@@ -135,3 +135,11 @@ pub fn cmd_health(_args: &Value, config: &VegaConfig) -> CommandResult {
         }),
     )
 }
+
+pub struct HealthHandler;
+
+impl super::CommandHandler for HealthHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_health(args, config)
+    }
+}

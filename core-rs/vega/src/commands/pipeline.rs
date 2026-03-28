@@ -328,3 +328,11 @@ mod tests {
         assert_eq!(format_amount(0.0), "미정");
     }
 }
+
+pub struct PipelineHandler;
+
+impl super::CommandHandler for PipelineHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_pipeline(args, config)
+    }
+}

@@ -196,3 +196,11 @@ fn find_person_actions(conn: &Connection, name: &str) -> Result<Vec<Value>, Stri
     }
     Ok(items)
 }
+
+pub struct PersonHandler;
+
+impl super::CommandHandler for PersonHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_person(args, config)
+    }
+}

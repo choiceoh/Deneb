@@ -317,3 +317,11 @@ mod tests {
         assert!(year >= 2024 && year <= 2100);
     }
 }
+
+pub struct UrgentHandler;
+
+impl super::CommandHandler for UrgentHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_urgent(args, config)
+    }
+}

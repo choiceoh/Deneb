@@ -345,3 +345,11 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+pub struct BriefHandler;
+
+impl super::CommandHandler for BriefHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_brief(args, config)
+    }
+}

@@ -175,3 +175,11 @@ fn fetch_recent_chunks(
 
     Ok(rows)
 }
+
+pub struct WeeklyHandler;
+
+impl super::CommandHandler for WeeklyHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_weekly(args, config)
+    }
+}

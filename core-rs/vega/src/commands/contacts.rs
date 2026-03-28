@@ -314,3 +314,11 @@ mod tests {
         assert_eq!(contacts[0]["phone"], "01012345678");
     }
 }
+
+pub struct ContactsHandler;
+
+impl super::CommandHandler for ContactsHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_contacts(args, config)
+    }
+}

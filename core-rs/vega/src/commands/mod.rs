@@ -10,19 +10,28 @@ pub mod compare;
 pub mod contacts;
 pub mod cross;
 pub mod dashboard;
+pub mod embed;
 pub mod health;
+pub mod list;
 pub mod mail_append;
 pub mod memory;
 pub mod person;
 pub mod pipeline;
 pub mod recent;
+pub mod search;
+pub mod show;
 pub mod sync_back;
+pub mod system;
+pub mod tags;
 pub mod template;
+pub mod timeline;
 pub mod update;
+pub mod upgrade;
 pub mod urgent;
 pub mod weekly;
 
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use regex::Regex;
 use rusqlite::{params, Connection};
@@ -31,7 +40,6 @@ use serde_json::{json, Value};
 
 use crate::config::VegaConfig;
 use crate::db::schema::init_db;
-use crate::search::SearchRouter;
 
 /// Command execution result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +69,11 @@ impl CommandResult {
             error: Some(msg.into()),
         }
     }
+}
+
+/// Trait implemented by every command handler.
+pub trait CommandHandler: Send + Sync {
+    fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult;
 }
 
 /// Route patterns: NL query → command name.
@@ -129,61 +142,77 @@ pub fn route_command(query: &str) -> &'static str {
     "search"
 }
 
+static REGISTRY: OnceLock<HashMap<&'static str, Box<dyn CommandHandler>>> = OnceLock::new();
+
+fn build_registry() -> HashMap<&'static str, Box<dyn CommandHandler>> {
+    let mut m: HashMap<&'static str, Box<dyn CommandHandler>> = HashMap::new();
+    m.insert("search", Box::new(search::SearchHandler));
+    m.insert("show", Box::new(show::ShowHandler));
+    m.insert("brief", Box::new(brief::BriefHandler));
+    m.insert("system", Box::new(system::SystemHandler));
+    m.insert("upgrade", Box::new(upgrade::UpgradeHandler));
+    m.insert("list", Box::new(list::ListHandler));
+    m.insert("tags", Box::new(tags::TagsHandler));
+    m.insert("timeline", Box::new(timeline::TimelineHandler));
+    m.insert("embed", Box::new(embed::EmbedHandler));
+    m.insert("ask", Box::new(AskHandler));
+    m.insert("urgent", Box::new(urgent::UrgentHandler));
+    m.insert("person", Box::new(person::PersonHandler));
+    m.insert("compare", Box::new(compare::CompareHandler));
+    m.insert("stats", Box::new(compare::StatsHandler));
+    m.insert("recent", Box::new(recent::RecentHandler));
+    m.insert("cross", Box::new(cross::CrossHandler));
+    m.insert("contacts", Box::new(contacts::ContactsHandler));
+    m.insert("dashboard", Box::new(dashboard::DashboardHandler));
+    m.insert("pipeline", Box::new(pipeline::PipelineHandler));
+    m.insert("weekly", Box::new(weekly::WeeklyHandler));
+    m.insert("changelog", Box::new(changelog::ChangelogHandler));
+    m.insert("add-action", Box::new(add_action::AddActionHandler));
+    m.insert("mail-append", Box::new(mail_append::MailAppendHandler));
+    m.insert("update", Box::new(update::UpdateHandler));
+    m.insert("template", Box::new(template::TemplateHandler));
+    m.insert("sync-back", Box::new(sync_back::SyncBackHandler));
+    m.insert("health", Box::new(health::HealthHandler));
+    m.insert("memory-search", Box::new(memory::MemorySearchHandler));
+    m.insert("memory-update", Box::new(memory::MemoryUpdateHandler));
+    m.insert("memory-embed", Box::new(memory::MemoryEmbedHandler));
+    m.insert("memory-status", Box::new(memory::MemoryStatusHandler));
+    m.insert("memory-version", Box::new(memory::MemoryVersionHandler));
+    m
+}
+
 /// Execute a Vega command by name.
 pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResult {
-    match command {
-        // Core query commands (Phase 0)
-        "search" => cmd_search(args, config),
-        "show" => cmd_show(args, config),
-        "brief" => brief::cmd_brief(args, config),
-        "system" => cmd_system(args, config),
-        "upgrade" => cmd_upgrade(args, config),
-        "list" => cmd_list(args, config),
-        "tags" => cmd_tags(args, config),
-        "timeline" => cmd_timeline(args, config),
-        "embed" => cmd_embed(args, config),
-        // Ported query commands
-        "ask" => cmd_ask(args, config),
-        "urgent" => urgent::cmd_urgent(args, config),
-        "person" => person::cmd_person(args, config),
-        "compare" => compare::cmd_compare(args, config),
-        "stats" => compare::cmd_stats(args, config),
-        "recent" => recent::cmd_recent(args, config),
-        "cross" => cross::cmd_cross(args, config),
-        "contacts" => contacts::cmd_contacts(args, config),
-        "dashboard" => dashboard::cmd_dashboard(args, config),
-        "pipeline" => pipeline::cmd_pipeline(args, config),
-        "weekly" => weekly::cmd_weekly(args, config),
-        "changelog" => changelog::cmd_changelog(args, config),
-        // Write commands
-        "add-action" => add_action::cmd_add_action(args, config),
-        "mail-append" => mail_append::cmd_mail_append(args, config),
-        "update" => update::cmd_update(args, config),
-        "template" => template::cmd_template(args, config),
-        "sync-back" => sync_back::cmd_sync_back(args, config),
-        "health" => health::cmd_health(args, config),
-        // Memory backend commands
-        "memory-search" => memory::cmd_memory_search(args, config),
-        "memory-update" => memory::cmd_memory_update(args, config),
-        "memory-embed" => memory::cmd_memory_embed(args, config),
-        "memory-status" => memory::cmd_memory_status(args, config),
-        "memory-version" => memory::cmd_memory_version(args, config),
-        _ => {
-            // Try to route the command as a query
-            let routed = route_command(command);
-            if routed != command && routed != "search" {
-                execute(routed, args, config)
-            } else {
-                // Default to search with command as query
-                let search_args = json!({"query": command});
-                cmd_search(&search_args, config)
-            }
-        }
+    let registry = REGISTRY.get_or_init(build_registry);
+    if let Some(handler) = registry.get(command) {
+        return handler.execute(config, args);
+    }
+    // Try to route the command as a query
+    let routed = route_command(command);
+    if routed != command && routed != "search" {
+        execute(routed, args, config)
+    } else {
+        // Default to search with command as query
+        let search_args = json!({"query": command});
+        registry
+            .get("search")
+            .map_or_else(
+                || CommandResult::err("search", "검색 핸들러 없음"),
+                |h| h.execute(config, &search_args),
+            )
     }
 }
 
 /// ask: Unified NL endpoint — full E-1 through E-7 framework.
 /// E-1: NL routing, E-2: depth, E-3: AI hints, E-4: bundle, E-5: session, E-7: auto-correct.
+struct AskHandler;
+
+impl CommandHandler for AskHandler {
+    fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult {
+        cmd_ask(args, config)
+    }
+}
+
 fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
     let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
     if query.is_empty() {
@@ -328,614 +357,15 @@ pub fn execute_query(query: &str, config: &VegaConfig) -> CommandResult {
     execute(command, &args, config)
 }
 
-// -- Command implementations --
-
-/// search: Full hybrid search with fusion ranking.
-/// Port of Python vega/commands/search.py with match_reasons, follow_up_hint,
-/// suggestions, auto_brief, and communications truncation.
-fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
-    let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
-    if query.is_empty() {
-        return CommandResult::err("search", "검색어가 필요합니다");
-    }
-
-    let router = SearchRouter::new(config.clone());
-    match router.search(query) {
-        Ok(result) => {
-            let query_lower = query.to_lowercase();
-
-            // Group by project
-            let mut projects: Vec<Value> = Vec::new();
-            let mut seen_pids: HashMap<i64, usize> = HashMap::new();
-
-            for item in &result.unified {
-                if let Some(&idx) = seen_pids.get(&item.project_id) {
-                    if let Some(proj) = projects.get_mut(idx) {
-                        if let Some(sections) = proj.get_mut("sections") {
-                            if let Some(arr) = sections.as_array_mut() {
-                                arr.push(json!({
-                                    "heading": item.heading,
-                                    "content": truncate(&item.content, 300),
-                                    "type": item.chunk_type,
-                                    "date": item.entry_date,
-                                    "source": item.source,
-                                }));
-                            }
-                        }
-                        // Track sources
-                        if let Some(sources) = proj.get_mut("sources") {
-                            if let Some(arr) = sources.as_array_mut() {
-                                let src = json!(item.source);
-                                if !arr.contains(&src) {
-                                    arr.push(src);
-                                }
-                            }
-                        }
-                        // Update score to max
-                        if let Some(cur_score) = proj.get("score").and_then(|v| v.as_f64()) {
-                            if item.score > cur_score {
-                                proj["score"] = json!(item.score);
-                            }
-                        }
-                    }
-                } else {
-                    seen_pids.insert(item.project_id, projects.len());
-                    projects.push(json!({
-                        "id": item.project_id,
-                        "name": item.project_name,
-                        "client": item.client,
-                        "status": item.status,
-                        "person": item.person,
-                        "score": item.score,
-                        "sections": [{
-                            "heading": item.heading,
-                            "content": truncate(&item.content, 300),
-                            "type": item.chunk_type,
-                            "date": item.entry_date,
-                            "source": item.source,
-                        }],
-                        "sources": [item.source],
-                    }));
-                }
-            }
-
-            // Add match_reasons per project
-            for proj in &mut projects {
-                let mut reasons = Vec::new();
-                let name_lower = proj
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_lowercase();
-
-                if !name_lower.is_empty()
-                    && name_lower.len() >= 2
-                    && (name_lower.contains(&query_lower) || query_lower.contains(&name_lower))
-                {
-                    reasons.push("프로젝트명");
-                }
-
-                let sources: Vec<String> = proj
-                    .get("sources")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                if sources.iter().any(|s| s == "sqlite") {
-                    let has_comm = proj
-                        .get("sections")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .any(|s| s.get("type").and_then(|v| v.as_str()) == Some("comm_log"))
-                        })
-                        .unwrap_or(false);
-                    if has_comm {
-                        reasons.push("커뮤니케이션");
-                    }
-                    if !has_comm
-                        || proj
-                            .get("sections")
-                            .and_then(|v| v.as_array())
-                            .map(|a| a.len())
-                            .unwrap_or(0)
-                            > 1
-                    {
-                        reasons.push("본문");
-                    }
-                }
-                if sources.iter().any(|s| s == "semantic") {
-                    reasons.push("의미검색");
-                }
-                if reasons.is_empty() {
-                    reasons.push("키워드");
-                }
-                proj["match_reasons"] = json!(reasons);
-            }
-
-            // Matched keywords from analysis
-            let extracted = &result.analysis.extracted;
-            let mut all_keywords: Vec<String> = Vec::new();
-            all_keywords.extend(extracted.keywords.iter().cloned());
-            all_keywords.extend(extracted.clients.iter().cloned());
-            all_keywords.extend(extracted.persons.iter().cloned());
-            all_keywords.extend(extracted.statuses.iter().cloned());
-            if all_keywords.is_empty() {
-                all_keywords.extend(query.split_whitespace().map(String::from));
-            }
-
-            let mut matched_kw: Vec<String> = Vec::new();
-            for kw in &all_keywords {
-                let kw_lower = kw.to_lowercase();
-                for proj in &projects {
-                    let text = format!(
-                        "{} {}",
-                        proj.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                        proj.get("sections")
-                            .and_then(|v| v.as_array())
-                            .map(|arr| arr
-                                .iter()
-                                .filter_map(|s| s.get("content").and_then(|v| v.as_str()))
-                                .collect::<Vec<_>>()
-                                .join(" "))
-                            .unwrap_or_default()
-                    )
-                    .to_lowercase();
-                    if text.contains(&kw_lower) && !matched_kw.contains(kw) {
-                        matched_kw.push(kw.clone());
-                        break;
-                    }
-                }
-            }
-
-            // Communications with truncation info
-            let total_comms = result.comms.len();
-            let comms: Vec<Value> = result
-                .comms
-                .iter()
-                .take(10)
-                .map(|c| {
-                    json!({
-                        "date": c.log_date,
-                        "project": c.name,
-                        "sender": c.sender,
-                        "subject": c.subject,
-                    })
-                })
-                .collect();
-
-            // Build response
-            let mut data = json!({
-                "query": query,
-                "projects": projects,
-                "communications": comms,
-                "result_count": {
-                    "projects": projects.len(),
-                    "communications": comms.len(),
-                },
-                "matched_keywords": matched_kw,
-                "search_meta": result.search_meta,
-                "analysis": {
-                    "route": result.search_meta.route,
-                    "reason": result.analysis.reason,
-                },
-            });
-
-            // Communications truncation note
-            if total_comms > 10 {
-                data["communications_total"] = json!(total_comms);
-                data["communications_note"] =
-                    json!(format!("최신 10건 표시 (전체 {}건)", total_comms));
-            }
-
-            // Follow-up hint based on result count
-            let proj_count = projects.len();
-            if proj_count == 0 {
-                // Zero results: suggestions + alternative commands
-                if let Ok(conn) = Connection::open(&config.db_path) {
-                    let suggestions = crate::utils::build_search_suggestions(&conn, query, 8);
-                    if !suggestions.is_empty() {
-                        data["suggestions"] =
-                            serde_json::to_value(&suggestions).unwrap_or_default();
-                    }
-                    // Auto-brief fallback via fuzzy match
-                    if let Some((fz_pid, _name, fz_conf)) =
-                        crate::utils::find_project_id_in_text(&conn, query, 0.6)
-                    {
-                        if let Ok(auto_brief) = brief::build_single_brief(&conn, fz_pid) {
-                            let mut ab = auto_brief;
-                            ab["_match_confidence"] = json!(fz_conf);
-                            data["_auto_brief"] = ab;
-                        }
-                    }
-                }
-                data["alternative_commands"] = json!(["list", "dashboard"]);
-                data["follow_up_hint"] = json!(
-                    "검색 결과 없음. show <ID>, brief <프로젝트명> 형태로 직접 조회해보세요."
-                );
-            } else if proj_count == 1 {
-                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
-                data["follow_up_hint"] = json!(format!(
-                    "show {} / brief {} / timeline {}",
-                    top_id, top_id, top_id
-                ));
-                // Auto-brief for single match
-                if let Ok(conn) = Connection::open(&config.db_path) {
-                    if let Ok(auto_brief) = brief::build_single_brief(&conn, top_id) {
-                        data["_auto_brief"] = auto_brief;
-                    }
-                }
-            } else if proj_count > 5 {
-                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
-                data["follow_up_hint"] = json!(format!(
-                    "결과 {}건. show {} / brief {} 로 상세 확인",
-                    proj_count, top_id, top_id
-                ));
-            } else {
-                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
-                data["follow_up_hint"] = json!(format!(
-                    "show {} / brief {} / timeline {}",
-                    top_id, top_id, top_id
-                ));
-            }
-
-            CommandResult::ok("search", data)
-        }
-        Err(e) => CommandResult::err("search", &format!("검색 오류: {}", e)),
-    }
-}
-
-/// show: Display detailed project info.
-fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
-    let project_id = args
-        .get("id")
-        .or_else(|| args.get("project_id"))
-        .and_then(|v| v.as_i64());
-
-    let project_id = match project_id {
-        Some(id) => id,
-        None => {
-            let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
-            if query.is_empty() {
-                return CommandResult::err("show", "프로젝트 ID 또는 이름이 필요합니다");
-            }
-            match find_project_id(config, query) {
-                Some(id) => id,
-                None => return CommandResult::err("show", &format!("프로젝트 '{}' 없음", query)),
-            }
-        }
-    };
-
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("show", &e),
-    };
-
-    let proj = conn.query_row(
-        "SELECT id, name, client, status, capacity, biz_type, person_internal, person_external, partner
-         FROM projects WHERE id=?1",
-        params![project_id],
-        |r| {
-            Ok(json!({
-                "id": r.get::<_, i64>(0)?,
-                "name": r.get::<_, Option<String>>(1)?,
-                "client": r.get::<_, Option<String>>(2)?,
-                "status": r.get::<_, Option<String>>(3)?,
-                "capacity": r.get::<_, Option<String>>(4)?,
-                "biz_type": r.get::<_, Option<String>>(5)?,
-                "person_internal": r.get::<_, Option<String>>(6)?,
-                "person_external": r.get::<_, Option<String>>(7)?,
-                "partner": r.get::<_, Option<String>>(8)?,
-            }))
-        },
-    );
-
-    let proj = match proj {
-        Ok(p) => p,
-        Err(_) => return CommandResult::err("show", &format!("프로젝트 ID {} 없음", project_id)),
-    };
-
-    // Chunks
-    let mut stmt = match conn
-        .prepare("SELECT section_heading, content, chunk_type, entry_date FROM chunks WHERE project_id=?1 ORDER BY id")
-    {
-        Ok(s) => s,
-        Err(e) => return CommandResult::err("show", &format!("청크 쿼리 준비 실패: {e}")),
-    };
-    let chunks: Vec<Value> = match stmt.query_map(params![project_id], |r| {
-        Ok(json!({
-            "heading": r.get::<_, Option<String>>(0)?,
-            "content": r.get::<_, Option<String>>(1)?,
-            "type": r.get::<_, Option<String>>(2)?,
-            "date": r.get::<_, Option<String>>(3)?,
-        }))
-    }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(e) => return CommandResult::err("show", &format!("청크 쿼리 실행 실패: {e}")),
-    };
-
-    // Tags
-    let mut stmt = match conn.prepare(
-        "SELECT DISTINCT t.name FROM tags t
-             JOIN chunk_tags ct ON ct.tag_id = t.id
-             JOIN chunks c ON c.id = ct.chunk_id
-             WHERE c.project_id = ?1",
-    ) {
-        Ok(s) => s,
-        Err(e) => return CommandResult::err("show", &format!("태그 쿼리 준비 실패: {e}")),
-    };
-    let tags: Vec<String> = match stmt.query_map(params![project_id], |r| r.get(0)) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(e) => return CommandResult::err("show", &format!("태그 쿼리 실행 실패: {e}")),
-    };
-
-    // Recent comms
-    let mut stmt = match conn
-        .prepare("SELECT log_date, sender, subject, summary FROM comm_log WHERE project_id=?1 ORDER BY log_date DESC LIMIT 10")
-    {
-        Ok(s) => s,
-        Err(e) => return CommandResult::err("show", &format!("통신 쿼리 준비 실패: {e}")),
-    };
-    let comms: Vec<Value> = match stmt.query_map(params![project_id], |r| {
-        Ok(json!({
-            "date": r.get::<_, Option<String>>(0)?,
-            "sender": r.get::<_, Option<String>>(1)?,
-            "subject": r.get::<_, Option<String>>(2)?,
-            "summary": r.get::<_, Option<String>>(3)?,
-        }))
-    }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(e) => return CommandResult::err("show", &format!("통신 쿼리 실행 실패: {e}")),
-    };
-
-    CommandResult::ok(
-        "show",
-        json!({
-            "project": proj,
-            "sections": chunks,
-            "tags": tags,
-            "communications": comms,
-        }),
-    )
-}
-
-/// system: Database health and stats.
-fn cmd_system(_args: &Value, config: &VegaConfig) -> CommandResult {
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("system", &e),
-    };
-
-    let stats: (i64, i64, i64, i64) = conn
-        .query_row(
-            "SELECT
-                (SELECT COUNT(*) FROM projects),
-                (SELECT COUNT(*) FROM chunks),
-                (SELECT COUNT(*) FROM comm_log),
-                (SELECT COUNT(DISTINCT name) FROM tags)",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .unwrap_or((0, 0, 0, 0));
-
-    let ver: u32 = conn
-        .pragma_query_value(None, "user_version", |r| r.get(0))
-        .unwrap_or(0);
-
-    CommandResult::ok(
-        "system",
-        json!({
-            "version": crate::config::VERSION,
-            "schema_version": ver,
-            "db_path": config.db_path.to_string_lossy(),
-            "md_dir": config.md_dir.to_string_lossy(),
-            "rerank_mode": config.rerank_mode,
-            "inference_backend": config.inference_backend,
-            "stats": {
-                "projects": stats.0,
-                "chunks": stats.1,
-                "communications": stats.2,
-                "tags": stats.3,
-            },
-        }),
-    )
-}
-
-/// upgrade: Run schema migrations and FTS rebuild.
-fn cmd_upgrade(_args: &Value, config: &VegaConfig) -> CommandResult {
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("upgrade", &e),
-    };
-
-    let ver_before: u32 = conn
-        .pragma_query_value(None, "user_version", |r| r.get(0))
-        .unwrap_or(0);
-
-    if let Err(e) = init_db(&conn) {
-        return CommandResult::err("upgrade", &format!("스키마 업그레이드 실패: {}", e));
-    }
-
-    if let Err(e) = crate::db::schema::rebuild_fts(&conn) {
-        return CommandResult::err("upgrade", &format!("FTS 리빌드 실패: {}", e));
-    }
-
-    let ver_after: u32 = conn
-        .pragma_query_value(None, "user_version", |r| r.get(0))
-        .unwrap_or(0);
-
-    CommandResult::ok(
-        "upgrade",
-        json!({
-            "schema_before": ver_before,
-            "schema_after": ver_after,
-            "fts_rebuilt": true,
-        }),
-    )
-}
-
-/// list: List all projects.
-fn cmd_list(_args: &Value, config: &VegaConfig) -> CommandResult {
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("list", &e),
-    };
-
-    let mut stmt = match conn.prepare(
-        "SELECT p.id, p.name, p.client, p.status, p.person_internal, p.capacity,
-                    (SELECT COUNT(*) FROM chunks WHERE project_id=p.id) as chunks,
-                    (SELECT COUNT(*) FROM comm_log WHERE project_id=p.id) as comms
-             FROM projects p ORDER BY p.id",
-    ) {
-        Ok(s) => s,
-        Err(e) => return CommandResult::err("list", &format!("프로젝트 목록 쿼리 실패: {e}")),
-    };
-
-    let projects: Vec<Value> = match stmt.query_map([], |r| {
-        Ok(json!({
-            "id": r.get::<_, i64>(0)?,
-            "name": r.get::<_, Option<String>>(1)?,
-            "client": r.get::<_, Option<String>>(2)?,
-            "status": r.get::<_, Option<String>>(3)?,
-            "person": r.get::<_, Option<String>>(4)?,
-            "capacity": r.get::<_, Option<String>>(5)?,
-            "chunks": r.get::<_, i64>(6)?,
-            "comms": r.get::<_, i64>(7)?,
-        }))
-    }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(e) => return CommandResult::err("list", &format!("프로젝트 목록 쿼리 실패: {e}")),
-    };
-
-    CommandResult::ok("list", json!({ "projects": projects }))
-}
-
-/// tags: List all tags with project counts.
-fn cmd_tags(_args: &Value, config: &VegaConfig) -> CommandResult {
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("tags", &e),
-    };
-
-    let mut stmt = match conn.prepare(
-        "SELECT t.name, COUNT(DISTINCT c.project_id) as cnt
-             FROM tags t
-             JOIN chunk_tags ct ON ct.tag_id = t.id
-             JOIN chunks c ON c.id = ct.chunk_id
-             GROUP BY t.name ORDER BY t.name",
-    ) {
-        Ok(s) => s,
-        Err(e) => return CommandResult::err("tags", &format!("태그 쿼리 실패: {e}")),
-    };
-
-    let tags: Vec<Value> = match stmt.query_map([], |r| {
-        Ok(json!({
-            "name": r.get::<_, String>(0)?,
-            "project_count": r.get::<_, i64>(1)?,
-        }))
-    }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(e) => return CommandResult::err("tags", &format!("태그 쿼리 실패: {e}")),
-    };
-
-    CommandResult::ok("tags", json!({ "tags": tags }))
-}
-
-/// timeline: Project communication timeline.
-fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
-    let project_id = args
-        .get("id")
-        .or_else(|| args.get("project_id"))
-        .and_then(|v| v.as_i64());
-
-    let project_id = match project_id {
-        Some(id) => id,
-        None => {
-            let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
-            match find_project_id(config, query) {
-                Some(id) => id,
-                None => {
-                    return CommandResult::err("timeline", "프로젝트 ID 또는 이름이 필요합니다")
-                }
-            }
-        }
-    };
-
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("timeline", &e),
-    };
-
-    let name: String = conn
-        .query_row(
-            "SELECT name FROM projects WHERE id=?1",
-            params![project_id],
-            |r| r.get(0),
-        )
-        .unwrap_or_default();
-
-    let mut stmt = match conn
-        .prepare("SELECT log_date, sender, subject, summary FROM comm_log WHERE project_id=?1 ORDER BY log_date DESC")
-    {
-        Ok(s) => s,
-        Err(e) => return CommandResult::err("timeline", &format!("타임라인 쿼리 실패: {e}")),
-    };
-
-    let entries: Vec<Value> = match stmt.query_map(params![project_id], |r| {
-        Ok(json!({
-            "date": r.get::<_, Option<String>>(0)?,
-            "sender": r.get::<_, Option<String>>(1)?,
-            "subject": r.get::<_, Option<String>>(2)?,
-            "summary": r.get::<_, Option<String>>(3)?,
-        }))
-    }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(e) => return CommandResult::err("timeline", &format!("타임라인 쿼리 실패: {e}")),
-    };
-
-    CommandResult::ok(
-        "timeline",
-        json!({
-            "project_id": project_id,
-            "project_name": name,
-            "entries": entries,
-            "count": entries.len(),
-        }),
-    )
-}
-
-/// embed: Generate embeddings for chunks.
-/// In sglang mode, embedding is handled by the Go gateway via SGLang HTTP API.
-/// This Rust-side command is retained for backward compatibility but returns
-/// a message directing to the Go-side embed pipeline.
-#[allow(unused_variables)]
-fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
-    if config.has_sglang() {
-        return CommandResult::ok(
-            "embed",
-            json!({
-                "message": "SGLang 모드: 임베딩은 Go 게이트웨이에서 SGLang HTTP API로 처리됩니다.",
-                "backend": "sglang",
-            }),
-        );
-    }
-
-    CommandResult::err("embed", "임베딩 백엔드가 설정되지 않았습니다 (VEGA_INFERENCE=sglang 권장)")
-}
-
 // -- Helpers --
 
-fn open_db(config: &VegaConfig) -> Result<Connection, String> {
+pub(super) fn open_db(config: &VegaConfig) -> Result<Connection, String> {
     let conn = Connection::open(&config.db_path).map_err(|e| format!("DB 열기 실패: {}", e))?;
     init_db(&conn).map_err(|e| format!("스키마 초기화 실패: {}", e))?;
     Ok(conn)
 }
 
-fn find_project_id(config: &VegaConfig, query: &str) -> Option<i64> {
+pub(super) fn find_project_id(config: &VegaConfig, query: &str) -> Option<i64> {
     let conn = Connection::open(&config.db_path).ok()?;
     let _ = init_db(&conn);
 
@@ -970,7 +400,7 @@ fn find_project_id(config: &VegaConfig, query: &str) -> Option<i64> {
     crate::utils::find_project_id_in_text(&conn, query, 0.55).map(|(id, _, _)| id)
 }
 
-fn truncate(s: &str, max: usize) -> String {
+pub(super) fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
     } else {
