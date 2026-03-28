@@ -215,7 +215,9 @@ func killSession(sessions *session.Manager, s *session.Session) {
 		s.RuntimeMs = &runtime
 	}
 	s.UpdatedAt = now
-	sessions.Set(s)
+	// Transition is always RUNNING → KILLED here; ignore error (can't happen
+	// unless the session was already in a terminal state by a concurrent event).
+	_ = sessions.Set(s)
 }
 
 // resolveChildTarget finds a child by 1-based index, exact key, label, or key prefix.
