@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.27.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.27.0...deneb-v3.27.1) (2026-03-28)
+
+
+### 🔧 Internal
+
+* **chat:** reorganize coding tools into dedicated Code category ([0649fa8](https://github.com/choiceoh/Deneb/commit/0649fa844bf5ea79fca447323b47f2bf826ea1dc))
+
 ## [3.27.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.26.0...deneb-v3.27.0) (2026-03-28)
 
 
