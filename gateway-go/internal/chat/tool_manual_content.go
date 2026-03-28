@@ -325,12 +325,60 @@ type guideEntry struct {
 
 // builtinGuideOrder defines the display order for guides.
 var builtinGuideOrder = []string{
-	"aurora", "vega", "agent-loop", "compaction", "tools",
-	"system-prompt", "memory", "sessions", "architecture", "channels",
-	"telegram", "skills", "pilot", "cron",
-	"web", "exec", "gateway-tool", "media", "gmail",
-	"data-tools", "sessions-tools", "message",
-	"provider", "liteparse", "metrics", "transcript",
+	// Core Engine
+	"aurora", "vega", "agent-loop", "compaction", "system-prompt", "architecture",
+	// Tools
+	"tools", "web", "exec", "gateway-tool", "media", "gmail", "data-tools", "pilot", "liteparse",
+	// Runtime
+	"sessions", "sessions-tools", "memory", "channels", "telegram", "message", "skills", "cron",
+	// Infrastructure
+	"provider", "metrics", "transcript", "nodes",
+}
+
+// guideCategory groups related guides for structured browsing.
+type guideCategory struct {
+	Key    string
+	Label  string
+	Guides []string
+}
+
+// guideCategories defines the 4 top-level categories for guides.
+var guideCategories = []guideCategory{
+	{"core", "Core Engine", []string{"aurora", "vega", "agent-loop", "compaction", "system-prompt", "architecture"}},
+	{"tools", "Tools", []string{"tools", "web", "exec", "gateway-tool", "media", "gmail", "data-tools", "pilot", "liteparse"}},
+	{"runtime", "Runtime", []string{"sessions", "sessions-tools", "memory", "channels", "telegram", "message", "skills", "cron"}},
+	{"infra", "Infrastructure", []string{"provider", "metrics", "transcript", "nodes"}},
+}
+
+// guideRelated maps a guide key to its most related guides.
+var guideRelated = map[string][]string{
+	"aurora":         {"compaction", "system-prompt", "agent-loop"},
+	"vega":           {"memory", "pilot"},
+	"agent-loop":     {"tools", "sessions", "system-prompt"},
+	"compaction":     {"aurora", "memory", "transcript"},
+	"system-prompt":  {"agent-loop", "skills", "aurora"},
+	"architecture":   {"agent-loop", "provider"},
+	"tools":          {"agent-loop", "pilot", "exec"},
+	"web":            {"pilot", "liteparse"},
+	"exec":           {"pilot", "tools"},
+	"gateway-tool":   {"architecture"},
+	"media":          {"telegram", "web"},
+	"gmail":          {"data-tools", "message"},
+	"data-tools":     {"gmail", "tools"},
+	"pilot":          {"tools", "exec", "vega"},
+	"liteparse":      {"web", "media"},
+	"sessions":       {"sessions-tools", "transcript", "agent-loop"},
+	"sessions-tools": {"sessions"},
+	"memory":         {"compaction", "vega", "aurora"},
+	"channels":       {"telegram", "message"},
+	"telegram":       {"channels", "message", "media"},
+	"message":        {"telegram", "channels", "sessions-tools"},
+	"skills":         {"system-prompt", "tools"},
+	"cron":           {"sessions"},
+	"provider":       {"agent-loop", "architecture"},
+	"metrics":        {"architecture"},
+	"transcript":     {"sessions", "compaction"},
+	"nodes":          {"exec", "media"},
 }
 
 // builtinGuides contains AI-curated system knowledge.
@@ -492,24 +540,64 @@ var builtinGuides = map[string]guideEntry{
 		Summary: "JSONL session history, append-only persistence, compaction integration",
 		Content: transcriptGuide,
 	},
+	"nodes": {
+		Key:     "nodes",
+		Title:   "Nodes (Edge Devices)",
+		Summary: "Companion devices: canvas, camera, location, system commands, Android data",
+		Content: nodesGuide,
+	},
 }
 
 func manualGuides(topic string) (string, error) {
 	if topic == "" {
-		// List all guides.
+		// Categorized listing of all guides.
 		var sb strings.Builder
-		sb.WriteString("Deneb System Guides (AI-curated)\n\n")
-		for _, key := range builtinGuideOrder {
-			g := builtinGuides[key]
-			fmt.Fprintf(&sb, "  %-16s — %s\n", g.Key, g.Summary)
+		fmt.Fprintf(&sb, "Deneb System Guides (%d guides, %d categories)\n\n", len(builtinGuides), len(guideCategories))
+		for _, cat := range guideCategories {
+			fmt.Fprintf(&sb, "%s (%d guides):\n", cat.Label, len(cat.Guides))
+			for _, key := range cat.Guides {
+				g := builtinGuides[key]
+				fmt.Fprintf(&sb, "  %-16s — %s\n", g.Key, g.Summary)
+			}
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\nUse polaris(action:'guides', topic:'<key>') to read a guide.\n")
+		sb.WriteString("Use polaris(action:'guides', topic:'<key>') to read a guide.\n")
+		sb.WriteString("Use polaris(action:'guides', topic:'core|tools|runtime|infra') to browse a category.\n")
 		return sb.String(), nil
 	}
 
+	// Check if topic is a category key.
+	for _, cat := range guideCategories {
+		if cat.Key == topic {
+			var sb strings.Builder
+			fmt.Fprintf(&sb, "%s (%d guides)\n\n", cat.Label, len(cat.Guides))
+			for _, key := range cat.Guides {
+				g := builtinGuides[key]
+				fmt.Fprintf(&sb, "  %-16s — %s\n", g.Key, g.Summary)
+			}
+			sb.WriteString("\nUse polaris(action:'guides', topic:'<key>') to read a guide.\n")
+			return sb.String(), nil
+		}
+	}
+
+	// Read a specific guide.
 	g, ok := builtinGuides[topic]
 	if !ok {
 		return fmt.Sprintf("Unknown guide %q. Use polaris(action:'guides') to list available guides.", topic), nil
 	}
-	return fmt.Sprintf("# %s\n\n%s", g.Title, g.Content), nil
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# %s\n\n%s", g.Title, g.Content)
+
+	// Append related guides.
+	if related, ok := guideRelated[topic]; ok && len(related) > 0 {
+		sb.WriteString("\n\n## Related Guides\n")
+		for _, rkey := range related {
+			if rg, ok := builtinGuides[rkey]; ok {
+				fmt.Fprintf(&sb, "- %s — %s\n", rg.Key, rg.Summary)
+			}
+		}
+	}
+
+	return sb.String(), nil
 }

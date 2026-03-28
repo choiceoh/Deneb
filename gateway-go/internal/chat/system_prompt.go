@@ -265,8 +265,9 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 func writePolarisSection(sb *strings.Builder) {
 	sb.WriteString("## Polaris (System Manual)\n")
 	sb.WriteString("데네브 시스템에 대해 모를 때 polaris로 문서를 조회하세요.\n")
-	sb.WriteString("- polaris(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
-	sb.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
+	sb.WriteString("- polaris(action:'guides') → 27개 AI 시스템 가이드 (4개 카테고리: core, tools, runtime, infra)\n")
+	sb.WriteString("- polaris(action:'guides', topic:'core') → 카테고리별 가이드 목록\n")
+	sb.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기 + Related Guides\n")
 	sb.WriteString("- polaris(action:'topics') → 전체 문서 트리 구조\n")
 	sb.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색\n")
 	sb.WriteString("- polaris(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")

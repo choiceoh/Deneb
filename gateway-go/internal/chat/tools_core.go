@@ -136,7 +136,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- System manual tool (queryable Deneb documentation) --
 	registry.RegisterTool(ToolDef{
 		Name:        "polaris",
-		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (26 AI-curated system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels, telegram, skills, pilot, cron, web, exec, gateway-tool, media, gmail, data-tools, sessions-tools, message, provider, liteparse, metrics, transcript)",
+		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides in 4 categories: core, tools, runtime, infra). Use guides with category key to browse",
 		InputSchema: systemManualToolSchema(),
 		Fn:          toolSystemManual(workspaceDir),
 	})

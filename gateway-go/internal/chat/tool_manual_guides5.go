@@ -142,6 +142,39 @@ RPCInstrumentation() middleware wraps RPC handlers:
 - gateway-go/internal/middleware/ (RPCInstrumentation)
 - gateway-go/internal/server/ (/metrics endpoint registration)`
 
+const nodesGuide = `Nodes are companion devices (iOS/Android/macOS/headless) that connect to the Gateway WebSocket with role:"node" and expose command surfaces via node.invoke.
+
+## What Nodes Are
+- Peripherals, NOT gateways. They don't run the gateway service.
+- Connect via WebSocket (same port as operators) with device pairing.
+- Expose command families: canvas.*, camera.*, device.*, notifications.*, system.*, location.*, sms.*, screen.*
+
+## Pairing + Status
+- WS nodes use device pairing: node presents identity during connect, Gateway creates pairing request.
+- CLI: deneb devices list, deneb devices approve <requestId>, deneb nodes status
+
+## Command Families
+- Canvas: snapshot, present, navigate, eval (JS), hide, A2UI push/reset
+- Camera: list, snap (--facing), clip (--duration, --no-audio, max 60s)
+- Screen: record (--duration, --fps, --no-audio, max 60s)
+- Location: get (lat/lon, accuracy, timestamp; off by default)
+- System: run (shell), notify, which; gated by exec approvals
+- Android: device.*, notifications.*, photos.*, contacts.*, calendar.*, callLog.*, sms.*, motion.*
+
+## Remote Node Host
+- Config: tools.exec.host=node, tools.exec.node=<id>
+- Start: deneb node run --host <gateway-host> --port 18789
+
+## Key Files
+- docs/nodes/ (index, audio, camera, images, location-command, media-understanding, talk, troubleshooting)
+- gateway-go/internal/events/node_events.go (event relay)
+- gateway-go/internal/rpc/handler/node/node.go (RPC handlers)
+
+## Gotchas
+- camera.snap/clip require foreground; background returns NODE_BACKGROUND_UNAVAILABLE, not timeout
+- system.run strips dangerous env vars (DYLD_*, LD_*, NODE_OPTIONS) silently
+- screen.record max 60s; exceeding silently truncates`
+
 const transcriptGuide = `The transcript system persists session conversation history as JSONL (newline-delimited JSON) files.
 
 ## Storage Format
