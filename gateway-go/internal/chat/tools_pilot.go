@@ -252,6 +252,10 @@ func pilotToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Shortcut: query agent run logs for diagnostics (expands to sources:[{tool:'agent_logs', input:{...}}]). Value: 'all' for recent logs, 'tools' for tool calls only, 'errors' for errors only, or a specific run_id",
 			},
+			"gateway_logs": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: query gateway process logs (expands to sources:[{tool:'gateway_logs', input:{...}}]). Value: 'all' for recent 100 lines, 'errors' for ERR only, 'warnings' for WRN+ERR, or a package name (e.g. 'chat', 'server', 'telegram') to filter by package",
+			},
 			"post_process": map[string]any{
 				"type": "array",
 				"items": map[string]any{
@@ -432,8 +436,9 @@ type pilotParams struct {
 	Polaris   string   `json:"polaris"`
 	Image     string   `json:"image"`
 	Ls        string   `json:"ls"`
-	Vega      string   `json:"vega"`
-	AgentLogs string   `json:"agent_logs"`
+	Vega        string `json:"vega"`
+	AgentLogs   string `json:"agent_logs"`
+	GatewayLogs string `json:"gateway_logs"`
 }
 
 // postProcessStep is a programmatic transformation applied to gathered data.
@@ -612,6 +617,26 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		})
 	}
 
+	if p.GatewayLogs != "" {
+		input := map[string]any{"lines": 100}
+		switch p.GatewayLogs {
+		case "all":
+			// No filter — return recent lines.
+		case "errors":
+			input["level"] = "error"
+		case "warnings":
+			input["level"] = "warn"
+		default:
+			// Treat as a package name filter.
+			input["pkg"] = p.GatewayLogs
+		}
+		specs = append(specs, sourceSpec{
+			Tool:  "gateway_logs",
+			Input: mustJSON(input),
+			Label: "gateway_logs: " + p.GatewayLogs,
+		})
+	}
+
 	return specs
 }
 
@@ -632,6 +657,8 @@ func sourceTypeFromTool(tool string) string {
 		return "url"
 	case "ls":
 		return "file"
+	case "agent_logs", "gateway_logs":
+		return "exec"
 	case "gmail", "youtube_transcript", "polaris", "image", "vega":
 		return "content"
 	default:

@@ -336,11 +336,21 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Hidden:      true,
 	})
 
+	// -- Gateway logs tool (pilot-only: query gateway process logs) --
+	// Hidden from the main LLM; use via pilot shortcut.
+	registry.RegisterTool(ToolDef{
+		Name:        "gateway_logs",
+		Description: "게이트웨이 프로세스 로그를 조회합니다. 레벨/패키지/패턴 필터링 지원. 서버 오류 진단, 요청 추적, 성능 분석에 사용합니다",
+		InputSchema: gatewayLogsToolSchema(),
+		Fn:          toolGatewayLogs(),
+		Hidden:      true,
+	})
+
 	// -- Pilot tool (fast local AI that orchestrates other tools) --
 	// Registered last: uses the registry itself to execute source tools.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, ls, vega, agent_logs. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
+		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, ls, vega, agent_logs, gateway_logs. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, workspaceDir),
 	})
