@@ -80,7 +80,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	}
 
 	// Phase 3: Pattern extraction.
-	patterns, err := extractPatterns(ctx, store, client, model, logger)
+	patterns, err := extractPatterns(ctx, store, embedder, client, model, logger)
 	if err != nil {
 		logger.Warn("aurora-dream: pattern extraction failed", "error", err)
 	} else {
@@ -436,7 +436,7 @@ type patternResponse struct {
 	Patterns []ExtractedFact `json:"patterns"`
 }
 
-func extractPatterns(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
+func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
 	if err != nil {
 		return 0, err
@@ -480,14 +480,20 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 		if p.Category == CategoryMutual {
 			cat = CategoryMutual
 		}
-		_, err := store.InsertFact(ctx, Fact{
+		id, err := store.InsertFact(ctx, Fact{
 			Content:    p.Content,
 			Category:   cat,
 			Importance: clamp(p.Importance, 0.7, 1.0),
 			Source:     SourceDreaming,
 		})
-		if err == nil {
-			count++
+		if err != nil {
+			continue
+		}
+		count++
+
+		// Embed the pattern so Phase 2 can detect duplicates in future cycles.
+		if embedder != nil {
+			_ = embedder.EmbedAndStore(ctx, id, p.Content)
 		}
 	}
 
