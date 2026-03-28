@@ -4,7 +4,23 @@
 - In chat replies, file references must be repo-root relative only (example: `gateway-go/internal/server/server.go:80`); never absolute paths or `~/...`.
 - Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
 
-## Project Philosophy & Deployment Context (MUST READ)
+## Table of Contents
+
+1. [Project Philosophy & Deployment Context](#project-philosophy--deployment-context)
+2. [Project Structure & Module Organization](#project-structure--module-organization)
+3. [Documentation Standards](#documentation-standards)
+4. [Build, Test & Development](#build-test--development)
+5. [Code Style & Naming Conventions](#code-style--naming-conventions)
+6. [Git & Commit Workflow](#git--commit-workflow)
+7. [Release & Advisory Workflows](#release--advisory-workflows)
+8. [Testing Guidelines](#testing-guidelines)
+9. [Local Platform & Runtime](#local-platform--runtime)
+10. [Collaboration & Safety](#collaboration--safety)
+11. [Production Deployment](#production-deployment)
+
+---
+
+## Project Philosophy & Deployment Context
 
 > **All AI agents MUST read and internalize this section before making any changes.** This defines the fundamental constraints and design principles for the entire project.
 
@@ -56,6 +72,8 @@
 
 - Single server (DGX Spark) direct deployment — no CI/CD pipeline or container orchestration needed.
 - Deployment is simply `git pull` + restart.
+
+---
 
 ## Project Structure & Module Organization
 
@@ -154,7 +172,11 @@ Shared type definitions compiled to Go and Rust.
 
 - When adding channels/docs, update `.github/labeler.yml` and create matching GitHub labels.
 
-## Docs Linking (Mintlify)
+---
+
+## Documentation Standards
+
+### Docs Linking & Hosting
 
 - Docs are hosted on Mintlify (docs.deneb.ai).
 - Internal doc links in `docs/**/*.md`: root-relative, no `.md`/`.mdx` (example: `[Config](/configuration)`).
@@ -165,9 +187,9 @@ Shared type definitions compiled to Go and Rust.
 - When Peter asks for links, reply with full `https://docs.deneb.ai/...` URLs (not root-relative).
 - When you touch docs, end the reply with the `https://docs.deneb.ai/...` URLs you referenced.
 - README (GitHub): keep absolute docs URLs (`https://docs.deneb.ai/...`) so links work on GitHub.
-- Docs content must be generic: no personal device names/hostnames/paths; use placeholders like `user@gateway-host` and “gateway host”.
+- Docs content must be generic: no personal device names/hostnames/paths; use placeholders like `user@gateway-host` and "gateway host".
 
-## Docs Syntax Rules (Mintlify)
+### Docs Syntax Rules (Mintlify)
 
 - Frontmatter (YAML) is required on every doc file with these fields:
   - `title` (required): matches the page H1 heading; 2-5 words.
@@ -177,28 +199,27 @@ Shared type definitions compiled to Go and Rust.
 - Heading structure: one H1 (`#`) per page matching frontmatter `title`; H2 (`##`) for major sections (3-5 per page typical); H3 (`###`) for subsections; H4 (`####`) rarely.
 - Code blocks: always use language tags (`bash`, `json5`, `python`, `typescript`, `powershell`, `swift`, `mermaid`). Use `json5` (not `json`) for config examples (supports comments and trailing commas). Use inline code (single backticks) for file paths, commands, config keys, and JSON fields.
 - Mintlify components are globally available (no imports needed):
-  - `<Steps>` / `<Step title=”...”>`: numbered procedures, quick starts.
-  - `<Tabs>` / `<Tab title=”...”>`: platform/OS variants, mutually exclusive content.
+  - `<Steps>` / `<Step title="...">`: numbered procedures, quick starts.
+  - `<Tabs>` / `<Tab title="...">`: platform/OS variants, mutually exclusive content.
   - `<Info>`, `<Tip>`, `<Warning>`, `<Note>`, `<Check>`: callout boxes.
-  - `<AccordionGroup>` / `<Accordion title=”...”>`: collapsible optional/advanced content.
-  - `<CardGroup cols={N}>` / `<Card title=”...” icon=”...” href=”...”>`: feature grids, navigation.
+  - `<AccordionGroup>` / `<Accordion title="...">`: collapsible optional/advanced content.
+  - `<CardGroup cols={N}>` / `<Card title="..." icon="..." href="...">`: feature grids, navigation.
   - `<Columns>` / `<Card>`: responsive card layouts (alternative to CardGroup).
-  - `<Tooltip headline=”...” tip=”...”>`: hover definitions.
-  - `<Frame caption=”...”>`: image wrapper with caption.
-  - Icons use the Lucide library (e.g. `icon=”rocket”`, `icon=”settings”`, `icon=”message-square”`).
-- Images: use root-relative paths (`/assets/...`). For light/dark mode, use paired `<img>` tags with `class=”dark:hidden”` and `class=”hidden dark:block”`.
+  - `<Tooltip headline="..." tip="...">`: hover definitions.
+  - `<Frame caption="...">`: image wrapper with caption.
+  - Icons use the Lucide library (e.g. `icon="rocket"`, `icon="settings"`, `icon="message-square"`).
+- Images: use root-relative paths (`/assets/...`). For light/dark mode, use paired `<img>` tags with `class="dark:hidden"` and `class="hidden dark:block"`.
 - Tables: standard Markdown tables for feature matrices, mode mappings, option lists. Use `✅` / `❌` for yes/no cells.
 - File conventions: all doc files are `.md` (Mintlify processes MDX syntax transparently). File naming: lowercase, hyphenated (`getting-started.md`, `voice-wake.md`).
 - Validation scripts: `pnpm docs:dev` (local preview), `pnpm docs:spellcheck` (spell check; `pnpm docs:spellcheck:fix` to auto-fix).
 
-## DGX Spark ops
+---
 
-- Restart gateway: `pkill -9 -f deneb-gateway || true; nohup ./gateway-go/deneb-gateway --bind loopback --port 18789 > /tmp/deneb-gateway.log 2>&1 &`
-- Verify: `ss -ltnp | rg 18789`, `tail -n 120 /tmp/deneb-gateway.log`.
+## Build, Test & Development
 
-## Build, Test, and Development Commands
+### Toolchain & Prerequisites
 
-- Toolchain: Rust (stable via rustup), Go (1.24+), buf (latest), protoc, protoc-gen-go.
+- Rust (stable via rustup), Go (1.24+), buf (latest), protoc, protoc-gen-go.
 - Hard gate: before any commit touching `core-rs/`, `gateway-go/`, or `proto/`, run `make check` (includes `proto-check`, `rust-test`, `go-test`) and it MUST pass.
 - Hard gate: do not commit or push with failing build or test checks.
 
@@ -226,7 +247,7 @@ Shared type definitions compiled to Go and Rust.
 | `make proto-lint`   | Lint proto files only (buf lint)                             |
 | `make proto-watch`  | Watch proto files and regenerate on change                   |
 
-### Documentation
+### Documentation Commands
 
 | Command                    | Description                |
 | -------------------------- | -------------------------- |
@@ -234,34 +255,29 @@ Shared type definitions compiled to Go and Rust.
 | `pnpm docs:spellcheck`     | Spell check docs           |
 | `pnpm docs:spellcheck:fix` | Auto-fix doc spelling      |
 
-## Coding Style & Naming Conventions
+### DGX Spark Operations
+
+- Restart gateway: `pkill -9 -f deneb-gateway || true; nohup ./gateway-go/deneb-gateway --bind loopback --port 18789 > /tmp/deneb-gateway.log 2>&1 &`
+- Verify: `ss -ltnp | rg 18789`, `tail -n 120 /tmp/deneb-gateway.log`.
+
+---
+
+## Code Style & Naming Conventions
 
 - Languages: Go (gateway-go), Rust (core-rs, cli-rs).
 - Go: follow standard `gofmt`/`go vet` conventions. Run `go vet ./...` before commits.
 - Rust: follow `cargo fmt`/`cargo clippy` conventions. Run `cargo clippy --workspace` before commits.
 - Add brief code comments for tricky or non-obvious logic.
-- Keep files concise; extract helpers instead of “V2” copies.
+- Keep files concise; extract helpers instead of "V2" copies.
 - Aim to keep files under ~700 LOC; guideline only (not a hard guardrail). Split/refactor when it improves clarity or testability.
 - Naming: use **Deneb** for product/app/docs headings; use `deneb` for CLI command, package/binary, paths, and config keys.
-- Written English: use American spelling and grammar in code, comments, docs, and UI strings (e.g. “color” not “colour”, “behavior” not “behaviour”, “analyze” not “analyse”).
+- Written English: use American spelling and grammar in code, comments, docs, and UI strings (e.g. "color" not "colour", "behavior" not "behaviour", "analyze" not "analyse").
 
-## Release / Advisory Workflows
+---
 
-- Use `$deneb-release-maintainer` at `.agents/skills/deneb-release-maintainer/SKILL.md` for release naming, version coordination, release auth, and changelog-backed release-note workflows.
-- Use `$deneb-ghsa-maintainer` at `.agents/skills/deneb-ghsa-maintainer/SKILL.md` for GHSA advisory inspection, patch/publish flow, private-fork checks, and GHSA API validation.
-- Release and publish remain explicit-approval actions even when using the skill.
+## Git & Commit Workflow
 
-## Testing Guidelines
-
-- Rust tests: `cargo test --workspace` (or `make rust-test`). Tests are inline `#[cfg(test)]`.
-- Go tests: `go test ./...` (or `make go-test`). Tests are `*_test.go` colocated with source.
-- Run `make test` before pushing when you touch logic.
-- Agents MUST NOT modify baseline, inventory, ignore, snapshot, or expected-failure files to silence failing checks without explicit approval in this chat.
-- Changelog: user-facing changes only; no internal/meta notes (version alignment, appcast reminders, release process).
-- Changelog placement: in the active version block, append new entries to the end of the target section (`### Changes` or `### Fixes`); do not insert new entries at the top of a section.
-- Pure test additions/fixes generally do **not** need a changelog entry unless they alter user-facing behavior or the user asks for one.
-
-## Conventional Commit Format (REQUIRED)
+### Conventional Commit Format (REQUIRED)
 
 All commits MUST use Conventional Commit format. Module-only prefixes (e.g., `chat:`, `pilot:`, `memory:`) are NOT recognized by release-please and will be silently dropped from changelogs.
 
@@ -279,26 +295,111 @@ All commits MUST use Conventional Commit format. Module-only prefixes (e.g., `ch
 **Allowed types:** feat, fix, perf, refactor, docs, test, chore, ci, build
 **Allowed scopes:** any module name (chat, pilot, memory, vega, aurora, telegram, etc.)
 
-## Commit & Pull Request Guidelines
+### Commit & Pull Request Guidelines
 
 - Use `$deneb-pr-maintainer` at `.agents/skills/deneb-pr-maintainer/SKILL.md` for maintainer PR triage, review, close, search, and landing workflows.
 - This includes auto-close labels, bug-fix evidence gates, GitHub comment/search footguns, and maintainer PR decision flow.
-- For the repo's end-to-end maintainer PR workflow, use `$deneb-pr-maintainer` at `.agents/skills/deneb-pr-maintainer/SKILL.md`.
-
 - `/landpr` lives in the global Codex prompts (`~/.codex/prompts/landpr.md`); when landing or merging any PR, always follow that `/landpr` process.
 - Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
-- Follow concise, action-oriented commit messages (e.g., `CLI: add verbose flag to send`).
+- Follow concise, action-oriented commit messages.
 - Group related changes; avoid bundling unrelated refactors.
 - PR submission template (canonical): `.github/pull_request_template.md`
 - Issue submission templates (canonical): `.github/ISSUE_TEMPLATE/`
 
-## Git Notes
+### Git Operations & Safety
 
 - If `git branch -d/-D <branch>` is policy-blocked, delete the local ref directly: `git update-ref -d refs/heads/<branch>`.
 - Agents MUST NOT create or push merge commits on `main`. If `main` has advanced, rebase local commits onto the latest `origin/main` before pushing.
 - Bulk PR close/reopen safety: if a close action would affect more than 5 PRs, first ask for explicit user confirmation with the exact PR count and target scope/query.
 
-## Security & Configuration Tips
+---
+
+## Release & Advisory Workflows
+
+- Use `$deneb-release-maintainer` at `.agents/skills/deneb-release-maintainer/SKILL.md` for release naming, version coordination, release auth, and changelog-backed release-note workflows.
+- Use `$deneb-ghsa-maintainer` at `.agents/skills/deneb-ghsa-maintainer/SKILL.md` for GHSA advisory inspection, patch/publish flow, private-fork checks, and GHSA API validation.
+- Release and publish remain explicit-approval actions even when using the skill.
+
+---
+
+## Testing Guidelines
+
+- Rust tests: `cargo test --workspace` (or `make rust-test`). Tests are inline `#[cfg(test)]`.
+- Go tests: `go test ./...` (or `make go-test`). Tests are `*_test.go` colocated with source.
+- Run `make test` before pushing when you touch logic.
+- Agents MUST NOT modify baseline, inventory, ignore, snapshot, or expected-failure files to silence failing checks without explicit approval in this chat.
+- Changelog: user-facing changes only; no internal/meta notes (version alignment, appcast reminders, release process).
+- Changelog placement: in the active version block, append new entries to the end of the target section (`### Changes` or `### Fixes`); do not insert new entries at the top of a section.
+- Pure test additions/fixes generally do **not** need a changelog entry unless they alter user-facing behavior or the user asks for one.
+
+---
+
+## Local Platform & Runtime
+
+### macOS Platform
+
+- Vocabulary: "makeup" = "mac app".
+- Rebrand/migration issues or legacy config/service warnings: run `deneb doctor` (see `docs/gateway/doctor.md`).
+- Skill notes go in `tools.md` or `CLAUDE.md`.
+- SwiftUI state management (iOS/macOS): prefer the `Observation` framework (`@Observable`, `@Bindable`) over `ObservableObject`/`@StateObject`; don't introduce new `ObservableObject` unless required for compatibility, and migrate existing usages when touching related code.
+- Version locations: `package.json`, `core-rs/core/Cargo.toml`.
+- Do not rebuild the macOS app over SSH; rebuilds must be run directly on the Mac.
+
+### macOS Gateway & Logging
+
+- Gateway currently runs only as the menubar app; there is no separate LaunchAgent/helper label installed. Restart via the Deneb Mac app or `scripts/restart-mac.sh`; to verify/kill use `launchctl print gui/$UID | grep deneb` rather than assuming a fixed label.
+- **When debugging on macOS, start/stop the gateway via the app, not ad-hoc tmux sessions; kill any temporary tunnels before handoff.**
+- macOS logs: use `./scripts/clawlog.sh` to query unified logs for the Deneb subsystem; it supports follow/tail/category filters and expects passwordless sudo for `/usr/bin/log`.
+
+### Session Files & Remote Access
+
+- When asked to open a "session" file, open the Pi session logs under `~/.deneb/agents/<agentId>/sessions/*.jsonl` (use the `agent=<id>` value in the Runtime line of the system prompt; newest unless a specific ID is given), not the default `sessions.json`.
+- If logs are needed from another machine, SSH via Tailscale and read the same path there.
+
+### Platform-Specific Workflows
+
+- Use `$deneb-parallels-smoke` at `.agents/skills/deneb-parallels-smoke/SKILL.md` for Parallels smoke, rerun, upgrade, debug, and result-interpretation workflows across macOS, Windows, and Linux guests.
+- For the macOS Discord roundtrip deep dive, use the narrower `.agents/skills/parallels-discord-roundtrip/SKILL.md` companion skill.
+- Signal: "update fly" => `fly ssh console -a flawd-bot -C "bash -lc 'cd /data/clawd/deneb && git pull --rebase origin main'"` then `fly machines restart e825232f34d058 -a flawd-bot`.
+- Status output: `status --all` = read-only/pasteable, `status --deep` = probes.
+- If shared guardrails are available locally, review them; otherwise follow this repo's guidance.
+- Connection providers: when adding a new connection, update every UI surface and docs (macOS app, web UI, mobile if applicable, onboarding/overview docs) and add matching status + configuration forms so provider lists and settings stay in sync.
+
+### Git & .agents Directories
+
+- If you need local-only `.agents` ignores, use `.git/info/exclude` instead of repo `.gitignore`.
+
+---
+
+## Collaboration & Safety
+
+- When working on a GitHub Issue or PR, print the full URL at the end of the task.
+- When answering questions, respond with high-confidence answers only: verify in code; do not guess.
+- Patching dependencies requires explicit approval; do not do this by default.
+
+### Multi-Agent Safety
+
+- **Do not create/apply/drop `git stash` entries** unless explicitly requested (this includes `git pull --rebase --autostash`). Assume other agents may be working; keep unrelated WIP untouched and avoid cross-cutting state changes.
+- **When the user says "push"**, you may `git pull --rebase` to integrate latest changes (never discard other agents' work). When the user says "commit", scope to your changes only. When the user says "commit all", commit everything in grouped chunks.
+- **Do not create/remove/modify `git worktree` checkouts** (or edit `.worktrees/*`) unless explicitly requested.
+- **Do not switch branches / check out a different branch** unless explicitly requested.
+- **Running multiple agents is OK** as long as each agent has its own session.
+- **When you see unrecognized files**, keep going; focus on your changes and commit only those.
+
+### Code Quality & Safety
+
+- Lint/format churn:
+  - If staged+unstaged diffs are formatting-only, auto-resolve without asking.
+  - If commit/push already requested, auto-stage and include formatting-only follow-ups in the same commit (or a tiny follow-up commit if needed), no extra confirmation.
+  - Only ask when changes are semantic (logic/data/behavior).
+- **Focus reports on your edits**; avoid guard-rail disclaimers unless truly blocked; when multiple agents touch the same file, continue if safe; end with a brief "other files present" note only if relevant.
+- Bug investigations: read source code and all related local code before concluding; aim for high-confidence root cause.
+- Code style: add brief comments for tricky logic; keep files under ~500 LOC when feasible (split/refactor as needed).
+- Never send streaming/partial replies to external messaging surfaces (WhatsApp, Telegram); only final replies should be delivered there. Streaming/tool events may still go to internal UIs/control channel.
+- For manual `deneb message send` messages that include `!`, use the heredoc pattern to avoid the Bash tool's escaping.
+- Release guardrails: do not change version numbers without operator's explicit consent.
+
+### Security & Configuration
 
 - Web provider stores creds at `~/.deneb/credentials/`; rerun `deneb login` if logged out.
 - Pi sessions live under `~/.deneb/sessions/` by default; the base directory is not configurable.
@@ -306,50 +407,13 @@ All commits MUST use Conventional Commit format. Module-only prefixes (e.g., `ch
 - Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
 - Release flow: use the private [maintainer release docs](https://github.com/deneb/maintainers/blob/main/release/README.md) for the actual runbook, `docs/reference/RELEASING.md` for the public release policy, and `$deneb-release-maintainer` for the maintainership workflow.
 
-## Local Runtime / Platform Notes
+---
 
-- Vocabulary: "makeup" = "mac app".
-- Rebrand/migration issues or legacy config/service warnings: run `deneb doctor` (see `docs/gateway/doctor.md`).
-- Use `$deneb-parallels-smoke` at `.agents/skills/deneb-parallels-smoke/SKILL.md` for Parallels smoke, rerun, upgrade, debug, and result-interpretation workflows across macOS, Windows, and Linux guests.
-- For the macOS Discord roundtrip deep dive, use the narrower `.agents/skills/parallels-discord-roundtrip/SKILL.md` companion skill.
-- Skill notes go in `tools.md` or `CLAUDE.md`.
-- If you need local-only `.agents` ignores, use `.git/info/exclude` instead of repo `.gitignore`.
-- Signal: "update fly" => `fly ssh console -a flawd-bot -C "bash -lc 'cd /data/clawd/deneb && git pull --rebase origin main'"` then `fly machines restart e825232f34d058 -a flawd-bot`.
-- Status output: `status --all` = read-only/pasteable, `status --deep` = probes.
-- Gateway currently runs only as the menubar app; there is no separate LaunchAgent/helper label installed. Restart via the Deneb Mac app or `scripts/restart-mac.sh`; to verify/kill use `launchctl print gui/$UID | grep deneb` rather than assuming a fixed label. **When debugging on macOS, start/stop the gateway via the app, not ad-hoc tmux sessions; kill any temporary tunnels before handoff.**
-- macOS logs: use `./scripts/clawlog.sh` to query unified logs for the Deneb subsystem; it supports follow/tail/category filters and expects passwordless sudo for `/usr/bin/log`.
-- If shared guardrails are available locally, review them; otherwise follow this repo's guidance.
-- SwiftUI state management (iOS/macOS): prefer the `Observation` framework (`@Observable`, `@Bindable`) over `ObservableObject`/`@StateObject`; don’t introduce new `ObservableObject` unless required for compatibility, and migrate existing usages when touching related code.
-- Connection providers: when adding a new connection, update every UI surface and docs (macOS app, web UI, mobile if applicable, onboarding/overview docs) and add matching status + configuration forms so provider lists and settings stay in sync.
-- Version locations: `package.json`, `core-rs/core/Cargo.toml`.
-- When asked to open a “session” file, open the Pi session logs under `~/.deneb/agents/<agentId>/sessions/*.jsonl` (use the `agent=<id>` value in the Runtime line of the system prompt; newest unless a specific ID is given), not the default `sessions.json`. If logs are needed from another machine, SSH via Tailscale and read the same path there.
-- Do not rebuild the macOS app over SSH; rebuilds must be run directly on the Mac.
+## Production Deployment
 
-## Collaboration / Safety Notes
-
-- When working on a GitHub Issue or PR, print the full URL at the end of the task.
-- When answering questions, respond with high-confidence answers only: verify in code; do not guess.
-- Patching dependencies requires explicit approval; do not do this by default.
-- **Multi-agent safety:** do **not** create/apply/drop `git stash` entries unless explicitly requested (this includes `git pull --rebase --autostash`). Assume other agents may be working; keep unrelated WIP untouched and avoid cross-cutting state changes.
-- **Multi-agent safety:** when the user says "push", you may `git pull --rebase` to integrate latest changes (never discard other agents' work). When the user says "commit", scope to your changes only. When the user says "commit all", commit everything in grouped chunks.
-- **Multi-agent safety:** do **not** create/remove/modify `git worktree` checkouts (or edit `.worktrees/*`) unless explicitly requested.
-- **Multi-agent safety:** do **not** switch branches / check out a different branch unless explicitly requested.
-- **Multi-agent safety:** running multiple agents is OK as long as each agent has its own session.
-- **Multi-agent safety:** when you see unrecognized files, keep going; focus on your changes and commit only those.
-- Lint/format churn:
-  - If staged+unstaged diffs are formatting-only, auto-resolve without asking.
-  - If commit/push already requested, auto-stage and include formatting-only follow-ups in the same commit (or a tiny follow-up commit if needed), no extra confirmation.
-  - Only ask when changes are semantic (logic/data/behavior).
-- **Multi-agent safety:** focus reports on your edits; avoid guard-rail disclaimers unless truly blocked; when multiple agents touch the same file, continue if safe; end with a brief “other files present” note only if relevant.
-- Bug investigations: read source code and all related local code before concluding; aim for high-confidence root cause.
-- Code style: add brief comments for tricky logic; keep files under ~500 LOC when feasible (split/refactor as needed).
-- Never send streaming/partial replies to external messaging surfaces (WhatsApp, Telegram); only final replies should be delivered there. Streaming/tool events may still go to internal UIs/control channel.
-- For manual `deneb message send` messages that include `!`, use the heredoc pattern noted below to avoid the Bash tool’s escaping.
-- Release guardrails: do not change version numbers without operator’s explicit consent.
-
-## DGX Spark Production Build
+### DGX Spark Production Build
 
 - `make gateway-dgx` — Full production binary: Go gateway + Rust core (Vega FTS + semantic search + CUDA GGUF inference).
-- CUDA 없는 환경: `make rust-vega` (FTS-only 모드).
-- 환경 변수: `VEGA_MODEL_EMBEDDER`, `VEGA_MODEL_RERANKER`, `VEGA_MODEL_EXPANDER` (GGUF 경로).
-- 모델 자동 감지: `~/.deneb/models/*.gguf` (`gateway-go/internal/vega/autodetect.go`).
+- For environments without CUDA: `make rust-vega` (FTS-only mode).
+- Environment variables: `VEGA_MODEL_EMBEDDER`, `VEGA_MODEL_RERANKER`, `VEGA_MODEL_EXPANDER` (GGUF paths).
+- Model auto-detection: `~/.deneb/models/*.gguf` (see `gateway-go/internal/vega/autodetect.go`).
