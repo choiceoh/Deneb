@@ -5,9 +5,10 @@
 package autoreply
 
 import (
+	"context"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"context"
 )
 
 // GetReplyFromConfig is the main entry point for generating a reply.
@@ -145,7 +146,7 @@ func ResolveModelForReply(session *types.SessionState, directives InlineDirectiv
 
 	if directives.HasModelDirective && directives.RawModelDirective != "" {
 		// Parse provider/model from directive.
-		parts := splitProviderModel(directives.RawModelDirective)
+		parts := pipeline.SplitProviderModel(directives.RawModelDirective)
 		if parts[0] != "" {
 			provider = parts[0]
 		}
@@ -159,18 +160,4 @@ func ResolveModelForReply(session *types.SessionState, directives InlineDirectiv
 		Model:      model,
 		IsOverride: directives.HasModelDirective,
 	}
-}
-
-func splitProviderModel(ref string) [2]string {
-	idx := -1
-	for i, c := range ref {
-		if c == '/' {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		return [2]string{"", ref}
-	}
-	return [2]string{ref[:idx], ref[idx+1:]}
 }
