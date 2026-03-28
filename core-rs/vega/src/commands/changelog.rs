@@ -398,3 +398,11 @@ mod tests {
         assert_eq!(diff["new_comms"].as_array().unwrap().len(), 0);
     }
 }
+
+pub struct ChangelogHandler;
+
+impl super::CommandHandler for ChangelogHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_changelog(args, config)
+    }
+}

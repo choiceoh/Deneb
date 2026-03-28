@@ -217,3 +217,11 @@ fn append_to_section(content: &str, section_name: &str, line: &str) -> String {
 
     result
 }
+
+pub struct UpdateHandler;
+
+impl super::CommandHandler for UpdateHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_update(args, config)
+    }
+}

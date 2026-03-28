@@ -212,3 +212,11 @@ fn generate_detailed_template(
 "#
     )
 }
+
+pub struct TemplateHandler;
+
+impl super::CommandHandler for TemplateHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_template(args, config)
+    }
+}

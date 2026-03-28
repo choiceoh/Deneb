@@ -128,3 +128,11 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         }),
     )
 }
+
+pub struct SyncBackHandler;
+
+impl super::CommandHandler for SyncBackHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_sync_back(args, config)
+    }
+}

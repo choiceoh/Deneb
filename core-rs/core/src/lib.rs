@@ -16,6 +16,10 @@
 #[macro_use]
 extern crate napi_derive;
 
+// FFI utilities: error codes, FFI_MAX_INPUT_LEN, ffi_catch
+mod ffi_utils;
+use ffi_utils::*;
+
 // Core modules (C FFI + Rust API)
 pub mod compaction;
 pub mod context_engine;
@@ -36,38 +40,6 @@ pub mod safe_regex;
 // ---------------------------------------------------------------------------
 // C FFI exports (used by Go via CGo)
 // ---------------------------------------------------------------------------
-
-/// Maximum input size for FFI string functions (16 MB).
-/// Prevents DoS via pathologically large inputs.
-const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
-
-// FFI error code constants — used across all `extern "C"` functions.
-// Negative values are shared error codes (below). Positive values from
-// buffer-writing functions (deneb_detect_mime, deneb_sanitize_html, etc.)
-// represent bytes written — NOT error codes.
-// These MUST stay in sync with gateway-go/internal/ffi/errors.go.
-const FFI_ERR_NULL_PTR: i32 = -1;
-const FFI_ERR_INVALID_UTF8: i32 = -2;
-const FFI_ERR_OUTPUT_TOO_SMALL: i32 = -3;
-const FFI_ERR_INPUT_TOO_LARGE: i32 = -4;
-const FFI_ERR_JSON: i32 = -5;
-const FFI_ERR_OVERFLOW: i32 = -6;
-const FFI_ERR_VALIDATION: i32 = -7;
-const FFI_ERR_PANIC: i32 = -99;
-
-/// Wraps an FFI body in catch_unwind to prevent Rust panics from aborting
-/// the Go process. Returns `panic_rc` if the closure panics.
-///
-/// # Safety
-/// Callers must ensure the closure does not rely on invariants that could
-/// be violated by unwinding. All FFI closures here operate on local data
-/// only, so AssertUnwindSafe is safe.
-fn ffi_catch(panic_rc: i32, f: impl FnOnce() -> i32) -> i32 {
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
-        Ok(rc) => rc,
-        Err(_) => panic_rc,
-    }
-}
 
 /// C FFI: Validate a gateway frame (JSON bytes).
 /// Returns 0 on success, negative error code on failure.

@@ -465,3 +465,43 @@ mod tests {
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }
+
+pub struct MemorySearchHandler;
+
+impl super::CommandHandler for MemorySearchHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_memory_search(args, config)
+    }
+}
+
+pub struct MemoryUpdateHandler;
+
+impl super::CommandHandler for MemoryUpdateHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_memory_update(args, config)
+    }
+}
+
+pub struct MemoryEmbedHandler;
+
+impl super::CommandHandler for MemoryEmbedHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_memory_embed(args, config)
+    }
+}
+
+pub struct MemoryStatusHandler;
+
+impl super::CommandHandler for MemoryStatusHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_memory_status(args, config)
+    }
+}
+
+pub struct MemoryVersionHandler;
+
+impl super::CommandHandler for MemoryVersionHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_memory_version(args, config)
+    }
+}
