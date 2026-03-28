@@ -102,6 +102,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")
 	s.WriteString("- Do not narrate routine tool calls. Narrate only for multi-step, complex, or sensitive actions.\n")
 	s.WriteString("- Do not ask confirmation for reversible operations (reads, searches, status checks). Act immediately.\n")
+	s.WriteString("- Never ask the user to perform an action you can do with your tools. If you can read, search, execute, or check something yourself, do it directly.\n")
 	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail), grep >200 lines capped, find >500 grouped.\n\n")
 
 	// Pilot & Chaining (merged: Pilot + pilot vs direct tools + Tool Chaining).
