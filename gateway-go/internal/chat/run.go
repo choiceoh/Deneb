@@ -395,9 +395,14 @@ func executeAgentRun(
 	}
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
+	// Apply tool profile filtering if the delivery context specifies one (e.g., "coding" for Propus).
 	var tools []llm.Tool
 	if deps.tools != nil {
-		tools = deps.tools.LLMTools()
+		toolProfile := ""
+		if params.Delivery != nil {
+			toolProfile = params.Delivery.ToolProfile
+		}
+		tools = deps.tools.LLMToolsForProfile(toolProfile)
 	}
 
 	// For Anthropic API: rebuild system prompt as ContentBlock array with
@@ -443,6 +448,10 @@ func executeAgentRun(
 	var hooks StreamHooks
 	if broadcaster != nil {
 		hooks.OnTextDelta = broadcaster.EmitDelta
+		hooks.OnToolEmit = broadcaster.EmitToolStart
+		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
+		}
 	}
 	if typingSignaler != nil {
 		prevOnDelta := hooks.OnTextDelta

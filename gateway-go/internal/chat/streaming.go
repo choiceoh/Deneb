@@ -57,9 +57,10 @@ func (sb *streamBroadcaster) EmitToolStart(name, toolUseID string) {
 }
 
 // EmitToolResult broadcasts a tool execution result event.
-func (sb *streamBroadcaster) EmitToolResult(toolUseID, result string, isError bool) {
+func (sb *streamBroadcaster) EmitToolResult(name, toolUseID, result string, isError bool) {
 	sb.emit(eventTool, map[string]any{
 		"state":     "completed",
+		"tool":      name,
 		"toolUseId": toolUseID,
 		"result":    truncateForBroadcast(result, maxBroadcastResultLen),
 		"isError":   isError,

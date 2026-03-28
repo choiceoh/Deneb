@@ -48,9 +48,11 @@ type AgentResult struct {
 // StreamHooks contains optional callbacks for agent streaming events.
 // All fields are optional — nil callbacks are silently skipped.
 type StreamHooks struct {
-	OnTextDelta func(text string) // text delta streamed from LLM
-	OnThinking  func()            // reasoning/thinking delta received
-	OnToolStart func(name string) // tool invocation about to execute
+	OnTextDelta  func(text string)                          // text delta streamed from LLM
+	OnThinking   func()                                     // reasoning/thinking delta received
+	OnToolStart  func(name string)                          // tool invocation about to execute (typing/status)
+	OnToolEmit   func(name, toolUseID string)                     // tool start broadcast (name + ID for streaming)
+	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
 }
 
 // RunAgent executes the agent tool-call loop: call LLM → detect tool_use →
@@ -178,6 +180,9 @@ func RunAgent(
 				if hooks.OnToolStart != nil {
 					hooks.OnToolStart(tc.Name)
 				}
+				if hooks.OnToolEmit != nil {
+					hooks.OnToolEmit(tc.Name, tc.ID)
+				}
 				logger.Info("executing tool", "name", tc.Name, "turn", turn)
 
 				start := time.Now()
@@ -201,6 +206,11 @@ func RunAgent(
 					block.Content = toolOutput
 				}
 				toolResults[idx] = block
+
+				// Broadcast tool result to streaming clients.
+				if hooks.OnToolResult != nil {
+					hooks.OnToolResult(tc.Name, tc.ID, block.Content, block.IsError)
+				}
 
 				// Log tool execution to agent detail log.
 				if runLog != nil {
