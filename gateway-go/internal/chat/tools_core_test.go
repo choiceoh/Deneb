@@ -109,7 +109,7 @@ func TestRegisterCoreTools(t *testing.T) {
 		"apply_patch", "cron", "gateway",
 		"sessions_list", "sessions_history", "sessions_search", "sessions_restore",
 		"sessions_send", "sessions_spawn",
-		"subagents", "session_status", "image", "youtube_transcript", "nodes",
+		"subagents", "session_status", "image", "youtube_transcript",
 	}
 
 	registered := make(map[string]bool)
