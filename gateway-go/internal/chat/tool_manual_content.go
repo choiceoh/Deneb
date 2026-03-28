@@ -327,7 +327,7 @@ type guideEntry struct {
 var builtinGuideOrder = []string{
 	"aurora", "vega", "agent-loop", "compaction", "tools",
 	"system-prompt", "memory", "sessions", "architecture", "channels",
-	"telegram", "skills", "pilot", "cron", "autonomous",
+	"telegram", "skills", "pilot", "cron",
 	"web", "exec", "gateway-tool", "media", "gmail",
 	"data-tools", "sessions-tools", "message",
 	"provider", "liteparse", "metrics", "transcript",
@@ -419,12 +419,6 @@ var builtinGuides = map[string]guideEntry{
 		Title:   "Cron Scheduler",
 		Summary: "Job scheduling, delivery modes, session keys, failure alerts",
 		Content: cronGuide,
-	},
-	"autonomous": {
-		Key:     "autonomous",
-		Title:   "Autonomous System",
-		Summary: "Goal-driven cycles, stale detection, starvation alerts, memory consolidation",
-		Content: autonomousGuide,
 	},
 	"web": {
 		Key:     "web",

@@ -54,7 +54,6 @@ type SecretDeps = handlerplatform.SecretDeps
 type TalkDeps = handlerplatform.TalkDeps
 type ExtendedDeps = handleragent.ExtendedDeps
 type AgentsDeps = handleragent.AgentsDeps
-type AutonomousDeps = handleragent.AutonomousDeps
 type SessionDeps = handlersession.Deps
 type HeartbeatDeps = handlerpresence.HeartbeatDeps
 type PresenceDeps = handlerpresence.Deps
@@ -102,10 +101,6 @@ func RegisterExtendedMethods(d *Dispatcher, deps ExtendedDeps) {
 
 func RegisterAgentsMethods(d *Dispatcher, deps AgentsDeps) {
 	d.RegisterDomain(handleragent.CRUDMethods(deps))
-}
-
-func RegisterAutonomousMethods(d *Dispatcher, deps AutonomousDeps) {
-	d.RegisterDomain(handleragent.AutonomousMethods(deps))
 }
 
 func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {

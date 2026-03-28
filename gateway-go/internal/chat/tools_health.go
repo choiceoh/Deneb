@@ -18,8 +18,8 @@ func healthCheckToolSchema() map[string]any {
 		"properties": map[string]any{
 			"component": map[string]any{
 				"type":        "string",
-				"enum":        []string{"all", "embedding", "reranker", "sglang", "memory", "autonomous"},
-				"description": "Component to check (default: all). embedding=Gemini API, reranker=Jina API, sglang=local LLM, memory=aurora-memory DB, autonomous=autonomous service",
+				"enum":        []string{"all", "embedding", "reranker", "sglang", "memory"},
+				"description": "Component to check (default: all). embedding=Gemini API, reranker=Jina API, sglang=local LLM, memory=aurora-memory DB",
 			},
 		},
 	}
@@ -44,8 +44,6 @@ func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
 			return formatSglangHealth(), nil
 		case "memory":
 			return formatMemoryHealth(ctx, deps), nil
-		case "autonomous":
-			return formatAutonomousHealth(deps), nil
 		}
 
 		// Collect all component rows for "all" or vega-related components.
@@ -94,9 +92,6 @@ func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
 
 		// Append aurora-memory health.
 		rows = append(rows, checkMemoryComponent(ctx, deps))
-
-		// Append autonomous health.
-		rows = append(rows, checkAutonomousComponent(deps))
 
 		return formatHealthStatus(vega.HealthStatus{Components: rows}), nil
 	}
@@ -150,66 +145,6 @@ func formatMemoryHealth(ctx context.Context, deps *CoreToolDeps) string {
 	return fmt.Sprintf("## Aurora-Memory 상태\n\n%s %s (latency: %s)\n%s", icon, ch.Name, latency, ch.Detail)
 }
 
-// --- Autonomous health ---
-
-// checkAutonomousComponent probes the autonomous service and returns a ComponentHealth.
-func checkAutonomousComponent(deps *CoreToolDeps) vega.ComponentHealth {
-	ch := vega.ComponentHealth{Name: "autonomous"}
-	if deps.AutonomousSvc == nil {
-		ch.Detail = "not configured"
-		return ch
-	}
-
-	status := deps.AutonomousSvc.Status()
-	ch.Available = true
-
-	var parts []string
-
-	// Running/enabled state.
-	if status.Running {
-		parts = append(parts, "running")
-	} else {
-		parts = append(parts, "stopped")
-	}
-	if status.Enabled {
-		parts = append(parts, "enabled")
-	} else {
-		parts = append(parts, "disabled")
-	}
-
-	// Goal stats.
-	parts = append(parts, fmt.Sprintf("goals=%d/%d", status.ActiveGoals, status.TotalGoals))
-
-	// Cycle stats.
-	if status.TotalCycles > 0 {
-		parts = append(parts, fmt.Sprintf("cycles=%d, success=%.0f%%", status.TotalCycles, status.SuccessRate*100))
-	}
-
-	// Error tracking.
-	if status.ConsecutiveErr > 0 {
-		parts = append(parts, fmt.Sprintf("consecutive_errors=%d", status.ConsecutiveErr))
-	}
-
-	// Last cycle time.
-	if status.LastCycleAt > 0 {
-		lastAt := time.UnixMilli(status.LastCycleAt)
-		ago := time.Since(lastAt).Round(time.Second)
-		parts = append(parts, fmt.Sprintf("last_cycle=%s ago", ago))
-	}
-
-	ch.Detail = strings.Join(parts, ", ")
-	return ch
-}
-
-// formatAutonomousHealth returns a standalone autonomous health report.
-func formatAutonomousHealth(deps *CoreToolDeps) string {
-	ch := checkAutonomousComponent(deps)
-	icon := "✅"
-	if !ch.Available {
-		icon = "❌"
-	}
-	return fmt.Sprintf("## Autonomous 상태\n\n%s %s\n%s", icon, ch.Name, ch.Detail)
-}
 
 // --- Shared helpers ---
 
@@ -224,8 +159,6 @@ func matchesComponent(name, filter string) bool {
 		return strings.Contains(name, "sglang")
 	case "memory":
 		return strings.Contains(name, "memory")
-	case "autonomous":
-		return strings.Contains(name, "autonomous")
 	default:
 		return false
 	}

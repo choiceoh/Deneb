@@ -1,5 +1,5 @@
 // Package agent provides RPC handlers for agent management, sessions,
-// process/cron/hooks orchestration, agents CRUD, and autonomous mode.
+// process/cron/hooks orchestration, and agents CRUD.
 package agent
 
 import (
@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 
 	agentpkg "github.com/choiceoh/deneb/gateway-go/internal/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
@@ -41,11 +40,6 @@ type ExtendedDeps struct {
 type AgentsDeps struct {
 	Agents      *agentpkg.Store
 	Broadcaster BroadcastFunc
-}
-
-// AutonomousDeps holds the dependencies for autonomous RPC methods.
-type AutonomousDeps struct {
-	Autonomous *autonomous.Service
 }
 
 // ExtendedMethods returns the extended agent/session/process/cron/hooks handlers.
@@ -97,24 +91,6 @@ func CRUDMethods(deps AgentsDeps) map[string]rpcutil.HandlerFunc {
 		"agents.files.list": agentsFilesList(deps),
 		"agents.files.get":  agentsFilesGet(deps),
 		"agents.files.set":  agentsFilesSet(deps),
-	}
-}
-
-// AutonomousMethods returns the autonomous.* handlers.
-func AutonomousMethods(deps AutonomousDeps) map[string]rpcutil.HandlerFunc {
-	if deps.Autonomous == nil {
-		return nil
-	}
-
-	return map[string]rpcutil.HandlerFunc{
-		"autonomous.status":       autonomousStatus(deps),
-		"autonomous.goals.list":   autonomousGoalsList(deps),
-		"autonomous.goals.add":    autonomousGoalsAdd(deps),
-		"autonomous.goals.update": autonomousGoalsUpdate(deps),
-		"autonomous.goals.remove": autonomousGoalsRemove(deps),
-		"autonomous.cycle.run":    autonomousCycleRun(deps),
-		"autonomous.cycle.stop":   autonomousCycleStop(deps),
-		"autonomous.enable":       autonomousEnable(deps),
 	}
 }
 
@@ -569,125 +545,3 @@ func agentsFilesSet(deps AgentsDeps) rpcutil.HandlerFunc {
 	}
 }
 
-// --- Autonomous methods ---
-
-func autonomousStatus(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		status := deps.Autonomous.Status()
-		recentRuns := deps.Autonomous.RecentRuns(5)
-		return protocol.MustResponseOK(req.ID, map[string]any{
-			"status":     status,
-			"recentRuns": recentRuns,
-		})
-	}
-}
-
-func autonomousGoalsList(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		goals, err := deps.Autonomous.Goals().List()
-		if err != nil {
-			return rpcerr.Unavailable("failed to load goals: " + err.Error()).Response(req.ID)
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
-			"goals": goals,
-			"count": len(goals),
-		})
-	}
-}
-
-func autonomousGoalsAdd(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			Description string `json:"description"`
-			Priority    string `json:"priority"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
-		}
-		if p.Description == "" {
-			return rpcerr.MissingParam("description").Response(req.ID)
-		}
-
-		goal, err := deps.Autonomous.AddGoal(p.Description, p.Priority)
-		if err != nil {
-			return rpcerr.Unavailable("failed to add goal: " + err.Error()).Response(req.ID)
-		}
-		return protocol.MustResponseOK(req.ID, goal)
-	}
-}
-
-func autonomousGoalsUpdate(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			ID       string `json:"id"`
-			Priority string `json:"priority,omitempty"`
-			Status   string `json:"status,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
-		}
-		if p.ID == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
-		}
-		if p.Priority == "" && p.Status == "" {
-			return rpcerr.MissingParam("priority or status").Response(req.ID)
-		}
-
-		if err := deps.Autonomous.Goals().UpdateGoal(p.ID, p.Priority, p.Status); err != nil {
-			return rpcerr.NotFound("goal").Response(req.ID)
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"updated": p.ID})
-	}
-}
-
-func autonomousGoalsRemove(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			ID string `json:"id"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
-		}
-		if p.ID == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
-		}
-
-		if err := deps.Autonomous.Goals().Remove(p.ID); err != nil {
-			return rpcerr.NotFound("goal").Response(req.ID)
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"removed": p.ID})
-	}
-}
-
-func autonomousCycleRun(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		// Start cycle asynchronously -- don't block the RPC response.
-		if err := deps.Autonomous.RunCycleAsync(); err != nil {
-			return rpcerr.Unavailable(err.Error()).Response(req.ID)
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
-			"started": true,
-			"status":  "cycle started in background",
-		})
-	}
-}
-
-func autonomousCycleStop(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		deps.Autonomous.StopCycle()
-		return protocol.MustResponseOK(req.ID, map[string]any{"stopped": true})
-	}
-}
-
-func autonomousEnable(deps AutonomousDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			Enabled bool `json:"enabled"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
-		}
-		deps.Autonomous.SetEnabled(p.Enabled)
-		return protocol.MustResponseOK(req.ID, map[string]any{"enabled": p.Enabled})
-	}
-}

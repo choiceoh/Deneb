@@ -86,7 +86,6 @@ const toolsGuide = `The tool system provides the AI agent with 34 capabilities t
 - LLMClient (*llm.Client): vision/image analysis
 - Transcript (TranscriptStore): history access
 - SessionSendFn: cross-session message delivery
-- AutonomousSvc (*autonomous.Service): goal management
 All fields gracefully degrade to friendly error when nil.
 
 ## Tool Execution Flow
@@ -122,7 +121,7 @@ Exec: exec, process
 AI: pilot (local sglang orchestrator)
 Web: web (search + fetch + search+fetch), http
 Memory: memory_search, memory_get, polaris
-System: cron, autonomous, message, gateway
+System: cron, message, gateway
 Sessions: sessions_list/history/search/restore/send/spawn, subagents, session_status
 Media: image, youtube_transcript, send_file
 Data: gmail, kv
@@ -151,8 +150,7 @@ Tools access runtime context via context.Context:
 - gateway-go/internal/chat/tool_message.go (messaging)
 - gateway-go/internal/chat/tool_media.go (image/youtube/send_file)
 - gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_gmail.go (Gmail)
-- gateway-go/internal/chat/tool_autonomous.go (autonomous goals)`
+- gateway-go/internal/chat/tool_gmail.go (Gmail)`
 
 const systemPromptGuide = `The system prompt is the instruction set injected into every LLM call. It defines the agent's identity, available tools, and behavioral rules.
 

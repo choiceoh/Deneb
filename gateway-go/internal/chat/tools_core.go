@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -34,10 +33,6 @@ type CoreToolDeps struct {
 	// SessionSendFn is a callback that sends a message to a target session,
 	// triggering an agent run. Set after Handler creation to avoid circular deps.
 	SessionSendFn func(sessionKey, message string) error
-
-	// AutonomousSvc is set after Handler creation to avoid init-order deps.
-	// The autonomous tool gracefully degrades when this is nil.
-	AutonomousSvc *autonomous.Service
 
 	// VegaBackend is the optional Vega search backend.
 	// The vega tool gracefully degrades when this is nil.
@@ -122,10 +117,10 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolMemorySearch(workspaceDir),
 	})
 
-	// -- Health check tool (embedding, reranker, sglang, memory, autonomous diagnostics) --
+	// -- Health check tool (embedding, reranker, sglang, memory diagnostics) --
 	registry.RegisterTool(ToolDef{
 		Name:        "health_check",
-		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB), autonomous (자율 실행). component: all (기본), embedding, reranker, sglang, memory, autonomous",
+		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
 		InputSchema: healthCheckToolSchema(),
 		Fn:          toolHealthCheck(deps),
 	})
@@ -141,7 +136,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- System manual tool (queryable Deneb documentation) --
 	registry.RegisterTool(ToolDef{
 		Name:        "polaris",
-		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels, telegram, skills, pilot, cron, autonomous, web, exec, gateway-tool, media, gmail, data-tools, sessions-tools, message, provider, liteparse, metrics, transcript)",
+		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (26 AI-curated system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels, telegram, skills, pilot, cron, web, exec, gateway-tool, media, gmail, data-tools, sessions-tools, message, provider, liteparse, metrics, transcript)",
 		InputSchema: systemManualToolSchema(),
 		Fn:          toolSystemManual(workspaceDir),
 	})
@@ -299,14 +294,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Gmail (native OAuth2): inbox summary, search, read, send, reply, labels with contact aliases. Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
 		Fn:          toolGmail(),
-	})
-
-	// -- Autonomous tool (goal-driven execution management) --
-	registry.RegisterTool(ToolDef{
-		Name:        "autonomous",
-		Description: "Manage autonomous goals and execution cycles. Autonomous cycles let Deneb act without waiting for user input — essential for callbacks like sub-agent completion notifications, scheduled checks, and deferred task follow-ups that would otherwise stay unread until the user speaks. Actions: status, goals, add_goal, update_goal, remove_goal, cycle_run, cycle_stop, enable, disable, recent_runs",
-		InputSchema: autonomousToolSchema(),
-		Fn:          toolAutonomous(deps),
 	})
 
 	// -- Agent logs tool (pilot-only: query past run detail logs for diagnostics) --

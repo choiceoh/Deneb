@@ -119,10 +119,7 @@ pub enum Commands {
     /// QR code operations.
     Qr(subcli::qr::QrArgs),
 
-    /// Autonomous agent management.
-    Autonomous(subcli::autonomous::AutonomousArgs),
-
-    /// Cron job scheduling.
+/// Cron job scheduling.
     Cron(subcli::cron::CronArgs),
 
     /// Hook management.

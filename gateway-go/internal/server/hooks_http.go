@@ -88,7 +88,7 @@ type HookMapping struct {
 type HookWakePayload struct {
 	Text   string `json:"text"`
 	Mode   string `json:"mode,omitempty"`   // "now" or "next-heartbeat"
-	Target string `json:"target,omitempty"` // "autonomous" to trigger autonomous cycle
+	Target string `json:"target,omitempty"`
 }
 
 // HookAgentPayload is the request body for /hooks/agent.
@@ -144,8 +144,6 @@ type HookDispatchers struct {
 	DispatchWake func(text string, mode string)
 	// DispatchAgent starts an agent job and returns a runId.
 	DispatchAgent func(payload HookAgentDispatchPayload) string
-	// DispatchAutonomousWake triggers an autonomous cycle (Phase 2).
-	DispatchAutonomousWake func(text string)
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -316,12 +314,6 @@ type HooksHTTPHandler struct {
 	rateLimiter *hookAuthRateLimiter
 	replayCache *hookReplayCache
 	logger      *slog.Logger
-}
-
-// SetAutonomousWakeDispatcher sets the callback for autonomous wake triggers.
-// Called after the autonomous service is initialized.
-func (h *HooksHTTPHandler) SetAutonomousWakeDispatcher(fn func(text string)) {
-	h.dispatchers.DispatchAutonomousWake = fn
 }
 
 // NewHooksHTTPHandler creates a new webhook HTTP handler.

@@ -8,6 +8,7 @@ import (
 )
 
 // telegramNotifier implements autonomous.Notifier by sending DMs via Telegram.
+// Used for AuroraDream cycle notifications.
 type telegramNotifier struct {
 	plugin *telegram.Plugin
 	chatID int64
@@ -22,7 +23,7 @@ func (n *telegramNotifier) Notify(ctx context.Context, message string) error {
 	}
 	_, err := telegram.SendText(ctx, client, n.chatID, message, telegram.SendOptions{})
 	if err != nil {
-		n.logger.Warn("autonomous telegram notification failed", "error", err)
+		n.logger.Warn("dreaming telegram notification failed", "error", err)
 	}
 	return err
 }

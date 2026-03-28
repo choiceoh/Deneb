@@ -103,7 +103,7 @@ IDLE → RUNNING → DONE / FAILED / KILLED / TIMEOUT
 const architectureGuide = `Deneb: multi-language gateway with three cooperating runtimes on DGX Spark hardware.
 
 ## Three Runtimes
-1. **Go Gateway** (primary): HTTP/WS server, RPC (130+ methods), sessions, auth, cron, autonomous, chat/agent loop
+1. **Go Gateway** (primary): HTTP/WS server, RPC (130+ methods), sessions, auth, cron, chat/agent loop
 2. **Rust Core** (CGo FFI): protocol validation, security, media detection (21 formats), markdown parsing, memory search (SIMD cosine), context engine, compaction, parsing utilities
 3. **Node.js Plugin Host** (subprocess): channels, skills, providers via TypeScript SDK
 
@@ -162,7 +162,7 @@ Rust yields commands (FetchMessages, Summarize), Go executes I/O, feeds response
 ## Gateway Internal Subsystems (gateway-go/internal/, 40+)
 Core: server/, rpc/, session/, channel/, chat/, auth/, ffi/
 AI: llm/, provider/ (plugin registry, model discovery, auth), vega/, memory/, aurora/
-Automation: cron/, autonomous/, hooks/
+Automation: cron/, hooks/
 Infrastructure: config/, logging/, metrics/ (Prometheus /metrics endpoint), monitoring/, middleware/
 Media: media/, liteparse/ (PDF/Office/CSV document parsing via lit CLI)
 Tools: process/, plugin/, skills/, skill/
@@ -438,70 +438,3 @@ const cronGuide = `Cron manages scheduled jobs that trigger agent turns at confi
 - gateway-go/internal/chat/tool_cron.go (cron tool implementation)
 - docs/automation/cron-jobs.md (25KB, comprehensive user docs)`
 
-const autonomousGuide = `Autonomous mode runs goal-driven agent cycles without user interaction.
-
-## Why Autonomous?
-Normal agent operation is reactive: the agent only runs when the user sends a message.
-This means sub-agent results delivered via session_send, scheduled checks, and deferred
-follow-ups sit unprocessed until the user speaks. Autonomous mode solves this by giving
-the agent its own turn — each cycle checks pending work (e.g. sub-agent callbacks,
-monitoring alerts) and acts on it proactively, enabling true "I'll let you know when
-it's done" behavior.
-
-## Autonomous Tool (agent-callable, 10 actions)
-- status: service status (running, enabled, active/total goals, cycle stats)
-- goals: list goals (filter: all|active|completed|paused)
-- add_goal: create goal (description required, priority: high|medium|low)
-- update_goal: modify goal (goal_id required; optional: priority, status, note)
-- remove_goal: delete goal (goal_id required)
-- cycle_run: spawn cycle in background (async)
-- cycle_stop: request graceful cycle stop
-- enable/disable: toggle autonomous timer
-- recent_runs: list recent cycle runs (default 10, via count param)
-
-## Goals
-- Max 20 goals, each with: description, priority (high/medium/low), status (active/completed/paused)
-- NoteHistory: last 3 progress notes (newest first)
-- CycleCount: times this goal was worked on, LastWorkedAtMs: last cycle timestamp
-- Completed goals auto-purge after 7 days
-
-## Cycle Execution
-- Session key: autonomous:cycle (shared transcript across cycles)
-- Decision prompt includes: active goals with priority, last cycle summary, recently changed goals
-- Agent selects highest-priority feasible goal, executes tools, reports progress
-- Output: goal_update JSON block with {id, status, note}
-- Each cycle has full tool access (exec, read, write, web, etc.)
-
-## Status Transitions
-- active → completed: fully achieved, verified
-- active → paused: blocked by external dep, permission, or impossibility
-- paused → active: user reactivates (paused reason cleared)
-
-## Stale Goal Detection
-- IsStale(): CycleCount >= 5 AND last 3 notes share same 50-char prefix (spinning in place)
-- Flagged with ⚠️ 반복 정체 in decision prompt
-- Auto-pause after 10 stale cycles (prevents infinite loops)
-
-## Starvation Detection
-- Goal flagged if never worked (CycleCount == 0) while others have been worked on
-- Flagged if idle > 3 cycle intervals (~30 min)
-- Marked with ⚠️ 장기 미작업 in decision prompt
-
-## Enable/Disable
-- enabled=true (default): cycles run on configured schedule
-- enabled=false: timer paused, manual cycle_run still works
-- State persisted in CycleState (survives gateway restart)
-
-## Memory Consolidation (Dreamer)
-- Optional post-cycle memory consolidation
-- Dreamer reviews cycle results and writes durable notes to MEMORY.md / memory/
-- Events: dreaming_started, dreaming_completed, dreaming_failed
-
-## Service Status Fields
-- Running, Enabled, CycleRunning, ActiveGoals, TotalGoals
-- LastCycleAt, ConsecutiveErr, TotalCycles, SuccessRate, AvgDurationMs
-
-## Key Files
-- gateway-go/internal/autonomous/goal.go, cycle.go, service.go
-- gateway-go/internal/chat/tool_autonomous.go (autonomous tool, 10 actions)
-- docs/automation/autonomous.md`
