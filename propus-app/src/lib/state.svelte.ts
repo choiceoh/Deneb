@@ -1,6 +1,6 @@
 // ═══ Propus app state — Svelte 5 runes (class-based for module export) ═══
 
-import type { ChatMessage, ServerMessage } from "./types";
+import type { ChatMessage, ServerMessage, SessionPreview } from "./types";
 import { parseSegments } from "./types";
 import { PropusWebSocket, loadSavedUrl, saveUrl, saveConnId } from "./ws";
 import type { ConnectionStatus } from "./ws";
@@ -24,6 +24,9 @@ class PropusState {
   msgCount = $state(0);
   isTyping = $state(false);
   sidebarVisible = $state(true);
+  sessions = $state<SessionPreview[]>([]);
+  currentSessionKey = $state("");
+  sessionSearchQuery = $state("");
 
   private _typingTimer: ReturnType<typeof setTimeout> | undefined;
   private _toolStartTimes = new Map<string, number>();
@@ -146,7 +149,10 @@ class PropusState {
         // Save conn_id for session resume on reconnect.
         if (msg.data.conn_id) {
           saveConnId(msg.data.conn_id);
+          this.currentSessionKey = "propus:" + msg.data.conn_id;
         }
+        // Auto-load session list on connect/reconnect.
+        this.loadSessions();
         break;
 
       case "File":
@@ -175,6 +181,31 @@ class PropusState {
           this.isTyping = false;
         }, 3000);
         break;
+
+      case "SessionList":
+        this.sessions = msg.data.sessions || [];
+        break;
+
+      case "SessionHistory": {
+        // Replay messages from a switched session.
+        const historyMsgs = msg.data.messages || [];
+        for (const m of historyMsgs) {
+          this.messages = [
+            ...this.messages,
+            {
+              id: genId(),
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              segments:
+                m.role === "assistant"
+                  ? parseSegments(m.content)
+                  : [{ type: "text", content: m.content }],
+            },
+          ];
+        }
+        this.msgCount = this.messages.length;
+        break;
+      }
 
       case "Pong":
         break;
@@ -238,6 +269,8 @@ class PropusState {
     this.usageText = "";
     this.msgCount = 0;
     this.statusText = "대화 초기화됨";
+    // Refresh session list after clearing.
+    this.loadSessions();
   }
 
   saveSession(): void {
@@ -254,6 +287,30 @@ class PropusState {
 
   toggleSidebar(): void {
     this.sidebarVisible = !this.sidebarVisible;
+  }
+
+  loadSessions(): void {
+    this.ws.send({ type: "ListSessions" });
+  }
+
+  switchSession(key: string): void {
+    if (!key || key === this.currentSessionKey) return;
+    this.messages = [];
+    this.streamingText = "";
+    this.usageText = "";
+    this.msgCount = 0;
+    this.isStreaming = false;
+    this.currentSessionKey = key;
+    this.ws.send({ type: "SwitchSession", data: { session_key: key } });
+  }
+
+  searchSessions(query: string): void {
+    this.sessionSearchQuery = query;
+    if (query.trim()) {
+      this.ws.send({ type: "SearchSessions", data: { query } });
+    } else {
+      this.loadSessions();
+    }
   }
 
   initAutoConnect(): void {

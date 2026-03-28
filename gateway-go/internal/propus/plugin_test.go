@@ -207,6 +207,98 @@ func TestPlugin_Status_Disabled(t *testing.T) {
 	}
 }
 
+func TestPlugin_HandleMessage_ListSessions(t *testing.T) {
+	p := newTestPlugin()
+
+	var listCalled bool
+	p.SetSessionList(func() ([]SessionPreview, error) {
+		listCalled = true
+		return []SessionPreview{
+			{Key: "propus:conn-1", Title: "테스트", UpdatedAt: 1711612800000, MessageCount: 3, Status: "idle"},
+		}, nil
+	})
+
+	cc := &clientConn{connID: "test-conn-list", lastPong: time.Now()}
+	data, _ := json.Marshal(ClientMessage{Type: "ListSessions"})
+	p.handleMessage(cc, data)
+
+	if !listCalled {
+		t.Fatal("expected sessionList to be called")
+	}
+}
+
+func TestPlugin_HandleMessage_SwitchSession(t *testing.T) {
+	p := newTestPlugin()
+
+	var gotOld, gotNew string
+	p.SetSessionSwitch(func(oldKey, newKey string) ([]SessionHistoryMsg, error) {
+		gotOld = oldKey
+		gotNew = newKey
+		return []SessionHistoryMsg{
+			{Role: "user", Content: "hello"},
+			{Role: "assistant", Content: "hi there"},
+		}, nil
+	})
+
+	cc := &clientConn{connID: "test-conn-switch", lastPong: time.Now()}
+	data, _ := json.Marshal(ClientMessage{
+		Type: "SwitchSession",
+		Data: json.RawMessage(`{"session_key":"propus:other-conn"}`),
+	})
+	p.handleMessage(cc, data)
+
+	if gotOld != "propus:test-conn-switch" {
+		t.Fatalf("expected old key propus:test-conn-switch, got %s", gotOld)
+	}
+	if gotNew != "propus:other-conn" {
+		t.Fatalf("expected new key propus:other-conn, got %s", gotNew)
+	}
+}
+
+func TestPlugin_HandleMessage_SwitchSessionEmptyKey(t *testing.T) {
+	p := newTestPlugin()
+
+	called := false
+	p.SetSessionSwitch(func(_, _ string) ([]SessionHistoryMsg, error) {
+		called = true
+		return nil, nil
+	})
+
+	cc := &clientConn{connID: "test-conn-switch-empty", lastPong: time.Now()}
+	data, _ := json.Marshal(ClientMessage{
+		Type: "SwitchSession",
+		Data: json.RawMessage(`{"session_key":""}`),
+	})
+	p.handleMessage(cc, data)
+
+	if called {
+		t.Fatal("sessionSwitch should not be called for empty key")
+	}
+}
+
+func TestPlugin_HandleMessage_SearchSessions(t *testing.T) {
+	p := newTestPlugin()
+
+	var gotQuery string
+	p.SetSessionSearch(func(query string) ([]SessionPreview, error) {
+		gotQuery = query
+		return []SessionPreview{
+			{Key: "propus:conn-1", Title: "검색 결과", MessageCount: 5, Status: "idle"},
+		}, nil
+	})
+
+	cc := &clientConn{connID: "test-conn-search", lastPong: time.Now()}
+	data, _ := json.Marshal(ClientMessage{
+		Type: "SearchSessions",
+		Data: json.RawMessage(`{"query":"코드 리뷰"}`),
+	})
+	p.handleMessage(cc, data)
+
+	if gotQuery != "코드 리뷰" {
+		t.Fatalf("expected query '코드 리뷰', got '%s'", gotQuery)
+	}
+}
+
 func TestRandomFileID(t *testing.T) {
 	id1 := randomFileID()
 	id2 := randomFileID()

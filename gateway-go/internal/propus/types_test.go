@@ -86,6 +86,83 @@ func TestMsgConfigStatus(t *testing.T) {
 	assertDataField(t, msg, "conn_id", "propus-123")
 }
 
+func TestMsgSessionList(t *testing.T) {
+	sessions := []SessionPreview{
+		{Key: "propus:conn-1", Title: "프로젝트 분석", UpdatedAt: 1711612800000, MessageCount: 5, Status: "active"},
+		{Key: "propus:conn-2", Title: "코드 리뷰", UpdatedAt: 1711526400000, MessageCount: 12, Status: "done"},
+	}
+	msg := MsgSessionList(sessions)
+	assertMsgType(t, msg, "SessionList")
+
+	b, _ := json.Marshal(msg)
+	var raw map[string]any
+	_ = json.Unmarshal(b, &raw)
+	data := raw["data"].(map[string]any)
+	sessionsData := data["sessions"].([]any)
+	if len(sessionsData) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(sessionsData))
+	}
+	first := sessionsData[0].(map[string]any)
+	if first["key"] != "propus:conn-1" {
+		t.Fatalf("expected key propus:conn-1, got %v", first["key"])
+	}
+	if first["title"] != "프로젝트 분석" {
+		t.Fatalf("expected title 프로젝트 분석, got %v", first["title"])
+	}
+}
+
+func TestMsgSessionListEmpty(t *testing.T) {
+	msg := MsgSessionList(nil)
+	assertMsgType(t, msg, "SessionList")
+
+	b, _ := json.Marshal(msg)
+	var raw map[string]any
+	_ = json.Unmarshal(b, &raw)
+	data := raw["data"].(map[string]any)
+	if data["sessions"] != nil {
+		t.Fatalf("expected nil sessions for empty list")
+	}
+}
+
+func TestMsgSessionHistory(t *testing.T) {
+	history := []SessionHistoryMsg{
+		{Role: "user", Content: "안녕"},
+		{Role: "assistant", Content: "안녕하세요!"},
+	}
+	msg := MsgSessionHistory(history)
+	assertMsgType(t, msg, "SessionHistory")
+
+	b, _ := json.Marshal(msg)
+	var raw map[string]any
+	_ = json.Unmarshal(b, &raw)
+	data := raw["data"].(map[string]any)
+	msgs := data["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+}
+
+func TestSessionPreviewJSON(t *testing.T) {
+	sp := SessionPreview{
+		Key:          "propus:test",
+		Title:        "테스트 세션",
+		UpdatedAt:    1711612800000,
+		MessageCount: 10,
+		Status:       "idle",
+	}
+	b, err := json.Marshal(sp)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var got SessionPreview
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if got.Key != sp.Key || got.Title != sp.Title || got.UpdatedAt != sp.UpdatedAt {
+		t.Fatalf("roundtrip mismatch: %+v vs %+v", sp, got)
+	}
+}
+
 // --- helpers ---
 
 func assertMsgType(t *testing.T, msg ServerMessage, expected string) {

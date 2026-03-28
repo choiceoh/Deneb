@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1924,6 +1925,127 @@ func (s *Server) wirePropusChatHandler() {
 		}
 
 		return dstPath, nil
+	})
+
+	// Inbound: Propus client ListSessions → list all session transcripts.
+	s.propusPlug.SetSessionList(func() ([]propus.SessionPreview, error) {
+		if s.toolDeps == nil || s.toolDeps.Transcript == nil {
+			return nil, fmt.Errorf("transcript store not available")
+		}
+		keys, err := s.toolDeps.Transcript.ListKeys()
+		if err != nil {
+			return nil, err
+		}
+		var previews []propus.SessionPreview
+		for _, key := range keys {
+			msgs, total, err := s.toolDeps.Transcript.Load(key, 0)
+			if err != nil || total == 0 {
+				continue
+			}
+			// Extract title from first user message.
+			title := key
+			var updatedAt int64
+			for _, m := range msgs {
+				if m.Role == "user" && m.Content != "" {
+					title = m.Content
+					break
+				}
+			}
+			// Truncate title to 50 chars.
+			if len([]rune(title)) > 50 {
+				title = string([]rune(title)[:50]) + "..."
+			}
+			// Use last message timestamp as updated_at.
+			if last := msgs[len(msgs)-1]; last.Timestamp > 0 {
+				updatedAt = last.Timestamp
+			}
+			// Determine status from session manager.
+			status := "idle"
+			if s.sessions != nil {
+				if sess := s.sessions.Get(key); sess != nil {
+					switch sess.Status {
+					case session.StatusRunning:
+						status = "active"
+					case session.StatusDone, session.StatusFailed, session.StatusKilled:
+						status = "done"
+					}
+				}
+			}
+			previews = append(previews, propus.SessionPreview{
+				Key:          key,
+				Title:        title,
+				UpdatedAt:    updatedAt,
+				MessageCount: total,
+				Status:       status,
+			})
+		}
+		// Sort by updated_at descending (most recent first).
+		sort.Slice(previews, func(i, j int) bool {
+			return previews[i].UpdatedAt > previews[j].UpdatedAt
+		})
+		return previews, nil
+	})
+
+	// Inbound: Propus client SwitchSession → load target session's history.
+	s.propusPlug.SetSessionSwitch(func(oldSessionKey, newSessionKey string) ([]propus.SessionHistoryMsg, error) {
+		if s.toolDeps == nil || s.toolDeps.Transcript == nil {
+			return nil, fmt.Errorf("transcript store not available")
+		}
+		// Abort any active run on the old session.
+		if s.chatHandler != nil {
+			s.chatHandler.InterruptActiveRun(oldSessionKey)
+		}
+		// Load message history for the target session.
+		msgs, _, err := s.toolDeps.Transcript.Load(newSessionKey, 0)
+		if err != nil {
+			return nil, fmt.Errorf("load session: %w", err)
+		}
+		var history []propus.SessionHistoryMsg
+		for _, m := range msgs {
+			if m.Role == "user" || m.Role == "assistant" {
+				history = append(history, propus.SessionHistoryMsg{
+					Role:    m.Role,
+					Content: m.Content,
+				})
+			}
+		}
+		return history, nil
+	})
+
+	// Inbound: Propus client SearchSessions → search transcripts by query.
+	s.propusPlug.SetSessionSearch(func(query string) ([]propus.SessionPreview, error) {
+		if s.toolDeps == nil || s.toolDeps.Transcript == nil {
+			return nil, fmt.Errorf("transcript store not available")
+		}
+		results, err := s.toolDeps.Transcript.Search(query, 50)
+		if err != nil {
+			return nil, err
+		}
+		var previews []propus.SessionPreview
+		for _, r := range results {
+			title := r.SessionKey
+			if len(r.Matches) > 0 {
+				// Use the first matched message content as preview title.
+				title = r.Matches[0].Message.Content
+			}
+			if len([]rune(title)) > 50 {
+				title = string([]rune(title)[:50]) + "..."
+			}
+			// Load full session to get metadata.
+			msgs, total, _ := s.toolDeps.Transcript.Load(r.SessionKey, 0)
+			var updatedAt int64
+			if len(msgs) > 0 {
+				updatedAt = msgs[len(msgs)-1].Timestamp
+			}
+			previews = append(previews, propus.SessionPreview{
+				Key:          r.SessionKey,
+				Title:        title,
+				UpdatedAt:    updatedAt,
+				MessageCount: total,
+				Status:       "idle",
+			})
+		}
+		return previews, nil
 	})
 
 	// Outbound: reply function — Propus sessions receive streaming deltas via
