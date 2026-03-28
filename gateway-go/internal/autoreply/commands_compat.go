@@ -1,21 +1,21 @@
-// commands_compat.go — Re-exports from the autoreply/commands subpackage.
-// TODO: Remove after all callers are updated to import autoreply/commands directly.
+// commands_compat.go — Re-exports from the autoreply/handlers subpackage.
+// TODO: Remove after all callers are updated to import autoreply/handlers directly.
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/commands"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 )
 
 // --- commands.go ---
 
-type CommandScope = commands.CommandScope
-type CommandCategory = commands.CommandCategory
-type CommandArgDefinition = commands.CommandArgDefinition
-type ChatCommandDefinition = commands.ChatCommandDefinition
-type NativeCommandSpec = commands.NativeCommandSpec
-type CommandArgs = commands.CommandArgs
-type CommandDetection = commands.CommandDetection
-type CommandRegistry = commands.CommandRegistry
+type CommandScope = handlers.CommandScope
+type CommandCategory = handlers.CommandCategory
+type CommandArgDefinition = handlers.CommandArgDefinition
+type ChatCommandDefinition = handlers.ChatCommandDefinition
+type NativeCommandSpec = handlers.NativeCommandSpec
+type CommandArgs = handlers.CommandArgs
+type CommandDetection = handlers.CommandDetection
+type CommandRegistry = handlers.CommandRegistry
 
 const (
 	ScopeText   CommandScope = "text"
@@ -33,75 +33,75 @@ const (
 	CategoryDocks      CommandCategory = "docks"
 )
 
-var NewCommandRegistry = commands.NewCommandRegistry
-var HasInlineCommandTokens = commands.HasInlineCommandTokens
-var ParseCommandArgs = commands.ParseCommandArgs
-var BuildCommandText = commands.BuildCommandText
+var NewCommandRegistry = handlers.NewCommandRegistry
+var HasInlineCommandTokens = handlers.HasInlineCommandTokens
+var ParseCommandArgs = handlers.ParseCommandArgs
+var BuildCommandText = handlers.BuildCommandText
 
 // --- commands_types.go ---
 
-type CommandContextFull = commands.CommandContextFull
-type HandleCommandsFullParams = commands.HandleCommandsFullParams
-type ElevatedState = commands.ElevatedState
-type ElevatedFailure = commands.ElevatedFailure
-type CommandHandlerFullResult = commands.CommandHandlerFullResult
-type CommandHandlerFull = commands.CommandHandlerFull
+type CommandContextFull = handlers.CommandContextFull
+type HandleCommandsFullParams = handlers.HandleCommandsFullParams
+type ElevatedState = handlers.ElevatedState
+type ElevatedFailure = handlers.ElevatedFailure
+type CommandHandlerFullResult = handlers.CommandHandlerFullResult
+type CommandHandlerFull = handlers.CommandHandlerFull
 
 // --- commands_handlers.go ---
 
-type CommandHandler = commands.CommandHandler
-type CommandContext = commands.CommandContext
-type CommandDeps = commands.CommandDeps
-type StatusDeps = commands.StatusDeps
-type ProviderUsageStats = commands.ProviderUsageStats
-type ChannelHealthEntry = commands.ChannelHealthEntry
-type CommandResult = commands.CommandResult
-type BtwContext = commands.BtwContext
-type CommandRouter = commands.CommandRouter
-type McpServerStore = commands.McpServerStore
+type CommandHandler = handlers.CommandHandler
+type CommandContext = handlers.CommandContext
+type CommandDeps = handlers.CommandDeps
+type StatusDeps = handlers.StatusDeps
+type ProviderUsageStats = handlers.ProviderUsageStats
+type ChannelHealthEntry = handlers.ChannelHealthEntry
+type CommandResult = handlers.CommandResult
+type BtwContext = handlers.BtwContext
+type CommandRouter = handlers.CommandRouter
+type McpServerStore = handlers.McpServerStore
 
-var NewCommandRouter = commands.NewCommandRouter
+var NewCommandRouter = handlers.NewCommandRouter
 
 // --- commands_dispatch.go ---
 
-type ResetCommandAction = commands.ResetCommandAction
-type SendPolicyFunc = commands.SendPolicyFunc
-type CommandDispatcher = commands.CommandDispatcher
+type ResetCommandAction = handlers.ResetCommandAction
+type SendPolicyFunc = handlers.SendPolicyFunc
+type CommandDispatcher = handlers.CommandDispatcher
 
 const ResetActionNew ResetCommandAction = "new"
 const ResetActionReset ResetCommandAction = "reset"
 
-var NewCommandDispatcher = commands.NewCommandDispatcher
-var IsResetCommand = commands.IsResetCommand
-var ParseResetCommand = commands.ParseResetCommand
+var NewCommandDispatcher = handlers.NewCommandDispatcher
+var IsResetCommand = handlers.IsResetCommand
+var ParseResetCommand = handlers.ParseResetCommand
 
 // --- commands_context_build.go ---
 
-type InboundCommandContext = commands.InboundCommandContext
+type InboundCommandContext = handlers.InboundCommandContext
 
-var BuildInboundCommandContext = commands.BuildInboundCommandContext
+var BuildInboundCommandContext = handlers.BuildInboundCommandContext
 
 // --- commands_data.go ---
 
-var BuiltinChatCommands = commands.BuiltinChatCommands
+var BuiltinChatCommands = handlers.BuiltinChatCommands
 
 // --- commands_session_store.go ---
 
-type SessionEntry = commands.SessionEntry
-type SessionStore = commands.SessionStore
+type SessionEntry = handlers.SessionEntry
+type SessionStore = handlers.SessionStore
 
-var PersistSessionEntry = commands.PersistSessionEntry
-var PersistAbortTargetEntry = commands.PersistAbortTargetEntry
-var ClearSessionAbortCutoff = commands.ClearSessionAbortCutoff
-var SessionEntryHasAbortCutoff = commands.SessionEntryHasAbortCutoff
-var ShouldSkipBySessionAbortCutoff = commands.ShouldSkipBySessionAbortCutoff
+var PersistSessionEntry = handlers.PersistSessionEntry
+var PersistAbortTargetEntry = handlers.PersistAbortTargetEntry
+var ClearSessionAbortCutoff = handlers.ClearSessionAbortCutoff
+var SessionEntryHasAbortCutoff = handlers.SessionEntryHasAbortCutoff
+var ShouldSkipBySessionAbortCutoff = handlers.ShouldSkipBySessionAbortCutoff
 
 // --- commands_setunset.go ---
 
-type SetUnsetKind = commands.SetUnsetKind
-type SetUnsetParseResult = commands.SetUnsetParseResult
-type SetUnsetCallbacks[T any] = commands.SetUnsetCallbacks[T]
-type SetUnsetSlashParams[T any] = commands.SetUnsetSlashParams[T]
+type SetUnsetKind = handlers.SetUnsetKind
+type SetUnsetParseResult = handlers.SetUnsetParseResult
+type SetUnsetCallbacks[T any] = handlers.SetUnsetCallbacks[T]
+type SetUnsetSlashParams[T any] = handlers.SetUnsetSlashParams[T]
 
 const (
 	SetUnsetSet   SetUnsetKind = 0
@@ -109,22 +109,22 @@ const (
 	SetUnsetError SetUnsetKind = 2
 )
 
-var ParseSetUnsetCommand = commands.ParseSetUnsetCommand
-var ParseSetUnsetCommandAction = commands.ParseSetUnsetCommandAction[any]
-var ParseSlashCommandWithSetUnset = commands.ParseSlashCommandWithSetUnset[any]
+var ParseSetUnsetCommand = handlers.ParseSetUnsetCommand
+var ParseSetUnsetCommandAction = handlers.ParseSetUnsetCommandAction[any]
+var ParseSlashCommandWithSetUnset = handlers.ParseSlashCommandWithSetUnset[any]
 
 // --- commands_setunset_standard.go ---
 
-type StandardSetUnsetAction = commands.StandardSetUnsetAction
-type StandardSetUnsetParams = commands.StandardSetUnsetParams
+type StandardSetUnsetAction = handlers.StandardSetUnsetAction
+type StandardSetUnsetParams = handlers.StandardSetUnsetParams
 
-var ParseStandardSetUnsetSlashCommand = commands.ParseStandardSetUnsetSlashCommand
+var ParseStandardSetUnsetSlashCommand = handlers.ParseStandardSetUnsetSlashCommand
 
 // --- commands_slash_parse.go ---
 
-type SlashParseKind = commands.SlashParseKind
-type SlashCommandParseResult = commands.SlashCommandParseResult
-type ParsedSlashCommand = commands.ParsedSlashCommand
+type SlashParseKind = handlers.SlashParseKind
+type SlashCommandParseResult = handlers.SlashCommandParseResult
+type ParsedSlashCommand = handlers.ParsedSlashCommand
 
 const (
 	SlashNoMatch  SlashParseKind = 0
@@ -133,22 +133,22 @@ const (
 	SlashParsed   SlashParseKind = 3
 )
 
-var ParseSlashCommandActionArgs = commands.ParseSlashCommandActionArgs
-var ParseSlashCommandOrNull = commands.ParseSlashCommandOrNull
+var ParseSlashCommandActionArgs = handlers.ParseSlashCommandActionArgs
+var ParseSlashCommandOrNull = handlers.ParseSlashCommandOrNull
 
 // --- config_value.go ---
 
-type ConfigValueResult = commands.ConfigValueResult
+type ConfigValueResult = handlers.ConfigValueResult
 
-var ParseConfigValue = commands.ParseConfigValue
+var ParseConfigValue = handlers.ParseConfigValue
 
 // --- config_commands.go ---
 
-type ConfigCommandAction = commands.ConfigCommandAction
-type ConfigCommand = commands.ConfigCommand
-type ConfigWriteAuthResult = commands.ConfigWriteAuthResult
-type ConfigWriteScope = commands.ConfigWriteScope
-type ConfigWriteTarget = commands.ConfigWriteTarget
+type ConfigCommandAction = handlers.ConfigCommandAction
+type ConfigCommand = handlers.ConfigCommand
+type ConfigWriteAuthResult = handlers.ConfigWriteAuthResult
+type ConfigWriteScope = handlers.ConfigWriteScope
+type ConfigWriteTarget = handlers.ConfigWriteTarget
 
 const (
 	ConfigActionShow  ConfigCommandAction = "show"
@@ -163,41 +163,41 @@ const (
 	ConfigWriteTargetAccount ConfigWriteTarget = "account"
 )
 
-var ParseConfigCommand = commands.ParseConfigCommand
-var AuthorizeConfigWrite = commands.AuthorizeConfigWrite
-var CanBypassConfigWritePolicy = commands.CanBypassConfigWritePolicy
+var ParseConfigCommand = handlers.ParseConfigCommand
+var AuthorizeConfigWrite = handlers.AuthorizeConfigWrite
+var CanBypassConfigWritePolicy = handlers.CanBypassConfigWritePolicy
 
 // --- debug_commands.go ---
 
-type DebugCommand = commands.DebugCommand
+type DebugCommand = handlers.DebugCommand
 
-var ParseDebugCommand = commands.ParseDebugCommand
+var ParseDebugCommand = handlers.ParseDebugCommand
 
 // --- mcp_commands.go ---
 
-type McpCommand = commands.McpCommand
+type McpCommand = handlers.McpCommand
 
-var ParseMcpCommand = commands.ParseMcpCommand
+var ParseMcpCommand = handlers.ParseMcpCommand
 
 // --- skill_commands.go ---
 
-type SkillCommandSpec = commands.SkillCommandSpec
+type SkillCommandSpec = handlers.SkillCommandSpec
 
-var BuildSkillCommandDefinitions = commands.BuildSkillCommandDefinitions
-var ResolveSkillCommand = commands.ResolveSkillCommand
+var BuildSkillCommandDefinitions = handlers.BuildSkillCommandDefinitions
+var ResolveSkillCommand = handlers.ResolveSkillCommand
 
 // --- btw_command.go ---
 
-var IsBtwRequestText = commands.IsBtwRequestText
-var ExtractBtwQuestion = commands.ExtractBtwQuestion
+var IsBtwRequestText = handlers.IsBtwRequestText
+var ExtractBtwQuestion = handlers.ExtractBtwQuestion
 
 // --- commands_plugins.go ---
 
-type PluginCommandAction = commands.PluginCommandAction
-type PluginCommand = commands.PluginCommand
-type PluginRecord = commands.PluginRecord
-type PluginStatusReport = commands.PluginStatusReport
-type HandlePluginsCommandResult = commands.HandlePluginsCommandResult
+type PluginCommandAction = handlers.PluginCommandAction
+type PluginCommand = handlers.PluginCommand
+type PluginRecord = handlers.PluginRecord
+type PluginStatusReport = handlers.PluginStatusReport
+type HandlePluginsCommandResult = handlers.HandlePluginsCommandResult
 
 const (
 	PluginActionList    PluginCommandAction = "list"
@@ -207,29 +207,29 @@ const (
 	PluginActionError   PluginCommandAction = "error"
 )
 
-var ParsePluginsCommand = commands.ParsePluginsCommand
-var FormatPluginLabel = commands.FormatPluginLabel
-var FormatPluginsList = commands.FormatPluginsList
-var FindPlugin = commands.FindPlugin
-var RenderJSONBlock = commands.RenderJSONBlock
-var HandlePluginsCommand = commands.HandlePluginsCommand
+var ParsePluginsCommand = handlers.ParsePluginsCommand
+var FormatPluginLabel = handlers.FormatPluginLabel
+var FormatPluginsList = handlers.FormatPluginsList
+var FindPlugin = handlers.FindPlugin
+var RenderJSONBlock = handlers.RenderJSONBlock
+var HandlePluginsCommand = handlers.HandlePluginsCommand
 
 // --- commands_plugin_match.go ---
 
-type PluginCommandMatch = commands.PluginCommandMatch
+type PluginCommandMatch = handlers.PluginCommandMatch
 
-var MatchPluginCommand = commands.MatchPluginCommand
-var ExecutePluginCommand = commands.ExecutePluginCommand
-var HandlePluginCommandInPipeline = commands.HandlePluginCommandInPipeline
+var MatchPluginCommand = handlers.MatchPluginCommand
+var ExecutePluginCommand = handlers.ExecutePluginCommand
+var HandlePluginCommandInPipeline = handlers.HandlePluginCommandInPipeline
 
 // --- commands_subagents_shared.go ---
 
-type SubagentsAction = commands.SubagentsAction
-type SubagentRunRecord = commands.SubagentRunRecord
-type SubagentsCommandContext = commands.SubagentsCommandContext
-type SubagentCommandResult = commands.SubagentCommandResult
-type SubagentListItem = commands.SubagentListItem
-type ResolvedSubagentController = commands.ResolvedSubagentController
+type SubagentsAction = handlers.SubagentsAction
+type SubagentRunRecord = handlers.SubagentRunRecord
+type SubagentsCommandContext = handlers.SubagentsCommandContext
+type SubagentCommandResult = handlers.SubagentCommandResult
+type SubagentListItem = handlers.SubagentListItem
+type ResolvedSubagentController = handlers.ResolvedSubagentController
 
 const (
 	SubagentsActionList    SubagentsAction = "list"
@@ -246,101 +246,101 @@ const (
 )
 
 const (
-	SubagentsCmdPrefix  = commands.SubagentsCmdPrefix
-	SubagentsCmdKill    = commands.SubagentsCmdKill
-	SubagentsCmdSteer   = commands.SubagentsCmdSteer
-	SubagentsCmdTell    = commands.SubagentsCmdTell
-	SubagentsCmdFocus   = commands.SubagentsCmdFocus
-	SubagentsCmdUnfocus = commands.SubagentsCmdUnfocus
-	SubagentsCmdAgents  = commands.SubagentsCmdAgents
+	SubagentsCmdPrefix  = handlers.SubagentsCmdPrefix
+	SubagentsCmdKill    = handlers.SubagentsCmdKill
+	SubagentsCmdSteer   = handlers.SubagentsCmdSteer
+	SubagentsCmdTell    = handlers.SubagentsCmdTell
+	SubagentsCmdFocus   = handlers.SubagentsCmdFocus
+	SubagentsCmdUnfocus = handlers.SubagentsCmdUnfocus
+	SubagentsCmdAgents  = handlers.SubagentsCmdAgents
 )
 
-const RecentWindowMinutes = commands.RecentWindowMinutes
+const RecentWindowMinutes = handlers.RecentWindowMinutes
 
-var ResolveHandledPrefix = commands.ResolveHandledPrefix
-var ResolveSubagentsAction = commands.ResolveSubagentsAction
-var FormatRunLabel = commands.FormatRunLabel
-var FormatRunStatus = commands.FormatRunStatus
-var ResolveDisplayStatus = commands.ResolveDisplayStatus
-var FormatDurationCompact = commands.FormatDurationCompact
-var SortSubagentRuns = commands.SortSubagentRuns
-var TruncateLine = commands.TruncateLine
-var ResolveSubagentTarget = commands.ResolveSubagentTarget
-var BuildSubagentsHelp = commands.BuildSubagentsHelp
+var ResolveHandledPrefix = handlers.ResolveHandledPrefix
+var ResolveSubagentsAction = handlers.ResolveSubagentsAction
+var FormatRunLabel = handlers.FormatRunLabel
+var FormatRunStatus = handlers.FormatRunStatus
+var ResolveDisplayStatus = handlers.ResolveDisplayStatus
+var FormatDurationCompact = handlers.FormatDurationCompact
+var SortSubagentRuns = handlers.SortSubagentRuns
+var TruncateLine = handlers.TruncateLine
+var ResolveSubagentTarget = handlers.ResolveSubagentTarget
+var BuildSubagentsHelp = handlers.BuildSubagentsHelp
 
 // --- commands_subagents.go ---
 
-type SubagentCommandDeps = commands.SubagentCommandDeps
+type SubagentCommandDeps = handlers.SubagentCommandDeps
 
-var HandleSubagentsCommand = commands.HandleSubagentsCommand
+var HandleSubagentsCommand = handlers.HandleSubagentsCommand
 
 // --- commands_subagents_actions.go ---
 
-type BuildSubagentListResult = commands.BuildSubagentListResult
-type SubagentKillDeps = commands.SubagentKillDeps
-type SubagentLogDeps = commands.SubagentLogDeps
-type ChatLogMessage = commands.ChatLogMessage
-type SubagentSendDeps = commands.SubagentSendDeps
-type SubagentSendResult = commands.SubagentSendResult
-type SubagentSteerResult = commands.SubagentSteerResult
-type SubagentSpawnDeps = commands.SubagentSpawnDeps
-type SubagentSpawnParams = commands.SubagentSpawnParams
-type SubagentSpawnContext = commands.SubagentSpawnContext
-type SubagentSpawnResult = commands.SubagentSpawnResult
-type SubagentFocusDeps = commands.SubagentFocusDeps
-type SubagentUnfocusDeps = commands.SubagentUnfocusDeps
-type SubagentAgentsDeps = commands.SubagentAgentsDeps
+type BuildSubagentListResult = handlers.BuildSubagentListResult
+type SubagentKillDeps = handlers.SubagentKillDeps
+type SubagentLogDeps = handlers.SubagentLogDeps
+type ChatLogMessage = handlers.ChatLogMessage
+type SubagentSendDeps = handlers.SubagentSendDeps
+type SubagentSendResult = handlers.SubagentSendResult
+type SubagentSteerResult = handlers.SubagentSteerResult
+type SubagentSpawnDeps = handlers.SubagentSpawnDeps
+type SubagentSpawnParams = handlers.SubagentSpawnParams
+type SubagentSpawnContext = handlers.SubagentSpawnContext
+type SubagentSpawnResult = handlers.SubagentSpawnResult
+type SubagentFocusDeps = handlers.SubagentFocusDeps
+type SubagentUnfocusDeps = handlers.SubagentUnfocusDeps
+type SubagentAgentsDeps = handlers.SubagentAgentsDeps
 
-var BuildSubagentList = commands.BuildSubagentList
-var HandleSubagentsListAction = commands.HandleSubagentsListAction
-var HandleSubagentsKillAction = commands.HandleSubagentsKillAction
-var HandleSubagentsInfoAction = commands.HandleSubagentsInfoAction
-var HandleSubagentsLogAction = commands.HandleSubagentsLogAction
-var HandleSubagentsSendAction = commands.HandleSubagentsSendAction
-var HandleSubagentsSpawnAction = commands.HandleSubagentsSpawnAction
-var HandleSubagentsFocusAction = commands.HandleSubagentsFocusAction
-var HandleSubagentsUnfocusAction = commands.HandleSubagentsUnfocusAction
-var HandleSubagentsAgentsAction = commands.HandleSubagentsAgentsAction
-var HandleSubagentsHelpAction = commands.HandleSubagentsHelpAction
+var BuildSubagentList = handlers.BuildSubagentList
+var HandleSubagentsListAction = handlers.HandleSubagentsListAction
+var HandleSubagentsKillAction = handlers.HandleSubagentsKillAction
+var HandleSubagentsInfoAction = handlers.HandleSubagentsInfoAction
+var HandleSubagentsLogAction = handlers.HandleSubagentsLogAction
+var HandleSubagentsSendAction = handlers.HandleSubagentsSendAction
+var HandleSubagentsSpawnAction = handlers.HandleSubagentsSpawnAction
+var HandleSubagentsFocusAction = handlers.HandleSubagentsFocusAction
+var HandleSubagentsUnfocusAction = handlers.HandleSubagentsUnfocusAction
+var HandleSubagentsAgentsAction = handlers.HandleSubagentsAgentsAction
+var HandleSubagentsHelpAction = handlers.HandleSubagentsHelpAction
 
 // --- commands_subagents_acp.go ---
 
-type ACPCommandDepsConfig = commands.ACPCommandDepsConfig
-type ACPSubagentCommandHandler = commands.ACPSubagentCommandHandler
+type ACPCommandDepsConfig = handlers.ACPCommandDepsConfig
+type ACPSubagentCommandHandler = handlers.ACPSubagentCommandHandler
 
-var NewSubagentCommandDepsFromACP = commands.NewSubagentCommandDepsFromACP
-var NewACPSubagentCommandHandler = commands.NewACPSubagentCommandHandler
-var RegisterACPSubagentRPC = commands.RegisterACPSubagentRPC
-var FormatACPSubagentSummary = commands.FormatACPSubagentSummary
-var PruneStaleACPAgents = commands.PruneStaleACPAgents
+var NewSubagentCommandDepsFromACP = handlers.NewSubagentCommandDepsFromACP
+var NewACPSubagentCommandHandler = handlers.NewACPSubagentCommandHandler
+var RegisterACPSubagentRPC = handlers.RegisterACPSubagentRPC
+var FormatACPSubagentSummary = handlers.FormatACPSubagentSummary
+var PruneStaleACPAgents = handlers.PruneStaleACPAgents
 
 // --- status.go ---
 
-type StatusReport = commands.StatusReport
+type StatusReport = handlers.StatusReport
 
-var BuildStatusMessage = commands.BuildStatusMessage
-var BuildHelpMessage = commands.BuildHelpMessage
-var FormatTokenCount = commands.FormatTokenCount
-var FormatContextUsageShort = commands.FormatContextUsageShort
-var BuildCommandsMessage = commands.BuildCommandsMessage
+var BuildStatusMessage = handlers.BuildStatusMessage
+var BuildHelpMessage = handlers.BuildHelpMessage
+var FormatTokenCount = handlers.FormatTokenCount
+var FormatContextUsageShort = handlers.FormatContextUsageShort
+var BuildCommandsMessage = handlers.BuildCommandsMessage
 
 // --- subagents_utils.go ---
 
-type SubagentRunListEntry = commands.SubagentRunListEntry
+type SubagentRunListEntry = handlers.SubagentRunListEntry
 
-var BuildSubagentRunListEntries = commands.BuildSubagentRunListEntries
-var ResolveSubagentEntryForToken = commands.ResolveSubagentEntryForToken
-var FormatSubagentInfo = commands.FormatSubagentInfo
+var BuildSubagentRunListEntries = handlers.BuildSubagentRunListEntries
+var ResolveSubagentEntryForToken = handlers.ResolveSubagentEntryForToken
+var FormatSubagentInfo = handlers.FormatSubagentInfo
 
 // --- commands_root_types.go (AllowlistMatcher/BashCommandConfig moved to commands/) ---
 // SessionUsage and AbortCutoffContext are aliased from session/ via session_compat.go
 // and are not re-exported here to avoid duplicate declarations.
 
-type AllowlistEntry = commands.AllowlistEntry
-type AllowlistMatcher = commands.AllowlistMatcher
-type BashCommandConfig = commands.BashCommandConfig
+type AllowlistEntry = handlers.AllowlistEntry
+type AllowlistMatcher = handlers.AllowlistMatcher
+type BashCommandConfig = handlers.BashCommandConfig
 
-var NewAllowlistMatcher = commands.NewAllowlistMatcher
-var DefaultBashConfig = commands.DefaultBashConfig
-var ValidateBashCommand = commands.ValidateBashCommand
-var ElevatedUnavailableMessage = commands.ElevatedUnavailableMessage
+var NewAllowlistMatcher = handlers.NewAllowlistMatcher
+var DefaultBashConfig = handlers.DefaultBashConfig
+var ValidateBashCommand = handlers.ValidateBashCommand
+var ElevatedUnavailableMessage = handlers.ElevatedUnavailableMessage
