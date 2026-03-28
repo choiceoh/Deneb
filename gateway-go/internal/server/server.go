@@ -1513,7 +1513,7 @@ func (s *Server) initGmailPoll() {
 	if err != nil || snap == nil {
 		return
 	}
-	pollCfg := snap.GmailPoll
+	pollCfg := snap.Config.GmailPoll
 	if pollCfg == nil || pollCfg.Enabled == nil || !*pollCfg.Enabled {
 		return
 	}
