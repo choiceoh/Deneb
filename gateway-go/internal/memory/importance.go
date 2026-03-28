@@ -16,8 +16,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-// thinkingTagRe matches <think>...</think> blocks that Qwen3.5 may emit.
-var thinkingTagRe = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
+// thinkingTagRe matches <think>...</think> and <thinking>...</thinking> blocks
+// that Qwen3.5 and other reasoning models may emit.
+var thinkingTagRe = regexp.MustCompile(`(?s)<think(?:ing)?>.*?</think(?:ing)?>\s*`)
 
 // stripThinkingTags removes <think>...</think> blocks from Qwen3.5 responses.
 func stripThinkingTags(s string) string {
@@ -370,18 +371,11 @@ func extractJSONArray(s string) (string, bool) {
 	return s[start : end+1], true
 }
 
+// stripCodeFences removes thinking tags and markdown code fences from LLM output.
+// Used by ExtractFacts which has its own multi-strategy parseFactsResponse.
+// Dream phases use callLLMJSON → extractJSON (in sglang.go) instead.
 func stripCodeFences(s string) string {
-	s = stripThinkingTags(s)
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "```json") {
-		s = strings.TrimPrefix(s, "```json")
-	} else if strings.HasPrefix(s, "```") {
-		s = strings.TrimPrefix(s, "```")
-	}
-	if strings.HasSuffix(s, "```") {
-		s = strings.TrimSuffix(s, "```")
-	}
-	return strings.TrimSpace(s)
+	return extractJSON(s)
 }
 
 func isValidCategory(c string) bool {

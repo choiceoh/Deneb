@@ -10,7 +10,6 @@ package memory
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -145,6 +144,17 @@ Return a JSON object with a "results" array:
 {"results": [{"id": <fact ID>, "valid": true/false, "reason": "brief Korean explanation if invalid", "new_importance": <optional adjusted importance>}, ...]}
 Return ONLY valid JSON.`
 
+type verifyResult struct {
+	ID            int64   `json:"id"`
+	Valid         bool    `json:"valid"`
+	Reason        string  `json:"reason"`
+	NewImportance float64 `json:"new_importance,omitempty"`
+}
+
+type verifyResponse struct {
+	Results []verifyResult `json:"results"`
+}
+
 func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (verified int, expired int, err error) {
 	facts, err := store.GetFactsForDreaming(ctx)
 	if err != nil {
@@ -172,36 +182,20 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 }
 
 func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model string, batch []Fact, logger *slog.Logger) (int, int, error) {
-	// Build prompt with fact list.
 	var sb strings.Builder
 	for _, f := range batch {
 		fmt.Fprintf(&sb, "ID %d [%s, importance=%.1f]: %s\n", f.ID, f.Category, f.Importance, f.Content)
 	}
 
-	resp, err := callLLM(ctx, client, model, verifySystemPrompt, sb.String(), dreamingMaxTokens)
+	wrapper, err := callLLMJSON[verifyResponse](ctx, client, model, verifySystemPrompt, sb.String(), dreamingMaxTokens)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	type verifyResult struct {
-		ID            int64   `json:"id"`
-		Valid         bool    `json:"valid"`
-		Reason        string  `json:"reason"`
-		NewImportance float64 `json:"new_importance,omitempty"`
-	}
-	var wrapper struct {
-		Results []verifyResult `json:"results"`
-	}
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
-		return 0, 0, fmt.Errorf("parse verify response: %w", err)
-	}
-	results := wrapper.Results
-
 	verified, expired := 0, 0
-	for _, r := range results {
+	for _, r := range wrapper.Results {
 		if r.Valid {
 			_ = store.MarkVerified(ctx, r.ID)
-			// Adjust importance if the LLM suggested a new value.
 			if r.NewImportance > 0 && r.NewImportance <= 1.0 {
 				_ = store.UpdateImportance(ctx, r.ID, r.NewImportance)
 			}
@@ -225,6 +219,12 @@ Return a JSON object:
 - "category": the best category for the merged fact
 - "importance": importance score (0.0-1.0)
 Return ONLY valid JSON, no markdown fences.`
+
+type mergeResponse struct {
+	MergedContent string  `json:"merged_content"`
+	Category      string  `json:"category"`
+	Importance    float64 `json:"importance"`
+}
 
 func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	if embedder == nil {
@@ -276,17 +276,8 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		}
 
 		prompt := fmt.Sprintf("Fact A: %s\nFact B: %s", factA.Content, factB.Content)
-		resp, err := callLLM(ctx, client, model, mergeSystemPrompt, prompt, 256)
+		result, err := callLLMJSON[mergeResponse](ctx, client, model, mergeSystemPrompt, prompt, 256)
 		if err != nil {
-			continue
-		}
-
-		var result struct {
-			MergedContent string  `json:"merged_content"`
-			Category      string  `json:"category"`
-			Importance    float64 `json:"importance"`
-		}
-		if err := json.Unmarshal([]byte(stripCodeFences(resp)), &result); err != nil {
 			continue
 		}
 
@@ -333,6 +324,16 @@ Return a JSON object with a "conflicts" array:
 If no conflicts found, return {"conflicts": []}.
 Return ONLY valid JSON.`
 
+type conflictResult struct {
+	KeepID   int64  `json:"keep_id"`
+	RemoveID int64  `json:"remove_id"`
+	Reason   string `json:"reason"`
+}
+
+type conflictResponse struct {
+	Conflicts []conflictResult `json:"conflicts"`
+}
+
 func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
 	if err != nil || len(facts) < 5 {
@@ -361,20 +362,8 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 				f.ID, f.Importance, f.CreatedAt.Format("2006-01-02"), f.Content)
 		}
 
-		resp, err := callLLM(ctx, client, model, conflictSystemPrompt, fmt.Sprintf("Category: %s\n\n%s", cat, sb.String()), dreamingMaxTokens)
+		wrapper, err := callLLMJSON[conflictResponse](ctx, client, model, conflictSystemPrompt, fmt.Sprintf("Category: %s\n\n%s", cat, sb.String()), dreamingMaxTokens)
 		if err != nil {
-			continue
-		}
-
-		type conflictResult struct {
-			KeepID   int64  `json:"keep_id"`
-			RemoveID int64  `json:"remove_id"`
-			Reason   string `json:"reason"`
-		}
-		var wrapper struct {
-			Conflicts []conflictResult `json:"conflicts"`
-		}
-		if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
 			continue
 		}
 
@@ -413,6 +402,10 @@ Return a JSON object with a "patterns" array:
 If no clear patterns (< 3 supporting facts), return {"patterns": []}.
 Return ONLY valid JSON.`
 
+type patternResponse struct {
+	Patterns []ExtractedFact `json:"patterns"`
+}
+
 func extractPatterns(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
 	if err != nil {
@@ -442,15 +435,8 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 		}
 	}
 
-	resp, err := callLLM(ctx, client, model, patternSystemPrompt, sb.String(), dreamingMaxTokens)
+	wrapper, err := callLLMJSON[patternResponse](ctx, client, model, patternSystemPrompt, sb.String(), dreamingMaxTokens)
 	if err != nil {
-		return 0, err
-	}
-
-	var wrapper struct {
-		Patterns []ExtractedFact `json:"patterns"`
-	}
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
 		return 0, nil
 	}
 
@@ -517,13 +503,8 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 		fmt.Fprintf(&sb, "[%s] %s\n", f.Category, f.Content)
 	}
 
-	resp, err := callLLM(ctx, client, model, userModelSystemPrompt, sb.String(), dreamingMaxTokens)
+	profile, err := callLLMJSON[map[string]string](ctx, client, model, userModelSystemPrompt, sb.String(), dreamingMaxTokens)
 	if err != nil {
-		return err
-	}
-
-	var profile map[string]string
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &profile); err != nil {
 		return nil // non-fatal
 	}
 
@@ -538,16 +519,4 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 
 	logger.Info("aurora-dream: updated user model", "keys", len(profile))
 	return nil
-}
-
-// callLLM calls the local SGLang model with JSON mode enforced.
-// All dreaming phases expect structured JSON output, so we use
-// response_format: json_object and strip any thinking tags the
-// Qwen3.5 model may emit before the JSON payload.
-func callLLM(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
-	resp, err := callSglangJSON(ctx, client, model, system, user, maxTokens)
-	if err != nil {
-		return "", err
-	}
-	return stripThinkingTags(resp), nil
 }

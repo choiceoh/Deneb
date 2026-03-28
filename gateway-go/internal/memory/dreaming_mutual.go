@@ -12,7 +12,6 @@ package memory
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -155,14 +154,9 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 	}
 
 	// Use higher token budget for richer synthesis.
-	resp, err := callLLM(ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), 1024)
+	profile, err := callLLMJSON[map[string]string](ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), 1024)
 	if err != nil {
-		return err
-	}
-
-	var profile map[string]string
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &profile); err != nil {
-		return nil // non-fatal
+		return nil // non-fatal: LLM parse failure shouldn't block other phases
 	}
 
 	mutualKeys := map[string]bool{
