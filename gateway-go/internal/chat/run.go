@@ -85,7 +85,7 @@ type runDeps struct {
 // runAgentAsync is the background goroutine that executes an agent run.
 // It persists the user message, assembles context, calls the LLM agent loop,
 // persists the result, and broadcasts completion events.
-func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
+func runAgentAsync(ctx context.Context, params RunParams, deps runDeps, box *InterruptBox) {
 	logger := deps.logger
 	if logger == nil {
 		logger = slog.Default()
@@ -180,7 +180,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 
 	// Run the agent and capture result.
-	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
+	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog, box)
 
 	// Stop typing indicator before delivering the reply.
 	if typingSignaler != nil {
@@ -216,6 +216,7 @@ func executeAgentRun(
 	statusCtrl *channel.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
+	box *InterruptBox,
 ) (*AgentResult, error) {
 	runStart := time.Now()
 
@@ -504,13 +505,19 @@ func executeAgentRun(
 	var agentResult *AgentResult
 	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
 
+	iDeps := interruptDeps{
+		transcript: deps.transcript,
+		replyFunc:  deps.replyFunc,
+		sessionKey: params.SessionKey,
+	}
+
 	for attempt := 0; attempt <= maxCompactionRetries; attempt++ {
 		if attempt > 0 {
 			logger.Info("retrying agent run after compaction", "attempt", attempt)
 		}
 
 		var runErr error
-		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog, box, iDeps)
 		if runErr != nil {
 			// Check for context overflow error.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
@@ -537,7 +544,7 @@ func executeAgentRun(
 				fbCfg := cfg
 				fbCfg.Model = sglangModel
 				fbCfg.APIType = "openai"
-				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
+				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, hooks, logger, runLog, nil, iDeps)
 				if runErr == nil {
 					break
 				}
@@ -839,7 +846,7 @@ func executeAgentRunWithDelta(
 	})
 	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
+	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog, nil)
 }
 
 // resolveDefaultBaseURL returns the default API base URL for a known provider

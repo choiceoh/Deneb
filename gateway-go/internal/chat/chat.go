@@ -132,6 +132,10 @@ type Handler struct {
 	abortMap map[string]*AbortEntry // clientRunId -> entry
 	done     chan struct{}          // signals abortGCLoop to stop
 
+	// Interrupt box tracking: sessionKey → active InterruptBox for the running agent.
+	interruptBoxMu sync.RWMutex
+	interruptBoxes map[string]*InterruptBox
+
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
 	// maxHistoryCount caps the number of messages returned.
@@ -209,6 +213,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		maxTokens:       cfg.MaxTokens,
 		abortMap:        make(map[string]*AbortEntry),
 		done:            make(chan struct{}),
+		interruptBoxes:  make(map[string]*InterruptBox),
 		maxHistoryBytes: cfg.MaxHistoryBytes,
 		maxHistoryCount: cfg.MaxHistoryCount,
 		maxMessageBytes: cfg.MaxMessageBytes,
@@ -354,7 +359,34 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult)
 	}
 
-	// Interrupt any active run on this session to prevent concurrent runs.
+	// If a run is active, route through the InterruptBox instead of killing it.
+	if box := h.getInterruptBox(p.SessionKey); box != nil {
+		// Explicit interrupt keywords → kill the run and start fresh.
+		if isExplicitInterrupt(p.Message) {
+			h.InterruptActiveRun(p.SessionKey)
+			return h.startAsyncRun(req.ID, RunParams{
+				SessionKey:  p.SessionKey,
+				Message:     sanitizeInput(p.Message),
+				Attachments: p.Attachments,
+				Delivery:    p.Delivery,
+				ClientRunID: p.ClientRunID,
+				Model:       p.Model,
+			}, false)
+		}
+
+		// Normal message → queue for in-flight interrupt response.
+		box.Offer(PendingMessage{
+			Message:    sanitizeInput(p.Message),
+			Delivery:   p.Delivery,
+			ReceivedAt: time.Now(),
+		})
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"status": "queued_for_interrupt",
+		})
+		return resp
+	}
+
+	// No active run → standard flow.
 	h.InterruptActiveRun(p.SessionKey)
 
 	return h.startAsyncRun(req.ID, RunParams{
@@ -537,11 +569,18 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		})
 	}
 
+	// Create InterruptBox for this run so Send() can queue messages
+	// instead of killing the agent.
+	box := NewInterruptBox()
+	h.setInterruptBox(params.SessionKey, box)
+
 	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
 	go func() {
 		defer runCancel()
 		defer h.cleanupAbort(params.ClientRunID)
+		defer box.Close()
+		defer h.clearInterruptBoxIfOwner(params.SessionKey, box)
 		defer func() {
 			if r := recover(); r != nil {
 				h.logger.Error("panic in agent run",
@@ -563,7 +602,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 				}
 			}
 		}()
-		runAgentAsync(runCtx, params, deps)
+		runAgentAsync(runCtx, params, deps, box)
 	}()
 
 	// Immediately return with runId.
@@ -853,6 +892,72 @@ func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protoco
 	// No transcript store available.
 	return protocol.NewResponseError(req.ID, protocol.NewError(
 		protocol.ErrDependencyFailed, "no transcript store available"))
+}
+
+// --- InterruptBox helpers ---
+
+// getInterruptBox returns the active InterruptBox for a session, or nil.
+func (h *Handler) getInterruptBox(sessionKey string) *InterruptBox {
+	h.interruptBoxMu.RLock()
+	defer h.interruptBoxMu.RUnlock()
+	return h.interruptBoxes[sessionKey]
+}
+
+// setInterruptBox registers an InterruptBox for a session.
+func (h *Handler) setInterruptBox(sessionKey string, box *InterruptBox) {
+	h.interruptBoxMu.Lock()
+	defer h.interruptBoxMu.Unlock()
+	h.interruptBoxes[sessionKey] = box
+}
+
+// clearInterruptBoxIfOwner removes the box only if it matches the one we own
+// (prevents clearing a box registered by a newer run).
+func (h *Handler) clearInterruptBoxIfOwner(sessionKey string, box *InterruptBox) {
+	h.interruptBoxMu.Lock()
+	defer h.interruptBoxMu.Unlock()
+	if h.interruptBoxes[sessionKey] == box {
+		delete(h.interruptBoxes, sessionKey)
+	}
+}
+
+// --- Explicit interrupt detection ---
+
+var interruptKeywords = []string{"중단", "그만", "멈춰", "취소", "중지", "스톱", "stop", "cancel", "abort", "kill"}
+var negationSuffixes = []string{"하지 마", "하지마", "지 마", "지마", "말고", "말아"}
+
+// isExplicitInterrupt returns true if the message is an explicit request to
+// stop the current task (slash commands or short keyword messages).
+func isExplicitInterrupt(message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	for _, prefix := range []string{"/kill", "/stop", "/reset", "/new"} {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	if utf8.RuneCountInString(lower) <= 30 {
+		for _, kw := range interruptKeywords {
+			if strings.Contains(lower, kw) && !isNegated(lower, kw) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isNegated checks if a keyword in the message is followed by a Korean
+// negation suffix (e.g., "중단하지 마" means "don't stop").
+func isNegated(message, keyword string) bool {
+	idx := strings.Index(message, keyword)
+	if idx < 0 {
+		return false
+	}
+	after := message[idx+len(keyword):]
+	for _, neg := range negationSuffixes {
+		if strings.Contains(after, neg) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Helpers ---

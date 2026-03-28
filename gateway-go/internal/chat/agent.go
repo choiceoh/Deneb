@@ -12,6 +12,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
+// interruptDeps holds the dependencies needed by handlePendingInterrupt
+// to persist messages and deliver the quick reply.
+type interruptDeps struct {
+	transcript TranscriptStore
+	replyFunc  ReplyFunc
+	sessionKey string
+}
+
 // AgentConfig configures the agent execution loop.
 type AgentConfig struct {
 	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
@@ -69,6 +77,8 @@ func RunAgent(
 	hooks StreamHooks,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
+	interruptBox *InterruptBox,
+	iDeps interruptDeps,
 ) (*AgentResult, error) {
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 25
@@ -90,6 +100,9 @@ func RunAgent(
 
 	for turn := 0; turn < cfg.MaxTurns; turn++ {
 		result.Turns = turn + 1
+
+		// Checkpoint B: handle pending interrupt before the LLM call.
+		messages = handlePendingInterrupt(ctx, cfg, messages, client, hooks, logger, interruptBox, iDeps)
 
 		// Create a fresh TurnContext for cross-tool result sharing within this turn.
 		turnCtx := NewTurnContext()
@@ -243,6 +256,9 @@ func RunAgent(
 			return result, nil
 		}
 
+		// Checkpoint A: handle pending interrupt after tool execution.
+		messages = handlePendingInterrupt(ctx, cfg, messages, client, hooks, logger, interruptBox, iDeps)
+
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
 	}
 
@@ -352,4 +368,88 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 			}
 		}
 	}
+}
+
+// handlePendingInterrupt checks the InterruptBox for a queued user message.
+// If one is present, it appends the user message to the conversation, makes
+// a quick tool-free LLM call using the existing client and system prompt,
+// streams the response (reusing hooks for Telegram delivery), persists both
+// messages, and delivers the reply. The updated messages slice is returned
+// so the main agent loop sees the exchange on its next turn.
+func handlePendingInterrupt(
+	ctx context.Context,
+	cfg AgentConfig,
+	messages []llm.Message,
+	client *llm.Client,
+	hooks StreamHooks,
+	logger *slog.Logger,
+	box *InterruptBox,
+	deps interruptDeps,
+) []llm.Message {
+	if box == nil {
+		return messages
+	}
+	pending, ok := box.Poll()
+	if !ok {
+		return messages
+	}
+
+	logger.Info("handling pending interrupt", "message", pending.Message)
+
+	// 1. Append user message to conversation.
+	messages = append(messages, llm.NewTextMessage("user", pending.Message))
+
+	// 2. Quick tool-free LLM call — same client, same system prompt.
+	quickReq := llm.ChatRequest{
+		Model:     cfg.Model,
+		Messages:  messages,
+		System:    cfg.System,
+		MaxTokens: 4096,
+		Tools:     nil, // no tools — fast response only
+		Stream:    true,
+	}
+	var events <-chan llm.StreamEvent
+	var err error
+	if cfg.APIType == "anthropic" {
+		events, err = client.StreamChat(ctx, quickReq)
+	} else {
+		events, err = client.StreamChatOpenAI(ctx, quickReq)
+	}
+	if err != nil {
+		logger.Warn("interrupt response: LLM call failed", "error", err)
+		return messages
+	}
+
+	// 3. Consume the stream (reuses hooks for Telegram real-time delivery).
+	turnResult, err := consumeStream(ctx, events, hooks)
+	if err != nil || turnResult.text == "" {
+		logger.Warn("interrupt response: stream consumption failed or empty", "error", err)
+		return messages
+	}
+
+	// 4. Append assistant response so the main loop sees the exchange.
+	messages = append(messages, llm.NewTextMessage("assistant", turnResult.text))
+
+	// 5. Persist to transcript.
+	now := time.Now().UnixMilli()
+	if deps.transcript != nil {
+		_ = deps.transcript.Append(deps.sessionKey, ChatMessage{
+			Role: "user", Content: pending.Message, Timestamp: now,
+		})
+		_ = deps.transcript.Append(deps.sessionKey, ChatMessage{
+			Role: "assistant", Content: turnResult.text, Timestamp: now,
+		})
+	}
+
+	// 6. Deliver reply to originating channel (e.g., Telegram).
+	if deps.replyFunc != nil && pending.Delivery != nil {
+		replyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if err := deps.replyFunc(replyCtx, pending.Delivery, turnResult.text); err != nil {
+			logger.Warn("interrupt reply delivery failed", "error", err)
+		}
+	}
+
+	logger.Info("interrupt response delivered", "chars", len(turnResult.text))
+	return messages
 }
