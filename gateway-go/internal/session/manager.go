@@ -32,8 +32,52 @@ const (
 	KindUnknown Kind = "unknown"
 )
 
+// ModelConfig holds inference and model-selection settings for a session.
+// Fields are embedded into Session and serialize as flat JSON keys.
+type ModelConfig struct {
+	// Inference mode controls.
+	ThinkingLevel  string `json:"thinkingLevel,omitempty"`
+	FastMode       *bool  `json:"fastMode,omitempty"`
+	VerboseLevel   string `json:"verboseLevel,omitempty"`
+	ReasoningLevel string `json:"reasoningLevel,omitempty"`
+	ElevatedLevel  string `json:"elevatedLevel,omitempty"`
+	ResponseUsage  string `json:"responseUsage,omitempty"`
+
+	// Per-mode model overrides (empty → use session default).
+	ThinkingModel  string `json:"thinkingModel,omitempty"`
+	FastModel      string `json:"fastModel,omitempty"`
+	ReasoningModel string `json:"reasoningModel,omitempty"`
+}
+
+// ExecConfig holds execution environment settings for a session.
+// Fields are embedded into Session and serialize as flat JSON keys.
+type ExecConfig struct {
+	ExecHost     string `json:"execHost,omitempty"`
+	ExecSecurity string `json:"execSecurity,omitempty"`
+	ExecAsk      string `json:"execAsk,omitempty"`
+	ExecNode     string `json:"execNode,omitempty"`
+}
+
+// AgentConfig holds spawn lineage and messaging policy for a session.
+// Fields are embedded into Session and serialize as flat JSON keys.
+type AgentConfig struct {
+	// Spawn / subagent lineage.
+	SpawnedBy            string `json:"spawnedBy,omitempty"`
+	SpawnedWorkspaceDir  string `json:"spawnedWorkspaceDir,omitempty"`
+	SpawnDepth           *int   `json:"spawnDepth,omitempty"`
+	SubagentRole         string `json:"subagentRole,omitempty"`
+	SubagentControlScope string `json:"subagentControlScope,omitempty"`
+
+	// Channel / messaging policy.
+	SendPolicy      string `json:"sendPolicy,omitempty"`
+	GroupActivation string `json:"groupActivation,omitempty"`
+}
+
 // Session represents a gateway session row.
+// Configuration fields are grouped into embedded structs (ModelConfig,
+// ExecConfig, AgentConfig) for readability; they remain flat in JSON.
 type Session struct {
+	// Core identity and lifecycle.
 	Key            string    `json:"key"`
 	Kind           Kind      `json:"kind"`
 	Status         RunStatus `json:"status,omitempty"`
@@ -45,40 +89,8 @@ type Session struct {
 	RuntimeMs      *int64    `json:"runtimeMs,omitempty"`
 	AbortedLastRun bool      `json:"abortedLastRun"`
 	CreatedAt      time.Time `json:"-"`
-
-	// Identity / display (Phase 3).
-	SessionID string `json:"sessionId,omitempty"`
-	Label     string `json:"label,omitempty"`
-
-	// Model / inference settings.
-	ThinkingLevel  string `json:"thinkingLevel,omitempty"`
-	FastMode       *bool  `json:"fastMode,omitempty"`
-	VerboseLevel   string `json:"verboseLevel,omitempty"`
-	ReasoningLevel string `json:"reasoningLevel,omitempty"`
-	ElevatedLevel  string `json:"elevatedLevel,omitempty"`
-	ResponseUsage  string `json:"responseUsage,omitempty"`
-
-	// Per-agent model defaults for mode-specific model selection.
-	ThinkingModel  string `json:"thinkingModel,omitempty"`
-	FastModel      string `json:"fastModel,omitempty"`
-	ReasoningModel string `json:"reasoningModel,omitempty"`
-
-	// Execution environment.
-	ExecHost     string `json:"execHost,omitempty"`
-	ExecSecurity string `json:"execSecurity,omitempty"`
-	ExecAsk      string `json:"execAsk,omitempty"`
-	ExecNode     string `json:"execNode,omitempty"`
-
-	// Spawn / subagent lineage.
-	SpawnedBy            string `json:"spawnedBy,omitempty"`
-	SpawnedWorkspaceDir  string `json:"spawnedWorkspaceDir,omitempty"`
-	SpawnDepth           *int   `json:"spawnDepth,omitempty"`
-	SubagentRole         string `json:"subagentRole,omitempty"`
-	SubagentControlScope string `json:"subagentControlScope,omitempty"`
-
-	// Channel / messaging policy.
-	SendPolicy      string `json:"sendPolicy,omitempty"`
-	GroupActivation string `json:"groupActivation,omitempty"`
+	SessionID      string    `json:"sessionId,omitempty"`
+	Label          string    `json:"label,omitempty"`
 
 	// Token accounting (cleared on compaction).
 	InputTokens  *int64 `json:"inputTokens,omitempty"`
@@ -88,6 +100,11 @@ type Session struct {
 	// LastOutput stores the last assistant output text for the session.
 	// Used by cron runner to retrieve the agent's response after completion.
 	LastOutput string `json:"lastOutput,omitempty"`
+
+	// Grouped configuration (embedded; JSON keys remain flat).
+	ModelConfig
+	ExecConfig
+	AgentConfig
 }
 
 // Session GC constants.
