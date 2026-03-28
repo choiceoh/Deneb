@@ -57,6 +57,21 @@ func TestStripThinkingTags(t *testing.T) {
 			input: "<think>if a < b && c > d</think>\nresult",
 			want:  "result",
 		},
+		{
+			name:  "angle bracket not a thinking tag",
+			input: "x < y and {\"ok\": true}",
+			want:  "x < y and {\"ok\": true}",
+		},
+		{
+			name:  "partial tag name not stripped",
+			input: "<thinker>not a tag</thinker>\ndata",
+			want:  "<thinker>not a tag</thinker>\ndata",
+		},
+		{
+			name:  "unclosed thinking tag",
+			input: "<thinking>never closed\n{\"data\": 1}",
+			want:  "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -256,6 +271,24 @@ func TestExtractArray(t *testing.T) {
 			name:   "code fence wrapped array",
 			input:  "```json\n[\"a\", \"b\"]\n```",
 			want:   `["a", "b"]`,
+			wantOK: true,
+		},
+		{
+			name:   "array with trailing prose",
+			input:  `["a", "b"] 이상입니다.`,
+			want:   `["a", "b"]`,
+			wantOK: true,
+		},
+		{
+			name:   "array with brackets in strings",
+			input:  `prefix [{"msg": "use arr[0]"}, {"msg": "ok"}] suffix`,
+			want:   `[{"msg": "use arr[0]"}, {"msg": "ok"}]`,
+			wantOK: true,
+		},
+		{
+			name:   "nested arrays",
+			input:  `result: [[1, 2], [3, 4]] done`,
+			want:   `[[1, 2], [3, 4]]`,
 			wantOK: true,
 		},
 		{
