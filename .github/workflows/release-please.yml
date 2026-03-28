@@ -90,41 +90,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-propus:
-    needs: release-please
-    if: needs.release-please.outputs.release-created == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: propus-app/pnpm-lock.yaml
-      - name: Install frontend dependencies
-        working-directory: propus-app
-        run: pnpm install
-      - name: Build Propus (Tauri)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tauriScript: pnpm tauri
-          projectPath: propus-app
-          tagName: ${{ needs.release-please.outputs.tag }}
-          releaseName: "Propus ${{ needs.release-please.outputs.tag }}"
-          releaseBody: "See release notes below."
-          releaseDraft: false
-          prerelease: false
-          updaterJsonPreferNsis: true
-          includeUpdaterJson: true
-
   release-summary:
-    needs: [release-please, post-release, build-propus]
+    needs: [release-please, post-release]
     if: needs.release-please.outputs.release-created == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -165,7 +132,6 @@ jobs:
           |----------|------|
           | linux/arm64 | \`deneb-linux-arm64\` |
           | linux/amd64 | \`deneb-linux-amd64\` |
-          | windows/x64 | \`Propus_x64-setup.exe\` |
 
           ### Deploy on DGX Spark
           \`\`\`bash
