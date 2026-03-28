@@ -225,5 +225,5 @@ will prompt to install it (npm or a local path) before it can be configured.
 - Onboarding overview: [Onboarding (CLI)](/start/wizard)
 - macOS app onboarding: [Onboarding](/start/onboarding)
 - Config reference: [Gateway configuration](/gateway/configuration)
-- Providers: [WhatsApp](/channels/whatsapp), [Telegram](/channels/telegram)
+- Providers: [Telegram](/channels/telegram)
 - Skills: [Skills](/tools/skills), [Skills config](/tools/skills-config)

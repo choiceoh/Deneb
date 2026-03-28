@@ -164,6 +164,5 @@ user service (no lingering needed). See [Gateway runbook](/gateway) for the syst
 
 - [Gateway runbook](/gateway) (flags, supervision, ports)
 - [Gateway configuration](/gateway/configuration) (config schema + examples)
-- Discord and [Telegram](/channels/telegram) (reply tags + replyToMode settings)
+- [Telegram](/channels/telegram) (reply tags + replyToMode settings)
 - [Deneb assistant setup](/start/deneb)
-- [macOS app](/platforms/macos) (gateway lifecycle)
