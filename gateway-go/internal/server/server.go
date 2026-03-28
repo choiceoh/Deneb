@@ -1415,8 +1415,6 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 	// Wire autonomous service into agent tools (late-binding, same as SessionSendFn).
 	s.toolDeps.AutonomousSvc = s.autonomousSvc
 
-	// Wire goal store into chat handler for auto-goal creation from recalled memory facts.
-	s.chatHandler.SetGoalStore(s.autonomousSvc.Goals())
 
 	// Wire AuroraDream adapter if available (created in phase 2).
 	if s.dreamingAdapter != nil {

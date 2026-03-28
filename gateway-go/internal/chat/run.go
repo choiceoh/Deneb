@@ -12,7 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -74,7 +73,6 @@ type runDeps struct {
 	vegaBackend    vega.Backend              // optional; enables knowledge prefetch
 	memoryStore    *memory.Store             // optional; structured memory (Honcho-style)
 	memoryEmbedder *memory.Embedder          // optional; fact embedding
-	goalStore      *autonomous.GoalStore     // optional; auto-goal creation from recalled facts
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
 	contextCfg     ContextConfig
@@ -304,7 +302,6 @@ func executeAgentRun(
 				WorkspaceDir:   workspaceDir,
 				MemoryStore:    deps.memoryStore,
 				MemoryEmbedder: deps.memoryEmbedder,
-				GoalStore:      deps.goalStore,
 			}
 			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
 		}

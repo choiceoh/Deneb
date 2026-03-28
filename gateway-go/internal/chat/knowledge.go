@@ -13,7 +13,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
@@ -24,7 +23,6 @@ type KnowledgeDeps struct {
 	WorkspaceDir   string                  // empty → skip file-based Memory search
 	MemoryStore    *memory.Store           // nil → skip structured memory search
 	MemoryEmbedder *memory.Embedder        // nil → FTS-only structured search
-	GoalStore      *autonomous.GoalStore   // nil → skip auto-goal creation from recalled facts
 }
 
 // Knowledge prefetch limits.
@@ -109,11 +107,6 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	}
 
 	wg.Wait()
-
-	// Auto-set autonomous goals from high-importance actionable facts (fire-and-forget).
-	if deps.GoalStore != nil && len(structFacts) > 0 {
-		go autoSetGoalsFromFacts(deps.GoalStore, structFacts)
-	}
 
 	// Build the combined knowledge section.
 	var parts []string
