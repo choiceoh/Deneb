@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -123,5 +124,79 @@ func TestJobTracker_ActiveRunCount(t *testing.T) {
 	jt.OnLifecycleEvent(LifecycleEvent{RunID: "a", Phase: "end", Ts: now + 100})
 	if jt.ActiveRunCount() != 1 {
 		t.Errorf("expected 1 active run, got %d", jt.ActiveRunCount())
+	}
+}
+
+func TestJobTracker_WaitForJob_ErrorThenRestartThenEnd(t *testing.T) {
+	jt := NewJobTracker(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	resultCh := make(chan *RunSnapshot, 1)
+	go func() {
+		resultCh <- jt.WaitForJob(ctx, "run-retry", 2500, true)
+	}()
+
+	now := time.Now().UnixMilli()
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-retry", Phase: "start", Ts: now})
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-retry", Phase: "error", Ts: now + 10, Error: "temporary"})
+
+	// Simulate autonomous retry/restart within grace window.
+	time.Sleep(20 * time.Millisecond)
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-retry", Phase: "start", Ts: now + 30})
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-retry", Phase: "end", Ts: now + 60})
+
+	select {
+	case snap := <-resultCh:
+		if snap == nil {
+			t.Fatal("expected snapshot after restart/end sequence")
+		}
+		if snap.Status != RunStatusOK {
+			t.Fatalf("expected status OK, got %s", snap.Status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForJob did not return in time")
+	}
+}
+
+func TestJobTracker_WaitForJob_IgnoresStaleCacheWhenRequested(t *testing.T) {
+	jt := NewJobTracker(nil)
+	now := time.Now().UnixMilli()
+
+	// Seed terminal cache from a previous run.
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-stale", Phase: "start", Ts: now})
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-stale", Phase: "end", Ts: now + 50})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var returned atomic.Bool
+	resultCh := make(chan *RunSnapshot, 1)
+	go func() {
+		snap := jt.WaitForJob(ctx, "run-stale", 1500, true)
+		if snap != nil {
+			returned.Store(true)
+		}
+		resultCh <- snap
+	}()
+
+	// Ensure we're truly waiting (cached result should be ignored).
+	time.Sleep(30 * time.Millisecond)
+	if returned.Load() {
+		t.Fatal("expected WaitForJob(ignoreCached=true) to wait for new lifecycle events")
+	}
+
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-stale", Phase: "start", Ts: now + 100})
+	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-stale", Phase: "end", Ts: now + 200})
+
+	snap := <-resultCh
+	if snap == nil {
+		t.Fatal("expected fresh snapshot after new lifecycle events")
+	}
+	if snap.Status != RunStatusOK {
+		t.Fatalf("expected OK status, got %s", snap.Status)
+	}
+	if snap.EndedAt == nil || *snap.EndedAt != now+200 {
+		t.Fatalf("expected endedAt=%d, got %v", now+200, snap.EndedAt)
 	}
 }
