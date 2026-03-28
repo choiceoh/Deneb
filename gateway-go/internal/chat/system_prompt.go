@@ -261,6 +261,16 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	}
 }
 
+// BuildCodingSystemPromptBlocks returns the coding system prompt as Anthropic
+// ContentBlocks with cache_control breakpoints for the Discord coding channel.
+func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
+	text := BuildCodingSystemPrompt(params)
+	ephemeral := &llm.CacheControl{Type: "ephemeral"}
+	return []llm.ContentBlock{
+		{Type: "text", Text: text, CacheControl: ephemeral},
+	}
+}
+
 // writePolarisSection writes the Polaris system manual usage guide.
 func writePolarisSection(sb *strings.Builder) {
 	sb.WriteString("## Polaris (System Manual)\n")

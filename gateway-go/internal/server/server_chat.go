@@ -16,7 +16,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func (s *Server) initGmailPoll() {
@@ -339,51 +338,12 @@ func (s *Server) wireDiscordChatHandler() {
 		return client.CreateReaction(ctx, delivery.To, delivery.MessageID, emoji)
 	})
 
-	// Set message handler: routes Discord messages to the chat pipeline.
+	// Route Discord messages through the autoreply inbound processor for
+	// command detection (/reset, /model, etc.) and directive parsing before
+	// dispatching to the chat pipeline.
+	inbound := NewInboundProcessor(s)
 	s.discordPlug.SetHandler(func(_ context.Context, msg *discord.Message) {
-		if msg == nil || msg.Content == "" {
-			return
-		}
-
-		// Build session key from channel ID.
-		sessionKey := "discord:" + msg.ChannelID
-
-		// Build delivery context.
-		delivery := map[string]any{
-			"channel":   "discord",
-			"to":        msg.ChannelID,
-			"messageId": msg.ID,
-		}
-		if msg.Author != nil {
-			delivery["accountId"] = msg.Author.ID
-		}
-
-		// Build chat.send params.
-		sendParams := map[string]any{
-			"sessionKey": sessionKey,
-			"message":    msg.Content,
-			"delivery":   delivery,
-		}
-
-		req, err := protocol.NewRequestFrame(
-			"dc-"+msg.ChannelID+"-"+msg.ID,
-			"chat.send",
-			sendParams,
-		)
-		if err != nil {
-			s.logger.Error("failed to build chat.send request for discord", "error", err)
-			return
-		}
-
-		sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer sendCancel()
-		resp := s.chatHandler.Send(sendCtx, req)
-		if resp != nil && !resp.OK {
-			s.logger.Warn("chat.send failed for discord message",
-				"channelId", msg.ChannelID,
-				"error", resp.Error,
-			)
-		}
+		inbound.HandleDiscordMessage(msg)
 	})
 
 	s.logger.Info("discord chat handler wired (coding channel)")

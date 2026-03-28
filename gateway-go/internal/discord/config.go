@@ -18,6 +18,10 @@ type Config struct {
 
 	// Enabled controls whether this Discord account is active. Default: true.
 	Enabled *bool `json:"enabled,omitempty"`
+
+	// RequireMention requires @bot mention to trigger a response.
+	// When true, messages without a mention are ignored. Default: false.
+	RequireMention bool `json:"requireMention,omitempty"`
 }
 
 // IsEnabled returns whether this Discord account is active.

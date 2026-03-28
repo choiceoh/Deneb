@@ -276,7 +276,12 @@ func executeAgentRun(
 		// Defer format choice: only build the format we'll actually use.
 		// BuildSystemPrompt (string) is the default; overridden to blocks
 		// for Anthropic API after apiType is resolved below.
-		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
+		// Discord channel uses the coding-focused system prompt.
+		if spp.Channel == "discord" {
+			systemPrompt = llm.SystemString(BuildCodingSystemPrompt(spp))
+		} else {
+			systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
+		}
 	}
 
 	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())
@@ -393,16 +398,25 @@ func executeAgentRun(
 	}
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
+	// Discord channel uses the coding profile (subset of tools).
 	var tools []llm.Tool
 	if deps.tools != nil {
-		tools = deps.tools.LLMTools()
+		if deliveryChannel(params.Delivery) == "discord" {
+			tools = deps.tools.LLMToolsForProfile("coding")
+		} else {
+			tools = deps.tools.LLMTools()
+		}
 	}
 
 	// For Anthropic API: rebuild system prompt as ContentBlock array with
 	// cache_control breakpoints, and mark the last tool for caching.
 	if apiType == "anthropic" {
 		if systemPromptParams != nil {
-			systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+			if systemPromptParams.Channel == "discord" {
+				systemPrompt = llm.SystemBlocks(BuildCodingSystemPromptBlocks(*systemPromptParams))
+			} else {
+				systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+			}
 			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
 			if knowledgeAddition != "" {
 				systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)

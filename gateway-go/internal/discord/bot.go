@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,15 +31,22 @@ type Bot struct {
 	resumeURL string
 	seq       int64
 	botUser   *User
+
+	// threadParents caches thread ID → parent channel ID for allowlist checks.
+	// Discord threads have their own channel IDs that aren't in the allowlist,
+	// so we check the parent channel instead.
+	threadParents   map[string]string
+	threadParentsMu sync.Mutex
 }
 
 // NewBot creates a new Discord bot instance.
 func NewBot(client *Client, config *Config, handler MessageHandler, logger *slog.Logger) *Bot {
 	return &Bot{
-		client:  client,
-		config:  config,
-		handler: handler,
-		logger:  logger,
+		client:        client,
+		config:        config,
+		handler:       handler,
+		logger:        logger,
+		threadParents: make(map[string]string),
 	}
 }
 
@@ -264,12 +272,29 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 			return
 		}
 
-		// Check access control.
-		if !b.config.IsChannelAllowed(msg.ChannelID) {
+		// Check access control. For threads, check the parent channel.
+		if !b.isChannelOrThreadAllowed(msg.ChannelID) {
 			return
 		}
 		if msg.Author != nil && !b.config.IsUserAllowed(msg.Author.ID) {
 			return
+		}
+
+		// Mention gating: if requireMention is set, only respond when @mentioned.
+		if b.config.RequireMention {
+			botUser := b.BotUser()
+			if botUser == nil {
+				return
+			}
+			mentionTag := "<@" + botUser.ID + ">"
+			if !strings.Contains(msg.Content, mentionTag) {
+				return
+			}
+			// Strip mention from message content.
+			msg.Content = strings.TrimSpace(strings.ReplaceAll(msg.Content, mentionTag, ""))
+			if msg.Content == "" {
+				return
+			}
 		}
 
 		// Dispatch to handler asynchronously.
@@ -279,7 +304,32 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 		if handler != nil {
 			go handler(ctx, &msg)
 		}
+
+	case "THREAD_CREATE":
+		// Cache thread → parent channel mapping for allowlist checks.
+		var ch Channel
+		if err := json.Unmarshal(payload.D, &ch); err == nil && ch.ParentID != "" {
+			b.threadParentsMu.Lock()
+			b.threadParents[ch.ID] = ch.ParentID
+			b.threadParentsMu.Unlock()
+		}
 	}
+}
+
+// isChannelOrThreadAllowed checks if a channel (or its parent for threads) is allowed.
+func (b *Bot) isChannelOrThreadAllowed(channelID string) bool {
+	if b.config.IsChannelAllowed(channelID) {
+		return true
+	}
+	// Check if this is a thread whose parent channel is allowed.
+	b.threadParentsMu.Lock()
+	parentID, ok := b.threadParents[channelID]
+	b.threadParentsMu.Unlock()
+	if ok {
+		return b.config.IsChannelAllowed(parentID)
+	}
+	// If no allowlist is configured, allow all (IsChannelAllowed already returned true above).
+	return false
 }
 
 // heartbeatLoop sends periodic heartbeats.
