@@ -125,6 +125,70 @@ func TestDoStream_RateLimitRetryAfter(t *testing.T) {
 	}
 }
 
+func TestBackoffDelay_Jitter(t *testing.T) {
+	c := NewClient("http://localhost", "key",
+		WithRetry(6, 100*time.Millisecond, 10*time.Second))
+	err := &APIError{StatusCode: 503, Body: "unavailable"}
+
+	// Run multiple times to verify jitter adds variance.
+	seen := make(map[time.Duration]bool)
+	for range 20 {
+		d := c.backoffDelay(1, err)
+		seen[d] = true
+		// Base delay for attempt 1: 100ms. Jitter adds 0-25%, so 100-125ms.
+		if d < 100*time.Millisecond || d >= 125*time.Millisecond {
+			t.Fatalf("delay %v out of expected range [100ms, 125ms)", d)
+		}
+	}
+	if len(seen) < 2 {
+		t.Error("expected jitter to produce varying delays")
+	}
+}
+
+func TestBackoffDelay_RateLimitFloor(t *testing.T) {
+	c := NewClient("http://localhost", "key",
+		WithRetry(6, 500*time.Millisecond, 60*time.Second))
+
+	// 429 error should use 2s floor instead of the configured 500ms base.
+	rateLimitErr := &APIError{StatusCode: 429, Body: "rate limited"}
+	d := c.backoffDelay(1, rateLimitErr)
+	// Floor is 2s, attempt 1 → 2s * 2^0 = 2s, plus up to 25% jitter → [2s, 2.5s).
+	if d < 2*time.Second || d >= 2500*time.Millisecond {
+		t.Fatalf("429 delay %v out of expected range [2s, 2.5s)", d)
+	}
+
+	// 503 error should use the configured 500ms base (no floor).
+	serverErr := &APIError{StatusCode: 503, Body: "unavailable"}
+	d = c.backoffDelay(1, serverErr)
+	// 500ms * 2^0 = 500ms, plus up to 25% jitter → [500ms, 625ms).
+	if d < 500*time.Millisecond || d >= 625*time.Millisecond {
+		t.Fatalf("503 delay %v out of expected range [500ms, 625ms)", d)
+	}
+}
+
+func TestDoStream_DefaultMaxRetries(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, "rate limited")
+	}))
+	defer server.Close()
+
+	// Use default client (maxRetries=6) with fast delays for testing.
+	c := NewClient(server.URL, "test-key",
+		WithRetry(6, 1*time.Millisecond, 10*time.Millisecond))
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
+	_, err := c.DoStream(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	// 1 initial + 6 retries = 7 total calls.
+	if calls != 7 {
+		t.Errorf("expected 7 calls (1 + 6 retries), got %d", calls)
+	}
+}
+
 func TestAPIError_Error(t *testing.T) {
 	err := &APIError{StatusCode: 429, Body: "rate limited"}
 	want := "LLM API error 429: rate limited"

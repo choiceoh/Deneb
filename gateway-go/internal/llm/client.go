@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"strconv"
@@ -70,7 +71,7 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 		baseURL:    baseURL,
 		apiKey:     apiKey,
 		logger:     slog.Default(),
-		maxRetries: 3,
+		maxRetries: 6,
 		baseDelay:  1 * time.Second,
 		maxDelay:   60 * time.Second,
 	}
@@ -139,15 +140,32 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
 }
 
-// backoffDelay computes exponential backoff, respecting Retry-After headers.
+// backoffDelay computes exponential backoff with jitter, respecting
+// Retry-After headers. 429 rate limits use a higher base delay floor.
 func (c *Client) backoffDelay(attempt int, err error) time.Duration {
-	// Check for Retry-After from API error.
+	// Respect Retry-After header from the API.
 	if apiErr, ok := err.(*APIError); ok && apiErr.RetryAfter > 0 {
 		return apiErr.RetryAfter
 	}
-	delay := time.Duration(float64(c.baseDelay) * math.Pow(2, float64(attempt-1)))
+
+	base := c.baseDelay
+	// 429 rate limits need a higher floor than transient server errors.
+	if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 429 {
+		const rateLimitFloor = 2 * time.Second
+		if base < rateLimitFloor {
+			base = rateLimitFloor
+		}
+	}
+
+	delay := time.Duration(float64(base) * math.Pow(2, float64(attempt-1)))
 	if delay > c.maxDelay {
 		delay = c.maxDelay
+	}
+
+	// Add 0-25% jitter to avoid synchronized retries.
+	if delay > 0 {
+		jitter := time.Duration(rand.Int64N(int64(delay) / 4))
+		delay += jitter
 	}
 	return delay
 }
