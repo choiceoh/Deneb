@@ -50,23 +50,29 @@ pub async fn run(args: &HealthArgs) -> Result<(), CliError> {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&payload)?);
             } else {
-                let ok_style = Palette::success();
-                println!("{}", ok_style.apply_to("Gateway is healthy"));
+                use crate::terminal::Symbols;
+                let success = Palette::success();
+                let muted = Palette::muted();
+                println!();
+                println!(
+                    "    {}  {}",
+                    success.apply_to(Symbols::SUCCESS),
+                    success.apply_to("Gateway healthy")
+                );
 
                 // Show basic info from payload if available
                 if let Some(obj) = payload.as_object() {
                     if let Some(uptime) = obj.get("uptimeSeconds") {
-                        let muted = Palette::muted();
-                        println!("  Uptime: {}", muted.apply_to(format!("{}s", uptime)));
+                        println!("       Uptime    {}", muted.apply_to(format!("{}s", uptime)));
                     }
                     if let Some(version) = obj.get("version") {
-                        let muted = Palette::muted();
                         println!(
-                            "  Version: {}",
+                            "       Version   {}",
                             muted.apply_to(version.as_str().unwrap_or("unknown"))
                         );
                     }
                 }
+                println!();
             }
             Ok(())
         }

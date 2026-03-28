@@ -108,20 +108,27 @@ pub async fn run(args: &DoctorArgs) -> Result<(), CliError> {
             .collect();
         println!("{}", serde_json::to_string_pretty(&json_results)?);
     } else {
+        use crate::terminal::Symbols;
         let bold = Palette::bold();
-        println!("{}", bold.apply_to("Doctor Results"));
+        println!();
+        println!("  {}", bold.apply_to("Diagnostics"));
         println!();
 
         for r in &results {
-            let icon = match r.status {
-                DiagStatus::Ok => Palette::success().apply_to("ok"),
-                DiagStatus::Warn => Palette::warn().apply_to("!!"),
-                DiagStatus::Error => Palette::error().apply_to("xx"),
+            let (icon, style) = match r.status {
+                DiagStatus::Ok => (Symbols::SUCCESS, Palette::success()),
+                DiagStatus::Warn => (Symbols::WARNING, Palette::warn()),
+                DiagStatus::Error => (Symbols::ERROR, Palette::error()),
             };
-            println!("  [{icon}] {}: {}", r.section, r.message);
+            println!(
+                "    {}  {} {} {}",
+                style.apply_to(icon),
+                r.section,
+                Palette::muted().apply_to(Symbols::BULLET),
+                r.message
+            );
             if let Some(ref detail) = r.detail {
-                let muted = Palette::muted();
-                println!("       {}", muted.apply_to(detail));
+                println!("       {}", Palette::muted().apply_to(detail));
             }
         }
 
@@ -135,14 +142,18 @@ pub async fn run(args: &DoctorArgs) -> Result<(), CliError> {
             .count();
         println!();
         if errors == 0 && warns == 0 {
-            println!("{}", Palette::success().apply_to("All checks passed."));
-        } else {
-            let muted = Palette::muted();
             println!(
-                "{}",
-                muted.apply_to(format!("{errors} error(s), {warns} warning(s)"))
+                "    {}  {}",
+                Palette::success().apply_to(Symbols::SUCCESS),
+                Palette::success().apply_to("All checks passed")
+            );
+        } else {
+            println!(
+                "    {}",
+                Palette::muted().apply_to(format!("{errors} error(s), {warns} warning(s)"))
             );
         }
+        println!();
     }
 
     Ok(())

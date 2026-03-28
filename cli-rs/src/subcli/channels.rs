@@ -143,17 +143,20 @@ async fn cmd_list(
         return Ok(());
     }
 
+    use crate::terminal::Symbols;
     let bold = Palette::bold();
     let muted = Palette::muted();
 
     let channel_accounts = result.get("channelAccounts").and_then(|ca| ca.as_object());
 
     let Some(channel_accounts) = channel_accounts else {
-        println!("{}", muted.apply_to("No channels configured."));
+        println!("    {}", muted.apply_to("No channels configured."));
         return Ok(());
     };
 
-    println!("{}", bold.apply_to("Channels"));
+    println!();
+    println!("  {}", bold.apply_to("Channels"));
+    println!();
 
     let mut table = styled_table();
     table.set_header(vec!["Channel", "Account", "Enabled"]);
@@ -161,19 +164,19 @@ async fn cmd_list(
     for (channel, accounts) in channel_accounts {
         let accounts_arr = accounts.as_array().cloned().unwrap_or_default();
         if accounts_arr.is_empty() {
-            table.add_row(vec![channel.clone(), "-".to_string(), "-".to_string()]);
+            table.add_row(vec![channel.clone(), Symbols::DASH.to_string(), Symbols::DASH.to_string()]);
             continue;
         }
         for acct in &accounts_arr {
             let account_id = acct
                 .get("accountId")
                 .and_then(|v| v.as_str())
-                .unwrap_or("-");
+                .unwrap_or(Symbols::DASH);
             let enabled = acct
                 .get("enabled")
                 .and_then(|v| v.as_bool())
-                .map(|b| if b { "yes" } else { "no" })
-                .unwrap_or("-");
+                .map(|b| if b { Symbols::DOT_FILLED } else { Symbols::DASH })
+                .unwrap_or(Symbols::DASH);
             table.add_row(vec![
                 channel.clone(),
                 account_id.to_string(),
@@ -183,6 +186,7 @@ async fn cmd_list(
     }
 
     println!("{table}");
+    println!();
     Ok(())
 }
 
@@ -228,17 +232,20 @@ async fn cmd_status(
         return Ok(());
     }
 
+    use crate::terminal::Symbols;
     let bold = Palette::bold();
     let muted = Palette::muted();
 
     let channel_accounts = result.get("channelAccounts").and_then(|ca| ca.as_object());
 
     let Some(channel_accounts) = channel_accounts else {
-        println!("{}", muted.apply_to("No channels configured."));
+        println!("    {}", muted.apply_to("No channels configured."));
         return Ok(());
     };
 
-    println!("{}", bold.apply_to("Channel Status"));
+    println!();
+    println!("  {}", bold.apply_to("Channel Status"));
+    println!();
 
     let mut table = styled_table();
     let mut headers = vec![
@@ -261,7 +268,7 @@ async fn cmd_status(
             let account_id = acct
                 .get("accountId")
                 .and_then(|v| v.as_str())
-                .unwrap_or("-");
+                .unwrap_or(Symbols::DASH);
             let enabled = bool_indicator(acct.get("enabled"));
             let configured = bool_indicator(acct.get("configured"));
             let linked = bool_indicator(acct.get("linked"));
@@ -272,7 +279,7 @@ async fn cmd_status(
                 .or_else(|| acct.get("lastOutboundAt"))
                 .and_then(|v| v.as_f64())
                 .map(format_age)
-                .unwrap_or_else(|| "-".to_string());
+                .unwrap_or_else(|| Symbols::DASH.to_string());
 
             let mut row = vec![
                 channel.clone(),
@@ -289,9 +296,9 @@ async fn cmd_status(
                     .and_then(|p| p.get("ok"))
                     .and_then(|v| v.as_bool());
                 row.push(match probe_ok {
-                    Some(true) => "ok".to_string(),
-                    Some(false) => "fail".to_string(),
-                    None => "-".to_string(),
+                    Some(true) => Symbols::SUCCESS.to_string(),
+                    Some(false) => Symbols::ERROR.to_string(),
+                    None => Symbols::DASH.to_string(),
                 });
             }
 
@@ -301,14 +308,16 @@ async fn cmd_status(
     }
 
     println!("{table}");
+    println!();
     Ok(())
 }
 
 fn bool_indicator(val: Option<&serde_json::Value>) -> String {
+    use crate::terminal::Symbols;
     match val.and_then(|v| v.as_bool()) {
-        Some(true) => "yes".to_string(),
-        Some(false) => "no".to_string(),
-        None => "-".to_string(),
+        Some(true) => Symbols::DOT_FILLED.to_string(),
+        Some(false) => Symbols::DASH.to_string(),
+        None => Symbols::DASH.to_string(),
     }
 }
 

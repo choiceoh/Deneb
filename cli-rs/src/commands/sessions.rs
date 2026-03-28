@@ -121,16 +121,21 @@ pub async fn run(args: &SessionsArgs) -> Result<(), CliError> {
     }
 
     // Text output
+    use crate::terminal::Symbols;
     let bold = Palette::bold();
     let muted = Palette::muted();
+    println!();
     println!(
-        "{} ({} sessions)",
-        bold.apply_to(format!("Sessions [{}]", args.agent)),
-        sessions.len()
+        "  {}  {}  {}",
+        bold.apply_to("Sessions"),
+        muted.apply_to(Symbols::ARROW),
+        muted.apply_to(format!("{} {} sessions", &args.agent, Symbols::BULLET)),
     );
+    println!();
 
     if sessions.is_empty() {
-        println!("  {}", muted.apply_to("No sessions found."));
+        println!("    {}", muted.apply_to("No sessions found."));
+        println!();
         return Ok(());
     }
 
@@ -139,16 +144,16 @@ pub async fn run(args: &SessionsArgs) -> Result<(), CliError> {
 
     for (key, entry) in &sessions {
         let age = format_age(now_ms - entry.updated_at);
-        let kind = entry.kind.as_deref().unwrap_or("-");
+        let kind = entry.kind.as_deref().unwrap_or(Symbols::DASH);
         let model = entry
             .model
             .as_deref()
             .map(truncate_model)
-            .unwrap_or("-".to_string());
+            .unwrap_or(Symbols::DASH.to_string());
         let tokens = entry
             .total_tokens
             .map(format_tokens)
-            .unwrap_or_else(|| "-".to_string());
+            .unwrap_or_else(|| Symbols::DASH.to_string());
 
         let display_key = if key.len() > 30 {
             format!("{}...", &key[..27])
@@ -160,10 +165,12 @@ pub async fn run(args: &SessionsArgs) -> Result<(), CliError> {
     }
 
     println!("{table}");
+    println!();
     println!(
-        "  {}",
-        muted.apply_to(format!("Store: {}", store_path.display()))
+        "    {}",
+        muted.apply_to(format!("Store  {}", store_path.display()))
     );
+    println!();
 
     Ok(())
 }

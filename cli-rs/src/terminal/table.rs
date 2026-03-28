@@ -1,9 +1,10 @@
 use comfy_table::{presets, Table};
 
-/// Create a styled table with the Deneb default style.
+/// Create a styled table with light horizontal-only borders.
+/// Minimal chrome — Apple-style airy layout without cage-like full borders.
 pub fn styled_table() -> Table {
     let mut table = Table::new();
-    table.load_preset(presets::UTF8_FULL_CONDENSED);
+    table.load_preset(presets::UTF8_HORIZONTAL_ONLY);
     table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
     table
 }

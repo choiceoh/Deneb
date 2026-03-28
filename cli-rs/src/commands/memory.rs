@@ -109,31 +109,40 @@ async fn cmd_status(
 }
 
 fn print_memory_status(payload: &serde_json::Value, agent: &str) {
+    use crate::terminal::Symbols;
     let bold = Palette::bold();
     let muted = Palette::muted();
     let success = Palette::success();
 
-    println!("{}", bold.apply_to(format!("Memory Status [{agent}]")));
+    println!();
+    println!(
+        "  {}  {}  {}",
+        bold.apply_to("Memory"),
+        muted.apply_to(Symbols::ARROW),
+        muted.apply_to(agent)
+    );
+    println!();
 
     if let Some(obj) = payload.as_object() {
         if let Some(indexed) = obj.get("indexedCount").and_then(|v| v.as_u64()) {
             println!(
-                "  Indexed: {}",
+                "    Indexed     {}",
                 success.apply_to(format!("{indexed} files"))
             );
         }
         if let Some(dirty) = obj.get("dirty").and_then(|v| v.as_bool()) {
             let label = if dirty { "yes (reindex needed)" } else { "no" };
-            println!("  Dirty: {}", muted.apply_to(label));
+            println!("    Dirty       {}", muted.apply_to(label));
         }
         if let Some(provider) = obj.get("provider").and_then(|v| v.as_str()) {
-            println!("  Provider: {}", muted.apply_to(provider));
+            println!("    Provider    {}", muted.apply_to(provider));
         }
         if let Some(model) = obj.get("model").and_then(|v| v.as_str()) {
-            println!("  Model: {}", muted.apply_to(model));
+            println!("    Model       {}", muted.apply_to(model));
         }
         if let Some(workspace) = obj.get("workspace").and_then(|v| v.as_str()) {
-            println!("  Workspace: {}", muted.apply_to(workspace));
+            println!("    Workspace   {}", muted.apply_to(workspace));
         }
     }
+    println!();
 }

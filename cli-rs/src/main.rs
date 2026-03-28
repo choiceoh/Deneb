@@ -90,7 +90,11 @@ async fn main() {
 
     if let Err(e) = result {
         let error_style = terminal::Palette::error();
-        eprintln!("{} {}", error_style.apply_to("Error:"), e.user_message());
+        eprintln!(
+            "  {}  {}",
+            error_style.apply_to(terminal::Symbols::ERROR),
+            e.user_message()
+        );
         std::process::exit(1);
     }
 }
