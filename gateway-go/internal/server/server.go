@@ -1816,8 +1816,9 @@ func (s *Server) wirePropusChatHandler() {
 	// Inbound: Propus client SendMessage → chat.send RPC.
 	s.propusPlug.SetChatSend(func(sessionKey, message string) {
 		delivery := map[string]any{
-			"channel": "propus",
-			"to":      sessionKey,
+			"channel":     "propus",
+			"to":          sessionKey,
+			"toolProfile": "coding",
 		}
 
 		sendParams := map[string]any{
@@ -1955,11 +1956,15 @@ func (s *Server) wirePropusChatHandler() {
 				s.propusPlug.BroadcastToSession(sk, propus.MsgText(envelope.Payload.Delta))
 			}
 		case "chat.tool":
+			toolName := envelope.Payload.Tool
 			switch envelope.Payload.State {
 			case "started":
-				s.propusPlug.BroadcastToSession(sk, propus.MsgToolStart(envelope.Payload.Tool, ""))
+				s.propusPlug.BroadcastToSession(sk, propus.MsgToolStart(toolName, envelope.Payload.ToolUseID))
 			case "completed":
-				s.propusPlug.BroadcastToSession(sk, propus.MsgToolResult(envelope.Payload.Tool, envelope.Payload.Result))
+				if toolName == "" {
+					toolName = envelope.Payload.ToolUseID
+				}
+				s.propusPlug.BroadcastToSession(sk, propus.MsgToolResult(toolName, envelope.Payload.Result))
 			}
 		case "chat":
 			switch envelope.Payload.State {

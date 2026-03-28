@@ -37,7 +37,7 @@ func TestStreamBroadcasterNilSafe(t *testing.T) {
 	// None of these should panic.
 	sb.EmitDelta("text")
 	sb.EmitToolStart("read", "tool-1")
-	sb.EmitToolResult("tool-1", "result", false)
+	sb.EmitToolResult("read", "tool-1", "result", false)
 	sb.EmitComplete("done", llm.TokenUsage{InputTokens: 10, OutputTokens: 5})
 	sb.EmitError("something broke")
 	sb.EmitStarted()
@@ -110,7 +110,7 @@ func TestStreamBroadcasterEvents(t *testing.T) {
 	sb.EmitStarted()
 	sb.EmitDelta("chunk1")
 	sb.EmitToolStart("read", "t1")
-	sb.EmitToolResult("t1", "file content", false)
+	sb.EmitToolResult("read", "t1", "file content", false)
 	sb.EmitDelta("chunk2")
 	sb.EmitComplete("final", llm.TokenUsage{InputTokens: 100, OutputTokens: 50})
 
@@ -143,11 +143,14 @@ func TestStreamBroadcasterToolResult(t *testing.T) {
 		return 1
 	}, "s1", "r1")
 
-	sb.EmitToolResult("tool-id", "error message", true)
+	sb.EmitToolResult("exec", "tool-id", "error message", true)
 
 	payload := captured["payload"].(map[string]any)
 	if payload["state"] != "completed" {
 		t.Errorf("state = %v, want %q", payload["state"], "completed")
+	}
+	if payload["tool"] != "exec" {
+		t.Errorf("tool = %v, want %q", payload["tool"], "exec")
 	}
 	if payload["toolUseId"] != "tool-id" {
 		t.Errorf("toolUseId = %v, want %q", payload["toolUseId"], "tool-id")
