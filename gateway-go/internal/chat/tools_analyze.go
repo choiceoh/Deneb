@@ -18,46 +18,6 @@ import (
 // --- Code analysis tool ---
 // Provides AST-based code analysis for Go (go/ast) and regex-based analysis for Rust.
 
-func analyzeToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Analysis action",
-				"enum":        []string{"outline", "symbols", "references", "imports", "signature"},
-			},
-			"file": map[string]any{
-				"type":        "string",
-				"description": "File path for outline/imports/signature analysis",
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory path for symbols/references/imports search",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Symbol name to search for (symbols/references/signature)",
-			},
-			"kind": map[string]any{
-				"type":        "string",
-				"description": "Filter symbols by kind",
-				"enum":        []string{"func", "type", "method", "const", "var", "interface", "struct"},
-			},
-			"symbol": map[string]any{
-				"type":        "string",
-				"description": "Symbol name for references action",
-			},
-			"reverse": map[string]any{
-				"type":        "boolean",
-				"description": "For imports: show who imports this package (reverse dependency)",
-				"default":     false,
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func toolAnalyze(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p analyzeParams
@@ -462,4 +422,3 @@ func searchRustSymbols(path, query, kindFilter string) []symbolResult {
 	}
 	return results
 }
-

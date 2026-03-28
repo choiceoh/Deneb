@@ -23,32 +23,6 @@ func truncate(s string, maxLen int) string {
 
 // --- cron tool ---
 
-func cronToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Cron action",
-				"enum":        []string{"status", "list", "add", "update", "remove", "run", "wake"},
-			},
-			"jobId": map[string]any{
-				"type":        "string",
-				"description": "Job ID for update/remove/run actions",
-			},
-			"job": map[string]any{
-				"type":        "object",
-				"description": "Job definition for add/update",
-			},
-			"text": map[string]any{
-				"type":        "string",
-				"description": "System event text for wake action",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -176,26 +150,7 @@ func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
 	}
 }
 
-// --- gateway tool ---
-
-func sessionsListToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"limit": map[string]any{
-				"type":        "number",
-				"description": "Maximum sessions to return",
-				"default":     50,
-				"minimum":     1,
-			},
-			"kinds": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string", "enum": []string{"main", "group", "cron", "hook"}},
-				"description": "Filter by session kind",
-			},
-		},
-	}
-}
+// --- sessions_list tool ---
 
 func toolSessionsList(sessions *session.Manager) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -252,25 +207,6 @@ func toolSessionsList(sessions *session.Manager) ToolFunc {
 
 // --- sessions_history tool ---
 
-func sessionsHistoryToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"sessionKey": map[string]any{
-				"type":        "string",
-				"description": "Session key to fetch history for",
-			},
-			"limit": map[string]any{
-				"type":        "number",
-				"description": "Number of messages to return",
-				"default":     20,
-				"minimum":     1,
-			},
-		},
-		"required": []string{"sessionKey"},
-	}
-}
-
 func toolSessionsHistory(transcript TranscriptStore) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -314,26 +250,6 @@ func toolSessionsHistory(transcript TranscriptStore) ToolFunc {
 }
 
 // --- sessions_search tool ---
-
-func sessionsSearchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search keyword to find in session transcripts",
-			},
-			"maxResults": map[string]any{
-				"type":        "number",
-				"description": "Maximum number of matching messages to return (default 20)",
-				"default":     20,
-				"minimum":     1,
-				"maximum":     100,
-			},
-		},
-		"required": []string{"query"},
-	}
-}
 
 func toolSessionsSearch(transcript TranscriptStore) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
@@ -404,23 +320,6 @@ func toolSessionsSearch(transcript TranscriptStore) ToolFunc {
 
 // --- sessions_send tool ---
 
-func sessionsSendToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"sessionKey": map[string]any{
-				"type":        "string",
-				"description": "Target session key",
-			},
-			"message": map[string]any{
-				"type":        "string",
-				"description": "Message to send",
-			},
-		},
-		"required": []string{"message"},
-	}
-}
-
 func toolSessionsSend(deps *CoreToolDeps) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -451,27 +350,6 @@ func toolSessionsSend(deps *CoreToolDeps) ToolFunc {
 }
 
 // --- sessions_spawn tool ---
-
-func sessionsSpawnToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"task": map[string]any{
-				"type":        "string",
-				"description": "Task description for the sub-agent",
-			},
-			"label": map[string]any{
-				"type":        "string",
-				"description": "Human-readable label",
-			},
-			"model": map[string]any{
-				"type":        "string",
-				"description": "Model override for the sub-agent",
-			},
-		},
-		"required": []string{"task"},
-	}
-}
 
 func toolSessionsSpawn(deps *CoreToolDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {

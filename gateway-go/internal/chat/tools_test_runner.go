@@ -16,60 +16,6 @@ import (
 // --- Test/Build runner tool ---
 // Provides structured test results, build output, and lint/vet checks.
 
-func testToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Action to perform",
-				"enum":        []string{"run", "build", "check"},
-			},
-			"framework": map[string]any{
-				"type":        "string",
-				"description": "Build/test framework",
-				"enum":        []string{"go", "cargo", "make"},
-				"default":     "go",
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Package path or directory (e.g. './internal/chat/...')",
-			},
-			"filter": map[string]any{
-				"type":        "string",
-				"description": "Test name filter (go: -run, cargo: --test)",
-			},
-			"verbose": map[string]any{
-				"type":        "boolean",
-				"description": "Verbose output (show all test names)",
-				"default":     false,
-			},
-			"timeout": map[string]any{
-				"type":        "number",
-				"description": "Timeout in seconds (default: 120, max: 600)",
-				"default":     120,
-				"minimum":     10,
-				"maximum":     600,
-			},
-			"coverage": map[string]any{
-				"type":        "boolean",
-				"description": "Enable coverage reporting (go only)",
-				"default":     false,
-			},
-			"target": map[string]any{
-				"type":        "string",
-				"description": "Build target (make: target name, cargo: --bin/--lib)",
-			},
-			"release": map[string]any{
-				"type":        "boolean",
-				"description": "Release build (cargo --release)",
-				"default":     false,
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func toolTest(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p testParams

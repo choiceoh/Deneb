@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -18,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // CoreToolDeps holds all dependencies for core agent tools.
@@ -303,40 +303,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 // --- Exec tool ---
 
-func execToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"command": map[string]any{
-				"type":        "string",
-				"description": "Shell command to execute",
-			},
-			"workdir": map[string]any{
-				"type":        "string",
-				"description": "Working directory (defaults to workspace root)",
-			},
-			"timeout": map[string]any{
-				"type":        "number",
-				"description": "Timeout in seconds (default: 30, max: 300)",
-				"default":     30,
-				"minimum":     1,
-				"maximum":     300,
-			},
-			"background": map[string]any{
-				"type":        "boolean",
-				"description": "Run in background immediately, then use process tool to check output",
-				"default":     false,
-			},
-			"structured": map[string]any{
-				"type":        "boolean",
-				"description": "Return JSON with stdout, stderr, exit_code, runtime_ms instead of plain text",
-				"default":     false,
-			},
-		},
-		"required": []string{"command"},
-	}
-}
-
 func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -466,28 +432,6 @@ func formatExecResult(r *process.ExecResult) string {
 
 // --- Process tool ---
 
-func processToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Process action",
-				"enum":        []string{"list", "poll", "log", "write", "kill"},
-			},
-			"sessionId": map[string]any{
-				"type":        "string",
-				"description": "Session ID for actions other than list",
-			},
-			"timeout": map[string]any{
-				"type":        "number",
-				"description": "Poll timeout in milliseconds",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func toolProcess(procMgr *process.Manager) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -533,19 +477,6 @@ func toolProcess(procMgr *process.Manager) ToolFunc {
 
 // --- YouTube transcript tool ---
 
-func youtubeTranscriptToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"url": map[string]any{
-				"type":        "string",
-				"description": "YouTube video URL (youtube.com/watch?v=... or youtu.be/...)",
-			},
-		},
-		"required": []string{"url"},
-	}
-}
-
 func toolYouTubeTranscript() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -572,4 +503,3 @@ func toolYouTubeTranscript() ToolFunc {
 		return media.FormatYouTubeResult(result), nil
 	}
 }
-

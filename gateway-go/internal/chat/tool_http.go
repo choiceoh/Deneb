@@ -14,48 +14,6 @@ import (
 )
 
 // httpToolSchema returns the JSON Schema for the http tool.
-func httpToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"url": map[string]any{
-				"type":        "string",
-				"description": "HTTP or HTTPS URL",
-			},
-			"method": map[string]any{
-				"type":        "string",
-				"description": "HTTP method",
-				"enum":        []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
-				"default":     "GET",
-			},
-			"headers": map[string]any{
-				"type":        "object",
-				"description": "Request headers as key-value pairs",
-			},
-			"body": map[string]any{
-				"type":        "string",
-				"description": "Request body as string",
-			},
-			"json": map[string]any{
-				"type":        "object",
-				"description": "JSON body (auto-sets Content-Type: application/json)",
-			},
-			"timeout": map[string]any{
-				"type":        "number",
-				"description": "Timeout in seconds",
-				"default":     30,
-				"minimum":     1,
-				"maximum":     120,
-			},
-			"max_response_chars": map[string]any{
-				"type":        "number",
-				"description": "Maximum response characters to return",
-				"default":     50000,
-			},
-		},
-		"required": []string{"url"},
-	}
-}
 
 // toolHTTP implements the http tool for making structured HTTP requests.
 func toolHTTP() ToolFunc {

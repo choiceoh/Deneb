@@ -12,47 +12,6 @@ import (
 // messageToolSchema returns the JSON Schema for the message tool.
 // This is a flattened schema with per-action runtime validation, matching
 // the Node.js message-tool.ts approach.
-func messageToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Message action",
-				"enum":        []string{"send", "react", "reply", "thread-reply"},
-			},
-			"message": map[string]any{
-				"type":        "string",
-				"description": "Text content to send",
-			},
-			"to": map[string]any{
-				"type":        "string",
-				"description": "Recipient (chat ID or user identifier)",
-			},
-			"channel": map[string]any{
-				"type":        "string",
-				"description": "Target channel (e.g., telegram)",
-			},
-			"replyTo": map[string]any{
-				"type":        "string",
-				"description": "Message ID to reply to",
-			},
-			"emoji": map[string]any{
-				"type":        "string",
-				"description": "Emoji for react action",
-			},
-			"messageId": map[string]any{
-				"type":        "string",
-				"description": "Message ID for react/reply actions",
-			},
-			"silent": map[string]any{
-				"type":        "boolean",
-				"description": "Send without notification sound",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
 
 // toolMessage implements the message tool for proactive channel sends.
 // It uses context values to access the ReplyFunc and DeliveryContext.

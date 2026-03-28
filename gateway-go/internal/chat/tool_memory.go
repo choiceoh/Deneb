@@ -92,19 +92,6 @@ func (c *memoryFileListCache) set(workspace string, files []string) {
 }
 
 // memorySearchToolSchema returns the JSON Schema for the memory_search tool.
-func memorySearchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search query for memory files",
-			},
-		},
-		"required": []string{"query"},
-	}
-}
-
 
 // MemoryMatch represents a single keyword match in a memory file.
 type MemoryMatch struct {
@@ -211,7 +198,6 @@ func toolMemorySearch(workspaceDir string) ToolFunc {
 		return strings.Join(results, "\n\n"), nil
 	}
 }
-
 
 // collectMemoryFiles finds MEMORY.md and memory/*.md in the workspace.
 // Results are cached with a short TTL to avoid repeated directory scans

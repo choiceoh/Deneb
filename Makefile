@@ -10,6 +10,7 @@
        deny machete \
        test clean check fmt \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
+       tool-schemas \
        error-code-sync \
        info
 
@@ -216,6 +217,15 @@ proto-lint:
 
 proto-watch:
 	./scripts/proto-gen.sh --watch
+
+# --- Tool schema code generation ---
+
+# Regenerate gateway-go/internal/chat/tool_schemas_gen.go from tool_schemas.yaml.
+# Requires: python3, pyyaml, gofmt
+tool-schemas:
+	cd gateway-go && python3 cmd/tool-schema-gen/gen.py \
+		-yaml internal/chat/tool_schemas.yaml \
+		-out  internal/chat/tool_schemas_gen.go
 
 # --- Error code sync ---
 

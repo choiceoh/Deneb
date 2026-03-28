@@ -184,28 +184,6 @@ func getDocTree(docsDir string) []docEntry {
 
 // --- Schema ---
 
-func polarisToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"enum":        []string{"topics", "search", "read", "guides"},
-				"description": "topics: browse doc tree, search: keyword search, read: read a doc, guides: AI-curated internal system guides",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Keyword(s) for search action",
-			},
-			"topic": map[string]any{
-				"type":        "string",
-				"description": "For topics: optional category filter (e.g. 'gateway'). For read: doc path (e.g. 'concepts/session'). For guides: guide name (e.g. 'aurora', 'vega')",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 // --- Docs directory resolution ---
 
 // resolveDocsDir finds the docs/ directory by checking multiple locations:
@@ -327,4 +305,3 @@ func toolPolaris(workspaceDir string) ToolFunc {
 		}
 	}
 }
-

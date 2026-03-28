@@ -18,44 +18,6 @@ import (
 // Essential for refactoring: rename a symbol, update imports, or make coordinated
 // changes across files without multiple round-trips.
 
-func multiEditToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"edits": map[string]any{
-				"type":        "array",
-				"description": "List of edits to apply. Each edit targets one file with one search-and-replace",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"file_path": map[string]any{
-							"type":        "string",
-							"description": "Path to the file to edit",
-						},
-						"old_string": map[string]any{
-							"type":        "string",
-							"description": "Text to find and replace",
-						},
-						"new_string": map[string]any{
-							"type":        "string",
-							"description": "Replacement text",
-						},
-						"replace_all": map[string]any{
-							"type":        "boolean",
-							"description": "Replace all occurrences (default: false)",
-							"default":     false,
-						},
-					},
-					"required": []string{"file_path", "old_string", "new_string"},
-				},
-				"minItems": 1,
-				"maxItems": 50,
-			},
-		},
-		"required": []string{"edits"},
-	}
-}
-
 func toolMultiEdit(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -155,39 +117,6 @@ func toolMultiEdit(defaultDir string) ToolFunc {
 // --- Tree tool ---
 // Displays a directory tree with configurable depth.
 // Helps the agent quickly understand project structure without multiple ls/find calls.
-
-func treeToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory to display (defaults to workspace root)",
-			},
-			"depth": map[string]any{
-				"type":        "number",
-				"description": "Max directory depth to display (default: 3, max: 6)",
-				"default":     3,
-				"minimum":     1,
-				"maximum":     6,
-			},
-			"show_hidden": map[string]any{
-				"type":        "boolean",
-				"description": "Include hidden files/directories (default: false)",
-				"default":     false,
-			},
-			"dirs_only": map[string]any{
-				"type":        "boolean",
-				"description": "Show only directories, no files (default: false)",
-				"default":     false,
-			},
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "Filter: only show entries matching this glob pattern (e.g. \"*.go\")",
-			},
-		},
-	}
-}
 
 // skipDirs are directories always excluded from tree output to avoid noise.
 var skipDirs = map[string]bool{
@@ -315,44 +244,6 @@ func buildTree(sb *strings.Builder, dir, prefix string, maxDepth, currentDepth i
 // --- Diff tool ---
 // Shows git diff, file comparison, or uncommitted changes.
 // Coding agents need diff to review changes before committing.
-
-func diffToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"mode": map[string]any{
-				"type":        "string",
-				"description": "Diff mode: 'staged' (git diff --cached), 'unstaged' (git diff), 'all' (staged+unstaged vs HEAD), 'commit' (show a commit), 'branch' (compare branches), 'files' (compare two files)",
-				"enum":        []string{"staged", "unstaged", "all", "commit", "branch", "files"},
-				"default":     "unstaged",
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Limit diff to a specific file or directory path",
-			},
-			"ref": map[string]any{
-				"type":        "string",
-				"description": "Git ref for 'commit' mode (e.g. HEAD~1, abc1234), or base ref for 'branch' mode",
-			},
-			"ref2": map[string]any{
-				"type":        "string",
-				"description": "Second ref for 'branch' mode (compared against ref). For 'files' mode: second file path",
-			},
-			"stat_only": map[string]any{
-				"type":        "boolean",
-				"description": "Show only file-level summary (--stat), not full diff content",
-				"default":     false,
-			},
-			"context_lines": map[string]any{
-				"type":        "number",
-				"description": "Number of context lines around changes (default: 3)",
-				"default":     3,
-				"minimum":     0,
-				"maximum":     20,
-			},
-		},
-	}
-}
 
 func toolDiff(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
