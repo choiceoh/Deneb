@@ -37,7 +37,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 			SessionKey: params.SessionKey,
 			ClientRun:  params.ClientRunID,
 			CancelFn:   runCancel,
-			ExpiresAt:  time.Now().Add(30 * time.Minute),
+			ExpiresAt:  time.Now().Add(4 * time.Hour),
 		}
 		h.abortMu.Unlock()
 	}
