@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-func toolGrep(defaultDir string) ToolFunc {
+func ToolGrep(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Pattern      string `json:"pattern"`
@@ -36,7 +36,7 @@ func toolGrep(defaultDir string) ToolFunc {
 
 		searchPath := defaultDir
 		if p.Path != "" {
-			searchPath = resolvePath(p.Path, defaultDir)
+			searchPath = ResolvePath(p.Path, defaultDir)
 		}
 
 		// Defaults and caps.
@@ -146,7 +146,7 @@ func clampInt(v, min, max int) int {
 
 // --- Find tool ---
 
-func toolFind(defaultDir string) ToolFunc {
+func ToolFind(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Pattern    string `json:"pattern"`
@@ -162,7 +162,7 @@ func toolFind(defaultDir string) ToolFunc {
 
 		searchDir := defaultDir
 		if p.Path != "" {
-			searchDir = resolvePath(p.Path, defaultDir)
+			searchDir = ResolvePath(p.Path, defaultDir)
 		}
 
 		const maxResults = 200
@@ -258,7 +258,7 @@ func findWithRipgrep(ctx context.Context, dir, pattern string, showHidden bool, 
 
 // resolvePath resolves a potentially relative path against the default directory.
 // It validates that the resolved path does not escape the workspace boundary.
-func resolvePath(path, defaultDir string) string {
+func ResolvePath(path, defaultDir string) string {
 	var resolved string
 	if filepath.IsAbs(path) {
 		resolved = filepath.Clean(path)

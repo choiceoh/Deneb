@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // --- Code analysis tool ---
 // Provides AST-based code analysis for Go (go/ast) and regex-based analysis for Rust.
 
-func toolAnalyze(defaultDir string) ToolFunc {
+func ToolAnalyze(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p analyzeParams
 		if err := jsonutil.UnmarshalInto("analyze params", input, &p); err != nil {
@@ -58,7 +58,7 @@ func analyzeOutline(p analyzeParams, defaultDir string) (string, error) {
 	if p.File == "" {
 		return "", fmt.Errorf("file is required for outline")
 	}
-	path := resolvePath(p.File, defaultDir)
+	path := ResolvePath(p.File, defaultDir)
 
 	if isGoFile(path) {
 		return outlineGo(path, p.File)
@@ -260,7 +260,7 @@ func analyzeSymbols(ctx context.Context, p analyzeParams, defaultDir string) (st
 
 	searchDir := defaultDir
 	if p.Path != "" {
-		searchDir = resolvePath(p.Path, defaultDir)
+		searchDir = ResolvePath(p.Path, defaultDir)
 	}
 
 	var sb strings.Builder
