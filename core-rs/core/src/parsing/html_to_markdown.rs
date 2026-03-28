@@ -16,7 +16,13 @@ pub struct HtmlToMarkdownResult {
 
 /// Convert HTML to a Markdown-like plain text representation.
 pub fn html_to_markdown(html: &str) -> HtmlToMarkdownResult {
-    let title = extract_title(html);
+    // Wrap extract_title in catch_unwind so a panic in title extraction
+    // doesn't abort the entire conversion via the FFI layer.
+    let title = {
+        let h = html.to_owned();
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| extract_title(&h)))
+            .unwrap_or(None)
+    };
 
     let mut text = String::with_capacity(html.len());
     text.push_str(html);
@@ -456,7 +462,7 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
     // Only lowercase a small bounded prefix — never the entire remaining input.
     // Find the nearest valid char boundary at or before byte 10.
     let prefix_end = bounded_char_boundary(rest, 10);
-    let rest_lower = rest[..prefix_end].to_ascii_lowercase();
+    let rest_lower = rest.get(..prefix_end)?.to_ascii_lowercase();
 
     for &(entity, ch) in named {
         if rest_lower.starts_with(entity) {
@@ -466,14 +472,11 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
 
     // Hex numeric: &#xHH; — cap search to first 12 bytes (covers realistic entities).
     if rest_lower.starts_with("&#x") {
-        let after = match rest.get(3..) {
-            Some(s) => s,
-            None => return None,
-        };
+        let after = rest.get(3..)?;
         // Only search for ';' within a reasonable range to avoid scanning megabytes.
         let search_limit = bounded_char_boundary(after, 12);
-        if let Some(semi) = after[..search_limit].find(';') {
-            let hex_str = &after[..semi];
+        if let Some(semi) = after.get(..search_limit)?.find(';') {
+            let hex_str = after.get(..semi)?;
             if let Ok(code) = u32::from_str_radix(hex_str, 16) {
                 if let Some(ch) = char::from_u32(code) {
                     return Some((ch, 3 + semi + 1));
@@ -485,13 +488,10 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
 
     // Decimal numeric: &#DDD;
     if rest_lower.starts_with("&#") {
-        let after = match rest.get(2..) {
-            Some(s) => s,
-            None => return None,
-        };
+        let after = rest.get(2..)?;
         let search_limit = bounded_char_boundary(after, 12);
-        if let Some(semi) = after[..search_limit].find(';') {
-            let dec_str = &after[..semi];
+        if let Some(semi) = after.get(..search_limit)?.find(';') {
+            let dec_str = after.get(..semi)?;
             if let Ok(code) = dec_str.parse::<u32>() {
                 if let Some(ch) = char::from_u32(code) {
                     return Some((ch, 2 + semi + 1));
@@ -762,5 +762,52 @@ mod tests {
         let html: String = chunk.repeat(20_000);
         let result = html_to_markdown(&html);
         assert!(result.text.contains("Hello"));
+    }
+
+    #[test]
+    fn curly_quotes_in_html() {
+        // RIGHT SINGLE QUOTATION MARK (U+2019, 3 bytes: E2 80 99) near tag boundaries.
+        // This is the pattern from YouTube Korean HTML that triggered panics.
+        let html = "<!doctype html><html lang=\"ko-kr\"><head><title>YouTube\u{2019}s Best</title></head><body><p>It\u{2019}s a video about \u{2018}coding\u{2019} &amp; stuff</p><li>Item with \u{2019}quotes\u{2019}</li><a href=\"https://example.com\">Link\u{2019}s text</a><h1>Heading with \u{2019}curly\u{2019}</h1></body></html>";
+        let result = html_to_markdown(html);
+        // Must not panic. Content should preserve the curly quotes.
+        assert!(result.text.contains("\u{2019}"));
+    }
+
+    #[test]
+    fn curly_quotes_at_every_byte_alignment() {
+        // Place multi-byte \u{2019} at different byte offsets to hit all alignments.
+        for padding in 0..4 {
+            let prefix = "x".repeat(padding);
+            let html = format!(
+                "<p>{prefix}\u{2019}</p><li>{prefix}\u{2019}item</li><a href=\"u\">{prefix}\u{2019}link</a><h2>{prefix}\u{2019}head</h2>"
+            );
+            let result = html_to_markdown(&html);
+            assert!(result.text.contains("\u{2019}"), "failed at padding={padding}");
+        }
+    }
+
+    #[test]
+    fn entity_adjacent_to_multibyte() {
+        // Entity decoding right next to multi-byte chars.
+        let html = "\u{2019}&amp;\u{2019}&lt;\u{2019}&#8217;\u{2019}&#x2019;\u{2019}";
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("&"));
+        assert!(result.text.contains("<"));
+    }
+
+    #[test]
+    fn youtube_like_korean_html() {
+        // Simulate the YouTube HTML pattern: large doc with Korean + curly quotes.
+        let mut html = String::from(r#"<!doctype html><html style="font-size: 10px;font-family: roboto, arial, sans-serif;" lang="ko-kr"><head><title>테스트 동영상</title></head><body>"#);
+        // Pad to push curly quotes near byte ~900.
+        html.push_str(&"<div>패딩텍스트</div>".repeat(30));
+        html.push_str("<p>It\u{2019}s a test \u{2018}video\u{2019} for Korean users</p>");
+        html.push_str("<script>var x = 'don\u{2019}t';</script>");
+        html.push_str("<li>\u{2019}목록 항목\u{2019}</li>");
+        html.push_str("</body></html>");
+        let result = html_to_markdown(&html);
+        assert!(result.title.as_deref() == Some("테스트 동영상"));
+        assert!(!result.text.contains("var x"));
     }
 }
