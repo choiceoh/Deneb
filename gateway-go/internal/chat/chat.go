@@ -23,7 +23,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
@@ -113,7 +112,6 @@ type Handler struct {
 	vegaBackend     vega.Backend              // optional; knowledge prefetch
 	memoryStore     *memory.Store             // optional; structured memory (Honcho-style)
 	memoryEmbedder  *memory.Embedder          // optional; fact embedding
-	goalStore       *autonomous.GoalStore     // optional; auto-goal creation from recalled facts
 	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer          // optional; agent detail logging
 
@@ -158,7 +156,6 @@ type HandlerConfig struct {
 	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
 	MemoryStore     *memory.Store             // optional; structured memory (Honcho-style)
 	MemoryEmbedder  *memory.Embedder          // optional; fact embedding via SGLang
-	GoalStore       *autonomous.GoalStore     // optional; auto-goal creation from recalled memory facts
 	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog        *agentlog.Writer          // optional; agent detail logging
 	ContextCfg      ContextConfig
@@ -202,7 +199,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		vegaBackend:     cfg.VegaBackend,
 		memoryStore:     cfg.MemoryStore,
 		memoryEmbedder:  cfg.MemoryEmbedder,
-		goalStore:       cfg.GoalStore,
 		dreamTurnFn:     cfg.DreamTurnFn,
 		agentLog:        cfg.AgentLog,
 		contextCfg:      cfg.ContextCfg,
@@ -248,13 +244,6 @@ func (h *Handler) SetTypingFunc(fn TypingFunc) {
 // triggering message to indicate agent status phases (thinking, tool use, done).
 func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 	h.reactionFn = fn
-}
-
-// SetGoalStore sets the autonomous goal store for auto-goal creation from
-// recalled memory facts during knowledge prefetch. Late-bound because the
-// autonomous service is created after the chat handler.
-func (h *Handler) SetGoalStore(gs *autonomous.GoalStore) {
-	h.goalStore = gs
 }
 
 // HandleBtw processes a side question (/btw) without affecting the main
@@ -683,7 +672,6 @@ func (h *Handler) buildRunDeps() runDeps {
 		vegaBackend:     h.vegaBackend,
 		memoryStore:     h.memoryStore,
 		memoryEmbedder:  h.memoryEmbedder,
-		goalStore:       h.goalStore,
 		dreamTurnFn:     h.dreamTurnFn,
 		agentLog:        h.agentLog,
 		contextCfg:      h.contextCfg,
