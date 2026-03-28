@@ -52,8 +52,8 @@ Protocol error codes (`ErrorCode` enum) are defined in `proto/gateway.proto` and
 4. Follow existing patterns for request/response types
 
 ### Adding a New Agent Tool
-1. Register tool schema in `internal/chat/tools_core.go`
-2. Implement handler in `internal/chat/tools_fs.go` (or new file for non-FS tools)
+1. Register tool schema in `internal/chat/toolreg_core.go`
+2. Implement handler in `internal/chat/tools/fs.go` (or new `tool_<name>.go` for non-FS tools)
 3. Tool schemas use full JSON Schema definitions
 
 ### Modifying System Prompt
