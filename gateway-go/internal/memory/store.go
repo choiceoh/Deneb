@@ -366,7 +366,7 @@ func (s *Store) GetFactsForDreaming(ctx context.Context) ([]Fact, error) {
 	cutoff := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339)
 	return s.queryFacts(ctx,
 		`SELECT * FROM facts WHERE active = 1 AND (verified_at IS NULL OR verified_at < ?)
-		 ORDER BY created_at ASC`, cutoff)
+		 ORDER BY created_at ASC LIMIT 500`, cutoff)
 }
 
 // UpdateImportance sets a fact's importance score.

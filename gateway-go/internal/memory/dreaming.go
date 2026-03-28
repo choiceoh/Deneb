@@ -23,11 +23,21 @@ import (
 const (
 	DreamingTurnThreshold    = 50
 	DreamingTimeIntervalH    = 8
-	dreamingTimeout          = 5 * time.Minute
-	dreamingBatchSize        = 20
+	dreamingTimeout          = 15 * time.Minute
+	dreamingBatchSize        = 50
 	dreamingMaxTokens        = 1024
 	similarityMergeThreshold = 0.78
 	maxMergeDepth            = 2 // cascade prevention: facts at this depth are ineligible for merging
+
+	// Per-phase timeouts prevent earlier phases from starving later ones.
+	// If a phase exceeds its budget, it's cut short but subsequent phases still run.
+	// Sum ~15m; the overall dreamingTimeout acts as a hard ceiling.
+	phaseTimeoutVerify    = 3 * time.Minute
+	phaseTimeoutMerge     = 3 * time.Minute
+	phaseTimeoutPatterns  = 150 * time.Second
+	phaseTimeoutConflict  = 150 * time.Second
+	phaseTimeoutUserModel = 2 * time.Minute
+	phaseTimeoutMutual    = 2 * time.Minute
 )
 
 // DreamingReport summarizes the results of a dreaming cycle.
@@ -62,48 +72,69 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		report.FactsPruned = int(pruned)
 	}
 
+	// Each phase gets its own timeout so a slow phase cannot starve later ones.
+	// The outer ctx (dreamingTimeout) acts as a hard ceiling for the entire cycle.
+
 	// Phase 1: Fact verification.
-	verified, expired, err := verifyFacts(ctx, store, client, model, logger)
-	if err != nil {
-		logger.Warn("aurora-dream: verification phase failed", "error", err)
-	} else {
-		report.FactsVerified = verified
-		report.FactsExpired += expired
+	if pCtx, pCancel := phaseContext(ctx, phaseTimeoutVerify); true {
+		verified, expired, err := verifyFacts(pCtx, store, client, model, logger)
+		pCancel()
+		if err != nil {
+			logger.Warn("aurora-dream: verification phase failed", "error", err)
+		} else {
+			report.FactsVerified = verified
+			report.FactsExpired += expired
+		}
 	}
 
 	// Phase 2: Duplicate merging.
-	merged, err := mergeDuplicates(ctx, store, embedder, client, model, logger)
-	if err != nil {
-		logger.Warn("aurora-dream: merge phase failed", "error", err)
-	} else {
-		report.FactsMerged = merged
+	if pCtx, pCancel := phaseContext(ctx, phaseTimeoutMerge); true {
+		merged, err := mergeDuplicates(pCtx, store, embedder, client, model, logger)
+		pCancel()
+		if err != nil {
+			logger.Warn("aurora-dream: merge phase failed", "error", err)
+		} else {
+			report.FactsMerged = merged
+		}
 	}
 
 	// Phase 3: Pattern extraction.
-	patterns, err := extractPatterns(ctx, store, embedder, client, model, logger)
-	if err != nil {
-		logger.Warn("aurora-dream: pattern extraction failed", "error", err)
-	} else {
-		report.PatternsExtracted = patterns
+	if pCtx, pCancel := phaseContext(ctx, phaseTimeoutPatterns); true {
+		patterns, err := extractPatterns(pCtx, store, embedder, client, model, logger)
+		pCancel()
+		if err != nil {
+			logger.Warn("aurora-dream: pattern extraction failed", "error", err)
+		} else {
+			report.PatternsExtracted = patterns
+		}
 	}
 
 	// Phase 4: Conflict resolution (Honcho-style).
 	// Identify contradicting facts and resolve them via LLM.
-	conflicts, err := resolveConflicts(ctx, store, client, model, logger)
-	if err != nil {
-		logger.Warn("aurora-dream: conflict resolution failed", "error", err)
-	} else if conflicts > 0 {
-		report.FactsMerged += conflicts
+	if pCtx, pCancel := phaseContext(ctx, phaseTimeoutConflict); true {
+		conflicts, err := resolveConflicts(pCtx, store, client, model, logger)
+		pCancel()
+		if err != nil {
+			logger.Warn("aurora-dream: conflict resolution failed", "error", err)
+		} else if conflicts > 0 {
+			report.FactsMerged += conflicts
+		}
 	}
 
 	// Phase 5: User model update.
-	if err := updateUserModel(ctx, store, client, model, logger); err != nil {
-		logger.Warn("aurora-dream: user model update failed", "error", err)
+	if pCtx, pCancel := phaseContext(ctx, phaseTimeoutUserModel); true {
+		if err := updateUserModel(pCtx, store, client, model, logger); err != nil {
+			logger.Warn("aurora-dream: user model update failed", "error", err)
+		}
+		pCancel()
 	}
 
 	// Phase 6: Mutual understanding synthesis (상호 인식).
-	if err := synthesizeMutualUnderstanding(ctx, store, client, model, logger); err != nil {
-		logger.Warn("aurora-dream: mutual understanding synthesis failed", "error", err)
+	if pCtx, pCancel := phaseContext(ctx, phaseTimeoutMutual); true {
+		if err := synthesizeMutualUnderstanding(pCtx, store, client, model, logger); err != nil {
+			logger.Warn("aurora-dream: mutual understanding synthesis failed", "error", err)
+		}
+		pCancel()
 	}
 
 	report.Duration = time.Since(start)
@@ -129,6 +160,18 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	)
 
 	return report, nil
+}
+
+// phaseContext returns a child context with the shorter of the per-phase
+// timeout and the parent's remaining deadline. This ensures each phase gets
+// its own budget while still respecting the overall dreaming deadline.
+func phaseContext(parent context.Context, budget time.Duration) (context.Context, context.CancelFunc) {
+	if deadline, ok := parent.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining < budget {
+			budget = remaining
+		}
+	}
+	return context.WithTimeout(parent, budget)
 }
 
 // --- Phase 1: Fact Verification ---
