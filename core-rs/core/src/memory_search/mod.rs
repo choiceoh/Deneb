@@ -11,6 +11,7 @@
 
 pub mod bm25;
 pub mod cosine;
+pub mod simd;
 pub mod fts;
 pub mod merge;
 pub mod mmr;
