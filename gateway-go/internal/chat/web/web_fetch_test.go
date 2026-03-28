@@ -20,7 +20,7 @@ func TestStripNoiseElements(t *testing.T) {
 <footer><p>Copyright 2024</p></footer>
 </body></html>`
 
-	result := stripNoiseElements(html)
+	result := StripNoiseElements(html)
 
 	// Article content should survive.
 	if !strings.Contains(result, "Main Content") {
@@ -47,7 +47,7 @@ func TestStripNoiseElements(t *testing.T) {
 
 func TestStripNoiseElements_NestedTags(t *testing.T) {
 	html := `<nav><div><nav>inner</nav></div></nav><p>keep</p>`
-	result := stripNoiseElements(html)
+	result := StripNoiseElements(html)
 	if strings.Contains(result, "inner") {
 		t.Error("nested nav should be stripped")
 	}
@@ -60,7 +60,7 @@ func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
 	html := `<p>Before</p>
 <div class="cookie-consent-banner"><p>We use cookies</p><button>Accept</button></div>
 <p>After</p>`
-	result := stripNoiseElements(html)
+	result := StripNoiseElements(html)
 	if strings.Contains(result, "We use cookies") {
 		t.Error("cookie banner should be stripped")
 	}
@@ -71,7 +71,7 @@ func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
 
 func TestStripMatchingBlocks_Sidebar(t *testing.T) {
 	html := `<main><p>Article</p></main><div class="sidebar widget-area"><p>Widget</p></div>`
-	result := stripNoiseElements(html)
+	result := StripNoiseElements(html)
 	if strings.Contains(result, "Widget") {
 		t.Error("sidebar should be stripped")
 	}
@@ -82,7 +82,7 @@ func TestStripMatchingBlocks_Sidebar(t *testing.T) {
 
 func TestStripMatchingBlocks_Comments(t *testing.T) {
 	html := `<article><p>Content</p></article><section class="comments-section"><p>User said stuff</p></section>`
-	result := stripNoiseElements(html)
+	result := StripNoiseElements(html)
 	if strings.Contains(result, "User said stuff") {
 		t.Error("comments section should be stripped")
 	}
