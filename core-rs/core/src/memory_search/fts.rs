@@ -1,4 +1,4 @@
-//! Full-text search query builder for SQLite FTS5.
+//! Full-text search query builder for `SQLite` FTS5.
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -24,7 +24,7 @@ pub fn build_fts_query(raw: &str) -> Option<String> {
         .iter()
         .map(|t| {
             let cleaned: String = t.chars().filter(|&c| c != '"').collect();
-            format!("\"{}\"", cleaned)
+            format!("\"{cleaned}\"")
         })
         .collect();
 

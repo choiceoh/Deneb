@@ -1,6 +1,6 @@
 //! Gateway protocol frame validation.
 //!
-//! Validates RequestFrame, ResponseFrame, and EventFrame structures
+//! Validates `RequestFrame`, `ResponseFrame`, and `EventFrame` structures
 //! matching the TypeScript definitions in `src/gateway/protocol/schema/frames.ts`.
 //!
 //! Generated protobuf types (via prost) are available in the `gen` submodule
@@ -115,7 +115,7 @@ pub struct EventFrame {
     pub state_version: Option<StateVersion>,
 }
 
-/// Maximum length for short string fields (id, method, event) to prevent DoS.
+/// Maximum length for short string fields (id, method, event) to prevent `DoS`.
 const MAX_SHORT_FIELD_LEN: usize = 256;
 
 fn validate_non_empty(value: &Option<String>, field: &'static str) -> Result<String, FrameError> {
@@ -176,7 +176,7 @@ pub fn validate_frame_type(json: &str) -> Result<FrameType, FrameError> {
                 if s < 0 {
                     return Err(FrameError::InvalidField {
                         field: "seq",
-                        reason: format!("must be non-negative, got {}", s),
+                        reason: format!("must be non-negative, got {s}"),
                     });
                 }
             }
@@ -219,7 +219,7 @@ pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
                 Some(s) if s < 0 => {
                     return Err(FrameError::InvalidField {
                         field: "seq",
-                        reason: format!("must be non-negative, got {}", s),
+                        reason: format!("must be non-negative, got {s}"),
                     });
                 }
                 Some(s) => Some(s as u64),

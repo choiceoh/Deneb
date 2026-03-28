@@ -466,7 +466,7 @@ pub struct ExpandEngine {
     // Per-level state
     current_children: Vec<ExpandChild>,
     child_index: usize,
-    /// Stack of (summary_id, remaining_depth) for iterative DFS.
+    /// Stack of (`summary_id`, `remaining_depth`) for iterative DFS.
     expand_stack: Vec<(String, u32)>,
 }
 

@@ -170,7 +170,7 @@ impl AssemblyEngine {
     /// DAG-aware context selection under token budget.
     ///
     /// Algorithm:
-    /// 1. Split items into fresh_tail (last N, always included) + evictable (rest)
+    /// 1. Split items into `fresh_tail` (last N, always included) + evictable (rest)
     /// 2. Fresh tail tokens are always included even if exceeding budget
     /// 3. Fill remaining budget from evictable, newest→oldest
     /// 4. Reverse to restore chronological order

@@ -1,7 +1,7 @@
-//! Marker-based rendering of MarkdownIR.
+//! Marker-based rendering of `MarkdownIR`.
 //!
 //! Mirrors `renderMarkdownWithMarkers` from `src/markdown/render.ts`.
-//! Takes a MarkdownIR and a set of style markers, producing a string
+//! Takes a `MarkdownIR` and a set of style markers, producing a string
 //! with opening/closing markers interleaved around the text.
 
 use super::spans::{LinkSpan, MarkdownIR, MarkdownStyle, StyleSpan};
@@ -31,7 +31,7 @@ pub struct RenderLink {
 /// Builder function that converts a link span into a rendered link.
 pub type BuildLinkFn = Box<dyn Fn(&LinkSpan, &str) -> Option<RenderLink>>;
 
-/// Options for rendering MarkdownIR with markers.
+/// Options for rendering `MarkdownIR` with markers.
 pub struct RenderOptions<F>
 where
     F: Fn(&str) -> String,
@@ -66,7 +66,7 @@ fn style_rank(style: MarkdownStyle) -> usize {
 // Rendering
 // ---------------------------------------------------------------------------
 
-/// Render a MarkdownIR into a string with style markers and escaped text.
+/// Render a `MarkdownIR` into a string with style markers and escaped text.
 pub fn render_markdown_with_markers<F>(ir: &MarkdownIR, options: &RenderOptions<F>) -> String
 where
     F: Fn(&str) -> String,
@@ -234,7 +234,7 @@ pub struct SimpleRenderOptions {
     pub style_markers: HashMap<String, (String, String)>,
 }
 
-/// Render MarkdownIR with simple options (no link builder, identity escape).
+/// Render `MarkdownIR` with simple options (no link builder, identity escape).
 /// Suitable for FFI where closures cannot be passed.
 pub fn render_markdown_simple(ir: &MarkdownIR, opts: &SimpleRenderOptions) -> String {
     let mut style_map = RenderStyleMap::new();

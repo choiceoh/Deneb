@@ -1,7 +1,7 @@
 //! Memory search algorithms — Rust port of `src/memory/` TypeScript modules.
 //!
 //! Pure computational functions for:
-//! - Cosine similarity (SIMD-accelerated on x86_64)
+//! - Cosine similarity (SIMD-accelerated on `x86_64`)
 //! - BM25 rank-to-score conversion
 //! - FTS query building
 //! - Temporal decay scoring

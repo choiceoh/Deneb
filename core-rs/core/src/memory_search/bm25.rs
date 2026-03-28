@@ -1,12 +1,12 @@
-//! BM25 rank-to-score conversion for SQLite FTS5 results.
+//! BM25 rank-to-score conversion for `SQLite` FTS5 results.
 //!
-//! SQLite FTS5's `bm25()` function returns negative values where a more-negative
+//! `SQLite` FTS5's `bm25()` function returns negative values where a more-negative
 //! value indicates higher relevance. This module normalizes those raw ranks into
 //! a [0, 1] score suitable for weighted fusion with vector similarity scores.
 
-/// Convert a SQLite BM25 rank value to a [0, 1] score.
+/// Convert a `SQLite` BM25 rank value to a [0, 1] score.
 ///
-/// SQLite's `bm25()` returns negative values where more negative = more relevant.
+/// `SQLite`'s `bm25()` returns negative values where more negative = more relevant.
 /// Positive values indicate lower relevance.
 ///
 /// Formula:

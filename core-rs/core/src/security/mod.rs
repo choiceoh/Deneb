@@ -58,10 +58,10 @@ impl DangerousPatterns {
         // Pre-sized allocation for small inputs avoids excess capacity; both branches heap-allocate.
         let lower: Vec<u8> = if haystack.len() <= 256 {
             let mut buf = Vec::with_capacity(haystack.len());
-            buf.extend(haystack.iter().map(|b| b.to_ascii_lowercase()));
+            buf.extend(haystack.iter().map(u8::to_ascii_lowercase));
             buf
         } else {
-            haystack.iter().map(|b| b.to_ascii_lowercase()).collect()
+            haystack.iter().map(u8::to_ascii_lowercase).collect()
         };
         self.finders.iter().any(|f| f.find(&lower).is_some())
     }
@@ -104,7 +104,7 @@ pub fn sanitize_control_chars(input: &str) -> std::borrow::Cow<'_, str> {
     )
 }
 
-/// Maximum session key length (matches TypeScript ChatSendSessionKeyString).
+/// Maximum session key length (matches TypeScript `ChatSendSessionKeyString`).
 const MAX_SESSION_KEY_LEN: usize = 512;
 
 /// Validate a session key: non-empty, max 512 characters, no control characters.

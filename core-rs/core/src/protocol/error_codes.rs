@@ -49,7 +49,7 @@ impl ErrorCode {
         }
     }
 
-    /// Parse a wire-format string into an ErrorCode.
+    /// Parse a wire-format string into an `ErrorCode`.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "NOT_LINKED" => Some(Self::NotLinked),

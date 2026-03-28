@@ -97,14 +97,13 @@ const MIME_MAP: &[(&str, &str, MediaCategory)] = &[
 
 /// Get the file extension for a MIME type.
 pub fn extension_for_mime(mime: &str) -> &'static str {
-    lookup_mime(mime).map(|(ext, _)| ext).unwrap_or("bin")
+    lookup_mime(mime).map_or("bin", |(ext, _)| ext)
 }
 
 /// Get the media category for a MIME type.
 pub fn category_for_mime(mime: &str) -> MediaCategory {
     lookup_mime(mime)
-        .map(|(_, cat)| cat)
-        .unwrap_or(MediaCategory::Unknown)
+        .map_or(MediaCategory::Unknown, |(_, cat)| cat)
 }
 
 /// Look up MIME info from the mapping table in a single pass.

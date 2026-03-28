@@ -2,11 +2,11 @@
 //!
 //! This crate provides:
 //! - Protocol frame validation (replacing AJV)
-//! - Security verification primitives + ReDoS detection
+//! - Security verification primitives + `ReDoS` detection
 //! - Media MIME detection, EXIF parsing, PNG encoding
 //!
 //! It exposes both a Rust API and a C FFI surface for integration
-//! with Go (via CGo) and Node.js (via napi-rs).
+//! with Go (via `CGo`) and Node.js (via napi-rs).
 
 // This crate uses unsafe for C FFI exports (#[no_mangle] extern "C" functions)
 // required by the Go gateway CGo integration.
@@ -640,7 +640,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
     }) as i64
 }
 
-/// C FFI: Start a sweep engine. Writes first SweepCommand JSON to `out_ptr`.
+/// C FFI: Start a sweep engine. Writes first `SweepCommand` JSON to `out_ptr`.
 /// Returns bytes written, or negative on error.
 ///
 /// # Safety
@@ -667,7 +667,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_start(
     })
 }
 
-/// C FFI: Step a sweep engine with a response. Writes next SweepCommand JSON.
+/// C FFI: Step a sweep engine with a response. Writes next `SweepCommand` JSON.
 /// Returns bytes written, or negative on error.
 ///
 /// # Safety
@@ -792,7 +792,7 @@ pub unsafe extern "C" fn deneb_memory_build_fts_query(
 }
 
 /// C FFI: Merge hybrid search results.
-/// Takes JSON MergeParams, writes JSON MergedResult array to output.
+/// Takes JSON `MergeParams`, writes JSON `MergedResult` array to output.
 /// Returns bytes written, or negative on error.
 ///
 /// # Safety
@@ -1104,7 +1104,7 @@ pub unsafe extern "C" fn deneb_parse_media_tokens(
 // Markdown FFI exports (IR parsing for Go gateway)
 // ---------------------------------------------------------------------------
 
-/// C FFI: Parse markdown text into a MarkdownIR structure.
+/// C FFI: Parse markdown text into a `MarkdownIR` structure.
 /// Takes markdown text and an optional JSON options string.
 /// Writes JSON `{"text":"...","styles":[...],"links":[...],"has_code_blocks":bool}` to `out_ptr`.
 /// Returns bytes written, or negative on error.
@@ -1243,7 +1243,7 @@ pub extern "C" fn deneb_context_assembly_new(
     )
 }
 
-/// C FFI: Start an assembly engine. Writes first AssemblyCommand JSON to `out_ptr`.
+/// C FFI: Start an assembly engine. Writes first `AssemblyCommand` JSON to `out_ptr`.
 /// Returns bytes written, or negative on error.
 ///
 /// # Safety
@@ -1338,7 +1338,7 @@ pub unsafe extern "C" fn deneb_context_expand_new(
     )
 }
 
-/// C FFI: Start an expand engine. Writes first RetrievalCommand JSON to `out_ptr`.
+/// C FFI: Start an expand engine. Writes first `RetrievalCommand` JSON to `out_ptr`.
 ///
 /// # Safety
 /// `out_ptr` must be writable for `out_len` bytes.

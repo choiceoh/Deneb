@@ -218,9 +218,9 @@ fn is_allowed_url(raw: &str) -> bool {
         && !raw.starts_with("HTTPS://")
     {
         // Case-insensitive prefix check.
-        let lower = raw.get(..8).map(|s| s.to_ascii_lowercase());
+        let lower = raw.get(..8).map(str::to_ascii_lowercase);
         if !matches!(lower.as_deref(), Some("https://") | Some("http://\x00")) {
-            let lower7 = raw.get(..7).map(|s| s.to_ascii_lowercase());
+            let lower7 = raw.get(..7).map(str::to_ascii_lowercase);
             if !matches!(lower7.as_deref(), Some("http://")) {
                 return false;
             }
