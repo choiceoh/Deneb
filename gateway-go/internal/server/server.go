@@ -7,25 +7,18 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
@@ -38,11 +31,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
-	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -55,12 +47,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
-	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -617,4 +607,3 @@ func (s *Server) broadcastShutdownEvent() {
 		return true
 	})
 }
-

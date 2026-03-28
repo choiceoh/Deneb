@@ -1,21 +1,20 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
+	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
-	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 func (s *Server) initGmailPoll() {
@@ -239,8 +238,6 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 	}
 	return root.Channels.Telegram
 }
-
-
 
 // loadProviderConfigs reads LLM provider configs (apiKey, baseUrl, api) from deneb.json.
 func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {

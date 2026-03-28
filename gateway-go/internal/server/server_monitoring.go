@@ -2,18 +2,17 @@ package server
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
+	"os"
+	"syscall"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
-	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func (s *Server) SetDaemon(d *daemon.Daemon) {
@@ -29,7 +28,6 @@ func (s *Server) SetVega(backend vega.Backend) {
 		s.toolDeps.VegaBackend = backend
 	}
 }
-
 
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
