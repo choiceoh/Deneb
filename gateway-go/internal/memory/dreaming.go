@@ -236,7 +236,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		return 0, nil
 	}
 
-	embeddings, err := store.LoadEmbeddingsForMerge(ctx, maxMergeDepth)
+	embeddings, depths, err := store.LoadEmbeddingsForMerge(ctx, maxMergeDepth)
 	if err != nil {
 		return 0, err
 	}
@@ -255,6 +255,11 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 
 	for i := 0; i < len(ids); i++ {
 		for j := i + 1; j < len(ids); j++ {
+			// Only merge facts at the same depth level to prevent
+			// abstraction-level mismatch that degrades similarity.
+			if depths[ids[i]] != depths[ids[j]] {
+				continue
+			}
 			sim := cosineSimilarity(embeddings[ids[i]], embeddings[ids[j]])
 			if sim >= similarityMergeThreshold {
 				pairs = append(pairs, pair{ids[i], ids[j], sim})
@@ -273,6 +278,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	})
 
 	merged := 0
+	consecutiveRejects := 0
 	// Limit merges per cycle to avoid excessive LLM calls.
 	maxMerges := 25
 	for _, p := range pairs {
@@ -297,8 +303,14 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 
 		if !result.ShouldMerge || result.MergedContent == "" {
 			logger.Info("aurora-dream: merge rejected by LLM", "a", p.a, "b", p.b, "sim", fmt.Sprintf("%.3f", p.sim))
+			consecutiveRejects++
+			if consecutiveRejects >= 3 {
+				logger.Info("aurora-dream: stopping merges after consecutive rejections", "rejects", consecutiveRejects)
+				break
+			}
 			continue
 		}
+		consecutiveRejects = 0
 		if !isValidCategory(result.Category) {
 			result.Category = factA.Category
 		}
@@ -498,6 +510,7 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 			Category:   cat,
 			Importance: clamp(p.Importance, 0.7, 1.0),
 			Source:     SourceDreaming,
+			MergeDepth: 1, // patterns are already abstractions; prevent cross-depth merging
 		})
 		if err != nil {
 			continue
