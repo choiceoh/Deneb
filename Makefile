@@ -11,7 +11,7 @@
        test clean check fmt \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
        tool-schemas model-caps \
-       error-code-sync \
+       ffi-gen ffi-gen-check error-code-sync \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -190,7 +190,7 @@ test: rust-test go-test cli-test
 clean: rust-clean go-clean cli-clean
 	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: proto-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
+check: proto-check ffi-gen-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
 	@echo "All checks passed"
 
 fmt:
@@ -234,8 +234,22 @@ model-caps:
 		-yaml internal/autoreply/thinking/model_caps.yaml \
 		-out  internal/autoreply/thinking/model_caps_gen.go
 
+# --- FFI error code generation ---
+#
+# Rust ffi_utils.rs is the single source of truth for FFI error codes.
+# ffi_error_codes_gen.go is generated from it — never edit it by hand.
+
+# Regenerate gateway-go/internal/ffi/ffi_error_codes_gen.go from ffi_utils.rs.
+ffi-gen:
+	./scripts/gen-ffi-errors.sh
+
+# Verify ffi_error_codes_gen.go is up to date (fails if Rust and Go are out of sync).
+ffi-gen-check:
+	./scripts/gen-ffi-errors.sh --check
+
 # --- Error code sync ---
 
+# Check protocol error codes (proto ↔ Rust error_codes.rs) are in sync.
 error-code-sync:
 	./scripts/error-code-sync-check.sh
 
