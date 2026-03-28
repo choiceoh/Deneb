@@ -1,0 +1,521 @@
+package chat
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+)
+
+func truncate(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
+}
+
+// --- cron tool ---
+
+func cronToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Cron action",
+				"enum":        []string{"status", "list", "add", "update", "remove", "run", "wake"},
+			},
+			"jobId": map[string]any{
+				"type":        "string",
+				"description": "Job ID for update/remove/run actions",
+			},
+			"job": map[string]any{
+				"type":        "object",
+				"description": "Job definition for add/update",
+			},
+			"text": map[string]any{
+				"type":        "string",
+				"description": "System event text for wake action",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
+func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Action   string         `json:"action"`
+			JobID    string         `json:"jobId"`
+			Job      map[string]any `json:"job"`
+			Name     string         `json:"name"`
+			Schedule string         `json:"schedule"`
+			Command  string         `json:"command"`
+			Text     string         `json:"text"`
+		}
+		if err := jsonutil.UnmarshalInto("cron params", input, &p); err != nil {
+			return "", err
+		}
+
+		if cronSched == nil {
+			return "Cron scheduler not available.", nil
+		}
+
+		switch p.Action {
+		case "status":
+			running := cronSched.Running()
+			nextRun := cronSched.NextRunAt()
+			taskCount := len(cronSched.List())
+			return fmt.Sprintf("Cron status: %d jobs, running=%v, nextRunAtMs=%d", taskCount, running, nextRun), nil
+
+		case "list":
+			jobs := cronSched.List()
+			if len(jobs) == 0 {
+				return "No cron jobs configured.", nil
+			}
+			data, _ := json.MarshalIndent(jobs, "", "  ")
+			return string(data), nil
+
+		case "add":
+			name := p.Name
+			schedule := p.Schedule
+			command := p.Command
+			// Support nested job object as well.
+			if p.Job != nil {
+				if v, ok := p.Job["name"].(string); ok && name == "" {
+					name = v
+				}
+				if v, ok := p.Job["schedule"].(string); ok && schedule == "" {
+					schedule = v
+				}
+				if v, ok := p.Job["command"].(string); ok && command == "" {
+					command = v
+				}
+			}
+			if name == "" || schedule == "" || command == "" {
+				return "", fmt.Errorf("name, schedule, and command are required for add")
+			}
+			sched, err := cron.ParseSchedule(schedule)
+			if err != nil {
+				return "", fmt.Errorf("invalid schedule: %w", err)
+			}
+			sched.Label = name
+			// Build real execution callback that sends the command to a session
+			// or falls back to direct shell execution.
+			cronCommand := command
+			cronName := name
+			cronCallback := func(runCtx context.Context) error {
+				if deps != nil && deps.SessionSendFn != nil {
+					return deps.SessionSendFn("cron:"+cronName, cronCommand)
+				}
+				// Fallback: execute as shell command directly.
+				cmd := exec.CommandContext(runCtx, "bash", "-c", cronCommand)
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("cron exec failed: %w\n%s", err, string(out))
+				}
+				return nil
+			}
+			if regErr := cronSched.Register(ctx, name, sched, cronCallback); regErr != nil {
+				return "", fmt.Errorf("failed to register cron job: %w", regErr)
+			}
+			return fmt.Sprintf("Cron job %q added (schedule: %s).", name, schedule), nil
+
+		case "update":
+			id := p.JobID
+			if id == "" {
+				return "", fmt.Errorf("jobId is required for update")
+			}
+			patch := p.Job
+			if patch == nil {
+				return "", fmt.Errorf("job patch object is required for update")
+			}
+			if err := cronSched.Update(id, patch); err != nil {
+				return "", fmt.Errorf("update failed: %w", err)
+			}
+			st := cronSched.Get(id)
+			data, _ := json.MarshalIndent(st, "", "  ")
+			return fmt.Sprintf("Cron job %q updated.\n%s", id, string(data)), nil
+
+		case "remove":
+			id := p.JobID
+			if id == "" {
+				return "", fmt.Errorf("jobId is required for remove")
+			}
+			removed := cronSched.Unregister(id)
+			if !removed {
+				return fmt.Sprintf("Cron job %q not found.", id), nil
+			}
+			return fmt.Sprintf("Cron job %q removed.", id), nil
+
+		case "run":
+			id := p.JobID
+			if id == "" {
+				return "", fmt.Errorf("jobId is required for run")
+			}
+			result, err := cronSched.RunNow(ctx, id)
+			if err != nil {
+				return "", fmt.Errorf("run failed: %w", err)
+			}
+			data, _ := json.MarshalIndent(result, "", "  ")
+			return string(data), nil
+
+		case "wake":
+			return fmt.Sprintf("Wake event: %s", p.Text), nil
+
+		default:
+			return fmt.Sprintf("Unknown cron action: %q. Supported: status, list, add, update, remove, run, wake", p.Action), nil
+		}
+	}
+}
+
+// --- gateway tool ---
+
+
+func sessionsListToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "Maximum sessions to return",
+				"default":     50,
+				"minimum":     1,
+			},
+			"kinds": map[string]any{
+				"type":  "array",
+				"items": map[string]any{"type": "string", "enum": []string{"main", "group", "cron", "hook"}},
+				"description": "Filter by session kind",
+			},
+		},
+	}
+}
+
+func toolSessionsList(sessions *session.Manager) ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		currentKey := SessionKeyFromContext(ctx)
+
+		if sessions == nil {
+			return fmt.Sprintf("Current session: %s\nSession manager not available.", currentKey), nil
+		}
+
+		var p struct {
+			Limit int      `json:"limit"`
+			Kinds []string `json:"kinds"`
+		}
+		if len(input) > 0 {
+			_ = json.Unmarshal(input, &p)
+		}
+
+		allSessions := sessions.List()
+		if len(allSessions) == 0 {
+			return fmt.Sprintf("Current session: %s\nNo other sessions found.", currentKey), nil
+		}
+
+		// Apply kind filter if specified.
+		kindFilter := make(map[string]bool, len(p.Kinds))
+		for _, k := range p.Kinds {
+			kindFilter[k] = true
+		}
+
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "Sessions (%d total):\n\n", len(allSessions))
+		shown := 0
+		limit := p.Limit
+		if limit <= 0 {
+			limit = 50
+		}
+		for _, s := range allSessions {
+			if len(kindFilter) > 0 && !kindFilter[string(s.Kind)] {
+				continue
+			}
+			if shown >= limit {
+				break
+			}
+			marker := ""
+			if s.Key == currentKey {
+				marker = " ← current"
+			}
+			fmt.Fprintf(&sb, "- **%s** (kind=%s, status=%s, model=%s)%s\n",
+				s.Key, s.Kind, s.Status, s.Model, marker)
+			shown++
+		}
+		return sb.String(), nil
+	}
+}
+
+// --- sessions_history tool ---
+
+func sessionsHistoryToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"sessionKey": map[string]any{
+				"type":        "string",
+				"description": "Session key to fetch history for",
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "Number of messages to return",
+				"default":     20,
+				"minimum":     1,
+			},
+		},
+		"required": []string{"sessionKey"},
+	}
+}
+
+func toolSessionsHistory(transcript TranscriptStore) ToolFunc {
+	return func(_ context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			SessionKey string `json:"sessionKey"`
+			Limit      int    `json:"limit"`
+		}
+		if err := jsonutil.UnmarshalInto("sessions_history params", input, &p); err != nil {
+			return "", err
+		}
+		if p.SessionKey == "" {
+			return "", fmt.Errorf("sessionKey is required")
+		}
+		if transcript == nil {
+			return "Transcript store not available. Cannot fetch session history.", nil
+		}
+
+		limit := p.Limit
+		if limit <= 0 {
+			limit = 20
+		}
+
+		msgs, total, err := transcript.Load(p.SessionKey, limit)
+		if err != nil {
+			return fmt.Sprintf("Failed to load history for session %q: %s", p.SessionKey, err.Error()), nil
+		}
+		if len(msgs) == 0 {
+			return fmt.Sprintf("Session %q has no history (or does not exist).", p.SessionKey), nil
+		}
+
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "Session %q history (%d of %d messages):\n\n", p.SessionKey, len(msgs), total)
+		for i, msg := range msgs {
+			content := msg.Content
+			if len(content) > 500 {
+				content = content[:500] + "..."
+			}
+			fmt.Fprintf(&sb, "%d. [%s] %s\n", i+1, msg.Role, content)
+		}
+		return sb.String(), nil
+	}
+}
+
+// --- sessions_search tool ---
+
+func sessionsSearchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search keyword to find in session transcripts",
+			},
+			"maxResults": map[string]any{
+				"type":        "number",
+				"description": "Maximum number of matching messages to return (default 20)",
+				"default":     20,
+				"minimum":     1,
+				"maximum":     100,
+			},
+		},
+		"required": []string{"query"},
+	}
+}
+
+func toolSessionsSearch(transcript TranscriptStore) ToolFunc {
+	return func(_ context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Query      string `json:"query"`
+			MaxResults int    `json:"maxResults"`
+		}
+		if err := jsonutil.UnmarshalInto("sessions_search params", input, &p); err != nil {
+			return "", err
+		}
+		if p.Query == "" {
+			return "", fmt.Errorf("query is required")
+		}
+		if transcript == nil {
+			return "Transcript store not available.", nil
+		}
+
+		maxResults := p.MaxResults
+		if maxResults <= 0 {
+			maxResults = 20
+		}
+		if maxResults > 100 {
+			maxResults = 100
+		}
+
+		results, err := transcript.Search(p.Query, maxResults)
+		if err != nil {
+			return fmt.Sprintf("Search failed: %s", err.Error()), nil
+		}
+		if len(results) == 0 {
+			return fmt.Sprintf("No matches found for %q across session transcripts.", p.Query), nil
+		}
+
+		var sb strings.Builder
+		totalMatches := 0
+		for _, r := range results {
+			totalMatches += len(r.Matches)
+		}
+		fmt.Fprintf(&sb, "Found %d match(es) across %d session(s) for %q:\n\n", totalMatches, len(results), p.Query)
+
+		for _, r := range results {
+			fmt.Fprintf(&sb, "### Session: %s\n", r.SessionKey)
+			for _, m := range r.Matches {
+				// Context layout: [before, after] when both exist,
+				// [after] when index==0, [before] when last message.
+				hasBefore := m.Index > 0 && len(m.Context) > 0
+				hasAfter := len(m.Context) > 1 || (len(m.Context) == 1 && !hasBefore)
+
+				if hasBefore {
+					c := m.Context[0]
+					content := truncate(c.Content, 200)
+					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
+				}
+
+				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, truncate(m.Message.Content, 500))
+
+				if hasAfter {
+					c := m.Context[len(m.Context)-1]
+					content := truncate(c.Content, 200)
+					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
+				}
+				sb.WriteString("\n")
+			}
+		}
+		return sb.String(), nil
+	}
+}
+
+// --- sessions_send tool ---
+
+func sessionsSendToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"sessionKey": map[string]any{
+				"type":        "string",
+				"description": "Target session key",
+			},
+			"message": map[string]any{
+				"type":        "string",
+				"description": "Message to send",
+			},
+		},
+		"required": []string{"message"},
+	}
+}
+
+func toolSessionsSend(deps *CoreToolDeps) ToolFunc {
+	return func(_ context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			SessionKey string `json:"sessionKey"`
+			Message    string `json:"message"`
+		}
+		if err := jsonutil.UnmarshalInto("sessions_send params", input, &p); err != nil {
+			return "", err
+		}
+		if p.Message == "" {
+			return "", fmt.Errorf("message is required")
+		}
+
+		targetKey := p.SessionKey
+		if targetKey == "" {
+			targetKey = "main"
+		}
+
+		if deps == nil || deps.SessionSendFn == nil {
+			return "Cross-session messaging is not available (session send function not wired).", nil
+		}
+
+		if err := deps.SessionSendFn(targetKey, p.Message); err != nil {
+			return fmt.Sprintf("Failed to send message to session %q: %s", targetKey, err.Error()), nil
+		}
+		return fmt.Sprintf("Message sent to session %q.", targetKey), nil
+	}
+}
+
+// --- sessions_spawn tool ---
+
+func sessionsSpawnToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"task": map[string]any{
+				"type":        "string",
+				"description": "Task description for the sub-agent",
+			},
+			"label": map[string]any{
+				"type":        "string",
+				"description": "Human-readable label",
+			},
+			"model": map[string]any{
+				"type":        "string",
+				"description": "Model override for the sub-agent",
+			},
+		},
+		"required": []string{"task"},
+	}
+}
+
+func toolSessionsSpawn(deps *CoreToolDeps) ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Task  string `json:"task"`
+			Label string `json:"label"`
+			Model string `json:"model"`
+		}
+		if err := jsonutil.UnmarshalInto("sessions_spawn params", input, &p); err != nil {
+			return "", err
+		}
+		if p.Task == "" {
+			return "", fmt.Errorf("task is required")
+		}
+
+		if deps == nil || deps.Sessions == nil || deps.SessionSendFn == nil {
+			return "Sub-agent spawning is not available (session dependencies not wired).", nil
+		}
+
+		// Create a unique session key for the sub-agent.
+		parentKey := SessionKeyFromContext(ctx)
+		label := p.Label
+		if label == "" {
+			label = "subagent"
+		}
+		childKey := fmt.Sprintf("%s:%s:%d", parentKey, label, time.Now().UnixMilli())
+
+		// Create the child session.
+		childSession := deps.Sessions.Create(childKey, session.KindDirect)
+		if p.Model != "" {
+			childSession.Model = p.Model
+		}
+		childSession.SpawnedBy = parentKey
+		deps.Sessions.Set(childSession)
+
+		// Send the task message to the child session.
+		if err := deps.SessionSendFn(childKey, p.Task); err != nil {
+			return fmt.Sprintf("Sub-agent session %q created but failed to send task: %s", childKey, err.Error()), nil
+		}
+
+		return fmt.Sprintf("Sub-agent spawned.\nSession: %s\nTask: %s", childKey, p.Task), nil
+	}
+}
+
+// --- subagents tool ---
+
