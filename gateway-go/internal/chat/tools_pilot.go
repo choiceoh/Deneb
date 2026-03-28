@@ -248,6 +248,10 @@ func pilotToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Shortcut: search project knowledge base (expands to sources:[{tool:'vega', input:{query:...}}])",
 			},
+			"agent_logs": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: query agent run logs for diagnostics (expands to sources:[{tool:'agent_logs', input:{...}}]). Value: 'all' for recent logs, 'tools' for tool calls only, 'errors' for errors only, or a specific run_id",
+			},
 			"post_process": map[string]any{
 				"type": "array",
 				"items": map[string]any{
@@ -429,6 +433,7 @@ type pilotParams struct {
 	Image     string   `json:"image"`
 	Ls        string   `json:"ls"`
 	Vega      string   `json:"vega"`
+	AgentLogs string   `json:"agent_logs"`
 }
 
 // postProcessStep is a programmatic transformation applied to gathered data.
@@ -584,6 +589,26 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 			Tool:  "vega",
 			Input: mustJSON(map[string]any{"query": p.Vega}),
 			Label: "vega: " + p.Vega,
+		})
+	}
+
+	if p.AgentLogs != "" {
+		input := map[string]any{"limit": 50}
+		switch p.AgentLogs {
+		case "all":
+			// No filter — return recent logs.
+		case "tools":
+			input["type"] = "turn.tool"
+		case "errors":
+			input["type"] = "run.error"
+		default:
+			// Treat as a specific run_id.
+			input["run_id"] = p.AgentLogs
+		}
+		specs = append(specs, sourceSpec{
+			Tool:  "agent_logs",
+			Input: mustJSON(input),
+			Label: "agent_logs: " + p.AgentLogs,
 		})
 	}
 

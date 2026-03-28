@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -18,8 +19,8 @@ type AgentConfig struct {
 	Model     string
 	System    json.RawMessage // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
-	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
-	APIType   string // "openai" (default) or "anthropic"
+	MaxTokens int          // Max output tokens per LLM call. Default: 8192.
+	APIType   string       // "openai" (default) or "anthropic"
 	OnTurn    TurnCallback // optional; called after each turn for mid-run hooks
 }
 
@@ -48,7 +49,7 @@ type AgentResult struct {
 // All fields are optional — nil callbacks are silently skipped.
 type StreamHooks struct {
 	OnTextDelta func(text string) // text delta streamed from LLM
-	OnThinking  func()           // reasoning/thinking delta received
+	OnThinking  func()            // reasoning/thinking delta received
 	OnToolStart func(name string) // tool invocation about to execute
 }
 
@@ -65,6 +66,7 @@ func RunAgent(
 	tools ToolExecutor,
 	hooks StreamHooks,
 	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
 ) (*AgentResult, error) {
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 25
@@ -130,6 +132,18 @@ func RunAgent(
 		result.Usage.InputTokens += turnResult.usage.InputTokens
 		result.Usage.OutputTokens += turnResult.usage.OutputTokens
 
+		// Log LLM turn result to agent detail log.
+		if runLog != nil {
+			runLog.LogTurnLLM(agentlog.TurnLLMData{
+				Turn:         turn + 1,
+				InputTokens:  turnResult.usage.InputTokens,
+				OutputTokens: turnResult.usage.OutputTokens,
+				StopReason:   turnResult.stopReason,
+				TextLen:      len(turnResult.text),
+				ToolCalls:    len(turnResult.toolCalls),
+			})
+		}
+
 		// Mid-run hook: notify caller of token accumulation (for memory extraction).
 		if cfg.OnTurn != nil {
 			cfg.OnTurn(turn+1, result.Usage.InputTokens+result.Usage.OutputTokens)
@@ -187,6 +201,21 @@ func RunAgent(
 					block.Content = toolOutput
 				}
 				toolResults[idx] = block
+
+				// Log tool execution to agent detail log.
+				if runLog != nil {
+					td := agentlog.TurnToolData{
+						Turn:       turn + 1,
+						Name:       tc.Name,
+						DurationMs: elapsed.Milliseconds(),
+						OutputLen:  len(block.Content),
+						IsError:    block.IsError,
+					}
+					if block.IsError {
+						td.Error = block.Content
+					}
+					runLog.LogTurnTool(td)
+				}
 
 				// Store result in TurnContext for cross-tool referencing ($ref).
 				turnCtx.Store(tc.ID, &turnResult_{
