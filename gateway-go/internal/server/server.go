@@ -1623,7 +1623,7 @@ func (s *Server) wireTelegramChatHandler() {
 	// the message tool AND also produces a text response without NO_REPLY).
 	var recentMu sync.Mutex
 	recentSends := make(map[string]time.Time) // key: "chatID:text[:200]"
-	const recentTTL = 60 * time.Second
+	const recentTTL = 10 * time.Second
 
 	// Set reply function: delivers assistant responses back to Telegram.
 	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
