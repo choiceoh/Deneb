@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
@@ -269,6 +270,104 @@ func (eb *EnhancedBackend) rerankResults(ctx context.Context, query string, resu
 		return results
 	}
 	return reranked
+}
+
+// HealthCheck probes each external dependency and returns a status report.
+// Each check runs in parallel with a short timeout.
+func (eb *EnhancedBackend) HealthCheck(ctx context.Context) HealthStatus {
+	var (
+		components []ComponentHealth
+		mu         sync.Mutex
+		wg         sync.WaitGroup
+	)
+
+	// Check Gemini Embedding API.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ch := ComponentHealth{Name: "embedding (Gemini)"}
+		if eb.embedder == nil {
+			ch.Available = false
+			ch.Detail = "not configured (GEMINI_API_KEY not set)"
+		} else {
+			probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			start := time.Now()
+			_, err := eb.embedder.EmbedQuery(probeCtx, "health check")
+			elapsed := time.Since(start)
+			ch.Latency = elapsed.Round(time.Millisecond).String()
+			if err != nil {
+				ch.Available = false
+				ch.Detail = err.Error()
+			} else {
+				ch.Available = true
+				ch.Detail = "gemini-embedding-2-preview"
+			}
+		}
+		mu.Lock()
+		components = append(components, ch)
+		mu.Unlock()
+	}()
+
+	// Check Jina Reranker API.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ch := ComponentHealth{Name: "reranker (Jina)"}
+		if eb.reranker == nil {
+			ch.Available = false
+			ch.Detail = "not configured (JINA_API_KEY not set)"
+		} else {
+			probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			start := time.Now()
+			_, err := eb.reranker.Rerank(probeCtx, "test", []string{"health check probe"}, 1)
+			elapsed := time.Since(start)
+			ch.Latency = elapsed.Round(time.Millisecond).String()
+			if err != nil {
+				ch.Available = false
+				ch.Detail = err.Error()
+			} else {
+				ch.Available = true
+				ch.Detail = eb.reranker.model
+			}
+		}
+		mu.Lock()
+		components = append(components, ch)
+		mu.Unlock()
+	}()
+
+	// Check SGLang (query expansion).
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ch := ComponentHealth{Name: "sglang"}
+		if eb.expander == nil || eb.expander.client == nil {
+			ch.Available = false
+			ch.Detail = "not configured"
+		} else {
+			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			start := time.Now()
+			terms := eb.expander.Expand(probeCtx, "health check test query")
+			elapsed := time.Since(start)
+			ch.Latency = elapsed.Round(time.Millisecond).String()
+			if terms == nil {
+				// Expand returns nil on failure — try a simpler connectivity check.
+				ch.Available = false
+				ch.Detail = fmt.Sprintf("model=%s, expansion failed (server may be down)", eb.expander.model)
+			} else {
+				ch.Available = true
+				ch.Detail = fmt.Sprintf("model=%s, expansion ok (%d terms)", eb.expander.model, len(terms))
+			}
+		}
+		mu.Lock()
+		components = append(components, ch)
+		mu.Unlock()
+	}()
+
+	wg.Wait()
+	return HealthStatus{Components: components}
 }
 
 // Close is a no-op.

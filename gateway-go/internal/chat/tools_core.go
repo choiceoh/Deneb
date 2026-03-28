@@ -128,6 +128,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolMemoryGet(workspaceDir),
 	})
 
+	// -- Health check tool (embedding, reranker, sglang diagnostics) --
+	registry.RegisterTool(ToolDef{
+		Name:        "health_check",
+		Description: "인프라 상태 점검: embedding API (Gemini), reranker API (Jina), SGLang 로컬 LLM 연결 상태 확인. component: all (기본), embedding, reranker, sglang",
+		InputSchema: healthCheckToolSchema(),
+		Fn:          toolHealthCheck(deps),
+	})
+
 	// -- Vega tool (project knowledge search) --
 	registry.RegisterTool(ToolDef{
 		Name:        "vega",

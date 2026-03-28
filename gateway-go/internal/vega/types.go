@@ -26,6 +26,25 @@ type SearchOpts struct {
 	Mode   string `json:"mode,omitempty"` // "bm25", "semantic", "hybrid"
 }
 
+// ComponentHealth describes the health of a single backend component.
+type ComponentHealth struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	Latency   string `json:"latency,omitempty"` // e.g. "123ms"
+	Detail    string `json:"detail,omitempty"`   // model name, endpoint, or error message
+}
+
+// HealthStatus is the aggregated health report from a backend.
+type HealthStatus struct {
+	Components []ComponentHealth `json:"components"`
+}
+
+// HealthChecker is an optional interface that backends can implement
+// to expose health diagnostics for their external dependencies.
+type HealthChecker interface {
+	HealthCheck(ctx context.Context) HealthStatus
+}
+
 // SearchResult is a single search result.
 type SearchResult struct {
 	ProjectID   int     `json:"projectId"`
