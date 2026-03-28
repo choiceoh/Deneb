@@ -437,7 +437,10 @@ fn decode_entities(input: &str) -> String {
 }
 
 fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
-    let rest = input.get(pos..)?;
+    let rest = match input.get(pos..) {
+        Some(s) => s,
+        None => return None,
+    };
 
     // Named entities (case-insensitive).
     let named: &[(&str, char)] = &[
@@ -463,7 +466,10 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
 
     // Hex numeric: &#xHH; — cap search to first 12 bytes (covers realistic entities).
     if rest_lower.starts_with("&#x") {
-        let after = rest.get(3..)?;
+        let after = match rest.get(3..) {
+            Some(s) => s,
+            None => return None,
+        };
         // Only search for ';' within a reasonable range to avoid scanning megabytes.
         let search_limit = bounded_char_boundary(after, 12);
         if let Some(semi) = after[..search_limit].find(';') {
@@ -479,7 +485,10 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
 
     // Decimal numeric: &#DDD;
     if rest_lower.starts_with("&#") {
-        let after = rest.get(2..)?;
+        let after = match rest.get(2..) {
+            Some(s) => s,
+            None => return None,
+        };
         let search_limit = bounded_char_boundary(after, 12);
         if let Some(semi) = after[..search_limit].find(';') {
             let dec_str = &after[..semi];
