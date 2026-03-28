@@ -215,7 +215,7 @@ func killSession(sessions *session.Manager, s *session.Session) {
 		s.RuntimeMs = &runtime
 	}
 	s.UpdatedAt = now
-	sessions.Set(s)
+	_ = sessions.Set(s) // RUNNING → KILLED is always valid; error unreachable
 }
 
 // resolveChildTarget finds a child by 1-based index, exact key, label, or key prefix.

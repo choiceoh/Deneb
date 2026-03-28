@@ -17,7 +17,7 @@ import (
 	"unsafe"
 )
 
-const vegaOutBufSize = 256 * 1024 // 256 KB default output buffer (grows on demand)
+const vegaOutBufSize = 1024 * 1024 // 1 MB default output buffer (grows on demand up to 16 MB)
 
 // VegaExecute executes a Vega command via the Rust FFI.
 // Returns the raw JSON response bytes. The output buffer grows automatically.

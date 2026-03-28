@@ -73,6 +73,11 @@ func MemoryBuildFtsQuery(raw string) (string, error) {
 	return string(out[:rc]), nil
 }
 
+// maxMergeParamsSize is the maximum accepted paramsJSON size for
+// MemoryMergeHybridResults. Inputs above this threshold are rejected early to
+// avoid large buffer allocations before the FFI call.
+const maxMergeParamsSize = 2 * 1024 * 1024 // 2 MB
+
 // MemoryMergeHybridResults merges vector and FTS search results using the Rust
 // hybrid merge pipeline. Takes JSON-encoded MergeParams, returns JSON results.
 // The output buffer grows automatically if the Rust side signals it is too small.
@@ -80,10 +85,13 @@ func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
 	if len(paramsJSON) == 0 {
 		return nil, fmt.Errorf("ffi: memory_merge: empty params")
 	}
+	if len(paramsJSON) > maxMergeParamsSize {
+		return nil, fmt.Errorf("ffi: memory_merge_hybrid_results: input too large (%d bytes, max %d)", len(paramsJSON), maxMergeParamsSize)
+	}
 
 	// Pre-estimate output size: merged results are typically 3-5x input size
 	// due to JSON structure expansion. Use 4x with 16 KB floor to minimize
-	// grow-and-retry FFI round trips.
+	// grow-and-retry FFI round trips. ffiCallWithGrow caps this at maxGrowBufSize.
 	initialSize := len(paramsJSON) * 4
 	if initialSize < 16384 {
 		initialSize = 16384

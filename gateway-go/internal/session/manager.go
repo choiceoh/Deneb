@@ -178,9 +178,12 @@ func (m *Manager) Get(key string) *Session {
 }
 
 // Set stores or updates a session. Ignores sessions with empty keys.
-func (m *Manager) Set(s *Session) {
+// Returns an error if the status transition is invalid for an existing session.
+// Transitions are only enforced when both the old and new statuses are non-empty,
+// so callers may bootstrap a session to any initial status via a fresh Set.
+func (m *Manager) Set(s *Session) error {
 	if s == nil || s.Key == "" {
-		return
+		return nil
 	}
 	m.mu.Lock()
 	old := m.sessions[s.Key]
@@ -188,8 +191,15 @@ func (m *Manager) Set(s *Session) {
 	if old != nil {
 		oldStatus = old.Status
 	}
-	m.sessions[s.Key] = s
 	newStatus := s.Status
+	// Validate status transition for existing sessions with known statuses.
+	if old != nil && oldStatus != "" && newStatus != "" && oldStatus != newStatus {
+		if err := ValidateTransition(oldStatus, newStatus); err != nil {
+			m.mu.Unlock()
+			return err
+		}
+	}
+	m.sessions[s.Key] = s
 	m.mu.Unlock()
 
 	if old == nil {
@@ -197,6 +207,7 @@ func (m *Manager) Set(s *Session) {
 	} else if oldStatus != newStatus {
 		m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: s.Key, OldStatus: oldStatus, NewStatus: newStatus})
 	}
+	return nil
 }
 
 // Delete removes a session by key. Returns true if the session existed.

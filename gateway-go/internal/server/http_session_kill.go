@@ -54,7 +54,12 @@ func (s *Server) handleSessionKill(w http.ResponseWriter, r *http.Request) {
 			sess.RuntimeMs = &runtime
 		}
 		sess.UpdatedAt = now
-		s.sessions.Set(sess)
+		if err := s.sessions.Set(sess); err != nil {
+			s.writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok": false, "error": map[string]string{"type": "invalid_state", "message": err.Error()},
+			})
+			return
+		}
 		killed = true
 
 		// Emit lifecycle event.
