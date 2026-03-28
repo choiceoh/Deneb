@@ -84,6 +84,11 @@ type Store struct {
 	mu       sync.RWMutex
 	reranker RerankFunc // optional cross-encoder reranker (nil = disabled)
 	logger   *slog.Logger
+
+	// In-memory embedding cache: avoids full table scan on every search.
+	// Populated on first LoadEmbeddings call, invalidated on mutations.
+	embCache      map[int64][]float32
+	embCacheReady bool
 }
 
 // schema v1 for the memory store.
@@ -402,6 +407,9 @@ func (s *Store) DeactivateFact(ctx context.Context, id int64) error {
 		`UPDATE facts SET active = 0, updated_at = ? WHERE id = ?`,
 		now, id,
 	)
+	if err == nil {
+		s.embCacheReady = false
+	}
 	return err
 }
 
@@ -419,7 +427,11 @@ func (s *Store) CleanupExpired(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	n, err := result.RowsAffected()
+	if n > 0 {
+		s.embCacheReady = false
+	}
+	return n, err
 }
 
 // PruneNoiseFacts deactivates low-quality noise facts matching ALL criteria:
@@ -444,7 +456,11 @@ func (s *Store) PruneNoiseFacts(ctx context.Context, maxImportance float64, maxA
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	n, err := result.RowsAffected()
+	if n > 0 {
+		s.embCacheReady = false
+	}
+	return n, err
 }
 
 // SupersedeFact marks oldID as superseded by newID and deactivates it.
@@ -456,6 +472,9 @@ func (s *Store) SupersedeFact(ctx context.Context, oldID, newID int64) error {
 		`UPDATE facts SET active = 0, superseded_by = ?, updated_at = ? WHERE id = ?`,
 		newID, now, oldID,
 	)
+	if err == nil {
+		s.embCacheReady = false
+	}
 	return err
 }
 
@@ -587,13 +606,32 @@ func (s *Store) StoreEmbedding(ctx context.Context, factID int64, vec []float32,
 		 ON CONFLICT(fact_id) DO UPDATE SET embedding = excluded.embedding, model_name = excluded.model_name, updated_at = excluded.updated_at`,
 		factID, blob, modelName, now,
 	)
+	if err == nil && s.embCacheReady {
+		s.embCache[factID] = vec
+	}
 	return err
 }
 
 // LoadEmbeddings loads all active fact embeddings for similarity search.
+// Results are cached in memory; subsequent calls return the cache until
+// a mutation (insert, deactivate, prune, supersede) invalidates it.
 func (s *Store) LoadEmbeddings(ctx context.Context) (map[int64][]float32, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	if s.embCacheReady {
+		result := s.embCache
+		s.mu.RUnlock()
+		return result, nil
+	}
+	s.mu.RUnlock()
+
+	// Cache miss — load from DB under write lock.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Double-check after acquiring write lock.
+	if s.embCacheReady {
+		return s.embCache, nil
+	}
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT fe.fact_id, fe.embedding
@@ -614,7 +652,13 @@ func (s *Store) LoadEmbeddings(ctx context.Context) (map[int64][]float32, error)
 		}
 		result[factID] = blobToFloat32s(blob)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	s.embCache = result
+	s.embCacheReady = true
+	return result, nil
 }
 
 // LoadEmbeddingsForMerge returns embeddings and merge depths for active facts eligible for merging.
