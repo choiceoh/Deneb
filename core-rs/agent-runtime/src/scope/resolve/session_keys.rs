@@ -47,6 +47,20 @@ pub struct BuildAgentPeerSessionKeyParams<'a> {
     pub dm_scope: Option<&'a str>,
 }
 
+// Pre-compiled regexes used by multiple functions.
+#[allow(clippy::expect_used)]
+static DISCORD_LEGACY_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").expect("valid regex"));
+#[allow(clippy::expect_used)]
+static CRON_RUN_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").expect("valid regex"));
+
+/// Normalize `s` to lowercase, falling back to `"unknown"` when empty.
+fn normalize_or_unknown(s: &str) -> String {
+    let t = s.trim().to_lowercase();
+    if t.is_empty() { "unknown".to_string() } else { t }
+}
+
 /// Parse an agent-scoped session key in canonical format "agent:<id>:<rest>".
 /// Returns both the agent ID and the remainder (rest), both normalized to lowercase.
 /// Mirrors `src/sessions/session-key-utils.ts#parseAgentSessionKey`. Keep in sync.
@@ -168,9 +182,6 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
         return SessionKeyChatType::Direct;
     }
     // Legacy Discord keys: discord:<accountId>:guild-<guildId>:channel-<channelId>
-    #[allow(clippy::expect_used)]
-    static DISCORD_LEGACY_RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").expect("valid regex"));
     if DISCORD_LEGACY_RE.is_match(&scoped) {
         return SessionKeyChatType::Channel;
     }
@@ -179,9 +190,6 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
 
 /// Check if a session key represents a cron run.
 pub fn is_cron_run_session_key(session_key: &str) -> bool {
-    #[allow(clippy::expect_used)]
-    static CRON_RUN_RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").expect("valid regex"));
     parse_agent_session_key(session_key)
         .map(|p| CRON_RUN_RE.is_match(&p.rest))
         .unwrap_or(false)
@@ -298,23 +306,9 @@ pub fn build_group_history_key(
     peer_kind: &str,
     peer_id: &str,
 ) -> String {
-    let ch = {
-        let t = channel.trim().to_lowercase();
-        if t.is_empty() {
-            "unknown".to_string()
-        } else {
-            t
-        }
-    };
+    let ch = normalize_or_unknown(channel);
     let acct = normalize_account_id(account_id.unwrap_or(""));
-    let pid = {
-        let t = peer_id.trim().to_lowercase();
-        if t.is_empty() {
-            "unknown".to_string()
-        } else {
-            t
-        }
-    };
+    let pid = normalize_or_unknown(peer_id);
     format!("{}:{}:{}:{}", ch, acct, peer_kind, pid)
 }
 
@@ -329,21 +323,16 @@ fn resolve_linked_peer_id(
     if pid.is_empty() {
         return None;
     }
-    let mut candidates = std::collections::HashSet::new();
-    let raw_candidate = pid.trim().to_lowercase();
-    if !raw_candidate.is_empty() {
-        candidates.insert(raw_candidate);
-    }
+    // At most two candidates: bare peer ID and channel-scoped peer ID.
+    let raw_candidate = pid.to_lowercase();
     let ch = channel.trim().to_lowercase();
-    if !ch.is_empty() {
-        let scoped = format!("{}:{}", ch, pid.trim().to_lowercase());
-        if !scoped.is_empty() {
-            candidates.insert(scoped);
-        }
-    }
-    if candidates.is_empty() {
-        return None;
-    }
+    let scoped_candidate = if ch.is_empty() {
+        String::new()
+    } else {
+        format!("{}:{}", ch, raw_candidate)
+    };
+    let candidates = [raw_candidate, scoped_candidate];
+
     for (canonical, ids) in identity_links {
         let canonical_name = canonical.trim();
         if canonical_name.is_empty() {
@@ -351,7 +340,7 @@ fn resolve_linked_peer_id(
         }
         for id in ids {
             let normalized = id.trim().to_lowercase();
-            if !normalized.is_empty() && candidates.contains(&normalized) {
+            if !normalized.is_empty() && candidates.iter().any(|c| !c.is_empty() && *c == normalized) {
                 return Some(canonical_name.to_string());
             }
         }
@@ -359,79 +348,65 @@ fn resolve_linked_peer_id(
     None
 }
 
+/// Build the session key for a direct DM scope.
+fn build_direct_dm_session_key(
+    aid: &str,
+    agent_id: &str,
+    main_key: Option<&str>,
+    channel: &str,
+    account_id: Option<&str>,
+    peer_id: Option<&str>,
+    identity_links: Option<&std::collections::HashMap<String, Vec<String>>>,
+    dm_scope: &str,
+) -> String {
+    let mut pid = peer_id.unwrap_or("").trim().to_string();
+
+    // Resolve identity links for non-main DM scopes.
+    if dm_scope != "main" {
+        if let Some(links) = identity_links {
+            if let Some(linked) = resolve_linked_peer_id(links, channel, &pid) {
+                pid = linked;
+            }
+        }
+    }
+    let pid = pid.to_lowercase();
+
+    if dm_scope == "per-account-channel-peer" && !pid.is_empty() {
+        let ch = normalize_or_unknown(channel);
+        let acct = normalize_account_id(account_id.unwrap_or(""));
+        return format!("agent:{}:{}:{}:direct:{}", aid, ch, acct, pid);
+    }
+    if dm_scope == "per-channel-peer" && !pid.is_empty() {
+        let ch = normalize_or_unknown(channel);
+        return format!("agent:{}:{}:direct:{}", aid, ch, pid);
+    }
+    if dm_scope == "per-peer" && !pid.is_empty() {
+        return format!("agent:{}:direct:{}", aid, pid);
+    }
+    build_agent_main_session_key(agent_id, main_key)
+}
+
 /// Build a peer-scoped session key for an agent.
 /// Mirrors `src/routing/session-key.ts#buildAgentPeerSessionKey`. Keep in sync.
 pub fn build_agent_peer_session_key(params: &BuildAgentPeerSessionKeyParams<'_>) -> String {
-    let agent_id = params.agent_id;
-    let main_key = params.main_key;
-    let channel = params.channel;
-    let account_id = params.account_id;
-    let peer_kind = params.peer_kind;
-    let peer_id = params.peer_id;
-    let identity_links = params.identity_links;
-    let dm_scope = params.dm_scope;
-    let kind = peer_kind.unwrap_or("direct");
-    let aid = normalize_agent_id(agent_id);
+    let aid = normalize_agent_id(params.agent_id);
+    let kind = params.peer_kind.unwrap_or("direct");
 
     if kind == "direct" {
-        let scope = dm_scope.unwrap_or("main");
-        let mut pid = peer_id.unwrap_or("").trim().to_string();
-
-        // Resolve identity links for non-main DM scopes.
-        if scope != "main" {
-            if let Some(links) = identity_links {
-                if let Some(linked) = resolve_linked_peer_id(links, channel, &pid) {
-                    pid = linked;
-                }
-            }
-        }
-        let pid = pid.to_lowercase();
-
-        if scope == "per-account-channel-peer" && !pid.is_empty() {
-            let ch = {
-                let t = channel.trim().to_lowercase();
-                if t.is_empty() {
-                    "unknown".to_string()
-                } else {
-                    t
-                }
-            };
-            let acct = normalize_account_id(account_id.unwrap_or(""));
-            return format!("agent:{}:{}:{}:direct:{}", aid, ch, acct, pid);
-        }
-        if scope == "per-channel-peer" && !pid.is_empty() {
-            let ch = {
-                let t = channel.trim().to_lowercase();
-                if t.is_empty() {
-                    "unknown".to_string()
-                } else {
-                    t
-                }
-            };
-            return format!("agent:{}:{}:direct:{}", aid, ch, pid);
-        }
-        if scope == "per-peer" && !pid.is_empty() {
-            return format!("agent:{}:direct:{}", aid, pid);
-        }
-        return build_agent_main_session_key(agent_id, main_key);
+        return build_direct_dm_session_key(
+            &aid,
+            params.agent_id,
+            params.main_key,
+            params.channel,
+            params.account_id,
+            params.peer_id,
+            params.identity_links,
+            params.dm_scope.unwrap_or("main"),
+        );
     }
 
-    let ch = {
-        let t = channel.trim().to_lowercase();
-        if t.is_empty() {
-            "unknown".to_string()
-        } else {
-            t
-        }
-    };
-    let pid = {
-        let t = peer_id.unwrap_or("").trim().to_lowercase();
-        if t.is_empty() {
-            "unknown".to_string()
-        } else {
-            t
-        }
-    };
+    let ch = normalize_or_unknown(params.channel);
+    let pid = normalize_or_unknown(params.peer_id.unwrap_or(""));
     format!("agent:{}:{}:{}:{}", aid, ch, kind, pid)
 }
 
