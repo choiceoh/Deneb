@@ -68,6 +68,17 @@ var firefoxProfile = browserProfile{
 	},
 }
 
+// stealthFetchTotalTimeout is the hard cap for the entire escalation chain.
+// Worst case without this cap: 10s + 0.8s + 10s + 1.2s + 10s ≈ 32s, but
+// applying an outer deadline lets callers reason about the upper bound and
+// avoids runaway waits when all three stages time out.
+const stealthFetchTotalTimeout = 30 * time.Second
+
+// stealthFetchStageTimeout is the per-stage HTTP timeout.
+// Reduced from 30s to 10s: bot-blocked sites respond almost immediately
+// (403/challenge page), so a 30s wait only delays the next stage needlessly.
+const stealthFetchStageTimeout = 10 * time.Second
+
 // stealthFetch fetches a URL with browser-like headers and bot-block evasion.
 // Escalation stages:
 //
@@ -75,8 +86,13 @@ var firefoxProfile = browserProfile{
 //	1: Firefox profile + cookie jar (handles cookie-gated blocks)
 //	2: Google webcache fallback (bypasses origin server entirely)
 //
-// Returns on first successful non-blocked response.
+// Returns on first successful non-blocked response. The entire chain is bounded
+// by stealthFetchTotalTimeout so callers get a predictable worst-case latency.
 func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media.FetchResult, error) {
+	// Apply a total deadline across all escalation stages.
+	totalCtx, totalCancel := context.WithTimeout(ctx, stealthFetchTotalTimeout)
+	defer totalCancel()
+
 	stages := []struct {
 		profile  browserProfile
 		jar      bool
@@ -92,8 +108,8 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 	for i, stage := range stages {
 		if stage.backoff > 0 {
 			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
+			case <-totalCtx.Done():
+				return nil, totalCtx.Err()
 			case <-time.After(stage.backoff):
 			}
 		}
@@ -104,8 +120,8 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 			fetchURL = googleCacheURL(targetURL)
 			// Google cache uses a simpler header set.
 			headers = map[string]string{
-				"User-Agent":     stage.profile.headers["User-Agent"],
-				"Accept":         stage.profile.headers["Accept"],
+				"User-Agent":      stage.profile.headers["User-Agent"],
+				"Accept":          stage.profile.headers["Accept"],
 				"Accept-Language": stage.profile.headers["Accept-Language"],
 				"Accept-Encoding": "identity",
 			}
@@ -116,7 +132,7 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 			client = newCookieClient()
 		}
 
-		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		fetchCtx, cancel := context.WithTimeout(totalCtx, stealthFetchStageTimeout)
 		result, err := media.Fetch(fetchCtx, media.FetchOptions{
 			URL:      fetchURL,
 			MaxBytes: maxBytes,
@@ -257,7 +273,7 @@ func newCookieClient() *http.Client {
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{
 		Jar:     jar,
-		Timeout: 60 * time.Second,
+		Timeout: stealthFetchStageTimeout,
 		Transport: &http.Transport{
 			DialContext: media.SSRFSafeDialer(),
 		},

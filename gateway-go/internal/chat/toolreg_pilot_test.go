@@ -164,6 +164,70 @@ func TestBuildPilotPrompt(t *testing.T) {
 	}
 }
 
+func TestComputeBudgets_AllFit(t *testing.T) {
+	blocks := []sourceResult{
+		{content: string(make([]byte, 500))},
+		{content: string(make([]byte, 300))},
+		{content: string(make([]byte, 200))},
+	}
+	budgets := computeBudgets(blocks, 24000)
+	for i, b := range budgets {
+		want := len(blocks[i].content)
+		if b != want {
+			t.Errorf("budget[%d] = %d, want %d (everything fits)", i, b, want)
+		}
+	}
+}
+
+func TestComputeBudgets_ProportionalLarge(t *testing.T) {
+	// Scenario from the issue: 5 sources, grep=200, read=15000, rest smaller.
+	// With equal allocation (24000/5=4800), grep wastes 4600 chars.
+	// With proportional allocation, read should receive significantly more.
+	blocks := []sourceResult{
+		{content: string(make([]byte, 200))},   // grep — tiny
+		{content: string(make([]byte, 15000))}, // read — large
+		{content: string(make([]byte, 3000))},  // exec
+		{content: string(make([]byte, 2000))},  // exec
+		{content: string(make([]byte, 9000))},  // read
+	}
+	total := 24000
+	budgets := computeBudgets(blocks, total)
+
+	// Total allocated must not exceed total.
+	sum := 0
+	for _, b := range budgets {
+		sum += b
+	}
+	if sum > total {
+		t.Errorf("total allocated %d exceeds budget %d", sum, total)
+	}
+
+	// Tiny source (200 chars) should keep its full content.
+	if budgets[0] != 200 {
+		t.Errorf("small source budget = %d, want 200 (exact fit)", budgets[0])
+	}
+
+	// Large source (15000) should get more than equal share (4800).
+	equalShare := total / len(blocks)
+	if budgets[1] <= equalShare {
+		t.Errorf("large source budget %d should exceed equal share %d", budgets[1], equalShare)
+	}
+}
+
+func TestComputeBudgets_MinFloor(t *testing.T) {
+	// Many large sources — every block should get at least 2000.
+	blocks := make([]sourceResult, 20)
+	for i := range blocks {
+		blocks[i] = sourceResult{content: string(make([]byte, 5000))}
+	}
+	budgets := computeBudgets(blocks, 24000)
+	for i, b := range budgets {
+		if b < 2000 {
+			t.Errorf("budget[%d] = %d, below minimum 2000", i, b)
+		}
+	}
+}
+
 func TestBuildPilotPromptNoBlocks(t *testing.T) {
 	result := buildPilotPrompt("just a question", "", "", nil)
 	if result != "Task: just a question" {
