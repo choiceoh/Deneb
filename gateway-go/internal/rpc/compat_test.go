@@ -1,0 +1,126 @@
+package rpc
+
+// Test-only type aliases, registration wrappers, and helper shims.
+// Production code (server/*.go) imports handler packages directly.
+
+import (
+	"encoding/json"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
+	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
+	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
+	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
+	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
+	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
+	handlernode "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/node"
+	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
+	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
+	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
+	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
+	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
+	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
+)
+
+// --- Type aliases ---
+
+type ChatDeps = handlerchat.Deps
+type ChatBtwDeps = handlerchat.BtwDeps
+type SessionExecDeps = handlersession.ExecDeps
+type ChannelLifecycleDeps = handlerchannel.LifecycleDeps
+type EventsDeps = handlerchannel.EventsDeps
+type MessagingDeps = handlerchannel.MessagingDeps
+type NodeDeps = handlernode.Deps
+type DeviceDeps = handlernode.DeviceDeps
+type ApprovalDeps = handlerprocess.ApprovalDeps
+type ACPDeps = handlerprocess.ACPDeps
+type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
+type ProviderDeps = handlerprovider.Deps
+type ModelsDeps = handlerprovider.ModelsDeps
+type PluginDeps = handlerskill.PluginDeps
+type ToolDeps = handlerskill.ToolDeps
+type SkillDeps = handlerskill.Deps
+type MonitoringDeps = handlersystem.MonitoringDeps
+type DoctorDeps = handlersystem.DoctorDeps
+type MaintenanceDeps = handlersystem.MaintenanceDeps
+type UpdateDeps = handlersystem.UpdateDeps
+type UsageDeps = handlersystem.UsageDeps
+type LogsDeps = handlersystem.LogsDeps
+type ConfigReloadDeps = handlersystem.ConfigReloadDeps
+type ConfigAdvancedDeps = handlersystem.ConfigAdvancedDeps
+type WizardDeps = handlerplatform.WizardDeps
+type SecretDeps = handlerplatform.SecretDeps
+type TalkDeps = handlerplatform.TalkDeps
+type ExtendedDeps = handleragent.ExtendedDeps
+type AgentsDeps = handleragent.AgentsDeps
+type SessionDeps = handlersession.Deps
+type GatewayRuntimeDeps = handlergateway.Deps
+type HeartbeatDeps = handlerpresence.HeartbeatDeps
+type PresenceDeps = handlerpresence.Deps
+type VegaDeps = handlerffi.VegaDeps
+type AuroraChannelDeps = handleraurorachannel.Deps
+
+// --- Registration wrappers ---
+
+func RegisterChatMethods(d *Dispatcher, deps ChatDeps)               { d.RegisterDomain(handlerchat.Methods(deps)) }
+func RegisterChatBtwMethods(d *Dispatcher, deps ChatBtwDeps)          { d.RegisterDomain(handlerchat.BtwMethods(deps)) }
+func RegisterSessionMethods(d *Dispatcher, deps SessionDeps)          { d.RegisterDomain(handlersession.Methods(deps)) }
+func RegisterSessionRepairMethods(d *Dispatcher, _ SessionDeps)       {} // no-op
+func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps)  { d.RegisterDomain(handlersession.ExecMethods(deps)) }
+func RegisterExtendedMethods(d *Dispatcher, deps ExtendedDeps)        { d.RegisterDomain(handleragent.ExtendedMethods(deps)) }
+func RegisterAgentsMethods(d *Dispatcher, deps AgentsDeps)            { d.RegisterDomain(handleragent.CRUDMethods(deps)) }
+func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
+	d.RegisterDomain(handlerchannel.LifecycleMethods(deps))
+}
+func RegisterEventsMethods(d *Dispatcher, deps EventsDeps)           { d.RegisterDomain(handlerchannel.EventsMethods(deps)) }
+func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps)   { d.RegisterDomain(handlerchannel.BroadcastMethods(deps)) }
+func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps)     { d.RegisterDomain(handlerchannel.MessagingMethods(deps)) }
+func RegisterNodeMethods(d *Dispatcher, deps NodeDeps)               { d.RegisterDomain(handlernode.Methods(deps)) }
+func RegisterDeviceMethods(d *Dispatcher, deps DeviceDeps)           { d.RegisterDomain(handlernode.DeviceMethods(deps)) }
+func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps)       { d.RegisterDomain(handlerprocess.ApprovalMethods(deps)) }
+func RegisterACPMethods(d *Dispatcher, deps *ACPDeps)                { d.RegisterDomain(handlerprocess.ACPMethods(deps)) }
+func RegisterCronAdvancedMethods(d *Dispatcher, deps CronAdvancedDeps) {
+	d.RegisterDomain(handlerprocess.CronAdvancedMethods(deps))
+}
+func RegisterProviderMethods(d *Dispatcher, deps ProviderDeps)       { d.RegisterDomain(handlerprovider.Methods(deps)) }
+func RegisterModelsMethods(d *Dispatcher, deps ModelsDeps)           { d.RegisterDomain(handlerprovider.ModelsMethods(deps)) }
+func RegisterPluginMethods(d *Dispatcher, deps PluginDeps)           { d.RegisterDomain(handlerskill.PluginMethods(deps)) }
+func RegisterToolMethods(d *Dispatcher, deps ToolDeps)               { d.RegisterDomain(handlerskill.ToolMethods(deps)) }
+func RegisterSkillMethods(d *Dispatcher, deps SkillDeps)             { d.RegisterDomain(handlerskill.Methods(deps)) }
+func RegisterMonitoringMethods(d *Dispatcher, deps MonitoringDeps)   { d.RegisterDomain(handlersystem.MonitoringMethods(deps)) }
+func RegisterDoctorMethods(d *Dispatcher, deps DoctorDeps)           { d.RegisterDomain(handlersystem.DoctorMethods(deps)) }
+func RegisterMaintenanceMethods(d *Dispatcher, deps MaintenanceDeps) { d.RegisterDomain(handlersystem.MaintenanceMethods(deps)) }
+func RegisterUpdateMethods(d *Dispatcher, deps UpdateDeps)           { d.RegisterDomain(handlersystem.UpdateMethods(deps)) }
+func RegisterUsageMethods(d *Dispatcher, deps UsageDeps)             { d.RegisterDomain(handlersystem.UsageMethods(deps)) }
+func RegisterLogsMethods(d *Dispatcher, deps LogsDeps)               { d.RegisterDomain(handlersystem.LogsMethods(deps)) }
+func RegisterConfigReloadMethod(d *Dispatcher, deps ConfigReloadDeps) {
+	d.RegisterDomain(handlersystem.ConfigReloadMethods(deps))
+}
+func RegisterConfigAdvancedMethods(d *Dispatcher, deps ConfigAdvancedDeps) {
+	d.RegisterDomain(handlersystem.ConfigAdvancedMethods(deps))
+}
+func RegisterIdentityMethods(d *Dispatcher, version string)          { d.RegisterDomain(handlersystem.IdentityMethods(version)) }
+func RegisterWizardMethods(d *Dispatcher, deps WizardDeps)           { d.RegisterDomain(handlerplatform.WizardMethods(deps)) }
+func RegisterSecretMethods(d *Dispatcher, deps SecretDeps)           { d.RegisterDomain(handlerplatform.SecretMethods(deps)) }
+func RegisterTalkMethods(d *Dispatcher, deps TalkDeps)               { d.RegisterDomain(handlerplatform.TalkMethods(deps)) }
+func RegisterHeartbeatMethods(d *Dispatcher, deps HeartbeatDeps)     { d.RegisterDomain(handlerpresence.HeartbeatMethods(deps)) }
+func RegisterPresenceMethods(d *Dispatcher, deps PresenceDeps)       { d.RegisterDomain(handlerpresence.Methods(deps)) }
+func RegisterVegaMethods(d *Dispatcher, deps VegaDeps)               { d.RegisterDomain(handlerffi.VegaMethods(deps)) }
+func RegisterAuroraChannelMethods(d *Dispatcher, deps AuroraChannelDeps) {
+	d.RegisterDomain(handleraurorachannel.Methods(deps))
+}
+func RegisterGatewayRuntimeMethods(d *Dispatcher, deps GatewayRuntimeDeps) {
+	d.RegisterDomain(handlergateway.RuntimeMethods(deps))
+}
+
+// --- Private helper shims for test compatibility (C2: rpcutil delegation) ---
+
+const maxKeyInErrorMsg = rpcutil.MaxKeyInErrorMsg
+
+func unmarshalParams(params json.RawMessage, v any) error {
+	return rpcutil.UnmarshalParams(params, v)
+}
+
+func truncateForError(s string) string {
+	return rpcutil.TruncateForError(s)
+}

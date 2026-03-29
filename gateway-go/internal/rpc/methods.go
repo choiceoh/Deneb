@@ -10,6 +10,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
+	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -223,4 +225,28 @@ func channelsHealth(deps Deps) HandlerFunc {
 			"channels": deps.ChannelLifecycle.HealthCheck(),
 		})
 	}
+}
+
+// RegisterBuiltinMethods registers the core Go-native RPC methods.
+// Delegates to the FFI and skill handler packages for the bulk of methods,
+// while keeping health/channels/system in the rpc package.
+func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
+	// Health, sessions CRUD, channels, system — kept in rpc package (methods.go).
+	if err := registerCoreBuiltins(d, deps); err != nil {
+		panic(err)
+	}
+
+	// FFI-backed methods: protocol, security, media, parsing, memory, markdown,
+	// compaction, context engine, ML.
+	d.RegisterDomain(handlerffi.ProtocolMethods())
+	d.RegisterDomain(handlerffi.SecurityMethods())
+	d.RegisterDomain(handlerffi.MediaMethods())
+	d.RegisterDomain(handlerffi.ParsingMethods())
+	d.RegisterDomain(handlerffi.MemoryMethods())
+	d.RegisterDomain(handlerffi.MarkdownMethods())
+	d.RegisterDomain(handlerffi.CompactionMethods())
+	d.RegisterDomain(handlerffi.ContextEngineMethods())
+
+	// Tools catalog (static core tool definitions).
+	d.RegisterDomain(handlerskill.CatalogMethods())
 }

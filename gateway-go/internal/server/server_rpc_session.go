@@ -16,7 +16,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
+	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
+	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
+	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -31,16 +35,15 @@ func (s *Server) registerSessionRPCMethods() {
 	if s.transcript != nil {
 		sessionCompressor = transcript.NewCompressor(transcript.DefaultCompactionConfig(), s.logger)
 	}
-	sessionDeps := rpc.SessionDeps{
+	sessionDeps := handlersession.Deps{
 		Sessions:    s.sessions,
 		GatewaySubs: s.gatewaySubs,
 		Transcripts: s.transcript,
 		Compressor:  sessionCompressor,
 	}
-	rpc.RegisterSessionMethods(s.dispatcher, sessionDeps)
+	s.dispatcher.RegisterDomain(handlersession.Methods(sessionDeps))
 
-	// Session repair and overflow check methods.
-	rpc.RegisterSessionRepairMethods(s.dispatcher, sessionDeps)
+	// Session repair methods are now included in handlersession.Methods().
 
 	// Chat methods — native agent execution.
 	broadcastFn := func(event string, payload any) (int, []error) {
@@ -205,7 +208,7 @@ func (s *Server) registerSessionRPCMethods() {
 	}
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
-	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
+	s.dispatcher.RegisterDomain(handlerchat.Methods(handlerchat.Deps{Chat: s.chatHandler}))
 
 	// Wire raw broadcast directly to chat handler for streaming event relay.
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
@@ -213,26 +216,26 @@ func (s *Server) registerSessionRPCMethods() {
 	})
 
 	// Side-question (/btw) method — routes through chat handler natively.
-	rpc.RegisterChatBtwMethods(s.dispatcher, rpc.ChatBtwDeps{
+	s.dispatcher.RegisterDomain(handlerchat.BtwMethods(handlerchat.BtwDeps{
 		Chat:        s.chatHandler,
 		Broadcaster: broadcastFn,
-	})
+	}))
 
 	// Native session execution / agent methods (Phase 4).
-	rpc.RegisterSessionExecMethods(s.dispatcher, rpc.SessionExecDeps{
+	s.dispatcher.RegisterDomain(handlersession.ExecMethods(handlersession.ExecDeps{
 		Chat:       s.chatHandler,
 		Agents:     s.agents,
 		JobTracker: s.jobTracker,
-	})
+	}))
 }
 
 // registerApprovalAgentMethods registers exec approval, agent lifecycle, talk, wizard,
 // and autonomous dreaming methods.
 func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int, []error)) {
-	rpc.RegisterApprovalMethods(s.dispatcher, rpc.ApprovalDeps{
+	s.dispatcher.RegisterDomain(handlerprocess.ApprovalMethods(handlerprocess.ApprovalDeps{
 		Store:       s.approvals,
 		Broadcaster: broadcastFn,
-	})
+	}))
 
 	// Wire process approval callback using the Go approval store directly.
 	// When a tool execution requires approval, create an approval request,
@@ -266,18 +269,18 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 		})
 	}
 
-	rpc.RegisterAgentsMethods(s.dispatcher, rpc.AgentsDeps{
+	s.dispatcher.RegisterDomain(handleragent.CRUDMethods(handleragent.AgentsDeps{
 		Agents:      s.agents,
 		Broadcaster: broadcastFn,
-	})
+	}))
 
-	rpc.RegisterWizardMethods(s.dispatcher, rpc.WizardDeps{
+	s.dispatcher.RegisterDomain(handlerplatform.WizardMethods(handlerplatform.WizardDeps{
 		Engine: s.wizardEng,
-	})
+	}))
 
-	rpc.RegisterTalkMethods(s.dispatcher, rpc.TalkDeps{
+	s.dispatcher.RegisterDomain(handlerplatform.TalkMethods(handlerplatform.TalkDeps{
 		Talk: s.talkState,
-	})
+	}))
 
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
 	s.autonomousSvc = autonomous.NewService(s.logger)

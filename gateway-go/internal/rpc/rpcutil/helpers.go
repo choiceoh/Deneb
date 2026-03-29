@@ -6,19 +6,19 @@
 package rpcutil
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// HandlerFunc is the canonical RPC handler signature. Domain handler packages
-// return maps of method name to HandlerFunc. The rpc.Dispatcher accepts this
-// same signature, so no conversion is needed.
-type HandlerFunc func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame
+// HandlerFunc is an alias for middleware.HandlerFunc so that the dispatcher,
+// domain handler packages, and the middleware chain all share one type.
+// This eliminates type conversions on the hot dispatch path.
+type HandlerFunc = middleware.HandlerFunc
 
 // MaxKeyInErrorMsg is the maximum key length included in error messages.
 // Prevents log inflation from pathologically large keys.
