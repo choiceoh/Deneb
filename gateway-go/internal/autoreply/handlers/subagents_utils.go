@@ -1,77 +1,37 @@
-// subagents_utils.go — Subagent run utilities for commands_handlers.go.
-// Provides BuildSubagentRunListEntries, ResolveSubagentEntryForToken,
-// and FormatSubagentInfo which are used by the legacy command handler layer.
+// subagents_utils.go — Subagent run utilities for the legacy command handler layer.
+// Display-only helpers (BuildSubagentRunListEntries, FormatSubagentInfo) have moved
+// to internal/autoreply/subagent. ResolveSubagentEntryForToken stays here because it
+// returns *CommandResult which would create an import cycle if placed in subagent.
 package handlers
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 )
 
-// SubagentRunListEntry holds a formatted run entry for display.
-type SubagentRunListEntry struct {
-	Entry *SubagentRunRecord
-	Line  string
-}
+// Re-export display helpers from subagent package.
+type SubagentRunListEntry = subagentpkg.SubagentRunListEntry
 
-// BuildSubagentRunListEntries builds formatted entries for the /agents list.
 func BuildSubagentRunListEntries(runs []*SubagentRunRecord, recentWindowMinutes int, maxLabelLen int) (active, recent []SubagentRunListEntry) {
-	sorted := sortSubagentRunPtrs(runs)
-	recentCutoff := currentTimeMs() - int64(recentWindowMinutes)*60_000
-	if maxLabelLen <= 0 {
-		maxLabelLen = 110
-	}
-
-	idx := 1
-	for _, e := range sorted {
-		if e.EndedAt != 0 {
-			continue
-		}
-		label := FormatRunLabel(*e)
-		line := fmt.Sprintf("#%d %s — %s", idx, label, FormatRunStatus(*e))
-		active = append(active, SubagentRunListEntry{Entry: e, Line: line})
-		idx++
-	}
-	for _, e := range sorted {
-		if e.EndedAt == 0 {
-			continue
-		}
-		if e.EndedAt < recentCutoff {
-			continue
-		}
-		label := FormatRunLabel(*e)
-		line := fmt.Sprintf("#%d %s — %s", idx, label, FormatRunStatus(*e))
-		recent = append(recent, SubagentRunListEntry{Entry: e, Line: line})
-		idx++
-	}
-	return active, recent
+	return subagentpkg.BuildSubagentRunListEntries(runs, recentWindowMinutes, maxLabelLen)
 }
 
-func sortSubagentRunPtrs(runs []*SubagentRunRecord) []*SubagentRunRecord {
-	sorted := make([]*SubagentRunRecord, len(runs))
-	copy(sorted, runs)
-	// Active first, then by creation time descending.
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			iActive := sorted[i].EndedAt == 0
-			jActive := sorted[j].EndedAt == 0
-			if (!iActive && jActive) || (iActive == jActive && sorted[i].CreatedAt < sorted[j].CreatedAt) {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
-	return sorted
+func FormatSubagentInfo(entry *SubagentRunRecord, indent int) string {
+	return subagentpkg.FormatSubagentInfo(entry, indent)
 }
 
 // ResolveSubagentEntryForToken finds a subagent by token (index, session key, label, or run ID prefix).
+// Returns a CommandResult error on failure. Kept here because CommandResult is in the handlers package.
 func ResolveSubagentEntryForToken(runs []*SubagentRunRecord, token string) (*SubagentRunRecord, *CommandResult) {
 	trimmed := strings.TrimSpace(token)
 	if trimmed == "" {
 		return nil, &CommandResult{Reply: "⚠️ Missing subagent target.", SkipAgent: true, IsError: true}
 	}
 
-	sorted := sortSubagentRunPtrs(runs)
+	sorted := sortSubagentRunPtrsLocal(runs)
 
 	if trimmed == "last" {
 		if len(sorted) > 0 {
@@ -132,21 +92,19 @@ func ResolveSubagentEntryForToken(runs []*SubagentRunRecord, token string) (*Sub
 	return nil, &CommandResult{Reply: fmt.Sprintf("⚠️ No subagent matching %q.", trimmed), SkipAgent: true, IsError: true}
 }
 
-// FormatSubagentInfo returns a detailed info string for a subagent run.
-func FormatSubagentInfo(entry *SubagentRunRecord, indent int) string {
-	var lines []string
-	prefix := strings.Repeat(" ", indent)
-	lines = append(lines, prefix+"Label: "+FormatRunLabel(*entry))
-	lines = append(lines, prefix+"Status: "+FormatRunStatus(*entry))
-	lines = append(lines, prefix+"RunID: "+entry.RunID)
-	lines = append(lines, prefix+"Session: "+entry.ChildSessionKey)
-	if entry.Task != "" {
-		lines = append(lines, prefix+"Task: "+entry.Task)
+// sortSubagentRunPtrsLocal sorts run pointers: active first, then by creation time descending.
+func sortSubagentRunPtrsLocal(runs []*SubagentRunRecord) []*SubagentRunRecord {
+	sorted := make([]*SubagentRunRecord, len(runs))
+	copy(sorted, runs)
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			iActive := sorted[i].EndedAt == 0
+			jActive := sorted[j].EndedAt == 0
+			if (!iActive && jActive) || (iActive == jActive && sorted[i].CreatedAt < sorted[j].CreatedAt) {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
 	}
-	if entry.Model != "" {
-		lines = append(lines, prefix+"Model: "+entry.Model)
-	}
-	lines = append(lines, prefix+"Cleanup: "+entry.Cleanup)
-	lines = append(lines, prefix+"Created: "+FormatTimestampWithAge(entry.CreatedAt))
-	return strings.Join(lines, "\n")
+	return sorted
 }
+
