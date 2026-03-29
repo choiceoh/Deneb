@@ -1,9 +1,10 @@
 use clap::Args;
 
+use crate::commands::gateway_query::{run_gateway_query, GatewayQueryArgs};
 use crate::config;
 use crate::errors::CliError;
-use crate::gateway::{call_gateway_with_config, CallOptions};
-use crate::terminal::{is_json_mode, Palette};
+use crate::gateway::call_gateway_with_config;
+use crate::terminal::Palette;
 
 #[derive(Args, Debug)]
 pub struct StatusArgs {
@@ -33,31 +34,21 @@ pub struct StatusArgs {
 }
 
 pub async fn run(args: &StatusArgs) -> Result<(), CliError> {
-    let json_mode = is_json_mode(args.json);
     let config_path = config::resolve_config_path();
     let config = config::load_config_best_effort(&config_path);
 
-    // Call gateway health to get status
-    let result = crate::terminal::progress::with_spinner(
+    run_gateway_query(
+        GatewayQueryArgs {
+            url: &args.url,
+            token: &args.token,
+            password: &args.password,
+            timeout: args.timeout,
+            json: args.json,
+        },
+        "health",
         "Fetching status...",
-        !json_mode,
-        call_gateway_with_config(
-            CallOptions {
-                url: args.url.clone(),
-                token: args.token.clone(),
-                password: args.password.clone(),
-                method: "health".to_string(),
-                params: None,
-                timeout_ms: args.timeout,
-                expect_final: false,
-            },
-            &config,
-        ),
-    )
-    .await;
-
-    match result {
-        Ok(payload) => {
+        |opts| call_gateway_with_config(opts, &config),
+        |payload, json_mode| {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&payload)?);
                 return Ok(());
@@ -65,39 +56,31 @@ pub async fn run(args: &StatusArgs) -> Result<(), CliError> {
 
             print_status_summary(&payload, &config);
             Ok(())
-        }
-        Err(e) => {
-            if json_mode {
-                let err_json = serde_json::json!({
-                    "ok": false,
-                    "error": e.user_message(),
-                });
-                println!("{}", serde_json::to_string_pretty(&err_json)?);
-                std::process::exit(1);
-            }
+        },
+    )
+    .await
+    .map_err(|e| {
+        use crate::terminal::Symbols;
+        let error_style = Palette::error();
+        eprintln!(
+            "  {}  {}",
+            error_style.apply_to(Symbols::ERROR),
+            e.user_message()
+        );
 
-            use crate::terminal::Symbols;
-            let error_style = Palette::error();
-            eprintln!(
-                "  {}  {}",
-                error_style.apply_to(Symbols::ERROR),
-                e.user_message()
-            );
+        // Show config info even when gateway is down
+        let muted = Palette::muted();
+        let port = config::resolve_gateway_port(config.gateway_port());
+        eprintln!();
+        eprintln!("    Port      {}", muted.apply_to(port));
+        eprintln!("    Config    {}", muted.apply_to(config_path.display()));
+        eprintln!(
+            "    State     {}",
+            muted.apply_to(config::resolve_state_dir().display())
+        );
 
-            // Show config info even when gateway is down
-            let muted = Palette::muted();
-            let port = config::resolve_gateway_port(config.gateway_port());
-            eprintln!();
-            eprintln!("    Port      {}", muted.apply_to(port));
-            eprintln!("    Config    {}", muted.apply_to(config_path.display()));
-            eprintln!(
-                "    State     {}",
-                muted.apply_to(config::resolve_state_dir().display())
-            );
-
-            std::process::exit(1);
-        }
-    }
+        std::process::exit(1);
+    })
 }
 
 fn print_status_summary(payload: &serde_json::Value, config: &config::DenebConfig) {

@@ -4,6 +4,7 @@ pub mod config_cmd;
 pub mod configure;
 pub mod dashboard;
 pub mod doctor;
+pub mod gateway_query;
 pub mod health;
 pub mod memory;
 pub mod message;
