@@ -9,7 +9,7 @@
 //! Node.js napi) must serialize all access. In Go, wrap in a sync.Mutex.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 /// Status of a subagent run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,9 +91,9 @@ pub struct SubagentRunRecord {
 /// Pure-logic subagent registry. Manages run lifecycle state without I/O.
 #[derive(Debug, Default)]
 pub struct SubagentRegistry {
-    runs: HashMap<String, SubagentRunRecord>,
+    runs: FxHashMap<String, SubagentRunRecord>,
     /// Index: child session key -> run ID (latest).
-    by_child_key: HashMap<String, String>,
+    by_child_key: FxHashMap<String, String>,
 }
 
 impl SubagentRegistry {

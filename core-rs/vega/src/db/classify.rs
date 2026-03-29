@@ -5,6 +5,7 @@
 use std::collections::HashSet;
 
 use regex::Regex;
+use rustc_hash::FxHashMap;
 
 /// Classify a section by heading and content keywords.
 /// Returns one of: status, next_action, history, comm_log, technical, issue,
@@ -55,7 +56,7 @@ pub fn classify_section(heading: &str, content: &str) -> &'static str {
 /// Extract domain-specific tags from metadata and sections.
 /// Returns a set of tags like "고객:한국전력", "기술:EPC", "유형:지붕태양광", etc.
 pub fn extract_tags(
-    meta: &std::collections::HashMap<String, String>,
+    meta: &FxHashMap<String, String>,
     sections: &[(String, String)], // (heading, body)
 ) -> HashSet<String> {
     let mut tags = HashSet::new();
@@ -177,7 +178,7 @@ pub fn extract_tags(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use rustc_hash::FxHashMap;
 
     #[test]
     fn test_classify_section() {
@@ -191,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_extract_tags() {
-        let mut meta = HashMap::new();
+        let mut meta = FxHashMap::default();
         meta.insert("client".into(), "한국전력".into());
         meta.insert("person_internal".into(), "김대희/고건".into());
         meta.insert("status".into(), "진행중".into());

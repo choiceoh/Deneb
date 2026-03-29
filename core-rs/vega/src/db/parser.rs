@@ -2,7 +2,7 @@
 //!
 //! Port of Python vega/db/parser.py.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use regex::Regex;
 
@@ -62,7 +62,7 @@ static COMM_PAT_BOLD_ONLY: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[-*]\s*\*{1,2}(.+?)\*{1,2}\s*$").expect("valid regex"));
 
 /// Field mapping from Korean table header to metadata key.
-fn field_map() -> HashMap<&'static str, &'static str> {
+fn field_map() -> FxHashMap<&'static str, &'static str> {
     let pairs = [
         ("상태", "status"),
         ("발주처", "client"),
@@ -88,8 +88,8 @@ fn field_map() -> HashMap<&'static str, &'static str> {
 }
 
 /// Extract metadata from markdown table (| key | value | format).
-pub fn extract_table_meta(text: &str) -> HashMap<String, String> {
-    let mut meta = HashMap::new();
+pub fn extract_table_meta(text: &str) -> FxHashMap<String, String> {
+    let mut meta = FxHashMap::default();
 
     // Project name from first # heading
     #[allow(clippy::expect_used)]

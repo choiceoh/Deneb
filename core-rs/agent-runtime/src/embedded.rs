@@ -7,7 +7,7 @@
 //! process handles, abort signals, and timers.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 /// Snapshot of an active embedded run for external inspection.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -93,9 +93,9 @@ struct ActiveRun {
 /// The host manages actual process handles; this tracks metadata and state.
 #[derive(Debug, Default)]
 pub struct EmbeddedRunTracker {
-    runs: HashMap<String, ActiveRun>,
+    runs: FxHashMap<String, ActiveRun>,
     /// Reverse index: session_key -> session_id for O(1) lookup.
-    session_key_index: HashMap<String, String>,
+    session_key_index: FxHashMap<String, String>,
 }
 
 impl EmbeddedRunTracker {

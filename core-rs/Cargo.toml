@@ -15,6 +15,7 @@ sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10"
 rayon = "1.10"
+rustc-hash = "2"
 
 # Shared lint configuration for all workspace crates.
 # Crates opt in via `[lints] workspace = true` in their own Cargo.toml.

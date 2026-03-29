@@ -7,7 +7,7 @@ pub mod fusion;
 pub mod query_analyzer;
 pub mod semantic;
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -178,7 +178,7 @@ impl SearchRouter {
         let mut unified = sqlite_rows_to_unified(&sqlite_result.chunks);
 
         // Apply project scores to unified results
-        let score_map: HashMap<i64, f64> = project_scores
+        let score_map: FxHashMap<i64, f64> = project_scores
             .iter()
             .map(|s| (s.project_id, s.score))
             .collect();

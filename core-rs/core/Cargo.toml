@@ -37,6 +37,7 @@ napi-derive = { version = "2", optional = true }
 
 # Data parallelism (20-core DGX Spark utilization)
 rayon.workspace = true
+rustc-hash.workspace = true
 
 # Regex (ReDoS-safe by design)
 regex.workspace = true

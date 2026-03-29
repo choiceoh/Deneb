@@ -30,7 +30,7 @@ pub mod upgrade;
 pub mod urgent;
 pub mod weekly;
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -251,10 +251,10 @@ pub fn route_command(query: &str) -> &'static str {
     "search"
 }
 
-static REGISTRY: OnceLock<HashMap<&'static str, Box<dyn CommandHandler>>> = OnceLock::new();
+static REGISTRY: OnceLock<FxHashMap<&'static str, Box<dyn CommandHandler>>> = OnceLock::new();
 
-fn build_registry() -> HashMap<&'static str, Box<dyn CommandHandler>> {
-    let mut m: HashMap<&'static str, Box<dyn CommandHandler>> = HashMap::new();
+fn build_registry() -> FxHashMap<&'static str, Box<dyn CommandHandler>> {
+    let mut m: FxHashMap<&'static str, Box<dyn CommandHandler>> = FxHashMap::default();
     m.insert("search", Box::new(search::SearchHandler));
     m.insert("show", Box::new(show::ShowHandler));
     m.insert("brief", Box::new(brief::BriefHandler));
