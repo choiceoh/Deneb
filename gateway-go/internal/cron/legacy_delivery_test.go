@@ -55,7 +55,7 @@ func TestBuildDeliveryFromLegacyPayload_DeliverFalse(t *testing.T) {
 }
 
 func TestMergeLegacyDeliveryInto(t *testing.T) {
-	existing := map[string]any{"mode": "announce", "channel": "slack"}
+	existing := map[string]any{"mode": "announce", "channel": "discord"}
 	payload := map[string]any{"channel": "telegram", "to": "99"}
 	merged, mutated := MergeLegacyDeliveryInto(existing, payload)
 	if !mutated {
@@ -68,7 +68,7 @@ func TestMergeLegacyDeliveryInto(t *testing.T) {
 		t.Errorf("expected to=99, got %v", merged["to"])
 	}
 	// Original should not be modified.
-	if existing["channel"] != "slack" {
+	if existing["channel"] != "discord" {
 		t.Error("expected original unchanged")
 	}
 }

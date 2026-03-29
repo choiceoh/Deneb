@@ -9,10 +9,8 @@ func TestNormalizeDeliveryTarget(t *testing.T) {
 		want string
 	}{
 		{"telegram", "12345", "12345"},
-		{"feishu", "user:abc", "abc"},
-		{"lark", "chat:xyz", "xyz"},
-		{"feishu", "normal", "normal"},
-		{"discord", "user:abc", "user:abc"}, // only feishu/lark strip prefixes
+		{"telegram", " 12345 ", "12345"},
+		{"discord", "user:abc", "user:abc"},
 	}
 	for _, tt := range tests {
 		got := NormalizeDeliveryTarget(tt.ch, tt.to)

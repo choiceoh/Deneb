@@ -33,28 +33,28 @@ func TestSnapshotStore_Update(t *testing.T) {
 func TestSnapshotStore_UpdateAccount(t *testing.T) {
 	store := NewSnapshotStore()
 
-	store.UpdateAccount("slack", "workspace-1", AccountSnapshot{
+	store.UpdateAccount("multi", "workspace-1", AccountSnapshot{
 		AccountID: "workspace-1",
 		Connected: true,
 		Name:      "My Workspace",
 	})
-	store.UpdateAccount("slack", "workspace-2", AccountSnapshot{
+	store.UpdateAccount("multi", "workspace-2", AccountSnapshot{
 		AccountID: "workspace-2",
 		Connected: false,
 		LastError: "token expired",
 	})
 
 	snap := store.Snapshot()
-	if len(snap.ChannelAccounts["slack"]) != 2 {
-		t.Fatalf("expected 2 slack accounts, got %d", len(snap.ChannelAccounts["slack"]))
+	if len(snap.ChannelAccounts["multi"]) != 2 {
+		t.Fatalf("expected 2 slack accounts, got %d", len(snap.ChannelAccounts["multi"]))
 	}
 
-	ws1 := snap.ChannelAccounts["slack"]["workspace-1"]
+	ws1 := snap.ChannelAccounts["multi"]["workspace-1"]
 	if ws1.Name != "My Workspace" {
 		t.Errorf("workspace-1 name = %q, want %q", ws1.Name, "My Workspace")
 	}
 
-	ws2 := snap.ChannelAccounts["slack"]["workspace-2"]
+	ws2 := snap.ChannelAccounts["multi"]["workspace-2"]
 	if ws2.LastError != "token expired" {
 		t.Errorf("workspace-2 error = %q, want %q", ws2.LastError, "token expired")
 	}

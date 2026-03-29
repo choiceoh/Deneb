@@ -80,7 +80,7 @@ func TestResolveFailureDestination_WebhookRequiresTo(t *testing.T) {
 
 func TestResolveFailureDestination_JobOverridesGlobal(t *testing.T) {
 	global := &CronFailureDestinationConfig{
-		Channel: "slack",
+		Channel: "telegram",
 		To:      "old",
 	}
 	delivery := &CronDeliveryFull{

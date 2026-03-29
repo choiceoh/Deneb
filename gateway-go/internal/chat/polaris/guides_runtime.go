@@ -230,7 +230,7 @@ const channelsGuide = `Channels are messaging surface plugins connecting externa
 - Typing signaler: 5s interval (matches Telegram TTL)
 
 ## Supported Channels
-Telegram (primary, fully optimized), Discord, Slack, WhatsApp (Baileys), Signal, iMessage, WebChat, extensions
+Telegram (primary, fully optimized), Discord
 Note: only Telegram is the active deployment target per project philosophy
 
 ## Group Handling

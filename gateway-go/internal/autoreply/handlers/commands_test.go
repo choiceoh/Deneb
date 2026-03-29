@@ -153,7 +153,7 @@ func TestBuildCommandText(t *testing.T) {
 func TestListNativeCommandSpecs(t *testing.T) {
 	r := NewCommandRegistry(testCommands())
 
-	specs := r.ListNativeCommandSpecs("")
+	specs := r.ListNativeCommandSpecs()
 	// /config is text-only, should not appear.
 	for _, s := range specs {
 		if s.Name == "config" {
@@ -161,12 +161,15 @@ func TestListNativeCommandSpecs(t *testing.T) {
 		}
 	}
 
-	// Slack should override /status → /agentstatus.
-	slackSpecs := r.ListNativeCommandSpecs("slack")
-	for _, s := range slackSpecs {
-		if s.Name == "agentstatus" {
-			return // found the override
+	// Verify /status appears as its native name.
+	found := false
+	for _, s := range specs {
+		if s.Name == "status" {
+			found = true
+			break
 		}
 	}
-	t.Error("expected 'agentstatus' in slack native specs")
+	if !found {
+		t.Error("expected 'status' in native specs")
+	}
 }

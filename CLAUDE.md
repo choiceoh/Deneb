@@ -27,7 +27,6 @@
 | `docs.md` | 문서 작성 표준 | `docs/**` |
 | `generated-code.md` | 생성 코드 수정 금지 | 생성 파일 직접 지정 |
 | `testing.md` | 테스트 가이드라인 | `**/*_test.go`, `**/*_test.rs` |
-| `macos.md` | macOS 플랫폼 규칙 | `**/macos/**`, `**/*.swift` |
 | `release-and-deploy.md` | 릴리스/배포 워크플로우 | `scripts/release*`, `.github/workflows/release*` |
 | `git-pr.md` | Git/PR 상세 가이드 | `.github/**` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |

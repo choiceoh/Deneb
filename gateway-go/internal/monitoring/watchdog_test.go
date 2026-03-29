@@ -38,7 +38,7 @@ func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 	restarted := ""
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs:   func() []string { return []string{"slack"} },
+		ListChannelIDs:   func() []string { return []string{"telegram"} },
 		GetChannelStatus: func(_ string) string { return "running" },
 		GetChannelLastEventAt: func(_ string) int64 {
 			return time.Now().Add(-1 * time.Hour).UnixMilli() // stale
@@ -62,7 +62,7 @@ func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 	m.startedAt = time.Now().Add(-1 * time.Hour)
 	m.check()
 
-	if restarted != "slack" {
+	if restarted != "telegram" {
 		t.Errorf("expected slack to be restarted, got %q", restarted)
 	}
 }
@@ -70,7 +70,7 @@ func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 func TestChannelHealthMonitor_CooldownPreventsRestart(t *testing.T) {
 	restartCount := 0
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs:   func() []string { return []string{"slack"} },
+		ListChannelIDs:   func() []string { return []string{"telegram"} },
 		GetChannelStatus: func(_ string) string { return "running" },
 		GetChannelLastEventAt: func(_ string) int64 {
 			return time.Now().Add(-1 * time.Hour).UnixMilli()
