@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.1.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.0.0...deneb-v4.1.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **chat:** improve Discord agent coding system prompt ([771bb0f](https://github.com/choiceoh/Deneb/commit/771bb0f6f69bcdf49d0d41096801621668aaf354))
+* **chat:** improve Discord agent coding system prompt ([5d84c9b](https://github.com/choiceoh/Deneb/commit/5d84c9b6e024b3c977ecd485b8fc6e5801506443))
+* **discord:** add coding enhancement features for vibe coders ([599f125](https://github.com/choiceoh/Deneb/commit/599f12506ec3f7f76be4fc19bc0c167cdf8ea6be))
+* **discord:** add coding enhancement features for vibe coders ([8c371d8](https://github.com/choiceoh/Deneb/commit/8c371d8c728b0bd61d03242ec6c01054c1ea9f69))
+* **discord:** add merge conflict check and resolution buttons ([a81bee0](https://github.com/choiceoh/Deneb/commit/a81bee023b9f5da69359ddb139c2eb6ea41c9628))
+* **discord:** add merge conflict check and resolution buttons ([702d8c1](https://github.com/choiceoh/Deneb/commit/702d8c12536e9318ef516eb277694c933a39ae9f))
+
+
+### 🐛 Bug Fixes
+
+* **discord:** instruct summarizer to translate English thinking to Korean ([c7ce36a](https://github.com/choiceoh/Deneb/commit/c7ce36a1b35d00d19fb3851dcccf57ad18c4381b))
+* **discord:** remove success/failure judgment from progress embed ([1f960d7](https://github.com/choiceoh/Deneb/commit/1f960d7465f11d6a3ec64647e3a0b2a4218217dd))
+* **discord:** retry without message_reference when referenced message is deleted ([6a70fbb](https://github.com/choiceoh/Deneb/commit/6a70fbbb2362a8736dbbd8ebb92c2e5a8b649d2e))
+* **discord:** use error ratio for progress embed status instead of any-error ([c2f18a1](https://github.com/choiceoh/Deneb/commit/c2f18a11f2c0760abadf755fb88cfe28697c3f48))
+* **discord:** use error ratio for progress embed status instead of any-error ([f53c3c6](https://github.com/choiceoh/Deneb/commit/f53c3c624627b0212368498505fdc9eb112e4cb7))
+* **discord:** validate reasoning summaries are Korean and single-line ([ccdc8bb](https://github.com/choiceoh/Deneb/commit/ccdc8bb9b172885223dddee53657027c3b28de26))
+* **discord:** validate reasoning summaries are Korean and single-line ([2fa7c80](https://github.com/choiceoh/Deneb/commit/2fa7c8031b75f29f7b8a6570bc7d853a84640dc0))
+
+
+### 🔧 Internal
+
+* **docs:** apply conditional rule loading to CLAUDE.md ([9cf7e4e](https://github.com/choiceoh/Deneb/commit/9cf7e4e2ef0cdc2dad2e5742d490aae0071cdb62))
+* **docs:** apply conditional rule loading to CLAUDE.md ([50b60c4](https://github.com/choiceoh/Deneb/commit/50b60c4348fb51ac75387cb6ba3a8c4c08130099))
+
 ## [4.0.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.33.1...deneb-v4.0.0) (2026-03-29)
 
 
