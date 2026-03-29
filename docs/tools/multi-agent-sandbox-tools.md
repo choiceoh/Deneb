@@ -56,11 +56,11 @@ If you want to share creds, copy `auth-profiles.json` into the other agent's `ag
     {
       "agentId": "family",
       "match": {
-        "provider": "whatsapp",
+        "provider": "telegram",
         "accountId": "*",
         "peer": {
           "kind": "group",
-          "id": "120363424282127706@g.us"
+          "id": "-1001234567890"
         }
       }
     }
@@ -96,7 +96,7 @@ If you want to share creds, copy `auth-profiles.json` into the other agent's `ag
         },
         "tools": {
           "allow": ["read", "write", "apply_patch", "exec"],
-          "deny": ["browser", "gateway", "discord"]
+          "deny": ["browser", "gateway"]
         }
       }
     ]
@@ -115,7 +115,7 @@ If you want to share creds, copy `auth-profiles.json` into the other agent's `ag
     "list": [
       {
         "id": "support",
-        "tools": { "profile": "messaging", "allow": ["slack"] }
+        "tools": { "profile": "messaging", "allow": ["discord"] }
       }
     ]
   }
@@ -125,7 +125,7 @@ If you want to share creds, copy `auth-profiles.json` into the other agent's `ag
 **Result:**
 
 - default agents get coding tools
-- `support` agent is messaging-only (+ Slack tool)
+- `support` agent is messaging-only (+ Discord tool)
 
 ---
 

@@ -18,7 +18,7 @@ Deneb runs as a multi-language gateway with three cooperating runtimes:
 - **Rust core** (`core-rs`) — high-performance library linked into Go via CGo FFI. Handles protocol validation, security (constant-time compare, HTML sanitization, SSRF checks), media detection, markdown parsing, memory search (cosine similarity, BM25, hybrid merge), and context engine (assembly, compaction, sweep).
 - **Node.js plugin host** — subprocess managed by the Go gateway over a Unix domain socket. Runs channel extensions, skill plugins, and provider integrations that use the TypeScript plugin SDK.
 
-A single long-lived Gateway owns all messaging surfaces (Telegram via grammY, Discord, Slack, WhatsApp via Baileys, Signal, iMessage, WebChat, and extension channels).
+A single long-lived Gateway owns all messaging surfaces (Telegram via grammY, Discord, and extension channels).
 
 <Tip>
 Telegram is the primary production channel. Other channels exist in the
@@ -26,9 +26,9 @@ codebase but may not receive the same depth of optimization. See
 [design philosophy](/concepts/design-philosophy) for details.
 </Tip>
 
-Control-plane clients (macOS app, CLI, web UI, automations) connect over **WebSocket** on the configured bind host (default `127.0.0.1:18789`).
+Control-plane clients (CLI, web UI, automations) connect over **WebSocket** on the configured bind host (default `127.0.0.1:18789`).
 
-**Nodes** (macOS/iOS/Android/headless) also connect over **WebSocket**, but declare `role: node` with explicit caps/commands.
+**Nodes** (Android/headless) also connect over **WebSocket**, but declare `role: node` with explicit caps/commands.
 
 One Gateway per host. The **canvas host** is served under `/__deneb__/canvas/` and `/__deneb__/a2ui/` on the same port.
 
@@ -102,21 +102,14 @@ graph TB
     subgraph "Messaging Channels"
         TG["📱 Telegram<br>(primary channel)"]
         DC["Discord"]
-        SL["Slack"]
-        WA["WhatsApp"]
-        SG["Signal"]
-        IM["iMessage"]
-        WC["WebChat"]
     end
 
     subgraph "Control Plane Clients"
         CLI["CLI (cli-rs)<br>Rust → WebSocket"]
-        MAC["macOS App"]
         WEB["Web Admin UI"]
     end
 
     subgraph "Nodes"
-        IOS["iOS Node"]
         AND["Android Node"]
         HL["Headless Node"]
     end
@@ -175,19 +168,12 @@ graph TB
     %% Channel → Gateway
     TG -->|"Bot API"| CHAN
     DC -->|"Bot API"| CHAN
-    SL --> CHAN
-    WA -->|"Baileys"| CHAN
-    SG --> CHAN
-    IM --> CHAN
-    WC -->|"WS"| WSS
 
     %% Control plane
     CLI -->|"WebSocket"| WSS
-    MAC -->|"WebSocket"| WSS
     WEB -->|"WebSocket"| WSS
 
     %% Nodes
-    IOS -->|"WS role:node"| WSS
     AND -->|"WS role:node"| WSS
     HL -->|"WS role:node"| WSS
 
@@ -243,7 +229,7 @@ graph LR
     subgraph "Inbound"
         REQ_HTTP["HTTP Request<br>/api/v1/rpc"]
         REQ_WS["WebSocket Frame<br>type: req"]
-        REQ_CHAN["Channel Message<br>Telegram, Discord..."]
+        REQ_CHAN["Channel Message<br>Telegram, Discord"]
     end
 
     subgraph "gateway-go/internal"
@@ -471,7 +457,7 @@ graph TB
 ### Plugin host (Node.js subprocess)
 
 - Communicates with Go gateway over Unix domain socket using a frame-based protocol (RequestFrame/ResponseFrame).
-- Runs channel extensions (Telegram, Discord, Slack, WhatsApp, etc.).
+- Runs channel extensions (Telegram, Discord, etc.).
 - Executes skill plugins and provider integrations via the TypeScript plugin SDK.
 - Auto-reconnects with exponential backoff (1s to 30s max) if the connection drops.
 
@@ -481,18 +467,13 @@ graph TB
 - Send requests (`health`, `status`, `send`, `agent`, `system-presence`).
 - Subscribe to events (`tick`, `agent`, `presence`, `shutdown`).
 
-### Nodes (macOS / iOS / Android / headless)
+### Nodes (Android / headless)
 
 - Connect to the **same WS server** with `role: node`.
 - Provide a device identity in `connect`; pairing is **device-based** (role `node`) and approval lives in the device pairing store.
 - Expose commands like `canvas.*`, `camera.*`, `screen.record`, `location.get`.
 
 Protocol details: [Gateway protocol](/gateway/protocol)
-
-### WebChat
-
-- Static UI that uses the Gateway WS API for chat history and sends.
-- In remote setups, connects through the same SSH/Tailscale tunnel as other clients.
 
 ## Connection lifecycle (single client)
 
@@ -552,7 +533,6 @@ Details: [Gateway protocol](/gateway/protocol), [Pairing](/channels/pairing),
 - Generated outputs: Go (`gateway-go/pkg/protocol/gen/`), Rust (prost, `OUT_DIR`), TypeScript (`src/protocol/generated/`).
 - TypeBox schemas define the WebSocket protocol surface.
 - JSON Schema is generated from TypeBox schemas.
-- Swift models are generated from the JSON Schema.
 - Generation: `make proto` (parallel Go + Rust + TS).
 
 ## Remote access
@@ -571,7 +551,7 @@ Details: [Gateway protocol](/gateway/protocol), [Pairing](/channels/pairing),
 
 - Start: `deneb gateway` (foreground, logs to stdout).
 - Health: `health` over WS (also included in `hello-ok`), or `GET /health` over HTTP.
-- Supervision: launchd/systemd for auto-restart.
+- Supervision: systemd for auto-restart.
 
 ## Invariants
 

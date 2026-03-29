@@ -77,7 +77,7 @@ Defaults: `debounceMs: 1000`, `cap: 20`, `drop: summarize`.
 
 ## Scope and guarantees
 
-- Applies to auto-reply agent runs across all inbound channels that use the gateway reply pipeline (WhatsApp web, Telegram, Slack, Discord, Signal, iMessage, webchat, etc.).
+- Applies to auto-reply agent runs across all inbound channels that use the gateway reply pipeline (Telegram, Discord, etc.).
 - Default lane (`main`) is process-wide for inbound + main heartbeats; set `agents.defaults.maxConcurrent` to allow multiple sessions in parallel.
 - Additional lanes may exist (e.g. `cron`, `subagent`) so background jobs can run in parallel without blocking inbound replies.
 - Per-session lanes guarantee that only one agent run touches a given session at a time.

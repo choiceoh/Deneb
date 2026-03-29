@@ -29,8 +29,6 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [How do I try the latest bits?](#how-do-i-try-the-latest-bits)
   - [How long does install and onboarding usually take?](#how-long-does-install-and-onboarding-usually-take)
   - [Installer stuck? How do I get more feedback?](#installer-stuck-how-do-i-get-more-feedback)
-  - [Windows install says git not found or deneb not recognized](#windows-install-says-git-not-found-or-deneb-not-recognized)
-  - [Windows exec output shows garbled Chinese text what should I do](#windows-exec-output-shows-garbled-chinese-text-what-should-i-do)
   - [The docs did not answer my question - how do I get a better answer](#the-docs-did-not-answer-my-question---how-do-i-get-a-better-answer)
   - [How do I install Deneb on Linux?](#how-do-i-install-deneb-on-linux)
   - [How do I install Deneb on a VPS?](#how-do-i-install-deneb-on-a-vps)
@@ -49,12 +47,8 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [How do I set up Gemini CLI OAuth](#how-do-i-set-up-gemini-cli-oauth)
   - [Is a local model OK for casual chats?](#is-a-local-model-ok-for-casual-chats)
   - [How do I keep hosted model traffic in a specific region?](#how-do-i-keep-hosted-model-traffic-in-a-specific-region)
-  - [Do I have to buy a Mac Mini to install this?](#do-i-have-to-buy-a-mac-mini-to-install-this)
-  - [Do I need a Mac mini for iMessage support?](#do-i-need-a-mac-mini-for-imessage-support)
-  - [If I buy a Mac mini to run Deneb, can I connect it to my MacBook Pro?](#if-i-buy-a-mac-mini-to-run-deneb-can-i-connect-it-to-my-macbook-pro)
   - [Can I use Bun?](#can-i-use-bun)
   - [Telegram: what goes in `allowFrom`?](#telegram-what-goes-in-allowfrom)
-  - [Can multiple people use one WhatsApp number with different Deneb instances?](#can-multiple-people-use-one-whatsapp-number-with-different-deneb-instances)
   - [Can I run a "fast chat" agent and an "Opus for coding" agent?](#can-i-run-a-fast-chat-agent-and-an-opus-for-coding-agent)
   - [Does Homebrew work on Linux?](#does-homebrew-work-on-linux)
   - [Difference between the hackable git install and npm install](#difference-between-the-hackable-git-install-and-npm-install)
@@ -78,7 +72,6 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [Cron or reminders do not fire. What should I check?](#cron-or-reminders-do-not-fire-what-should-i-check)
   - [How do I install skills on Linux?](#how-do-i-install-skills-on-linux)
   - [Can Deneb run tasks on a schedule or continuously in the background?](#can-deneb-run-tasks-on-a-schedule-or-continuously-in-the-background)
-  - [Can I run Apple macOS-only skills from Linux?](#can-i-run-apple-macos-only-skills-from-linux)
   - [Do you have a Notion or HeyGen integration?](#do-you-have-a-notion-or-heygen-integration)
   - [How do I use my existing signed-in Chrome with Deneb?](#how-do-i-use-my-existing-signed-in-chrome-with-deneb)
 - [Sandboxing and memory](#sandboxing-and-memory)
@@ -133,12 +126,8 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [I'm getting "context too large" errors - how do I reset or compact?](#im-getting-context-too-large-errors-how-do-i-reset-or-compact)
   - [Why am I seeing "LLM request rejected: messages.content.tool_use.input field required"?](#why-am-i-seeing-llm-request-rejected-messagescontenttool_useinput-field-required)
   - [Why am I getting heartbeat messages every 30 minutes?](#why-am-i-getting-heartbeat-messages-every-30-minutes)
-  - [Do I need to add a "bot account" to a WhatsApp group?](#do-i-need-to-add-a-bot-account-to-a-whatsapp-group)
-  - [How do I get the JID of a WhatsApp group?](#how-do-i-get-the-jid-of-a-whatsapp-group)
-  - [Why does Deneb not reply in a group](#why-does-deneb-not-reply-in-a-group)
   - [Do groups/threads share context with DMs?](#do-groupsthreads-share-context-with-dms)
   - [How many workspaces and agents can I create?](#how-many-workspaces-and-agents-can-i-create)
-  - [Can I run multiple bots or chats at the same time (Slack), and how should I set that up?](#can-i-run-multiple-bots-or-chats-at-the-same-time-slack-and-how-should-i-set-that-up)
 - [Models: defaults, selection, aliases, switching](#models-defaults-selection-aliases-switching)
   - [What is the "default model"?](#what-is-the-default-model)
   - [What model do you recommend?](#what-model-do-you-recommend)
@@ -176,7 +165,6 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
 - [Logging and debugging](#logging-and-debugging)
   - [Where are logs?](#where-are-logs)
   - [How do I start/stop/restart the Gateway service?](#how-do-i-startstoprestart-the-gateway-service)
-  - [I closed my terminal on Windows - how do I restart Deneb?](#i-closed-my-terminal-on-windows-how-do-i-restart-deneb)
   - [The Gateway is up but replies never arrive. What should I check?](#the-gateway-is-up-but-replies-never-arrive-what-should-i-check)
   - ["Disconnected from gateway: no reason" - what now?](#disconnected-from-gateway-no-reason-what-now)
   - [Telegram setMyCommands fails. What should I check?](#telegram-setmycommands-fails-what-should-i-check)
@@ -193,7 +181,6 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [Can I give it autonomy over my text messages and is that safe](#can-i-give-it-autonomy-over-my-text-messages-and-is-that-safe)
   - [Can I use cheaper models for personal assistant tasks?](#can-i-use-cheaper-models-for-personal-assistant-tasks)
   - [I ran /start in Telegram but did not get a pairing code](#i-ran-start-in-telegram-but-did-not-get-a-pairing-code)
-  - [WhatsApp: will it message my contacts? How does pairing work?](#whatsapp-will-it-message-my-contacts-how-does-pairing-work)
 - [Chat commands, aborting tasks, and "it will not stop"](#chat-commands-aborting-tasks-and-it-will-not-stop)
   - [How do I stop internal system messages from showing in chat](#how-do-i-stop-internal-system-messages-from-showing-in-chat)
   - [How do I stop/cancel a running task?](#how-do-i-stopcancel-a-running-task)
@@ -425,7 +412,7 @@ state) as long as you copy **both** locations:
 3. Copy your workspace (default: `~/.deneb/workspace`).
 4. Run `deneb doctor` and restart the Gateway service.
 
-That preserves config, auth profiles, WhatsApp creds, sessions, and memory. If you're in
+That preserves config, auth profiles, channel credentials, sessions, and memory. If you're in
 remote mode, remember the gateway host owns the session store and workspace.
 
 **Important:** if you only commit/push your workspace to GitHub, you're backing
@@ -474,7 +461,7 @@ See what changed:
 **Beta** is the npm dist-tag `beta` (may match `latest`).
 **Dev** is the moving head of `main` (git); when published, it uses the npm dist-tag `dev`.
 
-One-liners (macOS/Linux):
+One-liner (Linux):
 
 ```bash
 curl -fsSL --proto '=https' --tlsv1.2 https://deneb.ai/install.sh | bash -s -- --beta
@@ -483,9 +470,6 @@ curl -fsSL --proto '=https' --tlsv1.2 https://deneb.ai/install.sh | bash -s -- -
 ```bash
 curl -fsSL --proto '=https' --tlsv1.2 https://deneb.ai/install.sh | bash -s -- --install-method git
 ```
-
-Windows installer (PowerShell):
-[https://deneb.ai/install.ps1](https://deneb.ai/install.ps1)
 
 More detail: [Development channels](/install/development-channels) and [Installer flags](/install/installer).
 
@@ -561,57 +545,6 @@ Set-PSDebug -Trace 0
 ```
 
 More options: [Installer flags](/install/installer).
-
-### Windows install says git not found or deneb not recognized
-
-Two common Windows issues:
-
-**1) npm error spawn git / git not found**
-
-- Install **Git for Windows** and make sure `git` is on your PATH.
-- Close and reopen PowerShell, then re-run the installer.
-
-**2) deneb is not recognized after install**
-
-- Your npm global bin folder is not on PATH.
-- Check the path:
-
-  ```powershell
-  npm config get prefix
-  ```
-
-- Add that directory to your user PATH (no `\bin` suffix needed on Windows; on most systems it is `%AppData%\npm`).
-- Close and reopen PowerShell after updating PATH.
-
-If you want the smoothest Windows setup, use **WSL2** instead of native Windows.
-
-### Windows exec output shows garbled Chinese text what should I do
-
-This is usually a console code page mismatch on native Windows shells.
-
-Symptoms:
-
-- `system.run`/`exec` output renders Chinese as mojibake
-- The same command looks fine in another terminal profile
-
-Quick workaround in PowerShell:
-
-```powershell
-chcp 65001
-[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-```
-
-Then restart the Gateway and retry your command:
-
-```powershell
-deneb gateway restart
-```
-
-If you still reproduce this on latest Deneb, track/report it in:
-
-- [Issue #30640](https://github.com/deneb/deneb/issues/30640)
 
 ### The docs did not answer my question - how do I get a better answer
 
@@ -690,8 +623,8 @@ Docs: [Updating](/install/updating).
 - **Model/auth setup** (provider OAuth/setup-token flows and API keys supported, plus local model options such as LM Studio)
 - **Workspace** location + bootstrap files
 - **Gateway settings** (bind/port/auth/tailscale)
-- **Providers** (WhatsApp, Telegram, Discord, Mattermost (plugin), Signal, iMessage)
-- **Daemon install** (LaunchAgent on macOS; systemd user unit on Linux/WSL2)
+- **Providers** (Telegram, Discord)
+- **Daemon install** (systemd user unit on Linux)
 - **Health checks** and **skills** selection
 
 It also warns if your configured model is unknown or missing auth.
@@ -794,48 +727,13 @@ Usually no. Deneb needs large context + strong safety; small cards truncate and 
 
 Pick region-pinned endpoints. OpenRouter exposes US-hosted options for MiniMax, Kimi, and GLM; choose the US-hosted variant to keep data in-region. You can still list Anthropic/OpenAI alongside these by using `models.mode: "merge"` so fallbacks stay available while respecting the regioned provider you select.
 
-### Do I have to buy a Mac Mini to install this
-
-No. Deneb runs on macOS or Linux (Windows via WSL2). A Mac mini is optional - some people
-buy one as an always-on host, but a small VPS, home server, or Raspberry Pi-class box works too.
-
-You only need a Mac **for macOS-only tools**. If you want macOS-only tools, run the Gateway on a Mac or pair a macOS node.
-
-Docs: [Nodes](/nodes).
-
-### Do I need a Mac mini for iMessage support
-
-You need **some macOS device** signed into Messages. It does **not** have to be a Mac mini -
-any Mac works. Running the Gateway requires macOS (or connect to a Mac via SSH).
-
-Common setups:
-
-- Run the Gateway on a Mac.
-- Run the Gateway on Linux/VPS and use an SSH wrapper to reach a Mac.
-
-Docs: [Nodes](/nodes).
-
-### If I buy a Mac mini to run Deneb can I connect it to my MacBook Pro
-
-Yes. The **Mac mini can run the Gateway**, and your MacBook Pro can connect as a
-**node** (companion device). Nodes don't run the Gateway - they provide extra
-capabilities like screen/camera/canvas and `system.run` on that device.
-
-Common pattern:
-
-- Gateway on the Mac mini (always-on).
-- MacBook Pro runs the macOS app or a node host and pairs to the Gateway.
-- Use `deneb nodes status` / `deneb nodes list` to see it.
-
-Docs: [Nodes](/nodes).
-
 ### Can I use Bun
 
-Bun is **not recommended**. We see runtime bugs, especially with WhatsApp and Telegram.
+Bun is **not recommended**. We see runtime bugs, especially with Telegram and Discord.
 Use **Node** for stable gateways.
 
 If you still want to experiment with Bun, do it on a non-production gateway
-without WhatsApp/Telegram.
+without Telegram/Discord.
 
 ### Telegram what goes in allowFrom
 
@@ -856,10 +754,6 @@ Third-party (less private):
 - DM `@userinfobot` or `@getidsbot`.
 
 See [/channels/telegram](/channels/telegram#access-control-dms--groups).
-
-### Can multiple people use one WhatsApp number with different Deneb instances
-
-Yes, via **multi-agent routing**. Bind each sender's WhatsApp **DM** (peer `kind: "direct"`, sender E.164 like `+15551234567`) to a different `agentId`, so each person gets their own workspace and session store. Replies still come from the **same WhatsApp account**, and DM access control (`channels.whatsapp.dmPolicy` / `channels.whatsapp.allowFrom`) is global per WhatsApp account. See [Multi-Agent Routing](/concepts/multi-agent).
 
 ### Can I run a fast chat agent and an Opus for coding agent
 
@@ -932,7 +826,7 @@ lowest friction and you're okay with sleep/restarts, run it locally.
 - **Pros:** always-on, stable network, no laptop sleep issues, easier to keep running.
 - **Cons:** often run headless (use screenshots), remote file access only, you must SSH for updates.
 
-**Deneb-specific note:** WhatsApp/Telegram/Slack/Mattermost (plugin)/Discord all work fine from a VPS. The only real trade-off is **headless browser** vs a visible window. See [Browser](/tools/browser).
+**Deneb-specific note:** Telegram/Discord work fine from a VPS. The only real trade-off is **headless browser** vs a visible window. See [Browser](/tools/browser).
 
 **Recommended default:** VPS if you had gateway disconnects before. Local is great when you're actively using the Mac and want local file access or UI automation with a visible browser.
 
@@ -940,7 +834,7 @@ lowest friction and you're okay with sleep/restarts, run it locally.
 
 Not required, but **recommended for reliability and isolation**.
 
-- **Dedicated host (VPS/Mac mini/Pi):** always-on, fewer sleep/reboot interruptions, cleaner permissions, easier to keep running.
+- **Dedicated host (VPS/DGX Spark/Pi):** always-on, fewer sleep/reboot interruptions, cleaner permissions, easier to keep running.
 - **Shared laptop/desktop:** totally fine for testing and active use, but expect pauses when the machine sleeps or updates.
 
 If you want the best of both worlds, keep the Gateway on a dedicated host and pair your laptop as a **node** for local screen/camera/exec tools. See [Nodes](/nodes).
@@ -968,15 +862,13 @@ Baseline guidance:
 - **Recommended:** 2GB RAM or more if you run multiple channels, browser automation, or media tools.
 - **OS:** Ubuntu LTS or another modern Debian/Ubuntu.
 
-If you are on Windows, **WSL2 is the easiest VM style setup** and has the best tooling
-compatibility. See [VPS hosting](/vps).
-If you are running macOS in a VM, see [macOS VM](/install/macos-vm).
+See [VPS hosting](/vps).
 
 ## What is Deneb?
 
 ### What is Deneb in one paragraph
 
-Deneb is a personal AI assistant you run on your own devices. It replies on the messaging surfaces you already use (WhatsApp, Telegram, Slack, Mattermost (plugin), Discord, Google Chat, Signal, iMessage, WebChat) and can also do voice + a live Canvas on supported platforms. The **Gateway** is the always-on control plane; the assistant is the product.
+Deneb is a personal AI assistant you run on your own devices. It replies on the messaging surfaces you already use (Telegram, Discord) and can also do voice + a live Canvas on supported platforms. The **Gateway** is the always-on control plane; the assistant is the product.
 
 ### Value proposition
 
@@ -989,7 +881,7 @@ Highlights:
 
 - **Your devices, your data:** run the Gateway wherever you want (Mac, Linux, VPS) and keep the
   workspace + session history local.
-- **Real channels, not a web sandbox:** WhatsApp/Telegram/Slack/Discord/Signal/iMessage/etc,
+- **Real channels, not a web sandbox:** Telegram/Discord,
   plus mobile voice and Canvas on supported platforms.
 - **Model-agnostic:** use Anthropic, OpenAI, MiniMax, OpenRouter, etc., with per-agent routing
   and failover.
@@ -1043,7 +935,7 @@ want durable memory, cross-device access, and tool orchestration.
 Advantages:
 
 - **Persistent memory + workspace** across sessions
-- **Multi-platform access** (WhatsApp, Telegram, TUI, WebChat)
+- **Multi-platform access** (Telegram, Discord, TUI)
 - **Tool orchestration** (browser, files, scheduling, hooks)
 - **Always-on Gateway** (run on a VPS, interact from anywhere)
 - **Nodes** for local browser/screen/camera/exec
@@ -1125,7 +1017,7 @@ Docs: [Cron jobs](/automation/cron-jobs), [Cron vs Heartbeat](/automation/cron-v
 
 ### How do I install skills on Linux
 
-Use **ClawHub** (CLI) or drop skills into your workspace. The macOS Skills UI isn't available on Linux.
+Use **ClawHub** (CLI) or drop skills into your workspace.
 Browse skills at [https://clawhub.com](https://clawhub.com).
 
 Install the ClawHub CLI (pick one package manager):
@@ -1148,42 +1040,6 @@ Yes. Use the Gateway scheduler:
 
 Docs: [Cron jobs](/automation/cron-jobs), [Cron vs Heartbeat](/automation/cron-vs-heartbeat),
 [Heartbeat](/gateway/heartbeat).
-
-### Can I run Apple macOS-only skills from Linux?
-
-Not directly. macOS skills are gated by `metadata.deneb.os` plus required binaries, and skills only appear in the system prompt when they are eligible on the **Gateway host**. On Linux, `darwin`-only skills (like `apple-notes`, `apple-reminders`, `things-mac`) will not load unless you override the gating.
-
-You have three supported patterns:
-
-**Option A - run the Gateway on a Mac (simplest).**
-Run the Gateway where the macOS binaries exist, then connect from Linux in [remote mode](#how-do-i-run-deneb-in-remote-mode-client-connects-to-a-gateway-elsewhere) or over Tailscale. The skills load normally because the Gateway host is macOS.
-
-**Option B - use a macOS node (no SSH).**
-Run the Gateway on Linux, pair a macOS node (menubar app), and set **Node Run Commands** to "Always Ask" or "Always Allow" on the Mac. Deneb can treat macOS-only skills as eligible when the required binaries exist on the node. The agent runs those skills via the `nodes` tool. If you choose "Always Ask", approving "Always Allow" in the prompt adds that command to the allowlist.
-
-**Option C - proxy macOS binaries over SSH (advanced).**
-Keep the Gateway on Linux, but make the required CLI binaries resolve to SSH wrappers that run on a Mac. Then override the skill to allow Linux so it stays eligible.
-
-1. Create an SSH wrapper for the binary (example: `memo` for Apple Notes):
-
-   ```bash
-   #!/usr/bin/env bash
-   set -euo pipefail
-   exec ssh -T user@mac-host /opt/homebrew/bin/memo "$@"
-   ```
-
-2. Put the wrapper on `PATH` on the Linux host (for example `~/bin/memo`).
-3. Override the skill metadata (workspace or `~/.deneb/skills`) to allow Linux:
-
-   ```markdown
-   ---
-   name: apple-notes
-   description: Manage Apple Notes via the memo CLI on macOS.
-   metadata: { "deneb": { "os": ["darwin", "linux"], "requires": { "bins": ["memo"] } } }
-   ---
-   ```
-
-4. Start a new session so the skills snapshot refreshes.
 
 ### Do you have a Notion or HeyGen integration
 
@@ -1324,7 +1180,7 @@ No - **Deneb's state is local**, but **external services still see what you send
 - **Local by default:** sessions, memory files, config, and workspace live on the Gateway host
   (`~/.deneb` + your workspace directory).
 - **Remote by necessity:** messages you send to model providers (Anthropic/OpenAI/etc.) go to
-  their APIs, and chat platforms (WhatsApp/Telegram/Slack/etc.) store message data on their
+  their APIs, and chat platforms (Telegram/Discord) store message data on their
   servers.
 - **You control the footprint:** using local models keeps prompts on your machine, but channel
   traffic still goes through the channel's servers.
@@ -1543,7 +1399,7 @@ Docs: [Web tools](/tools/web).
 
 The common pattern is **one Gateway** (e.g. Raspberry Pi) plus **nodes** and **agents**:
 
-- **Gateway (central):** owns channels (Signal/WhatsApp), routing, and sessions.
+- **Gateway (central):** owns channels (Telegram/Discord), routing, and sessions.
 - **Nodes (devices):** Macs/iOS/Android connect as peripherals and expose local tools (`system.run`, `canvas`, `camera`).
 - **Agents (workers):** separate brains/workspaces for special roles (e.g. "Hetzner ops", "Personal data").
 - **Sub-agents:** spawn background work from a main agent when you want parallelism.
@@ -1637,7 +1493,7 @@ Docs: [Tailscale](/gateway/tailscale), [Remote access](/gateway/remote), [Channe
 Yes. There is no built-in "bot-to-bot" bridge, but you can wire it up in a few
 reliable ways:
 
-**Simplest:** use a normal chat channel both bots can access (Telegram/Slack/WhatsApp).
+**Simplest:** use a normal chat channel both bots can access (Telegram/Discord).
 Have Bot A send a message to Bot B, then let Bot B reply as usual.
 
 **CLI bridge (generic):** run a script that calls the other Gateway with
@@ -1669,7 +1525,7 @@ use multiple agents or sub-agents.
 ### Is there a benefit to using a node on my personal laptop instead of SSH from a VPS
 
 Yes - nodes are the first-class way to reach your laptop from a remote Gateway, and they
-unlock more than shell access. The Gateway runs on macOS/Linux (Windows via WSL2) and is
+unlock more than shell access. The Gateway runs on Linux and is
 lightweight (a small VPS or Raspberry Pi-class box is fine; 4 GB RAM is plenty), so a common
 setup is an always-on host plus your laptop as a node.
 
@@ -1979,52 +1835,6 @@ If the file is missing, the heartbeat still runs and the model decides what to d
 
 Per-agent overrides use `agents.list[].heartbeat`. Docs: [Heartbeat](/gateway/heartbeat).
 
-### Do I need to add a bot account to a WhatsApp group
-
-No. Deneb runs on **your own account**, so if you're in the group, Deneb can see it.
-By default, group replies are blocked until you allow senders (`groupPolicy: "allowlist"`).
-
-If you want only **you** to be able to trigger group replies:
-
-```json5
-{
-  channels: {
-    whatsapp: {
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["+15551234567"],
-    },
-  },
-}
-```
-
-### How do I get the JID of a WhatsApp group
-
-Option 1 (fastest): tail logs and send a test message in the group:
-
-```bash
-deneb logs --follow --json
-```
-
-Look for `chatId` (or `from`) ending in `@g.us`, like:
-`1234567890-1234567890@g.us`.
-
-Option 2 (if already configured/allowlisted): list groups from config:
-
-```bash
-deneb directory groups list --channel whatsapp
-```
-
-Docs: WhatsApp.
-
-### Why does Deneb not reply in a group
-
-Two common causes:
-
-- Mention gating is on (default). You must @mention the bot (or match `mentionPatterns`).
-- You configured `channels.whatsapp.groups` without `"*"` and the group isn't allowlisted.
-
-See [Groups](/channels/groups) and [Group messages](/channels/group-messages).
-
 ### Do groups/threads share context with DMs
 
 Direct chats collapse to the main session by default. Groups/channels have their own session keys, and Telegram topics / Discord threads are separate sessions. See [Groups](/channels/groups) and [Group messages](/channels/group-messages).
@@ -2042,25 +1852,6 @@ Tips:
 - Keep one **active** workspace per agent (`agents.defaults.workspace`).
 - Prune old sessions (delete JSONL or store entries) if disk grows.
 - Use `deneb doctor` to spot stray workspaces and profile mismatches.
-
-### Can I run multiple bots or chats at the same time Slack and how should I set that up
-
-Yes. Use **Multi-Agent Routing** to run multiple isolated agents and route inbound messages by
-channel/account/peer. Slack is supported as a channel and can be bound to specific agents.
-
-Browser access is powerful but not "do anything a human can" - anti-bot, CAPTCHAs, and MFA can
-still block automation. For the most reliable browser control, use local Chrome MCP on the host,
-or use CDP on the machine that actually runs the browser.
-
-Best-practice setup:
-
-- Always-on Gateway host (VPS/Mac mini).
-- One agent per role (bindings).
-- Slack channel(s) bound to those agents.
-- Local browser via Chrome MCP or a node when needed.
-
-Docs: [Multi-Agent Routing](/concepts/multi-agent),
-[Browser](/tools/browser), [Nodes](/nodes).
 
 ## Models: defaults, selection, aliases, switching
 
@@ -2628,9 +2419,7 @@ deneb logs --follow
 
 Service/supervisor logs (when the gateway runs via launchd/systemd):
 
-- macOS: `$DENEB_STATE_DIR/logs/gateway.log` and `gateway.err.log` (default: `~/.deneb/logs/...`; profiles use `~/.deneb-<profile>/logs/...`)
 - Linux: `journalctl --user -u deneb-gateway[-<profile>].service -n 200 --no-pager`
-- Windows: `schtasks /Query /TN "Deneb Gateway (<profile>)" /V /FO LIST`
 
 See [Troubleshooting](/gateway/troubleshooting#log-locations) for more.
 
@@ -2644,43 +2433,6 @@ deneb gateway restart
 ```
 
 If you run the gateway manually, `deneb gateway --force` can reclaim the port. See [Gateway](/gateway).
-
-### I closed my terminal on Windows how do I restart Deneb
-
-There are **two Windows install modes**:
-
-**1) WSL2 (recommended):** the Gateway runs inside Linux.
-
-Open PowerShell, enter WSL, then restart:
-
-```powershell
-wsl
-deneb gateway status
-deneb gateway restart
-```
-
-If you never installed the service, start it in the foreground:
-
-```bash
-deneb gateway run
-```
-
-**2) Native Windows (not recommended):** the Gateway runs directly in Windows.
-
-Open PowerShell and run:
-
-```powershell
-deneb gateway status
-deneb gateway restart
-```
-
-If you run it manually (no service), use:
-
-```powershell
-deneb gateway run
-```
-
-Docs: [Gateway service runbook](/gateway).
 
 ### The Gateway is up but replies never arrive What should I check
 
@@ -2697,7 +2449,7 @@ Common causes:
 
 - Model auth not loaded on the **gateway host** (check `models status`).
 - Channel pairing/allowlist blocking replies (check channel config + logs).
-- WebChat/Dashboard is open without the right token.
+- Dashboard is open without the right token.
 
 If you are remote, confirm the tunnel/Tailscale connection is up and that the
 Gateway WebSocket is reachable.
@@ -2877,24 +2629,6 @@ deneb pairing list telegram
 
 If you want immediate access, allowlist your sender id or set `dmPolicy: "open"`
 for that account.
-
-### WhatsApp will it message my contacts How does pairing work
-
-No. Default WhatsApp DM policy is **pairing**. Unknown senders only get a pairing code and their message is **not processed**. Deneb only replies to chats it receives or to explicit sends you trigger.
-
-Approve pairing with:
-
-```bash
-deneb pairing approve whatsapp <code>
-```
-
-List pending requests:
-
-```bash
-deneb pairing list whatsapp
-```
-
-Wizard phone number prompt: it's used to set your **allowlist/owner** so your own DMs are permitted. It's not used for auto-sending. If you run on your personal WhatsApp number, use that number and enable `channels.whatsapp.selfChatMode`.
 
 ## Chat commands, aborting tasks, and "it will not stop"
 

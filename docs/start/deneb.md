@@ -8,7 +8,7 @@ title: "Personal Assistant Setup"
 
 # Building a personal assistant with Deneb
 
-Deneb is a multi-language gateway (Go server + Rust core + Node.js plugin host) for **Pi** agents, connecting messaging channels like Telegram, WhatsApp, Discord, Slack, iMessage, and more. This guide is the "personal assistant" setup: one dedicated messaging account that behaves like your always-on agent.
+Deneb is a multi-language gateway (Go server + Rust core + Node.js plugin host) for **Pi** agents, connecting messaging channels like Telegram and Discord. This guide is the "personal assistant" setup: one dedicated messaging account that behaves like your always-on agent.
 
 ## ⚠️ Safety first
 
@@ -16,54 +16,35 @@ You’re putting an agent in a position to:
 
 - run commands on your machine (depending on your Pi tool setup)
 - read/write files in your workspace
-- send messages back out via WhatsApp/Telegram/Discord/Mattermost (plugin)
+- send messages back out via Telegram/Discord
 
 Start conservative:
 
-- Always set `channels.whatsapp.allowFrom` (never run open-to-the-world on your personal Mac).
-- Use a dedicated WhatsApp number for the assistant.
+- Always set `channels.telegram.allowFrom` (never run open-to-the-world).
 - Heartbeats now default to every 30 minutes. Disable until you trust the setup by setting `agents.defaults.heartbeat.every: "0m"`.
 
 ## Prerequisites
 
-- Deneb installed and onboarded — see [Getting Started](/start/getting-started) if you haven't done this yet
-- A second phone number (SIM/eSIM/prepaid) for the assistant
-
-## The two-phone setup (recommended)
-
-You want this:
-
-```mermaid
-flowchart TB
-    A["<b>Your Phone (personal)<br></b><br>Your WhatsApp<br>+1-555-YOU"] -- message --> B["<b>Second Phone (assistant)<br></b><br>Assistant WA<br>+1-555-ASSIST"]
-    B -- linked via QR --> C["<b>Your Mac (deneb)<br></b><br>Pi agent"]
-```
-
-If you link your personal WhatsApp to Deneb, every message to you becomes “agent input”. That’s rarely what you want.
+- Deneb installed and onboarded — see [Getting Started](/start/getting-started) if you haven’t done this yet
+- A Telegram bot token (from BotFather)
 
 ## 5-minute quick start
 
-1. Pair WhatsApp Web (shows QR; scan with the assistant phone):
-
-```bash
-deneb channels login
-```
-
-2. Start the Gateway (leave it running):
+1. Start the Gateway (leave it running):
 
 ```bash
 deneb gateway --port 18789
 ```
 
-3. Put a minimal config in `~/.deneb/deneb.json`:
+2. Put a minimal config in `~/.deneb/deneb.json`:
 
 ```json5
 {
-  channels: { whatsapp: { allowFrom: ["+15555550123"] } },
+  channels: { telegram: { botToken: “123456:ABC...”, allowFrom: [“tg:123456789”] } },
 }
 ```
 
-Now message the assistant number from your allowlisted phone.
+Now message your bot from your allowlisted Telegram account.
 
 When onboarding finishes, we auto-open the dashboard and print a clean (non-tokenized) link. If it prompts for auth, paste the token from `gateway.auth.token` into Control UI settings. To reopen later: `deneb dashboard`.
 
@@ -124,8 +105,8 @@ Example:
     heartbeat: { every: "0m" },
   },
   channels: {
-    whatsapp: {
-      allowFrom: ["+15555550123"],
+    telegram: {
+      allowFrom: ["tg:123456789"],
       groups: {
         "*": { requireMention: true },
       },

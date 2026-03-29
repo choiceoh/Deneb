@@ -86,66 +86,6 @@ Use `channels.defaults` for shared group-policy and heartbeat behavior across pr
 - `channels.defaults.heartbeat.showAlerts`: include degraded/error statuses in heartbeat output.
 - `channels.defaults.heartbeat.useIndicator`: render compact indicator-style heartbeat output.
 
-### WhatsApp
-
-WhatsApp runs through the gateway's web channel (Baileys Web). It starts automatically when a linked session exists.
-
-```json5
-{
-  channels: {
-    whatsapp: {
-      dmPolicy: "pairing", // pairing | allowlist | open | disabled
-      allowFrom: ["+15555550123", "+447700900123"],
-      textChunkLimit: 4000,
-      chunkMode: "length", // length | newline
-      mediaMaxMb: 50,
-      sendReadReceipts: true, // blue ticks (false in self-chat mode)
-      groups: {
-        "*": { requireMention: true },
-      },
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["+15551234567"],
-    },
-  },
-  web: {
-    enabled: true,
-    heartbeatSeconds: 60,
-    reconnect: {
-      initialMs: 2000,
-      maxMs: 120000,
-      factor: 1.4,
-      jitter: 0.2,
-      maxAttempts: 0,
-    },
-  },
-}
-```
-
-<Accordion title="Multi-account WhatsApp">
-
-```json5
-{
-  channels: {
-    whatsapp: {
-      accounts: {
-        default: {},
-        personal: {},
-        biz: {
-          // authDir: "~/.deneb/credentials/whatsapp/biz",
-        },
-      },
-    },
-  },
-}
-```
-
-- Outbound commands default to account `default` if present; otherwise the first configured account id (sorted).
-- Optional `channels.whatsapp.defaultAccount` overrides that fallback default account selection when it matches a configured account id.
-- Legacy single-account Baileys auth dir is migrated by `deneb doctor` into `whatsapp/default`.
-- Per-account overrides: `channels.whatsapp.accounts.<id>.sendReadReceipts`, `channels.whatsapp.accounts.<id>.dmPolicy`, `channels.whatsapp.accounts.<id>.allowFrom`.
-
-</Accordion>
-
 ### Telegram
 
 ```json5
@@ -361,7 +301,7 @@ Group messages default to **require mention** (metadata mention or safe regex pa
 
 **Mention types:**
 
-- **Metadata mentions**: Native platform @-mentions. Ignored in WhatsApp self-chat mode.
+- **Metadata mentions**: Native platform @-mentions.
 - **Text patterns**: Safe regex patterns in `agents.list[].groupChat.mentionPatterns`. Invalid patterns and unsafe nested repetition are ignored.
 - Mention gating is enforced only when detection is possible (native mentions or at least one pattern).
 
@@ -396,29 +336,6 @@ Group messages default to **require mention** (metadata mention or safe regex pa
 Resolution: per-DM override → provider default → no limit (all retained).
 
 Supported: `telegram`, `discord`.
-
-#### Self-chat mode
-
-Include your own number in `allowFrom` to enable self-chat mode (ignores native @-mentions, only responds to text patterns):
-
-```json5
-{
-  channels: {
-    whatsapp: {
-      allowFrom: ["+15555550123"],
-      groups: { "*": { requireMention: true } },
-    },
-  },
-  agents: {
-    list: [
-      {
-        id: "main",
-        groupChat: { mentionPatterns: ["reisponde", "@deneb"] },
-      },
-    ],
-  },
-}
-```
 
 ### Commands (chat command handling)
 
@@ -690,7 +607,7 @@ Periodic heartbeat runs.
         session: "main",
         to: "+15555550123",
         directPolicy: "allow", // allow (default) | block
-        target: "none", // default: none | options: last | whatsapp | telegram | discord | ...
+        target: "none", // default: none | options: last | telegram | discord
         prompt: "Read HEARTBEAT.md if it exists...",
         ackMaxChars: 300,
         suppressToolErrorWarnings: false,
@@ -1131,8 +1048,8 @@ Run multiple isolated agents inside one Gateway. See [Multi-Agent](/concepts/mul
     ],
   },
   bindings: [
-    { agentId: "home", match: { channel: "whatsapp", accountId: "personal" } },
-    { agentId: "work", match: { channel: "whatsapp", accountId: "biz" } },
+    { agentId: "home", match: { channel: "telegram", accountId: "personal" } },
+    { agentId: "work", match: { channel: "telegram", accountId: "biz" } },
   ],
 }
 ```
@@ -1350,15 +1267,15 @@ See [Multi-Agent Sandbox & Tools](/tools/multi-agent-sandbox-tools) for preceden
       cap: 20,
       drop: "summarize", // old | new | summarize
       byChannel: {
-        whatsapp: "collect",
         telegram: "collect",
+        discord: "collect",
       },
     },
     inbound: {
       debounceMs: 2000, // 0 disables
       byChannel: {
-        whatsapp: 5000,
-        slack: 1500,
+        telegram: 5000,
+        discord: 1500,
       },
     },
   },
@@ -1492,7 +1409,7 @@ Controls elevated (host) exec access:
     elevated: {
       enabled: true,
       allowFrom: {
-        whatsapp: ["+15555550123"],
+        telegram: ["123456789"],
         discord: ["1234567890123", "987654321098765432"],
       },
     },
@@ -2242,11 +2159,6 @@ See [Plugins](/tools/plugin).
 - `remote.transport`: `ssh` (default) or `direct` (ws/wss). For `direct`, `remote.url` must be `ws://` or `wss://`.
 - `DENEB_ALLOW_INSECURE_PRIVATE_WS=1`: client-side break-glass override that allows plaintext `ws://` to trusted private-network IPs; default remains loopback-only for plaintext.
 - `gateway.remote.token` / `.password` are remote-client credential fields. They do not configure gateway auth by themselves.
-- `gateway.push.apns.relay.baseUrl`: base HTTPS URL for the external APNs relay used by official/TestFlight iOS builds after they publish relay-backed registrations to the gateway. This URL must match the relay URL compiled into the iOS build.
-- `gateway.push.apns.relay.timeoutMs`: gateway-to-relay send timeout in milliseconds. Defaults to `10000`.
-- Relay-backed registrations are delegated to a specific gateway identity. The paired iOS app fetches `gateway.identity.get`, includes that identity in the relay registration, and forwards a registration-scoped send grant to the gateway. Another gateway cannot reuse that stored registration.
-- `DENEB_APNS_RELAY_BASE_URL` / `DENEB_APNS_RELAY_TIMEOUT_MS`: temporary env overrides for the relay config above.
-- `DENEB_APNS_RELAY_ALLOW_HTTP=true`: development-only escape hatch for loopback HTTP relay URLs. Production relay URLs should stay on HTTPS.
 - `gateway.channelHealthCheckMinutes`: channel health-monitor interval in minutes. Set `0` to disable health-monitor restarts globally. Default: `5`.
 - `gateway.channelStaleEventThresholdMinutes`: stale-socket threshold in minutes. Keep this greater than or equal to `gateway.channelHealthCheckMinutes`. Default: `30`.
 - `gateway.channelMaxRestartsPerHour`: maximum health-monitor restarts per channel/account in a rolling hour. Default: `10`.
@@ -2617,7 +2529,7 @@ Metadata written by CLI guided setup flows (`onboard`, `configure`, `doctor`):
 }
 ```
 
-Written by the macOS onboarding assistant. Derives defaults:
+Written by the onboarding assistant. Derives defaults:
 
 - `messages.ackReaction` from `identity.emoji` (falls back to 👀)
 - `mentionPatterns` from `identity.name`/`identity.emoji`
@@ -2702,7 +2614,7 @@ Template placeholders expanded in `tools.media.models[].args`:
 | `{{GroupMembers}}` | Group members preview (best effort)               |
 | `{{SenderName}}`   | Sender display name (best effort)                 |
 | `{{SenderE164}}`   | Sender phone number (best effort)                 |
-| `{{Provider}}`     | Provider hint (whatsapp, telegram, discord, etc.) |
+| `{{Provider}}`     | Provider hint (telegram, discord, etc.) |
 
 ---
 

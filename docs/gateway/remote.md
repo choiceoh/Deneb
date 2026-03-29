@@ -9,8 +9,8 @@ title: "Remote Access"
 
 This repo supports “remote over SSH” by keeping a single Gateway (the master) running on a dedicated host (desktop/server) and connecting clients to it.
 
-- For **operators (you / the macOS app)**: SSH tunneling is the universal fallback.
-- For **nodes (iOS/Android and future devices)**: connect to the Gateway **WebSocket** (LAN/tailnet or SSH tunnel as needed).
+- For **operators (you / the CLI)**: SSH tunneling is the universal fallback.
+- For **nodes**: connect to the Gateway **WebSocket** (LAN/tailnet or SSH tunnel as needed).
 
 ## The core idea
 
@@ -62,7 +62,6 @@ Flow example (Telegram → node):
 Notes:
 
 - **Nodes do not run the gateway service.** Only one gateway should run per host unless you intentionally run isolated profiles (see [Multiple gateways](/gateway/multiple-gateways)).
-- macOS app “node mode” is just a node client over the Gateway WebSocket.
 
 ## SSH tunnel (CLI + tools)
 
@@ -119,10 +118,9 @@ Gateway credential resolution follows one shared contract across call/probe/stat
 
 ## Chat UI over SSH
 
-WebChat no longer uses a separate HTTP port. The SwiftUI chat UI connects directly to the Gateway WebSocket.
+WebChat no longer uses a separate HTTP port. The chat UI connects directly to the Gateway WebSocket.
 
 - Forward `18789` over SSH (see above), then connect clients to `ws://127.0.0.1:18789`.
-- On macOS, prefer the app’s “Remote over SSH” mode, which manages the tunnel automatically.
 
 ## SSH tunnel setup
 

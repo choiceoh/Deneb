@@ -64,12 +64,6 @@ pnpm remove -g deneb
 bun remove -g deneb
 ```
 
-6. If you installed the macOS app:
-
-```bash
-rm -rf /Applications/Deneb.app
-```
-
 Notes:
 
 - If you used profiles (`--profile` / `DENEB_PROFILE`), repeat step 3 for each state dir (defaults are `~/.deneb-<profile>`).
@@ -78,17 +72,6 @@ Notes:
 ## Manual service removal (CLI not installed)
 
 Use this if the gateway service keeps running but `deneb` is missing.
-
-### macOS (launchd)
-
-Default label is `ai.deneb.gateway` (or `ai.deneb.<profile>`; legacy `com.deneb.*` may still exist):
-
-```bash
-launchctl bootout gui/$UID/ai.deneb.gateway
-rm -f ~/Library/LaunchAgents/ai.deneb.gateway.plist
-```
-
-If you used a profile, replace the label and plist name with `ai.deneb.<profile>`. Remove any legacy `com.deneb.*` plists if present.
 
 ### Linux (systemd user unit)
 
@@ -99,18 +82,6 @@ systemctl --user disable --now deneb-gateway.service
 rm -f ~/.config/systemd/user/deneb-gateway.service
 systemctl --user daemon-reload
 ```
-
-### Windows (Scheduled Task)
-
-Default task name is `Deneb Gateway` (or `Deneb Gateway (<profile>)`).
-The task script lives under your state dir.
-
-```powershell
-schtasks /Delete /F /TN "Deneb Gateway"
-Remove-Item -Force "$env:USERPROFILE\.deneb\gateway.cmd"
-```
-
-If you used a profile, delete the matching task name and `~\.deneb-<profile>\gateway.cmd`.
 
 ## Normal install vs source checkout
 

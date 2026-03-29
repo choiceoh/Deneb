@@ -36,11 +36,10 @@ For a complete map of the docs, see [Docs hubs](/start/hubs).
 
 ## Providers and UX
 
-- [WebChat](/web/webchat)
 - [Control UI (browser)](/web/control-ui)
 - [Telegram](/channels/telegram)
 - [Groups](/channels/groups)
-- [WhatsApp group messages](/channels/group-messages)
+- [Group messages](/channels/group-messages)
 - [Media images](/nodes/images)
 - [Media audio](/nodes/audio)
 

@@ -252,7 +252,7 @@ Notes:
 
 ## Group allowlists
 
-When `channels.whatsapp.groups`, `channels.telegram.groups`, or `channels.imessage.groups` is configured, the keys act as a group allowlist. Use `"*"` to allow all groups while still setting default mention behavior.
+When `channels.telegram.groups` or `channels.discord.guilds` is configured, the keys act as a group allowlist. Use `"*"` to allow all groups while still setting default mention behavior.
 
 Common intents (copy/paste):
 
@@ -260,19 +260,19 @@ Common intents (copy/paste):
 
 ```json5
 {
-  channels: { whatsapp: { groupPolicy: "disabled" } },
+  channels: { telegram: { groupPolicy: "disabled" } },
 }
 ```
 
-2. Allow only specific groups (WhatsApp)
+2. Allow only specific groups (Telegram)
 
 ```json5
 {
   channels: {
-    whatsapp: {
+    telegram: {
       groups: {
-        "123@g.us": { requireMention: true },
-        "456@g.us": { requireMention: false },
+        "-1001234567890": { requireMention: true },
+        "-1009876543210": { requireMention: false },
       },
     },
   },
@@ -284,35 +284,26 @@ Common intents (copy/paste):
 ```json5
 {
   channels: {
-    whatsapp: {
+    telegram: {
       groups: { "*": { requireMention: true } },
     },
   },
 }
 ```
 
-4. Only the owner can trigger in groups (WhatsApp)
+4. Only the owner can trigger in groups (Telegram)
 
 ```json5
 {
   channels: {
-    whatsapp: {
+    telegram: {
       groupPolicy: "allowlist",
-      groupAllowFrom: ["+15551234567"],
+      groupAllowFrom: ["123456789"],
       groups: { "*": { requireMention: true } },
     },
   },
 }
 ```
-
-## Activation (owner-only)
-
-Group owners can toggle per-group activation:
-
-- `/activation mention`
-- `/activation always`
-
-Owner is determined by `channels.whatsapp.allowFrom` (or the bot’s self E.164 when unset). Send the command as a standalone message. Other surfaces currently ignore `/activation`.
 
 ## Context fields
 
@@ -326,12 +317,3 @@ Group inbound payloads set:
 
 The agent system prompt includes a group intro on the first turn of a new group session. It reminds the model to respond like a human, avoid Markdown tables, and avoid typing literal `\n` sequences.
 
-## iMessage specifics
-
-- Prefer `chat_id:<id>` when routing or allowlisting.
-- List chats: `imsg chats --limit 20`.
-- Group replies always go back to the same `chat_id`.
-
-## WhatsApp specifics
-
-See [Group messages](/channels/group-messages) for WhatsApp-only behavior (history injection, mention handling details).

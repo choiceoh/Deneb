@@ -12,10 +12,9 @@ title: "Presence"
 Deneb “presence” is a lightweight, best‑effort view of:
 
 - the **Gateway** itself, and
-- **clients connected to the Gateway** (mac app, WebChat, CLI, etc.)
+- **clients connected to the Gateway** (CLI, web UI, etc.)
 
-Presence is used primarily to render the macOS app’s **Instances** tab and to
-provide quick operator visibility.
+Presence is used primarily to provide quick operator visibility.
 
 ## Presence fields (what shows up)
 
@@ -26,7 +25,7 @@ Presence entries are structured objects with fields like:
 - `ip`: best‑effort IP address
 - `version`: client version string
 - `deviceFamily` / `modelIdentifier`: hardware hints
-- `mode`: `ui`, `webchat`, `cli`, `backend`, `probe`, `test`, `node`, ...
+- `mode`: `ui`, `cli`, `backend`, `probe`, `test`, `node`, ...
 - `lastInputSeconds`: “seconds since last user input” (if known)
 - `reason`: `self`, `connect`, `node-connected`, `periodic`, ...
 - `ts`: last update timestamp (ms since epoch)
@@ -52,8 +51,7 @@ Instances list, `client.mode === "cli"` is **not** turned into a presence entry.
 
 ### 3) `system-event` beacons
 
-Clients can send richer periodic beacons via the `system-event` method. The mac
-app uses this to report host name, IP, and `lastInputSeconds`.
+Clients can send richer periodic beacons via the `system-event` method to report host name, IP, and `lastInputSeconds`.
 
 ### 4) Node connects (role: node)
 
@@ -85,13 +83,6 @@ This keeps the list fresh and avoids unbounded memory growth.
 When a client connects over an SSH tunnel / local port forward, the Gateway may
 see the remote address as `127.0.0.1`. To avoid overwriting a good client‑reported
 IP, loopback remote addresses are ignored.
-
-## Consumers
-
-### macOS Instances tab
-
-The macOS app renders the output of `system-presence` and applies a small status
-indicator (Active/Idle/Stale) based on the age of the last update.
 
 ## Debugging tips
 

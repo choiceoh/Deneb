@@ -1,14 +1,14 @@
 ---
-summary: "RPC adapters for external CLIs (signal-cli, legacy imsg) and gateway patterns"
+summary: "RPC adapters for external CLIs (signal-cli) and gateway patterns"
 read_when:
   - Adding or changing external CLI integrations
-  - Debugging RPC adapters (signal-cli, imsg)
+  - Debugging RPC adapters (signal-cli)
 title: "RPC Adapters"
 ---
 
 # RPC adapters
 
-Deneb integrates external CLIs via JSON-RPC. Two patterns are used today.
+Deneb integrates external CLIs via JSON-RPC.
 
 ## Pattern A: HTTP daemon (signal-cli)
 
@@ -18,21 +18,6 @@ Deneb integrates external CLIs via JSON-RPC. Two patterns are used today.
 - Deneb owns lifecycle when `channels.signal.autoStart=true`.
 
 See the Signal channel for setup and endpoints.
-
-## Pattern B: stdio child process (legacy: imsg)
-
-- Deneb spawns `imsg rpc` as a child process (iMessage integration).
-- JSON-RPC is line-delimited over stdin/stdout (one JSON object per line).
-- No TCP port, no daemon required.
-
-Core methods used:
-
-- `watch.subscribe` → notifications (`method: "message"`)
-- `watch.unsubscribe`
-- `send`
-- `chats.list` (probe/diagnostics)
-
-See the iMessage channel for legacy setup and addressing (`chat_id` preferred).
 
 ## Adapter guidelines
 

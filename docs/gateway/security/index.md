@@ -75,9 +75,9 @@ Deneb is designed as a personal assistant security model: one trusted operator b
 - Per-user session/memory isolation helps privacy, but does not convert a shared agent into per-user host authorization.
 - If users may be adversarial to each other, run separate gateways (or separate OS users/hosts) per trust boundary.
 
-### Shared Slack workspace: real risk
+### Shared workspace: real risk
 
-If "everyone in Slack can message the bot," the core risk is delegated tool authority:
+If everyone in a Discord server can message the bot, the core risk is delegated tool authority:
 
 - any allowed sender can induce tool calls (`exec`, browser, network/file tools) within the agent's policy;
 - prompt/content injection from one sender can cause actions that affect shared state, devices, or outputs;
@@ -165,7 +165,7 @@ Use this baseline first, then selectively re-enable tools per trusted agent:
     elevated: { enabled: false },
   },
   channels: {
-    whatsapp: { dmPolicy: "pairing", groups: { "*": { requireMention: true } } },
+    telegram: { dmPolicy: "pairing", groups: { "*": { requireMention: true } } },
   },
 }
 ```
@@ -199,10 +199,8 @@ If you run `--deep`, Deneb also attempts a best-effort live Gateway probe.
 
 Use this when auditing access or deciding what to back up:
 
-- **WhatsApp**: `~/.deneb/credentials/whatsapp/<accountId>/creds.json`
 - **Telegram bot token**: config/env or `channels.telegram.tokenFile` (regular file only; symlinks rejected)
 - **Discord bot token**: config/env or SecretRef (env/file/exec providers)
-- **Slack tokens**: config/env (`channels.slack.*`)
 - **Pairing allowlists**:
   - `~/.deneb/credentials/<channel>-allowFrom.json` (default account)
   - `~/.deneb/credentials/<channel>-<accountId>-allowFrom.json` (non-default accounts)
@@ -302,14 +300,6 @@ schema:
 - `browser.ssrfPolicy.dangerouslyAllowPrivateNetwork`
 - `channels.discord.dangerouslyAllowNameMatching`
 - `channels.discord.accounts.<accountId>.dangerouslyAllowNameMatching`
-- `channels.slack.dangerouslyAllowNameMatching`
-- `channels.slack.accounts.<accountId>.dangerouslyAllowNameMatching`
-- `channels.googlechat.dangerouslyAllowNameMatching`
-- `channels.googlechat.accounts.<accountId>.dangerouslyAllowNameMatching`
-- `channels.irc.dangerouslyAllowNameMatching` (extension channel)
-- `channels.irc.accounts.<accountId>.dangerouslyAllowNameMatching` (extension channel)
-- `channels.mattermost.dangerouslyAllowNameMatching` (extension channel)
-- `channels.mattermost.accounts.<accountId>.dangerouslyAllowNameMatching` (extension channel)
 - `agents.defaults.sandbox.docker.dangerouslyAllowReservedContainerTargets`
 - `agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources`
 - `agents.defaults.sandbox.docker.dangerouslyAllowContainerNamespaceJoin`
@@ -370,19 +360,19 @@ stronger isolation between agents, run them under separate OS users or separate 
 
 ## Node execution (system.run)
 
-If a macOS node is paired, the Gateway can invoke `system.run` on that node. This is **remote code execution** on the Mac:
+If a node is paired, the Gateway can invoke `system.run` on that node. This is **remote code execution** on the node host:
 
 - Requires node pairing (approval + token).
-- Controlled on the Mac via **Settings → Exec approvals** (security + ask + allowlist).
+- Controlled on the node via exec approvals (security + ask + allowlist).
 - Approval mode binds exact request context and, when possible, one concrete local script/file operand. If Deneb cannot identify exactly one direct local file for an interpreter/runtime command, approval-backed execution is denied rather than promising full semantic coverage.
-- If you don’t want remote execution, set security to **deny** and remove node pairing for that Mac.
+- If you don’t want remote execution, set security to **deny** and remove node pairing for that host.
 
 ## Dynamic skills (watcher / remote nodes)
 
 Deneb can refresh the skills list mid-session:
 
 - **Skills watcher**: changes to `SKILL.md` can update the skills snapshot on the next agent turn.
-- **Remote nodes**: connecting a macOS node can make macOS-only skills eligible (based on bin probing).
+- **Remote nodes**: connecting a node can make node-only skills eligible (based on bin probing).
 
 Treat skill folders as **trusted code** and restrict who can modify them.
 
@@ -393,7 +383,7 @@ Your AI assistant can:
 - Execute arbitrary shell commands
 - Read/write files
 - Access network services
-- Send messages to anyone (if you give it WhatsApp access)
+- Send messages to anyone (if you give it messaging channel access)
 
 People who message you can:
 
@@ -501,13 +491,13 @@ If you run multiple accounts on the same channel, use `per-account-channel-peer`
 
 Deneb has two separate “who can trigger me?” layers:
 
-- **DM allowlist** (`allowFrom` / `channels.discord.allowFrom` / `channels.slack.allowFrom`; legacy: `channels.discord.dm.allowFrom`, `channels.slack.dm.allowFrom`): who is allowed to talk to the bot in direct messages.
+- **DM allowlist** (`allowFrom` / `channels.discord.allowFrom`; legacy: `channels.discord.dm.allowFrom`): who is allowed to talk to the bot in direct messages.
   - When `dmPolicy="pairing"`, approvals are written to the account-scoped pairing allowlist store under `~/.deneb/credentials/` (`<channel>-allowFrom.json` for default account, `<channel>-<accountId>-allowFrom.json` for non-default accounts), merged with config allowlists.
 - **Group allowlist** (channel-specific): which groups/channels/guilds the bot will accept messages from at all.
   - Common patterns:
-    - `channels.whatsapp.groups`, `channels.telegram.groups`, `channels.imessage.groups`: per-group defaults like `requireMention`; when set, it also acts as a group allowlist (include `"*"` to keep allow-all behavior).
-    - `groupPolicy="allowlist"` + `groupAllowFrom`: restrict who can trigger the bot _inside_ a group session (WhatsApp/Telegram/Signal/iMessage/Microsoft Teams).
-    - `channels.discord.guilds` / `channels.slack.channels`: per-surface allowlists + mention defaults.
+    - `channels.telegram.groups`: per-group defaults like `requireMention`; when set, it also acts as a group allowlist (include `"*"` to keep allow-all behavior).
+    - `groupPolicy="allowlist"` + `groupAllowFrom`: restrict who can trigger the bot _inside_ a group session (Telegram).
+    - `channels.discord.guilds`: per-surface allowlists + mention defaults.
   - Group checks run in this order: `groupPolicy`/group allowlists first, mention/reply activation second.
   - Replying to a bot message (implicit mention) does **not** bypass sender allowlists like `groupAllowFrom`.
   - **Security note:** treat `dmPolicy="open"` and `groupPolicy="open"` as last-resort settings. They should be barely used; prefer pairing + allowlists unless you fully trust every member of the room.
@@ -737,7 +727,7 @@ Auth modes:
 Rotation checklist (token/password):
 
 1. Generate/set a new secret (`gateway.auth.token` or `DENEB_GATEWAY_PASSWORD`).
-2. Restart the Gateway (or restart the macOS app if it supervises the Gateway).
+2. Restart the Gateway.
 3. Update any remote clients (`gateway.remote.token` / `.password` on machines that call into the Gateway).
 4. Verify you can no longer connect with the old credentials.
 
@@ -797,7 +787,7 @@ Avoid:
 Assume anything under `~/.deneb/` (or `$DENEB_STATE_DIR/`) may contain secrets or private data:
 
 - `deneb.json`: config may include tokens (gateway, remote gateway), provider settings, and allowlists.
-- `credentials/**`: channel credentials (example: WhatsApp creds), pairing allowlists, legacy OAuth imports.
+- `credentials/**`: channel credentials, pairing allowlists, legacy OAuth imports.
 - `agents/<agentId>/agent/auth-profiles.json`: API keys, token profiles, OAuth tokens, and optional `keyRef`/`tokenRef`.
 - `secrets.json` (optional): file-backed secret payload used by `file` SecretRef providers (`secrets.providers`).
 - `agents/<agentId>/agent/auth.json`: legacy compatibility file. Static `api_key` entries are scrubbed when discovered.
@@ -831,7 +821,7 @@ Details: [Logging](/gateway/logging)
 
 ```json5
 {
-  channels: { whatsapp: { dmPolicy: "pairing" } },
+  channels: { telegram: { dmPolicy: "pairing" } },
 }
 ```
 
@@ -840,7 +830,7 @@ Details: [Logging](/gateway/logging)
 ```json
 {
   "channels": {
-    "whatsapp": {
+    "telegram": {
       "groups": {
         "*": { "requireMention": true }
       }
@@ -858,13 +848,6 @@ Details: [Logging](/gateway/logging)
 ```
 
 In group chats, only respond when explicitly mentioned.
-
-### 3. Separate Numbers
-
-Consider running your AI on a separate phone number from your personal one:
-
-- Personal number: Your conversations stay private
-- Bot number: AI handles these, with appropriate boundaries
 
 ### 4. Read-Only Mode (Today, via sandbox + tools)
 
@@ -894,7 +877,7 @@ One “safe default” config that keeps the Gateway private, requires DM pairin
     auth: { mode: "token", token: "your-long-random-token" },
   },
   channels: {
-    whatsapp: {
+    telegram: {
       dmPolicy: "pairing",
       groups: { "*": { requireMention: true } },
     },
@@ -1054,9 +1037,7 @@ Common use cases:
             "sessions_send",
             "sessions_spawn",
             "session_status",
-            "whatsapp",
             "telegram",
-            "slack",
             "discord",
           ],
           deny: [
@@ -1099,7 +1080,7 @@ If your AI does something bad:
 
 ### Contain
 
-1. **Stop it:** stop the macOS app (if it supervises the Gateway) or terminate your `deneb gateway` process.
+1. **Stop it:** terminate your `deneb gateway` process.
 2. **Close exposure:** set `gateway.bind: "loopback"` (or disable Tailscale Funnel/Serve) until you understand what happened.
 3. **Freeze access:** switch risky DMs/groups to `dmPolicy: "disabled"` / require mentions, and remove `"*"` allow-all entries if you had them.
 
@@ -1107,7 +1088,7 @@ If your AI does something bad:
 
 1. Rotate Gateway auth (`gateway.auth.token` / `DENEB_GATEWAY_PASSWORD`) and restart.
 2. Rotate remote client secrets (`gateway.remote.token` / `.password`) on any machine that can call the Gateway.
-3. Rotate provider/API credentials (WhatsApp creds, Slack/Discord tokens, model/API keys in `auth-profiles.json`, and encrypted secrets payload values when used).
+3. Rotate provider/API credentials (Telegram bot tokens, Discord tokens, model/API keys in `auth-profiles.json`, and encrypted secrets payload values when used).
 
 ### Audit
 

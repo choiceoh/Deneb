@@ -56,7 +56,7 @@ Notes:
 
 ## Gateway is the source of truth
 
-All session state is **owned by the gateway** (the “master” Deneb). UI clients (macOS app, WebChat, etc.) must query the gateway for session lists and token counts instead of reading local files.
+All session state is **owned by the gateway** (the “master” Deneb). UI clients must query the gateway for session lists and token counts instead of reading local files.
 
 - In **remote mode**, the session store you care about lives on the remote gateway host, not your Mac.
 - Token counts shown in UIs come from the gateway’s store fields (`inputTokens`, `outputTokens`, `totalTokens`, `contextTokens`). Clients do not parse JSONL transcripts to “fix up” totals.
@@ -210,7 +210,7 @@ the workspace is writable. See [Memory](/concepts/memory) and
 - Daily reset: defaults to **4:00 AM local time on the gateway host**. A session is stale once its last update is earlier than the most recent daily reset time.
 - Idle reset (optional): `idleMinutes` adds a sliding idle window. When both daily and idle resets are configured, **whichever expires first** forces a new session.
 - Legacy idle-only: if you set `session.idleMinutes` without any `session.reset`/`resetByType` config, Deneb stays in idle-only mode for backward compatibility.
-- Per-type overrides (optional): `resetByType` lets you override the policy for `direct`, `group`, and `thread` sessions (thread = Slack/Discord threads, Telegram topics, Matrix threads when provided by the connector).
+- Per-type overrides (optional): `resetByType` lets you override the policy for `direct`, `group`, and `thread` sessions (thread = Discord threads, Telegram topics).
 - Per-channel overrides (optional): `resetByChannel` overrides the reset policy for a channel (applies to all session types for that channel and takes precedence over `reset`/`resetByType`).
 - Reset triggers: exact `/new` or `/reset` (plus any extras in `resetTriggers`) start a fresh session id and pass the remainder of the message through. `/new <model>` accepts a model alias, `provider/model`, or provider name (fuzzy match) to set the new session model. If `/new` or `/reset` is sent alone, Deneb runs a short “hello” greeting turn to confirm the reset.
 - Manual reset: delete specific keys from the store or remove the JSONL transcript; the next message recreates them.
@@ -281,7 +281,7 @@ Runtime override (owner only):
 - `deneb status` — shows store path and recent sessions.
 - `deneb sessions --json` — dumps every entry (filter with `--active <minutes>`).
 - `deneb gateway call sessions.list --params '{}'` — fetch sessions from the running gateway (use `--url`/`--token` for remote gateway access).
-- Send `/status` as a standalone message in chat to see whether the agent is reachable, how much of the session context is used, current thinking/fast/verbose toggles, and when your WhatsApp web creds were last refreshed (helps spot relink needs).
+- Send `/status` as a standalone message in chat to see whether the agent is reachable, how much of the session context is used, and current thinking/fast/verbose toggles.
 - Send `/context list` or `/context detail` to see what’s in the system prompt and injected workspace files (and the biggest context contributors).
 - Send `/stop` (or standalone abort phrases like `stop`, `stop action`, `stop run`, `stop deneb`) to abort the current run, clear queued followups for that session, and stop any sub-agent runs spawned from it (the reply includes the stopped count).
 - Send `/compact` (optional instructions) as a standalone message to summarize older context and free up window space. See [/concepts/compaction](/concepts/compaction).

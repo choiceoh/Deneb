@@ -315,8 +315,8 @@ Config:
       agentFilter: ["main"],
       sessionFilter: ["discord"], // substring or regex
       targets: [
-        { channel: "slack", to: "U12345678" },
         { channel: "telegram", to: "123456789" },
+        { channel: "discord", to: "channel:123456789" },
       ],
     },
   },

@@ -178,7 +178,7 @@ The `metadata.deneb` object supports:
   - **`anyBins`**: At least one of these binaries must be present
   - **`env`**: Required environment variables
   - **`config`**: Required config paths (e.g., `["workspace.dir"]`)
-  - **`os`**: Required platforms (e.g., `["darwin", "linux"]`)
+  - **`os`**: Required platforms (e.g., `["linux"]`)
 - **`always`**: Bypass eligibility checks (boolean)
 - **`install`**: Installation methods (for bundled hooks: `[{"id":"bundled","kind":"bundled"}]`)
 
@@ -222,7 +222,7 @@ Each event includes:
     sessionEntry?: SessionEntry,
     sessionId?: string,
     sessionFile?: string,
-    commandSource?: string,    // e.g., 'whatsapp', 'telegram'
+    commandSource?: string,    // e.g., 'telegram', 'discord'
     senderId?: string,
     workspaceDir?: string,
     bootstrapFiles?: WorkspaceBootstrapFile[],
@@ -286,7 +286,7 @@ Message events include rich context about the message:
   from: string,           // Sender identifier (phone number, user ID, etc.)
   content: string,        // Message content
   timestamp?: number,     // Unix timestamp when received
-  channelId: string,      // Channel (e.g., "whatsapp", "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "discord")
   accountId?: string,     // Provider account ID for multi-account setups
   conversationId?: string, // Chat/conversation ID
   messageId?: string,     // Message ID from the provider
@@ -298,7 +298,6 @@ Message events include rich context about the message:
     senderId?: string,
     senderName?: string,
     senderUsername?: string,
-    senderE164?: string,
   }
 }
 
@@ -308,7 +307,7 @@ Message events include rich context about the message:
   content: string,        // Message content that was sent
   success: boolean,       // Whether the send succeeded
   error?: string,         // Error message if sending failed
-  channelId: string,      // Channel (e.g., "whatsapp", "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "discord")
   accountId?: string,     // Provider account ID
   conversationId?: string, // Chat/conversation ID
   messageId?: string,     // Message ID returned by the provider

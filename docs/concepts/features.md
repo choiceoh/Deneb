@@ -11,10 +11,10 @@ title: "Features"
 
 <Columns>
   <Card title="Channels" icon="message-square">
-    WhatsApp, Telegram, Discord, and iMessage with a single Gateway.
+    Telegram and Discord with a single Gateway.
   </Card>
   <Card title="Plugins" icon="plug">
-    Add Mattermost and more with extensions.
+    Add more channels with extensions.
   </Card>
   <Card title="Routing" icon="route">
     Multi-agent routing with isolated sessions.
@@ -23,20 +23,17 @@ title: "Features"
     Images, audio, and documents in and out.
   </Card>
   <Card title="Apps and UI" icon="monitor">
-    Web Control UI and macOS companion app.
+    Web Control UI.
   </Card>
   <Card title="Mobile nodes" icon="smartphone">
-    iOS and Android nodes with pairing, voice/chat, and rich device commands.
+    Android nodes with pairing, voice/chat, and rich device commands.
   </Card>
 </Columns>
 
 ## Full list
 
-- WhatsApp integration via WhatsApp Web (Baileys)
 - Telegram bot support (grammY)
 - Discord bot support (channels.discord.js)
-- Mattermost bot support (plugin)
-- iMessage integration via local imsg CLI (macOS)
 - Agent bridge for Pi in RPC mode with tool streaming
 - Streaming and chunking for long responses
 - Multi-agent routing for isolated sessions per workspace or sender
@@ -45,8 +42,7 @@ title: "Features"
 - Group chat support with mention based activation
 - Media support for images, audio, and documents
 - Optional voice note transcription hook
-- WebChat and macOS menu bar app
-- iOS node with pairing, Canvas, camera, screen recording, location, and voice features
+- Web Control UI
 - Android node with pairing, Connect tab, chat sessions, voice tab, Canvas/camera, plus device, notifications, contacts/calendar, motion, photos, and SMS commands
 
 <Note>

@@ -65,7 +65,7 @@ cat ~/.deneb/deneb.json
 - Config normalization for legacy values.
 - Browser migration checks for legacy Chrome extension configs and Chrome MCP readiness.
 - OpenCode provider override warnings (`models.providers.opencode` / `models.providers.opencode-go`).
-- Legacy on-disk state migration (sessions/agent dir/WhatsApp auth).
+- Legacy on-disk state migration (sessions/agent dir).
 - Legacy cron store migration (`jobId`, `schedule.cron`, top-level delivery/payload fields, payload `provider`, simple `notify: true` webhook fallback jobs).
 - State integrity and permissions checks (sessions, transcripts, state dir).
 - Config file permission checks (chmod 600) when running locally.
@@ -113,8 +113,8 @@ legacy config format, so stale configs are repaired without manual intervention.
 
 Current migrations:
 
-- `routing.allowFrom` → `channels.whatsapp.allowFrom`
-- `routing.groupChat.requireMention` → `channels.whatsapp/telegram/imessage.groups."*".requireMention`
+- `routing.allowFrom` → `channels.telegram.allowFrom`
+- `routing.groupChat.requireMention` → `channels.telegram.groups."*".requireMention`
 - `routing.groupChat.historyLimit` → `messages.groupChat.historyLimit`
 - `routing.groupChat.mentionPatterns` → `messages.groupChat.mentionPatterns`
 - `routing.queue` → `messages.queue`
@@ -181,15 +181,10 @@ Doctor can migrate older on-disk layouts into the current structure:
   - from `~/.deneb/sessions/` to `~/.deneb/agents/<agentId>/sessions/`
 - Agent dir:
   - from `~/.deneb/agent/` to `~/.deneb/agents/<agentId>/agent/`
-- WhatsApp auth state (Baileys):
-  - from legacy `~/.deneb/credentials/*.json` (except `oauth.json`)
-  - to `~/.deneb/credentials/whatsapp/<accountId>/...` (default account id: `default`)
-
 These migrations are best-effort and idempotent; doctor will emit warnings when
 it leaves any legacy folders behind as backups. The Gateway/CLI also auto-migrates
 the legacy sessions + agent dir on startup so history/auth/models land in the
-per-agent path without a manual doctor run. WhatsApp auth is intentionally only
-migrated via `deneb doctor`.
+per-agent path without a manual doctor run.
 
 ### 3b) Legacy cron store migrations
 
@@ -221,10 +216,6 @@ Doctor checks:
   the directory, and reminds you that it cannot recover missing data.
 - **State dir permissions**: verifies writability; offers to repair permissions
   (and emits a `chown` hint when owner/group mismatch is detected).
-- **macOS cloud-synced state dir**: warns when state resolves under iCloud Drive
-  (`~/Library/Mobile Documents/com~apple~CloudDocs/...`) or
-  `~/Library/CloudStorage/...` because sync-backed paths can cause slower I/O
-  and lock/sync races.
 - **Linux SD or eMMC state dir**: warns when state resolves to an `mmcblk*`
   mount source, because SD or eMMC-backed random I/O can be slower and wear
   faster under session and credential writes.
@@ -343,7 +334,7 @@ running, SSH tunnel).
 ### 17) Gateway runtime best practices
 
 Doctor warns when the gateway service runs on Bun or a version-managed Node path
-(`nvm`, `fnm`, `volta`, `asdf`, etc.). WhatsApp + Telegram channels require Node,
+(`nvm`, `fnm`, `volta`, `asdf`, etc.). Channels may require Node,
 and version-manager paths can break after upgrades because the service does not
 load your shell init. Doctor offers to migrate to a system Node install when
 available (Homebrew/apt/choco).
