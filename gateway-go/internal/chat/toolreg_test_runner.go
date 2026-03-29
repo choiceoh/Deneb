@@ -105,7 +105,7 @@ func testRunGo(ctx context.Context, dir string, p testParams) (string, error) {
 	results := parseGoTestJSON(string(out))
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Test Results: go test %s\n\n", pkgPath)
+	fmt.Fprintf(&sb, "## Tests: %s\n\n", pkgPath)
 
 	// Summary line.
 	fmt.Fprintf(&sb, "%s %d passed", passIcon(results.passed > 0 && results.failed == 0), results.passed)
@@ -259,7 +259,7 @@ var cargoResultPattern = regexp.MustCompile(`test result: (\w+)\.\s+(\d+) passed
 
 func formatCargoTestResults(output string, execErr error) string {
 	var sb strings.Builder
-	sb.WriteString("## Test Results: cargo test\n\n")
+	sb.WriteString("## Tests: cargo\n\n")
 
 	match := cargoResultPattern.FindStringSubmatch(output)
 	if match != nil {
@@ -347,7 +347,7 @@ func testBuildGo(ctx context.Context, dir string, p testParams) (string, error) 
 	out, err := cmd.CombinedOutput()
 
 	var sb strings.Builder
-	sb.WriteString("## Build: go build\n\n")
+	sb.WriteString("## Build: go\n\n")
 
 	if err != nil {
 		fmt.Fprintf(&sb, "%s Build failed\n\n", failIcon())
@@ -380,7 +380,7 @@ func testBuildCargo(ctx context.Context, dir string, p testParams) (string, erro
 	out, err := cmd.CombinedOutput()
 
 	var sb strings.Builder
-	sb.WriteString("## Build: cargo build\n\n")
+	sb.WriteString("## Build: cargo\n\n")
 
 	if err != nil {
 		fmt.Fprintf(&sb, "%s Build failed\n\n", failIcon())
@@ -417,7 +417,7 @@ func testCheckGo(ctx context.Context, dir string, p testParams) (string, error) 
 	}
 
 	var sb strings.Builder
-	sb.WriteString("## Check: go vet\n\n")
+	sb.WriteString("## Check: go\n\n")
 
 	cmd := exec.CommandContext(ctx, "go", "vet", pkgPath)
 	cmd.Dir = dir
@@ -442,7 +442,7 @@ func testCheckCargo(ctx context.Context, dir string, p testParams) (string, erro
 	args = append(args, "--", "-D", "warnings")
 
 	var sb strings.Builder
-	sb.WriteString("## Check: cargo clippy\n\n")
+	sb.WriteString("## Check: cargo\n\n")
 
 	cmd := exec.CommandContext(ctx, "cargo", args...)
 	cmd.Dir = dir

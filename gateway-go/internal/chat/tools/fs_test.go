@@ -192,7 +192,7 @@ func TestToolWrite_basic(t *testing.T) {
 		"file_path": "newfile.txt",
 		"content":   "hello world",
 	})
-	if !strings.Contains(out, "Successfully wrote") {
+	if !strings.Contains(out, "Wrote") {
 		t.Errorf("unexpected output: %q", out)
 	}
 	data, _ := os.ReadFile(filepath.Join(tmp, "newfile.txt"))

@@ -129,8 +129,84 @@ func ToolGrep(defaultDir string) ToolFunc {
 			}
 			return string(out2), nil
 		}
+		// Group content-mode output by file to reduce path repetition.
+		if p.Mode == "" || p.Mode == "content" {
+			return groupGrepOutput(string(out)), nil
+		}
 		return string(out), nil
 	}
+}
+
+// groupGrepOutput groups ripgrep content-mode output by file path.
+// Input: "file:42:match\nfile:89:match2\n" → "file:\n  42: match\n  89: match2\n"
+func groupGrepOutput(raw string) string {
+	lines := strings.Split(strings.TrimRight(raw, "\n"), "\n")
+	if len(lines) <= 1 {
+		return raw
+	}
+
+	var sb strings.Builder
+	currentFile := ""
+	for _, line := range lines {
+		if line == "--" {
+			continue
+		}
+		file, lineNum, content, ok := parseGrepLine(line)
+		if !ok {
+			sb.WriteString(line)
+			sb.WriteByte('\n')
+			continue
+		}
+
+		if file != currentFile {
+			if currentFile != "" {
+				sb.WriteByte('\n')
+			}
+			sb.WriteString(file)
+			sb.WriteString(":\n")
+			currentFile = file
+		}
+		sb.WriteString("  ")
+		sb.WriteString(lineNum)
+		sb.WriteString(": ")
+		sb.WriteString(content)
+		sb.WriteByte('\n')
+	}
+	return sb.String()
+}
+
+// parseGrepLine parses "file:linenum:content" or "file-linenum-content" format.
+// Returns (file, linenum, content, ok).
+func parseGrepLine(line string) (string, string, string, bool) {
+	// Try ":" separator first (match lines), then "-" (context lines).
+	for _, sep := range []byte{':', '-'} {
+		// Find first separator.
+		idx := strings.IndexByte(line, sep)
+		if idx <= 0 {
+			continue
+		}
+		file := line[:idx]
+		rest := line[idx+1:]
+		// Find second separator of the same type (linenum:content).
+		idx2 := strings.IndexByte(rest, sep)
+		if idx2 <= 0 {
+			continue
+		}
+		lineNum := rest[:idx2]
+		// Validate lineNum is all digits.
+		allDigits := true
+		for _, c := range lineNum {
+			if c < '0' || c > '9' {
+				allDigits = false
+				break
+			}
+		}
+		if !allDigits || len(lineNum) == 0 {
+			continue
+		}
+		return file, lineNum, rest[idx2+1:], true
+	}
+	return "", "", "", false
 }
 
 // clampInt clamps v to [min, max].

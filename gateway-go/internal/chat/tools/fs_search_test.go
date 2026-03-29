@@ -184,6 +184,43 @@ func TestToolGrep_findsMatch(t *testing.T) {
 	}
 }
 
+// ─── groupGrepOutput ────────────────────────────────────────────────────────
+
+func TestGroupGrepOutput_groupsByFile(t *testing.T) {
+	input := "src/a.go:10:func Foo() {\nsrc/a.go:20:func Bar() {\nsrc/b.go:5:import \"fmt\"\n"
+	got := groupGrepOutput(input)
+	if !strings.Contains(got, "src/a.go:\n") {
+		t.Errorf("expected file header: %q", got)
+	}
+	if !strings.Contains(got, "  10: func Foo()") {
+		t.Errorf("expected indented line: %q", got)
+	}
+	if !strings.Contains(got, "src/b.go:\n") {
+		t.Errorf("expected second file header: %q", got)
+	}
+	// Should NOT contain the old repeated-path format.
+	if strings.Contains(got, "src/a.go:10:") {
+		t.Errorf("expected paths to not repeat: %q", got)
+	}
+}
+
+func TestGroupGrepOutput_singleLine(t *testing.T) {
+	input := "file.go:1:only line\n"
+	got := groupGrepOutput(input)
+	// Single-line output should still pass through.
+	if got != input {
+		t.Errorf("expected passthrough: %q", got)
+	}
+}
+
+func TestGroupGrepOutput_skipsSeparators(t *testing.T) {
+	input := "a.go:1:match1\n--\nb.go:2:match2\n"
+	got := groupGrepOutput(input)
+	if strings.Contains(got, "--") {
+		t.Errorf("separators should be removed: %q", got)
+	}
+}
+
 func TestToolGrep_noMatch(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\n"), 0o644)
