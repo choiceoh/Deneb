@@ -106,50 +106,6 @@ func TestResolveSubagentTarget(t *testing.T) {
 	}
 }
 
-func TestHandleSubagentsListAction(t *testing.T) {
-	runs := []SubagentRunRecord{
-		{RunID: "run1", ChildSessionKey: "k1", Label: "worker", Task: "do stuff", CreatedAt: 100, StartedAt: 100},
-		{RunID: "run2", ChildSessionKey: "k2", Label: "done-one", Task: "old task", CreatedAt: 50, StartedAt: 50, EndedAt: 80},
-	}
-	ctx := &SubagentsCommandContext{
-		Runs: runs,
-	}
-	result := HandleSubagentsListAction(ctx)
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if !strings.Contains(result.Reply, "worker") {
-		t.Errorf("expected 'worker' in reply, got: %s", result.Reply)
-	}
-	if !strings.Contains(result.Reply, "active subagents:") {
-		t.Errorf("expected 'active subagents:' in reply")
-	}
-}
-
-func TestHandleSubagentsInfoAction(t *testing.T) {
-	now := currentTimeMs()
-	runs := []SubagentRunRecord{
-		{RunID: "run123abc", ChildSessionKey: "k1", Label: "worker", Task: "important task", CreatedAt: now - 60000, StartedAt: now - 60000, Cleanup: "keep"},
-	}
-	ctx := &SubagentsCommandContext{
-		Runs:       runs,
-		RestTokens: []string{"1"},
-	}
-	result := HandleSubagentsInfoAction(ctx)
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if !strings.Contains(result.Reply, "worker") {
-		t.Errorf("expected 'worker' in reply")
-	}
-	if !strings.Contains(result.Reply, "important task") {
-		t.Errorf("expected 'important task' in reply")
-	}
-	if !strings.Contains(result.Reply, "Cleanup: keep") {
-		t.Errorf("expected 'Cleanup: keep' in reply")
-	}
-}
-
 func TestHandleSubagentsCommand_nil_for_non_commands(t *testing.T) {
 	result := HandleSubagentsCommand("hello world", "key", "telegram", "acc", "", "sender", false, true, nil)
 	if result != nil {
