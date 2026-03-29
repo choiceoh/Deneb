@@ -144,7 +144,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 					Channel:    "telegram",
 					IsGroup:    msgCtx.IsGroup,
 				},
-				Deps: p.buildCommandDeps(),
+				Deps: p.buildCommandDeps(sessionKey),
 			})
 			if err == nil && result != nil && result.SkipAgent {
 				// Command handled; send reply back to Telegram.
@@ -388,7 +388,8 @@ func (p *InboundProcessor) sendCommandReply(chatID string, result *autoreply.Com
 }
 
 // buildCommandDeps creates a CommandDeps populated with server-level status data.
-func (p *InboundProcessor) buildCommandDeps() *autoreply.CommandDeps {
+// sessionKey is used to look up the current session's last failure reason for /status.
+func (p *InboundProcessor) buildCommandDeps(sessionKey string) *autoreply.CommandDeps {
 	sd := &autoreply.StatusDeps{
 		Version:   p.server.version,
 		StartedAt: p.server.startedAt,
@@ -426,6 +427,13 @@ func (p *InboundProcessor) buildCommandDeps() *autoreply.CommandDeps {
 					Reason:  ch.Reason,
 				}
 			}
+		}
+	}
+
+	// Session-specific failure reason for /status.
+	if sessionKey != "" && p.server.sessions != nil {
+		if sess := p.server.sessions.Get(sessionKey); sess != nil {
+			sd.LastFailureReason = sess.FailureReason
 		}
 	}
 

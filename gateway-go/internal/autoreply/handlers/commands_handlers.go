@@ -51,13 +51,14 @@ type CommandDeps struct {
 
 // StatusDeps holds server-level data for the /status command.
 type StatusDeps struct {
-	Version       string
-	StartedAt     time.Time
-	RustFFI       bool
-	SessionCount  int
-	WSConnections int32
-	ProviderUsage map[string]*ProviderUsageStats
-	ChannelHealth []ChannelHealthEntry
+	Version           string
+	StartedAt         time.Time
+	RustFFI           bool
+	SessionCount      int
+	WSConnections     int32
+	ProviderUsage     map[string]*ProviderUsageStats
+	ChannelHealth     []ChannelHealthEntry
+	LastFailureReason string // reason the most recent run failed, if any
 }
 
 // ProviderUsageStats holds per-provider API usage counters.

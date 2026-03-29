@@ -31,13 +31,14 @@ type StatusReport struct {
 	RunCount        int
 
 	// Server-level fields (populated from StatusDeps).
-	Version       string
-	StartedAt     time.Time
-	RustFFI       bool
-	SessionCount  int
-	WSConnections int32
-	ProviderUsage map[string]*ProviderUsageStats
-	ChannelHealth []ChannelHealthEntry
+	Version           string
+	StartedAt         time.Time
+	RustFFI           bool
+	SessionCount      int
+	WSConnections     int32
+	ProviderUsage     map[string]*ProviderUsageStats
+	ChannelHealth     []ChannelHealthEntry
+	LastFailureReason string // reason the most recent run failed, if any
 }
 
 // BuildStatusMessage creates a formatted status message from a report.
@@ -127,6 +128,11 @@ func BuildStatusMessage(report StatusReport) string {
 			}
 			sections = append(sections, fmt.Sprintf("%s **%s:** %s", icon, ch.ID, status))
 		}
+	}
+
+	// Last failure reason (if the most recent run ended in error).
+	if report.LastFailureReason != "" {
+		sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", report.LastFailureReason))
 	}
 
 	// Session-level usage (legacy, if available).

@@ -101,6 +101,10 @@ type Session struct {
 	// Used by cron runner to retrieve the agent's response after completion.
 	LastOutput string `json:"lastOutput,omitempty"`
 
+	// FailureReason holds a human-readable description of why the last run failed.
+	// Cleared when the session transitions back to Running (successful retry).
+	FailureReason string `json:"failureReason,omitempty"`
+
 	// Grouped configuration (embedded; JSON keys remain flat).
 	ModelConfig
 	ExecConfig
@@ -338,10 +342,11 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 	}
 
 	if snap.Status == StatusRunning {
-		// Start phase: set StartedAt, clear terminal fields.
+		// Start phase: set StartedAt, clear terminal fields and stale failure reason.
 		existing.StartedAt = snap.StartedAt
 		existing.EndedAt = nil
 		existing.RuntimeMs = nil
+		existing.FailureReason = ""
 	} else {
 		// End/Error phase: preserve existing StartedAt if snapshot doesn't set one.
 		if snap.StartedAt != nil {
@@ -349,6 +354,9 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 		}
 		existing.EndedAt = snap.EndedAt
 		existing.RuntimeMs = snap.RuntimeMs
+		if snap.FailureReason != "" {
+			existing.FailureReason = snap.FailureReason
+		}
 	}
 
 	newStatus := existing.Status

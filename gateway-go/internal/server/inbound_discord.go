@@ -102,7 +102,7 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 					Channel:    "discord",
 					IsGroup:    msgCtx.IsGroup,
 				},
-				Deps: p.buildCommandDeps(),
+				Deps: p.buildCommandDeps(sessionKey),
 			})
 			if err == nil && result != nil && result.SkipAgent {
 				// Reset auto-context on session lifecycle commands.
