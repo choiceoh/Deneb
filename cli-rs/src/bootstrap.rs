@@ -1,5 +1,34 @@
 use crate::cli::Cli;
 use crate::env;
+use crate::errors::CliError;
+use crate::router;
+use crate::terminal;
+
+/// run executes the full CLI lifecycle and returns an OS exit code (0 = success, 1 = error).
+///
+/// Phases:
+///  1. Env: apply CLI flag overrides to the process environment.
+///  2. Dispatch: route the command to its handler.
+///  3. Error display: format and print any failure to stderr.
+pub async fn run(cli: Cli) -> i32 {
+    apply_env_overrides(&cli);
+    match router::dispatch(&cli.command).await {
+        Ok(()) => 0,
+        Err(e) => {
+            print_error(&e);
+            1
+        }
+    }
+}
+
+fn print_error(e: &CliError) {
+    let error_style = terminal::Palette::error();
+    eprintln!(
+        "  {}  {}",
+        error_style.apply_to(terminal::Symbols::ERROR),
+        e.user_message()
+    );
+}
 
 pub fn apply_env_overrides(cli: &Cli) {
     apply_no_color(cli.no_color);
