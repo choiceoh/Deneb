@@ -385,17 +385,18 @@ pub fn resolve_summary_token_count(summary: &SummaryRecord) -> u64 {
 
 /// Select the oldest contiguous raw-message chunk outside fresh tail.
 ///
-/// Returns the selected context items and cumulative token count.
+/// Returns `(ordinals, message_ids, tokens)` collected in a single pass.
 /// The chunk is capped by `chunk_tokens_limit` but always includes at least
 /// one message when any compactable message exists.
-pub fn select_leaf_chunk<'a>(
-    items: &'a [ContextItem],
+pub fn select_leaf_chunk(
+    items: &[ContextItem],
     messages: &HashMap<u64, MessageRecord>,
     fresh_tail_ordinal: u64,
     chunk_tokens_limit: u32,
-) -> (Vec<&'a ContextItem>, u64) {
+) -> (Vec<u64>, Vec<u64>, u64) {
     let limit = chunk_tokens_limit as u64;
-    let mut chunk: Vec<&ContextItem> = Vec::new();
+    let mut ordinals: Vec<u64> = Vec::new();
+    let mut message_ids: Vec<u64> = Vec::new();
     let mut chunk_tokens: u64 = 0;
     let mut started = false;
 
@@ -420,18 +421,19 @@ pub fn select_leaf_chunk<'a>(
 
         let msg_tokens = messages.get(&msg_id).map_or(0, resolve_message_token_count);
 
-        if !chunk.is_empty() && chunk_tokens + msg_tokens > limit {
+        if !ordinals.is_empty() && chunk_tokens + msg_tokens > limit {
             break;
         }
 
-        chunk.push(item);
+        ordinals.push(item.ordinal);
+        message_ids.push(msg_id);
         chunk_tokens += msg_tokens;
         if chunk_tokens >= limit {
             break;
         }
     }
 
-    (chunk, chunk_tokens)
+    (ordinals, message_ids, chunk_tokens)
 }
 
 /// Count raw message tokens outside the fresh tail.
@@ -459,15 +461,18 @@ pub fn count_raw_tokens_outside_fresh_tail(
 ///
 /// Once selection starts, any non-summary item or depth mismatch terminates
 /// the chunk. Capped by `chunk_tokens_limit`.
-pub fn select_condensed_chunk<'a>(
-    items: &'a [ContextItem],
+///
+/// Returns `(ordinals, summary_ids, tokens)` collected in a single pass.
+pub fn select_condensed_chunk(
+    items: &[ContextItem],
     summaries: &HashMap<String, SummaryRecord>,
     target_depth: u32,
     fresh_tail_ordinal: u64,
     chunk_tokens_limit: u32,
-) -> (Vec<&'a ContextItem>, u64) {
+) -> (Vec<u64>, Vec<String>, u64) {
     let limit = chunk_tokens_limit as u64;
-    let mut chunk: Vec<&ContextItem> = Vec::new();
+    let mut ordinals: Vec<u64> = Vec::new();
+    let mut summary_ids: Vec<String> = Vec::new();
     let mut summary_tokens: u64 = 0;
 
     for item in items {
@@ -475,7 +480,7 @@ pub fn select_condensed_chunk<'a>(
             break;
         }
         if item.item_type != ContextItemType::Summary {
-            if !chunk.is_empty() {
+            if !ordinals.is_empty() {
                 break;
             }
             continue;
@@ -484,7 +489,7 @@ pub fn select_condensed_chunk<'a>(
         let summary_id = match &item.summary_id {
             Some(id) => id,
             None => {
-                if !chunk.is_empty() {
+                if !ordinals.is_empty() {
                     break;
                 }
                 continue;
@@ -494,7 +499,7 @@ pub fn select_condensed_chunk<'a>(
         let summary = match summaries.get(summary_id) {
             Some(s) => s,
             None => {
-                if !chunk.is_empty() {
+                if !ordinals.is_empty() {
                     break;
                 }
                 continue;
@@ -502,44 +507,45 @@ pub fn select_condensed_chunk<'a>(
         };
 
         if summary.depth != target_depth {
-            if !chunk.is_empty() {
+            if !ordinals.is_empty() {
                 break;
             }
             continue;
         }
 
         let token_count = resolve_summary_token_count(summary);
-        if !chunk.is_empty() && summary_tokens + token_count > limit {
+        if !ordinals.is_empty() && summary_tokens + token_count > limit {
             break;
         }
 
-        chunk.push(item);
+        ordinals.push(item.ordinal);
+        summary_ids.push(summary_id.clone());
         summary_tokens += token_count;
         if summary_tokens >= limit {
             break;
         }
     }
 
-    (chunk, summary_tokens)
+    (ordinals, summary_ids, summary_tokens)
 }
 
 /// Find the shallowest depth with an eligible condensation chunk.
 ///
-/// Returns `(target_depth, chunk_items, chunk_tokens)` or `None`.
-pub fn find_shallowest_condensation_candidate<'a>(
-    items: &'a [ContextItem],
+/// Returns `(target_depth, ordinals, summary_ids, chunk_tokens)` or `None`.
+pub fn find_shallowest_condensation_candidate(
+    items: &[ContextItem],
     summaries: &HashMap<String, SummaryRecord>,
     depth_levels: &[u32],
     fresh_tail_ordinal: u64,
     config: &CompactionConfig,
     hard_trigger: bool,
-) -> Option<(u32, Vec<&'a ContextItem>, u64)> {
+) -> Option<(u32, Vec<u64>, Vec<String>, u64)> {
     let chunk_limit = resolve_leaf_chunk_tokens(config);
     let min_chunk_tokens = resolve_condensed_min_chunk_tokens(config);
 
     for &target_depth in depth_levels {
         let fanout = resolve_fanout_for_depth(config, target_depth, hard_trigger);
-        let (chunk, tokens) = select_condensed_chunk(
+        let (ordinals, summary_ids, tokens) = select_condensed_chunk(
             items,
             summaries,
             target_depth,
@@ -547,13 +553,13 @@ pub fn find_shallowest_condensation_candidate<'a>(
             chunk_limit,
         );
 
-        if (chunk.len() as u32) < fanout {
+        if (ordinals.len() as u32) < fanout {
             continue;
         }
         if tokens < min_chunk_tokens {
             continue;
         }
-        return Some((target_depth, chunk, tokens));
+        return Some((target_depth, ordinals, summary_ids, tokens));
     }
 
     None
@@ -634,7 +640,7 @@ pub fn dedupe_ordered_ids(ids: &[&str]) -> Vec<String> {
 /// Compute aggregate descendant counts for a condensed summary from child summaries.
 ///
 /// Returns `(descendant_count, descendant_token_count, source_message_token_count)`.
-pub fn compute_descendant_counts(summaries: &[SummaryRecord]) -> (u64, u64, u64) {
+pub fn compute_descendant_counts(summaries: &[&SummaryRecord]) -> (u64, u64, u64) {
     let mut descendant_count: u64 = 0;
     let mut descendant_token_count: u64 = 0;
     let mut source_message_token_count: u64 = 0;
@@ -819,8 +825,9 @@ mod tests {
         }
 
         // With limit of 250, should select 2 messages (200 tokens < 250, adding 3rd = 300 > 250)
-        let (chunk, tokens) = select_leaf_chunk(&items, &messages, u64::MAX, 250);
-        assert_eq!(chunk.len(), 2);
+        let (ordinals, message_ids, tokens) = select_leaf_chunk(&items, &messages, u64::MAX, 250);
+        assert_eq!(ordinals.len(), 2);
+        assert_eq!(message_ids.len(), 2);
         assert_eq!(tokens, 200);
     }
 
@@ -853,9 +860,9 @@ mod tests {
         }
 
         // Fresh tail at ordinal 3 means only 0,1,2 are compactable
-        let (chunk, _) = select_leaf_chunk(&items, &messages, 3, 1000);
-        assert_eq!(chunk.len(), 3);
-        assert!(chunk.iter().all(|item| item.ordinal < 3));
+        let (ordinals, _message_ids, _) = select_leaf_chunk(&items, &messages, 3, 1000);
+        assert_eq!(ordinals.len(), 3);
+        assert!(ordinals.iter().all(|&o| o < 3));
     }
 
     #[test]
@@ -892,8 +899,10 @@ mod tests {
             );
         }
 
-        let (chunk, tokens) = select_condensed_chunk(&items, &summaries, 0, u64::MAX, 350);
-        assert_eq!(chunk.len(), 3); // 300 tokens, adding 4th = 400 > 350
+        let (ordinals, summary_ids, tokens) =
+            select_condensed_chunk(&items, &summaries, 0, u64::MAX, 350);
+        assert_eq!(ordinals.len(), 3); // 300 tokens, adding 4th = 400 > 350
+        assert_eq!(summary_ids.len(), 3);
         assert_eq!(tokens, 300);
     }
 
@@ -954,7 +963,8 @@ mod tests {
             },
         ];
 
-        let (dc, dtc, smt) = compute_descendant_counts(&summaries);
+        let refs: Vec<&SummaryRecord> = summaries.iter().collect();
+        let (dc, dtc, smt) = compute_descendant_counts(&refs);
         // descendant_count = (2+1) + (3+1) = 7
         assert_eq!(dc, 7);
         // descendant_token_count = (100+50) + (200+80) = 430

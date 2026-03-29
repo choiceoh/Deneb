@@ -525,20 +525,19 @@ impl SweepEngine {
         }
 
         let chunk_limit = resolve_leaf_chunk_tokens(&self.config);
-        let (chunk, _tokens) = select_leaf_chunk(
+        let (ordinals, message_ids, _tokens) = select_leaf_chunk(
             &self.context_items,
             &self.messages,
             self.fresh_tail_ordinal,
             chunk_limit,
         );
 
-        if chunk.is_empty() {
+        if ordinals.is_empty() {
             return self.transition_to_condensed_phase();
         }
 
-        // Collect chunk ordinals and message IDs
-        self.pass.chunk_ordinals = chunk.iter().map(|item| item.ordinal).collect();
-        self.pass.chunk_message_ids = chunk.iter().filter_map(|item| item.message_id).collect();
+        self.pass.chunk_ordinals = ordinals;
+        self.pass.chunk_message_ids = message_ids;
 
         // Check if we need to fetch prior summaries
         let start_ordinal = self.pass.chunk_ordinals.iter().copied().min().unwrap_or(0);
@@ -795,20 +794,19 @@ impl SweepEngine {
             }
 
             // All summaries cached — find candidate
-            if let Some((target_depth, chunk, _tokens)) = find_shallowest_condensation_candidate(
-                &self.context_items,
-                &self.summaries,
-                &depths,
-                self.fresh_tail_ordinal,
-                &self.config,
-                self.hard_trigger,
-            ) {
+            if let Some((target_depth, ordinals, summary_ids, _tokens)) =
+                find_shallowest_condensation_candidate(
+                    &self.context_items,
+                    &self.summaries,
+                    &depths,
+                    self.fresh_tail_ordinal,
+                    &self.config,
+                    self.hard_trigger,
+                )
+            {
                 self.pass.target_depth = target_depth;
-                self.pass.chunk_ordinals = chunk.iter().map(|item| item.ordinal).collect();
-                self.pass.chunk_summary_ids = chunk
-                    .iter()
-                    .filter_map(|item| item.summary_id.clone())
-                    .collect();
+                self.pass.chunk_ordinals = ordinals;
+                self.pass.chunk_summary_ids = summary_ids;
                 return self.prepare_condensed_summarize();
             }
         }
@@ -845,20 +843,19 @@ impl SweepEngine {
             d
         };
 
-        if let Some((target_depth, chunk, _tokens)) = find_shallowest_condensation_candidate(
-            &self.context_items,
-            &self.summaries,
-            &depths,
-            self.fresh_tail_ordinal,
-            &self.config,
-            self.hard_trigger,
-        ) {
+        if let Some((target_depth, ordinals, summary_ids, _tokens)) =
+            find_shallowest_condensation_candidate(
+                &self.context_items,
+                &self.summaries,
+                &depths,
+                self.fresh_tail_ordinal,
+                &self.config,
+                self.hard_trigger,
+            )
+        {
             self.pass.target_depth = target_depth;
-            self.pass.chunk_ordinals = chunk.iter().map(|item| item.ordinal).collect();
-            self.pass.chunk_summary_ids = chunk
-                .iter()
-                .filter_map(|item| item.summary_id.clone())
-                .collect();
+            self.pass.chunk_ordinals = ordinals;
+            self.pass.chunk_summary_ids = summary_ids;
             return self.prepare_condensed_summarize();
         }
 
@@ -1024,7 +1021,7 @@ impl SweepEngine {
             .collect();
 
         let (descendant_count, descendant_token_count, source_message_token_count) =
-            compute_descendant_counts(&recs.iter().map(|r| (*r).clone()).collect::<Vec<_>>());
+            compute_descendant_counts(&recs);
 
         let earliest_at = recs
             .iter()
