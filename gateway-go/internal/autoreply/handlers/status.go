@@ -27,8 +27,7 @@ type StatusReport struct {
 	ElevatedLevel   types.ElevatedLevel
 	SendPolicy      string
 	GroupActivation types.GroupActivationMode
-	Usage           *SessionUsage
-	RunCount        int
+	RunCount int
 
 	// Server-level fields (populated from StatusDeps).
 	Version           string
@@ -133,11 +132,6 @@ func BuildStatusMessage(report StatusReport) string {
 	// Last failure reason (if the most recent run ended in error).
 	if report.LastFailureReason != "" {
 		sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", report.LastFailureReason))
-	}
-
-	// Session-level usage (legacy, if available).
-	if report.Usage != nil && report.Usage.TotalTokens > 0 {
-		sections = append(sections, fmt.Sprintf("📊 **Usage:** %s", report.Usage.FormatUsage()))
 	}
 
 	return strings.Join(sections, "\n")
