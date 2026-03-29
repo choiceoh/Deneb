@@ -59,19 +59,25 @@ func (m *AgentRunnerMemory) Compact() int {
 		return 0
 	}
 
-	removed := 0
 	minKeep := 3
-	for m.usedTokens > m.maxTokens && len(m.history) > minKeep {
-		oldest := m.history[1]
-		m.history = append(m.history[:1], m.history[2:]...)
-		tokens := model.EstimateTokens(oldest.Content)
-		m.usedTokens -= tokens
-		removed++
+	// Pre-compute how many messages to remove and their token cost in a single
+	// forward pass, then apply the removal with one copy instead of O(n²) repeated
+	// append(history[:1], history[2:]...) shifts.
+	removeCount := 0
+	tokenSavings := 0
+	for removeCount+1 < len(m.history) && len(m.history)-removeCount > minKeep && m.usedTokens-tokenSavings > m.maxTokens {
+		tokenSavings += model.EstimateTokens(m.history[1+removeCount].Content)
+		removeCount++
 	}
-
+	if removeCount == 0 {
+		return 0
+	}
+	copy(m.history[1:], m.history[1+removeCount:])
+	m.history = m.history[:len(m.history)-removeCount]
+	m.usedTokens -= tokenSavings
 	m.compactionCount++
-	m.totalCompacted += removed
-	return removed
+	m.totalCompacted += removeCount
+	return removeCount
 }
 
 // CompactWithSummary replaces removed messages with a summary.
