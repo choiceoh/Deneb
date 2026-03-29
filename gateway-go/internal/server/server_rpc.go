@@ -98,7 +98,7 @@ func (s *Server) registerBuiltinMethods() {
 		RustFFI:         s.rustFFI,
 		ChannelsStatus:  func() any { return s.channels.StatusAll() },
 		SessionCount:    s.sessions.Count,
-		ConnectionCount: s.clientCnt.Load,
+		ConnectionCount: func() int64 { return int64(s.clientCnt.Load()) },
 		LastHeartbeatMs: func() int64 {
 			if s.activity == nil {
 				return 0

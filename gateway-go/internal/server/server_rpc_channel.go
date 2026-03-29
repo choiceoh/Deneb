@@ -12,7 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func (s *Server) registerEventsBroadcastMethods() {
