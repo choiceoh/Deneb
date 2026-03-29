@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
 
 const (
@@ -84,10 +86,12 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 
 		lastErr = err
 
-		// Only retry on rate limits (429) and server errors (5xx).
+		// Only retry on codes classified as retryable (rate limits, timeouts,
+		// transient server errors). Permanent errors — including 501 Not
+		// Implemented — are not retried.
 		var apiErr *APIError
 		if isDiscordAPIError(err, &apiErr) {
-			if apiErr.IsRateLimited() || apiErr.StatusCode >= 500 {
+			if httpretry.IsRetryable(apiErr.StatusCode) {
 				continue
 			}
 			return nil, err // Non-retryable API error.
