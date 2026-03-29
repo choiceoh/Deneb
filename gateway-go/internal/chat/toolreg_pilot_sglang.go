@@ -607,13 +607,8 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 			}
 			switch ev.Type {
 			case "content_block_delta":
-				var delta struct {
-					Delta struct {
-						Text string `json:"text"`
-					} `json:"delta"`
-				}
-				if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-					sb.WriteString(delta.Delta.Text)
+				if text := extractDeltaText(ev.Payload); text != "" {
+					sb.WriteString(text)
 				}
 			case "error":
 				var errPayload struct {
@@ -627,4 +622,35 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 			}
 		}
 	}
+}
+
+// extractDeltaText extracts the "text" field from {"delta":{"text":"..."}} payloads
+// using fast string scanning instead of json.Unmarshal on every streaming delta event.
+// Falls back to json.Unmarshal only when backslash escapes are detected (rare).
+func extractDeltaText(payload []byte) string {
+	const marker = `"text":"`
+	s := string(payload)
+	idx := strings.Index(s, marker)
+	if idx < 0 {
+		return ""
+	}
+	start := idx + len(marker)
+	for i := start; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			return s[start:i]
+		case '\\':
+			// Escape sequence present — fall back to json.Unmarshal for correctness.
+			var delta struct {
+				Delta struct {
+					Text string `json:"text"`
+				} `json:"delta"`
+			}
+			if json.Unmarshal(payload, &delta) == nil {
+				return delta.Delta.Text
+			}
+			return ""
+		}
+	}
+	return ""
 }
