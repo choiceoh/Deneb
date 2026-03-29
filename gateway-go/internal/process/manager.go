@@ -84,6 +84,21 @@ type Manager struct {
 	approver  ApprovalCallback
 	logger    *slog.Logger
 	maxStdout int // max bytes to capture per stream
+
+	// cachedBaseEnv is the sanitized parent environment, computed once and
+	// reused across sequential Execute calls to avoid repeated os.Environ()
+	// + SanitizeEnv overhead.
+	envOnce     sync.Once
+	cachedBaseEnv []string
+}
+
+// bufPool reuses byte buffers for stdout/stderr capture to reduce GC pressure
+// during sequential exec calls.
+var bufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 64*1024) // 64 KB initial cap
+		return &b
+	},
 }
 
 // NewManager creates a new process manager.
@@ -93,6 +108,21 @@ func NewManager(logger *slog.Logger) *Manager {
 		logger:    logger,
 		maxStdout: 1024 * 1024, // 1 MB default
 	}
+}
+
+// baseEnv returns the cached sanitized parent environment.
+func (m *Manager) baseEnv() []string {
+	m.envOnce.Do(func() {
+		m.cachedBaseEnv = SanitizeEnv(os.Environ(), m.logger)
+	})
+	return m.cachedBaseEnv
+}
+
+// InvalidateEnvCache forces re-computation of the cached base environment
+// on the next Execute call. Use after modifying the process environment.
+func (m *Manager) InvalidateEnvCache() {
+	m.envOnce = sync.Once{}
+	m.cachedBaseEnv = nil
 }
 
 // SetApprover sets the callback for approval-required commands.
@@ -167,9 +197,11 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	if req.WorkingDir != "" {
 		cmd.Dir = req.WorkingDir
 	}
-	// Inherit parent environment with dangerous vars stripped.
-	parentEnv := os.Environ()
-	cmd.Env = SanitizeEnv(parentEnv, m.logger)
+	// Use cached sanitized base environment to avoid repeated os.Environ() +
+	// SanitizeEnv overhead on sequential calls.
+	base := m.baseEnv()
+	cmd.Env = make([]string, len(base), len(base)+len(req.Env))
+	copy(cmd.Env, base)
 	// Overlay user-specified vars, also filtering blocked keys.
 	for k, v := range req.Env {
 		if isBlockedEnvKey(k) {
@@ -209,11 +241,20 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
-	// Capture output (bounded). We must fully drain both pipes even beyond the
-	// capture limit, otherwise the subprocess blocks on a full pipe buffer and
-	// cmd.Wait() hangs forever.
-	stdoutBytes := drainBounded(stdout, m.maxStdout)
-	stderrBytes := drainBounded(stderr, m.maxStdout)
+	// Drain both pipes concurrently. Sequential draining can deadlock when
+	// one pipe fills its OS buffer while we're blocked reading the other.
+	var stdoutBytes, stderrBytes []byte
+	var drainWg sync.WaitGroup
+	drainWg.Add(2)
+	go func() {
+		defer drainWg.Done()
+		stdoutBytes = drainBounded(stdout, m.maxStdout)
+	}()
+	go func() {
+		defer drainWg.Done()
+		stderrBytes = drainBounded(stderr, m.maxStdout)
+	}()
+	drainWg.Wait()
 
 	err = cmd.Wait()
 	// Capture context error before cancel() overwrites it.
@@ -259,6 +300,19 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	tracked.mu.Unlock()
 	m.logger.Info("process completed", "id", req.ID, "status", result.Status, "exitCode", result.ExitCode, "ms", result.RuntimeMs)
 	return result
+}
+
+// ExecuteBackground launches the command in a goroutine and returns
+// immediately with the process ID. Use Get(id) to poll for results.
+func (m *Manager) ExecuteBackground(ctx context.Context, req ExecRequest) string {
+	if req.ID == "" {
+		req.ID = shortid.New("proc")
+	}
+	// Detach from the caller's context so the process outlives the RPC call,
+	// but still respects server-level shutdown via the background context.
+	bgCtx := context.WithoutCancel(ctx)
+	go m.Execute(bgCtx, req)
+	return req.ID
 }
 
 // Kill terminates a running process.
@@ -348,11 +402,21 @@ func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int6
 }
 
 // drainBounded reads up to limit bytes into memory, then discards the rest
-// to prevent the subprocess from blocking on a full pipe.
+// to prevent the subprocess from blocking on a full pipe. Uses a pooled
+// buffer for the discard phase to reduce allocations.
 func drainBounded(r io.Reader, limit int) []byte {
 	kept, _ := io.ReadAll(io.LimitReader(r, int64(limit)))
-	// Drain any remaining bytes so the writer doesn't block.
-	io.Copy(io.Discard, r)
+	// Drain remaining bytes using a pooled buffer so the writer doesn't block.
+	bp := bufPool.Get().(*[]byte)
+	buf := *bp
+	for {
+		_, err := r.Read(buf[:cap(buf)])
+		if err != nil {
+			break
+		}
+	}
+	*bp = buf
+	bufPool.Put(bp)
 	return kept
 }
 

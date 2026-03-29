@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -50,6 +51,70 @@ func TestFormatExecResult(t *testing.T) {
 		got := formatExecResult(r)
 		if got != "\nExit code: 127" {
 			t.Errorf("got %q", got)
+		}
+	})
+}
+
+func TestTruncateForLLM(t *testing.T) {
+	t.Run("short string unchanged", func(t *testing.T) {
+		s := "hello world"
+		got := truncateForLLM(s)
+		if got != s {
+			t.Errorf("got %q, want %q", got, s)
+		}
+	})
+
+	t.Run("exact limit unchanged", func(t *testing.T) {
+		s := string(make([]rune, maxOutputRunes))
+		got := truncateForLLM(s)
+		if len([]rune(got)) != maxOutputRunes {
+			t.Errorf("expected %d runes, got %d", maxOutputRunes, len([]rune(got)))
+		}
+	})
+
+	t.Run("over limit truncated with marker", func(t *testing.T) {
+		runes := make([]rune, maxOutputRunes+1000)
+		for i := range runes {
+			runes[i] = 'A'
+		}
+		s := string(runes)
+		got := truncateForLLM(s)
+		if len([]rune(got)) >= len(runes) {
+			t.Error("expected truncation")
+		}
+		if !strings.Contains(got, "omitted") {
+			t.Error("expected elision marker")
+		}
+	})
+
+	t.Run("korean multibyte safe", func(t *testing.T) {
+		// Build string of Korean characters exceeding the limit.
+		runes := make([]rune, maxOutputRunes+500)
+		for i := range runes {
+			runes[i] = '가'
+		}
+		got := truncateForLLM(string(runes))
+		if !strings.Contains(got, "omitted") {
+			t.Error("expected elision marker for Korean text")
+		}
+	})
+}
+
+func TestValidateWorkdir(t *testing.T) {
+	t.Run("valid directory", func(t *testing.T) {
+		if err := validateWorkdir("/tmp"); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+	t.Run("nonexistent directory", func(t *testing.T) {
+		if err := validateWorkdir("/nonexistent/dir/xyz"); err == nil {
+			t.Error("expected error for nonexistent dir")
+		}
+	})
+	t.Run("cached valid directory", func(t *testing.T) {
+		// Second call should hit cache.
+		if err := validateWorkdir("/tmp"); err != nil {
+			t.Errorf("unexpected error on cached call: %v", err)
 		}
 	})
 }
