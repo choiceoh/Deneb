@@ -95,17 +95,19 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	// Normalize inbound context.
 	inbound.FinalizeInboundContext(msgCtx)
 
-	// Resolve per-channel workspace directory.
-	// For thread messages, use the parent channel ID so workspace mappings apply correctly.
+	// Resolve workspace directory.
+	// Thread sessions get an isolated git worktree so concurrent threads
+	// don't conflict. Falls back to parent channel workspace if worktree
+	// creation fails.
 	workspaceDir := ""
 	if p.server.discordPlug != nil {
-		workspaceChannelID := channelID
-		if isThread {
-			if parentID := p.getThreadParent(channelID); parentID != "" {
-				workspaceChannelID = parentID
-			}
+		parentWorkspace := p.resolveParentWorkspace(channelID, isThread)
+		if isThread && parentWorkspace != "" {
+			workspaceDir = p.ensureThreadWorktree(channelID, parentWorkspace)
 		}
-		workspaceDir = p.server.discordPlug.Config().WorkspaceForChannel(workspaceChannelID)
+		if workspaceDir == "" {
+			workspaceDir = parentWorkspace
+		}
 	}
 
 	// Try coding quick commands first (Discord-specific, no agent needed).
@@ -220,6 +222,12 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 			discordSessionSeenMu.Lock()
 			discordSessionSeen[sessionKey] = time.Now()
 			discordSessionSeenMu.Unlock()
+			// Create isolated worktree for the new thread.
+			if workspaceDir != "" {
+				if wtDir := p.ensureThreadWorktree(threadID, workspaceDir); wtDir != "" {
+					workspaceDir = wtDir
+				}
+			}
 		}
 	}
 
@@ -305,6 +313,40 @@ func (p *InboundProcessor) tryCreateDiscordThread(channelID, messageID, content 
 	return thread.ID
 }
 
+// resolveParentWorkspace looks up the workspace directory for a channel.
+// For threads, resolves via the parent channel ID.
+func (p *InboundProcessor) resolveParentWorkspace(channelID string, isThread bool) string {
+	workspaceChannelID := channelID
+	if isThread {
+		if parentID := p.getThreadParent(channelID); parentID != "" {
+			workspaceChannelID = parentID
+		}
+	}
+	return p.server.discordPlug.Config().WorkspaceForChannel(workspaceChannelID)
+}
+
+// ensureThreadWorktree creates or retrieves a git worktree for a thread session.
+// Returns the worktree directory path, or "" if creation fails (caller should
+// fall back to the parent workspace).
+func (p *InboundProcessor) ensureThreadWorktree(threadID, parentWorkspace string) string {
+	wm := p.server.discordWorktrees
+	if wm == nil {
+		return ""
+	}
+	// Return existing worktree if already created.
+	if ws := wm.Get(threadID); ws != nil {
+		return ws.Dir
+	}
+	// Create new worktree.
+	ws, err := wm.Create(threadID, parentWorkspace)
+	if err != nil {
+		p.logger.Warn("discord: failed to create thread worktree, using shared workspace",
+			"threadId", threadID, "parentDir", parentWorkspace, "error", err)
+		return ""
+	}
+	return ws.Dir
+}
+
 // isDiscordThread checks if a channelID is a known thread, either from the
 // bot's thread parent cache or from our local thread→parent map.
 func (p *InboundProcessor) isDiscordThread(channelID string) bool {
@@ -370,6 +412,11 @@ func (p *InboundProcessor) HandleThreadEvent(event discord.ThreadEvent) {
 			}
 		}
 
+		// Remove the thread's isolated worktree.
+		if p.server.discordWorktrees != nil {
+			p.server.discordWorktrees.Remove(event.ThreadID)
+		}
+
 		// Clean up thread parent mapping on delete.
 		if event.Deleted {
 			discordThreadParentMu.Lock()
@@ -391,6 +438,26 @@ func resolveWorkspaceChannel(p *InboundProcessor, sessionKey string) string {
 		return threadID
 	}
 	return strings.TrimPrefix(sessionKey, "discord:")
+}
+
+// resolveWorkspaceDir returns the actual workspace directory for a session key,
+// preferring the thread's isolated worktree if one exists.
+func resolveWorkspaceDir(p *InboundProcessor, sessionKey string) string {
+	if p.server.discordPlug == nil {
+		return ""
+	}
+	// For thread sessions, check worktree first.
+	if strings.HasPrefix(sessionKey, "discord:thread:") {
+		threadID := strings.TrimPrefix(sessionKey, "discord:thread:")
+		if p.server.discordWorktrees != nil {
+			if ws := p.server.discordWorktrees.Get(threadID); ws != nil {
+				return ws.Dir
+			}
+		}
+	}
+	// Fall back to channel workspace config.
+	wsChannelID := resolveWorkspaceChannel(p, sessionKey)
+	return p.server.discordPlug.Config().WorkspaceForChannel(wsChannelID)
 }
 
 // handleCodingQuickCommand handles Discord-specific quick commands for vibe coders.
@@ -671,17 +738,14 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 		agentMessage = "마지막 실행 결과를 자세히 보여주세요."
 	case "push":
 		// Push current branch to remote — handle inline for quick feedback.
-		wsChannelID := resolveWorkspaceChannel(p, sessionKey)
-		if p.server.discordPlug != nil {
-			if ws := p.server.discordPlug.Config().WorkspaceForChannel(wsChannelID); ws != "" {
-				branch := runGitCmd(ws, "rev-parse", "--abbrev-ref", "HEAD")
-				runCmdWithTimeout(ws, 30*time.Second, "git", "push", "-u", "origin", branch)
-				p.sendDiscordEmbed(interaction.ChannelID, []discord.Embed{{
-					Title:       "🚀 푸시 완료",
-					Description: "`" + branch + "` 브랜치를 원격 저장소에 업로드했습니다.",
-					Color:       discord.ColorSuccess,
-				}})
-			}
+		if ws := resolveWorkspaceDir(p, sessionKey); ws != "" {
+			branch := runGitCmd(ws, "rev-parse", "--abbrev-ref", "HEAD")
+			runCmdWithTimeout(ws, 30*time.Second, "git", "push", "-u", "origin", branch)
+			p.sendDiscordEmbed(interaction.ChannelID, []discord.Embed{{
+				Title:       "🚀 푸시 완료",
+				Description: "`" + branch + "` 브랜치를 원격 저장소에 업로드했습니다.",
+				Color:       discord.ColorSuccess,
+			}})
 		}
 		return
 	case "new":
@@ -710,12 +774,9 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 		"delivery":   delivery,
 	}
 
-	// Resolve workspace for the session.
-	if p.server.discordPlug != nil {
-		wsChannelID := resolveWorkspaceChannel(p, sessionKey)
-		if ws := p.server.discordPlug.Config().WorkspaceForChannel(wsChannelID); ws != "" {
-			sendParams["workspaceDir"] = ws
-		}
+	// Resolve workspace for the session (worktree if available).
+	if ws := resolveWorkspaceDir(p, sessionKey); ws != "" {
+		sendParams["workspaceDir"] = ws
 	}
 
 	req, err := protocol.NewRequestFrame(

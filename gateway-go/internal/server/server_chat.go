@@ -284,6 +284,9 @@ func (s *Server) wireDiscordChatHandler() {
 		s.logger.Info("discord: auto thread naming enabled", "model", lwModel)
 	}
 
+	// Initialize per-thread worktree manager for workspace isolation.
+	s.discordWorktrees = discord.NewWorktreeManager("", s.logger)
+
 	// Recent-send dedup cache.
 	var recentMu sync.Mutex
 	recentSends := make(map[string]time.Time)
@@ -568,14 +571,26 @@ func (s *Server) sendAutoVerifyEmbed(ctx context.Context, client *discord.Client
 		return
 	}
 
-	// Resolve workspace for this channel. For threads, use parent channel.
-	wsChannelID := channelID
-	if bot := s.discordPlug.Bot(); bot != nil {
-		if parentID := bot.ThreadParent(channelID); parentID != "" {
-			wsChannelID = parentID
+	// Resolve workspace for this channel. For threads, prefer worktree.
+	sessionKey := discordSessionKeyForChannel(s.discordPlug, channelID)
+	workspaceDir := ""
+	if strings.HasPrefix(sessionKey, "discord:thread:") {
+		threadID := strings.TrimPrefix(sessionKey, "discord:thread:")
+		if s.discordWorktrees != nil {
+			if ws := s.discordWorktrees.Get(threadID); ws != nil {
+				workspaceDir = ws.Dir
+			}
 		}
 	}
-	workspaceDir := s.discordPlug.Config().WorkspaceForChannel(wsChannelID)
+	if workspaceDir == "" {
+		wsChannelID := channelID
+		if bot := s.discordPlug.Bot(); bot != nil {
+			if parentID := bot.ThreadParent(channelID); parentID != "" {
+				wsChannelID = parentID
+			}
+		}
+		workspaceDir = s.discordPlug.Config().WorkspaceForChannel(wsChannelID)
+	}
 	if workspaceDir == "" {
 		return
 	}
