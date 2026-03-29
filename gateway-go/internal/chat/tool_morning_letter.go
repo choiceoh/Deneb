@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -21,7 +22,7 @@ import (
 // contextual interpretation (e.g. "우산 챙기세요" for rain, email importance ranking).
 //
 // Sections: weather (Gwangju), exchange rates, copper price, calendar, email.
-func toolMorningLetter(tools ToolExecutor) ToolFunc {
+func toolMorningLetter(_ ToolExecutor) ToolFunc {
 	return func(ctx context.Context, _ json.RawMessage) (string, error) {
 		now := time.Now().In(kstLocation)
 
@@ -37,7 +38,7 @@ func toolMorningLetter(tools ToolExecutor) ToolFunc {
 		collectors := []collector{
 			{0, func(ctx context.Context) any { return fetchWeather(ctx) }},
 			{1, func(ctx context.Context) any { return fetchExchangeRates(ctx) }},
-			{2, func(ctx context.Context) any { return fetchCopper(ctx, tools) }},
+			{2, func(ctx context.Context) any { return fetchCopper(ctx) }},
 			{3, func(ctx context.Context) any { return fetchCalendar(ctx) }},
 			{4, func(ctx context.Context) any { return fetchEmail(ctx) }},
 		}
@@ -110,10 +111,11 @@ type exchangeData struct {
 	Error  string  `json:"error,omitempty"`
 }
 
-type webSearchData struct {
-	OK      bool   `json:"ok"`
-	RawText string `json:"raw_text,omitempty"`
-	Error   string `json:"error,omitempty"`
+type copperData struct {
+	OK          bool    `json:"ok"`
+	PricePerTon float64 `json:"price_per_ton_usd,omitempty"` // USD/metric ton
+	Date        string  `json:"date,omitempty"`
+	Error       string  `json:"error,omitempty"`
 }
 
 type calendarData struct {
@@ -250,19 +252,60 @@ func fetchExchangeRates(ctx context.Context) any {
 	return d
 }
 
-func fetchCopper(ctx context.Context, tools ToolExecutor) any {
-	query := `{"query": "LME copper price today USD per ton", "count": 3}`
-	output, err := tools.Execute(ctx, "web", json.RawMessage(query))
+// fetchCopper fetches copper price from MetalpriceAPI (USD per metric ton).
+// Requires METALPRICEAPI_KEY environment variable.
+// API returns price per troy ounce; we convert to per metric ton (* 32150.747).
+func fetchCopper(ctx context.Context) any {
+	apiKey := os.Getenv("METALPRICEAPI_KEY")
+	if apiKey == "" {
+		return copperData{Error: "METALPRICEAPI_KEY not set"}
+	}
+
+	url := fmt.Sprintf("https://api.metalpriceapi.com/v1/latest?api_key=%s&base=USD&currencies=XCU", apiKey)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return webSearchData{Error: err.Error()}
+		return copperData{Error: "request build failed"}
 	}
-	if output == "" {
-		return webSearchData{Error: "empty result"}
+	req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return copperData{Error: "network error"}
 	}
-	if len(output) > 2000 {
-		output = output[:2000]
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
+	if err != nil {
+		return copperData{Error: "read error"}
 	}
-	return webSearchData{OK: true, RawText: output}
+
+	var raw struct {
+		Success bool               `json:"success"`
+		Date    string             `json:"date"`
+		Rates   map[string]float64 `json:"rates"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil || !raw.Success {
+		return copperData{Error: "parse error or API failure"}
+	}
+
+	// The API returns copper price per troy ounce (USDXCU = USD per ounce).
+	// Convert to USD per metric ton: 1 metric ton = 32,150.747 troy ounces.
+	const troyOuncesPerTon = 32150.747
+	pricePerOz, ok := raw.Rates["USDXCU"]
+	if !ok {
+		// Fallback: try XCU (inverse rate: 1 USD = X ounces of copper).
+		if xcuRate, ok2 := raw.Rates["XCU"]; ok2 && xcuRate > 0 {
+			pricePerOz = 1.0 / xcuRate
+		} else {
+			return copperData{Error: "XCU rate not found"}
+		}
+	}
+
+	return copperData{
+		OK:          true,
+		PricePerTon: pricePerOz * troyOuncesPerTon,
+		Date:        raw.Date,
+	}
 }
 
 func fetchCalendar(ctx context.Context) any {
