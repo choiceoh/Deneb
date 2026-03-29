@@ -18,8 +18,6 @@ import (
 // Compaction defaults.
 const (
 	defaultContextThreshold = 0.85
-	// summarizationModel — local sglang Qwen for cost-efficient compaction summaries.
-	summarizationModel = "Qwen/Qwen3.5-35B-A3B"
 )
 
 // CompactionConfig configures compaction behavior.
@@ -89,9 +87,9 @@ func handleContextOverflowAurora(
 				deps.compactionCfg.FreshTailCount, logger)
 		}
 
-		// Use local sglang for cost-efficient compaction summaries.
-		sglangClient := getSglangClient()
-		summarizer := aurora.NewLLMSummarizer(sglangClient, summarizationModel, "openai")
+		// Use lightweight model for cost-efficient compaction summaries.
+		lwClient := getLightweightClient()
+		summarizer := aurora.NewLLMSummarizer(lwClient, getLightweightModel(), "openai")
 
 		result, err := aurora.RunSweep(
 			deps.auroraStore,
@@ -363,8 +361,8 @@ func flushMemoryBeforeCompaction(
 		"assistantChars", len([]rune(assistantText)),
 	)
 
-	sglangClient := getSglangClient()
-	facts, err := memory.ExtractFacts(flushCtx, sglangClient, sglangModel, userText, assistantText, logger)
+	lwClient := getLightweightClient()
+	facts, err := memory.ExtractFacts(flushCtx, lwClient, getLightweightModel(), userText, assistantText, logger)
 	if err != nil {
 		logger.Warn("memory flush: extraction failed", "error", err)
 		return
@@ -459,11 +457,11 @@ func transferSummaryToMemory(deps runDeps, summaryID string, logger *slog.Logger
 		return
 	}
 
-	sglangClient := getSglangClient()
+	lwClient := getLightweightClient()
 	if err := aurora.TransferSummaryToMemory(
 		ctx, summary, deps.auroraStore,
 		deps.memoryStore, deps.memoryEmbedder,
-		sglangClient, summarizationModel,
+		lwClient, getLightweightModel(),
 		logger,
 	); err != nil {
 		logger.Warn("aurora-transfer: failed", "summaryId", summaryID, "error", err)

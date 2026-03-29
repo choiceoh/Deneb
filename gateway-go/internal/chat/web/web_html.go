@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -97,7 +98,7 @@ const (
 func NewSGLangExtractor() *SGLangExtractor {
 	baseURL := os.Getenv("SGLANG_BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://127.0.0.1:30000/v1"
+		baseURL = modelrole.DefaultSglangBaseURL
 	}
 	apiKey := os.Getenv("SGLANG_API_KEY")
 	if apiKey == "" {
@@ -105,7 +106,7 @@ func NewSGLangExtractor() *SGLangExtractor {
 	}
 	model := os.Getenv("SGLANG_MODEL")
 	if model == "" {
-		model = "Qwen/Qwen3.5-35B-A3B"
+		model = modelrole.DefaultSglangModel
 	}
 	return &SGLangExtractor{
 		client:  &http.Client{Timeout: 60 * time.Second},

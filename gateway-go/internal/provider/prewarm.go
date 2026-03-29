@@ -19,8 +19,6 @@ const (
 	prewarmRetryDelay = 2 * time.Second
 	// prewarmMaxRetries is the maximum number of prewarm attempts.
 	prewarmMaxRetries = 2
-	// prewarmDefaultModel is the fallback model when config has none.
-	prewarmDefaultModel = "google/gemini-3.0-flash"
 	// prewarmDefaultBaseURL is the Google AI OpenAI-compatible endpoint.
 	prewarmDefaultBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 )
@@ -140,7 +138,8 @@ func loadPrewarmConfig(logger *slog.Logger) (providerID, modelName string, cfg *
 		model = extractModelFromDefaults(root.Agents.Defaults)
 	}
 	if model == "" {
-		model = prewarmDefaultModel
+		// No model configured; skip prewarm.
+		return "", "", nil
 	}
 
 	// Split "provider/model" into parts.

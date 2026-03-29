@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -36,6 +37,7 @@ type Handler struct {
 	memoryEmbedder  *memory.Embedder          // optional; fact embedding
 	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer          // optional; agent detail logging
+	registry        *modelrole.Registry       // centralized model role registry
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -91,6 +93,7 @@ type HandlerConfig struct {
 	MemoryEmbedder  *memory.Embedder          // optional; fact embedding via SGLang
 	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog        *agentlog.Writer          // optional; agent detail logging
+	Registry        *modelrole.Registry       // centralized model role registry
 	ContextCfg      ContextConfig
 	CompactionCfg   CompactionConfig
 	DefaultModel    string
@@ -134,6 +137,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		memoryEmbedder:  cfg.MemoryEmbedder,
 		dreamTurnFn:     cfg.DreamTurnFn,
 		agentLog:        cfg.AgentLog,
+		registry:        cfg.Registry,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
@@ -145,6 +149,10 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		maxHistoryBytes: cfg.MaxHistoryBytes,
 		maxHistoryCount: cfg.MaxHistoryCount,
 		maxMessageBytes: cfg.MaxMessageBytes,
+	}
+	// Set the package-level model role registry for sglang hooks and pilot tools.
+	if h.registry != nil {
+		SetModelRoleRegistry(h.registry)
 	}
 	go h.abortGCLoop()
 	return h
@@ -237,6 +245,11 @@ func (h *Handler) SetShutdownCtx(ctx context.Context) {
 // DefaultModel returns the configured default LLM model name.
 func (h *Handler) DefaultModel() string {
 	return h.defaultModel
+}
+
+// ModelRegistry returns the centralized model role registry.
+func (h *Handler) ModelRegistry() *modelrole.Registry {
+	return h.registry
 }
 
 // Close stops background goroutines and cancels all active abort entries.

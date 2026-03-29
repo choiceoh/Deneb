@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
@@ -52,8 +53,8 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if resolvedModel == "" {
 		resolvedModel = h.defaultModel
 	}
-	if resolvedModel == "" {
-		resolvedModel = defaultModel
+	if resolvedModel == "" && h.registry != nil {
+		resolvedModel = h.registry.FullModelID(modelrole.RoleMain)
 	}
 
 	return &SyncResult{
@@ -110,8 +111,8 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 	if resolvedModel == "" {
 		resolvedModel = h.defaultModel
 	}
-	if resolvedModel == "" {
-		resolvedModel = defaultModel
+	if resolvedModel == "" && h.registry != nil {
+		resolvedModel = h.registry.FullModelID(modelrole.RoleMain)
 	}
 
 	return &SyncResult{

@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
@@ -107,7 +108,7 @@ func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 }
 
 func buildBannerInfo(version, addr string, vegaEnabled bool) logging.BannerInfo {
-	const sglangBannerURL = "http://127.0.0.1:30000/v1"
+	sglangBannerURL := modelrole.DefaultSglangBaseURL
 	sglangStatus := "offline"
 	if vega.IsSglangReachable(sglangBannerURL) {
 		sglangStatus = "online"

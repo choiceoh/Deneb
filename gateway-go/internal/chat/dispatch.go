@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -178,8 +179,8 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		return fmt.Sprintf("세션 %q: 정보 없음", sessionKey)
 	}
 	model := h.defaultModel
-	if model == "" {
-		model = defaultModel
+	if model == "" && h.registry != nil {
+		model = h.registry.FullModelID(modelrole.RoleMain)
 	}
 	return fmt.Sprintf("세션: %s\n모델: %s\n상태: %s",
 		sessionKey, model, string(sess.Status))
@@ -210,6 +211,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		memoryEmbedder:   h.memoryEmbedder,
 		dreamTurnFn:      h.dreamTurnFn,
 		agentLog:         h.agentLog,
+		registry:         h.registry,
 		contextCfg:       h.contextCfg,
 		compactionCfg:    h.compactionCfg,
 		defaultModel:     h.defaultModel,

@@ -16,7 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
@@ -35,7 +35,7 @@ func (s *Server) initGmailPoll() {
 
 	cfg := gmailpoll.Config{
 		StateDir:   stateDir,
-		LLMBaseURL: "http://127.0.0.1:30000/v1",
+		LLMBaseURL: modelrole.DefaultSglangBaseURL,
 		Model:      resolveDefaultModel(s.logger), // use main model by default
 	}
 	if pollCfg.IntervalMin != nil {
@@ -274,15 +274,14 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 // chat handler for coding-focused agent sessions. It wraps the existing
 // channel handlers so both Telegram and Discord can coexist.
 func (s *Server) wireDiscordChatHandler() {
-	// Initialize auto thread namer using the local sglang server (OpenAI-compatible).
-	// sglang is always available on DGX Spark and costs nothing per call.
+	// Initialize auto thread namer using the lightweight model (local sglang).
 	discordCfg := s.discordPlug.Config()
-	if discordCfg.AutoThreadNamesEnabled() {
-		const sglangURL = "http://127.0.0.1:30000/v1"
-		const sglangModel = "Qwen/Qwen3.5-35B-A3B"
-		sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
-		s.discordThreadNamer = discord.NewThreadNamer(sglangClient, sglangModel)
-		s.logger.Info("discord: auto thread naming enabled (sglang)", "model", sglangModel)
+	if discordCfg.AutoThreadNamesEnabled() && s.chatHandler != nil && s.chatHandler.ModelRegistry() != nil {
+		reg := s.chatHandler.ModelRegistry()
+		lwClient := reg.Client(modelrole.RoleLightweight)
+		lwModel := reg.Model(modelrole.RoleLightweight)
+		s.discordThreadNamer = discord.NewThreadNamer(lwClient, lwModel)
+		s.logger.Info("discord: auto thread naming enabled", "model", lwModel)
 	}
 
 	// Recent-send dedup cache.
@@ -536,13 +535,13 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 }
 
 // resolveDefaultModel reads agents.defaultModel or agents.defaults.model from
-// deneb.json, falling back to a hardcoded default.
+// deneb.json, falling back to the registry's main model default.
 // The model field can be either a string ("model-name") or an object
 // ({"primary": "model-name", "fallbacks": [...]}).
 func resolveDefaultModel(logger *slog.Logger) string {
 	snapshot, err := config.LoadConfigFromDefaultPath()
 	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
-		return "google/gemini-3.0-flash"
+		return "" // empty: registry will provide the default
 	}
 	var root struct {
 		Agents struct {
@@ -552,7 +551,7 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	}
 	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
 		logger.Warn("failed to parse agents config for model", "error", err)
-		return "google/gemini-3.0-flash"
+		return "" // empty: registry will provide the default
 	}
 	if root.Agents.DefaultModel != "" {
 		return root.Agents.DefaultModel
@@ -563,7 +562,7 @@ func resolveDefaultModel(logger *slog.Logger) string {
 			return model
 		}
 	}
-	return "google/gemini-3.0-flash"
+	return "" // empty: registry will provide the default
 }
 
 // extractModelFromDefaults handles both string and object forms of the model field.

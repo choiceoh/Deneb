@@ -13,8 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
@@ -89,16 +89,14 @@ func (s *Server) registerSessionRPCMethods() {
 		} else {
 			chatCfg.MemoryStore = memStore
 
-			const sglangURL = "http://127.0.0.1:30000/v1"
-			const sglangModel = "Qwen/Qwen3.5-35B-A3B"
-
 			// Use the Gemini embedder set during gateway init.
 			if s.geminiEmbedder != nil {
 				embedder := memory.NewEmbedder(s.geminiEmbedder, memStore, s.logger)
 				chatCfg.MemoryEmbedder = embedder
 
-				sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
-				s.dreamingAdapter = memory.NewDreamingAdapter(memStore, embedder, sglangClient, sglangModel, s.logger)
+				lwClient := reg.Client(modelrole.RoleLightweight)
+				lwModel := reg.Model(modelrole.RoleLightweight)
+				s.dreamingAdapter = memory.NewDreamingAdapter(memStore, embedder, lwClient, lwModel, s.logger)
 				// DreamTurnFn is wired after autonomous service is created (phase 3).
 				// Use a closure that captures s so the autonomous svc reference resolves at call time.
 				chatCfg.DreamTurnFn = func(ctx context.Context) {
@@ -145,8 +143,10 @@ func (s *Server) registerSessionRPCMethods() {
 		}
 	}
 
-	// Resolve default model from config; fall back to hardcoded default.
+	// Resolve default model from config and create the model role registry.
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
+	reg := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
+	chatCfg.Registry = reg
 
 	// Resolve workspace directory for file tool operations.
 	workspaceDir := resolveWorkspaceDir()
