@@ -12,6 +12,7 @@ metadata: { "deneb": { "emoji": "🌅" } }
 
 - 크론잡 `morning-letter`가 매일 08:00 KST에 자동 트리거
 - 사용자가 "모닝레터", "아침 브리핑" 등을 요청할 때 수동 실행
+- 기본 모델: 게이트웨이의 메인 모델을 자동 사용 (크론잡 payload에 model 미지정 시 defaultModel 폴백)
 
 ## 필수 환경변수
 
