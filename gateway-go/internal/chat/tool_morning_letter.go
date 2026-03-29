@@ -339,13 +339,13 @@ func fetchCalendar(ctx context.Context) any {
 	return calendarData{OK: true, Events: events}
 }
 
-func fetchEmail(_ context.Context) any {
+func fetchEmail(ctx context.Context) any {
 	client, err := gmail.GetClient()
 	if err != nil {
 		return emailData{Error: "no credentials"}
 	}
 
-	msgs, err := client.Search("newer_than:1d", 10)
+	msgs, err := client.Search(ctx, "newer_than:1d", 10)
 	if err != nil {
 		return emailData{Error: err.Error()}
 	}
