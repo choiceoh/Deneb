@@ -1,6 +1,11 @@
 package discord
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+)
 
 func TestBot_isChannelOrThreadAllowed(t *testing.T) {
 	cfg := &Config{
@@ -43,5 +48,65 @@ func TestBot_isChannelOrThreadAllowed_NoAllowlist(t *testing.T) {
 
 	if !b.isChannelOrThreadAllowed("anything") {
 		t.Error("expected all channels allowed when no allowlist")
+	}
+}
+
+func TestBot_handleDispatch_EnforcesGuildID(t *testing.T) {
+	called := make(chan struct{}, 1)
+	b := &Bot{
+		config:        &Config{GuildID: "12345678901234567"},
+		threadParents: make(map[string]string),
+		handler: func(_ context.Context, _ *Message) {
+			called <- struct{}{}
+		},
+	}
+
+	msg := Message{
+		ID:        "m1",
+		ChannelID: "33333333333333333",
+		GuildID:   "99999999999999999",
+		Content:   "hello",
+		Author:    &User{ID: "u1"},
+	}
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal message: %v", err)
+	}
+
+	b.handleDispatch(context.Background(), &GatewayPayload{T: "MESSAGE_CREATE", D: raw})
+	select {
+	case <-called:
+		t.Error("expected handler not called for mismatched guild")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestBot_handleDispatch_AllowsConfiguredGuild(t *testing.T) {
+	called := make(chan struct{}, 1)
+	b := &Bot{
+		config:        &Config{GuildID: "12345678901234567"},
+		threadParents: make(map[string]string),
+		handler: func(_ context.Context, _ *Message) {
+			called <- struct{}{}
+		},
+	}
+
+	msg := Message{
+		ID:        "m1",
+		ChannelID: "33333333333333333",
+		GuildID:   "12345678901234567",
+		Content:   "hello",
+		Author:    &User{ID: "u1"},
+	}
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal message: %v", err)
+	}
+
+	b.handleDispatch(context.Background(), &GatewayPayload{T: "MESSAGE_CREATE", D: raw})
+	select {
+	case <-called:
+	case <-time.After(200 * time.Millisecond):
+		t.Error("expected handler called for configured guild")
 	}
 }

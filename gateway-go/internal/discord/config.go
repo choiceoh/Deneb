@@ -79,6 +79,15 @@ func (c *Config) IsUserAllowed(userID string) bool {
 	return false
 }
 
+// IsGuildAllowed checks if the given guild ID matches the configured guild scope.
+// Returns true if no guild is configured (allow all guilds/DMs).
+func (c *Config) IsGuildAllowed(guildID string) bool {
+	if c.GuildID == "" {
+		return true
+	}
+	return guildID == c.GuildID
+}
+
 // Validate checks the config for common mistakes and returns an error if invalid.
 func (c *Config) Validate() error {
 	if c.BotToken == "" {

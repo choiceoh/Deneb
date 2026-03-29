@@ -22,10 +22,10 @@ type MessageHandler func(ctx context.Context, msg *Message)
 // Bot manages the Discord bot lifecycle: Gateway WebSocket connection,
 // heartbeating, and dispatching message events.
 type Bot struct {
-	channel.RunState             // provides IsRunning(), Stop(), BeginRun(), EndRun()
-	client  *Client
-	config  *Config
-	logger  *slog.Logger
+	channel.RunState // provides IsRunning(), Stop(), BeginRun(), EndRun()
+	client           *Client
+	config           *Config
+	logger           *slog.Logger
 
 	stateMu   sync.Mutex // protects handler, sessionID, resumeURL, botUser
 	handler   MessageHandler
@@ -250,6 +250,11 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 
 		// Ignore bot's own messages.
 		if msg.Author != nil && msg.Author.Bot {
+			return
+		}
+
+		// Enforce configured guild scope.
+		if !b.config.IsGuildAllowed(msg.GuildID) {
 			return
 		}
 

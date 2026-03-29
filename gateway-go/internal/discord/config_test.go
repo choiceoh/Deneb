@@ -61,6 +61,29 @@ func TestConfig_IsUserAllowed(t *testing.T) {
 	}
 }
 
+func TestConfig_IsGuildAllowed(t *testing.T) {
+	// No guild scope: allow all guilds/DMs.
+	cfg := &Config{}
+	if !cfg.IsGuildAllowed("") {
+		t.Error("expected DMs allowed when no guildId configured")
+	}
+	if !cfg.IsGuildAllowed("12345678901234567") {
+		t.Error("expected guild allowed when no guildId configured")
+	}
+
+	// Guild scope configured: only exact guild is allowed.
+	cfg.GuildID = "12345678901234567"
+	if !cfg.IsGuildAllowed("12345678901234567") {
+		t.Error("expected configured guild allowed")
+	}
+	if cfg.IsGuildAllowed("99999999999999999") {
+		t.Error("expected non-configured guild blocked")
+	}
+	if cfg.IsGuildAllowed("") {
+		t.Error("expected DMs blocked when guildId is configured")
+	}
+}
+
 func TestConfig_Validate(t *testing.T) {
 	// Missing token.
 	cfg := &Config{}
