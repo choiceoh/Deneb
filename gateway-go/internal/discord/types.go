@@ -149,12 +149,124 @@ type Channel struct {
 	ParentID string `json:"parent_id,omitempty"`
 }
 
+// --- Embed types ---
+
+// Embed represents a Discord rich embed.
+type Embed struct {
+	Title       string       `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Color       int          `json:"color,omitempty"`
+	Fields      []EmbedField `json:"fields,omitempty"`
+	Footer      *EmbedFooter `json:"footer,omitempty"`
+	Timestamp   string       `json:"timestamp,omitempty"` // ISO8601
+}
+
+// EmbedField represents a field in an embed.
+type EmbedField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline,omitempty"`
+}
+
+// EmbedFooter represents an embed footer.
+type EmbedFooter struct {
+	Text string `json:"text"`
+}
+
+// Embed color constants for semantic status coding.
+const (
+	ColorSuccess  = 0x2ECC71 // green — pass, complete
+	ColorError    = 0xE74C3C // red — fail, error
+	ColorInfo     = 0x3498DB // blue — informational, diff
+	ColorProgress = 0xF39C12 // orange — in-progress
+	ColorWarning  = 0xF1C40F // yellow — warning
+)
+
+// --- Component types (buttons, action rows) ---
+
+// Component represents a Discord message component.
+type Component struct {
+	Type       int         `json:"type"`                        // 1=ActionRow, 2=Button
+	Style      int         `json:"style,omitempty"`             // 1=Primary, 2=Secondary, 3=Success, 4=Danger
+	Label      string      `json:"label,omitempty"`
+	CustomID   string      `json:"custom_id,omitempty"`
+	Disabled   bool        `json:"disabled,omitempty"`
+	Components []Component `json:"components,omitempty"` // children for ActionRow
+}
+
+// Component type constants.
+const (
+	ComponentActionRow = 1
+	ComponentButton    = 2
+)
+
+// Button style constants.
+const (
+	ButtonPrimary   = 1
+	ButtonSecondary = 2
+	ButtonSuccess   = 3
+	ButtonDanger    = 4
+)
+
+// --- Interaction types ---
+
+// Interaction represents a Discord interaction (button click, slash command).
+type Interaction struct {
+	ID        string          `json:"id"`
+	Type      int             `json:"type"` // 2=Component, 3=ApplicationCommand
+	Data      InteractionData `json:"data,omitempty"`
+	Token     string          `json:"token"`
+	ChannelID string          `json:"channel_id"`
+	Message   *Message        `json:"message,omitempty"`
+	Member    *struct {
+		User *User `json:"user,omitempty"`
+	} `json:"member,omitempty"`
+}
+
+// InteractionData holds interaction-specific data.
+type InteractionData struct {
+	CustomID      string `json:"custom_id,omitempty"`
+	ComponentType int    `json:"component_type,omitempty"`
+	Name          string `json:"name,omitempty"` // for slash commands
+}
+
+// InteractionResponse is sent in reply to an interaction.
+type InteractionResponse struct {
+	Type int                      `json:"type"` // 4=ChannelMessage, 6=DeferredUpdate, 7=UpdateMessage
+	Data *InteractionResponseData `json:"data,omitempty"`
+}
+
+// InteractionResponseData is the data payload for an interaction response.
+type InteractionResponseData struct {
+	Content    string      `json:"content,omitempty"`
+	Embeds     []Embed     `json:"embeds,omitempty"`
+	Components []Component `json:"components,omitempty"`
+	Flags      int         `json:"flags,omitempty"` // 64=Ephemeral
+}
+
+// Interaction response type constants.
+const (
+	InteractionResponseMessage       = 4
+	InteractionResponseDeferredUpdate = 6
+	InteractionResponseUpdateMessage = 7
+)
+
+// --- Message request/edit types ---
+
 // SendMessageRequest is the request body for POST /channels/{id}/messages.
 type SendMessageRequest struct {
 	Content          string            `json:"content,omitempty"`
+	Embeds           []Embed           `json:"embeds,omitempty"`
+	Components       []Component       `json:"components,omitempty"`
 	MessageReference *MessageReference `json:"message_reference,omitempty"`
-	// AllowedMentions controls ping behavior.
-	AllowedMentions *AllowedMentions `json:"allowed_mentions,omitempty"`
+	AllowedMentions  *AllowedMentions  `json:"allowed_mentions,omitempty"`
+}
+
+// EditMessageRequest is the request body for PATCH /channels/{id}/messages/{id}.
+type EditMessageRequest struct {
+	Content    *string     `json:"content,omitempty"`    // pointer to allow empty string
+	Embeds     []Embed     `json:"embeds,omitempty"`
+	Components []Component `json:"components,omitempty"`
 }
 
 // AllowedMentions controls which mentions ping users.

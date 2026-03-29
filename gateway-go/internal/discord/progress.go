@@ -1,0 +1,172 @@
+// Package discord — ProgressTracker edits a single Discord message in-place
+// to show real-time agent execution progress (tool start/complete steps).
+//
+// Throttles edits to ≤1 per 2 seconds to stay within Discord rate limits.
+package discord
+
+import (
+	"context"
+	"sync"
+	"time"
+)
+
+const (
+	// progressEditThrottle is the minimum interval between message edits.
+	progressEditThrottle = 2 * time.Second
+)
+
+// ProgressTracker manages a single Discord message that is edited to reflect
+// agent execution progress. Each tool execution becomes a step with a status.
+type ProgressTracker struct {
+	client    *Client
+	channelID string
+	messageID string // the progress message being edited
+
+	mu        sync.Mutex
+	steps     []ProgressStep
+	lastEdit  time.Time
+	dirty     bool // true if steps changed since last edit
+	finalized bool
+}
+
+// NewProgressTracker sends an initial progress message and returns a tracker.
+// Returns nil if the message cannot be sent.
+func NewProgressTracker(ctx context.Context, client *Client, channelID string) *ProgressTracker {
+	msg, err := client.SendMessage(ctx, channelID, &SendMessageRequest{
+		Embeds: []Embed{{
+			Title:       "⏳ 처리 중...",
+			Description: "에이전트가 작업을 시작합니다.",
+			Color:       ColorProgress,
+		}},
+		AllowedMentions: &AllowedMentions{Parse: []string{}},
+	})
+	if err != nil || msg == nil {
+		return nil
+	}
+
+	return &ProgressTracker{
+		client:    client,
+		channelID: channelID,
+		messageID: msg.ID,
+	}
+}
+
+// AddStep adds a new pending step. Does not trigger an edit.
+func (pt *ProgressTracker) AddStep(name string) {
+	if pt == nil {
+		return
+	}
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	pt.steps = append(pt.steps, ProgressStep{Name: name, Status: StepPending})
+	pt.dirty = true
+}
+
+// StartStep marks a step as running. Triggers a throttled edit.
+func (pt *ProgressTracker) StartStep(ctx context.Context, name string) {
+	if pt == nil {
+		return
+	}
+	pt.mu.Lock()
+
+	found := false
+	for i := range pt.steps {
+		if pt.steps[i].Name == name && pt.steps[i].Status == StepPending {
+			pt.steps[i].Status = StepRunning
+			found = true
+			break
+		}
+	}
+	if !found {
+		// Auto-add if not pre-registered.
+		pt.steps = append(pt.steps, ProgressStep{Name: name, Status: StepRunning})
+	}
+	pt.dirty = true
+	pt.mu.Unlock()
+
+	pt.tryEdit(ctx)
+}
+
+// CompleteStep marks a step as done. Triggers a throttled edit.
+func (pt *ProgressTracker) CompleteStep(ctx context.Context, name string, isError bool) {
+	if pt == nil {
+		return
+	}
+	pt.mu.Lock()
+
+	status := StepDone
+	if isError {
+		status = StepError
+	}
+
+	for i := range pt.steps {
+		if pt.steps[i].Name == name && (pt.steps[i].Status == StepRunning || pt.steps[i].Status == StepPending) {
+			pt.steps[i].Status = status
+			break
+		}
+	}
+	pt.dirty = true
+	pt.mu.Unlock()
+
+	pt.tryEdit(ctx)
+}
+
+// Finalize sends the final edit marking the progress as complete.
+func (pt *ProgressTracker) Finalize(ctx context.Context) {
+	if pt == nil {
+		return
+	}
+	pt.mu.Lock()
+	if pt.finalized {
+		pt.mu.Unlock()
+		return
+	}
+	pt.finalized = true
+
+	// Mark any remaining running steps as done.
+	for i := range pt.steps {
+		if pt.steps[i].Status == StepRunning || pt.steps[i].Status == StepPending {
+			pt.steps[i].Status = StepDone
+		}
+	}
+	steps := make([]ProgressStep, len(pt.steps))
+	copy(steps, pt.steps)
+	pt.mu.Unlock()
+
+	embed := FormatProgressEmbed(steps)
+	pt.client.EditMessage(ctx, pt.channelID, pt.messageID, &EditMessageRequest{
+		Embeds: []Embed{embed},
+	})
+}
+
+// MessageID returns the tracked message ID.
+func (pt *ProgressTracker) MessageID() string {
+	if pt == nil {
+		return ""
+	}
+	return pt.messageID
+}
+
+// tryEdit edits the progress message if the throttle period has elapsed.
+func (pt *ProgressTracker) tryEdit(ctx context.Context) {
+	pt.mu.Lock()
+	if !pt.dirty || pt.finalized {
+		pt.mu.Unlock()
+		return
+	}
+	if time.Since(pt.lastEdit) < progressEditThrottle {
+		pt.mu.Unlock()
+		return
+	}
+
+	steps := make([]ProgressStep, len(pt.steps))
+	copy(steps, pt.steps)
+	pt.lastEdit = time.Now()
+	pt.dirty = false
+	pt.mu.Unlock()
+
+	embed := FormatProgressEmbed(steps)
+	pt.client.EditMessage(ctx, pt.channelID, pt.messageID, &EditMessageRequest{
+		Embeds: []Embed{embed},
+	})
+}

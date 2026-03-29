@@ -125,6 +125,15 @@ func (p *Plugin) SetHandler(h MessageHandler) {
 	}
 }
 
+// SetInteractionHandler sets the handler for button clicks and slash commands.
+func (p *Plugin) SetInteractionHandler(h InteractionHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.bot != nil {
+		p.bot.SetInteractionHandler(h)
+	}
+}
+
 // BotUser returns the verified bot user. Returns nil before Start.
 func (p *Plugin) BotUser() *User {
 	p.mu.Lock()
