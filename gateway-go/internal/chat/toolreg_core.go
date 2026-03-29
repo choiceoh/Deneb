@@ -48,6 +48,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	RegisterVegaTools(registry, &deps.Vega)
 	RegisterMediaTools(registry, deps.LLMClient)
 	RegisterDataTools(registry, deps.LLMClient, deps.DefaultModel)
+	RegisterAdvancedTools(registry, deps.WorkspaceDir)
 	RegisterHiddenTools(registry, deps.AgentLog)
 	// Morning letter: needs registry for web search calls.
 	registry.RegisterTool(ToolDef{
