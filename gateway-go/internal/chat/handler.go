@@ -40,9 +40,7 @@ type Handler struct {
 	registry        *modelrole.Registry       // centralized model role registry
 
 	// Agent run configuration.
-	sessionCache        *SessionCache        // L3 cache: compiled prompts + context snapshots
-	compactionPressure  *CompactionPressure  // branch prediction for context overflow
-	contextCfg          ContextConfig
+	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string
 	defaultSystem string
@@ -141,9 +139,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		dreamTurnFn:     cfg.DreamTurnFn,
 		agentLog:        cfg.AgentLog,
 		registry:        cfg.Registry,
-		sessionCache:       NewSessionCache(),
-		compactionPressure: NewCompactionPressure(),
-		contextCfg:         cfg.ContextCfg,
+		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
 		defaultSystem:   cfg.DefaultSystem,
