@@ -97,7 +97,7 @@ git commit -m "Add Clawd workspace"
 ## Core Skills (enable in Settings → Skills)
 
 - **mcporter** — Tool server runtime/CLI for managing external skill backends.
-- **Peekaboo** — Fast macOS screenshots with optional AI vision analysis.
+- **Peekaboo** — Fast screenshots with optional AI vision analysis.
 - **camsnap** — Capture frames, clips, or motion alerts from RTSP/ONVIF security cams.
 - **oracle** — OpenAI-ready agent CLI with session replay and browser control.
 - **eightctl** — Control your sleep, from the terminal.

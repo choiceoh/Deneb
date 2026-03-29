@@ -36,7 +36,7 @@ Healthy signals:
 
 ## Foreground requirements
 
-`canvas.*`, `camera.*`, and `screen.*` are foreground only on iOS/Android nodes.
+`canvas.*`, `camera.*`, and `screen.*` are foreground only on Android nodes.
 
 Quick check and fix:
 
@@ -50,12 +50,12 @@ If you see `NODE_BACKGROUND_UNAVAILABLE`, bring the node app to the foreground a
 
 ## Permissions matrix
 
-| Capability                   | iOS                                     | Android                                      | macOS node app                | Typical failure code           |
-| ---------------------------- | --------------------------------------- | -------------------------------------------- | ----------------------------- | ------------------------------ |
-| `camera.snap`, `camera.clip` | Camera (+ mic for clip audio)           | Camera (+ mic for clip audio)                | Camera (+ mic for clip audio) | `*_PERMISSION_REQUIRED`        |
-| `screen.record`              | Screen Recording (+ mic optional)       | Screen capture prompt (+ mic optional)       | Screen Recording              | `*_PERMISSION_REQUIRED`        |
-| `location.get`               | While Using or Always (depends on mode) | Foreground/Background location based on mode | Location permission           | `LOCATION_PERMISSION_REQUIRED` |
-| `system.run`                 | n/a (node host path)                    | n/a (node host path)                         | Exec approvals required       | `SYSTEM_RUN_DENIED`            |
+| Capability                   | Android                                      | Typical failure code           |
+| ---------------------------- | -------------------------------------------- | ------------------------------ |
+| `camera.snap`, `camera.clip` | Camera (+ mic for clip audio)                | `*_PERMISSION_REQUIRED`        |
+| `screen.record`              | Screen capture prompt (+ mic optional)       | `*_PERMISSION_REQUIRED`        |
+| `location.get`               | Foreground/Background location based on mode | `LOCATION_PERMISSION_REQUIRED` |
+| `system.run`                 | n/a (node host path)                         | `SYSTEM_RUN_DENIED`            |
 
 ## Pairing versus approvals
 

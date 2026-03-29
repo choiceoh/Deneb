@@ -29,7 +29,7 @@ For a complete map of the docs, see [Docs hubs](/start/hubs).
 - [Workspace templates](/reference/templates/AGENTS)
 - [RPC adapters](/reference/rpc)
 - [Gateway runbook](/gateway)
-- [Nodes (iOS and Android)](/nodes)
+- [Nodes (Android)](/nodes)
 - [Web surfaces (Control UI)](/web)
 - [Discovery and transports](/gateway/discovery)
 - [Remote access](/gateway/remote)

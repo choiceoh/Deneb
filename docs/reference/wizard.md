@@ -31,7 +31,7 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
   </Step>
   <Step title="Model/Auth">
     - **Anthropic API key**: uses `ANTHROPIC_API_KEY` if present or prompts for a key, then saves it for daemon use.
-    - **Anthropic OAuth (Claude Code CLI)**: on macOS onboarding checks Keychain item "Claude Code-credentials" (choose "Always Allow" so launchd starts don't block); on Linux/Windows it reuses `~/.claude/.credentials.json` if present.
+    - **Anthropic OAuth (Claude Code CLI)**: on Linux reuses `~/.claude/.credentials.json` if present.
     - **Anthropic token (paste setup-token)**: run `claude setup-token` on any machine, then paste the token (you can name it; blank = default).
     - **OpenAI Code (Codex) subscription (Codex CLI)**: if `~/.codex/auth.json` exists, onboarding can reuse it.
     - **OpenAI Code (Codex) subscription (OAuth)**: browser flow; paste the `code#state`.
@@ -112,7 +112,7 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
   <Step title="Skills (recommended)">
     - Reads the available skills and checks requirements.
     - Lets you choose a node manager: **npm / pnpm** (bun not recommended).
-    - Installs optional dependencies (some use Homebrew on macOS).
+    - Installs optional dependencies.
   </Step>
   <Step title="Finish">
     - Summary + next steps.
@@ -176,7 +176,7 @@ deneb agents add work \
 ## Gateway wizard RPC
 
 The Gateway exposes the onboarding flow over RPC (`wizard.start`, `wizard.next`, `wizard.cancel`, `wizard.status`).
-Clients (macOS app, Control UI) can render steps without re‑implementing onboarding logic.
+Clients (Control UI) can render steps without re‑implementing onboarding logic.
 
 ## What the wizard writes
 

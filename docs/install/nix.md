@@ -36,8 +36,8 @@ Reference the nix-deneb README for module options.
 
 ## What you get
 
-- Gateway + macOS app + tools (whisper, spotify, cameras) — all pinned
-- Launchd service that survives reboots
+- Gateway + tools (whisper, spotify, cameras) — all pinned
+- Systemd service that survives reboots
 - Plugin system with declarative config
 - Instant rollback: `home-manager switch --rollback`
 
@@ -52,13 +52,6 @@ Enable it by exporting:
 
 ```bash
 DENEB_NIX_MODE=1
-```
-
-On macOS, the GUI app does not automatically inherit shell env vars. You can
-also enable Nix mode via defaults:
-
-```bash
-defaults write ai.deneb.mac deneb.nixMode -bool true
 ```
 
 ### Config + state paths

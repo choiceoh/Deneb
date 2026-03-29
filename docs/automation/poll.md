@@ -11,9 +11,7 @@ title: "Polls"
 ## Supported channels
 
 - Telegram
-- WhatsApp (web channel)
 - Discord
-- MS Teams (Adaptive Cards)
 
 ## CLI
 
@@ -25,12 +23,6 @@ deneb message poll --channel telegram --target -1001234567890:topic:42 \
   --poll-question "Pick a time" --poll-option "10am" --poll-option "2pm" \
   --poll-duration-seconds 300
 
-# WhatsApp
-deneb message poll --target +15555550123 \
-  --poll-question "Lunch today?" --poll-option "Yes" --poll-option "No" --poll-option "Maybe"
-deneb message poll --target 123456789@g.us \
-  --poll-question "Meeting time?" --poll-option "10am" --poll-option "2pm" --poll-option "4pm" --poll-multi
-
 # Discord
 deneb message poll --channel discord --target channel:123456789 \
   --poll-question "Snack?" --poll-option "Pizza" --poll-option "Sushi"
@@ -40,7 +32,7 @@ deneb message poll --channel discord --target channel:123456789 \
 
 Options:
 
-- `--channel`: `whatsapp` (default), `telegram`, or `discord`
+- `--channel`: `telegram` (default) or `discord`
 - `--poll-multi`: allow selecting multiple options
 - `--poll-duration-hours`: Discord-only (defaults to 24 when omitted)
 - `--poll-duration-seconds`: Telegram-only (5-600 seconds)
@@ -59,13 +51,12 @@ Params:
 - `durationHours` (number, optional)
 - `durationSeconds` (number, optional, Telegram-only)
 - `isAnonymous` (boolean, optional, Telegram-only)
-- `channel` (string, optional, default: `whatsapp`)
+- `channel` (string, optional, default: `telegram`)
 - `idempotencyKey` (string, required)
 
 ## Channel differences
 
 - Telegram: 2-10 options. Supports forum topics via `threadId` or `:topic:` targets. Uses `durationSeconds` instead of `durationHours`, limited to 5-600 seconds. Supports anonymous and public polls.
-- WhatsApp: 2-12 options, `maxSelections` must be within option count, ignores `durationHours`.
 - Discord: 2-10 options, `durationHours` clamped to 1-768 hours (default 24). `maxSelections > 1` enables multi-select; Discord does not support a strict selection count.
 
 ## Agent tool (Message)

@@ -64,8 +64,7 @@ flowchart LR
   B --> C["Pi agent"]
   B --> D["CLI"]
   B --> E["Web Control UI"]
-  B --> F["macOS app"]
-  B --> G["iOS and Android nodes"]
+  B --> F["Android nodes"]
 ```
 
 The Gateway is the single source of truth for sessions, routing, and channel connections.
@@ -120,7 +119,7 @@ Open the browser Control UI after the Gateway starts.
 - Remote access: [Web surfaces](/web) and [Tailscale](/gateway/tailscale)
 
 <p align="center">
-  <img src="/whatsapp-deneb.jpg" alt="Deneb" width="420" />
+  <img src="/assets/deneb-logo-text.png" alt="Deneb" width="420" />
 </p>
 
 ## Configuration (optional)

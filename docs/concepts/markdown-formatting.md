@@ -106,7 +106,7 @@ rendered as spoiler tags.
 1. **Parse once:** use the shared `markdownToIR(...)` helper with channel-appropriate
    options (autolink, heading style, blockquote prefix).
 2. **Render:** implement a renderer with `renderMarkdownWithMarkers(...)` and a
-   style marker map (or Signal style ranges).
+   style marker map.
 3. **Chunk:** call `chunkMarkdownIR(...)` before rendering; render each chunk.
 4. **Wire adapter:** update the channel outbound adapter to use the new chunker
    and renderer.

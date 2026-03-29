@@ -80,7 +80,7 @@ It does not install or modify anything on the remote host.
   <Step title="Skills">
     - Reads available skills and checks requirements.
     - Lets you choose node manager: npm or pnpm (bun not recommended).
-    - Installs optional dependencies (some use Homebrew on macOS).
+    - Installs optional dependencies.
   </Step>
   <Step title="Finish">
     - Summary and next steps.
@@ -269,7 +269,7 @@ Gateway wizard RPC:
 - `wizard.cancel`
 - `wizard.status`
 
-Clients (macOS app and Control UI) can render steps without re-implementing onboarding logic.
+Clients (Control UI) can render steps without re-implementing onboarding logic.
 
 ## Related docs
 

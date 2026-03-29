@@ -461,7 +461,7 @@ graph TB
 - Executes skill plugins and provider integrations via the TypeScript plugin SDK.
 - Auto-reconnects with exponential backoff (1s to 30s max) if the connection drops.
 
-### Clients (macOS app / CLI / web admin)
+### Clients (CLI / web admin)
 
 - One WS connection per client.
 - Send requests (`health`, `status`, `send`, `agent`, `system-presence`).
