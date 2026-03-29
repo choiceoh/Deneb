@@ -12,50 +12,55 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/web"
-	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // CoreToolDeps holds all dependencies for core agent tools.
-// Fields may be nil — each tool gracefully degrades when its dependency is unavailable.
+// It composes focused dep structs for each tool group. Use the domain-specific
+// Register*Tools functions for fine-grained wiring; RegisterCoreTools is a
+// convenience wrapper that delegates to all of them.
+//
+// Fields that support late-binding (Vega.Backend, Sessions.SendFn, Chrono.SendFn)
+// can be set after initial construction — the tool closures read them at call time
+// through the pointer to the embedded sub-struct.
 type CoreToolDeps struct {
-	ProcessMgr   *process.Manager
 	WorkspaceDir string
-	CronSched    *cron.Scheduler
-	Sessions     *session.Manager
+	Process      ProcessDeps
+	Sessions     SessionDeps
+	Chrono       ChronoDeps
+	Vega         VegaDeps
 	LLMClient    *llm.Client
-	Transcript   TranscriptStore
-
-	// SessionSendFn is a callback that sends a message to a target session,
-	// triggering an agent run. Set after Handler creation to avoid circular deps.
-	SessionSendFn func(sessionKey, message string) error
-
-	// VegaBackend is the optional Vega search backend.
-	// The vega tool gracefully degrades when this is nil.
-	VegaBackend vega.Backend
-
-	// AgentLog is the optional agent detail log writer.
-	// The agent_logs tool gracefully degrades when this is nil.
-	AgentLog *agentlog.Writer
-
-	// MemoryStore is the optional aurora-memory structured store.
-	// The health_check tool uses this to probe memory subsystem health.
-	MemoryStore *memory.Store
+	AgentLog     *agentlog.Writer
 }
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
-// Tools that require external subsystems (e.g., process manager) are wired here.
+// It is a convenience wrapper that delegates to the domain-specific Register*Tools functions.
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
-	procMgr := deps.ProcessMgr
-	workspaceDir := deps.WorkspaceDir
-	cronSched := deps.CronSched
-	// -- File tools (tools_fs.go, tools_fs_search.go) --
+	RegisterFSTools(registry, deps.WorkspaceDir)
+	RegisterProcessTools(registry, &deps.Process)
+	RegisterWebTools(registry)
+	RegisterSessionTools(registry, &deps.Sessions)
+	RegisterChronoTools(registry, &deps.Chrono)
+	RegisterVegaTools(registry, &deps.Vega)
+	RegisterMediaTools(registry, deps.LLMClient)
+	RegisterDataTools(registry)
+	RegisterHiddenTools(registry, deps.AgentLog)
+	// Pilot registered last: it takes the registry itself as a dependency.
+	registry.RegisterTool(ToolDef{
+		Name:        "pilot",
+		Description: "Fast local AI — gathers tool outputs and analyzes them in one call (free, no API cost). Best for: summarizing file/command output, reviewing diffs, analyzing test failures, comparing multiple sources, processing grep results. Shortcuts: file, files, exec, grep, find, url, http, diff, test, tree, git_log, health, kv_key, memory, gmail, youtube, polaris, image, vega, agent_logs, gateway_logs. Options: chain, max_length, output_format, post_process",
+		InputSchema: pilotToolSchema(),
+		Fn:          toolPilot(registry, deps.WorkspaceDir),
+	})
+	RegisterDefaultPostProcessors(registry)
+}
+
+// RegisterFSTools registers file-system, code analysis, and git tools.
+// These tools only require the workspace directory.
+func RegisterFSTools(registry *ToolRegistry, workspaceDir string) {
 	registry.RegisterTool(ToolDef{
 		Name:        "read",
 		Description: "Read file contents with line numbers (default: 2000 lines). Use offset/limit for large files",
@@ -86,8 +91,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: findToolSchema(),
 		Fn:          toolFind(workspaceDir),
 	})
-
-	// -- Code tools (tools_coding.go, tools_analyze.go, tools_test_runner.go) --
 	registry.RegisterTool(ToolDef{
 		Name:        "multi_edit",
 		Description: "Batch search-and-replace across multiple files in one call. Up to 50 edits. Essential for refactoring, renaming symbols, updating imports",
@@ -118,30 +121,50 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: testToolSchema(),
 		Fn:          toolTest(workspaceDir),
 	})
-
-	// -- Git tool (tools_git.go) --
 	registry.RegisterTool(ToolDef{
 		Name:        "git",
 		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, cherry_pick, reset, remote, clean. Use diff tool for viewing diffs, apply_patch for applying patches",
 		InputSchema: gitToolSchema(),
 		Fn:          toolGit(workspaceDir),
 	})
+	registry.RegisterTool(ToolDef{
+		Name:        "memory_search",
+		Description: "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with context",
+		InputSchema: memorySearchToolSchema(),
+		Fn:          toolMemorySearch(workspaceDir),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "polaris",
+		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides in 4 categories: core, tools, runtime, infra). Use guides with category key to browse",
+		InputSchema: polarisToolSchema(),
+		Fn:          polaris.NewHandler(workspaceDir),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "gateway",
+		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
+		InputSchema: gatewayToolSchema(),
+		Fn:          toolGateway(workspaceDir),
+	})
+}
 
-	// -- Exec/process tools --
+// RegisterProcessTools registers exec and process management tools.
+func RegisterProcessTools(registry *ToolRegistry, d *ProcessDeps) {
 	registry.RegisterTool(ToolDef{
 		Name:        "exec",
 		Description: "Run a shell command (bash -c). Default timeout 30s, max 5min. Use background=true for long tasks, then process to check",
 		InputSchema: execToolSchema(),
-		Fn:          toolExec(procMgr, workspaceDir),
+		Fn:          toolExec(d.Mgr, d.WorkspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "process",
 		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
 		InputSchema: processToolSchema(),
-		Fn:          toolProcess(procMgr),
+		Fn:          toolProcess(d.Mgr),
 	})
+}
 
-	// -- Web tools --
+// RegisterWebTools registers web fetch and HTTP tools (no external deps required).
+func RegisterWebTools(registry *ToolRegistry) {
 	webCache := web.NewFetchCache()
 	sglang := web.NewSGLangExtractor()
 	registry.RegisterTool(ToolDef{
@@ -156,39 +179,57 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: httpToolSchema(),
 		Fn:          toolHTTP(),
 	})
+}
 
-	// -- Memory tools --
+// RegisterSessionTools registers session management tools.
+// d is passed by pointer so late-bound fields (SendFn) are visible at call time.
+func RegisterSessionTools(registry *ToolRegistry, d *SessionDeps) {
 	registry.RegisterTool(ToolDef{
-		Name:        "memory_search",
-		Description: "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with context",
-		InputSchema: memorySearchToolSchema(),
-		Fn:          toolMemorySearch(workspaceDir),
+		Name:        "sessions_list",
+		Description: "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
+		InputSchema: sessionsListToolSchema(),
+		Fn:          toolSessionsList(d.Manager),
 	})
 	registry.RegisterTool(ToolDef{
-		Name:        "vega",
-		Description: "Search project knowledge base (Vega). Hybrid BM25 + semantic search across all projects. Actions: search (default), ask",
-		InputSchema: vegaToolSchema(),
-		Fn:          toolVega(deps),
+		Name:        "sessions_history",
+		Description: "Fetch message history from another session (default: last 20 messages)",
+		InputSchema: sessionsHistoryToolSchema(),
+		Fn:          toolSessionsHistory(d.Transcript),
 	})
 	registry.RegisterTool(ToolDef{
-		Name:        "polaris",
-		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides in 4 categories: core, tools, runtime, infra). Use guides with category key to browse",
-		InputSchema: polarisToolSchema(),
-		Fn:          polaris.NewHandler(workspaceDir),
+		Name:        "sessions_search",
+		Description: "Search all past session transcripts by keyword",
+		InputSchema: sessionsSearchToolSchema(),
+		Fn:          toolSessionsSearch(d.Transcript),
 	})
+	registry.RegisterTool(ToolDef{
+		Name:        "sessions_send",
+		Description: "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
+		InputSchema: sessionsSendToolSchema(),
+		Fn:          toolSessionsSend(d),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "sessions_spawn",
+		Description: "Create an isolated sub-agent session for parallel work. Use subagents to monitor",
+		InputSchema: sessionsSpawnToolSchema(),
+		Fn:          toolSessionsSpawn(d),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "subagents",
+		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
+		InputSchema: subagentsToolSchema(),
+		Fn:          toolSubagents(d),
+	})
+}
 
-	// -- System tools --
-	registry.RegisterTool(ToolDef{
-		Name:        "health_check",
-		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
-		InputSchema: healthCheckToolSchema(),
-		Fn:          toolHealthCheck(deps),
-	})
+// RegisterChronoTools registers the cron scheduling tool.
+// d is passed by pointer so late-bound fields (SendFn) are visible at call time.
+func RegisterChronoTools(registry *ToolRegistry, d *ChronoDeps) {
 	registry.RegisterTool(ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
 		InputSchema: cronToolSchema(),
-		Fn:          toolCron(cronSched, deps),
+		Fn:          toolCron(d),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "message",
@@ -196,57 +237,32 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: messageToolSchema(),
 		Fn:          toolMessage(),
 	})
-	registry.RegisterTool(ToolDef{
-		Name:        "gateway",
-		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
-		InputSchema: gatewayToolSchema(),
-		Fn:          toolGateway(workspaceDir),
-	})
+}
 
-	// -- Session tools --
+// RegisterVegaTools registers vega search and health-check tools.
+// d is passed by pointer so late-bound fields (Backend) are visible at call time.
+func RegisterVegaTools(registry *ToolRegistry, d *VegaDeps) {
 	registry.RegisterTool(ToolDef{
-		Name:        "sessions_list",
-		Description: "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
-		InputSchema: sessionsListToolSchema(),
-		Fn:          toolSessionsList(deps.Sessions),
+		Name:        "vega",
+		Description: "Search project knowledge base (Vega). Hybrid BM25 + semantic search across all projects. Actions: search (default), ask",
+		InputSchema: vegaToolSchema(),
+		Fn:          toolVega(d),
 	})
 	registry.RegisterTool(ToolDef{
-		Name:        "sessions_history",
-		Description: "Fetch message history from another session (default: last 20 messages)",
-		InputSchema: sessionsHistoryToolSchema(),
-		Fn:          toolSessionsHistory(deps.Transcript),
+		Name:        "health_check",
+		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
+		InputSchema: healthCheckToolSchema(),
+		Fn:          toolHealthCheck(d),
 	})
-	registry.RegisterTool(ToolDef{
-		Name:        "sessions_search",
-		Description: "Search all past session transcripts by keyword",
-		InputSchema: sessionsSearchToolSchema(),
-		Fn:          toolSessionsSearch(deps.Transcript),
-	})
-	registry.RegisterTool(ToolDef{
-		Name:        "sessions_send",
-		Description: "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
-		InputSchema: sessionsSendToolSchema(),
-		Fn:          toolSessionsSend(deps),
-	})
-	registry.RegisterTool(ToolDef{
-		Name:        "sessions_spawn",
-		Description: "Create an isolated sub-agent session for parallel work. Use subagents to monitor",
-		InputSchema: sessionsSpawnToolSchema(),
-		Fn:          toolSessionsSpawn(deps),
-	})
-	registry.RegisterTool(ToolDef{
-		Name:        "subagents",
-		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
-		InputSchema: subagentsToolSchema(),
-		Fn:          toolSubagents(deps),
-	})
+}
 
-	// -- Media tools --
+// RegisterMediaTools registers image analysis and media delivery tools.
+func RegisterMediaTools(registry *ToolRegistry, llmClient *llm.Client) {
 	registry.RegisterTool(ToolDef{
 		Name:        "image",
 		Description: "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
 		InputSchema: imageToolSchema(),
-		Fn:          toolImage(deps.LLMClient),
+		Fn:          toolImage(llmClient),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "youtube_transcript",
@@ -260,8 +276,10 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: sendFileToolSchema(),
 		Fn:          toolSendFile(),
 	})
+}
 
-	// -- Data tools --
+// RegisterDataTools registers persistent storage tools (no external deps required).
+func RegisterDataTools(registry *ToolRegistry) {
 	registry.RegisterTool(ToolDef{
 		Name:        "kv",
 		Description: "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
@@ -274,13 +292,15 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: gmailToolSchema(),
 		Fn:          toolGmail(),
 	})
+}
 
-	// -- Hidden tools (pilot-only) --
+// RegisterHiddenTools registers pilot-only hidden tools.
+func RegisterHiddenTools(registry *ToolRegistry, agentLog *agentlog.Writer) {
 	registry.RegisterTool(ToolDef{
 		Name:        "agent_logs",
 		Description: "현재 세션의 이전 에이전트 런 상세 로그를 조회합니다. 문제 진단, 이전 실행 결과 확인, 도구 실행 시간 분석에 사용합니다",
 		InputSchema: agentLogsToolSchema(),
-		Fn:          toolAgentLogs(deps.AgentLog),
+		Fn:          toolAgentLogs(agentLog),
 		Hidden:      true,
 	})
 	registry.RegisterTool(ToolDef{
@@ -290,17 +310,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolGatewayLogs(),
 		Hidden:      true,
 	})
-
-	// -- Pilot (registered last: uses the registry itself) --
-	registry.RegisterTool(ToolDef{
-		Name:        "pilot",
-		Description: "Fast local AI — gathers tool outputs and analyzes them in one call (free, no API cost). Best for: summarizing file/command output, reviewing diffs, analyzing test failures, comparing multiple sources, processing grep results. Shortcuts: file, files, exec, grep, find, url, http, diff, test, tree, git_log, health, kv_key, memory, gmail, youtube, polaris, image, vega, agent_logs, gateway_logs. Options: chain, max_length, output_format, post_process",
-		InputSchema: pilotToolSchema(),
-		Fn:          toolPilot(registry, workspaceDir),
-	})
-
-	// -- Post-processing pipeline --
-	RegisterDefaultPostProcessors(registry)
 }
 
 // --- Exec tool ---

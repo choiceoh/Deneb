@@ -25,7 +25,7 @@ func (s *Server) SetVega(backend vega.Backend) {
 	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Backend: backend})
 	// Late-bind Vega backend into core tool deps so the vega chat tool works.
 	if s.toolDeps != nil {
-		s.toolDeps.VegaBackend = backend
+		s.toolDeps.Vega.Backend = backend
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 // healthCheckToolSchema returns the JSON Schema for the health_check tool.
 
 // toolHealthCheck creates the health_check ToolFunc.
-func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
+func toolHealthCheck(d *VegaDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Component string `json:"component"`
@@ -31,14 +31,14 @@ func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
 		case "sglang":
 			return formatSglangHealth(), nil
 		case "memory":
-			return formatMemoryHealth(ctx, deps), nil
+			return formatMemoryHealth(ctx, d), nil
 		}
 
 		// Collect all component rows for "all" or vega-related components.
 		var rows []vega.ComponentHealth
 
 		// Vega-backed components (embedding, reranker, sglang via expander).
-		backend := deps.VegaBackend
+		backend := d.Backend
 		if backend != nil {
 			if hc, ok := backend.(vega.HealthChecker); ok {
 				status := hc.HealthCheck(ctx)
@@ -79,7 +79,7 @@ func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
 		rows = append(rows, sglangGw)
 
 		// Append aurora-memory health.
-		rows = append(rows, checkMemoryComponent(ctx, deps))
+		rows = append(rows, checkMemoryComponent(ctx, d))
 
 		return formatHealthStatus(vega.HealthStatus{Components: rows}), nil
 	}
@@ -88,9 +88,9 @@ func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
 // --- Memory health ---
 
 // checkMemoryComponent probes the aurora-memory store and returns a ComponentHealth.
-func checkMemoryComponent(ctx context.Context, deps *CoreToolDeps) vega.ComponentHealth {
+func checkMemoryComponent(ctx context.Context, d *VegaDeps) vega.ComponentHealth {
 	ch := vega.ComponentHealth{Name: "aurora-memory"}
-	if deps.MemoryStore == nil {
+	if d.MemoryStore == nil {
 		ch.Detail = "not configured"
 		return ch
 	}
@@ -98,7 +98,7 @@ func checkMemoryComponent(ctx context.Context, deps *CoreToolDeps) vega.Componen
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	start := time.Now()
-	count, err := deps.MemoryStore.ActiveFactCount(probeCtx)
+	count, err := d.MemoryStore.ActiveFactCount(probeCtx)
 	elapsed := time.Since(start)
 	ch.Latency = elapsed.Round(time.Millisecond).String()
 
@@ -111,7 +111,7 @@ func checkMemoryComponent(ctx context.Context, deps *CoreToolDeps) vega.Componen
 
 	// Load embeddings count for richer status.
 	embCount := 0
-	if embeddings, err := deps.MemoryStore.LoadEmbeddings(probeCtx); err == nil {
+	if embeddings, err := d.MemoryStore.LoadEmbeddings(probeCtx); err == nil {
 		embCount = len(embeddings)
 	}
 
@@ -120,8 +120,8 @@ func checkMemoryComponent(ctx context.Context, deps *CoreToolDeps) vega.Componen
 }
 
 // formatMemoryHealth returns a standalone aurora-memory health report.
-func formatMemoryHealth(ctx context.Context, deps *CoreToolDeps) string {
-	ch := checkMemoryComponent(ctx, deps)
+func formatMemoryHealth(ctx context.Context, d *VegaDeps) string {
+	ch := checkMemoryComponent(ctx, d)
 	icon := "✅"
 	if !ch.Available {
 		icon = "❌"

@@ -23,7 +23,7 @@ func truncate(s string, maxLen int) string {
 
 // --- cron tool ---
 
-func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
+func toolCron(d *ChronoDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action   string         `json:"action"`
@@ -38,6 +38,7 @@ func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
 			return "", err
 		}
 
+		cronSched := d.Scheduler
 		if cronSched == nil {
 			return "Cron scheduler not available.", nil
 		}
@@ -86,8 +87,8 @@ func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
 			cronCommand := command
 			cronName := name
 			cronCallback := func(runCtx context.Context) error {
-				if deps != nil && deps.SessionSendFn != nil {
-					return deps.SessionSendFn("cron:"+cronName, cronCommand)
+				if d != nil && d.SendFn != nil {
+					return d.SendFn("cron:"+cronName, cronCommand)
 				}
 				// Fallback: execute as shell command directly.
 				cmd := exec.CommandContext(runCtx, "bash", "-c", cronCommand)
@@ -320,7 +321,7 @@ func toolSessionsSearch(transcript TranscriptStore) ToolFunc {
 
 // --- sessions_send tool ---
 
-func toolSessionsSend(deps *CoreToolDeps) ToolFunc {
+func toolSessionsSend(d *SessionDeps) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SessionKey string `json:"sessionKey"`
@@ -338,11 +339,11 @@ func toolSessionsSend(deps *CoreToolDeps) ToolFunc {
 			targetKey = "main"
 		}
 
-		if deps == nil || deps.SessionSendFn == nil {
+		if d == nil || d.SendFn == nil {
 			return "Cross-session messaging is not available (session send function not wired).", nil
 		}
 
-		if err := deps.SessionSendFn(targetKey, p.Message); err != nil {
+		if err := d.SendFn(targetKey, p.Message); err != nil {
 			return fmt.Sprintf("Failed to send message to session %q: %s", targetKey, err.Error()), nil
 		}
 		return fmt.Sprintf("Message sent to session %q.", targetKey), nil
@@ -351,7 +352,7 @@ func toolSessionsSend(deps *CoreToolDeps) ToolFunc {
 
 // --- sessions_spawn tool ---
 
-func toolSessionsSpawn(deps *CoreToolDeps) ToolFunc {
+func toolSessionsSpawn(d *SessionDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Task  string `json:"task"`
@@ -365,7 +366,7 @@ func toolSessionsSpawn(deps *CoreToolDeps) ToolFunc {
 			return "", fmt.Errorf("task is required")
 		}
 
-		if deps == nil || deps.Sessions == nil || deps.SessionSendFn == nil {
+		if d == nil || d.Manager == nil || d.SendFn == nil {
 			return "Sub-agent spawning is not available (session dependencies not wired).", nil
 		}
 
@@ -378,15 +379,15 @@ func toolSessionsSpawn(deps *CoreToolDeps) ToolFunc {
 		childKey := fmt.Sprintf("%s:%s:%d", parentKey, label, time.Now().UnixMilli())
 
 		// Create the child session.
-		childSession := deps.Sessions.Create(childKey, session.KindDirect)
+		childSession := d.Manager.Create(childKey, session.KindDirect)
 		if p.Model != "" {
 			childSession.Model = p.Model
 		}
 		childSession.SpawnedBy = parentKey
-		deps.Sessions.Set(childSession)
+		d.Manager.Set(childSession)
 
 		// Send the task message to the child session.
-		if err := deps.SessionSendFn(childKey, p.Task); err != nil {
+		if err := d.SendFn(childKey, p.Task); err != nil {
 			return fmt.Sprintf("Sub-agent session %q created but failed to send task: %s", childKey, err.Error()), nil
 		}
 
