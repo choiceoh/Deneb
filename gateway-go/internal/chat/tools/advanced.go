@@ -424,6 +424,9 @@ func ToolApplyPatch(defaultDir string) ToolFunc {
 		if p.Patch == "" {
 			return "", fmt.Errorf("patch is required")
 		}
+		if patchContainsSymlinkMode(p.Patch) {
+			return "", fmt.Errorf("patch apply failed: symlink patches are not allowed")
+		}
 
 		strip := p.Strip
 		if strip < 0 {
@@ -475,4 +478,21 @@ func ToolApplyPatch(defaultDir string) ToolFunc {
 		}
 		return fmt.Sprintf("Patch applied successfully.\n%s", output), nil
 	}
+}
+
+func patchContainsSymlinkMode(patch string) bool {
+	for _, line := range strings.Split(patch, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "new file mode 120000") ||
+			strings.HasPrefix(trimmed, "old mode 120000") {
+			return true
+		}
+
+		// Existing symlink updates are represented as:
+		// index <old-sha>..<new-sha> 120000
+		if strings.HasPrefix(trimmed, "index ") && strings.HasSuffix(trimmed, " 120000") {
+			return true
+		}
+	}
+	return false
 }
