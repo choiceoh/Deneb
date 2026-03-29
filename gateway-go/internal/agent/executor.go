@@ -12,8 +12,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -137,6 +139,10 @@ func RunAgent(
 		// Build assistant message with all content blocks from this turn.
 		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 
+		// Extract a brief reasoning summary from the turn's thinking blocks
+		// so Discord can display what the agent is thinking alongside each tool step.
+		turnReason := extractThinkingSummary(turnRes.contentBlocks)
+
 		// Execute tools in parallel and build tool_result blocks.
 		// Each goroutine writes to its own index — no mutex needed for the slice.
 		toolResults := make([]llm.ContentBlock, len(turnRes.toolCalls))
@@ -146,7 +152,7 @@ func RunAgent(
 			go func(idx int, tc llm.ContentBlock) {
 				defer wg.Done()
 				if hooks.OnToolStart != nil {
-					hooks.OnToolStart(tc.Name)
+					hooks.OnToolStart(tc.Name, turnReason)
 				}
 				if hooks.OnToolEmit != nil {
 					hooks.OnToolEmit(tc.Name, tc.ID)
@@ -323,6 +329,49 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 			}
 		}
 	}
+}
+
+// extractThinkingSummary returns a brief summary from the last thinking block
+// in a turn's content blocks. Used to show LLM reasoning alongside tool steps.
+// Returns empty string if no thinking block is found.
+func extractThinkingSummary(blocks []llm.ContentBlock) string {
+	// Find the last thinking block in this turn.
+	var thinkingText string
+	for i := len(blocks) - 1; i >= 0; i-- {
+		if blocks[i].Thinking != "" {
+			thinkingText = blocks[i].Thinking
+			break
+		}
+	}
+	if thinkingText == "" {
+		return ""
+	}
+
+	// Extract a brief summary: take the last non-empty line (closest to the
+	// tool decision) and truncate to keep the progress embed compact.
+	lines := strings.Split(strings.TrimSpace(thinkingText), "\n")
+	var summary string
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.HasPrefix(line, "```") {
+			summary = line
+			break
+		}
+	}
+	if summary == "" {
+		return ""
+	}
+
+	// Strip leading markers like "- ", "* ", "1. " etc.
+	summary = strings.TrimLeft(summary, "-*•→> ")
+	summary = strings.TrimSpace(summary)
+
+	const maxRunes = 60
+	if utf8.RuneCountInString(summary) > maxRunes {
+		runes := []rune(summary)
+		summary = string(runes[:maxRunes]) + "…"
+	}
+	return summary
 }
 
 // stopReasonFromCtx determines the stop reason from a cancelled context.

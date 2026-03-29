@@ -96,7 +96,8 @@ func (pt *ProgressTracker) AddStep(name string) {
 
 // StartStep marks a step as running. Triggers a throttled edit.
 // Tool names are automatically translated to Korean for vibe coders.
-func (pt *ProgressTracker) StartStep(ctx context.Context, name string) {
+// reason is a brief LLM reasoning summary (may be empty).
+func (pt *ProgressTracker) StartStep(ctx context.Context, name, reason string) {
 	if pt == nil {
 		return
 	}
@@ -107,13 +108,16 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name string) {
 	for i := range pt.steps {
 		if pt.steps[i].Name == kr && pt.steps[i].Status == StepPending {
 			pt.steps[i].Status = StepRunning
+			if reason != "" {
+				pt.steps[i].Reason = reason
+			}
 			found = true
 			break
 		}
 	}
 	if !found {
 		// Auto-add if not pre-registered.
-		pt.steps = append(pt.steps, ProgressStep{Name: kr, Status: StepRunning})
+		pt.steps = append(pt.steps, ProgressStep{Name: kr, Reason: reason, Status: StepRunning})
 	}
 	pt.dirty = true
 	pt.mu.Unlock()

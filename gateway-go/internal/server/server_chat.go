@@ -489,7 +489,7 @@ func (s *Server) wireDiscordChatHandler() {
 
 		switch event.Type {
 		case "start":
-			tracker.StartStep(ctx, event.Name)
+			tracker.StartStep(ctx, event.Name, event.Reason)
 		case "complete":
 			tracker.CompleteStep(ctx, event.Name, event.IsError)
 			// Check if all steps are done to finalize.
