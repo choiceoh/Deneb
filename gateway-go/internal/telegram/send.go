@@ -288,9 +288,9 @@ func ValidatePhotoMetadata(r io.ReadSeeker) bool {
 
 func applyMediaOpts(params map[string]any, caption string, opts SendOptions) {
 	if caption != "" {
-		// Truncate caption to Telegram limit.
+		// Truncate caption to Telegram limit (UTF-8 safe).
 		if len(caption) > MaxCaptionLength {
-			caption = caption[:MaxCaptionLength]
+			caption = truncateUTF8(caption, MaxCaptionLength)
 		}
 		params["caption"] = caption
 	}
