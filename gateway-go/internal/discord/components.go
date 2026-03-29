@@ -64,6 +64,28 @@ func AfterCommitButtons(sessionKey string) []Component {
 	}
 }
 
+// MergeConflictButtons returns buttons for resolving a detected merge conflict.
+// Shows options to auto-resolve, view conflict details, or abort the merge.
+func MergeConflictButtons(sessionKey string) []Component {
+	return []Component{
+		ActionRow(
+			Button("🔧 충돌 해결", fmt.Sprintf("mergefix:%s", sessionKey), ButtonPrimary),
+			Button("📋 충돌 상세", fmt.Sprintf("mergedetail:%s", sessionKey), ButtonSecondary),
+			Button("⛔ 병합 중단", fmt.Sprintf("mergeabort:%s", sessionKey), ButtonDanger),
+		),
+	}
+}
+
+// MergeConflictCheckButtons returns a button to check for merge conflicts
+// before merging a branch.
+func MergeConflictCheckButtons(sessionKey string) []Component {
+	return []Component{
+		ActionRow(
+			Button("🔍 충돌 검사", fmt.Sprintf("mergecheck:%s", sessionKey), ButtonPrimary),
+		),
+	}
+}
+
 // ParseButtonAction extracts the action and session key from a button custom_id.
 // Format: "action:sessionKey" or "action:subaction:sessionKey".
 // Returns action, sessionKey.

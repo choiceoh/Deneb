@@ -16,13 +16,14 @@ import (
 type ReplyOutcome int
 
 const (
-	OutcomeGeneral     ReplyOutcome = iota // conversational reply, no special action
-	OutcomeCodeChange                      // agent modified files
-	OutcomeTestPass                        // tests ran and passed
-	OutcomeTestFail                        // tests ran and failed
-	OutcomeBuildFail                       // build failed
-	OutcomeCommitDone                      // agent committed changes
-	OutcomeError                           // agent encountered an error
+	OutcomeGeneral       ReplyOutcome = iota // conversational reply, no special action
+	OutcomeCodeChange                        // agent modified files
+	OutcomeTestPass                          // tests ran and passed
+	OutcomeTestFail                          // tests ran and failed
+	OutcomeBuildFail                         // build failed
+	OutcomeCommitDone                        // agent committed changes
+	OutcomeMergeConflict                     // merge conflict detected
+	OutcomeError                             // agent encountered an error
 )
 
 // AnalyzeReply classifies an agent reply text into an outcome for UI decisions.
@@ -30,6 +31,9 @@ func AnalyzeReply(text string) ReplyOutcome {
 	lower := strings.ToLower(text)
 
 	// Check most specific patterns first.
+	if matchesAny(lower, mergeConflictIndicators) {
+		return OutcomeMergeConflict
+	}
 	if matchesAny(lower, commitIndicators) {
 		return OutcomeCommitDone
 	}
@@ -81,6 +85,15 @@ var (
 		"커밋 완료", "커밋했습니다", "committed", "git commit",
 		"[main ", "[master ", // git commit output prefix
 	}
+	mergeConflictIndicators = []string{
+		"merge conflict", "병합 충돌", "충돌이 발생",
+		"conflict in", "conflicts:", "unmerged paths",
+		"both modified", "both added",
+		"<<<<<<< ", ">>>>>>> ", // conflict markers
+		"fix conflicts and then commit",
+		"automatic merge failed",
+		"unmerged files",
+	}
 	errorIndicators = []string{
 		"오류가 발생", "에러가 발생", "실패했습니다",
 		"error:", "panic:", "fatal:",
@@ -107,6 +120,8 @@ func ContextButtons(outcome ReplyOutcome, sessionKey string) []Component {
 		return TestResultButtons(sessionKey)
 	case OutcomeBuildFail:
 		return BuildFailButtons(sessionKey)
+	case OutcomeMergeConflict:
+		return MergeConflictButtons(sessionKey)
 	case OutcomeCommitDone:
 		return AfterCommitButtons(sessionKey)
 	case OutcomeError:
@@ -152,6 +167,12 @@ func ErrorButtons(sessionKey string) []Component {
 // human-readable Korean summaries for non-developers.
 func TranslateErrorToKorean(errorText string) string {
 	lower := strings.ToLower(errorText)
+
+	// Merge conflict errors.
+	if strings.Contains(lower, "merge conflict") || strings.Contains(lower, "unmerged paths") ||
+		strings.Contains(lower, "automatic merge failed") {
+		return "병합 충돌이 발생했어요. 같은 파일을 서로 다르게 수정해서 자동 병합이 안 됐어요. \"충돌 해결\" 버튼을 눌러주세요."
+	}
 
 	// Go errors.
 	if strings.Contains(lower, "undefined:") {
