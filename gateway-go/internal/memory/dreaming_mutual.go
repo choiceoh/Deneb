@@ -255,6 +255,14 @@ func appendRelationshipHistory(ctx context.Context, store *Store, entryMap map[s
 	}
 }
 
+// mutualPhase wraps synthesizeMutualUnderstanding as a dreamPhase (Phase 6).
+type mutualPhase struct{}
+
+func (mutualPhase) Name() string { return "mutual" }
+func (mutualPhase) Run(ctx context.Context, s *dreamState) error {
+	return synthesizeMutualUnderstanding(ctx, s.store, s.client, s.model, s.logger)
+}
+
 // formatPreviousState formats the current mutual understanding keys as
 // context for the next synthesis cycle. Takes a pre-built map to avoid
 // redundant DB reads when the caller already loaded entries.
