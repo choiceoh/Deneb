@@ -328,14 +328,15 @@ func (s *Server) wireDiscordChatHandler() {
 			return err
 		}
 
-		// Detect code changes in reply for actionable buttons.
+		// Analyze reply outcome for context-aware buttons and auto-verification.
+		outcome := discord.AnalyzeReply(text)
 		var components []discord.Component
-		if containsCodeChange(text) && delivery.To != "" {
+		if delivery.To != "" {
 			sessionKey := "discord:" + delivery.To
-			components = discord.CodeActionButtons(sessionKey)
+			components = discord.ContextButtons(outcome, sessionKey)
 		}
 
-		// If we have components, use SendMessage with components; otherwise plain text.
+		// Send the main reply text (with buttons on last chunk if any).
 		if len(components) > 0 {
 			chunks := discord.ChunkText(formatted.Text, discord.TextChunkLimit)
 			for i, chunk := range chunks {
@@ -343,7 +344,6 @@ func (s *Server) wireDiscordChatHandler() {
 					Content:         chunk,
 					AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
 				}
-				// Attach buttons only to the last chunk.
 				if i == len(chunks)-1 {
 					req.Components = components
 				}
@@ -354,11 +354,15 @@ func (s *Server) wireDiscordChatHandler() {
 					return err
 				}
 			}
-			return nil
+		} else {
+			if _, err := discord.SendText(ctx, client, delivery.To, formatted.Text, delivery.MessageID); err != nil {
+				return err
+			}
 		}
 
-		_, err := discord.SendText(ctx, client, delivery.To, formatted.Text, delivery.MessageID)
-		return err
+		// Post-reply follow-ups for vibe coders: error translation and auto-verify.
+		s.sendVibeCoderFollowUps(ctx, client, delivery, text, outcome)
+		return nil
 	})
 
 	// Chain media send function.
@@ -528,26 +532,135 @@ func (s *Server) wireDiscordChatHandler() {
 	s.logger.Info("discord chat handler wired (coding channel)")
 }
 
-// containsCodeChange detects whether an agent reply includes code modifications
-// (diffs, file edits) that warrant follow-up action buttons.
-func containsCodeChange(text string) bool {
-	indicators := []string{
-		"```diff",
-		"--- a/",
-		"+++ b/",
-		"파일을 수정했습니다",
-		"파일을 생성했습니다",
-		"wrote to",
-		"edited",
-		"applied edit",
+// sendVibeCoderFollowUps sends post-reply embeds for vibe coders:
+// - Error Korean translation when errors are detected
+// - Auto build/test verification when code changes are detected
+func (s *Server) sendVibeCoderFollowUps(ctx context.Context, client *discord.Client, delivery *chat.DeliveryContext, text string, outcome discord.ReplyOutcome) {
+	if delivery.To == "" {
+		return
 	}
-	lower := strings.ToLower(text)
-	for _, ind := range indicators {
-		if strings.Contains(lower, strings.ToLower(ind)) {
-			return true
+
+	// Error translation: add a Korean explanation embed for non-developers.
+	if outcome == discord.OutcomeBuildFail || outcome == discord.OutcomeTestFail || outcome == discord.OutcomeError {
+		if embed := discord.FormatErrorTranslationEmbed(text); embed != nil {
+			client.SendMessage(ctx, delivery.To, &discord.SendMessageRequest{
+				Embeds:          []discord.Embed{*embed},
+				AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+			})
 		}
 	}
-	return false
+
+	// Auto-verify: when code changes are detected, run build + test and show results.
+	if outcome == discord.OutcomeCodeChange {
+		s.sendAutoVerifyEmbed(ctx, client, delivery.To)
+	}
+}
+
+// sendAutoVerifyEmbed runs build and test commands in the workspace and sends
+// a result embed to the Discord channel. This gives vibe coders immediate
+// feedback on whether the agent's changes actually work.
+func (s *Server) sendAutoVerifyEmbed(ctx context.Context, client *discord.Client, channelID string) {
+	if s.discordPlug == nil {
+		return
+	}
+
+	// Resolve workspace for this channel.
+	wsChannelID := channelID
+	workspaceDir := s.discordPlug.Config().WorkspaceForChannel(wsChannelID)
+	if workspaceDir == "" {
+		return
+	}
+
+	// Run build and test with timeouts (non-blocking to the reply).
+	buildResult, buildOk := runQuickVerify(workspaceDir, "build")
+	testResult, testOk := runQuickVerify(workspaceDir, "test")
+
+	// Build the verification embed.
+	var fields []discord.EmbedField
+
+	buildEmoji := "✅"
+	if !buildOk {
+		buildEmoji = "❌"
+	}
+	fields = append(fields, discord.EmbedField{
+		Name: "🔨 빌드", Value: buildEmoji + " " + discord.TruncateText(buildResult, 200), Inline: false,
+	})
+
+	testEmoji := "✅"
+	if !testOk {
+		testEmoji = "❌"
+	}
+	fields = append(fields, discord.EmbedField{
+		Name: "🧪 테스트", Value: testEmoji + " " + discord.TruncateText(testResult, 200), Inline: false,
+	})
+
+	color := discord.ColorSuccess
+	title := "✅ 자동 검증 통과"
+	if !buildOk || !testOk {
+		color = discord.ColorError
+		title = "⚠️ 자동 검증 실패"
+	}
+
+	embed := discord.Embed{
+		Title:     title,
+		Color:     color,
+		Fields:    fields,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Footer:    &discord.EmbedFooter{Text: "코드 변경 감지 → 자동 빌드/테스트 실행"},
+	}
+
+	// If verification failed, add fix button.
+	var components []discord.Component
+	if !buildOk || !testOk {
+		sessionKey := "discord:" + channelID
+		components = discord.BuildFailButtons(sessionKey)
+	}
+
+	client.SendMessage(ctx, channelID, &discord.SendMessageRequest{
+		Embeds:          []discord.Embed{embed},
+		Components:      components,
+		AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+	})
+}
+
+// runQuickVerify runs a build or test command and returns (summary, success).
+func runQuickVerify(workspaceDir, kind string) (string, bool) {
+	projType := detectProjectType(workspaceDir)
+	if projType == "" {
+		return "프로젝트 타입 감지 실패", false
+	}
+
+	var cmdName string
+	var cmdArgs []string
+
+	switch kind {
+	case "build":
+		cmdName, cmdArgs = buildCommand(projType)
+	case "test":
+		cmdName, cmdArgs = testCommand(projType)
+	}
+
+	if cmdName == "" {
+		return "해당 없음", true
+	}
+
+	output := runCmdWithTimeout(workspaceDir, 30*time.Second, cmdName, cmdArgs...)
+	if output == "" {
+		return "성공", true
+	}
+
+	lower := strings.ToLower(output)
+	isError := strings.Contains(lower, "error") || strings.Contains(lower, "fail") || strings.Contains(lower, "panic")
+	if isError {
+		// Extract just the last few lines for a concise summary.
+		lines := strings.Split(strings.TrimSpace(output), "\n")
+		if len(lines) > 5 {
+			lines = lines[len(lines)-5:]
+		}
+		return strings.Join(lines, "\n"), false
+	}
+
+	return "성공", true
 }
 
 // loadDiscordConfig extracts Discord channel config from deneb.json.
