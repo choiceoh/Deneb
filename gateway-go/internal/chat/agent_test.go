@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -52,18 +53,18 @@ func TestRunAgent_SimpleTextResponse(t *testing.T) {
 	defer server.Close()
 
 	client := llm.NewClient(server.URL, "test-key")
-	cfg := AgentConfig{
+	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,
 		Model:    "test-model",
 	}
 
 	var deltas []string
-	result, err := RunAgent(
+	result, err := agent.RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "hi")},
 		client, nil,
-		StreamHooks{OnTextDelta: func(text string) { deltas = append(deltas, text) }},
+		agent.StreamHooks{OnTextDelta: func(text string) { deltas = append(deltas, text) }},
 		nil, nil,
 	)
 	if err != nil {
@@ -101,7 +102,7 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 	defer server.Close()
 
 	client := llm.NewClient(server.URL, "test-key")
-	cfg := AgentConfig{
+	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,
 		Model:    "test-model",
@@ -113,10 +114,10 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 		return "echoed: " + string(input), nil
 	})
 
-	result, err := RunAgent(
+	result, err := agent.RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "use echo")},
-		client, reg, StreamHooks{}, nil, nil,
+		client, reg, agent.StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -142,7 +143,7 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 	defer server.Close()
 
 	client := llm.NewClient(server.URL, "test-key")
-	cfg := AgentConfig{
+	cfg := agent.AgentConfig{
 		MaxTurns: 3,
 		Timeout:  10 * time.Second,
 		Model:    "test-model",
@@ -154,10 +155,10 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 		return "ok", nil
 	})
 
-	result, err := RunAgent(
+	result, err := agent.RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "loop forever")},
-		client, reg, StreamHooks{}, nil, nil,
+		client, reg, agent.StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -185,16 +186,16 @@ func TestRunAgent_Timeout(t *testing.T) {
 	defer server.Close()
 
 	client := llm.NewClient(server.URL, "test-key", llm.WithRetry(0, 0, 0))
-	cfg := AgentConfig{
+	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  200 * time.Millisecond,
 		Model:    "test-model",
 	}
 
-	result, err := RunAgent(
+	result, err := agent.RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "hello")},
-		client, nil, StreamHooks{}, nil, nil,
+		client, nil, agent.StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -220,7 +221,7 @@ func TestRunAgent_Abort(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := llm.NewClient(server.URL, "test-key", llm.WithRetry(0, 0, 0))
-	cfg := AgentConfig{
+	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,
 		Model:    "test-model",
@@ -232,10 +233,10 @@ func TestRunAgent_Abort(t *testing.T) {
 		cancel()
 	}()
 
-	result, err := RunAgent(
+	result, err := agent.RunAgent(
 		ctx, cfg,
 		[]llm.Message{llm.NewTextMessage("user", "hello")},
-		client, nil, StreamHooks{}, nil, nil,
+		client, nil, agent.StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -261,7 +262,7 @@ func TestRunAgent_ToolError(t *testing.T) {
 	defer server.Close()
 
 	client := llm.NewClient(server.URL, "test-key")
-	cfg := AgentConfig{
+	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,
 		Model:    "test-model",
@@ -273,10 +274,10 @@ func TestRunAgent_ToolError(t *testing.T) {
 		return "", fmt.Errorf("tool broken")
 	})
 
-	result, err := RunAgent(
+	result, err := agent.RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "use fail tool")},
-		client, reg, StreamHooks{}, nil, nil,
+		client, reg, agent.StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)

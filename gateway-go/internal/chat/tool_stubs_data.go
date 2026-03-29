@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 func toolSubagents(d *SessionDeps) ToolFunc {
@@ -89,10 +89,10 @@ func subagentsList(children []*session.Session) string {
 		var parts []string
 		// Runtime.
 		if c.RuntimeMs != nil {
-			parts = append(parts, autoreply.FormatDuration(*c.RuntimeMs))
+			parts = append(parts, textutil.FormatDuration(*c.RuntimeMs))
 		} else if c.Status == session.StatusRunning && c.StartedAt != nil {
 			elapsed := time.Now().UnixMilli() - *c.StartedAt
-			parts = append(parts, autoreply.FormatDuration(elapsed))
+			parts = append(parts, textutil.FormatDuration(elapsed))
 		}
 		// Tokens.
 		if c.TotalTokens != nil && *c.TotalTokens > 0 {
