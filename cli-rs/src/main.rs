@@ -14,7 +14,7 @@ use clap::Parser;
 
 use cli::Cli;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let cli = Cli::parse();
     std::process::exit(bootstrap::run(cli).await);

@@ -21,13 +21,17 @@ pub fn load_config(config_path: &Path) -> Result<DenebConfig, CliError> {
     parse_config_json5(&raw, config_path)
 }
 
-/// Parse a JSON5 config string into a DenebConfig.
+/// Parse a config string into a DenebConfig.
+///
+/// Fast path: try standard JSON first (write_config always writes standard JSON).
+/// Fallback: parse as JSON5 to support hand-edited configs with comments or trailing commas.
 fn parse_config_json5(raw: &str, path: &Path) -> Result<DenebConfig, CliError> {
-    // json5 crate parses JSON5 (comments, trailing commas, unquoted keys)
-    let config: DenebConfig = json5::from_str(raw).map_err(|e| {
+    if let Ok(config) = serde_json::from_str::<DenebConfig>(raw) {
+        return Ok(config);
+    }
+    json5::from_str(raw).map_err(|e| {
         CliError::Config(format!("failed to parse config at {}: {e}", path.display()))
-    })?;
-    Ok(config)
+    })
 }
 
 /// Best-effort config load: returns default config on any error.

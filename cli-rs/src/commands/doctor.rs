@@ -1,8 +1,8 @@
 use clap::Args;
 
-use crate::config;
+use crate::config::{self, DenebConfig};
 use crate::errors::CliError;
-use crate::gateway::{call_gateway, CallOptions};
+use crate::gateway::{call_gateway_with_config, CallOptions};
 use crate::terminal::{is_json_mode, Palette};
 
 #[derive(Args, Debug)]
@@ -76,19 +76,21 @@ pub async fn run(args: &DoctorArgs) -> Result<(), CliError> {
     let json_mode = is_json_mode(args.json);
     let auto_repair = args.repair || args.force;
 
+    // Load config once; pass it to all checks so they don't re-resolve paths.
+    let config_path = config::resolve_config_path();
     let mut results: Vec<DiagResult> = Vec::new();
 
-    // 1. Config check
-    check_config(&mut results, args, auto_repair)?;
+    // 1. Config check — returns the (possibly modified) config for reuse below.
+    let cfg = check_config(&mut results, &config_path, args, auto_repair)?;
 
     // 2. Gateway health
-    check_gateway_health(&mut results, args).await;
+    check_gateway_health(&mut results, args, &cfg).await;
 
     // 3. Channel status
-    check_channels(&mut results, args).await;
+    check_channels(&mut results, args, &cfg).await;
 
     // 4. Security checks
-    check_security(&mut results, args, auto_repair)?;
+    check_security(&mut results, &cfg)?;
 
     // Output
     if json_mode {
@@ -159,13 +161,14 @@ pub async fn run(args: &DoctorArgs) -> Result<(), CliError> {
     Ok(())
 }
 
+/// Check the config file and return the loaded config for reuse by callers.
+/// Returns the default config if the file is missing (check recorded as Warn).
 fn check_config(
     results: &mut Vec<DiagResult>,
+    config_path: &std::path::Path,
     args: &DoctorArgs,
     auto_repair: bool,
-) -> Result<(), CliError> {
-    let config_path = config::resolve_config_path();
-
+) -> Result<DenebConfig, CliError> {
     // Config file exists
     if !config_path.exists() {
         results.push(DiagResult {
@@ -177,12 +180,12 @@ fn check_config(
                 config_path.display()
             )),
         });
-        return Ok(());
+        return Ok(DenebConfig::default());
     }
 
     // Config parseable
-    match config::load_config(&config_path) {
-        Ok(cfg) => {
+    match config::load_config(config_path) {
+        Ok(mut cfg) => {
             results.push(DiagResult {
                 section: "config".to_string(),
                 status: DiagStatus::Ok,
@@ -202,14 +205,13 @@ fn check_config(
 
             // Generate token if requested
             if args.generate_gateway_token && cfg.auth_token().is_none() {
-                let mut cfg = cfg;
                 let token = uuid::Uuid::new_v4().to_string();
                 config::set_config_value(
                     &mut cfg,
                     "gateway.auth.token",
                     serde_json::json!(&token),
                 )?;
-                config::write_config(&config_path, &cfg)?;
+                config::write_config(config_path, &cfg)?;
                 results.push(DiagResult {
                     section: "config".to_string(),
                     status: DiagStatus::Ok,
@@ -226,14 +228,13 @@ fn check_config(
                             .unwrap_or(false));
 
                 if should_gen {
-                    let mut cfg = cfg;
                     let token = uuid::Uuid::new_v4().to_string();
                     config::set_config_value(
                         &mut cfg,
                         "gateway.auth.token",
                         serde_json::json!(&token),
                     )?;
-                    config::write_config(&config_path, &cfg)?;
+                    config::write_config(config_path, &cfg)?;
                     results.push(DiagResult {
                         section: "security".to_string(),
                         status: DiagStatus::Ok,
@@ -251,6 +252,8 @@ fn check_config(
                     });
                 }
             }
+
+            Ok(cfg)
         }
         Err(e) => {
             results.push(DiagResult {
@@ -259,25 +262,31 @@ fn check_config(
                 message: format!("Config file is invalid: {}", e.user_message()),
                 detail: Some(format!("Path: {}", config_path.display())),
             });
+            Ok(DenebConfig::default())
         }
     }
-
-    Ok(())
 }
 
-async fn check_gateway_health(results: &mut Vec<DiagResult>, args: &DoctorArgs) {
+async fn check_gateway_health(
+    results: &mut Vec<DiagResult>,
+    args: &DoctorArgs,
+    cfg: &DenebConfig,
+) {
     let result = crate::terminal::progress::with_spinner(
         "Checking gateway...",
         !is_json_mode(args.json),
-        call_gateway(CallOptions {
-            url: args.url.clone(),
-            token: args.token.clone(),
-            password: args.password.clone(),
-            method: "health".to_string(),
-            params: None,
-            timeout_ms: args.timeout,
-            expect_final: false,
-        }),
+        call_gateway_with_config(
+            CallOptions {
+                url: args.url.clone(),
+                token: args.token.clone(),
+                password: args.password.clone(),
+                method: "health".to_string(),
+                params: None,
+                timeout_ms: args.timeout,
+                expect_final: false,
+            },
+            cfg,
+        ),
     )
     .await;
 
@@ -305,16 +314,19 @@ async fn check_gateway_health(results: &mut Vec<DiagResult>, args: &DoctorArgs) 
     }
 }
 
-async fn check_channels(results: &mut Vec<DiagResult>, args: &DoctorArgs) {
-    let result = call_gateway(CallOptions {
-        url: args.url.clone(),
-        token: args.token.clone(),
-        password: args.password.clone(),
-        method: "channels.status".to_string(),
-        params: Some(serde_json::json!({"probe": true, "timeoutMs": 5000})),
-        timeout_ms: args.timeout,
-        expect_final: false,
-    })
+async fn check_channels(results: &mut Vec<DiagResult>, args: &DoctorArgs, cfg: &DenebConfig) {
+    let result = call_gateway_with_config(
+        CallOptions {
+            url: args.url.clone(),
+            token: args.token.clone(),
+            password: args.password.clone(),
+            method: "channels.status".to_string(),
+            params: Some(serde_json::json!({"probe": true, "timeoutMs": 5000})),
+            timeout_ms: args.timeout,
+            expect_final: false,
+        },
+        cfg,
+    )
     .await;
 
     match result {
@@ -348,14 +360,7 @@ async fn check_channels(results: &mut Vec<DiagResult>, args: &DoctorArgs) {
     }
 }
 
-fn check_security(
-    results: &mut Vec<DiagResult>,
-    _args: &DoctorArgs,
-    _auto_repair: bool,
-) -> Result<(), CliError> {
-    let config_path = config::resolve_config_path();
-    let cfg = config::load_config_best_effort(&config_path);
-
+fn check_security(results: &mut Vec<DiagResult>, cfg: &DenebConfig) -> Result<(), CliError> {
     // Check bind mode
     let bind = cfg
         .gateway

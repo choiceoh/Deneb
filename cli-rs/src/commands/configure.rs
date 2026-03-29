@@ -1,8 +1,8 @@
 use clap::Args;
 
-use crate::config;
+use crate::config::{self, DenebConfig};
 use crate::errors::CliError;
-use crate::gateway::{call_gateway, CallOptions};
+use crate::gateway::{call_gateway_with_config, CallOptions};
 use crate::terminal::{is_json_mode, Palette};
 
 const SECTIONS: &[(&str, &str)] = &[
@@ -91,10 +91,10 @@ pub async fn run(args: &ConfigureArgs) -> Result<(), CliError> {
                 modified |= configure_gateway(&mut cfg, args.non_interactive)?;
             }
             "channels" => {
-                run_channels_check(args, json_mode).await?;
+                run_channels_check(args, json_mode, &cfg).await?;
             }
             "health" => {
-                run_health_check(args, json_mode).await?;
+                run_health_check(args, json_mode, &cfg).await?;
             }
             _ => {
                 eprintln!("Unknown section: {section}");
@@ -246,22 +246,29 @@ fn configure_gateway(
     Ok(true)
 }
 
-async fn run_channels_check(args: &ConfigureArgs, json_mode: bool) -> Result<(), CliError> {
+async fn run_channels_check(
+    args: &ConfigureArgs,
+    json_mode: bool,
+    cfg: &DenebConfig,
+) -> Result<(), CliError> {
     let bold = Palette::bold();
     println!("\n{}", bold.apply_to("Channel Status"));
 
     let result = crate::terminal::progress::with_spinner(
         "Checking channels...",
         !json_mode,
-        call_gateway(CallOptions {
-            url: args.url.clone(),
-            token: args.token.clone(),
-            password: args.password.clone(),
-            method: "channels.status".to_string(),
-            params: Some(serde_json::json!({"probe": true})),
-            timeout_ms: args.timeout,
-            expect_final: false,
-        }),
+        call_gateway_with_config(
+            CallOptions {
+                url: args.url.clone(),
+                token: args.token.clone(),
+                password: args.password.clone(),
+                method: "channels.status".to_string(),
+                params: Some(serde_json::json!({"probe": true})),
+                timeout_ms: args.timeout,
+                expect_final: false,
+            },
+            cfg,
+        ),
     )
     .await;
 
@@ -294,22 +301,29 @@ async fn run_channels_check(args: &ConfigureArgs, json_mode: bool) -> Result<(),
     Ok(())
 }
 
-async fn run_health_check(args: &ConfigureArgs, json_mode: bool) -> Result<(), CliError> {
+async fn run_health_check(
+    args: &ConfigureArgs,
+    json_mode: bool,
+    cfg: &DenebConfig,
+) -> Result<(), CliError> {
     let bold = Palette::bold();
     println!("\n{}", bold.apply_to("Gateway Health"));
 
     let result = crate::terminal::progress::with_spinner(
         "Checking gateway...",
         !json_mode,
-        call_gateway(CallOptions {
-            url: args.url.clone(),
-            token: args.token.clone(),
-            password: args.password.clone(),
-            method: "health".to_string(),
-            params: None,
-            timeout_ms: args.timeout,
-            expect_final: false,
-        }),
+        call_gateway_with_config(
+            CallOptions {
+                url: args.url.clone(),
+                token: args.token.clone(),
+                password: args.password.clone(),
+                method: "health".to_string(),
+                params: None,
+                timeout_ms: args.timeout,
+                expect_final: false,
+            },
+            cfg,
+        ),
     )
     .await;
 

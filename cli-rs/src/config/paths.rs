@@ -65,12 +65,31 @@ pub fn resolve_state_dir_policy(
     default_dir
 }
 
+/// Return true when `state_dir` is itself a legacy-branded directory.
+///
+/// Legacy config filenames (clawdbot.json, etc.) inside the state dir are
+/// only relevant when the dir was created by an old install.  On a standard
+/// `.deneb` install those files never exist, so probing them wastes syscalls.
+pub fn is_legacy_state_dir(state_dir: &Path) -> bool {
+    state_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|name| LEGACY_STATE_DIRNAMES.contains(&name))
+        .unwrap_or(false)
+}
+
 /// Build the ordered list of config file candidates for a given state dir.
+///
+/// Legacy config filenames are only included when `state_dir` is itself a
+/// legacy-branded path; on a standard `.deneb` install only `deneb.json` is
+/// probed, saving three unnecessary `path.exists()` calls per resolution.
 pub fn config_candidates(state_dir: &Path) -> Vec<PathBuf> {
     let mut candidates = Vec::with_capacity(4);
     candidates.push(state_dir.join(CONFIG_FILENAME));
-    for name in LEGACY_CONFIG_FILENAMES {
-        candidates.push(state_dir.join(name));
+    if is_legacy_state_dir(state_dir) {
+        for name in LEGACY_CONFIG_FILENAMES {
+            candidates.push(state_dir.join(name));
+        }
     }
     candidates
 }
