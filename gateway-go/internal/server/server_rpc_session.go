@@ -153,16 +153,25 @@ func (s *Server) registerSessionRPCMethods() {
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
 	// Build core tool dependencies. Stored on the server so later init phases
-	// can late-bind fields.
+	// can late-bind fields (Vega.Backend, Sessions.SendFn, Chrono.SendFn).
 	s.toolDeps = &chat.CoreToolDeps{
-		ProcessMgr:   s.processes,
 		WorkspaceDir: workspaceDir,
-		CronSched:    s.cron,
-		Sessions:     s.sessions,
-		LLMClient:    chatCfg.LLMClient,
-		Transcript:   transcriptStore,
-		AgentLog:     agentLogWriter,
-		MemoryStore:  chatCfg.MemoryStore,
+		Process: chat.ProcessDeps{
+			Mgr:          s.processes,
+			WorkspaceDir: workspaceDir,
+		},
+		Sessions: chat.SessionDeps{
+			Manager:    s.sessions,
+			Transcript: transcriptStore,
+		},
+		Chrono: chat.ChronoDeps{
+			Scheduler: s.cron,
+		},
+		Vega: chat.VegaDeps{
+			MemoryStore: chatCfg.MemoryStore,
+		},
+		LLMClient: chatCfg.LLMClient,
+		AgentLog:  agentLogWriter,
 	}
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
@@ -179,8 +188,8 @@ func (s *Server) registerSessionRPCMethods() {
 		chatCfg,
 	)
 
-	// Wire SessionSendFn after handler creation to avoid circular deps.
-	s.toolDeps.SessionSendFn = func(sessionKey, message string) error {
+	// Wire SendFn after handler creation to avoid circular deps.
+	sendFn := func(sessionKey, message string) error {
 		fakeReq := &protocol.RequestFrame{
 			ID:     shortid.New("tool_send"),
 			Method: "sessions.send",
@@ -193,6 +202,8 @@ func (s *Server) registerSessionRPCMethods() {
 		}
 		return nil
 	}
+	s.toolDeps.Sessions.SendFn = sendFn
+	s.toolDeps.Chrono.SendFn = sendFn
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
 
 	// Wire raw broadcast directly to chat handler for streaming event relay.

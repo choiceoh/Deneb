@@ -13,8 +13,8 @@ import (
 // vegaToolSchema returns the JSON Schema for the vega tool.
 
 // toolVega creates the vega ToolFunc.
-// Uses CoreToolDeps for late-binding: VegaBackend may be set after tool registration.
-func toolVega(deps *CoreToolDeps) ToolFunc {
+// d is passed by pointer so VegaDeps.Backend is read at call time (late-binding).
+func toolVega(d *VegaDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action string `json:"action"`
@@ -29,7 +29,7 @@ func toolVega(deps *CoreToolDeps) ToolFunc {
 			return "", fmt.Errorf("query is required")
 		}
 
-		backend := deps.VegaBackend
+		backend := d.Backend
 		if backend == nil {
 			return "[vega unavailable: backend not configured]", nil
 		}

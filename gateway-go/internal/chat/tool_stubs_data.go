@@ -17,7 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-func toolSubagents(deps *CoreToolDeps) ToolFunc {
+func toolSubagents(d *SessionDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action  string `json:"action"`
@@ -31,14 +31,14 @@ func toolSubagents(deps *CoreToolDeps) ToolFunc {
 			p.Action = "list"
 		}
 
-		if deps == nil || deps.Sessions == nil {
+		if d == nil || d.Manager == nil {
 			return "Sub-agent management not available (session dependencies not wired).", nil
 		}
 
 		parentKey := SessionKeyFromContext(ctx)
 
 		// Gather children: sessions where SpawnedBy == parentKey.
-		allSessions := deps.Sessions.List()
+		allSessions := d.Manager.List()
 		var children []*session.Session
 		for _, s := range allSessions {
 			if s.SpawnedBy == parentKey {
@@ -60,9 +60,9 @@ func toolSubagents(deps *CoreToolDeps) ToolFunc {
 		case "list":
 			return subagentsList(children), nil
 		case "kill":
-			return subagentsKill(deps, children, p.Target)
+			return subagentsKill(d, children, p.Target)
 		case "steer":
-			return subagentsSteer(deps, children, p.Target, p.Message)
+			return subagentsSteer(d, children, p.Target, p.Message)
 		default:
 			return fmt.Sprintf("Unknown subagents action: %q", p.Action), nil
 		}
@@ -113,7 +113,7 @@ func subagentsList(children []*session.Session) string {
 }
 
 // subagentsKill kills one or all child sessions.
-func subagentsKill(deps *CoreToolDeps, children []*session.Session, target string) (string, error) {
+func subagentsKill(d *SessionDeps, children []*session.Session, target string) (string, error) {
 	if target == "" {
 		return "Target is required. Use a sub-agent index, label, session key, or \"all\".", nil
 	}
@@ -122,7 +122,7 @@ func subagentsKill(deps *CoreToolDeps, children []*session.Session, target strin
 		killed := 0
 		for _, c := range children {
 			if c.Status == session.StatusRunning {
-				killSession(deps.Sessions, c)
+				killSession(d.Manager, c)
 				killed++
 			}
 		}
@@ -139,13 +139,13 @@ func subagentsKill(deps *CoreToolDeps, children []*session.Session, target strin
 	if child.Status != session.StatusRunning {
 		return fmt.Sprintf("Sub-agent %q is not running (status: %s).", child.Key, child.Status), nil
 	}
-	killSession(deps.Sessions, child)
+	killSession(d.Manager, child)
 	return fmt.Sprintf("Killed sub-agent: %s", child.Key), nil
 }
 
 // subagentsSteer sends a steering message to a running child session.
-func subagentsSteer(deps *CoreToolDeps, children []*session.Session, target, message string) (string, error) {
-	if deps.SessionSendFn == nil {
+func subagentsSteer(d *SessionDeps, children []*session.Session, target, message string) (string, error) {
+	if d.SendFn == nil {
 		return "Steering not available (SessionSendFn not wired).", nil
 	}
 	if message == "" {
@@ -178,7 +178,7 @@ func subagentsSteer(deps *CoreToolDeps, children []*session.Session, target, mes
 		return fmt.Sprintf("Sub-agent %q is not running (status: %s).", child.Key, child.Status), nil
 	}
 
-	if err := deps.SessionSendFn(child.Key, message); err != nil {
+	if err := d.SendFn(child.Key, message); err != nil {
 		return fmt.Sprintf("Failed to steer sub-agent %q: %s", child.Key, err.Error()), nil
 	}
 	return fmt.Sprintf("Steered sub-agent: %s\nMessage: %s", child.Key, message), nil
