@@ -543,7 +543,7 @@ func executeAgentRun(
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
 				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
-					deps, params, client, logger,
+					ctx, deps, params, client, logger,
 				)
 				if compErr != nil {
 					return nil, fmt.Errorf("compaction failed: %w (original: %w)", compErr, runErr)
