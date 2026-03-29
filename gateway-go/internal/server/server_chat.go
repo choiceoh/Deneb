@@ -148,7 +148,23 @@ func (s *Server) wireTelegramChatHandler() {
 
 		switch mediaType {
 		case "photo":
-			_, err = telegram.UploadPhoto(ctx, client, chatID, fileName, f, caption, opts)
+			if telegram.ValidatePhotoMetadata(f) {
+				_, err = telegram.UploadPhoto(ctx, client, chatID, fileName, f, caption, opts)
+				if err != nil {
+					// Telegram rejected the photo (e.g. format issue, server-side resize
+					// failure). Seek back and retry as a document so the file is not lost.
+					s.logger.Warn("uploadPhoto failed, falling back to document",
+						"file", fileName, "error", err)
+					if _, seekErr := f.Seek(0, 0); seekErr == nil {
+						_, err = telegram.UploadDocument(ctx, client, chatID, fileName, f, caption, opts)
+					}
+				}
+			} else {
+				// Metadata check failed (unsupported format, oversized dimensions, bad
+				// aspect ratio) — skip sendPhoto and send directly as a document.
+				s.logger.Info("photo metadata invalid, sending as document", "file", fileName)
+				_, err = telegram.UploadDocument(ctx, client, chatID, fileName, f, caption, opts)
+			}
 		case "video":
 			// Upload as document — Telegram sendVideo requires a URL/file_id, not multipart.
 			_, err = telegram.UploadDocument(ctx, client, chatID, fileName, f, caption, opts)

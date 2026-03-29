@@ -31,6 +31,15 @@ const (
 
 	// MessageBufferTrimTarget is the number of messages kept when the buffer is trimmed.
 	MessageBufferTrimTarget = 100
+
+	// PhotoMaxFileSize is the maximum file size for Telegram's sendPhoto API (10 MB).
+	PhotoMaxFileSize = 10 * 1024 * 1024
+
+	// PhotoMaxDimension is the maximum width or height (in pixels) for Telegram photos.
+	PhotoMaxDimension = 10000
+
+	// PhotoMaxAspectRatio is the maximum allowed aspect ratio (wider:taller) for Telegram photos.
+	PhotoMaxAspectRatio = 20.0
 )
 
 // Update represents an incoming update from Telegram.
