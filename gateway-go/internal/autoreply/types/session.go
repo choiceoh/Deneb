@@ -116,6 +116,5 @@ type SessionModification struct {
 	SystemPrompt    *string
 	Label           *string
 	// Session lifecycle.
-	IdleTimeoutMs int64
-	MaxAgeMs      int64
+	MaxAgeMs int64
 }

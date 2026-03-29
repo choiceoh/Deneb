@@ -3,8 +3,6 @@ package handlers
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
@@ -22,12 +20,7 @@ func handleModelCommand(ctx CommandContext) (*CommandResult, error) {
 		return &CommandResult{Reply: "Usage: /model <provider/model>", SkipAgent: true}, nil
 	}
 
-	// Try to resolve the model from candidates.
-	var candidates []model.ModelCandidate
-	if ctx.Deps != nil {
-		candidates = ctx.Deps.ModelCandidates
-	}
-	resolved := model.ResolveModelFromDirective(raw, candidates)
+	resolved := model.ResolveModelFromDirective(raw, nil)
 
 	provider := ""
 	modelStr := raw
@@ -45,51 +38,6 @@ func handleModelCommand(ctx CommandContext) (*CommandResult, error) {
 		SessionMod: &types.SessionModification{Model: modelStr, Provider: provider},
 		SkipAgent:  true,
 	}, nil
-}
-
-func handleModelsListCommand(ctx CommandContext) (*CommandResult, error) {
-	var candidates []model.ModelCandidate
-	if ctx.Deps != nil {
-		candidates = ctx.Deps.ModelCandidates
-	}
-	if len(candidates) == 0 {
-		return &CommandResult{Reply: "No models available.", SkipAgent: true}, nil
-	}
-
-	// Parse pagination args.
-	raw := argRaw(ctx.Args)
-	page := 0
-	limit := 15
-	if raw != "" {
-		if p, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && p > 0 {
-			page = p - 1
-		}
-	}
-
-	start := page * limit
-	if start >= len(candidates) {
-		return &CommandResult{Reply: "No more models.", SkipAgent: true}, nil
-	}
-	end := start + limit
-	if end > len(candidates) {
-		end = len(candidates)
-	}
-
-	var lines []string
-	lines = append(lines, "📋 **Available Models:**\n")
-	for _, c := range candidates[start:end] {
-		ref := model.FormatProviderModelRef(c.Provider, c.Model)
-		label := c.Label
-		if label == "" {
-			label = c.Model
-		}
-		lines = append(lines, fmt.Sprintf("• `%s` — %s", ref, label))
-	}
-	if end < len(candidates) {
-		lines = append(lines, fmt.Sprintf("\n_Page %d. Use /models %d for next._", page+1, page+2))
-	}
-
-	return &CommandResult{Reply: strings.Join(lines, "\n"), SkipAgent: true}, nil
 }
 
 func handleVerboseCommand(ctx CommandContext) (*CommandResult, error) {

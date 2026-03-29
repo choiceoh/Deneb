@@ -2,7 +2,7 @@
 //
 // Handler implementations are split by domain:
 //   - commands_handlers_session.go  — reset, compact, stop/cancel/kill
-//   - commands_handlers_model.go    — model, models, verbose
+//   - commands_handlers_model.go    — model, verbose
 //   - commands_handlers_info.go     — status
 //   - commands_handlers_agents.go   — agents
 package handlers
@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
@@ -37,9 +36,6 @@ type CommandContext struct {
 
 // CommandDeps holds dependencies available to command handlers.
 type CommandDeps struct {
-	SessionStore    func(key string) *types.SessionState
-	SaveSession     func(session *types.SessionState) error
-	ModelCandidates []model.ModelCandidate
 	SubagentRuns    func() []subagentpkg.SubagentRunRecord // for /agents
 	Status          *StatusDeps                            // Server-level data for /status command.
 }
@@ -125,7 +121,6 @@ func (r *CommandRouter) registerBuiltinHandlers() {
 
 	// Model
 	r.Handle("model", handleModelCommand)
-	r.Handle("models", handleModelsListCommand)
 	r.Handle("verbose", handleVerboseCommand)
 }
 
