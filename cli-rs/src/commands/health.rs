@@ -1,8 +1,9 @@
 use clap::Args;
 
+use crate::commands::gateway_query::{run_gateway_query, GatewayQueryArgs};
 use crate::errors::CliError;
-use crate::gateway::{call_gateway, CallOptions};
-use crate::terminal::{is_json_mode, Palette};
+use crate::gateway::call_gateway;
+use crate::terminal::Palette;
 
 #[derive(Args, Debug)]
 pub struct HealthArgs {
@@ -28,64 +29,51 @@ pub struct HealthArgs {
 }
 
 pub async fn run(args: &HealthArgs) -> Result<(), CliError> {
-    let json_mode = is_json_mode(args.json);
-
-    let result = crate::terminal::progress::with_spinner(
+    run_gateway_query(
+        GatewayQueryArgs {
+            url: &args.url,
+            token: &args.token,
+            password: &args.password,
+            timeout: args.timeout,
+            json: args.json,
+        },
+        "health",
         "Checking gateway health...",
-        !json_mode,
-        call_gateway(CallOptions {
-            url: args.url.clone(),
-            token: args.token.clone(),
-            password: args.password.clone(),
-            method: "health".to_string(),
-            params: None,
-            timeout_ms: args.timeout,
-            expect_final: false,
-        }),
-    )
-    .await;
-
-    match result {
-        Ok(payload) => {
+        call_gateway,
+        |payload, json_mode| {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&payload)?);
-            } else {
-                use crate::terminal::Symbols;
-                let success = Palette::success();
-                let muted = Palette::muted();
-                println!();
-                println!(
-                    "    {}  {}",
-                    success.apply_to(Symbols::SUCCESS),
-                    success.apply_to("Gateway healthy")
-                );
+                return Ok(());
+            }
 
-                // Show basic info from payload if available
-                if let Some(obj) = payload.as_object() {
-                    if let Some(uptime) = obj.get("uptimeSeconds") {
-                        println!("       Uptime    {}", muted.apply_to(format!("{}s", uptime)));
-                    }
-                    if let Some(version) = obj.get("version") {
-                        println!(
-                            "       Version   {}",
-                            muted.apply_to(version.as_str().unwrap_or("unknown"))
-                        );
-                    }
+            use crate::terminal::Symbols;
+            let success = Palette::success();
+            let muted = Palette::muted();
+            println!();
+            println!(
+                "    {}  {}",
+                success.apply_to(Symbols::SUCCESS),
+                success.apply_to("Gateway healthy")
+            );
+
+            // Show basic info from payload if available
+            if let Some(obj) = payload.as_object() {
+                if let Some(uptime) = obj.get("uptimeSeconds") {
+                    println!(
+                        "       Uptime    {}",
+                        muted.apply_to(format!("{}s", uptime))
+                    );
                 }
-                println!();
+                if let Some(version) = obj.get("version") {
+                    println!(
+                        "       Version   {}",
+                        muted.apply_to(version.as_str().unwrap_or("unknown"))
+                    );
+                }
             }
+            println!();
             Ok(())
-        }
-        Err(e) => {
-            if json_mode {
-                let err_json = serde_json::json!({
-                    "ok": false,
-                    "error": e.user_message(),
-                });
-                println!("{}", serde_json::to_string_pretty(&err_json)?);
-                std::process::exit(1);
-            }
-            Err(e)
-        }
-    }
+        },
+    )
+    .await
 }
