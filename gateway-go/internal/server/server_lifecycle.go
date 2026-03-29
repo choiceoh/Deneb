@@ -61,8 +61,7 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// Mark ready only after all channel plugins have had a chance to start.
 	s.ready.Store(true)
 
-	// Restore persisted Telegram sessions and fire a startup heartbeat so the
-	// agent can check HEARTBEAT.md and resume pending work from before restart.
+	// Restore persisted Telegram sessions to the in-memory session manager.
 	s.safeGo("session-restore", func() {
 		s.restoreAndWakeSessions(ctx)
 	})

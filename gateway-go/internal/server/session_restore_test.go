@@ -54,12 +54,7 @@ func TestRestoreAndWakeSessions_RestoresTelegramSessions(t *testing.T) {
 	mgr := session.NewManager()
 	srv := newTestServerForRestore(mgr)
 
-	// Use a cancelled context so the goroutine that fires heartbeats exits
-	// immediately — we only want to test the restore (scan) portion here.
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	srv.restoreAndWakeSessions(ctx)
+	srv.restoreAndWakeSessions(context.Background())
 
 	// Allow any goroutines spawned in safeGo to exit.
 	time.Sleep(50 * time.Millisecond)
@@ -112,10 +107,7 @@ func TestRestoreAndWakeSessions_SkipsAlreadyRestoredSessions(t *testing.T) {
 	})
 
 	srv := newTestServerForRestore(mgr)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	srv.restoreAndWakeSessions(ctx)
+	srv.restoreAndWakeSessions(context.Background())
 	time.Sleep(50 * time.Millisecond)
 
 	// Status should remain running — not overwritten to done.
@@ -131,57 +123,11 @@ func TestRestoreAndWakeSessions_NoTranscriptDir(t *testing.T) {
 
 	mgr := session.NewManager()
 	srv := newTestServerForRestore(mgr)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
 
 	// Must not panic.
-	srv.restoreAndWakeSessions(ctx)
+	srv.restoreAndWakeSessions(context.Background())
 
 	if count := mgr.Count(); count != 0 {
 		t.Errorf("expected 0 sessions, got %d", count)
-	}
-}
-
-func TestAllowStartupHeartbeat_ThrottlesRecentSession(t *testing.T) {
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
-
-	now := time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC)
-	ok, err := allowStartupHeartbeat("telegram:123", now)
-	if err != nil {
-		t.Fatalf("allowStartupHeartbeat first call error: %v", err)
-	}
-	if !ok {
-		t.Fatal("expected first startup heartbeat attempt to be allowed")
-	}
-
-	ok, err = allowStartupHeartbeat("telegram:123", now.Add(5*time.Minute))
-	if err != nil {
-		t.Fatalf("allowStartupHeartbeat second call error: %v", err)
-	}
-	if ok {
-		t.Fatal("expected second startup heartbeat attempt to be throttled")
-	}
-}
-
-func TestAllowStartupHeartbeat_AllowsAfterWindow(t *testing.T) {
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
-
-	now := time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC)
-	ok, err := allowStartupHeartbeat("telegram:abc", now)
-	if err != nil {
-		t.Fatalf("allowStartupHeartbeat first call error: %v", err)
-	}
-	if !ok {
-		t.Fatal("expected first startup heartbeat attempt to be allowed")
-	}
-
-	ok, err = allowStartupHeartbeat("telegram:abc", now.Add(startupHeartbeatMinInterval+time.Minute))
-	if err != nil {
-		t.Fatalf("allowStartupHeartbeat third call error: %v", err)
-	}
-	if !ok {
-		t.Fatal("expected startup heartbeat attempt after throttle window to be allowed")
 	}
 }
