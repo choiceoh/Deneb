@@ -56,6 +56,19 @@ Protocol error codes (`ErrorCode` enum) are defined in `proto/gateway.proto` and
 2. Implement handler in `internal/chat/tools/fs.go` (or new `tool_<name>.go` for non-FS tools)
 3. Tool schemas use full JSON Schema definitions
 
+### Working with Generated Files
+
+Several files in this module are machine-generated. **Never edit them by hand.**
+
+| File | Source | Command |
+|------|--------|---------|
+| `internal/chat/tool_schemas_gen.go` | `internal/chat/tool_schemas.yaml` | `make tool-schemas` |
+| `internal/autoreply/thinking/model_caps_gen.go` | `internal/autoreply/thinking/model_caps.yaml` | `make model-caps` |
+| `internal/ffi/ffi_error_codes_gen.go` | `core-rs/core/src/ffi_utils.rs` | `make ffi-gen` |
+| `pkg/protocol/gen/*.pb.go` | `proto/*.proto` | `make proto` |
+
+To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.
+
 ### Modifying System Prompt
 - Assembly: `internal/chat/system_prompt.go`
 - Context files: `internal/chat/context_files.go` (loads CLAUDE.md, SOUL.md, etc.)
