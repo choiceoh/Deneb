@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 )
 
 // ---------------------------------------------------------------------------
