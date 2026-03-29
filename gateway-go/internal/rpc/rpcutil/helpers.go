@@ -59,3 +59,30 @@ func ErrMissingKey(reqID string) *protocol.ResponseFrame {
 func ParamError(reqID string, err error) *protocol.ResponseFrame {
 	return rpcerr.InvalidParams(err).Response(reqID)
 }
+
+// DecodeParams unmarshals request params into T. On success it returns the
+// decoded value and nil; on failure it returns the zero value and a ready-made
+// INVALID_REQUEST error response.
+//
+// Usage (inline struct type is valid Go generic syntax):
+//
+//	p, errResp := rpcutil.DecodeParams[struct {
+//	    Key string `json:"key"`
+//	}](req)
+//	if errResp != nil {
+//	    return errResp
+//	}
+func DecodeParams[T any](req *protocol.RequestFrame) (T, *protocol.ResponseFrame) {
+	var v T
+	if err := UnmarshalParams(req.Params, &v); err != nil {
+		return v, rpcerr.InvalidParams(err).Response(req.ID)
+	}
+	return v, nil
+}
+
+// RespondOK is a shorthand for protocol.MustResponseOK.
+// It builds a success ResponseFrame, panicking only on JSON marshal failure
+// (which should never happen for well-formed result values).
+func RespondOK(reqID string, result any) *protocol.ResponseFrame {
+	return protocol.MustResponseOK(reqID, result)
+}

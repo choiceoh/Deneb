@@ -2,13 +2,13 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"runtime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -20,26 +20,6 @@ type Deps struct {
 	ChannelLifecycle *channel.LifecycleManager
 	GatewaySubs      *events.GatewayEventSubscriptions
 	Version          string // Server version string (from --version flag).
-}
-
-// unmarshalParams safely unmarshals request params, handling nil/empty params.
-func unmarshalParams(params json.RawMessage, v any) error {
-	if len(params) == 0 {
-		return errors.New("missing params")
-	}
-	return json.Unmarshal(params, v)
-}
-
-// maxKeyInErrorMsg is the maximum key length included in error messages.
-// Prevents log inflation from pathologically large keys.
-const maxKeyInErrorMsg = 128
-
-// truncateForError truncates a string for safe inclusion in error messages.
-func truncateForError(s string) string {
-	if len(s) <= maxKeyInErrorMsg {
-		return s
-	}
-	return s[:maxKeyInErrorMsg] + "..."
 }
 
 // registerCoreBuiltins registers the core Go-native RPC methods (health,
@@ -59,106 +39,110 @@ func registerCoreBuiltins(d *Dispatcher, deps Deps) {
 
 func healthCheck(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"status":   "ok",
 			"runtime":  "go",
 			"ffi":      ffi.Available,
 			"sessions": deps.Sessions.Count(),
 			"channels": deps.Channels.List(),
 		})
-		return resp
 	}
 }
 
 func sessionsList(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp := protocol.MustResponseOK(req.ID, deps.Sessions.List())
-		return resp
+		return rpcutil.RespondOK(req.ID, deps.Sessions.List())
 	}
 }
 
 func sessionsGet(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key string `json:"key"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := unmarshalParams(req.Params, &p); err != nil || p.Key == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "key is required"))
+		key, errResp := rpcutil.RequireKey(req.ID, p.Key)
+		if errResp != nil {
+			return errResp
 		}
-		s := deps.Sessions.Get(p.Key)
+		s := deps.Sessions.Get(key)
 		if s == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "session not found: "+truncateForError(p.Key)))
+			return rpcerr.NotFound("session").
+				WithSession(rpcutil.TruncateForError(key)).
+				Response(req.ID)
 		}
-		resp := protocol.MustResponseOK(req.ID, s)
-		return resp
+		return rpcutil.RespondOK(req.ID, s)
 	}
 }
 
 func sessionsDelete(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key   string `json:"key"`
 			Force bool   `json:"force"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := unmarshalParams(req.Params, &p); err != nil || p.Key == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "key is required"))
+		key, errResp := rpcutil.RequireKey(req.ID, p.Key)
+		if errResp != nil {
+			return errResp
 		}
 		// Check if session is running (prevent accidental deletion).
-		s := deps.Sessions.Get(p.Key)
+		s := deps.Sessions.Get(key)
 		if s != nil && s.Status == session.StatusRunning && !p.Force {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrConflict, "session is currently running; use force=true to delete"))
+			return rpcerr.Conflict("session is currently running; use force=true to delete").
+				WithSession(key).
+				Response(req.ID)
 		}
-		found := deps.Sessions.Delete(p.Key)
+		found := deps.Sessions.Delete(key)
 		if found && deps.GatewaySubs != nil {
 			deps.GatewaySubs.EmitLifecycle(events.LifecycleChangeEvent{
-				SessionKey: p.Key,
+				SessionKey: key,
 				Reason:     "deleted",
 			})
 		}
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"deleted": found})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]bool{"deleted": found})
 	}
 }
 
 func channelsList(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp := protocol.MustResponseOK(req.ID, deps.Channels.List())
-		return resp
+		return rpcutil.RespondOK(req.ID, deps.Channels.List())
 	}
 }
 
 func channelsGet(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id is required"))
+		if p.ID == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		ch := deps.Channels.Get(p.ID)
 		if ch == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "channel not found: "+truncateForError(p.ID)))
+			return rpcerr.NotFound("channel").
+				WithChannel(rpcutil.TruncateForError(p.ID)).
+				Response(req.ID)
 		}
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"id":           ch.ID(),
 			"meta":         ch.Meta(),
 			"capabilities": ch.Capabilities(),
 			"status":       ch.Status(),
 		})
-		return resp
 	}
 }
 
 func channelsStatus(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp := protocol.MustResponseOK(req.ID, deps.Channels.StatusAll())
-		return resp
+		return rpcutil.RespondOK(req.ID, deps.Channels.StatusAll())
 	}
 }
 
@@ -168,7 +152,7 @@ func systemInfo(deps Deps) HandlerFunc {
 		if version == "" {
 			version = "unknown"
 		}
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"runtime":      "go",
 			"version":      version,
 			"goVersion":    runtime.Version(),
@@ -177,7 +161,6 @@ func systemInfo(deps Deps) HandlerFunc {
 			"numCPU":       runtime.NumCPU(),
 			"ffiAvailable": ffi.Available,
 		})
-		return resp
 	}
 }
 
@@ -187,16 +170,11 @@ func systemInfo(deps Deps) HandlerFunc {
 func channelsHealth(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.ChannelLifecycle == nil {
-			resp := protocol.MustResponseOK(req.ID, map[string]any{
-				"channels": []any{},
-			})
-			return resp
+			return rpcutil.RespondOK(req.ID, map[string]any{"channels": []any{}})
 		}
-		health := deps.ChannelLifecycle.HealthCheck()
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
-			"channels": health,
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"channels": deps.ChannelLifecycle.HealthCheck(),
 		})
-		return resp
 	}
 }
 

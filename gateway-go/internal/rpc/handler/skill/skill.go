@@ -16,6 +16,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// broadcast calls fn only if it is non-nil — avoids a nil check at every call site.
+func broadcast(fn BroadcastFunc, event string, payload any) {
+	if fn != nil {
+		fn(event, payload)
+	}
+}
+
 // BroadcastFunc broadcasts an event to subscribers.
 type BroadcastFunc func(event string, payload any) (int, []error)
 
@@ -78,7 +85,7 @@ func skillsInstall(deps Deps) rpcutil.HandlerFunc {
 			InstallID string `json:"installId"`
 			TimeoutMs int64  `json:"timeoutMs,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.Name == "" || p.InstallID == "" {
@@ -86,16 +93,11 @@ func skillsInstall(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		result := deps.Skills.Install(p.Name, p.InstallID)
-
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("skills.changed", map[string]any{
-				"action": "installed",
-				"name":   p.Name,
-			})
-		}
-
-		resp := protocol.MustResponseOK(req.ID, result)
-		return resp
+		broadcast(deps.Broadcaster, "skills.changed", map[string]any{
+			"action": "installed",
+			"name":   p.Name,
+		})
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
@@ -107,7 +109,7 @@ func skillsUpdate(deps Deps) rpcutil.HandlerFunc {
 			APIKey   string            `json:"apiKey,omitempty"`
 			Env      map[string]string `json:"env,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.SkillKey == "" {
@@ -123,19 +125,15 @@ func skillsUpdate(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound(err.Error()).Response(req.ID)
 		}
 
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("skills.changed", map[string]any{
-				"action":   "updated",
-				"skillKey": p.SkillKey,
-			})
-		}
-
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		broadcast(deps.Broadcaster, "skills.changed", map[string]any{
+			"action":   "updated",
+			"skillKey": p.SkillKey,
+		})
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":       true,
 			"skillKey": p.SkillKey,
 			"config":   updated.Config,
 		})
-		return resp
 	}
 }
 
@@ -156,7 +154,7 @@ func skillsSnapshot(_ Deps) rpcutil.HandlerFunc {
 			EnvVars          map[string]string              `json:"envVars,omitempty"`
 			RemoteNote       string                        `json:"remoteNote,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.WorkspaceDir == "" {
@@ -207,7 +205,7 @@ func skillsCommands(_ Deps) rpcutil.HandlerFunc {
 			AllowBundled     []string                      `json:"allowBundled,omitempty"`
 			ReservedNames    []string                      `json:"reservedNames,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.WorkspaceDir == "" {
@@ -252,7 +250,7 @@ func skillsDiscover(deps Deps) rpcutil.HandlerFunc {
 			ExtraDirs        []string `json:"extraDirs,omitempty"`
 			PluginSkillDirs  []string `json:"pluginSkillDirs,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.WorkspaceDir == "" {
@@ -266,14 +264,11 @@ func skillsDiscover(deps Deps) rpcutil.HandlerFunc {
 			PluginSkillDirs:  p.PluginSkillDirs,
 		})
 
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("skills.changed", map[string]any{
-				"action": "discovered",
-				"count":  len(entries),
-			})
-		}
-
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		broadcast(deps.Broadcaster, "skills.changed", map[string]any{
+			"action": "discovered",
+			"count":  len(entries),
+		})
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":    true,
 			"count": len(entries),
 		})
@@ -294,7 +289,7 @@ func skillsEntries(_ Deps) rpcutil.HandlerFunc {
 			AllowBundled     []string                      `json:"allowBundled,omitempty"`
 			SkillFilter      []string                      `json:"skillFilter,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.WorkspaceDir == "" {
@@ -339,7 +334,7 @@ func skillsWorkspaceStatus(_ Deps) rpcutil.HandlerFunc {
 			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
 			AllowBundled     []string                      `json:"allowBundled,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.WorkspaceDir == "" {
@@ -450,7 +445,7 @@ func toolsInvoke(deps ToolDeps) rpcutil.HandlerFunc {
 			SessionKey string         `json:"sessionKey,omitempty"`
 			DryRun     bool           `json:"dryRun,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
 			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		if p.Tool == "" {
@@ -541,10 +536,13 @@ func toolsList(_ ToolDeps) rpcutil.HandlerFunc {
 // toolsStatus handles "tools.status" — returns status of a running tool execution.
 func toolsStatus(deps ToolDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 
