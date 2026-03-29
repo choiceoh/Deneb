@@ -44,44 +44,31 @@ func PrefetchForNextRun(
 	ctx, cancel := context.WithTimeout(ctx, prefetchTimeout)
 	defer cancel()
 
+	// All prefetch work runs inline (not as child goroutines) because this
+	// function is already called as a goroutine. The timeout context bounds
+	// total work; defer cancel() safely fires after all work completes.
+
 	// Prefetch 1: Sglang health probe.
-	// After a successful run, the next run is likely to need proactive context
-	// (sglang local LLM). Pre-check health so the run doesn't waste time probing.
-	go prefetchSglangHealth()
+	prefetchSglangHealth()
 
-	// Prefetch 2: Context files.
-	// Workspace context files (CLAUDE.md, SOUL.md, etc.) are cached with mtime
-	// validation. Touch the cache now so the next prompt build gets a cache hit
-	// instead of re-reading from disk.
+	// Prefetch 2: Context files — touch the mtime cache.
 	if workspaceDir != "" {
-		go func() {
-			_ = prompt.LoadContextFiles(workspaceDir)
-		}()
+		_ = prompt.LoadContextFiles(workspaceDir)
 	}
 
-	// Prefetch 3: Transcript warmup.
-	// The transcript cache has a 10s TTL. Loading now extends the window so
-	// the next context assembly likely gets a cache hit.
+	// Prefetch 3: Transcript warmup — extend the 10s TTL window.
 	if deps.transcript != nil {
-		go func() {
-			_, _, _ = deps.transcript.Load(sessionKey, 0)
-		}()
+		_, _, _ = deps.transcript.Load(sessionKey, 0)
 	}
 
-	// Prefetch 4: Knowledge embedding warmup.
-	// If the memory embedder is available, pre-load the embedding model state
-	// by running a tiny embedding request. This warms up the GGUF model on
-	// DGX Spark so the next semantic search is faster.
+	// Prefetch 4: Knowledge embedding model warmup (DGX Spark GPU).
 	if deps.memoryEmbedder != nil {
-		go func() {
-			embedCtx, embedCancel := context.WithTimeout(ctx, 3*time.Second)
-			defer embedCancel()
-			// Minimal embedding to warm the model — result is discarded.
-			_, _ = deps.memoryEmbedder.EmbedQuery(embedCtx, "warmup")
-		}()
+		embedCtx, embedCancel := context.WithTimeout(ctx, 3*time.Second)
+		_, _ = deps.memoryEmbedder.EmbedQuery(embedCtx, "warmup")
+		embedCancel()
 	}
 
-	logger.Debug("prefetcher: scheduled next-run prefetch", "session", sessionKey)
+	logger.Debug("prefetcher: next-run prefetch done", "session", sessionKey)
 }
 
 // prefetchSglangHealth updates the cached sglang health status.

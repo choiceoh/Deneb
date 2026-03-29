@@ -129,7 +129,7 @@ var koreanParticles = map[string]bool{
 	"과": true, "도": true, "만": true, "부터": true,
 	"까지": true, "처럼": true, "같이": true, "보다": true,
 	"한테": true, "에게": true, "께": true, "하고": true,
-	"그": true, "이": true, "저": true, "그리고": true,
+	"그": true, "저": true, "그리고": true,
 	"하지만": true, "그런데": true, "그래서": true,
 	"좀": true, "잘": true, "더": true, "다": true,
 	"해줘": true, "해주세요": true, "할래": true, "할게": true,
