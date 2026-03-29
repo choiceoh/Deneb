@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.2.3](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.2...deneb-v4.2.3) (2026-03-29)
+
+
+### ⚡ Performance
+
+* **chat:** cache LLMToolsForProfile, static prompt block, and BuildCacheKey fast-path ([9d6536d](https://github.com/choiceoh/Deneb/commit/9d6536d3180c1fa5b9cafc096a41bd0f353d1053))
+* **chat:** reduce per-turn overhead in post-processors, context, and knowledge ([2eb61e2](https://github.com/choiceoh/Deneb/commit/2eb61e272aae2f854d1fc1ff2daade968ba663ee))
+
 ## [4.2.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.1...deneb-v4.2.2) (2026-03-29)
 
 
