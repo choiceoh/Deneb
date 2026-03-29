@@ -80,6 +80,11 @@ func (s *Server) registerSessionRPCMethods() {
 		s.logger.Info("aurora compaction store initialized")
 	}
 
+	// Resolve default model from config and create the model role registry.
+	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
+	reg := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
+	chatCfg.Registry = reg
+
 	// Initialize structured memory store (Honcho-style).
 	if home, err := os.UserHomeDir(); err == nil {
 		dbPath := filepath.Join(home, ".deneb", "memory.db")
@@ -142,11 +147,6 @@ func (s *Server) registerSessionRPCMethods() {
 			s.logger.Info("aurora-memory: structured store initialized", "db", dbPath)
 		}
 	}
-
-	// Resolve default model from config and create the model role registry.
-	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
-	reg := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
-	chatCfg.Registry = reg
 
 	// Resolve workspace directory for file tool operations.
 	workspaceDir := resolveWorkspaceDir()
