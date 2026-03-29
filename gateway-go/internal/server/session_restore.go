@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,10 @@ import (
 // startupHeartbeatDelay gives Telegram polling time to finish connecting
 // before we send heartbeat messages into restored sessions.
 const startupHeartbeatDelay = 3 * time.Second
+
+// startupHeartbeatMinInterval avoids repeated startup-heartbeat bursts when the
+// gateway process is restarted repeatedly in a short period.
+const startupHeartbeatMinInterval = 15 * time.Minute
 
 // restoreAndWakeSessions scans the transcript directory for persisted Telegram
 // sessions, restores them to the in-memory session manager, then fires a
@@ -109,6 +114,15 @@ func (s *Server) sendStartupHeartbeat(ctx context.Context, sessionKey, chatID st
 	if s.chatHandler == nil {
 		return
 	}
+	allowed, err := allowStartupHeartbeat(sessionKey, time.Now())
+	if err != nil {
+		s.logger.Warn("session restore: startup heartbeat throttle check failed",
+			"session", sessionKey, "error", err)
+	}
+	if !allowed {
+		s.logger.Info("session restore: startup heartbeat throttled", "session", sessionKey)
+		return
+	}
 
 	req, err := protocol.NewRequestFrame(
 		"startup-heartbeat-"+chatID,
@@ -138,4 +152,42 @@ func (s *Server) sendStartupHeartbeat(ctx context.Context, sessionKey, chatID st
 	} else {
 		s.logger.Info("session restore: heartbeat sent", "session", sessionKey)
 	}
+}
+
+// allowStartupHeartbeat returns whether a startup heartbeat is allowed for the
+// given session key at the provided time. The decision is persisted under
+// ~/.deneb/state/startup-heartbeat to survive process restarts.
+func allowStartupHeartbeat(sessionKey string, now time.Time) (bool, error) {
+	path, err := startupHeartbeatStampPath(sessionKey)
+	if err != nil {
+		return false, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return false, err
+	}
+
+	if raw, readErr := os.ReadFile(path); readErr == nil {
+		prevRaw := strings.TrimSpace(string(raw))
+		if prevRaw != "" {
+			if prevAt, parseErr := time.Parse(time.RFC3339Nano, prevRaw); parseErr == nil {
+				if now.Sub(prevAt) < startupHeartbeatMinInterval {
+					return false, nil
+				}
+			}
+		}
+	}
+
+	if err := os.WriteFile(path, []byte(now.UTC().Format(time.RFC3339Nano)), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func startupHeartbeatStampPath(sessionKey string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	safe := strings.NewReplacer(":", "_", "/", "_", "\\", "_").Replace(sessionKey)
+	return filepath.Join(home, ".deneb", "state", "startup-heartbeat", fmt.Sprintf("%s.stamp", safe)), nil
 }
