@@ -21,10 +21,27 @@ type dedupeEntry struct {
 	seenAt time.Time
 }
 
+// expiryEntry is a node in the FIFO expiry queue.
+type expiryEntry struct {
+	key       string
+	expiresAt time.Time
+}
+
 // RecentMessageIDCache is a bounded TTL cache for message ID deduplication.
+//
+// Expiry design: instead of scanning the whole map every N operations, we
+// maintain a FIFO expiry queue (entries are appended in insertion order and
+// therefore roughly sorted by expiration time). prune() sweeps from the front
+// of the queue until it hits a non-expired entry, giving O(1) amortized cost
+// per prune call regardless of map size.
+//
+// A key may appear more than once in the queue if it was re-added after its
+// initial insertion; the stale queue entry is harmlessly skipped during prune
+// because we verify the map entry's actual seenAt before deleting.
 type RecentMessageIDCache struct {
 	mu      sync.Mutex
 	entries map[string]dedupeEntry
+	expiry  []expiryEntry // FIFO; front holds the earliest expiration
 	checks  int
 }
 
@@ -53,7 +70,9 @@ func (c *RecentMessageIDCache) peek(key string) bool {
 func (c *RecentMessageIDCache) check(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[key] = dedupeEntry{seenAt: time.Now()}
+	now := time.Now()
+	c.entries[key] = dedupeEntry{seenAt: now}
+	c.expiry = append(c.expiry, expiryEntry{key: key, expiresAt: now.Add(recentMessageIDTTL)})
 	c.checks++
 	if len(c.entries) > recentMessageIDMaxSize || c.checks%100 == 0 {
 		c.prune()
@@ -65,16 +84,28 @@ func (c *RecentMessageIDCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries = make(map[string]dedupeEntry)
+	c.expiry = c.expiry[:0]
 	c.checks = 0
 }
 
+// prune sweeps expired entries from the front of the FIFO expiry queue.
+// Because entries are appended in time order the front always holds the
+// oldest (soonest-to-expire) entries, so we stop as soon as we reach a
+// live entry. O(expired) per call — amortized O(1) per insertion.
 func (c *RecentMessageIDCache) prune() {
 	now := time.Now()
-	for k, v := range c.entries {
-		if now.Sub(v.seenAt) > recentMessageIDTTL {
-			delete(c.entries, k)
+	i := 0
+	for i < len(c.expiry) && c.expiry[i].expiresAt.Before(now) {
+		key := c.expiry[i].key
+		// Only remove the map entry if the key hasn't been refreshed since
+		// this queue entry was added (i.e., its actual expiry has passed).
+		if e, ok := c.entries[key]; ok && e.seenAt.Add(recentMessageIDTTL).Before(now) {
+			delete(c.entries, key)
 		}
+		i++
 	}
+	// Slide the queue forward, reusing the backing array to avoid allocation.
+	c.expiry = c.expiry[i:]
 }
 
 // buildRecentMessageIDKey builds a dedup key for a followup run.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // SessionBindParams holds params for binding a session to a conversation.
@@ -61,6 +62,7 @@ type SessionBindingService struct {
 	bindings map[string]*SessionBindingEntry // bindingID → entry
 	byConvo  map[string]string               // "channel:account:convo" → bindingID
 	nextID   int
+	dirty    atomic.Bool // true when bindings have changed since last save
 }
 
 // NewSessionBindingService creates a new binding service.
@@ -70,6 +72,12 @@ func NewSessionBindingService() *SessionBindingService {
 		byConvo:  make(map[string]string),
 	}
 }
+
+// IsDirty reports whether bindings have changed since the last MarkClean call.
+func (s *SessionBindingService) IsDirty() bool { return s.dirty.Load() }
+
+// MarkClean clears the dirty flag (called by BindingStore after a successful save).
+func (s *SessionBindingService) MarkClean() { s.dirty.Store(false) }
 
 // Bind creates a new session binding.
 func (s *SessionBindingService) Bind(params SessionBindParams) *SessionBindResult {
@@ -92,6 +100,7 @@ func (s *SessionBindingService) Bind(params SessionBindParams) *SessionBindResul
 	}
 	s.bindings[bindingID] = entry
 	s.byConvo[convoKey] = bindingID
+	s.dirty.Store(true)
 
 	return &SessionBindResult{
 		BindingID:      bindingID,
@@ -123,6 +132,7 @@ func (s *SessionBindingService) Unbind(bindingID string) error {
 		return fmt.Errorf("binding %q not found", bindingID)
 	}
 	delete(s.bindings, bindingID)
+	s.dirty.Store(true)
 
 	// Clean up convo index.
 	for key, id := range s.byConvo {
@@ -216,4 +226,5 @@ func (s *SessionBindingService) RestoreAll(entries []StoredBinding) {
 		}
 		s.byConvo[convoKey] = bindingID
 	}
+	s.dirty.Store(true)
 }
