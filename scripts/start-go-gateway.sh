@@ -58,4 +58,11 @@ fi
 CMD+=("${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")
 
 echo "Starting Go gateway: ${CMD[*]}"
-exec "${CMD[@]}"
+"${CMD[@]}"
+EXIT=$?
+if [ "$EXIT" -eq 75 ]; then
+  echo "Gateway requested restart (exit 75), restarting once..."
+  sleep 0.5
+  exec "${CMD[@]}"
+fi
+exit "$EXIT"
