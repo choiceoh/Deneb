@@ -15,7 +15,7 @@ import (
 // context.Context, and discarded when the turn ends.
 type TurnContext struct {
 	mu      sync.Mutex
-	results map[string]*turnResult_  // keyed by tool_use_id
+	results map[string]*turnResult_    // keyed by tool_use_id
 	waiters map[string][]chan struct{} // signals when a result is stored
 }
 
@@ -30,11 +30,10 @@ type turnResult_ struct {
 }
 
 // NewTurnContext creates an empty turn context.
+// Maps are allocated lazily on first use so text-only turns (no tool calls)
+// pay only the cost of the struct itself.
 func NewTurnContext() *TurnContext {
-	return &TurnContext{
-		results: make(map[string]*turnResult_),
-		waiters: make(map[string][]chan struct{}),
-	}
+	return &TurnContext{}
 }
 
 // Store records a tool's result, keyed by tool_use_id.
@@ -43,6 +42,10 @@ func (tc *TurnContext) Store(toolUseID string, result *turnResult_) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
+	if tc.results == nil {
+		// Most turns have 1–3 tool calls; capacity 4 avoids rehashing.
+		tc.results = make(map[string]*turnResult_, 4)
+	}
 	tc.results[toolUseID] = result
 
 	// Unblock all waiters for this ID.
@@ -75,6 +78,9 @@ func (tc *TurnContext) Wait(ctx context.Context, toolUseID string, timeout time.
 
 	// Register a waiter channel.
 	ch := make(chan struct{})
+	if tc.waiters == nil {
+		tc.waiters = make(map[string][]chan struct{}, 4)
+	}
 	tc.waiters[toolUseID] = append(tc.waiters[toolUseID], ch)
 	tc.mu.Unlock()
 
