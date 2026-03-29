@@ -50,6 +50,11 @@ type factsResponse struct {
 // 1. Explicit extraction — what was directly stated
 // 2. Deductive reasoning — what can be logically inferred but wasn't said
 // 3. Structured output with category, importance, and confidence
+//
+// NOTE: This prompt is ~2,500 tokens and is sent on every extraction call.
+// SGLang's --enable-prefix-caching should be active on the inference server
+// so the KV cache for this repeated prefix is reused across calls.
+// Without prefix caching, each call pays the full prefill cost.
 const importanceSystemPrompt = `You are Neuromancer, a memory inference engine for a personal AI assistant.
 Your job is to understand the USER — who they are, how they think, what they value — not to log what work was done.
 

@@ -168,8 +168,37 @@ func isNetworkError(err error) bool {
 		strings.Contains(msg, "529")
 }
 
+// callWithNetworkRetry calls fn and retries with exponential backoff on
+// transient network errors. Non-network errors and context cancellation
+// fail immediately.
+func callWithNetworkRetry(ctx context.Context, fn func() (string, error), logger *slog.Logger) (string, error) {
+	text, err := fn()
+	if err == nil {
+		return text, nil
+	}
+	if !isNetworkError(err) {
+		return "", err
+	}
+	for _, backoff := range networkRetryBackoffs {
+		logger.Debug("aurora-transfer: network error, retrying", "backoff", backoff, "error", err)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(backoff):
+		}
+		text, err = fn()
+		if err == nil {
+			return text, nil
+		}
+		if !isNetworkError(err) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("aurora-transfer: network error after retries: %w", err)
+}
+
 // extractFactsFromSummary calls the LLM to extract structured facts from a summary.
-// Network errors are retried with exponential backoff; parse errors retry once
+// Network errors are retried via callWithNetworkRetry; parse errors retry once
 // (the LLM may produce valid JSON on a second attempt).
 func extractFactsFromSummary(
 	ctx context.Context,
@@ -186,34 +215,11 @@ func extractFactsFromSummary(
 	}
 
 	for attempt := range 2 {
-		text, err := callTransferLLM(ctx, client, model, content)
+		text, err := callWithNetworkRetry(ctx, func() (string, error) {
+			return callTransferLLM(ctx, client, model, content)
+		}, logger)
 		if err != nil {
-			// Network errors: retry with backoff. Non-network errors: fail immediately.
-			if !isNetworkError(err) {
-				return nil, err
-			}
-			logger.Debug("aurora-transfer: network error, retrying with backoff",
-				"attempt", attempt, "error", err)
-			retried := false
-			for _, backoff := range networkRetryBackoffs {
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(backoff):
-				}
-				text, err = callTransferLLM(ctx, client, model, content)
-				if err == nil {
-					retried = true
-					break
-				}
-				if !isNetworkError(err) {
-					return nil, err
-				}
-				logger.Debug("aurora-transfer: network retry failed", "backoff", backoff, "error", err)
-			}
-			if !retried {
-				return nil, fmt.Errorf("aurora-transfer: network error after retries: %w", err)
-			}
+			return nil, err
 		}
 		if text == "" || text == "[]" {
 			return nil, nil
