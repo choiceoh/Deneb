@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -77,12 +78,15 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 	bannerInfo := buildBannerInfo(flags.Version, cfg.Addr, svc.VegaEnabled)
 	bannerInfo.PID = os.Getpid()
 
+	svc.Server.OnListening = func(_ net.Addr) {
+		logging.PrintBanner(os.Stderr, bannerInfo, log.UseColor)
+	}
+
 	exitCode := RunWithSignals(func(ctx context.Context) error {
 		if err := d.Start(func() {}); err != nil {
 			return fmt.Errorf("daemon start failed: %w", err)
 		}
 		go provider.PrewarmModel(ctx, log.Logger)
-		logging.PrintBanner(os.Stderr, bannerInfo, log.UseColor)
 		return svc.Server.Run(ctx)
 	}, log.Logger)
 
@@ -93,9 +97,11 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 // RunServer runs the gateway in non-daemon foreground mode.
 func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) int {
 	bannerInfo := buildBannerInfo(flags.Version, cfg.Addr, svc.VegaEnabled)
+	svc.Server.OnListening = func(_ net.Addr) {
+		logging.PrintBanner(os.Stderr, bannerInfo, log.UseColor)
+	}
 	return RunWithSignals(func(ctx context.Context) error {
 		go provider.PrewarmModel(ctx, log.Logger)
-		logging.PrintBanner(os.Stderr, bannerInfo, log.UseColor)
 		return svc.Server.Run(ctx)
 	}, log.Logger)
 }

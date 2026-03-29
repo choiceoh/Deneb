@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"sync"
@@ -129,6 +130,10 @@ type Server struct {
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
 	*ChatManager    // chatHandler, toolDeps, telegramPlug, discordPlug
 	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
+
+	// OnListening is called after the TCP listener is bound successfully.
+	// Use this to print the startup banner or signal readiness to external callers.
+	OnListening func(addr net.Addr)
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.

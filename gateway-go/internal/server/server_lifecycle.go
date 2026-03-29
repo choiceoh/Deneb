@@ -99,7 +99,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
+	if s.OnListening != nil {
+		s.OnListening(ln.Addr())
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
