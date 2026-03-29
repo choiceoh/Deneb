@@ -66,7 +66,15 @@ func (s *Server) initGmailPoll() {
 		}
 	}
 
-	s.logger.Info("gmailpoll service initialized")
+	// Register as a periodic task within the autonomous service.
+	// The autonomous service handles lifecycle, panic recovery, and scheduling.
+	if s.autonomousSvc != nil {
+		s.autonomousSvc.RegisterTask(s.gmailPollSvc)
+		s.logger.Info("gmailpoll registered with autonomous service",
+			"interval", fmt.Sprintf("%dm", cfg.IntervalMin))
+	} else {
+		s.logger.Warn("gmailpoll: autonomous service not available, polling disabled")
+	}
 }
 
 // registerNativeSystemMethods registers native Go system RPC methods:

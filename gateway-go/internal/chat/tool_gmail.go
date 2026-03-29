@@ -30,7 +30,7 @@ type gmailParams struct {
 
 // toolGmail implements the gmail tool for structured Gmail operations via native API.
 func toolGmail() ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p gmailParams
 		if err := jsonutil.UnmarshalInto("gmail params", input, &p); err != nil {
 			return "", err
@@ -43,17 +43,17 @@ func toolGmail() ToolFunc {
 
 		switch p.Action {
 		case "inbox":
-			return gmailInbox(client, p)
+			return gmailInbox(ctx, client, p)
 		case "search":
-			return gmailSearch(client, p)
+			return gmailSearch(ctx, client, p)
 		case "read":
-			return gmailRead(client, p)
+			return gmailRead(ctx, client, p)
 		case "send":
-			return gmailSend(client, p)
+			return gmailSend(ctx, client, p)
 		case "reply":
-			return gmailReply(client, p)
+			return gmailReply(ctx, client, p)
 		case "label":
-			return gmailLabel(client, p)
+			return gmailLabel(ctx, client, p)
 		default:
 			return fmt.Sprintf("알 수 없는 gmail 액션: %q. 지원: inbox, search, read, send, reply, label", p.Action), nil
 		}
@@ -62,7 +62,7 @@ func toolGmail() ToolFunc {
 
 // --- inbox: structured inbox summary ---
 
-func gmailInbox(client *gmail.Client, p gmailParams) (string, error) {
+func gmailInbox(ctx context.Context, client *gmail.Client, p gmailParams) (string, error) {
 	max := clampGmailMax(p.Max, 10)
 
 	type result struct {
@@ -76,12 +76,12 @@ func gmailInbox(client *gmail.Client, p gmailParams) (string, error) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		msgs, err := client.Search("is:unread", max)
+		msgs, err := client.Search(ctx, "is:unread", max)
 		unreadCh <- result{msgs, err}
 	}()
 	go func() {
 		defer wg.Done()
-		msgs, err := client.Search("is:important is:unread", 5)
+		msgs, err := client.Search(ctx, "is:important is:unread", 5)
 		importantCh <- result{msgs, err}
 	}()
 	wg.Wait()
@@ -118,13 +118,13 @@ func gmailInbox(client *gmail.Client, p gmailParams) (string, error) {
 
 // --- search: structured search results ---
 
-func gmailSearch(client *gmail.Client, p gmailParams) (string, error) {
+func gmailSearch(ctx context.Context, client *gmail.Client, p gmailParams) (string, error) {
 	if p.Query == "" {
 		return "", fmt.Errorf("query는 search 액션에 필수입니다")
 	}
 	max := clampGmailMax(p.Max, 10)
 
-	msgs, err := client.Search(p.Query, max)
+	msgs, err := client.Search(ctx, p.Query, max)
 	if err != nil {
 		return "", err
 	}
@@ -140,12 +140,12 @@ func gmailSearch(client *gmail.Client, p gmailParams) (string, error) {
 
 // --- read: structured email with metadata separation ---
 
-func gmailRead(client *gmail.Client, p gmailParams) (string, error) {
+func gmailRead(ctx context.Context, client *gmail.Client, p gmailParams) (string, error) {
 	if p.MessageID == "" {
 		return "", fmt.Errorf("message_id는 read 액션에 필수입니다")
 	}
 
-	msg, err := client.GetMessage(p.MessageID)
+	msg, err := client.GetMessage(ctx, p.MessageID)
 	if err != nil {
 		return "", err
 	}
@@ -155,7 +155,7 @@ func gmailRead(client *gmail.Client, p gmailParams) (string, error) {
 
 // --- send: email with contact alias resolution ---
 
-func gmailSend(client *gmail.Client, p gmailParams) (string, error) {
+func gmailSend(ctx context.Context, client *gmail.Client, p gmailParams) (string, error) {
 	if p.To == "" {
 		return "", fmt.Errorf("to는 send 액션에 필수입니다")
 	}
@@ -176,7 +176,7 @@ func gmailSend(client *gmail.Client, p gmailParams) (string, error) {
 		bcc = resolveRecipients(p.BCC)
 	}
 
-	msgID, err := client.Send(to, cc, bcc, p.Subject, p.Body, p.HTML)
+	msgID, err := client.Send(ctx, to, cc, bcc, p.Subject, p.Body, p.HTML)
 	if err != nil {
 		return fmt.Sprintf("발송 실패: %s", err), nil
 	}
@@ -189,7 +189,7 @@ func gmailSend(client *gmail.Client, p gmailParams) (string, error) {
 
 // --- reply ---
 
-func gmailReply(client *gmail.Client, p gmailParams) (string, error) {
+func gmailReply(ctx context.Context, client *gmail.Client, p gmailParams) (string, error) {
 	if p.MessageID == "" {
 		return "", fmt.Errorf("message_id는 reply 액션에 필수입니다")
 	}
@@ -202,7 +202,7 @@ func gmailReply(client *gmail.Client, p gmailParams) (string, error) {
 		to = resolveRecipient(p.To)
 	}
 
-	msgID, err := client.Reply(p.MessageID, to, p.Body, p.HTML)
+	msgID, err := client.Reply(ctx, p.MessageID, to, p.Body, p.HTML)
 	if err != nil {
 		return fmt.Sprintf("답장 실패: %s", err), nil
 	}
@@ -212,7 +212,7 @@ func gmailReply(client *gmail.Client, p gmailParams) (string, error) {
 
 // --- label management ---
 
-func gmailLabel(client *gmail.Client, p gmailParams) (string, error) {
+func gmailLabel(ctx context.Context, client *gmail.Client, p gmailParams) (string, error) {
 	action := p.LabelAction
 	if action == "" {
 		action = "list"
@@ -220,7 +220,7 @@ func gmailLabel(client *gmail.Client, p gmailParams) (string, error) {
 
 	switch action {
 	case "list":
-		labels, err := client.ListLabels()
+		labels, err := client.ListLabels(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -236,7 +236,7 @@ func gmailLabel(client *gmail.Client, p gmailParams) (string, error) {
 		if p.LabelName == "" {
 			return "", fmt.Errorf("label_name은 label add에 필수입니다")
 		}
-		if err := client.ModifyLabels(p.MessageID, []string{p.LabelName}, nil); err != nil {
+		if err := client.ModifyLabels(ctx, p.MessageID, []string{p.LabelName}, nil); err != nil {
 			return fmt.Sprintf("라벨 추가 실패: %s", err), nil
 		}
 		return fmt.Sprintf("🏷️ 라벨 '%s' 추가 완료", p.LabelName), nil
@@ -248,7 +248,7 @@ func gmailLabel(client *gmail.Client, p gmailParams) (string, error) {
 		if p.LabelName == "" {
 			return "", fmt.Errorf("label_name은 label remove에 필수입니다")
 		}
-		if err := client.ModifyLabels(p.MessageID, nil, []string{p.LabelName}); err != nil {
+		if err := client.ModifyLabels(ctx, p.MessageID, nil, []string{p.LabelName}); err != nil {
 			return fmt.Sprintf("라벨 제거 실패: %s", err), nil
 		}
 		return fmt.Sprintf("🏷️ 라벨 '%s' 제거 완료", p.LabelName), nil

@@ -19,6 +19,9 @@ const (
 type PollState struct {
 	LastPollAt int64    `json:"lastPollAt"`
 	SeenIDs    []string `json:"seenIds"`
+
+	// seenSet is an in-memory index for O(1) lookups, rebuilt on Load.
+	seenSet map[string]struct{} `json:"-"`
 }
 
 // stateStore handles persistence of poll state to disk.
@@ -34,13 +37,18 @@ func (s *stateStore) Load() (*PollState, error) {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &PollState{}, nil
+			return &PollState{seenSet: make(map[string]struct{})}, nil
 		}
 		return nil, fmt.Errorf("read poll state: %w", err)
 	}
 	var state PollState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return nil, fmt.Errorf("parse poll state: %w", err)
+	}
+	// Rebuild the in-memory set from the persisted slice.
+	state.seenSet = make(map[string]struct{}, len(state.SeenIDs))
+	for _, id := range state.SeenIDs {
+		state.seenSet[id] = struct{}{}
 	}
 	return &state, nil
 }
@@ -49,6 +57,11 @@ func (s *stateStore) Save(state *PollState) error {
 	// Trim SeenIDs to prevent unbounded growth.
 	if len(state.SeenIDs) > maxSeenIDs {
 		state.SeenIDs = state.SeenIDs[len(state.SeenIDs)-maxSeenIDs:]
+		// Rebuild set after trim.
+		state.seenSet = make(map[string]struct{}, len(state.SeenIDs))
+		for _, id := range state.SeenIDs {
+			state.seenSet[id] = struct{}{}
+		}
 	}
 
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -69,17 +82,20 @@ func (s *stateStore) Save(state *PollState) error {
 	return os.Rename(tmp, s.path)
 }
 
-// hasSeen checks if a message ID has already been processed.
+// hasSeen checks if a message ID has already been processed (O(1)).
 func (state *PollState) hasSeen(id string) bool {
-	for _, seen := range state.SeenIDs {
-		if seen == id {
-			return true
-		}
+	if state.seenSet == nil {
+		return false
 	}
-	return false
+	_, ok := state.seenSet[id]
+	return ok
 }
 
-// markSeen adds a message ID to the seen list.
+// markSeen adds a message ID to the seen list and set.
 func (state *PollState) markSeen(id string) {
+	if state.seenSet == nil {
+		state.seenSet = make(map[string]struct{})
+	}
 	state.SeenIDs = append(state.SeenIDs, id)
+	state.seenSet[id] = struct{}{}
 }

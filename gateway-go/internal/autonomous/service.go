@@ -24,7 +24,8 @@ type CycleEvent struct {
 	Ts          int64        `json:"ts"`
 }
 
-// Service manages the AuroraDream memory consolidation lifecycle.
+// Service manages the AuroraDream memory consolidation lifecycle
+// and registered periodic tasks (e.g., Gmail polling).
 type Service struct {
 	mu     sync.Mutex
 	logger *slog.Logger
@@ -32,6 +33,7 @@ type Service struct {
 	// Service-level context for propagation to async operations.
 	svcCtx    context.Context
 	svcCancel context.CancelFunc
+	started   bool
 
 	listeners []EventListener
 	notifier  Notifier // optional: delivers significant events to the user
@@ -40,30 +42,78 @@ type Service struct {
 	dreamer          Dreamer
 	dreamRunning     bool
 	dreamTimerCancel context.CancelFunc // independent dreaming check timer
+
+	// Periodic tasks (gmail polling, etc.).
+	tasks       []PeriodicTask
+	taskCancels []context.CancelFunc
+	taskStatus  map[string]*TaskStatus
 }
 
-// NewService creates a new autonomous service (dreaming lifecycle only).
+// NewService creates a new autonomous service (dreaming + periodic tasks).
 func NewService(logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	svcCtx, svcCancel := context.WithCancel(context.Background())
 	return &Service{
-		logger:    logger.With("pkg", "autonomous"),
-		svcCtx:    svcCtx,
-		svcCancel: svcCancel,
+		logger:     logger.With("pkg", "autonomous"),
+		svcCtx:     svcCtx,
+		svcCancel:  svcCancel,
+		taskStatus: make(map[string]*TaskStatus),
 	}
 }
 
-// Start initializes the service. Dreaming timer is started when SetDreamer is called.
-func (s *Service) Start() {
-	s.logger.Info("autonomous service started (dreaming-only)")
+// RegisterTask adds a periodic task. Must be called before Start().
+func (s *Service) RegisterTask(task PeriodicTask) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tasks = append(s.tasks, task)
+	s.taskStatus[task.Name()] = &TaskStatus{Name: task.Name()}
 }
 
-// Stop shuts down the service.
+// GetTaskStatus returns the status of a registered task, or nil if not found.
+func (s *Service) GetTaskStatus(name string) *TaskStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.taskStatus[name]
+	if !ok {
+		return nil
+	}
+	// Return a copy.
+	cp := *st
+	return &cp
+}
+
+// Start initializes the service and starts all registered periodic tasks.
+// Dreaming timer is started when SetDreamer is called.
+func (s *Service) Start() {
+	s.mu.Lock()
+	s.started = true
+	tasks := make([]PeriodicTask, len(s.tasks))
+	copy(tasks, s.tasks)
+	s.mu.Unlock()
+
+	for _, task := range tasks {
+		ctx, cancel := context.WithCancel(s.svcCtx)
+		s.mu.Lock()
+		s.taskCancels = append(s.taskCancels, cancel)
+		s.mu.Unlock()
+		go s.runTaskLoop(ctx, task)
+	}
+
+	s.logger.Info("autonomous service started", "tasks", len(tasks))
+}
+
+// Stop shuts down the service and all periodic tasks.
 func (s *Service) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Cancel all periodic task loops.
+	for _, cancel := range s.taskCancels {
+		cancel()
+	}
+	s.taskCancels = nil
 
 	if s.dreamTimerCancel != nil {
 		s.dreamTimerCancel()
@@ -220,6 +270,88 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 		if notifyErr := notifier.Notify(ctx, msg); notifyErr != nil {
 			s.logger.Warn("aurora-dream: notification failed", "error", notifyErr)
 		}
+	}
+}
+
+// runTaskLoop runs a periodic task with panic recovery and status tracking.
+func (s *Service) runTaskLoop(ctx context.Context, task PeriodicTask) {
+	name := task.Name()
+	interval := task.Interval()
+	s.logger.Info("periodic task started", "task", name, "interval", interval)
+
+	// Initial grace period before first run (30 seconds).
+	initialTimer := time.NewTimer(30 * time.Second)
+	defer initialTimer.Stop()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	runOnce := func() {
+		s.executeTask(ctx, task)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Info("periodic task stopped", "task", name)
+			return
+		case <-initialTimer.C:
+			runOnce()
+		case <-ticker.C:
+			runOnce()
+		}
+	}
+}
+
+// executeTask runs a single task cycle with panic recovery and status bookkeeping.
+func (s *Service) executeTask(ctx context.Context, task PeriodicTask) {
+	name := task.Name()
+
+	// Mark running.
+	s.mu.Lock()
+	st := s.taskStatus[name]
+	if st != nil && st.Running {
+		s.mu.Unlock()
+		s.logger.Debug("periodic task still running, skipping", "task", name)
+		return
+	}
+	if st != nil {
+		st.Running = true
+	}
+	s.mu.Unlock()
+
+	defer func() {
+		// Panic recovery.
+		if r := recover(); r != nil {
+			s.logger.Error("periodic task panic recovered", "task", name, "panic", r)
+			s.mu.Lock()
+			if st != nil {
+				st.Running = false
+				st.ErrorCount++
+				st.LastError = fmt.Sprintf("panic: %v", r)
+			}
+			s.mu.Unlock()
+		}
+	}()
+
+	err := task.Run(ctx)
+
+	s.mu.Lock()
+	if st != nil {
+		st.Running = false
+		st.RunCount++
+		st.LastRunAt = time.Now().UnixMilli()
+		if err != nil {
+			st.ErrorCount++
+			st.LastError = err.Error()
+		} else {
+			st.LastError = ""
+		}
+	}
+	s.mu.Unlock()
+
+	if err != nil {
+		s.logger.Warn("periodic task failed", "task", name, "error", err)
 	}
 }
 

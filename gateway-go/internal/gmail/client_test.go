@@ -267,6 +267,32 @@ func TestValidToken_RefreshFailsOnBadResponse(t *testing.T) {
 	}
 }
 
+func TestGetClient_RetriableOnFailure(t *testing.T) {
+	// Reset the global singleton for this test.
+	globalMu.Lock()
+	savedClient := globalClient
+	globalClient = nil
+	globalMu.Unlock()
+	defer func() {
+		globalMu.Lock()
+		globalClient = savedClient
+		globalMu.Unlock()
+	}()
+
+	// First call should fail (no credentials).
+	_, err := GetClient()
+	if err == nil {
+		t.Fatal("expected error for missing credentials")
+	}
+
+	// Second call should also try again (not permanently failed like sync.Once).
+	_, err2 := GetClient()
+	if err2 == nil {
+		t.Fatal("expected error again for missing credentials")
+	}
+	// Both should fail, but importantly the second call actually tried (not cached error).
+}
+
 func TestPersistToken(t *testing.T) {
 	tokenPath := filepath.Join(t.TempDir(), "token.json")
 

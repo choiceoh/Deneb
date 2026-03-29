@@ -72,12 +72,7 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		s.autonomousSvc.Start()
 	}
 
-	// Start Gmail polling service.
-	if s.gmailPollSvc != nil {
-		s.safeGo("gmailpoll:start", func() {
-			s.gmailPollSvc.Start(ctx)
-		})
-	}
+	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
 
 	// Fire gateway.start hooks.
 	if s.hooks != nil {
@@ -199,10 +194,7 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6c. Stop Gmail poll service.
-	if s.gmailPollSvc != nil {
-		s.gmailPollSvc.Stop()
-	}
+	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
 	// 7. Fire gateway.stop hooks.
 	if s.hooks != nil {

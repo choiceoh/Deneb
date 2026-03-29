@@ -91,7 +91,7 @@ func TestFormatEmailForAnalysis_LongBody(t *testing.T) {
 	}
 }
 
-func TestFormatReport(t *testing.T) {
+func TestFormatReport_HTML(t *testing.T) {
 	msg := &gmail.MessageDetail{
 		From:    "sender@test.com",
 		Subject: "Important Email",
@@ -103,6 +103,9 @@ func TestFormatReport(t *testing.T) {
 	if !strings.Contains(report, "📬") {
 		t.Error("report should contain emoji header")
 	}
+	if !strings.Contains(report, "<b>") {
+		t.Error("report should use HTML bold tags")
+	}
 	if !strings.Contains(report, "sender@test.com") {
 		t.Error("report should contain sender")
 	}
@@ -111,5 +114,22 @@ func TestFormatReport(t *testing.T) {
 	}
 	if !strings.Contains(report, analysis) {
 		t.Error("report should contain analysis")
+	}
+}
+
+func TestFormatReport_EscapesHTML(t *testing.T) {
+	msg := &gmail.MessageDetail{
+		From:    "test <user@test.com>",
+		Subject: "Subject with <tag>",
+	}
+	analysis := "Analysis with <script>alert('xss')</script>"
+
+	report := formatReport(msg, analysis)
+
+	if strings.Contains(report, "<script>") {
+		t.Error("report should escape HTML entities in content")
+	}
+	if !strings.Contains(report, "&lt;script&gt;") {
+		t.Error("report should contain escaped HTML")
 	}
 }
