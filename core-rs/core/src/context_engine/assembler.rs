@@ -179,38 +179,35 @@ impl AssemblyEngine {
         let tail_count = (self.fresh_tail_count as usize).min(total);
         let split_idx = total.saturating_sub(tail_count);
 
-        let evictable = &self.context_items[..split_idx];
-        let fresh_tail = &self.context_items[split_idx..];
-
         // Fresh tail tokens (always included)
-        let fresh_tail_tokens: u64 = fresh_tail.iter().map(|item| item.token_count).sum();
+        let fresh_tail_tokens: u64 = self.context_items[split_idx..]
+            .iter()
+            .map(|item| item.token_count)
+            .sum();
 
         let remaining_budget = self.token_budget.saturating_sub(fresh_tail_tokens);
 
-        // Walk evictable newest→oldest, accumulating tokens
-        let mut selected_evictable: Vec<&AssemblyContextItem> = Vec::new();
+        // Walk evictable newest→oldest, tracking the start index of the selected range.
+        // Using an index avoids an intermediate Vec<&AssemblyContextItem>; the
+        // selected items are always a contiguous suffix of `evictable`, so we only
+        // need to record where that suffix begins.
         let mut evictable_tokens: u64 = 0;
+        // evict_start == split_idx means no evictable items selected yet.
+        let mut evict_start = split_idx;
 
-        for item in evictable.iter().rev() {
-            if evictable_tokens + item.token_count > remaining_budget
-                && !selected_evictable.is_empty()
-            {
-                // Budget exhausted — stop including older items
+        for i in (0..split_idx).rev() {
+            let count = self.context_items[i].token_count;
+            if evictable_tokens + count > remaining_budget && evict_start < split_idx {
+                // Budget exhausted after at least one item has been selected — stop.
                 break;
             }
-            selected_evictable.push(item);
-            evictable_tokens += item.token_count;
+            evictable_tokens += count;
+            evict_start = i;
         }
 
-        // Reverse to restore chronological order (oldest first)
-        selected_evictable.reverse();
-
-        // Build final selected list
-        self.selected_items = selected_evictable
-            .iter()
-            .map(|item| (*item).clone())
-            .chain(fresh_tail.iter().cloned())
-            .collect();
+        // Clone once from the selected contiguous range (evictable suffix + fresh_tail).
+        // items[evict_start..split_idx] are already in chronological order.
+        self.selected_items = self.context_items[evict_start..].to_vec();
 
         self.estimated_tokens = evictable_tokens + fresh_tail_tokens;
     }
