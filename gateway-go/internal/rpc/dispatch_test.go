@@ -2,19 +2,14 @@ package rpc
 
 import (
 	"context"
-	"log/slog"
-	"os"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-}
-
 func TestDispatchRegisteredMethod(t *testing.T) {
-	d := NewDispatcher(testLogger())
+	d := NewDispatcher(rpctest.NewLogger())
 	d.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"status": "ok"})
 		return resp
@@ -29,7 +24,7 @@ func TestDispatchRegisteredMethod(t *testing.T) {
 }
 
 func TestDispatchUnknownMethodNoForwarder(t *testing.T) {
-	d := NewDispatcher(testLogger())
+	d := NewDispatcher(rpctest.NewLogger())
 	req := &protocol.RequestFrame{Type: "req", ID: "2", Method: "unknown.method"}
 	resp := d.Dispatch(context.Background(), req)
 
@@ -42,7 +37,7 @@ func TestDispatchUnknownMethodNoForwarder(t *testing.T) {
 }
 
 func TestDispatchUnknownMethodReturnsNotFound(t *testing.T) {
-	d := NewDispatcher(testLogger())
+	d := NewDispatcher(rpctest.NewLogger())
 	req := &protocol.RequestFrame{Type: "req", ID: "3", Method: "unknown.forwarded"}
 	resp := d.Dispatch(context.Background(), req)
 
@@ -55,7 +50,7 @@ func TestDispatchUnknownMethodReturnsNotFound(t *testing.T) {
 }
 
 func TestDispatchTimeoutReturnsAgentTimeout(t *testing.T) {
-	d := NewDispatcher(testLogger())
+	d := NewDispatcher(rpctest.NewLogger())
 	d.Register("slow", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		<-ctx.Done()
 		return protocol.NewResponseError(req.ID, protocol.NewError(protocol.ErrUnavailable, "unexpected return"))
@@ -76,7 +71,7 @@ func TestDispatchTimeoutReturnsAgentTimeout(t *testing.T) {
 }
 
 func TestDispatchCanceledContextReturnsAgentTimeout(t *testing.T) {
-	d := NewDispatcher(testLogger())
+	d := NewDispatcher(rpctest.NewLogger())
 	d.Register("cancelled", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		<-ctx.Done()
 		return protocol.NewResponseError(req.ID, protocol.NewError(protocol.ErrUnavailable, "unexpected return"))
@@ -96,7 +91,7 @@ func TestDispatchCanceledContextReturnsAgentTimeout(t *testing.T) {
 }
 
 func TestMethods(t *testing.T) {
-	d := NewDispatcher(testLogger())
+	d := NewDispatcher(rpctest.NewLogger())
 	d.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		return nil
 	})
@@ -111,7 +106,7 @@ func TestMethods(t *testing.T) {
 }
 
 func TestDispatchPanicRecovery(t *testing.T) {
-	d := NewDispatcher(testLogger())
+	d := NewDispatcher(rpctest.NewLogger())
 	d.Register("crasher", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		panic("intentional test panic")
 	})

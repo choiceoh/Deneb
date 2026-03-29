@@ -3,17 +3,13 @@ package telegram
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
-)
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-}
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
+)
 
 func newTestBotSetup(t *testing.T, handler http.HandlerFunc) (*Bot, *Client, *httptest.Server) {
 	t.Helper()
@@ -21,7 +17,7 @@ func newTestBotSetup(t *testing.T, handler http.HandlerFunc) (*Bot, *Client, *ht
 	c := NewClient(ClientConfig{Token: "test-token"})
 	c.baseURL = srv.URL + "/bottest-token"
 	cfg := &Config{BotToken: "test-token"}
-	bot := NewBot(c, cfg, nil, testLogger())
+	bot := NewBot(c, cfg, nil, rpctest.NewLogger())
 	return bot, c, srv
 }
 
@@ -113,7 +109,7 @@ func TestBot_InboundMessageCallback(t *testing.T) {
 		case receivedCh <- update:
 		default:
 		}
-	}, testLogger())
+	}, rpctest.NewLogger())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
