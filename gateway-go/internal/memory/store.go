@@ -37,9 +37,10 @@ const (
 
 // Fact sources.
 const (
-	SourceAutoExtract = "auto_extract"
-	SourceDreaming    = "dreaming"
-	SourceManual      = "manual"
+	SourceAutoExtract    = "auto_extract"
+	SourceDreaming       = "dreaming"
+	SourceManual         = "manual"
+	SourceAuroraTransfer = "aurora_transfer" // graduated from Aurora compaction summaries
 )
 
 // ExportMinImportance is the minimum importance for a fact to appear in MEMORY.md.
