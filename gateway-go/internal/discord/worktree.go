@@ -36,15 +36,57 @@ type ThreadWorkspace struct {
 
 // NewWorktreeManager creates a manager that stores worktrees under baseDir.
 // If baseDir is empty, defaults to ~/.deneb/worktrees.
+// On creation, scans the base directory for existing worktrees left over from
+// a previous server run so that Get() calls work immediately after restart.
 func NewWorktreeManager(baseDir string, logger *slog.Logger) *WorktreeManager {
 	if baseDir == "" {
 		home, _ := os.UserHomeDir()
 		baseDir = filepath.Join(home, ".deneb", "worktrees")
 	}
-	return &WorktreeManager{
+	m := &WorktreeManager{
 		worktrees: make(map[string]*ThreadWorkspace),
 		baseDir:   baseDir,
 		logger:    logger,
+	}
+	m.recoverExisting()
+	return m
+}
+
+// recoverExisting scans the base directory for worktrees left over from a
+// previous server run. Each "thread-<id>" subdirectory is probed for a valid
+// git checkout and re-registered in the worktrees map so that subsequent
+// Get()/Remove() calls work without requiring a fresh Create().
+func (m *WorktreeManager) recoverExisting() {
+	entries, err := os.ReadDir(m.baseDir)
+	if err != nil {
+		return // baseDir doesn't exist yet — nothing to recover.
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "thread-") {
+			continue
+		}
+		threadID := strings.TrimPrefix(e.Name(), "thread-")
+		wtDir := filepath.Join(m.baseDir, e.Name())
+		// Verify it's a valid git worktree by checking for .git file/link.
+		if _, err := os.Stat(filepath.Join(wtDir, ".git")); err != nil {
+			continue
+		}
+		// Read the current branch name.
+		branch, _ := m.runGitOutput(wtDir, "rev-parse", "--abbrev-ref", "HEAD")
+		if branch == "" {
+			branch = "deneb/thread/" + threadID
+		}
+		// Best-effort parent dir: not recoverable, use the main repo.
+		// The parent dir is only needed for Remove(), which can fall back to
+		// direct directory removal if git commands fail.
+		m.worktrees[threadID] = &ThreadWorkspace{
+			ThreadID:  threadID,
+			Dir:       wtDir,
+			Branch:    branch,
+			CreatedAt: time.Now(), // approximate
+		}
+		m.logger.Info("discord: recovered existing thread worktree",
+			"threadId", threadID, "branch", branch, "dir", wtDir)
 	}
 }
 
@@ -74,11 +116,13 @@ func (m *WorktreeManager) Create(threadID, parentDir string) (*ThreadWorkspace, 
 	}
 
 	// Create worktree with a new branch from current HEAD.
-	if out, err := m.runGitOutput(parentDir, "worktree", "add", "-b", branch, wtDir); err != nil {
-		// If branch already exists, try without -b.
+	// Explicitly pass HEAD so the starting point is deterministic even when
+	// the repo is in a detached-HEAD or mid-rebase state.
+	if out, err := m.runGitOutput(parentDir, "worktree", "add", "-b", branch, wtDir, "HEAD"); err != nil {
+		// If branch already exists, remove it and retry.
 		if strings.Contains(out, "already exists") {
 			m.runGit(parentDir, "branch", "-D", branch)
-			if _, err2 := m.runGitOutput(parentDir, "worktree", "add", "-b", branch, wtDir); err2 != nil {
+			if _, err2 := m.runGitOutput(parentDir, "worktree", "add", "-b", branch, wtDir, "HEAD"); err2 != nil {
 				return nil, fmt.Errorf("git worktree add: %w", err2)
 			}
 		} else {
@@ -112,6 +156,7 @@ func (m *WorktreeManager) Get(threadID string) *ThreadWorkspace {
 
 // Remove removes the git worktree and branch for a thread session.
 // Safe to call multiple times or with unknown thread IDs.
+// Works even after server restart (recovered worktrees may lack ParentDir).
 func (m *WorktreeManager) Remove(threadID string) {
 	m.mu.Lock()
 	ws, ok := m.worktrees[threadID]
@@ -122,18 +167,20 @@ func (m *WorktreeManager) Remove(threadID string) {
 	delete(m.worktrees, threadID)
 	m.mu.Unlock()
 
-	// Remove the worktree.
-	if err := m.runGit(ws.ParentDir, "worktree", "remove", "--force", ws.Dir); err != nil {
-		m.logger.Warn("discord: failed to remove worktree via git, removing directory",
-			"threadId", threadID, "dir", ws.Dir, "error", err)
-		os.RemoveAll(ws.Dir)
+	// Try git-based cleanup if we have a parent dir reference.
+	if ws.ParentDir != "" {
+		if err := m.runGit(ws.ParentDir, "worktree", "remove", "--force", ws.Dir); err != nil {
+			m.logger.Warn("discord: failed to remove worktree via git, removing directory",
+				"threadId", threadID, "dir", ws.Dir, "error", err)
+		}
+		// Prune stale worktree references.
+		m.runGit(ws.ParentDir, "worktree", "prune")
+		// Delete the branch (best-effort).
+		m.runGit(ws.ParentDir, "branch", "-D", ws.Branch)
 	}
 
-	// Prune stale worktree references.
-	m.runGit(ws.ParentDir, "worktree", "prune")
-
-	// Delete the branch (best-effort).
-	m.runGit(ws.ParentDir, "branch", "-D", ws.Branch)
+	// Always ensure the directory is gone (covers restart recovery case).
+	os.RemoveAll(ws.Dir)
 
 	m.logger.Info("discord: removed thread worktree",
 		"threadId", threadID, "branch", ws.Branch)

@@ -36,12 +36,20 @@ var (
 
 const discordSessionTTL = 24 * time.Hour
 
-// discordThreadParent maps a thread channel ID to its parent channel ID.
-// Used to resolve workspace from parent channel for thread sessions.
+// discordThreadParent maps a thread channel ID to its parent channel ID and
+// creation timestamp. Used to resolve workspace from parent channel for thread sessions.
+// Periodically pruned to prevent unbounded growth from archived-but-not-deleted threads.
 var (
-	discordThreadParent   = make(map[string]string) // threadChannelID → parentChannelID
+	discordThreadParent   = make(map[string]threadParentEntry) // threadChannelID → parentChannelID
 	discordThreadParentMu sync.Mutex
 )
+
+type threadParentEntry struct {
+	ParentID  string
+	CreatedAt time.Time
+}
+
+const discordThreadParentTTL = 24 * time.Hour
 
 // threadSessionKey returns the session key for a Discord thread.
 func threadSessionKey(threadID string) string {
@@ -322,7 +330,7 @@ func (p *InboundProcessor) tryCreateDiscordThread(channelID, messageID, content 
 
 	// Record thread → parent channel mapping for workspace resolution.
 	discordThreadParentMu.Lock()
-	discordThreadParent[thread.ID] = channelID
+	discordThreadParent[thread.ID] = threadParentEntry{ParentID: channelID, CreatedAt: time.Now()}
 	discordThreadParentMu.Unlock()
 
 	return thread.ID
@@ -382,12 +390,21 @@ func (p *InboundProcessor) isDiscordThread(channelID string) bool {
 }
 
 // getThreadParent returns the parent channel ID for a thread, or "" if unknown.
+// Also prunes stale entries when the map exceeds 100 entries.
 func (p *InboundProcessor) getThreadParent(threadID string) string {
+	// Periodic cleanup: remove expired thread parent entries when map grows.
 	discordThreadParentMu.Lock()
-	parentID := discordThreadParent[threadID]
+	if len(discordThreadParent) > 100 {
+		for k, v := range discordThreadParent {
+			if time.Since(v.CreatedAt) > discordThreadParentTTL {
+				delete(discordThreadParent, k)
+			}
+		}
+	}
+	entry, ok := discordThreadParent[threadID]
 	discordThreadParentMu.Unlock()
-	if parentID != "" {
-		return parentID
+	if ok {
+		return entry.ParentID
 	}
 	// Fall back to the bot's Gateway cache.
 	if p.server.discordPlug != nil {
