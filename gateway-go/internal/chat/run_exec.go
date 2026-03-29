@@ -71,10 +71,9 @@ func executeAgentRun(
 		proactiveCh <- proactiveResult{} // no-op: skip for short messages
 	}
 
-	promptStart := time.Now()
-	// 3. Assemble system prompt (supports both string and content block array).
-	// The prompt format is deferred: if Anthropic is the provider, we use
-	// ContentBlock arrays with cache_control breakpoints; otherwise plain string.
+	// 3. Collect system prompt params; actual build is deferred until after apiType
+	// is resolved, so dynamic prompts are built exactly once in the right format
+	// (Anthropic ContentBlock array vs plain string) without a redundant string pass.
 	var systemPrompt json.RawMessage
 	var systemPromptParams *prompt.SystemPromptParams // non-nil when dynamic build is needed
 	if params.System != "" {
@@ -93,18 +92,8 @@ func executeAgentRun(
 			Channel:      deliveryChannel(params.Delivery),
 		}
 		systemPromptParams = &spp
-		// Defer format choice: only build the format we'll actually use.
-		// BuildSystemPrompt (string) is the default; overridden to blocks
-		// for Anthropic API after apiType is resolved below.
-		// Discord channel uses the coding-focused system prompt.
-		if spp.Channel == "discord" {
-			systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
-		} else {
-			systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
-		}
+		// Build deferred — see "Finalize system prompt" block below.
 	}
-
-	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())
 
 	prepStart := time.Now()
 	// 3.5 + 4. Run knowledge prefetch and context assembly in parallel.
@@ -154,9 +143,8 @@ func executeAgentRun(
 	if contextErr != nil {
 		logger.Warn("context assembly failed, using message only", "error", contextErr)
 	}
-	if knowledgeAddition != "" {
-		systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
-	}
+	// Knowledge and proactive hints are applied in the "Finalize system prompt" block
+	// below, after apiType is resolved, so they are appended exactly once.
 
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
@@ -174,16 +162,11 @@ func executeAgentRun(
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
-	// 5. Collect proactive context hint and inject into system prompt.
+	// 5. Collect proactive context hint (applied in "Finalize system prompt" block below).
 	proactiveWaitStart := time.Now()
 	proactive := <-proactiveCh
 	if pw := time.Since(proactiveWaitStart).Milliseconds(); pw > 50 {
 		logger.Info("pipeline: proactive context wait", "ms", pw)
-	}
-	if proactive.hint != "" {
-		systemPrompt = llm.AppendSystemText(systemPrompt,
-			"\n## Context Hint (from local analysis)\n"+proactive.hint)
-		logger.Info("proactive context injected", "chars", len(proactive.hint))
 	}
 
 	// 6. Resolve model and provider.
@@ -231,14 +214,6 @@ func executeAgentRun(
 		Channel:  deliveryChannel(params.Delivery),
 	})
 
-	// Log run.prep with context assembly metrics.
-	runLog.LogPrep(agentlog.RunPrepData{
-		SystemPromptChars: len(systemPrompt),
-		ContextMessages:   len(messages),
-		KnowledgeChars:    len(knowledgeAddition),
-		PrepMs:            time.Since(runStart).Milliseconds(),
-	})
-
 	// 7. Resolve LLM client from provider config, auth manager, or pre-configured client.
 	client, apiType := resolveClient(deps, providerID, logger)
 	if client == nil {
@@ -256,31 +231,49 @@ func executeAgentRun(
 		}
 	}
 
-	// For Anthropic API: rebuild system prompt as ContentBlock array with
-	// cache_control breakpoints, and mark the last tool for caching.
-	if apiType == "anthropic" {
-		if systemPromptParams != nil {
+	// 9. Finalize system prompt now that apiType is known.
+	// Dynamic prompts (systemPromptParams != nil) are built once in the correct format:
+	// Anthropic ContentBlock array with cache_control breakpoints, or plain string.
+	// Knowledge and proactive hints are appended once here for all cases.
+	promptStart := time.Now()
+	if systemPromptParams != nil {
+		if apiType == "anthropic" {
 			if systemPromptParams.Channel == "discord" {
 				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(*systemPromptParams))
 			} else {
 				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(*systemPromptParams))
 			}
-			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
-			if knowledgeAddition != "" {
-				systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
+		} else {
+			if systemPromptParams.Channel == "discord" {
+				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(*systemPromptParams))
+			} else {
+				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(*systemPromptParams))
 			}
 		}
-		// Re-inject proactive hint (Anthropic rebuild overwrites the string version).
-		if proactive.hint != "" {
-			systemPrompt = llm.AppendSystemText(systemPrompt,
-				"\n## Context Hint (from local analysis)\n"+proactive.hint)
-		}
-		if len(tools) > 0 {
-			tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
-		}
+	}
+	if knowledgeAddition != "" {
+		systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
+	}
+	if proactive.hint != "" {
+		systemPrompt = llm.AppendSystemText(systemPrompt,
+			"\n## Context Hint (from local analysis)\n"+proactive.hint)
+		logger.Info("proactive context injected", "chars", len(proactive.hint))
+	}
+	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())
+
+	runLog.LogPrep(agentlog.RunPrepData{
+		SystemPromptChars: len(systemPrompt),
+		ContextMessages:   len(messages),
+		KnowledgeChars:    len(knowledgeAddition),
+		PrepMs:            time.Since(runStart).Milliseconds(),
+	})
+
+	// For Anthropic: mark the last tool for prompt caching.
+	if apiType == "anthropic" && len(tools) > 0 {
+		tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
 	}
 
-	// 9. Build agent config.
+	// 10. Build agent config.
 	maxTokens := deps.maxTokens
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokens
