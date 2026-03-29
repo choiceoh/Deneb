@@ -124,26 +124,6 @@ func ExtractSystemText(system json.RawMessage) string {
 	return ""
 }
 
-// AppendSystemTexts appends multiple text additions to the system prompt in a
-// single unmarshal/marshal pass. Empty additions are ignored. Equivalent to
-// calling AppendSystemText repeatedly but avoids repeated JSON round-trips.
-func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMessage {
-	var combined strings.Builder
-	for _, a := range additions {
-		if a == "" {
-			continue
-		}
-		if combined.Len() > 0 {
-			combined.WriteString("\n\n")
-		}
-		combined.WriteString(a)
-	}
-	if combined.Len() == 0 {
-		return system
-	}
-	return AppendSystemText(system, combined.String())
-}
-
 // AppendSystemText appends additional text to the system prompt.
 // Handles both JSON string and []ContentBlock formats.
 func AppendSystemText(system json.RawMessage, addition string) json.RawMessage {
