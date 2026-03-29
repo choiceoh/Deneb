@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.32.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.31.1...deneb-v3.32.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **chat:** omit session key from logs for main sessions ([d216c52](https://github.com/choiceoh/Deneb/commit/d216c52c80fc2ea5ccf9de29bcfc3bc0524865c0))
+* **logging:** add newline-continuation attr convention; break content onto new line in aurora-memory log ([b627863](https://github.com/choiceoh/Deneb/commit/b6278634b1703f00de3dbd23c3648f3628140b7a))
+
 ## [3.31.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.31.0...deneb-v3.31.1) (2026-03-29)
 
 
