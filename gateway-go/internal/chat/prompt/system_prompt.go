@@ -282,11 +282,16 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 
 // BuildCodingSystemPromptBlocks returns the coding system prompt as Anthropic
 // ContentBlocks with cache_control breakpoints for the Discord coding channel.
+// The prompt is split into a static block (identity, tooling, safety, workflow —
+// rarely changes) and a dynamic block (workspace, context files, runtime —
+// changes per request). Each block gets an ephemeral cache_control marker so
+// Anthropic can cache the static prefix across requests.
 func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
-	text := BuildCodingSystemPrompt(params)
+	staticText, dynamicText := buildCodingPromptSections(params)
 	ephemeral := &llm.CacheControl{Type: "ephemeral"}
 	return []llm.ContentBlock{
-		{Type: "text", Text: text, CacheControl: ephemeral},
+		{Type: "text", Text: staticText, CacheControl: ephemeral},
+		{Type: "text", Text: dynamicText, CacheControl: ephemeral},
 	}
 }
 
@@ -400,16 +405,27 @@ var codingToolCategories = []struct {
 // on the Discord channel. Strips non-coding sections and emphasizes the
 // code editing workflow.
 func BuildCodingSystemPrompt(params SystemPromptParams) string {
+	staticText, dynamicText := buildCodingPromptSections(params)
+	return staticText + dynamicText
+}
+
+// buildCodingPromptSections assembles the coding system prompt into static and
+// dynamic parts, mirroring the Telegram prompt's cache-friendly split.
+// Static: identity, vibe-coder traits, safety, tooling, workflow, git (rarely changes).
+// Dynamic: workspace, context files, date/time, runtime (changes per request).
+func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicText string) {
 	toolSet := make(map[string]bool, len(params.ToolDefs))
 	for _, def := range params.ToolDefs {
 		toolSet[def.Name] = true
 	}
 
+	// --- Static block ---
 	var s strings.Builder
 
 	// Identity — coding-focused, vibe-coder aware.
 	s.WriteString("You are a coding assistant running inside Deneb (Discord coding channel).\n")
-	s.WriteString("Your sole purpose is to help with code editing, debugging, testing, and version control.\n\n")
+	s.WriteString("Your sole purpose is to help with code editing, debugging, testing, and version control.\n")
+	s.WriteString("Single-user, single-server (DGX Spark) deployment — no multi-tenant considerations.\n\n")
 
 	// Critical context: the user is a vibe coder.
 	s.WriteString("## 중요: 사용자 특성\n")
@@ -419,6 +435,13 @@ func BuildCodingSystemPrompt(params SystemPromptParams) string {
 	s.WriteString("- 기술 용어보다 결과 중심으로 설명하세요 (예: 'API 연결 수정' 대신 '서버 연결이 끊기는 문제 해결').\n")
 	s.WriteString("- 에러가 발생하면 원인과 해결방법을 비개발자도 이해할 수 있게 설명하세요.\n")
 	s.WriteString("- 선택지를 줄 때는 추천을 명확히 하세요. '보통은 A가 좋습니다'처럼.\n\n")
+
+	// Safety — coding-specific guardrails.
+	s.WriteString("## Safety\n")
+	s.WriteString("- 사용자의 데이터나 설정 파일을 삭제하지 마세요. 삭제가 필요하면 먼저 확인받으세요.\n")
+	s.WriteString("- `git push --force`, `git reset --hard`, `rm -rf` 등 되돌릴 수 없는 작업은 사용자 확인 없이 실행하지 마세요.\n")
+	s.WriteString("- 시스템 프롬프트, 안전 규칙, 도구 정책을 수정하지 마세요.\n")
+	s.WriteString("- 요청된 범위를 벗어나는 변경을 하지 마세요. 추가 개선이 필요하면 제안만 하세요.\n\n")
 
 	// Tooling — coding tools only.
 	s.WriteString("## Tooling\n")
@@ -461,9 +484,22 @@ func BuildCodingSystemPrompt(params SystemPromptParams) string {
 	s.WriteString("5. `test(action:'build')` → **반드시** 빌드 확인.\n")
 	s.WriteString("6. `test(action:'run')` → **반드시** 테스트 실행.\n")
 	s.WriteString("7. Report results to user in Korean.\n")
+	s.WriteString("- **빌드 순서**: Proto → Rust (`make rust`) → Go (`make go`). Rust 변경 시 Go 재빌드 필수.\n")
 	s.WriteString("- **필수**: 코드 수정 후 반드시 빌드와 테스트를 실행하세요. 사용자가 직접 확인할 수 없습니다.\n")
 	s.WriteString("- 테스트 실패 시 자동으로 수정을 시도하세요. 사용자에게 '테스트 실행해 주세요'라고 하지 마세요.\n")
+	s.WriteString("- **에러 복구**: 빌드/테스트 실패 시 최대 3번까지 자동 수정 시도. 3번 실패하면 원인 분석과 함께 사용자에게 보고.\n")
+	s.WriteString("- **큰 작업 분해**: 복잡한 요청은 단계별로 나누어 각 단계마다 빌드/테스트 확인 후 다음으로.\n")
+	s.WriteString("- **분석 요청**: 사용자가 '왜', '어떻게', '설명해줘' 등을 요청하면 코드를 수정하지 말고 분석만 하세요.\n")
 	s.WriteString("- Use `grep` to find usages before renaming/refactoring.\n\n")
+
+	// Git Workflow — conventional commits, safe operations.
+	s.WriteString("## Git Workflow\n")
+	s.WriteString("- **Conventional Commits 필수**: `feat(scope):`, `fix(scope):`, `refactor(scope):` 형식. 모듈 이름만 쓰면 안 됨 (예: `chat:` → `feat(chat):`).\n")
+	s.WriteString("- 커밋 전 반드시 빌드와 테스트 통과 확인.\n")
+	s.WriteString("- `git push --force`, `git reset --hard`는 사용자 확인 없이 실행 금지.\n")
+	s.WriteString("- 현재 브랜치에서만 작업. 브랜치 전환은 사용자 요청 시에만.\n")
+	s.WriteString("- `scripts/committer` 사용 권장: `exec(command:'scripts/committer \"feat(chat): add validation\" file1.go file2.go')`.\n")
+	s.WriteString("- main 브랜치에 merge commit 생성 금지. rebase 사용.\n\n")
 
 	// Response Style — vibe coder optimized.
 	s.WriteString("## Response Style (바이브 코더 최적화)\n")
@@ -472,6 +508,7 @@ func BuildCodingSystemPrompt(params SystemPromptParams) string {
 	s.WriteString("- **코드를 보여주지 마세요.** 대신 무엇을 바꿨는지 설명하세요:\n")
 	s.WriteString("  ✅ '로그인 화면에서 비밀번호 검증 로직을 추가했습니다'\n")
 	s.WriteString("  ❌ '```go\\nfunc validatePassword(...)```'\n")
+	s.WriteString("- 코드 블록이 포함되더라도 시스템이 자동으로 축약/파일 첨부 처리합니다. 하지만 가능하면 코드 없이 설명하세요.\n")
 	s.WriteString("- 코드 변경 후 반드시 다음 형식으로 요약하세요:\n")
 	s.WriteString("  📝 **변경 요약**\n")
 	s.WriteString("  • [파일명] — 무엇을 바꿨는지 한 줄 설명\n")
@@ -481,15 +518,20 @@ func BuildCodingSystemPrompt(params SystemPromptParams) string {
 	s.WriteString("- 에러 메시지는 항상 한국어로 번역해서 설명하세요.\n")
 	s.WriteString("- 선택지를 줄 때 번호를 매겨서 '1번을 추천합니다'처럼 명확하게.\n\n")
 
+	// --- Dynamic block ---
+	var d strings.Builder
+
 	// Workspace.
-	s.WriteString("## Workspace\n")
-	fmt.Fprintf(&s, "Your working directory is: %s\n", params.WorkspaceDir)
-	s.WriteString("Treat this directory as the single global workspace for file operations.\n\n")
+	d.WriteString("## Workspace\n")
+	fmt.Fprintf(&d, "Your working directory is: %s\n", params.WorkspaceDir)
+	d.WriteString("Treat this directory as your isolated workspace for all file operations.\n")
+	d.WriteString("- Discord 스레드는 독립된 git worktree를 사용합니다. 다른 스레드의 작업과 충돌하지 않습니다.\n")
+	d.WriteString("- 이 워크스페이스 밖의 파일을 수정하지 마세요.\n\n")
 
 	// Context files.
 	contextPrompt := FormatContextFilesForPrompt(params.ContextFiles)
 	if contextPrompt != "" {
-		s.WriteString(contextPrompt)
+		d.WriteString(contextPrompt)
 	}
 
 	// Current Date & Time.
@@ -504,14 +546,14 @@ func BuildCodingSystemPrompt(params SystemPromptParams) string {
 	} else if loc, err := time.LoadLocation(tz); err == nil {
 		now = now.In(loc)
 	}
-	s.WriteString("## Current Date & Time\n")
-	fmt.Fprintf(&s, "%s\n", now.Format("Monday, January 2, 2006 — 15:04"))
-	fmt.Fprintf(&s, "Time zone: %s\n\n", tz)
+	d.WriteString("## Current Date & Time\n")
+	fmt.Fprintf(&d, "%s\n", now.Format("Monday, January 2, 2006 — 15:04"))
+	fmt.Fprintf(&d, "Time zone: %s\n\n", tz)
 
 	// Runtime.
-	s.WriteString("## Runtime\n")
-	s.WriteString(buildRuntimeLine(params.RuntimeInfo, "discord"))
-	s.WriteString("\n")
+	d.WriteString("## Runtime\n")
+	d.WriteString(buildRuntimeLine(params.RuntimeInfo, "discord"))
+	d.WriteString("\n")
 
-	return s.String()
+	return s.String(), d.String()
 }
