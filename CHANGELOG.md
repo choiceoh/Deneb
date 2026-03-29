@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.3.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.3...deneb-v4.3.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **aurora:** migrate store from JSON to SQLite with WAL mode ([3c105e8](https://github.com/choiceoh/Deneb/commit/3c105e80c78d9150087aa501b1adb9739a953837))
+
+
+### 🐛 Bug Fixes
+
+* **aurora:** use cmdType parameter instead of undefined cmd.Type ([2420341](https://github.com/choiceoh/Deneb/commit/2420341b9c4d75cdb4356f801d6593fa341bb7ee))
+* **llm:** remove duplicate AppendSystemTexts definition ([4c95f34](https://github.com/choiceoh/Deneb/commit/4c95f3428c478ca0466bdc5dabb325141324ea45))
+* **llm:** remove duplicate AppendSystemTexts definition ([470fbf0](https://github.com/choiceoh/Deneb/commit/470fbf079bcdd15b4180b392e3dff9049fc3cdf7))
+* **telegram:** apply HTML parse fallback to all chunks and pool upload buffers ([e1e73bb](https://github.com/choiceoh/Deneb/commit/e1e73bbedab7a3fe451f17c6dd4e6b33228ff910))
+
+
+### ⚡ Performance
+
+* **ffi:** optimize buffer allocation with sync.Pool and ffiCallWithGrow ([b3c68c3](https://github.com/choiceoh/Deneb/commit/b3c68c3306df0ba373589d7eb4e7390ecb6d9c8b))
+* **memory:** optimize dreaming cycle — merge phases, category filter, retry extraction ([15e2342](https://github.com/choiceoh/Deneb/commit/15e2342a7deeb361966464b135bfc323bd55531a))
+
+
+### 🔧 Internal
+
+* **chat:** remove agent.go shim, extract FormatDuration to pkg/textutil ([2a8a292](https://github.com/choiceoh/Deneb/commit/2a8a29265df59e492f25c1c25b003058f8577bf5))
+* **rpc:** extract shared test helpers into rpctest package ([99bd926](https://github.com/choiceoh/Deneb/commit/99bd926b4426cc3d4196a4c422a0c4066b1e5a08))
+* **rpc:** remove compat layer, unify HandlerFunc, lock-free dispatch ([37949f3](https://github.com/choiceoh/Deneb/commit/37949f35524b935009ba5e9cd3fb085a43fa6cc1))
+* **test:** consolidate duplicate RPC test helpers into rpctest package ([6bbb289](https://github.com/choiceoh/Deneb/commit/6bbb28988d38f7b5c84914c069581506bda507f6))
+
 ## [4.2.3](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.2...deneb-v4.2.3) (2026-03-29)
 
 
