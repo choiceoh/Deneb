@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.2.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.0...deneb-v4.2.1) (2026-03-29)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** block symlink patches in apply_patch ([e2c16a2](https://github.com/choiceoh/Deneb/commit/e2c16a270ca555adb759a1df46713cb720899888))
+* **chat:** block symlink patches in apply_patch ([636d562](https://github.com/choiceoh/Deneb/commit/636d5628bd5a87f4d55b667402556e2f5e0f63e4))
+* **chat:** reject index-mode symlink patches ([0377c71](https://github.com/choiceoh/Deneb/commit/0377c71216784441e0e77cecede07fcf737cfcf0))
+* **subagent:** remove unused session imports ([d31de52](https://github.com/choiceoh/Deneb/commit/d31de521aca2e0dc15f4ce5acaa291640c5ba622))
+* **subagent:** remove unused session imports ([0e9abe3](https://github.com/choiceoh/Deneb/commit/0e9abe32111d32cba0f2ac6495c8f323a6e706bc))
+
 ## [4.2.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.1.0...deneb-v4.2.0) (2026-03-29)
 
 
