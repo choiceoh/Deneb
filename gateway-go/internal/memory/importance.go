@@ -294,6 +294,9 @@ func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFa
 //  3. {"<any_key>": [...]} — array under an arbitrary key
 //  4. {"content": "...", "category": "...", ...} — single fact as object
 func parseFactsResponse(text string) ([]ExtractedFact, bool) {
+	// Pre-process: strip trailing commas (common LLM mistake: {"a":1,}).
+	text = jsonutil.StripTrailingCommas(text)
+
 	// Case 1: expected object with "facts" key.
 	var resp factsResponse
 	if err := json.Unmarshal([]byte(text), &resp); err == nil && resp.Facts != nil {
@@ -339,6 +342,14 @@ func parseFactsResponse(text string) ([]ExtractedFact, bool) {
 		return recovered, true
 	}
 
+	// Case 7: key-boundary extraction — handles malformed JSON where string
+	// values contain unescaped quotes (e.g. content with Korean quotes like
+	// "사용자가 ("이제 됐나")"). Uses known key names as delimiters instead of
+	// relying on proper JSON string escaping.
+	if recovered, ok := tryExtractFactsByKeyBoundaries(text); ok {
+		return recovered, true
+	}
+
 	return nil, false
 }
 
@@ -378,6 +389,139 @@ func tryRecoverTruncatedJSON(text string) ([]ExtractedFact, bool) {
 		}
 	}
 	return nil, false
+}
+
+// tryExtractFactsByKeyBoundaries extracts facts from malformed JSON by using
+// known key names ("content", "category", "importance") as structural delimiters.
+// This handles the common LLM failure mode where string values contain unescaped
+// double quotes that break standard JSON parsing (e.g. content with Korean
+// parenthetical quotes: "사용자가 단축 반응 ("이제 됐나")").
+func tryExtractFactsByKeyBoundaries(text string) ([]ExtractedFact, bool) {
+	var facts []ExtractedFact
+	pos := 0
+
+	for {
+		// Find next "content" key.
+		ci := strings.Index(text[pos:], `"content"`)
+		if ci == -1 {
+			break
+		}
+		ci += pos
+
+		fact, nextPos := extractFactAtKeyBoundary(text, ci)
+		if fact.Content != "" {
+			facts = append(facts, fact)
+		}
+		// Ensure forward progress to avoid infinite loop.
+		if nextPos <= ci {
+			nextPos = ci + len(`"content"`)
+		}
+		pos = nextPos
+	}
+
+	if len(facts) > 0 {
+		return facts, true
+	}
+	return nil, false
+}
+
+// extractFactAtKeyBoundary extracts a single fact starting from a "content" key
+// position. Returns the parsed fact and the position to continue scanning from.
+func extractFactAtKeyBoundary(text string, contentKeyPos int) (ExtractedFact, int) {
+	var fact ExtractedFact
+	after := text[contentKeyPos+len(`"content"`):]
+	nextPos := contentKeyPos + len(`"content"`)
+
+	// Find the colon after "content".
+	colonIdx := strings.IndexByte(after, ':')
+	if colonIdx == -1 {
+		return fact, nextPos
+	}
+	valStart := after[colonIdx+1:]
+
+	// Find opening quote of the content value.
+	qIdx := strings.IndexByte(valStart, '"')
+	if qIdx == -1 {
+		return fact, nextPos
+	}
+	valStr := valStart[qIdx+1:]
+
+	// Use "category" key as the end boundary for content value.
+	catKeyIdx := strings.Index(valStr, `"category"`)
+	if catKeyIdx == -1 {
+		// No category key — can't reliably extract.
+		return fact, nextPos
+	}
+
+	// Content is everything up to the "category" key, trimmed of trailing junk.
+	rawContent := valStr[:catKeyIdx]
+	fact.Content = trimJSONValueSuffix(rawContent)
+
+	// Extract category value: between "category": " and "importance".
+	catAfter := valStr[catKeyIdx+len(`"category"`):]
+	catColonIdx := strings.IndexByte(catAfter, ':')
+	if catColonIdx != -1 {
+		catValStart := catAfter[catColonIdx+1:]
+		catQIdx := strings.IndexByte(catValStart, '"')
+		if catQIdx != -1 {
+			fact.Category = extractQuotedValue(catValStart[catQIdx+1:])
+		}
+	}
+
+	// Extract importance value: numeric after "importance":
+	impKeyIdx := strings.Index(valStr[catKeyIdx:], `"importance"`)
+	if impKeyIdx != -1 {
+		impAfter := valStr[catKeyIdx+impKeyIdx+len(`"importance"`):]
+		impColonIdx := strings.IndexByte(impAfter, ':')
+		if impColonIdx != -1 {
+			impStr := strings.TrimSpace(impAfter[impColonIdx+1:])
+			fact.Importance = parseLeadingFloat(impStr)
+		}
+		nextPos = contentKeyPos + len(`"content"`) + (colonIdx + 1) + (qIdx + 1) + catKeyIdx + impKeyIdx + len(`"importance"`)
+	} else {
+		nextPos = contentKeyPos + len(`"content"`) + (colonIdx + 1) + (qIdx + 1) + catKeyIdx + len(`"category"`)
+	}
+
+	return fact, nextPos
+}
+
+// trimJSONValueSuffix strips trailing JSON structural chars from a raw value
+// extracted by key-boundary parsing: trailing quotes, commas, whitespace.
+func trimJSONValueSuffix(s string) string {
+	s = strings.TrimRight(s, " \t\n\r")
+	// Strip trailing: ," or , " or "  ,  "
+	s = strings.TrimRight(s, " \t\n\r,\"")
+	return strings.TrimSpace(s)
+}
+
+// extractQuotedValue extracts a string value terminated by the next
+// unescaped quote (for short, well-formed enum values like category).
+func extractQuotedValue(s string) string {
+	end := strings.IndexByte(s, '"')
+	if end == -1 {
+		return strings.TrimRight(s, " \t\n\r,\"")
+	}
+	return s[:end]
+}
+
+// parseLeadingFloat parses a float from the beginning of a string,
+// stopping at the first non-numeric character.
+func parseLeadingFloat(s string) float64 {
+	end := 0
+	for end < len(s) {
+		c := s[end]
+		if c == '.' || (c >= '0' && c <= '9') {
+			end++
+		} else {
+			break
+		}
+	}
+	if end == 0 {
+		return 0
+	}
+	var v float64
+	fmt.Sscanf(s[:end], "%f", &v)
+	return v
 }
 
 // stripCodeFences removes thinking tags and markdown code fences from LLM output.
