@@ -2,6 +2,7 @@ package ffi
 
 import (
 	"fmt"
+	"sync"
 	"unsafe"
 )
 
@@ -35,6 +36,36 @@ func ffiError(fn string, rc int) error {
 	default:
 		return fmt.Errorf("ffi: %s: unknown error (rc=%d)", fn, rc)
 	}
+}
+
+// ffiOutPool1MB pools 1 MB byte slices for FFI output buffers used by
+// compaction and context engine calls that repeat at short intervals.
+var ffiOutPool1MB = sync.Pool{
+	New: func() any { return make([]byte, 1024*1024) },
+}
+
+// ffiCallWithPool is like ffiCallWithGrow but reuses buffers from a sync.Pool
+// for the initial attempt. The result is copied to a right-sized slice so the
+// pooled buffer can be returned safely. Falls back to ffiCallWithGrow if the
+// pooled buffer is too small.
+func ffiCallWithPool(fn string, pool *sync.Pool, call func(outPtr unsafe.Pointer, outLen int) int) ([]byte, error) {
+	buf := pool.Get().([]byte)
+	var outPtr unsafe.Pointer
+	if len(buf) > 0 {
+		outPtr = unsafe.Pointer(&buf[0])
+	}
+	rc := call(outPtr, len(buf))
+	if rc >= 0 {
+		result := make([]byte, rc)
+		copy(result, buf[:rc])
+		pool.Put(buf)
+		return result, nil
+	}
+	pool.Put(buf) // return before fallback to avoid holding two large buffers
+	if rc == rcOutputTooSmall {
+		return ffiCallWithGrow(fn, len(buf)*2, call)
+	}
+	return nil, ffiError(fn, rc)
 }
 
 // ffiCallWithGrow calls an FFI function that writes into an output buffer,

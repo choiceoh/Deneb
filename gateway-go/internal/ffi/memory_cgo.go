@@ -46,31 +46,32 @@ func MemoryBm25RankToScore(rank float64) float64 {
 
 // MemoryBuildFtsQuery builds a full-text search query from raw text.
 // Returns empty string if no valid tokens are found.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func MemoryBuildFtsQuery(raw string) (string, error) {
 	if len(raw) == 0 {
 		return "", nil
 	}
 
-	outSize := len(raw) * 3
-	if outSize < 4096 {
-		outSize = 4096
+	initialSize := len(raw) * 3
+	if initialSize < 4096 {
+		initialSize = 4096
 	}
-	out := make([]byte, outSize)
 
 	rawPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(raw)))
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_memory_build_fts_query(
-		rawPtr, C.ulong(len(raw)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return "", ffiError("memory_build_fts_query", int(rc))
+	data, err := ffiCallWithGrow("memory_build_fts_query", initialSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_memory_build_fts_query(
+				rawPtr, C.ulong(len(raw)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return "", err
 	}
-	if rc == 0 {
+	if len(data) == 0 {
 		return "", nil
 	}
-	return string(out[:rc]), nil
+	return string(data), nil
 }
 
 // maxMergeParamsSize is the maximum accepted paramsJSON size for
@@ -113,30 +114,31 @@ func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
 
 // MemoryExtractKeywords extracts searchable keywords from a query string
 // for full-text search expansion.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func MemoryExtractKeywords(query string) ([]string, error) {
 	if len(query) == 0 {
 		return nil, nil
 	}
 
-	outSize := len(query) * 4
-	if outSize < 4096 {
-		outSize = 4096
+	initialSize := len(query) * 4
+	if initialSize < 4096 {
+		initialSize = 4096
 	}
-	out := make([]byte, outSize)
 
 	queryPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(query)))
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_memory_extract_keywords(
-		queryPtr, C.ulong(len(query)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return nil, ffiError("memory_extract_keywords", int(rc))
+	data, err := ffiCallWithGrow("memory_extract_keywords", initialSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_memory_extract_keywords(
+				queryPtr, C.ulong(len(query)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
 
 	var keywords []string
-	if err := json.Unmarshal(out[:rc], &keywords); err != nil {
+	if err := json.Unmarshal(data, &keywords); err != nil {
 		return nil, fmt.Errorf("ffi: memory_extract_keywords: invalid JSON: %w", err)
 	}
 	return keywords, nil

@@ -68,34 +68,35 @@ func ExtractLinks(text string, maxLinks int) ([]string, error) {
 
 // HtmlToMarkdown converts HTML to a Markdown-like text representation.
 // Returns the converted text and an optional title.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func HtmlToMarkdown(html string) (text string, title string, err error) {
 	if len(html) == 0 {
 		return "", "", nil
 	}
 
-	// Markdown output is typically shorter than HTML; allocate 2x for safety.
-	outSize := len(html) * 2
-	if outSize < 4096 {
-		outSize = 4096
+	// Markdown output is typically shorter than HTML; allocate 2x with 4 KB floor.
+	initialSize := len(html) * 2
+	if initialSize < 4096 {
+		initialSize = 4096
 	}
-	out := make([]byte, outSize)
 
 	htmlPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(html)))
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_html_to_markdown(
-		htmlPtr, C.ulong(len(html)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return "", "", ffiError("html_to_markdown", int(rc))
+	data, err2 := ffiCallWithGrow("html_to_markdown", initialSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_html_to_markdown(
+				htmlPtr, C.ulong(len(html)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err2 != nil {
+		return "", "", err2
 	}
 
 	var result struct {
 		Text  string  `json:"text"`
 		Title *string `json:"title,omitempty"`
 	}
-	if err := json.Unmarshal(out[:rc], &result); err != nil {
+	if err := json.Unmarshal(data, &result); err != nil {
 		return "", "", fmt.Errorf("ffi: html_to_markdown: invalid JSON output: %w", err)
 	}
 	if result.Title != nil {

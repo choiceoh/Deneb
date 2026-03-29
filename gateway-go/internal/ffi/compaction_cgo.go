@@ -29,8 +29,6 @@ import (
 	"unsafe"
 )
 
-const compactionOutBufSize = 1024 * 1024 // 1 MB default output buffer (grows on demand)
-
 // CompactionEvaluate evaluates whether compaction is needed.
 // Returns the JSON-encoded CompactionDecision.
 func CompactionEvaluate(configJSON string, storedTokens, liveTokens, tokenBudget uint64) ([]byte, error) {
@@ -83,7 +81,7 @@ func CompactionSweepNew(configJSON string, conversationID, tokenBudget uint64, f
 // CompactionSweepStart starts a sweep and returns the first command JSON.
 // The output buffer grows automatically if the Rust side signals it is too small.
 func CompactionSweepStart(handle uint32) (json.RawMessage, error) {
-	data, err := ffiCallWithGrow("compaction_sweep_start", compactionOutBufSize,
+	data, err := ffiCallWithPool("compaction_sweep_start", &ffiOutPool1MB,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_compaction_sweep_start(
 				C.uint(handle),
@@ -103,7 +101,7 @@ func CompactionSweepStep(handle uint32, responseJSON []byte) (json.RawMessage, e
 		return nil, errors.New("ffi: empty response JSON")
 	}
 	respPtr := (*C.uchar)(unsafe.Pointer(&responseJSON[0]))
-	data, err := ffiCallWithGrow("compaction_sweep_step", compactionOutBufSize,
+	data, err := ffiCallWithPool("compaction_sweep_step", &ffiOutPool1MB,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_compaction_sweep_step(
 				C.uint(handle),
