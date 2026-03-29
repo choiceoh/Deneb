@@ -57,8 +57,8 @@ pub fn resolve_thinking_default(
     let legacy_key = legacy_model_key(provider, model);
 
     let per_model_thinking = configured_models
-        .get(&canonical_key)
-        .or_else(|| legacy_key.as_ref().and_then(|k| configured_models.get(k)))
+        .get(canonical_key.as_ref())
+        .or_else(|| legacy_key.as_ref().and_then(|k| configured_models.get(k.as_str())))
         .and_then(|v| v.get("params"))
         .and_then(|v| v.get("thinking"))
         .and_then(|v| v.as_str());

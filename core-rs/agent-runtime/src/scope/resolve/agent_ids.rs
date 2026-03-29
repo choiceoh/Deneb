@@ -3,6 +3,8 @@
 //! Mirrors `src/agents/agent-scope.ts` and `src/routing/account-id.ts` (pure-logic subset).
 //! Keep in sync.
 
+use std::borrow::Cow;
+
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -34,13 +36,21 @@ static VALID_ACCOUNT_ID_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
 
 /// Normalize an agent ID to a path-safe, shell-friendly form.
-pub fn normalize_agent_id(value: &str) -> String {
+///
+/// Returns `Cow::Borrowed` when the input is already a valid, lowercase ID
+/// (no allocation). Allocates only when lowercasing or sanitization is needed.
+pub fn normalize_agent_id(value: &str) -> Cow<'_, str> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return DEFAULT_AGENT_ID.to_string();
+        return Cow::Borrowed(DEFAULT_AGENT_ID);
     }
     if VALID_ID_RE.is_match(trimmed) {
-        return trimmed.to_lowercase();
+        // Fast path: valid format. Only allocate if lowercasing is required.
+        return if trimmed.bytes().all(|b| !b.is_ascii_uppercase()) {
+            Cow::Borrowed(trimmed)
+        } else {
+            Cow::Owned(trimmed.to_lowercase())
+        };
     }
     // Best-effort fallback: collapse invalid characters to "-".
     let lowered = trimmed.to_lowercase();
@@ -53,19 +63,23 @@ pub fn normalize_agent_id(value: &str) -> String {
         &no_trailing
     };
     if result.is_empty() {
-        DEFAULT_AGENT_ID.to_string()
+        Cow::Borrowed(DEFAULT_AGENT_ID)
     } else {
-        result.to_string()
+        Cow::Owned(result.to_string())
     }
 }
 
 /// Normalize a main key to lowercase with default fallback.
-pub fn normalize_main_key(value: &str) -> String {
+///
+/// Returns `Cow::Borrowed` when the input is already lowercase (no allocation).
+pub fn normalize_main_key(value: &str) -> Cow<'_, str> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        DEFAULT_MAIN_KEY.to_string()
+        Cow::Borrowed(DEFAULT_MAIN_KEY)
+    } else if trimmed.bytes().all(|b| !b.is_ascii_uppercase()) {
+        Cow::Borrowed(trimmed)
     } else {
-        trimmed.to_lowercase()
+        Cow::Owned(trimmed.to_lowercase())
     }
 }
 
@@ -76,19 +90,25 @@ pub fn is_valid_agent_id(value: &str) -> bool {
 }
 
 /// Sanitize an agent ID (alias for normalize_agent_id).
-pub fn sanitize_agent_id(value: &str) -> String {
+pub fn sanitize_agent_id(value: &str) -> Cow<'_, str> {
     normalize_agent_id(value)
 }
 
 /// Normalize an account ID to a path-safe form. Defaults to DEFAULT_ACCOUNT_ID.
 /// Mirrors `src/routing/account-id.ts#normalizeAccountId`. Keep in sync.
-pub fn normalize_account_id(value: &str) -> String {
+///
+/// Returns `Cow::Borrowed` when the input is already valid lowercase (no allocation).
+pub fn normalize_account_id(value: &str) -> Cow<'_, str> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return DEFAULT_ACCOUNT_ID.to_string();
+        return Cow::Borrowed(DEFAULT_ACCOUNT_ID);
     }
     if VALID_ACCOUNT_ID_RE.is_match(trimmed) {
-        return trimmed.to_lowercase();
+        return if trimmed.bytes().all(|b| !b.is_ascii_uppercase()) {
+            Cow::Borrowed(trimmed)
+        } else {
+            Cow::Owned(trimmed.to_lowercase())
+        };
     }
     let lowered = trimmed.to_lowercase();
     let collapsed = INVALID_CHARS_RE.replace_all(&lowered, "-");
@@ -100,9 +120,9 @@ pub fn normalize_account_id(value: &str) -> String {
         &no_trailing
     };
     if result.is_empty() {
-        DEFAULT_ACCOUNT_ID.to_string()
+        Cow::Borrowed(DEFAULT_ACCOUNT_ID)
     } else {
-        result.to_string()
+        Cow::Owned(result.to_string())
     }
 }
 

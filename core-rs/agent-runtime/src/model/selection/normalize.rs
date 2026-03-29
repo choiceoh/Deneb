@@ -67,7 +67,7 @@ pub fn normalize_model_ref(provider: &str, model: &str) -> ModelRef {
     let normalized_provider = normalize_provider_id(provider);
     let normalized_model = normalize_provider_model_id(&normalized_provider, model.trim());
     ModelRef {
-        provider: normalized_provider,
+        provider: normalized_provider.into_owned(),
         model: normalized_model,
     }
 }

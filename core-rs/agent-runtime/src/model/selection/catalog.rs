@@ -45,10 +45,10 @@ pub fn get_model_ref_status(
     let allow_any = allowed_keys.is_none();
     let allowed = allow_any
         || allowed_keys
-            .map(|keys| keys.contains(&key))
+            .map(|keys| keys.contains(key.as_ref()))
             .unwrap_or(false);
     ModelRefStatus {
-        key,
+        key: key.into_owned(),
         in_catalog,
         allow_any,
         allowed,

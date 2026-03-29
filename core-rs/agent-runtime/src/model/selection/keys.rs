@@ -1,25 +1,32 @@
 //! Canonical model key generation.
 
+use std::borrow::Cow;
+
 /// Generate a canonical model key from provider and model.
-/// If the model already starts with "provider/", returns model as-is.
-pub fn model_key(provider: &str, model: &str) -> String {
+/// If the model already starts with "provider/", returns the model borrowed
+/// without any allocation. Otherwise allocates `"provider/model"`.
+pub fn model_key<'a>(provider: &'a str, model: &'a str) -> Cow<'a, str> {
     let provider_id = provider.trim();
     let model_id = model.trim();
 
     if provider_id.is_empty() {
-        return model_id.to_string();
+        return Cow::Borrowed(model_id);
     }
     if model_id.is_empty() {
-        return provider_id.to_string();
+        return Cow::Borrowed(provider_id);
     }
 
     // Check if model already contains the provider prefix (case-insensitive).
-    let provider_prefix = format!("{}/", provider_id.to_lowercase());
-    if model_id.to_lowercase().starts_with(&provider_prefix) {
-        model_id.to_string()
-    } else {
-        format!("{}/{}", provider_id, model_id)
+    // Avoids allocating a format string just for the prefix comparison.
+    let prefix_len = provider_id.len() + 1; // provider + "/"
+    if model_id.len() >= prefix_len
+        && model_id.as_bytes()[provider_id.len()] == b'/'
+        && model_id[..provider_id.len()].eq_ignore_ascii_case(provider_id)
+    {
+        return Cow::Borrowed(model_id);
     }
+
+    Cow::Owned(format!("{}/{}", provider_id, model_id))
 }
 
 /// Generate a legacy model key. Returns None if it would be identical to the
