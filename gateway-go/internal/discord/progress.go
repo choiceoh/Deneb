@@ -15,6 +15,37 @@ const (
 	progressEditThrottle = 2 * time.Second
 )
 
+// toolNameKorean maps raw English tool names to Korean labels for vibe coders.
+// The progress tracker shows these instead of cryptic tool names.
+var toolNameKorean = map[string]string{
+	"exec":        "명령어 실행",
+	"read":        "파일 읽기",
+	"write":       "파일 작성",
+	"edit":        "파일 수정",
+	"grep":        "코드 검색",
+	"find":        "파일 찾기",
+	"ls":          "폴더 탐색",
+	"web":         "웹 검색",
+	"web_search":  "웹 검색",
+	"web_fetch":   "웹 페이지 가져오기",
+	"send_file":   "파일 전송",
+	"http":        "API 호출",
+	"kv":          "데이터 저장",
+	"clipboard":   "클립보드",
+	"process":     "프로세스 관리",
+	"search_code": "코드 검색",
+	"glob":        "파일 패턴 검색",
+}
+
+// KoreanToolName returns a Korean label for a tool name.
+// Falls back to the original name if no translation exists.
+func KoreanToolName(name string) string {
+	if kr, ok := toolNameKorean[name]; ok {
+		return kr
+	}
+	return name
+}
+
 // ProgressTracker manages a single Discord message that is edited to reflect
 // agent execution progress. Each tool execution becomes a step with a status.
 type ProgressTracker struct {
@@ -52,26 +83,29 @@ func NewProgressTracker(ctx context.Context, client *Client, channelID string) *
 }
 
 // AddStep adds a new pending step. Does not trigger an edit.
+// Tool names are automatically translated to Korean for vibe coders.
 func (pt *ProgressTracker) AddStep(name string) {
 	if pt == nil {
 		return
 	}
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
-	pt.steps = append(pt.steps, ProgressStep{Name: name, Status: StepPending})
+	pt.steps = append(pt.steps, ProgressStep{Name: KoreanToolName(name), Status: StepPending})
 	pt.dirty = true
 }
 
 // StartStep marks a step as running. Triggers a throttled edit.
+// Tool names are automatically translated to Korean for vibe coders.
 func (pt *ProgressTracker) StartStep(ctx context.Context, name string) {
 	if pt == nil {
 		return
 	}
+	kr := KoreanToolName(name)
 	pt.mu.Lock()
 
 	found := false
 	for i := range pt.steps {
-		if pt.steps[i].Name == name && pt.steps[i].Status == StepPending {
+		if pt.steps[i].Name == kr && pt.steps[i].Status == StepPending {
 			pt.steps[i].Status = StepRunning
 			found = true
 			break
@@ -79,7 +113,7 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name string) {
 	}
 	if !found {
 		// Auto-add if not pre-registered.
-		pt.steps = append(pt.steps, ProgressStep{Name: name, Status: StepRunning})
+		pt.steps = append(pt.steps, ProgressStep{Name: kr, Status: StepRunning})
 	}
 	pt.dirty = true
 	pt.mu.Unlock()
@@ -88,10 +122,12 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name string) {
 }
 
 // CompleteStep marks a step as done. Triggers a throttled edit.
+// Tool names are automatically translated to Korean for vibe coders.
 func (pt *ProgressTracker) CompleteStep(ctx context.Context, name string, isError bool) {
 	if pt == nil {
 		return
 	}
+	kr := KoreanToolName(name)
 	pt.mu.Lock()
 
 	status := StepDone
@@ -100,7 +136,7 @@ func (pt *ProgressTracker) CompleteStep(ctx context.Context, name string, isErro
 	}
 
 	for i := range pt.steps {
-		if pt.steps[i].Name == name && (pt.steps[i].Status == StepRunning || pt.steps[i].Status == StepPending) {
+		if pt.steps[i].Name == kr && (pt.steps[i].Status == StepRunning || pt.steps[i].Status == StepPending) {
 			pt.steps[i].Status = status
 			break
 		}

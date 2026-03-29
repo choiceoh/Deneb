@@ -218,50 +218,110 @@ type FormattedReply struct {
 }
 
 // FormatReply processes an agent reply for Discord delivery.
-// If the reply contains a single large code block (>1500 chars), it extracts
-// the code block as a file attachment and replaces it with a summary.
+// Optimized for vibe coders: extracts the largest code block (>200 chars) as a
+// file attachment and collapses remaining inline code blocks into short summaries.
+// The vibe coder doesn't read code — they only need to know what changed.
 func FormatReply(text string) FormattedReply {
-	// Try to extract a dominant code block.
+	// Try to extract the dominant code block as a file attachment.
 	block, lang, before, after := extractLargestCodeBlock(text)
-	if block == "" || len(block) < 800 {
-		// If text fits in a single message, send as-is.
-		if len(text) <= TextChunkLimit {
-			return FormattedReply{Text: text}
-		}
-		// No large code block found — send as regular text.
-		return FormattedReply{Text: text}
-	}
-
-	// Build file attachment from the code block.
-	ext := ".txt"
-	if lang != "" {
-		ext = langToFileExt(lang)
-	}
-
-	// Build summary text from surrounding content.
-	summary := strings.TrimSpace(before)
-	if after := strings.TrimSpace(after); after != "" {
-		if summary != "" {
-			summary += "\n\n" + after
-		} else {
-			summary = after
-		}
-	}
-	if summary == "" {
-		lines := strings.Count(block, "\n") + 1
+	if block != "" && len(block) >= 200 {
+		ext := ".txt"
 		if lang != "" {
-			summary = fmt.Sprintf("📎 코드 출력 (%s, %d줄)", strings.TrimSpace(lang), lines)
-		} else {
-			summary = fmt.Sprintf("📎 코드 출력 (%d줄)", lines)
+			ext = langToFileExt(lang)
+		}
+
+		// Collapse any remaining code blocks in before/after text.
+		summary := collapseCodeBlocks(strings.TrimSpace(before))
+		if afterText := collapseCodeBlocks(strings.TrimSpace(after)); afterText != "" {
+			if summary != "" {
+				summary += "\n\n" + afterText
+			} else {
+				summary = afterText
+			}
+		}
+		if summary == "" {
+			lines := strings.Count(block, "\n") + 1
+			if lang != "" {
+				summary = fmt.Sprintf("📎 코드 출력 (%s, %d줄)", strings.TrimSpace(lang), lines)
+			} else {
+				summary = fmt.Sprintf("📎 코드 출력 (%d줄)", lines)
+			}
+		}
+
+		return FormattedReply{
+			Text:        summary,
+			FileContent: []byte(block),
+			FileName:    "output" + ext,
 		}
 	}
 
-	return FormattedReply{
-		Text:        summary,
-		FileContent: []byte(block),
-		FileName:    "output" + ext,
-	}
+	// No large block to extract — collapse all inline code blocks.
+	cleaned := collapseCodeBlocks(text)
+	return FormattedReply{Text: cleaned}
 }
+
+// collapseCodeBlocks replaces fenced code blocks in text with short Korean summaries.
+// Vibe coders don't read code, so we summarize instead of showing raw blocks.
+// Small code blocks (≤3 lines, ≤150 chars) are kept as-is since they might be
+// command output or short results the user can understand.
+func collapseCodeBlocks(text string) string {
+	var result strings.Builder
+	remaining := text
+
+	for {
+		start := strings.Index(remaining, "```")
+		if start < 0 {
+			result.WriteString(remaining)
+			break
+		}
+
+		// Write text before the code block.
+		result.WriteString(remaining[:start])
+
+		// Find the language tag and closing fence.
+		afterFence := remaining[start+3:]
+		nlIdx := strings.IndexByte(afterFence, '\n')
+		if nlIdx < 0 {
+			result.WriteString(remaining[start:])
+			break
+		}
+		blockLang := strings.TrimSpace(afterFence[:nlIdx])
+
+		codeStart := start + 3 + nlIdx + 1
+		closeIdx := strings.Index(remaining[codeStart:], "```")
+		if closeIdx < 0 {
+			result.WriteString(remaining[start:])
+			break
+		}
+
+		blockContent := remaining[codeStart : codeStart+closeIdx]
+		remaining = remaining[codeStart+closeIdx+3:]
+
+		// Keep small code blocks (short output, commands, etc.)
+		lines := strings.Count(blockContent, "\n") + 1
+		if lines <= 3 && len(blockContent) <= 150 {
+			result.WriteString("```")
+			result.WriteString(blockLang)
+			result.WriteByte('\n')
+			result.WriteString(blockContent)
+			result.WriteString("```")
+			continue
+		}
+
+		// Replace larger code blocks with a summary.
+		if blockLang == "diff" {
+			added, removed := countDiffLines(blockContent)
+			result.WriteString(fmt.Sprintf("_(diff: +%d/-%d줄)_", added, removed))
+		} else if blockLang != "" {
+			result.WriteString(fmt.Sprintf("_(%s 코드, %d줄)_", blockLang, lines))
+		} else {
+			result.WriteString(fmt.Sprintf("_(출력 %d줄)_", lines))
+		}
+	}
+
+	return result.String()
+}
+
 
 // extractLargestCodeBlock finds the largest fenced code block in text.
 // Returns the code content (without fences), language tag, text before, and text after.

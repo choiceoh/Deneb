@@ -199,7 +199,7 @@ func TestFormatReply_LargeCodeBlock(t *testing.T) {
 }
 
 func TestFormatReply_NoLargeBlock(t *testing.T) {
-	// Code block smaller than 800 chars should not be extracted.
+	// Code block smaller than 200 chars should not be extracted as file.
 	text := "Some text\n```go\nfmt.Println(\"hi\")\n```\nEnd."
 	// Make text exceed TextChunkLimit to trigger FormatReply processing.
 	text = text + strings.Repeat("\nMore text here.", 200)
