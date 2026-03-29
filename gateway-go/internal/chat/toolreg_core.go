@@ -60,7 +60,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Pilot registered last: it takes the registry itself as a dependency.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI — gathers tool outputs and analyzes them in one call (free, no API cost). Best for: summarizing file/command output, reviewing diffs, analyzing test failures, comparing multiple sources, processing grep results. Shortcuts: file, files, exec, grep, find, url, http, diff, test, tree, git_log, health, kv_key, memory, gmail, youtube, polaris, image, vega, agent_logs, gateway_logs. Options: chain, max_length, output_format, post_process",
+		Description: "Local AI analysis — gathers tool outputs and analyzes in one call (free). Shortcuts: file, exec, grep, find, url, diff, test, tree, git_log, health, memory, vega, image + more",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, deps.WorkspaceDir),
 	})
@@ -126,13 +126,13 @@ func RegisterFSTools(registry *ToolRegistry, workspaceDir string) {
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "test",
-		Description: "Run tests/builds with structured results. Actions: run (tests with pass/fail/skip counts), build (compile check), check (lint/vet). Frameworks: go, cargo, make. Parses go test -json for structured output",
+		Description: "Run tests/builds (go/cargo/make). Actions: run, build, check. Structured pass/fail/skip results",
 		InputSchema: testToolSchema(),
 		Fn:          toolTest(workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "git",
-		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, cherry_pick, reset, remote, clean. Use diff tool for viewing diffs, apply_patch for applying patches",
+		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, reset, remote, clean",
 		InputSchema: gitToolSchema(),
 		Fn:          toolGit(workspaceDir),
 	})

@@ -45,7 +45,6 @@ func ToolRead(defaultDir string) ToolFunc {
 
 		lines := strings.Split(string(data), "\n")
 		totalLines := len(lines)
-		fileSize := len(data)
 
 		// Apply offset (1-based).
 		start := 0
@@ -68,9 +67,9 @@ func ToolRead(defaultDir string) ToolFunc {
 
 		// Format with line numbers (cat -n style) and file metadata.
 		var sb strings.Builder
-		fmt.Fprintf(&sb, "[File: %s | %d lines | %d bytes]\n", p.FilePath, totalLines, fileSize)
+		fmt.Fprintf(&sb, "[File: %s | %d lines]\n", p.FilePath, totalLines)
 		for i := start; i < end; i++ {
-			fmt.Fprintf(&sb, "%6d\t%s\n", i+1, lines[i])
+			fmt.Fprintf(&sb, "%d\t%s\n", i+1, lines[i])
 		}
 		if end < totalLines {
 			fmt.Fprintf(&sb, "[... %d more lines. Use offset=%d to continue reading.]\n", totalLines-end, end+1)
@@ -209,7 +208,7 @@ func formatFunctionLines(displayPath string, lines []string, start, end int, fun
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "[%s: %s (lines %d-%d)]\n", displayPath, funcName, start, end)
 	for i := start - 1; i < end; i++ {
-		fmt.Fprintf(&sb, "%6d\t%s\n", i+1, lines[i])
+		fmt.Fprintf(&sb, "%d\t%s\n", i+1, lines[i])
 	}
 	return sb.String(), nil
 }
@@ -240,7 +239,7 @@ func ToolWrite(defaultDir string) ToolFunc {
 		if err := os.WriteFile(path, []byte(p.Content), 0o644); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
-		return fmt.Sprintf("Successfully wrote %d bytes to %s", len(p.Content), p.FilePath), nil
+		return fmt.Sprintf("Wrote %s", p.FilePath), nil
 	}
 }
 
@@ -303,9 +302,9 @@ func ToolEdit(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
 		if count > 1 {
-			return fmt.Sprintf("Successfully edited %s (%d replacements)", p.FilePath, count), nil
+			return fmt.Sprintf("Edited %s (%d replacements)", p.FilePath, count), nil
 		}
-		return fmt.Sprintf("Successfully edited %s", p.FilePath), nil
+		return fmt.Sprintf("Edited %s", p.FilePath), nil
 	}
 }
 
@@ -336,7 +335,7 @@ func editWithRegex(path, displayPath, content, pattern, replacement string, repl
 	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
-	return fmt.Sprintf("Successfully edited %s (regex, %d matches)", displayPath, len(matches)), nil
+	return fmt.Sprintf("Edited %s (regex, %d matches)", displayPath, len(matches)), nil
 }
 
 // editAtLine performs replacement only on a specific line.
@@ -357,7 +356,7 @@ func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) 
 	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
-	return fmt.Sprintf("Successfully edited %s (line %d)", displayPath, lineNum), nil
+	return fmt.Sprintf("Edited %s (line %d)", displayPath, lineNum), nil
 }
 
 // editFuzzyHint provides a hint when old_string is not found.

@@ -230,7 +230,7 @@ func buildTree(sb *strings.Builder, dir, prefix string, maxDepth, currentDepth i
 		} else {
 			info, _ := entry.Info()
 			if info != nil {
-				fmt.Fprintf(sb, "%s%s%s (%d)\n", prefix, connector, name, info.Size())
+				fmt.Fprintf(sb, "%s%s%s (%s)\n", prefix, connector, name, formatSize(info.Size()))
 			} else {
 				fmt.Fprintf(sb, "%s%s%s\n", prefix, connector, name)
 			}
@@ -239,6 +239,20 @@ func buildTree(sb *strings.Builder, dir, prefix string, maxDepth, currentDepth i
 	}
 
 	return totalFiles, totalDirs
+}
+
+// formatSize returns a human-readable file size string.
+func formatSize(b int64) string {
+	switch {
+	case b >= 1<<30:
+		return fmt.Sprintf("%.1fG", float64(b)/(1<<30))
+	case b >= 1<<20:
+		return fmt.Sprintf("%.1fM", float64(b)/(1<<20))
+	case b >= 1<<10:
+		return fmt.Sprintf("%.1fK", float64(b)/(1<<10))
+	default:
+		return fmt.Sprintf("%dB", b)
+	}
 }
 
 // --- Diff tool ---
