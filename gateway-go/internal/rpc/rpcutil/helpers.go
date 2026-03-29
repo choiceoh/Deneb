@@ -86,3 +86,31 @@ func DecodeParams[T any](req *protocol.RequestFrame) (T, *protocol.ResponseFrame
 func RespondOK(reqID string, result any) *protocol.ResponseFrame {
 	return protocol.MustResponseOK(reqID, result)
 }
+
+// Bind unmarshals request params into P, calls fn with the decoded value, and
+// returns a ready-made ResponseFrame. fn returns the success payload and an
+// optional error; *rpcerr.Error values are converted to error responses
+// directly, any other error is wrapped as INVALID_REQUEST.
+//
+// Typical usage with a local named type:
+//
+//	type params struct { Name string `json:"name"` }
+//	return rpcutil.Bind[params](req, func(p params) (any, error) {
+//	    if p.Name == "" { return nil, rpcerr.MissingParam("name") }
+//	    return deps.Manager.DoSomething(p.Name), nil
+//	})
+func Bind[P any](req *protocol.RequestFrame, fn func(P) (any, error)) *protocol.ResponseFrame {
+	p, errResp := DecodeParams[P](req)
+	if errResp != nil {
+		return errResp
+	}
+	result, err := fn(p)
+	if err != nil {
+		var rpcErr *rpcerr.Error
+		if errors.As(err, &rpcErr) {
+			return rpcErr.Response(req.ID)
+		}
+		return rpcerr.InvalidParams(err).Response(req.ID)
+	}
+	return RespondOK(req.ID, result)
+}
