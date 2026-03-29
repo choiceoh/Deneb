@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,15 @@ var (
 	cachedTimezone     string
 	cachedTimezoneLoc  *time.Location
 	cachedTimezoneOnce sync.Once
+)
+
+// staticPromptCache caches the assembled static system prompt block, keyed on
+// the sorted tool name list. Invalidated only when the tool set changes (i.e.
+// never during normal operation after server start).
+var (
+	staticPromptMu      sync.RWMutex
+	staticPromptKey     string
+	staticPromptCached  string
 )
 
 // LoadCachedTimezone resolves and caches timezone once.
@@ -93,6 +103,17 @@ var toolCategories = []struct {
 	{"Data", []string{"gmail", "kv"}},
 }
 
+// buildStaticCacheKey returns a stable string key for the static prompt block
+// based on the sorted tool name list.
+func buildStaticCacheKey(toolDefs []ToolDef) string {
+	names := make([]string, 0, len(toolDefs))
+	for _, d := range toolDefs {
+		names = append(names, d.Name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
+}
+
 // buildPromptSections assembles the system prompt into static, semi-static, and dynamic parts.
 // Static: identity, tooling, usage guides, safety, CLI reference (rarely changes).
 // Semi-static: skills prompt (changes only when skills are added/removed, not per request).
@@ -103,8 +124,17 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		toolSet[def.Name] = true
 	}
 
-	// --- Static block ---
-	var s strings.Builder
+	// --- Static block (cached) ---
+	// The static block depends only on the tool set, which is fixed after server
+	// start. Cache it to avoid rebuilding ~2 KB of strings on every request.
+	cacheKey := buildStaticCacheKey(params.ToolDefs)
+	staticPromptMu.RLock()
+	if staticPromptKey == cacheKey {
+		staticText = staticPromptCached
+		staticPromptMu.RUnlock()
+	} else {
+		staticPromptMu.RUnlock()
+		var s strings.Builder
 
 	// Identity.
 	s.WriteString("You are a personal assistant running inside Deneb.\n\n")
@@ -168,6 +198,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	s.WriteString("Deneb is controlled via subcommands. Do not invent commands.\n")
 	s.WriteString("Gateway management: deneb gateway {status|start|stop|restart}\n")
 	s.WriteString("If unsure, ask the user to run `deneb help` and paste the output.\n\n")
+	built := s.String()
+	staticPromptMu.Lock()
+	staticPromptKey = cacheKey
+	staticPromptCached = built
+	staticPromptMu.Unlock()
+	staticText = built
+	} // end else (cache miss)
 
 	// --- Semi-static block (skills — changes only when skills are added/removed) ---
 	var ss strings.Builder
@@ -260,7 +297,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString(buildRuntimeLine(params.RuntimeInfo, params.Channel))
 	d.WriteString("\n")
 
-	return s.String(), ss.String(), d.String()
+	return staticText, ss.String(), d.String()
 }
 
 // BuildSystemPrompt assembles the full system prompt as a single string.

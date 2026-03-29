@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -625,20 +626,20 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 }
 
 // extractDeltaText extracts the "text" field from {"delta":{"text":"..."}} payloads
-// using fast string scanning instead of json.Unmarshal on every streaming delta event.
-// Falls back to json.Unmarshal only when backslash escapes are detected (rare).
+// by scanning the raw bytes directly, avoiding the string(payload) allocation on
+// every streaming delta event. Falls back to json.Unmarshal only when backslash
+// escapes are detected (rare).
 func extractDeltaText(payload []byte) string {
-	const marker = `"text":"`
-	s := string(payload)
-	idx := strings.Index(s, marker)
+	marker := []byte(`"text":"`)
+	idx := bytes.Index(payload, marker)
 	if idx < 0 {
 		return ""
 	}
 	start := idx + len(marker)
-	for i := start; i < len(s); i++ {
-		switch s[i] {
+	for i := start; i < len(payload); i++ {
+		switch payload[i] {
 		case '"':
-			return s[start:i]
+			return string(payload[start:i])
 		case '\\':
 			// Escape sequence present — fall back to json.Unmarshal for correctness.
 			var delta struct {

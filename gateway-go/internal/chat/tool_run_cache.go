@@ -7,6 +7,7 @@
 package chat
 
 import (
+	"bytes"
 	"encoding/json"
 	"sync"
 )
@@ -87,7 +88,14 @@ func IsMutationTool(name string) bool {
 // BuildCacheKey creates a canonical cache key from tool name and input JSON.
 // Non-semantic fields (compress, $ref) are stripped before key generation.
 // Go's json.Marshal sorts map keys alphabetically, providing canonical ordering.
+//
+// Fast path: if neither "compress" nor "$ref" appear in the raw bytes, skip the
+// JSON round-trip entirely — the vast majority of find/grep/tree calls take this
+// path and pay no allocation beyond the key string itself.
 func BuildCacheKey(name string, input json.RawMessage) string {
+	if !bytes.Contains(input, []byte(`"compress"`)) && !bytes.Contains(input, []byte(`"$ref"`)) {
+		return name + ":" + string(input)
+	}
 	var m map[string]any
 	if json.Unmarshal(input, &m) != nil {
 		return name + ":" + string(input)

@@ -42,12 +42,13 @@ type ToolDef struct {
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {
-	mu                      sync.RWMutex
-	tools                   map[string]ToolDef
-	order                   []string // preserves registration order
-	postProcess             *PostProcessRegistry
-	cachedLLMTools          []llm.Tool // cached tool list; invalidated on RegisterTool
-	cachedLLMToolsAnthropic []llm.Tool // same list with CacheControl on last tool for Anthropic prompt caching
+	mu                       sync.RWMutex
+	tools                    map[string]ToolDef
+	order                    []string // preserves registration order
+	postProcess              *PostProcessRegistry
+	cachedLLMTools           []llm.Tool            // cached tool list; invalidated on RegisterTool
+	cachedLLMToolsAnthropic  []llm.Tool            // same list with CacheControl on last tool for Anthropic prompt caching
+	cachedLLMToolsForProfile map[string][]llm.Tool // per-profile cache; invalidated on RegisterTool
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -76,8 +77,9 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 		r.order = append(r.order, def.Name)
 	}
 	r.tools[def.Name] = def
-	r.cachedLLMTools = nil          // invalidate cache
-	r.cachedLLMToolsAnthropic = nil // invalidate Anthropic variant
+	r.cachedLLMTools = nil           // invalidate full-set cache
+	r.cachedLLMToolsAnthropic = nil  // invalidate Anthropic variant
+	r.cachedLLMToolsForProfile = nil // invalidate per-profile cache
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
@@ -371,13 +373,37 @@ var chatTools = map[string]bool{
 // If profile is empty, returns all tools (same as LLMTools).
 // If profile is "coding", returns only coding-related tools (Discord channel).
 // If profile is "chat", returns general-conversation tools, excluding coding/FS tools.
+// Results are cached per profile and only rebuilt when tools change.
 func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {
 	if profile == "" {
 		return r.LLMTools()
 	}
 
+	// Cache read fast-path.
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	if r.cachedLLMToolsForProfile != nil {
+		if cached, ok := r.cachedLLMToolsForProfile[profile]; ok {
+			out := make([]llm.Tool, len(cached))
+			copy(out, cached)
+			r.mu.RUnlock()
+			return out
+		}
+	}
+	r.mu.RUnlock()
+
+	// Cache miss — build under write lock.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Double-check after acquiring write lock.
+	if r.cachedLLMToolsForProfile != nil {
+		if cached, ok := r.cachedLLMToolsForProfile[profile]; ok {
+			out := make([]llm.Tool, len(cached))
+			copy(out, cached)
+			return out
+		}
+	} else {
+		r.cachedLLMToolsForProfile = make(map[string][]llm.Tool)
+	}
 
 	var profileMap map[string]bool
 	switch profile {
@@ -386,43 +412,21 @@ func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {
 	case "chat":
 		profileMap = chatTools
 	default:
-		// Unknown profile → fall back to full set (safe default).
-		tools := make([]llm.Tool, 0, len(r.order))
-		for _, name := range r.order {
-			def := r.tools[name]
-			if def.Hidden {
-				continue
-			}
-			schema := def.InputSchema
-			if schema == nil {
-				schema = map[string]any{"type": "object"}
-			}
-			tools = append(tools, llm.Tool{
-				Name:        def.Name,
-				Description: def.Description,
-				InputSchema: schema,
-			})
-		}
-		return tools
+		// Unknown profile → fall back to full set (safe default, not cached).
+		return r.buildLLMToolsLocked()
 	}
 
-	tools := make([]llm.Tool, 0, len(r.order))
-	for _, name := range r.order {
-		def := r.tools[name]
-		if def.Hidden || !profileMap[name] {
-			continue
+	all := r.buildLLMToolsLocked()
+	tools := make([]llm.Tool, 0, len(all))
+	for _, t := range all {
+		if profileMap[t.Name] {
+			tools = append(tools, t)
 		}
-		schema := def.InputSchema
-		if schema == nil {
-			schema = map[string]any{"type": "object"}
-		}
-		tools = append(tools, llm.Tool{
-			Name:        def.Name,
-			Description: def.Description,
-			InputSchema: schema,
-		})
 	}
-	return tools
+	r.cachedLLMToolsForProfile[profile] = tools
+	out := make([]llm.Tool, len(tools))
+	copy(out, tools)
+	return out
 }
 
 // Summaries returns a map of tool name → description for system prompt assembly.
