@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -136,7 +137,7 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 		}
 
 		// Only retry on transient errors (rate limit, timeout, server overload).
-		if !httpretry.IsRetryable(resp.StatusCode) {
+		if !httpretry.IsRetryable(resp.StatusCode) || isProviderPermanentRateLimit(lastErr) {
 			return nil, lastErr
 		}
 	}
@@ -195,4 +196,30 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("LLM API error %d: %s", e.StatusCode, e.Body)
+}
+
+// isProviderPermanentRateLimit returns true for provider error payloads that
+// represent hard request-capacity limits where immediate retry is unlikely to
+// succeed (e.g. OpenRouter code 1302: "Rate limit reached for requests").
+func isProviderPermanentRateLimit(err error) bool {
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.StatusCode != http.StatusTooManyRequests || apiErr.Body == "" {
+		return false
+	}
+	var payload struct {
+		Error struct {
+			Code any `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(apiErr.Body), &payload) != nil {
+		return false
+	}
+	switch v := payload.Error.Code.(type) {
+	case string:
+		return v == "1302"
+	case float64:
+		return int(v) == 1302
+	default:
+		return false
+	}
 }

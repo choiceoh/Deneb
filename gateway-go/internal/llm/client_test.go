@@ -265,3 +265,51 @@ func TestDoStream_501_NoRetry(t *testing.T) {
 		t.Errorf("expected 1 call (no retry on 501 Not Implemented), got %d", calls)
 	}
 }
+
+func TestDoStream_429Code1302_NoRetry(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"error":{"code":"1302","message":"Rate limit reached for requests"}}`)
+	}))
+	defer server.Close()
+
+	c := NewClient(server.URL, "test-key",
+		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
+	_, err := c.DoStream(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error for 429 code 1302 response")
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call (no retry on provider hard rate-limit), got %d", calls)
+	}
+}
+
+func TestDoStream_429OtherCode_Retries(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls <= 2 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, `{"error":{"code":"9999","message":"temporary rate limit"}}`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "ok")
+	}))
+	defer server.Close()
+
+	c := NewClient(server.URL, "test-key",
+		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
+	body, err := c.DoStream(context.Background(), req)
+	if err != nil {
+		t.Fatalf("DoStream error: %v", err)
+	}
+	defer body.Close()
+	if calls != 3 {
+		t.Errorf("expected 3 calls for retryable 429 payload, got %d", calls)
+	}
+}
