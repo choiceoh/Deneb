@@ -8,63 +8,28 @@
 //
 // Designed for AI agent consumption with structured metadata, machine-readable
 // errors, aggressive noise removal, SGLang AI extraction, and bot-block evasion.
+//
+// Layer overview:
+//   - web_http.go           — HTTP fetch, retry, error type, error classification
+//   - web_html.go           — HTML → text (FFI, SGLang AI)
+//   - web_html_preprocess.go — HTML noise stripping, metadata, signals, charset
+//   - web_content.go        — Content dispatch, metadata type, output formatting
+//   - web_fetch_stealth.go  — Browser profiles, bot-block evasion
+//   - web_fetch_search.go   — Search providers (Perplexity, Brave, DuckDuckGo)
+//   - fetch_cache.go        — In-memory result cache
 package web
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
-	"io"
-	"log/slog"
-	"net/http"
-	"os"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 )
 
-// --- Tool schema ---
-
-// --- Structured output types ---
-
-// webFetchMeta holds machine-readable metadata about the fetched page.
-type webFetchMeta struct {
-	Title        string   `json:"title,omitempty"`
-	Description  string   `json:"description,omitempty"`
-	URL          string   `json:"url"`
-	FinalURL     string   `json:"final_url,omitempty"`
-	CanonicalURL string   `json:"canonical_url,omitempty"`
-	Language     string   `json:"language,omitempty"`
-	Published    string   `json:"published,omitempty"`
-	Author       string   `json:"author,omitempty"`
-	SiteName     string   `json:"site_name,omitempty"`
-	OGType       string   `json:"og_type,omitempty"`
-	ContentType  string   `json:"content_type"`
-	StatusCode   int      `json:"status_code"`
-	FetchMs      int64    `json:"fetch_ms"`
-	OrigChars    int      `json:"original_chars"`
-	ExtractChars int      `json:"extracted_chars"`
-	Retention    string   `json:"retention_ratio"`
-	Truncated    bool     `json:"truncated"`
-	WordCount    int      `json:"word_count,omitempty"`
-	Signals      []string `json:"signals,omitempty"`
-}
-
-// webFetchErr is a machine-readable error for agent consumption.
-type webFetchErr struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	URL       string `json:"url"`
-	Retryable bool   `json:"retryable"`
-}
-
-// --- Unified tool implementation ---
-
+// Tool returns the unified web tool handler (fetch + search + search+fetch).
 func Tool(cache *FetchCache, sglang *SGLangExtractor) func(context.Context, json.RawMessage) (string, error) {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -108,8 +73,7 @@ func Tool(cache *FetchCache, sglang *SGLangExtractor) func(context.Context, json
 	}
 }
 
-// --- Fetch mode ---
-
+// webFetchURL fetches a URL and returns extracted content with metadata envelope.
 func webFetchURL(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor, targetURL string, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 50000
@@ -165,8 +129,6 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor
 	return applyTruncation(fullResult, maxChars), nil
 }
 
-// --- Search+fetch mode ---
-
 // webSearchAndFetch searches the web and auto-fetches the top N results.
 // Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
 func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor, query string, count, fetchTop, maxChars int) (string, error) {
@@ -208,314 +170,4 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *SGLangExt
 	}
 
 	return sb.String(), nil
-}
-
-// --- SGLang AI-powered content extraction ---
-
-type SGLangExtractor struct {
-	mu      sync.Mutex
-	client  *http.Client
-	baseURL string
-	apiKey  string
-	model   string
-	state   int // 0=unknown, 1=available, -1=unavailable
-	probeAt time.Time
-}
-
-const (
-	sglangUnknown     = 0
-	sglangAvailable   = 1
-	sglangUnavailable = -1
-	// Re-probe interval when previously unavailable.
-	sglangReprobeInterval = 5 * time.Minute
-)
-
-func NewSGLangExtractor() *SGLangExtractor {
-	baseURL := os.Getenv("SGLANG_BASE_URL")
-	if baseURL == "" {
-		baseURL = "http://127.0.0.1:30000/v1"
-	}
-	apiKey := os.Getenv("SGLANG_API_KEY")
-	if apiKey == "" {
-		apiKey = "local"
-	}
-	model := os.Getenv("SGLANG_MODEL")
-	if model == "" {
-		model = "Qwen/Qwen3.5-35B-A3B"
-	}
-	return &SGLangExtractor{
-		client:  &http.Client{Timeout: 60 * time.Second},
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		model:   model,
-	}
-}
-
-// available checks if SGLang is reachable. Probes on first call,
-// then re-probes periodically if previously unavailable.
-func (s *SGLangExtractor) available() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.state == sglangAvailable {
-		return true
-	}
-	if s.state == sglangUnavailable && time.Since(s.probeAt) < sglangReprobeInterval {
-		return false
-	}
-
-	// Probe the server.
-	s.probeAt = time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+"/models", nil)
-	if err != nil {
-		s.state = sglangUnavailable
-		return false
-	}
-	req.Header.Set("Authorization", "Bearer "+s.apiKey)
-	resp, err := s.client.Do(req)
-	if err != nil {
-		slog.Info("sglang not available", "url", s.baseURL, "error", err)
-		s.state = sglangUnavailable
-		return false
-	}
-	resp.Body.Close()
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		s.state = sglangAvailable
-		slog.Info("sglang available", "url", s.baseURL, "model", s.model)
-		return true
-	}
-	s.state = sglangUnavailable
-	return false
-}
-
-const sglangSystemPrompt = `You are a precision web content extractor for AI agents. Your output becomes the agent's sole understanding of the webpage.
-
-REMOVE completely:
-- Navigation menus, breadcrumbs, pagination elements
-- Cookie banners, GDPR notices, consent dialogs
-- Advertisement blocks, sponsored content, promotional banners
-- "Related articles", "You might also like", "Trending" sections
-- Comment sections, user reviews (unless they ARE the main content)
-- Social media share buttons, follow widgets
-- Site-wide headers, footers, copyright notices
-- Search bars, login forms, newsletter signup forms
-- Sidebar widgets, tag clouds, archive links
-
-PRESERVE with structure:
-- Main article/page body text — this is the primary output
-- Headings hierarchy (# through ######) exactly as structured
-- Data tables as proper markdown tables with alignment
-- Code blocks with language tags (` + "```" + `lang ... ` + "```" + `)
-- Ordered and unordered lists with proper nesting
-- Blockquotes with > prefix
-- Image references as ![alt](url) when informational
-- Inline links [text](url) when they add value
-
-RULES:
-- Output ONLY the extracted content — no wrapping, no commentary
-- Preserve the source language exactly
-- If content is already clean, return it unchanged
-- Empty extraction is better than including noise`
-
-// extract calls SGLang for intelligent content extraction from pre-cleaned HTML.
-func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, language string) (string, error) {
-	// Convert HTML to markdown via FFI first to reduce token count.
-	mdContent := ffiConvert(html)
-
-	// Small content: AI adds little value, return directly.
-	if len(mdContent) < 2000 {
-		return mdContent, nil
-	}
-
-	// Cap input to ~100K chars (well within Qwen 262K context).
-	if len(mdContent) > 100000 {
-		mdContent = mdContent[:100000]
-	}
-
-	// Build user message with context hints.
-	var userMsg strings.Builder
-	fmt.Fprintf(&userMsg, "URL: %s\n", url)
-	if language != "" {
-		fmt.Fprintf(&userMsg, "Language: %s\n", language)
-	}
-	userMsg.WriteString("\n---\n")
-	userMsg.WriteString(mdContent)
-
-	reqBody := map[string]any{
-		"model": s.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": sglangSystemPrompt},
-			{"role": "user", "content": userMsg.String()},
-		},
-		"max_tokens":  16384,
-		"temperature": 0,
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("marshal sglang request: %w", err)
-	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, "POST", s.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create sglang request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.apiKey)
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("sglang request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("sglang HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode sglang response: %w", err)
-	}
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("sglang returned no choices")
-	}
-
-	extracted := result.Choices[0].Message.Content
-	extracted = jsonutil.StripThinkingTags(extracted)
-
-	return strings.TrimSpace(extracted), nil
-}
-
-// --- Output formatting ---
-
-func formatFetchResult(meta webFetchMeta, content string) string {
-	var b strings.Builder
-	b.Grow(len(content) + 512)
-
-	b.WriteString("<metadata>\n")
-	if meta.Title != "" {
-		fmt.Fprintf(&b, "Title: %s\n", meta.Title)
-	}
-	if meta.Description != "" {
-		fmt.Fprintf(&b, "Description: %s\n", meta.Description)
-	}
-	if meta.Author != "" {
-		fmt.Fprintf(&b, "Author: %s\n", meta.Author)
-	}
-	if meta.SiteName != "" {
-		fmt.Fprintf(&b, "Site: %s\n", meta.SiteName)
-	}
-	fmt.Fprintf(&b, "URL: %s\n", meta.URL)
-	if meta.FinalURL != "" && meta.FinalURL != meta.URL {
-		fmt.Fprintf(&b, "FinalURL: %s\n", meta.FinalURL)
-	}
-	if meta.CanonicalURL != "" && meta.CanonicalURL != meta.URL && meta.CanonicalURL != meta.FinalURL {
-		fmt.Fprintf(&b, "Canonical: %s\n", meta.CanonicalURL)
-	}
-	if meta.Language != "" {
-		fmt.Fprintf(&b, "Language: %s\n", meta.Language)
-	}
-	if meta.Published != "" {
-		fmt.Fprintf(&b, "Published: %s\n", meta.Published)
-	}
-	if meta.OGType != "" {
-		fmt.Fprintf(&b, "Type: %s\n", meta.OGType)
-	}
-	fmt.Fprintf(&b, "ContentType: %s\n", meta.ContentType)
-	fmt.Fprintf(&b, "StatusCode: %d\n", meta.StatusCode)
-	fmt.Fprintf(&b, "FetchTime: %dms\n", meta.FetchMs)
-	fmt.Fprintf(&b, "ContentChars: %d (original: %d, retention: %s)\n",
-		meta.ExtractChars, meta.OrigChars, meta.Retention)
-	if meta.WordCount > 0 {
-		fmt.Fprintf(&b, "WordCount: %d\n", meta.WordCount)
-	}
-	if meta.Truncated {
-		b.WriteString("Truncated: true\n")
-	}
-	if len(meta.Signals) > 0 {
-		fmt.Fprintf(&b, "Signals: %s\n", strings.Join(meta.Signals, ", "))
-	}
-	b.WriteString("</metadata>\n<content>\n")
-	b.WriteString(content)
-	b.WriteString("\n</content>")
-
-	return b.String()
-}
-
-func formatFetchError(e webFetchErr) string {
-	var b strings.Builder
-	b.WriteString("<error>\n")
-	fmt.Fprintf(&b, "Code: %s\n", e.Code)
-	fmt.Fprintf(&b, "Message: %s\n", e.Message)
-	if e.URL != "" {
-		fmt.Fprintf(&b, "URL: %s\n", e.URL)
-	}
-	fmt.Fprintf(&b, "Retryable: %v\n", e.Retryable)
-	b.WriteString("</error>")
-	return b.String()
-}
-
-// applyTruncation truncates a formatted result preserving metadata section
-// and cutting content at section boundaries rather than mid-sentence.
-func applyTruncation(result string, maxChars int) string {
-	if len(result) <= maxChars {
-		return result
-	}
-
-	// Split at content boundary.
-	contentStart := strings.Index(result, "<content>\n")
-	if contentStart < 0 || contentStart >= maxChars {
-		return result[:maxChars] + "\n[...truncated]"
-	}
-
-	metaSection := result[:contentStart+len("<content>\n")]
-	contentBody := result[contentStart+len("<content>\n"):]
-
-	// Remove trailing </content> for processing.
-	contentBody = strings.TrimSuffix(contentBody, "\n</content>")
-
-	// Available chars for content.
-	availChars := maxChars - len(metaSection) - 40 // 40 for truncation marker + closing tag
-	if availChars <= 0 {
-		return metaSection + "\n[...no space for content]\n</content>"
-	}
-
-	truncated, wasTruncated := truncateAtSection(contentBody, availChars)
-	if wasTruncated {
-		remaining := len(contentBody) - len(truncated)
-		return metaSection + truncated +
-			"\n\n[...truncated: " + strconv.Itoa(remaining) + " chars remaining]\n</content>"
-	}
-	return metaSection + truncated + "\n</content>"
-}
-
-// --- Helpers ---
-
-func appendUnique(ss []string, s string) []string {
-	for _, existing := range ss {
-		if existing == s {
-			return ss
-		}
-	}
-	return append(ss, s)
-}
-
-// estimateWordCount estimates word count from text content.
-// Uses a simple split on whitespace, which works for both Latin and CJK text.
-func estimateWordCount(text string) int {
-	fields := strings.Fields(text)
-	return len(fields)
 }

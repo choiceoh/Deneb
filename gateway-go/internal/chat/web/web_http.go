@@ -1,3 +1,7 @@
+// web_http.go — HTTP fetch layer: error type, retry, error classification, YouTube.
+//
+// Wraps stealthFetch (web_fetch_stealth.go) and translates HTTP/transport errors
+// into machine-readable webFetchErr codes for agent consumption.
 package web
 
 import (
@@ -9,6 +13,14 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 )
+
+// webFetchErr is a machine-readable fetch error for agent consumption.
+type webFetchErr struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	URL       string `json:"url"`
+	Retryable bool   `json:"retryable"`
+}
 
 // fetchWithRetry fetches a URL using browser-like stealth profiles.
 // Delegates to stealthFetch which handles bot-block detection and escalation.
@@ -43,6 +55,7 @@ func fetchYouTube(ctx context.Context, url string) (string, error) {
 	return media.FormatYouTubeResult(result), nil
 }
 
+// classifyFetchError maps transport and HTTP errors to agent-readable codes.
 func classifyFetchError(err error, url string) webFetchErr {
 	var mfe *media.MediaFetchError
 	if errors.As(err, &mfe) {
