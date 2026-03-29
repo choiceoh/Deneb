@@ -3,6 +3,56 @@
 use super::keys::model_key;
 use super::types::{ModelCatalogEntry, ModelInputType, ModelRef, ModelRefStatus};
 use crate::model::provider_id::normalize_provider_id;
+use std::collections::HashMap;
+
+/// Pre-built index for O(1) model catalog lookups.
+///
+/// Build once from a catalog slice, then use `find` instead of the O(n)
+/// `find_model_in_catalog` scan. Useful when the same catalog is queried
+/// many times (e.g. during model selection across many candidates).
+pub struct CatalogIndex<'a> {
+    /// (normalized_provider, lowercase_model_id) → catalog entry reference.
+    map: HashMap<(String, String), &'a ModelCatalogEntry>,
+}
+
+impl<'a> CatalogIndex<'a> {
+    /// Build the index by normalizing every entry's provider and model ID once.
+    pub fn new(catalog: &'a [ModelCatalogEntry]) -> Self {
+        let mut map = HashMap::with_capacity(catalog.len());
+        for entry in catalog {
+            let key = (normalize_provider_id(&entry.provider), entry.id.to_lowercase());
+            map.insert(key, entry);
+        }
+        Self { map }
+    }
+
+    /// O(1) lookup — returns the entry if provider+model are in the catalog.
+    pub fn find(&self, provider: &str, model: &str) -> Option<&'a ModelCatalogEntry> {
+        let key = (normalize_provider_id(provider), model.to_lowercase());
+        self.map.get(&key).copied()
+    }
+
+    /// Convenience: check `in_catalog` + allowlist status (mirrors `get_model_ref_status`).
+    pub fn ref_status(
+        &self,
+        model_ref: &ModelRef,
+        allowed_keys: Option<&std::collections::HashSet<String>>,
+    ) -> ModelRefStatus {
+        let key = model_key(&model_ref.provider, &model_ref.model);
+        let in_catalog = self.find(&model_ref.provider, &model_ref.model).is_some();
+        let allow_any = allowed_keys.is_none();
+        let allowed = allow_any
+            || allowed_keys
+                .map(|keys| keys.contains(&key))
+                .unwrap_or(false);
+        ModelRefStatus {
+            key,
+            in_catalog,
+            allow_any,
+            allowed,
+        }
+    }
+}
 
 /// Check if a model supports vision (image input) based on catalog lookup.
 pub fn model_supports_vision(entry: Option<&ModelCatalogEntry>) -> bool {

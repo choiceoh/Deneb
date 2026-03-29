@@ -142,29 +142,59 @@ pub fn is_valid_session_key(key: &str) -> bool {
 /// Prevents XSS when user input is rendered in HTML contexts.
 /// Operates at byte level since all HTML-special chars are ASCII.
 pub fn sanitize_html(input: &str) -> String {
-    // Fast path: no special chars — avoid allocation entirely.
-    if !input
-        .bytes()
-        .any(|b| matches!(b, b'<' | b'>' | b'&' | b'"' | b'\''))
-    {
+    let bytes = input.as_bytes();
+
+    // Fast path: use memchr to find the first special char. If none, avoid allocation.
+    let first = find_html_special(bytes, 0);
+    if first.is_none() {
         return input.to_string();
     }
-    // All escapable characters are single-byte ASCII, so we can work at byte level.
+
     let mut out = Vec::with_capacity(input.len() + input.len() / 4);
-    for &b in input.as_bytes() {
-        match b {
+    let mut start = 0;
+
+    // Use memchr to skip bulk-safe spans, escaping only the special chars.
+    // This avoids the per-byte match in the common case of long safe spans.
+    while let Some(pos) = find_html_special(bytes, start) {
+        // Bulk-copy the safe prefix before this special char.
+        out.extend_from_slice(&bytes[start..pos]);
+        match bytes[pos] {
             b'<' => out.extend_from_slice(b"&lt;"),
             b'>' => out.extend_from_slice(b"&gt;"),
             b'&' => out.extend_from_slice(b"&amp;"),
             b'"' => out.extend_from_slice(b"&quot;"),
             b'\'' => out.extend_from_slice(b"&#x27;"),
-            _ => out.push(b),
+            _ => out.push(bytes[pos]),
         }
+        start = pos + 1;
     }
+    // Bulk-copy the trailing safe suffix.
+    out.extend_from_slice(&bytes[start..]);
+
     // SAFETY: input is valid UTF-8 and we only replaced single-byte ASCII characters
     // (< > & " ') with ASCII-only entity sequences (e.g., "&lt;"). Non-ASCII bytes
     // are passed through unchanged, so the output remains valid UTF-8.
     unsafe { String::from_utf8_unchecked(out) }
+}
+
+/// Find the byte position of the next HTML-special character at or after `start`.
+/// Uses memchr SIMD search over two groups (< > &) and (" ') to minimise scans.
+#[inline]
+fn find_html_special(bytes: &[u8], start: usize) -> Option<usize> {
+    if start >= bytes.len() {
+        return None;
+    }
+    let slice = &bytes[start..];
+    // Group A: <, >, & (3 needles — memchr3 SIMD)
+    let pa = memchr::memchr3(b'<', b'>', b'&', slice);
+    // Group B: ", ' (2 needles — memchr2 SIMD)
+    let pb = memchr::memchr2(b'"', b'\'', slice);
+    match (pa, pb) {
+        (None, None) => None,
+        (Some(a), None) => Some(start + a),
+        (None, Some(b)) => Some(start + b),
+        (Some(a), Some(b)) => Some(start + a.min(b)),
+    }
 }
 
 /// Remove invisible Unicode characters that can be used for prompt injection.

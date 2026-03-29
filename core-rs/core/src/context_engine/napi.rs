@@ -16,7 +16,7 @@ use super::retrieval::{
 use super::{estimate_tokens, AuroraConfig};
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 // ── Handle stores ────────────────────────────────────────────────────────────
 
@@ -58,11 +58,9 @@ impl ContextEngineStore {
     }
 }
 
-/// Lock the context engine store, recovering from poisoned mutex.
-fn lock_context_store() -> std::sync::MutexGuard<'static, ContextEngineStore> {
-    CONTEXT_ENGINES
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+/// Lock the context engine store.
+fn lock_context_store() -> parking_lot::MutexGuard<'static, ContextEngineStore> {
+    CONTEXT_ENGINES.lock()
 }
 
 // ── Assembly engine exports ──────────────────────────────────────────────────

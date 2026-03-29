@@ -182,76 +182,70 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
         }
     };
 
-    // Greedy MMR loop: select items one at a time, always picking the candidate
-    // with the highest MMR score relative to the already-selected set.
+    // Greedy MMR loop with incremental similarity cache.
+    //
+    // Key insight: instead of recomputing max_sim(candidate, selected) from scratch
+    // each round (O(remaining × selected) per round → O(n³/6) total), we maintain
+    // a per-candidate cache of the maximum similarity seen so far.  When an item is
+    // newly selected, we update only the pairings with that one item — reducing total
+    // Jaccard calls from O(n³/6) to O(n²/2), a ~(n/3)× improvement for large n.
     let mut selected: Vec<usize> = Vec::with_capacity(items.len());
     let mut remaining: Vec<usize> = (0..items.len()).collect();
 
-    // Threshold for parallel inner loop: when remaining × selected exceeds this,
-    // the O(n²) Jaccard work benefits from multi-core distribution.
-    const PAR_THRESHOLD: usize = 64;
+    // best_sim_cache[i] = max Jaccard similarity between item i and any selected item.
+    // Initialised to 0.0 (no selected items yet).
+    let mut best_sim_cache: Vec<f64> = vec![0.0; items.len()];
+
+    // Threshold for parallelising the cache-update sweep (O(remaining) Jaccard calls).
+    const PAR_THRESHOLD: usize = 32;
+
+    let pick_best = |remaining: &[usize], best_sim: &[f64]| {
+        remaining
+            .iter()
+            .map(|&i| {
+                let mmr = compute_mmr_score(normalize(items[i].score), best_sim[i], clamped_lambda);
+                (i, mmr)
+            })
+            .max_by(|a, b| {
+                a.1.partial_cmp(&b.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| {
+                        items[a.0]
+                            .score
+                            .partial_cmp(&items[b.0].score)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            })
+    };
 
     while !remaining.is_empty() {
-        let best = if remaining.len() * selected.len().max(1) >= PAR_THRESHOLD {
-            // Parallel: distribute MMR scoring across cores.
-            remaining
-                .par_iter()
-                .map(|&candidate_idx| {
-                    let normalized_relevance = normalize(items[candidate_idx].score);
-                    let max_sim = selected
-                        .iter()
-                        .map(|&sel_idx| {
-                            jaccard_similarity_sets(&set_cache[candidate_idx], &set_cache[sel_idx])
-                        })
-                        .fold(0.0_f64, f64::max);
-                    let mmr_score =
-                        compute_mmr_score(normalized_relevance, max_sim, clamped_lambda);
-                    (candidate_idx, mmr_score)
-                })
-                .max_by(|a, b| {
-                    a.1.partial_cmp(&b.1)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| {
-                            items[a.0]
-                                .score
-                                .partial_cmp(&items[b.0].score)
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        })
-                })
-        } else {
-            // Sequential: avoid rayon overhead for small sets.
-            remaining
-                .iter()
-                .map(|&candidate_idx| {
-                    let normalized_relevance = normalize(items[candidate_idx].score);
-                    let max_sim = selected
-                        .iter()
-                        .map(|&sel_idx| {
-                            jaccard_similarity_sets(&set_cache[candidate_idx], &set_cache[sel_idx])
-                        })
-                        .fold(0.0_f64, f64::max);
-                    let mmr_score =
-                        compute_mmr_score(normalized_relevance, max_sim, clamped_lambda);
-                    (candidate_idx, mmr_score)
-                })
-                .max_by(|a, b| {
-                    a.1.partial_cmp(&b.1)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| {
-                            items[a.0]
-                                .score
-                                .partial_cmp(&items[b.0].score)
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        })
-                })
+        let Some((idx, _)) = pick_best(&remaining, &best_sim_cache) else {
+            break;
         };
 
-        match best {
-            Some((idx, _)) => {
-                selected.push(idx);
-                remaining.retain(|&x| x != idx);
+        selected.push(idx);
+        remaining.retain(|&x| x != idx);
+
+        // Update cache: compute Jaccard between the newly selected item and each
+        // remaining candidate, raising the cached max if the new similarity is higher.
+        if remaining.len() >= PAR_THRESHOLD {
+            // Parallel update when the sweep is large enough to benefit from rayon.
+            let new_sims: Vec<f64> = remaining
+                .par_iter()
+                .map(|&r| jaccard_similarity_sets(&set_cache[r], &set_cache[idx]))
+                .collect();
+            for (&r, sim) in remaining.iter().zip(new_sims) {
+                if sim > best_sim_cache[r] {
+                    best_sim_cache[r] = sim;
+                }
             }
-            None => break,
+        } else {
+            for &r in &remaining {
+                let sim = jaccard_similarity_sets(&set_cache[r], &set_cache[idx]);
+                if sim > best_sim_cache[r] {
+                    best_sim_cache[r] = sim;
+                }
+            }
         }
     }
 

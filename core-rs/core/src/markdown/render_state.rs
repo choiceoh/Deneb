@@ -234,14 +234,18 @@ impl RenderState {
         let depth = self.list_stack.len();
         if let Some(top) = self.list_stack.last_mut() {
             top.index += 1;
-            let indent = "  ".repeat(depth.saturating_sub(1));
-            let prefix = if top.ordered {
-                format!("{}. ", top.index)
+            // Write indent and prefix directly into self.text to avoid heap allocs.
+            // depth is practically ≤10, so this loop is at most ~9 iterations.
+            for _ in 0..depth.saturating_sub(1) {
+                self.text.push_str("  ");
+            }
+            if top.ordered {
+                use std::fmt::Write as _;
+                // write! on String uses fmt::Write — no heap allocation.
+                let _ = write!(self.text, "{}. ", top.index);
             } else {
-                "• ".to_string()
-            };
-            self.text.push_str(&indent);
-            self.text.push_str(&prefix);
+                self.text.push_str("• ");
+            }
         }
     }
 

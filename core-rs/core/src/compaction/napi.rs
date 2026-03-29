@@ -14,7 +14,7 @@ use super::{
 };
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 // ── Handle store ────────────────────────────────────────────────────────────
 
@@ -55,11 +55,9 @@ impl EngineStore {
     }
 }
 
-/// Lock the engine store, recovering from poisoned mutex.
-fn lock_engine_store() -> std::sync::MutexGuard<'static, EngineStore> {
-    ENGINES
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+/// Lock the engine store.
+fn lock_engine_store() -> parking_lot::MutexGuard<'static, EngineStore> {
+    ENGINES.lock()
 }
 
 // ── Pure function exports ───────────────────────────────────────────────────

@@ -563,30 +563,49 @@ pub fn find_shallowest_condensation_candidate<'a>(
 ///
 /// Format: `[YYYY-MM-DD HH:mm TZ]\n{content}\n\n...`
 pub fn build_leaf_source_text(messages: &[MessageRecord], timezone: &str) -> String {
-    let mut parts: Vec<String> = Vec::with_capacity(messages.len());
-    for msg in messages {
-        let ts = timestamp::format_timestamp(msg.created_at, timezone);
-        parts.push(format!("[{}]\n{}", ts, msg.content));
+    if messages.is_empty() {
+        return String::new();
     }
-    parts.join("\n\n")
+    // Pre-estimate capacity: timestamp ~25 chars + brackets/newline + content.
+    let cap: usize = messages.iter().map(|m| m.content.len() + 30).sum();
+    let mut out = String::with_capacity(cap);
+    for (i, msg) in messages.iter().enumerate() {
+        if i > 0 {
+            out.push_str("\n\n");
+        }
+        let ts = timestamp::format_timestamp(msg.created_at, timezone);
+        out.push('[');
+        out.push_str(&ts);
+        out.push_str("]\n");
+        out.push_str(&msg.content);
+    }
+    out
 }
 
 /// Build condensed source text by concatenating summaries with time ranges.
 ///
 /// Format: `[start - end]\n{content}\n\n...`
 pub fn build_condensed_source_text(summaries: &[SummaryRecord], timezone: &str) -> String {
-    let mut parts: Vec<String> = Vec::with_capacity(summaries.len());
-    for summary in summaries {
+    if summaries.is_empty() {
+        return String::new();
+    }
+    // Pre-estimate capacity: two timestamps (~25 chars each) + brackets/dashes + content.
+    let cap: usize = summaries.iter().map(|s| s.content.len() + 60).sum();
+    let mut out = String::with_capacity(cap);
+    for (i, summary) in summaries.iter().enumerate() {
+        if i > 0 {
+            out.push_str("\n\n");
+        }
         let earliest = summary.earliest_at.unwrap_or(summary.created_at);
         let latest = summary.latest_at.unwrap_or(summary.created_at);
-        let header = format!(
-            "[{} - {}]",
-            timestamp::format_timestamp(earliest, timezone),
-            timestamp::format_timestamp(latest, timezone),
-        );
-        parts.push(format!("{}\n{}", header, summary.content));
+        out.push('[');
+        out.push_str(&timestamp::format_timestamp(earliest, timezone));
+        out.push_str(" - ");
+        out.push_str(&timestamp::format_timestamp(latest, timezone));
+        out.push_str("]\n");
+        out.push_str(&summary.content);
     }
-    parts.join("\n\n")
+    out
 }
 
 /// Generate a unique summary ID from content + current timestamp.
