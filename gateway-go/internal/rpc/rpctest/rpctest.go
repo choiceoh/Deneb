@@ -8,6 +8,8 @@ package rpctest
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
@@ -61,4 +63,9 @@ func Result(t *testing.T, resp *protocol.ResponseFrame) map[string]any {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 	return m
+}
+
+// NewLogger returns a quiet logger suitable for tests (error-level only).
+func NewLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
