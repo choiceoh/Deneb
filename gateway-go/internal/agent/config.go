@@ -28,6 +28,16 @@ type AgentConfig struct {
 	// Use this to inject per-turn state (e.g., a TurnContext for cross-tool sharing).
 	// Returning nil is a no-op; returning a modified ctx replaces the turn context.
 	OnTurnInit func(ctx context.Context) context.Context
+
+	// StripImagesAfterFirstTurn drops base64 image data from the message history
+	// after the first LLM turn. On turn 0 the image is sent normally; from turn 1
+	// onward each image block is replaced with a lightweight text placeholder so
+	// the bytes are not retransmitted on every subsequent turn.
+	//
+	// Enable when the initial message contains base64 image attachments and the
+	// run is expected to take multiple turns (e.g. tool-heavy coding or analysis).
+	// Savings: ~1600 tokens × image count per turn after turn 0.
+	StripImagesAfterFirstTurn bool
 }
 
 // TurnCallback is called after each agent turn with accumulated token count.

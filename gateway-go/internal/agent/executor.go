@@ -134,6 +134,15 @@ func RunAgent(
 			return result, nil
 		}
 
+		// After turn 0 completes and more turns follow, strip base64 image data from
+		// the message history to avoid retransmitting image bytes on every subsequent
+		// turn. The image was already consumed by the model on turn 0; subsequent turns
+		// only need the text context. Each image block (~1600 tokens) becomes a tiny
+		// text placeholder instead.
+		if turn == 0 && cfg.StripImagesAfterFirstTurn {
+			messages = stripBase64ImagesFromHistory(messages)
+		}
+
 		// Build assistant message with all content blocks from this turn.
 		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 
@@ -356,4 +365,53 @@ func stopReasonFromCtx(ctx context.Context) string {
 		return "timeout"
 	}
 	return "aborted"
+}
+
+// stripBase64ImagesFromHistory replaces base64-encoded image blocks in the
+// message history with a lightweight text placeholder. Called after turn 0
+// when StripImagesAfterFirstTurn is set so that subsequent turns don't
+// retransmit large image payloads to the LLM.
+//
+// Only "base64" source images are stripped; URL-referenced images are left
+// intact because they don't carry inline bytes.
+func stripBase64ImagesFromHistory(messages []llm.Message) []llm.Message {
+	result := make([]llm.Message, len(messages))
+	copy(result, messages)
+
+	for i, msg := range result {
+		// Only process user messages; assistant/tool messages never contain images.
+		if msg.Role != "user" {
+			continue
+		}
+
+		// Parse as content block array. If it's a plain string there are no images.
+		var blocks []llm.ContentBlock
+		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			continue
+		}
+
+		changed := false
+		for j, b := range blocks {
+			if b.Type == "image" && b.Source != nil && b.Source.Type == "base64" {
+				// Replace the heavy data payload with a text note.
+				blocks[j] = llm.ContentBlock{
+					Type: "text",
+					Text: fmt.Sprintf("[image/%s already analyzed — not retransmitted]", b.Source.MediaType),
+				}
+				changed = true
+			}
+		}
+
+		if changed {
+			newContent, err := json.Marshal(blocks)
+			if err == nil {
+				result[i] = llm.Message{
+					Role:    msg.Role,
+					Content: newContent,
+				}
+			}
+		}
+	}
+
+	return result
 }

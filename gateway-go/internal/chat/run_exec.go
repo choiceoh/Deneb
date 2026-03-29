@@ -221,12 +221,19 @@ func executeAgentRun(
 	}
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
-	// Discord channel uses the coding profile (subset of tools).
+	// Profile selection reduces per-turn schema token cost:
+	//   discord  → "coding"  (13 tools): file-system and code-execution only.
+	//   telegram → "chat"    (~22 tools): web, email, media, memory — no FS/coding.
+	//              ""        (full, ~39): coding trigger keywords detected in message.
+	//   other    → full set (safe default).
 	var tools []llm.Tool
 	if deps.tools != nil {
-		if deliveryChannel(params.Delivery) == "discord" {
+		switch deliveryChannel(params.Delivery) {
+		case "discord":
 			tools = deps.tools.LLMToolsForProfile("coding")
-		} else {
+		case "telegram":
+			tools = deps.tools.LLMToolsForProfile(classifyMessageProfile(params.Message))
+		default:
 			tools = deps.tools.LLMTools()
 		}
 	}
@@ -291,6 +298,11 @@ func executeAgentRun(
 		Tools:     tools,
 		MaxTokens: maxTokens,
 		APIType:   apiType,
+		// Drop base64 image bytes from the message history after turn 0 so that
+		// subsequent tool-call turns don't retransmit the full image payload.
+		// Each inline image is ~1600 tokens; stripping saves that cost per turn
+		// from turn 1 onward for multi-turn runs that start with an image.
+		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
 		// RunCache is injected once and persists across turns.
