@@ -919,7 +919,8 @@ func sessionsSpawnToolSchema() map[string]any {
 			},
 			"model": map[string]any{
 				"type":        "string",
-				"description": "Model override for the sub-agent",
+				"enum":        []string{"main", "lightweight", "fallback", "image"},
+				"description": "Model role to use (default: main)",
 			},
 		},
 		"required": []string{"task"},
@@ -968,7 +969,8 @@ func imageToolSchema() map[string]any {
 			},
 			"model": map[string]any{
 				"type":        "string",
-				"description": "Vision model to use",
+				"enum":        []string{"main", "lightweight", "fallback", "image"},
+				"description": "Model role to use (default: image)",
 			},
 		},
 	}

@@ -36,7 +36,7 @@ type RunParams struct {
 	SessionKey   string
 	Message      string
 	Attachments  []ChatAttachment
-	Model        string // model ID ("google/gemini-3.1-pro") or role name ("main", "lightweight", "fallback", "image")
+	Model        string // role name ("main", "lightweight", "fallback", "image"); raw model ID only via /model override
 	System       string // system prompt override
 	ClientRunID  string
 	Delivery     *DeliveryContext
@@ -405,26 +405,27 @@ func executeAgentRun(
 	}
 
 	// 6. Resolve model and provider.
-	// Priority: explicit request → handler default → registry main role.
-	// Model strings may be role names ("main", "lightweight") or actual model IDs ("google/gemini-3.1-pro").
+	// Agent tools pass role names ("main", "lightweight", "fallback", "image").
+	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
+	// are treated as direct overrides (no fallback chain).
 	model := params.Model
+	initialRole := modelrole.RoleMain
+
+	if deps.registry != nil && model != "" {
+		// Role name → resolve to actual model ID with fallback chain.
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		}
+		// Raw model ID → no role mapping, no fallback chain (direct override).
+	}
+
+	// If no explicit model, use handler default or registry main.
 	if model == "" {
 		model = deps.defaultModel
 	}
 	if model == "" && deps.registry != nil {
 		model = deps.registry.FullModelID(modelrole.RoleMain)
-	}
-
-	// Determine the initial model role for fallback chain resolution.
-	initialRole := modelrole.RoleMain
-	if deps.registry != nil {
-		// If model is a role name (e.g., "main", "lightweight"), resolve to actual model ID.
-		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
-			model = resolved
-			initialRole = role
-		} else if role, found := deps.registry.RoleForModel(model); found {
-			initialRole = role
-		}
 	}
 
 	// If the request has image attachments, prefer the image model.

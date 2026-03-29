@@ -20,7 +20,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		Attachments  []ChatAttachment `json:"attachments,omitempty"`
 		Delivery     *DeliveryContext `json:"delivery,omitempty"`
 		ClientRunID  string           `json:"clientRunId,omitempty"`
-		Model        string           `json:"model,omitempty"` // model ID or role name ("main","lightweight","fallback","image")
+		Model        string           `json:"model,omitempty"` // role name: "main","lightweight","fallback","image"
 		WorkspaceDir string           `json:"workspaceDir,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
@@ -101,7 +101,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 		Key          string `json:"key"`
 		Message      string `json:"message,omitempty"`
 		Thinking     string `json:"thinking,omitempty"`
-		Model        string `json:"model,omitempty"` // model ID or role name ("main","lightweight","fallback","image")
+		Model        string `json:"model,omitempty"` // role name: "main","lightweight","fallback","image"
 		SystemPrompt string `json:"systemPrompt,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
