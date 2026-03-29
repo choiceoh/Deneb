@@ -71,7 +71,7 @@ func TestLoadEmbeddingsForMerge_FiltersActiveAndDepth(t *testing.T) {
 		t.Fatalf("DeactivateFact: %v", err)
 	}
 
-	embeddings, depths, err := s.LoadEmbeddingsForMerge(ctx, 3)
+	embeddings, depths, categories, err := s.LoadEmbeddingsForMerge(ctx, 3)
 	if err != nil {
 		t.Fatalf("LoadEmbeddingsForMerge: %v", err)
 	}
@@ -90,5 +90,8 @@ func TestLoadEmbeddingsForMerge_FiltersActiveAndDepth(t *testing.T) {
 	}
 	if depth := depths[idLow]; depth != 0 {
 		t.Fatalf("expected depth 0 for low-depth fact, got %d", depth)
+	}
+	if cat := categories[idLow]; cat != CategoryContext {
+		t.Fatalf("expected category %q, got %q", CategoryContext, cat)
 	}
 }

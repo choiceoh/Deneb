@@ -1,11 +1,11 @@
 // dreaming.go — AuroraDream: periodic memory consolidation inspired by Honcho's "Dreaming" feature.
 // Runs every 50 turns, 8 hours, or when active facts exceed 200 to:
 //  0. Clean up expired facts
-//  1. Verify existing facts (still valid?)
+//  1. Verify existing facts + resolve contradictions (unified LLM call)
 //  2. Merge duplicate/similar facts
 //  3. Extract meta-patterns (inductive reasoning)
-//  4. Resolve contradictions between facts
-//  5. Update the user model
+//  4. Update the user model
+//  5. Synthesize mutual understanding
 package memory
 
 import (
@@ -36,7 +36,6 @@ const (
 	phaseTimeoutVerify    = 3 * time.Minute
 	phaseTimeoutMerge     = 3 * time.Minute
 	phaseTimeoutPatterns  = 150 * time.Second
-	phaseTimeoutConflict  = 150 * time.Second
 	phaseTimeoutUserModel = 2 * time.Minute
 	phaseTimeoutMutual    = 2 * time.Minute
 )
@@ -111,6 +110,8 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	}
 
 	// Phases 1–6: each gets its own timeout budget; the outer ctx is the hard ceiling.
+	// Conflict resolution is merged into the verify phase (single LLM call per batch),
+	// so there is no standalone conflict phase.
 	phases := []struct {
 		phase  dreamPhase
 		budget time.Duration
@@ -118,7 +119,6 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		{verifyPhase{}, phaseTimeoutVerify},
 		{mergePhase{}, phaseTimeoutMerge},
 		{patternPhase{}, phaseTimeoutPatterns},
-		{conflictPhase{}, phaseTimeoutConflict},
 		{userModelPhase{}, phaseTimeoutUserModel},
 		{mutualPhase{}, phaseTimeoutMutual},
 	}
@@ -170,25 +170,39 @@ type verifyPhase struct{}
 
 func (verifyPhase) Name() string { return "verify" }
 func (verifyPhase) Run(ctx context.Context, s *dreamState) error {
-	verified, expired, err := verifyFacts(ctx, s.store, s.client, s.model, s.logger)
+	verified, expired, conflicts, err := verifyFacts(ctx, s.store, s.client, s.model, s.logger)
 	if err != nil {
 		return err
 	}
 	s.report.FactsVerified = verified
 	s.report.FactsExpired += expired
+	s.report.FactsMerged += conflicts
 	return nil
 }
 
-const verifySystemPrompt = `You are a memory fact verifier performing "dreaming" consolidation.
-Given stored facts, determine validity using these criteria:
+// verifyAndResolveSystemPrompt combines fact verification (Phase 1) and conflict
+// resolution (Phase 4) into a single LLM call per batch. This halves the total
+// LLM calls compared to running the two phases separately.
+const verifyAndResolveSystemPrompt = `You are a memory fact verifier performing "dreaming" consolidation.
+Given stored facts, perform TWO tasks in a single pass:
 
+## Task 1: Fact Verification
+Determine each fact's validity using these criteria:
 1. **Temporal validity**: Is this fact still current? Technology choices, versions, and project states change.
 2. **Logical consistency**: Does this fact contradict newer information?
 3. **Relevance decay**: Is this fact about a completed/abandoned task?
 4. **Confidence calibration**: Was the original importance score accurate?
 
-Return a JSON object with a "results" array:
-{"results": [{"id": <fact ID>, "valid": true/false, "reason": "brief Korean explanation if invalid", "new_importance": <optional adjusted importance>}, ...]}
+## Task 2: Conflict Resolution
+Within the SAME category, identify genuine contradictions — facts that are mutually incompatible and cannot both be true.
+- Only flag TRUE contradictions (logically incompatible facts). Do NOT flag duplicates, overlapping, or complementary facts.
+- For each conflict, keep the fact that is more specific, has higher importance, or is more recent.
+- Each remove_id must appear at most ONCE across all conflicts.
+- Only consider facts you marked as valid in Task 1.
+
+Return a JSON object with both arrays:
+{"results": [{"id": <fact ID>, "valid": true/false, "reason": "brief Korean explanation if invalid", "new_importance": <optional adjusted importance>}, ...], "conflicts": [{"keep_id": <ID>, "remove_id": <ID>, "reason": "brief Korean explanation"}, ...]}
+If no conflicts exist, return an empty "conflicts" array.
 Return ONLY valid JSON.`
 
 type verifyResult struct {
@@ -198,15 +212,18 @@ type verifyResult struct {
 	NewImportance float64 `json:"new_importance,omitempty"`
 }
 
-type verifyResponse struct {
-	Results []verifyResult `json:"results"`
+type verifyAndResolveResponse struct {
+	Results   []verifyResult   `json:"results"`
+	Conflicts []conflictResult `json:"conflicts"`
 }
 
-func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (verified int, expired int, err error) {
+func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (verified int, expired int, conflictsResolved int, err error) {
 	facts, err := store.GetFactsForDreaming(ctx)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
+
+	removed := map[int64]bool{} // track removed IDs across batches
 
 	// Process in batches.
 	for i := 0; i < len(facts); i += dreamingBatchSize {
@@ -216,7 +233,7 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 		}
 		batch := facts[i:end]
 
-		v, e, batchErr := verifyBatch(ctx, store, client, model, batch, logger)
+		v, e, c, batchErr := verifyAndResolveBatch(ctx, store, client, model, batch, removed, logger)
 		if batchErr != nil {
 			if shouldStopVerifyBatches(batchErr) {
 				logger.Debug("aurora-dream: stopping verify phase due to context deadline", "error", batchErr)
@@ -227,24 +244,26 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 		}
 		verified += v
 		expired += e
+		conflictsResolved += c
 	}
 
-	return verified, expired, nil
+	return verified, expired, conflictsResolved, nil
 }
 
 func shouldStopVerifyBatches(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
-func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model string, batch []Fact, logger *slog.Logger) (int, int, error) {
+func verifyAndResolveBatch(ctx context.Context, store *Store, client *llm.Client, model string, batch []Fact, removed map[int64]bool, logger *slog.Logger) (int, int, int, error) {
 	var sb strings.Builder
 	for _, f := range batch {
-		fmt.Fprintf(&sb, "ID %d [%s, importance=%.1f]: %s\n", f.ID, f.Category, f.Importance, f.Content)
+		fmt.Fprintf(&sb, "ID %d [%s, importance=%.1f, %s]: %s\n",
+			f.ID, f.Category, f.Importance, f.CreatedAt.Format("2006-01-02"), f.Content)
 	}
 
-	wrapper, err := callLLMJSON[verifyResponse](ctx, client, model, verifySystemPrompt, sb.String(), dreamingMaxTokens)
+	wrapper, err := callLLMJSON[verifyAndResolveResponse](ctx, client, model, verifyAndResolveSystemPrompt, sb.String(), dreamingMaxTokens)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
 	verified, expired := 0, 0
@@ -257,12 +276,28 @@ func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model st
 			verified++
 		} else {
 			_ = store.DeactivateFact(ctx, r.ID)
+			removed[r.ID] = true
 			expired++
 			logger.Info("aurora-dream: expired fact", "id", r.ID, "reason", r.Reason)
 		}
 	}
 
-	return verified, expired, nil
+	// Process conflicts detected within this batch.
+	resolved := 0
+	for _, c := range wrapper.Conflicts {
+		if c.KeepID <= 0 || c.RemoveID <= 0 || c.KeepID == c.RemoveID {
+			continue
+		}
+		if removed[c.RemoveID] || removed[c.KeepID] {
+			continue
+		}
+		_ = store.SupersedeFact(ctx, c.RemoveID, c.KeepID)
+		removed[c.RemoveID] = true
+		resolved++
+		logger.Info("aurora-dream: resolved conflict", "keep", c.KeepID, "remove", c.RemoveID, "reason", c.Reason)
+	}
+
+	return verified, expired, resolved, nil
 }
 
 // --- Phase 2: Duplicate Merging ---
@@ -301,33 +336,39 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		return 0, nil
 	}
 
-	embeddings, depths, err := store.LoadEmbeddingsForMerge(ctx, maxMergeDepth)
+	embeddings, depths, categories, err := store.LoadEmbeddingsForMerge(ctx, maxMergeDepth)
 	if err != nil {
 		return 0, err
 	}
 
-	// Find similar pairs above threshold.
+	// Group IDs by category so we only compare within the same category.
+	// This reduces O(n²) across all facts to O(n²/k) where k is the number
+	// of categories (~6), since duplicates only make sense within a category.
+	catGroups := map[string][]int64{}
+	for id := range embeddings {
+		cat := categories[id]
+		catGroups[cat] = append(catGroups[cat], id)
+	}
+
+	// Find similar pairs above threshold (within same category and depth).
 	type pair struct {
 		a, b int64
 		sim  float64
 	}
 	var pairs []pair
 
-	ids := make([]int64, 0, len(embeddings))
-	for id := range embeddings {
-		ids = append(ids, id)
-	}
-
-	for i := 0; i < len(ids); i++ {
-		for j := i + 1; j < len(ids); j++ {
-			// Only merge facts at the same depth level to prevent
-			// abstraction-level mismatch that degrades similarity.
-			if depths[ids[i]] != depths[ids[j]] {
-				continue
-			}
-			sim := cosineSimilarity(embeddings[ids[i]], embeddings[ids[j]])
-			if sim >= similarityMergeThreshold {
-				pairs = append(pairs, pair{ids[i], ids[j], sim})
+	for _, ids := range catGroups {
+		for i := 0; i < len(ids); i++ {
+			for j := i + 1; j < len(ids); j++ {
+				// Only merge facts at the same depth level to prevent
+				// abstraction-level mismatch that degrades similarity.
+				if depths[ids[i]] != depths[ids[j]] {
+					continue
+				}
+				sim := cosineSimilarity(embeddings[ids[i]], embeddings[ids[j]])
+				if sim >= similarityMergeThreshold {
+					pairs = append(pairs, pair{ids[i], ids[j], sim})
+				}
 			}
 		}
 	}
@@ -519,102 +560,11 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 	return count, nil
 }
 
-// --- Phase 4: Conflict Resolution ---
-
-type conflictPhase struct{}
-
-func (conflictPhase) Name() string { return "conflict" }
-func (conflictPhase) Run(ctx context.Context, s *dreamState) error {
-	conflicts, err := resolveConflicts(ctx, s.store, s.client, s.model, s.logger)
-	if err != nil {
-		return err
-	}
-	if conflicts > 0 {
-		s.report.FactsMerged += conflicts
-	}
-	return nil
-}
-
-const conflictSystemPrompt = `You are a fact conflict resolution assistant.
-Given a list of facts in the same category, identify genuine contradictions — facts that are mutually incompatible and cannot both be true.
-
-Rules:
-- Only flag TRUE contradictions (logically incompatible facts). Do NOT flag duplicates, overlapping, or complementary facts — those are handled separately.
-- For each conflict, keep the fact that is more specific, has higher importance, or is more recent.
-- Each remove_id must appear at most ONCE across all conflicts.
-- If no genuine contradictions exist, return an empty array.
-
-Return a JSON object:
-{"conflicts": [{"keep_id": <ID>, "remove_id": <ID>, "reason": "brief Korean explanation"}, ...]}
-Return ONLY valid JSON.`
-
+// conflictResult is used by the unified verify-and-resolve response.
 type conflictResult struct {
 	KeepID   int64  `json:"keep_id"`
 	RemoveID int64  `json:"remove_id"`
 	Reason   string `json:"reason"`
-}
-
-type conflictResponse struct {
-	Conflicts []conflictResult `json:"conflicts"`
-}
-
-func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
-	facts, err := store.GetActiveFacts(ctx)
-	if err != nil || len(facts) < 5 {
-		return 0, err
-	}
-
-	// Group by category and check for conflicts within each group.
-	categories := map[string][]Fact{}
-	for _, f := range facts {
-		categories[f.Category] = append(categories[f.Category], f)
-	}
-
-	resolved := 0
-	removed := map[int64]bool{} // track already-removed IDs across all categories
-	for cat, catFacts := range categories {
-		if len(catFacts) < 3 {
-			continue // too few to have conflicts
-		}
-
-		// Sort by importance descending so the most important facts are included
-		// when we hit the per-category limit.
-		sort.Slice(catFacts, func(i, j int) bool {
-			return catFacts[i].Importance > catFacts[j].Importance
-		})
-
-		var sb strings.Builder
-		limit := 20
-		if len(catFacts) < limit {
-			limit = len(catFacts)
-		}
-		for _, f := range catFacts[:limit] {
-			fmt.Fprintf(&sb, "ID %d [importance=%.1f, %s]: %s\n",
-				f.ID, f.Importance, f.CreatedAt.Format("2006-01-02"), f.Content)
-		}
-
-		wrapper, err := callLLMJSON[conflictResponse](ctx, client, model, conflictSystemPrompt, fmt.Sprintf("Category: %s\n\n%s", cat, sb.String()), dreamingMaxTokens)
-		if err != nil {
-			continue
-		}
-
-		for _, r := range wrapper.Conflicts {
-			if r.KeepID <= 0 || r.RemoveID <= 0 || r.KeepID == r.RemoveID {
-				continue
-			}
-			// Skip if remove target was already removed or if the keep target
-			// was previously removed (prevents using a deactivated fact as winner).
-			if removed[r.RemoveID] || removed[r.KeepID] {
-				continue
-			}
-			_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
-			removed[r.RemoveID] = true
-			resolved++
-			logger.Info("aurora-dream: resolved conflict", "keep", r.KeepID, "remove", r.RemoveID, "reason", r.Reason)
-		}
-	}
-
-	return resolved, nil
 }
 
 // --- Phase 5: User Model Update ---
