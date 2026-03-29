@@ -1,5 +1,93 @@
 # Changelog
 
+## [3.29.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.28.1...deneb-v3.29.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **core:** improve html-to-markdown conversion with rich formatting support ([9f43451](https://github.com/choiceoh/Deneb/commit/9f4345166b9e896a25a4cd174c07cbeb5b2abdc1))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** increase abort GC expiry from 30m to 4h to prevent premature session kill ([a32dfad](https://github.com/choiceoh/Deneb/commit/a32dfad0d4c20d91394c0d5583cf1d9e508144d7))
+* **discord:** harden chunk splitting edge cases ([2540fc1](https://github.com/choiceoh/Deneb/commit/2540fc1b0ea8eb0f0dd36fec7013e61398841a11))
+* **discord:** resolve undefined autoreply.FinalizeInboundContext ([3135830](https://github.com/choiceoh/Deneb/commit/3135830564c76ef48517a7750373fab9d1397da5))
+
+
+### 🔧 Internal
+
+* **agent-runtime:** clean up session_keys.rs structure ([168b0e8](https://github.com/choiceoh/Deneb/commit/168b0e816a39c520c34c0fba7b16cece53736fce))
+* **agent:** unify dual LLM agent loop engines into internal/agent ([8e42b06](https://github.com/choiceoh/Deneb/commit/8e42b061e467ae56db694fbe6c87f2f0089eb7a0))
+* **autoreply:** bootstrap rules/cmd-dispatch/subagent facades ([e106769](https://github.com/choiceoh/Deneb/commit/e10676912ff0936bf5efe8afdfb2fce66b2aba3b))
+* **autoreply:** convert split action files to facades in handlers layer ([5a8b365](https://github.com/choiceoh/Deneb/commit/5a8b3654791fdc1c56254f4ead112fe8963b4a10))
+* **autoreply:** migrate subagent command layer out of handlers into subagent package ([8e04be7](https://github.com/choiceoh/Deneb/commit/8e04be74c6cbc92b7209bd4a81f206bd9857484d))
+* **autoreply:** migrate subagent shared logic into subagent package ([322e9ea](https://github.com/choiceoh/Deneb/commit/322e9eabad7e43157566a4000a65f82a8280541d))
+* **autoreply:** remove remaining compat shims ([8c1ee46](https://github.com/choiceoh/Deneb/commit/8c1ee46c7f117a7ba59c177c9e472c8b84552144))
+* **autoreply:** remove remaining compat shims and migrate callers to subpackages ([cd6e792](https://github.com/choiceoh/Deneb/commit/cd6e792f92692863f811692f9337c73323d68c93))
+* **autoreply:** rename commands/ subpackage to handlers/ ([2bd713d](https://github.com/choiceoh/Deneb/commit/2bd713d8101af0746ecde354c425264a3aea877d))
+* **autoreply:** split agent runner into focused files ([7bcab8a](https://github.com/choiceoh/Deneb/commit/7bcab8a2827a97efc08b5503574f2917aa44d085))
+* **autoreply:** split agent runner into focused files ([e0832be](https://github.com/choiceoh/Deneb/commit/e0832be2d5a99a57bedc162a71c2ecdca6152de7))
+* **autoreply:** split dispatch and pipeline subpackages with compat shims ([f8eba5c](https://github.com/choiceoh/Deneb/commit/f8eba5ca32c76c9fe2a0132490e5c26c3eb716e8))
+* **autoreply:** start dispatch/pipeline subpackage split ([1cf0411](https://github.com/choiceoh/Deneb/commit/1cf0411761ab5ca32c55932fbe17f20546185e28))
+* **bootstrap:** extract gateway and CLI startup into bootstrap packages ([9904e12](https://github.com/choiceoh/Deneb/commit/9904e127ef47c5c1d7fce6cbf0bd8dfa9994533f))
+* **channel:** extract PluginBase and RunState to eliminate lifecycle boilerplate ([8979f20](https://github.com/choiceoh/Deneb/commit/8979f203bbd9a070653f16f60707b028d37709fa))
+* **chat:** decompose CoreToolDeps into focused per-domain dep structs ([8111dec](https://github.com/choiceoh/Deneb/commit/8111dec20eaea2bfa243ef97ab4df73bf6ad5486))
+* **chat:** remove deleted polaris_* and chat.go source files ([2f1c6ab](https://github.com/choiceoh/Deneb/commit/2f1c6ab1d0cfd1598ea48a24e7436d749bd8976f))
+* **chat:** rename tools_*.go → toolreg_*.go for naming clarity ([095e557](https://github.com/choiceoh/Deneb/commit/095e5577fd57344c486f3c1309c4f5cc2f55aa9f))
+* **chat:** split chat.go and move polaris_* to chat/polaris subpackage ([88fd100](https://github.com/choiceoh/Deneb/commit/88fd1000027a341116e0601429a871a00562967b))
+* **chat:** split core tool implementations into tools subpackage ([5a1dee9](https://github.com/choiceoh/Deneb/commit/5a1dee9bf66f67038bed6565af52f55ff8001d56))
+* **chat:** split foundational tool implementations into internal/chat/tools ([62f5223](https://github.com/choiceoh/Deneb/commit/62f522398097c0eff02848c8f3c8934dbc769e74))
+* **cli:** add shared gateway query pipeline ([acb886f](https://github.com/choiceoh/Deneb/commit/acb886f91547c01d09f045183833970ffa991fd0))
+* **cli:** clarify env/config path/io layering ([e469ee6](https://github.com/choiceoh/Deneb/commit/e469ee6f5c4e1613905a8db42c5e408dc64c97c9))
+* **cli:** delegate command dispatch to domain router ([543538b](https://github.com/choiceoh/Deneb/commit/543538be6c53d514bc3ca5248bd11c3e6bfc2634))
+* **cli:** route commands through domain dispatch ([2aa15c5](https://github.com/choiceoh/Deneb/commit/2aa15c53ce8550f75d3f45d9a9a0bedeb94c3a5d))
+* **cli:** split agents command into focused modules ([4407d12](https://github.com/choiceoh/Deneb/commit/4407d1226557093a76c28d5d0fd0050c208407d3))
+* **cli:** split agents command into purpose-specific modules ([1156f4e](https://github.com/choiceoh/Deneb/commit/1156f4ec658f0a798bf74674b0e50a54b053e5e9))
+* **cli:** split bootstrap and router from main entrypoint ([1d061d3](https://github.com/choiceoh/Deneb/commit/1d061d398b5acf9dbce180dcbbbefa83a0a31f2e))
+* **cli:** split bootstrap and routing from main entrypoint ([905d07c](https://github.com/choiceoh/Deneb/commit/905d07c50e076f22fad18964c3ab41ddd2c1b1a3))
+* **cli:** split env/path/io config responsibilities ([65f9566](https://github.com/choiceoh/Deneb/commit/65f9566c64c291841ea61f6facc8a9ef8638532e))
+* **cli:** 공통 gateway query 실행 파이프라인 도입 ([9a7b8c3](https://github.com/choiceoh/Deneb/commit/9a7b8c38a34d647239c4e2f9b01b0018aa48c3f6))
+* **config:** add legacy_compat and paths modules (new files) ([8884627](https://github.com/choiceoh/Deneb/commit/8884627013479b51bf3fd14694d0ee0d7e4787bf))
+* **config:** modularize path resolution into policy objects ([e56d0cb](https://github.com/choiceoh/Deneb/commit/e56d0cb955547356e9e389f85bc6c241018dcf60))
+* **core:** add FFI string macros and apply in lib exports ([869e653](https://github.com/choiceoh/Deneb/commit/869e6539cd8483d3d7780b017cc720d5a1914e9f))
+* **core:** extract reusable string-based FFI macros in lib exports ([9d9a0f5](https://github.com/choiceoh/Deneb/commit/9d9a0f51f5c85a1b13d3b5bbcfd1b042a2e45fa7))
+* **cron:** split gateway cron service by responsibility ([c6e6d4e](https://github.com/choiceoh/Deneb/commit/c6e6d4e6d2f28e776a7b0285759a033c2cb2d1cd))
+* **cron:** split service responsibilities into focused files ([e0aa090](https://github.com/choiceoh/Deneb/commit/e0aa09018fe6d94ee96d850424d8493f7ab99543))
+* **ffi:** separate FFI layer into domain submodules under ffi/ ([eaf0438](https://github.com/choiceoh/Deneb/commit/eaf0438e816e545a89394184f90e8370ad3b8b8d))
+* **gateway-go:** split ffi RPC handlers by domain ([53627ea](https://github.com/choiceoh/Deneb/commit/53627ea00ab564703147ad3b1d65e8cdc6eb781a))
+* **gateway-go:** split ffi RPC handlers by domain ([a22ad50](https://github.com/choiceoh/Deneb/commit/a22ad503800b996751b91d43bbab90cf9eb42ca9))
+* **gateway-rpc:** extract gateway runtime handlers and split Phase2 registration wiring ([82f920c](https://github.com/choiceoh/Deneb/commit/82f920c30bcda08d0ff91effb7170998abd4cbc7))
+* **gateway-rpc:** extract runtime handlers and phase2 wiring helpers ([8870516](https://github.com/choiceoh/Deneb/commit/8870516c1a94c5b219c035f35e4b77ae47195bf5))
+* **go:** separate web fetch into http/html/content layers ([510d0ce](https://github.com/choiceoh/Deneb/commit/510d0ce5fc373ce023500c262f46b5e6f0f7f41d))
+* **go:** split web fetch into http/html/content layers ([34af112](https://github.com/choiceoh/Deneb/commit/34af112575b9a4a82977cc7b1b8ba2835d5fc4e9))
+* **markdown:** split parser.rs into render_state, spoilers modules ([2223863](https://github.com/choiceoh/Deneb/commit/2223863acc6f3845eb3bdf9a7c6efa046855459e))
+* **memory:** extract dreaming phases into dreamPhase interface ([af7817d](https://github.com/choiceoh/Deneb/commit/af7817d1439d8ccb6f3460d6253a24b3d3dd5de4))
+* **memory:** split store.go into focused sub-files ([fade47d](https://github.com/choiceoh/Deneb/commit/fade47d2c381b3b5bbba395c6fd946c4fe7bd6ff))
+* **memory:** split store.go into focused sub-files ([197fd43](https://github.com/choiceoh/Deneb/commit/197fd431a2dc62561ff41d1da90398e39b1acc73))
+* **plugin:** split discovery logic by concern ([107915d](https://github.com/choiceoh/Deneb/commit/107915df84c05da15f17cf55ce480b76a20bc377))
+* **plugin:** split discovery logic into cache/scan/security files ([20edf08](https://github.com/choiceoh/Deneb/commit/20edf08ecbfc6188428780185c15d6a8518708fa))
+* **rpc:** add DecodeParams/RespondOK helpers and eliminate handler boilerplate ([8bd1625](https://github.com/choiceoh/Deneb/commit/8bd1625da5ac617d107623c6b6383c83fb31df7a))
+* **rpc:** extract Bind[P] middleware and migrate node/skill handlers ([c77cb9b](https://github.com/choiceoh/Deneb/commit/c77cb9b266c61fdaf2285638dfca2bc268fa962e))
+* **rpc:** modularize core method registration with validation ([6cc0ffb](https://github.com/choiceoh/Deneb/commit/6cc0ffb4ac9374e7bb3683edb50ee8d31c10724f))
+* **rpc:** modularize core method registration with validation ([6469e1d](https://github.com/choiceoh/Deneb/commit/6469e1d2c59e94425e5f7f7a5e23b2e99b88a42c))
+* **server:** decompose gateway Server into transport/rpc/runtime/integrations ([adada7e](https://github.com/choiceoh/Deneb/commit/adada7e3ae209fa7d9b3b578bf7b7b958572c84d))
+* **server:** extract PluginHTTPRouter to internal/server/pluginrouter ([bbdac87](https://github.com/choiceoh/Deneb/commit/bbdac877250ad94640ffc16e240d4db8d6d4bdab))
+* **server:** extract PluginHTTPRouter to internal/server/pluginrouter ([2223863](https://github.com/choiceoh/Deneb/commit/2223863acc6f3845eb3bdf9a7c6efa046855459e))
+* **server:** extract SessionManager, ChatManager, HookManager from Server struct ([7cfd7b6](https://github.com/choiceoh/Deneb/commit/7cfd7b627f4d4ca50be2ce7f3c98789888de5655))
+* **server:** split gateway server state into focused components ([1b53b41](https://github.com/choiceoh/Deneb/commit/1b53b41336138e641dced92d0a0bf0a3955e72e7))
+* **server:** split HTTP routing and WS session loop concerns ([4eb7247](https://github.com/choiceoh/Deneb/commit/4eb72479a106af517add389143d794f840c08b6f))
+* **server:** split HTTP routing and WS session loop concerns ([d1c1583](https://github.com/choiceoh/Deneb/commit/d1c158376c973b838f858a523c1e9191d98e90a8))
+* **server:** split server_rpc.go into auth, session, and channel domain files ([fb2cddf](https://github.com/choiceoh/Deneb/commit/fb2cddfd48279254e78ab60041ae2076c911baa1))
+* **server:** split server_rpc.go into auth, session, and channel domain files ([5bc272f](https://github.com/choiceoh/Deneb/commit/5bc272f08c936ea1a230c673ec2b0b7ef6742e62))
+* **session:** group Session fields into embedded config structs ([0f71a89](https://github.com/choiceoh/Deneb/commit/0f71a892652c8c5ebaf376eca926e35e90e637af))
+* **session:** group Session fields into embedded config structs ([0552b9b](https://github.com/choiceoh/Deneb/commit/0552b9b5c538e9b062aeca3d8f44adecceed87e0))
+* **tests:** replace panic branches in sweep.rs tests with Result errors ([57a11ab](https://github.com/choiceoh/Deneb/commit/57a11abe65e852421e1b407e617c40cc9331a254))
+* **vega:** introduce command context for shared db access ([4e8a9b0](https://github.com/choiceoh/Deneb/commit/4e8a9b00e6e46e75fc2a2802b247cd7437b2399c))
+* **vega:** introduce CommandContext and migrate show/timeline/compare/stats ([f84266d](https://github.com/choiceoh/Deneb/commit/f84266d600da50bdbd2548ad6d2f648266daee18))
+* **vega:** replace ai.rs match dispatch with CommandHandler trait methods ([699eeda](https://github.com/choiceoh/Deneb/commit/699eeda85dc88fa15771d2c7ccb207018bfef0d6))
+* **web:** split web fetch layer into three focused files ([265a279](https://github.com/choiceoh/Deneb/commit/265a279750f70408fb1c3acac9819500fd7a2b1c))
+
 ## [3.28.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.28.0...deneb-v3.28.1) (2026-03-28)
 
 
