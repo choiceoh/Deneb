@@ -27,14 +27,15 @@ type Store struct {
 
 // storeData is the on-disk schema.
 type storeData struct {
-	ContextItems     []ContextItem            `json:"contextItems"`
-	Messages         map[string]MessageRecord `json:"messages"`        // key: messageId as string
-	Summaries        map[string]SummaryRecord `json:"summaries"`       // key: summaryId
-	SummaryParents   map[string][]string      `json:"summaryParents"`  // summaryId -> parentIds
-	SummaryMessages  map[string][]uint64      `json:"summaryMessages"` // summaryId -> messageIds
-	CompactionEvents []CompactionEvent        `json:"compactionEvents"`
-	NextOrdinalVal   uint64                   `json:"nextOrdinal"`
-	NextMessageID    uint64                   `json:"nextMessageId"`
+	ContextItems          []ContextItem            `json:"contextItems"`
+	Messages              map[string]MessageRecord `json:"messages"`              // key: messageId as string
+	Summaries             map[string]SummaryRecord `json:"summaries"`             // key: summaryId
+	SummaryParents        map[string][]string      `json:"summaryParents"`        // summaryId -> parentIds
+	SummaryMessages       map[string][]uint64      `json:"summaryMessages"`       // summaryId -> messageIds
+	CompactionEvents      []CompactionEvent        `json:"compactionEvents"`
+	TransferredSummaries  map[string]int64          `json:"transferredSummaries"`  // summaryId -> epoch ms when transferred to memory store
+	NextOrdinalVal        uint64                   `json:"nextOrdinal"`
+	NextMessageID         uint64                   `json:"nextMessageId"`
 }
 
 // CompactionEvent is a persisted compaction event record.
@@ -171,10 +172,11 @@ func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		path:   cfg.DatabasePath,
 		logger: logger,
 		data: storeData{
-			Messages:        make(map[string]MessageRecord),
-			Summaries:       make(map[string]SummaryRecord),
-			SummaryParents:  make(map[string][]string),
-			SummaryMessages: make(map[string][]uint64),
+			Messages:             make(map[string]MessageRecord),
+			Summaries:            make(map[string]SummaryRecord),
+			SummaryParents:       make(map[string][]string),
+			SummaryMessages:      make(map[string][]uint64),
+			TransferredSummaries: make(map[string]int64),
 		},
 	}
 
@@ -183,10 +185,11 @@ func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		if err := json.Unmarshal(raw, &s.data); err != nil {
 			logger.Warn("aurora store: corrupt file, starting fresh", "error", err)
 			s.data = storeData{
-				Messages:        make(map[string]MessageRecord),
-				Summaries:       make(map[string]SummaryRecord),
-				SummaryParents:  make(map[string][]string),
-				SummaryMessages: make(map[string][]uint64),
+				Messages:             make(map[string]MessageRecord),
+				Summaries:            make(map[string]SummaryRecord),
+				SummaryParents:       make(map[string][]string),
+				SummaryMessages:      make(map[string][]uint64),
+				TransferredSummaries: make(map[string]int64),
 			}
 		}
 	}
@@ -204,12 +207,33 @@ func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 	if s.data.SummaryMessages == nil {
 		s.data.SummaryMessages = make(map[string][]uint64)
 	}
+	if s.data.TransferredSummaries == nil {
+		s.data.TransferredSummaries = make(map[string]int64)
+	}
 
 	logger.Info("aurora store opened", "path", cfg.DatabasePath,
 		"items", len(s.data.ContextItems),
 		"messages", len(s.data.Messages),
 		"summaries", len(s.data.Summaries))
 	return s, nil
+}
+
+// ── Transfer tracking ──────────────────────────────────────────────────────
+
+// MarkTransferred records that a summary has been transferred to the memory store.
+func (s *Store) MarkTransferred(summaryID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data.TransferredSummaries[summaryID] = time.Now().UnixMilli()
+	return s.flushLocked()
+}
+
+// IsTransferred checks if a summary has already been transferred to the memory store.
+func (s *Store) IsTransferred(summaryID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.data.TransferredSummaries[summaryID]
+	return ok
 }
 
 // Close flushes data to disk.
@@ -486,6 +510,7 @@ func (s *Store) PersistCondensedSummary(input PersistCondensedInput) error {
 		delete(s.data.Summaries, parentID)
 		delete(s.data.SummaryParents, parentID)
 		delete(s.data.SummaryMessages, parentID)
+		delete(s.data.TransferredSummaries, parentID)
 	}
 
 	return s.flushLocked()

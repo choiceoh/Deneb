@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -95,6 +96,11 @@ func handleContextOverflowAurora(
 		if err != nil {
 			logger.Warn("aurora sweep failed, falling back", "error", err)
 		} else if result != nil && result.ActionTaken {
+			// Transfer condensed summary knowledge to long-term memory (async, best-effort).
+			if result.Condensed && result.CreatedSummaryID != nil && deps.memoryStore != nil {
+				go transferSummaryToMemory(deps, *result.CreatedSummaryID, logger)
+			}
+
 			// Reassemble context from Aurora store.
 			asmCfg := aurora.AssemblyConfig{
 				TokenBudget:    deps.contextCfg.TokenBudget,
@@ -298,5 +304,40 @@ func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logge
 
 	default:
 		return map[string]any{"type": "empty"}, nil
+	}
+}
+
+// transferSummaryToMemory extracts important facts from a newly created
+// Aurora condensed summary and stores them in the structured memory store.
+// Runs as a background goroutine — errors are logged, not propagated.
+func transferSummaryToMemory(deps runDeps, summaryID string, logger *slog.Logger) {
+	// Use the server shutdown context to bound this background work.
+	ctx := deps.shutdownCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	summaries, err := deps.auroraStore.FetchSummaries([]string{summaryID})
+	if err != nil || len(summaries) == 0 {
+		logger.Debug("aurora-transfer: summary not found", "summaryId", summaryID, "error", err)
+		return
+	}
+	summary := summaries[summaryID]
+
+	cfg := aurora.DefaultMemoryTransferConfig()
+	if !aurora.ShouldTransfer(summary, cfg) {
+		logger.Debug("aurora-transfer: summary below transfer threshold",
+			"summaryId", summaryID, "depth", summary.Depth, "tokens", summary.TokenCount)
+		return
+	}
+
+	sglangClient := getSglangClient()
+	if err := aurora.TransferSummaryToMemory(
+		ctx, summary, deps.auroraStore,
+		deps.memoryStore, deps.memoryEmbedder,
+		sglangClient, summarizationModel,
+		logger,
+	); err != nil {
+		logger.Warn("aurora-transfer: failed", "summaryId", summaryID, "error", err)
 	}
 }

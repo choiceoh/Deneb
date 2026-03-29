@@ -182,7 +182,18 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 }
 
 // InsertExtractedFacts stores extracted facts in the memory store and embeds them.
+// Uses SourceAutoExtract as the fact source.
 func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder, facts []ExtractedFact, logger *slog.Logger) {
+	insertExtractedFactsWithSource(ctx, store, embedder, facts, SourceAutoExtract, logger)
+}
+
+// InsertExtractedFactsAs stores extracted facts with a custom source identifier.
+// Use this when facts come from a non-standard extraction path (e.g., Aurora transfer).
+func InsertExtractedFactsAs(ctx context.Context, store *Store, embedder *Embedder, facts []ExtractedFact, source string, logger *slog.Logger) {
+	insertExtractedFactsWithSource(ctx, store, embedder, facts, source, logger)
+}
+
+func insertExtractedFactsWithSource(ctx context.Context, store *Store, embedder *Embedder, facts []ExtractedFact, source string, logger *slog.Logger) {
 	for _, ef := range facts {
 		var expiresAt *time.Time
 		if ef.ExpiryHint != "" {
@@ -197,7 +208,7 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 			Content:    ef.Content,
 			Category:   ef.Category,
 			Importance: ef.Importance,
-			Source:     SourceAutoExtract,
+			Source:     source,
 			ExpiresAt:  expiresAt,
 		}
 
