@@ -186,6 +186,36 @@ func (r *Registry) Client(role Role) *llm.Client {
 	return entry.client
 }
 
+// ResolveModel resolves a model string that may be a role name ("main", "lightweight",
+// "fallback", "image") into the actual full model ID. If the string is already a
+// model name (not a role), it is returned unchanged along with ok=false.
+// This allows callers to accept either role names or raw model names.
+func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Role, ok bool) {
+	switch Role(modelOrRole) {
+	case RoleMain, RoleLightweight, RoleFallback, RoleImage:
+		role = Role(modelOrRole)
+		return r.FullModelID(role), role, true
+	}
+	return modelOrRole, "", false
+}
+
+// RoleForModel returns the role that matches the given full model ID (e.g., "google/gemini-3.1-pro").
+// Returns ("", false) if no role matches.
+func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for role, cfg := range r.models {
+		fid := cfg.ProviderID + "/" + cfg.Model
+		if cfg.ProviderID == "" {
+			fid = cfg.Model
+		}
+		if fid == fullModelID {
+			return role, true
+		}
+	}
+	return "", false
+}
+
 // FallbackChain returns the ordered list of roles to try for the given role.
 // The first element is always the role itself.
 func (r *Registry) FallbackChain(role Role) []Role {

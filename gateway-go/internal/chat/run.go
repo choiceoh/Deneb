@@ -36,7 +36,7 @@ type RunParams struct {
 	SessionKey   string
 	Message      string
 	Attachments  []ChatAttachment
-	Model        string
+	Model        string // model ID ("google/gemini-3.1-pro") or role name ("main", "lightweight", "fallback", "image")
 	System       string // system prompt override
 	ClientRunID  string
 	Delivery     *DeliveryContext
@@ -406,6 +406,7 @@ func executeAgentRun(
 
 	// 6. Resolve model and provider.
 	// Priority: explicit request → handler default → registry main role.
+	// Model strings may be role names ("main", "lightweight") or actual model IDs ("google/gemini-3.1-pro").
 	model := params.Model
 	if model == "" {
 		model = deps.defaultModel
@@ -415,11 +416,14 @@ func executeAgentRun(
 	}
 
 	// Determine the initial model role for fallback chain resolution.
-	// If the model matches the registry's main or lightweight model, use that role.
 	initialRole := modelrole.RoleMain
 	if deps.registry != nil {
-		if model == deps.registry.FullModelID(modelrole.RoleImage) {
-			initialRole = modelrole.RoleImage
+		// If model is a role name (e.g., "main", "lightweight"), resolve to actual model ID.
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		} else if role, found := deps.registry.RoleForModel(model); found {
+			initialRole = role
 		}
 	}
 

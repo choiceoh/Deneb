@@ -54,10 +54,11 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "kill",
 		}
 	case "model":
+		// Accepts model ID ("google/gemini-3.1-pro") or role name ("main", "lightweight", "fallback", "image").
 		if args == "" {
 			return &SlashResult{
 				Handled:  true,
-				Response: "사용법: /model <model-name>",
+				Response: "사용법: /model <model-name 또는 역할명(main|lightweight|fallback|image)>",
 				Command:  "model",
 			}
 		}

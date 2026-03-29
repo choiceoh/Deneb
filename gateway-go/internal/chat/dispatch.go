@@ -146,8 +146,17 @@ func (h *Handler) handleSlashCommand(
 
 	case "model":
 		if cmd.Args != "" {
-			h.defaultModel = cmd.Args
-			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %q(으)로 변경되었습니다.", cmd.Args))
+			modelArg := cmd.Args
+			displayName := modelArg
+			// Accept role names ("main", "lightweight", etc.) as well as model IDs.
+			if h.registry != nil {
+				if resolved, role, ok := h.registry.ResolveModel(modelArg); ok {
+					modelArg = resolved
+					displayName = fmt.Sprintf("%s (%s)", modelArg, string(role))
+				}
+			}
+			h.defaultModel = modelArg
+			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %s(으)로 변경되었습니다.", displayName))
 		}
 
 	case "think":
