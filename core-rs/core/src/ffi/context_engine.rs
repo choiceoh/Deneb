@@ -37,12 +37,7 @@ pub unsafe extern "C" fn deneb_context_assembly_start(
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
         let json = crate::context_engine::napi::context_assembly_start(handle);
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
 
@@ -75,12 +70,7 @@ pub unsafe extern "C" fn deneb_context_assembly_step(
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let json = crate::context_engine::napi::context_assembly_step(handle, resp_str.to_string());
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
 
@@ -131,12 +121,7 @@ pub unsafe extern "C" fn deneb_context_expand_start(
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
         let json = crate::context_engine::napi::context_expand_start(handle);
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
 
@@ -168,12 +153,7 @@ pub unsafe extern "C" fn deneb_context_expand_step(
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let json = crate::context_engine::napi::context_expand_step(handle, resp_str.to_string());
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
 

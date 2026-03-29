@@ -61,12 +61,7 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         let sanitized = crate::security::sanitize_html(input_str);
-        let bytes = sanitized.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_bytes(out_slice, sanitized.as_bytes())
     }
 );
 

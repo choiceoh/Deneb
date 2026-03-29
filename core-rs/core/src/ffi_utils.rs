@@ -121,5 +121,25 @@ macro_rules! ffi_string_to_buffer {
     };
 }
 
+/// Write a serializable value as JSON into an output buffer.
+/// Returns bytes written on success, or a negative FFI error code.
+pub(crate) fn ffi_write_json(out: &mut [u8], value: &impl serde::Serialize) -> i32 {
+    let json = match serde_json::to_string(value) {
+        Ok(j) => j,
+        Err(_) => return FFI_ERR_JSON_ERROR,
+    };
+    ffi_write_bytes(out, json.as_bytes())
+}
+
+/// Write raw bytes into an output buffer.
+/// Returns bytes written on success, or `FFI_ERR_OUTPUT_TOO_SMALL`.
+pub(crate) fn ffi_write_bytes(out: &mut [u8], data: &[u8]) -> i32 {
+    if data.len() > out.len() {
+        return FFI_ERR_OUTPUT_TOO_SMALL;
+    }
+    out[..data.len()].copy_from_slice(data);
+    data.len() as i32
+}
+
 pub(crate) use ffi_string_to_buffer;
 pub(crate) use ffi_string_to_int;

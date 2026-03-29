@@ -56,16 +56,7 @@ pub unsafe extern "C" fn deneb_extract_links(
             max_links: config.max_links,
         };
         let urls = crate::parsing::url_extract::extract_links(text_str, &cfg);
-        let json = match serde_json::to_string(&urls) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &urls)
     })
 }
 
@@ -85,16 +76,7 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         let result = crate::parsing::html_to_markdown::html_to_markdown(html_str);
-        let json = match serde_json::to_string(&result) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &result)
     }
 );
 
@@ -139,14 +121,7 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         match crate::parsing::base64_util::canonicalize_base64(input_str) {
-            Some(canonical) => {
-                let bytes = canonical.as_bytes();
-                if bytes.len() > out_slice.len() {
-                    return FFI_ERR_OUTPUT_TOO_SMALL;
-                }
-                out_slice[..bytes.len()].copy_from_slice(bytes);
-                bytes.len() as i32
-            }
+            Some(canonical) => ffi_write_bytes(out_slice, canonical.as_bytes()),
             None => FFI_ERR_VALIDATION, // invalid base64
         }
     }
@@ -168,15 +143,6 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         let result = crate::parsing::media_tokens::split_media_from_output(text_str);
-        let json = match serde_json::to_string(&result) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &result)
     }
 );
