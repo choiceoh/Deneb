@@ -33,8 +33,6 @@ import (
 	"unsafe"
 )
 
-const contextOutBufSize = 1024 * 1024 // 1 MB default output buffer (grows on demand)
-
 // ContextAssemblyNew creates a new context assembly engine.
 // Returns a handle for subsequent start/step calls.
 func ContextAssemblyNew(conversationID, tokenBudget uint64, freshTailCount uint32) (uint32, error) {
@@ -52,7 +50,7 @@ func ContextAssemblyNew(conversationID, tokenBudget uint64, freshTailCount uint3
 // ContextAssemblyStart starts an assembly engine, returning the first command JSON.
 // The output buffer grows automatically if the Rust side signals it is too small.
 func ContextAssemblyStart(handle uint32) (json.RawMessage, error) {
-	data, err := ffiCallWithGrow("context_assembly_start", contextOutBufSize,
+	data, err := ffiCallWithPool("context_assembly_start", &ffiOutPool1MB,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_context_assembly_start(
 				C.uint(handle),
@@ -72,7 +70,7 @@ func ContextAssemblyStep(handle uint32, responseJSON []byte) (json.RawMessage, e
 		return nil, errors.New("ffi: empty response JSON")
 	}
 	respPtr := (*C.uchar)(unsafe.Pointer(&responseJSON[0]))
-	data, err := ffiCallWithGrow("context_assembly_step", contextOutBufSize,
+	data, err := ffiCallWithPool("context_assembly_step", &ffiOutPool1MB,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_context_assembly_step(
 				C.uint(handle),
@@ -110,7 +108,7 @@ func ContextExpandNew(summaryID string, maxDepth uint32, includeMessages bool, t
 // ContextExpandStart starts an expand engine, returning the first command JSON.
 // The output buffer grows automatically if the Rust side signals it is too small.
 func ContextExpandStart(handle uint32) (json.RawMessage, error) {
-	data, err := ffiCallWithGrow("context_expand_start", contextOutBufSize,
+	data, err := ffiCallWithPool("context_expand_start", &ffiOutPool1MB,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_context_expand_start(
 				C.uint(handle),
@@ -130,7 +128,7 @@ func ContextExpandStep(handle uint32, responseJSON []byte) (json.RawMessage, err
 		return nil, errors.New("ffi: empty response JSON")
 	}
 	respPtr := (*C.uchar)(unsafe.Pointer(&responseJSON[0]))
-	data, err := ffiCallWithGrow("context_expand_step", contextOutBufSize,
+	data, err := ffiCallWithPool("context_expand_step", &ffiOutPool1MB,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_context_expand_step(
 				C.uint(handle),
