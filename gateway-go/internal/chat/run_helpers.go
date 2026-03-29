@@ -34,7 +34,7 @@ func handleRunSuccess(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	logger *slog.Logger,
-	result *AgentResult,
+	result *agent.AgentResult,
 	now int64,
 	runLog *agentlog.RunLogger,
 ) {
@@ -363,7 +363,7 @@ func executeAgentRunWithDelta(
 	deps runDeps,
 	onDelta func(string),
 	logger *slog.Logger,
-) (*AgentResult, error) {
+) (*agent.AgentResult, error) {
 	deltaRaw := streaming.BroadcastRawFunc(func(event string, data []byte) int {
 		if onDelta == nil || event != "chat.delta" {
 			return 0

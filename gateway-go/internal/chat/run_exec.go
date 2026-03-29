@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -30,7 +31,7 @@ func executeAgentRun(
 	statusCtrl *channel.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
-) (*AgentResult, error) {
+) (*agent.AgentResult, error) {
 	runStart := time.Now()
 
 	// 1. Persist user message to transcript + Aurora store.
@@ -296,7 +297,7 @@ func executeAgentRun(
 	// idempotent tool results (find, tree). Invalidated on mutation tools.
 	runCache := NewRunCache()
 
-	cfg := AgentConfig{
+	cfg := agent.AgentConfig{
 		MaxTurns:  defaultMaxTurns,
 		Timeout:   defaultAgentTimeout,
 		Model:     model,
@@ -324,7 +325,7 @@ func executeAgentRun(
 
 	// 10. Set up stream hooks: compose broadcaster (WS deltas) + typing + status reactions.
 	// (Numbered 10 to preserve the agent loop label below as 11.)
-	var hooks StreamHooks
+	var hooks agent.StreamHooks
 	if broadcaster != nil {
 		hooks.OnTextDelta = broadcaster.EmitDelta
 		hooks.OnToolEmit = broadcaster.EmitToolStart
@@ -400,7 +401,7 @@ func executeAgentRun(
 
 	// 11. Execute agent loop with compaction retry and model fallback chain.
 	agentStart := time.Now()
-	var agentResult *AgentResult
+	var agentResult *agent.AgentResult
 	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
 
 	for attempt := 0; attempt <= maxCompactionRetries; attempt++ {
@@ -409,7 +410,7 @@ func executeAgentRun(
 		}
 
 		var runErr error
-		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
 			// Check for context overflow error.
 			// Skip Aurora compaction for Discord: ephemeral coding sessions
@@ -449,7 +450,7 @@ func executeAgentRun(
 					agentCfg := cfg
 					agentCfg.Model = fbCfg.Model
 					agentCfg.APIType = fbCfg.APIType
-					agentResult, runErr = RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
+					agentResult, runErr = agent.RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
 					if runErr == nil {
 						fallbackSucceeded = true
 						break

@@ -7,6 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // ContentBlockKind represents content block type values in agent messages.
@@ -135,15 +136,5 @@ func FormatUsageSummary(usage session.TokenUsage) string {
 	return fmt.Sprintf("%d tokens (in: %d, out: %d)", usage.TotalTokens, usage.InputTokens, usage.OutputTokens)
 }
 
-func FormatDuration(ms int64) string {
-	if ms < 1000 {
-		return fmt.Sprintf("%dms", ms)
-	}
-	secs := float64(ms) / 1000.0
-	if secs < 60 {
-		return fmt.Sprintf("%.1fs", secs)
-	}
-	mins := int(secs / 60)
-	remainSecs := int(secs) % 60
-	return fmt.Sprintf("%dm%ds", mins, remainSecs)
-}
+// FormatDuration delegates to pkg/textutil.FormatDuration.
+var FormatDuration = textutil.FormatDuration

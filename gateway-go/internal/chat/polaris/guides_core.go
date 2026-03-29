@@ -160,7 +160,7 @@ const agentLoopGuide = `The agent loop is the core execution cycle: intake → c
 - Stop reasons: end_turn, max_tokens, timeout, aborted, max_turns
 
 ## Go Implementation (gateway-go/internal/chat/)
-- agent.go: AgentConfig, RunAgent(), consumeStream(), StreamHooks (OnTextDelta, OnThinking, OnToolStart)
+- internal/agent/: AgentConfig, RunAgent(), StreamHooks (OnTextDelta, OnThinking, OnToolStart)
 - run.go: RunParams, runDeps (sessions, llmClient, transcript, tools, aurora, vega, memory, etc.)
 
 ## Queueing
