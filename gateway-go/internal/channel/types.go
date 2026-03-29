@@ -111,3 +111,11 @@ type AllowlistAdapter interface {
 	IsAllowed(ctx context.Context, sender string) bool
 	AllowList(ctx context.Context) []string
 }
+
+// FileUploadAdapter reports channel-specific file upload constraints.
+// Channels that support file delivery implement this to declare their
+// maximum allowed upload size. Used by the send_file tool to enforce
+// per-channel limits before attempting the upload.
+type FileUploadAdapter interface {
+	MaxUploadBytes() int64
+}

@@ -229,6 +229,9 @@ func (s *Server) wireTelegramChatHandler() {
 		inbound.HandleTelegramUpdate(update)
 	})
 
+	// Register Telegram's per-channel upload limit for the send_file tool.
+	s.chatHandler.SetChannelUploadLimit("telegram", s.telegramPlug.MaxUploadBytes())
+
 	s.logger.Info("telegram chat handler wired (with autoreply preprocessing)")
 }
 
@@ -400,6 +403,9 @@ func (s *Server) wireDiscordChatHandler() {
 	s.discordPlug.SetHandler(func(_ context.Context, msg *discord.Message) {
 		inbound.HandleDiscordMessage(msg)
 	})
+
+	// Register Discord's per-channel upload limit for the send_file tool.
+	s.chatHandler.SetChannelUploadLimit("discord", s.discordPlug.MaxUploadBytes())
 
 	s.logger.Info("discord chat handler wired (coding channel)")
 }

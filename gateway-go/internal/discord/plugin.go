@@ -137,5 +137,12 @@ func (p *Plugin) Config() *Config {
 	return p.config
 }
 
+// MaxUploadBytes implements channel.FileUploadAdapter.
+// Discord's file upload limit is 25 MB for standard servers.
+// Boosted servers allow up to 50 MB (level 2) or 100 MB (level 3),
+// but 25 MB is the safe baseline for all guilds.
+func (p *Plugin) MaxUploadBytes() int64 { return 25 * 1024 * 1024 }
+
 // Ensure Plugin satisfies the channel.Plugin interface at compile time.
 var _ channel.Plugin = (*Plugin)(nil)
+var _ channel.FileUploadAdapter = (*Plugin)(nil)

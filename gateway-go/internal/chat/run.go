@@ -68,6 +68,9 @@ type runDeps struct {
 	typingFn        TypingFunc                // optional; sends typing indicator during run
 	reactionFn        ReactionFunc              // optional; sets emoji reaction for status phases
 	removeReactionFn  ReactionFunc              // optional; removes emoji reaction (Discord additive)
+	// channelUploadLimitFn returns the max file upload size for a channel ID.
+	// Returns 0 if no limit is registered (tool applies its own default).
+	channelUploadLimitFn func(channelID string) int64 // optional
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
@@ -142,6 +145,13 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	if deps.mediaSendFn != nil {
 		ctx = WithMediaSendFunc(ctx, deps.mediaSendFn)
+	}
+	// Inject the channel-specific upload limit so send_file can enforce
+	// the correct per-channel maximum without hard-coding channel names.
+	if deps.channelUploadLimitFn != nil && params.Delivery != nil {
+		if limit := deps.channelUploadLimitFn(params.Delivery.Channel); limit > 0 {
+			ctx = WithMaxUploadBytes(ctx, limit)
+		}
 	}
 	ctx = WithSessionKey(ctx, params.SessionKey)
 

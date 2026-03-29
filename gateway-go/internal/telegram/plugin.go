@@ -180,5 +180,10 @@ func (p *Plugin) BotUserID() int64 {
 	return p.botUser.ID
 }
 
+// MaxUploadBytes implements channel.FileUploadAdapter.
+// Telegram Bot API allows up to 50 MB per file upload.
+func (p *Plugin) MaxUploadBytes() int64 { return 50 * 1024 * 1024 }
+
 // Ensure Plugin satisfies the channel.Plugin interface at compile time.
 var _ channel.Plugin = (*Plugin)(nil)
+var _ channel.FileUploadAdapter = (*Plugin)(nil)
