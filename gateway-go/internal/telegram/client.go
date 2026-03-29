@@ -11,10 +11,17 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
+
+// uploadBufPool reduces allocation pressure for multipart upload buffers.
+// Buffers are returned to the pool after uploadWithRetry completes.
+var uploadBufPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
 
 const apiBaseURL = "https://api.telegram.org/bot"
 
@@ -194,9 +201,13 @@ func (c *Client) doCall(ctx context.Context, method string, body io.Reader) (jso
 
 // Upload sends a multipart/form-data request for file uploads with automatic retry.
 // Retries only on pre-connect errors (uploads are non-idempotent).
+// Uses a pooled buffer to reduce allocation pressure for large files.
 func (c *Client) Upload(ctx context.Context, method string, fieldName string, fileName string, fileData io.Reader, params map[string]string) (json.RawMessage, error) {
-	var buf bytes.Buffer
-	w := multipart.NewWriter(&buf)
+	buf := uploadBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer uploadBufPool.Put(buf)
+
+	w := multipart.NewWriter(buf)
 
 	// Add file field.
 	part, err := w.CreateFormFile(fieldName, fileName)
@@ -218,7 +229,11 @@ func (c *Client) Upload(ctx context.Context, method string, fieldName string, fi
 		return nil, fmt.Errorf("close multipart writer: %w", err)
 	}
 
-	return c.uploadWithRetry(ctx, method, buf.Bytes(), w.FormDataContentType())
+	// Copy to a byte slice for retry safety; the pooled buffer is returned after this call.
+	body := make([]byte, buf.Len())
+	copy(body, buf.Bytes())
+
+	return c.uploadWithRetry(ctx, method, body, w.FormDataContentType())
 }
 
 // doUpload executes a single upload HTTP request (no retry).

@@ -60,14 +60,17 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 		chunks = ChunkText(text, maxLen)
 	}
 
+	// Track whether HTML parse failed so subsequent chunks skip HTML entirely.
+	parseMode := opts.ParseMode
+
 	var results []SendResult
 	for i, chunk := range chunks {
 		params := map[string]any{
 			"chat_id": chatID,
 			"text":    chunk,
 		}
-		if opts.ParseMode != "" {
-			params["parse_mode"] = opts.ParseMode
+		if parseMode != "" {
+			params["parse_mode"] = parseMode
 		}
 		if opts.ThreadID != 0 {
 			params["message_thread_id"] = opts.ThreadID
@@ -92,9 +95,10 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 
 		result, err := c.Call(ctx, "sendMessage", params)
 		if err != nil {
-			// If HTML parse fails, retry as plain text.
-			if opts.ParseMode == "HTML" {
+			// If HTML parse fails, retry as plain text and disable HTML for remaining chunks.
+			if parseMode == "HTML" && isHTMLParseError(err) {
 				delete(params, "parse_mode")
+				parseMode = "" // all subsequent chunks sent as plain text
 				result, err = c.Call(ctx, "sendMessage", params)
 			}
 			if err != nil {
@@ -282,6 +286,15 @@ func ValidatePhotoMetadata(r io.ReadSeeker) bool {
 		}
 	}
 	return true
+}
+
+// isHTMLParseError returns true if err is a Telegram API error caused by invalid HTML entities.
+func isHTMLParseError(err error) bool {
+	var apiErr *APIError
+	if isAPIError(err, &apiErr) {
+		return apiErr.IsParseError()
+	}
+	return false
 }
 
 // --- Helpers ---
