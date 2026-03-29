@@ -329,22 +329,28 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 	case "diff":
 		output := runGitCmd(workspaceDir, "diff", "--stat")
 		if output == "" {
-			output = "No changes."
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "📊 Git Diff", Description: "변경 사항 없음", Color: discord.ColorInfo,
+			}})
+			return true
 		}
-		p.sendDiscordQuickReply(channelID, "```diff\n"+output+"\n```")
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatGitDiffEmbed(output)})
 		return true
 
 	case "gdiff":
 		output := runGitCmd(workspaceDir, "diff")
 		if output == "" {
-			output = "No changes."
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "📊 Git Diff (full)", Description: "변경 사항 없음", Color: discord.ColorInfo,
+			}})
+			return true
 		}
+		// Full diff can be large — send as code block text (not embed) for readability.
 		p.sendDiscordQuickReply(channelID, "```diff\n"+output+"\n```")
 		return true
 
 	case "tree":
 		depth := "2"
-		// Parse optional depth: /tree 3
 		parts := strings.Fields(text)
 		if len(parts) > 1 {
 			depth = parts[1]
@@ -355,7 +361,11 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 		if output == "" {
 			output = "(empty)"
 		}
-		p.sendDiscordQuickReply(channelID, "```\n"+output+"\n```")
+		p.sendDiscordEmbed(channelID, []discord.Embed{{
+			Title:       "🌳 Directory Tree (depth " + depth + ")",
+			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+			Color:       discord.ColorInfo,
+		}})
 		return true
 
 	case "branch", "branches":
@@ -363,7 +373,7 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 		if output == "" {
 			output = "No git branches."
 		}
-		p.sendDiscordQuickReply(channelID, "```\n"+output+"\n```")
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatBranchEmbed(output)})
 		return true
 
 	case "log":
@@ -376,15 +386,113 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 		if output == "" {
 			output = "No commits."
 		}
-		p.sendDiscordQuickReply(channelID, "```\n"+output+"\n```")
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatGitLogEmbed(output)})
 		return true
 
-	case "ws", "workspace":
-		ctx := buildWorkspaceContext(workspaceDir)
-		if ctx == "" {
-			ctx = "Workspace: `" + workspaceDir + "`"
+	case "ws", "workspace", "status":
+		branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD")
+		status := runGitCmd(workspaceDir, "status", "--short")
+		diffStats := runGitCmd(workspaceDir, "diff", "--stat")
+		recentLog := runGitCmd(workspaceDir, "log", "--oneline", "-5", "--no-color")
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatStatusEmbed(branch, status, diffStats, recentLog)})
+		return true
+
+	case "test":
+		projType := detectProjectType(workspaceDir)
+		cmdName, cmdArgs := testCommand(projType)
+		if cmdName == "" {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "🧪 테스트", Description: "프로젝트 타입을 감지할 수 없습니다.", Color: discord.ColorWarning,
+			}})
+			return true
 		}
-		p.sendDiscordQuickReply(channelID, ctx)
+		output := runCmdWithTimeout(workspaceDir, 60*time.Second, cmdName, cmdArgs...)
+		success := output != "" && !strings.Contains(output, "FAIL")
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatBuildEmbed(output, success)})
+		return true
+
+	case "build":
+		projType := detectProjectType(workspaceDir)
+		cmdName, cmdArgs := buildCommand(projType)
+		if cmdName == "" {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "🔨 빌드", Description: "프로젝트 타입을 감지할 수 없습니다.", Color: discord.ColorWarning,
+			}})
+			return true
+		}
+		output := runCmdWithTimeout(workspaceDir, 60*time.Second, cmdName, cmdArgs...)
+		success := !strings.Contains(strings.ToLower(output), "error")
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatBuildEmbed(output, success)})
+		return true
+
+	case "lint":
+		projType := detectProjectType(workspaceDir)
+		cmdName, cmdArgs := lintCommand(projType)
+		if cmdName == "" {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "🔍 린트", Description: "프로젝트 타입을 감지할 수 없습니다.", Color: discord.ColorWarning,
+			}})
+			return true
+		}
+		output := runCmdWithTimeout(workspaceDir, 30*time.Second, cmdName, cmdArgs...)
+		if output == "" {
+			output = "린트 이슈 없음 ✅"
+		}
+		hasIssues := strings.Contains(output, "error") || strings.Contains(output, "warning")
+		color := discord.ColorSuccess
+		if hasIssues {
+			color = discord.ColorWarning
+		}
+		p.sendDiscordEmbed(channelID, []discord.Embed{{
+			Title:       "🔍 린트",
+			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+			Color:       color,
+		}})
+		return true
+
+	case "commit":
+		// /commit [message] — stage and commit. If no message, generate one.
+		parts := strings.SplitN(text, " ", 2)
+		commitMsg := ""
+		if len(parts) > 1 {
+			commitMsg = strings.TrimSpace(parts[1])
+		}
+		if commitMsg == "" {
+			commitMsg = "Auto-commit from Discord"
+		}
+		runGitCmd(workspaceDir, "add", "-A")
+		output := runGitCmd(workspaceDir, "commit", "-m", commitMsg)
+		if output == "" {
+			output = "커밋할 변경 사항 없음"
+		}
+		success := strings.Contains(output, "file") || strings.Contains(output, "changed")
+		color := discord.ColorSuccess
+		title := "💾 커밋 완료"
+		if !success {
+			color = discord.ColorWarning
+			title = "💾 커밋"
+		}
+		p.sendDiscordEmbed(channelID, []discord.Embed{{
+			Title:       title,
+			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+			Color:       color,
+		}})
+		return true
+
+	case "push":
+		branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD")
+		output := runCmdWithTimeout(workspaceDir, 30*time.Second, "git", "push", "-u", "origin", branch)
+		if output == "" {
+			output = "푸시 완료"
+		}
+		p.sendDiscordEmbed(channelID, []discord.Embed{{
+			Title:       "🚀 Push",
+			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+			Color:       discord.ColorSuccess,
+			Fields: []discord.EmbedField{
+				{Name: "브랜치", Value: "`" + branch + "`", Inline: true},
+			},
+		}})
 		return true
 	}
 
@@ -401,6 +509,23 @@ func (p *InboundProcessor) sendDiscordQuickReply(channelID, text string) {
 	defer cancel()
 	if _, err := discord.SendText(ctx, client, channelID, text, ""); err != nil {
 		p.logger.Warn("failed to send discord quick reply", "channelId", channelID, "error", err)
+	}
+}
+
+// sendDiscordEmbed sends one or more embeds to a Discord channel.
+func (p *InboundProcessor) sendDiscordEmbed(channelID string, embeds []discord.Embed) {
+	client := p.server.discordPlug.Client()
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := client.SendMessage(ctx, channelID, &discord.SendMessageRequest{
+		Embeds:          embeds,
+		AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+	})
+	if err != nil {
+		p.logger.Warn("failed to send discord embed", "channelId", channelID, "error", err)
 	}
 }
 
@@ -424,6 +549,92 @@ func (p *InboundProcessor) sendDiscordCommandReply(channelID string, result *aut
 	defer cancel()
 	if _, err := discord.SendText(ctx, client, channelID, replyText, ""); err != nil {
 		p.logger.Warn("failed to send discord command reply", "channelId", channelID, "error", err)
+	}
+}
+
+// HandleDiscordInteraction processes a Discord interaction (button click, slash command).
+func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interaction *discord.Interaction) {
+	if interaction == nil {
+		return
+	}
+
+	client := p.server.discordPlug.Client()
+	if client == nil {
+		return
+	}
+
+	customID := interaction.Data.CustomID
+	if customID == "" {
+		return
+	}
+
+	action, sessionKey := discord.ParseButtonAction(customID)
+	if action == "" || sessionKey == "" {
+		return
+	}
+
+	// Acknowledge the interaction immediately to prevent Discord timeout.
+	client.CreateInteractionResponse(ctx, interaction.ID, interaction.Token, &discord.InteractionResponse{
+		Type: discord.InteractionResponseDeferredUpdate,
+	})
+
+	// Map button actions to agent messages.
+	var agentMessage string
+	switch action {
+	case "test":
+		agentMessage = "프로젝트 테스트를 실행해 주세요."
+	case "commit":
+		agentMessage = "변경 사항을 커밋해 주세요. 적절한 커밋 메시지를 자동 생성해 주세요."
+	case "revert":
+		agentMessage = "마지막 변경 사항을 되돌려 주세요."
+	case "fix":
+		agentMessage = "테스트 실패를 수정해 주세요."
+	case "details":
+		agentMessage = "마지막 실행 결과를 자세히 보여주세요."
+	case "cancel":
+		// Acknowledge only, no action.
+		return
+	default:
+		return
+	}
+
+	// Resolve delivery target: use the interaction channel.
+	channelID := interaction.ChannelID
+	delivery := map[string]any{
+		"channel": "discord",
+		"to":      channelID,
+	}
+
+	sendParams := map[string]any{
+		"sessionKey": sessionKey,
+		"message":    agentMessage,
+		"delivery":   delivery,
+	}
+
+	// Resolve workspace for the session.
+	if p.server.discordPlug != nil {
+		wsChannelID := strings.TrimPrefix(sessionKey, "discord:")
+		if ws := p.server.discordPlug.Config().WorkspaceForChannel(wsChannelID); ws != "" {
+			sendParams["workspaceDir"] = ws
+		}
+	}
+
+	req, err := protocol.NewRequestFrame(
+		"dc-interaction-"+interaction.ID,
+		"chat.send",
+		sendParams,
+	)
+	if err != nil {
+		p.logger.Error("failed to build chat.send for interaction", "error", err)
+		return
+	}
+
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer sendCancel()
+	resp := p.chatHandler.Send(sendCtx, req)
+	if resp != nil && !resp.OK {
+		p.logger.Warn("chat.send failed for discord interaction",
+			"action", action, "error", resp.Error)
 	}
 }
 
@@ -577,15 +788,91 @@ func runGitCmd(dir string, args ...string) string {
 
 // runCmd runs a command in the given directory with a 5-second timeout.
 func runCmd(dir string, name string, args ...string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	return runCmdWithTimeout(dir, 5*time.Second, name, args...)
+}
+
+// runCmdWithTimeout runs a command with a custom timeout. Returns combined
+// stdout+stderr trimmed output.
+func runCmdWithTimeout(dir string, timeout time.Duration, name string, args ...string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	cmd.Stderr = io.Discard
+	cmd.Stderr = &out
 	if err := cmd.Run(); err != nil {
+		// Return partial output even on error (useful for build/test failures).
+		if s := strings.TrimSpace(out.String()); s != "" {
+			return s
+		}
 		return ""
 	}
 	return strings.TrimSpace(out.String())
+}
+
+// detectProjectType determines the project type from marker files.
+func detectProjectType(dir string) string {
+	markers := map[string]string{
+		"go.mod":          "go",
+		"Cargo.toml":      "rust",
+		"package.json":    "node",
+		"pyproject.toml":  "python",
+		"setup.py":        "python",
+		"requirements.txt": "python",
+		"Makefile":        "make",
+	}
+	for file, lang := range markers {
+		if _, err := os.Stat(dir + "/" + file); err == nil {
+			return lang
+		}
+	}
+	return ""
+}
+
+// testCommand returns the test command for a project type.
+func testCommand(projType string) (string, []string) {
+	switch projType {
+	case "go":
+		return "go", []string{"test", "./..."}
+	case "rust":
+		return "cargo", []string{"test"}
+	case "node":
+		return "npm", []string{"test"}
+	case "python":
+		return "python", []string{"-m", "pytest"}
+	case "make":
+		return "make", []string{"test"}
+	}
+	return "", nil
+}
+
+// buildCommand returns the build command for a project type.
+func buildCommand(projType string) (string, []string) {
+	switch projType {
+	case "go":
+		return "go", []string{"build", "./..."}
+	case "rust":
+		return "cargo", []string{"build"}
+	case "node":
+		return "npm", []string{"run", "build"}
+	case "make":
+		return "make", []string{"all"}
+	}
+	return "", nil
+}
+
+// lintCommand returns the lint command for a project type.
+func lintCommand(projType string) (string, []string) {
+	switch projType {
+	case "go":
+		return "go", []string{"vet", "./..."}
+	case "rust":
+		return "cargo", []string{"clippy"}
+	case "node":
+		return "npx", []string{"eslint", "."}
+	case "python":
+		return "python", []string{"-m", "ruff", "check", "."}
+	}
+	return "", nil
 }

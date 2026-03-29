@@ -273,6 +273,30 @@ func (c *Client) DeleteOwnReaction(ctx context.Context, channelID, messageID, em
 	return err
 }
 
+// EditMessage edits an existing message in a channel.
+func (c *Client) EditMessage(ctx context.Context, channelID, messageID string, req *EditMessageRequest) (*Message, error) {
+	path := fmt.Sprintf("/channels/%s/messages/%s", channelID, messageID)
+	result, err := c.Call(ctx, http.MethodPatch, path, req)
+	if err != nil {
+		return nil, fmt.Errorf("editMessage: %w", err)
+	}
+	var msg Message
+	if err := json.Unmarshal(result, &msg); err != nil {
+		return nil, fmt.Errorf("decode message: %w", err)
+	}
+	return &msg, nil
+}
+
+// CreateInteractionResponse sends a response to a Discord interaction.
+func (c *Client) CreateInteractionResponse(ctx context.Context, interactionID, interactionToken string, resp *InteractionResponse) error {
+	path := fmt.Sprintf("/interactions/%s/%s/callback", interactionID, interactionToken)
+	_, err := c.Call(ctx, http.MethodPost, path, resp)
+	if err != nil {
+		return fmt.Errorf("createInteractionResponse: %w", err)
+	}
+	return nil
+}
+
 // CreateThread creates a new thread from a message.
 func (c *Client) CreateThread(ctx context.Context, channelID, messageID, name string) (*Channel, error) {
 	path := fmt.Sprintf("/channels/%s/messages/%s/threads", channelID, messageID)

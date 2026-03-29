@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -326,6 +327,36 @@ func (s *Server) wireDiscordChatHandler() {
 				formatted.Text, formatted.FileName, formatted.FileContent)
 			return err
 		}
+
+		// Detect code changes in reply for actionable buttons.
+		var components []discord.Component
+		if containsCodeChange(text) && delivery.To != "" {
+			sessionKey := "discord:" + delivery.To
+			components = discord.CodeActionButtons(sessionKey)
+		}
+
+		// If we have components, use SendMessage with components; otherwise plain text.
+		if len(components) > 0 {
+			chunks := discord.ChunkText(formatted.Text, discord.TextChunkLimit)
+			for i, chunk := range chunks {
+				req := &discord.SendMessageRequest{
+					Content:         chunk,
+					AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+				}
+				// Attach buttons only to the last chunk.
+				if i == len(chunks)-1 {
+					req.Components = components
+				}
+				if i == 0 && delivery.MessageID != "" {
+					req.MessageReference = &discord.MessageReference{MessageID: delivery.MessageID}
+				}
+				if _, err := client.SendMessage(ctx, delivery.To, req); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
 		_, err := discord.SendText(ctx, client, delivery.To, formatted.Text, delivery.MessageID)
 		return err
 	})
@@ -425,10 +456,37 @@ func (s *Server) wireDiscordChatHandler() {
 		inbound.HandleDiscordMessage(msg)
 	})
 
+	// Wire interaction handler for button clicks and slash commands.
+	s.discordPlug.SetInteractionHandler(func(ctx context.Context, interaction *discord.Interaction) {
+		inbound.HandleDiscordInteraction(ctx, interaction)
+	})
+
 	// Register Discord's per-channel upload limit for the send_file tool.
 	s.chatHandler.SetChannelUploadLimit("discord", s.discordPlug.MaxUploadBytes())
 
 	s.logger.Info("discord chat handler wired (coding channel)")
+}
+
+// containsCodeChange detects whether an agent reply includes code modifications
+// (diffs, file edits) that warrant follow-up action buttons.
+func containsCodeChange(text string) bool {
+	indicators := []string{
+		"```diff",
+		"--- a/",
+		"+++ b/",
+		"파일을 수정했습니다",
+		"파일을 생성했습니다",
+		"wrote to",
+		"edited",
+		"applied edit",
+	}
+	lower := strings.ToLower(text)
+	for _, ind := range indicators {
+		if strings.Contains(lower, strings.ToLower(ind)) {
+			return true
+		}
+	}
+	return false
 }
 
 // loadDiscordConfig extracts Discord channel config from deneb.json.

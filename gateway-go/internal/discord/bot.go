@@ -19,6 +19,9 @@ import (
 // MessageHandler is called for each incoming message.
 type MessageHandler func(ctx context.Context, msg *Message)
 
+// InteractionHandler is called for each incoming interaction (button click, slash command).
+type InteractionHandler func(ctx context.Context, interaction *Interaction)
+
 // Bot manages the Discord bot lifecycle: Gateway WebSocket connection,
 // heartbeating, and dispatching message events.
 type Bot struct {
@@ -27,8 +30,9 @@ type Bot struct {
 	config  *Config
 	logger  *slog.Logger
 
-	stateMu   sync.Mutex // protects handler, sessionID, resumeURL, botUser
-	handler   MessageHandler
+	stateMu            sync.Mutex // protects handler, interactionHandler, sessionID, resumeURL, botUser
+	handler            MessageHandler
+	interactionHandler InteractionHandler
 	sessionID string
 	resumeURL string
 	seq       atomic.Int64
@@ -70,6 +74,13 @@ func (b *Bot) SetHandler(h MessageHandler) {
 	b.stateMu.Lock()
 	defer b.stateMu.Unlock()
 	b.handler = h
+}
+
+// SetInteractionHandler sets the handler for button clicks and slash commands.
+func (b *Bot) SetInteractionHandler(h InteractionHandler) {
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	b.interactionHandler = h
 }
 
 // BotUser returns the authenticated bot user (set after READY). Returns nil before Start.
@@ -284,6 +295,19 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 		b.stateMu.Unlock()
 		if handler != nil {
 			go handler(ctx, &msg)
+		}
+
+	case "INTERACTION_CREATE":
+		var interaction Interaction
+		if err := json.Unmarshal(payload.D, &interaction); err != nil {
+			b.logger.Error("decode INTERACTION_CREATE", "error", err)
+			return
+		}
+		b.stateMu.Lock()
+		ih := b.interactionHandler
+		b.stateMu.Unlock()
+		if ih != nil {
+			go ih(ctx, &interaction)
 		}
 
 	case "THREAD_CREATE":
