@@ -35,6 +35,10 @@ const ExitCodeRestart = 75
 var Version = "dev"
 
 func main() {
+	os.Exit(runMain())
+}
+
+func runMain() int {
 	configPath := flag.String("config", "", "Path to deneb.json config file")
 	port := flag.Int("port", 0, "Gateway server port (overrides config)")
 	bind := flag.String("bind", "", "Bind address: 'loopback', 'lan', 'all', 'custom', 'tailnet' (overrides config)")
@@ -65,7 +69,7 @@ func main() {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config bootstrap failed: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	// Resolve log level: CLI flag > config > default.
@@ -111,7 +115,7 @@ func main() {
 	})
 	if err != nil {
 		logger.Error("runtime config resolution failed", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	addr := fmt.Sprintf("%s:%d", rtCfg.BindHost, rtCfg.Port)
@@ -194,7 +198,7 @@ func main() {
 				"port", existing.Port,
 				"version", existing.Version,
 			)
-			os.Exit(1)
+			return 1
 		}
 
 		srv.SetDaemon(d)
@@ -210,9 +214,9 @@ func main() {
 			return srv.Run(ctx)
 		}, logger)
 
-		// Explicitly stop services before os.Exit (defers won't run).
+		// Explicitly stop services before returning the exit code to main.
 		d.Stop()
-		os.Exit(exitCode)
+		return exitCode
 	}
 
 	// Non-daemon mode.
@@ -221,7 +225,7 @@ func main() {
 		logging.PrintBanner(os.Stderr, bannerInfo, useColor)
 		return srv.Run(ctx)
 	}, logger)
-	os.Exit(exitCode)
+	return exitCode
 }
 
 // runWithSignals runs the given function with a context that is cancelled on
