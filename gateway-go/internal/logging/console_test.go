@@ -260,12 +260,12 @@ func TestConsoleHandler_Timestamp(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	if !strings.HasPrefix(got, "14:05:09.1") {
-		t.Errorf("expected decisecond timestamp, got %q", got)
+	if !strings.HasPrefix(got, "14:05:09 ") {
+		t.Errorf("expected second-precision timestamp, got %q", got)
 	}
-	// Should NOT have 3-digit milliseconds.
-	if strings.HasPrefix(got, "14:05:09.123") {
-		t.Errorf("timestamp should be decisecond (1 digit), not millisecond: %q", got)
+	// Should NOT have any fractional seconds.
+	if strings.HasPrefix(got, "14:05:09.") {
+		t.Errorf("timestamp should have no fractional seconds: %q", got)
 	}
 }
 

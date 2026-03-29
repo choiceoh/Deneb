@@ -2,7 +2,7 @@
 //
 // The ConsoleHandler outputs compact, modern log lines with ANSI styling:
 //
-//	14:05:09.1 INF · [server] request handled status=200 latency=1.2s
+//	14:05:09 INF · [server] request handled status=200 latency=1.2s
 //
 // Visual hierarchy: dim timestamp, bold colored level, dim · separator,
 // dim cyan [pkg] tag, bold message, dim key= with normal values.
@@ -331,17 +331,14 @@ func needsQuote(s string) bool {
 	return false
 }
 
-// appendTimestamp writes "HH:MM:SS.d" (decisecond precision) to buf.
+// appendTimestamp writes "HH:MM:SS" to buf.
 func appendTimestamp(buf []byte, t time.Time) []byte {
 	hour, min, sec := t.Clock()
-	ds := t.Nanosecond() / 100_000_000 // deciseconds (0-9)
 	buf = appendTwoDigits(buf, hour)
 	buf = append(buf, ':')
 	buf = appendTwoDigits(buf, min)
 	buf = append(buf, ':')
 	buf = appendTwoDigits(buf, sec)
-	buf = append(buf, '.')
-	buf = append(buf, byte('0'+ds))
 	return buf
 }
 
