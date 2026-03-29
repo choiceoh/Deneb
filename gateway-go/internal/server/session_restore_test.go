@@ -137,3 +137,47 @@ func TestRestoreAndWakeSessions_NoTranscriptDir(t *testing.T) {
 		t.Errorf("expected 0 sessions, got %d", count)
 	}
 }
+
+func TestAllowStartupHeartbeat_ThrottlesRecentSession(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	now := time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC)
+	ok, err := allowStartupHeartbeat("telegram:123", now)
+	if err != nil {
+		t.Fatalf("allowStartupHeartbeat first call error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected first startup heartbeat attempt to be allowed")
+	}
+
+	ok, err = allowStartupHeartbeat("telegram:123", now.Add(5*time.Minute))
+	if err != nil {
+		t.Fatalf("allowStartupHeartbeat second call error: %v", err)
+	}
+	if ok {
+		t.Fatal("expected second startup heartbeat attempt to be throttled")
+	}
+}
+
+func TestAllowStartupHeartbeat_AllowsAfterWindow(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	now := time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC)
+	ok, err := allowStartupHeartbeat("telegram:abc", now)
+	if err != nil {
+		t.Fatalf("allowStartupHeartbeat first call error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected first startup heartbeat attempt to be allowed")
+	}
+
+	ok, err = allowStartupHeartbeat("telegram:abc", now.Add(startupHeartbeatMinInterval+time.Minute))
+	if err != nil {
+		t.Fatalf("allowStartupHeartbeat third call error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected startup heartbeat attempt after throttle window to be allowed")
+	}
+}
