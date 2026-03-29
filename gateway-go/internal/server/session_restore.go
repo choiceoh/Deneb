@@ -52,6 +52,13 @@ func (s *Server) restoreAndWakeSessions(ctx context.Context) {
 		}
 		sessionKey := strings.TrimSuffix(name, ".jsonl")
 
+		// Only restore main sessions (telegram:<chatID>), not sub-sessions
+		// (telegram:<chatID>:<name>:<ts>) which are transient agent tasks.
+		chatID := strings.TrimPrefix(sessionKey, "telegram:")
+		if strings.Contains(chatID, ":") {
+			continue
+		}
+
 		// Skip sessions already in memory (should not occur at startup, but be safe).
 		if s.sessions.Get(sessionKey) != nil {
 			continue

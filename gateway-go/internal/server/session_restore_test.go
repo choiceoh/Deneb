@@ -45,10 +45,11 @@ func TestRestoreAndWakeSessions_RestoresTelegramSessions(t *testing.T) {
 	}
 	t.Setenv("HOME", tmpHome)
 
-	// Create two telegram transcripts and one non-telegram transcript.
+	// Create main telegram transcripts, a sub-session, and a non-telegram transcript.
 	makeSessionTranscript(t, transcriptDir, "telegram:111")
 	makeSessionTranscript(t, transcriptDir, "telegram:222")
-	makeSessionTranscript(t, transcriptDir, "cron:job1") // should not be restored
+	makeSessionTranscript(t, transcriptDir, "telegram:111:some-task:1234567890") // sub-session, should not be restored
+	makeSessionTranscript(t, transcriptDir, "cron:job1")                         // should not be restored
 
 	mgr := session.NewManager()
 	srv := newTestServerForRestore(mgr)
@@ -71,6 +72,9 @@ func TestRestoreAndWakeSessions_RestoresTelegramSessions(t *testing.T) {
 	}
 	if got := mgr.Get("cron:job1"); got != nil {
 		t.Error("cron:job1 should not have been restored")
+	}
+	if got := mgr.Get("telegram:111:some-task:1234567890"); got != nil {
+		t.Error("sub-session telegram:111:some-task:1234567890 should not have been restored")
 	}
 
 	// Restored sessions must have DONE status and be from the telegram channel.
