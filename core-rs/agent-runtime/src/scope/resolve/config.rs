@@ -90,7 +90,7 @@ pub fn list_agent_ids(agents_list: &[serde_json::Value]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut ids = Vec::new();
     for entry in &agents {
-        let id = normalize_agent_id(&entry.id);
+        let id = normalize_agent_id(&entry.id).into_owned();
         if seen.insert(id.clone()) {
             ids.push(id);
         }
@@ -117,7 +117,7 @@ pub fn resolve_default_agent_id(agents_list: &[serde_json::Value]) -> String {
     match chosen {
         Some(agent) => {
             let id = agent.id.trim();
-            normalize_agent_id(if id.is_empty() { DEFAULT_AGENT_ID } else { id })
+            normalize_agent_id(if id.is_empty() { DEFAULT_AGENT_ID } else { id }).into_owned()
         }
         None => DEFAULT_AGENT_ID.to_string(),
     }
@@ -134,14 +134,14 @@ pub fn resolve_session_agent_ids(
     let explicit_id = explicit_agent_id
         .map(|s| s.trim().to_lowercase())
         .filter(|s| !s.is_empty())
-        .map(|s| normalize_agent_id(&s));
+        .map(|s| normalize_agent_id(&s).into_owned());
 
     let session_agent_id = if let Some(id) = explicit_id {
         id
     } else if let Some(key) = session_key {
         // Extract agent ID from session key format "agent:<id>:<rest>".
         parse_agent_session_key(key)
-            .map(|p| normalize_agent_id(&p.agent_id))
+            .map(|p| normalize_agent_id(&p.agent_id).into_owned())
             .unwrap_or_else(|| default_agent_id.clone())
     } else {
         default_agent_id.clone()
@@ -159,7 +159,7 @@ pub fn resolve_fallback_agent_id(agent_id: Option<&str>, session_key: Option<&st
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     if let Some(id) = explicit {
-        return normalize_agent_id(&id);
+        return normalize_agent_id(&id).into_owned();
     }
     super::session_keys::resolve_agent_id_from_session_key(session_key.unwrap_or(""))
 }

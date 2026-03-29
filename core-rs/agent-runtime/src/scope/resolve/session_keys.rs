@@ -101,6 +101,7 @@ pub fn resolve_agent_id_from_session_key(session_key: &str) -> String {
             .map(|p| p.agent_id.as_str())
             .unwrap_or(DEFAULT_AGENT_ID),
     )
+    .into_owned()
 }
 
 /// Classify the shape of a session key.

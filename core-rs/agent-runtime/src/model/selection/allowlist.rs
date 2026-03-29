@@ -12,7 +12,7 @@ use super::types::{
 /// Resolve a model key from allowlist entry string.
 pub fn resolve_allowlist_model_key(raw: &str, default_provider: &str) -> Option<String> {
     let parsed = parse_model_ref(raw, default_provider)?;
-    Some(model_key(&parsed.provider, &parsed.model))
+    Some(model_key(&parsed.provider, &parsed.model).into_owned())
 }
 
 /// Build set of configured allowlist keys from config model map.
@@ -57,7 +57,7 @@ pub fn build_model_alias_index(
         index
             .by_alias
             .insert(alias_key, (alias.clone(), parsed.clone()));
-        let key = model_key(&parsed.provider, &parsed.model);
+        let key = model_key(&parsed.provider, &parsed.model).into_owned();
         index.by_key.entry(key).or_default().push(alias);
     }
     index
@@ -82,11 +82,11 @@ pub fn build_allowed_model_set(params: &BuildAllowedModelSetParams<'_>) -> Allow
         if dm.is_empty() {
             return None;
         }
-        parse_model_ref(dm, default_provider).map(|r| model_key(&r.provider, &r.model))
+        parse_model_ref(dm, default_provider).map(|r| model_key(&r.provider, &r.model).into_owned())
     });
     let catalog_keys: std::collections::HashSet<String> = catalog
         .iter()
-        .map(|e| model_key(&e.provider, &e.id))
+        .map(|e| model_key(&e.provider, &e.id).into_owned())
         .collect();
 
     if allow_any {
@@ -106,11 +106,10 @@ pub fn build_allowed_model_set(params: &BuildAllowedModelSetParams<'_>) -> Allow
 
     for raw in raw_allowlist {
         if let Some(parsed) = parse_model_ref(raw, default_provider) {
-            let key = model_key(&parsed.provider, &parsed.model);
-            allowed_keys.insert(key.clone());
+            let key = model_key(&parsed.provider, &parsed.model).into_owned();
             if !catalog_keys.contains(&key) && !synthetic.contains_key(&key) {
                 synthetic.insert(
-                    key,
+                    key.clone(),
                     ModelCatalogEntry {
                         provider: parsed.provider,
                         id: parsed.model.clone(),
@@ -118,6 +117,7 @@ pub fn build_allowed_model_set(params: &BuildAllowedModelSetParams<'_>) -> Allow
                     },
                 );
             }
+            allowed_keys.insert(key);
         }
     }
 
@@ -128,11 +128,10 @@ pub fn build_allowed_model_set(params: &BuildAllowedModelSetParams<'_>) -> Allow
         .unwrap_or_else(|| resolve_agent_model_fallback_values(agents_defaults_model));
     for fallback in &fallbacks {
         if let Some(parsed) = parse_model_ref(fallback, default_provider) {
-            let key = model_key(&parsed.provider, &parsed.model);
-            allowed_keys.insert(key.clone());
+            let key = model_key(&parsed.provider, &parsed.model).into_owned();
             if !catalog_keys.contains(&key) && !synthetic.contains_key(&key) {
                 synthetic.insert(
-                    key,
+                    key.clone(),
                     ModelCatalogEntry {
                         provider: parsed.provider,
                         id: parsed.model.clone(),
@@ -140,6 +139,7 @@ pub fn build_allowed_model_set(params: &BuildAllowedModelSetParams<'_>) -> Allow
                     },
                 );
             }
+            allowed_keys.insert(key);
         }
     }
 
@@ -149,7 +149,7 @@ pub fn build_allowed_model_set(params: &BuildAllowedModelSetParams<'_>) -> Allow
 
     let mut allowed_catalog: Vec<ModelCatalogEntry> = catalog
         .iter()
-        .filter(|e| allowed_keys.contains(&model_key(&e.provider, &e.id)))
+        .filter(|e| allowed_keys.contains(model_key(&e.provider, &e.id).as_ref()))
         .cloned()
         .collect();
     allowed_catalog.extend(synthetic.into_values());
@@ -208,8 +208,8 @@ pub fn resolve_allowed_model_ref(
         agent_id: None,
         agents_defaults_model,
     });
-    let key = model_key(&resolved.provider, &resolved.model);
-    if !allowed.allow_any && !allowed.allowed_keys.contains(&key) {
+    let key = model_key(&resolved.provider, &resolved.model).into_owned();
+    if !allowed.allow_any && !allowed.allowed_keys.contains(key.as_str()) {
         return Err(format!("model not allowed: {}", key));
     }
 

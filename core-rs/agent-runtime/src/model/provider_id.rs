@@ -2,32 +2,55 @@
 //!
 //! Mirrors `src/agents/provider-id.ts`. Keep in sync.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 /// Normalize a provider identifier to its canonical form.
 /// Handles aliases, legacy naming, and case normalization.
-pub fn normalize_provider_id(provider: &str) -> String {
-    let normalized = provider.trim().to_lowercase();
-    match normalized.as_str() {
-        "z.ai" | "z-ai" => "zai".to_string(),
-        "opencode-zen" => "opencode".to_string(),
-        "opencode-go-auth" => "opencode-go".to_string(),
-        "qwen" => "qwen-portal".to_string(),
-        "kimi" | "kimi-code" | "kimi-coding" => "kimi".to_string(),
-        "bedrock" | "aws-bedrock" => "amazon-bedrock".to_string(),
-        // Backward compatibility for older provider naming.
-        "bytedance" | "doubao" => "volcengine".to_string(),
-        _ => normalized,
+///
+/// Returns `Cow::Borrowed` when the input is already in canonical form (no
+/// allocation), `Cow::Owned` only when lowercasing is required.
+pub fn normalize_provider_id(provider: &str) -> Cow<'_, str> {
+    let trimmed = provider.trim();
+
+    // Fast path: already lowercase — alias-check then borrow without allocating.
+    if trimmed.bytes().all(|b| !b.is_ascii_uppercase()) {
+        return match trimmed {
+            "z.ai" | "z-ai" => Cow::Borrowed("zai"),
+            "opencode-zen" => Cow::Borrowed("opencode"),
+            "opencode-go-auth" => Cow::Borrowed("opencode-go"),
+            "qwen" => Cow::Borrowed("qwen-portal"),
+            "kimi-code" | "kimi-coding" => Cow::Borrowed("kimi"),
+            "bedrock" | "aws-bedrock" => Cow::Borrowed("amazon-bedrock"),
+            // Backward compatibility for older provider naming.
+            "bytedance" | "doubao" => Cow::Borrowed("volcengine"),
+            _ => Cow::Borrowed(trimmed),
+        };
     }
+
+    // Slow path: uppercase chars present — must lowercase first.
+    let lowered = trimmed.to_lowercase();
+    // Alias matches here point to static strings, so we can still avoid owning.
+    let canonical: &'static str = match lowered.as_str() {
+        "z.ai" | "z-ai" => "zai",
+        "opencode-zen" => "opencode",
+        "opencode-go-auth" => "opencode-go",
+        "qwen" => "qwen-portal",
+        "kimi" | "kimi-code" | "kimi-coding" => "kimi",
+        "bedrock" | "aws-bedrock" => "amazon-bedrock",
+        "bytedance" | "doubao" => "volcengine",
+        _ => return Cow::Owned(lowered),
+    };
+    Cow::Borrowed(canonical)
 }
 
 /// Normalize provider ID for auth lookup. Coding-plan variants share auth with base.
 pub fn normalize_provider_id_for_auth(provider: &str) -> String {
     let normalized = normalize_provider_id(provider);
-    match normalized.as_str() {
+    match normalized.as_ref() {
         "volcengine-plan" => "volcengine".to_string(),
         "byteplus-plan" => "byteplus".to_string(),
-        _ => normalized,
+        _ => normalized.into_owned(),
     }
 }
 
