@@ -53,6 +53,17 @@ func ConfirmButtons(sessionKey, action string) []Component {
 	}
 }
 
+// AfterCommitButtons returns an action row with follow-up buttons after a successful commit.
+// Shows push and new-task options for vibe coders.
+func AfterCommitButtons(sessionKey string) []Component {
+	return []Component{
+		ActionRow(
+			Button("🚀 푸시", fmt.Sprintf("push:%s", sessionKey), ButtonPrimary),
+			Button("🆕 새 작업", fmt.Sprintf("new:%s", sessionKey), ButtonSecondary),
+		),
+	}
+}
+
 // ParseButtonAction extracts the action and session key from a button custom_id.
 // Format: "action:sessionKey" or "action:subaction:sessionKey".
 // Returns action, sessionKey.

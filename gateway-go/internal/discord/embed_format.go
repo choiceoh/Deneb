@@ -449,17 +449,40 @@ func FormatAgentSummaryEmbed(toolsUsed []string, totalDurationMs int64, replyPre
 
 // FormatHelpEmbed returns an embed listing all available Discord coding commands.
 func FormatHelpEmbed() Embed {
+	return FormatVibeCoderHelpEmbed()
+}
+
+// FormatVibeCoderHelpEmbed returns a help embed optimized for vibe coders.
+// Only shows commands that a non-developer needs: project status, commit, push.
+// Emphasizes that the user can just describe what they want in natural Korean.
+func FormatVibeCoderHelpEmbed() Embed {
 	fields := []EmbedField{
-		{Name: "📄 파일", Value: "`/file <경로> [시작줄] [끝줄]` — 파일 보기\n`/grep <패턴> [파일패턴]` — 코드 검색\n`/tree [depth]` — 디렉토리 구조", Inline: false},
-		{Name: "🔀 Git", Value: "`/diff` — 변경 통계\n`/gdiff` — 전체 diff\n`/log [n]` — 커밋 로그\n`/branch` — 브랜치 목록\n`/blame <파일> [줄]` — blame 조회\n`/stash [pop|list|show|drop]` — 스태시\n`/checkout <브랜치>` — 브랜치 전환", Inline: false},
-		{Name: "🔨 빌드 & 테스트", Value: "`/build` — 프로젝트 빌드\n`/test` — 테스트 실행\n`/lint` — 린트 검사\n`/run <명령어>` — 셸 명령 실행", Inline: false},
-		{Name: "💾 배포", Value: "`/commit [메시지]` — 커밋\n`/push` — 푸시\n`/ws` — 워크스페이스 상태", Inline: false},
-		{Name: "🤖 에이전트", Value: "`/agents` — 활성 세션 목록\n`/new` — 새 세션 시작\n`/model [이름]` — 모델 변경", Inline: false},
+		{
+			Name:   "💬 기본 사용법",
+			Value:  "원하는 것을 **한국어로 자유롭게** 설명하면 에이전트가 알아서 코딩합니다.\n예: \"로그인 기능 추가해줘\", \"빌드 에러 고쳐줘\", \"테스트 돌려봐\"",
+			Inline: false,
+		},
+		{
+			Name:   "📊 프로젝트 현황",
+			Value:  "`/dashboard` — 빌드·테스트·브랜치 상태 한눈에 보기",
+			Inline: false,
+		},
+		{
+			Name:   "💾 저장 & 배포",
+			Value:  "`/commit [메시지]` — 변경 사항 저장\n`/push` — 원격 저장소에 업로드",
+			Inline: false,
+		},
+		{
+			Name:   "🤖 세션 관리",
+			Value:  "`/new` — 새 작업 시작\n`/model [이름]` — AI 모델 변경",
+			Inline: false,
+		},
 	}
 	return Embed{
-		Title:  "📖 디스코드 코딩 명령어",
-		Color:  ColorInfo,
-		Fields: fields,
+		Title:       "📖 디스코드 코딩 채널 도움말",
+		Description: "코드를 직접 볼 필요 없이, 원하는 것을 말로 설명하세요!",
+		Color:       ColorInfo,
+		Fields:      fields,
 	}
 }
 

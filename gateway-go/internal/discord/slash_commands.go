@@ -35,60 +35,17 @@ const (
 	OptionTypeBoolean = 5
 )
 
-// CodingCommands returns all Discord slash commands for the coding channel.
+// CodingCommands returns Discord slash commands for the vibe-coding channel.
+// Only includes commands that make sense for a non-developer who works entirely
+// through natural language instructions to the AI agent.
 func CodingCommands() []ApplicationCommand {
 	return []ApplicationCommand{
-		// File operations
-		{Name: "file", Description: "파일 내용 보기 (구문 강조)", Options: []ApplicationCommandOption{
-			{Name: "path", Description: "파일 경로", Type: OptionTypeString, Required: true},
-			{Name: "start", Description: "시작 줄 번호", Type: OptionTypeInteger},
-			{Name: "end", Description: "끝 줄 번호", Type: OptionTypeInteger},
-		}},
-		{Name: "grep", Description: "코드베이스에서 패턴 검색 (ripgrep)", Options: []ApplicationCommandOption{
-			{Name: "pattern", Description: "검색 패턴 (정규식)", Type: OptionTypeString, Required: true},
-			{Name: "glob", Description: "파일 필터 (예: *.go, *.ts)", Type: OptionTypeString},
-		}},
-		{Name: "tree", Description: "디렉토리 구조 보기", Options: []ApplicationCommandOption{
-			{Name: "depth", Description: "탐색 깊이 (기본: 2)", Type: OptionTypeInteger},
-		}},
-
-		// Git operations
-		{Name: "diff", Description: "Git 변경 통계 보기"},
-		{Name: "gdiff", Description: "전체 Git diff 보기"},
-		{Name: "log", Description: "최근 커밋 로그 보기", Options: []ApplicationCommandOption{
-			{Name: "count", Description: "표시할 커밋 수 (기본: 10)", Type: OptionTypeInteger},
-		}},
-		{Name: "branch", Description: "Git 브랜치 목록 보기"},
-		{Name: "blame", Description: "파일의 Git blame 조회", Options: []ApplicationCommandOption{
-			{Name: "file", Description: "파일 경로", Type: OptionTypeString, Required: true},
-			{Name: "line", Description: "줄 번호 (또는 시작 줄)", Type: OptionTypeInteger},
-			{Name: "end_line", Description: "끝 줄 번호 (범위 지정 시)", Type: OptionTypeInteger},
-		}},
-		{Name: "stash", Description: "Git stash 관리", Options: []ApplicationCommandOption{
-			{Name: "action", Description: "push, pop, list, show, drop", Type: OptionTypeString},
-		}},
-		{Name: "checkout", Description: "Git 브랜치 전환", Options: []ApplicationCommandOption{
-			{Name: "branch", Description: "전환할 브랜치 이름", Type: OptionTypeString, Required: true},
-		}},
-
-		// Build & test
-		{Name: "build", Description: "프로젝트 빌드 실행"},
-		{Name: "test", Description: "프로젝트 테스트 실행"},
-		{Name: "lint", Description: "코드 린트 검사"},
-		{Name: "run", Description: "셸 명령어 직접 실행", Options: []ApplicationCommandOption{
-			{Name: "command", Description: "실행할 명령어", Type: OptionTypeString, Required: true},
-		}},
-
-		// Deploy
-		{Name: "commit", Description: "변경 사항 커밋", Options: []ApplicationCommandOption{
+		{Name: "dashboard", Description: "프로젝트 현황 한눈에 보기 (빌드·테스트·브랜치)"},
+		{Name: "commit", Description: "변경 사항 저장", Options: []ApplicationCommandOption{
 			{Name: "message", Description: "커밋 메시지 (비워두면 자동 생성)", Type: OptionTypeString},
 		}},
-		{Name: "push", Description: "현재 브랜치 원격 푸시"},
-
-		// Status & session
-		{Name: "ws", Description: "워크스페이스 상태 (브랜치, 변경사항, 최근 커밋)"},
-		{Name: "agents", Description: "활성 에이전트 세션 목록 및 관리"},
-		{Name: "help", Description: "사용 가능한 코딩 명령어 목록"},
+		{Name: "push", Description: "원격 저장소에 업로드"},
+		{Name: "help", Description: "사용 가능한 명령어 보기"},
 	}
 }
 
