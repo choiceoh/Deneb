@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -477,6 +479,75 @@ func emit(ctx context.Context, ch chan<- StreamEvent, ev StreamEvent) {
 	case ch <- ev:
 	case <-ctx.Done():
 	}
+}
+
+// CompleteOpenAI sends a non-streaming request to an OpenAI-compatible
+// /chat/completions endpoint and returns the full response text.
+// Intended for lightweight single-turn tasks (e.g. thread title generation).
+func (c *Client) CompleteOpenAI(ctx context.Context, req ChatRequest) (string, error) {
+	oaiReq := openAIRequest{
+		Model:     req.Model,
+		Stream:    false,
+		MaxTokens: req.MaxTokens,
+	}
+
+	// System prompt → system message.
+	if systemText := ExtractSystemText(req.System); systemText != "" {
+		oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
+			Role:    "system",
+			Content: systemText,
+		})
+	}
+
+	// User messages (text only — title generation doesn't need multimodal).
+	for _, m := range req.Messages {
+		var text string
+		if err := json.Unmarshal(m.Content, &text); err == nil {
+			oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
+				Role:    m.Role,
+				Content: text,
+			})
+		}
+	}
+
+	body, err := json.Marshal(oaiReq)
+	if err != nil {
+		return "", fmt.Errorf("marshal openai request: %w", err)
+	}
+
+	url := c.baseURL + "/chat/completions"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	respBody, err := c.DoStream(ctx, httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer respBody.Close()
+
+	data, err := io.ReadAll(io.LimitReader(respBody, 64*1024))
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	var resp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return "", fmt.Errorf("decode response: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
+	}
+	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 }
 
 // --- OpenAI request/response types ---

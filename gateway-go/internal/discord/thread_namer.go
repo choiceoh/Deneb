@@ -1,7 +1,7 @@
 // Package discord — LLM-based thread name generation for Discord conversations.
 //
-// When a new coding session starts in Discord, ThreadNamer calls a fast LLM
-// (Haiku) to produce a short, descriptive thread title from the first message.
+// When a new coding session starts in Discord, ThreadNamer calls the local sglang
+// server to produce a short, descriptive thread title from the first message.
 // Falls back to a truncated excerpt if the LLM call fails or times out.
 package discord
 
@@ -15,8 +15,6 @@ import (
 )
 
 const (
-	// threadNameModel is a fast, cheap model suited for short title generation.
-	threadNameModel = "claude-haiku-4-5-20251001"
 	// threadNameMaxTokens caps the response to a short title (roughly 7 words).
 	threadNameMaxTokens = 25
 	// discordThreadNameLimit is Discord's maximum thread name length in characters.
@@ -26,15 +24,16 @@ const (
 // ThreadNamer generates Discord thread titles from message content via an LLM.
 type ThreadNamer struct {
 	client *llm.Client
+	model  string
 }
 
-// NewThreadNamer creates a ThreadNamer backed by the given Anthropic LLM client.
-// Returns nil if client is nil (feature disabled — replies go to channel directly).
-func NewThreadNamer(client *llm.Client) *ThreadNamer {
+// NewThreadNamer creates a ThreadNamer backed by the given OpenAI-compatible LLM
+// client (e.g. local sglang). Returns nil if client is nil.
+func NewThreadNamer(client *llm.Client, model string) *ThreadNamer {
 	if client == nil {
 		return nil
 	}
-	return &ThreadNamer{client: client}
+	return &ThreadNamer{client: client, model: model}
 }
 
 // Generate produces a short, descriptive thread name for the given message.
@@ -52,7 +51,7 @@ func (n *ThreadNamer) Generate(ctx context.Context, message string) string {
 	}
 
 	req := llm.ChatRequest{
-		Model: threadNameModel,
+		Model: n.model,
 		System: llm.SystemString(
 			"Generate a short Discord thread title for the user's message. " +
 				"Reply with ONLY the title — no quotes, no trailing punctuation, no explanation. " +
@@ -62,7 +61,7 @@ func (n *ThreadNamer) Generate(ctx context.Context, message string) string {
 		MaxTokens: threadNameMaxTokens,
 	}
 
-	title, err := n.client.Complete(ctx, req)
+	title, err := n.client.CompleteOpenAI(ctx, req)
 	if err != nil || title == "" {
 		return fallbackThreadName(message)
 	}

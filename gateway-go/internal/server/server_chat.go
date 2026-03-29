@@ -245,22 +245,15 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 // chat handler for coding-focused agent sessions. It wraps the existing
 // channel handlers so both Telegram and Discord can coexist.
 func (s *Server) wireDiscordChatHandler() {
-	// Initialize auto thread namer when Anthropic credentials are available
-	// and the Discord config has not explicitly disabled the feature.
+	// Initialize auto thread namer using the local sglang server (OpenAI-compatible).
+	// sglang is always available on DGX Spark and costs nothing per call.
 	discordCfg := s.discordPlug.Config()
-	if discordCfg.AutoThreadNamesEnabled() && s.authManager != nil {
-		cred := s.authManager.Resolve("anthropic", "")
-		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
-			anthropicClient := llm.NewClient(
-				llm.DefaultAnthropicBaseURL, cred.APIKey,
-				llm.WithLogger(s.logger),
-			)
-			s.discordThreadNamer = discord.NewThreadNamer(anthropicClient)
-			s.logger.Info("discord: auto thread naming enabled",
-				"model", "claude-haiku-4-5-20251001")
-		} else {
-			s.logger.Info("discord: auto thread naming disabled (no Anthropic credentials)")
-		}
+	if discordCfg.AutoThreadNamesEnabled() {
+		const sglangURL = "http://127.0.0.1:30000/v1"
+		const sglangModel = "Qwen/Qwen3.5-35B-A3B"
+		sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
+		s.discordThreadNamer = discord.NewThreadNamer(sglangClient, sglangModel)
+		s.logger.Info("discord: auto thread naming enabled (sglang)", "model", sglangModel)
 	}
 
 	// Recent-send dedup cache.
