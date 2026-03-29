@@ -12,8 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
@@ -124,7 +125,7 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	if strings.HasPrefix(trimmed, "/") {
 		cmdKey := extractCommandKey(trimmed)
 		if cmdKey != "" && p.cmdRouter.HasHandler(cmdKey) {
-			result, err := p.cmdRouter.Dispatch(autoreply.CommandContext{
+			result, err := p.cmdRouter.Dispatch(handlers.CommandContext{
 				Command:    cmdKey,
 				Body:       msgCtx.Body,
 				SessionKey: sessionKey,
@@ -157,7 +158,7 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	// Parse inline directives (/model, /think, etc.) and clean the message body.
 	agentMessage := msgCtx.BodyForAgent
 	if agentMessage != "" {
-		directives := autoreply.ParseInlineDirectives(agentMessage, nil)
+		directives := rules.ParseInlineDirectives(agentMessage, nil)
 		if directives.Cleaned != "" {
 			agentMessage = directives.Cleaned
 		}
