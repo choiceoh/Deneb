@@ -42,11 +42,12 @@ type ToolDef struct {
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {
-	mu             sync.RWMutex
-	tools          map[string]ToolDef
-	order          []string // preserves registration order
-	postProcess    *PostProcessRegistry
-	cachedLLMTools []llm.Tool // cached tool list; invalidated on RegisterTool
+	mu                      sync.RWMutex
+	tools                   map[string]ToolDef
+	order                   []string // preserves registration order
+	postProcess             *PostProcessRegistry
+	cachedLLMTools          []llm.Tool // cached tool list; invalidated on RegisterTool
+	cachedLLMToolsAnthropic []llm.Tool // same list with CacheControl on last tool for Anthropic prompt caching
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -75,7 +76,8 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 		r.order = append(r.order, def.Name)
 	}
 	r.tools[def.Name] = def
-	r.cachedLLMTools = nil // invalidate cache
+	r.cachedLLMTools = nil          // invalidate cache
+	r.cachedLLMToolsAnthropic = nil // invalidate Anthropic variant
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
@@ -234,13 +236,11 @@ func (r *ToolRegistry) Names() []string {
 
 // LLMTools returns tool definitions formatted for LLM API requests,
 // in registration order. Results are cached and only rebuilt when tools change.
+// The returned slice is shared — callers must not mutate it.
 func (r *ToolRegistry) LLMTools() []llm.Tool {
 	r.mu.RLock()
 	if r.cachedLLMTools != nil {
-		// Return a copy so callers (e.g., Anthropic cache_control injection)
-		// can mutate their slice without corrupting the cache.
-		out := make([]llm.Tool, len(r.cachedLLMTools))
-		copy(out, r.cachedLLMTools)
+		out := r.cachedLLMTools
 		r.mu.RUnlock()
 		return out
 	}
@@ -249,12 +249,50 @@ func (r *ToolRegistry) LLMTools() []llm.Tool {
 	// Cache miss — build and store under write lock.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Double-check after acquiring write lock.
 	if r.cachedLLMTools != nil {
-		out := make([]llm.Tool, len(r.cachedLLMTools))
-		copy(out, r.cachedLLMTools)
+		return r.cachedLLMTools
+	}
+	r.cachedLLMTools = r.buildLLMToolsLocked()
+	return r.cachedLLMTools
+}
+
+// LLMToolsAnthropic returns tool definitions with CacheControl set on the last
+// tool for Anthropic prompt caching. Results are cached alongside the base list
+// and only rebuilt when tools change. The returned slice is shared — callers
+// must not mutate it.
+func (r *ToolRegistry) LLMToolsAnthropic() []llm.Tool {
+	r.mu.RLock()
+	if r.cachedLLMToolsAnthropic != nil {
+		out := r.cachedLLMToolsAnthropic
+		r.mu.RUnlock()
 		return out
 	}
+	r.mu.RUnlock()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cachedLLMToolsAnthropic != nil {
+		return r.cachedLLMToolsAnthropic
+	}
+	// Ensure the base list is built first.
+	if r.cachedLLMTools == nil {
+		r.cachedLLMTools = r.buildLLMToolsLocked()
+	}
+	base := r.cachedLLMTools
+	if len(base) == 0 {
+		r.cachedLLMToolsAnthropic = base
+		return base
+	}
+	// Copy once at build time, then cache. Subsequent calls return the shared slice.
+	anthropic := make([]llm.Tool, len(base))
+	copy(anthropic, base)
+	anthropic[len(anthropic)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
+	r.cachedLLMToolsAnthropic = anthropic
+	return anthropic
+}
+
+// buildLLMToolsLocked builds the base tool slice. Caller must hold s.mu (write).
+func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 	tools := make([]llm.Tool, 0, len(r.order))
 	for _, name := range r.order {
 		def := r.tools[name]
@@ -271,10 +309,7 @@ func (r *ToolRegistry) LLMTools() []llm.Tool {
 			InputSchema: schema,
 		})
 	}
-	r.cachedLLMTools = tools
-	out := make([]llm.Tool, len(tools))
-	copy(out, tools)
-	return out
+	return tools
 }
 
 // codingTools is the set of tools included in the "coding" profile (Discord).
