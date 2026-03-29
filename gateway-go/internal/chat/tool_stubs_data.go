@@ -89,10 +89,10 @@ func subagentsList(children []*session.Session) string {
 		var parts []string
 		// Runtime.
 		if c.RuntimeMs != nil {
-			parts = append(parts, autoreply.FormatDurationCompact(*c.RuntimeMs))
+			parts = append(parts, autoreply.FormatDuration(*c.RuntimeMs))
 		} else if c.Status == session.StatusRunning && c.StartedAt != nil {
 			elapsed := time.Now().UnixMilli() - *c.StartedAt
-			parts = append(parts, autoreply.FormatDurationCompact(elapsed))
+			parts = append(parts, autoreply.FormatDuration(elapsed))
 		}
 		// Tokens.
 		if c.TotalTokens != nil && *c.TotalTokens > 0 {
@@ -103,13 +103,27 @@ func subagentsList(children []*session.Session) string {
 			parts = append(parts, fmt.Sprintf("model=%s", c.Model))
 		}
 
-		fmt.Fprintf(&sb, "  %d. [%s] %s", i+1, status, autoreply.TruncateLine(label, 60))
+		fmt.Fprintf(&sb, "  %d. [%s] %s", i+1, status, truncateLine(label, 60))
 		if len(parts) > 0 {
 			fmt.Fprintf(&sb, " (%s)", strings.Join(parts, ", "))
 		}
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+func truncateLine(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= maxLen {
+		return s
+	}
+	if maxLen <= 1 {
+		return "…"
+	}
+	return string(r[:maxLen-1]) + "…"
 }
 
 // subagentsKill kills one or all child sessions.
