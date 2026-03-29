@@ -26,16 +26,22 @@ func TestEstimateTokens(t *testing.T) {
 	}{
 		{"empty string returns minimum", "", 1},
 		{"short string returns minimum", "hi", 1},
-		{"4 chars = 1 token", "abcd", 1},
-		{"8 chars = 2 tokens", "abcdefgh", 2},
-		{"100 chars = 25 tokens", string(make([]byte, 100)), 25},
-		{"1000 chars = 250 tokens", string(make([]byte, 1000)), 250},
+		{"2 ASCII chars = 1 token", "ab", 1},
+		{"4 ASCII chars = 2 tokens", "abcd", 2},
+		{"8 ASCII chars = 4 tokens", "abcdefgh", 4},
+		{"100 ASCII chars = 50 tokens", string(make([]byte, 100)), 50},
+		{"1000 ASCII chars = 500 tokens", string(make([]byte, 1000)), 500},
+		// Korean: 3 bytes/rune in UTF-8 — rune count is used, not byte count.
+		// "비금도 해상태양광" = 9 runes → 9/2 = 4 tokens (was 27 bytes/4 = 6 with old formula)
+		{"Korean 9 runes = 4 tokens", "비금도 해상태양광", 4},
+		// 26-rune Korean sentence → 13 tokens (was 78 bytes/4 = 19 with old formula)
+		{"Korean 26 runes = 13 tokens", "비금도 해상태양광 프로젝트 현황 보고서를 작성해 주세요", 13},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := estimateTokens(tt.input)
 			if got != tt.want {
-				t.Errorf("estimateTokens(%d chars) = %d, want %d", len(tt.input), got, tt.want)
+				t.Errorf("estimateTokens(%q) = %d, want %d", tt.input, got, tt.want)
 			}
 		})
 	}

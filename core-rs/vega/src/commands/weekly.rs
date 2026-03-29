@@ -179,7 +179,11 @@ fn fetch_recent_chunks(
 pub struct WeeklyHandler;
 
 impl super::CommandHandler for WeeklyHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_weekly(args, config)
     }
 

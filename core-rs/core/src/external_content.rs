@@ -14,8 +14,8 @@ use napi::bindgen_prelude::*;
 ///
 /// The wrapping functions (`wrapExternalContent`, `buildSafeExternalPrompt`) remain
 /// in TypeScript since they use `crypto.randomBytes` and string templating.
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 // ---------------------------------------------------------------------------
 // Suspicious patterns (compiled once)
@@ -26,7 +26,7 @@ struct SuspiciousPattern {
     source: &'static str,
 }
 
-static SUSPICIOUS_PATTERNS: Lazy<Vec<SuspiciousPattern>> = Lazy::new(|| {
+static SUSPICIOUS_PATTERNS: LazyLock<Vec<SuspiciousPattern>> = LazyLock::new(|| {
     let patterns: &[&str] = &[
         r"(?i)ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)",
         r"(?i)disregard\s+(all\s+)?(previous|prior|above)",
@@ -145,17 +145,17 @@ pub fn fold_marker_text_impl(input: &str) -> String {
 // Marker replacement
 // ---------------------------------------------------------------------------
 
-static MARKER_CHECK: Lazy<Regex> = Lazy::new(|| {
+static MARKER_CHECK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)external[\s_]+untrusted[\s_]+content")
         .unwrap_or_else(|_| unreachable!("marker check regex is always valid"))
 });
 
-static MARKER_START_RE: Lazy<Regex> = Lazy::new(|| {
+static MARKER_START_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)<<<\s*EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>"#)
         .unwrap_or_else(|_| unreachable!("marker start regex is always valid"))
 });
 
-static MARKER_END_RE: Lazy<Regex> = Lazy::new(|| {
+static MARKER_END_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?i)<<<\s*END[\s_]+EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>"#,
     )

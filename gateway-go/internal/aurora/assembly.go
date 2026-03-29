@@ -120,6 +120,26 @@ func handleAssemblyCmd(store *Store, cmdJSON json.RawMessage) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Collect all IDs in one pass, then batch-fetch to avoid N+1 lock churn.
+		var msgIDs []uint64
+		var sumIDs []string
+		for _, ci := range items {
+			if ci.ItemType == "message" && ci.MessageID != nil {
+				msgIDs = append(msgIDs, *ci.MessageID)
+			} else if ci.ItemType == "summary" && ci.SummaryID != nil {
+				sumIDs = append(sumIDs, *ci.SummaryID)
+			}
+		}
+		msgs, err := store.FetchMessages(msgIDs)
+		if err != nil {
+			return nil, err
+		}
+		sums, err := store.FetchSummaries(sumIDs)
+		if err != nil {
+			return nil, err
+		}
+
 		// Build assembly-compatible items with token counts.
 		asmItems := make([]map[string]any, 0, len(items))
 		for _, ci := range items {
@@ -131,10 +151,6 @@ func handleAssemblyCmd(store *Store, cmdJSON json.RawMessage) (any, error) {
 			}
 
 			if ci.ItemType == "message" && ci.MessageID != nil {
-				msgs, err := store.FetchMessages([]uint64{*ci.MessageID})
-				if err != nil {
-					return nil, err
-				}
 				if m, ok := msgs[*ci.MessageID]; ok {
 					item["messageId"] = m.MessageID
 					item["tokenCount"] = m.TokenCount
@@ -143,10 +159,6 @@ func handleAssemblyCmd(store *Store, cmdJSON json.RawMessage) (any, error) {
 					item["tokenCount"] = uint64(0)
 				}
 			} else if ci.ItemType == "summary" && ci.SummaryID != nil {
-				sums, err := store.FetchSummaries([]string{*ci.SummaryID})
-				if err != nil {
-					return nil, err
-				}
 				if s, ok := sums[*ci.SummaryID]; ok {
 					item["summaryId"] = s.SummaryID
 					item["tokenCount"] = s.TokenCount

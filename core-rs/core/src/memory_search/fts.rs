@@ -1,11 +1,11 @@
 //! Full-text search query builder for `SQLite` FTS5.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 #[allow(clippy::expect_used)]
-static FTS_TOKEN_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[\p{L}\p{N}_]+").expect("valid regex"));
+static FTS_TOKEN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[\p{L}\p{N}_]+").expect("valid regex"));
 
 /// Build an FTS5 query from raw text.
 ///

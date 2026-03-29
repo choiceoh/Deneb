@@ -55,7 +55,6 @@ fn negate_date_str(date_str: &str) -> String {
         .collect()
 }
 
-
 /// Score SQLite chunk results per-project.
 fn score_sqlite_chunks(
     chunks: &[ChunkRow],
@@ -360,7 +359,10 @@ mod tests {
         let mut result = SqliteSearchResult::default();
         let extracted = ExtractedFields::default();
         let scores = rerank_fusion(&mut result, &extracted);
-        assert!(scores.is_empty(), "empty input should yield no project scores");
+        assert!(
+            scores.is_empty(),
+            "empty input should yield no project scores"
+        );
     }
 
     #[test]
@@ -392,7 +394,10 @@ mod tests {
         };
         let (scores, _, _) = score_sqlite_chunks(&chunks, &extracted);
         assert!(scores.contains_key(&5));
-        assert!(scores[&5] > 0.0, "person match should produce a positive score");
+        assert!(
+            scores[&5] > 0.0,
+            "person match should produce a positive score"
+        );
     }
 
     #[test]

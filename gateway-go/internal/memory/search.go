@@ -21,9 +21,10 @@ type RerankResult struct {
 
 // SearchOpts configures a memory search.
 type SearchOpts struct {
-	Limit    int     // max results (default 10)
-	Category string  // filter by category (empty = all)
-	MinScore float64 // minimum final score threshold
+	Limit         int     // max results (default 10)
+	Category      string  // filter by category (empty = all)
+	MinScore      float64 // minimum final score threshold
+	MinImportance float64 // minimum importance to include (0 = all; use 0.7 for FTS-only mode)
 }
 
 // SearchResult is a scored fact from a search query.
@@ -76,7 +77,7 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 	}
 
 	// Phase 1: FTS search.
-	ftsResults, err := s.ftsSearch(ctx, query, opts.Category)
+	ftsResults, err := s.ftsSearch(ctx, query, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -103,22 +104,39 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 }
 
 // ftsSearch performs FTS5 search and returns scored fact IDs.
-func (s *Store) ftsSearch(ctx context.Context, query string, category string) (map[int64]float64, error) {
+func (s *Store) ftsSearch(ctx context.Context, query string, opts SearchOpts) (map[int64]float64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var rows_query string
 	var args []any
 
-	if category != "" {
+	switch {
+	case opts.Category != "" && opts.MinImportance > 0:
+		rows_query = `SELECT f.id, fts.rank
+			FROM facts_fts fts
+			JOIN facts f ON f.id = fts.rowid
+			WHERE facts_fts MATCH ? AND f.active = 1 AND f.category = ? AND f.importance >= ?
+			ORDER BY fts.rank
+			LIMIT 50`
+		args = []any{escapeFTS(query), opts.Category, opts.MinImportance}
+	case opts.Category != "":
 		rows_query = `SELECT f.id, fts.rank
 			FROM facts_fts fts
 			JOIN facts f ON f.id = fts.rowid
 			WHERE facts_fts MATCH ? AND f.active = 1 AND f.category = ?
 			ORDER BY fts.rank
 			LIMIT 50`
-		args = []any{escapeFTS(query), category}
-	} else {
+		args = []any{escapeFTS(query), opts.Category}
+	case opts.MinImportance > 0:
+		rows_query = `SELECT f.id, fts.rank
+			FROM facts_fts fts
+			JOIN facts f ON f.id = fts.rowid
+			WHERE facts_fts MATCH ? AND f.active = 1 AND f.importance >= ?
+			ORDER BY fts.rank
+			LIMIT 50`
+		args = []any{escapeFTS(query), opts.MinImportance}
+	default:
 		rows_query = `SELECT f.id, fts.rank
 			FROM facts_fts fts
 			JOIN facts f ON f.id = fts.rowid
@@ -148,7 +166,7 @@ func (s *Store) ftsSearch(ctx context.Context, query string, category string) (m
 
 	// Korean/CJK fallback: if unicode61 found nothing, try trigram index.
 	if len(results) == 0 {
-		trigramResults := s.trigramSearch(ctx, query)
+		trigramResults := s.trigramSearch(ctx, query, opts.MinImportance)
 		for id, score := range trigramResults {
 			results[id] = score
 		}
@@ -158,16 +176,29 @@ func (s *Store) ftsSearch(ctx context.Context, query string, category string) (m
 }
 
 // trigramSearch uses the trigram FTS5 index for CJK/Korean substring matching.
-func (s *Store) trigramSearch(ctx context.Context, query string) map[int64]float64 {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT f.id, fts.rank
+// minImportance filters out low-importance facts when > 0 (e.g. 0.7 for FTS-only mode).
+func (s *Store) trigramSearch(ctx context.Context, query string, minImportance float64) map[int64]float64 {
+	var rows_query string
+	var args []any
+	if minImportance > 0 {
+		rows_query = `SELECT f.id, fts.rank
+		 FROM facts_fts_trigram fts
+		 JOIN facts f ON f.id = fts.rowid
+		 WHERE facts_fts_trigram MATCH ? AND f.active = 1 AND f.importance >= ?
+		 ORDER BY fts.rank
+		 LIMIT 30`
+		args = []any{`"` + query + `"`, minImportance}
+	} else {
+		rows_query = `SELECT f.id, fts.rank
 		 FROM facts_fts_trigram fts
 		 JOIN facts f ON f.id = fts.rowid
 		 WHERE facts_fts_trigram MATCH ? AND f.active = 1
 		 ORDER BY fts.rank
-		 LIMIT 30`,
-		`"`+query+`"`,
-	)
+		 LIMIT 30`
+		args = []any{`"` + query + `"`}
+	}
+
+	rows, err := s.db.QueryContext(ctx, rows_query, args...)
 	if err != nil {
 		return nil
 	}

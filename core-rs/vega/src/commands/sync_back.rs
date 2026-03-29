@@ -4,16 +4,16 @@
 
 use std::fs;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
 
 #[allow(clippy::expect_used)]
-static STATUS_TABLE_RE: Lazy<Regex> = Lazy::new(|| {
+static STATUS_TABLE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").expect("valid regex")
 });
 
@@ -96,7 +96,10 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         let mut new_content = content.clone();
         if let Some(st) = status {
             if let Some(cap) = status_re.captures(&content) {
-                let old = cap.get(1).unwrap_or_else(|| unreachable!("capture group 1 exists")).as_str();
+                let old = cap
+                    .get(1)
+                    .unwrap_or_else(|| unreachable!("capture group 1 exists"))
+                    .as_str();
                 if old.trim() != st.trim() {
                     new_content = status_re
                         .replace(&new_content, |caps: &regex::Captures| {
@@ -133,7 +136,11 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
 pub struct SyncBackHandler;
 
 impl super::CommandHandler for SyncBackHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_sync_back(args, config)
     }
 }

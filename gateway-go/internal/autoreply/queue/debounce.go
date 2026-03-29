@@ -44,6 +44,18 @@ type Debouncer[T any] struct {
 
 const maxDebounceRetries = 3
 
+// maxDebounceBufferItems caps per-key buffered items to prevent runaway growth
+// when retries keep failing while new items are continuously enqueued.
+const maxDebounceBufferItems = 1000
+
+func capDebounceItems[T any](items []T) []T {
+	if len(items) <= maxDebounceBufferItems {
+		return items
+	}
+	// Keep the newest tail to prioritize recent follow-ups under pressure.
+	return items[len(items)-maxDebounceBufferItems:]
+}
+
 // NewDebouncer creates a new inbound debouncer.
 func NewDebouncer[T any](ctx context.Context, cfg DebouncerConfig[T]) *Debouncer[T] {
 	debounceMs := cfg.DebounceMs
@@ -172,12 +184,13 @@ func (d *Debouncer[T]) flushBuffer(key string, buf *debounceBuffer[T]) {
 	if ok {
 		// Prepend failed items to existing buffer.
 		existing.items = append(buf.items, existing.items...)
+		existing.items = capDebounceItems(existing.items)
 		if existing.retryCount < nextRetry {
 			existing.retryCount = nextRetry
 		}
 	} else {
 		retry := &debounceBuffer[T]{
-			items:      buf.items,
+			items:      capDebounceItems(buf.items),
 			debounceMs: buf.debounceMs,
 			retryCount: nextRetry,
 		}

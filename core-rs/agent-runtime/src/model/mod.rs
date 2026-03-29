@@ -48,6 +48,7 @@ pub use selection::{
     to_agent_model_list_like,
     // Types
     AllowedModelSet,
+    BuildAllowedModelSetParams,
     ModelAliasIndex,
     ModelCatalogEntry,
     ModelInputType,
@@ -56,6 +57,7 @@ pub use selection::{
     ProviderConfigEntry,
     ProviderModelEntry,
     ResolveAllowedModelRefParams,
+    SubagentSpawnModelSelectionParams,
     ThinkLevel,
     ThinkingCatalogEntry,
 };

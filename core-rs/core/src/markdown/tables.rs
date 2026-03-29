@@ -304,10 +304,7 @@ mod tests {
         }
     }
 
-    fn make_state_with_table(
-        headers: Vec<TableCell>,
-        rows: Vec<Vec<TableCell>>,
-    ) -> RenderState {
+    fn make_state_with_table(headers: Vec<TableCell>, rows: Vec<Vec<TableCell>>) -> RenderState {
         let mut state = RenderState::new(HeadingStyle::None, String::new(), TableMode::Bullets);
         state.table = Some(TableState {
             headers,
@@ -373,7 +370,9 @@ mod tests {
         let bold_spans: Vec<_> = state
             .styles
             .iter()
-            .filter(|s| s.style == MarkdownStyle::Bold && s.start <= pos && s.end >= pos + label_text.len())
+            .filter(|s| {
+                s.style == MarkdownStyle::Bold && s.start <= pos && s.end >= pos + label_text.len()
+            })
             .collect();
         assert_eq!(bold_spans.len(), 1, "row label must be bold");
     }

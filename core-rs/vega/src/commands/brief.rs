@@ -4,17 +4,18 @@
 //! next_actions, risks, key_points, recent_comms, recommended_commands.
 //! Supports multi-project brief ("brief 5 10 15").
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use crate::config::VegaConfig;
 use crate::utils::extract_bullets;
 
 #[allow(clippy::expect_used)]
-static RISK_KEYWORD_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(이슈|리스크|지연|미정|보류|주의|대응|중단|긴급)").expect("valid regex"));
+static RISK_KEYWORD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(이슈|리스크|지연|미정|보류|주의|대응|중단|긴급)").expect("valid regex")
+});
 
 use super::{find_project_id, open_db, CommandResult};
 
@@ -365,15 +366,25 @@ mod tests {
 pub struct BriefHandler;
 
 impl super::CommandHandler for BriefHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_brief(args, config)
     }
 
     fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
         let mut kept = json!({});
         for key in [
-            "project_id", "project_name", "status", "client",
-            "person_internal", "latest_activity", "next_actions", "risks",
+            "project_id",
+            "project_name",
+            "status",
+            "client",
+            "person_internal",
+            "latest_activity",
+            "next_actions",
+            "risks",
         ] {
             if let Some(v) = data.get(key) {
                 kept[key] = v.clone();
@@ -412,7 +423,11 @@ impl super::CommandHandler for BriefHandler {
         hints
     }
 
-    fn build_bundle(&self, data: &serde_json::Value, conn: Option<&Connection>) -> serde_json::Value {
+    fn build_bundle(
+        &self,
+        data: &serde_json::Value,
+        conn: Option<&Connection>,
+    ) -> serde_json::Value {
         let conn = match conn {
             Some(c) => c,
             None => return json!({}),
@@ -425,8 +440,7 @@ impl super::CommandHandler for BriefHandler {
                 "SELECT content FROM chunks WHERE project_id=?1 AND chunk_type='next_action'",
             ) {
                 let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-                if let Ok(rows) =
-                    stmt.query_map(rusqlite::params![pid], |r| r.get::<_, String>(0))
+                if let Ok(rows) = stmt.query_map(rusqlite::params![pid], |r| r.get::<_, String>(0))
                 {
                     if let Ok(date_re) = regex::Regex::new(r"20\d{2}[-/]\d{2}[-/]\d{2}") {
                         for content in rows.flatten() {

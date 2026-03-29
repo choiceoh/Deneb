@@ -370,8 +370,8 @@ pub fn validate_cron_runs_params(
 
     // id and jobId use CronRunLogJobIdSchema: minLength 1, pattern ^[^/\\]+$
     #[allow(clippy::expect_used)]
-    static JOB_ID_RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| regex::Regex::new(r"^[^/\\]+$").expect("valid regex"));
+    static JOB_ID_RE: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"^[^/\\]+$").expect("valid regex"));
     for f in &["id", "jobId"] {
         check_optional(obj, f, path, errors, |v, p, e| {
             check_non_empty_string(v, p, e);

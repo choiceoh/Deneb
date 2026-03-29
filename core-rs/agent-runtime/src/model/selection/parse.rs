@@ -113,8 +113,8 @@ pub fn resolve_model_ref_from_string(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_model_ref, resolve_model_ref_from_string, split_trailing_auth_profile};
     use super::super::allowlist::build_model_alias_index;
+    use super::{parse_model_ref, resolve_model_ref_from_string, split_trailing_auth_profile};
     use crate::defaults::DEFAULT_PROVIDER;
 
     #[test]

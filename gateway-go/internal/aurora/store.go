@@ -35,6 +35,9 @@ type Store struct {
 	dirty      bool
 	flushTimer *time.Timer
 	flushErr   error // last async flush error, surfaced on next write or Close
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // storeData is the on-disk schema.
@@ -264,8 +267,29 @@ func (s *Store) Sync() error {
 	return s.flushErr
 }
 
-// Close flushes any pending dirty data to disk synchronously.
+// Close flushes any pending dirty data to disk. Uses closeOnce to ensure
+// idempotency, and a timeout to avoid indefinite shutdown hangs if another
+// goroutine is stuck while holding s.mu.
 func (s *Store) Close() error {
+	s.closeOnce.Do(func() {
+		const closeFlushTimeout = 5 * time.Second
+		done := make(chan error, 1)
+		go func() {
+			done <- s.syncLocked()
+		}()
+		select {
+		case err := <-done:
+			s.closeErr = err
+		case <-time.After(closeFlushTimeout):
+			s.closeErr = fmt.Errorf("aurora store close timeout after %s", closeFlushTimeout)
+		}
+	})
+	return s.closeErr
+}
+
+// syncLocked acquires the write lock and flushes dirty data. Used by Close
+// via a goroutine so Close can apply a timeout without holding the lock.
+func (s *Store) syncLocked() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.flushTimer != nil {
@@ -534,6 +558,12 @@ func (s *Store) PersistCondensedSummary(input PersistCondensedInput) error {
 
 	// Prune condensed child summary records — they are now captured by the condensed summary.
 	for _, parentID := range input.ParentSummaryIDs {
+		// Defensive cleanup: some test paths can create condensed summaries
+		// without going through PersistLeafSummary, leaving parent message records.
+		// Remove parent-linked message records before dropping parent metadata.
+		for _, msgID := range s.data.SummaryMessages[parentID] {
+			delete(s.data.Messages, msgKey(msgID))
+		}
 		delete(s.data.Summaries, parentID)
 		delete(s.data.SummaryParents, parentID)
 		delete(s.data.SummaryMessages, parentID)

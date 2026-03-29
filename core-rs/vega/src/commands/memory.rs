@@ -469,7 +469,11 @@ mod tests {
 pub struct MemorySearchHandler;
 
 impl super::CommandHandler for MemorySearchHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_memory_search(args, config)
     }
 }
@@ -477,7 +481,11 @@ impl super::CommandHandler for MemorySearchHandler {
 pub struct MemoryUpdateHandler;
 
 impl super::CommandHandler for MemoryUpdateHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_memory_update(args, config)
     }
 }
@@ -485,7 +493,11 @@ impl super::CommandHandler for MemoryUpdateHandler {
 pub struct MemoryEmbedHandler;
 
 impl super::CommandHandler for MemoryEmbedHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_memory_embed(args, config)
     }
 }
@@ -493,7 +505,11 @@ impl super::CommandHandler for MemoryEmbedHandler {
 pub struct MemoryStatusHandler;
 
 impl super::CommandHandler for MemoryStatusHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_memory_status(args, config)
     }
 }
@@ -501,7 +517,11 @@ impl super::CommandHandler for MemoryStatusHandler {
 pub struct MemoryVersionHandler;
 
 impl super::CommandHandler for MemoryVersionHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_memory_version(args, config)
     }
 }

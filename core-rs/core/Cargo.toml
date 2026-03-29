@@ -42,7 +42,6 @@ rayon.workspace = true
 regex.workspace = true
 # Fancy regex for patterns with lookahead/lookbehind (e.g., secret ref ID validation).
 fancy-regex.workspace = true
-once_cell.workspace = true
 
 # Compression (PNG encoding)
 flate2 = "1"

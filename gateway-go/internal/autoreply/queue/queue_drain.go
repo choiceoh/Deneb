@@ -3,8 +3,8 @@
 package queue
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 	"sync"
 	"time"
@@ -130,6 +130,7 @@ func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDra
 func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, runFollowup FollowupDrainCallback) {
 	consecutiveFailures := 0
 	collectForceIndividual := false
+	reschedule := true
 
 	defer func() {
 		queue.Lock()
@@ -138,7 +139,7 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 		queue.Unlock()
 		if empty {
 			s.registry.Delete(key)
-		} else {
+		} else if reschedule {
 			s.ScheduleDrain(key, runFollowup)
 		}
 	}()
@@ -188,6 +189,7 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 					consecutiveFailures++
 					if consecutiveFailures >= maxConsecutiveFailures {
 						s.logError(fmt.Sprintf("followup queue drain giving up for %s after %d failures", key, consecutiveFailures))
+						reschedule = false
 						break
 					}
 					continue
@@ -223,6 +225,7 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 			consecutiveFailures++
 			s.logError(fmt.Sprintf("followup queue drain failed for %s: %s", key, err))
 			if consecutiveFailures >= maxConsecutiveFailures {
+				reschedule = false
 				break
 			}
 			continue

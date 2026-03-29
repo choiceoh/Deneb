@@ -200,7 +200,11 @@ fn find_person_actions(conn: &Connection, name: &str) -> Result<Vec<Value>, Stri
 pub struct PersonHandler;
 
 impl super::CommandHandler for PersonHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_person(args, config)
     }
 
@@ -228,7 +232,11 @@ impl super::CommandHandler for PersonHandler {
         }
     }
 
-    fn build_bundle(&self, data: &serde_json::Value, conn: Option<&rusqlite::Connection>) -> serde_json::Value {
+    fn build_bundle(
+        &self,
+        data: &serde_json::Value,
+        conn: Option<&rusqlite::Connection>,
+    ) -> serde_json::Value {
         let conn = match conn {
             Some(c) => c,
             None => return json!({}),

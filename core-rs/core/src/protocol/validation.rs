@@ -7,9 +7,9 @@
 //! Each schema maps to a validation function operating on `serde_json::Value`
 //! (not typed structs) for rich error reporting with field paths.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
+use std::sync::LazyLock;
 
 use super::schemas;
 
@@ -164,7 +164,7 @@ pub fn check_max_length(
 pub fn check_pattern(
     value: &serde_json::Value,
     path: &str,
-    pattern: &Lazy<Regex>,
+    pattern: &LazyLock<Regex>,
     errors: &mut Vec<ValidationError>,
 ) {
     if let Some(s) = value.as_str() {
@@ -182,7 +182,7 @@ pub fn check_pattern(
 pub fn check_fancy_pattern(
     value: &serde_json::Value,
     path: &str,
-    pattern: &Lazy<fancy_regex::Regex>,
+    pattern: &LazyLock<fancy_regex::Regex>,
     errors: &mut Vec<ValidationError>,
 ) {
     if let Some(s) = value.as_str() {

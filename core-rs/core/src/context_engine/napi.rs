@@ -27,8 +27,8 @@ enum EngineInstance {
     Describe(DescribeEngine),
 }
 
-static CONTEXT_ENGINES: once_cell::sync::Lazy<Mutex<ContextEngineStore>> =
-    once_cell::sync::Lazy::new(|| Mutex::new(ContextEngineStore::new()));
+static CONTEXT_ENGINES: std::sync::LazyLock<Mutex<ContextEngineStore>> =
+    std::sync::LazyLock::new(|| Mutex::new(ContextEngineStore::new()));
 
 struct ContextEngineStore {
     engines: std::collections::HashMap<u32, EngineInstance>,

@@ -346,22 +346,34 @@ func truncateForLLM(s string) string {
 	return fmt.Sprintf("%s\n\n... [%d chars omitted] ...\n\n%s", head, omitted, tail)
 }
 
+type workdirCacheEntry struct {
+	exists  bool
+	checked time.Time
+}
+
+const workdirCacheTTL = 10 * time.Second
+
 // workdirCache avoids redundant os.Stat calls for the same directory across
 // sequential exec invocations. Safe for concurrent use.
-var workdirCache sync.Map // map[string]bool
+var workdirCache sync.Map // map[string]workdirCacheEntry
 
 func validateWorkdir(dir string) error {
 	if cached, ok := workdirCache.Load(dir); ok {
-		if cached.(bool) {
-			return nil
+		entry := cached.(workdirCacheEntry)
+		if time.Since(entry.checked) <= workdirCacheTTL {
+			if entry.exists {
+				return nil
+			}
+			return fmt.Errorf("working directory does not exist: %s", dir)
 		}
+		workdirCache.Delete(dir)
 	}
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		workdirCache.Store(dir, false)
+		workdirCache.Store(dir, workdirCacheEntry{exists: false, checked: time.Now()})
 		return fmt.Errorf("working directory does not exist: %s", dir)
 	}
-	workdirCache.Store(dir, true)
+	workdirCache.Store(dir, workdirCacheEntry{exists: true, checked: time.Now()})
 	return nil
 }
 

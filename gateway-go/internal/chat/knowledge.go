@@ -82,7 +82,13 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 					queryVec = vec
 				}
 			}
-			results, err := deps.MemoryStore.SearchFacts(ctx, message, queryVec, memory.SearchOpts{Limit: knowledgeMaxMemory})
+			searchOpts := memory.SearchOpts{Limit: knowledgeMaxMemory}
+			if deps.MemoryEmbedder == nil {
+				// No semantic search available: restrict FTS scan to high-importance facts
+				// so hundreds of low-signal facts don't get scanned on every message.
+				searchOpts.MinImportance = 0.7
+			}
+			results, err := deps.MemoryStore.SearchFacts(ctx, message, queryVec, searchOpts)
 			if err == nil {
 				structFacts = results
 			}

@@ -3,8 +3,8 @@
 //! Mirrors `src/agents/agent-scope.ts` and `src/routing/account-id.ts` (pure-logic subset).
 //! Keep in sync.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// Default agent identifier when none is configured.
 pub const DEFAULT_AGENT_ID: &str = "main";
@@ -17,21 +17,21 @@ pub const DEFAULT_ACCOUNT_ID: &str = "default";
 
 // Pre-compiled regexes for agent ID normalization.
 #[allow(clippy::expect_used)]
-pub(super) static VALID_ID_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
+pub(super) static VALID_ID_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
 #[allow(clippy::expect_used)]
-pub(super) static INVALID_CHARS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[^a-z0-9_-]+").expect("valid regex"));
+pub(super) static INVALID_CHARS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^a-z0-9_-]+").expect("valid regex"));
 #[allow(clippy::expect_used)]
-pub(super) static LEADING_DASH_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^-+").expect("valid regex"));
+pub(super) static LEADING_DASH_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^-+").expect("valid regex"));
 #[allow(clippy::expect_used)]
-pub(super) static TRAILING_DASH_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"-+$").expect("valid regex"));
+pub(super) static TRAILING_DASH_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"-+$").expect("valid regex"));
 
 #[allow(clippy::expect_used)]
-static VALID_ACCOUNT_ID_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
+static VALID_ACCOUNT_ID_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
 
 /// Normalize an agent ID to a path-safe, shell-friendly form.
 pub fn normalize_agent_id(value: &str) -> String {
