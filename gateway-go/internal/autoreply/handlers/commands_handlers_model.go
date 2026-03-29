@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
