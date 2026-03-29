@@ -481,8 +481,18 @@ func ToolApplyPatch(defaultDir string) ToolFunc {
 }
 
 func patchContainsSymlinkMode(patch string) bool {
-	return strings.Contains(patch, "\nnew file mode 120000") ||
-		strings.HasPrefix(patch, "new file mode 120000") ||
-		strings.Contains(patch, "\nold mode 120000") ||
-		strings.HasPrefix(patch, "old mode 120000")
+	for _, line := range strings.Split(patch, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "new file mode 120000") ||
+			strings.HasPrefix(trimmed, "old mode 120000") {
+			return true
+		}
+
+		// Existing symlink updates are represented as:
+		// index <old-sha>..<new-sha> 120000
+		if strings.HasPrefix(trimmed, "index ") && strings.HasSuffix(trimmed, " 120000") {
+			return true
+		}
+	}
+	return false
 }
