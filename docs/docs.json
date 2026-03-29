@@ -256,10 +256,6 @@
       "destination": "/web/dashboard"
     },
     {
-      "source": "/device-models",
-      "destination": "/reference/device-models"
-    },
-    {
       "source": "/discord",
       "destination": "/channels/discord"
     },

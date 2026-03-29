@@ -535,15 +535,6 @@ For a hackable (git) install:
 curl -fsSL https://deneb.ai/install.sh | bash -s -- --install-method git --verbose
 ```
 
-Windows (PowerShell) equivalent:
-
-```powershell
-# install.ps1 has no dedicated -Verbose flag yet.
-Set-PSDebug -Trace 1
-& ([scriptblock]::Create((iwr -useb https://deneb.ai/install.ps1))) -NoOnboard
-Set-PSDebug -Trace 0
-```
-
 More options: [Installer flags](/install/installer).
 
 ### The docs did not answer my question - how do I get a better answer
@@ -584,7 +575,7 @@ How it works in the cloud: the **Gateway runs on the server**, and you access it
 from your laptop/phone via the Control UI (or Tailscale/SSH). Your state + workspace
 live on the server, so treat the host as the source of truth and back it up.
 
-You can pair **nodes** (Mac/iOS/Android/headless) to that cloud Gateway to access
+You can pair **nodes** (headless) to that cloud Gateway to access
 local screen/camera/canvas or run commands on your laptop while keeping the
 Gateway in the cloud.
 
@@ -1400,7 +1391,7 @@ Docs: [Web tools](/tools/web).
 The common pattern is **one Gateway** (e.g. Raspberry Pi) plus **nodes** and **agents**:
 
 - **Gateway (central):** owns channels (Telegram/Discord), routing, and sessions.
-- **Nodes (devices):** Macs/iOS/Android connect as peripherals and expose local tools (`system.run`, `canvas`, `camera`).
+- **Nodes (devices):** connect as peripherals and expose local tools (`system.run`, `canvas`, `camera`).
 - **Agents (workers):** separate brains/workspaces for special roles (e.g. "Hetzner ops", "Personal data").
 - **Sub-agents:** spawn background work from a main agent when you want parallelism.
 - **TUI:** connect to the Gateway and switch agents/sessions.
@@ -1456,7 +1447,7 @@ Typical setup:
 1. Run the Gateway on the always-on host (VPS/home server).
 2. Put the Gateway host + your computer on the same tailnet.
 3. Ensure the Gateway WS is reachable (tailnet bind or SSH tunnel).
-4. Open the macOS app locally and connect in **Remote over SSH** mode (or direct tailnet)
+4. Connect a node host in **Remote over SSH** mode (or direct tailnet)
    so it can register as a node.
 5. Approve the node on the Gateway:
 
@@ -1467,7 +1458,7 @@ Typical setup:
 
 No separate TCP bridge is required; nodes connect over the Gateway WebSocket.
 
-Security reminder: pairing a macOS node allows `system.run` on that machine. Only
+Security reminder: pairing a node allows `system.run` on that machine. Only
 pair devices you trust, and review [Security](/gateway/security).
 
 Docs: [Nodes](/nodes), [Gateway protocol](/gateway/protocol), [Security](/gateway/security).
@@ -1543,7 +1534,7 @@ Docs: [Nodes](/nodes), [Browser](/tools/browser).
 
 If you only need **local tools** (screen/camera/exec) on the second laptop, add it as a
 **node**. That keeps a single Gateway and avoids duplicated config. Local node tools are
-currently macOS-only, but we plan to extend them to other OSes.
+available on Linux via headless node hosts.
 
 Install a second Gateway only when you need **hard isolation** or two fully separate bots.
 
@@ -1552,8 +1543,7 @@ Docs: [Nodes](/nodes), [Multiple gateways](/gateway/multiple-gateways).
 ### Do nodes run a gateway service
 
 No. Only **one gateway** should run per host unless you intentionally run isolated profiles (see [Multiple gateways](/gateway/multiple-gateways)). Nodes are peripherals that connect
-to the gateway (iOS/Android nodes, or macOS "node mode" in the menubar app). For headless node
-hosts and CLI control, see `deneb node`.
+to the gateway. For headless node hosts and CLI control, see `deneb node`.
 
 A full restart is required for `gateway`, `discovery`, and `canvasHost` changes.
 
@@ -1618,15 +1608,15 @@ deneb gateway --tailscale serve
 
 This keeps the gateway bound to loopback and exposes HTTPS via Tailscale. See [Tailscale](/gateway/tailscale).
 
-### How do I connect a Mac node to a remote Gateway Tailscale Serve
+### How do I connect a node to a remote Gateway Tailscale Serve
 
 Serve exposes the **Gateway Control UI + WS**. Nodes connect over the same Gateway WS endpoint.
 
 Recommended setup:
 
-1. **Make sure the VPS + Mac are on the same tailnet**.
-2. **Use the macOS app in Remote mode** (SSH target can be the tailnet hostname).
-   The app will tunnel the Gateway port and connect as a node.
+1. **Make sure both hosts are on the same tailnet**.
+2. **Run `deneb node` on the node host** (SSH target can be the tailnet hostname).
+   The node will connect to the Gateway WS endpoint and register.
 3. **Approve the node** on the gateway:
 
    ```bash
@@ -2515,7 +2505,7 @@ deneb gateway stop
 deneb gateway start
 ```
 
-This stops/starts the **supervised service** (launchd on macOS, systemd on Linux).
+This stops/starts the **supervised service** (systemd on Linux).
 Use this when the Gateway runs in the background as a daemon.
 
 If you're running in the foreground, stop with Ctrl-C, then:
