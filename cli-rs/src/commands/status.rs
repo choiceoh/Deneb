@@ -1,32 +1,16 @@
 use clap::Args;
 
-use crate::commands::gateway_query::{run_gateway_query, GatewayQueryArgs};
+use crate::commands::gateway_query::run_gateway_query;
 use crate::config;
 use crate::errors::CliError;
 use crate::gateway::call_gateway_with_config;
+use crate::subcli::rpc_helpers::GatewayFlags;
 use crate::terminal::Palette;
 
 #[derive(Args, Debug)]
 pub struct StatusArgs {
-    /// Gateway WebSocket URL override.
-    #[arg(long)]
-    pub url: Option<String>,
-
-    /// Gateway auth token.
-    #[arg(long)]
-    pub token: Option<String>,
-
-    /// Gateway password.
-    #[arg(long)]
-    pub password: Option<String>,
-
-    /// Timeout in milliseconds.
-    #[arg(long, default_value = "10000")]
-    pub timeout: u64,
-
-    /// Output JSON.
-    #[arg(long)]
-    pub json: bool,
+    #[command(flatten)]
+    pub gw: GatewayFlags,
 
     /// Show all details.
     #[arg(long)]
@@ -38,13 +22,7 @@ pub async fn run(args: &StatusArgs) -> Result<(), CliError> {
     let config = config::load_config_best_effort(&config_path);
 
     run_gateway_query(
-        GatewayQueryArgs {
-            url: &args.url,
-            token: &args.token,
-            password: &args.password,
-            timeout: args.timeout,
-            json: args.json,
-        },
+        &args.gw,
         "health",
         "Fetching status...",
         |opts| call_gateway_with_config(opts, &config),

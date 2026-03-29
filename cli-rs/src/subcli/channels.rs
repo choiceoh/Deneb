@@ -1,8 +1,8 @@
 use clap::{Args, Subcommand};
 
+use super::rpc_helpers::{rpc_print_fmt, GatewayFlags};
 use crate::errors::CliError;
-use crate::gateway::{call_gateway, CallOptions};
-use crate::terminal::{is_json_mode, styled_table, Palette};
+use crate::terminal::{styled_table, Palette};
 
 #[derive(Args, Debug)]
 pub struct ChannelsArgs {
@@ -17,26 +17,8 @@ pub enum ChannelsCommand {
         /// Skip usage/quota snapshots.
         #[arg(long)]
         no_usage: bool,
-
-        /// Output JSON.
-        #[arg(long)]
-        json: bool,
-
-        /// Gateway WebSocket URL override.
-        #[arg(long)]
-        url: Option<String>,
-
-        /// Gateway auth token.
-        #[arg(long)]
-        token: Option<String>,
-
-        /// Gateway password.
-        #[arg(long)]
-        password: Option<String>,
-
-        /// Timeout in milliseconds.
-        #[arg(long, default_value = "15000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
 
     /// Show channel status with optional connectivity probe.
@@ -44,114 +26,58 @@ pub enum ChannelsCommand {
         /// Probe channel credentials for connectivity.
         #[arg(long)]
         probe: bool,
-
-        /// Output JSON.
-        #[arg(long)]
-        json: bool,
-
-        /// Gateway WebSocket URL override.
-        #[arg(long)]
-        url: Option<String>,
-
-        /// Gateway auth token.
-        #[arg(long)]
-        token: Option<String>,
-
-        /// Gateway password.
-        #[arg(long)]
-        password: Option<String>,
-
-        /// Timeout in milliseconds.
-        #[arg(long, default_value = "15000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
 }
 
 pub async fn run(args: &ChannelsArgs) -> Result<(), CliError> {
     match &args.command {
-        ChannelsCommand::List {
-            no_usage,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            cmd_list(
-                *no_usage,
-                *json,
-                url.as_deref(),
-                token.as_deref(),
-                password.as_deref(),
-                *timeout,
-            )
+        ChannelsCommand::List { no_usage, gw } => {
+            let mut params = serde_json::json!({});
+            if *no_usage {
+                params["noUsage"] = serde_json::json!(true);
+            }
+            rpc_print_fmt("channels.list", params, gw, "Fetching channels...", |result, json_mode| {
+                if json_mode {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                    return Ok(());
+                }
+                print_channels_list(&result);
+                Ok(())
+            })
             .await
         }
-        ChannelsCommand::Status {
-            probe,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            cmd_status(
-                *probe,
-                *json,
-                url.as_deref(),
-                token.as_deref(),
-                password.as_deref(),
-                *timeout,
-            )
+        ChannelsCommand::Status { probe, gw } => {
+            let probe = *probe;
+            let mut params = serde_json::json!({});
+            if probe {
+                params["probe"] = serde_json::json!(true);
+            }
+            params["timeoutMs"] = serde_json::json!(gw.timeout);
+            let spinner_msg = if probe { "Probing channels..." } else { "Fetching channel status..." };
+            rpc_print_fmt("channels.status", params, gw, spinner_msg, move |result, json_mode| {
+                if json_mode {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                    return Ok(());
+                }
+                print_channels_status(&result, probe);
+                Ok(())
+            })
             .await
         }
     }
 }
 
-async fn cmd_list(
-    no_usage: bool,
-    json: bool,
-    url: Option<&str>,
-    token: Option<&str>,
-    password: Option<&str>,
-    timeout: u64,
-) -> Result<(), CliError> {
-    let json_mode = is_json_mode(json);
-
-    let mut params = serde_json::json!({});
-    if no_usage {
-        params["noUsage"] = serde_json::json!(true);
-    }
-
-    let result = crate::terminal::progress::with_spinner(
-        "Fetching channels...",
-        !json_mode,
-        call_gateway(CallOptions {
-            url: url.map(|s| s.to_string()),
-            token: token.map(|s| s.to_string()),
-            password: password.map(|s| s.to_string()),
-            method: "channels.list".to_string(),
-            params: Some(params),
-            timeout_ms: timeout,
-            expect_final: false,
-        }),
-    )
-    .await?;
-
-    if json_mode {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-        return Ok(());
-    }
-
+fn print_channels_list(result: &serde_json::Value) {
     use crate::terminal::Symbols;
     let bold = Palette::bold();
     let muted = Palette::muted();
 
     let channel_accounts = result.get("channelAccounts").and_then(|ca| ca.as_object());
-
     let Some(channel_accounts) = channel_accounts else {
         println!("    {}", muted.apply_to("No channels configured."));
-        return Ok(());
+        return;
     };
 
     println!();
@@ -164,7 +90,11 @@ async fn cmd_list(
     for (channel, accounts) in channel_accounts {
         let accounts_arr = accounts.as_array().cloned().unwrap_or_default();
         if accounts_arr.is_empty() {
-            table.add_row(vec![channel.clone(), Symbols::DASH.to_string(), Symbols::DASH.to_string()]);
+            table.add_row(vec![
+                channel.clone(),
+                Symbols::DASH.to_string(),
+                Symbols::DASH.to_string(),
+            ]);
             continue;
         }
         for acct in &accounts_arr {
@@ -177,70 +107,23 @@ async fn cmd_list(
                 .and_then(|v| v.as_bool())
                 .map(|b| if b { Symbols::DOT_FILLED } else { Symbols::DASH })
                 .unwrap_or(Symbols::DASH);
-            table.add_row(vec![
-                channel.clone(),
-                account_id.to_string(),
-                enabled.to_string(),
-            ]);
+            table.add_row(vec![channel.clone(), account_id.to_string(), enabled.to_string()]);
         }
     }
 
     println!("{table}");
     println!();
-    Ok(())
 }
 
-async fn cmd_status(
-    probe: bool,
-    json: bool,
-    url: Option<&str>,
-    token: Option<&str>,
-    password: Option<&str>,
-    timeout: u64,
-) -> Result<(), CliError> {
-    let json_mode = is_json_mode(json);
-
-    let mut params = serde_json::json!({});
-    if probe {
-        params["probe"] = serde_json::json!(true);
-    }
-    params["timeoutMs"] = serde_json::json!(timeout);
-
-    let spinner_msg = if probe {
-        "Probing channels..."
-    } else {
-        "Fetching channel status..."
-    };
-
-    let result = crate::terminal::progress::with_spinner(
-        spinner_msg,
-        !json_mode,
-        call_gateway(CallOptions {
-            url: url.map(|s| s.to_string()),
-            token: token.map(|s| s.to_string()),
-            password: password.map(|s| s.to_string()),
-            method: "channels.status".to_string(),
-            params: Some(params),
-            timeout_ms: timeout,
-            expect_final: false,
-        }),
-    )
-    .await?;
-
-    if json_mode {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-        return Ok(());
-    }
-
+fn print_channels_status(result: &serde_json::Value, probe: bool) {
     use crate::terminal::Symbols;
     let bold = Palette::bold();
     let muted = Palette::muted();
 
     let channel_accounts = result.get("channelAccounts").and_then(|ca| ca.as_object());
-
     let Some(channel_accounts) = channel_accounts else {
         println!("    {}", muted.apply_to("No channels configured."));
-        return Ok(());
+        return;
     };
 
     println!();
@@ -248,14 +131,7 @@ async fn cmd_status(
     println!();
 
     let mut table = styled_table();
-    let mut headers = vec![
-        "Channel",
-        "Account",
-        "Enabled",
-        "Configured",
-        "Linked",
-        "Connected",
-    ];
+    let mut headers = vec!["Channel", "Account", "Enabled", "Configured", "Linked", "Connected"];
     if probe {
         headers.push("Probe");
     }
@@ -273,7 +149,6 @@ async fn cmd_status(
             let configured = bool_indicator(acct.get("configured"));
             let linked = bool_indicator(acct.get("linked"));
             let connected = bool_indicator(acct.get("connected"));
-
             let last_activity = acct
                 .get("lastInboundAt")
                 .or_else(|| acct.get("lastOutboundAt"))
@@ -309,15 +184,13 @@ async fn cmd_status(
 
     println!("{table}");
     println!();
-    Ok(())
 }
 
 fn bool_indicator(val: Option<&serde_json::Value>) -> String {
     use crate::terminal::Symbols;
     match val.and_then(|v| v.as_bool()) {
         Some(true) => Symbols::DOT_FILLED.to_string(),
-        Some(false) => Symbols::DASH.to_string(),
-        None => Symbols::DASH.to_string(),
+        _ => Symbols::DASH.to_string(),
     }
 }
 

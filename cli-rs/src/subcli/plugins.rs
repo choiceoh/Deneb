@@ -1,8 +1,8 @@
 use clap::{Args, Subcommand};
 
+use super::rpc_helpers::{rpc_action, rpc_print, rpc_print_fmt, GatewayFlags};
 use crate::errors::CliError;
-use crate::gateway::{call_gateway, CallOptions};
-use crate::terminal::{is_json_mode, styled_table, Palette};
+use crate::terminal::{styled_table, Palette};
 
 #[derive(Args, Debug)]
 pub struct PluginsArgs {
@@ -16,76 +16,36 @@ pub enum PluginsCommand {
     List {
         #[arg(long)]
         all: bool,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        token: Option<String>,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "10000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
     /// Show plugin info.
     Info {
         /// Plugin ID.
         id: String,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        token: Option<String>,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "10000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
     /// Enable a plugin.
     Enable {
         /// Plugin ID.
         id: String,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        token: Option<String>,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "10000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
     /// Disable a plugin.
     Disable {
         /// Plugin ID.
         id: String,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        token: Option<String>,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "10000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
     /// Install a plugin.
     Install {
         /// Plugin package name or path.
         source: String,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        token: Option<String>,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "30000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
     /// Uninstall a plugin.
     Uninstall {
@@ -93,149 +53,67 @@ pub enum PluginsCommand {
         id: String,
         #[arg(long)]
         force: bool,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        token: Option<String>,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "30000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
 }
 
 pub async fn run(args: &PluginsArgs) -> Result<(), CliError> {
     match &args.command {
-        PluginsCommand::List {
-            all,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            let json_mode = is_json_mode(*json);
-            let result = crate::terminal::progress::with_spinner(
+        PluginsCommand::List { all, gw } => {
+            rpc_print_fmt(
+                "plugins.list",
+                serde_json::json!({"all": all}),
+                gw,
                 "Fetching plugins...",
-                !json_mode,
-                call_gateway(CallOptions {
-                    url: url.clone(),
-                    token: token.clone(),
-                    password: password.clone(),
-                    method: "plugins.list".to_string(),
-                    params: Some(serde_json::json!({"all": all})),
-                    timeout_ms: *timeout,
-                    expect_final: false,
-                }),
+                |result, json_mode| {
+                    if json_mode {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                    } else {
+                        print_plugins_table(&result);
+                    }
+                    Ok(())
+                },
             )
-            .await?;
-            if json_mode {
-                println!("{}", serde_json::to_string_pretty(&result)?);
-            } else {
-                print_plugins_table(&result);
-            }
-            Ok(())
+            .await
         }
-        PluginsCommand::Info {
-            id,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            rpc_simple(
-                "plugins.info",
+        PluginsCommand::Info { id, gw } => {
+            rpc_print("plugins.info", serde_json::json!({"id": id}), gw).await
+        }
+        PluginsCommand::Enable { id, gw } => {
+            rpc_action(
+                "plugins.enable",
                 serde_json::json!({"id": id}),
-                *json,
-                url,
-                token,
-                password,
-                *timeout,
+                gw,
+                &format!("Plugin '{id}' enabled."),
             )
             .await
         }
-        PluginsCommand::Enable {
-            id,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            rpc_action(RpcActionParams {
-                method: "plugins.enable",
-                params: serde_json::json!({"id": id}),
-                json: *json,
-                url,
-                token,
-                password,
-                timeout: *timeout,
-                success_msg: &format!("Plugin '{id}' enabled."),
-            })
+        PluginsCommand::Disable { id, gw } => {
+            rpc_action(
+                "plugins.disable",
+                serde_json::json!({"id": id}),
+                gw,
+                &format!("Plugin '{id}' disabled."),
+            )
             .await
         }
-        PluginsCommand::Disable {
-            id,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            rpc_action(RpcActionParams {
-                method: "plugins.disable",
-                params: serde_json::json!({"id": id}),
-                json: *json,
-                url,
-                token,
-                password,
-                timeout: *timeout,
-                success_msg: &format!("Plugin '{id}' disabled."),
-            })
+        PluginsCommand::Install { source, gw } => {
+            rpc_action(
+                "plugins.install",
+                serde_json::json!({"source": source}),
+                gw,
+                &format!("Plugin '{source}' installed."),
+            )
             .await
         }
-        PluginsCommand::Install {
-            source,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            rpc_action(RpcActionParams {
-                method: "plugins.install",
-                params: serde_json::json!({"source": source}),
-                json: *json,
-                url,
-                token,
-                password,
-                timeout: *timeout,
-                success_msg: &format!("Plugin '{source}' installed."),
-            })
-            .await
-        }
-        PluginsCommand::Uninstall {
-            id,
-            force,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            rpc_action(RpcActionParams {
-                method: "plugins.uninstall",
-                params: serde_json::json!({"id": id, "force": force}),
-                json: *json,
-                url,
-                token,
-                password,
-                timeout: *timeout,
-                success_msg: &format!("Plugin '{id}' uninstalled."),
-            })
+        PluginsCommand::Uninstall { id, force, gw } => {
+            rpc_action(
+                "plugins.uninstall",
+                serde_json::json!({"id": id, "force": force}),
+                gw,
+                &format!("Plugin '{id}' uninstalled."),
+            )
             .await
         }
     }
@@ -274,67 +152,4 @@ fn print_plugins_table(result: &serde_json::Value) {
     }
     println!("{table}");
     println!();
-}
-
-async fn rpc_simple(
-    method: &str,
-    params: serde_json::Value,
-    _json: bool,
-    url: &Option<String>,
-    token: &Option<String>,
-    password: &Option<String>,
-    timeout: u64,
-) -> Result<(), CliError> {
-    let result = call_gateway(CallOptions {
-        url: url.clone(),
-        token: token.clone(),
-        password: password.clone(),
-        method: method.to_string(),
-        params: Some(params),
-        timeout_ms: timeout,
-        expect_final: false,
-    })
-    .await?;
-    println!("{}", serde_json::to_string_pretty(&result)?);
-    Ok(())
-}
-
-struct RpcActionParams<'a> {
-    method: &'a str,
-    params: serde_json::Value,
-    json: bool,
-    url: &'a Option<String>,
-    token: &'a Option<String>,
-    password: &'a Option<String>,
-    timeout: u64,
-    success_msg: &'a str,
-}
-
-async fn rpc_action(p: RpcActionParams<'_>) -> Result<(), CliError> {
-    let json_mode = is_json_mode(p.json);
-    let result = crate::terminal::progress::with_spinner(
-        "Working...",
-        !json_mode,
-        call_gateway(CallOptions {
-            url: p.url.clone(),
-            token: p.token.clone(),
-            password: p.password.clone(),
-            method: p.method.to_string(),
-            params: Some(p.params),
-            timeout_ms: p.timeout,
-            expect_final: false,
-        }),
-    )
-    .await?;
-    if json_mode {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-    } else {
-        use crate::terminal::Symbols;
-        println!(
-            "    {}  {}",
-            Palette::success().apply_to(Symbols::SUCCESS),
-            Palette::success().apply_to(p.success_msg)
-        );
-    }
-    Ok(())
 }

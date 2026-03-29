@@ -1,8 +1,8 @@
 use clap::{Args, Subcommand};
 
+use super::rpc_helpers::{rpc_print_fmt, GatewayFlags};
 use crate::errors::CliError;
-use crate::gateway::{call_gateway, CallOptions};
-use crate::terminal::{is_json_mode, Palette};
+use crate::terminal::Palette;
 
 #[derive(Args, Debug)]
 pub struct ModelsArgs {
@@ -22,137 +22,64 @@ pub enum ModelsCommand {
         #[arg(long)]
         provider: Option<String>,
 
-        /// Output JSON.
-        #[arg(long)]
-        json: bool,
-
-        /// Gateway WebSocket URL override.
-        #[arg(long)]
-        url: Option<String>,
-
-        /// Gateway auth token.
-        #[arg(long)]
-        token: Option<String>,
-
-        /// Gateway password.
-        #[arg(long)]
-        password: Option<String>,
-
-        /// Timeout in milliseconds.
-        #[arg(long, default_value = "10000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
 
     /// Show configured model status.
     Status {
-        /// Output JSON.
-        #[arg(long)]
-        json: bool,
-
-        /// Gateway WebSocket URL override.
-        #[arg(long)]
-        url: Option<String>,
-
-        /// Gateway auth token.
-        #[arg(long)]
-        token: Option<String>,
-
-        /// Gateway password.
-        #[arg(long)]
-        password: Option<String>,
-
-        /// Timeout in milliseconds.
-        #[arg(long, default_value = "10000")]
-        timeout: u64,
+        #[command(flatten)]
+        gw: GatewayFlags,
     },
 }
 
 pub async fn run(args: &ModelsArgs) -> Result<(), CliError> {
     match &args.command {
-        ModelsCommand::List {
-            all,
-            provider,
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            cmd_list(
-                *all,
-                provider.as_deref(),
-                *json,
-                url.as_deref(),
-                token.as_deref(),
-                password.as_deref(),
-                *timeout,
-            )
+        ModelsCommand::List { all, provider, gw } => {
+            let params = serde_json::json!({
+                "all": all,
+                "provider": provider,
+            });
+            rpc_print_fmt("models.list", params, gw, "Fetching models...", |result, json_mode| {
+                if json_mode {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                    return Ok(());
+                }
+                print_models_list(&result);
+                Ok(())
+            })
             .await
         }
-        ModelsCommand::Status {
-            json,
-            url,
-            token,
-            password,
-            timeout,
-        } => {
-            cmd_status(
-                *json,
-                url.as_deref(),
-                token.as_deref(),
-                password.as_deref(),
-                *timeout,
+        ModelsCommand::Status { gw } => {
+            rpc_print_fmt(
+                "models.status",
+                serde_json::json!({}),
+                gw,
+                "Fetching model status...",
+                |result, json_mode| {
+                    if json_mode {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                        return Ok(());
+                    }
+                    print_models_status(&result);
+                    Ok(())
+                },
             )
             .await
         }
     }
 }
 
-async fn cmd_list(
-    all: bool,
-    provider: Option<&str>,
-    json: bool,
-    url: Option<&str>,
-    token: Option<&str>,
-    password: Option<&str>,
-    timeout: u64,
-) -> Result<(), CliError> {
-    let json_mode = is_json_mode(json);
-
-    let params = serde_json::json!({
-        "all": all,
-        "provider": provider,
-    });
-
-    let result = crate::terminal::progress::with_spinner(
-        "Fetching models...",
-        !json_mode,
-        call_gateway(CallOptions {
-            url: url.map(|s| s.to_string()),
-            token: token.map(|s| s.to_string()),
-            password: password.map(|s| s.to_string()),
-            method: "models.list".to_string(),
-            params: Some(params),
-            timeout_ms: timeout,
-            expect_final: false,
-        }),
-    )
-    .await?;
-
-    if json_mode {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-        return Ok(());
-    }
+fn print_models_list(result: &serde_json::Value) {
+    use crate::terminal::Symbols;
+    let bold = Palette::bold();
+    let muted = Palette::muted();
 
     let models = result
         .as_array()
         .or_else(|| result.get("models").and_then(|v| v.as_array()));
 
     if let Some(models) = models {
-        use crate::terminal::Symbols;
-        let bold = Palette::bold();
-        let muted = Palette::muted();
-
         println!();
         println!(
             "  {}  {}  {}",
@@ -187,41 +114,11 @@ async fn cmd_list(
             println!();
         }
     } else {
-        println!("{}", serde_json::to_string_pretty(&result)?);
+        println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
     }
-
-    Ok(())
 }
 
-async fn cmd_status(
-    json: bool,
-    url: Option<&str>,
-    token: Option<&str>,
-    password: Option<&str>,
-    timeout: u64,
-) -> Result<(), CliError> {
-    let json_mode = is_json_mode(json);
-
-    let result = crate::terminal::progress::with_spinner(
-        "Fetching model status...",
-        !json_mode,
-        call_gateway(CallOptions {
-            url: url.map(|s| s.to_string()),
-            token: token.map(|s| s.to_string()),
-            password: password.map(|s| s.to_string()),
-            method: "models.status".to_string(),
-            params: None,
-            timeout_ms: timeout,
-            expect_final: false,
-        }),
-    )
-    .await?;
-
-    if json_mode {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-        return Ok(());
-    }
-
+fn print_models_status(result: &serde_json::Value) {
     let bold = Palette::bold();
     let muted = Palette::muted();
     let success = Palette::success();
@@ -248,6 +145,4 @@ async fn cmd_status(
         }
     }
     println!();
-
-    Ok(())
 }
