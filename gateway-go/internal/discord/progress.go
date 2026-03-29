@@ -74,7 +74,7 @@ type ProgressTracker struct {
 	client     *Client
 	channelID  string
 	messageID  string // the progress message being edited
-	summarizer *ReasoningSummarizer // optional; summarizes thinking blocks for step reasons
+	summarizer *Summarizer // optional; summarizes thinking blocks for step reasons
 
 	mu          sync.Mutex
 	steps       []ProgressStep
@@ -112,8 +112,8 @@ func NewProgressTracker(ctx context.Context, client *Client, channelID string) *
 	}
 }
 
-// SetSummarizer attaches a reasoning summarizer for async thinking summaries.
-func (pt *ProgressTracker) SetSummarizer(rs *ReasoningSummarizer) {
+// SetSummarizer attaches a summarizer for async thinking summaries.
+func (pt *ProgressTracker) SetSummarizer(rs *Summarizer) {
 	if pt == nil {
 		return
 	}
@@ -135,7 +135,7 @@ func (pt *ProgressTracker) AddStep(name string) {
 // StartStep marks a step as running. Triggers a throttled edit.
 // Tool names are automatically translated to Korean for vibe coders.
 // rawThinking is the raw thinking block text from the LLM (may be empty).
-// If a ReasoningSummarizer is attached, it asynchronously generates a brief
+// If a Summarizer is attached, it asynchronously generates a brief
 // summary and updates the step once ready.
 // Tools that start within parallelGroupWindow of each other are assigned the
 // same Group ID so the progress embed can visually group them.
@@ -186,7 +186,7 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking stri
 // has already been finalized, it sends a direct edit to update the final
 // embed with the late-arriving summary.
 func (pt *ProgressTracker) summarizeAndUpdate(ctx context.Context, stepIdx int, rawThinking string) {
-	summary := pt.summarizer.Summarize(ctx, rawThinking)
+	summary := pt.summarizer.ReasoningSummary(ctx, rawThinking)
 	if summary == "" {
 		return
 	}

@@ -1163,6 +1163,130 @@ func gatewayLogsToolSchema() map[string]any {
 	}
 }
 
+func batchReadToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"files": map[string]any{
+				"type":        "array",
+				"description": "List of files to read (up to 20). Each entry supports the same options as the read tool",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"file_path": map[string]any{
+							"type":        "string",
+							"description": "Absolute path to the file",
+						},
+						"offset": map[string]any{
+							"type":        "number",
+							"description": "Line number to start from (1-based)",
+							"minimum":     1,
+						},
+						"limit": map[string]any{
+							"type":        "number",
+							"description": "Number of lines to read (default: 2000)",
+							"minimum":     1,
+						},
+						"function": map[string]any{
+							"type":        "string",
+							"description": "Read only this function/method/type",
+						},
+					},
+					"required": []string{"file_path"},
+				},
+				"minItems": 1,
+				"maxItems": 20,
+			},
+		},
+		"required": []string{"files"},
+	}
+}
+
+func searchAndReadToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"pattern": map[string]any{
+				"type":        "string",
+				"description": "Regex pattern to search for (same as grep)",
+			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Directory to search in",
+			},
+			"include": map[string]any{
+				"type":        "string",
+				"description": "Glob pattern to filter files (e.g. \"*.go\")",
+			},
+			"fileType": map[string]any{
+				"type":        "string",
+				"description": "File type filter for ripgrep --type (e.g. \"go\", \"py\")",
+			},
+			"context_lines": map[string]any{
+				"type":        "number",
+				"description": "Lines of context around each match in the file read (default: 10)",
+				"default":     10,
+				"minimum":     0,
+				"maximum":     50,
+			},
+			"max_files": map[string]any{
+				"type":        "number",
+				"description": "Maximum number of matching files to read (default: 5)",
+				"default":     5,
+				"minimum":     1,
+				"maximum":     20,
+			},
+		},
+		"required": []string{"pattern"},
+	}
+}
+
+func inspectToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"file": map[string]any{
+				"type":        "string",
+				"description": "File path to inspect",
+			},
+			"symbol": map[string]any{
+				"type":        "string",
+				"description": "Specific symbol to inspect (function, type, method name). Enables symbol-level depth automatically",
+			},
+			"depth": map[string]any{
+				"type":        "string",
+				"description": "Inspection depth: shallow (outline+imports), deep (+git log+stats), symbol (+references+blame)",
+				"enum":        []string{"shallow", "deep", "symbol"},
+				"default":     "shallow",
+			},
+		},
+		"required": []string{"file"},
+	}
+}
+
+func applyPatchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"patch": map[string]any{
+				"type":        "string",
+				"description": "Unified diff content (output of git diff, diff -u, etc.)",
+			},
+			"strip": map[string]any{
+				"type":        "number",
+				"description": "Strip leading path components (like git apply -pN, default: 1)",
+				"default":     1,
+			},
+			"dry_run": map[string]any{
+				"type":        "boolean",
+				"description": "Check if patch applies cleanly without modifying files (default: false)",
+				"default":     false,
+			},
+		},
+		"required": []string{"patch"},
+	}
+}
+
 func pilotToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

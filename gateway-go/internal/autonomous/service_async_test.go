@@ -183,12 +183,8 @@ func TestService_TaskPanicRecovery(t *testing.T) {
 	panicTask := newFakeTask("panic-task", 1*time.Hour)
 	svc.RegisterTask(panicTask)
 
-	// Manually execute to test panic recovery.
-	type panicTaskType struct {
-		fakeTask
-	}
-	pt := &panicTaskType{fakeTask: fakeTask{name: "panic-task2"}}
-	svc.taskStatus["panic-task2"] = &TaskStatus{Name: "panic-task2"}
+	// Register panicker status for verification.
+	svc.taskStatus["panicker"] = &TaskStatus{Name: "panicker"}
 
 	// Test that executeTask recovers from panic.
 	func() {
@@ -249,6 +245,202 @@ func TestService_ExecuteTask_SkipsIfRunning(t *testing.T) {
 		t.Error("task should not run while already running")
 	}
 	task.mu.Unlock()
+}
+
+// TestService_ConcurrentIncrementDreamTurn verifies that RunDream is called
+// exactly once even when multiple goroutines call IncrementDreamTurn simultaneously
+// with ShouldDream returning true.
+func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
+	svc := NewService(nil)
+	d := &fakeDreamer{
+		shouldDream: true,
+		runReport:   &DreamReport{FactsVerified: 1, DurationMs: 10},
+	}
+	events := make(chan CycleEvent, 20)
+	svc.OnEvent(func(ev CycleEvent) { events <- ev })
+	svc.SetDreamer(d)
+
+	// Launch 10 goroutines calling IncrementDreamTurn simultaneously.
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			svc.IncrementDreamTurn(context.Background())
+		}()
+	}
+	wg.Wait()
+
+	// Wait for the dream cycle to complete (at most one should run).
+	_ = waitForEvent(t, events, "dreaming_completed")
+
+	// Verify RunDream was called exactly once despite 10 concurrent triggers.
+	d.mu.Lock()
+	runCount := d.runCount
+	d.mu.Unlock()
+	if runCount != 1 {
+		t.Errorf("RunDream called %d times, want exactly 1", runCount)
+	}
+}
+
+// TestService_SetDreamer_AfterStart verifies that the dream timer goroutine is
+// spawned when SetDreamer is called after Start().
+func TestService_SetDreamer_AfterStart(t *testing.T) {
+	svc := NewService(nil)
+	svc.Start()
+	defer svc.Stop()
+
+	d := &fakeDreamer{shouldDream: false}
+	svc.SetDreamer(d)
+
+	// Verify the timer cancel was set (indicating the goroutine was spawned).
+	svc.mu.Lock()
+	hasTimerCancel := svc.dreamTimerCancel != nil
+	svc.mu.Unlock()
+
+	if !hasTimerCancel {
+		t.Error("expected dreamTimerCancel to be set after SetDreamer")
+	}
+}
+
+// TestService_NotifierError verifies the service doesn't crash if Notifier returns an error.
+func TestService_NotifierError(t *testing.T) {
+	svc := NewService(nil)
+	d := &fakeDreamer{
+		shouldDream: true,
+		runReport:   &DreamReport{FactsVerified: 3, DurationMs: 50},
+	}
+	events := make(chan CycleEvent, 10)
+	svc.OnEvent(func(ev CycleEvent) { events <- ev })
+	svc.SetNotifier(&errorNotifier{})
+	svc.SetDreamer(d)
+
+	svc.IncrementDreamTurn(context.Background())
+
+	// Should complete even though notifier fails.
+	completed := waitForEvent(t, events, "dreaming_completed")
+	if completed.DreamReport == nil || completed.DreamReport.FactsVerified != 3 {
+		t.Fatalf("unexpected dream report: %+v", completed.DreamReport)
+	}
+}
+
+// errorNotifier always returns an error.
+type errorNotifier struct{}
+
+func (n *errorNotifier) Notify(_ context.Context, _ string) error {
+	return errors.New("notification delivery failed")
+}
+
+// TestService_DreamNotRunWhileAlreadyRunning verifies that a second dream cycle
+// is not started while one is already in progress.
+func TestService_DreamNotRunWhileAlreadyRunning(t *testing.T) {
+	svc := NewService(nil)
+
+	// Create a slow dreamer that holds the lock for a while.
+	slowDreamer := &slowFakeDreamer{
+		shouldDream: true,
+		holdTime:    100 * time.Millisecond,
+		report:      &DreamReport{DurationMs: 100},
+	}
+	events := make(chan CycleEvent, 10)
+	svc.OnEvent(func(ev CycleEvent) { events <- ev })
+	svc.SetDreamer(slowDreamer)
+
+	// First call triggers dream.
+	svc.IncrementDreamTurn(context.Background())
+
+	// Wait briefly for the dream to start.
+	_ = waitForEvent(t, events, "dreaming_started")
+
+	// Second call while dream is running should be a no-op.
+	svc.IncrementDreamTurn(context.Background())
+
+	// Wait for completion.
+	_ = waitForEvent(t, events, "dreaming_completed")
+
+	slowDreamer.mu.Lock()
+	runCount := slowDreamer.runCount
+	slowDreamer.mu.Unlock()
+	if runCount != 1 {
+		t.Errorf("RunDream called %d times, want 1 (second should be skipped)", runCount)
+	}
+}
+
+// slowFakeDreamer simulates a dream that takes time.
+type slowFakeDreamer struct {
+	mu          sync.Mutex
+	shouldDream bool
+	holdTime    time.Duration
+	report      *DreamReport
+	runCount    int
+}
+
+func (d *slowFakeDreamer) ShouldDream(context.Context) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.shouldDream
+}
+
+func (d *slowFakeDreamer) RunDream(context.Context) (*DreamReport, error) {
+	d.mu.Lock()
+	d.runCount++
+	d.mu.Unlock()
+	time.Sleep(d.holdTime)
+	return d.report, nil
+}
+
+func (d *slowFakeDreamer) IncrementTurn(context.Context) {}
+
+// TestService_PeriodicTask_ErrorTracking verifies task error status updates.
+func TestService_PeriodicTask_ErrorTracking(t *testing.T) {
+	svc := NewService(nil)
+	task := newFakeTask("error-task", time.Hour)
+	task.runErr = errors.New("fetch failed")
+
+	svc.RegisterTask(task)
+	svc.taskStatus["error-task"] = &TaskStatus{Name: "error-task"}
+
+	// Execute the task directly.
+	svc.executeTask(context.Background(), task)
+
+	status := svc.GetTaskStatus("error-task")
+	if status == nil {
+		t.Fatal("expected task status")
+	}
+	if status.RunCount != 1 {
+		t.Errorf("RunCount = %d, want 1", status.RunCount)
+	}
+	if status.ErrorCount != 1 {
+		t.Errorf("ErrorCount = %d, want 1", status.ErrorCount)
+	}
+	if status.LastError != "fetch failed" {
+		t.Errorf("LastError = %q, want %q", status.LastError, "fetch failed")
+	}
+	if status.Running {
+		t.Error("task should not be running after completion")
+	}
+}
+
+// TestService_PeriodicTask_Success verifies successful task execution clears errors.
+func TestService_PeriodicTask_Success(t *testing.T) {
+	svc := NewService(nil)
+	task := newFakeTask("ok-task", time.Hour)
+
+	svc.RegisterTask(task)
+	svc.taskStatus["ok-task"] = &TaskStatus{Name: "ok-task", LastError: "old error", ErrorCount: 1}
+
+	svc.executeTask(context.Background(), task)
+
+	status := svc.GetTaskStatus("ok-task")
+	if status.LastError != "" {
+		t.Errorf("LastError should be cleared, got %q", status.LastError)
+	}
+	if status.RunCount != 1 {
+		t.Errorf("RunCount = %d, want 1", status.RunCount)
+	}
+	if status.LastRunAt == 0 {
+		t.Error("LastRunAt should be set")
+	}
 }
 
 func TestTruncateOutput(t *testing.T) {

@@ -70,6 +70,42 @@ func StripThinkingTags(s string) string {
 	return b.String()
 }
 
+// thinkingPreamblePrefixes are common meta-prefixes that reasoning models
+// (DeepSeek-R1, QwQ, etc.) emit at the start of their output. These carry no
+// semantic value for downstream consumers like thread naming or summarization.
+var thinkingPreamblePrefixes = []string{
+	"Thinking Process:",
+	"Analyze the Request:",
+	"Analysis:",
+	"Let me think",
+	"Let me analyze",
+	"I need to",
+	"Okay, let me",
+	"Okay, I need",
+}
+
+// StripThinkingPreamble removes common boilerplate prefixes that reasoning
+// models prepend to their output. Strips up to 5 consecutive prefix lines
+// from the top of the string.
+func StripThinkingPreamble(s string) string {
+	s = strings.TrimSpace(s)
+	for range 5 {
+		trimmed := false
+		for _, prefix := range thinkingPreamblePrefixes {
+			if strings.HasPrefix(s, prefix) {
+				s = strings.TrimSpace(s[len(prefix):])
+				trimmed = true
+				break
+			}
+		}
+		if !trimmed {
+			break
+		}
+		s = strings.TrimLeft(s, "\r\n")
+	}
+	return strings.TrimSpace(s)
+}
+
 // ---------- Object extraction ----------
 
 // ExtractObject removes thinking tags, markdown code fences, and surrounding
