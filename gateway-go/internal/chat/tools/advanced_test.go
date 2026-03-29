@@ -350,6 +350,46 @@ index 0000000..1111111
 	}
 }
 
+func TestToolApplyPatch_rejectsIndexSymlinkPatch(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+
+	linkPath := filepath.Join(tmp, "existing_link")
+	if err := os.Symlink("safe_target", linkPath); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+	gitAdd(t, tmp, "existing_link")
+	gitCommit(t, tmp, "add symlink")
+
+	patch := `diff --git a/existing_link b/existing_link
+index 1111111..2222222 120000
+--- a/existing_link
++++ b/existing_link
+@@ -1 +1 @@
+-safe_target
++/etc/passwd
+`
+
+	_, err := callTool(t, ToolApplyPatch(tmp), map[string]any{
+		"patch": patch,
+		"strip": 1,
+	})
+	if err == nil {
+		t.Fatal("expected index-mode symlink patch to be rejected")
+	}
+	if !strings.Contains(err.Error(), "symlink patches are not allowed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	target, readErr := os.Readlink(linkPath)
+	if readErr != nil {
+		t.Fatalf("read symlink: %v", readErr)
+	}
+	if target != "safe_target" {
+		t.Fatalf("symlink target changed unexpectedly: %q", target)
+	}
+}
+
 // ─── git helpers ───────────────────────────────────────────────────────────
 
 func initGitRepo(t *testing.T, dir string) {

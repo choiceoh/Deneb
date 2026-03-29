@@ -481,8 +481,14 @@ func ToolApplyPatch(defaultDir string) ToolFunc {
 }
 
 func patchContainsSymlinkMode(patch string) bool {
+	// Existing symlink updates are encoded as:
+	//   index <old>..<new> 120000
+	// so we must block those in addition to new/old mode markers.
+	indexSymlinkMode := regexp.MustCompile(`(?m)^index [0-9a-fA-F]+\.\.[0-9a-fA-F]+ 120000$`)
+
 	return strings.Contains(patch, "\nnew file mode 120000") ||
 		strings.HasPrefix(patch, "new file mode 120000") ||
 		strings.Contains(patch, "\nold mode 120000") ||
-		strings.HasPrefix(patch, "old mode 120000")
+		strings.HasPrefix(patch, "old mode 120000") ||
+		indexSymlinkMode.MatchString(patch)
 }
