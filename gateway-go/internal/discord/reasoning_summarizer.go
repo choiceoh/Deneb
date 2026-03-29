@@ -9,6 +9,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -47,8 +48,13 @@ func (rs *ReasoningSummarizer) Summarize(ctx context.Context, thinking string) s
 		return ""
 	}
 
+	// Strip common LLM thinking headers that models echo back instead of summarizing.
+	input := stripThinkingHeaders(thinking)
+	if input == "" {
+		return ""
+	}
+
 	// Truncate input to avoid sending huge prompts.
-	input := thinking
 	if len(input) > reasoningSummaryMaxInput {
 		input = input[len(input)-reasoningSummaryMaxInput:]
 	}
@@ -73,9 +79,15 @@ func (rs *ReasoningSummarizer) Summarize(ctx context.Context, thinking string) s
 		return ""
 	}
 
-	// Clean up: strip quotes, trim whitespace.
+	// Clean up: strip quotes, trim whitespace, collapse to single line.
 	summary = strings.Trim(strings.TrimSpace(summary), `"'`)
+	summary = collapseNewlines(summary)
 	if summary == "" {
+		return ""
+	}
+
+	// Discard if the model echoed English instead of producing Korean.
+	if !containsKorean(summary) {
 		return ""
 	}
 
@@ -85,4 +97,61 @@ func (rs *ReasoningSummarizer) Summarize(ctx context.Context, thinking string) s
 		summary = string(runes[:reasoningSummaryMaxRunes]) + "…"
 	}
 	return summary
+}
+
+// thinkingHeaderPrefixes are common LLM meta-prefixes that appear at the start
+// of thinking blocks but carry no semantic value for summarization.
+var thinkingHeaderPrefixes = []string{
+	"Thinking Process:",
+	"Analyze the Request:",
+	"Analysis:",
+	"Let me think",
+	"Let me analyze",
+	"I need to",
+	"Okay, let me",
+	"Okay, I need",
+}
+
+// stripThinkingHeaders removes common boilerplate prefixes from LLM thinking
+// text so the summarizer receives the substantive reasoning content.
+func stripThinkingHeaders(s string) string {
+	s = strings.TrimSpace(s)
+	// Strip up to a few header lines from the top.
+	for range 5 {
+		trimmed := false
+		for _, prefix := range thinkingHeaderPrefixes {
+			if strings.HasPrefix(s, prefix) {
+				s = strings.TrimSpace(s[len(prefix):])
+				trimmed = true
+				break
+			}
+		}
+		if !trimmed {
+			break
+		}
+		// Also skip leading newlines after stripping a prefix.
+		s = strings.TrimLeft(s, "\r\n")
+	}
+	return strings.TrimSpace(s)
+}
+
+// containsKorean reports whether s contains at least one Hangul character.
+// Used to discard summaries where the model echoed English instead of Korean.
+func containsKorean(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Hangul, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// collapseNewlines replaces all newlines with a single space, producing a
+// single-line string suitable for the progress embed.
+func collapseNewlines(s string) string {
+	if !strings.ContainsAny(s, "\r\n") {
+		return s
+	}
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == '\r' })
+	return strings.Join(parts, " ")
 }
