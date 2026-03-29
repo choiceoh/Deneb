@@ -284,6 +284,9 @@ func (s *Server) wireDiscordChatHandler() {
 		s.logger.Info("discord: auto thread naming enabled", "model", lwModel)
 	}
 
+	// Initialize per-thread worktree manager for workspace isolation.
+	s.discordWorktrees = discord.NewWorktreeManager("", s.logger)
+
 	// Recent-send dedup cache.
 	var recentMu sync.Mutex
 	recentSends := make(map[string]time.Time)
@@ -331,7 +334,7 @@ func (s *Server) wireDiscordChatHandler() {
 		outcome := discord.AnalyzeReply(text)
 		var components []discord.Component
 		if delivery.To != "" {
-			sessionKey := "discord:" + delivery.To
+			sessionKey := discordSessionKeyForChannel(s.discordPlug, delivery.To)
 			components = discord.ContextButtons(outcome, sessionKey)
 		}
 
@@ -525,6 +528,11 @@ func (s *Server) wireDiscordChatHandler() {
 		inbound.HandleDiscordInteraction(ctx, interaction)
 	})
 
+	// Wire thread lifecycle handler: archive/delete → end session.
+	s.discordPlug.SetThreadEventHandler(func(event discord.ThreadEvent) {
+		inbound.HandleThreadEvent(event)
+	})
+
 	// Register Discord's per-channel upload limit for the send_file tool.
 	s.chatHandler.SetChannelUploadLimit("discord", s.discordPlug.MaxUploadBytes())
 
@@ -563,9 +571,26 @@ func (s *Server) sendAutoVerifyEmbed(ctx context.Context, client *discord.Client
 		return
 	}
 
-	// Resolve workspace for this channel.
-	wsChannelID := channelID
-	workspaceDir := s.discordPlug.Config().WorkspaceForChannel(wsChannelID)
+	// Resolve workspace for this channel. For threads, prefer worktree.
+	sessionKey := discordSessionKeyForChannel(s.discordPlug, channelID)
+	workspaceDir := ""
+	if strings.HasPrefix(sessionKey, "discord:thread:") {
+		threadID := strings.TrimPrefix(sessionKey, "discord:thread:")
+		if s.discordWorktrees != nil {
+			if ws := s.discordWorktrees.Get(threadID); ws != nil {
+				workspaceDir = ws.Dir
+			}
+		}
+	}
+	if workspaceDir == "" {
+		wsChannelID := channelID
+		if bot := s.discordPlug.Bot(); bot != nil {
+			if parentID := bot.ThreadParent(channelID); parentID != "" {
+				wsChannelID = parentID
+			}
+		}
+		workspaceDir = s.discordPlug.Config().WorkspaceForChannel(wsChannelID)
+	}
 	if workspaceDir == "" {
 		return
 	}
@@ -611,7 +636,7 @@ func (s *Server) sendAutoVerifyEmbed(ctx context.Context, client *discord.Client
 	// If verification failed, add fix button.
 	var components []discord.Component
 	if !buildOk || !testOk {
-		sessionKey := "discord:" + channelID
+		sessionKey := discordSessionKeyForChannel(s.discordPlug, channelID)
 		components = discord.BuildFailButtons(sessionKey)
 	}
 
@@ -660,6 +685,24 @@ func runQuickVerify(workspaceDir, kind string) (string, bool) {
 	}
 
 	return "성공", true
+}
+
+// discordSessionKeyForChannel returns the session key for a Discord channel ID.
+// For threads, returns "discord:thread:<id>"; for regular channels, "discord:<id>".
+func discordSessionKeyForChannel(plug *discord.Plugin, channelID string) string {
+	if plug != nil {
+		if bot := plug.Bot(); bot != nil && bot.IsThread(channelID) {
+			return "discord:thread:" + channelID
+		}
+	}
+	// Also check the local thread parent map.
+	discordThreadParentMu.Lock()
+	_, isThread := discordThreadParent[channelID]
+	discordThreadParentMu.Unlock()
+	if isThread {
+		return "discord:thread:" + channelID
+	}
+	return "discord:" + channelID
 }
 
 // loadDiscordConfig extracts Discord channel config from deneb.json.

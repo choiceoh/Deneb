@@ -12,14 +12,14 @@ import (
 
 // Plugin implements the channel.Plugin interface for Discord.
 type Plugin struct {
-	channel.PluginBase          // status field + Status() + SetStatus()
-	mu      sync.Mutex          // protects client, bot, botUser, handler
-	client  *Client
-	bot     *Bot
-	config  *Config
-	logger  *slog.Logger
-	botUser *User
-	handler MessageHandler
+	channel.PluginBase            // status field + Status() + SetStatus()
+	mu                 sync.Mutex // protects client, bot, botUser, handler
+	client             *Client
+	bot                *Bot
+	config             *Config
+	logger             *slog.Logger
+	botUser            *User
+	handler            MessageHandler
 }
 
 // NewPlugin creates a new Discord channel plugin.
@@ -143,6 +143,23 @@ func (p *Plugin) SetInteractionHandler(h InteractionHandler) {
 	if p.bot != nil {
 		p.bot.SetInteractionHandler(h)
 	}
+}
+
+// SetThreadEventHandler sets the handler for thread lifecycle events
+// (archive, delete). If the bot is already running, applies immediately.
+func (p *Plugin) SetThreadEventHandler(h ThreadEventHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.bot != nil {
+		p.bot.SetThreadEventHandler(h)
+	}
+}
+
+// Bot returns the underlying Bot instance. Returns nil before Start.
+func (p *Plugin) Bot() *Bot {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.bot
 }
 
 // BotUser returns the verified bot user. Returns nil before Start.

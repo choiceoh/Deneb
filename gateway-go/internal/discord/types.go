@@ -20,19 +20,18 @@ const (
 
 	// MaxFileSize is the maximum file upload size (25 MB for non-boosted servers).
 	MaxFileSize = 25 * 1024 * 1024
-
 )
 
 // Gateway opcodes.
 const (
-	OpcodeDispatch        = 0
-	OpcodeHeartbeat       = 1
-	OpcodeIdentify        = 2
-	OpcodeResume          = 6
-	OpcodeReconnect       = 7
-	OpcodeInvalidSession  = 9
-	OpcodeHello           = 10
-	OpcodeHeartbeatAck    = 11
+	OpcodeDispatch       = 0
+	OpcodeHeartbeat      = 1
+	OpcodeIdentify       = 2
+	OpcodeResume         = 6
+	OpcodeReconnect      = 7
+	OpcodeInvalidSession = 9
+	OpcodeHello          = 10
+	OpcodeHeartbeatAck   = 11
 )
 
 // Gateway intents.
@@ -47,10 +46,10 @@ const (
 
 // GatewayPayload is the envelope for all Gateway messages.
 type GatewayPayload struct {
-	Op   int              `json:"op"`
-	D    json.RawMessage  `json:"d,omitempty"`
-	S    *int64           `json:"s,omitempty"`
-	T    string           `json:"t,omitempty"`
+	Op int             `json:"op"`
+	D  json.RawMessage `json:"d,omitempty"`
+	S  *int64          `json:"s,omitempty"`
+	T  string          `json:"t,omitempty"`
 }
 
 // HelloData is the payload for opcode 10 (Hello).
@@ -60,10 +59,10 @@ type HelloData struct {
 
 // IdentifyData is the payload for opcode 2 (Identify).
 type IdentifyData struct {
-	Token      string              `json:"token"`
-	Intents    int                 `json:"intents"`
-	Properties IdentifyProperties  `json:"properties"`
-	Presence   *PresenceUpdate     `json:"presence,omitempty"`
+	Token      string             `json:"token"`
+	Intents    int                `json:"intents"`
+	Properties IdentifyProperties `json:"properties"`
+	Presence   *PresenceUpdate    `json:"presence,omitempty"`
 }
 
 // PresenceUpdate sets the bot's presence/activity on connect.
@@ -110,14 +109,14 @@ type User struct {
 
 // Message represents a Discord message.
 type Message struct {
-	ID        string   `json:"id"`
-	ChannelID string   `json:"channel_id"`
-	GuildID   string   `json:"guild_id,omitempty"`
-	Author    *User    `json:"author,omitempty"`
-	Content   string   `json:"content"`
-	Timestamp string   `json:"timestamp,omitempty"`
+	ID        string `json:"id"`
+	ChannelID string `json:"channel_id"`
+	GuildID   string `json:"guild_id,omitempty"`
+	Author    *User  `json:"author,omitempty"`
+	Content   string `json:"content"`
+	Timestamp string `json:"timestamp,omitempty"`
 	// Thread is present when the message is in a thread.
-	Thread    *Channel `json:"thread,omitempty"`
+	Thread *Channel `json:"thread,omitempty"`
 	// MessageReference is present when this message is a reply.
 	MessageReference *MessageReference `json:"message_reference,omitempty"`
 	// Attachments on the message.
@@ -142,12 +141,46 @@ type Attachment struct {
 
 // Channel represents a Discord channel.
 type Channel struct {
-	ID       string `json:"id"`
-	GuildID  string `json:"guild_id,omitempty"`
-	Name     string `json:"name,omitempty"`
-	Type     int    `json:"type"`
-	ParentID string `json:"parent_id,omitempty"`
+	ID             string          `json:"id"`
+	GuildID        string          `json:"guild_id,omitempty"`
+	Name           string          `json:"name,omitempty"`
+	Type           int             `json:"type"`
+	ParentID       string          `json:"parent_id,omitempty"`
+	ThreadMetadata *ThreadMetadata `json:"thread_metadata,omitempty"`
 }
+
+// IsThread returns true if the channel type is a thread (public or private).
+func (c *Channel) IsThread() bool {
+	return c.Type == ChannelPublicThread || c.Type == ChannelPrivateThread
+}
+
+// ThreadMetadata holds Discord thread-specific metadata.
+type ThreadMetadata struct {
+	Archived            bool   `json:"archived"`
+	Locked              bool   `json:"locked"`
+	AutoArchiveDuration int    `json:"auto_archive_duration,omitempty"`
+	ArchiveTimestamp    string `json:"archive_timestamp,omitempty"`
+}
+
+// Channel type constants.
+const (
+	ChannelGuildText     = 0
+	ChannelPublicThread  = 11
+	ChannelPrivateThread = 12
+)
+
+// ThreadEvent represents a thread lifecycle event dispatched from the Gateway.
+type ThreadEvent struct {
+	ThreadID string // the thread channel ID
+	ParentID string // parent channel ID
+	GuildID  string // guild (server) ID
+	Archived bool   // true when thread was archived
+	Deleted  bool   // true when thread was deleted
+}
+
+// ThreadEventHandler is called when a thread lifecycle event occurs
+// (created by user, archived, or deleted).
+type ThreadEventHandler func(event ThreadEvent)
 
 // --- Embed types ---
 
@@ -186,8 +219,8 @@ const (
 
 // Component represents a Discord message component.
 type Component struct {
-	Type       int         `json:"type"`                        // 1=ActionRow, 2=Button
-	Style      int         `json:"style,omitempty"`             // 1=Primary, 2=Secondary, 3=Success, 4=Danger
+	Type       int         `json:"type"`            // 1=ActionRow, 2=Button
+	Style      int         `json:"style,omitempty"` // 1=Primary, 2=Secondary, 3=Success, 4=Danger
 	Label      string      `json:"label,omitempty"`
 	CustomID   string      `json:"custom_id,omitempty"`
 	Disabled   bool        `json:"disabled,omitempty"`
@@ -225,10 +258,10 @@ type Interaction struct {
 
 // InteractionData holds interaction-specific data.
 type InteractionData struct {
-	CustomID      string                    `json:"custom_id,omitempty"`
-	ComponentType int                       `json:"component_type,omitempty"`
-	Name          string                    `json:"name,omitempty"`    // for slash commands
-	Options       []InteractionDataOption   `json:"options,omitempty"` // slash command options
+	CustomID      string                  `json:"custom_id,omitempty"`
+	ComponentType int                     `json:"component_type,omitempty"`
+	Name          string                  `json:"name,omitempty"`    // for slash commands
+	Options       []InteractionDataOption `json:"options,omitempty"` // slash command options
 }
 
 // InteractionDataOption holds a resolved option value from a slash command.
@@ -270,9 +303,9 @@ type InteractionResponseData struct {
 
 // Interaction response type constants.
 const (
-	InteractionResponseMessage       = 4
+	InteractionResponseMessage        = 4
 	InteractionResponseDeferredUpdate = 6
-	InteractionResponseUpdateMessage = 7
+	InteractionResponseUpdateMessage  = 7
 )
 
 // --- Message request/edit types ---
@@ -288,7 +321,7 @@ type SendMessageRequest struct {
 
 // EditMessageRequest is the request body for PATCH /channels/{id}/messages/{id}.
 type EditMessageRequest struct {
-	Content    *string     `json:"content,omitempty"`    // pointer to allow empty string
+	Content    *string     `json:"content,omitempty"` // pointer to allow empty string
 	Embeds     []Embed     `json:"embeds,omitempty"`
 	Components []Component `json:"components,omitempty"`
 }

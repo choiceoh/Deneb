@@ -25,18 +25,19 @@ type InteractionHandler func(ctx context.Context, interaction *Interaction)
 // Bot manages the Discord bot lifecycle: Gateway WebSocket connection,
 // heartbeating, and dispatching message events.
 type Bot struct {
-	channel.RunState             // provides IsRunning(), Stop(), BeginRun(), EndRun()
-	client  *Client
-	config  *Config
-	logger  *slog.Logger
+	channel.RunState // provides IsRunning(), Stop(), BeginRun(), EndRun()
+	client           *Client
+	config           *Config
+	logger           *slog.Logger
 
-	stateMu            sync.Mutex // protects handler, interactionHandler, sessionID, resumeURL, botUser
+	stateMu            sync.Mutex // protects handler, interactionHandler, threadEventHandler, sessionID, resumeURL, botUser
 	handler            MessageHandler
 	interactionHandler InteractionHandler
-	sessionID string
-	resumeURL string
-	seq       atomic.Int64
-	botUser   *User
+	threadEventHandler ThreadEventHandler
+	sessionID          string
+	resumeURL          string
+	seq                atomic.Int64
+	botUser            *User
 
 	// threadParents caches thread ID → parent channel ID for allowlist checks.
 	// Discord threads have their own channel IDs that aren't in the allowlist,
@@ -81,6 +82,14 @@ func (b *Bot) SetInteractionHandler(h InteractionHandler) {
 	b.stateMu.Lock()
 	defer b.stateMu.Unlock()
 	b.interactionHandler = h
+}
+
+// SetThreadEventHandler sets the handler for thread lifecycle events
+// (user-created threads, archives, deletes).
+func (b *Bot) SetThreadEventHandler(h ThreadEventHandler) {
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	b.threadEventHandler = h
 }
 
 // BotUser returns the authenticated bot user (set after READY). Returns nil before Start.
@@ -327,6 +336,68 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 			b.threadParents[ch.ID] = ch.ParentID
 			b.threadParentsMu.Unlock()
 		}
+
+	case "THREAD_UPDATE":
+		// Detect thread archive events and notify the thread event handler.
+		var ch Channel
+		if err := json.Unmarshal(payload.D, &ch); err != nil {
+			b.logger.Error("decode THREAD_UPDATE", "error", err)
+			break
+		}
+		// Update parent cache.
+		if ch.ParentID != "" {
+			b.threadParentsMu.Lock()
+			b.threadParents[ch.ID] = ch.ParentID
+			b.threadParentsMu.Unlock()
+		}
+		// If archived, dispatch thread event.
+		if ch.ThreadMetadata != nil && ch.ThreadMetadata.Archived {
+			b.stateMu.Lock()
+			teh := b.threadEventHandler
+			b.stateMu.Unlock()
+			if teh != nil {
+				parentID := ch.ParentID
+				if parentID == "" {
+					b.threadParentsMu.Lock()
+					parentID = b.threadParents[ch.ID]
+					b.threadParentsMu.Unlock()
+				}
+				go teh(ThreadEvent{
+					ThreadID: ch.ID,
+					ParentID: parentID,
+					GuildID:  ch.GuildID,
+					Archived: true,
+				})
+			}
+		}
+
+	case "THREAD_DELETE":
+		var ch Channel
+		if err := json.Unmarshal(payload.D, &ch); err != nil {
+			b.logger.Error("decode THREAD_DELETE", "error", err)
+			break
+		}
+		// Clean up parent cache.
+		b.threadParentsMu.Lock()
+		parentID := b.threadParents[ch.ID]
+		delete(b.threadParents, ch.ID)
+		b.threadParentsMu.Unlock()
+
+		// Dispatch thread deleted event.
+		b.stateMu.Lock()
+		teh := b.threadEventHandler
+		b.stateMu.Unlock()
+		if teh != nil {
+			if parentID == "" {
+				parentID = ch.ParentID
+			}
+			go teh(ThreadEvent{
+				ThreadID: ch.ID,
+				ParentID: parentID,
+				GuildID:  ch.GuildID,
+				Deleted:  true,
+			})
+		}
 	}
 }
 
@@ -380,6 +451,22 @@ func (b *Bot) handleSlashCommandAsMessage(ctx context.Context, interaction *Inte
 	if handler != nil {
 		go handler(ctx, msg)
 	}
+}
+
+// IsThread returns true if the given channelID is a known thread (has a cached parent).
+func (b *Bot) IsThread(channelID string) bool {
+	b.threadParentsMu.Lock()
+	_, ok := b.threadParents[channelID]
+	b.threadParentsMu.Unlock()
+	return ok
+}
+
+// ThreadParent returns the parent channel ID for a thread, or "" if unknown.
+func (b *Bot) ThreadParent(channelID string) string {
+	b.threadParentsMu.Lock()
+	parentID := b.threadParents[channelID]
+	b.threadParentsMu.Unlock()
+	return parentID
 }
 
 // isChannelOrThreadAllowed checks if a channel (or its parent for threads) is allowed.
