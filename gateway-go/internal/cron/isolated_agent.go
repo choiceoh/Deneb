@@ -67,7 +67,7 @@ func RunIsolatedAgentTurn(
 	// 1. Apply timeout.
 	timeoutMs := cfg.TimeoutMs
 	if timeoutMs <= 0 {
-		timeoutMs = 5 * 60 * 1000
+		timeoutMs = 10 * 60 * 1000
 	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
@@ -185,6 +185,7 @@ func isLikelyInterimMessage(text string) bool {
 	interimPatterns := []string{
 		"working on", "let me", "i'll", "one moment", "processing",
 		"looking into", "checking", "running", "executing",
+		"작업 중", "확인 중", "수집 중", "처리 중", "잠시만", "진행 중",
 	}
 	if len(trimmed) < 100 {
 		for _, pattern := range interimPatterns {

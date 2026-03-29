@@ -1157,3 +1157,10 @@
       description: "If true, pilot may request one follow-up round of tool calls based on initial analysis (e.g., read files found by grep)"
   required:
     - task
+
+# ---------------------------------------------------------------------------
+# Morning letter tool
+# ---------------------------------------------------------------------------
+
+- name: morning_letter
+  properties: {}
