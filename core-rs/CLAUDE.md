@@ -31,11 +31,24 @@ Rust workspace providing protocol validation, security, media, memory search, ma
 
 ## FFI Exports
 
-All C FFI functions are in `core/src/lib.rs` with `deneb_*` naming convention.
+`deneb_*` C FFI functions live in `core/src/ffi/` organised by domain.
+`core/src/lib.rs` re-exports all symbols into the crate root.
+
+| FFI file | Domain |
+|---|---|
+| `core/src/ffi/protocol.rs` | Frame validation, param validation, error codes |
+| `core/src/ffi/security.rs` | Constant-time eq, session key, HTML sanitize, URL check |
+| `core/src/ffi/media.rs` | MIME-type detection |
+| `core/src/ffi/vega.rs` | Vega FTS/semantic search (feature-gated) |
+| `core/src/ffi/compaction.rs` | Compaction evaluate + sweep state machine |
+| `core/src/ffi/memory_search.rs` | Cosine similarity, BM25, FTS query, hybrid merge |
+| `core/src/ffi/parsing.rs` | Link extraction, HTML-to-Markdown, base64, media tokens |
+| `core/src/ffi/markdown.rs` | Markdown-to-IR, fenced code block detection |
+| `core/src/ffi/context_engine.rs` | Context assembly/expansion state machines |
 
 ### Adding a New FFI Function
 
-1. Add the function in `core/src/lib.rs` with `#[unsafe(no_mangle)] pub extern "C" fn deneb_*`
+1. Add the function to the appropriate `core/src/ffi/<domain>.rs` file with `#[no_mangle] pub extern "C" fn deneb_*`
 2. Create Go wrapper in `gateway-go/internal/ffi/*_cgo.go`
 3. Create fallback in `gateway-go/internal/ffi/*_noffi.go`
 4. If adding new error codes:
@@ -64,7 +77,8 @@ Generated output goes to `OUT_DIR`, included by `core/src/protocol/gen.rs`.
 
 | Path | Purpose |
 |------|---------|
-| `core/src/lib.rs` | 30+ C FFI exports |
+| `core/src/lib.rs` | Module re-exports; `ffi/` submodule declarations |
+| `core/src/ffi/` | C FFI exports organised by domain (30+ `deneb_*` functions) |
 | `core/src/protocol/` | Gateway frame validation, error codes |
 | `core/src/security/` | `constant_time_eq`, `sanitize_html`, `is_safe_url`, `is_valid_session_key` |
 | `core/src/media/` | Magic-byte MIME detection (21 formats), MIME-to-extension (35+ types) |
@@ -78,5 +92,5 @@ Generated output goes to `OUT_DIR`, included by `core/src/protocol/gen.rs`.
 
 Workspace lint config in root `Cargo.toml`:
 - `clippy::unwrap_used` = deny (use `map_err`/`ok_or` instead)
-- `unsafe_code` = deny (except FFI exports in `lib.rs`)
+- `unsafe_code` = deny (except FFI exports in `core/src/ffi/`)
 - `print_stdout`/`print_stderr` = deny
