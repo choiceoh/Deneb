@@ -57,6 +57,7 @@ func (rc *RunCache) Len() int {
 var cacheableTools = map[string]bool{
 	"find": true,
 	"tree": true,
+	"grep": true,
 }
 
 // mutationTools are tools that can modify the file system, requiring cache

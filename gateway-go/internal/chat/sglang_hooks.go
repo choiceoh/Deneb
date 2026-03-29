@@ -37,8 +37,29 @@ Reply in Korean. Be extremely concise. If no special context is needed, reply wi
 // buildProactiveContext uses the local sglang model to analyze the user's
 // message and generate a context hint for the main agent.
 // Returns empty string if proactive context is not needed or fails.
+// isLowInfoMessage returns true for short follow-up messages that don't benefit
+// from proactive context (e.g., "응", "좋아 그렇게 해", "계속", "다음은?").
+// Uses rune count and simple keyword heuristics to avoid unnecessary sglang calls.
+func isLowInfoMessage(msg string) bool {
+	runes := []rune(strings.TrimSpace(msg))
+	runeCount := len(runes)
+	// Very short messages (< 8 runes) are almost always follow-ups.
+	if runeCount < 8 {
+		return true
+	}
+	// Short messages (< 30 runes) without a question mark or specific action words
+	// are typically confirmations like "좋아 그렇게 해", "계속", "알겠어".
+	if runeCount < 30 && !strings.ContainsAny(msg, "?？") {
+		return true
+	}
+	return false
+}
+
 func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string, logger *slog.Logger) string {
 	if len(userMessage) < proactiveMinMsgLen {
+		return ""
+	}
+	if isLowInfoMessage(userMessage) {
 		return ""
 	}
 	// Skip if sglang was recently confirmed down (cached result only, no probe).
@@ -199,8 +220,39 @@ Rules:
 
 // extractAutoMemory analyzes a conversation turn and returns memory-worthy notes.
 // Returns empty string if nothing worth remembering.
+// isToolOnlyResponse returns true if the agent response looks like pure tool
+// result relay with minimal natural language — e.g., forwarding file contents
+// or command output. These turns rarely contain user-model-worthy information.
+func isToolOnlyResponse(response string) bool {
+	trimmed := strings.TrimSpace(response)
+	lines := strings.Split(trimmed, "\n")
+	if len(lines) == 0 {
+		return true
+	}
+	// Count lines that look like natural language (not code/output).
+	naturalLines := 0
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Skip lines that look like code, output, or tool markup.
+		if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "    ") ||
+			strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "|") ||
+			strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
+			continue
+		}
+		naturalLines++
+	}
+	// If less than 3 lines of natural language, it's likely a tool-only response.
+	return naturalLines < 3
+}
+
 func extractAutoMemory(ctx context.Context, userMessage, agentResponse string, logger *slog.Logger) string {
 	if len(userMessage) < autoMemoryMinInput || len(agentResponse) < autoMemoryMinOutput {
+		return ""
+	}
+	if isToolOnlyResponse(agentResponse) {
 		return ""
 	}
 	// Skip if sglang was recently confirmed down (cached result only, no probe).
