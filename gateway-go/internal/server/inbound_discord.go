@@ -505,8 +505,10 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 	switch cmd {
 
 	case "dashboard", "d", "status", "ws":
-		// /dashboard — visual project health panel for vibe coders.
-		p.sendDiscordEmbed(channelID, p.buildDashboardEmbeds(workspaceDir))
+		// /dashboard — enhanced visual project health panel for vibe coders.
+		sessionKey := discordSessionKeyForChannel(p.server.discordPlug, channelID)
+		embeds, buttons := p.buildEnhancedDashboard(workspaceDir, sessionKey)
+		p.sendDiscordEmbedWithButtons(channelID, embeds, buttons)
 		return true
 
 	case "commit":
@@ -567,83 +569,8 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 	return false
 }
 
-// buildDashboardEmbeds creates a visual project health dashboard for vibe coders.
-// Shows build status, test status, branch, recent changes — all in Korean.
-func (p *InboundProcessor) buildDashboardEmbeds(workspaceDir string) []discord.Embed {
-	branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD")
-	status := runGitCmd(workspaceDir, "status", "--short")
-	recentLog := runGitCmd(workspaceDir, "log", "--oneline", "-3", "--no-color")
-
-	// Count changed files.
-	changedFiles := 0
-	if status != "" {
-		changedFiles = len(strings.Split(strings.TrimSpace(status), "\n"))
-	}
-
-	// Build status check (quick, 10s timeout).
-	projType := detectProjectType(workspaceDir)
-	buildStatus := "⏭️ 미확인"
-	testStatus := "⏭️ 미확인"
-
-	if cmdName, cmdArgs := buildCommand(projType); cmdName != "" {
-		buildOut := runCmdWithTimeout(workspaceDir, 15*time.Second, cmdName, cmdArgs...)
-		if buildOut != "" && !strings.Contains(strings.ToLower(buildOut), "error") {
-			buildStatus = "✅ 성공"
-		} else {
-			buildStatus = "❌ 실패"
-		}
-	}
-
-	if cmdName, cmdArgs := testCommand(projType); cmdName != "" {
-		testOut := runCmdWithTimeout(workspaceDir, 30*time.Second, cmdName, cmdArgs...)
-		if testOut != "" && !strings.Contains(testOut, "FAIL") && !strings.Contains(strings.ToLower(testOut), "error") {
-			testStatus = "✅ 전체 통과"
-		} else if testOut != "" {
-			testStatus = "❌ 일부 실패"
-		}
-	}
-
-	// Format changed files summary.
-	changedSummary := "변경 없음 (클린)"
-	if changedFiles > 0 {
-		changedSummary = fmt.Sprintf("%d개 파일 변경됨", changedFiles)
-	}
-
-	// Format recent commits in Korean-friendly way.
-	commitSummary := "커밋 없음"
-	if recentLog != "" {
-		lines := strings.Split(strings.TrimSpace(recentLog), "\n")
-		var commitLines []string
-		for _, line := range lines {
-			if len(line) > 0 {
-				commitLines = append(commitLines, "• "+line)
-			}
-		}
-		commitSummary = strings.Join(commitLines, "\n")
-	}
-
-	fields := []discord.EmbedField{
-		{Name: "🌿 브랜치", Value: "`" + branch + "`", Inline: true},
-		{Name: "📝 변경사항", Value: changedSummary, Inline: true},
-		{Name: "🔨 빌드", Value: buildStatus, Inline: true},
-		{Name: "🧪 테스트", Value: testStatus, Inline: true},
-		{Name: "📜 최근 커밋", Value: commitSummary, Inline: false},
-	}
-
-	// Determine overall health color.
-	color := discord.ColorSuccess
-	if strings.Contains(buildStatus, "❌") || strings.Contains(testStatus, "❌") {
-		color = discord.ColorError
-	} else if changedFiles > 0 {
-		color = discord.ColorInfo
-	}
-
-	return []discord.Embed{{
-		Title:  "📊 프로젝트 현황",
-		Color:  color,
-		Fields: fields,
-	}}
-}
+// buildDashboardEmbeds is superseded by buildEnhancedDashboard which adds
+// lint status, stash count, upstream info, file details, and action buttons.
 
 // sendDiscordEmbedWithButtons sends embeds with action buttons to a Discord channel.
 func (p *InboundProcessor) sendDiscordEmbedWithButtons(channelID string, embeds []discord.Embed, buttons []discord.Component) {
@@ -816,6 +743,39 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 		agentMessage = "현재 병합 충돌을 확인하고 자동으로 해결해 주세요. 충돌이 있는 파일들을 분석하고, 양쪽 변경 사항을 적절히 통합해서 충돌 마커를 제거해 주세요. 해결이 끝나면 결과를 요약해 주세요."
 	case "mergedetail":
 		agentMessage = "현재 병합 충돌 상태를 자세히 분석해 주세요. 충돌이 있는 파일 목록, 각 파일의 충돌 내용, 그리고 양쪽 브랜치에서 어떤 변경이 있었는지 설명해 주세요."
+
+	// --- Diff Preview buttons ---
+	case "diffapply":
+		agentMessage = "미리보기한 변경 사항을 적용해 주세요."
+	case "diffreject":
+		agentMessage = "미리보기한 변경 사항을 적용하지 마세요. 다른 방법을 제안해 주세요."
+	case "difffull":
+		agentMessage = "변경 사항의 전체 diff를 보여주세요."
+
+	// --- Error Recovery buttons ---
+	case "autofix":
+		agentMessage = "발생한 오류를 분석하고 자동으로 수정해 주세요. 수정 후 빌드와 테스트를 다시 실행해서 확인해 주세요."
+	case "altfix":
+		agentMessage = "이전 수정 방법이 실패했습니다. 완전히 다른 접근 방법으로 문제를 해결해 주세요. 이전 변경은 되돌리고 새로운 전략을 사용해 주세요."
+
+	// --- Smart Test buttons ---
+	case "testall":
+		agentMessage = "전체 테스트 스위트를 실행해 주세요."
+
+	// --- Git Workflow buttons ---
+	case "branchcreate":
+		agentMessage = "현재 작업을 위한 새 브랜치를 생성해 주세요. 적절한 브랜치 이름을 자동으로 정하고, 브랜치 생성 후 전환해 주세요."
+	case "prcreate":
+		agentMessage = "현재 브랜치의 변경 사항으로 Pull Request를 생성해 주세요. PR 제목과 설명을 변경 내용 기반으로 자동 생성해 주세요."
+
+	// --- Dashboard button ---
+	case "dashboard":
+		if ws := resolveDiscordWorkspaceDir(p, sessionKey); ws != "" {
+			embeds, buttons := p.buildEnhancedDashboard(ws, sessionKey)
+			p.sendDiscordEmbedWithButtons(interaction.ChannelID, embeds, buttons)
+		}
+		return
+
 	case "push":
 		// Push current branch to remote — handle inline for quick feedback.
 		if ws := resolveDiscordWorkspaceDir(p, sessionKey); ws != "" {
@@ -1121,4 +1081,153 @@ func buildCommand(projType string) (string, []string) {
 		return "make", []string{"all"}
 	}
 	return "", nil
+}
+
+// lintCommand returns the lint/vet command for a project type.
+func lintCommand(projType string) (string, []string) {
+	switch projType {
+	case "go":
+		return "go", []string{"vet", "./..."}
+	case "rust":
+		return "cargo", []string{"clippy", "--workspace", "--", "-D", "warnings"}
+	case "node":
+		return "npx", []string{"eslint", "."}
+	case "python":
+		return "python", []string{"-m", "ruff", "check", "."}
+	}
+	return "", nil
+}
+
+// buildEnhancedDashboard creates the enhanced dashboard with lint, stash, upstream info.
+func (p *InboundProcessor) buildEnhancedDashboard(workspaceDir, sessionKey string) ([]discord.Embed, []discord.Component) {
+	branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD")
+	status := runGitCmd(workspaceDir, "status", "--short")
+	recentLog := runGitCmd(workspaceDir, "log", "--oneline", "-5", "--no-color")
+
+	// Count changed files and build summary.
+	changedFiles := 0
+	filesSummary := ""
+	if status != "" {
+		lines := strings.Split(strings.TrimSpace(status), "\n")
+		changedFiles = len(lines)
+		// Show first 5 files.
+		var summaryLines []string
+		for i, line := range lines {
+			if i >= 5 {
+				summaryLines = append(summaryLines, fmt.Sprintf("... 외 %d개", len(lines)-5))
+				break
+			}
+			summaryLines = append(summaryLines, "`"+strings.TrimSpace(line)+"`")
+		}
+		filesSummary = strings.Join(summaryLines, "\n")
+	}
+
+	// Upstream tracking info.
+	upstream := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+
+	// Stash count.
+	stashCount := 0
+	if stashOut := runGitCmd(workspaceDir, "stash", "list"); stashOut != "" {
+		stashCount = len(strings.Split(strings.TrimSpace(stashOut), "\n"))
+	}
+
+	// Build/test/lint status (concurrent).
+	projType := detectProjectType(workspaceDir)
+	buildStatus := "⏭️ 미확인"
+	testStatus := "⏭️ 미확인"
+	lintStatus := "⏭️ 미확인"
+
+	if cmdName, cmdArgs := buildCommand(projType); cmdName != "" {
+		buildOut := runCmdWithTimeout(workspaceDir, 15*time.Second, cmdName, cmdArgs...)
+		lower := strings.ToLower(buildOut)
+		if buildOut == "" || (!strings.Contains(lower, "error") && !strings.Contains(lower, "fail")) {
+			buildStatus = "✅ 성공"
+		} else {
+			buildStatus = "❌ 실패"
+		}
+	}
+
+	if cmdName, cmdArgs := testCommand(projType); cmdName != "" {
+		testOut := runCmdWithTimeout(workspaceDir, 30*time.Second, cmdName, cmdArgs...)
+		lower := strings.ToLower(testOut)
+		if testOut == "" || (!strings.Contains(lower, "fail") && !strings.Contains(lower, "error") && !strings.Contains(lower, "panic")) {
+			testStatus = "✅ 전체 통과"
+		} else {
+			testStatus = "❌ 일부 실패"
+		}
+	}
+
+	if cmdName, cmdArgs := lintCommand(projType); cmdName != "" {
+		lintOut := runCmdWithTimeout(workspaceDir, 15*time.Second, cmdName, cmdArgs...)
+		lower := strings.ToLower(lintOut)
+		if lintOut == "" || (!strings.Contains(lower, "error") && !strings.Contains(lower, "warning")) {
+			lintStatus = "✅ 깨끗"
+		} else if strings.Contains(lower, "error") {
+			lintStatus = "❌ 오류 있음"
+		} else {
+			lintStatus = "⚠️ 경고 있음"
+		}
+	}
+
+	// Format recent commits.
+	commitSummary := "커밋 없음"
+	if recentLog != "" {
+		lines := strings.Split(strings.TrimSpace(recentLog), "\n")
+		var commitLines []string
+		for _, line := range lines {
+			if len(line) > 0 {
+				commitLines = append(commitLines, "• "+line)
+			}
+		}
+		commitSummary = strings.Join(commitLines, "\n")
+	}
+
+	data := discord.DashboardData{
+		Branch:       branch,
+		ChangedFiles: changedFiles,
+		FilesSummary: filesSummary,
+		BuildStatus:  buildStatus,
+		TestStatus:   testStatus,
+		LintStatus:   lintStatus,
+		RecentLog:    commitSummary,
+		Upstream:     upstream,
+		StashCount:   stashCount,
+	}
+
+	embed := discord.FormatEnhancedDashboardEmbed(data)
+	buttons := discord.DashboardButtons(sessionKey)
+	return []discord.Embed{embed}, buttons
+}
+
+// changedGoPackages returns the Go packages that have uncommitted changes.
+// Uses git diff to find changed .go files and maps them to packages.
+func changedGoPackages(workspaceDir string) []string {
+	diff := runGitCmd(workspaceDir, "diff", "--name-only", "HEAD")
+	if diff == "" {
+		// Also check untracked files.
+		diff = runGitCmd(workspaceDir, "ls-files", "--others", "--exclude-standard")
+	}
+	if diff == "" {
+		return nil
+	}
+
+	pkgSet := make(map[string]bool)
+	for _, file := range strings.Split(strings.TrimSpace(diff), "\n") {
+		if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		dir := file
+		if idx := strings.LastIndex(file, "/"); idx >= 0 {
+			dir = file[:idx]
+		} else {
+			dir = "."
+		}
+		pkgSet["./" + dir + "/..."] = true
+	}
+
+	pkgs := make([]string, 0, len(pkgSet))
+	for pkg := range pkgSet {
+		pkgs = append(pkgs, pkg)
+	}
+	return pkgs
 }

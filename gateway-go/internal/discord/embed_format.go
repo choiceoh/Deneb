@@ -553,12 +553,22 @@ func FormatVibeCoderHelpEmbed() Embed {
 		},
 		{
 			Name:   "📊 프로젝트 현황",
-			Value:  "`/dashboard` — 빌드·테스트·브랜치 상태 한눈에 보기",
+			Value:  "`/dashboard` — 빌드·테스트·린트·브랜치 상태 한눈에 보기\n대시보드에서 바로 테스트, 커밋, 푸시 가능",
 			Inline: false,
 		},
 		{
 			Name:   "💾 저장 & 배포",
 			Value:  "`/commit [메시지]` — 변경 사항 저장\n`/push` — 원격 저장소에 업로드",
+			Inline: false,
+		},
+		{
+			Name:   "🤖 스마트 기능",
+			Value:  "• **자동 검증** — 코드 변경 시 빌드/테스트 자동 실행\n• **자동 수정** — 오류 시 원클릭 복구\n• **다른 방법** — 수정 실패 시 대안 자동 제안\n• **되돌리기** — 변경 사항 원상복구",
+			Inline: false,
+		},
+		{
+			Name:   "🔀 Git 워크플로우",
+			Value:  "커밋 후 버튼으로: 푸시, PR 생성, 브랜치 생성",
 			Inline: false,
 		},
 		{
@@ -569,7 +579,7 @@ func FormatVibeCoderHelpEmbed() Embed {
 	}
 	return Embed{
 		Title:       "📖 디스코드 코딩 채널 도움말",
-		Description: "코드를 직접 볼 필요 없이, 원하는 것을 말로 설명하세요!",
+		Description: "코드를 직접 볼 필요 없이, 원하는 것을 말로 설명하세요!\n버튼을 눌러 다음 단계를 진행하세요.",
 		Color:       ColorInfo,
 		Fields:      fields,
 	}

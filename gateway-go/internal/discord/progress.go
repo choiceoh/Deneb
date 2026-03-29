@@ -42,6 +42,15 @@ var toolNameKorean = map[string]string{
 	"analyze":     "코드 분석",
 	"test":        "테스트 실행",
 	"git":         "Git 작업",
+	"pilot":       "Pilot 분석",
+	"subagents":   "서브에이전트",
+	"vega":        "프로젝트 검색",
+	"polaris":     "시스템 문서",
+	"image":       "이미지 분석",
+	"gmail":       "Gmail",
+	"cron":        "예약 작업",
+	"memory_search": "메모리 검색",
+	"health_check":  "상태 점검",
 }
 
 // KoreanToolName returns a Korean label for a tool name.
