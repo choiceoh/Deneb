@@ -581,6 +581,46 @@ func isDiscordDelivery(d *DeliveryContext) bool {
 	return d != nil && d.Channel == "discord"
 }
 
+// classifyMessageProfile heuristically selects the tool profile for a Telegram message.
+// Returns "chat" for general conversation tasks (web, email, media, memory) and ""
+// (full tool set) for messages that likely require coding / file-system operations.
+//
+// Conservative by design: when in doubt it returns "" (full set) so that the agent
+// never silently lacks a required tool. The "chat" profile is activated only when the
+// message contains no recognisable coding/FS trigger keywords.
+//
+// Callers should only invoke this for non-Discord channels; Discord always uses the
+// "coding" profile regardless of message content.
+func classifyMessageProfile(msg string) string {
+	if msg == "" {
+		return "chat"
+	}
+	lower := strings.ToLower(msg)
+
+	// Explicit coding / file-system triggers → full tool set needed.
+	// Each entry is precise enough to avoid false positives in everyday Korean chat.
+	codingTriggers := []string{
+		// Korean — code / file operations
+		"코드", "빌드", "컴파일", "디버그", "리팩토링",
+		"커밋", "브랜치", "푸시", "머지", "리베이스",
+		"함수", "클래스", "메서드", "인터페이스",
+		"파일 읽", "파일 만들", "파일 수정", "파일 삭제", "파일 내용",
+		"소스 검색", "로그 찾", "코드 검색",
+		"빌드 에러", "컴파일 에러", "테스트 실행", "테스트 코드",
+		// English — shell / git / build tool names
+		" git ", "git\n", "cargo ", "go build", "go run", "go test",
+		"make ", "grep ", " diff ", "exec ", "bash ", "shell ",
+		// Generic coding ops
+		"refactor", "compile", " debug", "function ", "class ", "method ",
+	}
+	for _, kw := range codingTriggers {
+		if strings.Contains(lower, kw) {
+			return "" // full tool set
+		}
+	}
+	return "chat"
+}
+
 // Definitions returns all registered tool definitions (for system prompt assembly).
 func (r *ToolRegistry) Definitions() []ToolDef {
 	r.mu.RLock()
