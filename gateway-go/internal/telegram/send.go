@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg" // register JPEG decoder for ValidatePhotoMetadata
+	_ "image/png"  // register PNG decoder for ValidatePhotoMetadata
 	"io"
 	"strconv"
 )
@@ -253,6 +256,32 @@ func BuildInlineKeyboard(rows [][]InlineKeyboardButton) *InlineKeyboardMarkup {
 	return &InlineKeyboardMarkup{
 		InlineKeyboard: rows,
 	}
+}
+
+// ValidatePhotoMetadata reports whether r is safe to send via Telegram's sendPhoto API.
+// It peeks at the image header to check format and dimensions without decoding the full
+// image, then seeks r back to the start so the caller can immediately upload it.
+// Returns false for unrecognised formats, dimensions exceeding PhotoMaxDimension,
+// or aspect ratios exceeding PhotoMaxAspectRatio — in those cases the caller should
+// send the file as a document instead.
+func ValidatePhotoMetadata(r io.ReadSeeker) bool {
+	cfg, _, err := image.DecodeConfig(r)
+	// Always seek back regardless of outcome so the caller reads from the start.
+	_, _ = r.Seek(0, io.SeekStart)
+	if err != nil {
+		// Unrecognised image format — safer to send as document.
+		return false
+	}
+	if cfg.Width > PhotoMaxDimension || cfg.Height > PhotoMaxDimension {
+		return false
+	}
+	if cfg.Width > 0 && cfg.Height > 0 {
+		w, h := float64(cfg.Width), float64(cfg.Height)
+		if w/h > PhotoMaxAspectRatio || h/w > PhotoMaxAspectRatio {
+			return false
+		}
+	}
+	return true
 }
 
 // --- Helpers ---
