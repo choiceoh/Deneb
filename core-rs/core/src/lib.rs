@@ -1315,6 +1315,26 @@ pub extern "C" fn deneb_context_engine_drop(handle: u32) {
 mod tests {
     use super::*;
 
+    fn ffi_validate_params(method: &str, params_json: &str, out: &mut [u8]) -> (i32, String) {
+        let code = unsafe {
+            deneb_validate_params(
+                method.as_ptr(),
+                method.len(),
+                params_json.as_ptr(),
+                params_json.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
+        };
+        let written = if code > 0 {
+            (code as usize).min(out.len())
+        } else {
+            0
+        };
+        let payload = String::from_utf8_lossy(&out[..written]).to_string();
+        (code, payload)
+    }
+
     #[test]
     fn test_validate_frame_valid_request() {
         let json = r#"{"type":"req","id":"1","method":"chat.send"}"#;
@@ -1396,6 +1416,38 @@ mod tests {
             unsafe { deneb_validate_error_code(invalid.as_ptr(), invalid.len()) },
             1
         );
+    }
+
+    #[test]
+    fn test_bridge_native_equivalence_validate_params_valid() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let method = "chat.send";
+        let params = r#"{"key":"sess-1","text":"hello"}"#;
+
+        let native = protocol::validation::validate_params(method, params)?;
+        assert!(native.valid);
+
+        let mut out = [0u8; 256];
+        let (ffi_code, ffi_payload) = ffi_validate_params(method, params, &mut out);
+        assert_eq!(ffi_code, 0, "ffi payload={ffi_payload}");
+        Ok(())
+    }
+
+    #[test]
+    fn test_bridge_native_equivalence_validate_params_invalid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let method = "chat.send";
+        let params = r#"{"text":"missing required key"}"#;
+
+        let native = protocol::validation::validate_params(method, params)?;
+        assert!(!native.valid);
+        let expected = serde_json::to_string(&native.errors)?;
+
+        let mut out = [0u8; 1024];
+        let (ffi_code, ffi_payload) = ffi_validate_params(method, params, &mut out);
+        assert!(ffi_code > 0, "expected serialized errors size, got {ffi_code}");
+        assert_eq!(ffi_payload, expected);
+        Ok(())
     }
 
     #[test]

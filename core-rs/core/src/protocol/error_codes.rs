@@ -117,6 +117,7 @@ pub fn is_valid_error_code(code: &str) -> bool {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::protocol::gen;
 
     #[test]
     fn test_roundtrip() {
@@ -165,5 +166,46 @@ mod tests {
     #[test]
     fn test_display() {
         assert_eq!(format!("{}", ErrorCode::NotFound), "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_generated_proto_error_code_mapping_consistency() {
+        let mapping = [
+            (ErrorCode::NotLinked, gen::gateway::ErrorCode::NotLinked),
+            (ErrorCode::NotPaired, gen::gateway::ErrorCode::NotPaired),
+            (ErrorCode::AgentTimeout, gen::gateway::ErrorCode::AgentTimeout),
+            (
+                ErrorCode::InvalidRequest,
+                gen::gateway::ErrorCode::InvalidRequest,
+            ),
+            (ErrorCode::Unavailable, gen::gateway::ErrorCode::Unavailable),
+            (ErrorCode::MissingParam, gen::gateway::ErrorCode::MissingParam),
+            (ErrorCode::NotFound, gen::gateway::ErrorCode::NotFound),
+            (ErrorCode::Unauthorized, gen::gateway::ErrorCode::Unauthorized),
+            (
+                ErrorCode::ValidationFailed,
+                gen::gateway::ErrorCode::ValidationFailed,
+            ),
+            (ErrorCode::Conflict, gen::gateway::ErrorCode::Conflict),
+            (ErrorCode::Forbidden, gen::gateway::ErrorCode::Forbidden),
+            (
+                ErrorCode::NodeDisconnected,
+                gen::gateway::ErrorCode::NodeDisconnected,
+            ),
+            (
+                ErrorCode::DependencyFailed,
+                gen::gateway::ErrorCode::DependencyFailed,
+            ),
+            (
+                ErrorCode::FeatureDisabled,
+                gen::gateway::ErrorCode::FeatureDisabled,
+            ),
+        ];
+
+        for (local, proto) in mapping {
+            assert_eq!(local as i32, proto as i32, "numeric mapping mismatch");
+            let local_name = format!("ERROR_CODE_{}", local.as_str());
+            assert_eq!(local_name, proto.as_str_name(), "string mapping mismatch");
+        }
     }
 }

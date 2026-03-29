@@ -611,6 +611,7 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_validate_params_unknown_method() {
@@ -660,6 +661,65 @@ mod tests {
         let json = serde_json::to_string(&result)?;
         assert!(json.contains("\"valid\":false"));
         assert!(json.contains("\"minLength\""));
+        Ok(())
+    }
+
+    #[test]
+    fn test_rpc_method_golden_shapes() -> Result<(), Box<dyn std::error::Error>> {
+        struct GoldenCase {
+            name: &'static str,
+            method: &'static str,
+            params: serde_json::Value,
+            valid: bool,
+            expected_keyword: Option<&'static str>,
+        }
+
+        let cases = vec![
+            GoldenCase {
+                name: "sessions.create minimal",
+                method: "sessions.create",
+                params: json!({
+                    "key": "team-chat",
+                    "kind": "group"
+                }),
+                valid: true,
+                expected_keyword: None,
+            },
+            GoldenCase {
+                name: "chat.send requires key",
+                method: "chat.send",
+                params: json!({
+                    "text": "hello"
+                }),
+                valid: false,
+                expected_keyword: Some("required"),
+            },
+            GoldenCase {
+                name: "cron.add full",
+                method: "cron.add",
+                params: json!({
+                    "expr": "*/5 * * * *",
+                    "command": "echo hi",
+                    "enabled": true
+                }),
+                valid: true,
+                expected_keyword: None,
+            },
+        ];
+
+        for case in cases {
+            let raw = serde_json::to_string(&case.params)?;
+            let result = validate_params(case.method, &raw)?;
+            assert_eq!(result.valid, case.valid, "case={}", case.name);
+            if let Some(keyword) = case.expected_keyword {
+                assert!(
+                    result.errors.iter().any(|e| e.keyword == keyword),
+                    "case={} expected keyword={keyword}, got={:?}",
+                    case.name,
+                    result.errors
+                );
+            }
+        }
         Ok(())
     }
 }
