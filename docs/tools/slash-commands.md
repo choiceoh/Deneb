@@ -14,7 +14,7 @@ The host-only bash chat command uses `! <cmd>` (with `/bash <cmd>` as an alias).
 There are two related systems:
 
 - **Commands**: standalone `/...` messages.
-- **Directives**: `/think`, `/fast`, `/verbose`, `/reasoning`, `/elevated`, `/exec`, `/model`, `/queue`.
+- **Directives**: `/think`, `/fast`, `/verbose`, `/reasoning`, `/elevated`, `/model`.
   - Directives are stripped from the message before the model sees it.
   - In normal chat messages (not directive-only), they are treated as “inline hints” and do **not** persist session settings.
   - In directive-only messages (the message contains only directives), they persist to the session and reply with an acknowledgement.
@@ -22,7 +22,7 @@ There are two related systems:
     allowlist used; otherwise authorization comes from channel allowlists/pairing plus `commands.useAccessGroups`.
     Unauthorized senders see directives treated as plain text.
 
-There are also a few **inline shortcuts** (allowlisted/authorized senders only): `/help`, `/commands`, `/status`, `/whoami` (`/id`).
+There are also a few **inline shortcuts** (allowlisted/authorized senders only): `/help`, `/status`.
 They run immediately, are stripped before the model sees the message, and the remaining text continues through the normal flow.
 
 ## Config
@@ -31,7 +31,6 @@ They run immediately, are stripped before the model sees the message, and the re
 {
   commands: {
     native: "auto",
-    nativeSkills: "auto",
     text: true,
     bash: false,
     bashForegroundMs: 2000,
@@ -39,7 +38,6 @@ They run immediately, are stripped before the model sees the message, and the re
     mcp: false,
     plugins: false,
     debug: false,
-    restart: false,
     allowFrom: {
       "*": ["user1"],
       discord: ["user:123"],
@@ -55,9 +53,6 @@ They run immediately, are stripped before the model sees the message, and the re
   - Auto: on for Discord/Telegram; off for Slack (until you add slash commands); ignored for providers without native support.
   - Set `channels.discord.commands.native`, `channels.telegram.commands.native`, or `channels.slack.commands.native` to override per provider (bool or `"auto"`).
   - `false` clears previously registered commands on Discord/Telegram at startup. Slack commands are managed in the Slack app and are not removed automatically.
-- `commands.nativeSkills` (default `"auto"`) registers **skill** commands natively when supported.
-  - Auto: on for Discord/Telegram; off for Slack (Slack requires creating a slash command per skill).
-  - Set `channels.discord.commands.nativeSkills`, `channels.telegram.commands.nativeSkills`, or `channels.slack.commands.nativeSkills` to override per provider (bool or `"auto"`).
 - `commands.bash` (default `false`) enables `! <cmd>` to run host shell commands (`/bash <cmd>` is an alias; requires `tools.elevated` allowlists).
 - `commands.bashForegroundMs` (default `2000`) controls how long bash waits before switching to background mode (`0` backgrounds immediately).
 - `commands.config` (default `false`) enables `/config` (reads/writes `deneb.json`).
@@ -74,15 +69,12 @@ They run immediately, are stripped before the model sees the message, and the re
 Text + native (when enabled):
 
 - `/help`
-- `/commands`
-- `/skill <name> [input]` (run a skill by name)
 - `/status` (show current status; includes provider usage/quota for the current model provider when available)
 - `/allowlist` (list/add/remove allowlist entries)
 - `/approve <id> allow-once|allow-always|deny` (resolve exec approval prompts)
 - `/context [list|detail|json]` (explain “context”; `detail` shows per-file + per-tool + per-skill + system prompt size)
 - `/btw <question>` (ask an ephemeral side question about the current session without changing future session context; see [/tools/btw](/tools/btw))
-- `/export-session [path]` (alias: `/export`) (export current session to HTML with full system prompt)
-- `/whoami` (show your sender id; alias: `/id`)
+- `/export [path]` (export current session to HTML with full system prompt)
 - `/session idle <duration|off>` (manage inactivity auto-unfocus for focused thread bindings)
 - `/session max-age <duration|off>` (manage hard max-age auto-unfocus for focused thread bindings)
 - `/subagents list|kill|log|info|send|steer|spawn` (inspect, control, or spawn sub-agent runs for the current session)
@@ -99,10 +91,6 @@ Text + native (when enabled):
 - `/debug show|set|unset|reset` (runtime overrides, owner-only; requires `commands.debug: true`)
 - `/usage off|tokens|full|cost` (per-response usage footer or local cost summary)
 - `/stop`
-- `/restart`
-- `/dock-telegram` (alias: `/dock_telegram`) (switch replies to Telegram)
-- `/dock-discord` (alias: `/dock_discord`) (switch replies to Discord)
-- `/dock-slack` (alias: `/dock_slack`) (switch replies to Slack)
 - `/activation mention|always` (groups only)
 - `/send on|off|inherit` (owner-only)
 - `/reset` or `/new [model]` (optional model hint; remainder is passed through)
@@ -111,9 +99,7 @@ Text + native (when enabled):
 - `/verbose on|full|off` (alias: `/v`)
 - `/reasoning on|off|stream` (alias: `/reason`; when on, sends a separate message prefixed `Reasoning:`; `stream` = Telegram draft only)
 - `/elevated on|off|ask|full` (alias: `/elev`; `full` skips exec approvals)
-- `/exec host=<sandbox|gateway|node> security=<deny|allowlist|full> ask=<off|on-miss|always> node=<id>` (send `/exec` to show current)
 - `/model <name>` (alias: `/models`; or `/<alias>` from `agents.defaults.models.*.alias`)
-- `/queue <mode>` (plus options like `debounce:2s cap:25 drop:summarize`; send `/queue` to see current settings)
 - `/bash <command>` (host-only; alias for `! <command>`; requires `commands.bash: true` + `tools.elevated` allowlists)
 
 Text-only:
@@ -131,7 +117,6 @@ Notes:
 - `/allowlist add|remove` requires `commands.config=true` and honors channel `configWrites`.
 - In multi-account channels, config-targeted `/allowlist --account <id>` and `/config set channels.<provider>.accounts.<id>...` also honor the target account's `configWrites`.
 - `/usage` controls the per-response usage footer; `/usage cost` prints a local cost summary from Deneb session logs.
-- `/restart` is enabled by default; set `commands.restart: false` to disable it.
 - Discord-only native command: `/vc join|leave|status` controls voice channels (requires `channels.discord.voice` and native commands; not available as text).
 - Discord thread-binding commands (`/focus`, `/unfocus`, `/agents`, `/session idle`, `/session max-age`) require effective thread bindings to be enabled (`session.threadBindings.enabled` and/or `channels.discord.threadBindings.enabled`).
 - ACP command reference and runtime behavior: [ACP Agents](/tools/acp-agents).
@@ -143,13 +128,8 @@ Notes:
 - **Group mention gating:** command-only messages from allowlisted senders bypass mention requirements.
 - **Inline shortcuts (allowlisted senders only):** certain commands also work when embedded in a normal message and are stripped before the model sees the remaining text.
   - Example: `hey /status` triggers a status reply, and the remaining text continues through the normal flow.
-- Currently: `/help`, `/commands`, `/status`, `/whoami` (`/id`).
+  - Currently: `/help`, `/status`.
 - Unauthorized command-only messages are silently ignored, and inline `/...` tokens are treated as plain text.
-- **Skill commands:** `user-invocable` skills are exposed as slash commands. Names are sanitized to `a-z0-9_` (max 32 chars); collisions get numeric suffixes (e.g. `_2`).
-  - `/skill <name> [input]` runs a skill by name (useful when native command limits prevent per-skill commands).
-  - By default, skill commands are forwarded to the model as a normal request.
-  - Skills may optionally declare `command-dispatch: tool` to route the command directly to a tool (deterministic, no model).
-  - Example: `/prose` (OpenProse plugin) — see [OpenProse](/plugins/prose).
 - **Native command arguments:** Discord uses autocomplete for dynamic options (and button menus when you omit required args). Telegram and Slack show a button menu when a command supports choices and you omit the arg.
 
 ## Usage surfaces (what shows where)

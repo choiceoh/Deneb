@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
+	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -437,7 +438,31 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *autoreply.Comman
 		}
 	}
 
-	return &autoreply.CommandDeps{Status: sd}
+	var subagentRunsFn func() []subagentpkg.SubagentRunRecord
+	if p.server.acpDeps != nil && p.server.acpDeps.Registry != nil {
+		reg := p.server.acpDeps.Registry
+		key := sessionKey
+		subagentRunsFn = func() []subagentpkg.SubagentRunRecord {
+			agents := reg.List(key)
+			runs := make([]subagentpkg.SubagentRunRecord, len(agents))
+			for i, a := range agents {
+				runs[i] = subagentpkg.SubagentRunRecord{
+					RunID:           a.ID,
+					ChildSessionKey: a.SessionKey,
+					RequesterKey:    key,
+					SpawnDepth:      a.Depth,
+					WorkspaceDir:    a.WorkspaceDir,
+					CreatedAt:       a.SpawnedAt,
+					StartedAt:       a.SpawnedAt,
+					EndedAt:         a.EndedAt,
+					OutcomeStatus:   a.Status,
+				}
+			}
+			return runs
+		}
+	}
+
+	return &autoreply.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn}
 }
 
 // extractCommandKey pulls the command name from a slash-prefixed message.
