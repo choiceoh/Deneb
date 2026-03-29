@@ -1,13 +1,5 @@
-// commands_handlers_info.go — Status, info, and help command handlers.
+// commands_handlers_info.go — Status command handler.
 package handlers
-
-import (
-	"fmt"
-	"strconv"
-	"strings"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
-)
 
 func handleStatusCommand(ctx CommandContext) (*CommandResult, error) {
 	if ctx.Session == nil {
@@ -42,43 +34,4 @@ func handleStatusCommand(ctx CommandContext) (*CommandResult, error) {
 		report.LastFailureReason = sd.LastFailureReason
 	}
 	return &CommandResult{Reply: BuildStatusMessage(report), SkipAgent: true}, nil
-}
-
-func handleHelpCommand(ctx CommandContext) (*CommandResult, error) {
-	raw := argRaw(ctx.Args)
-	page := 0
-	if raw != "" {
-		if p, err := strconv.Atoi(raw); err == nil && p > 0 {
-			page = p
-		}
-	}
-	commands := BuiltinChatCommands()
-	if page > 0 {
-		return &CommandResult{Reply: BuildCommandsMessage(commands, page, 20), SkipAgent: true}, nil
-	}
-	return &CommandResult{Reply: BuildHelpMessage(commands), SkipAgent: true}, nil
-}
-
-func handleContextCommand(ctx CommandContext) (*CommandResult, error) {
-	if ctx.Session == nil {
-		return &CommandResult{Reply: "No active session.", SkipAgent: true}, nil
-	}
-	return &CommandResult{
-		Reply:     "📊 Context usage report generated.",
-		SkipAgent: true,
-	}, nil
-}
-
-func handleInfoCommand(ctx CommandContext) (*CommandResult, error) {
-	var lines []string
-	lines = append(lines, "ℹ️ **Agent Info**")
-	if ctx.Session != nil {
-		lines = append(lines, fmt.Sprintf("Session: `%s`", ctx.Session.SessionKey))
-		lines = append(lines, fmt.Sprintf("Agent: `%s`", ctx.Session.AgentID))
-		lines = append(lines, fmt.Sprintf("Channel: %s", ctx.Session.Channel))
-		if ctx.Session.Model != "" {
-			lines = append(lines, fmt.Sprintf("Model: %s", model.FormatProviderModelRef(ctx.Session.Provider, ctx.Session.Model)))
-		}
-	}
-	return &CommandResult{Reply: strings.Join(lines, "\n"), SkipAgent: true}, nil
 }
