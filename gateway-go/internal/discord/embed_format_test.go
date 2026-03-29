@@ -147,6 +147,33 @@ func TestFormatProgressEmbed_AllDone(t *testing.T) {
 	}
 }
 
+func TestFormatProgressEmbed_ParallelGroup(t *testing.T) {
+	steps := []ProgressStep{
+		{Name: "tree", Status: StepDone, Group: 0},
+		{Name: "grep", Status: StepDone, Group: 2},
+		{Name: "find", Status: StepDone, Group: 2},
+		{Name: "edit", Status: StepDone, Group: 3},
+	}
+	e := FormatProgressEmbed(steps)
+	if e.Color != ColorSuccess {
+		t.Errorf("expected green, got %#x", e.Color)
+	}
+	// Grouped steps (group 2) should have ┃ prefix.
+	if !strings.Contains(e.Description, "┃ ✅ grep") {
+		t.Error("expected parallel prefix for group-2 step 'grep'")
+	}
+	if !strings.Contains(e.Description, "┃ ✅ find") {
+		t.Error("expected parallel prefix for group-2 step 'find'")
+	}
+	// Non-grouped / single-member group steps should not.
+	if strings.Contains(e.Description, "┃ ✅ tree") {
+		t.Error("group-0 step should not have parallel prefix")
+	}
+	if strings.Contains(e.Description, "┃ ✅ edit") {
+		t.Error("single-member group step should not have parallel prefix")
+	}
+}
+
 func TestParseDiffSummary(t *testing.T) {
 	files, ins, del := parseDiffSummary("3 files changed, 10 insertions(+), 2 deletions(-)")
 	if files != 3 || ins != 10 || del != 2 {

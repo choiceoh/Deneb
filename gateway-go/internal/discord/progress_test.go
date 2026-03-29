@@ -59,6 +59,46 @@ func TestProgressStep_AllDoneWithError(t *testing.T) {
 	}
 }
 
+func TestProgressStep_ParallelGroup(t *testing.T) {
+	// Steps in the same group should get the ┃ prefix.
+	steps := []ProgressStep{
+		{Name: "프로젝트 구조", Status: StepDone, Group: 0},
+		{Name: "파일 읽기", Status: StepRunning, Group: 1},
+		{Name: "코드 검색", Status: StepRunning, Group: 1},
+		{Name: "파일 찾기", Status: StepRunning, Group: 1},
+		{Name: "파일 수정", Status: StepPending, Group: 0},
+	}
+	e := FormatProgressEmbed(steps)
+
+	// Parallel group members should have ┃ prefix.
+	if !strings.Contains(e.Description, "┃ 🔄 파일 읽기") {
+		t.Error("expected parallel prefix for grouped step '파일 읽기'")
+	}
+	if !strings.Contains(e.Description, "┃ 🔄 코드 검색") {
+		t.Error("expected parallel prefix for grouped step '코드 검색'")
+	}
+
+	// Non-grouped steps should NOT have ┃ prefix.
+	if strings.Contains(e.Description, "┃ ✅ 프로젝트 구조") {
+		t.Error("ungrouped step should not have parallel prefix")
+	}
+	if strings.Contains(e.Description, "┃ ⬜ 파일 수정") {
+		t.Error("ungrouped step should not have parallel prefix")
+	}
+}
+
+func TestProgressStep_SingleMemberGroupNoPrefix(t *testing.T) {
+	// A group with only one member should render without ┃ prefix.
+	steps := []ProgressStep{
+		{Name: "파일 읽기", Status: StepDone, Group: 1},
+		{Name: "파일 수정", Status: StepRunning, Group: 2},
+	}
+	e := FormatProgressEmbed(steps)
+	if strings.Contains(e.Description, "┃") {
+		t.Error("single-member groups should not have parallel prefix")
+	}
+}
+
 func TestProgressTracker_NilSafe(t *testing.T) {
 	// All methods should be safe to call on nil tracker.
 	var pt *ProgressTracker
