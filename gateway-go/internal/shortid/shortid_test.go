@@ -10,11 +10,11 @@ func TestNew_Format(t *testing.T) {
 	if !strings.HasPrefix(id, "run_") {
 		t.Fatalf("expected prefix run_, got %s", id)
 	}
-	// "run_" (4) + up to 11 base62 chars = max 15
-	if len(id) > 15 {
-		t.Fatalf("expected len <= 15, got %d (%s)", len(id), id)
+	// "run_" (4) + 4 digits = 8
+	if len(id) != len("run_")+4 {
+		t.Fatalf("expected len %d, got %d (%s)", len("run_")+4, len(id), id)
 	}
-	t.Logf("generated id: %s (len=%d)", id, len(id))
+	t.Logf("generated id: %s", id)
 }
 
 func TestNew_Uniqueness(t *testing.T) {
@@ -28,21 +28,19 @@ func TestNew_Uniqueness(t *testing.T) {
 	}
 }
 
-func TestEncodeBase62(t *testing.T) {
-	tests := []struct {
-		input int64
-		want  string
-	}{
-		{0, "0"},
-		{1, "1"},
-		{61, "z"},
-		{62, "10"},
-		{3844, "100"},
+func TestNew_Wrap(t *testing.T) {
+	// Force counter near wrap point.
+	counter.Store(9998)
+	a := New("p")
+	b := New("p")
+	c := New("p")
+	if a != "p_9998" {
+		t.Fatalf("expected p_9998, got %s", a)
 	}
-	for _, tt := range tests {
-		got := encodeBase62(tt.input)
-		if got != tt.want {
-			t.Errorf("encodeBase62(%d) = %q, want %q", tt.input, got, tt.want)
-		}
+	if b != "p_9999" {
+		t.Fatalf("expected p_9999, got %s", b)
+	}
+	if c != "p_0000" {
+		t.Fatalf("expected p_0000, got %s", c)
 	}
 }
