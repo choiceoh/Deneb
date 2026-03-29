@@ -1154,7 +1154,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sweep_below_threshold_returns_done() {
+    fn test_sweep_below_threshold_returns_done() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = SweepEngine::new(default_config(), 1, 1000, false, false, 1000);
         let cmd = engine.start();
         assert!(matches!(cmd, SweepCommand::FetchTokenCount { .. }));
@@ -1166,12 +1166,13 @@ mod tests {
                 assert!(!result.action_taken);
                 assert_eq!(result.tokens_before, 500);
             }
-            _ => panic!("Expected Done, got {:?}", cmd),
+            _ => return Err(format!("Expected Done, got {:?}", cmd).into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_sweep_empty_items_returns_done() {
+    fn test_sweep_empty_items_returns_done() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = SweepEngine::new(default_config(), 1, 1000, false, false, 1000);
         let _ = engine.start();
         let cmd = engine.step(SweepResponse::TokenCount { count: 800 });
@@ -1182,8 +1183,9 @@ mod tests {
             SweepCommand::Done { result } => {
                 assert!(!result.action_taken);
             }
-            _ => panic!("Expected Done, got {:?}", cmd),
+            _ => return Err(format!("Expected Done, got {:?}", cmd).into()),
         }
+        Ok(())
     }
 
     #[test]
@@ -1207,7 +1209,7 @@ mod tests {
             SweepCommand::FetchMessages { message_ids } => {
                 assert_eq!(message_ids, vec![1, 2, 3]);
             }
-            _ => panic!("Wrong variant"),
+            _ => return Err("Wrong variant".into()),
         }
         Ok(())
     }
@@ -1219,7 +1221,7 @@ mod tests {
         let parsed: SweepResponse = serde_json::from_str(&json)?;
         match parsed {
             SweepResponse::TokenCount { count } => assert_eq!(count, 42),
-            _ => panic!("Wrong variant"),
+            _ => return Err("Wrong variant".into()),
         }
         Ok(())
     }
