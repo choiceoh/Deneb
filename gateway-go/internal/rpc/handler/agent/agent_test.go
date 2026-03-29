@@ -1,24 +1,12 @@
 package agent
 
 import (
-	"context"
-	"encoding/json"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 )
 
-// callMethod invokes a handler by method name from the given map.
-func callMethod(m map[string]rpcutil.HandlerFunc, method string, params any) *protocol.ResponseFrame {
-	raw, _ := json.Marshal(params)
-	req := &protocol.RequestFrame{ID: "t1", Method: method, Params: json.RawMessage(raw)}
-	h, ok := m[method]
-	if !ok {
-		return nil
-	}
-	return h(context.Background(), req)
-}
+var callMethod = rpctest.Call
 
 // ---------------------------------------------------------------------------
 // ExtendedMethods

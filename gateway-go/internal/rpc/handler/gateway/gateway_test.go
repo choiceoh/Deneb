@@ -6,52 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// callMethod invokes a named handler from the map.
-func callMethod(m map[string]rpcutil.HandlerFunc, method string, params any) *protocol.ResponseFrame {
-	var raw json.RawMessage
-	if params != nil {
-		raw, _ = json.Marshal(params)
-	}
-	req := &protocol.RequestFrame{ID: "t1", Method: method, Params: raw}
-	h, ok := m[method]
-	if !ok {
-		return nil
-	}
-	return h(context.Background(), req)
-}
-
-func mustOK(t *testing.T, resp *protocol.ResponseFrame) {
-	t.Helper()
-	if resp == nil {
-		t.Fatal("nil response")
-	}
-	if resp.Error != nil {
-		t.Fatalf("unexpected error: %+v", resp.Error)
-	}
-}
-
-func mustErr(t *testing.T, resp *protocol.ResponseFrame) {
-	t.Helper()
-	if resp == nil {
-		t.Fatal("nil response")
-	}
-	if resp.Error == nil {
-		t.Fatal("expected error response, got success")
-	}
-}
-
-func extractResult(t *testing.T, resp *protocol.ResponseFrame) map[string]any {
-	t.Helper()
-	var m map[string]any
-	if err := json.Unmarshal(resp.Payload, &m); err != nil {
-		t.Fatalf("unmarshal result: %v", err)
-	}
-	return m
-}
+var (
+	callMethod    = rpctest.Call
+	mustOK        = rpctest.MustOK
+	mustErr       = rpctest.MustErr
+	extractResult = rpctest.Result
+)
 
 // ─── RuntimeMethods key set ──────────────────────────────────────────────────
 

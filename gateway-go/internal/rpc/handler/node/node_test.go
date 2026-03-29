@@ -1,59 +1,22 @@
 package node
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	nodemod "github.com/choiceoh/deneb/gateway-go/internal/node"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 )
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-func call(m map[string]rpcutil.HandlerFunc, method string, params any) *protocol.ResponseFrame {
-	var raw json.RawMessage
-	if params != nil {
-		raw, _ = json.Marshal(params)
-	}
-	req := &protocol.RequestFrame{ID: "t1", Method: method, Params: raw}
-	h, ok := m[method]
-	if !ok {
-		return nil
-	}
-	return h(context.Background(), req)
-}
-
-func mustOK(t *testing.T, resp *protocol.ResponseFrame) {
-	t.Helper()
-	if resp == nil {
-		t.Fatal("nil response")
-	}
-	if resp.Error != nil {
-		t.Fatalf("unexpected error: %+v", resp.Error)
-	}
-}
-
-func mustErr(t *testing.T, resp *protocol.ResponseFrame) {
-	t.Helper()
-	if resp == nil {
-		t.Fatal("nil response")
-	}
-	if resp.Error == nil {
-		t.Fatalf("expected error, got success: %s", resp.Payload)
-	}
-}
-
-func result(t *testing.T, resp *protocol.ResponseFrame) map[string]any {
-	t.Helper()
-	var m map[string]any
-	if err := json.Unmarshal(resp.Payload, &m); err != nil {
-		t.Fatalf("unmarshal result: %v", err)
-	}
-	return m
-}
+var (
+	call    = rpctest.Call
+	mustOK  = rpctest.MustOK
+	mustErr = rpctest.MustErr
+	result  = rpctest.Result
+)
 
 func newNodeDeps() Deps {
 	return Deps{Nodes: nodemod.NewManager()}
