@@ -14,12 +14,12 @@ func TestCodeActionButtons(t *testing.T) {
 	if row.Type != ComponentActionRow {
 		t.Errorf("expected ActionRow type %d, got %d", ComponentActionRow, row.Type)
 	}
-	if len(row.Components) != 3 {
-		t.Fatalf("expected 3 buttons, got %d", len(row.Components))
+	if len(row.Components) != 4 {
+		t.Fatalf("expected 4 buttons, got %d", len(row.Components))
 	}
 
 	// Verify button custom_ids.
-	expectedPrefixes := []string{"test:", "commit:", "revert:"}
+	expectedPrefixes := []string{"test:", "commit:", "dashboard:", "revert:"}
 	for i, btn := range row.Components {
 		if btn.Type != ComponentButton {
 			t.Errorf("button %d: expected type %d, got %d", i, ComponentButton, btn.Type)

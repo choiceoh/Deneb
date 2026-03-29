@@ -27,20 +27,16 @@ func CodeActionButtons(sessionKey string) []Component {
 		ActionRow(
 			Button("🧪 테스트 실행", fmt.Sprintf("test:%s", sessionKey), ButtonPrimary),
 			Button("💾 커밋", fmt.Sprintf("commit:%s", sessionKey), ButtonSuccess),
+			Button("📊 현황", fmt.Sprintf("dashboard:%s", sessionKey), ButtonSecondary),
 			Button("↩️ 되돌리기", fmt.Sprintf("revert:%s", sessionKey), ButtonDanger),
 		),
 	}
 }
 
 // TestResultButtons returns an action row for test result follow-ups.
+// Uses the smart test button set with auto-fix and full test options.
 func TestResultButtons(sessionKey string) []Component {
-	return []Component{
-		ActionRow(
-			Button("🔧 오류 수정", fmt.Sprintf("fix:%s", sessionKey), ButtonPrimary),
-			Button("📋 상세보기", fmt.Sprintf("details:%s", sessionKey), ButtonSecondary),
-			Button("💾 커밋", fmt.Sprintf("commit:%s", sessionKey), ButtonSuccess),
-		),
-	}
+	return SmartTestButtons(sessionKey, true)
 }
 
 // ConfirmButtons returns confirm/cancel buttons for destructive actions.
@@ -54,11 +50,12 @@ func ConfirmButtons(sessionKey, action string) []Component {
 }
 
 // AfterCommitButtons returns an action row with follow-up buttons after a successful commit.
-// Shows push and new-task options for vibe coders.
+// Shows push, PR creation, and new-task options for vibe coders.
 func AfterCommitButtons(sessionKey string) []Component {
 	return []Component{
 		ActionRow(
 			Button("🚀 푸시", fmt.Sprintf("push:%s", sessionKey), ButtonPrimary),
+			Button("🔀 PR 생성", fmt.Sprintf("prcreate:%s", sessionKey), ButtonSuccess),
 			Button("🆕 새 작업", fmt.Sprintf("new:%s", sessionKey), ButtonSecondary),
 		),
 	}

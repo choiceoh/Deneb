@@ -7,7 +7,6 @@
 package discord
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
@@ -133,32 +132,19 @@ func ContextButtons(outcome ReplyOutcome, sessionKey string) []Component {
 
 // AfterTestPassButtons returns buttons shown when tests pass.
 func AfterTestPassButtons(sessionKey string) []Component {
-	return []Component{
-		ActionRow(
-			Button("💾 커밋", fmt.Sprintf("commit:%s", sessionKey), ButtonSuccess),
-			Button("🚀 푸시", fmt.Sprintf("push:%s", sessionKey), ButtonPrimary),
-		),
-	}
+	return SmartTestButtons(sessionKey, false)
 }
 
 // BuildFailButtons returns buttons shown when build fails.
+// Uses the enhanced error recovery flow.
 func BuildFailButtons(sessionKey string) []Component {
-	return []Component{
-		ActionRow(
-			Button("🔧 수정 요청", fmt.Sprintf("fix:%s", sessionKey), ButtonPrimary),
-			Button("↩️ 되돌리기", fmt.Sprintf("revert:%s", sessionKey), ButtonDanger),
-		),
-	}
+	return ErrorRecoveryButtons(sessionKey)
 }
 
 // ErrorButtons returns buttons shown when an error occurs.
+// Uses the enhanced error recovery flow with auto-fix and alternative approach options.
 func ErrorButtons(sessionKey string) []Component {
-	return []Component{
-		ActionRow(
-			Button("🔧 수정 요청", fmt.Sprintf("fix:%s", sessionKey), ButtonPrimary),
-			Button("📋 상세보기", fmt.Sprintf("details:%s", sessionKey), ButtonSecondary),
-		),
-	}
+	return ErrorRecoveryButtons(sessionKey)
 }
 
 // --- Error Korean translation for vibe coders ---

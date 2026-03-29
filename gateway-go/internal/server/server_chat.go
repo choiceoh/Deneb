@@ -537,11 +537,13 @@ func (s *Server) sendVibeCoderFollowUps(ctx context.Context, client *discord.Cli
 		return
 	}
 
-	// Error translation: add a Korean explanation embed for non-developers.
+	// Error translation + recovery: add Korean explanation and auto-fix buttons.
 	if outcome == discord.OutcomeBuildFail || outcome == discord.OutcomeTestFail || outcome == discord.OutcomeError {
 		if embed := discord.FormatErrorTranslationEmbed(text); embed != nil {
+			sessionKey := discordSessionKeyForChannel(s.discordPlug, delivery.To)
 			client.SendMessage(ctx, delivery.To, &discord.SendMessageRequest{
 				Embeds:          []discord.Embed{*embed},
+				Components:      discord.ErrorRecoveryButtons(sessionKey),
 				AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
 			})
 		}
