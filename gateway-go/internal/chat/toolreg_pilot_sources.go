@@ -389,23 +389,103 @@ func buildPilotPrompt(task, outputFormat, maxLength string, blocks []sourceResul
 		return sb.String()
 	}
 
-	// Budget per block to stay within total limit.
-	perBlock := pilotMaxInput
-	if len(blocks) > 1 {
-		perBlock = pilotMaxInput / len(blocks)
-		if perBlock < 2000 {
-			perBlock = 2000
-		}
-	}
+	// Proportional budget allocation: small sources keep their full content and
+	// the freed budget is redistributed to larger sources, minimising truncation
+	// of high-value data (e.g. large file reads) while avoiding waste from small
+	// sources (e.g. a 200-char grep result consuming a 4800-char equal share).
+	budgets := computeBudgets(blocks, pilotMaxInput)
 
-	for _, b := range blocks {
+	for i, b := range blocks {
 		sb.WriteString("\n\n--- ")
 		sb.WriteString(b.label)
 		sb.WriteString(" ---\n")
-		sb.WriteString(smartTruncate(b.content, perBlock, b.sourceType))
+		sb.WriteString(smartTruncate(b.content, budgets[i], b.sourceType))
 	}
 
 	return sb.String()
+}
+
+// computeBudgets allocates total chars across blocks proportionally.
+//
+// Algorithm:
+//  1. If the sum of all content sizes fits within total, return actual sizes (no truncation).
+//  2. Otherwise, iteratively "fix" blocks whose content fits under the current
+//     equal share, assigning them their exact size and releasing the savings.
+//  3. Remaining budget is split proportionally among overflow blocks by their size.
+//
+// The minimum per-block budget is 2000 chars so even large-overflow blocks
+// always receive a usable context window.
+func computeBudgets(blocks []sourceResult, total int) []int {
+	n := len(blocks)
+	budgets := make([]int, n)
+	sizes := make([]int, n)
+	totalRaw := 0
+	for i, b := range blocks {
+		sizes[i] = len(b.content)
+		totalRaw += sizes[i]
+	}
+
+	// Everything fits — no truncation needed.
+	if totalRaw <= total {
+		copy(budgets, sizes)
+		return budgets
+	}
+
+	const minPerBlock = 2000
+
+	remaining := total
+	assigned := make([]bool, n)
+
+	// Iteratively pin blocks whose size is ≤ equal share of the remaining budget,
+	// freeing their saved portion for the remaining overflow blocks.
+	for {
+		unassigned := 0
+		for i := range blocks {
+			if !assigned[i] {
+				unassigned++
+			}
+		}
+		if unassigned == 0 {
+			break
+		}
+		share := remaining / unassigned
+		if share < minPerBlock {
+			share = minPerBlock
+		}
+		changed := false
+		for i, s := range sizes {
+			if !assigned[i] && s <= share {
+				budgets[i] = s
+				assigned[i] = true
+				remaining -= s
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+
+	// Distribute remaining budget to overflow blocks proportional to their size.
+	var overflowTotal int
+	for i, s := range sizes {
+		if !assigned[i] {
+			overflowTotal += s
+		}
+	}
+	if overflowTotal > 0 {
+		for i, s := range sizes {
+			if !assigned[i] {
+				b := remaining * s / overflowTotal
+				if b < minPerBlock {
+					b = minPerBlock
+				}
+				budgets[i] = b
+			}
+		}
+	}
+
+	return budgets
 }
 
 // --- Smart truncation ---
