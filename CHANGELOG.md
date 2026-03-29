@@ -1,5 +1,33 @@
 # Changelog
 
+## [4.2.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.1.0...deneb-v4.2.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **chat:** add advanced composed tools (batch_read, search_and_read, inspect, apply_patch) ([6406a56](https://github.com/choiceoh/Deneb/commit/6406a5690c8a311d670fa83fba334c12412f8267))
+* **discord:** enhance coding channel with smart test, error recovery, and outcome embeds ([6f88ea3](https://github.com/choiceoh/Deneb/commit/6f88ea32f96f4ca62713e0b8efd42321b47a6342))
+* **discord:** enhance progress tracker and thread management (Phase 2) ([debc82a](https://github.com/choiceoh/Deneb/commit/debc82a354aa42fa7d1ea20158ed9b3bebefdfe6))
+
+
+### 🐛 Bug Fixes
+
+* **telegram:** prevent Korean text corruption from UTF-8 byte-level slicing ([420ebc6](https://github.com/choiceoh/Deneb/commit/420ebc63548121cc770f815e7fa35fc778401e07))
+
+
+### ⚡ Performance
+
+* **chat:** add run-level cache for find/tree tool results ([068b855](https://github.com/choiceoh/Deneb/commit/068b8553d0824d48368f4ee7c7ab48c8964e49dd))
+* **chat:** optimize tool output formats to reduce context window usage ([335c5a3](https://github.com/choiceoh/Deneb/commit/335c5a38102ac4095a28576bd7d627a4f8f968a0))
+* **exec:** optimize bash tool for sequential execution and correctness ([5b12307](https://github.com/choiceoh/Deneb/commit/5b123079ecba443174d4d12d180fd8a78fe2311e))
+* **process:** optimize exec tool with concurrent drain, env cache, and background exec ([7da4037](https://github.com/choiceoh/Deneb/commit/7da4037fa388f2587e7c3512e4ebe489e20da03f))
+
+
+### 🔧 Internal
+
+* **discord:** consolidate ThreadNamer + ReasoningSummarizer into Summarizer ([d1c5a8c](https://github.com/choiceoh/Deneb/commit/d1c5a8c6b0c0d2af25d546cd2471ad0dd2d1b2b2))
+* **gateway:** split 6 large Go files into focused domain files ([3b47bf2](https://github.com/choiceoh/Deneb/commit/3b47bf27d70c03936ed7d6571184989b1d0c62b4))
+
 ## [4.1.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.0.0...deneb-v4.1.0) (2026-03-29)
 
 
