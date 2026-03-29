@@ -25,6 +25,7 @@ type dedupeEntry struct {
 type RecentMessageIDCache struct {
 	mu      sync.Mutex
 	entries map[string]dedupeEntry
+	checks  int
 }
 
 func NewRecentMessageIDCache() *RecentMessageIDCache {
@@ -53,7 +54,8 @@ func (c *RecentMessageIDCache) check(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[key] = dedupeEntry{seenAt: time.Now()}
-	if len(c.entries) > recentMessageIDMaxSize {
+	c.checks++
+	if len(c.entries) > recentMessageIDMaxSize || c.checks%100 == 0 {
 		c.prune()
 	}
 }
@@ -63,6 +65,7 @@ func (c *RecentMessageIDCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries = make(map[string]dedupeEntry)
+	c.checks = 0
 }
 
 func (c *RecentMessageIDCache) prune() {

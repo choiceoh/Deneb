@@ -51,6 +51,17 @@ type contextFileCache struct {
 	cachedAt time.Time
 }
 
+// ResetContextFileCacheForTest clears the package-level context-file cache.
+// Intended for tests to avoid cross-test cache state leakage.
+func ResetContextFileCacheForTest() {
+	ctxCache.mu.Lock()
+	defer ctxCache.mu.Unlock()
+	ctxCache.workspace = ""
+	ctxCache.files = nil
+	ctxCache.resolved = nil
+	ctxCache.cachedAt = time.Time{}
+}
+
 // isValid checks whether the cache can be reused for the given workspace.
 // It stat()s each previously resolved path and compares mtimes.
 func (c *contextFileCache) isValid(workspace string) bool {
@@ -147,7 +158,7 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 
 	var files []ContextFile
 	totalChars := 0
-	seen := make(map[string]bool)            // track resolved paths for dedup
+	seen := make(map[string]bool)                // track resolved paths for dedup
 	resolvedMtimes := make(map[string]time.Time) // for cache validation
 
 	for _, name := range contextFileNames {

@@ -49,54 +49,53 @@ const (
 
 // transferSystemPrompt is optimized for extracting lasting knowledge from
 // Aurora compaction summaries (already compressed conversation history).
-const transferSystemPrompt = `You are a memory curator for a personal AI assistant.
-Your input is a COMPACTION SUMMARY — compressed conversation history that has already been distilled from raw messages.
+const transferSystemPrompt = `당신은 개인 AI 비서의 장기 기억 큐레이터입니다.
+입력은 COMPACTION SUMMARY(원본 대화를 이미 압축/요약한 텍스트)입니다.
 
-## Task
-Extract lasting, reusable knowledge that should be preserved as permanent long-term memory.
-The summary will eventually be deleted by further compaction, so anything important must be extracted NOW.
+## 작업 목표
+추가 압축으로 사라질 수 있는 중요한 지식을 영구 장기 기억으로 보존하세요.
 
-## What to extract (in priority order)
+## 추출 우선순위
+1. **결정사항**: 아키텍처/설계 선택, 도구·프레임워크 채택 등 향후 작업 제약
+2. **선호도**: 사용자의 작업 방식, 소통 방식, 코딩 관례 선호
+3. **해결방법**: 재사용 가능한 문제-해결 패턴, 디버깅 요령, 워크어라운드
+4. **사용자 모델**: 사용자의 전문성·가치관·습관 등 추론 가능한 특성
+5. **상호 인식**: 사용자-네브 사이의 신뢰/기대/교정 신호
 
-1. **결정사항 (Decisions)**: Architectural choices, design decisions, tool/framework selections that constrain future work
-2. **선호도 (Preferences)**: User's work style, communication preferences, coding conventions
-3. **해결방법 (Solutions)**: Reusable problem-solution pairs, debugging patterns, workarounds
-4. **사용자 모델 (User Model)**: Inferred traits about the user — expertise, values, habits
-5. **상호 인식 (Mutual)**: AI-user relationship dynamics — corrections, trust signals, expectations
+## 화자 귀속(매우 중요)
+요약에는 선택님(사용자)과 네브(AI)의 행동이 함께 있습니다.
+- 네브가 설명/제안/요약한 내용은 네브의 행동으로 귀속
+- 선택님이 요청/질문/결정한 내용은 선택님의 행동으로 귀속
+- 선택님이 명시하지 않은 관심사를 추정해 기록하지 말 것
+- 네브의 제안을 선택님의 의도로 오인하지 말 것
 
-## Speaker Attribution (화자 귀속) — CRITICAL
-The summary contains actions by both 선택님 (사용자) and 네브 (AI).
-You MUST correctly attribute WHO said or did what:
-- If 네브 summarized, listed, or explained something → that is 네브's action
-- If 선택님 requested, asked, or decided something → that is 선택님's action
-- Do NOT write "선택님이 X에 관심을 가짐" unless 선택님 explicitly brought up X
-- Do NOT confuse 네브's proposals/suggestions with 선택님's requests
-
-## What NOT to extract
+## 추출 금지
 - ❌ 일시적 작업 상태: "X 파일 수정 중", "Y 브랜치 작업 중"
 - ❌ 루틴 코드 작업: "버그 수정", "기능 추가", "리팩토링"
-- ❌ 이미 완료된 단발성 작업
+- ❌ 완료된 단발성 작업
 - ❌ 구현 디테일: 함수명, 변수명, 파일 경로
-- ❌ 잘못된 화자 귀속: AI가 한 말을 "사용자가 ~함"으로 기록
+- ❌ 잘못된 화자 귀속
 
-## Output format
-Return a JSON object with a "facts" key containing an array of fact objects:
-- "content": Korean, concise (1-2 sentences). Include reasoning basis
-- "category": one of "decision", "preference", "solution", "user_model", "mutual", "context"
-- "importance": 0.0-1.0
-  - 0.9+: core decisions, persistent preferences
-  - 0.7-0.9: reusable solutions, strong patterns
-  - 0.5-0.7: useful context worth preserving
-  - Below 0.5: do not extract
-- "expiry_hint": null or "YYYY-MM-DD" if time-sensitive
+## 출력 형식
+"facts" 키를 가진 JSON 객체를 반환하세요.
+facts 배열의 각 원소:
+- "content": 반드시 한국어, 1~2문장, 핵심 근거 포함
+- "category": "decision" | "preference" | "solution" | "user_model" | "mutual" | "context"
+- "importance": 0.0~1.0
+  - 0.9+: 핵심 결정/지속 선호
+  - 0.7~0.9: 재사용 가치 높은 해결 패턴
+  - 0.5~0.7: 보존 가치 있는 맥락
+  - 0.5 미만: 추출 금지
+- "expiry_hint": null 또는 "YYYY-MM-DD" (시한성 정보일 때)
 
-Example: {"facts": [{"content": "프로젝트에서 Go gateway + Rust core FFI 아키텍처를 채택 — 성능 critical path는 Rust, 나머지는 Go", "category": "decision", "importance": 0.95, "expiry_hint": null}]}
+예시:
+{"facts":[{"content":"프로젝트는 Go gateway + Rust core FFI 아키텍처를 채택했으며, 성능 임계 경로는 Rust로 유지한다.","category":"decision","importance":0.95,"expiry_hint":null}]}
 
-## Rules
-- Max 5 facts per summary. Quality over quantity
-- Minimum importance 0.5 — only extract what's worth remembering permanently
-- If nothing worth extracting, return {"facts": []}
-- Return ONLY valid JSON, no markdown fences, no explanation`
+## 규칙
+- 요약 1개당 최대 5개 사실(양보다 질 우선)
+- 중요도 0.5 미만은 포함하지 말 것
+- 추출할 내용이 없으면 {"facts": []} 반환
+- 설명/마크다운 없이 **유효한 JSON만** 반환`
 
 // TransferSummaryToMemory extracts important facts from an Aurora summary
 // and stores them in the structured memory store.

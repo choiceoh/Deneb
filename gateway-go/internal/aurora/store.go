@@ -23,19 +23,22 @@ type Store struct {
 	path   string
 	logger *slog.Logger
 	data   storeData
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // storeData is the on-disk schema.
 type storeData struct {
-	ContextItems          []ContextItem            `json:"contextItems"`
-	Messages              map[string]MessageRecord `json:"messages"`              // key: messageId as string
-	Summaries             map[string]SummaryRecord `json:"summaries"`             // key: summaryId
-	SummaryParents        map[string][]string      `json:"summaryParents"`        // summaryId -> parentIds
-	SummaryMessages       map[string][]uint64      `json:"summaryMessages"`       // summaryId -> messageIds
-	CompactionEvents      []CompactionEvent        `json:"compactionEvents"`
-	TransferredSummaries  map[string]int64          `json:"transferredSummaries"`  // summaryId -> epoch ms when transferred to memory store
-	NextOrdinalVal        uint64                   `json:"nextOrdinal"`
-	NextMessageID         uint64                   `json:"nextMessageId"`
+	ContextItems         []ContextItem            `json:"contextItems"`
+	Messages             map[string]MessageRecord `json:"messages"`        // key: messageId as string
+	Summaries            map[string]SummaryRecord `json:"summaries"`       // key: summaryId
+	SummaryParents       map[string][]string      `json:"summaryParents"`  // summaryId -> parentIds
+	SummaryMessages      map[string][]uint64      `json:"summaryMessages"` // summaryId -> messageIds
+	CompactionEvents     []CompactionEvent        `json:"compactionEvents"`
+	TransferredSummaries map[string]int64         `json:"transferredSummaries"` // summaryId -> epoch ms when transferred to memory store
+	NextOrdinalVal       uint64                   `json:"nextOrdinal"`
+	NextMessageID        uint64                   `json:"nextMessageId"`
 }
 
 // CompactionEvent is a persisted compaction event record.
@@ -238,7 +241,22 @@ func (s *Store) IsTransferred(summaryID string) bool {
 
 // Close flushes data to disk.
 func (s *Store) Close() error {
-	return s.flush()
+	s.closeOnce.Do(func() {
+		// Avoid indefinite shutdown hangs if another goroutine is stuck while
+		// holding s.mu. Flush runs in a goroutine and Close returns with timeout.
+		const closeFlushTimeout = 5 * time.Second
+		done := make(chan error, 1)
+		go func() {
+			done <- s.flush()
+		}()
+		select {
+		case err := <-done:
+			s.closeErr = err
+		case <-time.After(closeFlushTimeout):
+			s.closeErr = fmt.Errorf("aurora store close timeout after %s", closeFlushTimeout)
+		}
+	})
+	return s.closeErr
 }
 
 func (s *Store) flush() error {
@@ -507,6 +525,12 @@ func (s *Store) PersistCondensedSummary(input PersistCondensedInput) error {
 
 	// Prune condensed child summary records — they are now captured by the condensed summary.
 	for _, parentID := range input.ParentSummaryIDs {
+		// Defensive cleanup: some test paths can create condensed summaries
+		// without going through PersistLeafSummary, leaving parent message records.
+		// Remove parent-linked message records before dropping parent metadata.
+		for _, msgID := range s.data.SummaryMessages[parentID] {
+			delete(s.data.Messages, msgKey(msgID))
+		}
 		delete(s.data.Summaries, parentID)
 		delete(s.data.SummaryParents, parentID)
 		delete(s.data.SummaryMessages, parentID)

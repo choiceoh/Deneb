@@ -29,6 +29,8 @@ const (
 	pilotMaxSources  = 10
 	sourceTimeout    = 30 * time.Second // per-source tool execution timeout
 	sglangHealthTTL  = 30 * time.Second
+	sglangWarmupTTL  = 5 * time.Second
+	sglangWarmupFor  = 1 * time.Minute
 	sglangHealthPing = 3 * time.Second // HTTP timeout for health check
 )
 

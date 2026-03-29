@@ -47,6 +47,7 @@ func lightweightBaseURL() string {
 var (
 	sglangHealthy   atomic.Bool
 	sglangLastCheck atomic.Int64 // unix timestamp
+	sglangStartedAt = time.Now()
 )
 
 // checkSglangHealth returns true if the local sglang server is reachable.
@@ -54,7 +55,11 @@ var (
 func checkSglangHealth() bool {
 	now := time.Now().Unix()
 	last := sglangLastCheck.Load()
-	if now-last < int64(sglangHealthTTL.Seconds()) {
+	ttl := sglangHealthTTL
+	if time.Since(sglangStartedAt) < sglangWarmupFor {
+		ttl = sglangWarmupTTL
+	}
+	if now-last < int64(ttl.Seconds()) {
 		return sglangHealthy.Load()
 	}
 
