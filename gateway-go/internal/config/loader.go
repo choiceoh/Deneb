@@ -7,24 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
-)
-
-const (
-	// DefaultGatewayPort is the default gateway server port.
-	DefaultGatewayPort = 18789
-	// DefaultStateDirname is the canonical state directory name.
-	DefaultStateDirname = ".deneb"
-	// DefaultConfigFilename is the canonical config file name.
-	DefaultConfigFilename = "deneb.json"
-)
-
-// Legacy directory and config file names for migration support.
-var (
-	legacyStateDirnames   = []string{".clawdbot", ".moldbot", ".moltbot"}
-	legacyConfigFilenames = []string{"clawdbot.json", "moldbot.json", "moltbot.json"}
 )
 
 // ConfigSnapshot holds the result of loading and validating a config file.
@@ -50,92 +33,6 @@ func (i ConfigIssue) String() string {
 		return i.Message
 	}
 	return fmt.Sprintf("%s: %s", i.Path, i.Message)
-}
-
-// ResolveStateDir determines the Deneb state directory.
-// Priority: DENEB_STATE_DIR env > existing legacy dir > ~/.deneb
-func ResolveStateDir() string {
-	if override := strings.TrimSpace(os.Getenv("DENEB_STATE_DIR")); override != "" {
-		return expandHomePath(override)
-	}
-	if override := strings.TrimSpace(os.Getenv("CLAWDBOT_STATE_DIR")); override != "" {
-		return expandHomePath(override)
-	}
-
-	home := resolveHomeDir()
-	newDir := filepath.Join(home, DefaultStateDirname)
-	if dirExists(newDir) {
-		return newDir
-	}
-	for _, legacy := range legacyStateDirnames {
-		legacyDir := filepath.Join(home, legacy)
-		if dirExists(legacyDir) {
-			return legacyDir
-		}
-	}
-	return newDir
-}
-
-// ResolveConfigPath determines the config file path.
-// Priority: DENEB_CONFIG_PATH env > existing config in state dir > canonical path.
-func ResolveConfigPath() string {
-	if override := strings.TrimSpace(os.Getenv("DENEB_CONFIG_PATH")); override != "" {
-		return expandHomePath(override)
-	}
-	if override := strings.TrimSpace(os.Getenv("CLAWDBOT_CONFIG_PATH")); override != "" {
-		return expandHomePath(override)
-	}
-
-	stateDir := ResolveStateDir()
-
-	// Check for existing config files in state dir.
-	candidates := []string{filepath.Join(stateDir, DefaultConfigFilename)}
-	for _, legacy := range legacyConfigFilenames {
-		candidates = append(candidates, filepath.Join(stateDir, legacy))
-	}
-	for _, candidate := range candidates {
-		if fileExists(candidate) {
-			return candidate
-		}
-	}
-
-	// If state dir is default, also check legacy home dirs.
-	home := resolveHomeDir()
-	defaultStateDir := filepath.Join(home, DefaultStateDirname)
-	if filepath.Clean(stateDir) == filepath.Clean(defaultStateDir) {
-		for _, legacyDir := range legacyStateDirnames {
-			dir := filepath.Join(home, legacyDir)
-			allNames := append([]string{DefaultConfigFilename}, legacyConfigFilenames...)
-			for _, name := range allNames {
-				candidate := filepath.Join(dir, name)
-				if fileExists(candidate) {
-					return candidate
-				}
-			}
-		}
-	}
-
-	return filepath.Join(stateDir, DefaultConfigFilename)
-}
-
-// ResolveGatewayPort determines the gateway port from env or config.
-func ResolveGatewayPort(cfg *DenebConfig) int {
-	if envRaw := strings.TrimSpace(os.Getenv("DENEB_GATEWAY_PORT")); envRaw != "" {
-		var port int
-		if _, err := fmt.Sscanf(envRaw, "%d", &port); err == nil && port > 0 {
-			return port
-		}
-	}
-	if envRaw := strings.TrimSpace(os.Getenv("CLAWDBOT_GATEWAY_PORT")); envRaw != "" {
-		var port int
-		if _, err := fmt.Sscanf(envRaw, "%d", &port); err == nil && port > 0 {
-			return port
-		}
-	}
-	if cfg != nil && cfg.Gateway != nil && cfg.Gateway.Port != nil && *cfg.Gateway.Port > 0 {
-		return *cfg.Gateway.Port
-	}
-	return DefaultGatewayPort
 }
 
 // LoadConfig reads and parses the Deneb config file, returning a snapshot.
@@ -380,7 +277,7 @@ func applyDefaults(cfg *DenebConfig) {
 	}
 }
 
-// hashRaw computes a SHA-256 hex hash of the raw config bytes (or "empty" for nil).
+// hashRaw computes a SHA-256 hex hash of the raw config bytes (or "" for nil).
 func hashRaw(data []byte) string {
 	if data == nil {
 		h := sha256.Sum256([]byte(""))
@@ -388,66 +285,4 @@ func hashRaw(data []byte) string {
 	}
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
-}
-
-func resolveHomeDir() string {
-	if home := os.Getenv("HOME"); home != "" {
-		return home
-	}
-	if home := os.Getenv("USERPROFILE"); home != "" {
-		return home
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		if runtime.GOOS == "windows" {
-			return `C:\`
-		}
-		return "/tmp"
-	}
-	return home
-}
-
-func expandHomePath(p string) string {
-	if strings.HasPrefix(p, "~/") {
-		return filepath.Join(resolveHomeDir(), p[2:])
-	}
-	return p
-}
-
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
-
-// ResolveAgentWorkspaceDir determines the workspace directory for the default agent.
-// Priority:
-//  1. agents.list[] entry with default=true → workspace
-//  2. agents.defaults.workspace
-//  3. ~/.deneb/workspace (built-in default, matching TS resolveDefaultAgentWorkspaceDir)
-func ResolveAgentWorkspaceDir(cfg *DenebConfig) string {
-	if cfg != nil && cfg.Agents != nil {
-		// Check per-agent workspace from agents.list[].
-		for _, agent := range cfg.Agents.List {
-			if agent.Default != nil && *agent.Default && strings.TrimSpace(agent.Workspace) != "" {
-				return expandHomePath(strings.TrimSpace(agent.Workspace))
-			}
-		}
-		// Check agents.defaults.workspace.
-		if cfg.Agents.Defaults != nil && strings.TrimSpace(cfg.Agents.Defaults.Workspace) != "" {
-			return expandHomePath(strings.TrimSpace(cfg.Agents.Defaults.Workspace))
-		}
-	}
-
-	// Built-in default: ~/.deneb/workspace (matches TS resolveDefaultAgentWorkspaceDir).
-	home := resolveHomeDir()
-	profile := strings.TrimSpace(os.Getenv("DENEB_PROFILE"))
-	if profile != "" && strings.ToLower(profile) != "default" {
-		return filepath.Join(home, DefaultStateDirname, "workspace-"+profile)
-	}
-	return filepath.Join(home, DefaultStateDirname, "workspace")
 }

@@ -1,4 +1,5 @@
 pub mod io;
+pub mod legacy_compat;
 pub mod paths;
 pub mod types;
 
