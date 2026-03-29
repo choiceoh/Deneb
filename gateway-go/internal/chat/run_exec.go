@@ -33,6 +33,11 @@ func executeAgentRun(
 ) (*AgentResult, error) {
 	runStart := time.Now()
 
+	// ── Pipeline stage 0: Zen Decoder — pre-decode the user message ─────
+	// Extract hints (greeting, short, attachments, keywords) that guide
+	// downstream stages to skip unnecessary work.
+	decoded := DecodeMessage(params.Message, params.Attachments)
+
 	workspaceDir := params.WorkspaceDir
 	if workspaceDir == "" {
 		workspaceDir = resolveWorkspaceDirForPrompt()
@@ -58,7 +63,7 @@ func executeAgentRun(
 	if model == "" && deps.registry != nil {
 		model = deps.registry.FullModelID(modelrole.RoleMain)
 	}
-	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
+	if deps.registry != nil && decoded.HasImageAttachment {
 		imgCfg := deps.registry.Config(modelrole.RoleImage)
 		if imgCfg.Model != "" {
 			model = deps.registry.FullModelID(modelrole.RoleImage)
@@ -102,9 +107,11 @@ func executeAgentRun(
 	}
 
 	// ── Pipeline stage 3: Proactive context (parallel goroutine) ────────
+	// Zen Decoder hint: skip proactive context for greetings and short messages
+	// (they don't benefit from local LLM analysis — saves 100-500ms).
 	type proactiveResult struct{ hint string }
 	proactiveCh := make(chan proactiveResult, 1)
-	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
+	if params.Message != "" && !decoded.IsShort && !decoded.IsGreeting {
 		go func() {
 			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)
 			proactiveCh <- proactiveResult{hint: hint}

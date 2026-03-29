@@ -179,6 +179,16 @@ func handleRunSuccess(
 		"inputTokens", result.Usage.InputTokens,
 		"outputTokens", result.Usage.OutputTokens,
 	)
+
+	// Zen arch — Prefetcher: speculatively pre-load data for the next run.
+	// Runs async after the critical path completes, overlapping with user think time.
+	if !isDiscordDelivery(params.Delivery) {
+		base := deps.shutdownCtx
+		if base == nil {
+			base = context.Background()
+		}
+		go PrefetchForNextRun(base, params.SessionKey, resolveWorkspaceDirForPrompt(), deps, logger)
+	}
 }
 
 func shouldLogStructuredMemoryExtractionError(err error) bool {

@@ -10,8 +10,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -172,62 +170,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	ctx = WithSessionKey(ctx, params.SessionKey)
 
-	// Set up phase-aware typing indicator for channel delivery (e.g., Telegram).
-	// Uses TypingController (5s keepalive matching Telegram's sendChatAction TTL)
-	// with FullTypingSignaler for phase-aware signals (text, thinking, tool use).
-	var typingSignaler *typing.FullTypingSignaler
-	if deps.typingFn != nil && params.Delivery != nil {
-		delivery := params.Delivery
-		typingCtrl := typing.NewTypingController(typing.TypingControllerConfig{
-			OnStart:    func() { _ = deps.typingFn(ctx, delivery) },
-			IntervalMs: 5000, // Telegram typing expires after 5s
-		})
-		typingSignaler = typing.NewFullTypingSignaler(typingCtrl, typing.TypingModeInstant, false)
-		typingSignaler.SignalRunStart()
-	}
-
-	// Set up status reaction controller for phase-aware emoji on the user's message.
-	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → ⚡ web → 👍 done.
-	var statusCtrl *channel.StatusReactionController
-	if deps.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
-		delivery := params.Delivery
-		phaseEmojis := channel.StatusReactionEmojis{
-			Queued:     "👀",
-			Thinking:   "🤔",
-			Tool:       "🔥",
-			Coding:     "🔥",
-			Web:        "⚡",
-			Done:       "👍",
-			Error:      "😱",
-			StallSoft:  "🥱",
-			StallHard:  "😨",
-			Compacting: "🤔",
-		}
-		adapter := channel.StatusReactionAdapter{
-			SetReaction: func(emoji string) error {
-				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-				defer cancel()
-				return deps.reactionFn(rctx, delivery, emoji)
-			},
-		}
-		// Discord uses additive reactions: need RemoveReaction to clear previous phase.
-		if deliveryChannel(params.Delivery) == "discord" && deps.removeReactionFn != nil {
-			adapter.RemoveReaction = func(emoji string) error {
-				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-				defer cancel()
-				return deps.removeReactionFn(rctx, delivery, emoji)
-			}
-		}
-		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
-			Enabled: true,
-			Adapter: adapter,
-			Emojis:  &phaseEmojis,
-			OnError: func(err error) {
-				logger.Warn("status reaction failed", "error", err)
-			},
-		})
-		statusCtrl.SetQueued()
-	}
+	// Zen arch — SMT: run typing + status reaction setup concurrently.
+	// Both share the same delivery context but write to independent outputs.
+	smtResult := SMTSessionSetup(ctx, deps, params)
+	typingSignaler := smtResult.TypingSignaler
+	statusCtrl := smtResult.StatusCtrl
 
 	// Create agent detail logger for this run.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
