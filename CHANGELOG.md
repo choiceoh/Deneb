@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.33.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.33.0...deneb-v3.33.1) (2026-03-29)
+
+
+### 🐛 Bug Fixes
+
+* **server:** rename duplicate resolveWorkspaceDir declaration in Discord inbound ([eed4107](https://github.com/choiceoh/Deneb/commit/eed41076b53f2ed16d33e6c63ef2e580c60f064b))
+
 ## [3.33.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.32.0...deneb-v3.33.0) (2026-03-29)
 
 
