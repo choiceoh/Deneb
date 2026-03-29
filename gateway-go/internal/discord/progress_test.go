@@ -48,14 +48,38 @@ func TestProgressStep_ReasonDisplayed(t *testing.T) {
 	}
 }
 
-func TestProgressStep_AllDoneWithError(t *testing.T) {
+func TestProgressStep_AllDoneWithMinorError(t *testing.T) {
+	// 1 error out of 5 → minor errors → warning color.
 	steps := []ProgressStep{
 		{Name: "step1", Status: StepDone},
 		{Name: "step2", Status: StepError},
+		{Name: "step3", Status: StepDone},
+		{Name: "step4", Status: StepDone},
+		{Name: "step5", Status: StepDone},
+	}
+	e := FormatProgressEmbed(steps)
+	if e.Color != ColorWarning {
+		t.Errorf("expected warning color for minor errors, got %#x", e.Color)
+	}
+	if !strings.Contains(e.Title, "일부 오류") {
+		t.Errorf("expected partial error title, got %q", e.Title)
+	}
+}
+
+func TestProgressStep_AllDoneWithMajorityError(t *testing.T) {
+	// 3 errors out of 4 → majority failed → error color.
+	steps := []ProgressStep{
+		{Name: "step1", Status: StepError},
+		{Name: "step2", Status: StepError},
+		{Name: "step3", Status: StepError},
+		{Name: "step4", Status: StepDone},
 	}
 	e := FormatProgressEmbed(steps)
 	if e.Color != ColorError {
-		t.Errorf("expected error color when has error steps, got %#x", e.Color)
+		t.Errorf("expected error color for majority failures, got %#x", e.Color)
+	}
+	if !strings.Contains(e.Title, "오류 발생") {
+		t.Errorf("expected error title, got %q", e.Title)
 	}
 }
 
