@@ -40,6 +40,46 @@ type ResponseFormat struct {
 	Type string `json:"type"` // "json_object" or "text"
 }
 
+// hexChars is used by appendJSONString to encode control characters as \uXXXX.
+const hexChars = "0123456789abcdef"
+
+// appendJSONString encodes s as a JSON string and appends it to dst.
+// It is equivalent to json.Marshal(s) but avoids the reflection path and
+// html-safe escaping of <, >, & that json.Marshal performs by default.
+// Valid UTF-8 multi-byte sequences are passed through unchanged (JSON allows UTF-8).
+func appendJSONString(dst []byte, s string) []byte {
+	dst = append(dst, '"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '"':
+			dst = append(dst, '\\', '"')
+		case c == '\\':
+			dst = append(dst, '\\', '\\')
+		case c < 0x20:
+			// Control character — use short form where available, \uXXXX otherwise.
+			switch c {
+			case '\t':
+				dst = append(dst, '\\', 't')
+			case '\n':
+				dst = append(dst, '\\', 'n')
+			case '\r':
+				dst = append(dst, '\\', 'r')
+			case '\b':
+				dst = append(dst, '\\', 'b')
+			case '\f':
+				dst = append(dst, '\\', 'f')
+			default:
+				dst = append(dst, '\\', 'u', '0', '0', hexChars[c>>4], hexChars[c&0x0f])
+			}
+		default:
+			dst = append(dst, c)
+		}
+	}
+	dst = append(dst, '"')
+	return dst
+}
+
 // SystemString is a convenience for setting a plain string system prompt.
 func SystemString(s string) json.RawMessage {
 	if s == "" {
@@ -107,6 +147,52 @@ func AppendSystemText(system json.RawMessage, addition string) json.RawMessage {
 	return system
 }
 
+// AppendSystemTexts appends multiple text additions to the system prompt in a single
+// unmarshal/marshal cycle. Empty additions are ignored. This is more efficient than
+// calling AppendSystemText repeatedly when multiple additions are known upfront.
+func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMessage {
+	// Collect non-empty additions.
+	filtered := additions[:0:0]
+	for _, a := range additions {
+		if a != "" {
+			filtered = append(filtered, a)
+		}
+	}
+	if len(filtered) == 0 {
+		return system
+	}
+	if len(system) == 0 {
+		var sb strings.Builder
+		for i, a := range filtered {
+			if i > 0 {
+				sb.WriteString("\n\n")
+			}
+			sb.WriteString(a)
+		}
+		return SystemString(sb.String())
+	}
+	// Try plain string — unmarshal once, build combined string, marshal once.
+	var s string
+	if json.Unmarshal(system, &s) == nil {
+		var sb strings.Builder
+		sb.WriteString(s)
+		for _, a := range filtered {
+			sb.WriteString("\n\n")
+			sb.WriteString(a)
+		}
+		return SystemString(sb.String())
+	}
+	// Try array of content blocks — unmarshal once, append blocks, marshal once.
+	var blocks []ContentBlock
+	if json.Unmarshal(system, &blocks) == nil {
+		for _, a := range filtered {
+			blocks = append(blocks, ContentBlock{Type: "text", Text: "\n\n" + a})
+		}
+		return SystemBlocks(blocks)
+	}
+	return system
+}
+
 // ThinkingConfig controls Anthropic's extended thinking feature.
 type ThinkingConfig struct {
 	Type         string `json:"type"`          // "enabled" or "disabled"
@@ -120,9 +206,10 @@ type Message struct {
 }
 
 // NewTextMessage creates a message with a plain text content string.
+// Uses appendJSONString to avoid json.Marshal's reflection path and
+// html-safe escaping, and to pre-size the allocation from string length.
 func NewTextMessage(role, text string) Message {
-	raw, _ := json.Marshal(text)
-	return Message{Role: role, Content: raw}
+	return Message{Role: role, Content: appendJSONString(make([]byte, 0, len(text)+2), text)}
 }
 
 // NewBlockMessage creates a message with structured content blocks.
