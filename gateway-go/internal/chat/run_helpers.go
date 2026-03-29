@@ -52,7 +52,8 @@ func handleRunSuccess(
 			logger.Error("failed to persist assistant message", "error", err)
 		}
 	}
-	if deps.auroraStore != nil && result.Text != "" {
+	// Skip Aurora sync for Discord: ephemeral coding sessions don't need compaction.
+	if deps.auroraStore != nil && result.Text != "" && !isDiscordDelivery(params.Delivery) {
 		tokenCount := uint64(estimateTokens(result.Text))
 		if _, err := deps.auroraStore.SyncMessage(1, "assistant", result.Text, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync assistant message", "error", err)
@@ -93,7 +94,10 @@ func handleRunSuccess(
 	// Dream turn is incremented on every successful run with a user message,
 	// regardless of whether the response is empty or memory extraction succeeds.
 	// This ensures dreaming triggers reliably even for tool-only or silent runs.
-	if params.Message != "" {
+	//
+	// Skip entirely for Discord: coding sessions are ephemeral and task-driven;
+	// memory extraction and dreaming add latency without benefit.
+	if params.Message != "" && !isDiscordDelivery(params.Delivery) {
 		go func() {
 			// Bound by the server shutdown context (if set) so the goroutine
 			// exits when the process is shutting down rather than leaking until
@@ -541,6 +545,13 @@ func deliveryChannel(d *DeliveryContext) string {
 		return ""
 	}
 	return d.Channel
+}
+
+// isDiscordDelivery reports whether the run targets the Discord channel.
+// Discord is a coding-only channel with ephemeral sessions; heavy persistence
+// systems (Aurora, Memory, Compaction, Dreaming) are unnecessary overhead.
+func isDiscordDelivery(d *DeliveryContext) bool {
+	return d != nil && d.Channel == "discord"
 }
 
 // Definitions returns all registered tool definitions (for system prompt assembly).

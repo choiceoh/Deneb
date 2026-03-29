@@ -285,7 +285,8 @@ func executeAgentRun(
 		}
 	}
 	// Sync to Aurora store for compaction tracking.
-	if deps.auroraStore != nil && params.Message != "" {
+	// Skip for Discord: ephemeral coding sessions don't need compaction.
+	if deps.auroraStore != nil && params.Message != "" && !isDiscordDelivery(params.Delivery) {
 		tokenCount := uint64(estimateTokens(params.Message))
 		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync user message", "error", err)
@@ -355,15 +356,19 @@ func executeAgentRun(
 	var prepWg sync.WaitGroup
 
 	// Knowledge prefetch (parallel).
+	// For Discord, skip memory recall — coding sessions are ephemeral and
+	// don't benefit from conversational memory. Vega (project knowledge) still runs.
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
 		if params.Message != "" {
 			kDeps := KnowledgeDeps{
-				VegaBackend:    deps.vegaBackend,
-				WorkspaceDir:   workspaceDir,
-				MemoryStore:    deps.memoryStore,
-				MemoryEmbedder: deps.memoryEmbedder,
+				VegaBackend:  deps.vegaBackend,
+				WorkspaceDir: workspaceDir,
+			}
+			if !isDiscordDelivery(params.Delivery) {
+				kDeps.MemoryStore = deps.memoryStore
+				kDeps.MemoryEmbedder = deps.memoryEmbedder
 			}
 			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
 		}
@@ -628,7 +633,9 @@ func executeAgentRun(
 		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
 			// Check for context overflow error.
-			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
+			// Skip Aurora compaction for Discord: ephemeral coding sessions
+			// don't maintain Aurora state, so compaction would be a no-op.
+			if isContextOverflow(runErr) && attempt < maxCompactionRetries && !isDiscordDelivery(params.Delivery) {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
 				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
 					ctx, deps, params, client, logger,
