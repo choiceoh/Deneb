@@ -233,10 +233,15 @@ type SecretsConfig struct {
 }
 
 // ChannelsConfig holds channel-level settings from deneb.json.
-// Per-channel plugin configs (e.g., Telegram bot token, DM policy) are loaded
-// directly by each channel plugin; this struct captures cross-channel settings
-// that the gateway core consumes.
+// Per-channel plugin configs are stored as raw JSON and unmarshaled by each
+// channel plugin at registration time. Cross-channel settings are typed directly.
 type ChannelsConfig struct {
+	// Telegram holds the raw Telegram channel plugin config (channels.telegram).
+	// Unmarshaled into telegram.Config by the channel registration code.
+	Telegram json.RawMessage `json:"telegram,omitempty"`
+	// Discord holds the raw Discord channel plugin config (channels.discord).
+	// Unmarshaled into discord.Config by the channel registration code.
+	Discord json.RawMessage `json:"discord,omitempty"`
 	// ModelByChannel maps channel names to model overrides.
 	// Structure: {"telegram": {"*": "model-id", "chat:123": "other-model"}}
 	ModelByChannel map[string]map[string]string `json:"modelByChannel,omitempty"`

@@ -259,25 +259,18 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 		return nil
 	}
 
-	// Extract channels.telegram from raw config JSON.
-	if snapshot.Raw == "" {
-		slog.Warn("telegram config: snapshot.Raw is empty")
+	// Use typed channels config instead of re-parsing raw JSON.
+	if snapshot.Config.Channels == nil || len(snapshot.Config.Channels.Telegram) == 0 {
+		slog.Warn("telegram config: channels.telegram section not found in config")
 		return nil
 	}
 
-	var root struct {
-		Channels struct {
-			Telegram *telegram.Config `json:"telegram"`
-		} `json:"channels"`
-	}
-	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
-		slog.Warn("telegram config: JSON unmarshal failed", "error", err)
+	var cfg telegram.Config
+	if err := json.Unmarshal(snapshot.Config.Channels.Telegram, &cfg); err != nil {
+		slog.Warn("telegram config: failed to unmarshal channels.telegram", "error", err)
 		return nil
 	}
-	if root.Channels.Telegram == nil {
-		slog.Warn("telegram config: channels.telegram section not found in config")
-	}
-	return root.Channels.Telegram
+	return &cfg
 }
 
 // wireDiscordChatHandler connects the Discord Gateway message handler to the
@@ -725,19 +718,17 @@ func loadDiscordConfig(_ *config.GatewayRuntimeConfig) *discord.Config {
 		return nil
 	}
 
-	if snapshot.Raw == "" {
+	// Use typed channels config instead of re-parsing raw JSON.
+	if snapshot.Config.Channels == nil || len(snapshot.Config.Channels.Discord) == 0 {
 		return nil
 	}
 
-	var root struct {
-		Channels struct {
-			Discord *discord.Config `json:"discord"`
-		} `json:"channels"`
-	}
-	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+	var cfg discord.Config
+	if err := json.Unmarshal(snapshot.Config.Channels.Discord, &cfg); err != nil {
+		slog.Warn("discord config: failed to unmarshal channels.discord", "error", err)
 		return nil
 	}
-	return root.Channels.Discord
+	return &cfg
 }
 
 // loadProviderConfigs reads LLM provider configs (apiKey, baseUrl, api) from deneb.json.

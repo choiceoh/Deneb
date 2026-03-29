@@ -163,6 +163,36 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 		}
 	}
 
+	// Validate channel configs.
+	if cfg.Channels != nil {
+		if len(cfg.Channels.Telegram) > 0 {
+			var tg struct {
+				BotToken string `json:"botToken"`
+			}
+			if err := json.Unmarshal(cfg.Channels.Telegram, &tg); err != nil {
+				issues = append(issues, ConfigIssue{
+					Path:    "channels.telegram",
+					Message: fmt.Sprintf("invalid JSON: %s", err),
+				})
+			} else if tg.BotToken == "" {
+				warnings = append(warnings, "channels.telegram.botToken is empty")
+			}
+		}
+		if len(cfg.Channels.Discord) > 0 {
+			var dc struct {
+				BotToken string `json:"botToken"`
+			}
+			if err := json.Unmarshal(cfg.Channels.Discord, &dc); err != nil {
+				issues = append(issues, ConfigIssue{
+					Path:    "channels.discord",
+					Message: fmt.Sprintf("invalid JSON: %s", err),
+				})
+			} else if dc.BotToken == "" {
+				warnings = append(warnings, "channels.discord.botToken is empty")
+			}
+		}
+	}
+
 	return issues, warnings
 }
 
