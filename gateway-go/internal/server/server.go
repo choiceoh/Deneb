@@ -37,6 +37,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
+	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
@@ -113,7 +114,7 @@ type Server struct {
 	pluginFullRegistry *plugin.FullRegistry
 
 	// Phase 5: HTTP routing for plugins.
-	pluginRouter *PluginHTTPRouter
+	pluginRouter *pluginrouter.Router
 
 	// ACP subsystem.
 	acpDeps           *rpc.ACPDeps
@@ -343,7 +344,7 @@ func New(addr string, opts ...Option) *Server {
 			return err == nil
 		}
 	}
-	s.pluginRouter = NewPluginHTTPRouter(s.logger, pluginAuthCheck)
+	s.pluginRouter = pluginrouter.New(s.logger, pluginAuthCheck)
 
 	return s
 }
