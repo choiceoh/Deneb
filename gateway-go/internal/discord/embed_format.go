@@ -283,31 +283,15 @@ func FormatProgressEmbed(steps []ProgressStep) Embed {
 	color := ColorProgress
 	title := "⏳ 실행 중..."
 	allDone := true
-	errorCount := 0
-	doneCount := 0
 	for _, s := range steps {
-		switch s.Status {
-		case StepDone:
-			doneCount++
-		case StepError:
-			errorCount++
-		default:
+		if s.Status != StepDone && s.Status != StepError {
 			allDone = false
+			break
 		}
 	}
 	if allDone {
-		total := doneCount + errorCount
-		switch {
-		case errorCount == 0:
-			color = ColorSuccess
-			title = "✅ 완료"
-		case total > 0 && errorCount*2 > total: // majority failed
-			color = ColorError
-			title = "❌ 완료 (오류 발생)"
-		default: // minor errors
-			color = ColorWarning
-			title = "⚠️ 완료 (일부 오류)"
-		}
+		color = ColorSuccess
+		title = "✅ 완료"
 	}
 
 	return Embed{
