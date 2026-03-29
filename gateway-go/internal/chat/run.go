@@ -559,7 +559,7 @@ func executeAgentRun(
 		hooks.OnThinking = func() {
 			typingSignaler.SignalReasoningDelta()
 		}
-		hooks.OnToolStart = func(_ string) {
+		hooks.OnToolStart = func(_ string, _ string) {
 			typingSignaler.SignalToolStart()
 		}
 	}
@@ -572,9 +572,9 @@ func executeAgentRun(
 			statusCtrl.SetThinking()
 		}
 		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name string) {
+		hooks.OnToolStart = func(name, reason string) {
 			if prevOnToolStart != nil {
-				prevOnToolStart(name)
+				prevOnToolStart(name, reason)
 			}
 			statusCtrl.SetTool(name)
 		}
@@ -594,11 +594,11 @@ func executeAgentRun(
 	if deps.toolProgressFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
 		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name string) {
+		hooks.OnToolStart = func(name, reason string) {
 			if prevOnToolStart != nil {
-				prevOnToolStart(name)
+				prevOnToolStart(name, reason)
 			}
-			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "start", Name: name})
+			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "start", Name: name, Reason: reason})
 		}
 		prevOnToolResult := hooks.OnToolResult
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {

@@ -259,7 +259,11 @@ func FormatProgressEmbed(steps []ProgressStep) Embed {
 		case StepError:
 			emoji = "❌"
 		}
-		lines = append(lines, emoji+" "+s.Name)
+		line := emoji + " " + s.Name
+		if s.Reason != "" {
+			line += " — " + s.Reason
+		}
+		lines = append(lines, line)
 	}
 
 	color := ColorProgress
@@ -295,6 +299,7 @@ func FormatProgressEmbed(steps []ProgressStep) Embed {
 // ProgressStep represents a single step in an agent execution.
 type ProgressStep struct {
 	Name   string
+	Reason string // brief LLM reasoning summary (may be empty)
 	Status StepStatus
 }
 

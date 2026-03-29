@@ -6,7 +6,7 @@ package agent
 type StreamHooks struct {
 	OnTextDelta  func(text string)                              // text delta streamed from LLM
 	OnThinking   func()                                        // reasoning/thinking delta received
-	OnToolStart  func(name string)                             // tool invocation about to execute
+	OnToolStart  func(name, reason string)                     // tool invocation about to execute; reason is a brief thinking summary
 	OnToolEmit   func(name, toolUseID string)                  // tool start broadcast (name + ID for streaming)
 	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
 }

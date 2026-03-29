@@ -137,6 +137,10 @@ func RunAgent(
 		// Build assistant message with all content blocks from this turn.
 		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 
+		// Extract raw thinking text from this turn's thinking blocks.
+		// Passed to OnToolStart so Discord can summarize it via lightweight LLM.
+		turnReason := extractThinkingText(turnRes.contentBlocks)
+
 		// Execute tools in parallel and build tool_result blocks.
 		// Each goroutine writes to its own index — no mutex needed for the slice.
 		toolResults := make([]llm.ContentBlock, len(turnRes.toolCalls))
@@ -146,7 +150,7 @@ func RunAgent(
 			go func(idx int, tc llm.ContentBlock) {
 				defer wg.Done()
 				if hooks.OnToolStart != nil {
-					hooks.OnToolStart(tc.Name)
+					hooks.OnToolStart(tc.Name, turnReason)
 				}
 				if hooks.OnToolEmit != nil {
 					hooks.OnToolEmit(tc.Name, tc.ID)
@@ -323,6 +327,18 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 			}
 		}
 	}
+}
+
+// extractThinkingText returns the raw text from the last thinking block in a
+// turn's content blocks. The caller (e.g. Discord ProgressTracker) is
+// responsible for summarizing it. Returns empty string if no thinking found.
+func extractThinkingText(blocks []llm.ContentBlock) string {
+	for i := len(blocks) - 1; i >= 0; i-- {
+		if blocks[i].Thinking != "" {
+			return blocks[i].Thinking
+		}
+	}
+	return ""
 }
 
 // stopReasonFromCtx determines the stop reason from a cancelled context.

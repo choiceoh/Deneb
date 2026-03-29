@@ -28,6 +28,7 @@ type ToolProgressFunc func(ctx context.Context, delivery *DeliveryContext, event
 type ToolProgressEvent struct {
 	Type    string // "start", "complete"
 	Name    string // tool name
+	Reason  string // raw thinking block text for summarization (only for "start"; may be empty)
 	IsError bool   // true if tool execution failed (only for "complete")
 }
 
