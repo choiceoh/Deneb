@@ -189,7 +189,7 @@ func handleCommand(
 		return handlePersistEvent(store, cmdJSON, logger)
 	default:
 		if logger != nil {
-			logger.Warn("aurora sweep: unknown command", "type", cmd.Type)
+			logger.Warn("aurora sweep: unknown command", "type", cmdType)
 		}
 		return map[string]any{"type": "persistOk"}, nil
 	}
