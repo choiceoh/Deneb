@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"strconv"
 	"time"
 
 	channelpkg "github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -374,5 +373,5 @@ func messagingPoll(deps MessagingDeps) rpcutil.HandlerFunc {
 
 // parseChatID converts a string chat ID to int64 for the Telegram API.
 func parseChatID(to string) (int64, error) {
-	return strconv.ParseInt(to, 10, 64)
+	return telegram.ParseChatID(to)
 }
