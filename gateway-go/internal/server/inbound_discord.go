@@ -292,6 +292,21 @@ func (p *InboundProcessor) tryCreateDiscordThread(channelID, messageID, content 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Check whether this channel type supports "Start Thread from Message".
+	// Forum/media/voice channels use a different thread model and will
+	// return error 50024 if we try the message-based endpoint.
+	ch, err := client.GetChannel(ctx, channelID)
+	if err != nil {
+		p.logger.Warn("discord: failed to fetch channel for thread check",
+			"channelId", channelID, "error", err)
+		return ""
+	}
+	if !discord.SupportsMessageThreads(ch.Type) {
+		p.logger.Debug("discord: skipping auto-thread for unsupported channel type",
+			"channelId", channelID, "channelType", ch.Type)
+		return ""
+	}
+
 	name := p.server.discordThreadNamer.Generate(ctx, content)
 
 	thread, err := client.CreateThread(ctx, channelID, messageID, name)

@@ -164,10 +164,26 @@ type ThreadMetadata struct {
 
 // Channel type constants.
 const (
-	ChannelGuildText     = 0
-	ChannelPublicThread  = 11
-	ChannelPrivateThread = 12
+	ChannelGuildText         = 0
+	ChannelDM                = 1
+	ChannelGuildVoice        = 2
+	ChannelGroupDM           = 3
+	ChannelGuildCategory     = 4
+	ChannelGuildAnnouncement = 5
+	ChannelPublicThread      = 11
+	ChannelPrivateThread     = 12
+	ChannelGuildStageVoice   = 13
+	ChannelGuildForum        = 15
+	ChannelGuildMedia        = 16
 )
+
+// SupportsMessageThreads reports whether a channel type supports the
+// "Start Thread from Message" API endpoint. Only guild text and
+// announcement channels support this; forum/media channels use a
+// different thread-creation flow.
+func SupportsMessageThreads(channelType int) bool {
+	return channelType == ChannelGuildText || channelType == ChannelGuildAnnouncement
+}
 
 // ThreadEvent represents a thread lifecycle event dispatched from the Gateway.
 type ThreadEvent struct {

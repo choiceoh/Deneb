@@ -297,6 +297,20 @@ func (c *Client) CreateInteractionResponse(ctx context.Context, interactionID, i
 	return nil
 }
 
+// GetChannel fetches a channel by ID from the Discord REST API.
+func (c *Client) GetChannel(ctx context.Context, channelID string) (*Channel, error) {
+	path := fmt.Sprintf("/channels/%s", channelID)
+	result, err := c.Call(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getChannel: %w", err)
+	}
+	var ch Channel
+	if err := json.Unmarshal(result, &ch); err != nil {
+		return nil, fmt.Errorf("decode channel: %w", err)
+	}
+	return &ch, nil
+}
+
 // CreateThread creates a new thread from a message.
 func (c *Client) CreateThread(ctx context.Context, channelID, messageID, name string) (*Channel, error) {
 	path := fmt.Sprintf("/channels/%s/messages/%s/threads", channelID, messageID)
