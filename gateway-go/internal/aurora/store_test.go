@@ -9,7 +9,7 @@ import (
 func tempStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
-	cfg := StoreConfig{DatabasePath: filepath.Join(dir, "aurora.json")}
+	cfg := StoreConfig{DatabasePath: filepath.Join(dir, "aurora.db")}
 	s, err := NewStore(cfg, nil)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
@@ -255,7 +255,7 @@ func TestReset(t *testing.T) {
 
 func TestPersistence(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "aurora.json")
+	path := filepath.Join(dir, "aurora.db")
 	cfg := StoreConfig{DatabasePath: path}
 
 	// Create store and add data.
@@ -304,13 +304,8 @@ func TestPersistEvent(t *testing.T) {
 		t.Fatalf("PersistEvent: %v", err)
 	}
 
-	// Force debounced flush to disk before checking.
-	if err := s.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
-
-	// Verify file written.
-	if _, err := os.Stat(s.path); os.IsNotExist(err) {
+	// Verify DB file exists.
+	if _, err := os.Stat(s.dbPath); os.IsNotExist(err) {
 		t.Error("expected store file to exist after persist")
 	}
 }
@@ -356,5 +351,59 @@ func TestFetchEmptyCollections(t *testing.T) {
 	}
 	if total != 0 {
 		t.Errorf("expected 0 tokens, got %d", total)
+	}
+}
+
+func TestJSONMigration(t *testing.T) {
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "aurora.json")
+	dbPath := filepath.Join(dir, "aurora.db")
+
+	// Write a legacy JSON file.
+	legacy := `{
+		"contextItems": [
+			{"conversationId": 1, "ordinal": 0, "itemType": "message", "messageId": 0, "createdAt": 1000}
+		],
+		"messages": {
+			"0": {"messageId": 0, "conversationId": 1, "seq": 0, "role": "user", "content": "from json", "tokenCount": 5, "createdAt": 1000}
+		},
+		"summaries": {},
+		"summaryParents": {},
+		"summaryMessages": {},
+		"compactionEvents": [],
+		"transferredSummaries": {},
+		"nextOrdinal": 1,
+		"nextMessageId": 1
+	}`
+	os.WriteFile(jsonPath, []byte(legacy), 0o644)
+
+	// Open store — should auto-migrate.
+	cfg := StoreConfig{DatabasePath: dbPath}
+	s, err := NewStore(cfg, nil)
+	if err != nil {
+		t.Fatalf("NewStore with migration: %v", err)
+	}
+	defer s.Close()
+
+	// Verify data was migrated.
+	items, _ := s.FetchContextItems(1)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item after migration, got %d", len(items))
+	}
+
+	msgs, _ := s.FetchMessages([]uint64{0})
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message after migration, got %d", len(msgs))
+	}
+	if msgs[0].Content != "from json" {
+		t.Errorf("expected 'from json', got %q", msgs[0].Content)
+	}
+
+	// Verify JSON file was renamed.
+	if _, err := os.Stat(jsonPath); !os.IsNotExist(err) {
+		t.Error("expected JSON file to be renamed after migration")
+	}
+	if _, err := os.Stat(jsonPath + ".migrated"); os.IsNotExist(err) {
+		t.Error("expected .migrated file to exist")
 	}
 }

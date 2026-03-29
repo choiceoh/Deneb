@@ -69,7 +69,7 @@ func TestShouldTransfer(t *testing.T) {
 
 func TestTransferredSummaryTracking(t *testing.T) {
 	dir := t.TempDir()
-	storePath := filepath.Join(dir, "aurora.json")
+	storePath := filepath.Join(dir, "aurora.db")
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	store, err := NewStore(StoreConfig{DatabasePath: storePath}, logger)
@@ -116,7 +116,7 @@ func TestTransferredSummaryTracking(t *testing.T) {
 
 func TestTransferredCleanupOnCondensation(t *testing.T) {
 	dir := t.TempDir()
-	storePath := filepath.Join(dir, "aurora.json")
+	storePath := filepath.Join(dir, "aurora.db")
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	store, err := NewStore(StoreConfig{DatabasePath: storePath}, logger)
@@ -131,15 +131,29 @@ func TestTransferredCleanupOnCondensation(t *testing.T) {
 	store.MarkTransferred(leaf1)
 	store.MarkTransferred(leaf2)
 
-	// Add them as summaries so PersistCondensedSummary can find context items.
-	store.mu.Lock()
-	store.data.Summaries[leaf1] = SummaryRecord{SummaryID: leaf1, ConversationID: 1, Kind: "leaf", Depth: 0}
-	store.data.Summaries[leaf2] = SummaryRecord{SummaryID: leaf2, ConversationID: 1, Kind: "leaf", Depth: 0}
-	store.data.ContextItems = append(store.data.ContextItems,
-		ContextItem{ConversationID: 1, Ordinal: 0, ItemType: "summary", SummaryID: &leaf1},
-		ContextItem{ConversationID: 1, Ordinal: 1, ItemType: "summary", SummaryID: &leaf2},
-	)
-	store.mu.Unlock()
+	// Add them as leaf summaries via the store API.
+	store.SyncMessage(1, "user", "msg1", 10)
+	store.SyncMessage(1, "user", "msg2", 10)
+	store.PersistLeafSummary(PersistLeafInput{
+		SummaryID:      leaf1,
+		ConversationID: 1,
+		Content:        "leaf 1",
+		TokenCount:     5,
+		FileIDs:        []string{},
+		MessageIDs:     []uint64{0},
+		StartOrdinal:   0,
+		EndOrdinal:     0,
+	})
+	store.PersistLeafSummary(PersistLeafInput{
+		SummaryID:      leaf2,
+		ConversationID: 1,
+		Content:        "leaf 2",
+		TokenCount:     5,
+		FileIDs:        []string{},
+		MessageIDs:     []uint64{1},
+		StartOrdinal:   1,
+		EndOrdinal:     1,
+	})
 
 	if !store.IsTransferred(leaf1) || !store.IsTransferred(leaf2) {
 		t.Fatal("expected leaves to be transferred before condensation")

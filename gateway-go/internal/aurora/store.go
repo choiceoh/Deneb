@@ -1,54 +1,50 @@
-// Aurora context store backed by JSON files.
+// Aurora context store backed by SQLite (WAL mode).
 //
 // Manages context_items, messages, summaries, and compaction_events
 // that power the Rust Aurora hierarchical compaction engine via FFI.
-// Uses a single JSON file for persistence with in-memory working state.
+// Migrated from single-file JSON persistence to SQLite for indexed
+// lookups and transactional consistency.
 // Optimized for single-user deployment (no concurrent access concerns).
 package aurora
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+	"strings"
 	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
-// flushDebounce is the window during which consecutive writes are coalesced
-// into a single disk flush. This reduces I/O when multiple persist calls fire
-// in quick succession (e.g., PersistLeafSummary → PersistEvent).
-const flushDebounce = 100 * time.Millisecond
+// maxCompactionEvents is the maximum number of compaction events retained.
+// Older entries are pruned to prevent unbounded growth.
+const maxCompactionEvents = 500
 
-// Store is the Aurora context store (in-memory + JSON file persistence).
+// Store is the Aurora context store (SQLite-backed).
 type Store struct {
 	mu     sync.RWMutex
-	path   string
+	db     *sql.DB
+	dbPath string
 	logger *slog.Logger
-	data   storeData
-
-	// Debounced flush: consecutive writes within flushDebounce are coalesced
-	// into a single disk write. dirty is set by scheduleFlushed (under mu),
-	// and the timer goroutine calls flushIfDirty after the debounce window.
-	dirty      bool
-	flushTimer *time.Timer
-	flushErr   error // last async flush error, surfaced on next write or Close
 
 	closeOnce sync.Once
 	closeErr  error
 }
 
-// storeData is the on-disk schema.
+// storeData is the legacy JSON on-disk schema, used only for migration.
 type storeData struct {
 	ContextItems         []ContextItem            `json:"contextItems"`
-	Messages             map[string]MessageRecord `json:"messages"`        // key: messageId as string
-	Summaries            map[string]SummaryRecord `json:"summaries"`       // key: summaryId
-	SummaryParents       map[string][]string      `json:"summaryParents"`  // summaryId -> parentIds
-	SummaryMessages      map[string][]uint64      `json:"summaryMessages"` // summaryId -> messageIds
+	Messages             map[string]MessageRecord `json:"messages"`
+	Summaries            map[string]SummaryRecord `json:"summaries"`
+	SummaryParents       map[string][]string      `json:"summaryParents"`
+	SummaryMessages      map[string][]uint64      `json:"summaryMessages"`
 	CompactionEvents     []CompactionEvent        `json:"compactionEvents"`
-	TransferredSummaries map[string]int64         `json:"transferredSummaries"` // summaryId -> epoch ms when transferred to memory store
+	TransferredSummaries map[string]int64         `json:"transferredSummaries"`
 	NextOrdinalVal       uint64                   `json:"nextOrdinal"`
 	NextMessageID        uint64                   `json:"nextMessageId"`
 }
@@ -66,8 +62,8 @@ type CompactionEvent struct {
 
 // StoreConfig configures the Aurora store.
 type StoreConfig struct {
-	// DatabasePath is the JSON store file path.
-	// Default: ~/.deneb/aurora.json
+	// DatabasePath is the SQLite database file path.
+	// Default: ~/.deneb/aurora.db
 	DatabasePath string `json:"databasePath"`
 }
 
@@ -75,7 +71,7 @@ type StoreConfig struct {
 func DefaultStoreConfig() StoreConfig {
 	home, _ := os.UserHomeDir()
 	return StoreConfig{
-		DatabasePath: filepath.Join(home, ".deneb", "aurora.json"),
+		DatabasePath: filepath.Join(home, ".deneb", "aurora.db"),
 	}
 }
 
@@ -170,9 +166,104 @@ type PersistEventInput struct {
 	CreatedSummaryID string `json:"createdSummaryId"`
 }
 
+// ── Schema ──────────────────────────────────────────────────────────────────
+
+const schemaSQL = `
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
+PRAGMA foreign_keys = ON;
+
+-- Monotonic ID generators (replaces NextOrdinalVal / NextMessageID).
+CREATE TABLE IF NOT EXISTS sequences (
+	name  TEXT PRIMARY KEY,
+	value INTEGER NOT NULL DEFAULT 0
+);
+
+-- Context items with composite index on (conversation_id, ordinal).
+CREATE TABLE IF NOT EXISTS context_items (
+	conversation_id INTEGER NOT NULL,
+	ordinal         INTEGER NOT NULL,
+	item_type       TEXT NOT NULL,  -- 'message' or 'summary'
+	message_id      INTEGER,
+	summary_id      TEXT,
+	created_at      INTEGER NOT NULL,
+	PRIMARY KEY (conversation_id, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ci_conv ON context_items(conversation_id);
+
+-- Chat messages.
+CREATE TABLE IF NOT EXISTS messages (
+	message_id      INTEGER PRIMARY KEY,
+	conversation_id INTEGER NOT NULL,
+	seq             INTEGER NOT NULL,
+	role            TEXT NOT NULL,
+	content         TEXT NOT NULL,
+	token_count     INTEGER NOT NULL,
+	created_at      INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id);
+
+-- Summaries (leaf and condensed).
+CREATE TABLE IF NOT EXISTS summaries (
+	summary_id                TEXT PRIMARY KEY,
+	conversation_id           INTEGER NOT NULL,
+	kind                      TEXT NOT NULL,  -- 'leaf' or 'condensed'
+	depth                     INTEGER NOT NULL DEFAULT 0,
+	content                   TEXT NOT NULL,
+	token_count               INTEGER NOT NULL,
+	file_ids                  TEXT NOT NULL DEFAULT '[]',  -- JSON array
+	earliest_at               INTEGER,
+	latest_at                 INTEGER,
+	descendant_count          INTEGER NOT NULL DEFAULT 0,
+	descendant_token_count    INTEGER NOT NULL DEFAULT 0,
+	source_message_token_count INTEGER NOT NULL DEFAULT 0,
+	created_at                INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sum_conv ON summaries(conversation_id);
+
+-- Summary parent relationships (DAG).
+CREATE TABLE IF NOT EXISTS summary_parents (
+	summary_id TEXT NOT NULL,
+	parent_id  TEXT NOT NULL,
+	PRIMARY KEY (summary_id, parent_id)
+);
+
+-- Summary-to-message links.
+CREATE TABLE IF NOT EXISTS summary_messages (
+	summary_id TEXT NOT NULL,
+	message_id INTEGER NOT NULL,
+	PRIMARY KEY (summary_id, message_id)
+);
+
+-- Compaction event audit log.
+CREATE TABLE IF NOT EXISTS compaction_events (
+	id               INTEGER PRIMARY KEY AUTOINCREMENT,
+	conversation_id  INTEGER NOT NULL,
+	pass             TEXT NOT NULL,
+	level            TEXT NOT NULL,
+	tokens_before    INTEGER NOT NULL,
+	tokens_after     INTEGER NOT NULL,
+	created_summary_id TEXT NOT NULL,
+	created_at       INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ce_conv ON compaction_events(conversation_id);
+
+-- Memory transfer tracking.
+CREATE TABLE IF NOT EXISTS transferred_summaries (
+	summary_id    TEXT PRIMARY KEY,
+	transferred_at INTEGER NOT NULL
+);
+`
+
 // ── Constructor ─────────────────────────────────────────────────────────────
 
-// NewStore opens or creates an Aurora JSON store.
+// NewStore opens or creates an Aurora SQLite store.
+// If a legacy JSON file (aurora.json) exists alongside the DB path,
+// it is migrated automatically.
 func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -183,54 +274,169 @@ func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("aurora store: mkdir %s: %w", dir, err)
 	}
 
-	s := &Store{
-		path:   cfg.DatabasePath,
-		logger: logger,
-		data: storeData{
-			Messages:             make(map[string]MessageRecord),
-			Summaries:            make(map[string]SummaryRecord),
-			SummaryParents:       make(map[string][]string),
-			SummaryMessages:      make(map[string][]uint64),
-			TransferredSummaries: make(map[string]int64),
-		},
+	db, err := sql.Open("sqlite", cfg.DatabasePath)
+	if err != nil {
+		return nil, fmt.Errorf("aurora store: open db: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(schemaSQL); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("aurora store: init schema: %w", err)
 	}
 
-	// Load existing data if file exists.
-	if raw, err := os.ReadFile(cfg.DatabasePath); err == nil && len(raw) > 0 {
-		if err := json.Unmarshal(raw, &s.data); err != nil {
-			logger.Warn("aurora store: corrupt file, starting fresh", "error", err)
-			s.data = storeData{
-				Messages:             make(map[string]MessageRecord),
-				Summaries:            make(map[string]SummaryRecord),
-				SummaryParents:       make(map[string][]string),
-				SummaryMessages:      make(map[string][]uint64),
-				TransferredSummaries: make(map[string]int64),
-			}
+	s := &Store{
+		db:     db,
+		dbPath: cfg.DatabasePath,
+		logger: logger,
+	}
+
+	// One-time migration from legacy JSON file.
+	if err := s.migrateFromJSON(dir); err != nil {
+		logger.Warn("aurora store: json migration failed, starting fresh", "error", err)
+	}
+
+	// Log current state.
+	var itemCount, msgCount, sumCount int
+	db.QueryRow(`SELECT COUNT(*) FROM context_items`).Scan(&itemCount)
+	db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&msgCount)
+	db.QueryRow(`SELECT COUNT(*) FROM summaries`).Scan(&sumCount)
+
+	logger.Info("aurora store opened", "path", cfg.DatabasePath,
+		"items", itemCount, "messages", msgCount, "summaries", sumCount)
+	return s, nil
+}
+
+// ── JSON Migration ─────────────────────────────────────────────────────────
+
+// migrateFromJSON imports data from a legacy aurora.json file if it exists.
+// After successful import, the JSON file is renamed to aurora.json.migrated.
+func (s *Store) migrateFromJSON(dir string) error {
+	// Check common legacy paths: same dir as DB, or the old default.
+	candidates := []string{
+		filepath.Join(dir, "aurora.json"),
+	}
+	// If the DB path changed from the old default, also check the old path.
+	home, _ := os.UserHomeDir()
+	oldDefault := filepath.Join(home, ".deneb", "aurora.json")
+	if dir != filepath.Join(home, ".deneb") {
+		candidates = append(candidates, oldDefault)
+	}
+
+	var jsonPath string
+	var raw []byte
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err == nil && len(data) > 0 {
+			jsonPath = p
+			raw = data
+			break
+		}
+	}
+	if jsonPath == "" {
+		return nil // no legacy file
+	}
+
+	// Check if we already have data (migration already happened).
+	var count int
+	s.db.QueryRow(`SELECT COUNT(*) FROM context_items`).Scan(&count)
+	if count > 0 {
+		return nil // already migrated
+	}
+
+	var legacy storeData
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		return fmt.Errorf("parse legacy json: %w", err)
+	}
+
+	s.logger.Info("aurora store: migrating from JSON", "path", jsonPath,
+		"items", len(legacy.ContextItems),
+		"messages", len(legacy.Messages),
+		"summaries", len(legacy.Summaries))
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Import sequences.
+	tx.Exec(`INSERT OR REPLACE INTO sequences (name, value) VALUES ('ordinal', ?)`, legacy.NextOrdinalVal)
+	tx.Exec(`INSERT OR REPLACE INTO sequences (name, value) VALUES ('message_id', ?)`, legacy.NextMessageID)
+
+	// Import context items.
+	ciStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO context_items (conversation_id, ordinal, item_type, message_id, summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+	defer ciStmt.Close()
+	for _, ci := range legacy.ContextItems {
+		var msgID, sumID any
+		if ci.MessageID != nil {
+			msgID = *ci.MessageID
+		}
+		if ci.SummaryID != nil {
+			sumID = *ci.SummaryID
+		}
+		ciStmt.Exec(ci.ConversationID, ci.Ordinal, ci.ItemType, msgID, sumID, ci.CreatedAt)
+	}
+
+	// Import messages.
+	msgStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO messages (message_id, conversation_id, seq, role, content, token_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	defer msgStmt.Close()
+	for _, m := range legacy.Messages {
+		msgStmt.Exec(m.MessageID, m.ConversationID, m.Seq, m.Role, m.Content, m.TokenCount, m.CreatedAt)
+	}
+
+	// Import summaries.
+	sumStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summaries (summary_id, conversation_id, kind, depth, content, token_count, file_ids, earliest_at, latest_at, descendant_count, descendant_token_count, source_message_token_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	defer sumStmt.Close()
+	for _, sr := range legacy.Summaries {
+		fileIDsJSON, _ := json.Marshal(sr.FileIDs)
+		sumStmt.Exec(sr.SummaryID, sr.ConversationID, sr.Kind, sr.Depth, sr.Content, sr.TokenCount, string(fileIDsJSON), sr.EarliestAt, sr.LatestAt, sr.DescendantCount, sr.DescendantTokenCount, sr.SourceMessageTokenCount, sr.CreatedAt)
+	}
+
+	// Import summary parents.
+	spStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_parents (summary_id, parent_id) VALUES (?, ?)`)
+	defer spStmt.Close()
+	for sid, parents := range legacy.SummaryParents {
+		for _, pid := range parents {
+			spStmt.Exec(sid, pid)
 		}
 	}
 
-	// Ensure maps are initialized.
-	if s.data.Messages == nil {
-		s.data.Messages = make(map[string]MessageRecord)
-	}
-	if s.data.Summaries == nil {
-		s.data.Summaries = make(map[string]SummaryRecord)
-	}
-	if s.data.SummaryParents == nil {
-		s.data.SummaryParents = make(map[string][]string)
-	}
-	if s.data.SummaryMessages == nil {
-		s.data.SummaryMessages = make(map[string][]uint64)
-	}
-	if s.data.TransferredSummaries == nil {
-		s.data.TransferredSummaries = make(map[string]int64)
+	// Import summary messages.
+	smStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_messages (summary_id, message_id) VALUES (?, ?)`)
+	defer smStmt.Close()
+	for sid, msgIDs := range legacy.SummaryMessages {
+		for _, mid := range msgIDs {
+			smStmt.Exec(sid, mid)
+		}
 	}
 
-	logger.Info("aurora store opened", "path", cfg.DatabasePath,
-		"items", len(s.data.ContextItems),
-		"messages", len(s.data.Messages),
-		"summaries", len(s.data.Summaries))
-	return s, nil
+	// Import compaction events.
+	ceStmt, _ := tx.Prepare(`INSERT INTO compaction_events (conversation_id, pass, level, tokens_before, tokens_after, created_summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	defer ceStmt.Close()
+	for _, e := range legacy.CompactionEvents {
+		ceStmt.Exec(e.ConversationID, e.Pass, e.Level, e.TokensBefore, e.TokensAfter, e.CreatedSummaryID, e.CreatedAt)
+	}
+
+	// Import transferred summaries.
+	tsStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO transferred_summaries (summary_id, transferred_at) VALUES (?, ?)`)
+	defer tsStmt.Close()
+	for sid, ts := range legacy.TransferredSummaries {
+		tsStmt.Exec(sid, ts)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration: %w", err)
+	}
+
+	// Rename legacy file so we don't re-migrate.
+	if err := os.Rename(jsonPath, jsonPath+".migrated"); err != nil {
+		s.logger.Warn("aurora store: could not rename legacy json", "error", err)
+	} else {
+		s.logger.Info("aurora store: migration complete, renamed to .migrated", "path", jsonPath)
+	}
+
+	return nil
 }
 
 // ── Transfer tracking ──────────────────────────────────────────────────────
@@ -239,73 +445,51 @@ func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 func (s *Store) MarkTransferred(summaryID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.data.TransferredSummaries[summaryID] = time.Now().UnixMilli()
-	return s.scheduleFlushLocked()
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO transferred_summaries (summary_id, transferred_at) VALUES (?, ?)`,
+		summaryID, time.Now().UnixMilli())
+	return err
 }
 
 // IsTransferred checks if a summary has already been transferred to the memory store.
 func (s *Store) IsTransferred(summaryID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, ok := s.data.TransferredSummaries[summaryID]
-	return ok
+	var count int
+	s.db.QueryRow(`SELECT COUNT(*) FROM transferred_summaries WHERE summary_id = ?`, summaryID).Scan(&count)
+	return count > 0
 }
 
-// Sync forces any pending dirty data to disk synchronously.
-// Safe to call multiple times. Use this when you need a read-after-write
-// guarantee (e.g., before passing the file path to another process).
+// Sync is a no-op for SQLite (WAL mode auto-checkpoints).
+// Retained for API compatibility.
 func (s *Store) Sync() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.flushTimer != nil {
-		s.flushTimer.Stop()
-	}
-	if s.dirty {
-		s.dirty = false
-		return s.flushLocked()
-	}
-	return s.flushErr
+	return nil
 }
 
-// Close flushes any pending dirty data to disk. Uses closeOnce to ensure
-// idempotency, and a timeout to avoid indefinite shutdown hangs if another
-// goroutine is stuck while holding s.mu.
+// Close closes the database connection.
 func (s *Store) Close() error {
 	s.closeOnce.Do(func() {
-		const closeFlushTimeout = 5 * time.Second
-		done := make(chan error, 1)
-		go func() {
-			done <- s.syncLocked()
-		}()
-		select {
-		case err := <-done:
-			s.closeErr = err
-		case <-time.After(closeFlushTimeout):
-			s.closeErr = fmt.Errorf("aurora store close timeout after %s", closeFlushTimeout)
+		if s.db != nil {
+			s.closeErr = s.db.Close()
 		}
 	})
 	return s.closeErr
 }
 
-// syncLocked acquires the write lock and flushes dirty data. Used by Close
-// via a goroutine so Close can apply a timeout without holding the lock.
-func (s *Store) syncLocked() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.flushTimer != nil {
-		s.flushTimer.Stop()
-		s.flushTimer = nil
-	}
-	if s.dirty {
-		s.dirty = false
-		return s.flushLocked()
-	}
-	return s.flushErr
-}
+// ── Sequences ──────────────────────────────────────────────────────────────
 
-// msgKey converts a uint64 message ID to a map key.
-func msgKey(id uint64) string {
-	return fmt.Sprintf("%d", id)
+// nextSequence atomically increments and returns the next value for a named sequence.
+// Caller must hold s.mu write lock.
+func (s *Store) nextSequence(tx *sql.Tx, name string) (uint64, error) {
+	// Ensure the row exists.
+	tx.Exec(`INSERT OR IGNORE INTO sequences (name, value) VALUES (?, 0)`, name)
+	var val uint64
+	if err := tx.QueryRow(`SELECT value FROM sequences WHERE name = ?`, name).Scan(&val); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`UPDATE sequences SET value = ? WHERE name = ?`, val+1, name); err != nil {
+		return 0, err
+	}
+	return val, nil
 }
 
 // ── Context items ───────────────────────────────────────────────────────────
@@ -315,23 +499,42 @@ func (s *Store) FetchContextItems(conversationID uint64) ([]ContextItem, error) 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var items []ContextItem
-	for _, ci := range s.data.ContextItems {
-		if ci.ConversationID == conversationID {
-			items = append(items, ci)
-		}
+	rows, err := s.db.Query(
+		`SELECT conversation_id, ordinal, item_type, message_id, summary_id, created_at
+		 FROM context_items WHERE conversation_id = ? ORDER BY ordinal`,
+		conversationID)
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].Ordinal < items[j].Ordinal
-	})
-	return items, nil
+	defer rows.Close()
+
+	var items []ContextItem
+	for rows.Next() {
+		var ci ContextItem
+		var msgID sql.NullInt64
+		var sumID sql.NullString
+		if err := rows.Scan(&ci.ConversationID, &ci.Ordinal, &ci.ItemType, &msgID, &sumID, &ci.CreatedAt); err != nil {
+			return nil, err
+		}
+		if msgID.Valid {
+			v := uint64(msgID.Int64)
+			ci.MessageID = &v
+		}
+		if sumID.Valid {
+			ci.SummaryID = &sumID.String
+		}
+		items = append(items, ci)
+	}
+	return items, rows.Err()
 }
 
 // NextOrdinal returns the next available ordinal.
 func (s *Store) NextOrdinal(conversationID uint64) (uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.data.NextOrdinalVal, nil
+	var val uint64
+	err := s.db.QueryRow(`SELECT COALESCE((SELECT value FROM sequences WHERE name = 'ordinal'), 0)`).Scan(&val)
+	return val, err
 }
 
 // ── Messages ────────────────────────────────────────────────────────────────
@@ -342,34 +545,67 @@ func (s *Store) FetchMessages(messageIDs []uint64) (map[uint64]MessageRecord, er
 	defer s.mu.RUnlock()
 
 	result := make(map[uint64]MessageRecord, len(messageIDs))
-	for _, id := range messageIDs {
-		if m, ok := s.data.Messages[msgKey(id)]; ok {
-			result[id] = m
-		}
+	if len(messageIDs) == 0 {
+		return result, nil
 	}
-	return result, nil
+
+	// Build query with placeholders.
+	placeholders := make([]string, len(messageIDs))
+	args := make([]any, len(messageIDs))
+	for i, id := range messageIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(
+		`SELECT message_id, conversation_id, seq, role, content, token_count, created_at
+		 FROM messages WHERE message_id IN (%s)`,
+		strings.Join(placeholders, ","))
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var m MessageRecord
+		if err := rows.Scan(&m.MessageID, &m.ConversationID, &m.Seq, &m.Role, &m.Content, &m.TokenCount, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		result[m.MessageID] = m
+	}
+	return result, rows.Err()
 }
 
-// FetchTokenCount returns total token count for all context items.
+// FetchTokenCount returns total token count for all context items in a conversation.
 func (s *Store) FetchTokenCount(conversationID uint64) (uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var total uint64
-	for _, ci := range s.data.ContextItems {
-		if ci.ConversationID != conversationID {
-			continue
-		}
-		if ci.ItemType == "message" && ci.MessageID != nil {
-			if m, ok := s.data.Messages[msgKey(*ci.MessageID)]; ok {
-				total += m.TokenCount
-			}
-		} else if ci.ItemType == "summary" && ci.SummaryID != nil {
-			if sr, ok := s.data.Summaries[*ci.SummaryID]; ok {
-				total += sr.TokenCount
-			}
-		}
+
+	// Sum message tokens via join.
+	var msgTokens sql.NullInt64
+	s.db.QueryRow(
+		`SELECT COALESCE(SUM(m.token_count), 0) FROM context_items ci
+		 JOIN messages m ON ci.message_id = m.message_id
+		 WHERE ci.conversation_id = ? AND ci.item_type = 'message'`,
+		conversationID).Scan(&msgTokens)
+	if msgTokens.Valid {
+		total += uint64(msgTokens.Int64)
 	}
+
+	// Sum summary tokens via join.
+	var sumTokens sql.NullInt64
+	s.db.QueryRow(
+		`SELECT COALESCE(SUM(s.token_count), 0) FROM context_items ci
+		 JOIN summaries s ON ci.summary_id = s.summary_id
+		 WHERE ci.conversation_id = ? AND ci.item_type = 'summary'`,
+		conversationID).Scan(&sumTokens)
+	if sumTokens.Valid {
+		total += uint64(sumTokens.Int64)
+	}
+
 	return total, nil
 }
 
@@ -381,12 +617,52 @@ func (s *Store) FetchSummaries(summaryIDs []string) (map[string]SummaryRecord, e
 	defer s.mu.RUnlock()
 
 	result := make(map[string]SummaryRecord, len(summaryIDs))
-	for _, id := range summaryIDs {
-		if sr, ok := s.data.Summaries[id]; ok {
-			result[id] = sr
-		}
+	if len(summaryIDs) == 0 {
+		return result, nil
 	}
-	return result, nil
+
+	placeholders := make([]string, len(summaryIDs))
+	args := make([]any, len(summaryIDs))
+	for i, id := range summaryIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(
+		`SELECT summary_id, conversation_id, kind, depth, content, token_count,
+		        file_ids, earliest_at, latest_at, descendant_count,
+		        descendant_token_count, source_message_token_count, created_at
+		 FROM summaries WHERE summary_id IN (%s)`,
+		strings.Join(placeholders, ","))
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var sr SummaryRecord
+		var fileIDsJSON string
+		var earliestAt, latestAt sql.NullInt64
+		if err := rows.Scan(&sr.SummaryID, &sr.ConversationID, &sr.Kind, &sr.Depth,
+			&sr.Content, &sr.TokenCount, &fileIDsJSON, &earliestAt, &latestAt,
+			&sr.DescendantCount, &sr.DescendantTokenCount, &sr.SourceMessageTokenCount,
+			&sr.CreatedAt); err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(fileIDsJSON), &sr.FileIDs)
+		if sr.FileIDs == nil {
+			sr.FileIDs = []string{}
+		}
+		if earliestAt.Valid {
+			sr.EarliestAt = &earliestAt.Int64
+		}
+		if latestAt.Valid {
+			sr.LatestAt = &latestAt.Int64
+		}
+		result[sr.SummaryID] = sr
+	}
+	return result, rows.Err()
 }
 
 // FetchDistinctDepths returns distinct summary depths for context items
@@ -395,24 +671,26 @@ func (s *Store) FetchDistinctDepths(conversationID uint64, maxOrdinal uint64) ([
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	depthSet := make(map[uint32]bool)
-	for _, ci := range s.data.ContextItems {
-		if ci.ConversationID != conversationID || ci.Ordinal > maxOrdinal {
-			continue
-		}
-		if ci.ItemType == "summary" && ci.SummaryID != nil {
-			if sr, ok := s.data.Summaries[*ci.SummaryID]; ok {
-				depthSet[sr.Depth] = true
-			}
-		}
+	rows, err := s.db.Query(
+		`SELECT DISTINCT sm.depth FROM context_items ci
+		 JOIN summaries sm ON ci.summary_id = sm.summary_id
+		 WHERE ci.conversation_id = ? AND ci.ordinal <= ? AND ci.item_type = 'summary'
+		 ORDER BY sm.depth`,
+		conversationID, maxOrdinal)
+	if err != nil {
+		return nil, err
 	}
+	defer rows.Close()
 
-	depths := make([]uint32, 0, len(depthSet))
-	for d := range depthSet {
+	var depths []uint32
+	for rows.Next() {
+		var d uint32
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
 		depths = append(depths, d)
 	}
-	sort.Slice(depths, func(i, j int) bool { return depths[i] < depths[j] })
-	return depths, nil
+	return depths, rows.Err()
 }
 
 // FetchSummaryStats returns aggregate summary info for a conversation.
@@ -421,86 +699,82 @@ func (s *Store) FetchSummaryStats(conversationID uint64) (SummaryStats, error) {
 	defer s.mu.RUnlock()
 
 	var stats SummaryStats
-	for _, sr := range s.data.Summaries {
-		if sr.ConversationID != conversationID {
-			continue
-		}
-		if sr.Depth > stats.MaxDepth {
-			stats.MaxDepth = sr.Depth
-		}
-		if sr.Kind == "condensed" {
-			stats.CondensedCount++
-		} else {
-			stats.LeafCount++
-		}
-		stats.TotalSummaryTokens += sr.TokenCount
-	}
+	s.db.QueryRow(
+		`SELECT COALESCE(MAX(depth), 0),
+		        COALESCE(SUM(CASE WHEN kind = 'condensed' THEN 1 ELSE 0 END), 0),
+		        COALESCE(SUM(CASE WHEN kind != 'condensed' THEN 1 ELSE 0 END), 0),
+		        COALESCE(SUM(token_count), 0)
+		 FROM summaries WHERE conversation_id = ?`,
+		conversationID).Scan(&stats.MaxDepth, &stats.CondensedCount, &stats.LeafCount, &stats.TotalSummaryTokens)
 	return stats, nil
 }
-
-// maxCompactionEvents is the maximum number of compaction events retained on disk.
-// Older entries are pruned to prevent unbounded file growth.
-const maxCompactionEvents = 500
 
 // PersistLeafSummary inserts a leaf summary and replaces compacted messages.
 func (s *Store) PersistLeafSummary(input PersistLeafInput) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	now := time.Now().UnixMilli()
 	fileIDs := input.FileIDs
 	if fileIDs == nil {
 		fileIDs = []string{}
 	}
+	fileIDsJSON, _ := json.Marshal(fileIDs)
 
-	// Insert summary.
-	s.data.Summaries[input.SummaryID] = SummaryRecord{
-		SummaryID:               input.SummaryID,
-		ConversationID:          input.ConversationID,
-		Kind:                    "leaf",
-		Depth:                   0,
-		Content:                 input.Content,
-		TokenCount:              input.TokenCount,
-		FileIDs:                 fileIDs,
-		EarliestAt:              input.EarliestAt,
-		LatestAt:                input.LatestAt,
-		SourceMessageTokenCount: input.SourceMessageTokenCount,
-		CreatedAt:               now,
+	// Insert summary record.
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO summaries
+		 (summary_id, conversation_id, kind, depth, content, token_count, file_ids,
+		  earliest_at, latest_at, descendant_count, descendant_token_count,
+		  source_message_token_count, created_at)
+		 VALUES (?, ?, 'leaf', 0, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+		input.SummaryID, input.ConversationID, input.Content, input.TokenCount,
+		string(fileIDsJSON), input.EarliestAt, input.LatestAt,
+		input.SourceMessageTokenCount, now); err != nil {
+		return err
 	}
 
-	// Link messages.
-	s.data.SummaryMessages[input.SummaryID] = input.MessageIDs
+	// Link messages to summary.
+	smStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_messages (summary_id, message_id) VALUES (?, ?)`)
+	defer smStmt.Close()
+	for _, mid := range input.MessageIDs {
+		smStmt.Exec(input.SummaryID, mid)
+	}
 
-	// Remove compacted context items in ordinal range and replace with summary.
-	var kept []ContextItem
-	for _, ci := range s.data.ContextItems {
-		if ci.ConversationID == input.ConversationID &&
-			ci.Ordinal >= input.StartOrdinal && ci.Ordinal <= input.EndOrdinal &&
-			ci.ItemType == "message" {
-			continue // remove
+	// Remove compacted message context items in ordinal range.
+	if _, err := tx.Exec(
+		`DELETE FROM context_items
+		 WHERE conversation_id = ? AND ordinal >= ? AND ordinal <= ? AND item_type = 'message'`,
+		input.ConversationID, input.StartOrdinal, input.EndOrdinal); err != nil {
+		return err
+	}
+
+	// Insert summary context item at start ordinal.
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO context_items (conversation_id, ordinal, item_type, summary_id, created_at)
+		 VALUES (?, ?, 'summary', ?, ?)`,
+		input.ConversationID, input.StartOrdinal, input.SummaryID, now); err != nil {
+		return err
+	}
+
+	// Prune compacted message records.
+	if len(input.MessageIDs) > 0 {
+		ph := make([]string, len(input.MessageIDs))
+		args := make([]any, len(input.MessageIDs))
+		for i, id := range input.MessageIDs {
+			ph[i] = "?"
+			args[i] = id
 		}
-		kept = append(kept, ci)
+		tx.Exec(fmt.Sprintf(`DELETE FROM messages WHERE message_id IN (%s)`, strings.Join(ph, ",")), args...)
 	}
 
-	// Add summary context item at start ordinal.
-	sid := input.SummaryID
-	kept = append(kept, ContextItem{
-		ConversationID: input.ConversationID,
-		Ordinal:        input.StartOrdinal,
-		ItemType:       "summary",
-		SummaryID:      &sid,
-		CreatedAt:      now,
-	})
-
-	sort.Slice(kept, func(i, j int) bool { return kept[i].Ordinal < kept[j].Ordinal })
-	s.data.ContextItems = kept
-
-	// Prune compacted message records — they are now captured by the leaf summary.
-	for _, msgID := range input.MessageIDs {
-		delete(s.data.Messages, msgKey(msgID))
-	}
-
-	return s.scheduleFlushLocked()
+	return tx.Commit()
 }
 
 // PersistCondensedSummary inserts a condensed summary and replaces children.
@@ -508,69 +782,83 @@ func (s *Store) PersistCondensedSummary(input PersistCondensedInput) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	now := time.Now().UnixMilli()
 	fileIDs := input.FileIDs
 	if fileIDs == nil {
 		fileIDs = []string{}
 	}
+	fileIDsJSON, _ := json.Marshal(fileIDs)
 
-	s.data.Summaries[input.SummaryID] = SummaryRecord{
-		SummaryID:               input.SummaryID,
-		ConversationID:          input.ConversationID,
-		Kind:                    "condensed",
-		Depth:                   input.Depth,
-		Content:                 input.Content,
-		TokenCount:              input.TokenCount,
-		FileIDs:                 fileIDs,
-		EarliestAt:              input.EarliestAt,
-		LatestAt:                input.LatestAt,
-		DescendantCount:         input.DescendantCount,
-		DescendantTokenCount:    input.DescendantTokenCount,
-		SourceMessageTokenCount: input.SourceMessageTokenCount,
-		CreatedAt:               now,
+	// Insert condensed summary record.
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO summaries
+		 (summary_id, conversation_id, kind, depth, content, token_count, file_ids,
+		  earliest_at, latest_at, descendant_count, descendant_token_count,
+		  source_message_token_count, created_at)
+		 VALUES (?, ?, 'condensed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.SummaryID, input.ConversationID, input.Depth, input.Content,
+		input.TokenCount, string(fileIDsJSON), input.EarliestAt, input.LatestAt,
+		input.DescendantCount, input.DescendantTokenCount,
+		input.SourceMessageTokenCount, now); err != nil {
+		return err
 	}
 
-	// Link parents.
-	s.data.SummaryParents[input.SummaryID] = input.ParentSummaryIDs
-
-	// Remove condensed child context items in range.
-	var kept []ContextItem
-	for _, ci := range s.data.ContextItems {
-		if ci.ConversationID == input.ConversationID &&
-			ci.Ordinal >= input.StartOrdinal && ci.Ordinal <= input.EndOrdinal &&
-			ci.ItemType == "summary" {
-			continue
-		}
-		kept = append(kept, ci)
+	// Link parent summaries.
+	spStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_parents (summary_id, parent_id) VALUES (?, ?)`)
+	defer spStmt.Close()
+	for _, pid := range input.ParentSummaryIDs {
+		spStmt.Exec(input.SummaryID, pid)
 	}
 
-	sid := input.SummaryID
-	kept = append(kept, ContextItem{
-		ConversationID: input.ConversationID,
-		Ordinal:        input.StartOrdinal,
-		ItemType:       "summary",
-		SummaryID:      &sid,
-		CreatedAt:      now,
-	})
+	// Remove condensed child context items in ordinal range.
+	if _, err := tx.Exec(
+		`DELETE FROM context_items
+		 WHERE conversation_id = ? AND ordinal >= ? AND ordinal <= ? AND item_type = 'summary'`,
+		input.ConversationID, input.StartOrdinal, input.EndOrdinal); err != nil {
+		return err
+	}
 
-	sort.Slice(kept, func(i, j int) bool { return kept[i].Ordinal < kept[j].Ordinal })
-	s.data.ContextItems = kept
+	// Insert condensed summary context item.
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO context_items (conversation_id, ordinal, item_type, summary_id, created_at)
+		 VALUES (?, ?, 'summary', ?, ?)`,
+		input.ConversationID, input.StartOrdinal, input.SummaryID, now); err != nil {
+		return err
+	}
 
-	// Prune condensed child summary records — they are now captured by the condensed summary.
+	// Prune parent summary records and their links.
 	for _, parentID := range input.ParentSummaryIDs {
-		// Defensive cleanup: some test paths can create condensed summaries
-		// without going through PersistLeafSummary, leaving parent message records.
-		// Remove parent-linked message records before dropping parent metadata.
-		for _, msgID := range s.data.SummaryMessages[parentID] {
-			delete(s.data.Messages, msgKey(msgID))
+		// Delete messages linked to parent summaries.
+		rows, _ := tx.Query(`SELECT message_id FROM summary_messages WHERE summary_id = ?`, parentID)
+		if rows != nil {
+			var msgIDs []any
+			for rows.Next() {
+				var mid uint64
+				rows.Scan(&mid)
+				msgIDs = append(msgIDs, mid)
+			}
+			rows.Close()
+			if len(msgIDs) > 0 {
+				ph := make([]string, len(msgIDs))
+				for i := range ph {
+					ph[i] = "?"
+				}
+				tx.Exec(fmt.Sprintf(`DELETE FROM messages WHERE message_id IN (%s)`, strings.Join(ph, ",")), msgIDs...)
+			}
 		}
-		delete(s.data.Summaries, parentID)
-		delete(s.data.SummaryParents, parentID)
-		delete(s.data.SummaryMessages, parentID)
-		delete(s.data.TransferredSummaries, parentID)
+		tx.Exec(`DELETE FROM summaries WHERE summary_id = ?`, parentID)
+		tx.Exec(`DELETE FROM summary_parents WHERE summary_id = ?`, parentID)
+		tx.Exec(`DELETE FROM summary_messages WHERE summary_id = ?`, parentID)
+		tx.Exec(`DELETE FROM transferred_summaries WHERE summary_id = ?`, parentID)
 	}
 
-	return s.scheduleFlushLocked()
+	return tx.Commit()
 }
 
 // PersistEvent records a compaction event.
@@ -578,22 +866,22 @@ func (s *Store) PersistEvent(input PersistEventInput) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.data.CompactionEvents = append(s.data.CompactionEvents, CompactionEvent{
-		ConversationID:   input.ConversationID,
-		Pass:             input.Pass,
-		Level:            input.Level,
-		TokensBefore:     input.TokensBefore,
-		TokensAfter:      input.TokensAfter,
-		CreatedSummaryID: input.CreatedSummaryID,
-		CreatedAt:        time.Now().UnixMilli(),
-	})
-
-	// Cap the event log to prevent unbounded file growth.
-	if len(s.data.CompactionEvents) > maxCompactionEvents {
-		s.data.CompactionEvents = s.data.CompactionEvents[len(s.data.CompactionEvents)-maxCompactionEvents:]
+	now := time.Now().UnixMilli()
+	if _, err := s.db.Exec(
+		`INSERT INTO compaction_events (conversation_id, pass, level, tokens_before, tokens_after, created_summary_id, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		input.ConversationID, input.Pass, input.Level,
+		input.TokensBefore, input.TokensAfter, input.CreatedSummaryID, now); err != nil {
+		return err
 	}
 
-	return s.scheduleFlushLocked()
+	// Cap the event log.
+	s.db.Exec(
+		`DELETE FROM compaction_events WHERE id NOT IN (
+			SELECT id FROM compaction_events ORDER BY id DESC LIMIT ?
+		)`, maxCompactionEvents)
+
+	return nil
 }
 
 // ── Sync from chat ──────────────────────────────────────────────────────────
@@ -603,33 +891,42 @@ func (s *Store) SyncMessage(conversationID uint64, role, content string, tokenCo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
 	now := time.Now().UnixMilli()
-	ordinal := s.data.NextOrdinalVal
-	s.data.NextOrdinalVal++
 
-	msgID := s.data.NextMessageID
-	s.data.NextMessageID++
-
-	s.data.Messages[msgKey(msgID)] = MessageRecord{
-		MessageID:      msgID,
-		ConversationID: conversationID,
-		Seq:            ordinal,
-		Role:           role,
-		Content:        content,
-		TokenCount:     tokenCount,
-		CreatedAt:      now,
+	ordinal, err := s.nextSequence(tx, "ordinal")
+	if err != nil {
+		return 0, fmt.Errorf("next ordinal: %w", err)
 	}
 
-	mid := msgID
-	s.data.ContextItems = append(s.data.ContextItems, ContextItem{
-		ConversationID: conversationID,
-		Ordinal:        ordinal,
-		ItemType:       "message",
-		MessageID:      &mid,
-		CreatedAt:      now,
-	})
+	msgID, err := s.nextSequence(tx, "message_id")
+	if err != nil {
+		return 0, fmt.Errorf("next message_id: %w", err)
+	}
 
-	return msgID, s.scheduleFlushLocked()
+	if _, err := tx.Exec(
+		`INSERT INTO messages (message_id, conversation_id, seq, role, content, token_count, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		msgID, conversationID, ordinal, role, content, tokenCount, now); err != nil {
+		return 0, err
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO context_items (conversation_id, ordinal, item_type, message_id, created_at)
+		 VALUES (?, ?, 'message', ?, ?)`,
+		conversationID, ordinal, msgID, now); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return msgID, nil
 }
 
 // Reset clears all data for a conversation.
@@ -637,89 +934,36 @@ func (s *Store) Reset(conversationID uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Filter context items.
-	var kept []ContextItem
-	for _, ci := range s.data.ContextItems {
-		if ci.ConversationID != conversationID {
-			kept = append(kept, ci)
-		}
-	}
-	s.data.ContextItems = kept
-
-	// Remove messages.
-	for k, m := range s.data.Messages {
-		if m.ConversationID == conversationID {
-			delete(s.data.Messages, k)
-		}
-	}
-
-	// Remove summaries and links.
-	for k, sr := range s.data.Summaries {
-		if sr.ConversationID == conversationID {
-			delete(s.data.Summaries, k)
-			delete(s.data.SummaryParents, k)
-			delete(s.data.SummaryMessages, k)
-		}
-	}
-
-	// Remove events.
-	var keptEvents []CompactionEvent
-	for _, e := range s.data.CompactionEvents {
-		if e.ConversationID != conversationID {
-			keptEvents = append(keptEvents, e)
-		}
-	}
-	s.data.CompactionEvents = keptEvents
-
-	return s.flushLocked()
-}
-
-// scheduleFlushLocked marks the store as dirty and schedules a debounced disk
-// write. If a previous async flush failed, that error is returned immediately
-// so the caller knows persistence is degraded. Caller must hold s.mu.
-func (s *Store) scheduleFlushLocked() error {
-	// Surface any error from a previous async flush.
-	if err := s.flushErr; err != nil {
-		s.flushErr = nil
-		s.dirty = true
-		s.resetFlushTimerLocked()
-		return fmt.Errorf("previous flush failed: %w", err)
-	}
-
-	s.dirty = true
-	s.resetFlushTimerLocked()
-	return nil
-}
-
-// resetFlushTimerLocked resets (or starts) the debounce timer. Caller must hold s.mu.
-func (s *Store) resetFlushTimerLocked() {
-	if s.flushTimer != nil {
-		s.flushTimer.Stop()
-	}
-	s.flushTimer = time.AfterFunc(flushDebounce, s.flushIfDirty)
-}
-
-// flushIfDirty is called by the debounce timer. It acquires the lock and
-// writes to disk only if the store is still dirty.
-func (s *Store) flushIfDirty() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.dirty {
-		return
-	}
-	s.flushErr = s.flushLocked()
-	s.dirty = false
-}
-
-// flushLocked writes data to disk. Caller must hold s.mu.
-func (s *Store) flushLocked() error {
-	raw, err := json.Marshal(s.data)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	defer tx.Rollback()
+
+	// Collect summary IDs for this conversation to clean up links.
+	rows, err := tx.Query(`SELECT summary_id FROM summaries WHERE conversation_id = ?`, conversationID)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	var sumIDs []string
+	for rows.Next() {
+		var sid string
+		rows.Scan(&sid)
+		sumIDs = append(sumIDs, sid)
+	}
+	rows.Close()
+
+	// Delete links for each summary.
+	for _, sid := range sumIDs {
+		tx.Exec(`DELETE FROM summary_parents WHERE summary_id = ?`, sid)
+		tx.Exec(`DELETE FROM summary_messages WHERE summary_id = ?`, sid)
+		tx.Exec(`DELETE FROM transferred_summaries WHERE summary_id = ?`, sid)
+	}
+
+	tx.Exec(`DELETE FROM context_items WHERE conversation_id = ?`, conversationID)
+	tx.Exec(`DELETE FROM messages WHERE conversation_id = ?`, conversationID)
+	tx.Exec(`DELETE FROM summaries WHERE conversation_id = ?`, conversationID)
+	tx.Exec(`DELETE FROM compaction_events WHERE conversation_id = ?`, conversationID)
+
+	return tx.Commit()
 }
