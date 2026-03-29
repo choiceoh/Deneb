@@ -251,12 +251,13 @@ func executeAgentRun(
 			}
 		}
 	}
-	if knowledgeAddition != "" {
-		systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
-	}
+	// Append knowledge and proactive hint in a single unmarshal/marshal cycle.
+	proactiveHint := ""
 	if proactive.hint != "" {
-		systemPrompt = llm.AppendSystemText(systemPrompt,
-			"\n## Context Hint (from local analysis)\n"+proactive.hint)
+		proactiveHint = "\n## Context Hint (from local analysis)\n" + proactive.hint
+	}
+	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint)
+	if proactive.hint != "" {
 		logger.Info("proactive context injected", "chars", len(proactive.hint))
 	}
 	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())

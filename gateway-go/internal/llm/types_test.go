@@ -125,6 +125,110 @@ func TestNewTextMessage(t *testing.T) {
 	}
 }
 
+func TestAppendJSONString(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"plain ascii", "hello world"},
+		{"empty", ""},
+		{"quotes", `say "hi"`},
+		{"backslash", `a\b`},
+		{"newline", "line1\nline2"},
+		{"tab", "col1\tcol2"},
+		{"carriage return", "a\rb"},
+		{"control char", "a\x01b"},
+		{"korean", "안녕하세요"},
+		{"mixed", "한글\n\"quoted\"\ttab"},
+		{"null byte", "a\x00b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := appendJSONString(nil, tc.input)
+			var got string
+			if err := json.Unmarshal(raw, &got); err != nil {
+				t.Fatalf("unmarshal(%q): %v (raw=%s)", tc.input, err, raw)
+			}
+			if got != tc.input {
+				t.Errorf("round-trip: got %q, want %q", got, tc.input)
+			}
+		})
+	}
+}
+
+func TestAppendSystemTexts(t *testing.T) {
+	t.Run("no additions returns unchanged", func(t *testing.T) {
+		base := SystemString("base")
+		got := AppendSystemTexts(base)
+		if string(got) != string(base) {
+			t.Errorf("got %s, want %s", got, base)
+		}
+	})
+
+	t.Run("empty additions are skipped", func(t *testing.T) {
+		base := SystemString("base")
+		got := AppendSystemTexts(base, "", "")
+		if string(got) != string(base) {
+			t.Errorf("got %s, want %s", got, base)
+		}
+	})
+
+	t.Run("two additions on string in one cycle", func(t *testing.T) {
+		base := SystemString("base")
+		got := AppendSystemTexts(base, "add1", "add2")
+		var s string
+		if err := json.Unmarshal(got, &s); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		want := "base\n\nadd1\n\nadd2"
+		if s != want {
+			t.Errorf("got %q, want %q", s, want)
+		}
+	})
+
+	t.Run("two additions on block array in one cycle", func(t *testing.T) {
+		base := SystemBlocks([]ContentBlock{{Type: "text", Text: "base"}})
+		got := AppendSystemTexts(base, "add1", "add2")
+		var blocks []ContentBlock
+		if err := json.Unmarshal(got, &blocks); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(blocks) != 3 {
+			t.Fatalf("got %d blocks, want 3", len(blocks))
+		}
+		if blocks[1].Text != "\n\nadd1" {
+			t.Errorf("blocks[1].Text = %q, want %q", blocks[1].Text, "\n\nadd1")
+		}
+		if blocks[2].Text != "\n\nadd2" {
+			t.Errorf("blocks[2].Text = %q, want %q", blocks[2].Text, "\n\nadd2")
+		}
+	})
+
+	t.Run("nil base with additions", func(t *testing.T) {
+		got := AppendSystemTexts(nil, "only")
+		var s string
+		if err := json.Unmarshal(got, &s); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if s != "only" {
+			t.Errorf("got %q, want %q", s, "only")
+		}
+	})
+
+	t.Run("skips empty among mixed", func(t *testing.T) {
+		base := SystemString("base")
+		got := AppendSystemTexts(base, "", "real", "")
+		var s string
+		if err := json.Unmarshal(got, &s); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		want := "base\n\nreal"
+		if s != want {
+			t.Errorf("got %q, want %q", s, want)
+		}
+	})
+}
+
 func TestNewBlockMessage(t *testing.T) {
 	blocks := []ContentBlock{
 		{Type: "text", Text: "hello"},
