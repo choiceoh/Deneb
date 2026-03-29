@@ -440,6 +440,62 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
+func TestStripThinkingPreamble(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "thinking process prefix",
+			input: "Thinking Process:\nAnalyze the Request:\nThe user wants to fix a bug",
+			want:  "The user wants to fix a bug",
+		},
+		{
+			name:  "thinking process inline",
+			input: "Thinking Process: some reasoning here",
+			want:  "some reasoning here",
+		},
+		{
+			name:  "chained prefixes",
+			input: "Analyze the Request:\nLet me think about this",
+			want:  "about this",
+		},
+		{
+			name:  "no prefix",
+			input: "The user wants to add a login feature",
+			want:  "The user wants to add a login feature",
+		},
+		{
+			name:  "whitespace around prefix",
+			input: "  Thinking Process:\n  actual content  ",
+			want:  "actual content",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "prefix only",
+			input: "Thinking Process:",
+			want:  "",
+		},
+		{
+			name:  "okay let me prefix",
+			input: "Okay, let me analyze this.\nThe code has a bug.",
+			want:  "analyze this.\nThe code has a bug.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StripThinkingPreamble(tt.input); got != tt.want {
+				t.Errorf("StripThinkingPreamble() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // --- Benchmarks ---
 
 func BenchmarkExtractObject_Clean(b *testing.B) {

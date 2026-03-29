@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // StreamChatOpenAI sends a streaming chat request to an OpenAI-compatible
@@ -547,7 +549,12 @@ func (c *Client) CompleteOpenAI(ctx context.Context, req ChatRequest) (string, e
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("no choices in response")
 	}
-	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+	// Strip reasoning model artifacts (<think> tags, "Thinking Process:" preamble)
+	// that leak into the content field of some local models (DeepSeek-R1, QwQ, etc.).
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	content = jsonutil.StripThinkingTags(content)
+	content = jsonutil.StripThinkingPreamble(content)
+	return strings.TrimSpace(content), nil
 }
 
 // --- OpenAI request/response types ---

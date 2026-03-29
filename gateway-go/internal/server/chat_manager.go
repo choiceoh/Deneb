@@ -13,7 +13,6 @@ type ChatManager struct {
 	toolDeps             *chat.CoreToolDeps
 	telegramPlug         *telegram.Plugin
 	discordPlug          *discord.Plugin
-	discordThreadNamer   *discord.ThreadNamer          // optional; nil when disabled or no Anthropic creds
-	discordWorktrees     *discord.WorktreeManager      // per-thread git worktree isolation
-	discordReasoningSumm *discord.ReasoningSummarizer  // optional; summarizes thinking blocks for progress
+	discordSummarizer *discord.Summarizer        // optional; thread titles + reasoning summaries
+	discordWorktrees  *discord.WorktreeManager   // per-thread git worktree isolation
 }

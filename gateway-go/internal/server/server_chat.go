@@ -284,19 +284,16 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 // chat handler for coding-focused agent sessions. It wraps the existing
 // channel handlers so both Telegram and Discord can coexist.
 func (s *Server) wireDiscordChatHandler() {
-	// Initialize lightweight LLM features using the local sglang model.
+	// Initialize lightweight LLM summarizer for thread titles + reasoning summaries.
 	discordCfg := s.discordPlug.Config()
 	if s.chatHandler != nil && s.chatHandler.ModelRegistry() != nil {
 		reg := s.chatHandler.ModelRegistry()
 		lwClient := reg.Client(modelrole.RoleLightweight)
 		lwModel := reg.Model(modelrole.RoleLightweight)
-		if discordCfg.AutoThreadNamesEnabled() {
-			s.discordThreadNamer = discord.NewThreadNamer(lwClient, lwModel)
-			s.logger.Info("discord: auto thread naming enabled", "model", lwModel)
-		}
-		s.discordReasoningSumm = discord.NewReasoningSummarizer(lwClient, lwModel)
-		if s.discordReasoningSumm != nil {
-			s.logger.Info("discord: reasoning summarizer enabled", "model", lwModel)
+		s.discordSummarizer = discord.NewSummarizer(lwClient, lwModel)
+		if s.discordSummarizer != nil {
+			s.logger.Info("discord: summarizer enabled (thread titles + reasoning)",
+				"model", lwModel, "autoThreadNames", discordCfg.AutoThreadNamesEnabled())
 		}
 	}
 
@@ -467,7 +464,7 @@ func (s *Server) wireDiscordChatHandler() {
 			// Create progress tracker on first tool start.
 			tracker = discord.NewProgressTracker(ctx, dcClient, delivery.To)
 			if tracker != nil {
-				tracker.SetSummarizer(s.discordReasoningSumm)
+				tracker.SetSummarizer(s.discordSummarizer)
 				activeTrackers[delivery.To] = tracker
 			}
 		}
