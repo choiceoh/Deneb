@@ -316,7 +316,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_assembly_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_assembly_lifecycle() -> napi::Result<()> {
         let handle = context_assembly_new(1, 10_000, 8);
         assert!(handle > 0);
 
@@ -335,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_expand_lifecycle() -> napi::Result<()> {
         let handle = context_expand_new("sum_abc".to_string(), 1, true, 10_000);
         assert!(handle > 0);
 
@@ -360,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grep_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_grep_lifecycle() -> napi::Result<()> {
         let handle = context_grep_new(
             "test".to_string(),
             "regex".to_string(),
@@ -381,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn test_describe_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_describe_lifecycle() -> napi::Result<()> {
         let handle = context_describe_new("sum_xyz".to_string());
         assert!(handle > 0);
 
@@ -394,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_config_valid() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_resolve_config_valid() -> napi::Result<()> {
         let json = r#"{"contextThreshold": 0.5, "freshTailCount": 16}"#;
         let result = context_resolve_config(json.to_string());
         let config: AuroraConfig = serde_json::from_str(&result)?;
@@ -404,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_config_invalid_returns_defaults() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_resolve_config_invalid_returns_defaults() -> napi::Result<()> {
         let result = context_resolve_config("not-json".to_string());
         let config: AuroraConfig = serde_json::from_str(&result)?;
         assert_eq!(config.context_threshold, 0.75);

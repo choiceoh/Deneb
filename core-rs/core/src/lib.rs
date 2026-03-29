@@ -164,7 +164,7 @@ mod tests {
     fn test_bridge_native_equivalence_validate_params_valid(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let method = "chat.send";
-        let params = r#"{"key":"sess-1","text":"hello"}"#;
+        let params = r#"{"sessionKey":"sess-1","message":"hello","idempotencyKey":"idk-1"}"#;
 
         let native = protocol::validation::validate_params(method, params)?;
         assert!(native.valid);
