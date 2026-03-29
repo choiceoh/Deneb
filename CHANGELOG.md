@@ -1,5 +1,47 @@
 # Changelog
 
+## [3.31.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.30.1...deneb-v3.31.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **chat:** accept role names as model input with auto-resolution ([3123d60](https://github.com/choiceoh/Deneb/commit/3123d60a82c019638e8ad583c332db559fd3619c))
+* **chat:** add centralized model role registry with dynamic fallback chains ([e875e55](https://github.com/choiceoh/Deneb/commit/e875e557f59ae5995cc2e964c8872a516b99b447))
+* **chat:** enforce role names only in tool schemas via enum ([25ab842](https://github.com/choiceoh/Deneb/commit/25ab842a47042039c7047df4dcb0567a67d2f46e))
+* **chat:** use gateway default model for morning letter cron instead of hardcoded glm-5.1 ([db627e8](https://github.com/choiceoh/Deneb/commit/db627e8c51c0295fa482ed9578cdc5e3387ec9e0))
+* **commands:** add back /agents command for subagent list ([d64f6a0](https://github.com/choiceoh/Deneb/commit/d64f6a0b55640e9f125458bd83ca69f6e5542ea1))
+* **commands:** wire /agents to live ACP registry data ([708cf4e](https://github.com/choiceoh/Deneb/commit/708cf4e0822ec1a526fdaade0b73902417c46a1d))
+* **cron:** add copper price via MetalpriceAPI, return USD/ton ([194cf5d](https://github.com/choiceoh/Deneb/commit/194cf5d6a5a406ab374f3c0eda3ab99fb49331a5))
+* **cron:** add native morning_letter tool for stable daily briefing ([7a00bab](https://github.com/choiceoh/Deneb/commit/7a00bab25886e7c5561850e22103820cc322b2af))
+* **discord:** add context-aware buttons, auto-verify, and Korean error translation ([48227d2](https://github.com/choiceoh/Deneb/commit/48227d23a53bbeea5f5c7aaaeffb07b7dea313d3))
+* **discord:** enhance coding agent I/O with slash commands, progress tracking, and extended quick commands ([dfbd441](https://github.com/choiceoh/Deneb/commit/dfbd4418cfd785c61badff0916212010e01a96a1))
+* **discord:** enhance Discord as coding-focused agent I/O channel ([14eedbb](https://github.com/choiceoh/Deneb/commit/14eedbb97403f79d135babb01433d3c0fd344a12))
+* **discord:** Korean tool names, code block collapsing, and auto-verify pipeline ([e0561c1](https://github.com/choiceoh/Deneb/commit/e0561c1383bd9de547f1b3b7df401ecf31c83744))
+* **discord:** optimize for vibe coder UX — remove developer commands, add Korean-first workflow ([502c429](https://github.com/choiceoh/Deneb/commit/502c429553203e5962f48ddf349c2330f4d70eae))
+* **discord:** vibe coder optimized coding channel (Phase 1-4) ([5764d02](https://github.com/choiceoh/Deneb/commit/5764d0235b6ca28b7bf807e8e531111b0e440478))
+* **gmail:** add analyze action to gmail tool with main model default ([b5bdff3](https://github.com/choiceoh/Deneb/commit/b5bdff3525a54525ffb184358f3c32b663fdd796))
+* **gmailpoll:** stabilize email analysis with autonomous integration ([d0319a1](https://github.com/choiceoh/Deneb/commit/d0319a1c57cf8872012865ccc0446a5a162bad48))
+
+
+### 🐛 Bug Fixes
+
+* **channel:** remove redundant starting channel log ([340f3bd](https://github.com/choiceoh/Deneb/commit/340f3bdc86e18259c106a58f638f882a4b783c18))
+* **chat:** strip thinking tags and tool markup before Telegram delivery ([dd4dead](https://github.com/choiceoh/Deneb/commit/dd4deadd0028633e031ffa7ef7b8baac8ba9f33b))
+* **discord:** use params.Delivery instead of undefined deliveryCtx in run.go ([eb2cbf5](https://github.com/choiceoh/Deneb/commit/eb2cbf51bbe82caac79fbb9104e651b4f29e542e))
+* **telegram:** remove bot username/id from verified log ([90e2598](https://github.com/choiceoh/Deneb/commit/90e2598f6badf97e991be3339890a2b2b0ed49fb))
+* **telegram:** restore only main sessions on startup heartbeat ([0f2d543](https://github.com/choiceoh/Deneb/commit/0f2d5431f8ee115182a820934aa45b2de718568e))
+* **telegram:** restore only main sessions on startup heartbeat ([28d1734](https://github.com/choiceoh/Deneb/commit/28d173479b7017c491e166052e5a655c3bdb5fae))
+
+
+### 🔧 Internal
+
+* **commands:** limit Telegram native commands to actively used ones ([700a8bf](https://github.com/choiceoh/Deneb/commit/700a8bf8c4af8d3d1933f5ea7414d14bf5dd20b8))
+* **commands:** remove unused command handlers for lightweight core ([896fae3](https://github.com/choiceoh/Deneb/commit/896fae3c81404569b2f03d31e7108287928265eb))
+* **cron:** return raw JSON from morning_letter for LLM curation ([7fb06be](https://github.com/choiceoh/Deneb/commit/7fb06be810b5c22e5f570a743cbba4335749c47c))
+* **server:** print banner after successful port bind, remove redundant start log ([9237726](https://github.com/choiceoh/Deneb/commit/9237726e085788aebc1c1ecb27fe0aa29d58a09f))
+* **shortid:** shorten IDs to 4-digit zero-padded counter ([6d5ddfd](https://github.com/choiceoh/Deneb/commit/6d5ddfd27f17cb07af9c892a04a3d1d1d8fecd29))
+* **vega:** collapse startup logs into single line ([871a9b7](https://github.com/choiceoh/Deneb/commit/871a9b79f8f5a452b82ad73f1f86375654533a0c))
+
 ## [3.30.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.30.0...deneb-v3.30.1) (2026-03-29)
 
 
