@@ -3,9 +3,9 @@ package handlers
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
@@ -29,7 +29,7 @@ func handleModelCommand(ctx CommandContext) (*CommandResult, error) {
 		provider = resolved.Provider
 		modelStr = resolved.Model
 	} else {
-		parts := splitProviderModel(raw)
+		parts := pipeline.SplitProviderModel(raw)
 		provider = parts[0]
 		modelStr = parts[1]
 	}
@@ -61,11 +61,3 @@ func handleVerboseCommand(ctx CommandContext) (*CommandResult, error) {
 	}, nil
 }
 
-// splitProviderModel splits a "provider/model" reference into [provider, model].
-// If no slash is present, returns ["", ref].
-func splitProviderModel(ref string) [2]string {
-	if idx := strings.Index(ref, "/"); idx >= 0 {
-		return [2]string{ref[:idx], ref[idx+1:]}
-	}
-	return [2]string{"", ref}
-}

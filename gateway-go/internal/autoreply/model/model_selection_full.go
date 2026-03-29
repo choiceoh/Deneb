@@ -4,6 +4,8 @@ package model
 
 import (
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 )
 
 // ModelSelectionState holds the full resolved model state.
@@ -50,7 +52,8 @@ func ResolveModelSelection(cfg ModelSelectionConfig) ModelSelectionState {
 			}
 		}
 		// Accept raw directive value even without candidate match.
-		provider, model := splitProviderModelStr(cfg.DirectiveModel)
+		parts := pipeline.SplitProviderModel(cfg.DirectiveModel)
+		provider, model := parts[0], parts[1]
 		if cfg.DirectiveProvider != "" {
 			provider = cfg.DirectiveProvider
 		}
@@ -144,21 +147,6 @@ func resolveFromCandidates(rawModel, rawProvider string, candidates []ModelCandi
 	return nil
 }
 
-// splitProviderModelStr splits a "provider/model" ref into its two parts.
-// If there is no slash, provider is empty and model is the full string.
-func splitProviderModelStr(ref string) (provider, model string) {
-	idx := -1
-	for i, c := range ref {
-		if c == '/' {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		return "", ref
-	}
-	return ref[:idx], ref[idx+1:]
-}
 
 // ResolveStoredModelOverride checks session and parent session for model overrides.
 func ResolveStoredModelOverride(sessionModel, parentSessionModel, configModel string) string {

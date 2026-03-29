@@ -8,11 +8,13 @@
 package directives
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
 // DirectiveHandlingResult holds the full outcome of processing inline directives.
@@ -242,7 +244,7 @@ func resolveModelDirective(rawModel, rawProfile string, opts DirectiveHandlingOp
 	}
 
 	// Parse provider/model from the raw string.
-	parts := splitProviderModel(rawModel)
+	parts := pipeline.SplitProviderModel(rawModel)
 	provider := parts[0]
 	mdl := parts[1]
 
@@ -398,13 +400,3 @@ func boolToOnOff(b bool) string {
 	return "off"
 }
 
-// splitProviderModel splits a "provider/model" ref into [provider, model].
-// If no slash, returns ["", ref].
-func splitProviderModel(ref string) [2]string {
-	for i, c := range ref {
-		if c == '/' {
-			return [2]string{ref[:i], ref[i+1:]}
-		}
-	}
-	return [2]string{"", ref}
-}

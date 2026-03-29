@@ -18,6 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -292,7 +293,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 		if runErr != nil && len(cfg.FallbackModels) > 0 {
 			for i, fallback := range cfg.FallbackModels {
 				logger.Info("trying fallback model", "model", fallback, "attempt", i+1, "session", cfg.SessionKey)
-				parts := splitProviderModel(fallback)
+				parts := pipeline.SplitProviderModel(fallback)
 				if parts[0] != "" {
 					cfg.Provider = parts[0]
 				}
