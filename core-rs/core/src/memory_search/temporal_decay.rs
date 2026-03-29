@@ -95,7 +95,8 @@ pub fn date_to_ms(year: i32, month: u32, day: u32) -> f64 {
     let date = NaiveDate::from_ymd_opt(year, month, day);
     match date {
         Some(d) => {
-            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap_or_else(|| unreachable!("1970-01-01 is always valid"));
+            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+                .unwrap_or_else(|| unreachable!("1970-01-01 is always valid"));
             let days = (d - epoch).num_days();
             days as f64 * 24.0 * 60.0 * 60.0 * 1000.0
         }

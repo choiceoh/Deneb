@@ -145,11 +145,10 @@ pub fn fold_marker_text_impl(input: &str) -> String {
 // Marker replacement
 // ---------------------------------------------------------------------------
 
-static MARKER_CHECK: Lazy<Regex> =
-    Lazy::new(|| {
-        Regex::new(r"(?i)external[\s_]+untrusted[\s_]+content")
-            .unwrap_or_else(|_| unreachable!("marker check regex is always valid"))
-    });
+static MARKER_CHECK: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)external[\s_]+untrusted[\s_]+content")
+        .unwrap_or_else(|_| unreachable!("marker check regex is always valid"))
+});
 
 static MARKER_START_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?i)<<<\s*EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>"#)

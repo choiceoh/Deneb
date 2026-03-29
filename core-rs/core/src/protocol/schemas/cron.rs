@@ -10,7 +10,9 @@ pub fn validate_cron_list_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "includeDisabled",
         "limit",
@@ -52,7 +54,9 @@ pub fn validate_cron_status_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &[], path, errors);
 }
 
@@ -64,7 +68,9 @@ pub fn validate_cron_add_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "name",
         "agentId",
@@ -133,7 +139,9 @@ fn validate_cron_schedule(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     match obj.get("kind").and_then(|v| v.as_str()) {
         Some("at") => {
             check_no_additional_properties(obj, &["kind", "at"], path, errors);
@@ -214,7 +222,9 @@ fn validate_cron_payload(value: &serde_json::Value, path: &str, errors: &mut Vec
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     match obj.get("kind").and_then(|v| v.as_str()) {
         Some("systemEvent") => {
             check_no_additional_properties(obj, &["kind", "text"], path, errors);
@@ -267,7 +277,9 @@ fn validate_cron_id_or_job_id(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let has_id = obj.contains_key("id");
     let has_job_id = obj.contains_key("jobId");
 
@@ -334,7 +346,9 @@ pub fn validate_cron_runs_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "scope",
         "id",

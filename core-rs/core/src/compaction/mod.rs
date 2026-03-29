@@ -418,9 +418,7 @@ pub fn select_leaf_chunk<'a>(
             None => continue,
         };
 
-        let msg_tokens = messages
-            .get(&msg_id)
-            .map_or(0, resolve_message_token_count);
+        let msg_tokens = messages.get(&msg_id).map_or(0, resolve_message_token_count);
 
         if !chunk.is_empty() && chunk_tokens + msg_tokens > limit {
             break;
@@ -451,9 +449,7 @@ pub fn count_raw_tokens_outside_fresh_tail(
             continue;
         }
         if let Some(msg_id) = item.message_id {
-            total += messages
-                .get(&msg_id)
-                .map_or(0, resolve_message_token_count);
+            total += messages.get(&msg_id).map_or(0, resolve_message_token_count);
         }
     }
     total
@@ -665,9 +661,7 @@ pub fn resolve_prior_summary_ids(
 ) -> Vec<String> {
     items
         .iter()
-        .filter(|item| {
-            item.ordinal < start_ordinal && item.item_type == ContextItemType::Summary
-        })
+        .filter(|item| item.ordinal < start_ordinal && item.item_type == ContextItemType::Summary)
         .filter_map(|item| item.summary_id.clone())
         .collect::<Vec<_>>()
         .into_iter()
@@ -690,9 +684,7 @@ pub fn resolve_prior_summary_ids_at_depth(
 ) -> Vec<String> {
     items
         .iter()
-        .filter(|item| {
-            item.ordinal < start_ordinal && item.item_type == ContextItemType::Summary
-        })
+        .filter(|item| item.ordinal < start_ordinal && item.item_type == ContextItemType::Summary)
         .filter(|item| {
             item.summary_id
                 .as_ref()

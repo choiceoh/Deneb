@@ -10,7 +10,9 @@ pub fn validate_node_pair_request_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "nodeId",
         "displayName",
@@ -63,7 +65,9 @@ fn validate_empty(value: &serde_json::Value, path: &str, errors: &mut Vec<Valida
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &[], path, errors);
 }
 
@@ -71,7 +75,9 @@ fn validate_request_id(value: &serde_json::Value, path: &str, errors: &mut Vec<V
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["requestId"], path, errors);
     if check_required(obj, "requestId", path, errors) {
         check_non_empty_string(&obj["requestId"], &format!("{path}/requestId"), errors);
@@ -110,7 +116,9 @@ pub fn validate_node_pair_verify_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["nodeId", "token"], path, errors);
     if check_required(obj, "nodeId", path, errors) {
         check_non_empty_string(&obj["nodeId"], &format!("{path}/nodeId"), errors);
@@ -128,7 +136,9 @@ pub fn validate_node_rename_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["nodeId", "displayName"], path, errors);
     if check_required(obj, "nodeId", path, errors) {
         check_non_empty_string(&obj["nodeId"], &format!("{path}/nodeId"), errors);
@@ -154,7 +164,9 @@ pub fn validate_node_pending_ack_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["ids"], path, errors);
     if check_required(obj, "ids", path, errors) {
         let ids_p = format!("{path}/ids");
@@ -177,7 +189,9 @@ pub fn validate_node_describe_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["nodeId"], path, errors);
     if check_required(obj, "nodeId", path, errors) {
         check_non_empty_string(&obj["nodeId"], &format!("{path}/nodeId"), errors);
@@ -192,7 +206,9 @@ pub fn validate_node_invoke_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &["nodeId", "command", "params", "timeoutMs", "idempotencyKey"];
     check_no_additional_properties(obj, allowed, path, errors);
     if check_required(obj, "nodeId", path, errors) {
@@ -222,7 +238,9 @@ pub fn validate_node_invoke_result_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &["id", "nodeId", "ok", "payload", "payloadJSON", "error"];
     check_no_additional_properties(obj, allowed, path, errors);
     if check_required(obj, "id", path, errors) {
@@ -240,7 +258,9 @@ pub fn validate_node_invoke_result_params(
     });
     check_optional(obj, "error", path, errors, |v, p, e| {
         if require_object(v, p, e) {
-            let Some(err_obj) = v.as_object() else { return; };
+            let Some(err_obj) = v.as_object() else {
+                return;
+            };
             check_no_additional_properties(err_obj, &["code", "message"], p, e);
             check_optional(err_obj, "code", p, e, |v2, p2, e2| {
                 check_non_empty_string(v2, p2, e2);
@@ -260,7 +280,9 @@ pub fn validate_node_event_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["event", "payload", "payloadJSON"], path, errors);
     if check_required(obj, "event", path, errors) {
         check_non_empty_string(&obj["event"], &format!("{path}/event"), errors);
@@ -279,7 +301,9 @@ pub fn validate_node_pending_drain_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["maxItems"], path, errors);
     check_optional(obj, "maxItems", path, errors, |v, p, e| {
         check_integer(v, p, Some(1), Some(10), e);
@@ -294,7 +318,9 @@ pub fn validate_node_pending_enqueue_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &["nodeId", "type", "priority", "expiresInMs", "wake"];
     check_no_additional_properties(obj, allowed, path, errors);
     if check_required(obj, "nodeId", path, errors) {

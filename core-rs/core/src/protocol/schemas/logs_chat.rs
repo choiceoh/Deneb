@@ -11,7 +11,9 @@ pub fn validate_logs_tail_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["cursor", "limit", "maxBytes"], path, errors);
     check_optional(obj, "cursor", path, errors, |v, p, e| {
         check_integer(v, p, Some(0), None, e);
@@ -32,7 +34,9 @@ pub fn validate_chat_history_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["sessionKey", "limit"], path, errors);
     if check_required(obj, "sessionKey", path, errors) {
         check_non_empty_string(&obj["sessionKey"], &format!("{path}/sessionKey"), errors);
@@ -50,7 +54,9 @@ pub fn validate_chat_send_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "sessionKey",
         "message",
@@ -88,7 +94,9 @@ pub fn validate_chat_send_params(
     // systemInputProvenance: InputProvenanceSchema — validated as object with known fields
     check_optional(obj, "systemInputProvenance", path, errors, |v, p, e| {
         if require_object(v, p, e) {
-            let Some(prov) = v.as_object() else { return; };
+            let Some(prov) = v.as_object() else {
+                return;
+            };
             let prov_allowed = &[
                 "kind",
                 "originSessionId",
@@ -127,7 +135,9 @@ pub fn validate_chat_abort_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["sessionKey", "runId"], path, errors);
     if check_required(obj, "sessionKey", path, errors) {
         check_non_empty_string(&obj["sessionKey"], &format!("{path}/sessionKey"), errors);
@@ -145,7 +155,9 @@ pub fn validate_chat_inject_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["sessionKey", "message", "label"], path, errors);
     if check_required(obj, "sessionKey", path, errors) {
         check_non_empty_string(&obj["sessionKey"], &format!("{path}/sessionKey"), errors);

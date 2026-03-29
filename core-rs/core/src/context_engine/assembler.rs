@@ -504,7 +504,9 @@ mod tests {
 
         match cmd {
             AssemblyCommand::Done { result } => {
-                let guidance = result.system_prompt_addition.expect("expected system_prompt_addition for deep compaction");
+                let guidance = result
+                    .system_prompt_addition
+                    .expect("expected system_prompt_addition for deep compaction");
                 // Deep compaction → full guidance with precision rules
                 assert!(guidance.contains("Precision Rules"));
                 assert!(guidance.contains("Uncertainty Checklist"));
@@ -537,7 +539,9 @@ mod tests {
 
         match cmd {
             AssemblyCommand::Done { result } => {
-                let guidance = result.system_prompt_addition.expect("expected system_prompt_addition for shallow compaction");
+                let guidance = result
+                    .system_prompt_addition
+                    .expect("expected system_prompt_addition for shallow compaction");
                 // Shallow → minimal guidance
                 assert!(guidance.contains("Context Recall (Aurora)"));
                 assert!(!guidance.contains("Precision Rules"));

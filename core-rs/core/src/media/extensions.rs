@@ -102,8 +102,7 @@ pub fn extension_for_mime(mime: &str) -> &'static str {
 
 /// Get the media category for a MIME type.
 pub fn category_for_mime(mime: &str) -> MediaCategory {
-    lookup_mime(mime)
-        .map_or(MediaCategory::Unknown, |(_, cat)| cat)
+    lookup_mime(mime).map_or(MediaCategory::Unknown, |(_, cat)| cat)
 }
 
 /// Look up MIME info from the mapping table in a single pass.

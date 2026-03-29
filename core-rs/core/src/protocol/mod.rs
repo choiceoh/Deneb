@@ -356,7 +356,13 @@ mod tests {
         };
         assert_eq!(frame.event, "health");
         assert_eq!(frame.seq, Some(42));
-        assert_eq!(frame.state_version.expect("state_version should be Some").presence, 1);
+        assert_eq!(
+            frame
+                .state_version
+                .expect("state_version should be Some")
+                .presence,
+            1
+        );
     }
 
     #[test]
