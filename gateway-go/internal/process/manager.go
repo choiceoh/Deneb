@@ -67,7 +67,7 @@ type TrackedProcess struct {
 	Request ExecRequest `json:"request"`
 
 	mu     sync.Mutex
-	Status RunStatus   `json:"status"`   // guarded by mu
+	Status RunStatus   `json:"status"`           // guarded by mu
 	Result *ExecResult `json:"result,omitempty"` // guarded by mu
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
@@ -88,25 +88,54 @@ type Manager struct {
 	// cachedBaseEnv is the sanitized parent environment, computed once and
 	// reused across sequential Execute calls to avoid repeated os.Environ()
 	// + SanitizeEnv overhead.
-	envOnce     sync.Once
+	envOnce       sync.Once
 	cachedBaseEnv []string
-}
 
-// bufPool reuses byte buffers for stdout/stderr capture to reduce GC pressure
-// during sequential exec calls.
-var bufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 0, 64*1024) // 64 KB initial cap
-		return &b
-	},
+	stopPrune chan struct{} // closed to stop auto-prune goroutine
 }
 
 // NewManager creates a new process manager.
+// It caches the sanitized parent environment and starts a background
+// goroutine that prunes completed processes every 5 minutes.
 func NewManager(logger *slog.Logger) *Manager {
-	return &Manager{
+	m := &Manager{
 		processes: make(map[string]*TrackedProcess),
 		logger:    logger,
 		maxStdout: 1024 * 1024, // 1 MB default
+		stopPrune: make(chan struct{}),
+	}
+	go m.autoPrune()
+	return m
+}
+
+// Stop terminates the background prune goroutine. Safe to call multiple times.
+func (m *Manager) Stop() {
+	select {
+	case <-m.stopPrune:
+		// already stopped
+	default:
+		close(m.stopPrune)
+	}
+}
+
+const (
+	pruneInterval = 5 * time.Minute
+	pruneMaxAge   = 10 * time.Minute
+)
+
+// autoPrune periodically removes completed processes older than pruneMaxAge.
+func (m *Manager) autoPrune() {
+	ticker := time.NewTicker(pruneInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-m.stopPrune:
+			return
+		case <-ticker.C:
+			if n := m.Prune(pruneMaxAge); n > 0 {
+				m.logger.Info("auto-pruned completed processes", "count", n)
+			}
+		}
 	}
 }
 
@@ -401,23 +430,14 @@ func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int6
 	return result
 }
 
-// drainBounded reads up to limit bytes into memory, then discards the rest
-// to prevent the subprocess from blocking on a full pipe. Uses a pooled
-// buffer for the discard phase to reduce allocations.
+// drainBounded reads up to limit bytes into a pre-allocated buffer, then
+// discards the rest to prevent the subprocess from blocking on a full pipe.
 func drainBounded(r io.Reader, limit int) []byte {
-	kept, _ := io.ReadAll(io.LimitReader(r, int64(limit)))
-	// Drain remaining bytes using a pooled buffer so the writer doesn't block.
-	bp := bufPool.Get().(*[]byte)
-	buf := *bp
-	for {
-		_, err := r.Read(buf[:cap(buf)])
-		if err != nil {
-			break
-		}
-	}
-	*bp = buf
-	bufPool.Put(bp)
-	return kept
+	buf := make([]byte, limit)
+	n, _ := io.ReadFull(r, buf)
+	// Drain any remaining bytes so the writer doesn't block.
+	io.Copy(io.Discard, r)
+	return buf[:n]
 }
 
 // Prune removes completed/failed processes older than the given duration.

@@ -224,6 +224,11 @@ func (s *Server) doShutdown() error {
 		s.vegaBackend.Close()
 	}
 
+	// 11b. Stop process manager background goroutine.
+	if s.processes != nil {
+		s.processes.Stop()
+	}
+
 	// 12. ACP cleanup: persist bindings and unsubscribe lifecycle sync.
 	if s.acpDeps != nil && s.acpDeps.BindingStore != nil && s.acpDeps.Bindings != nil {
 		if err := s.acpDeps.BindingStore.SyncFromService(s.acpDeps.Bindings); err != nil {
