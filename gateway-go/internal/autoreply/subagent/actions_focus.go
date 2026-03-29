@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 )
 
 // ---------------------------------------------------------------------------
