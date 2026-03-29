@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,6 +108,16 @@ func abbreviateSession(key string) string {
 	return key
 }
 
+// isMainSession reports whether key is a top-level direct session (e.g. "telegram:123").
+// Sub-sessions ("telegram:123:task:ts"), cron, and hook sessions return false.
+func isMainSession(key string) bool {
+	idx := strings.Index(key, ":")
+	if idx < 0 {
+		return false
+	}
+	return !strings.Contains(key[idx+1:], ":")
+}
+
 // runAgentAsync is the background goroutine that executes an agent run.
 // It persists the user message, assembles context, calls the LLM agent loop,
 // persists the result, and broadcasts completion events.
@@ -115,11 +126,16 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	logArgs := []any{"session", abbreviateSession(params.SessionKey)}
+	var logArgs []any
+	if !isMainSession(params.SessionKey) {
+		logArgs = append(logArgs, "session", abbreviateSession(params.SessionKey))
+	}
 	if params.ClientRunID != "" {
 		logArgs = append(logArgs, "runId", params.ClientRunID)
 	}
-	logger = logger.With(logArgs...)
+	if len(logArgs) > 0 {
+		logger = logger.With(logArgs...)
+	}
 
 	// Emit lifecycle start event for agent job tracker.
 	if deps.jobTracker != nil {

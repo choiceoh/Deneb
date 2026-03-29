@@ -63,11 +63,11 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		defer h.cleanupAbort(params.ClientRunID)
 		defer func() {
 			if r := recover(); r != nil {
-				h.logger.Error("panic in agent run",
-					"session", abbreviateSession(params.SessionKey),
-					"runId", params.ClientRunID,
-					"panic", r,
-				)
+				panicArgs := []any{"panic", r, "runId", params.ClientRunID}
+				if !isMainSession(params.SessionKey) {
+					panicArgs = append(panicArgs, "session", abbreviateSession(params.SessionKey))
+				}
+				h.logger.Error("panic in agent run", panicArgs...)
 				// Ensure session transitions out of running state.
 				h.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
 					Phase: session.PhaseError,
