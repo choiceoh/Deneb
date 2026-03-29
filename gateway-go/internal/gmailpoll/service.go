@@ -15,8 +15,9 @@ const (
 	defaultIntervalMin = 30
 	defaultQuery       = "is:unread newer_than:1h"
 	defaultMaxPerCycle = 5
-	defaultModel       = "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+	defaultModel       = "" // resolved from main config via initGmailPoll
 	defaultPromptFile  = "~/.deneb/gmail-analysis-prompt.md"
+	searchMaxRetries   = 2
 )
 
 // Notifier delivers messages to the user (e.g., via Telegram).
@@ -36,8 +37,9 @@ type Config struct {
 	LLMAPIKey   string // optional API key for LLM endpoint
 }
 
-// Service periodically polls Gmail for new emails, analyzes them via LLM,
-// and sends reports through the configured notifier.
+// Service implements autonomous.PeriodicTask for Gmail polling.
+// It fetches new unread emails, analyzes them via LLM, and sends reports
+// through the configured notifier.
 type Service struct {
 	mu  sync.Mutex
 	cfg Config
@@ -47,13 +49,10 @@ type Service struct {
 	llmClient   *llm.Client
 	notifier    Notifier
 	state       *stateStore
-
-	running   bool
-	svcCtx    context.Context
-	svcCancel context.CancelFunc
 }
 
-// NewService creates a gmail poll service. Call Start() to begin polling.
+// NewService creates a gmail poll service.
+// Register it with autonomous.Service via RegisterTask() to start polling.
 func NewService(cfg Config, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
@@ -93,67 +92,59 @@ func (s *Service) SetNotifier(n Notifier) {
 	s.notifier = n
 }
 
-// Start begins the polling loop. Blocks until ctx is cancelled.
-func (s *Service) Start(ctx context.Context) {
-	s.mu.Lock()
-	if s.running {
-		s.mu.Unlock()
-		return
-	}
-	s.svcCtx, s.svcCancel = context.WithCancel(ctx)
-	s.running = true
-	s.mu.Unlock()
+// --- autonomous.PeriodicTask interface ---
 
-	// Initialize Gmail client.
-	client, err := gmail.GetClient()
-	if err != nil {
-		s.log.Error("Gmail 클라이언트 초기화 실패 — gmailpoll 비활성화", "error", err)
-		return
-	}
-	s.gmailClient = client
+// Name returns the task identifier.
+func (s *Service) Name() string { return "gmailpoll" }
 
-	s.log.Info("gmailpoll 서비스 시작",
-		"interval", fmt.Sprintf("%d분", s.cfg.IntervalMin),
-		"query", s.cfg.Query,
-		"model", s.cfg.Model)
-
-	interval := time.Duration(s.cfg.IntervalMin) * time.Minute
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	// Run initial poll after a short grace period.
-	initialTimer := time.NewTimer(30 * time.Second)
-	defer initialTimer.Stop()
-
-	for {
-		select {
-		case <-s.svcCtx.Done():
-			s.log.Info("gmailpoll 서비스 종료")
-			return
-		case <-initialTimer.C:
-			s.poll()
-		case <-ticker.C:
-			s.poll()
-		}
-	}
+// Interval returns the polling interval.
+func (s *Service) Interval() time.Duration {
+	return time.Duration(s.cfg.IntervalMin) * time.Minute
 }
 
-// Stop gracefully shuts down the service.
-func (s *Service) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.svcCancel != nil {
-		s.svcCancel()
+// isBusinessHours checks if the current time in KST is within weekday business hours (9:00~19:00).
+func isBusinessHours() bool {
+	kst := time.FixedZone("KST", 9*60*60)
+	now := time.Now().In(kst)
+
+	weekday := now.Weekday()
+	if weekday == time.Saturday || weekday == time.Sunday {
+		return false
 	}
-	s.running = false
+
+	hour := now.Hour()
+	return hour >= 9 && hour < 19
+}
+
+// Run executes a single polling cycle. Called by the autonomous service.
+// Skips polling outside weekday business hours (KST 09:00~19:00).
+func (s *Service) Run(ctx context.Context) error {
+	if !isBusinessHours() {
+		s.log.Debug("업무 시간 외 — 폴링 건너뜀")
+		return nil
+	}
+	// Lazy-init Gmail client (retries on each call if previous init failed).
+	s.mu.Lock()
+	client := s.gmailClient
+	s.mu.Unlock()
+
+	if client == nil {
+		c, err := gmail.GetClient()
+		if err != nil {
+			return fmt.Errorf("Gmail 클라이언트 초기화 실패: %w", err)
+		}
+		s.mu.Lock()
+		s.gmailClient = c
+		s.mu.Unlock()
+		client = c
+	}
+
+	return s.poll(ctx, client)
 }
 
 // poll executes a single polling cycle: fetch new emails, analyze, and report.
-func (s *Service) poll() {
+func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	s.log.Debug("Gmail 폴링 시작")
-
-	ctx, cancel := context.WithTimeout(s.svcCtx, 5*time.Minute)
-	defer cancel()
 
 	// Load persisted state.
 	pollState, err := s.state.Load()
@@ -162,11 +153,28 @@ func (s *Service) poll() {
 		pollState = &PollState{}
 	}
 
-	// Search for emails.
-	messages, err := s.gmailClient.Search(s.cfg.Query, s.cfg.MaxPerCycle+10)
+	// Search for emails with retry on transient failures.
+	var messages []gmail.MessageSummary
+	for attempt := 0; attempt <= searchMaxRetries; attempt++ {
+		messages, err = client.Search(ctx, s.cfg.Query, s.cfg.MaxPerCycle+10)
+		if err == nil {
+			break
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if attempt < searchMaxRetries {
+			delay := time.Duration(1<<uint(attempt+1)) * time.Second // 2s, 4s
+			s.log.Warn("Gmail 검색 실패, 재시도", "error", err, "attempt", attempt+1, "delay", delay)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+	}
 	if err != nil {
-		s.log.Warn("Gmail 검색 실패", "error", err)
-		return
+		return fmt.Errorf("Gmail 검색 실패 (%d회 시도): %w", searchMaxRetries+1, err)
 	}
 
 	// Filter out already-seen messages.
@@ -181,7 +189,7 @@ func (s *Service) poll() {
 		s.log.Debug("새 메일 없음")
 		pollState.LastPollAt = time.Now().UnixMilli()
 		s.state.Save(pollState)
-		return
+		return nil
 	}
 
 	// Cap to MaxPerCycle.
@@ -196,15 +204,16 @@ func (s *Service) poll() {
 
 	for _, summary := range newMessages {
 		// Fetch full message.
-		detail, err := s.gmailClient.GetMessage(summary.ID)
+		detail, err := client.GetMessage(ctx, summary.ID)
 		if err != nil {
 			s.log.Warn("메일 본문 조회 실패", "id", summary.ID, "error", err)
 			pollState.markSeen(summary.ID)
+			s.saveState(pollState)
 			continue
 		}
 
 		// Analyze via LLM.
-		analysis, err := analyzeEmail(ctx, s.llmClient, s.cfg.Model, prompt, detail)
+		analysis, err := AnalyzeEmail(ctx, s.llmClient, s.cfg.Model, prompt, detail)
 		if err != nil {
 			s.log.Warn("메일 분석 실패", "id", summary.ID, "error", err)
 			// Still report the email without analysis.
@@ -215,11 +224,18 @@ func (s *Service) poll() {
 		report := formatReport(detail, analysis)
 		s.sendNotification(ctx, report)
 
+		// Save state after each email to prevent re-notification on crash.
 		pollState.markSeen(summary.ID)
+		s.saveState(pollState)
 	}
 
 	pollState.LastPollAt = time.Now().UnixMilli()
-	if err := s.state.Save(pollState); err != nil {
+	s.saveState(pollState)
+	return nil
+}
+
+func (s *Service) saveState(state *PollState) {
+	if err := s.state.Save(state); err != nil {
 		s.log.Error("폴링 상태 저장 실패", "error", err)
 	}
 }

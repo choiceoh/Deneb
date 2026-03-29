@@ -35,6 +35,7 @@ func (s *Server) initGmailPoll() {
 	cfg := gmailpoll.Config{
 		StateDir:   stateDir,
 		LLMBaseURL: "http://127.0.0.1:30000/v1",
+		Model:      resolveDefaultModel(s.logger), // use main model by default
 	}
 	if pollCfg.IntervalMin != nil {
 		cfg.IntervalMin = *pollCfg.IntervalMin
@@ -46,7 +47,7 @@ func (s *Server) initGmailPoll() {
 		cfg.MaxPerCycle = *pollCfg.MaxPerCycle
 	}
 	if pollCfg.Model != "" {
-		cfg.Model = pollCfg.Model
+		cfg.Model = pollCfg.Model // explicit override from config
 	}
 	if pollCfg.PromptFile != "" {
 		cfg.PromptFile = pollCfg.PromptFile
@@ -66,7 +67,15 @@ func (s *Server) initGmailPoll() {
 		}
 	}
 
-	s.logger.Info("gmailpoll service initialized")
+	// Register as a periodic task within the autonomous service.
+	// The autonomous service handles lifecycle, panic recovery, and scheduling.
+	if s.autonomousSvc != nil {
+		s.autonomousSvc.RegisterTask(s.gmailPollSvc)
+		s.logger.Info("gmailpoll registered with autonomous service",
+			"interval", fmt.Sprintf("%dm", cfg.IntervalMin))
+	} else {
+		s.logger.Warn("gmailpoll: autonomous service not available, polling disabled")
+	}
 }
 
 // registerNativeSystemMethods registers native Go system RPC methods:

@@ -1,6 +1,7 @@
 package gmailpoll
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,6 +21,9 @@ func TestStateStore_LoadEmpty(t *testing.T) {
 	if len(state.SeenIDs) != 0 {
 		t.Errorf("SeenIDs = %v, want empty", state.SeenIDs)
 	}
+	if state.seenSet == nil {
+		t.Error("seenSet should be initialized on Load")
+	}
 }
 
 func TestStateStore_SaveAndLoad(t *testing.T) {
@@ -29,6 +33,10 @@ func TestStateStore_SaveAndLoad(t *testing.T) {
 	state := &PollState{
 		LastPollAt: 1234567890,
 		SeenIDs:    []string{"msg1", "msg2", "msg3"},
+		seenSet:    make(map[string]struct{}),
+	}
+	for _, id := range state.SeenIDs {
+		state.seenSet[id] = struct{}{}
 	}
 
 	if err := store.Save(state); err != nil {
@@ -45,6 +53,10 @@ func TestStateStore_SaveAndLoad(t *testing.T) {
 	if len(loaded.SeenIDs) != 3 {
 		t.Errorf("SeenIDs len = %d, want 3", len(loaded.SeenIDs))
 	}
+	// Verify seenSet is rebuilt on load.
+	if !loaded.hasSeen("msg2") {
+		t.Error("seenSet should contain msg2 after load")
+	}
 }
 
 func TestStateStore_TrimSeenIDs(t *testing.T) {
@@ -54,9 +66,15 @@ func TestStateStore_TrimSeenIDs(t *testing.T) {
 	// Create state with more than maxSeenIDs entries.
 	ids := make([]string, maxSeenIDs+50)
 	for i := range ids {
-		ids[i] = "msg" + string(rune('0'+i%10))
+		ids[i] = fmt.Sprintf("msg-%d", i)
 	}
-	state := &PollState{SeenIDs: ids}
+	state := &PollState{
+		SeenIDs: ids,
+		seenSet: make(map[string]struct{}),
+	}
+	for _, id := range ids {
+		state.seenSet[id] = struct{}{}
+	}
 
 	if err := store.Save(state); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -69,13 +87,25 @@ func TestStateStore_TrimSeenIDs(t *testing.T) {
 	if len(loaded.SeenIDs) != maxSeenIDs {
 		t.Errorf("SeenIDs len = %d, want %d", len(loaded.SeenIDs), maxSeenIDs)
 	}
+	// The earliest entries should have been trimmed.
+	if loaded.hasSeen("msg-0") {
+		t.Error("msg-0 should have been trimmed")
+	}
+	// Latest entry should still exist.
+	if !loaded.hasSeen(fmt.Sprintf("msg-%d", maxSeenIDs+49)) {
+		t.Error("latest msg should still be present")
+	}
 }
 
 func TestStateStore_AtomicWrite(t *testing.T) {
 	dir := t.TempDir()
 	store := newStateStore(dir)
 
-	state := &PollState{LastPollAt: 42, SeenIDs: []string{"a"}}
+	state := &PollState{
+		LastPollAt: 42,
+		SeenIDs:    []string{"a"},
+		seenSet:    map[string]struct{}{"a": {}},
+	}
 	if err := store.Save(state); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -93,14 +123,25 @@ func TestStateStore_AtomicWrite(t *testing.T) {
 	}
 }
 
-func TestPollState_HasSeen(t *testing.T) {
-	state := &PollState{SeenIDs: []string{"a", "b", "c"}}
+func TestPollState_HasSeen_MapLookup(t *testing.T) {
+	state := &PollState{
+		SeenIDs: []string{"a", "b", "c"},
+		seenSet: map[string]struct{}{"a": {}, "b": {}, "c": {}},
+	}
 
 	if !state.hasSeen("b") {
 		t.Error("hasSeen(b) = false, want true")
 	}
 	if state.hasSeen("d") {
 		t.Error("hasSeen(d) = true, want false")
+	}
+}
+
+func TestPollState_HasSeen_NilSet(t *testing.T) {
+	state := &PollState{SeenIDs: []string{"a"}}
+	// Should not panic with nil seenSet.
+	if state.hasSeen("a") {
+		t.Error("hasSeen should return false when seenSet is nil")
 	}
 }
 

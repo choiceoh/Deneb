@@ -11,14 +11,14 @@ import (
 
 func TestLoadPrompt_Default(t *testing.T) {
 	prompt := loadPrompt("")
-	if prompt != defaultPrompt {
+	if prompt != DefaultPrompt {
 		t.Errorf("empty path should return default prompt")
 	}
 }
 
 func TestLoadPrompt_MissingFile(t *testing.T) {
 	prompt := loadPrompt("/nonexistent/path/prompt.md")
-	if prompt != defaultPrompt {
+	if prompt != DefaultPrompt {
 		t.Errorf("missing file should return default prompt")
 	}
 }
@@ -45,7 +45,7 @@ func TestLoadPrompt_EmptyFile(t *testing.T) {
 	}
 
 	prompt := loadPrompt(path)
-	if prompt != defaultPrompt {
+	if prompt != DefaultPrompt {
 		t.Errorf("empty file should return default prompt")
 	}
 }
@@ -59,7 +59,7 @@ func TestFormatEmailForAnalysis(t *testing.T) {
 		Body:    "Hello, this is the email body.",
 	}
 
-	result := formatEmailForAnalysis(msg)
+	result := FormatEmailForAnalysis(msg)
 
 	if !strings.Contains(result, "sender@example.com") {
 		t.Error("should contain From address")
@@ -81,7 +81,7 @@ func TestFormatEmailForAnalysis_LongBody(t *testing.T) {
 		Body:    longBody,
 	}
 
-	result := formatEmailForAnalysis(msg)
+	result := FormatEmailForAnalysis(msg)
 	if !strings.Contains(result, "본문 생략") {
 		t.Error("long body should be truncated with notice")
 	}
@@ -91,7 +91,7 @@ func TestFormatEmailForAnalysis_LongBody(t *testing.T) {
 	}
 }
 
-func TestFormatReport(t *testing.T) {
+func TestFormatReport_HTML(t *testing.T) {
 	msg := &gmail.MessageDetail{
 		From:    "sender@test.com",
 		Subject: "Important Email",
@@ -103,6 +103,9 @@ func TestFormatReport(t *testing.T) {
 	if !strings.Contains(report, "📬") {
 		t.Error("report should contain emoji header")
 	}
+	if !strings.Contains(report, "<b>") {
+		t.Error("report should use HTML bold tags")
+	}
 	if !strings.Contains(report, "sender@test.com") {
 		t.Error("report should contain sender")
 	}
@@ -111,5 +114,22 @@ func TestFormatReport(t *testing.T) {
 	}
 	if !strings.Contains(report, analysis) {
 		t.Error("report should contain analysis")
+	}
+}
+
+func TestFormatReport_EscapesHTML(t *testing.T) {
+	msg := &gmail.MessageDetail{
+		From:    "test <user@test.com>",
+		Subject: "Subject with <tag>",
+	}
+	analysis := "Analysis with <script>alert('xss')</script>"
+
+	report := formatReport(msg, analysis)
+
+	if strings.Contains(report, "<script>") {
+		t.Error("report should escape HTML entities in content")
+	}
+	if !strings.Contains(report, "&lt;script&gt;") {
+		t.Error("report should contain escaped HTML")
 	}
 }

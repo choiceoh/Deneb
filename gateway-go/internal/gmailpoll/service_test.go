@@ -2,6 +2,7 @@ package gmailpoll
 
 import (
 	"testing"
+	"time"
 )
 
 func TestNewService_Defaults(t *testing.T) {
@@ -47,8 +48,20 @@ func TestNewService_CustomConfig(t *testing.T) {
 	}
 }
 
-func TestService_StopWithoutStart(t *testing.T) {
+func TestService_PeriodicTaskInterface(t *testing.T) {
+	svc := NewService(Config{IntervalMin: 15, StateDir: t.TempDir()}, nil)
+
+	if svc.Name() != "gmailpoll" {
+		t.Errorf("Name() = %q, want gmailpoll", svc.Name())
+	}
+	if svc.Interval() != 15*time.Minute {
+		t.Errorf("Interval() = %v, want 15m", svc.Interval())
+	}
+}
+
+func TestService_DefaultInterval(t *testing.T) {
 	svc := NewService(Config{StateDir: t.TempDir()}, nil)
-	// Should not panic.
-	svc.Stop()
+	if svc.Interval() != 30*time.Minute {
+		t.Errorf("Interval() = %v, want 30m", svc.Interval())
+	}
 }

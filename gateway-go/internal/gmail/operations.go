@@ -1,6 +1,7 @@
 package gmail
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/url"
@@ -55,7 +56,7 @@ type apiLabel struct {
 }
 
 // Search lists messages matching a Gmail query.
-func (c *Client) Search(query string, maxResults int) ([]MessageSummary, error) {
+func (c *Client) Search(ctx context.Context, query string, maxResults int) ([]MessageSummary, error) {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
@@ -67,7 +68,7 @@ func (c *Client) Search(query string, maxResults int) ([]MessageSummary, error) 
 	path := "/messages?" + params.Encode()
 
 	var list apiMessageList
-	if err := c.readJSON(path, &list); err != nil {
+	if err := c.readJSON(ctx, path, &list); err != nil {
 		return nil, err
 	}
 
@@ -89,7 +90,7 @@ func (c *Client) Search(query string, maxResults int) ([]MessageSummary, error) 
 		wg.Add(1)
 		go func(idx int, id, threadID string) {
 			defer wg.Done()
-			summary, err := c.fetchMessageMetadata(id, threadID)
+			summary, err := c.fetchMessageMetadata(ctx, id, threadID)
 			ch <- indexedResult{idx, summary, err}
 		}(i, m.ID, m.ThreadID)
 	}
@@ -109,11 +110,11 @@ func (c *Client) Search(query string, maxResults int) ([]MessageSummary, error) 
 }
 
 // fetchMessageMetadata fetches a single message with metadata format.
-func (c *Client) fetchMessageMetadata(id, threadID string) (MessageSummary, error) {
+func (c *Client) fetchMessageMetadata(ctx context.Context, id, threadID string) (MessageSummary, error) {
 	path := "/messages/" + id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date"
 
 	var msg apiMessage
-	if err := c.readJSON(path, &msg); err != nil {
+	if err := c.readJSON(ctx, path, &msg); err != nil {
 		return MessageSummary{}, err
 	}
 
@@ -139,11 +140,11 @@ func (c *Client) fetchMessageMetadata(id, threadID string) (MessageSummary, erro
 }
 
 // GetMessage fetches the full content of a message.
-func (c *Client) GetMessage(messageID string) (*MessageDetail, error) {
+func (c *Client) GetMessage(ctx context.Context, messageID string) (*MessageDetail, error) {
 	path := "/messages/" + messageID + "?format=full"
 
 	var msg apiMessage
-	if err := c.readJSON(path, &msg); err != nil {
+	if err := c.readJSON(ctx, path, &msg); err != nil {
 		return nil, err
 	}
 
@@ -218,15 +219,15 @@ func decodeBase64URL(s string) string {
 }
 
 // Send composes and sends an email. Returns the sent message ID.
-func (c *Client) Send(to, cc, bcc, subject, body string, html bool) (string, error) {
+func (c *Client) Send(ctx context.Context, to, cc, bcc, subject, body string, html bool) (string, error) {
 	raw := buildMIME(to, cc, bcc, subject, "", body, html)
-	return c.sendRaw(raw, "")
+	return c.sendRaw(ctx, raw, "")
 }
 
 // Reply sends a reply to an existing message. Returns the sent message ID.
-func (c *Client) Reply(messageID, to, body string, html bool) (string, error) {
+func (c *Client) Reply(ctx context.Context, messageID, to, body string, html bool) (string, error) {
 	// Fetch original to get threadId, Message-ID, Subject.
-	orig, err := c.getMessageHeaders(messageID)
+	orig, err := c.getMessageHeaders(ctx, messageID)
 	if err != nil {
 		return "", fmt.Errorf("원본 메시지 조회 실패: %w", err)
 	}
@@ -242,7 +243,7 @@ func (c *Client) Reply(messageID, to, body string, html bool) (string, error) {
 	}
 
 	raw := buildMIME(to, "", "", replySubject, orig.messageIDHeader, body, html)
-	return c.sendRaw(raw, orig.threadID)
+	return c.sendRaw(ctx, raw, orig.threadID)
 }
 
 type origHeaders struct {
@@ -252,11 +253,11 @@ type origHeaders struct {
 	messageIDHeader string // the Message-ID header value
 }
 
-func (c *Client) getMessageHeaders(id string) (*origHeaders, error) {
+func (c *Client) getMessageHeaders(ctx context.Context, id string) (*origHeaders, error) {
 	path := "/messages/" + id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Message-ID"
 
 	var msg apiMessage
-	if err := c.readJSON(path, &msg); err != nil {
+	if err := c.readJSON(ctx, path, &msg); err != nil {
 		return nil, err
 	}
 
@@ -304,7 +305,7 @@ func buildMIME(to, cc, bcc, subject, inReplyTo, body string, html bool) string {
 }
 
 // sendRaw sends a pre-built RFC 2822 message.
-func (c *Client) sendRaw(rawMessage, threadID string) (string, error) {
+func (c *Client) sendRaw(ctx context.Context, rawMessage, threadID string) (string, error) {
 	encoded := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString([]byte(rawMessage))
 
 	payload := map[string]string{"raw": encoded}
@@ -315,16 +316,16 @@ func (c *Client) sendRaw(rawMessage, threadID string) (string, error) {
 	var result struct {
 		ID string `json:"id"`
 	}
-	if err := c.postJSON("/messages/send", payload, &result); err != nil {
+	if err := c.postJSON(ctx, "/messages/send", payload, &result); err != nil {
 		return "", err
 	}
 	return result.ID, nil
 }
 
 // ListLabels returns all labels for the user.
-func (c *Client) ListLabels() ([]LabelInfo, error) {
+func (c *Client) ListLabels(ctx context.Context) ([]LabelInfo, error) {
 	var list apiLabelList
-	if err := c.readJSON("/labels", &list); err != nil {
+	if err := c.readJSON(ctx, "/labels", &list); err != nil {
 		return nil, err
 	}
 
@@ -341,12 +342,12 @@ func (c *Client) ListLabels() ([]LabelInfo, error) {
 
 // ModifyLabels adds and/or removes labels on a message.
 // Label names are resolved to IDs automatically.
-func (c *Client) ModifyLabels(messageID string, addNames, removeNames []string) error {
-	addIDs, err := c.resolveLabels(addNames)
+func (c *Client) ModifyLabels(ctx context.Context, messageID string, addNames, removeNames []string) error {
+	addIDs, err := c.resolveLabels(ctx, addNames)
 	if err != nil {
 		return err
 	}
-	removeIDs, err := c.resolveLabels(removeNames)
+	removeIDs, err := c.resolveLabels(ctx, removeNames)
 	if err != nil {
 		return err
 	}
@@ -359,16 +360,16 @@ func (c *Client) ModifyLabels(messageID string, addNames, removeNames []string) 
 		payload["removeLabelIds"] = removeIDs
 	}
 
-	return c.postJSON("/messages/"+messageID+"/modify", payload, nil)
+	return c.postJSON(ctx, "/messages/"+messageID+"/modify", payload, nil)
 }
 
 // resolveLabels maps label names to their IDs.
-func (c *Client) resolveLabels(names []string) ([]string, error) {
+func (c *Client) resolveLabels(ctx context.Context, names []string) ([]string, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
 
-	labels, err := c.ListLabels()
+	labels, err := c.ListLabels(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -440,4 +441,3 @@ func FormatLabels(labels []LabelInfo) string {
 	}
 	return sb.String()
 }
-

@@ -1,6 +1,7 @@
 package gmail
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -53,17 +54,26 @@ type Client struct {
 }
 
 var (
+	globalMu     sync.Mutex
 	globalClient *Client
-	clientOnce   sync.Once
-	clientErr    error
 )
 
 // GetClient returns the singleton Gmail client, initializing on first call.
+// Unlike sync.Once, a failed initialization can be retried on the next call.
 func GetClient() (*Client, error) {
-	clientOnce.Do(func() {
-		globalClient, clientErr = newClient()
-	})
-	return globalClient, clientErr
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	if globalClient != nil {
+		return globalClient, nil
+	}
+
+	c, err := newClient()
+	if err != nil {
+		return nil, err
+	}
+	globalClient = c
+	return globalClient, nil
 }
 
 func credentialsDir() string {
@@ -177,7 +187,7 @@ func (c *Client) refresh() (string, error) {
 	return c.accessToken, nil
 }
 
-// persistToken writes the current token state to disk.
+// persistToken writes the current token state to disk atomically.
 func (c *Client) persistToken() {
 	tok := tokenJSON{
 		AccessToken:  c.accessToken,
@@ -189,18 +199,23 @@ func (c *Client) persistToken() {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(c.tokenPath, data, 0600)
+	// Atomic write via temp file + rename to prevent corruption on crash.
+	tmp := c.tokenPath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, c.tokenPath)
 }
 
 // doAPI performs an authenticated HTTP request to the Gmail API.
-func (c *Client) doAPI(method, path string, body io.Reader) (*http.Response, error) {
+func (c *Client) doAPI(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
 	token, err := c.validToken()
 	if err != nil {
 		return nil, err
 	}
 
 	reqURL := apiBase + path
-	req, err := http.NewRequest(method, reqURL, body)
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
 	if err != nil {
 		return nil, err
 	}
@@ -213,8 +228,8 @@ func (c *Client) doAPI(method, path string, body io.Reader) (*http.Response, err
 }
 
 // readJSON performs a GET request and decodes the JSON response into dest.
-func (c *Client) readJSON(path string, dest any) error {
-	resp, err := c.doAPI("GET", path, nil)
+func (c *Client) readJSON(ctx context.Context, path string, dest any) error {
+	resp, err := c.doAPI(ctx, "GET", path, nil)
 	if err != nil {
 		return err
 	}
@@ -228,13 +243,13 @@ func (c *Client) readJSON(path string, dest any) error {
 }
 
 // postJSON performs a POST request with a JSON body and decodes the response.
-func (c *Client) postJSON(path string, payload any, dest any) error {
+func (c *Client) postJSON(ctx context.Context, path string, payload any, dest any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	resp, err := c.doAPI("POST", path, strings.NewReader(string(data)))
+	resp, err := c.doAPI(ctx, "POST", path, strings.NewReader(string(data)))
 	if err != nil {
 		return err
 	}

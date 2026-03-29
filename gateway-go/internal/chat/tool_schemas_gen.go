@@ -1046,7 +1046,7 @@ func gmailToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "Gmail action to perform",
-				"enum":        []string{"inbox", "search", "read", "send", "reply", "label"},
+				"enum":        []string{"inbox", "search", "read", "send", "reply", "label", "analyze"},
 			},
 			"query": map[string]any{
 				"type":        "string",

@@ -33,6 +33,7 @@ type CoreToolDeps struct {
 	Chrono       ChronoDeps
 	Vega         VegaDeps
 	LLMClient    *llm.Client
+	DefaultModel string
 	AgentLog     *agentlog.Writer
 }
 
@@ -46,7 +47,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	RegisterChronoTools(registry, &deps.Chrono)
 	RegisterVegaTools(registry, &deps.Vega)
 	RegisterMediaTools(registry, deps.LLMClient)
-	RegisterDataTools(registry)
+	RegisterDataTools(registry, deps.LLMClient, deps.DefaultModel)
 	RegisterHiddenTools(registry, deps.AgentLog)
 	// Morning letter: needs registry for web search calls.
 	registry.RegisterTool(ToolDef{
@@ -289,8 +290,8 @@ func RegisterMediaTools(registry *ToolRegistry, llmClient *llm.Client) {
 	})
 }
 
-// RegisterDataTools registers persistent storage tools (no external deps required).
-func RegisterDataTools(registry *ToolRegistry) {
+// RegisterDataTools registers persistent storage tools.
+func RegisterDataTools(registry *ToolRegistry, llmClient *llm.Client, defaultModel string) {
 	registry.RegisterTool(ToolDef{
 		Name:        "kv",
 		Description: "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
@@ -299,9 +300,9 @@ func RegisterDataTools(registry *ToolRegistry) {
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "gmail",
-		Description: "Gmail (native OAuth2): inbox summary, search, read, send, reply, labels with contact aliases. Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
+		Description: "Gmail (native OAuth2): inbox, search, read, send, reply, labels, analyze (LLM 이메일 분석). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
-		Fn:          toolGmail(),
+		Fn:          toolGmail(llmClient, defaultModel),
 	})
 }
 
