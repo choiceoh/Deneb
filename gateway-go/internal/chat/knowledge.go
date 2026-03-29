@@ -45,6 +45,11 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	if utf8.RuneCountInString(message) < minPrefetchRunes {
 		return ""
 	}
+	// Early return when no knowledge sources are configured (common for Telegram
+	// chat profiles without Vega or memory). Avoids WaitGroup + goroutine overhead.
+	if deps.VegaBackend == nil && deps.MemoryStore == nil && deps.WorkspaceDir == "" {
+		return ""
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, knowledgeTimeout)
 	defer cancel()

@@ -16,7 +16,7 @@ var exitCodeRe = regexp.MustCompile(`Exit code: (\d+)`)
 type PostProcessor func(ctx context.Context, toolName string, output string) string
 
 // PostProcessRegistry holds per-tool and global post-processors.
-// Global processors run first, then tool-specific ones.
+// Per-tool processors run first, then global ones.
 type PostProcessRegistry struct {
 	perTool map[string][]PostProcessor
 	global  []PostProcessor
@@ -40,14 +40,15 @@ func (r *PostProcessRegistry) Add(toolName string, p PostProcessor) {
 }
 
 // Apply runs all applicable post-processors on the output.
+// Per-tool processors run first (e.g., summarizers before trimming), then global ones.
 func (r *PostProcessRegistry) Apply(ctx context.Context, toolName string, output string) string {
-	for _, p := range r.global {
-		output = p(ctx, toolName, output)
-	}
 	if processors, ok := r.perTool[toolName]; ok {
 		for _, p := range processors {
 			output = p(ctx, toolName, output)
 		}
+	}
+	for _, p := range r.global {
+		output = p(ctx, toolName, output)
 	}
 	return output
 }
@@ -180,18 +181,22 @@ func ExecAnnotator(_ context.Context, toolName string, output string) string {
 }
 
 // RegisterDefaultPostProcessors sets up the standard post-processing pipeline.
-// Execution order: global processors run first (in registration order), then
-// per-tool processors.
+// Execution order: per-tool processors run first, then global ones.
+// This ensures tool-specific summarizers (grep, find) reduce output BEFORE
+// OutputTrimmer applies the 64K cap — summarizing 10K lines to 200 is far
+// cheaper than trimming 100K to 64K first and then summarizing.
 func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	pp := NewPostProcessRegistry()
 
-	// Global processors (run on all tools, in registration order).
-	// 1. Generic trimmer: caps any large output at 64K chars.
+	// Global processors (run on all tools after per-tool processors).
+	// 1. Generic trimmer: caps any remaining large output at 64K chars.
 	pp.AddGlobal(OutputTrimmer)
 	// 2. Error enrichment: adds actionable hints to error patterns.
 	pp.AddGlobal(ErrorEnricher)
 
-	// Tool-specific processors (run after global, scoped to their tool only).
+	// Tool-specific processors (run before global processors).
+	// Summarizers are per-tool so they only run for their respective tools,
+	// avoiding unnecessary function calls across all 34+ tools every turn.
 	pp.Add("exec", ExecAnnotator)
 	pp.Add("grep", GrepResultSummarizer)
 	pp.Add("find", FindResultSummarizer)
