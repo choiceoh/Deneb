@@ -9,4 +9,6 @@ pub mod fences;
 pub mod parser;
 pub mod render;
 pub mod spans;
+mod render_state;
+mod spoilers;
 mod tables;

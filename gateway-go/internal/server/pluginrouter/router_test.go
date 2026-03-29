@@ -1,4 +1,4 @@
-package server
+package pluginrouter
 
 import (
 	"log/slog"
@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-func TestPluginHTTPRouter_RegisterAndMatch(t *testing.T) {
-	router := NewPluginHTTPRouter(slog.Default(), nil)
+func TestRouter_RegisterAndMatch(t *testing.T) {
+	router := New(slog.Default(), nil)
 
 	var called bool
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:   "test-plugin",
 		PathPrefix: "/plugins/test-plugin/",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,10 +36,10 @@ func TestPluginHTTPRouter_RegisterAndMatch(t *testing.T) {
 	}
 }
 
-func TestPluginHTTPRouter_UnmatchedPath(t *testing.T) {
-	router := NewPluginHTTPRouter(slog.Default(), nil)
+func TestRouter_UnmatchedPath(t *testing.T) {
+	router := New(slog.Default(), nil)
 
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:   "test-plugin",
 		PathPrefix: "/plugins/test-plugin/",
 		Handler:    http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
@@ -54,16 +54,16 @@ func TestPluginHTTPRouter_UnmatchedPath(t *testing.T) {
 	}
 }
 
-func TestPluginHTTPRouter_AuthEnforcement(t *testing.T) {
+func TestRouter_AuthEnforcement(t *testing.T) {
 	// Auth check that accepts tokens starting with "valid-".
 	authCheck := func(r *http.Request) bool {
 		auth := r.Header.Get("Authorization")
 		return auth == "Bearer valid-token"
 	}
-	router := NewPluginHTTPRouter(slog.Default(), authCheck)
+	router := New(slog.Default(), authCheck)
 
 	var called bool
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:     "secure-plugin",
 		PathPrefix:   "/plugins/secure-plugin/",
 		RequiresAuth: true,
@@ -104,11 +104,11 @@ func TestPluginHTTPRouter_AuthEnforcement(t *testing.T) {
 	}
 }
 
-func TestPluginHTTPRouter_NilAuthCheckDeniesProtectedRoutes(t *testing.T) {
+func TestRouter_NilAuthCheckDeniesProtectedRoutes(t *testing.T) {
 	// No auth check provided — protected routes should always be denied.
-	router := NewPluginHTTPRouter(slog.Default(), nil)
+	router := New(slog.Default(), nil)
 
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:     "protected",
 		PathPrefix:   "/plugins/protected/",
 		RequiresAuth: true,
@@ -127,18 +127,18 @@ func TestPluginHTTPRouter_NilAuthCheckDeniesProtectedRoutes(t *testing.T) {
 	}
 }
 
-func TestPluginHTTPRouter_LongestPrefixWins(t *testing.T) {
-	router := NewPluginHTTPRouter(slog.Default(), nil)
+func TestRouter_LongestPrefixWins(t *testing.T) {
+	router := New(slog.Default(), nil)
 
 	var which string
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:   "parent",
 		PathPrefix: "/plugins/",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			which = "parent"
 		}),
 	})
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:   "child",
 		PathPrefix: "/plugins/child/",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -155,19 +155,19 @@ func TestPluginHTTPRouter_LongestPrefixWins(t *testing.T) {
 	}
 }
 
-func TestPluginHTTPRouter_RouteCount(t *testing.T) {
-	router := NewPluginHTTPRouter(slog.Default(), nil)
+func TestRouter_RouteCount(t *testing.T) {
+	router := New(slog.Default(), nil)
 
 	if router.RouteCount() != 0 {
 		t.Error("expected 0 routes initially")
 	}
 
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:   "a",
 		PathPrefix: "/plugins/a/",
 		Handler:    http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
 	})
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:   "b",
 		PathPrefix: "/plugins/b/",
 		Handler:    http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
@@ -178,12 +178,12 @@ func TestPluginHTTPRouter_RouteCount(t *testing.T) {
 	}
 }
 
-func TestPluginHTTPRouter_PrefixNormalization(t *testing.T) {
-	router := NewPluginHTTPRouter(slog.Default(), nil)
+func TestRouter_PrefixNormalization(t *testing.T) {
+	router := New(slog.Default(), nil)
 
 	var called bool
 	// Register without trailing slash — should be normalized.
-	router.Register(PluginHTTPRoute{
+	router.Register(Route{
 		PluginID:   "norm",
 		PathPrefix: "/plugins/norm",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

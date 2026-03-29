@@ -4,11 +4,11 @@
 //! bullet-list or fenced-code-block representations, appending to the
 //! main `RenderState`.
 
-use super::parser::{RenderState, TableCell};
+use super::render_state::{RenderState, RenderTarget, TableCell};
 use super::spans::{LinkSpan, MarkdownStyle, StyleSpan};
 
 /// Close remaining open styles in a cell render target and return the finished cell.
-pub(crate) fn finish_table_cell(target: &mut super::parser::RenderTarget) -> TableCell {
+pub(crate) fn finish_table_cell(target: &mut RenderTarget) -> TableCell {
     let end = target.text.len();
     for i in (0..target.open_styles.len()).rev() {
         let open = &target.open_styles[i];

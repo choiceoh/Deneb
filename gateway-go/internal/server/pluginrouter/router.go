@@ -1,13 +1,9 @@
-// Package server — Plugin HTTP routing framework.
+// Package pluginrouter provides HTTP routing for server-side plugin handlers.
 //
-// Provides a route registry where plugins can register HTTP handlers under
-// /plugins/<pluginId>/<path> or custom path prefixes. Routes are matched by
-// longest-prefix and optionally enforce Bearer token authentication.
-//
-// Currently this is an empty framework ready for future plugins. The Telegram
-// channel registers its webhook directly in the gateway mux rather than through
-// this router.
-package server
+// Plugins register routes under path prefixes and the router dispatches
+// incoming requests using longest-prefix matching. Routes may optionally
+// require Bearer token authentication via a caller-supplied check function.
+package pluginrouter
 
 import (
 	"log/slog"
@@ -16,19 +12,19 @@ import (
 	"sync"
 )
 
-// PluginHTTPRoute defines a single HTTP route registered by a plugin.
-type PluginHTTPRoute struct {
+// Route defines a single HTTP route registered by a plugin.
+type Route struct {
 	PluginID     string       // owning plugin identifier
 	PathPrefix   string       // URL path prefix to match (e.g. "/plugins/my-plugin/")
 	RequiresAuth bool         // if true, validate Bearer token before dispatching
 	Handler      http.Handler // handler to invoke for matched requests
 }
 
-// PluginHTTPRouter dispatches incoming HTTP requests to registered plugin routes.
+// Router dispatches incoming HTTP requests to registered plugin routes.
 // Thread-safe for concurrent registration and lookup.
-type PluginHTTPRouter struct {
+type Router struct {
 	mu     sync.RWMutex
-	routes []PluginHTTPRoute
+	routes []Route
 	logger *slog.Logger
 
 	// authCheck is called when a route requires auth. Returns true if the
@@ -37,12 +33,12 @@ type PluginHTTPRouter struct {
 	authCheck func(r *http.Request) bool
 }
 
-// NewPluginHTTPRouter creates a new plugin HTTP router.
+// New creates a new plugin HTTP router.
 // authCheck is an optional function that validates Bearer tokens on protected
 // routes. Pass nil to deny all auth-required routes (useful in tests or when
 // auth is not configured).
-func NewPluginHTTPRouter(logger *slog.Logger, authCheck func(r *http.Request) bool) *PluginHTTPRouter {
-	return &PluginHTTPRouter{
+func New(logger *slog.Logger, authCheck func(r *http.Request) bool) *Router {
+	return &Router{
 		logger:    logger,
 		authCheck: authCheck,
 	}
@@ -51,7 +47,7 @@ func NewPluginHTTPRouter(logger *slog.Logger, authCheck func(r *http.Request) bo
 // Register adds a plugin HTTP route. Routes are matched in registration order
 // by longest prefix, so more specific routes should be registered first or
 // will still win by prefix length.
-func (pr *PluginHTTPRouter) Register(route PluginHTTPRoute) {
+func (pr *Router) Register(route Route) {
 	// Normalize prefix to end with "/".
 	if route.PathPrefix != "" && !strings.HasSuffix(route.PathPrefix, "/") {
 		route.PathPrefix = route.PathPrefix + "/"
@@ -69,12 +65,12 @@ func (pr *PluginHTTPRouter) Register(route PluginHTTPRoute) {
 
 // Handle dispatches the request to a matching plugin route.
 // Returns true if the request was handled, false if no route matched.
-func (pr *PluginHTTPRouter) Handle(w http.ResponseWriter, r *http.Request) bool {
+func (pr *Router) Handle(w http.ResponseWriter, r *http.Request) bool {
 	pr.mu.RLock()
 	defer pr.mu.RUnlock()
 
 	// Find the best (longest prefix) matching route.
-	var best *PluginHTTPRoute
+	var best *Route
 	bestLen := 0
 	for i := range pr.routes {
 		rt := &pr.routes[i]
@@ -113,7 +109,7 @@ func (pr *PluginHTTPRouter) Handle(w http.ResponseWriter, r *http.Request) bool 
 }
 
 // RouteCount returns the number of registered routes (useful for tests/status).
-func (pr *PluginHTTPRouter) RouteCount() int {
+func (pr *Router) RouteCount() int {
 	pr.mu.RLock()
 	defer pr.mu.RUnlock()
 	return len(pr.routes)

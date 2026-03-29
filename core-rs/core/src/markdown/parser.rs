@@ -4,34 +4,24 @@
 //! Converts markdown text into a `MarkdownIR` (plain text + style spans + links).
 //!
 //! Table rendering is in the sibling `tables` module.
-//! Spoiler preprocessing lives here as it is tightly coupled with the parser.
+//! Internal render state lives in the sibling `render_state` module.
+//! Spoiler preprocessing lives in the sibling `spoilers` module.
 
+// Re-export HeadingStyle and TableMode so external callers and tests can access them
+// via `markdown::parser::HeadingStyle` (same path as before the split).
+pub use super::render_state::{HeadingStyle, TableMode};
+use super::render_state::{ListEntry, RenderState, RenderTarget, TableState};
 use super::spans::{
-    clamp_link_spans, clamp_style_spans, merge_style_spans, LinkSpan, MarkdownIR, MarkdownStyle,
-    StyleSpan,
+    clamp_link_spans, clamp_style_spans, merge_style_spans, MarkdownIR, MarkdownStyle,
 };
+use super::spoilers::{handle_spoiler_text, preprocess_spoilers, SPOILER_CLOSE, SPOILER_OPEN};
 use super::tables;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
-// Options
+// Parse options
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HeadingStyle {
-    None,
-    Bold,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TableMode {
-    Off,
-    Bullets,
-    Code,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,370 +64,6 @@ impl Default for ParseOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Internal state (pub(crate) for tables module access)
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub(crate) struct OpenStyle {
-    pub(crate) style: MarkdownStyle,
-    pub(crate) start: usize,
-}
-
-#[derive(Debug, Clone)]
-struct LinkState {
-    href: String,
-    label_start: usize,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ListEntry {
-    pub(crate) ordered: bool,
-    pub(crate) index: usize,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct TableCell {
-    pub(crate) text: String,
-    pub(crate) styles: Vec<StyleSpan>,
-    pub(crate) links: Vec<LinkSpan>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RenderTarget {
-    pub(crate) text: String,
-    pub(crate) styles: Vec<StyleSpan>,
-    pub(crate) open_styles: Vec<OpenStyle>,
-    pub(crate) links: Vec<LinkSpan>,
-    link_stack: Vec<LinkState>,
-}
-
-impl RenderTarget {
-    pub(crate) fn new() -> Self {
-        Self {
-            text: String::new(),
-            styles: Vec::new(),
-            open_styles: Vec::new(),
-            links: Vec::new(),
-            link_stack: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct TableState {
-    pub(crate) headers: Vec<TableCell>,
-    pub(crate) rows: Vec<Vec<TableCell>>,
-    pub(crate) current_row: Vec<TableCell>,
-    pub(crate) current_cell: Option<RenderTarget>,
-    pub(crate) in_header: bool,
-}
-
-impl TableState {
-    pub(crate) fn new() -> Self {
-        Self {
-            headers: Vec::new(),
-            rows: Vec::new(),
-            current_row: Vec::new(),
-            current_cell: None,
-            in_header: false,
-        }
-    }
-}
-
-pub(crate) struct RenderState {
-    // Main render target
-    pub(crate) text: String,
-    pub(crate) styles: Vec<StyleSpan>,
-    pub(crate) open_styles: Vec<OpenStyle>,
-    pub(crate) links: Vec<LinkSpan>,
-    link_stack: Vec<LinkState>,
-    // Environment
-    pub(crate) list_stack: Vec<ListEntry>,
-    heading_style: HeadingStyle,
-    blockquote_prefix: String,
-    pub(crate) table_mode: TableMode,
-    pub(crate) table: Option<TableState>,
-    pub(crate) has_tables: bool,
-}
-
-impl RenderState {
-    fn new(options: &ParseOptions) -> Self {
-        Self {
-            text: String::new(),
-            styles: Vec::new(),
-            open_styles: Vec::new(),
-            links: Vec::new(),
-            link_stack: Vec::new(),
-            list_stack: Vec::new(),
-            heading_style: options.heading_style,
-            blockquote_prefix: options.blockquote_prefix.clone(),
-            table_mode: options.table_mode,
-            table: None,
-            has_tables: false,
-        }
-    }
-
-    /// Get the active text buffer (table cell or main).
-    fn text_mut(&mut self) -> &mut String {
-        if let Some(ref mut table) = self.table {
-            if let Some(ref mut cell) = table.current_cell {
-                return &mut cell.text;
-            }
-        }
-        &mut self.text
-    }
-
-    fn styles_mut(&mut self) -> &mut Vec<StyleSpan> {
-        if let Some(ref mut table) = self.table {
-            if let Some(ref mut cell) = table.current_cell {
-                return &mut cell.styles;
-            }
-        }
-        &mut self.styles
-    }
-
-    fn open_styles_mut(&mut self) -> &mut Vec<OpenStyle> {
-        if let Some(ref mut table) = self.table {
-            if let Some(ref mut cell) = table.current_cell {
-                return &mut cell.open_styles;
-            }
-        }
-        &mut self.open_styles
-    }
-
-    fn links_mut(&mut self) -> &mut Vec<LinkSpan> {
-        if let Some(ref mut table) = self.table {
-            if let Some(ref mut cell) = table.current_cell {
-                return &mut cell.links;
-            }
-        }
-        &mut self.links
-    }
-
-    fn link_stack_mut(&mut self) -> &mut Vec<LinkState> {
-        if let Some(ref mut table) = self.table {
-            if let Some(ref mut cell) = table.current_cell {
-                return &mut cell.link_stack;
-            }
-        }
-        &mut self.link_stack
-    }
-
-    fn text_len(&self) -> usize {
-        if let Some(ref table) = self.table {
-            if let Some(ref cell) = table.current_cell {
-                return cell.text.len();
-            }
-        }
-        self.text.len()
-    }
-
-    fn append_text(&mut self, value: &str) {
-        if value.is_empty() {
-            return;
-        }
-        self.text_mut().push_str(value);
-    }
-
-    fn open_style(&mut self, style: MarkdownStyle) {
-        let start = self.text_len();
-        self.open_styles_mut().push(OpenStyle { style, start });
-    }
-
-    fn close_style(&mut self, style: MarkdownStyle) {
-        let open_styles = self.open_styles_mut();
-        for i in (0..open_styles.len()).rev() {
-            if open_styles[i].style == style {
-                let start = open_styles[i].start;
-                open_styles.remove(i);
-                let end = self.text_len();
-                if end > start {
-                    self.styles_mut().push(StyleSpan { start, end, style });
-                }
-                return;
-            }
-        }
-    }
-
-    fn append_paragraph_separator(&mut self) {
-        if !self.list_stack.is_empty() {
-            return;
-        }
-        if self.table.is_some() {
-            return;
-        }
-        self.text.push_str("\n\n");
-    }
-
-    fn append_list_prefix(&mut self) {
-        let depth = self.list_stack.len();
-        if let Some(top) = self.list_stack.last_mut() {
-            top.index += 1;
-            let indent = "  ".repeat(depth.saturating_sub(1));
-            let prefix = if top.ordered {
-                format!("{}. ", top.index)
-            } else {
-                "• ".to_string()
-            };
-            self.text.push_str(&indent);
-            self.text.push_str(&prefix);
-        }
-    }
-
-    fn render_inline_code(&mut self, content: &str) {
-        if content.is_empty() {
-            return;
-        }
-        let start = self.text_len();
-        self.text_mut().push_str(content);
-        let end = self.text_len();
-        self.styles_mut().push(StyleSpan {
-            start,
-            end,
-            style: MarkdownStyle::Code,
-        });
-    }
-
-    fn render_code_block(&mut self, content: &str) {
-        let mut code = content.to_string();
-        if !code.ends_with('\n') {
-            code.push('\n');
-        }
-        let start = self.text_len();
-        self.text_mut().push_str(&code);
-        let end = self.text_len();
-        self.styles_mut().push(StyleSpan {
-            start,
-            end,
-            style: MarkdownStyle::CodeBlock,
-        });
-        if self.list_stack.is_empty() {
-            self.text_mut().push('\n');
-        }
-    }
-
-    fn handle_link_open(&mut self, href: String) {
-        let label_start = self.text_len();
-        self.link_stack_mut().push(LinkState { href, label_start });
-    }
-
-    fn handle_link_close(&mut self) {
-        let link = match self.link_stack_mut().pop() {
-            Some(l) => l,
-            None => return,
-        };
-        let href = link.href.trim().to_string();
-        if href.is_empty() {
-            return;
-        }
-        let start = link.label_start;
-        let end = self.text_len();
-        self.links_mut().push(LinkSpan { start, end, href });
-    }
-
-    fn close_remaining_styles(&mut self) {
-        let end = self.text.len();
-        for i in (0..self.open_styles.len()).rev() {
-            let open = &self.open_styles[i];
-            if end > open.start {
-                self.styles.push(StyleSpan {
-                    start: open.start,
-                    end,
-                    style: open.style,
-                });
-            }
-        }
-        self.open_styles.clear();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Spoiler preprocessing
-// ---------------------------------------------------------------------------
-
-/// Preprocess markdown text to convert `||text||` into placeholder markers
-/// that pulldown-cmark won't strip. We use zero-width chars as sentinels.
-const SPOILER_OPEN: &str = "\u{200B}\u{FEFF}SPOILER_OPEN\u{200B}";
-const SPOILER_CLOSE: &str = "\u{200B}\u{FEFF}SPOILER_CLOSE\u{200B}";
-
-fn preprocess_spoilers(text: &str) -> String {
-    // Count || delimiters
-    let mut total_delims = 0;
-    let mut i = 0;
-    let bytes = text.as_bytes();
-    while i < bytes.len() {
-        if i + 1 < bytes.len() && bytes[i] == b'|' && bytes[i + 1] == b'|' {
-            total_delims += 1;
-            i += 2;
-        } else {
-            i += 1;
-        }
-    }
-
-    if total_delims < 2 {
-        return text.to_string();
-    }
-    let usable_delims = total_delims - (total_delims % 2);
-
-    let mut result = String::with_capacity(text.len() + 64);
-    let mut consumed = 0;
-    let mut spoiler_open = false;
-    let mut idx = 0;
-
-    while idx < bytes.len() {
-        if idx + 1 < bytes.len() && bytes[idx] == b'|' && bytes[idx + 1] == b'|' {
-            if consumed >= usable_delims {
-                result.push_str("||");
-                idx += 2;
-                continue;
-            }
-            consumed += 1;
-            spoiler_open = !spoiler_open;
-            result.push_str(if spoiler_open {
-                SPOILER_OPEN
-            } else {
-                SPOILER_CLOSE
-            });
-            idx += 2;
-        } else {
-            // Push the char (handle multi-byte UTF-8)
-            // Safety: idx is always at a valid UTF-8 boundary (advanced by
-            // len_utf8()), but we guard defensively in case of unexpected state.
-            let Some(ch) = text[idx..].chars().next() else {
-                break;
-            };
-            result.push(ch);
-            idx += ch.len_utf8();
-        }
-    }
-
-    result
-}
-
-/// Handle text that contains spoiler sentinel markers.
-fn handle_spoiler_text(state: &mut RenderState, text: &str) {
-    let mut remaining = text;
-    while !remaining.is_empty() {
-        if let Some(pos) = remaining.find(SPOILER_OPEN) {
-            if pos > 0 {
-                state.append_text(&remaining[..pos]);
-            }
-            state.open_style(MarkdownStyle::Spoiler);
-            remaining = &remaining[pos + SPOILER_OPEN.len()..];
-        } else if let Some(pos) = remaining.find(SPOILER_CLOSE) {
-            if pos > 0 {
-                state.append_text(&remaining[..pos]);
-            }
-            state.close_style(MarkdownStyle::Spoiler);
-            remaining = &remaining[pos + SPOILER_CLOSE.len()..];
-        } else {
-            state.append_text(remaining);
-            break;
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Main parser
 // ---------------------------------------------------------------------------
 
@@ -461,7 +87,11 @@ pub fn markdown_to_ir_with_meta(markdown: &str, options: &ParseOptions) -> (Mark
     }
 
     let parser = Parser::new_ext(&input, pulldown_opts);
-    let mut state = RenderState::new(options);
+    let mut state = RenderState::new(
+        options.heading_style,
+        options.blockquote_prefix.clone(),
+        options.table_mode,
+    );
 
     // Track whether we're in a code block to accumulate text
     let mut in_code_block = false;
