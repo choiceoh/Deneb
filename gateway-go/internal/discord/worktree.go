@@ -109,6 +109,13 @@ func (m *WorktreeManager) Create(threadID, parentDir string) (*ThreadWorkspace, 
 		return nil, fmt.Errorf("create worktree base dir: %w", err)
 	}
 
+	// Ensure parentDir is a git repository. If it's a plain directory
+	// (e.g. a default workspace that was never git-initialized), initialize
+	// it so that worktree creation can succeed.
+	if err := m.ensureGitRepo(parentDir); err != nil {
+		return nil, fmt.Errorf("ensure git repo at %s: %w", parentDir, err)
+	}
+
 	// Clean up any stale worktree at this path.
 	if _, err := os.Stat(wtDir); err == nil {
 		m.runGit(parentDir, "worktree", "remove", "--force", wtDir)
@@ -191,6 +198,29 @@ func (m *WorktreeManager) Count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.worktrees)
+}
+
+// ensureGitRepo checks if dir is a git repository and initializes it if not.
+// This handles the case where a workspace directory exists but was never
+// git-initialized, which would cause all worktree operations to fail.
+func (m *WorktreeManager) ensureGitRepo(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create directory: %w", err)
+	}
+	// Check if already a git repo.
+	if err := m.runGit(dir, "rev-parse", "--git-dir"); err == nil {
+		return nil
+	}
+	// Initialize a new git repo with an empty initial commit so that
+	// HEAD exists and worktree branching works.
+	if err := m.runGit(dir, "init"); err != nil {
+		return fmt.Errorf("git init: %w", err)
+	}
+	if err := m.runGit(dir, "commit", "--allow-empty", "-m", "initial commit"); err != nil {
+		return fmt.Errorf("git initial commit: %w", err)
+	}
+	m.logger.Info("discord: initialized git repo for worktree parent", "dir", dir)
+	return nil
 }
 
 // runGit executes a git command in the given directory. Returns error on failure.
