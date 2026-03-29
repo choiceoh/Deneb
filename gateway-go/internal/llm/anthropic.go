@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -97,4 +99,54 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 	}()
 
 	return out, nil
+}
+
+// Complete sends a non-streaming chat request to the Anthropic Messages API
+// and returns the full response text. Intended for lightweight single-turn tasks
+// (e.g. thread title generation) where streaming overhead is unnecessary.
+func (c *Client) Complete(ctx context.Context, req ChatRequest) (string, error) {
+	req.Stream = false
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := c.baseURL + "/v1/messages"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-api-key", c.apiKey)
+	httpReq.Header.Set("anthropic-version", AnthropicAPIVersion)
+
+	respBody, err := c.DoStream(ctx, httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer respBody.Close()
+
+	data, err := io.ReadAll(io.LimitReader(respBody, 64*1024))
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	var resp struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return "", fmt.Errorf("decode response: %w", err)
+	}
+
+	var sb strings.Builder
+	for _, block := range resp.Content {
+		if block.Type == "text" {
+			sb.WriteString(block.Text)
+		}
+	}
+	return strings.TrimSpace(sb.String()), nil
 }

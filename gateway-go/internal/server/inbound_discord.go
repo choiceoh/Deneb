@@ -35,6 +35,18 @@ var (
 
 const discordSessionTTL = 24 * time.Hour
 
+// discordSessionThread maps a session key to the Discord thread channel ID that
+// was created for it. Populated on the first message of each new coding session
+// when auto thread names are enabled.
+var (
+	discordSessionThread   = make(map[string]string) // sessionKey → threadChannelID
+	discordSessionThreadMu sync.Mutex
+	// discordThreadSession is the reverse map: threadChannelID → sessionKey.
+	// Used to route incoming thread messages back to the originating session.
+	discordThreadSession   = make(map[string]string)
+	discordThreadSessionMu sync.Mutex
+)
+
 // HandleDiscordMessage processes an incoming Discord message through the
 // autoreply pipeline: command detection → directive parsing → chat.send dispatch.
 func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
@@ -43,7 +55,17 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	}
 
 	channelID := msg.ChannelID
+
+	// If this message arrived in a thread that was auto-created by us, route it
+	// back to the parent session so conversation history stays consistent.
+	discordThreadSessionMu.Lock()
+	parentSession, isKnownThread := discordThreadSession[channelID]
+	discordThreadSessionMu.Unlock()
+
 	sessionKey := "discord:" + channelID
+	if isKnownThread {
+		sessionKey = parentSession
+	}
 
 	// Build autoreply MsgContext from the Discord message.
 	var senderID, senderName string
@@ -73,9 +95,15 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	inbound.FinalizeInboundContext(msgCtx)
 
 	// Resolve per-channel workspace directory.
+	// For thread messages, use the parent channel ID so workspace mappings apply correctly.
 	workspaceDir := ""
 	if p.server.discordPlug != nil {
-		workspaceDir = p.server.discordPlug.Config().WorkspaceForChannel(channelID)
+		workspaceChannelID := channelID
+		if isKnownThread {
+			// parentSession is "discord:<parentChannelID>"
+			workspaceChannelID = strings.TrimPrefix(parentSession, "discord:")
+		}
+		workspaceDir = p.server.discordPlug.Config().WorkspaceForChannel(workspaceChannelID)
 	}
 
 	// Try coding quick commands first (Discord-specific, no agent needed).
@@ -110,6 +138,15 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 					discordSessionSeenMu.Lock()
 					delete(discordSessionSeen, sessionKey)
 					discordSessionSeenMu.Unlock()
+					// Clear thread mapping so the next message creates a fresh thread.
+					discordSessionThreadMu.Lock()
+					if oldThread, ok := discordSessionThread[sessionKey]; ok {
+						delete(discordSessionThread, sessionKey)
+						discordThreadSessionMu.Lock()
+						delete(discordThreadSession, oldThread)
+						discordThreadSessionMu.Unlock()
+					}
+					discordSessionThreadMu.Unlock()
 				}
 				p.sendDiscordCommandReply(channelID, result)
 				return
@@ -148,6 +185,10 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	}
 	discordSessionSeenMu.Unlock()
 
+	// Capture the clean user message before workspace context injection so the
+	// thread namer sees only the user's words (not git status / project tree).
+	cleanMessageForTitle := agentMessage
+
 	if isFirstMessage && workspaceDir != "" {
 		if ctx := buildWorkspaceContext(workspaceDir); ctx != "" {
 			agentMessage = ctx + "\n\n---\n\n" + agentMessage
@@ -168,10 +209,33 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 		return
 	}
 
+	// Determine the delivery target. If this session already has a thread,
+	// send replies there. If not but we should create one, do so now.
+	deliveryTarget := channelID
+	if isKnownThread {
+		// Incoming message is from a thread we created — replies stay in that thread.
+		deliveryTarget = channelID
+	} else {
+		// Check whether the session already has a thread from a previous message.
+		discordSessionThreadMu.Lock()
+		existingThread, hasThread := discordSessionThread[sessionKey]
+		discordSessionThreadMu.Unlock()
+
+		if hasThread {
+			deliveryTarget = existingThread
+		} else if isFirstMessage && p.server.discordThreadNamer != nil {
+			// First message in a new session: generate a thread name and create the thread.
+			// Use cleanMessageForTitle (no workspace context) so the LLM sees only the user's words.
+			if threadID := p.tryCreateDiscordThread(sessionKey, channelID, msg.ID, cleanMessageForTitle); threadID != "" {
+				deliveryTarget = threadID
+			}
+		}
+	}
+
 	// Build delivery context.
 	delivery := map[string]any{
 		"channel":   "discord",
-		"to":        channelID,
+		"to":        deliveryTarget,
 		"messageId": msg.ID,
 	}
 	if msg.Author != nil {
@@ -212,6 +276,44 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 			"error", resp.Error,
 		)
 	}
+}
+
+// tryCreateDiscordThread generates a thread name via LLM and creates a Discord
+// thread from the given message. Stores the thread mapping and returns the new
+// thread's channel ID on success, or "" on failure (caller falls back to channel).
+//
+// The total operation is bounded by a 5-second context timeout so a slow LLM
+// or Discord API call does not block the agent from starting.
+func (p *InboundProcessor) tryCreateDiscordThread(sessionKey, channelID, messageID, content string) string {
+	client := p.server.discordPlug.Client()
+	if client == nil {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	name := p.server.discordThreadNamer.Generate(ctx, content)
+
+	thread, err := client.CreateThread(ctx, channelID, messageID, name)
+	if err != nil {
+		p.logger.Warn("discord: failed to create auto thread",
+			"channelId", channelID, "messageId", messageID, "error", err)
+		return ""
+	}
+
+	p.logger.Info("discord: created auto thread",
+		"sessionKey", sessionKey, "threadId", thread.ID, "name", name)
+
+	discordSessionThreadMu.Lock()
+	discordSessionThread[sessionKey] = thread.ID
+	discordSessionThreadMu.Unlock()
+
+	discordThreadSessionMu.Lock()
+	discordThreadSession[thread.ID] = sessionKey
+	discordThreadSessionMu.Unlock()
+
+	return thread.ID
 }
 
 // handleCodingQuickCommand handles Discord-specific coding shortcuts that
