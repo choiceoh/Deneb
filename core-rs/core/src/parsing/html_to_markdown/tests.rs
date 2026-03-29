@@ -1,0 +1,461 @@
+use super::*;
+
+#[test]
+fn basic_html() {
+    let result = html_to_markdown("<p>Hello <b>world</b></p>");
+    assert_eq!(result.text, "Hello **world**");
+}
+
+#[test]
+fn strips_script_style() {
+    let html = "<p>before</p><script>alert(1)</script><style>.x{}</style><p>after</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("before"));
+    assert!(result.text.contains("after"));
+    assert!(!result.text.contains("alert"));
+    assert!(!result.text.contains(".x"));
+}
+
+#[test]
+fn extracts_title() {
+    let html = "<html><head><title>My Page</title></head><body>content</body></html>";
+    let result = html_to_markdown(html);
+    assert_eq!(result.title.as_deref(), Some("My Page"));
+}
+
+#[test]
+fn converts_links() {
+    let html = r#"<a href="https://example.com">Click here</a>"#;
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("[Click here](https://example.com)"));
+}
+
+#[test]
+fn converts_headings() {
+    let html = "<h1>Title</h1><h2>Subtitle</h2><p>text</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("# Title"));
+    assert!(result.text.contains("## Subtitle"));
+}
+
+#[test]
+fn converts_list_items() {
+    let html = "<ul><li>one</li><li>two</li></ul>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("- one"));
+    assert!(result.text.contains("- two"));
+}
+
+#[test]
+fn decodes_entities() {
+    let html = "<p>&amp; &lt; &gt; &quot; &#39; &#x41; &#65;</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("& < > \" ' A A"));
+}
+
+#[test]
+fn normalizes_whitespace() {
+    let html = "<p>  hello   world  </p>";
+    let result = html_to_markdown(html);
+    assert_eq!(result.text, "hello world");
+}
+
+#[test]
+fn multibyte_utf8() {
+    // Korean + emoji: must not panic on multi-byte characters.
+    let html = "<p>안녕하세요 🌍</p><br><p>세계</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("안녕하세요"));
+    assert!(result.text.contains("🌍"));
+    assert!(result.text.contains("세계"));
+}
+
+#[test]
+fn multibyte_entities_mixed() {
+    // Multi-byte chars mixed with HTML entities.
+    let html = "<p>한국어 &amp; 日本語</p>";
+    let result = html_to_markdown(html);
+    assert_eq!(result.text, "한국어 & 日本語");
+}
+
+#[test]
+fn empty_input() {
+    let result = html_to_markdown("");
+    assert_eq!(result.text, "");
+    assert!(result.title.is_none());
+}
+
+#[test]
+fn truncated_tags() {
+    // Truncated tags at end of input must not panic.
+    let cases = [
+        "<h",
+        "<h1",
+        "<h1>",
+        "<a ",
+        "<a href=",
+        "<li",
+        "<li>",
+        "<br",
+        "<hr",
+        "</p",
+        "<script",
+        "<style",
+        "<noscript",
+        "&",
+        "&amp",
+        "&#",
+        "&#x",
+        "&#x4",
+        "&#39",
+    ];
+    for case in cases {
+        let result = html_to_markdown(case);
+        // Just ensure no panic; content correctness is secondary.
+        let _ = result.text;
+    }
+}
+
+#[test]
+fn multibyte_near_entity_boundary() {
+    // Multi-byte chars near entity decode boundaries (byte 10 mid-char).
+    let html = "<p>&amp;한국어텍스트</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("&"));
+    assert!(result.text.contains("한국어텍스트"));
+}
+
+#[test]
+fn many_ampersands_with_multibyte() {
+    // Many & chars interleaved with multi-byte text.
+    let html = "&한&국&어&amp;테스트";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("&테스트"));
+}
+
+#[test]
+fn deeply_nested_tags() {
+    let html = "<div>".repeat(100) + "content" + &"</div>".repeat(100);
+    let result = html_to_markdown(&html);
+    assert!(result.text.contains("content"));
+}
+
+#[test]
+fn unbalanced_tags() {
+    let html = "<h1>Title</h2><a href=\"x\">link<p>text</li></a>";
+    let result = html_to_markdown(html);
+    let _ = result.text; // no panic
+}
+
+#[test]
+fn script_with_angle_brackets() {
+    let html = "<script>if (a < b && c > d) { alert('</script>test'); }</script>after";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("after"));
+}
+
+#[test]
+fn emoji_sequences() {
+    // Complex emoji (multi-codepoint, ZWJ sequences).
+    let html = "<p>👨‍👩‍👧‍👦 family 🏳️‍🌈 flag</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("family"));
+    assert!(result.text.contains("flag"));
+}
+
+#[test]
+fn null_bytes() {
+    let html = "<p>before\0after</p>";
+    let result = html_to_markdown(html);
+    // Should not panic. The null byte may or may not survive.
+    let _ = result.text;
+}
+
+#[test]
+fn only_tags_no_content() {
+    let html = "<div><p><span></span></p></div>";
+    let result = html_to_markdown(html);
+    assert!(result.text.is_empty() || result.text.trim().is_empty());
+}
+
+#[test]
+fn numeric_entity_edge_cases() {
+    // Invalid code point, huge number, zero.
+    let html = "&#0; &#xFFFFFF; &#999999999; &#xD800; normal";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("normal"));
+}
+
+#[test]
+fn href_with_multibyte() {
+    let html = r#"<a href="https://example.com/한국">한국어 링크</a>"#;
+    let result = html_to_markdown(html);
+    assert!(result
+        .text
+        .contains("[한국어 링크](https://example.com/한국)"));
+}
+
+#[test]
+fn large_input_no_panic() {
+    // ~1MB of repetitive HTML.
+    let chunk = "<p>Hello &amp; world 한국어 🌍</p><br><hr>\n";
+    let html: String = chunk.repeat(20_000);
+    let result = html_to_markdown(&html);
+    assert!(result.text.contains("Hello"));
+}
+
+#[test]
+fn curly_quotes_in_html() {
+    // RIGHT SINGLE QUOTATION MARK (U+2019, 3 bytes: E2 80 99) near tag boundaries.
+    // This is the pattern from YouTube Korean HTML that triggered panics.
+    let html = "<!doctype html><html lang=\"ko-kr\"><head><title>YouTube\u{2019}s Best</title></head><body><p>It\u{2019}s a video about \u{2018}coding\u{2019} &amp; stuff</p><li>Item with \u{2019}quotes\u{2019}</li><a href=\"https://example.com\">Link\u{2019}s text</a><h1>Heading with \u{2019}curly\u{2019}</h1></body></html>";
+    let result = html_to_markdown(html);
+    // Must not panic. Content should preserve the curly quotes.
+    assert!(result.text.contains("\u{2019}"));
+}
+
+#[test]
+fn curly_quotes_at_every_byte_alignment() {
+    // Place multi-byte \u{2019} at different byte offsets to hit all alignments.
+    for padding in 0..4 {
+        let prefix = "x".repeat(padding);
+        let html = format!(
+            "<p>{prefix}\u{2019}</p><li>{prefix}\u{2019}item</li><a href=\"u\">{prefix}\u{2019}link</a><h2>{prefix}\u{2019}head</h2>"
+        );
+        let result = html_to_markdown(&html);
+        assert!(
+            result.text.contains("\u{2019}"),
+            "failed at padding={padding}"
+        );
+    }
+}
+
+#[test]
+fn entity_adjacent_to_multibyte() {
+    // Entity decoding right next to multi-byte chars.
+    let html = "\u{2019}&amp;\u{2019}&lt;\u{2019}&#8217;\u{2019}&#x2019;\u{2019}";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("&"));
+    assert!(result.text.contains("<"));
+}
+
+#[test]
+fn youtube_like_korean_html() {
+    // Simulate the YouTube HTML pattern: large doc with Korean + curly quotes.
+    let mut html = String::from(
+        r#"<!doctype html><html style="font-size: 10px;font-family: roboto, arial, sans-serif;" lang="ko-kr"><head><title>테스트 동영상</title></head><body>"#,
+    );
+    // Pad to push curly quotes near byte ~900.
+    html.push_str(&"<div>패딩텍스트</div>".repeat(30));
+    html.push_str("<p>It\u{2019}s a test \u{2018}video\u{2019} for Korean users</p>");
+    html.push_str("<script>var x = 'don\u{2019}t';</script>");
+    html.push_str("<li>\u{2019}목록 항목\u{2019}</li>");
+    html.push_str("</body></html>");
+    let result = html_to_markdown(&html);
+    assert!(result.title.as_deref() == Some("테스트 동영상"));
+    assert!(!result.text.contains("var x"));
+}
+
+// --- Conversion tests ---
+
+#[test]
+fn converts_bold() {
+    let html = "<p><strong>bold text</strong> and <b>also bold</b></p>";
+    let result = html_to_markdown(html);
+    assert!(
+        result.text.contains("**bold text**"),
+        "got: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains("**also bold**"),
+        "got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn converts_italic() {
+    let html = "<p><em>italic text</em> and <i>also italic</i></p>";
+    let result = html_to_markdown(html);
+    assert!(
+        result.text.contains("*italic text*"),
+        "got: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains("*also italic*"),
+        "got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn b_tag_boundary() {
+    // <b> should not match <br>, <body>, <base>, <button>.
+    let html = "<body><br><base href='x'><button>click</button><b>bold</b></body>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("**bold**"), "got: {}", result.text);
+    assert!(!result.text.contains("**utton"), "got: {}", result.text);
+    assert!(!result.text.contains("**ody"), "got: {}", result.text);
+}
+
+#[test]
+fn i_tag_boundary() {
+    // <i> should not match <img>, <iframe>, <input>.
+    let html = "<p><input type='text'><i>italic</i></p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("*italic*"), "got: {}", result.text);
+}
+
+#[test]
+fn nested_emphasis() {
+    let html = "<strong><em>bold italic</em></strong>";
+    let result = html_to_markdown(html);
+    // Should contain both markers (order may vary).
+    assert!(result.text.contains("bold italic"), "got: {}", result.text);
+    assert!(
+        result.text.contains("***") || result.text.contains("**"),
+        "got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn converts_inline_code() {
+    let html = "<p>Use <code>println!</code> to print</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("`println!`"), "got: {}", result.text);
+}
+
+#[test]
+fn converts_code_block() {
+    let html = "<pre><code>fn main() {\n    println!(\"hello\");\n}</code></pre>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("```"), "got: {}", result.text);
+    assert!(result.text.contains("fn main()"), "got: {}", result.text);
+}
+
+#[test]
+fn converts_code_block_with_language() {
+    let html = r#"<pre><code class="language-rust">let x = 42;</code></pre>"#;
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("```rust"), "got: {}", result.text);
+    assert!(result.text.contains("let x = 42;"), "got: {}", result.text);
+}
+
+#[test]
+fn converts_strikethrough() {
+    let html = "<p><del>deleted</del> and <s>struck</s> and <strike>old</strike></p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("~~deleted~~"), "got: {}", result.text);
+    assert!(result.text.contains("~~struck~~"), "got: {}", result.text);
+    assert!(result.text.contains("~~old~~"), "got: {}", result.text);
+}
+
+#[test]
+fn converts_image() {
+    let html = r#"<img src="https://example.com/pic.jpg" alt="A photo">"#;
+    let result = html_to_markdown(html);
+    assert!(
+        result
+            .text
+            .contains("[A photo](https://example.com/pic.jpg)"),
+        "got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn converts_image_no_alt() {
+    let html = r#"<img src="https://example.com/photo.png">"#;
+    let result = html_to_markdown(html);
+    assert!(
+        result
+            .text
+            .contains("[photo.png](https://example.com/photo.png)"),
+        "got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn converts_blockquote() {
+    let html = "<blockquote>This is quoted text</blockquote>";
+    let result = html_to_markdown(html);
+    assert!(
+        result.text.contains("> This is quoted text"),
+        "got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn converts_simple_table() {
+    let html = "<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("| A | B |"), "got: {}", result.text);
+    assert!(result.text.contains("| 1 | 2 |"), "got: {}", result.text);
+    assert!(result.text.contains("| --- |"), "got: {}", result.text);
+}
+
+#[test]
+fn converts_table_with_headers() {
+    let html =
+        "<table><tr><th>Name</th><th>Age</th></tr><tr><td>Alice</td><td>30</td></tr></table>";
+    let result = html_to_markdown(html);
+    assert!(
+        result.text.contains("| Name | Age |"),
+        "got: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains("| --- | --- |"),
+        "got: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains("| Alice | 30 |"),
+        "got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn converts_table_pipe_escape() {
+    let html = "<table><tr><td>a|b</td><td>c</td></tr></table>";
+    let result = html_to_markdown(html);
+    assert!(
+        result.text.contains(r"a\|b"),
+        "pipe should be escaped, got: {}",
+        result.text
+    );
+}
+
+#[test]
+fn converts_ordered_list() {
+    let html = "<ol><li>first</li><li>second</li><li>third</li></ol>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("1. first"), "got: {}", result.text);
+    assert!(result.text.contains("2. second"), "got: {}", result.text);
+    assert!(result.text.contains("3. third"), "got: {}", result.text);
+}
+
+#[test]
+fn mixed_ol_ul() {
+    let html = "<ul><li>bullet</li></ul><ol><li>one</li><li>two</li></ol><ul><li>dot</li></ul>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("- bullet"), "got: {}", result.text);
+    assert!(result.text.contains("1. one"), "got: {}", result.text);
+    assert!(result.text.contains("2. two"), "got: {}", result.text);
+    assert!(result.text.contains("- dot"), "got: {}", result.text);
+}
+
+#[test]
+fn s_tag_boundary() {
+    // <s> should not match <script>, <style>, <section>, <span>, <strong>.
+    let html = "<p><span>text</span><s>struck</s><strong>bold</strong></p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("~~struck~~"), "got: {}", result.text);
+    assert!(result.text.contains("**bold**"), "got: {}", result.text);
+}
