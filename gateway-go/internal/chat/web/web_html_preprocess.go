@@ -1,4 +1,4 @@
-// web_fetch_html.go — HTML preprocessing for agent-oriented content extraction.
+// web_html_preprocess.go — HTML preprocessing for agent-oriented content extraction.
 //
 // Handles three critical tasks BEFORE the HTML→Markdown conversion:
 //  1. Noise element stripping (nav, aside, footer, ads, cookie banners)
@@ -482,13 +482,13 @@ var signalDetectors = []struct {
 // SPA framework indicators: when these are present but text content is minimal,
 // the page likely requires JavaScript rendering.
 var spaIndicators = []string{
-	`id="__next"`,     // Next.js
-	`id="__nuxt"`,     // Nuxt.js
-	`id="app"`,        // Vue.js default
-	`id="root"`,       // React default
-	`ng-app`,          // Angular
-	`data-reactroot`,  // React
-	`<app-root`,       // Angular
+	`id="__next"`,    // Next.js
+	`id="__nuxt"`,    // Nuxt.js
+	`id="app"`,       // Vue.js default
+	`id="root"`,      // React default
+	`ng-app`,         // Angular
+	`data-reactroot`, // React
+	`<app-root`,      // Angular
 	`window.__NEXT_DATA__`,
 	`window.__NUXT__`,
 }
