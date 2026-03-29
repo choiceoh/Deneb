@@ -115,6 +115,7 @@ func RunSweep(
 
 	const maxIterations = 200
 	for i := 0; i < maxIterations; i++ {
+		// Parse only the type field to dispatch — handlers re-parse their own fields.
 		var cmd struct {
 			Type string `json:"type"`
 		}
@@ -139,7 +140,7 @@ func RunSweep(
 			return &done.Result, nil
 		}
 
-		resp, err := handleCommand(store, cmdJSON, summarize, logger)
+		resp, err := handleCommand(store, cmd.Type, cmdJSON, summarize, logger)
 		if err != nil {
 			return nil, fmt.Errorf("aurora sweep: handle %s: %w", cmd.Type, err)
 		}
@@ -159,20 +160,15 @@ func RunSweep(
 }
 
 // handleCommand dispatches a SweepCommand to the appropriate store/LLM operation.
+// cmdType is pre-extracted by the caller so we avoid a redundant unmarshal here.
 func handleCommand(
 	store *Store,
+	cmdType string,
 	cmdJSON json.RawMessage,
 	summarize Summarizer,
 	logger *slog.Logger,
 ) (any, error) {
-	var cmd struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(cmdJSON, &cmd); err != nil {
-		return nil, err
-	}
-
-	switch cmd.Type {
+	switch cmdType {
 	case "fetchTokenCount":
 		return handleFetchTokenCount(store, cmdJSON)
 	case "fetchContextItems":

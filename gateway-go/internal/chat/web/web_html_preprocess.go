@@ -25,17 +25,19 @@ var noiseTagNames = []string{
 	"noscript", "svg", "iframe", "form",
 }
 
-// noiseClassIDPatterns match class/id attribute values that indicate noise.
-// Elements matching these are stripped as whole blocks.
-var noiseClassIDPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)class=["'][^"']*(cookie[-_]?(?:banner|consent|notice|popup|bar)|gdpr|cc-window|CookieConsent)[^"']*["']`),
-	regexp.MustCompile(`(?i)class=["'][^"']*(sidebar|side-bar|widget-area|related-(?:posts|articles)|recommended)[^"']*["']`),
-	regexp.MustCompile(`(?i)class=["'][^"']*(comment(?:s|-section|-list|-area)|disqus|discourse)[^"']*["']`),
-	regexp.MustCompile(`(?i)class=["'][^"']*(ad[-_]?(?:banner|container|wrapper|slot|unit)|advertisement|sponsored|promo[-_]?banner)[^"']*["']`),
-	regexp.MustCompile(`(?i)class=["'][^"']*(social[-_]?(?:share|buttons|links|media)|share-buttons)[^"']*["']`),
-	regexp.MustCompile(`(?i)class=["'][^"']*(breadcrumb|pagination|pager|page-navigation)[^"']*["']`),
-	regexp.MustCompile(`(?i)id=["'](cookie[-_]?(?:banner|consent|notice)|gdpr|sidebar|comments|disqus_thread|ad[-_]container)["']`),
-}
+// noiseClassIDPattern matches class/id attribute values that indicate noise elements.
+// All sub-patterns are combined into one regex so the HTML is scanned only once
+// instead of once per pattern (was 7 × O(n); now 1 × O(n)).
+var noiseClassIDPattern = regexp.MustCompile(
+	`(?i)` +
+		`class=["'][^"']*(cookie[-_]?(?:banner|consent|notice|popup|bar)|gdpr|cc-window|CookieConsent)[^"']*["']` +
+		`|class=["'][^"']*(sidebar|side-bar|widget-area|related-(?:posts|articles)|recommended)[^"']*["']` +
+		`|class=["'][^"']*(comment(?:s|-section|-list|-area)|disqus|discourse)[^"']*["']` +
+		`|class=["'][^"']*(ad[-_]?(?:banner|container|wrapper|slot|unit)|advertisement|sponsored|promo[-_]?banner)[^"']*["']` +
+		`|class=["'][^"']*(social[-_]?(?:share|buttons|links|media)|share-buttons)[^"']*["']` +
+		`|class=["'][^"']*(breadcrumb|pagination|pager|page-navigation)[^"']*["']` +
+		`|id=["'](cookie[-_]?(?:banner|consent|notice)|gdpr|sidebar|comments|disqus_thread|ad[-_]container)["']`,
+)
 
 // StripNoiseElements removes non-content HTML elements before Markdown conversion.
 // This is a critical preprocessing step: without it, nav menus, cookie banners,
@@ -49,10 +51,8 @@ func StripNoiseElements(html string) string {
 	}
 
 	// Phase 2: Strip div/section blocks with noise class/id attributes.
-	// We search for noise markers and strip the enclosing block.
-	for _, pattern := range noiseClassIDPatterns {
-		result = stripMatchingBlocks(result, pattern)
-	}
+	// Single combined regex replaces the old per-pattern loop (was 7 passes).
+	result = stripMatchingBlocks(result, noiseClassIDPattern)
 
 	return result
 }

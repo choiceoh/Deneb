@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+// cmdType extracts the "type" field from a RawMessage for use in handleCommand tests.
+func cmdType(raw json.RawMessage) string {
+	var h struct {
+		Type string `json:"type"`
+	}
+	json.Unmarshal(raw, &h)
+	return h.Type
+}
+
 func TestEvaluateCompaction_PureGo(t *testing.T) {
 	cfg := DefaultSweepConfig()
 
@@ -39,7 +48,7 @@ func TestSweepCommandHandlers(t *testing.T) {
 
 	// Test fetchTokenCount handler.
 	cmd := json.RawMessage(`{"type":"fetchTokenCount","conversationId":1}`)
-	resp, err := handleCommand(s, cmd, nil, nil)
+	resp, err := handleCommand(s, cmdType(cmd), cmd, nil, nil)
 	if err != nil {
 		t.Fatalf("fetchTokenCount: %v", err)
 	}
@@ -55,7 +64,7 @@ func TestSweepCommandHandlers(t *testing.T) {
 
 	// Test fetchContextItems handler.
 	cmd = json.RawMessage(`{"type":"fetchContextItems","conversationId":1}`)
-	resp, err = handleCommand(s, cmd, nil, nil)
+	resp, err = handleCommand(s, cmdType(cmd), cmd, nil, nil)
 	if err != nil {
 		t.Fatalf("fetchContextItems: %v", err)
 	}
@@ -71,7 +80,7 @@ func TestSweepCommandHandlers(t *testing.T) {
 
 	// Test fetchMessages handler.
 	cmd = json.RawMessage(`{"type":"fetchMessages","messageIds":[0,1]}`)
-	resp, err = handleCommand(s, cmd, nil, nil)
+	resp, err = handleCommand(s, cmdType(cmd), cmd, nil, nil)
 	if err != nil {
 		t.Fatalf("fetchMessages: %v", err)
 	}
@@ -86,7 +95,7 @@ func TestSweepCommandHandlers(t *testing.T) {
 
 	// Test fetchSummaries handler (empty).
 	cmd = json.RawMessage(`{"type":"fetchSummaries","summaryIds":["nonexistent"]}`)
-	resp, err = handleCommand(s, cmd, nil, nil)
+	resp, err = handleCommand(s, cmdType(cmd), cmd, nil, nil)
 	if err != nil {
 		t.Fatalf("fetchSummaries: %v", err)
 	}
@@ -101,14 +110,14 @@ func TestSweepCommandHandlers(t *testing.T) {
 
 	// Test fetchDistinctDepths handler (empty).
 	cmd = json.RawMessage(`{"type":"fetchDistinctDepths","conversationId":1,"maxOrdinal":999}`)
-	resp, err = handleCommand(s, cmd, nil, nil)
+	resp, err = handleCommand(s, cmdType(cmd), cmd, nil, nil)
 	if err != nil {
 		t.Fatalf("fetchDistinctDepths: %v", err)
 	}
 
 	// Test persistEvent handler.
 	cmd = json.RawMessage(`{"type":"persistEvent","input":{"conversationId":1,"pass":"leaf","level":"normal","tokensBefore":100,"tokensAfter":50,"createdSummaryId":"sum_001"}}`)
-	resp, err = handleCommand(s, cmd, nil, nil)
+	resp, err = handleCommand(s, cmdType(cmd), cmd, nil, nil)
 	if err != nil {
 		t.Fatalf("persistEvent: %v", err)
 	}
@@ -122,7 +131,7 @@ func TestSweepCommandHandlers(t *testing.T) {
 		return "mocked summary of: " + text[:10], nil
 	}
 	cmd = json.RawMessage(`{"type":"summarize","text":"This is a long conversation that needs summarizing","aggressive":false}`)
-	resp, err = handleCommand(s, cmd, mockSummarizer, nil)
+	resp, err = handleCommand(s, cmdType(cmd), cmd, mockSummarizer, nil)
 	if err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
@@ -161,7 +170,7 @@ func TestPersistLeafSummaryHandler(t *testing.T) {
 		}
 	}`)
 
-	resp, err := handleCommand(s, cmd, nil, nil)
+	resp, err := handleCommand(s, cmdType(cmd), cmd, nil, nil)
 	if err != nil {
 		t.Fatalf("persistLeafSummary: %v", err)
 	}
