@@ -54,13 +54,9 @@ func (rc *RunCache) Len() int {
 
 // cacheableTools are read-only tools whose results can be safely cached
 // within an agent run. Results are invalidated when mutation tools execute.
-// CPU architecture analogy: extending L2 cache coverage — more tools benefit
-// from run-scoped caching, reducing redundant I/O across agent turns.
 var cacheableTools = map[string]bool{
 	"find": true,
 	"tree": true,
-	"grep": true,
-	"ls":   true,
 }
 
 // mutationTools are tools that can modify the file system, requiring cache

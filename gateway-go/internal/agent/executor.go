@@ -52,18 +52,6 @@ func RunAgent(
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	// Zen arch — Superscalar Unit Separation: wrap hooks with async dispatch
-	// so stream parsing (frontend) and hook execution (backend) run on
-	// independent goroutines. The parser never stalls on slow hooks.
-	//
-	// IMPORTANT: Close() must be called AFTER all tool goroutines finish,
-	// because tool goroutines enqueue hook events (OnToolResult). Closing
-	// the queue while goroutines are still writing would panic.
-	var hookDispatcher *AsyncHookDispatcher
-	hookDispatcher, hooks = NewAsyncHookDispatcher(hooks)
-	// NOT deferred here — closed explicitly after the loop to ensure
-	// all tool goroutines have finished writing to the hook queue.
-
 	result := &AgentResult{}
 
 	for turn := 0; turn < cfg.MaxTurns; turn++ {
@@ -101,34 +89,73 @@ func RunAgent(
 			return nil, fmt.Errorf("stream chat (turn %d): %w", turn, err)
 		}
 
-		// Zen arch — Superscalar Early Issue: start tool execution as soon as
-		// each tool_use block completes in the stream, rather than waiting for
-		// the entire stream to finish. This overlaps remaining stream parsing
-		// (and other tool_use block accumulation) with tool execution.
-		//
-		// CPU analogy: superscalar processors issue instructions to execution
-		// units as soon as operands are ready, not after the entire fetch
-		// window completes.
-		var earlyTools []earlyToolEntry
-		var earlyMu sync.Mutex
+		// Consume the stream for this turn.
+		turnRes, err := consumeStream(ctx, events, hooks)
+		if err != nil {
+			if ctx.Err() != nil {
+				result.StopReason = stopReasonFromCtx(ctx)
+				return result, nil
+			}
+			return nil, fmt.Errorf("consume stream (turn %d): %w", turn, err)
+		}
+
+		// Accumulate usage.
+		result.Usage.InputTokens += turnRes.usage.InputTokens
+		result.Usage.OutputTokens += turnRes.usage.OutputTokens
+
+		// Log LLM turn result to agent detail log.
+		if runLog != nil {
+			runLog.LogTurnLLM(agentlog.TurnLLMData{
+				Turn:         turn + 1,
+				InputTokens:  turnRes.usage.InputTokens,
+				OutputTokens: turnRes.usage.OutputTokens,
+				StopReason:   turnRes.stopReason,
+				TextLen:      len(turnRes.text),
+				ToolCalls:    len(turnRes.toolCalls),
+			})
+		}
+
+		// Mid-run hook: notify caller of token accumulation.
+		if cfg.OnTurn != nil {
+			cfg.OnTurn(turn+1, result.Usage.InputTokens+result.Usage.OutputTokens)
+		}
+
+		// Keep latest text as the final text.
+		if turnRes.text != "" {
+			result.Text = turnRes.text
+		}
+
+		// Check stop reason.
+		if turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0 {
+			result.StopReason = turnRes.stopReason
+			if result.StopReason == "" {
+				result.StopReason = "end_turn"
+			}
+			return result, nil
+		}
+
+		// Build assistant message with all content blocks from this turn.
+		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+
+		// Extract raw thinking text from this turn's thinking blocks.
+		// Passed to OnToolStart so Discord can summarize it via lightweight LLM.
+		turnReason := extractThinkingText(turnRes.contentBlocks)
+
+		// Execute tools in parallel and build tool_result blocks.
+		// Each goroutine writes to its own index — no mutex needed for the slice.
+		toolResults := make([]llm.ContentBlock, len(turnRes.toolCalls))
 		var wg sync.WaitGroup
-
-		onToolReady := func(tc llm.ContentBlock) {
-			earlyMu.Lock()
-			idx := len(earlyTools)
-			earlyTools = append(earlyTools, earlyToolEntry{})
-			earlyMu.Unlock()
-
+		for i, tc := range turnRes.toolCalls {
 			wg.Add(1)
 			go func(idx int, tc llm.ContentBlock) {
 				defer wg.Done()
 				if hooks.OnToolStart != nil {
-					hooks.OnToolStart(tc.Name, "") // reason filled post-stream
+					hooks.OnToolStart(tc.Name, turnReason)
 				}
 				if hooks.OnToolEmit != nil {
 					hooks.OnToolEmit(tc.Name, tc.ID)
 				}
-				logger.Info("exec-early", "name", tc.Name, "turn", turn)
+				logger.Info("exec", "name", tc.Name, "turn", turn)
 
 				start := time.Now()
 				var toolOutput string
@@ -150,10 +177,14 @@ func RunAgent(
 				} else {
 					block.Content = toolOutput
 				}
+				toolResults[idx] = block
 
+				// Broadcast tool result to streaming clients.
 				if hooks.OnToolResult != nil {
 					hooks.OnToolResult(tc.Name, tc.ID, block.Content, block.IsError)
 				}
+
+				// Log tool execution to agent detail log.
 				if runLog != nil {
 					td := agentlog.TurnToolData{
 						Turn:       turn + 1,
@@ -167,110 +198,31 @@ func RunAgent(
 					}
 					runLog.LogTurnTool(td)
 				}
-
-				earlyMu.Lock()
-				earlyTools[idx] = earlyToolEntry{id: tc.ID, result: block}
-				earlyMu.Unlock()
-			}(idx, tc)
+			}(i, tc)
 		}
 
-		// Consume the stream, launching tool goroutines as tool_use blocks complete.
-		turnRes, err := consumeStream(ctx, events, hooks, onToolReady)
-
-		// ALWAYS wait for tool goroutines before proceeding, even on error.
-		// This prevents: (a) goroutine leaks, (b) writes to closed hook queue,
-		// (c) race on earlyTools slice.
-		wg.Wait()
-
-		if err != nil {
-			if ctx.Err() != nil {
-				result.StopReason = stopReasonFromCtx(ctx)
-				hookDispatcher.Close()
-				return result, nil
-			}
-			hookDispatcher.Close()
-			return nil, fmt.Errorf("consume stream (turn %d): %w", turn, err)
-		}
-
-		// Accumulate usage.
-		result.Usage.InputTokens += turnRes.usage.InputTokens
-		result.Usage.OutputTokens += turnRes.usage.OutputTokens
-
-		if runLog != nil {
-			runLog.LogTurnLLM(agentlog.TurnLLMData{
-				Turn:         turn + 1,
-				InputTokens:  turnRes.usage.InputTokens,
-				OutputTokens: turnRes.usage.OutputTokens,
-				StopReason:   turnRes.stopReason,
-				TextLen:      len(turnRes.text),
-				ToolCalls:    len(turnRes.toolCalls),
-			})
-		}
-
-		if cfg.OnTurn != nil {
-			cfg.OnTurn(turn+1, result.Usage.InputTokens+result.Usage.OutputTokens)
-		}
-
-		if turnRes.text != "" {
-			result.Text = turnRes.text
-		}
-
-		// Check stop reason.
-		if turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0 {
-			result.StopReason = turnRes.stopReason
-			if result.StopReason == "" {
-				result.StopReason = "end_turn"
-			}
-			hookDispatcher.Close()
+		// Wait for all tool goroutines, but bail immediately if ctx is cancelled
+		// (agent abort/kill). The goroutines still run to completion in the
+		// background — they hold their own index and don't share state.
+		wgDone := make(chan struct{})
+		go func() { wg.Wait(); close(wgDone) }()
+		select {
+		case <-wgDone:
+		case <-ctx.Done():
+			result.StopReason = stopReasonFromCtx(ctx)
 			return result, nil
 		}
 
-		// Build assistant message with all content blocks from this turn.
-		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+		if ctx.Err() != nil {
+			result.StopReason = stopReasonFromCtx(ctx)
+			return result, nil
+		}
 
-		// Assemble tool results in the order LLM expects (matching toolCalls order).
-		// Safe to read earlyTools without lock — wg.Wait() above guarantees all
-		// tool goroutines have finished writing.
-		toolResults := buildToolResults(turnRes.toolCalls, earlyTools)
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
 	}
 
 	result.StopReason = "max_turns"
-	hookDispatcher.Close()
 	return result, nil
-}
-
-// earlyToolEntry tracks a tool that was dispatched during stream parsing.
-type earlyToolEntry struct {
-	id     string
-	result llm.ContentBlock
-}
-
-// buildToolResults assembles tool results in the order the LLM expects,
-// matching the original toolCalls order. Early-dispatched tools are looked
-// up by tool_use_id.
-func buildToolResults(toolCalls []llm.ContentBlock, early []earlyToolEntry) []llm.ContentBlock {
-	byID := make(map[string]llm.ContentBlock, len(early))
-	for _, e := range early {
-		if e.id != "" {
-			byID[e.id] = e.result
-		}
-	}
-	results := make([]llm.ContentBlock, len(toolCalls))
-	for i, tc := range toolCalls {
-		if r, ok := byID[tc.ID]; ok {
-			results[i] = r
-		} else {
-			// Should not happen — all tools dispatched via onToolReady.
-			results[i] = llm.ContentBlock{
-				Type:      "tool_result",
-				ToolUseID: tc.ID,
-				Content:   "Error: tool result not found",
-				IsError:   true,
-			}
-		}
-	}
-	return results
 }
 
 // turnResult holds the parsed output of a single LLM turn.
@@ -284,10 +236,7 @@ type turnResult struct {
 
 // consumeStream reads all events from a streaming LLM response and assembles
 // the turn result. Handles both Anthropic and OpenAI SSE formats.
-//
-// onToolReady is called (if non-nil) when a tool_use content block is fully
-// parsed — enabling early tool dispatch while the stream continues.
-func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks, onToolReady func(llm.ContentBlock)) (*turnResult, error) {
+func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks) (*turnResult, error) {
 	result := &turnResult{}
 
 	// Track current content block being built.
@@ -351,11 +300,6 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 					switch currentBlock.block.Type {
 					case "tool_use":
 						result.toolCalls = append(result.toolCalls, currentBlock.block)
-						// Zen arch — Early Issue: dispatch tool execution immediately
-						// while the stream continues parsing remaining blocks.
-						if onToolReady != nil {
-							onToolReady(currentBlock.block)
-						}
 					case "text":
 						result.text += currentBlock.block.Text
 					case "thinking":
