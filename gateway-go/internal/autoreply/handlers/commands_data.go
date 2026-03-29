@@ -22,7 +22,6 @@ func BuiltinChatCommands() []ChatCommandDefinition {
 
 		// Model & thinking
 		{Key: "model", NativeName: "model", Description: "Set or show the model", TextAliases: []string{"/model"}, AcceptsArgs: true, Scope: ScopeBoth, Category: CategoryOptions},
-		{Key: "models", NativeName: "models", Description: "List available models", TextAliases: []string{"/models"}, Scope: ScopeBoth, Category: CategoryOptions},
 		{Key: "think", Description: "Set thinking level", TextAliases: []string{"/think"}, AcceptsArgs: true, Scope: ScopeText, Category: CategoryOptions},
 		{Key: "fast", Description: "Toggle fast mode", TextAliases: []string{"/fast"}, AcceptsArgs: true, Scope: ScopeText, Category: CategoryOptions},
 		{Key: "verbose", NativeName: "verbose", Description: "Set verbose level", TextAliases: []string{"/verbose"}, AcceptsArgs: true, Scope: ScopeBoth, Category: CategoryOptions},

@@ -1,10 +1,7 @@
 package handlers
 
 import (
-	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 )
 
 func TestCommandRouter_DispatchModel(t *testing.T) {
@@ -35,18 +32,3 @@ func TestCommandRouter_UnknownCommand(t *testing.T) {
 	}
 }
 
-func TestCommandRouter_ModelsWithPagination(t *testing.T) {
-	r := NewCommandRouter(NewCommandRegistry(BuiltinChatCommands()))
-	result, _ := r.Dispatch(CommandContext{
-		Command: "models",
-		Deps: &CommandDeps{
-			ModelCandidates: []model.ModelCandidate{
-				{Provider: "anthropic", Model: "claude-3", Label: "Claude 3"},
-				{Provider: "openai", Model: "gpt-4", Label: "GPT-4"},
-			},
-		},
-	})
-	if !strings.Contains(result.Reply, "claude-3") {
-		t.Errorf("reply should list models: %q", result.Reply)
-	}
-}
