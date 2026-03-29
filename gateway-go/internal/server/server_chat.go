@@ -433,37 +433,10 @@ func (s *Server) wireDiscordChatHandler() {
 		return client.TriggerTyping(ctx, delivery.To)
 	})
 
-	// Chain reaction function.
-	prevReaction := s.chatHandler.ReactionFunc()
-	s.chatHandler.SetReactionFunc(func(ctx context.Context, delivery *chat.DeliveryContext, emoji string) error {
-		if delivery == nil || delivery.Channel != "discord" || delivery.MessageID == "" {
-			if prevReaction != nil {
-				return prevReaction(ctx, delivery, emoji)
-			}
-			return nil
-		}
-		client := s.discordPlug.Client()
-		if client == nil {
-			return nil
-		}
-		return client.CreateReaction(ctx, delivery.To, delivery.MessageID, emoji)
-	})
-
-	// Chain remove reaction function (Discord additive reactions need explicit removal).
-	prevRemoveReaction := s.chatHandler.RemoveReactionFunc()
-	s.chatHandler.SetRemoveReactionFunc(func(ctx context.Context, delivery *chat.DeliveryContext, emoji string) error {
-		if delivery == nil || delivery.Channel != "discord" || delivery.MessageID == "" {
-			if prevRemoveReaction != nil {
-				return prevRemoveReaction(ctx, delivery, emoji)
-			}
-			return nil
-		}
-		client := s.discordPlug.Client()
-		if client == nil {
-			return nil
-		}
-		return client.DeleteOwnReaction(ctx, delivery.To, delivery.MessageID, emoji)
-	})
+	// Discord does not use status reactions — progress is shown via
+	// ProgressTracker embeds instead. Reaction wiring is intentionally
+	// skipped to avoid 404 spam when the triggering message is ephemeral
+	// or deleted (e.g. thread-start messages in Discord).
 
 	// Wire tool progress tracking for Discord: when the agent executes tools,
 	// update a progress embed in-place to show real-time execution status.
