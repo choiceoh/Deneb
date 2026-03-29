@@ -168,9 +168,14 @@ func (s *Server) registerSystemServiceMethods(denebDir string) {
 	// Loads Telegram config from deneb.json if available.
 	if s.runtimeCfg != nil {
 		tgCfg := loadTelegramConfig(s.runtimeCfg)
-		if tgCfg != nil && tgCfg.BotToken != "" {
+		if tgCfg == nil {
+			s.logger.Warn("telegram channel not configured (config missing or invalid)")
+		} else if tgCfg.BotToken == "" {
+			s.logger.Warn("telegram channel config found but botToken is empty")
+		} else {
 			s.telegramPlug = telegram.NewPlugin(tgCfg, s.logger)
 			s.channels.Register(s.telegramPlug)
+			s.logger.Info("telegram channel registered")
 		}
 	}
 	rpc.RegisterMessagingMethods(s.dispatcher, rpc.MessagingDeps{
