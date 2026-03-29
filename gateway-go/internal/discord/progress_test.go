@@ -48,14 +48,18 @@ func TestProgressStep_ReasonDisplayed(t *testing.T) {
 	}
 }
 
-func TestProgressStep_AllDoneWithError(t *testing.T) {
+func TestProgressStep_AllDoneWithErrors(t *testing.T) {
+	// Progress embed does not judge success/failure — always "완료" when all steps finish.
 	steps := []ProgressStep{
 		{Name: "step1", Status: StepDone},
 		{Name: "step2", Status: StepError},
 	}
 	e := FormatProgressEmbed(steps)
-	if e.Color != ColorError {
-		t.Errorf("expected error color when has error steps, got %#x", e.Color)
+	if e.Color != ColorSuccess {
+		t.Errorf("expected success color when all steps finished, got %#x", e.Color)
+	}
+	if !strings.Contains(e.Title, "완료") {
+		t.Errorf("expected 완료 title, got %q", e.Title)
 	}
 }
 

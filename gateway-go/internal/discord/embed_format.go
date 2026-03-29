@@ -283,23 +283,15 @@ func FormatProgressEmbed(steps []ProgressStep) Embed {
 	color := ColorProgress
 	title := "⏳ 실행 중..."
 	allDone := true
-	hasError := false
 	for _, s := range steps {
 		if s.Status != StepDone && s.Status != StepError {
 			allDone = false
-		}
-		if s.Status == StepError {
-			hasError = true
+			break
 		}
 	}
 	if allDone {
-		if hasError {
-			color = ColorError
-			title = "❌ 완료 (오류 발생)"
-		} else {
-			color = ColorSuccess
-			title = "✅ 완료"
-		}
+		color = ColorSuccess
+		title = "✅ 완료"
 	}
 
 	return Embed{
