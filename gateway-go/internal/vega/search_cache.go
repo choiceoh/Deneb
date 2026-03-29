@@ -15,9 +15,13 @@ import (
 	"time"
 )
 
+// CPU architecture analogy: L4 cross-session cache. Single-user deployment with
+// infrequent knowledge base updates means we can cache more aggressively.
+// Increased from 32 entries/3min to 64 entries/10min for better hit rates
+// on repeated similar queries within and across sessions.
 const (
-	searchCacheMaxSize = 32
-	searchCacheTTL     = 3 * time.Minute
+	searchCacheMaxSize = 64
+	searchCacheTTL     = 10 * time.Minute
 )
 
 type searchCacheEntry struct {

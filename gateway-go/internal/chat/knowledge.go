@@ -17,6 +17,17 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
+// CPU architecture analogy: L4 cross-session cache for user model data.
+// User model (communication style, expertise, preferences) changes very slowly —
+// only updated by dreaming cycles. Caching for 10 minutes avoids a SQLite query
+// on every knowledge prefetch (100-500ms → ~0ms on hit).
+var (
+	userModelCache     []memory.UserModelEntry
+	userModelCacheAt   time.Time
+	userModelCacheMu   sync.Mutex
+	userModelCacheTTL  = 10 * time.Minute
+)
+
 // KnowledgeDeps holds optional dependencies for knowledge prefetch.
 type KnowledgeDeps struct {
 	VegaBackend    vega.Backend            // nil → skip Vega search
@@ -88,13 +99,30 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 			}
 		}()
 
-		// Fetch mutual understanding / user model (parallel).
+		// Fetch mutual understanding / user model (parallel, L4 cached).
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			userModelCacheMu.Lock()
+			if len(userModelCache) > 0 && time.Since(userModelCacheAt) < userModelCacheTTL {
+				// L4 cache hit — user model changes only during dreaming cycles.
+				copied := make([]memory.UserModelEntry, len(userModelCache))
+				copy(copied, userModelCache)
+				userModelCacheMu.Unlock()
+				userModelEntries = copied
+				return
+			}
+			userModelCacheMu.Unlock()
+
 			entries, err := deps.MemoryStore.GetUserModel(ctx)
 			if err == nil {
 				userModelEntries = entries
+				// Update L4 cache.
+				userModelCacheMu.Lock()
+				userModelCache = make([]memory.UserModelEntry, len(entries))
+				copy(userModelCache, entries)
+				userModelCacheAt = time.Now()
+				userModelCacheMu.Unlock()
 			}
 		}()
 	} else if deps.WorkspaceDir != "" {

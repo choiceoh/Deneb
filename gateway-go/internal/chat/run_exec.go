@@ -33,7 +33,58 @@ func executeAgentRun(
 ) (*AgentResult, error) {
 	runStart := time.Now()
 
-	// 1. Persist user message to transcript + Aurora store.
+	// ── Pipeline stage 0: Zen Decoder — pre-decode the user message ─────
+	// Extract hints (greeting, short, attachments, keywords) that guide
+	// downstream stages to skip unnecessary work.
+	decoded := DecodeMessage(params.Message, params.Attachments)
+
+	workspaceDir := params.WorkspaceDir
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDirForPrompt()
+	}
+
+	// ── Pipeline stage 1: Early model + provider resolution ─────────────
+	// CPU architecture technique: "pipeline interleaving" — resolve model/provider
+	// first so we know the API type (anthropic vs openai) before building the
+	// system prompt. This eliminates the Anthropic double-build (string → blocks
+	// → re-inject knowledge/proactive) that previously wasted ~10-50ms.
+	model := params.Model
+	initialRole := modelrole.RoleMain
+
+	if deps.registry != nil && model != "" {
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		}
+	}
+	if model == "" {
+		model = deps.defaultModel
+	}
+	if model == "" && deps.registry != nil {
+		model = deps.registry.FullModelID(modelrole.RoleMain)
+	}
+	if deps.registry != nil && decoded.HasImageAttachment {
+		imgCfg := deps.registry.Config(modelrole.RoleImage)
+		if imgCfg.Model != "" {
+			model = deps.registry.FullModelID(modelrole.RoleImage)
+			initialRole = modelrole.RoleImage
+		}
+	}
+
+	providerID, modelName := parseModelID(model)
+	model = modelName
+
+	client, apiType := resolveClient(deps, providerID, logger)
+	if client == nil {
+		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
+	}
+	isAnthropic := apiType == "anthropic"
+
+	// ── Pipeline stage 2: Persist user message + async Aurora sync ──────
+	// CPU architecture technique: "write-back buffer" — transcript.Append is
+	// synchronous (write-through cache ensures context assembly sees the new
+	// message), but Aurora sync is fire-and-forget since it's only needed for
+	// compaction tracking and has no downstream data dependency.
 	if deps.transcript != nil && params.Message != "" {
 		userMsg := ChatMessage{
 			Role:      "user",
@@ -44,80 +95,90 @@ func executeAgentRun(
 			logger.Error("failed to persist user message", "error", err)
 		}
 	}
-	// Sync to Aurora store for compaction tracking.
-	// Skip for Discord: ephemeral coding sessions don't need compaction.
 	if deps.auroraStore != nil && params.Message != "" && !isDiscordDelivery(params.Delivery) {
-		tokenCount := uint64(estimateTokens(params.Message))
-		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
-			logger.Warn("aurora: failed to sync user message", "error", err)
-		}
+		auroraStore := deps.auroraStore
+		msg := params.Message
+		go func() {
+			tokenCount := uint64(estimateTokens(msg))
+			if _, err := auroraStore.SyncMessage(1, "user", msg, tokenCount); err != nil {
+				logger.Warn("aurora: failed to sync user message", "error", err)
+			}
+		}()
 	}
 
-	// 2. Kick off proactive context in parallel with prompt + history assembly.
-	// The local sglang model analyzes the user message and returns a context
-	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
+	// ── Pipeline stage 3: Proactive context (parallel goroutine) ────────
+	// Zen Decoder hint: skip proactive context for greetings and short messages
+	// (they don't benefit from local LLM analysis — saves 100-500ms).
 	type proactiveResult struct{ hint string }
 	proactiveCh := make(chan proactiveResult, 1)
-	workspaceDir := params.WorkspaceDir
-	if workspaceDir == "" {
-		workspaceDir = resolveWorkspaceDirForPrompt()
-	}
-	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
+	if params.Message != "" && !decoded.IsShort && !decoded.IsGreeting {
 		go func() {
 			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)
 			proactiveCh <- proactiveResult{hint: hint}
 		}()
 	} else {
-		proactiveCh <- proactiveResult{} // no-op: skip for short messages
+		proactiveCh <- proactiveResult{}
 	}
 
+	// ── Pipeline stage 4: System prompt (L3 cache + correct format) ────
+	// CPU architecture technique: L3 session cache — compiled system prompts are
+	// expensive to build (context file loading, tool schema serialization, ~10-50ms).
+	// Most components are stable within a session, so we cache the result keyed
+	// by (channel, toolCount, workspaceDir, apiType). Cache hit → ~0ms.
+	//
+	// Since apiType is already known (from stage 1), we build in the right format
+	// directly: Anthropic → ContentBlock array, others → plain string.
 	promptStart := time.Now()
-	// 3. Assemble system prompt (supports both string and content block array).
-	// The prompt format is deferred: if Anthropic is the provider, we use
-	// ContentBlock arrays with cache_control breakpoints; otherwise plain string.
 	var systemPrompt json.RawMessage
-	var systemPromptParams *prompt.SystemPromptParams // non-nil when dynamic build is needed
 	if params.System != "" {
 		systemPrompt = llm.SystemString(params.System)
 	} else if deps.defaultSystem != "" {
 		systemPrompt = llm.SystemString(deps.defaultSystem)
 	}
 	if len(systemPrompt) == 0 && deps.tools != nil {
-		tz, _ := prompt.LoadCachedTimezone()
-		spp := prompt.SystemPromptParams{
-			WorkspaceDir: workspaceDir,
-			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
-			UserTimezone: tz,
-			ContextFiles: prompt.LoadContextFiles(workspaceDir),
-			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:      deliveryChannel(params.Delivery),
-		}
-		systemPromptParams = &spp
-		// Defer format choice: only build the format we'll actually use.
-		// BuildSystemPrompt (string) is the default; overridden to blocks
-		// for Anthropic API after apiType is resolved below.
-		// Discord channel uses the coding-focused system prompt.
-		if spp.Channel == "discord" {
-			systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
+		toolCount := len(deps.tools.Definitions())
+		promptKey := PromptCacheKey(deliveryChannel(params.Delivery), toolCount, workspaceDir, apiType)
+
+		if cached, ok := deps.sessionCache.GetPrompt(promptKey); ok {
+			systemPrompt = cached
+			logger.Info("pipeline: system prompt cache hit")
 		} else {
-			systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+			tz, _ := prompt.LoadCachedTimezone()
+			spp := prompt.SystemPromptParams{
+				WorkspaceDir: workspaceDir,
+				ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
+				UserTimezone: tz,
+				ContextFiles: prompt.LoadContextFiles(workspaceDir),
+				RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+				Channel:      deliveryChannel(params.Delivery),
+			}
+			if isAnthropic {
+				if spp.Channel == "discord" {
+					systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(spp))
+				} else {
+					systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+				}
+			} else {
+				if spp.Channel == "discord" {
+					systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
+				} else {
+					systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+				}
+			}
+			deps.sessionCache.SetPrompt(promptKey, systemPrompt)
 		}
 	}
 
 	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())
 
+	// ── Pipeline stage 5: Knowledge + context assembly (parallel) ───────
 	prepStart := time.Now()
-	// 3.5 + 4. Run knowledge prefetch and context assembly in parallel.
-	// Both are independent: knowledge searches Vega/Memory, context loads transcript history.
 	var knowledgeAddition string
 	var messages []llm.Message
 	var contextErr error
 
 	var prepWg sync.WaitGroup
 
-	// Knowledge prefetch (parallel).
-	// For Discord, skip memory recall — coding sessions are ephemeral and
-	// don't benefit from conversational memory. Vega (project knowledge) still runs.
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
@@ -134,7 +195,6 @@ func executeAgentRun(
 		}
 	}()
 
-	// Context assembly (parallel).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
@@ -144,6 +204,18 @@ func executeAgentRun(
 				contextErr = err
 			} else {
 				messages = result.Messages
+				// CPU technique: "branch prediction" — record token pressure so we
+				// can predict context overflow before it happens. High pressure
+				// sessions can pre-evaluate compaction in the next run.
+				if deps.compactionPressure != nil && result.EstimatedTokens > 0 {
+					deps.compactionPressure.Update(
+						params.SessionKey,
+						result.EstimatedTokens,
+						int(deps.contextCfg.TokenBudget),
+						result.TotalMessages,
+					)
+					deps.compactionPressure.LogPressure(params.SessionKey, logger)
+				}
 			}
 		}
 	}()
@@ -160,7 +232,6 @@ func executeAgentRun(
 
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
-		// No history — build the user message from scratch.
 		if len(params.Attachments) > 0 {
 			blocks := buildAttachmentBlocks(params.Message, params.Attachments)
 			messages = []llm.Message{llm.NewBlockMessage("user", blocks)}
@@ -168,13 +239,10 @@ func executeAgentRun(
 			messages = []llm.Message{llm.NewTextMessage("user", params.Message)}
 		}
 	} else if len(messages) > 0 && len(params.Attachments) > 0 {
-		// History exists but current message has attachments — replace the
-		// last user message (which was persisted as text-only) with a
-		// multimodal version that includes the image/video content blocks.
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
-	// 5. Collect proactive context hint and inject into system prompt.
+	// ── Pipeline stage 6: Collect proactive context hint ────────────────
 	proactiveWaitStart := time.Now()
 	proactive := <-proactiveCh
 	if pw := time.Since(proactiveWaitStart).Milliseconds(); pw > 50 {
@@ -185,43 +253,6 @@ func executeAgentRun(
 			"\n## Context Hint (from local analysis)\n"+proactive.hint)
 		logger.Info("proactive context injected", "chars", len(proactive.hint))
 	}
-
-	// 6. Resolve model and provider.
-	// Agent tools pass role names ("main", "lightweight", "fallback", "image").
-	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
-	// are treated as direct overrides (no fallback chain).
-	model := params.Model
-	initialRole := modelrole.RoleMain
-
-	if deps.registry != nil && model != "" {
-		// Role name → resolve to actual model ID with fallback chain.
-		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
-			model = resolved
-			initialRole = role
-		}
-		// Raw model ID → no role mapping, no fallback chain (direct override).
-	}
-
-	// If no explicit model, use handler default or registry main.
-	if model == "" {
-		model = deps.defaultModel
-	}
-	if model == "" && deps.registry != nil {
-		model = deps.registry.FullModelID(modelrole.RoleMain)
-	}
-
-	// If the request has image attachments, prefer the image model.
-	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
-		imgCfg := deps.registry.Config(modelrole.RoleImage)
-		if imgCfg.Model != "" {
-			model = deps.registry.FullModelID(modelrole.RoleImage)
-			initialRole = modelrole.RoleImage
-		}
-	}
-
-	// Parse provider prefix from model (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
-	providerID, modelName := parseModelID(model)
-	model = modelName
 
 	// Log run.start with resolved model/provider info.
 	runLog.LogStart(agentlog.RunStartData{
@@ -239,14 +270,7 @@ func executeAgentRun(
 		PrepMs:            time.Since(runStart).Milliseconds(),
 	})
 
-	// 7. Resolve LLM client from provider config, auth manager, or pre-configured client.
-	client, apiType := resolveClient(deps, providerID, logger)
-	if client == nil {
-		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
-	}
-
-	// 8. Build tool list from registry (uses stored descriptions and schemas).
-	// Discord channel uses the coding profile (subset of tools).
+	// ── Pipeline stage 7: Build tools + Anthropic caching ───────────────
 	var tools []llm.Tool
 	if deps.tools != nil {
 		if deliveryChannel(params.Delivery) == "discord" {
@@ -256,28 +280,8 @@ func executeAgentRun(
 		}
 	}
 
-	// For Anthropic API: rebuild system prompt as ContentBlock array with
-	// cache_control breakpoints, and mark the last tool for caching.
-	if apiType == "anthropic" {
-		if systemPromptParams != nil {
-			if systemPromptParams.Channel == "discord" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(*systemPromptParams))
-			} else {
-				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(*systemPromptParams))
-			}
-			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
-			if knowledgeAddition != "" {
-				systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
-			}
-		}
-		// Re-inject proactive hint (Anthropic rebuild overwrites the string version).
-		if proactive.hint != "" {
-			systemPrompt = llm.AppendSystemText(systemPrompt,
-				"\n## Context Hint (from local analysis)\n"+proactive.hint)
-		}
-		if len(tools) > 0 {
-			tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
-		}
+	if isAnthropic && len(tools) > 0 {
+		tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
 	}
 
 	// 9. Build agent config.

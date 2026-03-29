@@ -108,6 +108,12 @@ func (sb *Broadcaster) EmitAborted(partialText string) {
 
 // emit is the shared broadcast path. It injects common fields (sessionKey,
 // clientRunId, seq) and serializes to JSON. No-ops when broadcastRaw is nil.
+//
+// Zen arch — Reorder Buffer: the atomic seq counter provides monotonic event
+// ordering that's preserved even when hooks are dispatched asynchronously via
+// AsyncHookDispatcher. The FIFO drain goroutine ensures hooks call emit() in
+// the correct causal order; the seq number lets clients verify/reorder if
+// events arrive out-of-order over WebSocket transport.
 func (sb *Broadcaster) emit(event string, payload map[string]any) {
 	if sb.broadcastRaw == nil {
 		return
