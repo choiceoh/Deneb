@@ -325,6 +325,10 @@ func (p *InboundProcessor) tryCreateDiscordThread(channelID, messageID, content 
 	discordThreadParentMu.Lock()
 	discordThreadParent[thread.ID] = threadParentEntry{ParentID: channelID, CreatedAt: time.Now()}
 	discordThreadParentMu.Unlock()
+	// Persist to disk for restart recovery.
+	if p.server.discordThreadStore != nil {
+		p.server.discordThreadStore.Put(thread.ID, channelID)
+	}
 
 	return thread.ID
 }
@@ -402,8 +406,14 @@ func (p *InboundProcessor) getThreadParent(threadID string) string {
 	// Fall back to the bot's Gateway cache.
 	if p.server.discordPlug != nil {
 		if bot := p.server.discordPlug.Bot(); bot != nil {
-			return bot.ThreadParent(threadID)
+			if parentID := bot.ThreadParent(threadID); parentID != "" {
+				return parentID
+			}
 		}
+	}
+	// Fall back to persistent thread store (survives restart).
+	if p.server.discordThreadStore != nil {
+		return p.server.discordThreadStore.Get(threadID)
 	}
 	return ""
 }
@@ -437,6 +447,11 @@ func (p *InboundProcessor) HandleThreadEvent(event discord.ThreadEvent) {
 			}
 		}
 
+		// Send session end summary embed on archive (before removing worktree).
+		if event.Archived && p.server.discordWorktrees != nil && p.server.discordPlug != nil {
+			p.sendThreadArchiveSummary(event.ThreadID)
+		}
+
 		// Remove the thread's isolated worktree.
 		if p.server.discordWorktrees != nil {
 			p.server.discordWorktrees.Remove(event.ThreadID)
@@ -447,8 +462,57 @@ func (p *InboundProcessor) HandleThreadEvent(event discord.ThreadEvent) {
 			discordThreadParentMu.Lock()
 			delete(discordThreadParent, event.ThreadID)
 			discordThreadParentMu.Unlock()
+			if p.server.discordThreadStore != nil {
+				p.server.discordThreadStore.Delete(event.ThreadID)
+			}
 		}
 	}
+}
+
+// sendThreadArchiveSummary gathers git info from the thread worktree and sends
+// a session-end summary embed showing branch, recent commits, and change stats.
+func (p *InboundProcessor) sendThreadArchiveSummary(threadID string) {
+	ws := p.server.discordWorktrees.Get(threadID)
+	if ws == nil {
+		return
+	}
+	dir := ws.Dir
+
+	// Gather git info from the worktree.
+	branch := runGitQuiet(dir, "rev-parse", "--abbrev-ref", "HEAD")
+	diffStat := runGitQuiet(dir, "diff", "--stat", "HEAD~3..HEAD")
+	recentLog := runGitQuiet(dir, "log", "--oneline", "-5")
+
+	// Format commit lines as bullet points for the embed.
+	if recentLog != "" {
+		lines := strings.Split(recentLog, "\n")
+		var formatted []string
+		for _, l := range lines {
+			if l = strings.TrimSpace(l); l != "" {
+				formatted = append(formatted, "- "+l)
+			}
+		}
+		recentLog = strings.Join(formatted, "\n")
+	}
+
+	embed := discord.FormatSessionEndEmbed(branch, diffStat, recentLog)
+	client := p.server.discordPlug.Client()
+	ctx := context.Background()
+	client.SendMessage(ctx, threadID, &discord.SendMessageRequest{
+		Embeds:          []discord.Embed{embed},
+		AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+	})
+}
+
+// runGitQuiet runs a git command and returns trimmed output, or "" on error.
+func runGitQuiet(dir string, args ...string) string {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // resolveWorkspaceChannel extracts the workspace-lookup channel ID from a session key.

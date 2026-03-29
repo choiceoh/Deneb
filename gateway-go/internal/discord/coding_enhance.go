@@ -462,3 +462,35 @@ func FormatPilotResultEmbed(summary string, durationMs int64) Embed {
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 	}
 }
+
+// FormatSessionEndEmbed builds a summary embed sent when a thread session ends
+// (archive). Shows branch, recent commits, and change stats for the session.
+func FormatSessionEndEmbed(branch, diffStat, recentCommits string) Embed {
+	fields := []EmbedField{}
+	if branch != "" {
+		fields = append(fields, EmbedField{
+			Name: "🌿 브랜치", Value: "`" + branch + "`", Inline: true,
+		})
+	}
+	if diffStat != "" {
+		fields = append(fields, EmbedField{
+			Name: "📝 변경 요약", Value: "```\n" + truncate(diffStat, 300) + "\n```",
+		})
+	}
+	if recentCommits != "" {
+		fields = append(fields, EmbedField{
+			Name: "📜 최근 커밋", Value: truncate(recentCommits, 500),
+		})
+	}
+	desc := "스레드 세션이 종료되었습니다."
+	if len(fields) == 0 {
+		desc = "스레드 세션이 종료되었습니다. (변경 사항 없음)"
+	}
+	return Embed{
+		Title:       "📦 스레드 세션 종료",
+		Description: desc,
+		Color:       ColorInfo,
+		Fields:      fields,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+	}
+}

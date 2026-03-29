@@ -249,7 +249,9 @@ func FormatStatusEmbed(branch, status, diffStats, recentLog string) Embed {
 // FormatProgressEmbed builds an orange embed showing agent execution progress.
 // Steps in the same parallel group (Group >= 1, count >= 2) are prefixed with
 // "┃ " to visually indicate they ran simultaneously.
-func FormatProgressEmbed(steps []ProgressStep) Embed {
+// trackerStart is the time the progress tracker was created; used to compute
+// total elapsed time in the finalized footer.
+func FormatProgressEmbed(steps []ProgressStep, trackerStart ...time.Time) Embed {
 	// Count members per group to decide whether to show parallel indicator.
 	groupCount := map[int]int{}
 	for _, s := range steps {
@@ -258,18 +260,26 @@ func FormatProgressEmbed(steps []ProgressStep) Embed {
 		}
 	}
 
+	var doneCount, totalCount int
 	var lines []string
 	for _, s := range steps {
+		totalCount++
 		emoji := "⬜"
 		switch s.Status {
 		case StepRunning:
 			emoji = "🔄"
 		case StepDone:
 			emoji = "✅"
+			doneCount++
 		case StepError:
 			emoji = "❌"
+			doneCount++
 		}
 		line := emoji + " " + s.Name
+		// Show duration for completed steps.
+		if s.Duration > 0 {
+			line += " " + formatDurationKorean(s.Duration)
+		}
 		if s.Reason != "" {
 			line += " — " + s.Reason
 		}
@@ -281,33 +291,55 @@ func FormatProgressEmbed(steps []ProgressStep) Embed {
 	}
 
 	color := ColorProgress
-	title := "⏳ 실행 중..."
-	allDone := true
-	for _, s := range steps {
-		if s.Status != StepDone && s.Status != StepError {
-			allDone = false
-			break
-		}
-	}
+	allDone := doneCount == totalCount && totalCount > 0
+	var title string
 	if allDone {
 		color = ColorSuccess
-		title = "✅ 완료"
+		title = fmt.Sprintf("✅ %d/%d 완료", doneCount, totalCount)
+	} else {
+		title = fmt.Sprintf("⏳ %d/%d 도구 실행 중...", doneCount, totalCount)
+	}
+
+	var footer *EmbedFooter
+	if allDone && len(trackerStart) > 0 && !trackerStart[0].IsZero() {
+		elapsed := time.Since(trackerStart[0])
+		footer = &EmbedFooter{Text: "총 " + formatDurationKorean(elapsed) + " 소요"}
 	}
 
 	return Embed{
 		Title:       title,
 		Description: strings.Join(lines, "\n"),
 		Color:       color,
+		Footer:      footer,
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 	}
 }
 
+// formatDurationKorean formats a duration into a concise Korean string.
+func formatDurationKorean(d time.Duration) string {
+	if d < time.Second {
+		ms := d.Milliseconds()
+		if ms < 100 {
+			return fmt.Sprintf("(%dms)", ms)
+		}
+		return fmt.Sprintf("(0.%d초)", ms/100)
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("(%.1f초)", d.Seconds())
+	}
+	mins := int(d.Minutes())
+	secs := int(d.Seconds()) % 60
+	return fmt.Sprintf("(%d분 %d초)", mins, secs)
+}
+
 // ProgressStep represents a single step in an agent execution.
 type ProgressStep struct {
-	Name   string
-	Reason string // brief LLM reasoning summary (may be empty)
-	Status StepStatus
-	Group  int // parallel group ID; 0 = ungrouped, >=1 = same parallel batch
+	Name      string
+	Reason    string     // brief LLM reasoning summary (may be empty)
+	Status    StepStatus
+	Group     int           // parallel group ID; 0 = ungrouped, >=1 = same parallel batch
+	StartedAt time.Time     // when the step started running
+	Duration  time.Duration // elapsed time (set on completion)
 }
 
 // StepStatus is the state of a progress step.

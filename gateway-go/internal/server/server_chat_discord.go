@@ -37,6 +37,9 @@ func (s *Server) wireDiscordChatHandler() {
 	// Initialize per-thread worktree manager for workspace isolation.
 	s.discordWorktrees = discord.NewWorktreeManager("", s.logger)
 
+	// Initialize persistent thread→parent mapping store.
+	s.discordThreadStore = discord.NewThreadStore("", s.logger)
+
 	// Recent-send dedup cache.
 	var recentMu sync.Mutex
 	recentSends := make(map[string]time.Time)
@@ -215,7 +218,7 @@ func (s *Server) wireDiscordChatHandler() {
 		case "start":
 			tracker.StartStep(ctx, event.Name, event.Reason)
 		case "complete":
-			tracker.CompleteStep(ctx, event.Name, event.IsError)
+			tracker.CompleteStepWithResult(ctx, event.Name, event.IsError, event.Result)
 			// Check if all steps are done to finalize.
 			// Finalize is called lazily; the agent reply will come separately.
 		}
