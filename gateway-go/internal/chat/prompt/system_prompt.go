@@ -123,7 +123,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	s.WriteString("- Do not narrate routine tool calls. Narrate only for multi-step, complex, or sensitive actions.\n")
 	s.WriteString("- Do not ask confirmation for reversible operations (reads, searches, status checks). Act immediately.\n")
 	s.WriteString("- Never ask the user to perform an action you can do with your tools. If you can read, search, execute, or check something yourself, do it directly.\n")
-	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail), grep >200 lines capped, find >500 grouped.\n\n")
+	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail), grep >200 lines capped, find >500 grouped.\n")
+	s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n\n")
 
 	// Pilot & Chaining (merged: Pilot + pilot vs direct tools + Tool Chaining).
 	if toolSet["pilot"] {
@@ -472,7 +473,8 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	s.WriteString("- **Sequential only when dependent**: `edit` → `test(action:'build')` → `test(action:'run')` must be separate turns.\n")
 	s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
 	s.WriteString("- Do not narrate routine tool calls. Act immediately.\n")
-	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail).\n\n")
+	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail).\n")
+	s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n\n")
 
 	// Coding Workflow — with mandatory verification.
 	s.WriteString("## Coding Workflow\n")

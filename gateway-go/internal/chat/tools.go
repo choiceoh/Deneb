@@ -92,14 +92,38 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// Resolve $ref: wait for the referenced tool result and inject it.
 	input = resolveRef(ctx, input)
 
+	// Check run-level cache for idempotent read tools (find, tree).
+	// Cached results include post-processing but not compression.
+	rc := RunCacheFromContext(ctx)
+	if rc != nil && IsCacheableTool(name) {
+		cacheKey := BuildCacheKey(name, input)
+		if cached, ok := rc.Get(cacheKey); ok {
+			if wantCompress && len(cached) > 0 {
+				return compressToolOutput(ctx, name, cached, slog.Default()), nil
+			}
+			return cached, nil
+		}
+	}
+
 	output, err := def.Fn(ctx, input)
 	if err != nil {
 		return output, err
 	}
 
+	// Invalidate run cache when mutation tools modify the file system.
+	if rc != nil && IsMutationTool(name) {
+		rc.Invalidate()
+	}
+
 	// Apply post-processors.
 	if r.postProcess != nil {
 		output = r.postProcess.Apply(ctx, name, output)
+	}
+
+	// Store in run cache (after post-processing, before compression).
+	if rc != nil && IsCacheableTool(name) {
+		cacheKey := BuildCacheKey(name, input)
+		rc.Set(cacheKey, output)
 	}
 
 	// Apply compression if requested by the agent.
