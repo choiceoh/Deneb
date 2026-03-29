@@ -256,6 +256,101 @@ fn youtube_like_korean_html() {
     assert!(!result.text.contains("var x"));
 }
 
+/// Regression test for the X.com/Twitter HTML panic.
+///
+/// Production logs showed:
+///   panicked at core/src/parsing/html_to_markdown.rs:295:21:
+///   byte index 1374 is not a char boundary; it is inside '…' (bytes 1373..1376)
+///
+/// The input is Korean X.com HTML where the U+2026 ELLIPSIS character (3-byte
+/// UTF-8: E2 80 A6) sits at a byte offset that the old 14-pass code tried to
+/// slice through.
+#[test]
+fn xcom_korean_html_with_ellipsis_no_panic() {
+    // Build HTML that places '…' (U+2026) near byte offset 1373, mimicking the
+    // X.com production input that triggered the panic.
+    let prefix = r#"<!doctype html><html dir="ltr" lang="ko"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover" />"#;
+    // Pad with realistic-looking HTML to push the ellipsis near byte 1373.
+    let padding_unit = r#"<meta http-equiv="origin-trial" content="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" />"#;
+    let mut html = String::from(prefix);
+    while html.len() < 1370 {
+        html.push_str(padding_unit);
+    }
+    // Place the multi-byte ellipsis character right around byte 1373.
+    html.push_str("<title>AI 연구\u{2026}최신 뉴스</title>");
+    html.push_str("</head><body>");
+    html.push_str("<p>Anthropic\u{2026}Claude 연구</p>");
+    html.push_str("<a href=\"https://example.com\">링크\u{2026}텍스트</a>");
+    html.push_str("<li>\u{2026}목록</li>");
+    html.push_str("</body></html>");
+
+    let result = html_to_markdown(&html);
+    // Must not panic. Verify content is extracted correctly.
+    assert!(
+        result.title.is_some(),
+        "title should be extracted, got None"
+    );
+    assert!(
+        result.text.contains("\u{2026}"),
+        "ellipsis should be preserved, got: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains("Claude"),
+        "content should survive, got: {}",
+        result.text
+    );
+}
+
+/// Verify that the ellipsis character at EVERY possible byte alignment within a
+/// tag does not cause panics or incorrect slicing.
+#[test]
+fn ellipsis_at_every_byte_alignment() {
+    for padding in 0..4 {
+        let prefix = "x".repeat(padding);
+        let html = format!(
+            "<p>{prefix}\u{2026}</p><li>{prefix}\u{2026}item</li><a href=\"u\">{prefix}\u{2026}link</a><h2>{prefix}\u{2026}head</h2><code>{prefix}\u{2026}code</code>"
+        );
+        let result = html_to_markdown(&html);
+        assert!(
+            result.text.contains("\u{2026}"),
+            "failed at padding={padding}, got: {}",
+            result.text
+        );
+    }
+}
+
+/// Large X.com-like HTML document with many multi-byte characters throughout.
+/// Simulates the realistic size (~50KB) where the panic occurred in production.
+#[test]
+fn large_xcom_html_with_multibyte() {
+    let mut html = String::from(
+        r#"<!doctype html><html dir="ltr" lang="ko"><head><meta charset="utf-8" /><title>AI\u{2026}뉴스</title></head><body>"#,
+    );
+    // Build a large document with multi-byte characters at various positions.
+    for i in 0..500 {
+        html.push_str(&format!(
+            "<div><p>섹션 {i}: 한국어 텍스트\u{2026}더 보기</p><a href=\"https://x.com/{i}\">링크\u{2026}</a></div>"
+        ));
+    }
+    html.push_str("</body></html>");
+
+    assert!(html.len() > 50_000, "document should be large");
+    let result = html_to_markdown(&html);
+    assert!(
+        result.text.contains("섹션 0"),
+        "first section should survive"
+    );
+    assert!(
+        result.text.contains("섹션 499"),
+        "last section should survive"
+    );
+    assert!(
+        result.text.contains("\u{2026}"),
+        "ellipsis should be preserved"
+    );
+}
+
 // --- Conversion tests ---
 
 #[test]
