@@ -119,6 +119,11 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 
 		resp, err := c.httpClient.Do(req.WithContext(ctx))
 		if err != nil {
+			// If the parent context is done (abort, timeout, shutdown),
+			// return immediately — retrying is pointless.
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			lastErr = fmt.Errorf("http request failed: %w", err)
 			continue
 		}

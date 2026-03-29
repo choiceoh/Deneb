@@ -287,6 +287,32 @@ func TestDoStream_429Code1302_NoRetry(t *testing.T) {
 	}
 }
 
+func TestDoStream_ContextCancelledDuringRequest_NoRetry(t *testing.T) {
+	calls := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		// Cancel the context while the request is in-flight.
+		cancel()
+		// Delay the response so the client sees the cancellation.
+		time.Sleep(50 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "ok")
+	}))
+	defer server.Close()
+
+	c := NewClient(server.URL, "test-key",
+		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
+	_, err := c.DoStream(ctx, req)
+	if err == nil {
+		t.Fatal("expected error for context cancelled during request")
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call (no retry after context cancellation), got %d", calls)
+	}
+}
+
 func TestDoStream_429OtherCode_Retries(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
