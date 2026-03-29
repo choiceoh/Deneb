@@ -2,7 +2,7 @@
 //
 // Handler implementations are split by domain:
 //   - commands_handlers_session.go  — reset, compact, stop/cancel/kill
-//   - commands_handlers_model.go    — model, models, verbose
+//   - commands_handlers_model.go    — model, verbose
 //   - commands_handlers_info.go     — status
 //   - commands_handlers_agents.go   — agents
 package handlers
