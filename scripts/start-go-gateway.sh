@@ -57,5 +57,24 @@ if [[ -n "$LOG_LEVEL" ]]; then
 fi
 CMD+=("${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")
 
+# Restart loop: allow one graceful restart (exit 75) per 30 minutes.
+RESTART_INTERVAL=600
+last_restart=0
+
 echo "Starting Go gateway: ${CMD[*]}"
-exec "${CMD[@]}"
+while true; do
+  "${CMD[@]}"
+  EXIT=$?
+  if [ "$EXIT" -ne 75 ]; then
+    exit "$EXIT"
+  fi
+  now=$(date +%s)
+  elapsed=$(( now - last_restart ))
+  if [ "$elapsed" -lt "$RESTART_INTERVAL" ]; then
+    echo "Gateway requested restart but rate limit reached (last restart ${elapsed}s ago, limit ${RESTART_INTERVAL}s). Exiting."
+    exit 75
+  fi
+  echo "Gateway requested restart (exit 75), restarting..."
+  last_restart="$now"
+  sleep 0.5
+done
