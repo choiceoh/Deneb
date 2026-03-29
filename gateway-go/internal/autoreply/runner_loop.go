@@ -1,13 +1,8 @@
-// agent_runner.go — Core LLM agent execution engine.
-// Mirrors src/auto-reply/reply/agent-runner.ts (763 LOC),
-// agent-runner-execution.ts (674 LOC), agent-runner-memory.ts (561 LOC),
-// agent-runner-payloads.ts (251 LOC), agent-runner-utils.ts (303 LOC),
-// agent-runner-helpers.ts (76 LOC), agent-runner-reminder-guard.ts (64 LOC).
+// runner_loop.go — Core LLM agent execution loop and memory management.
 package autoreply
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -116,35 +111,6 @@ type ToolExecutor interface {
 	Execute(ctx context.Context, call ToolCall) (output string, isError bool, err error)
 }
 
-// --- Default Agent Runner Implementation ---
-
-// Error classification constants (mirrors TS pi-embedded-helpers.ts).
-const (
-	BillingErrorMessage      = "⚠️ Billing error — please check your API key or plan."
-	ContextOverflowMessage   = "⚠️ Context overflow — prompt too large for this model. Try a shorter message or a larger-context model."
-	RoleOrderingMessage      = "⚠️ Message ordering conflict. I've reset the conversation - please try again."
-	CompactionFailureMessage = "⚠️ Context limit exceeded during compaction. I've reset our conversation to start fresh - please try again."
-	TransientRetryDelayMs    = 2500
-)
-
-// ContentBlockKind represents content block type values in agent messages.
-type ContentBlockKind string
-
-const (
-	ContentBlockText       ContentBlockKind = "text"
-	ContentBlockToolUse    ContentBlockKind = "tool_use"
-	ContentBlockToolResult ContentBlockKind = "tool_result"
-	ContentBlockThinking   ContentBlockKind = "thinking"
-)
-
-// ThinkingType represents the reasoning mode in LLM payloads.
-type ThinkingType string
-
-const (
-	ThinkingTypeEnabled  ThinkingType = "enabled"
-	ThinkingTypeDisabled ThinkingType = "disabled"
-)
-
 // ExecHost represents where tools execute.
 type ExecHost string
 
@@ -169,46 +135,6 @@ const (
 	ExecAskElevatedOnly ExecAsk = "elevated-only"
 	ExecAskNever        ExecAsk = "never"
 )
-
-// IsContextOverflowError checks if an error message indicates context overflow.
-func IsContextOverflowError(msg string) bool {
-	lower := strings.ToLower(msg)
-	if strings.Contains(lower, "context") && (strings.Contains(lower, "overflow") || strings.Contains(lower, "too large") || strings.Contains(lower, "exceeded") || strings.Contains(lower, "too long")) {
-		return true
-	}
-	if strings.Contains(lower, "max_tokens") || strings.Contains(lower, "token limit") {
-		return true
-	}
-	return false
-}
-
-// IsBillingError checks if an error is billing-related.
-func IsBillingError(msg string) bool {
-	lower := strings.ToLower(msg)
-	return strings.Contains(lower, "billing") || strings.Contains(lower, "payment") || strings.Contains(lower, "insufficient_quota")
-}
-
-// IsTransientHTTPError checks if an error is a retryable transient HTTP error.
-func IsTransientHTTPError(msg string) bool {
-	for _, code := range []string{"502", "503", "521", "429", "529"} {
-		if strings.Contains(msg, code) {
-			return true
-		}
-	}
-	return false
-}
-
-// IsRoleOrderingError checks if an error is a role ordering conflict.
-func IsRoleOrderingError(msg string) bool {
-	lower := strings.ToLower(msg)
-	return strings.Contains(lower, "roles must alternate") || strings.Contains(lower, "incorrect role")
-}
-
-// IsCompactionFailure checks if an error occurred during compaction.
-func IsCompactionFailure(msg string) bool {
-	lower := strings.ToLower(msg)
-	return strings.Contains(lower, "compaction") && (strings.Contains(lower, "fail") || strings.Contains(lower, "error"))
-}
 
 // DefaultAgentRunner implements AgentExecutor with the full LLM loop.
 type DefaultAgentRunner struct {
@@ -487,145 +413,6 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 	return result, nil
 }
 
-func (r *DefaultAgentRunner) executeTool(ctx context.Context, call ToolCall, cfg AgentTurnConfig) (string, bool, error) {
-	if r.tools == nil {
-		return "", true, fmt.Errorf("no tool executor configured")
-	}
-
-	// Check elevated permissions for bash/exec tools.
-	if (call.Name == "bash" || call.Name == "execute" || call.Name == "computer") &&
-		cfg.ElevatedLevel == types.ElevatedOff {
-		return "Tool execution requires elevated permissions. Use /elevated on to enable.", true, nil
-	}
-
-	// Check approval requirement.
-	if cfg.ExecAsk == ExecAskAlways && (call.Name == "bash" || call.Name == "execute") {
-		// In approval mode, we'd normally pause and wait for user approval.
-		// For now, auto-approve in the Go gateway (matches DGX Spark single-user model).
-	}
-
-	return r.tools.Execute(ctx, call)
-}
-
-// --- Supporting types and functions ---
-
-// ReminderGuard prevents infinite reminder loops during agent execution.
-type ReminderGuard struct {
-	mu       sync.Mutex
-	count    int
-	maxCount int
-}
-
-func NewReminderGuard(maxCount int) *ReminderGuard {
-	if maxCount <= 0 {
-		maxCount = 3
-	}
-	return &ReminderGuard{maxCount: maxCount}
-}
-
-func (g *ReminderGuard) TryRemind() bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.count >= g.maxCount {
-		return false
-	}
-	g.count++
-	return true
-}
-
-func (g *ReminderGuard) Reset() {
-	g.mu.Lock()
-	g.count = 0
-	g.mu.Unlock()
-}
-
-// AgentRunnerPayload builds the LLM request payload.
-type AgentRunnerPayload struct {
-	Model       string         `json:"model"`
-	System      string         `json:"system,omitempty"`
-	Messages    []AgentMessage `json:"messages"`
-	MaxTokens   int            `json:"max_tokens,omitempty"`
-	Tools       []AgentToolDef `json:"tools,omitempty"`
-	Stream      bool           `json:"stream,omitempty"`
-	Temperature float64        `json:"temperature,omitempty"`
-	// Thinking configuration.
-	Thinking *ThinkingConfig `json:"thinking,omitempty"`
-}
-
-// ThinkingConfig configures the thinking/reasoning mode for the LLM request.
-type ThinkingConfig struct {
-	Type         ThinkingType `json:"type"`                    // "enabled" or "disabled"
-	BudgetTokens int          `json:"budget_tokens,omitempty"` // token budget for thinking
-}
-
-// AgentMessage is a single message in the agent conversation.
-type AgentMessage struct {
-	Role          string         `json:"role"`
-	Content       string         `json:"content,omitempty"`
-	ToolUseID     string         `json:"tool_use_id,omitempty"`    // for tool_result
-	IsError       bool           `json:"is_error,omitempty"`       // for tool_result
-	ContentBlocks []ContentBlock `json:"content_blocks,omitempty"` // for multi-block messages
-}
-
-// ContentBlock represents a block within a message (text, tool_use, tool_result, thinking).
-type ContentBlock struct {
-	Type     ContentBlockKind `json:"type"` // "text", "tool_use", "tool_result", "thinking"
-	Text     string         `json:"text,omitempty"`
-	ID       string         `json:"id,omitempty"`
-	Name     string         `json:"name,omitempty"`
-	Input    map[string]any `json:"input,omitempty"`
-	Content  string         `json:"content,omitempty"`
-	IsError  bool           `json:"is_error,omitempty"`
-	Thinking string         `json:"thinking,omitempty"`
-}
-
-// AgentToolDef describes a tool available to the agent.
-type AgentToolDef struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"input_schema,omitempty"`
-}
-
-// BuildAgentPayload constructs the LLM request from a turn config and history.
-func BuildAgentPayload(cfg AgentTurnConfig, history []AgentMessage, tools []AgentToolDef) AgentRunnerPayload {
-	messages := make([]AgentMessage, 0, len(history)+1)
-	messages = append(messages, history...)
-
-	maxTokens := cfg.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = model.DefaultMaxTokens
-	}
-
-	payload := AgentRunnerPayload{
-		Model:     cfg.Model,
-		System:    cfg.SystemPrompt,
-		Messages:  messages,
-		MaxTokens: maxTokens,
-		Tools:     tools,
-		Stream:    true,
-	}
-
-	// Configure thinking based on think level.
-	switch cfg.ThinkLevel {
-	case types.ThinkOff, "":
-		// No thinking config needed.
-	case types.ThinkMinimal:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 1024}
-	case types.ThinkLow:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 4096}
-	case types.ThinkMedium:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 10240}
-	case types.ThinkHigh:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 32768}
-	case types.ThinkXHigh:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 65536}
-	case types.ThinkAdaptive:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 16384}
-	}
-
-	return payload
-}
-
 // AgentRunnerMemory manages conversation context for agent execution.
 type AgentRunnerMemory struct {
 	mu         sync.Mutex
@@ -770,58 +557,4 @@ func BuildMemoryFlush(memory *AgentRunnerMemory, sessionKey, agentID string, usa
 		Timestamp:  time.Now().UnixMilli(),
 		Usage:      usage,
 	}
-}
-
-// --- Utility functions ---
-
-func FormatUsageSummary(usage session.TokenUsage) string {
-	if usage.TotalTokens == 0 {
-		return ""
-	}
-	return fmt.Sprintf("%d tokens (in: %d, out: %d)", usage.TotalTokens, usage.InputTokens, usage.OutputTokens)
-}
-
-func FormatDuration(ms int64) string {
-	if ms < 1000 {
-		return fmt.Sprintf("%dms", ms)
-	}
-	secs := float64(ms) / 1000.0
-	if secs < 60 {
-		return fmt.Sprintf("%.1fs", secs)
-	}
-	mins := int(secs / 60)
-	remainSecs := int(secs) % 60
-	return fmt.Sprintf("%dm%ds", mins, remainSecs)
-}
-
-func IsToolUseContent(text string) bool {
-	trimmed := strings.TrimSpace(text)
-	return strings.HasPrefix(trimmed, "{\"tool_use\"") || strings.HasPrefix(trimmed, "<tool_use>")
-}
-
-func buildToolResultMessage(toolUseID, output string, isError bool) AgentMessage {
-	return AgentMessage{
-		Role:      "user",
-		ToolUseID: toolUseID,
-		Content:   output,
-		IsError:   isError,
-	}
-}
-
-func formatToolInput(input map[string]any) string {
-	if input == nil {
-		return ""
-	}
-	data, err := json.Marshal(input)
-	if err != nil {
-		return "{}"
-	}
-	return string(data)
-}
-
-func truncateToolOutput(output string, maxLen int) string {
-	if len(output) <= maxLen {
-		return output
-	}
-	return output[:maxLen] + "…[truncated]"
 }
