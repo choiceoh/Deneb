@@ -135,9 +135,13 @@ func RegisterFSTools(registry *ToolRegistry, workspaceDir string) {
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "polaris",
-		Description: "Deneb system knowledge agent. Use ask action with a question for AI-synthesized answers. Also supports: topics (doc tree), search (keyword), read (doc), guides (27 curated guides). Prefer ask for questions",
+		Description: "Deneb system knowledge agent. Ask any question about the Deneb system — Polaris autonomously searches docs, guides, and source code to synthesize a direct answer",
 		InputSchema: polarisToolSchema(),
-		Fn:          polaris.NewHandlerWithLLM(workspaceDir, callLocalLLM, checkSglangHealth),
+		Fn: polaris.NewHandlerWithDeps(workspaceDir, polaris.Deps{
+			LLM:    callLocalLLM,
+			Health: checkSglangHealth,
+			Tools:  &polaris.ReadOnlyExecutor{Inner: registry},
+		}),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "gateway",

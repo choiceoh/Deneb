@@ -711,25 +711,12 @@ func polarisToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"enum":        []string{"ask", "topics", "search", "read", "guides"},
-				"description": "ask: AI-powered Q&A about Deneb (preferred), topics: browse doc tree, search: keyword search, read: read a doc, guides: AI-curated system guides",
-			},
 			"question": map[string]any{
 				"type":        "string",
-				"description": "Natural language question about the Deneb system (for ask action)",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Keyword(s) for search action",
-			},
-			"topic": map[string]any{
-				"type":        "string",
-				"description": "For topics: optional category filter (e.g. 'gateway'). For read: doc path (e.g. 'concepts/session'). For guides: guide name (e.g. 'aurora', 'vega')",
+				"description": "Natural language question about the Deneb system. Polaris autonomously searches docs, guides, and source code to synthesize an answer",
 			},
 		},
-		"required": []string{"action"},
+		"required": []string{"question"},
 	}
 }
 

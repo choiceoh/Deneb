@@ -290,14 +290,14 @@ func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock
 	}
 }
 
-// writePolarisSection writes the Polaris system manual usage guide.
+// writePolarisSection writes the Polaris system knowledge agent guide.
 func writePolarisSection(sb *strings.Builder) {
 	sb.WriteString("## Polaris (AI 시스템 지식 에이전트)\n")
-	sb.WriteString("데네브 시스템에 대해 질문이 있으면 polaris ask를 사용하세요. 관련 문서/가이드를 자동 검색하고 종합 답변을 생성합니다.\n")
-	sb.WriteString("- polaris(action:'ask', question:'세션 라이프사이클은 어떻게 동작하나요?') → AI가 관련 문서를 검색하고 종합 답변\n")
-	sb.WriteString("- polaris(action:'guides') → 27개 AI 시스템 가이드 직접 탐색\n")
-	sb.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색 (원본 결과)\n")
-	sb.WriteString("- polaris(action:'read', topic:'concepts/session') → 특정 문서 읽기\n\n")
+	sb.WriteString("데네브 시스템에 대해 질문이 있으면 polaris를 사용하세요.\n")
+	sb.WriteString("문서, 가이드, 소스코드를 자동으로 검색하고 종합 답변을 생성합니다.\n")
+	sb.WriteString("- polaris(question:'세션 라이프사이클은 어떻게 동작하나요?')\n")
+	sb.WriteString("- polaris(question:'aurora context engine은 어떻게 작동하나요?')\n")
+	sb.WriteString("- polaris(question:'How does the tool registry work?')\n\n")
 }
 
 // writeCompactToolList writes a categorized tool name list (no descriptions).
