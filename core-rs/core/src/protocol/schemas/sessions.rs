@@ -15,7 +15,9 @@ pub fn validate_sessions_list_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "limit",
         "activeMinutes",
@@ -75,7 +77,9 @@ pub fn validate_sessions_preview_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &["keys", "limit", "maxChars"];
     check_no_additional_properties(obj, allowed, path, errors);
 
@@ -111,7 +115,9 @@ pub fn validate_sessions_resolve_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "key",
         "sessionId",
@@ -159,7 +165,9 @@ pub fn validate_sessions_create_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "key",
         "agentId",
@@ -207,7 +215,9 @@ pub fn validate_sessions_send_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "key",
         "message",
@@ -251,7 +261,9 @@ fn validate_session_key_only(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["key"], path, errors);
     if check_required(obj, "key", path, errors) {
         check_non_empty_string(&obj["key"], &format!("{path}/key"), errors);
@@ -286,7 +298,9 @@ pub fn validate_sessions_abort_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["key", "runId"], path, errors);
     if check_required(obj, "key", path, errors) {
         check_non_empty_string(&obj["key"], &format!("{path}/key"), errors);
@@ -308,7 +322,9 @@ pub fn validate_sessions_patch_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "key",
         "label",
@@ -409,7 +425,9 @@ pub fn validate_sessions_reset_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["key", "reason"], path, errors);
     if check_required(obj, "key", path, errors) {
         check_non_empty_string(&obj["key"], &format!("{path}/key"), errors);
@@ -431,7 +449,9 @@ pub fn validate_sessions_delete_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(
         obj,
         &["key", "deleteTranscript", "emitLifecycleHooks"],
@@ -461,7 +481,9 @@ pub fn validate_sessions_compact_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["key", "maxLines"], path, errors);
     if check_required(obj, "key", path, errors) {
         check_non_empty_string(&obj["key"], &format!("{path}/key"), errors);
@@ -483,7 +505,9 @@ pub fn validate_sessions_usage_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &[
         "key",
         "startDate",
@@ -496,11 +520,13 @@ pub fn validate_sessions_usage_params(
     check_no_additional_properties(obj, allowed, path, errors);
 
     #[allow(clippy::expect_used)]
-    static DATE_RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").expect("valid regex"));
+    static DATE_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").expect("valid regex")
+    });
     #[allow(clippy::expect_used)]
-    static UTC_OFFSET_RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| regex::Regex::new(r"^UTC[+-]\d{1,2}(?::[0-5]\d)?$").expect("valid regex"));
+    static UTC_OFFSET_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        regex::Regex::new(r"^UTC[+-]\d{1,2}(?::[0-5]\d)?$").expect("valid regex")
+    });
 
     check_optional(obj, "key", path, errors, |v, p, e| {
         check_non_empty_string(v, p, e);

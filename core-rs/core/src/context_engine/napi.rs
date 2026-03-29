@@ -325,8 +325,7 @@ mod tests {
         assert!(matches!(cmd, AssemblyCommand::FetchContextItems { .. }));
 
         // Empty items → Done
-        let resp =
-            serde_json::to_string(&AssemblyResponse::ContextItems { items: vec![] })?;
+        let resp = serde_json::to_string(&AssemblyResponse::ContextItems { items: vec![] })?;
         let cmd_json = context_assembly_step(handle, resp);
         let cmd: AssemblyCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, AssemblyCommand::Done { .. }));

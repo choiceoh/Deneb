@@ -10,7 +10,9 @@ pub fn validate_secrets_reload_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &[], path, errors);
 }
 
@@ -22,7 +24,9 @@ pub fn validate_secrets_resolve_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["commandName", "targetIds"], path, errors);
     if check_required(obj, "commandName", path, errors) {
         check_non_empty_string(&obj["commandName"], &format!("{path}/commandName"), errors);

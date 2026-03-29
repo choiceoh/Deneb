@@ -10,7 +10,9 @@ pub fn validate_talk_mode_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["enabled", "phase"], path, errors);
     if check_required(obj, "enabled", path, errors) {
         check_boolean(&obj["enabled"], &format!("{path}/enabled"), errors);
@@ -28,7 +30,9 @@ pub fn validate_talk_config_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["includeSecrets"], path, errors);
     check_optional(obj, "includeSecrets", path, errors, |v, p, e| {
         check_boolean(v, p, e);
@@ -43,7 +47,9 @@ pub fn validate_channels_status_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["probe", "timeoutMs"], path, errors);
     check_optional(obj, "probe", path, errors, |v, p, e| {
         check_boolean(v, p, e);
@@ -61,7 +67,9 @@ pub fn validate_channels_logout_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["channel", "accountId"], path, errors);
     if check_required(obj, "channel", path, errors) {
         check_non_empty_string(&obj["channel"], &format!("{path}/channel"), errors);
@@ -79,7 +87,9 @@ pub fn validate_web_login_start_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &["force", "timeoutMs", "verbose", "accountId"];
     check_no_additional_properties(obj, allowed, path, errors);
     check_optional(obj, "force", path, errors, |v, p, e| {
@@ -104,7 +114,9 @@ pub fn validate_web_login_wait_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["timeoutMs", "accountId"], path, errors);
     check_optional(obj, "timeoutMs", path, errors, |v, p, e| {
         check_integer(v, p, Some(0), None, e);

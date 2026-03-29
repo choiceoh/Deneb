@@ -10,7 +10,9 @@ pub fn validate_agents_list_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &[], path, errors);
 }
 
@@ -22,7 +24,9 @@ pub fn validate_agents_create_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["name", "workspace", "emoji", "avatar"], path, errors);
     if check_required(obj, "name", path, errors) {
         check_non_empty_string(&obj["name"], &format!("{path}/name"), errors);
@@ -46,7 +50,9 @@ pub fn validate_agents_update_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     let allowed = &["agentId", "name", "workspace", "model", "avatar"];
     check_no_additional_properties(obj, allowed, path, errors);
     if check_required(obj, "agentId", path, errors) {
@@ -74,7 +80,9 @@ pub fn validate_agents_delete_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["agentId", "deleteFiles"], path, errors);
     if check_required(obj, "agentId", path, errors) {
         check_non_empty_string(&obj["agentId"], &format!("{path}/agentId"), errors);
@@ -92,7 +100,9 @@ pub fn validate_agents_files_list_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["agentId"], path, errors);
     if check_required(obj, "agentId", path, errors) {
         check_non_empty_string(&obj["agentId"], &format!("{path}/agentId"), errors);
@@ -107,7 +117,9 @@ pub fn validate_agents_files_get_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["agentId", "name"], path, errors);
     if check_required(obj, "agentId", path, errors) {
         check_non_empty_string(&obj["agentId"], &format!("{path}/agentId"), errors);
@@ -125,7 +137,9 @@ pub fn validate_agents_files_set_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["agentId", "name", "content"], path, errors);
     if check_required(obj, "agentId", path, errors) {
         check_non_empty_string(&obj["agentId"], &format!("{path}/agentId"), errors);
@@ -146,7 +160,9 @@ pub fn validate_models_list_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &[], path, errors);
 }
 
@@ -158,7 +174,9 @@ pub fn validate_skills_status_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["agentId"], path, errors);
     check_optional(obj, "agentId", path, errors, |v, p, e| {
         check_non_empty_string(v, p, e);
@@ -173,7 +191,9 @@ pub fn validate_skills_bins_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &[], path, errors);
 }
 
@@ -185,7 +205,9 @@ pub fn validate_skills_install_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["name", "installId", "timeoutMs"], path, errors);
     if check_required(obj, "name", path, errors) {
         check_non_empty_string(&obj["name"], &format!("{path}/name"), errors);
@@ -206,7 +228,9 @@ pub fn validate_skills_update_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["skillKey", "enabled", "apiKey", "env"], path, errors);
     if check_required(obj, "skillKey", path, errors) {
         check_non_empty_string(&obj["skillKey"], &format!("{path}/skillKey"), errors);
@@ -244,7 +268,9 @@ pub fn validate_tools_catalog_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let Some(obj) = value.as_object() else { return; };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
     check_no_additional_properties(obj, &["agentId", "includePlugins"], path, errors);
     check_optional(obj, "agentId", path, errors, |v, p, e| {
         check_non_empty_string(v, p, e);

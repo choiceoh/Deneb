@@ -52,7 +52,8 @@ static JP_PART_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("valid regex")
 });
 #[allow(clippy::expect_used)]
-static PUNCT_SYMBOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\p{P}\p{S}]+$").expect("valid regex"));
+static PUNCT_SYMBOL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[\p{P}\p{S}]+$").expect("valid regex"));
 
 #[inline]
 fn contains_hiragana_katakana(s: &str) -> bool {

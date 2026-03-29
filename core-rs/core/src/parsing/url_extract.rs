@@ -369,9 +369,7 @@ mod tests {
     #[test]
     fn balanced_parens_preserved() {
         // Wikipedia-style URL with balanced parens should be kept intact.
-        let urls = find_bare_urls(
-            "https://en.wikipedia.org/wiki/Rust_(programming_language)",
-        );
+        let urls = find_bare_urls("https://en.wikipedia.org/wiki/Rust_(programming_language)");
         assert_eq!(
             urls[0],
             "https://en.wikipedia.org/wiki/Rust_(programming_language)"

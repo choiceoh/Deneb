@@ -11,12 +11,12 @@
 
 pub mod bm25;
 pub mod cosine;
-pub mod simd;
 pub mod fts;
 pub mod merge;
 pub mod mmr;
 pub mod napi;
 pub mod query_expansion;
+pub mod simd;
 pub mod stop_words;
 pub mod temporal_decay;
 pub mod types;

@@ -825,7 +825,10 @@ fn convert_list_items(input: &str) -> String {
             in_ol = true;
             ol_counter = 0;
             // Skip the <ol> tag itself.
-            cursor = input.get(next_lt..).and_then(|s| s.find('>')).map_or(next_lt + 3, |e| next_lt + e + 1);
+            cursor = input
+                .get(next_lt..)
+                .and_then(|s| s.find('>'))
+                .map_or(next_lt + 3, |e| next_lt + e + 1);
             continue;
         }
 
@@ -845,7 +848,10 @@ fn convert_list_items(input: &str) -> String {
             }
             in_ol = false;
             ol_counter = 0;
-            cursor = input.get(next_lt..).and_then(|s| s.find('>')).map_or(next_lt + 3, |e| next_lt + e + 1);
+            cursor = input
+                .get(next_lt..)
+                .and_then(|s| s.find('>'))
+                .map_or(next_lt + 3, |e| next_lt + e + 1);
             continue;
         }
 
@@ -1252,9 +1258,25 @@ mod tests {
     fn truncated_tags() {
         // Truncated tags at end of input must not panic.
         let cases = [
-            "<h", "<h1", "<h1>", "<a ", "<a href=", "<li", "<li>",
-            "<br", "<hr", "</p", "<script", "<style", "<noscript",
-            "&", "&amp", "&#", "&#x", "&#x4", "&#39",
+            "<h",
+            "<h1",
+            "<h1>",
+            "<a ",
+            "<a href=",
+            "<li",
+            "<li>",
+            "<br",
+            "<hr",
+            "</p",
+            "<script",
+            "<style",
+            "<noscript",
+            "&",
+            "&amp",
+            "&#",
+            "&#x",
+            "&#x4",
+            "&#39",
         ];
         for case in cases {
             let result = html_to_markdown(case);
@@ -1337,7 +1359,9 @@ mod tests {
     fn href_with_multibyte() {
         let html = r#"<a href="https://example.com/한국">한국어 링크</a>"#;
         let result = html_to_markdown(html);
-        assert!(result.text.contains("[한국어 링크](https://example.com/한국)"));
+        assert!(result
+            .text
+            .contains("[한국어 링크](https://example.com/한국)"));
     }
 
     #[test]
@@ -1368,7 +1392,10 @@ mod tests {
                 "<p>{prefix}\u{2019}</p><li>{prefix}\u{2019}item</li><a href=\"u\">{prefix}\u{2019}link</a><h2>{prefix}\u{2019}head</h2>"
             );
             let result = html_to_markdown(&html);
-            assert!(result.text.contains("\u{2019}"), "failed at padding={padding}");
+            assert!(
+                result.text.contains("\u{2019}"),
+                "failed at padding={padding}"
+            );
         }
     }
 
@@ -1384,7 +1411,9 @@ mod tests {
     #[test]
     fn youtube_like_korean_html() {
         // Simulate the YouTube HTML pattern: large doc with Korean + curly quotes.
-        let mut html = String::from(r#"<!doctype html><html style="font-size: 10px;font-family: roboto, arial, sans-serif;" lang="ko-kr"><head><title>테스트 동영상</title></head><body>"#);
+        let mut html = String::from(
+            r#"<!doctype html><html style="font-size: 10px;font-family: roboto, arial, sans-serif;" lang="ko-kr"><head><title>테스트 동영상</title></head><body>"#,
+        );
         // Pad to push curly quotes near byte ~900.
         html.push_str(&"<div>패딩텍스트</div>".repeat(30));
         html.push_str("<p>It\u{2019}s a test \u{2018}video\u{2019} for Korean users</p>");
@@ -1402,16 +1431,32 @@ mod tests {
     fn converts_bold() {
         let html = "<p><strong>bold text</strong> and <b>also bold</b></p>";
         let result = html_to_markdown(html);
-        assert!(result.text.contains("**bold text**"), "got: {}", result.text);
-        assert!(result.text.contains("**also bold**"), "got: {}", result.text);
+        assert!(
+            result.text.contains("**bold text**"),
+            "got: {}",
+            result.text
+        );
+        assert!(
+            result.text.contains("**also bold**"),
+            "got: {}",
+            result.text
+        );
     }
 
     #[test]
     fn converts_italic() {
         let html = "<p><em>italic text</em> and <i>also italic</i></p>";
         let result = html_to_markdown(html);
-        assert!(result.text.contains("*italic text*"), "got: {}", result.text);
-        assert!(result.text.contains("*also italic*"), "got: {}", result.text);
+        assert!(
+            result.text.contains("*italic text*"),
+            "got: {}",
+            result.text
+        );
+        assert!(
+            result.text.contains("*also italic*"),
+            "got: {}",
+            result.text
+        );
     }
 
     #[test]
@@ -1457,17 +1502,12 @@ mod tests {
         let html = "<pre><code>fn main() {\n    println!(\"hello\");\n}</code></pre>";
         let result = html_to_markdown(html);
         assert!(result.text.contains("```"), "got: {}", result.text);
-        assert!(
-            result.text.contains("fn main()"),
-            "got: {}",
-            result.text
-        );
+        assert!(result.text.contains("fn main()"), "got: {}", result.text);
     }
 
     #[test]
     fn converts_code_block_with_language() {
-        let html =
-            r#"<pre><code class="language-rust">let x = 42;</code></pre>"#;
+        let html = r#"<pre><code class="language-rust">let x = 42;</code></pre>"#;
         let result = html_to_markdown(html);
         assert!(result.text.contains("```rust"), "got: {}", result.text);
         assert!(result.text.contains("let x = 42;"), "got: {}", result.text);
@@ -1487,7 +1527,9 @@ mod tests {
         let html = r#"<img src="https://example.com/pic.jpg" alt="A photo">"#;
         let result = html_to_markdown(html);
         assert!(
-            result.text.contains("[A photo](https://example.com/pic.jpg)"),
+            result
+                .text
+                .contains("[A photo](https://example.com/pic.jpg)"),
             "got: {}",
             result.text
         );
@@ -1498,7 +1540,9 @@ mod tests {
         let html = r#"<img src="https://example.com/photo.png">"#;
         let result = html_to_markdown(html);
         assert!(
-            result.text.contains("[photo.png](https://example.com/photo.png)"),
+            result
+                .text
+                .contains("[photo.png](https://example.com/photo.png)"),
             "got: {}",
             result.text
         );
@@ -1534,7 +1578,11 @@ mod tests {
             "got: {}",
             result.text
         );
-        assert!(result.text.contains("| --- | --- |"), "got: {}", result.text);
+        assert!(
+            result.text.contains("| --- | --- |"),
+            "got: {}",
+            result.text
+        );
         assert!(
             result.text.contains("| Alice | 30 |"),
             "got: {}",

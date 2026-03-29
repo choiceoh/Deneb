@@ -8,7 +8,7 @@ pub mod code_spans;
 pub mod fences;
 pub mod parser;
 pub mod render;
-pub mod spans;
 mod render_state;
+pub mod spans;
 mod spoilers;
 mod tables;

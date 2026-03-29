@@ -173,15 +173,24 @@ mod tests {
         let mapping = [
             (ErrorCode::NotLinked, gen::gateway::ErrorCode::NotLinked),
             (ErrorCode::NotPaired, gen::gateway::ErrorCode::NotPaired),
-            (ErrorCode::AgentTimeout, gen::gateway::ErrorCode::AgentTimeout),
+            (
+                ErrorCode::AgentTimeout,
+                gen::gateway::ErrorCode::AgentTimeout,
+            ),
             (
                 ErrorCode::InvalidRequest,
                 gen::gateway::ErrorCode::InvalidRequest,
             ),
             (ErrorCode::Unavailable, gen::gateway::ErrorCode::Unavailable),
-            (ErrorCode::MissingParam, gen::gateway::ErrorCode::MissingParam),
+            (
+                ErrorCode::MissingParam,
+                gen::gateway::ErrorCode::MissingParam,
+            ),
             (ErrorCode::NotFound, gen::gateway::ErrorCode::NotFound),
-            (ErrorCode::Unauthorized, gen::gateway::ErrorCode::Unauthorized),
+            (
+                ErrorCode::Unauthorized,
+                gen::gateway::ErrorCode::Unauthorized,
+            ),
             (
                 ErrorCode::ValidationFailed,
                 gen::gateway::ErrorCode::ValidationFailed,

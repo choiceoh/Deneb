@@ -48,8 +48,7 @@ pub fn parse_fence_spans(buffer: &str) -> Vec<FenceSpan> {
 
     while offset <= len {
         // Find end of current line
-        let line_end = memchr::memchr(b'\n', &bytes[offset..])
-            .map_or(len, |pos| offset + pos);
+        let line_end = memchr::memchr(b'\n', &bytes[offset..]).map_or(len, |pos| offset + pos);
 
         let line = &buffer[offset..line_end];
 

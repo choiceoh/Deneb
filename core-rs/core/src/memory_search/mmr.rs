@@ -37,7 +37,6 @@ impl TokenSet {
     fn as_set(&self) -> HashSet<&str> {
         self.tokens().collect()
     }
-
 }
 
 #[cfg(test)]
@@ -96,7 +95,10 @@ fn jaccard_similarity(set_a: &HashSet<String>, set_b: &HashSet<String>) -> f64 {
         (set_b, set_a)
     };
 
-    let intersection_size = smaller.iter().filter(|t| larger.contains(t.as_str())).count();
+    let intersection_size = smaller
+        .iter()
+        .filter(|t| larger.contains(t.as_str()))
+        .count();
     let union_size = set_a.len() + set_b.len() - intersection_size;
 
     if union_size == 0 {
@@ -198,10 +200,7 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
                     let max_sim = selected
                         .iter()
                         .map(|&sel_idx| {
-                            jaccard_similarity_sets(
-                                &set_cache[candidate_idx],
-                                &set_cache[sel_idx],
-                            )
+                            jaccard_similarity_sets(&set_cache[candidate_idx], &set_cache[sel_idx])
                         })
                         .fold(0.0_f64, f64::max);
                     let mmr_score =
@@ -227,10 +226,7 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
                     let max_sim = selected
                         .iter()
                         .map(|&sel_idx| {
-                            jaccard_similarity_sets(
-                                &set_cache[candidate_idx],
-                                &set_cache[sel_idx],
-                            )
+                            jaccard_similarity_sets(&set_cache[candidate_idx], &set_cache[sel_idx])
                         })
                         .fold(0.0_f64, f64::max);
                     let mmr_score =
