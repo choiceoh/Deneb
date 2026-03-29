@@ -37,11 +37,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
-	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
+	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
@@ -52,11 +52,67 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// ServerTransport owns HTTP/WS lifecycle and connection state.
+type ServerTransport struct {
+	addr       string
+	httpServer *http.Server
+	clients    sync.Map     // connID → *WsClient; concurrent-safe client tracking
+	clientCnt  atomic.Int32 // current WebSocket connection count (capped at maxWebSocketClients)
+	startedAt  time.Time
+}
+
+// ServerRPC owns dispatcher construction and RPC/auth wiring state.
+type ServerRPC struct {
+	dispatcher        *rpc.Dispatcher
+	authValidator     *auth.Validator
+	providers         *provider.Registry
+	authManager       *provider.AuthManager
+	authRateLimiter   *auth.AuthRateLimiter
+	acpDeps           *rpc.ACPDeps
+	acpLifecycleUnsub func()
+}
+
+// ServerRuntime owns long-running runtime health/activity trackers.
+type ServerRuntime struct {
+	ready         atomic.Bool
+	shutdownOnce  sync.Once
+	gatewaySubs   *events.GatewayEventSubscriptions
+	watchdog      *monitoring.Watchdog
+	channelHealth *monitoring.ChannelHealthMonitor
+	activity      *monitoring.ActivityTracker
+	channelEvents *monitoring.ChannelEventTracker
+}
+
+// ServerIntegrations owns optional domain/integration subsystems.
+type ServerIntegrations struct {
+	vegaBackend        vega.Backend
+	geminiEmbedder     *embedding.GeminiEmbedder
+	jinaAPIKey         string
+	approvals          *approval.Store
+	nodes              *node.Manager
+	devices            *device.Manager
+	agents             *agent.Store
+	skills             *skill.Manager
+	wizardEng          *wizard.Engine
+	secrets            *secret.Resolver
+	talkState          *talk.State
+	usageTracker       *usage.Tracker
+	maintRunner        *maintenance.Runner
+	jobTracker         *agent.JobTracker
+	pluginFullRegistry *plugin.FullRegistry
+	pluginRouter       *pluginrouter.Router
+	autonomousSvc      *autonomous.Service
+	dreamingAdapter    *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
+	gmailPollSvc       *gmailpoll.Service
+}
+
 // Server is the main gateway server.
 type Server struct {
-	addr             string
-	httpServer       *http.Server
-	dispatcher       *rpc.Dispatcher
+	*ServerTransport
+	*ServerRPC
+	*ServerRuntime
+	*ServerIntegrations
+
 	channels         *channel.Registry
 	channelLifecycle *channel.LifecycleManager
 	dedupe           *dedupe.Tracker
@@ -64,68 +120,15 @@ type Server struct {
 	processes        *process.Manager
 	daemon           *daemon.Daemon
 	runtimeCfg       *config.GatewayRuntimeConfig
-	authValidator    *auth.Validator
-	clients          sync.Map     // connID → *WsClient; concurrent-safe client tracking
-	clientCnt        atomic.Int32 // current WebSocket connection count (capped at maxWebSocketClients)
-	startedAt        time.Time
 	version          string
 	rustFFI          bool // true when Rust FFI is available
 	logColor         bool // true when ANSI color output is enabled
 	logger           *slog.Logger
-	ready            atomic.Bool
-	shutdownOnce     sync.Once
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
 	*ChatManager    // chatHandler, toolDeps, telegramPlug, discordPlug
 	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
-
-	// Phase 2 additions.
-	gatewaySubs     *events.GatewayEventSubscriptions
-	providers       *provider.Registry
-	authManager     *provider.AuthManager
-	authRateLimiter *auth.AuthRateLimiter
-	watchdog        *monitoring.Watchdog
-	channelHealth   *monitoring.ChannelHealthMonitor
-	activity        *monitoring.ActivityTracker
-	channelEvents   *monitoring.ChannelEventTracker
-	vegaBackend     vega.Backend
-	geminiEmbedder  *embedding.GeminiEmbedder
-	jinaAPIKey      string
-
-	// Phase 3: Advanced workflow subsystems.
-	approvals *approval.Store
-	nodes     *node.Manager
-	devices   *device.Manager
-	agents    *agent.Store
-	skills    *skill.Manager
-	wizardEng *wizard.Engine
-	secrets   *secret.Resolver
-	talkState *talk.State
-
-	// Phase 4: Native system methods (migrated from bridge).
-	usageTracker *usage.Tracker
-	maintRunner  *maintenance.Runner
-
-	// Phase 4: Native agent execution.
-	jobTracker *agent.JobTracker
-
-	// Phase 5: Plugin full registry (discovery, manifests, hooks).
-	pluginFullRegistry *plugin.FullRegistry
-
-	// Phase 5: HTTP routing for plugins.
-	pluginRouter *pluginrouter.Router
-
-	// ACP subsystem.
-	acpDeps           *rpc.ACPDeps
-	acpLifecycleUnsub func()
-
-	// AuroraDream: memory consolidation lifecycle.
-	autonomousSvc   *autonomous.Service
-	dreamingAdapter *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
-
-	// GmailPoll: periodic Gmail polling with LLM analysis.
-	gmailPollSvc *gmailpoll.Service
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -229,9 +232,12 @@ func WithJinaAPIKey(key string) Option {
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) *Server {
 	s := &Server{
-		addr:     addr,
-		channels: channel.NewRegistry(),
-		rustFFI:  ffi.Available,
+		ServerTransport:    &ServerTransport{addr: addr},
+		ServerRPC:          &ServerRPC{},
+		ServerRuntime:      &ServerRuntime{},
+		ServerIntegrations: &ServerIntegrations{},
+		channels:           channel.NewRegistry(),
+		rustFFI:            ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
 			protocol.DedupeMax,
