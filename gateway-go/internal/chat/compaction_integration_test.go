@@ -30,7 +30,7 @@ import (
 func tempAuroraStore(t *testing.T) *aurora.Store {
 	t.Helper()
 	dir := t.TempDir()
-	cfg := aurora.StoreConfig{DatabasePath: filepath.Join(dir, "aurora.json")}
+	cfg := aurora.StoreConfig{DatabasePath: filepath.Join(dir, "aurora.db")}
 	s, err := aurora.NewStore(cfg, nil)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
