@@ -111,7 +111,12 @@ pub fn update_meta_field(
             .unwrap_or_default();
         let new_content = re
             .replace(&content, |caps: &regex::Captures| {
-                caps[0].replace(caps.get(1).unwrap_or_else(|| unreachable!("capture group 1 exists")).as_str(), new_value)
+                caps[0].replace(
+                    caps.get(1)
+                        .unwrap_or_else(|| unreachable!("capture group 1 exists"))
+                        .as_str(),
+                    new_value,
+                )
             })
             .to_string();
 

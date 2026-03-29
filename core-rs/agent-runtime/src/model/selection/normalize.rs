@@ -2,8 +2,8 @@
 //!
 //! Mirrors `src/agents/models/model-id-normalization.ts`. Keep in sync.
 
-use crate::model::provider_id::normalize_provider_id;
 use super::types::ModelRef;
+use crate::model::provider_id::normalize_provider_id;
 
 /// Normalize Anthropic model ID aliases to canonical form.
 fn normalize_anthropic_model_id(model: &str) -> String {

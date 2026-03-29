@@ -99,7 +99,10 @@ impl super::CommandHandler for SearchHandler {
             })
             .unwrap_or_default();
         if top_names.is_empty() {
-            format!("검색 결과: {}개 프로젝트, {}건 커뮤니케이션", projects, comms)
+            format!(
+                "검색 결과: {}개 프로젝트, {}건 커뮤니케이션",
+                projects, comms
+            )
         } else {
             format!(
                 "검색 결과: {} ({}개 프로젝트, {}건 커뮤니케이션)",

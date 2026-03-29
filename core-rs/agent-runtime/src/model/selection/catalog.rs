@@ -1,8 +1,8 @@
 //! Model catalog queries: capability checks and status resolution.
 
-use crate::model::provider_id::normalize_provider_id;
 use super::keys::model_key;
 use super::types::{ModelCatalogEntry, ModelInputType, ModelRef, ModelRefStatus};
+use crate::model::provider_id::normalize_provider_id;
 
 /// Check if a model supports vision (image input) based on catalog lookup.
 pub fn model_supports_vision(entry: Option<&ModelCatalogEntry>) -> bool {
@@ -68,11 +68,11 @@ pub fn resolve_reasoning_default(
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::{ModelCatalogEntry, ModelInputType, ModelRef};
     use super::{
         find_model_in_catalog, get_model_ref_status, model_supports_document,
         model_supports_vision, resolve_reasoning_default,
     };
-    use super::super::types::{ModelCatalogEntry, ModelInputType, ModelRef};
 
     #[test]
     fn model_catalog_support_checks() {

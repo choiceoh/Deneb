@@ -124,3 +124,25 @@ pub struct ResolveAllowedModelRefParams<'a> {
     pub default_model: Option<&'a str>,
     pub agents_defaults_model: Option<&'a serde_json::Value>,
 }
+
+/// Parameters for `build_allowed_model_set`.
+pub struct BuildAllowedModelSetParams<'a> {
+    pub agents_list: &'a [serde_json::Value],
+    pub raw_allowlist: &'a [String],
+    pub catalog: &'a [ModelCatalogEntry],
+    pub default_provider: &'a str,
+    pub default_model: Option<&'a str>,
+    pub agent_id: Option<&'a str>,
+    pub agents_defaults_model: Option<&'a serde_json::Value>,
+}
+
+/// Parameters for `resolve_subagent_spawn_model_selection`.
+pub struct SubagentSpawnModelSelectionParams<'a> {
+    pub agents_list: &'a [serde_json::Value],
+    pub agents_defaults_model: Option<&'a serde_json::Value>,
+    pub configured_models: &'a std::collections::HashMap<String, serde_json::Value>,
+    pub configured_providers: Option<&'a std::collections::HashMap<String, serde_json::Value>>,
+    pub agent_id: &'a str,
+    pub agents_defaults_subagents_model: Option<&'a serde_json::Value>,
+    pub model_override: Option<&'a serde_json::Value>,
+}

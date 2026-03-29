@@ -94,6 +94,8 @@ struct ActiveRun {
 #[derive(Debug, Default)]
 pub struct EmbeddedRunTracker {
     runs: HashMap<String, ActiveRun>,
+    /// Reverse index: session_key -> session_id for O(1) lookup.
+    session_key_index: HashMap<String, String>,
 }
 
 impl EmbeddedRunTracker {
@@ -103,6 +105,10 @@ impl EmbeddedRunTracker {
 
     /// Register an active run.
     pub fn set_active(&mut self, session_id: &str, meta: EmbeddedPiRunMeta) {
+        if let Some(ref key) = meta.session_key {
+            self.session_key_index
+                .insert(key.clone(), session_id.to_string());
+        }
         self.runs.insert(
             session_id.to_string(),
             ActiveRun {
@@ -114,7 +120,14 @@ impl EmbeddedRunTracker {
 
     /// Clear an active run (run completed/aborted).
     pub fn clear_active(&mut self, session_id: &str) -> bool {
-        self.runs.remove(session_id).is_some()
+        if let Some(run) = self.runs.remove(session_id) {
+            if let Some(ref key) = run.meta.session_key {
+                self.session_key_index.remove(key);
+            }
+            true
+        } else {
+            false
+        }
     }
 
     /// Update the snapshot for an active run.
@@ -137,11 +150,9 @@ impl EmbeddedRunTracker {
             .unwrap_or(false)
     }
 
-    /// Check if a session is active by session key (linear scan).
+    /// Check if a session is active by session key (O(1) via reverse index).
     pub fn is_active_by_session_key(&self, session_key: &str) -> bool {
-        self.runs
-            .values()
-            .any(|r| r.meta.session_key.as_deref() == Some(session_key))
+        self.session_key_index.contains_key(session_key)
     }
 
     /// Get the count of active runs.
@@ -162,6 +173,7 @@ impl EmbeddedRunTracker {
     /// Clear all active runs (for restart/reset).
     pub fn reset(&mut self) {
         self.runs.clear();
+        self.session_key_index.clear();
     }
 }
 
@@ -224,7 +236,9 @@ mod tests {
                 in_flight_prompt: None,
             },
         );
-        let snap = tracker.get_snapshot("s1").ok_or("get_snapshot returned None")?;
+        let snap = tracker
+            .get_snapshot("s1")
+            .ok_or("get_snapshot returned None")?;
         assert_eq!(snap.transcript_leaf_id.as_deref(), Some("leaf1"));
         Ok(())
     }

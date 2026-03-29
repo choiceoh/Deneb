@@ -1,21 +1,21 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
 
 #[allow(clippy::expect_used)]
-static NAME_RE: Lazy<Regex> = Lazy::new(|| {
+static NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"([가-힣]{2,4})\s*(과장|대리|부장|사원|팀장|차장|이사|사장|실장|수석|선임|책임|매니저|담당|주임|부사장|전무|상무)?").expect("valid regex")
 });
 #[allow(clippy::expect_used)]
-static PHONE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").expect("valid regex"));
+static PHONE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static EMAIL_RE: Lazy<Regex> = Lazy::new(|| {
+static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})").expect("valid regex")
 });
 
@@ -251,7 +251,10 @@ mod tests {
         let contacts = extract_from_text(body, "note", "테스트 프로젝트", 1);
         assert!(!contacts.is_empty(), "expected at least one contact");
         // Find the contact with the phone number
-        let c = contacts.iter().find(|c| c["phone"] == "010-1234-5678").expect("contact with phone 010-1234-5678");
+        let c = contacts
+            .iter()
+            .find(|c| c["phone"] == "010-1234-5678")
+            .expect("contact with phone 010-1234-5678");
         assert_eq!(c["name"], "김철수");
         assert_eq!(c["title"], "과장");
     }
@@ -299,7 +302,11 @@ mod tests {
     fn test_extract_from_text_multiple_contacts() {
         let body = "김영희 과장 010-1111-2222\n\n이철수 대리 010-3333-4444\n";
         let contacts = extract_from_text(body, "note", "프로젝트", 1);
-        assert!(contacts.len() >= 2, "expected at least 2 contacts, got {}", contacts.len());
+        assert!(
+            contacts.len() >= 2,
+            "expected at least 2 contacts, got {}",
+            contacts.len()
+        );
     }
 
     #[test]
@@ -322,7 +329,11 @@ mod tests {
 pub struct ContactsHandler;
 
 impl super::CommandHandler for ContactsHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_contacts(args, config)
     }
 }

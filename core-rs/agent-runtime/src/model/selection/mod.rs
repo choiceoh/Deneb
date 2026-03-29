@@ -31,7 +31,8 @@ pub use resolve::{
 };
 pub use thinking::{resolve_thinking_default, resolve_thinking_default_for_model};
 pub use types::{
-    AllowedModelSet, ModelAliasIndex, ModelCatalogEntry, ModelInputType, ModelRef, ModelRefStatus,
-    ProviderConfigEntry, ProviderModelEntry, ResolveAllowedModelRefParams, ThinkLevel,
+    AllowedModelSet, BuildAllowedModelSetParams, ModelAliasIndex, ModelCatalogEntry,
+    ModelInputType, ModelRef, ModelRefStatus, ProviderConfigEntry, ProviderModelEntry,
+    ResolveAllowedModelRefParams, SubagentSpawnModelSelectionParams, ThinkLevel,
     ThinkingCatalogEntry,
 };

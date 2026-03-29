@@ -466,33 +466,31 @@ mod tests {
         assert_eq!(result, UpsertResult::Updated);
 
         // Verify project exists
-        let name: String = conn
-            .query_row("SELECT name FROM projects WHERE id=1", [], |r| r.get(0))?;
+        let name: String =
+            conn.query_row("SELECT name FROM projects WHERE id=1", [], |r| r.get(0))?;
         assert_eq!(name, "Test Project");
 
         // Verify chunks
-        let chunk_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM chunks WHERE project_id=1", [], |r| {
+        let chunk_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM chunks WHERE project_id=1", [], |r| {
                 r.get(0)
             })?;
         assert!(chunk_count >= 2, "Should have at least 2 sections");
 
         // Verify comm log
-        let comm_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM comm_log WHERE project_id=1",
-                [],
-                |r| r.get(0),
-            )?;
+        let comm_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM comm_log WHERE project_id=1",
+            [],
+            |r| r.get(0),
+        )?;
         assert_eq!(comm_count, 1);
 
         // Verify FTS works
-        let fts_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"status\"'",
-                [],
-                |r| r.get(0),
-            )?;
+        let fts_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"status\"'",
+            [],
+            |r| r.get(0),
+        )?;
         assert!(fts_count >= 0); // Triggers should have populated FTS
         Ok(())
     }

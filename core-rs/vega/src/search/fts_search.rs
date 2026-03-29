@@ -5,10 +5,10 @@
 
 use std::collections::HashSet;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 use super::query_analyzer::{normalize_keyword, ExtractedFields};
 
@@ -57,23 +57,25 @@ pub struct SqliteSearchResult {
 
 // -- FTS5 safety --
 
-static FTS_RESERVED: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["AND", "OR", "NOT", "NEAR"].into_iter().collect());
+static FTS_RESERVED: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| ["AND", "OR", "NOT", "NEAR"].into_iter().collect());
 
 #[allow(clippy::expect_used)]
-static SPECIAL_CHARS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[&|!@#$%^*()\-+=\[\]{}<>?/\\~`]").expect("valid regex"));
+static SPECIAL_CHARS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[&|!@#$%^*()\-+=\[\]{}<>?/\\~`]").expect("valid regex"));
 
 #[allow(clippy::expect_used)]
-static HAS_ALNUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").expect("valid regex"));
+static HAS_ALNUM: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").expect("valid regex"));
 
 #[allow(clippy::expect_used)]
-static KO_JOSA: Lazy<Regex> = Lazy::new(|| {
+static KO_JOSA: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(은|는|이|가|을|를|의|에|에서|으로|로|와|과|만|까지|부터|에게|한테|께|보다|처럼|같이|에서도|까지도|만도|부터도|라고|이라고|이란)$").expect("valid regex")
 });
 
 #[allow(clippy::expect_used)]
-static TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").expect("valid regex"));
+static TOKEN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").expect("valid regex"));
 
 /// Sanitize a single FTS5 search term.
 fn sanitize_fts_single(term: &str) -> Option<String> {

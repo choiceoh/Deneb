@@ -4,12 +4,13 @@
 //! Memories older than the half-life have their score halved; evergreen files
 //! (e.g., `MEMORY.md`) are exempt from decay.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 #[allow(clippy::expect_used)]
-static DATED_MEMORY_PATH_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?:^|/)memory/(\d{4})-(\d{2})-(\d{2})\.md$").expect("valid regex"));
+static DATED_MEMORY_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:^|/)memory/(\d{4})-(\d{2})-(\d{2})\.md$").expect("valid regex")
+});
 
 /// Compute the decay constant lambda from a half-life in days.
 pub fn to_decay_lambda(half_life_days: f64) -> f64 {

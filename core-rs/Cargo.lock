@@ -287,7 +287,6 @@ dependencies = [
 name = "deneb-agent-runtime"
 version = "0.1.0"
 dependencies = [
- "once_cell",
  "regex",
  "serde",
  "serde_json",
@@ -296,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "deneb-core"
-version = "4.1.0"
+version = "4.2.1"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -307,7 +306,6 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
- "once_cell",
  "proptest",
  "prost",
  "prost-build",
@@ -328,7 +326,6 @@ dependencies = [
  "chrono",
  "log",
  "md5",
- "once_cell",
  "rayon",
  "regex",
  "reqwest",

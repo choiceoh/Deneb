@@ -6,9 +6,9 @@
 
 use std::collections::HashSet;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 /// Result of query analysis: extracted fields + routing decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,14 +40,14 @@ pub struct ExtractedFields {
 // -- Static patterns (fallback when DB is not available) --
 
 #[allow(clippy::expect_used)]
-static CLIENT_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+static CLIENT_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(?i)(금호타이어|기아|현대[가-힣]*|대한전선|롯데[가-힣]*|무림[가-힣]*|비금도|석문호|썬탑|양명|옹진|인하|하이트|글로비스|위아|화성산단|한화[가-힣]*|쿠팡|카카오|ZTT|jinko|진코)").expect("valid regex"),
     ]
 });
 
 #[allow(clippy::expect_used)]
-static PERSON_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+static PERSON_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(김대희|고건|이시연|박민수|강민수|김유영|임은진|박종원|제용범|조은실|백종태|강동민|이영민|김세미|장현정|Sara)").expect("valid regex"),
         Regex::new(r"(누가|담당자|담당)").expect("valid regex"),
@@ -55,7 +55,7 @@ static PERSON_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
 });
 
 #[allow(clippy::expect_used)]
-static STATUS_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+static STATUS_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(진행중|진행\s?중|완료|준공|설계|시공|계약|검토|대기|마무리|긴급|급한|위급)")
             .expect("valid regex"),
@@ -64,7 +64,7 @@ static STATUS_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
 });
 
 #[allow(clippy::expect_used)]
-static TAG_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+static TAG_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(현대차\s?그룹|현대차그룹)").expect("valid regex"),
         Regex::new(r"(환경공단|탄소중립|지원사업)").expect("valid regex"),
@@ -74,7 +74,7 @@ static TAG_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
 
 /// Semantic/conceptual query patterns (vector search performs well on these).
 #[allow(clippy::expect_used)]
-static SEMANTIC_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+static SEMANTIC_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     [
         r"(어떻게|왜|방법|이유|원인|차이|비교)",
         r"(관련\s?내용|자세히|설명|배경)",
@@ -97,7 +97,7 @@ static SEMANTIC_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
 });
 
 /// Query stopwords (pure filler only — domain terms are preserved).
-static QUERY_STOPWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static QUERY_STOPWORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     [
         "프로젝트",
         "검색",
@@ -132,25 +132,27 @@ static QUERY_STOPWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 #[allow(clippy::expect_used)]
-static TRAILING_PARTICLES: Lazy<Regex> = Lazy::new(|| {
+static TRAILING_PARTICLES: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(은|는|이|가|을|를|의|에|에서|으로|로|와|과|만|까지|부터|에게|한테|께|처럼|같이|에서도|까지도|만도|부터도|라도|이라도|라고|이라고)$").expect("valid regex")
 });
 
 #[allow(clippy::expect_used)]
-static TRAILING_ENDINGS: Lazy<Regex> = Lazy::new(|| {
+static TRAILING_ENDINGS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(하는지|했는지|되는지|해줘|해줘요|해주세요|해라|한다|하는|하기|하다|했던|되고|되는|되어|됐다|된|중인|있던|있는|있고|있어|있음|이야|야|인가요|인가|인지|임)$").expect("valid regex")
 });
 
 #[allow(clippy::expect_used)]
-static SUFFIX_CLEANUP: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(해줘|알려줘|보여줘|뭐야|좀|요)\s*$").expect("valid regex"));
+static SUFFIX_CLEANUP: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(해줘|알려줘|보여줘|뭐야|좀|요)\s*$").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static TRAILING_PUNCT: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?？！!.。]+$").expect("valid regex"));
+static TRAILING_PUNCT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[?？！!.。]+$").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").expect("valid regex"));
+static TOKEN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static STRIP_NONALPHA: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[^가-힣A-Za-z0-9]+|[^가-힣A-Za-z0-9]+$").expect("valid regex"));
+static STRIP_NONALPHA: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[^가-힣A-Za-z0-9]+|[^가-힣A-Za-z0-9]+$").expect("valid regex"));
 
 /// Normalize a query: remove trailing punctuation, then filler suffixes.
 pub fn normalize_query(query: &str) -> String {
@@ -440,7 +442,11 @@ mod tests {
             !analysis.extracted.statuses.is_empty(),
             "expected at least one status term extracted"
         );
-        assert!(analysis.extracted.statuses.iter().any(|s| s.contains("긴급")));
+        assert!(analysis
+            .extracted
+            .statuses
+            .iter()
+            .any(|s| s.contains("긴급")));
     }
 
     #[test]

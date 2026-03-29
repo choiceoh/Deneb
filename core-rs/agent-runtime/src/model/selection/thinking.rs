@@ -2,9 +2,9 @@
 //!
 //! Mirrors `src/auto-reply/thinking.shared.ts`. Keep in sync.
 
-use crate::model::provider_id::normalize_provider_id;
 use super::keys::{legacy_model_key, model_key};
 use super::types::{ThinkLevel, ThinkingCatalogEntry};
+use crate::model::provider_id::normalize_provider_id;
 
 /// Claude 4.6+ model prefixes that support adaptive thinking.
 const CLAUDE_46_PREFIXES: &[&str] = &["claude-opus-4-6", "claude-sonnet-4-6"];
@@ -82,8 +82,8 @@ pub fn resolve_thinking_default(
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_thinking_default, resolve_thinking_default_for_model};
     use super::super::types::{ThinkLevel, ThinkingCatalogEntry};
+    use super::{resolve_thinking_default, resolve_thinking_default_for_model};
 
     #[test]
     fn think_level_parsing() {

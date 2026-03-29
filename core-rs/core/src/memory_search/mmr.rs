@@ -1,14 +1,15 @@
 //! Maximal Marginal Relevance (MMR) re-ranking for search result diversity.
 
-use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 use super::types::{MmrConfig, MmrItem};
 
 #[allow(clippy::expect_used)]
-static MMR_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[a-z0-9_]+").expect("valid regex"));
+static MMR_TOKEN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[a-z0-9_]+").expect("valid regex"));
 
 /// Pre-tokenized text that avoids per-token heap allocations.
 /// Stores a single lowercase copy and byte ranges into it.

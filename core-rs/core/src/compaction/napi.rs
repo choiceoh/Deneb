@@ -20,8 +20,8 @@ use std::sync::Mutex;
 
 /// Global store for active sweep engine instances.
 /// Each instance is identified by a monotonically increasing handle.
-static ENGINES: once_cell::sync::Lazy<Mutex<EngineStore>> =
-    once_cell::sync::Lazy::new(|| Mutex::new(EngineStore::new()));
+static ENGINES: std::sync::LazyLock<Mutex<EngineStore>> =
+    std::sync::LazyLock::new(|| Mutex::new(EngineStore::new()));
 
 struct EngineStore {
     engines: std::collections::HashMap<u32, SweepEngine>,

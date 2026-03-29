@@ -520,11 +520,11 @@ pub fn validate_sessions_usage_params(
     check_no_additional_properties(obj, allowed, path, errors);
 
     #[allow(clippy::expect_used)]
-    static DATE_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    static DATE_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
         regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").expect("valid regex")
     });
     #[allow(clippy::expect_used)]
-    static UTC_OFFSET_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    static UTC_OFFSET_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
         regex::Regex::new(r"^UTC[+-]\d{1,2}(?::[0-5]\d)?$").expect("valid regex")
     });
 
