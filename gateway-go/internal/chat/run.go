@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -35,7 +36,7 @@ type RunParams struct {
 	SessionKey   string
 	Message      string
 	Attachments  []ChatAttachment
-	Model        string
+	Model        string // role name ("main", "lightweight", "fallback", "image"); raw model ID only via /model override
 	System       string // system prompt override
 	ClientRunID  string
 	Delivery     *DeliveryContext
@@ -47,7 +48,6 @@ const (
 	defaultMaxTokens     = 8192
 	defaultMaxTurns      = 25
 	defaultAgentTimeout  = 10 * time.Minute
-	defaultModel         = "google/gemini-3.0-flash"
 	maxCompactionRetries = 2
 )
 
@@ -81,6 +81,7 @@ type runDeps struct {
 	memoryEmbedder *memory.Embedder          // optional; fact embedding
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
+	registry       *modelrole.Registry       // centralized model role registry
 	contextCfg     ContextConfig
 	compactionCfg  CompactionConfig
 	defaultModel   string
@@ -405,12 +406,36 @@ func executeAgentRun(
 	}
 
 	// 6. Resolve model and provider.
+	// Agent tools pass role names ("main", "lightweight", "fallback", "image").
+	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
+	// are treated as direct overrides (no fallback chain).
 	model := params.Model
+	initialRole := modelrole.RoleMain
+
+	if deps.registry != nil && model != "" {
+		// Role name → resolve to actual model ID with fallback chain.
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		}
+		// Raw model ID → no role mapping, no fallback chain (direct override).
+	}
+
+	// If no explicit model, use handler default or registry main.
 	if model == "" {
 		model = deps.defaultModel
 	}
-	if model == "" {
-		model = defaultModel
+	if model == "" && deps.registry != nil {
+		model = deps.registry.FullModelID(modelrole.RoleMain)
+	}
+
+	// If the request has image attachments, prefer the image model.
+	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
+		imgCfg := deps.registry.Config(modelrole.RoleImage)
+		if imgCfg.Model != "" {
+			model = deps.registry.FullModelID(modelrole.RoleImage)
+			initialRole = modelrole.RoleImage
+		}
 	}
 
 	// Parse provider prefix from model (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
@@ -573,7 +598,7 @@ func executeAgentRun(
 		"model", model, "provider", providerID,
 		"messages", len(messages), "tools", len(tools))
 
-	// 11. Execute agent loop with compaction retry.
+	// 11. Execute agent loop with compaction retry and model fallback chain.
 	agentStart := time.Now()
 	var agentResult *AgentResult
 	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
@@ -602,20 +627,37 @@ func executeAgentRun(
 				continue
 			}
 
-			// Fallback to local sglang when a known remote provider fails
-			// (skip if already sglang, context cancelled, or unknown provider).
-			if providerID != "sglang" && providerID != "" && ctx.Err() == nil {
-				logger.Warn("primary model failed, falling back to sglang",
-					"provider", providerID, "model", model, "error", runErr)
-				fbClient := getSglangClient()
-				fbCfg := cfg
-				fbCfg.Model = sglangModel
-				fbCfg.APIType = "openai"
-				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
-				if runErr == nil {
+			// Model fallback chain: try each subsequent role in the chain.
+			// e.g., Main → Lightweight → Fallback
+			if deps.registry != nil && ctx.Err() == nil {
+				chain := deps.registry.FallbackChain(initialRole)
+				fallbackSucceeded := false
+				for i := 1; i < len(chain); i++ {
+					fbRole := chain[i]
+					fbCfg := deps.registry.Config(fbRole)
+					fbClient := deps.registry.Client(fbRole)
+					if fbClient == nil {
+						continue
+					}
+					logger.Warn("model failed, trying fallback",
+						"failedRole", string(chain[i-1]),
+						"nextRole", string(fbRole),
+						"nextModel", fbCfg.Model,
+						"error", runErr)
+					agentCfg := cfg
+					agentCfg.Model = fbCfg.Model
+					agentCfg.APIType = fbCfg.APIType
+					agentResult, runErr = RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
+					if runErr == nil {
+						fallbackSucceeded = true
+						break
+					}
+					logger.Error("fallback also failed",
+						"role", string(fbRole), "model", fbCfg.Model, "error", runErr)
+				}
+				if fallbackSucceeded {
 					break
 				}
-				logger.Error("sglang fallback also failed", "error", runErr)
 			}
 
 			return nil, runErr

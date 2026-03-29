@@ -74,7 +74,7 @@ func toolHealthCheck(d *VegaDeps) ToolFunc {
 			sglangGw.Available = true
 			sglangGw.Detail = "chat hooks + compression operational"
 		} else {
-			sglangGw.Detail = "unreachable at " + defaultSglangBaseURL
+			sglangGw.Detail = "unreachable at " + lightweightBaseURL()
 		}
 		rows = append(rows, sglangGw)
 
@@ -181,10 +181,11 @@ func formatHealthStatus(status vega.HealthStatus) string {
 func formatSglangHealth() string {
 	healthy := checkSglangHealth()
 	icon := "✅"
-	detail := "operational at " + defaultSglangBaseURL
+	baseURL := lightweightBaseURL()
+	detail := "operational at " + baseURL
 	if !healthy {
 		icon = "❌"
-		detail = "unreachable at " + defaultSglangBaseURL
+		detail = "unreachable at " + baseURL
 	}
 	return fmt.Sprintf("## SGLang 상태\n\n%s %s\n%s", icon, "sglang", detail)
 }

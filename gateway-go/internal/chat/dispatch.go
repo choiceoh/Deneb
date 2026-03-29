@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -145,8 +146,17 @@ func (h *Handler) handleSlashCommand(
 
 	case "model":
 		if cmd.Args != "" {
-			h.defaultModel = cmd.Args
-			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %q(으)로 변경되었습니다.", cmd.Args))
+			modelArg := cmd.Args
+			displayName := modelArg
+			// Accept role names ("main", "lightweight", etc.) as well as model IDs.
+			if h.registry != nil {
+				if resolved, role, ok := h.registry.ResolveModel(modelArg); ok {
+					modelArg = resolved
+					displayName = fmt.Sprintf("%s (%s)", modelArg, string(role))
+				}
+			}
+			h.defaultModel = modelArg
+			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %s(으)로 변경되었습니다.", displayName))
 		}
 
 	case "think":
@@ -178,8 +188,8 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		return fmt.Sprintf("세션 %q: 정보 없음", sessionKey)
 	}
 	model := h.defaultModel
-	if model == "" {
-		model = defaultModel
+	if model == "" && h.registry != nil {
+		model = h.registry.FullModelID(modelrole.RoleMain)
 	}
 	return fmt.Sprintf("세션: %s\n모델: %s\n상태: %s",
 		sessionKey, model, string(sess.Status))
@@ -211,6 +221,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		memoryEmbedder:   h.memoryEmbedder,
 		dreamTurnFn:      h.dreamTurnFn,
 		agentLog:         h.agentLog,
+		registry:         h.registry,
 		contextCfg:       h.contextCfg,
 		compactionCfg:    h.compactionCfg,
 		defaultModel:     h.defaultModel,

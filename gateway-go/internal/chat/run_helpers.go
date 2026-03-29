@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -110,8 +111,8 @@ func handleRunSuccess(
 					if !checkSglangHealth() {
 						logger.Debug("structured memory extraction skipped: sglang unhealthy")
 					} else {
-						sglangClient := getSglangClient()
-						facts, err := memory.ExtractFacts(memCtx, sglangClient, sglangModel, params.Message, result.Text, logger)
+						lwClient := getLightweightClient()
+						facts, err := memory.ExtractFacts(memCtx, lwClient, getLightweightModel(), params.Message, result.Text, logger)
 						if err != nil {
 							if shouldLogStructuredMemoryExtractionError(err) {
 								logger.Debug("structured memory extraction failed, falling back", "error", err)
@@ -320,10 +321,6 @@ const (
 	// Z.ai Coding Plan global endpoint (OpenAI-compatible).
 	// Matches ZAI_CODING_GLOBAL_BASE_URL in src/plugins/provider-model-definitions.ts.
 	defaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
-
-	// Local sglang server (OpenAI-compatible). Used as fallback and for lightweight tasks.
-	defaultSglangBaseURL = "http://127.0.0.1:30000/v1"
-	sglangModel          = "Qwen/Qwen3.5-35B-A3B"
 )
 
 // inferAPIType guesses the API type from the provider ID.
@@ -377,10 +374,20 @@ func resolveDefaultBaseURL(providerID string) string {
 	case "google":
 		return "https://generativelanguage.googleapis.com/v1beta/openai"
 	case "sglang":
-		return defaultSglangBaseURL
+		return modelrole.DefaultSglangBaseURL
 	default:
 		return ""
 	}
+}
+
+// hasImageAttachment returns true if any attachment is an image.
+func hasImageAttachment(attachments []ChatAttachment) bool {
+	for _, att := range attachments {
+		if att.Type == "image" {
+			return true
+		}
+	}
+	return false
 }
 
 // buildAttachmentBlocks creates a multimodal content block array from text and

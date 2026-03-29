@@ -14,7 +14,33 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
+
+// --- Package-level model role registry ---
+// Set once during handler initialization via SetModelRoleRegistry.
+// Used by callLocalLLM, checkSglangHealth, and other sglang-dependent code.
+
+var (
+	pkgRegistry     *modelrole.Registry
+	pkgRegistryOnce sync.Once
+)
+
+// SetModelRoleRegistry sets the package-level model role registry.
+// Called once during chat handler initialization.
+func SetModelRoleRegistry(reg *modelrole.Registry) {
+	pkgRegistryOnce.Do(func() {
+		pkgRegistry = reg
+	})
+}
+
+// lightweightBaseURL returns the base URL for the lightweight model.
+func lightweightBaseURL() string {
+	if pkgRegistry != nil {
+		return pkgRegistry.BaseURL(modelrole.RoleLightweight)
+	}
+	return modelrole.DefaultSglangBaseURL
+}
 
 // --- sglang health check (cached) ---
 
@@ -36,7 +62,8 @@ func checkSglangHealth() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), sglangHealthPing)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, defaultSglangBaseURL+"/models", nil)
+	baseURL := lightweightBaseURL()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
 	if err != nil {
 		sglangHealthy.Store(false)
 		sglangLastCheck.Store(now)
@@ -492,27 +519,32 @@ func parseLineCount(s string, defaultN int) int {
 
 // truncateInput is a simple head-only truncation. Used by sglang_hooks.go and pilot fallback.
 
-// Avoids creating a new HTTP client + transport on every call.
-var (
-	sglangClientOnce sync.Once
-	sglangClientInst *llm.Client
-)
+// getLightweightClient returns the cached LLM client for the lightweight model role.
+func getLightweightClient() *llm.Client {
+	if pkgRegistry != nil {
+		return pkgRegistry.Client(modelrole.RoleLightweight)
+	}
+	// Fallback: should not happen after initialization.
+	return llm.NewClient(modelrole.DefaultSglangBaseURL, "", llm.WithLogger(slog.Default()))
+}
 
-func getSglangClient() *llm.Client {
-	sglangClientOnce.Do(func() {
-		sglangClientInst = llm.NewClient(defaultSglangBaseURL, "", llm.WithLogger(slog.Default()))
-	})
-	return sglangClientInst
+// getLightweightModel returns the model name for the lightweight role.
+func getLightweightModel() string {
+	if pkgRegistry != nil {
+		return pkgRegistry.Model(modelrole.RoleLightweight)
+	}
+	return modelrole.DefaultSglangModel
 }
 
 func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
-	client := getSglangClient()
+	client := getLightweightClient()
+	model := getLightweightModel()
 
 	req := llm.ChatRequest{
-		Model:     sglangModel,
+		Model:     model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userMessage)},
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
@@ -521,7 +553,27 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 
 	events, err := client.StreamChatOpenAI(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("sglang stream: %w", err)
+		// Lightweight model failed — try fallback model if registry is available.
+		if pkgRegistry != nil {
+			fbChain := pkgRegistry.FallbackChain(modelrole.RoleLightweight)
+			for _, role := range fbChain[1:] {
+				fbCfg := pkgRegistry.Config(role)
+				fbClient := pkgRegistry.Client(role)
+				if fbClient == nil {
+					continue
+				}
+				req.Model = fbCfg.Model
+				events, err = fbClient.StreamChatOpenAI(ctx, req)
+				if err == nil {
+					break
+				}
+			}
+			if err != nil {
+				return "", fmt.Errorf("all models failed: %w", err)
+			}
+		} else {
+			return "", fmt.Errorf("sglang stream: %w", err)
+		}
 	}
 
 	text, err := collectStream(ctx, events)

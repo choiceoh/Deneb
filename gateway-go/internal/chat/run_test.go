@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
 
 func TestParseModelID(t *testing.T) {
@@ -128,7 +129,7 @@ func TestResolveDefaultBaseURL(t *testing.T) {
 		{"anthropic", llm.DefaultAnthropicBaseURL},
 		{"google", "https://generativelanguage.googleapis.com/v1beta/openai"},
 		{"zai", defaultZaiBaseURL},
-		{"sglang", defaultSglangBaseURL},
+		{"sglang", modelrole.DefaultSglangBaseURL},
 		{"openai", ""},
 		{"", ""},
 	}

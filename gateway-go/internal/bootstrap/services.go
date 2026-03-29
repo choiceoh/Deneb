@@ -7,6 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
@@ -51,22 +52,20 @@ func newGeminiEmbedder(logger *slog.Logger) *embedding.GeminiEmbedder {
 }
 
 // initVega configures the Vega search backend with Gemini embedding,
-// SGLang query expansion, and Jina reranking. Returns false if unavailable.
+// lightweight model query expansion, and Jina reranking. Returns false if unavailable.
 func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.GeminiEmbedder) bool {
-	const (
-		sglangURL   = "http://127.0.0.1:30000/v1"
-		sglangModel = "Qwen/Qwen3.5-35B-A3B"
-	)
+	lwURL := modelrole.DefaultSglangBaseURL
+	lwModel := modelrole.DefaultSglangModel
 
-	if !vega.ShouldEnableVega(ffi.Available, sglangURL, logger) {
+	if !vega.ShouldEnableVega(ffi.Available, lwURL, logger) {
 		logger.Info("vega: disabled (FFI not available)")
 		return false
 	}
 
 	cfg := vega.EnhancedBackendConfig{
 		Logger:      logger,
-		SglangURL:   sglangURL,
-		SglangModel: sglangModel,
+		SglangURL:   lwURL,
+		SglangModel: lwModel,
 		Embedder:    embedder,
 		JinaAPIKey:  vega.GetJinaAPIKey(),
 	}

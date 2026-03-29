@@ -796,7 +796,8 @@
       description: Human-readable label
     model:
       type: string
-      description: Model override for the sub-agent
+      enum: ["main", "lightweight", "fallback", "image"]
+      description: "Model role to use (default: main)"
   required:
     - task
 
@@ -839,7 +840,8 @@
       description: "Multiple image paths or URLs (up to 20)"
     model:
       type: string
-      description: Vision model to use
+      enum: ["main", "lightweight", "fallback", "image"]
+      description: "Model role to use (default: image)"
 
 - name: youtube_transcript
   properties:
