@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.30.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.29.0...deneb-v3.30.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **aurora:** add memory transfer from Aurora summaries to long-term memory ([e2f540d](https://github.com/choiceoh/Deneb/commit/e2f540d5db45e554c732f554c5a8e4923d0ea5da))
+* **chat:** integrate per-channel upload-file limits ([3bde736](https://github.com/choiceoh/Deneb/commit/3bde736022bc450aed82107af7ccb312b81f0072))
+* **llm:** add shared httpretry policy with per-code retry classification ([b734193](https://github.com/choiceoh/Deneb/commit/b7341932725e7e5ca8eb6bc9225930905b6e42de))
+* **memory:** flush important facts to memory before Aurora compaction ([c4d6ad5](https://github.com/choiceoh/Deneb/commit/c4d6ad599b823c1e7ea6e3aa4e3b98e23d80a58c))
+* **session:** restore gateway sessions and send startup heartbeat on restart ([8112e3c](https://github.com/choiceoh/Deneb/commit/8112e3c475c23dd57e03ef6d303a70f87ac706ee))
+* **status:** expose specific error reasons in daemon status and error messages ([1b85063](https://github.com/choiceoh/Deneb/commit/1b8506323d44afad34d66b689c27e67dd81453aa))
+* **telegram:** validate photo metadata and fall back to document on failure ([29c7f99](https://github.com/choiceoh/Deneb/commit/29c7f99df36b43b66ac0a1002d91217d89410940))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** omit empty runId from logs, abbreviate session channel prefix ([4c21416](https://github.com/choiceoh/Deneb/commit/4c214160e5da6ff992f3aa2d45e421489ad16a5b))
+* **logging:** drop fractional seconds from console timestamp ([cc9c929](https://github.com/choiceoh/Deneb/commit/cc9c9297b8696dc9965114567c6a95dcc9f33780))
+* **logging:** replace level text with bar color, drop level label ([c9fc432](https://github.com/choiceoh/Deneb/commit/c9fc432c9197dcd1fd4d0ed06c60d9f67a2e8b45))
+
+
+### 🔧 Internal
+
+* **core:** replace 14-pass HTML-to-Markdown with 2-pass tokenizer + emitter ([611946d](https://github.com/choiceoh/Deneb/commit/611946d87ed3a08e86a5a6d10adad92b875f2abe))
+
 ## [3.29.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.28.1...deneb-v3.29.0) (2026-03-29)
 
 
