@@ -136,10 +136,15 @@ func TestIsCacheableTool(t *testing.T) {
 }
 
 func TestIsMutationTool(t *testing.T) {
-	for _, name := range []string{"write", "edit", "multi_edit", "exec", "apply_patch", "git"} {
+	for _, name := range []string{"write", "edit", "multi_edit", "apply_patch", "git"} {
 		if !IsMutationTool(name) {
 			t.Fatalf("%s should be a mutation tool", name)
 		}
+	}
+	// exec is excluded from mutation tools: most exec calls are read-only
+	// (cat, ls, curl) and blanket invalidation destroys cache hit rates.
+	if IsMutationTool("exec") {
+		t.Fatal("exec should not be a mutation tool")
 	}
 	if IsMutationTool("find") {
 		t.Fatal("find should not be a mutation tool")

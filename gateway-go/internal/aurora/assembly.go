@@ -52,7 +52,7 @@ func Assemble(
 	if ffi.Available {
 		return assembleFFI(store, conversationID, cfg, logger)
 	}
-	return assembleFallback(store, conversationID, cfg)
+	return assembleFallback(store, conversationID, cfg, logger)
 }
 
 func assembleFFI(
@@ -64,7 +64,7 @@ func assembleFFI(
 	handle, err := ffi.ContextAssemblyNew(conversationID, cfg.TokenBudget, cfg.FreshTailCount)
 	if err != nil {
 		logger.Warn("aurora assembly: FFI failed, using fallback", "error", err)
-		return assembleFallback(store, conversationID, cfg)
+		return assembleFallback(store, conversationID, cfg, logger)
 	}
 	defer ffi.ContextEngineDrop(handle)
 
@@ -278,6 +278,7 @@ func assembleFallback(
 	store *Store,
 	conversationID uint64,
 	cfg AssemblyConfig,
+	logger *slog.Logger,
 ) (*AssemblyResult, error) {
 	items, err := store.FetchContextItems(conversationID)
 	if err != nil {
@@ -304,8 +305,16 @@ func assembleFallback(
 		}
 	}
 
-	messages, _ := store.FetchMessages(msgIDs)
-	summaries, _ := store.FetchSummaries(sumIDs)
+	messages, err := store.FetchMessages(msgIDs)
+	if err != nil {
+		logger.Error("assembleFallback: FetchMessages failed, context may be incomplete", "error", err)
+		return nil, fmt.Errorf("assembleFallback: fetch messages: %w", err)
+	}
+	summaries, err := store.FetchSummaries(sumIDs)
+	if err != nil {
+		logger.Error("assembleFallback: FetchSummaries failed, context may be incomplete", "error", err)
+		return nil, fmt.Errorf("assembleFallback: fetch summaries: %w", err)
+	}
 
 	var llmMsgs []llm.Message
 	hasSums := false

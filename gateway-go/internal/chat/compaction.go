@@ -80,11 +80,18 @@ func handleContextOverflowAurora(
 		sweepCfg.ContextThreshold = deps.compactionCfg.ContextThreshold
 		sweepCfg.FreshTailCount = uint32(deps.compactionCfg.FreshTailCount)
 
-		// Flush important facts to memory before compacting messages away.
-		// Runs synchronously so facts are saved before Aurora summarizes them.
+		// Flush important facts to memory in parallel with the sweep.
+		// Memory flush is best-effort — if it fails, compaction still proceeds.
+		// Both operations read from the in-memory store snapshot, so they don't
+		// conflict. The flush only writes to the memory store (separate from Aurora).
+		var flushDone chan struct{}
 		if deps.memoryStore != nil {
-			flushMemoryBeforeCompaction(ctx, deps.auroraStore, deps.memoryStore, deps.memoryEmbedder,
-				deps.compactionCfg.FreshTailCount, logger)
+			flushDone = make(chan struct{})
+			go func() {
+				defer close(flushDone)
+				flushMemoryBeforeCompaction(ctx, deps.auroraStore, deps.memoryStore, deps.memoryEmbedder,
+					deps.compactionCfg.FreshTailCount, logger)
+			}()
 		}
 
 		// Use lightweight model for cost-efficient compaction summaries.
@@ -101,6 +108,11 @@ func handleContextOverflowAurora(
 			true, // hard trigger
 			logger,
 		)
+		// Wait for the parallel memory flush to finish before proceeding.
+		if flushDone != nil {
+			<-flushDone
+		}
+
 		if err != nil {
 			logger.Warn("aurora sweep failed, falling back", "error", err)
 		} else if result != nil && result.ActionTaken {
