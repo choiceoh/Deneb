@@ -1,15 +1,16 @@
 // dreaming.go — AuroraDream: periodic memory consolidation inspired by Honcho's "Dreaming" feature.
 // Runs every 50 turns, 8 hours, or when active facts exceed 200 to:
-//   0. Clean up expired facts
-//   1. Verify existing facts (still valid?)
-//   2. Merge duplicate/similar facts
-//   3. Extract meta-patterns (inductive reasoning)
-//   4. Resolve contradictions between facts
-//   5. Update the user model
+//  0. Clean up expired facts
+//  1. Verify existing facts (still valid?)
+//  2. Merge duplicate/similar facts
+//  3. Extract meta-patterns (inductive reasoning)
+//  4. Resolve contradictions between facts
+//  5. Update the user model
 package memory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -217,6 +218,10 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 
 		v, e, batchErr := verifyBatch(ctx, store, client, model, batch, logger)
 		if batchErr != nil {
+			if shouldStopVerifyBatches(batchErr) {
+				logger.Debug("aurora-dream: stopping verify phase due to context deadline", "error", batchErr)
+				break
+			}
 			logger.Debug("aurora-dream: verify batch failed", "error", batchErr)
 			continue
 		}
@@ -225,6 +230,10 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 	}
 
 	return verified, expired, nil
+}
+
+func shouldStopVerifyBatches(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model string, batch []Fact, logger *slog.Logger) (int, int, error) {
