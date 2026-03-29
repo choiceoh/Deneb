@@ -13,8 +13,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// Extended for single-user DGX Spark: memory files rarely change between messages.
-const memoryFileCacheTTL = 30 * time.Second
+// Extended to 5m for single-user DGX Spark: memory files rarely change,
+// matching ctxCacheRevalidateInterval to reduce redundant os.ReadDir calls.
+const memoryFileCacheTTL = 5 * time.Minute
 
 // memFileCache caches the result of collectMemoryFiles to avoid repeated
 // os.Stat + os.ReadDir calls within a short window. TTL-based invalidation
