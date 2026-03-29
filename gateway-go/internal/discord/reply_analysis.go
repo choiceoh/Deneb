@@ -23,6 +23,9 @@ const (
 	OutcomeCommitDone                        // agent committed changes
 	OutcomeMergeConflict                     // merge conflict detected
 	OutcomeError                             // agent encountered an error
+	OutcomeBranchCreate                      // agent created a new branch
+	OutcomePRCreate                          // agent created a pull request
+	OutcomeRevert                            // agent reverted changes
 )
 
 // AnalyzeReply classifies an agent reply text into an outcome for UI decisions.
@@ -32,6 +35,15 @@ func AnalyzeReply(text string) ReplyOutcome {
 	// Check most specific patterns first.
 	if matchesAny(lower, mergeConflictIndicators) {
 		return OutcomeMergeConflict
+	}
+	if matchesAny(lower, revertIndicators) {
+		return OutcomeRevert
+	}
+	if matchesAny(lower, prCreateIndicators) {
+		return OutcomePRCreate
+	}
+	if matchesAny(lower, branchCreateIndicators) {
+		return OutcomeBranchCreate
 	}
 	if matchesAny(lower, commitIndicators) {
 		return OutcomeCommitDone
@@ -97,6 +109,21 @@ var (
 		"오류가 발생", "에러가 발생", "실패했습니다",
 		"error:", "panic:", "fatal:",
 	}
+	branchCreateIndicators = []string{
+		"브랜치를 생성", "브랜치 생성 완료", "새 브랜치",
+		"created branch", "switched to new branch", "switched to a new branch",
+		"git checkout -b", "git switch -c",
+	}
+	prCreateIndicators = []string{
+		"pull request를 생성", "pr을 생성", "pr 생성 완료",
+		"created pull request", "pull request #", "pr #",
+		"successfully created", "github.com/",
+	}
+	revertIndicators = []string{
+		"되돌렸습니다", "되돌리기 완료", "변경을 취소",
+		"reverted", "git revert", "changes undone",
+		"이전 상태로 복원",
+	}
 )
 
 func matchesAny(text string, indicators []string) bool {
@@ -125,6 +152,12 @@ func ContextButtons(outcome ReplyOutcome, sessionKey string) []Component {
 		return AfterCommitButtons(sessionKey)
 	case OutcomeError:
 		return ErrorButtons(sessionKey)
+	case OutcomeBranchCreate:
+		return AfterBranchCreateButtons(sessionKey)
+	case OutcomePRCreate:
+		return AfterPRCreateButtons(sessionKey)
+	case OutcomeRevert:
+		return AfterUndoButtons(sessionKey)
 	default:
 		return nil
 	}

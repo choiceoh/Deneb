@@ -264,23 +264,73 @@ func (s *Server) wireDiscordChatHandler() {
 }
 
 // sendVibeCoderFollowUps sends post-reply embeds for vibe coders:
-// - Error Korean translation when errors are detected
+// - Error Korean translation + recovery suggestions when errors are detected
+// - Confirmation embeds for branch/PR/revert operations
 // - Auto build/test verification when code changes are detected
 func (s *Server) sendVibeCoderFollowUps(ctx context.Context, client *discord.Client, delivery *chat.DeliveryContext, text string, outcome discord.ReplyOutcome) {
 	if delivery.To == "" {
 		return
 	}
+	sessionKey := discordSessionKeyForChannel(s.discordPlug, delivery.To)
 
-	// Error translation + recovery: add Korean explanation and auto-fix buttons.
+	// Error translation + recovery: split explanation from actionable suggestions.
 	if outcome == discord.OutcomeBuildFail || outcome == discord.OutcomeTestFail || outcome == discord.OutcomeError {
+		// 1. Korean error explanation (no buttons — pure explanation).
 		if embed := discord.FormatErrorTranslationEmbed(text); embed != nil {
-			sessionKey := discordSessionKeyForChannel(s.discordPlug, delivery.To)
 			client.SendMessage(ctx, delivery.To, &discord.SendMessageRequest{
 				Embeds:          []discord.Embed{*embed},
+				AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+			})
+		}
+		// 2. Recovery suggestion with action buttons.
+		suggested := errorRecoverySuggestion(outcome)
+		if suggested != "" {
+			summary := discord.TruncateText(text, 200)
+			recoveryEmbed := discord.FormatErrorRecoveryEmbed(summary, suggested)
+			client.SendMessage(ctx, delivery.To, &discord.SendMessageRequest{
+				Embeds:          []discord.Embed{recoveryEmbed},
 				Components:      discord.ErrorRecoveryButtons(sessionKey),
 				AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
 			})
 		}
+	}
+
+	// Confirmation embeds for branch/PR/revert operations.
+	switch outcome {
+	case discord.OutcomeBranchCreate:
+		branchName := extractQuotedOrBackticked(text)
+		embed := discord.FormatBranchCreateEmbed(branchName, "main")
+		client.SendMessage(ctx, delivery.To, &discord.SendMessageRequest{
+			Embeds:          []discord.Embed{embed},
+			Components:      discord.AfterBranchCreateButtons(sessionKey),
+			AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+		})
+		s.sendAutoVerifyEmbed(ctx, client, delivery.To)
+
+	case discord.OutcomePRCreate:
+		prTitle := extractQuotedOrBackticked(text)
+		if prTitle == "" {
+			prTitle = "Pull Request"
+		}
+		embed := discord.FormatPRCreateEmbed(0, prTitle, "", "main", "")
+		client.SendMessage(ctx, delivery.To, &discord.SendMessageRequest{
+			Embeds:          []discord.Embed{embed},
+			Components:      discord.AfterPRCreateButtons(sessionKey),
+			AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+		})
+
+	case discord.OutcomeRevert:
+		embed := discord.FormatUndoEmbed(0, "")
+		client.SendMessage(ctx, delivery.To, &discord.SendMessageRequest{
+			Embeds:          []discord.Embed{embed},
+			Components:      discord.AfterUndoButtons(sessionKey),
+			AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+		})
+		s.sendAutoVerifyEmbed(ctx, client, delivery.To)
+
+	case discord.OutcomeCommitDone:
+		// Auto-verify after commit to confirm workspace health.
+		s.sendAutoVerifyEmbed(ctx, client, delivery.To)
 	}
 
 	// Auto-verify: when code changes are detected, run build + test and show results.
@@ -289,128 +339,39 @@ func (s *Server) sendVibeCoderFollowUps(ctx context.Context, client *discord.Cli
 	}
 }
 
-// sendAutoVerifyEmbed runs build and test commands in the workspace and sends
-// a result embed to the Discord channel. This gives vibe coders immediate
-// feedback on whether the agent's changes actually work.
-func (s *Server) sendAutoVerifyEmbed(ctx context.Context, client *discord.Client, channelID string) {
-	if s.discordPlug == nil {
-		return
+// errorRecoverySuggestion returns a Korean recovery suggestion based on the error outcome.
+func errorRecoverySuggestion(outcome discord.ReplyOutcome) string {
+	switch outcome {
+	case discord.OutcomeBuildFail:
+		return "빌드 오류를 자동 수정할 수 있어요. '자동 수정' 버튼을 눌러보세요."
+	case discord.OutcomeTestFail:
+		return "테스트 실패를 분석하고 수정할 수 있어요."
+	case discord.OutcomeError:
+		return "에이전트가 다른 방법을 시도할 수 있어요."
+	default:
+		return ""
 	}
-
-	// Resolve workspace for this channel. For threads, prefer worktree.
-	sessionKey := discordSessionKeyForChannel(s.discordPlug, channelID)
-	workspaceDir := ""
-	if strings.HasPrefix(sessionKey, "discord:thread:") {
-		threadID := strings.TrimPrefix(sessionKey, "discord:thread:")
-		if s.discordWorktrees != nil {
-			if ws := s.discordWorktrees.Get(threadID); ws != nil {
-				workspaceDir = ws.Dir
-			}
-		}
-	}
-	if workspaceDir == "" {
-		wsChannelID := channelID
-		if bot := s.discordPlug.Bot(); bot != nil {
-			if parentID := bot.ThreadParent(channelID); parentID != "" {
-				wsChannelID = parentID
-			}
-		}
-		workspaceDir = s.discordPlug.Config().WorkspaceForChannel(wsChannelID)
-	}
-	if workspaceDir == "" {
-		return
-	}
-
-	// Run build and test with timeouts (non-blocking to the reply).
-	buildResult, buildOk := runQuickVerify(workspaceDir, "build")
-	testResult, testOk := runQuickVerify(workspaceDir, "test")
-
-	// Build the verification embed.
-	var fields []discord.EmbedField
-
-	buildEmoji := "✅"
-	if !buildOk {
-		buildEmoji = "❌"
-	}
-	fields = append(fields, discord.EmbedField{
-		Name: "🔨 빌드", Value: buildEmoji + " " + discord.TruncateText(buildResult, 200), Inline: false,
-	})
-
-	testEmoji := "✅"
-	if !testOk {
-		testEmoji = "❌"
-	}
-	fields = append(fields, discord.EmbedField{
-		Name: "🧪 테스트", Value: testEmoji + " " + discord.TruncateText(testResult, 200), Inline: false,
-	})
-
-	color := discord.ColorSuccess
-	title := "✅ 자동 검증 통과"
-	if !buildOk || !testOk {
-		color = discord.ColorError
-		title = "⚠️ 자동 검증 실패"
-	}
-
-	embed := discord.Embed{
-		Title:     title,
-		Color:     color,
-		Fields:    fields,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Footer:    &discord.EmbedFooter{Text: "코드 변경 감지 → 자동 빌드/테스트 실행"},
-	}
-
-	// If verification failed, add fix button.
-	var components []discord.Component
-	if !buildOk || !testOk {
-		sessionKey := discordSessionKeyForChannel(s.discordPlug, channelID)
-		components = discord.BuildFailButtons(sessionKey)
-	}
-
-	client.SendMessage(ctx, channelID, &discord.SendMessageRequest{
-		Embeds:          []discord.Embed{embed},
-		Components:      components,
-		AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
-	})
 }
 
-// runQuickVerify runs a build or test command and returns (summary, success).
-func runQuickVerify(workspaceDir, kind string) (string, bool) {
-	projType := detectProjectType(workspaceDir)
-	if projType == "" {
-		return "프로젝트 타입 감지 실패", false
-	}
-
-	var cmdName string
-	var cmdArgs []string
-
-	switch kind {
-	case "build":
-		cmdName, cmdArgs = buildCommand(projType)
-	case "test":
-		cmdName, cmdArgs = testCommand(projType)
-	}
-
-	if cmdName == "" {
-		return "해당 없음", true
-	}
-
-	output := runCmdWithTimeout(workspaceDir, 30*time.Second, cmdName, cmdArgs...)
-	if output == "" {
-		return "성공", true
-	}
-
-	lower := strings.ToLower(output)
-	isError := strings.Contains(lower, "error") || strings.Contains(lower, "fail") || strings.Contains(lower, "panic")
-	if isError {
-		// Extract just the last few lines for a concise summary.
-		lines := strings.Split(strings.TrimSpace(output), "\n")
-		if len(lines) > 5 {
-			lines = lines[len(lines)-5:]
+// extractQuotedOrBackticked extracts the first backtick-quoted or double-quoted
+// string from text. Returns "" if nothing found. Used for best-effort parsing
+// of branch names, PR titles, etc. from agent replies.
+func extractQuotedOrBackticked(text string) string {
+	// Try backtick-quoted first (most common in agent replies).
+	if start := strings.Index(text, "`"); start >= 0 {
+		rest := text[start+1:]
+		if end := strings.Index(rest, "`"); end > 0 && end < 100 {
+			return rest[:end]
 		}
-		return strings.Join(lines, "\n"), false
 	}
-
-	return "성공", true
+	// Try double-quoted.
+	if start := strings.Index(text, "\""); start >= 0 {
+		rest := text[start+1:]
+		if end := strings.Index(rest, "\""); end > 0 && end < 100 {
+			return rest[:end]
+		}
+	}
+	return ""
 }
 
 // discordSessionKeyForChannel returns the session key for a Discord channel ID.

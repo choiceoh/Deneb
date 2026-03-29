@@ -73,6 +73,16 @@ func MergeConflictButtons(sessionKey string) []Component {
 	}
 }
 
+// AfterPRCreateButtons returns follow-up buttons after PR creation.
+func AfterPRCreateButtons(sessionKey string) []Component {
+	return []Component{
+		ActionRow(
+			Button("📊 현황 보기", fmt.Sprintf("dashboard:%s", sessionKey), ButtonSecondary),
+			Button("🆕 새 작업", fmt.Sprintf("new:%s", sessionKey), ButtonPrimary),
+		),
+	}
+}
+
 // MergeConflictCheckButtons returns a button to check for merge conflicts
 // before merging a branch.
 func MergeConflictCheckButtons(sessionKey string) []Component {
