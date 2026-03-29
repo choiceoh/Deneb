@@ -87,6 +87,21 @@ type runDeps struct {
 	shutdownCtx context.Context
 }
 
+// abbreviateSession shortens channel prefixes in session keys for compact log output.
+// e.g. "telegram:7074071666" → "te:7074071666", "discord:123" → "dc:123"
+func abbreviateSession(key string) string {
+	prefixes := [][2]string{
+		{"telegram:", "te:"},
+		{"discord:", "dc:"},
+	}
+	for _, p := range prefixes {
+		if len(key) > len(p[0]) && key[:len(p[0])] == p[0] {
+			return p[1] + key[len(p[0]):]
+		}
+	}
+	return key
+}
+
 // runAgentAsync is the background goroutine that executes an agent run.
 // It persists the user message, assembles context, calls the LLM agent loop,
 // persists the result, and broadcasts completion events.
@@ -95,10 +110,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	logger = logger.With(
-		"session", params.SessionKey,
-		"runId", params.ClientRunID,
-	)
+	logArgs := []any{"session", abbreviateSession(params.SessionKey)}
+	if params.ClientRunID != "" {
+		logArgs = append(logArgs, "runId", params.ClientRunID)
+	}
+	logger = logger.With(logArgs...)
 
 	// Emit lifecycle start event for agent job tracker.
 	if deps.jobTracker != nil {

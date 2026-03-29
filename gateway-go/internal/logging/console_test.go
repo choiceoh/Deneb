@@ -32,7 +32,7 @@ func TestConsoleHandler_BasicFormat(t *testing.T) {
 	}
 
 	got := buf.String()
-	want := "14:05:09.1 INF │ server started addr=127.0.0.1:8080 port=8080\n"
+	want := "14:05:09 INF │ server started addr=127.0.0.1:8080 port=8080\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -260,12 +260,12 @@ func TestConsoleHandler_Timestamp(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	if !strings.HasPrefix(got, "14:05:09.1") {
-		t.Errorf("expected decisecond timestamp, got %q", got)
+	if !strings.HasPrefix(got, "14:05:09 ") {
+		t.Errorf("expected second-precision timestamp, got %q", got)
 	}
-	// Should NOT have 3-digit milliseconds.
-	if strings.HasPrefix(got, "14:05:09.123") {
-		t.Errorf("timestamp should be decisecond (1 digit), not millisecond: %q", got)
+	// Should NOT have any fractional seconds.
+	if strings.HasPrefix(got, "14:05:09.") {
+		t.Errorf("timestamp should have no fractional seconds: %q", got)
 	}
 }
 
@@ -331,7 +331,7 @@ func TestConsoleHandler_PkgTag(t *testing.T) {
 	h2.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09.1 INF │ [server] request status=200\n"
+	want := "14:05:09 INF │ [server] request status=200\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -388,7 +388,7 @@ func TestConsoleHandler_NoPkgTag(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09.1 INF │ hello\n"
+	want := "14:05:09 INF │ hello\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
