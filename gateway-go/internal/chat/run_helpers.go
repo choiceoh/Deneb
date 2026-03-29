@@ -11,12 +11,14 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // handleRunSuccess processes a successful agent run completion.
@@ -67,6 +69,9 @@ func handleRunSuccess(
 			logger.Info("suppressing silent reply (NO_REPLY)")
 		} else {
 			replyText := StripSilentToken(result.Text)
+			replyText = jsonutil.StripThinkingTags(replyText)
+			replyText = reply.StripLeakedToolCallMarkup(replyText)
+			replyText = strings.TrimSpace(replyText)
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
