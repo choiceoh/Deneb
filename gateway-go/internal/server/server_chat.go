@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
@@ -244,6 +245,24 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 // chat handler for coding-focused agent sessions. It wraps the existing
 // channel handlers so both Telegram and Discord can coexist.
 func (s *Server) wireDiscordChatHandler() {
+	// Initialize auto thread namer when Anthropic credentials are available
+	// and the Discord config has not explicitly disabled the feature.
+	discordCfg := s.discordPlug.Config()
+	if discordCfg.AutoThreadNamesEnabled() && s.authManager != nil {
+		cred := s.authManager.Resolve("anthropic", "")
+		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
+			anthropicClient := llm.NewClient(
+				llm.DefaultAnthropicBaseURL, cred.APIKey,
+				llm.WithLogger(s.logger),
+			)
+			s.discordThreadNamer = discord.NewThreadNamer(anthropicClient)
+			s.logger.Info("discord: auto thread naming enabled",
+				"model", "claude-haiku-4-5-20251001")
+		} else {
+			s.logger.Info("discord: auto thread naming disabled (no Anthropic credentials)")
+		}
+	}
+
 	// Recent-send dedup cache.
 	var recentMu sync.Mutex
 	recentSends := make(map[string]time.Time)

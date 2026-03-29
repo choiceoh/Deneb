@@ -32,6 +32,12 @@ type Config struct {
 
 	// DefaultWorkspace is the fallback workspace for channels not in the Workspaces map.
 	DefaultWorkspace string `json:"defaultWorkspace,omitempty"`
+
+	// AutoThreadNames controls whether an LLM-generated thread is created for each
+	// new conversation. When enabled (default: true), the bot creates a Discord thread
+	// from the first message with a short descriptive title so each task is organized
+	// into its own thread automatically.
+	AutoThreadNames *bool `json:"autoThreadNames,omitempty"`
 }
 
 // WorkspaceForChannel returns the workspace directory for a channel ID.
@@ -77,6 +83,14 @@ func (c *Config) IsUserAllowed(userID string) bool {
 		}
 	}
 	return false
+}
+
+// AutoThreadNamesEnabled returns true when auto thread naming is active (default: true).
+func (c *Config) AutoThreadNamesEnabled() bool {
+	if c.AutoThreadNames == nil {
+		return true
+	}
+	return *c.AutoThreadNames
 }
 
 // Validate checks the config for common mistakes and returns an error if invalid.
