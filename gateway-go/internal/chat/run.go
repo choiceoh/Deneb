@@ -80,7 +80,9 @@ type runDeps struct {
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
 	registry       *modelrole.Registry       // centralized model role registry
-	contextCfg     ContextConfig
+	sessionCache       *SessionCache       // L3 cache for compiled prompts + context snapshots
+	compactionPressure *CompactionPressure // branch prediction for context overflow
+	contextCfg         ContextConfig
 	compactionCfg  CompactionConfig
 	defaultModel   string
 	defaultSystem  string
