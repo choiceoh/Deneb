@@ -75,6 +75,9 @@ func (c *CachedTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessag
 }
 
 // Append writes a message and updates the cache (write-through).
+// If no cache entry exists yet (e.g. first message before any Load), a new
+// entry is seeded so that the immediately following Load hits the cache
+// instead of falling through to disk.
 func (c *CachedTranscriptStore) Append(sessionKey string, msg ChatMessage) error {
 	if err := c.inner.Append(sessionKey, msg); err != nil {
 		return err
@@ -82,10 +85,22 @@ func (c *CachedTranscriptStore) Append(sessionKey string, msg ChatMessage) error
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if entry, ok := c.cache[sessionKey]; ok && time.Now().Before(entry.expiresAt) {
+	now := time.Now()
+	if entry, ok := c.cache[sessionKey]; ok && now.Before(entry.expiresAt) {
 		entry.msgs = append(entry.msgs, msg)
 		entry.total++
-		entry.expiresAt = time.Now().Add(c.ttl)
+		entry.expiresAt = now.Add(c.ttl)
+	} else {
+		// No entry or expired: seed cache with this message. On a brand-new
+		// session there are no prior messages, so [msg] is the full and
+		// correct transcript. On a resumed session the gateway always calls
+		// Load for context assembly before Append, so this branch is only
+		// reached for new sessions in practice.
+		c.cache[sessionKey] = &transcriptCacheEntry{
+			msgs:      []ChatMessage{msg},
+			total:     1,
+			expiresAt: now.Add(c.ttl),
+		}
 	}
 	return nil
 }
