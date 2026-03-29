@@ -113,9 +113,17 @@ func (b *Bot) connectLoop(ctx context.Context) error {
 			gwURL = b.resumeURL + "?v=10&encoding=json"
 		}
 
+		connStart := time.Now()
 		err := b.runGateway(ctx, gwURL)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+
+		// Reset backoff if the connection lived long enough to be considered
+		// healthy (received events, heartbeated, etc.). Short-lived connections
+		// keep the exponential backoff to avoid hammering Discord.
+		if time.Since(connStart) > 30*time.Second {
+			backoff = time.Second
 		}
 
 		b.logger.Warn("discord gateway disconnected, reconnecting",
