@@ -2,99 +2,11 @@ package monitoring
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"log/slog"
 )
-
-func TestWatchdog_SkipsGracePeriod(t *testing.T) {
-	restartCalled := atomic.Bool{}
-	w := NewWatchdog(WatchdogDeps{
-		IsServerListening: func() bool { return false },
-		OnRestartNeeded:   func(_ string) { restartCalled.Store(true) },
-	}, WatchdogConfig{
-		CheckIntervalMs: 50,
-		StartupGraceMs:  5000, // 5 seconds grace
-		MaxAutoRestarts: 3,
-	}, slog.Default())
-
-	// During grace period, check should not trigger restart.
-	w.check()
-	if restartCalled.Load() {
-		t.Error("should not restart during grace period")
-	}
-}
-
-func TestWatchdog_TriggersRestart_ServerNotListening(t *testing.T) {
-	restartCalled := atomic.Bool{}
-	restartReason := ""
-	w := NewWatchdog(WatchdogDeps{
-		IsServerListening: func() bool { return false },
-		OnRestartNeeded: func(reason string) {
-			restartCalled.Store(true)
-			restartReason = reason
-		},
-	}, WatchdogConfig{
-		CheckIntervalMs: 50,
-		StartupGraceMs:  0, // no grace
-		MaxAutoRestarts: 3,
-	}, slog.Default())
-
-	w.startedAt = time.Now().Add(-1 * time.Hour) // simulate past startup
-	w.check()
-
-	if !restartCalled.Load() {
-		t.Error("should trigger restart when server not listening")
-	}
-	if restartReason != "server not listening" {
-		t.Errorf("unexpected reason: %q", restartReason)
-	}
-}
-
-func TestWatchdog_NoChannelsConnected(t *testing.T) {
-	restartCalled := atomic.Bool{}
-	w := NewWatchdog(WatchdogDeps{
-		IsServerListening:        func() bool { return true },
-		GetExpectedChannelCount:  func() int { return 3 },
-		GetConnectedChannelCount: func() int { return 0 },
-		OnRestartNeeded:          func(_ string) { restartCalled.Store(true) },
-	}, WatchdogConfig{
-		CheckIntervalMs: 50,
-		StartupGraceMs:  0,
-		MaxAutoRestarts: 3,
-	}, slog.Default())
-
-	w.startedAt = time.Now().Add(-1 * time.Hour)
-	w.check()
-
-	if !restartCalled.Load() {
-		t.Error("should trigger restart when 0 channels connected")
-	}
-}
-
-func TestWatchdog_RateLimitsRestarts(t *testing.T) {
-	restartCount := 0
-	w := NewWatchdog(WatchdogDeps{
-		IsServerListening: func() bool { return false },
-		OnRestartNeeded:   func(_ string) { restartCount++ },
-	}, WatchdogConfig{
-		CheckIntervalMs: 50,
-		StartupGraceMs:  0,
-		MaxAutoRestarts: 2,
-	}, slog.Default())
-
-	w.startedAt = time.Now().Add(-1 * time.Hour)
-	w.check()
-	w.check()
-	w.check()
-	w.check()
-
-	if restartCount != 2 {
-		t.Errorf("expected 2 restarts (rate limited), got %d", restartCount)
-	}
-}
 
 func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
@@ -204,21 +116,20 @@ func TestActivityTracker(t *testing.T) {
 	}
 }
 
-func TestWatchdog_RunContext(t *testing.T) {
+func TestChannelHealthMonitor_RunContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	w := NewWatchdog(WatchdogDeps{
-		IsServerListening: func() bool { return true },
-	}, WatchdogConfig{
-		CheckIntervalMs: 10,
-		StartupGraceMs:  100000,
-		MaxAutoRestarts: 3,
+	m := NewChannelHealthMonitor(ChannelHealthDeps{
+		ListChannelIDs: func() []string { return nil },
+	}, ChannelHealthConfig{
+		CheckIntervalMs:       10,
+		MonitorStartupGraceMs: 100000,
 	}, slog.Default())
 
 	done := make(chan struct{})
 	go func() {
-		w.Run(ctx)
+		m.Run(ctx)
 		close(done)
 	}()
 
