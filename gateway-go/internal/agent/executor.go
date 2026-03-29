@@ -151,7 +151,7 @@ func RunAgent(
 				if hooks.OnToolEmit != nil {
 					hooks.OnToolEmit(tc.Name, tc.ID)
 				}
-				logger.Info("executing tool", "name", tc.Name, "turn", turn)
+				logger.Info("exec", "name", tc.Name, "turn", turn)
 
 				start := time.Now()
 				var toolOutput string

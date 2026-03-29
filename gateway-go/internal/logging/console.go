@@ -234,7 +234,13 @@ func (h *ConsoleHandler) clone() *ConsoleHandler {
 	return h2
 }
 
+// continuationIndent is the visual width of "HH:MM:SS │ " used to align
+// continuation lines (attrs whose key starts with "\n").
+const continuationIndent = "           " // 11 spaces: 8 (time) + 1 + 1 (│) + 1
+
 // appendAttr formats a single attribute as " key=val" with styling.
+// If the key starts with "\n", the attr is rendered on a new indented line
+// (the "\n" prefix is stripped from the displayed key).
 // The "error" key gets special red highlighting for quick scanning.
 func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr, isErr bool) []byte {
 	a.Value = a.Value.Resolve()
@@ -242,7 +248,14 @@ func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr, isErr bool) []byte 
 		return buf
 	}
 
-	buf = append(buf, ' ')
+	// Continuation-line attrs: start a new line aligned past the timestamp+bar.
+	if len(a.Key) > 0 && a.Key[0] == '\n' {
+		a.Key = a.Key[1:]
+		buf = append(buf, '\n')
+		buf = append(buf, continuationIndent...)
+	} else {
+		buf = append(buf, ' ')
+	}
 
 	// Build the full key with group prefix.
 	isErrorKey := a.Key == "error" || a.Key == "err" || a.Key == "panic"

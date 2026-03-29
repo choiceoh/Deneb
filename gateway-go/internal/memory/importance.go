@@ -238,7 +238,7 @@ func insertExtractedFactsWithSource(ctx context.Context, store *Store, embedder 
 			"id", id,
 			"category", ef.Category,
 			"importance", fmt.Sprintf("%.2f", ef.Importance),
-			"content", truncate(ef.Content, 80),
+			"\ncontent", truncate(ef.Content, 120),
 		)
 	}
 }
