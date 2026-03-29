@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -224,6 +225,26 @@ func TestSessionsGet_NotFound(t *testing.T) {
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
 		t.Errorf("expected NOT_FOUND, got %+v", resp.Error)
+	}
+}
+
+func TestRegisterCoreBuiltins_DuplicateMethodValidation(t *testing.T) {
+	d := NewDispatcher(testLogger())
+	d.beginRegistryValidation()
+	d.setRegistryModule("core.health")
+	d.Register("health.check", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return protocol.MustResponseOK(req.ID, map[string]any{"ok": true})
+	})
+	d.setRegistryModule("core.session")
+	d.Register("health.check", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return protocol.MustResponseOK(req.ID, map[string]any{"ok": true})
+	})
+	err := d.endRegistryValidation()
+	if err == nil {
+		t.Fatal("expected duplicate registration error")
+	}
+	if !strings.Contains(err.Error(), "duplicate rpc method") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

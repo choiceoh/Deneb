@@ -234,7 +234,9 @@ func RegisterGatewayRuntimeMethods(d *Dispatcher, deps GatewayRuntimeDeps) {
 // while keeping health/channels/system in the rpc package.
 func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	// Health, sessions CRUD, channels, system — kept in rpc package (methods.go).
-	registerCoreBuiltins(d, deps)
+	if err := registerCoreBuiltins(d, deps); err != nil {
+		panic(err)
+	}
 
 	// FFI-backed methods: protocol, security, media, parsing, memory, markdown,
 	// compaction, context engine, ML.
