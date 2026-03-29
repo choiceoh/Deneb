@@ -1338,3 +1338,9 @@ func pilotToolSchema() map[string]any {
 		"required": []string{"task"},
 	}
 }
+
+func morningLetterToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+	}
+}

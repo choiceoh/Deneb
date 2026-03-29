@@ -48,6 +48,13 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	RegisterMediaTools(registry, deps.LLMClient)
 	RegisterDataTools(registry)
 	RegisterHiddenTools(registry, deps.AgentLog)
+	// Morning letter: needs registry for web search calls.
+	registry.RegisterTool(ToolDef{
+		Name:        "morning_letter",
+		Description: "Collect daily morning briefing data (모닝레터). Fetches weather, exchange rates, copper price (MetalpriceAPI), calendar, and email in parallel. Returns structured JSON for you to compose the final letter",
+		InputSchema: morningLetterToolSchema(),
+		Fn:          toolMorningLetter(registry),
+	})
 	// Pilot registered last: it takes the registry itself as a dependency.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
