@@ -15,4 +15,5 @@ type ChatManager struct {
 	discordPlug          *discord.Plugin
 	discordSummarizer *discord.Summarizer        // optional; thread titles + reasoning summaries
 	discordWorktrees  *discord.WorktreeManager   // per-thread git worktree isolation
+	discordThreadStore *discord.ThreadStore       // persistent thread→parent mapping
 }

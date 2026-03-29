@@ -23,6 +23,7 @@ type WorktreeManager struct {
 	worktrees map[string]*ThreadWorkspace // threadID → workspace
 	baseDir   string                      // parent directory for worktrees (e.g. ~/.deneb/worktrees)
 	logger    *slog.Logger
+	done      chan struct{} // closed by Close() to stop periodic pruning
 }
 
 // ThreadWorkspace holds the workspace info for one thread session.
@@ -47,8 +48,10 @@ func NewWorktreeManager(baseDir string, logger *slog.Logger) *WorktreeManager {
 		worktrees: make(map[string]*ThreadWorkspace),
 		baseDir:   baseDir,
 		logger:    logger,
+		done:      make(chan struct{}),
 	}
 	m.recoverExisting()
+	go m.periodicPrune()
 	return m
 }
 
@@ -76,17 +79,17 @@ func (m *WorktreeManager) recoverExisting() {
 		if branch == "" {
 			branch = "deneb/thread/" + threadID
 		}
-		// Best-effort parent dir: not recoverable, use the main repo.
-		// The parent dir is only needed for Remove(), which can fall back to
-		// direct directory removal if git commands fail.
+		// Recover parentDir from git config (stored during Create).
+		parentDir, _ := m.runGitOutput(wtDir, "config", "--get", "deneb.parentDir")
 		m.worktrees[threadID] = &ThreadWorkspace{
 			ThreadID:  threadID,
+			ParentDir: parentDir,
 			Dir:       wtDir,
 			Branch:    branch,
 			CreatedAt: time.Now(), // approximate
 		}
 		m.logger.Info("discord: recovered existing thread worktree",
-			"threadId", threadID, "branch", branch, "dir", wtDir)
+			"threadId", threadID, "branch", branch, "dir", wtDir, "parentDir", parentDir)
 	}
 }
 
@@ -151,6 +154,8 @@ func (m *WorktreeManager) Create(threadID, parentDir string) (*ThreadWorkspace, 
 
 	m.logger.Info("discord: created thread worktree",
 		"threadId", threadID, "branch", branch, "dir", wtDir)
+	// Store parentDir in git config so it can be recovered after restart.
+	m.runGit(wtDir, "config", "deneb.parentDir", parentDir)
 	return ws, nil
 }
 
@@ -198,6 +203,50 @@ func (m *WorktreeManager) Count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.worktrees)
+}
+
+// PruneStale removes worktrees older than maxAge and returns the count pruned.
+func (m *WorktreeManager) PruneStale(maxAge time.Duration) int {
+	m.mu.Lock()
+	var stale []string
+	for id, ws := range m.worktrees {
+		if time.Since(ws.CreatedAt) > maxAge {
+			stale = append(stale, id)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, id := range stale {
+		m.logger.Info("discord: pruning stale worktree", "threadId", id, "maxAge", maxAge)
+		m.Remove(id)
+	}
+	return len(stale)
+}
+
+// periodicPrune runs PruneStale every 24 hours until the done channel is closed.
+func (m *WorktreeManager) periodicPrune() {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if n := m.PruneStale(7 * 24 * time.Hour); n > 0 {
+				m.logger.Info("discord: periodic prune completed", "pruned", n)
+			}
+		case <-m.done:
+			return
+		}
+	}
+}
+
+// Close stops the periodic prune goroutine. Safe to call multiple times.
+func (m *WorktreeManager) Close() {
+	select {
+	case <-m.done:
+		// already closed
+	default:
+		close(m.done)
+	}
 }
 
 // ensureGitRepo checks if dir is a git repository and initializes it if not.

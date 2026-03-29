@@ -22,10 +22,10 @@ const (
 	discordThreadNameLimit = 100
 
 	// Reasoning summary generation.
-	reasoningSummaryMaxTokens = 30
+	reasoningSummaryMaxTokens = 40
 	reasoningSummaryTimeout   = 3 * time.Second
-	reasoningSummaryMaxInput  = 800
-	reasoningSummaryMaxRunes  = 50
+	reasoningSummaryMaxInput  = 1200
+	reasoningSummaryMaxRunes  = 65
 )
 
 // Summarizer generates Discord thread titles and reasoning summaries via a
@@ -130,7 +130,7 @@ func (s *Summarizer) ReasoningSummary(ctx context.Context, thinking string) stri
 		System: llm.SystemString(
 			"AI 에이전트의 추론 과정이 주어집니다. " +
 				"입력이 영어여도 반드시 한국어로 번역하여 요약하세요. " +
-				"지금 무엇을 하려는지 한국어로 한 문장(15자~30자)으로 요약하세요. " +
+				"지금 무엇을 하려는지 한국어로 한 문장(20자~40자)으로 요약하세요. " +
 				"반드시 '~하고 있습니다' 또는 '~합니다' 체로 끝내세요. " +
 				"설명 없이 요약만 출력하세요.",
 		),

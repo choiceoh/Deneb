@@ -83,6 +83,7 @@ type ProgressTracker struct {
 	finalized   bool
 	nextGroup   int       // incremented for each new parallel batch
 	groupWindow time.Time // timestamp of first StartStep in current batch
+	startTime   time.Time // when the tracker was created (for total elapsed)
 }
 
 // NewProgressTracker sends an initial progress message and returns a tracker.
@@ -109,6 +110,7 @@ func NewProgressTracker(ctx context.Context, client *Client, channelID string) *
 		client:    client,
 		channelID: channelID,
 		messageID: msg.ID,
+		startTime: time.Now(),
 	}
 }
 
@@ -160,6 +162,7 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking stri
 		if pt.steps[i].Name == kr && pt.steps[i].Status == StepPending {
 			pt.steps[i].Status = StepRunning
 			pt.steps[i].Group = group
+			pt.steps[i].StartedAt = now
 			stepIdx = i
 			found = true
 			break
@@ -167,7 +170,7 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking stri
 	}
 	if !found {
 		stepIdx = len(pt.steps)
-		pt.steps = append(pt.steps, ProgressStep{Name: kr, Status: StepRunning, Group: group})
+		pt.steps = append(pt.steps, ProgressStep{Name: kr, Status: StepRunning, Group: group, StartedAt: now})
 	}
 	needsSummary := rawThinking != "" && pt.summarizer != nil
 	pt.dirty = true
@@ -207,7 +210,7 @@ func (pt *ProgressTracker) summarizeAndUpdate(ctx context.Context, stepIdx int, 
 
 	if wasFinalized {
 		// Embed already finalized — send a direct edit with the updated summary.
-		embed := FormatProgressEmbed(steps)
+		embed := FormatProgressEmbed(steps, pt.startTime)
 		pt.client.EditMessage(ctx, pt.channelID, pt.messageID, &EditMessageRequest{
 			Embeds: []Embed{embed},
 		})
@@ -219,6 +222,13 @@ func (pt *ProgressTracker) summarizeAndUpdate(ctx context.Context, stepIdx int, 
 // CompleteStep marks a step as done. Triggers a throttled edit.
 // Tool names are automatically translated to Korean for vibe coders.
 func (pt *ProgressTracker) CompleteStep(ctx context.Context, name string, isError bool) {
+	pt.CompleteStepWithResult(ctx, name, isError, "")
+}
+
+// CompleteStepWithResult marks a step as done with an optional error result preview.
+// If errorResult is non-empty and the step has no existing reason, it's used as the
+// reason text so vibe coders can see a brief error preview in the progress embed.
+func (pt *ProgressTracker) CompleteStepWithResult(ctx context.Context, name string, isError bool, errorResult string) {
 	if pt == nil {
 		return
 	}
@@ -233,6 +243,13 @@ func (pt *ProgressTracker) CompleteStep(ctx context.Context, name string, isErro
 	for i := range pt.steps {
 		if pt.steps[i].Name == kr && (pt.steps[i].Status == StepRunning || pt.steps[i].Status == StepPending) {
 			pt.steps[i].Status = status
+			if !pt.steps[i].StartedAt.IsZero() {
+				pt.steps[i].Duration = time.Since(pt.steps[i].StartedAt)
+			}
+			// Show error preview if no reason exists yet.
+			if isError && errorResult != "" && pt.steps[i].Reason == "" {
+				pt.steps[i].Reason = errorResult
+			}
 			break
 		}
 	}
@@ -264,7 +281,7 @@ func (pt *ProgressTracker) Finalize(ctx context.Context) {
 	copy(steps, pt.steps)
 	pt.mu.Unlock()
 
-	embed := FormatProgressEmbed(steps)
+	embed := FormatProgressEmbed(steps, pt.startTime)
 	pt.client.EditMessage(ctx, pt.channelID, pt.messageID, &EditMessageRequest{
 		Embeds: []Embed{embed},
 	})
@@ -296,7 +313,7 @@ func (pt *ProgressTracker) tryEdit(ctx context.Context) {
 	pt.dirty = false
 	pt.mu.Unlock()
 
-	embed := FormatProgressEmbed(steps)
+	embed := FormatProgressEmbed(steps, pt.startTime)
 	pt.client.EditMessage(ctx, pt.channelID, pt.messageID, &EditMessageRequest{
 		Embeds: []Embed{embed},
 	})

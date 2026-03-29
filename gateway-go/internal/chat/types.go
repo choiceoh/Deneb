@@ -30,6 +30,7 @@ type ToolProgressEvent struct {
 	Name    string // tool name
 	Reason  string // raw thinking block text for summarization (only for "start"; may be empty)
 	IsError bool   // true if tool execution failed (only for "complete")
+	Result  string // truncated error output for display (only for "complete" when IsError; may be empty)
 }
 
 // ProviderConfig holds credentials and endpoint for an LLM provider.
