@@ -7,7 +7,6 @@ package session
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -397,10 +396,13 @@ func sessionsOverflowCheck(_ Deps) rpcutil.HandlerFunc {
 
 func agentIdentityGet(deps ExecDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID string `json:"agentId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.AgentID == "" {
+		if p.AgentID == "" {
 			return rpcerr.MissingParam("agentId").
 				WithMethod("agent.identity.get").
 				Response(req.ID)
@@ -435,12 +437,15 @@ func agentIdentityGet(deps ExecDeps) rpcutil.HandlerFunc {
 
 func agentWait(deps ExecDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			RunID        string `json:"runId"`
 			TimeoutMs    int64  `json:"timeoutMs,omitempty"`
 			IgnoreCached bool   `json:"ignoreCached,omitempty"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.RunID == "" {
+		if p.RunID == "" {
 			return rpcerr.MissingParam("runId").
 				WithMethod("agent.wait").
 				Response(req.ID)
