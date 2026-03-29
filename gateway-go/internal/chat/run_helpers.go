@@ -111,7 +111,9 @@ func handleRunSuccess(
 
 			if deps.memoryStore != nil {
 				// Structured extraction: extract facts with importance scoring.
-				if result.Text != "" {
+				// Skip tool-only responses (file contents relay, command output)
+				// that rarely contain user-model-worthy information.
+				if result.Text != "" && !isToolOnlyResponse(result.Text) {
 					if !checkSglangHealth() {
 						logger.Debug("structured memory extraction skipped: sglang unhealthy")
 					} else {
@@ -537,6 +539,17 @@ func resolveWorkspaceDirForPrompt() string {
 		cachedWorkspaceDir = config.ResolveAgentWorkspaceDir(nil)
 	})
 	return cachedWorkspaceDir
+}
+
+// memoryContextOpts returns LoadContextOptions based on whether the structured
+// memory store is active. When active, MEMORY.md is skipped from context files
+// because PrefetchKnowledge already provides the same information with
+// importance-weighted scoring via the structured memory store.
+func memoryContextOpts(deps runDeps) []prompt.LoadContextOption {
+	if deps.memoryStore != nil {
+		return []prompt.LoadContextOption{prompt.WithSkipMemory()}
+	}
+	return nil
 }
 
 // deliveryChannel extracts the channel name from a delivery context.

@@ -87,21 +87,58 @@ func (c *contextFileCache) store(workspace string, files []ContextFile, resolved
 // Results are cached using mtime-based validation: on subsequent calls for the
 // same workspace, only os.Stat is performed (skipping EvalSymlinks + ReadFile)
 // unless a file has been modified or the revalidation interval has elapsed.
-func LoadContextFiles(workspaceDir string) []ContextFile {
+func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextFile {
 	if workspaceDir == "" {
 		return nil
+	}
+
+	var cfg loadContextConfig
+	for _, o := range opts {
+		o(&cfg)
 	}
 
 	ctxCache.mu.Lock()
 	defer ctxCache.mu.Unlock()
 
 	if ctxCache.isValid(workspaceDir) {
-		return ctxCache.files
+		files := ctxCache.files
+		if cfg.skipMemory {
+			files = filterOutMemory(files)
+		}
+		return files
 	}
 
 	files, resolved := loadContextFilesFromDisk(workspaceDir)
 	ctxCache.store(workspaceDir, files, resolved)
+	if cfg.skipMemory {
+		files = filterOutMemory(files)
+	}
 	return files
+}
+
+// loadContextConfig holds options for LoadContextFiles.
+type loadContextConfig struct {
+	skipMemory bool // skip MEMORY.md (structured memory store provides this)
+}
+
+// LoadContextOption configures LoadContextFiles behavior.
+type LoadContextOption func(*loadContextConfig)
+
+// WithSkipMemory skips loading MEMORY.md when the structured memory store
+// is active, avoiding duplicate content in the context window.
+func WithSkipMemory() LoadContextOption {
+	return func(c *loadContextConfig) { c.skipMemory = true }
+}
+
+// filterOutMemory removes MEMORY.md entries from a context file slice.
+func filterOutMemory(files []ContextFile) []ContextFile {
+	out := make([]ContextFile, 0, len(files))
+	for _, f := range files {
+		if filepath.Base(f.Path) != "MEMORY.md" {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // loadContextFilesFromDisk performs the actual filesystem scan.

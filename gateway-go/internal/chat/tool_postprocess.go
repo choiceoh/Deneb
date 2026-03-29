@@ -184,16 +184,23 @@ func ExecAnnotator(_ context.Context, toolName string, output string) string {
 }
 
 // RegisterDefaultPostProcessors sets up the standard post-processing pipeline.
+// Execution order: global processors run first (in registration order), then
+// per-tool processors. Tool-specific summarizers (grep, find) are registered
+// as global so they run BEFORE OutputTrimmer — summarizing 10K lines down to
+// 200 is far cheaper than trimming 100K to 64K first and then summarizing.
 func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	pp := NewPostProcessRegistry()
 
-	// Global processors (run on all tools).
+	// Global processors (run on all tools, in registration order).
+	// 1. Summarizers first: reduce tool-specific output before generic trimming.
+	pp.AddGlobal(GrepResultSummarizer)
+	pp.AddGlobal(FindResultSummarizer)
+	// 2. Generic trimmer: caps any remaining large output at 64K chars.
 	pp.AddGlobal(OutputTrimmer)
+	// 3. Error enrichment: adds actionable hints to error patterns.
 	pp.AddGlobal(ErrorEnricher)
 
 	// Tool-specific processors.
-	pp.Add("grep", GrepResultSummarizer)
-	pp.Add("find", FindResultSummarizer)
 	pp.Add("exec", ExecAnnotator)
 
 	// JSON formatting for structured tools.

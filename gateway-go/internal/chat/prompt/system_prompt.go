@@ -93,10 +93,11 @@ var toolCategories = []struct {
 	{"Data", []string{"gmail", "kv"}},
 }
 
-// buildPromptSections assembles the system prompt into static and dynamic parts.
+// buildPromptSections assembles the system prompt into static, semi-static, and dynamic parts.
 // Static: identity, tooling, usage guides, safety, CLI reference (rarely changes).
-// Dynamic: skills, memory, workspace, context files, runtime (changes per request).
-func buildPromptSections(params SystemPromptParams) (staticText, dynamicText string) {
+// Semi-static: skills prompt (changes only when skills are added/removed, not per request).
+// Dynamic: memory, workspace, context files, runtime (changes per request).
+func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText, dynamicText string) {
 	toolSet := make(map[string]bool, len(params.ToolDefs))
 	for _, def := range params.ToolDefs {
 		toolSet[def.Name] = true
@@ -168,20 +169,21 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	s.WriteString("Gateway management: deneb gateway {status|start|stop|restart}\n")
 	s.WriteString("If unsure, ask the user to run `deneb help` and paste the output.\n\n")
 
+	// --- Semi-static block (skills — changes only when skills are added/removed) ---
+	var ss strings.Builder
+	if params.SkillsPrompt != "" {
+		ss.WriteString("## Skills (mandatory)\n")
+		ss.WriteString("Before replying: scan <available_skills> <description> entries.\n")
+		ss.WriteString("- If exactly one skill clearly applies: read its SKILL.md at <location> with `read`, then follow it.\n")
+		ss.WriteString("- If multiple could apply: choose the most specific one, then read/follow it.\n")
+		ss.WriteString("- If none clearly apply: do not read any SKILL.md.\n")
+		ss.WriteString("Constraints: never read more than one skill up front; only read after selecting.\n")
+		ss.WriteString(params.SkillsPrompt)
+		ss.WriteString("\n\n")
+	}
+
 	// --- Dynamic block ---
 	var d strings.Builder
-
-	// Skills.
-	if params.SkillsPrompt != "" {
-		d.WriteString("## Skills (mandatory)\n")
-		d.WriteString("Before replying: scan <available_skills> <description> entries.\n")
-		d.WriteString("- If exactly one skill clearly applies: read its SKILL.md at <location> with `read`, then follow it.\n")
-		d.WriteString("- If multiple could apply: choose the most specific one, then read/follow it.\n")
-		d.WriteString("- If none clearly apply: do not read any SKILL.md.\n")
-		d.WriteString("Constraints: never read more than one skill up front; only read after selecting.\n")
-		d.WriteString(params.SkillsPrompt)
-		d.WriteString("\n\n")
-	}
 
 	// Memory Recall.
 	if toolSet["memory_search"] {
@@ -258,27 +260,35 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	d.WriteString(buildRuntimeLine(params.RuntimeInfo, params.Channel))
 	d.WriteString("\n")
 
-	return s.String(), d.String()
+	return s.String(), ss.String(), d.String()
 }
 
 // BuildSystemPrompt assembles the full system prompt as a single string.
 func BuildSystemPrompt(params SystemPromptParams) string {
-	staticText, dynamicText := buildPromptSections(params)
-	return staticText + dynamicText
+	staticText, semiStaticText, dynamicText := buildPromptSections(params)
+	return staticText + semiStaticText + dynamicText
 }
 
 // BuildSystemPromptBlocks returns the system prompt as Anthropic ContentBlocks
-// with cache_control breakpoints. The prompt is split into a static block
-// (identity, tooling, safety — rarely changes) and a dynamic block (skills,
-// context files, runtime — changes per request). Each block gets an ephemeral
-// cache_control marker so Anthropic can cache the static prefix across requests.
+// with cache_control breakpoints. The prompt is split into three blocks:
+//   - Static: identity, tooling, safety (rarely changes)
+//   - Semi-static: skills prompt (changes only when skills are added/removed)
+//   - Dynamic: context files, runtime, date/time (changes per request)
+//
+// Each block gets an ephemeral cache_control marker so Anthropic can cache the
+// static and semi-static prefixes across requests. Skills are typically 10-15K
+// tokens, so caching them separately yields meaningful input token savings.
 func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
-	staticText, dynamicText := buildPromptSections(params)
+	staticText, semiStaticText, dynamicText := buildPromptSections(params)
 	ephemeral := &llm.CacheControl{Type: "ephemeral"}
-	return []llm.ContentBlock{
+	blocks := []llm.ContentBlock{
 		{Type: "text", Text: staticText, CacheControl: ephemeral},
-		{Type: "text", Text: dynamicText, CacheControl: ephemeral},
 	}
+	if semiStaticText != "" {
+		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: semiStaticText, CacheControl: ephemeral})
+	}
+	blocks = append(blocks, llm.ContentBlock{Type: "text", Text: dynamicText, CacheControl: ephemeral})
+	return blocks
 }
 
 // BuildCodingSystemPromptBlocks returns the coding system prompt as Anthropic

@@ -17,7 +17,7 @@ import (
 
 // Compaction defaults.
 const (
-	defaultContextThreshold = 0.85
+	defaultContextThreshold = 0.75
 )
 
 // CompactionConfig configures compaction behavior.

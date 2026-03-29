@@ -88,7 +88,7 @@ func executeAgentRun(
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
 			UserTimezone: tz,
-			ContextFiles: prompt.LoadContextFiles(workspaceDir),
+			ContextFiles: prompt.LoadContextFiles(workspaceDir, memoryContextOpts(deps)...),
 			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:      deliveryChannel(params.Delivery),
 		}

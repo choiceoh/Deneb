@@ -11,7 +11,11 @@ import (
 	"time"
 )
 
-const defaultTranscriptCacheTTL = 10 * time.Second
+// defaultTranscriptCacheTTL is extended to 60s for single-user DGX Spark
+// deployment where no other process modifies transcripts. Reduces redundant
+// JSONL reads during long tool executions (web fetch 30s+) that would
+// previously expire the 10s cache between context assembly loads.
+const defaultTranscriptCacheTTL = 60 * time.Second
 
 type transcriptCacheEntry struct {
 	msgs      []ChatMessage
