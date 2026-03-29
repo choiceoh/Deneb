@@ -256,6 +256,48 @@ fn youtube_like_korean_html() {
     assert!(!result.text.contains("var x"));
 }
 
+#[test]
+fn html_comment_with_multibyte_em_dashes() {
+    // Exact input from production panic: HTML comment containing em dashes
+    // (U+2014, 3 bytes each) caused byte-index-not-char-boundary panic in
+    // the old 14-pass code. The 2-pass tokenizer must handle this cleanly.
+    let html = r#"<!doctype html>
+<!--
+    design by:
+    ——————————
+        godo fredo
+        ✉ https://godofredo.ninja
+        ✎ @godofredoninja
+        ✈ lima - perú
+-->
+<html lang="en">
+<head><title>Test Page</title></head>
+<body><p>Hello world</p></body>
+</html>"#;
+    let result = html_to_markdown(html);
+    assert_eq!(result.title.as_deref(), Some("Test Page"));
+    assert!(result.text.contains("Hello world"), "got: {}", result.text);
+}
+
+#[test]
+fn comment_with_multibyte_no_panic() {
+    // Various multi-byte characters inside HTML comments at different byte
+    // alignments to ensure the tokenizer never indexes mid-character.
+    let cases = [
+        "<!-- 한국어 코멘트 --><p>ok</p>",
+        "<!-- —— --><p>ok</p>",
+        "<!-- 🎉🎊🎈 --><p>ok</p>",
+        "x<!-- ñ --><p>ok</p>",
+        "xx<!-- ñ --><p>ok</p>",
+        "xxx<!-- ñ --><p>ok</p>",
+        "<!-- \u{2019}\u{2018}\u{201C}\u{201D} --><p>ok</p>",
+    ];
+    for case in cases {
+        let result = html_to_markdown(case);
+        assert!(result.text.contains("ok"), "failed on: {case}");
+    }
+}
+
 // --- Conversion tests ---
 
 #[test]
