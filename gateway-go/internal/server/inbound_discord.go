@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -35,17 +36,17 @@ var (
 
 const discordSessionTTL = 24 * time.Hour
 
-// discordSessionThread maps a session key to the Discord thread channel ID that
-// was created for it. Populated on the first message of each new coding session
-// when auto thread names are enabled.
+// discordThreadParent maps a thread channel ID to its parent channel ID.
+// Used to resolve workspace from parent channel for thread sessions.
 var (
-	discordSessionThread   = make(map[string]string) // sessionKey → threadChannelID
-	discordSessionThreadMu sync.Mutex
-	// discordThreadSession is the reverse map: threadChannelID → sessionKey.
-	// Used to route incoming thread messages back to the originating session.
-	discordThreadSession   = make(map[string]string)
-	discordThreadSessionMu sync.Mutex
+	discordThreadParent   = make(map[string]string) // threadChannelID → parentChannelID
+	discordThreadParentMu sync.Mutex
 )
+
+// threadSessionKey returns the session key for a Discord thread.
+func threadSessionKey(threadID string) string {
+	return "discord:thread:" + threadID
+}
 
 // HandleDiscordMessage processes an incoming Discord message through the
 // autoreply pipeline: command detection → directive parsing → chat.send dispatch.
@@ -56,15 +57,15 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 
 	channelID := msg.ChannelID
 
-	// If this message arrived in a thread that was auto-created by us, route it
-	// back to the parent session so conversation history stays consistent.
-	discordThreadSessionMu.Lock()
-	parentSession, isKnownThread := discordThreadSession[channelID]
-	discordThreadSessionMu.Unlock()
+	// Determine if this message is in a thread. If so, it gets its own
+	// independent session key so each thread = isolated coding session.
+	isThread := p.isDiscordThread(channelID)
 
-	sessionKey := "discord:" + channelID
-	if isKnownThread {
-		sessionKey = parentSession
+	var sessionKey string
+	if isThread {
+		sessionKey = threadSessionKey(channelID)
+	} else {
+		sessionKey = "discord:" + channelID
 	}
 
 	// Build autoreply MsgContext from the Discord message.
@@ -99,9 +100,10 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	workspaceDir := ""
 	if p.server.discordPlug != nil {
 		workspaceChannelID := channelID
-		if isKnownThread {
-			// parentSession is "discord:<parentChannelID>"
-			workspaceChannelID = strings.TrimPrefix(parentSession, "discord:")
+		if isThread {
+			if parentID := p.getThreadParent(channelID); parentID != "" {
+				workspaceChannelID = parentID
+			}
 		}
 		workspaceDir = p.server.discordPlug.Config().WorkspaceForChannel(workspaceChannelID)
 	}
@@ -138,15 +140,6 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 					discordSessionSeenMu.Lock()
 					delete(discordSessionSeen, sessionKey)
 					discordSessionSeenMu.Unlock()
-					// Clear thread mapping so the next message creates a fresh thread.
-					discordSessionThreadMu.Lock()
-					if oldThread, ok := discordSessionThread[sessionKey]; ok {
-						delete(discordSessionThread, sessionKey)
-						discordThreadSessionMu.Lock()
-						delete(discordThreadSession, oldThread)
-						discordThreadSessionMu.Unlock()
-					}
-					discordSessionThreadMu.Unlock()
 				}
 				p.sendDiscordCommandReply(channelID, result)
 				return
@@ -209,26 +202,24 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 		return
 	}
 
-	// Determine the delivery target. If this session already has a thread,
-	// send replies there. If not but we should create one, do so now.
+	// Determine the delivery target.
+	// Thread messages: reply in the same thread.
+	// Channel messages: create a new thread (= new coding session) if auto-threading is on.
 	deliveryTarget := channelID
-	if isKnownThread {
-		// Incoming message is from a thread we created — replies stay in that thread.
+	if isThread {
+		// Already in a thread — replies stay here.
 		deliveryTarget = channelID
-	} else {
-		// Check whether the session already has a thread from a previous message.
-		discordSessionThreadMu.Lock()
-		existingThread, hasThread := discordSessionThread[sessionKey]
-		discordSessionThreadMu.Unlock()
-
-		if hasThread {
-			deliveryTarget = existingThread
-		} else if isFirstMessage && p.server.discordThreadNamer != nil {
-			// First message in a new session: generate a thread name and create the thread.
-			// Use cleanMessageForTitle (no workspace context) so the LLM sees only the user's words.
-			if threadID := p.tryCreateDiscordThread(sessionKey, channelID, msg.ID, cleanMessageForTitle); threadID != "" {
-				deliveryTarget = threadID
-			}
+	} else if isFirstMessage && p.server.discordThreadNamer != nil {
+		// First message in channel: create a thread for this coding session.
+		if threadID := p.tryCreateDiscordThread(channelID, msg.ID, cleanMessageForTitle); threadID != "" {
+			deliveryTarget = threadID
+			// Switch session key to the new thread's session.
+			sessionKey = threadSessionKey(threadID)
+			// Mark thread session as seen so subsequent thread messages
+			// don't re-inject workspace context redundantly.
+			discordSessionSeenMu.Lock()
+			discordSessionSeen[sessionKey] = time.Now()
+			discordSessionSeenMu.Unlock()
 		}
 	}
 
@@ -279,12 +270,12 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 }
 
 // tryCreateDiscordThread generates a thread name via LLM and creates a Discord
-// thread from the given message. Stores the thread mapping and returns the new
-// thread's channel ID on success, or "" on failure (caller falls back to channel).
+// thread from the given message. Records the thread→parent mapping and returns
+// the new thread's channel ID on success, or "" on failure (caller falls back to channel).
 //
 // The total operation is bounded by a 5-second context timeout so a slow LLM
 // or Discord API call does not block the agent from starting.
-func (p *InboundProcessor) tryCreateDiscordThread(sessionKey, channelID, messageID, content string) string {
+func (p *InboundProcessor) tryCreateDiscordThread(channelID, messageID, content string) string {
 	client := p.server.discordPlug.Client()
 	if client == nil {
 		return ""
@@ -302,18 +293,104 @@ func (p *InboundProcessor) tryCreateDiscordThread(sessionKey, channelID, message
 		return ""
 	}
 
-	p.logger.Info("discord: created auto thread",
-		"sessionKey", sessionKey, "threadId", thread.ID, "name", name)
+	threadSession := threadSessionKey(thread.ID)
+	p.logger.Info("discord: created thread session",
+		"sessionKey", threadSession, "threadId", thread.ID, "name", name)
 
-	discordSessionThreadMu.Lock()
-	discordSessionThread[sessionKey] = thread.ID
-	discordSessionThreadMu.Unlock()
-
-	discordThreadSessionMu.Lock()
-	discordThreadSession[thread.ID] = sessionKey
-	discordThreadSessionMu.Unlock()
+	// Record thread → parent channel mapping for workspace resolution.
+	discordThreadParentMu.Lock()
+	discordThreadParent[thread.ID] = channelID
+	discordThreadParentMu.Unlock()
 
 	return thread.ID
+}
+
+// isDiscordThread checks if a channelID is a known thread, either from the
+// bot's thread parent cache or from our local thread→parent map.
+func (p *InboundProcessor) isDiscordThread(channelID string) bool {
+	// Check local mapping first (bot-created threads).
+	discordThreadParentMu.Lock()
+	_, ok := discordThreadParent[channelID]
+	discordThreadParentMu.Unlock()
+	if ok {
+		return true
+	}
+	// Check the bot's Gateway-populated thread parent cache (user-created threads).
+	if p.server.discordPlug != nil {
+		if bot := p.server.discordPlug.Bot(); bot != nil {
+			return bot.IsThread(channelID)
+		}
+	}
+	return false
+}
+
+// getThreadParent returns the parent channel ID for a thread, or "" if unknown.
+func (p *InboundProcessor) getThreadParent(threadID string) string {
+	discordThreadParentMu.Lock()
+	parentID := discordThreadParent[threadID]
+	discordThreadParentMu.Unlock()
+	if parentID != "" {
+		return parentID
+	}
+	// Fall back to the bot's Gateway cache.
+	if p.server.discordPlug != nil {
+		if bot := p.server.discordPlug.Bot(); bot != nil {
+			return bot.ThreadParent(threadID)
+		}
+	}
+	return ""
+}
+
+// HandleThreadEvent processes a Discord thread lifecycle event (archive/delete).
+// When a thread is archived or deleted, the associated session is ended.
+func (p *InboundProcessor) HandleThreadEvent(event discord.ThreadEvent) {
+	sessionKey := threadSessionKey(event.ThreadID)
+
+	if event.Archived || event.Deleted {
+		p.logger.Info("discord: thread session ended",
+			"threadId", event.ThreadID,
+			"sessionKey", sessionKey,
+			"archived", event.Archived,
+			"deleted", event.Deleted)
+
+		// Clear session auto-context state.
+		discordSessionSeenMu.Lock()
+		delete(discordSessionSeen, sessionKey)
+		discordSessionSeenMu.Unlock()
+
+		// End the session in the session manager if it exists.
+		if p.server.sessions != nil {
+			existing := p.server.sessions.Get(sessionKey)
+			if existing != nil && existing.Status == session.StatusRunning {
+				now := time.Now().UnixMilli()
+				p.server.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
+					Phase: session.PhaseEnd,
+					Ts:    now,
+				})
+			}
+		}
+
+		// Clean up thread parent mapping on delete.
+		if event.Deleted {
+			discordThreadParentMu.Lock()
+			delete(discordThreadParent, event.ThreadID)
+			discordThreadParentMu.Unlock()
+		}
+	}
+}
+
+// resolveWorkspaceChannel extracts the workspace-lookup channel ID from a session key.
+// For thread sessions ("discord:thread:<threadID>"), resolves to parent channel.
+// For regular sessions ("discord:<channelID>"), returns the channel ID directly.
+func resolveWorkspaceChannel(p *InboundProcessor, sessionKey string) string {
+	if strings.HasPrefix(sessionKey, "discord:thread:") {
+		threadID := strings.TrimPrefix(sessionKey, "discord:thread:")
+		if parentID := p.getThreadParent(threadID); parentID != "" {
+			return parentID
+		}
+		return threadID
+	}
+	return strings.TrimPrefix(sessionKey, "discord:")
 }
 
 // handleCodingQuickCommand handles Discord-specific quick commands for vibe coders.
@@ -594,7 +671,7 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 		agentMessage = "마지막 실행 결과를 자세히 보여주세요."
 	case "push":
 		// Push current branch to remote — handle inline for quick feedback.
-		wsChannelID := strings.TrimPrefix(sessionKey, "discord:")
+		wsChannelID := resolveWorkspaceChannel(p, sessionKey)
 		if p.server.discordPlug != nil {
 			if ws := p.server.discordPlug.Config().WorkspaceForChannel(wsChannelID); ws != "" {
 				branch := runGitCmd(ws, "rev-parse", "--abbrev-ref", "HEAD")
@@ -635,7 +712,7 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 
 	// Resolve workspace for the session.
 	if p.server.discordPlug != nil {
-		wsChannelID := strings.TrimPrefix(sessionKey, "discord:")
+		wsChannelID := resolveWorkspaceChannel(p, sessionKey)
 		if ws := p.server.discordPlug.Config().WorkspaceForChannel(wsChannelID); ws != "" {
 			sendParams["workspaceDir"] = ws
 		}
@@ -836,13 +913,13 @@ func runCmdWithTimeout(dir string, timeout time.Duration, name string, args ...s
 // detectProjectType determines the project type from marker files.
 func detectProjectType(dir string) string {
 	markers := map[string]string{
-		"go.mod":          "go",
-		"Cargo.toml":      "rust",
-		"package.json":    "node",
-		"pyproject.toml":  "python",
-		"setup.py":        "python",
+		"go.mod":           "go",
+		"Cargo.toml":       "rust",
+		"package.json":     "node",
+		"pyproject.toml":   "python",
+		"setup.py":         "python",
 		"requirements.txt": "python",
-		"Makefile":        "make",
+		"Makefile":         "make",
 	}
 	for file, lang := range markers {
 		if _, err := os.Stat(dir + "/" + file); err == nil {
@@ -883,4 +960,3 @@ func buildCommand(projType string) (string, []string) {
 	}
 	return "", nil
 }
-
