@@ -2,11 +2,11 @@
 //!
 //! Mirrors `src/agents/models/model-selection.ts` and `src/config/model-input.ts`. Keep in sync.
 
-use crate::model::provider_id::normalize_provider_id;
 use super::allowlist::build_model_alias_index;
 use super::normalize::normalize_model_selection;
 use super::parse::{parse_model_ref, resolve_model_ref_from_string};
-use super::types::{ModelRef, ProviderConfigEntry};
+use super::types::{ModelRef, ProviderConfigEntry, SubagentSpawnModelSelectionParams};
+use crate::model::provider_id::normalize_provider_id;
 
 /// Check if a provider is a CLI provider.
 pub fn is_cli_provider(
@@ -235,14 +235,16 @@ pub fn resolve_subagent_configured_model_selection(
 /// Resolve the model selection for spawning a subagent.
 /// Mirrors `src/agents/models/model-selection.ts#resolveSubagentSpawnModelSelection`. Keep in sync.
 pub fn resolve_subagent_spawn_model_selection(
-    agents_list: &[serde_json::Value],
-    agents_defaults_model: Option<&serde_json::Value>,
-    configured_models: &std::collections::HashMap<String, serde_json::Value>,
-    configured_providers: Option<&std::collections::HashMap<String, serde_json::Value>>,
-    agent_id: &str,
-    agents_defaults_subagents_model: Option<&serde_json::Value>,
-    model_override: Option<&serde_json::Value>,
+    params: &SubagentSpawnModelSelectionParams<'_>,
 ) -> String {
+    let agents_list = params.agents_list;
+    let agents_defaults_model = params.agents_defaults_model;
+    let configured_models = params.configured_models;
+    let configured_providers = params.configured_providers;
+    let agent_id = params.agent_id;
+    let agents_defaults_subagents_model = params.agents_defaults_subagents_model;
+    let model_override = params.model_override;
+
     // 1. Explicit runtime override.
     if let Some(val) = model_override {
         if let Some(s) = normalize_model_selection(val) {
@@ -294,6 +296,7 @@ pub fn resolve_hooks_gmail_model(
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::SubagentSpawnModelSelectionParams;
     use super::{
         infer_unique_provider_from_configured_models, is_cli_provider,
         resolve_agent_model_primary_value, resolve_configured_model_ref,
@@ -437,8 +440,7 @@ mod tests {
     fn resolve_default_model_for_agent_basic() {
         let agents = vec![serde_json::json!({"id": "alpha", "model": "openai/gpt-4o"})];
         let models = std::collections::HashMap::new();
-        let result =
-            resolve_default_model_for_agent(&agents, None, &models, None, Some("alpha"));
+        let result = resolve_default_model_for_agent(&agents, None, &models, None, Some("alpha"));
         assert_eq!(result.provider, "openai");
         assert_eq!(result.model, "gpt-4o");
     }
@@ -501,15 +503,15 @@ mod tests {
     fn resolve_subagent_spawn_model_selection_override() {
         let agents: Vec<serde_json::Value> = vec![];
         let models = std::collections::HashMap::new();
-        let result = resolve_subagent_spawn_model_selection(
-            &agents,
-            None,
-            &models,
-            None,
-            "alpha",
-            None,
-            Some(&serde_json::json!("openai/gpt-4o")),
-        );
+        let result = resolve_subagent_spawn_model_selection(&SubagentSpawnModelSelectionParams {
+            agents_list: &agents,
+            agents_defaults_model: None,
+            configured_models: &models,
+            configured_providers: None,
+            agent_id: "alpha",
+            agents_defaults_subagents_model: None,
+            model_override: Some(&serde_json::json!("openai/gpt-4o")),
+        });
         assert_eq!(result, "openai/gpt-4o");
     }
 }

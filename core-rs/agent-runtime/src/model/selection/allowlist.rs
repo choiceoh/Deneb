@@ -5,7 +5,8 @@
 use super::keys::model_key;
 use super::parse::{parse_model_ref, resolve_model_ref_from_string};
 use super::types::{
-    AllowedModelSet, ModelAliasIndex, ModelCatalogEntry, ModelRef, ResolveAllowedModelRefParams,
+    AllowedModelSet, BuildAllowedModelSetParams, ModelAliasIndex, ModelCatalogEntry, ModelRef,
+    ResolveAllowedModelRefParams,
 };
 
 /// Resolve a model key from allowlist entry string.
@@ -64,16 +65,16 @@ pub fn build_model_alias_index(
 
 /// Build the set of allowed models from config allowlist and catalog.
 /// Mirrors `src/agents/models/model-selection.ts#buildAllowedModelSet`. Keep in sync.
-pub fn build_allowed_model_set(
-    agents_list: &[serde_json::Value],
-    raw_allowlist: &[String],
-    catalog: &[ModelCatalogEntry],
-    default_provider: &str,
-    default_model: Option<&str>,
-    agent_id: Option<&str>,
-    agents_defaults_model: Option<&serde_json::Value>,
-) -> AllowedModelSet {
+pub fn build_allowed_model_set(params: &BuildAllowedModelSetParams<'_>) -> AllowedModelSet {
     use crate::scope::resolve_agent_model_fallback_values;
+
+    let agents_list = params.agents_list;
+    let raw_allowlist = params.raw_allowlist;
+    let catalog = params.catalog;
+    let default_provider = params.default_provider;
+    let default_model = params.default_model;
+    let agent_id = params.agent_id;
+    let agents_defaults_model = params.agents_defaults_model;
 
     let allow_any = raw_allowlist.is_empty();
     let default_key = default_model.and_then(|dm| {
@@ -198,15 +199,15 @@ pub fn resolve_allowed_model_ref(
             None => return Err(format!("invalid model: {}", trimmed)),
         };
 
-    let allowed = build_allowed_model_set(
+    let allowed = build_allowed_model_set(&BuildAllowedModelSetParams {
         agents_list,
         raw_allowlist,
         catalog,
         default_provider,
         default_model,
-        None,
+        agent_id: None,
         agents_defaults_model,
-    );
+    });
     let key = model_key(&resolved.provider, &resolved.model);
     if !allowed.allow_any && !allowed.allowed_keys.contains(&key) {
         return Err(format!("model not allowed: {}", key));
@@ -217,11 +218,13 @@ pub fn resolve_allowed_model_ref(
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::{
+        BuildAllowedModelSetParams, ModelCatalogEntry, ResolveAllowedModelRefParams,
+    };
     use super::{
         build_allowed_model_set, build_configured_allowlist_keys, build_model_alias_index,
         resolve_allowed_model_ref, resolve_allowlist_model_key,
     };
-    use super::super::types::{ModelCatalogEntry, ResolveAllowedModelRefParams};
     use crate::defaults::DEFAULT_PROVIDER;
 
     #[test]
@@ -281,8 +284,15 @@ mod tests {
             id: "claude-opus-4-6".to_string(),
             ..Default::default()
         }];
-        let result =
-            build_allowed_model_set(&agents, &[], &catalog, DEFAULT_PROVIDER, None, None, None);
+        let result = build_allowed_model_set(&BuildAllowedModelSetParams {
+            agents_list: &agents,
+            raw_allowlist: &[],
+            catalog: &catalog,
+            default_provider: DEFAULT_PROVIDER,
+            default_model: None,
+            agent_id: None,
+            agents_defaults_model: None,
+        });
         assert!(result.allow_any);
         assert_eq!(result.allowed_catalog.len(), 1);
     }
@@ -303,15 +313,15 @@ mod tests {
             },
         ];
         let allowlist = vec!["anthropic/claude-opus-4-6".to_string()];
-        let result = build_allowed_model_set(
-            &agents,
-            &allowlist,
-            &catalog,
-            DEFAULT_PROVIDER,
-            None,
-            None,
-            None,
-        );
+        let result = build_allowed_model_set(&BuildAllowedModelSetParams {
+            agents_list: &agents,
+            raw_allowlist: &allowlist,
+            catalog: &catalog,
+            default_provider: DEFAULT_PROVIDER,
+            default_model: None,
+            agent_id: None,
+            agents_defaults_model: None,
+        });
         assert!(!result.allow_any);
         assert!(result.allowed_keys.contains("anthropic/claude-opus-4-6"));
         assert!(!result.allowed_keys.contains("openai/gpt-4o"));
