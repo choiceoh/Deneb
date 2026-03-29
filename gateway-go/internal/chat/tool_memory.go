@@ -29,8 +29,10 @@ var memContentCache = &memoryContentCache{
 }
 
 type memContentEntry struct {
-	content string
-	mtime   time.Time
+	content    string
+	lines      []string // pre-split by "\n"
+	lowerLines []string // pre-lowercased variant of lines
+	mtime      time.Time
 }
 
 type memoryContentCache struct {
@@ -41,31 +43,53 @@ type memoryContentCache struct {
 // readMemoryFile returns file content, using a mtime-based cache to skip
 // redundant reads. Falls back to os.ReadFile on cache miss or mtime change.
 func readMemoryFile(path string) (string, error) {
-	info, err := os.Stat(path)
+	entry, err := readMemoryFileParsed(path)
 	if err != nil {
 		return "", err
+	}
+	return entry.content, nil
+}
+
+// readMemoryFileParsed returns the full cached entry including pre-split lines
+// and their lowercase variants. Avoids repeated strings.Split + strings.ToLower
+// in searchMemoryFiles when the same file is searched multiple times per turn.
+func readMemoryFileParsed(path string) (*memContentEntry, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
 	}
 	mtime := info.ModTime()
 
 	memContentCache.mu.Lock()
 	if entry, ok := memContentCache.entries[path]; ok && entry.mtime.Equal(mtime) {
-		content := entry.content
+		e := entry
 		memContentCache.mu.Unlock()
-		return content, nil
+		return e, nil
 	}
 	memContentCache.mu.Unlock()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	content := string(data)
+	lines := strings.Split(string(data), "\n")
+	lowerLines := make([]string, len(lines))
+	for i, l := range lines {
+		lowerLines[i] = strings.ToLower(l)
+	}
+
+	entry := &memContentEntry{
+		content:    string(data),
+		lines:      lines,
+		lowerLines: lowerLines,
+		mtime:      mtime,
+	}
 
 	memContentCache.mu.Lock()
-	memContentCache.entries[path] = &memContentEntry{content: content, mtime: mtime}
+	memContentCache.entries[path] = entry
 	memContentCache.mu.Unlock()
 
-	return content, nil
+	return entry, nil
 }
 
 type memoryFileListCache struct {
@@ -115,22 +139,22 @@ func searchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMat
 
 	var matches []MemoryMatch
 	for _, path := range memoryFiles {
-		content, err := readMemoryFile(path)
+		entry, err := readMemoryFileParsed(path)
 		if err != nil {
 			continue
 		}
-		lines := strings.Split(content, "\n")
+		lines := entry.lines
+		lowerLines := entry.lowerLines
 		rel, _ := filepath.Rel(workspaceDir, path)
 		if rel == "" {
 			rel = path
 		}
 
 		matchedLines := make(map[int]bool)
-		for i, line := range lines {
+		for i, lower := range lowerLines {
 			if matchedLines[i] {
 				continue
 			}
-			lower := strings.ToLower(line)
 			for _, kw := range keywords {
 				if strings.Contains(lower, kw) {
 					start := i - 2
