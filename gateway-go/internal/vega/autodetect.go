@@ -20,9 +20,6 @@ func ShouldEnableVega(ffiAvailable bool, sglangURL string, logger *slog.Logger) 
 	}
 
 	// Vega FTS (non-ML) always works with FFI, so enable regardless of SGLang.
-	if logger != nil {
-		logger.Info("vega: FFI available, enabling Vega")
-	}
 	return true
 }
 
