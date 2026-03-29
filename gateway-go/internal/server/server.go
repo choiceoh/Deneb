@@ -20,6 +20,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
+	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
+	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -69,7 +72,7 @@ type ServerRPC struct {
 	providers         *provider.Registry
 	authManager       *provider.AuthManager
 	authRateLimiter   *auth.AuthRateLimiter
-	acpDeps           *rpc.ACPDeps
+	acpDeps           *handlerprocess.ACPDeps
 	acpLifecycleUnsub func()
 }
 
@@ -303,7 +306,7 @@ func New(addr string, opts ...Option) *Server {
 		s.logger.Warn("failed to restore ACP bindings", "error", err)
 	}
 	s.acpLifecycleUnsub = acp.StartACPLifecycleSync(acpRegistry, s.sessions.EventBusRef())
-	s.acpDeps = &rpc.ACPDeps{
+	s.acpDeps = &handlerprocess.ACPDeps{
 		Registry:     acpRegistry,
 		Bindings:     acpBindings,
 		Infra:        &acp.SubagentInfraDeps{ACPRegistry: acpRegistry},
@@ -331,16 +334,16 @@ func New(addr string, opts ...Option) *Server {
 
 	// Wire provider RPC methods if a provider registry is configured.
 	if s.providers != nil {
-		rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
+		s.dispatcher.RegisterDomain(handlerprovider.Methods(handlerprovider.Deps{
 			Providers: s.providers,
-		})
+		}))
 	}
 
 	// Initialize plugin full registry and register RPC methods.
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
-	rpc.RegisterPluginMethods(s.dispatcher, rpc.PluginDeps{
+	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
 		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
-	})
+	}))
 
 	// Plugin HTTP router with auth check backed by the gateway auth validator.
 	var pluginAuthCheck func(r *http.Request) bool

@@ -12,28 +12,47 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// HandlerFunc processes an RPC request and returns a response.
-type HandlerFunc func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame
+// HandlerFunc is an alias for rpcutil.HandlerFunc so domain handler packages
+// and the dispatcher share a single type — no conversion needed.
+type HandlerFunc = rpcutil.HandlerFunc
 
 // MiddlewareFunc wraps an RPC handler to add cross-cutting behavior (logging,
 // rate-limiting, etc.). This type-aliases the middleware package's Middleware
 // so callers don't need a separate import.
 type MiddlewareFunc = middleware.Middleware
 
+// handlerSnapshot is an immutable map stored in atomic.Value.
+// After boot-time registration completes, the snapshot is published once
+// and never mutated, so Dispatch reads it without any locking.
+type handlerSnapshot map[string]HandlerFunc
+
 // Dispatcher routes RPC method calls to registered handlers.
 // Optionally backed by a WorkerPool to bound concurrent handler goroutines
 // and a middleware chain for cross-cutting concerns.
+//
+// The handler map is stored as an atomic immutable snapshot (handlerSnapshot)
+// so the hot dispatch path is lock-free. Registration (boot-time only) uses
+// a sync.Mutex to serialize writes and publish new snapshots.
 type Dispatcher struct {
-	mu       sync.RWMutex
-	handlers map[string]HandlerFunc
-	logger   *slog.Logger
-	pool     *WorkerPool
-	mw       middleware.Middleware // composed middleware chain (may be nil)
+	// snap holds the current handlerSnapshot. Loaded atomically on every
+	// Dispatch call — zero contention on the hot path.
+	snap atomic.Value // handlerSnapshot
+
+	mu sync.Mutex // protects registration-time mutable state below
+	// staging is the mutable map used during boot-time registration.
+	// After each Register call the map is published to snap.
+	staging map[string]HandlerFunc
+
+	logger *slog.Logger
+	pool   atomic.Pointer[WorkerPool]
+	mw     middleware.Middleware // composed middleware chain (may be nil)
 
 	registryValidation *registryValidationState
 }
@@ -46,11 +65,14 @@ type registryValidationState struct {
 // NewDispatcher creates an empty RPC dispatcher with a default worker pool
 // to prevent unbounded goroutine creation under burst load.
 func NewDispatcher(logger *slog.Logger) *Dispatcher {
-	return &Dispatcher{
-		handlers: make(map[string]HandlerFunc),
-		logger:   logger,
-		pool:     NewWorkerPool(0), // default: 2× CPU cores, clamped [4, 64]
+	d := &Dispatcher{
+		staging: make(map[string]HandlerFunc),
+		logger:  logger,
 	}
+	d.snap.Store(handlerSnapshot{})
+	pool := NewWorkerPool(0) // default: 2× CPU cores, clamped [4, 64]
+	d.pool.Store(pool)
+	return d
 }
 
 // UseMiddleware installs a composed middleware chain that wraps every handler
@@ -68,17 +90,16 @@ func (d *Dispatcher) UseMiddleware(mws ...middleware.Middleware) {
 // spawning unbounded goroutines. This prevents goroutine explosion
 // under burst load.
 func (d *Dispatcher) SetWorkerPool(pool *WorkerPool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.pool = pool
+	d.pool.Store(pool)
 }
 
 // Register adds a handler for the given method name.
+// Must be called during boot; not safe for concurrent use with Dispatch.
 func (d *Dispatcher) Register(method string, handler HandlerFunc) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.registryValidation != nil {
-		if _, exists := d.handlers[method]; exists {
+		if _, exists := d.staging[method]; exists {
 			module := d.registryValidation.module
 			if module == "" {
 				module = "unknown"
@@ -88,7 +109,18 @@ func (d *Dispatcher) Register(method string, handler HandlerFunc) {
 			return
 		}
 	}
-	d.handlers[method] = handler
+	d.staging[method] = handler
+	d.publishLocked()
+}
+
+// publishLocked copies the staging map into an immutable snapshot and stores
+// it in the atomic.Value. Must be called with d.mu held.
+func (d *Dispatcher) publishLocked() {
+	snap := make(handlerSnapshot, len(d.staging))
+	for k, v := range d.staging {
+		snap[k] = v
+	}
+	d.snap.Store(snap)
 }
 
 func (d *Dispatcher) beginRegistryValidation() {
@@ -118,10 +150,9 @@ func (d *Dispatcher) endRegistryValidation() error {
 
 // Methods returns all registered method names.
 func (d *Dispatcher) Methods() []string {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	methods := make([]string, 0, len(d.handlers))
-	for m := range d.handlers {
+	snap := d.snap.Load().(handlerSnapshot)
+	methods := make([]string, 0, len(snap))
+	for m := range snap {
 		methods = append(methods, m)
 	}
 	return methods
@@ -130,11 +161,12 @@ func (d *Dispatcher) Methods() []string {
 // Dispatch routes a request to the appropriate handler.
 // Returns a NOT_FOUND error if no handler is registered for the method.
 // If a middleware chain is installed via UseMiddleware, it wraps the handler.
+//
+// The handler lookup is lock-free: it loads an immutable snapshot from
+// atomic.Value, avoiding RWMutex contention on every RPC call.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-	d.mu.RLock()
-	handler, ok := d.handlers[req.Method]
-	mw := d.mw
-	d.mu.RUnlock()
+	snap := d.snap.Load().(handlerSnapshot)
+	handler, ok := snap[req.Method]
 
 	if !ok {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -144,11 +176,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 	}
 
 	// Wrap handler through middleware chain if one is installed.
-	// Type conversion needed because rpc.HandlerFunc and middleware.HandlerFunc
-	// are structurally identical but distinct named types.
-	if mw != nil {
-		wrapped := mw(middleware.HandlerFunc(handler))
-		handler = HandlerFunc(wrapped)
+	// HandlerFunc is an alias for middleware.HandlerFunc, so no conversion needed.
+	if mw := d.mw; mw != nil {
+		handler = mw(handler)
 	}
 
 	return d.safeCall(ctx, req, handler)
@@ -178,11 +208,7 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 		ch <- result{resp: handler(ctx, req)}
 	}
 
-	d.mu.RLock()
-	pool := d.pool
-	d.mu.RUnlock()
-
-	if pool != nil {
+	if pool := d.pool.Load(); pool != nil {
 		pool.Submit(run)
 	} else {
 		go run()

@@ -10,19 +10,25 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
+	handlernode "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/node"
+	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
+	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
+	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
+	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
 func (s *Server) registerEventsBroadcastMethods() {
-	rpc.RegisterEventBroadcastMethods(s.dispatcher, rpc.EventsDeps{
+	s.dispatcher.RegisterDomain(handlerchannel.BroadcastMethods(handlerchannel.EventsDeps{
 		Broadcaster: s.broadcaster,
 		Logger:      s.logger,
-	})
+	}))
 }
 
 func (s *Server) registerConfigLifecycleMethods() {
-	rpc.RegisterConfigReloadMethod(s.dispatcher, rpc.ConfigReloadDeps{
+	s.dispatcher.RegisterDomain(handlersystem.ConfigReloadMethods(handlersystem.ConfigReloadDeps{
 		OnReloaded: func(_ *config.ConfigSnapshot) {
 			// Notify hooks of config change.
 			if s.hooks != nil {
@@ -60,53 +66,53 @@ func (s *Server) registerConfigLifecycleMethods() {
 				})
 			}
 		},
-	})
-	rpc.RegisterChannelLifecycleMethods(s.dispatcher, rpc.ChannelLifecycleDeps{
+	}))
+	s.dispatcher.RegisterDomain(handlerchannel.LifecycleMethods(handlerchannel.LifecycleDeps{
 		ChannelLifecycle: s.channelLifecycle,
 		Hooks:            s.hooks,
 		Broadcaster:      s.broadcaster,
-	})
+	}))
 }
 
 func (s *Server) registerMonitoringMethods() {
-	rpc.RegisterMonitoringMethods(s.dispatcher, rpc.MonitoringDeps{
+	s.dispatcher.RegisterDomain(handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{
 		ChannelHealth: s.channelHealth,
 		Activity:      s.activity,
-	})
+	}))
 }
 
 func (s *Server) registerSubscriptionMethods() {
-	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger})
+	s.dispatcher.RegisterDomain(handlerchannel.EventsMethods(handlerchannel.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger}))
 }
 
 func (s *Server) registerIdentityMethods() {
-	rpc.RegisterIdentityMethods(s.dispatcher, s.version)
+	s.dispatcher.RegisterDomain(handlersystem.IdentityMethods(s.version))
 }
 
 func (s *Server) registerHeartbeatMethods(broadcastFn func(string, any) (int, []error)) {
 	if s.heartbeatState == nil {
-		s.heartbeatState = rpc.NewHeartbeatState()
+		s.heartbeatState = handlerpresence.NewHeartbeatState()
 	}
-	rpc.RegisterHeartbeatMethods(s.dispatcher, rpc.HeartbeatDeps{
+	s.dispatcher.RegisterDomain(handlerpresence.HeartbeatMethods(handlerpresence.HeartbeatDeps{
 		State:       s.heartbeatState,
 		Broadcaster: broadcastFn,
-	})
+	}))
 }
 
 func (s *Server) registerPresenceMethods(broadcastFn func(string, any) (int, []error)) {
 	if s.presenceStore == nil {
-		s.presenceStore = rpc.NewPresenceStore()
+		s.presenceStore = handlerpresence.NewStore()
 	}
-	rpc.RegisterPresenceMethods(s.dispatcher, rpc.PresenceDeps{
+	s.dispatcher.RegisterDomain(handlerpresence.Methods(handlerpresence.Deps{
 		Store:       s.presenceStore,
 		Broadcaster: broadcastFn,
-	})
+	}))
 }
 
 func (s *Server) registerModelsMethods() {
-	rpc.RegisterModelsMethods(s.dispatcher, rpc.ModelsDeps{
+	s.dispatcher.RegisterDomain(handlerprovider.ModelsMethods(handlerprovider.ModelsDeps{
 		Providers: s.providers,
-	})
+	}))
 }
 
 // registerAdvancedChannelMethods registers node, device, cron-advanced, skill, and
@@ -116,53 +122,53 @@ func (s *Server) registerAdvancedChannelMethods(broadcastFn func(string, any) (i
 	if s.runtimeCfg != nil {
 		canvasHost = fmt.Sprintf("http://%s:%d", s.runtimeCfg.BindHost, s.runtimeCfg.Port)
 	}
-	rpc.RegisterNodeMethods(s.dispatcher, rpc.NodeDeps{
+	s.dispatcher.RegisterDomain(handlernode.Methods(handlernode.Deps{
 		Nodes:       s.nodes,
 		Broadcaster: broadcastFn,
 		CanvasHost:  canvasHost,
-	})
+	}))
 
-	rpc.RegisterDeviceMethods(s.dispatcher, rpc.DeviceDeps{
+	s.dispatcher.RegisterDomain(handlernode.DeviceMethods(handlernode.DeviceDeps{
 		Devices:     s.devices,
 		Broadcaster: broadcastFn,
-	})
+	}))
 
-	rpc.RegisterCronAdvancedMethods(s.dispatcher, rpc.CronAdvancedDeps{
+	s.dispatcher.RegisterDomain(handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
 		Cron:        s.cron,
 		RunLog:      s.cronRunLog,
 		Broadcaster: broadcastFn,
-	})
+	}))
 
-	rpc.RegisterConfigAdvancedMethods(s.dispatcher, rpc.ConfigAdvancedDeps{
+	s.dispatcher.RegisterDomain(handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{
 		Broadcaster: broadcastFn,
-	})
+	}))
 
-	rpc.RegisterSkillMethods(s.dispatcher, rpc.SkillDeps{
+	s.dispatcher.RegisterDomain(handlerskill.Methods(handlerskill.Deps{
 		Skills:      s.skills,
 		Broadcaster: broadcastFn,
-	})
+	}))
 }
 
 // registerSystemServiceMethods registers native system management (usage, logs, doctor,
 // maintenance, update) and channel plugin (Telegram, Discord) methods.
 func (s *Server) registerSystemServiceMethods(denebDir string) {
-	rpc.RegisterUsageMethods(s.dispatcher, rpc.UsageDeps{
+	s.dispatcher.RegisterDomain(handlersystem.UsageMethods(handlersystem.UsageDeps{
 		Tracker: s.usageTracker,
-	})
+	}))
 
-	rpc.RegisterLogsMethods(s.dispatcher, rpc.LogsDeps{
+	s.dispatcher.RegisterDomain(handlersystem.LogsMethods(handlersystem.LogsDeps{
 		LogDir: filepath.Join(denebDir, "logs"),
-	})
+	}))
 
-	rpc.RegisterDoctorMethods(s.dispatcher, rpc.DoctorDeps{})
+	s.dispatcher.RegisterDomain(handlersystem.DoctorMethods(handlersystem.DoctorDeps{}))
 
-	rpc.RegisterMaintenanceMethods(s.dispatcher, rpc.MaintenanceDeps{
+	s.dispatcher.RegisterDomain(handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{
 		Runner: s.maintRunner,
-	})
+	}))
 
-	rpc.RegisterUpdateMethods(s.dispatcher, rpc.UpdateDeps{
+	s.dispatcher.RegisterDomain(handlersystem.UpdateMethods(handlersystem.UpdateDeps{
 		DenebDir: denebDir,
-	})
+	}))
 
 	// Telegram native channel plugin + messaging methods.
 	// Loads Telegram config from deneb.json if available.
@@ -178,9 +184,9 @@ func (s *Server) registerSystemServiceMethods(denebDir string) {
 			s.logger.Info("telegram channel registered")
 		}
 	}
-	rpc.RegisterMessagingMethods(s.dispatcher, rpc.MessagingDeps{
+	s.dispatcher.RegisterDomain(handlerchannel.MessagingMethods(handlerchannel.MessagingDeps{
 		TelegramPlugin: s.telegramPlug,
-	})
+	}))
 
 	// Wire Telegram update handler → autoreply preprocessing → chat.send pipeline.
 	if s.telegramPlug != nil && s.chatHandler != nil {

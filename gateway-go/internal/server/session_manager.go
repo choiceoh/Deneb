@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 )
@@ -13,6 +13,6 @@ type SessionManager struct {
 	sessions       *session.Manager
 	keyCache       *session.KeyCache
 	transcript     *transcript.Writer
-	presenceStore  *rpc.PresenceStore
-	heartbeatState *rpc.HeartbeatState
+	presenceStore  *handlerpresence.Store
+	heartbeatState *handlerpresence.HeartbeatState
 }

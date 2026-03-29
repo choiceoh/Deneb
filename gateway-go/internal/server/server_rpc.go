@@ -1,8 +1,13 @@
 package server
 
 import (
+	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
+	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
+	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
+	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
+	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -17,9 +22,9 @@ func (s *Server) registerExtendedMethods() {
 
 func (s *Server) registerAgentMethods() {
 	// ACP RPC methods.
-	rpc.RegisterACPMethods(s.dispatcher, s.acpDeps)
+	s.dispatcher.RegisterDomain(handlerprocess.ACPMethods(s.acpDeps))
 
-	rpc.RegisterExtendedMethods(s.dispatcher, rpc.ExtendedDeps{
+	s.dispatcher.RegisterDomain(handleragent.ExtendedMethods(handleragent.ExtendedDeps{
 		Sessions:    s.sessions,
 		Channels:    s.channels,
 		GatewaySubs: s.gatewaySubs,
@@ -27,27 +32,27 @@ func (s *Server) registerAgentMethods() {
 		Cron:        s.cron,
 		Hooks:       s.hooks,
 		Broadcaster: s.broadcaster,
-	})
+	}))
 }
 
 func (s *Server) registerProviderMethods() {
-	rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
+	s.dispatcher.RegisterDomain(handlerprovider.Methods(handlerprovider.Deps{
 		Providers:   s.providers,
 		AuthManager: s.authManager,
-	})
+	}))
 }
 
 func (s *Server) registerToolMethods() {
-	rpc.RegisterToolMethods(s.dispatcher, rpc.ToolDeps{
+	s.dispatcher.RegisterDomain(handlerskill.ToolMethods(handlerskill.ToolDeps{
 		Processes: s.processes,
-	})
+	}))
 }
 
 func (s *Server) registerAuroraMethods() {
 	// Aurora channel methods (desktop app communication).
-	rpc.RegisterAuroraChannelMethods(s.dispatcher, rpc.AuroraChannelDeps{
+	s.dispatcher.RegisterDomain(handleraurorachannel.Methods(handleraurorachannel.Deps{
 		Chat: s.chatHandler,
-	})
+	}))
 }
 
 func (s *Server) registerPhase2Methods() {
@@ -92,7 +97,7 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 }
 
 func (s *Server) registerBuiltinMethods() {
-	rpc.RegisterGatewayRuntimeMethods(s.dispatcher, rpc.GatewayRuntimeDeps{
+	s.dispatcher.RegisterDomain(handlergateway.RuntimeMethods(handlergateway.Deps{
 		Version:         s.version,
 		StartedAt:       s.startedAt,
 		RustFFI:         s.rustFFI,
@@ -129,7 +134,7 @@ func (s *Server) registerBuiltinMethods() {
 			}
 			return s.daemon.Status(), true
 		},
-	})
+	}))
 }
 
 // pluginRegistryAdapter bridges plugin.FullRegistry to the rpc.PluginRegistry interface.

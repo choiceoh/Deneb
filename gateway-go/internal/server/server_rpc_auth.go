@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -13,9 +13,9 @@ import (
 // channel-logout RPC methods.
 func (s *Server) registerAuthRPCMethods() {
 	// Secret resolution methods.
-	rpc.RegisterSecretMethods(s.dispatcher, rpc.SecretDeps{
+	s.dispatcher.RegisterDomain(handlerplatform.SecretMethods(handlerplatform.SecretDeps{
 		Resolver: s.secrets,
-	})
+	}))
 
 	// Stub handlers for methods that required the removed Node.js bridge.
 	// Registered explicitly so callers receive ErrUnavailable instead of
