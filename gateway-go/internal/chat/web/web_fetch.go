@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"io"
@@ -26,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
-	"github.com/choiceoh/deneb/gateway-go/internal/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 )
 
@@ -150,24 +147,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor
 		FetchMs: fetchMs, OrigChars: origChars,
 	}
 
-	isHTML := strings.Contains(result.ContentType, "text/html") ||
-		strings.Contains(result.ContentType, "application/xhtml")
-	isJSON := strings.Contains(result.ContentType, "application/json") ||
-		strings.Contains(result.ContentType, "+json")
-	isDocument := liteparse.Available() && liteparse.SupportedMIME(result.ContentType)
-
-	var content string
-	switch {
-	case isHTML:
-		content = processHTML(ctx, rawContent, targetURL, sglang, &meta)
-	case isJSON:
-		content = processJSON(rawContent)
-	case isDocument:
-		// Use raw bytes (not charset-normalized string) for binary documents.
-		content = processDocument(ctx, result.Data, targetURL)
-	default:
-		content = rawContent
-	}
+	content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, sglang, &meta)
 
 	meta.ExtractChars = len(content)
 	if origChars > 0 {
@@ -228,134 +208,6 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *SGLangExt
 	}
 
 	return sb.String(), nil
-}
-
-// --- Content processing by type ---
-
-// processHTML runs the full HTML extraction pipeline:
-// 1. Extract metadata from raw HTML
-// 2. Detect quality signals
-// 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
-// 4. Convert to Markdown (SGLang AI or FFI fallback)
-func processHTML(ctx context.Context, html string, url string, sglang *SGLangExtractor, meta *webFetchMeta) string {
-	// Step 1: Extract metadata from raw HTML (before any stripping).
-	extractHTMLMeta(html, meta)
-
-	// Step 2: Detect quality signals from raw HTML.
-	meta.Signals = detectSignals(html)
-
-	// Step 3: Strip noise elements — the critical preprocessing step.
-	// This removes nav, aside, footer, ads, cookie banners, comments, etc.
-	// Even when SGLang is available, pre-stripping reduces input tokens
-	// and prevents noise from confusing the AI extraction.
-	cleaned := StripNoiseElements(html)
-
-	// Step 4: Convert to Markdown.
-	var content string
-	if sglang.available() {
-		extracted, err := sglang.extract(ctx, cleaned, url, meta.Language)
-		if err != nil {
-			slog.Warn("sglang extraction failed, falling back to FFI",
-				"url", url, "error", err)
-			content = ffiConvert(cleaned)
-		} else {
-			content = extracted
-		}
-	} else {
-		content = ffiConvert(cleaned)
-	}
-
-	// Step 5: Post-extraction quality check.
-	trimmedLen := len(strings.TrimSpace(content))
-	if trimmedLen < 100 && meta.OrigChars > 1000 {
-		meta.Signals = appendUnique(meta.Signals, "low_content_yield")
-	}
-
-	return content
-}
-
-// processJSON pretty-prints JSON for readability.
-func processJSON(raw string) string {
-	var parsed any
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return raw // invalid JSON — return as-is
-	}
-	pretty, err := json.MarshalIndent(parsed, "", "  ")
-	if err != nil {
-		return raw
-	}
-	return string(pretty)
-}
-
-// processDocument extracts text from a binary document (PDF, Office, etc.)
-// using the LiteParse CLI. Falls back to a notice if parsing fails.
-func processDocument(ctx context.Context, data []byte, url string) string {
-	name := "document"
-	if url != "" {
-		// Extract filename from URL path.
-		if idx := strings.LastIndex(url, "/"); idx >= 0 {
-			name = url[idx+1:]
-		}
-		// Strip query string.
-		if idx := strings.Index(name, "?"); idx >= 0 {
-			name = name[:idx]
-		}
-	}
-
-	text, err := liteparse.Parse(ctx, data, name)
-	if err != nil {
-		return fmt.Sprintf("(문서 파싱 실패: %s)", err)
-	}
-	if strings.TrimSpace(text) == "" {
-		return "(문서에서 텍스트를 추출하지 못했습니다)"
-	}
-	return text
-}
-
-func fetchYouTube(ctx context.Context, url string) (string, error) {
-	ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-	result, err := media.ExtractYouTubeTranscript(ytCtx, url)
-	if err != nil {
-		return formatFetchError(webFetchErr{
-			Code: "youtube_failed", Message: err.Error(),
-			URL: url, Retryable: true,
-		}), nil
-	}
-	return media.FormatYouTubeResult(result), nil
-}
-
-// --- Fetch with stealth ---
-
-// fetchWithRetry fetches a URL using browser-like stealth profiles.
-// Delegates to stealthFetch which handles bot-block detection and escalation.
-func fetchWithRetry(ctx context.Context, url string, maxBytes int64) (*media.FetchResult, error) {
-	return stealthFetch(ctx, url, maxBytes)
-}
-
-func isRetryableError(err error) bool {
-	var mfe *media.MediaFetchError
-	if errors.As(err, &mfe) {
-		if mfe.Code == media.ErrHTTPError && mfe.Status >= 500 {
-			return true
-		}
-		if mfe.Code == media.ErrFetchFailed {
-			return true
-		}
-		return false
-	}
-	return errors.Is(err, context.DeadlineExceeded)
-}
-
-// --- FFI HTML→Markdown conversion ---
-
-func ffiConvert(html string) string {
-	text, _, err := ffi.HtmlToMarkdown(html)
-	if err != nil {
-		slog.Warn("ffi html-to-markdown failed", "error", err)
-		return html
-	}
-	return text
 }
 
 // --- SGLang AI-powered content extraction ---
@@ -545,54 +397,6 @@ func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, 
 	extracted = jsonutil.StripThinkingTags(extracted)
 
 	return strings.TrimSpace(extracted), nil
-}
-
-// --- Error classification ---
-
-func classifyFetchError(err error, url string) webFetchErr {
-	var mfe *media.MediaFetchError
-	if errors.As(err, &mfe) {
-		switch mfe.Code {
-		case media.ErrHTTPError:
-			return webFetchErr{
-				Code:      "http_" + strconv.Itoa(mfe.Status),
-				Message:   mfe.Message,
-				URL:       url,
-				Retryable: mfe.Status >= 500,
-			}
-		case media.ErrMaxBytes:
-			return webFetchErr{
-				Code: "content_too_large", Message: mfe.Message,
-				URL: url, Retryable: false,
-			}
-		case media.ErrFetchFailed:
-			code := "fetch_failed"
-			msg := mfe.Message
-			retryable := true
-			switch {
-			case strings.Contains(msg, "SSRF"):
-				code, retryable = "ssrf_blocked", false
-			case strings.Contains(msg, "no such host") || strings.Contains(msg, "no addresses"):
-				code, retryable = "dns_failure", false
-			case strings.Contains(msg, "too many redirects"):
-				code, retryable = "redirect_loop", false
-			case strings.Contains(msg, "certificate"):
-				code, retryable = "tls_error", false
-			case strings.Contains(msg, "connection refused"):
-				code, retryable = "connection_refused", true
-			case strings.Contains(msg, "connection reset"):
-				code, retryable = "connection_reset", true
-			}
-			return webFetchErr{Code: code, Message: msg, URL: url, Retryable: retryable}
-		}
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return webFetchErr{Code: "timeout", Message: "request timed out", URL: url, Retryable: true}
-	}
-	if errors.Is(err, context.Canceled) {
-		return webFetchErr{Code: "canceled", Message: "request canceled", URL: url, Retryable: false}
-	}
-	return webFetchErr{Code: "unknown", Message: err.Error(), URL: url, Retryable: false}
 }
 
 // --- Output formatting ---
