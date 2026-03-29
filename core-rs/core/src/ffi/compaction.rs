@@ -40,16 +40,7 @@ pub unsafe extern "C" fn deneb_compaction_evaluate(
         };
         let decision =
             crate::compaction::evaluate(&config, stored_tokens, live_tokens, token_budget);
-        let json = match serde_json::to_string(&decision) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &decision)
     })
 }
 
@@ -119,12 +110,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_start(
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
         let json = crate::compaction::napi::compaction_sweep_start(handle);
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
 
@@ -157,12 +143,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let json = crate::compaction::napi::compaction_sweep_step(handle, resp_str.to_string());
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
 

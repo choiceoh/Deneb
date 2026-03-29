@@ -52,14 +52,7 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         match crate::memory_search::fts::build_fts_query(raw_str) {
-            Some(query) => {
-                let bytes = query.as_bytes();
-                if bytes.len() > out_slice.len() {
-                    return FFI_ERR_OUTPUT_TOO_SMALL;
-                }
-                out_slice[..bytes.len()].copy_from_slice(bytes);
-                bytes.len() as i32
-            }
+            Some(query) => ffi_write_bytes(out_slice, query.as_bytes()),
             None => 0,
         }
     }
@@ -86,16 +79,7 @@ ffi_string_to_buffer!(
                 Err(_) => return FFI_ERR_JSON_ERROR,
             };
         let results = crate::memory_search::merge::merge_hybrid_results(&params);
-        let json = match serde_json::to_string(&results) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &results)
     }
 );
 
@@ -114,15 +98,6 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         let keywords = crate::memory_search::query_expansion::extract_keywords(query_str);
-        let json = match serde_json::to_string(&keywords) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &keywords)
     }
 );

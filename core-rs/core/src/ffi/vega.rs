@@ -23,12 +23,7 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         let result_json = vega_execute_impl(cmd_str);
-        let result_bytes = result_json.as_bytes();
-        if result_bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
-        result_bytes.len() as i32
+        ffi_write_bytes(out_slice, result_json.as_bytes())
     }
 );
 
@@ -50,12 +45,7 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         let result_json = vega_search_impl(query_str);
-        let result_bytes = result_json.as_bytes();
-        if result_bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
-        result_bytes.len() as i32
+        ffi_write_bytes(out_slice, result_json.as_bytes())
     }
 );
 

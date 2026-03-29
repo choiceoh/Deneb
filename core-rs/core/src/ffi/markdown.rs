@@ -67,16 +67,7 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
             has_code_blocks,
             has_tables,
         };
-        let json = match serde_json::to_string(&output) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &output)
     })
 }
 
@@ -96,15 +87,6 @@ ffi_string_to_buffer!(
         out_slice
     ) {
         let fences = crate::markdown::fences::parse_fence_spans(text_str);
-        let json = match serde_json::to_string(&fences) {
-            Ok(j) => j,
-            Err(_) => return FFI_ERR_JSON_ERROR,
-        };
-        let bytes = json.as_bytes();
-        if bytes.len() > out_slice.len() {
-            return FFI_ERR_OUTPUT_TOO_SMALL;
-        }
-        out_slice[..bytes.len()].copy_from_slice(bytes);
-        bytes.len() as i32
+        ffi_write_json(out_slice, &fences)
     }
 );

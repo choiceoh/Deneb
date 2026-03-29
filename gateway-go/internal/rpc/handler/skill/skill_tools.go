@@ -133,19 +133,17 @@ func toolsStatus(deps ToolDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.ID == "" {
-				return nil, rpcerr.MissingParam("id")
-			}
-			if deps.Processes == nil {
-				return nil, rpcerr.NotFound("process tracking")
-			}
-			tracked := deps.Processes.Get(p.ID)
-			if tracked == nil {
-				return nil, rpcerr.NotFound("tool execution")
-			}
-			return tracked, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.ID == "" {
+			return nil, rpcerr.MissingParam("id")
+		}
+		if deps.Processes == nil {
+			return nil, rpcerr.NotFound("process tracking")
+		}
+		tracked := deps.Processes.Get(p.ID)
+		if tracked == nil {
+			return nil, rpcerr.NotFound("tool execution")
+		}
+		return tracked, nil
+	})
 }

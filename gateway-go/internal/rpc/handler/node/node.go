@@ -81,21 +81,19 @@ func DeviceMethods(deps DeviceDeps) map[string]rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func nodePairRequest(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[node.PairRequest](req, func(p node.PairRequest) (any, error) {
-			if p.NodeID == "" {
-				return nil, rpcerr.MissingParam("nodeId")
-			}
-			created := deps.Nodes.RequestPairing(p)
-			if deps.Broadcaster != nil && !p.Silent {
-				deps.Broadcaster("node.pair.requested", map[string]any{
-					"requestId": created.RequestID,
-					"nodeId":    created.NodeID,
-				})
-			}
-			return map[string]any{"requestId": created.RequestID}, nil
-		})
-	}
+	return rpcutil.BindHandler[node.PairRequest](func(p node.PairRequest) (any, error) {
+		if p.NodeID == "" {
+			return nil, rpcerr.MissingParam("nodeId")
+		}
+		created := deps.Nodes.RequestPairing(p)
+		if deps.Broadcaster != nil && !p.Silent {
+			deps.Broadcaster("node.pair.requested", map[string]any{
+				"requestId": created.RequestID,
+				"nodeId":    created.NodeID,
+			})
+		}
+		return map[string]any{"requestId": created.RequestID}, nil
+	})
 }
 
 func nodePairList(deps Deps) rpcutil.HandlerFunc {
@@ -118,42 +116,38 @@ func nodePairApprove(deps Deps) rpcutil.HandlerFunc {
 	type params struct {
 		RequestID string `json:"requestId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.RequestID == "" {
-				return nil, rpcerr.MissingParam("requestId")
-			}
-			paired, err := deps.Nodes.ApprovePairing(p.RequestID)
-			if err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			if deps.Broadcaster != nil {
-				deps.Broadcaster("node.pair.approved", map[string]any{"nodeId": paired.NodeID})
-			}
-			return map[string]any{"node": paired}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.RequestID == "" {
+			return nil, rpcerr.MissingParam("requestId")
+		}
+		paired, err := deps.Nodes.ApprovePairing(p.RequestID)
+		if err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("node.pair.approved", map[string]any{"nodeId": paired.NodeID})
+		}
+		return map[string]any{"node": paired}, nil
+	})
 }
 
 func nodePairReject(deps Deps) rpcutil.HandlerFunc {
 	type params struct {
 		RequestID string `json:"requestId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.RequestID == "" {
-				return nil, rpcerr.MissingParam("requestId")
-			}
-			nodeID, err := deps.Nodes.RejectPairing(p.RequestID)
-			if err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			if deps.Broadcaster != nil {
-				deps.Broadcaster("node.pair.rejected", map[string]any{"nodeId": nodeID})
-			}
-			return map[string]any{"nodeId": nodeID}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.RequestID == "" {
+			return nil, rpcerr.MissingParam("requestId")
+		}
+		nodeID, err := deps.Nodes.RejectPairing(p.RequestID)
+		if err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("node.pair.rejected", map[string]any{"nodeId": nodeID})
+		}
+		return map[string]any{"nodeId": nodeID}, nil
+	})
 }
 
 func nodePairVerify(deps Deps) rpcutil.HandlerFunc {
@@ -161,19 +155,17 @@ func nodePairVerify(deps Deps) rpcutil.HandlerFunc {
 		NodeID string `json:"nodeId"`
 		Token  string `json:"token"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.NodeID == "" || p.Token == "" {
-				return nil, rpcerr.MissingParam("nodeId and token")
-			}
-			valid := deps.Nodes.VerifyToken(p.NodeID, p.Token)
-			result := map[string]any{"valid": valid}
-			if valid {
-				result["nodeId"] = p.NodeID
-			}
-			return result, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.NodeID == "" || p.Token == "" {
+			return nil, rpcerr.MissingParam("nodeId and token")
+		}
+		valid := deps.Nodes.VerifyToken(p.NodeID, p.Token)
+		result := map[string]any{"valid": valid}
+		if valid {
+			result["nodeId"] = p.NodeID
+		}
+		return result, nil
+	})
 }
 
 func nodeList(deps Deps) rpcutil.HandlerFunc {
@@ -193,33 +185,31 @@ func nodeDescribe(deps Deps) rpcutil.HandlerFunc {
 	type params struct {
 		NodeID string `json:"nodeId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.NodeID == "" {
-				return nil, rpcerr.MissingParam("nodeId")
-			}
-			info := deps.Nodes.DescribeNode(p.NodeID)
-			if info == nil {
-				return nil, rpcerr.NotFound("node")
-			}
-			return map[string]any{
-				"ts":              time.Now().UnixMilli(),
-				"nodeId":          info.NodeID,
-				"displayName":     info.DisplayName,
-				"platform":        info.Platform,
-				"version":         info.Version,
-				"coreVersion":     info.CoreVersion,
-				"uiVersion":       info.UIVersion,
-				"deviceFamily":    info.DeviceFamily,
-				"modelIdentifier": info.ModelIdentifier,
-				"caps":            info.Caps,
-				"commands":        info.Commands,
-				"paired":          info.Paired,
-				"connected":       info.Connected,
-				"lastSeenAtMs":    info.LastSeenAtMs,
-			}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.NodeID == "" {
+			return nil, rpcerr.MissingParam("nodeId")
+		}
+		info := deps.Nodes.DescribeNode(p.NodeID)
+		if info == nil {
+			return nil, rpcerr.NotFound("node")
+		}
+		return map[string]any{
+			"ts":              time.Now().UnixMilli(),
+			"nodeId":          info.NodeID,
+			"displayName":     info.DisplayName,
+			"platform":        info.Platform,
+			"version":         info.Version,
+			"coreVersion":     info.CoreVersion,
+			"uiVersion":       info.UIVersion,
+			"deviceFamily":    info.DeviceFamily,
+			"modelIdentifier": info.ModelIdentifier,
+			"caps":            info.Caps,
+			"commands":        info.Commands,
+			"paired":          info.Paired,
+			"connected":       info.Connected,
+			"lastSeenAtMs":    info.LastSeenAtMs,
+		}, nil
+	})
 }
 
 func nodeRename(deps Deps) rpcutil.HandlerFunc {
@@ -227,20 +217,18 @@ func nodeRename(deps Deps) rpcutil.HandlerFunc {
 		NodeID      string `json:"nodeId"`
 		DisplayName string `json:"displayName"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.NodeID == "" || p.DisplayName == "" {
-				return nil, rpcerr.MissingParam("nodeId and displayName")
-			}
-			if err := deps.Nodes.RenameNode(p.NodeID, p.DisplayName); err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			return map[string]any{
-				"nodeId":      p.NodeID,
-				"displayName": p.DisplayName,
-			}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.NodeID == "" || p.DisplayName == "" {
+			return nil, rpcerr.MissingParam("nodeId and displayName")
+		}
+		if err := deps.Nodes.RenameNode(p.NodeID, p.DisplayName); err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		return map[string]any{
+			"nodeId":      p.NodeID,
+			"displayName": p.DisplayName,
+		}, nil
+	})
 }
 
 func nodeInvoke(deps Deps) rpcutil.HandlerFunc {
@@ -308,22 +296,20 @@ func nodeInvokeResult(deps Deps) rpcutil.HandlerFunc {
 		Payload        any    `json:"payload,omitempty"`
 		PayloadJSON    string `json:"payloadJSON,omitempty"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.IdempotencyKey == "" {
-				return nil, rpcerr.MissingParam("idempotencyKey")
-			}
-			result := &node.InvokeResult{
-				OK:          p.OK,
-				NodeID:      p.NodeID,
-				Command:     p.Command,
-				Payload:     p.Payload,
-				PayloadJSON: p.PayloadJSON,
-			}
-			resolved := deps.Nodes.ResolveInvoke(p.IdempotencyKey, result)
-			return map[string]bool{"resolved": resolved}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.IdempotencyKey == "" {
+			return nil, rpcerr.MissingParam("idempotencyKey")
+		}
+		result := &node.InvokeResult{
+			OK:          p.OK,
+			NodeID:      p.NodeID,
+			Command:     p.Command,
+			Payload:     p.Payload,
+			PayloadJSON: p.PayloadJSON,
+		}
+		resolved := deps.Nodes.ResolveInvoke(p.IdempotencyKey, result)
+		return map[string]bool{"resolved": resolved}, nil
+	})
 }
 
 func nodeCanvasCapabilityRefresh(deps Deps) rpcutil.HandlerFunc {
@@ -361,19 +347,17 @@ func nodePendingAck(deps Deps) rpcutil.HandlerFunc {
 		NodeID string   `json:"nodeId,omitempty"`
 		IDs    []string `json:"ids"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if len(p.IDs) == 0 {
-				return nil, rpcerr.MissingParam("ids")
-			}
-			ackedIDs, remaining := deps.Nodes.AckActions(p.NodeID, p.IDs)
-			return map[string]any{
-				"nodeId":         p.NodeID,
-				"ackedIds":       ackedIDs,
-				"remainingCount": remaining,
-			}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if len(p.IDs) == 0 {
+			return nil, rpcerr.MissingParam("ids")
+		}
+		ackedIDs, remaining := deps.Nodes.AckActions(p.NodeID, p.IDs)
+		return map[string]any{
+			"nodeId":         p.NodeID,
+			"ackedIds":       ackedIDs,
+			"remainingCount": remaining,
+		}, nil
+	})
 }
 
 func nodePendingDrain(deps Deps) rpcutil.HandlerFunc {
@@ -405,30 +389,28 @@ func nodePendingEnqueue(deps Deps) rpcutil.HandlerFunc {
 		ExpiresInMs int64  `json:"expiresInMs,omitempty"`
 		Wake        bool   `json:"wake,omitempty"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.NodeID == "" || p.Type == "" {
-				return nil, rpcerr.MissingParam("nodeId and type")
-			}
-			action := node.PendingAction{
-				Command:  p.Type,
-				Priority: p.Priority,
-				Type:     p.Type,
-			}
-			if p.ExpiresInMs > 0 {
-				action.ExpiresAtMs = time.Now().Add(time.Duration(p.ExpiresInMs) * time.Millisecond).UnixMilli()
-			}
-			queued := deps.Nodes.EnqueueAction(p.NodeID, action)
-			if deps.Broadcaster != nil {
-				deps.Broadcaster("node.pending.changed", map[string]any{"nodeId": p.NodeID})
-			}
-			return map[string]any{
-				"nodeId":        p.NodeID,
-				"queued":        queued,
-				"wakeTriggered": p.Wake,
-			}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.NodeID == "" || p.Type == "" {
+			return nil, rpcerr.MissingParam("nodeId and type")
+		}
+		action := node.PendingAction{
+			Command:  p.Type,
+			Priority: p.Priority,
+			Type:     p.Type,
+		}
+		if p.ExpiresInMs > 0 {
+			action.ExpiresAtMs = time.Now().Add(time.Duration(p.ExpiresInMs) * time.Millisecond).UnixMilli()
+		}
+		queued := deps.Nodes.EnqueueAction(p.NodeID, action)
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("node.pending.changed", map[string]any{"nodeId": p.NodeID})
+		}
+		return map[string]any{
+			"nodeId":        p.NodeID,
+			"queued":        queued,
+			"wakeTriggered": p.Wake,
+		}, nil
+	})
 }
 
 func nodeEvent(deps Deps) rpcutil.HandlerFunc {
@@ -437,17 +419,15 @@ func nodeEvent(deps Deps) rpcutil.HandlerFunc {
 		Payload     any    `json:"payload,omitempty"`
 		PayloadJSON string `json:"payloadJSON,omitempty"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.Event == "" {
-				return nil, rpcerr.MissingParam("event")
-			}
-			if deps.Broadcaster != nil {
-				deps.Broadcaster("node.event."+p.Event, p.Payload)
-			}
-			return map[string]bool{"ok": true}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.Event == "" {
+			return nil, rpcerr.MissingParam("event")
+		}
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("node.event."+p.Event, p.Payload)
+		}
+		return map[string]bool{"ok": true}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -468,99 +448,89 @@ func devicePairApprove(deps DeviceDeps) rpcutil.HandlerFunc {
 	type params struct {
 		RequestID string `json:"requestId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.RequestID == "" {
-				return nil, rpcerr.MissingParam("requestId")
-			}
-			dev, err := deps.Devices.Approve(p.RequestID)
-			if err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			if deps.Broadcaster != nil {
-				deps.Broadcaster("device.pair.approved", map[string]any{"deviceId": dev.DeviceID})
-			}
-			return map[string]any{"device": dev}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.RequestID == "" {
+			return nil, rpcerr.MissingParam("requestId")
+		}
+		dev, err := deps.Devices.Approve(p.RequestID)
+		if err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("device.pair.approved", map[string]any{"deviceId": dev.DeviceID})
+		}
+		return map[string]any{"device": dev}, nil
+	})
 }
 
 func devicePairReject(deps DeviceDeps) rpcutil.HandlerFunc {
 	type params struct {
 		RequestID string `json:"requestId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.RequestID == "" {
-				return nil, rpcerr.MissingParam("requestId")
-			}
-			if err := deps.Devices.Reject(p.RequestID); err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			return map[string]bool{"ok": true}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.RequestID == "" {
+			return nil, rpcerr.MissingParam("requestId")
+		}
+		if err := deps.Devices.Reject(p.RequestID); err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		return map[string]bool{"ok": true}, nil
+	})
 }
 
 func devicePairRemove(deps DeviceDeps) rpcutil.HandlerFunc {
 	type params struct {
 		DeviceID string `json:"deviceId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.DeviceID == "" {
-				return nil, rpcerr.MissingParam("deviceId")
-			}
-			if err := deps.Devices.Remove(p.DeviceID); err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			if deps.Broadcaster != nil {
-				deps.Broadcaster("device.pair.removed", map[string]any{"deviceId": p.DeviceID})
-			}
-			return map[string]bool{"ok": true}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.DeviceID == "" {
+			return nil, rpcerr.MissingParam("deviceId")
+		}
+		if err := deps.Devices.Remove(p.DeviceID); err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("device.pair.removed", map[string]any{"deviceId": p.DeviceID})
+		}
+		return map[string]bool{"ok": true}, nil
+	})
 }
 
 func deviceTokenRotate(deps DeviceDeps) rpcutil.HandlerFunc {
 	type params struct {
 		DeviceID string `json:"deviceId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.DeviceID == "" {
-				return nil, rpcerr.MissingParam("deviceId")
-			}
-			newToken, err := deps.Devices.RotateToken(p.DeviceID)
-			if err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			return map[string]any{
-				"deviceId": p.DeviceID,
-				"token":    newToken,
-			}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.DeviceID == "" {
+			return nil, rpcerr.MissingParam("deviceId")
+		}
+		newToken, err := deps.Devices.RotateToken(p.DeviceID)
+		if err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		return map[string]any{
+			"deviceId": p.DeviceID,
+			"token":    newToken,
+		}, nil
+	})
 }
 
 func deviceTokenRevoke(deps DeviceDeps) rpcutil.HandlerFunc {
 	type params struct {
 		DeviceID string `json:"deviceId"`
 	}
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.Bind[params](req, func(p params) (any, error) {
-			if p.DeviceID == "" {
-				return nil, rpcerr.MissingParam("deviceId")
-			}
-			if err := deps.Devices.RevokeToken(p.DeviceID); err != nil {
-				return nil, rpcerr.NotFound(err.Error())
-			}
-			if deps.Broadcaster != nil {
-				deps.Broadcaster("device.token.revoked", map[string]any{"deviceId": p.DeviceID})
-			}
-			return map[string]bool{"ok": true}, nil
-		})
-	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.DeviceID == "" {
+			return nil, rpcerr.MissingParam("deviceId")
+		}
+		if err := deps.Devices.RevokeToken(p.DeviceID); err != nil {
+			return nil, rpcerr.NotFound(err.Error())
+		}
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("device.token.revoked", map[string]any{"deviceId": p.DeviceID})
+		}
+		return map[string]bool{"ok": true}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------

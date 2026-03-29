@@ -87,6 +87,19 @@ func RespondOK(reqID string, result any) *protocol.ResponseFrame {
 	return protocol.MustResponseOK(reqID, result)
 }
 
+// BindHandler returns a HandlerFunc that decodes params into P, calls fn, and
+// builds the response. It eliminates the closure-wrapping boilerplate that
+// otherwise repeats in every handler:
+//
+//	return rpcutil.BindHandler[params](func(p params) (any, error) {
+//	    return deps.Manager.DoSomething(p.Name), nil
+//	})
+func BindHandler[P any](fn func(P) (any, error)) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return Bind[P](req, fn)
+	}
+}
+
 // Bind unmarshals request params into P, calls fn with the decoded value, and
 // returns a ready-made ResponseFrame. fn returns the success payload and an
 // optional error; *rpcerr.Error values are converted to error responses
