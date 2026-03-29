@@ -66,7 +66,7 @@ func TestProtocolValidate_invalidFramePayload(t *testing.T) {
 func TestProtocolValidateParams_schemaValidationPath(t *testing.T) {
 	m := ProtocolMethods()
 	resp := callHandler(m, "protocol.validate_params", map[string]any{
-		"method": "sessions.get",
+		"method": "sessions.resolve",
 		"params": `{"key":"abc"}`,
 	})
 	if ffipkg.Available {

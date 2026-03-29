@@ -165,7 +165,7 @@ func TestConsoleHandler_ColorLevelStyles(t *testing.T) {
 		want  string
 	}{
 		{slog.LevelDebug, ansiBoldCyn},
-		{slog.LevelInfo, ansiBoldBlu},
+		{slog.LevelInfo, ansiDim},
 		{slog.LevelWarn, ansiBoldYel},
 		{slog.LevelError, ansiBoldRed},
 	}
@@ -246,7 +246,7 @@ func TestConsoleHandler_BoolAttr(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09.1 DBG │ rpc method=health ok=true ms=5\n"
+	want := "14:05:09 DBG │ rpc method=health ok=true ms=5\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}

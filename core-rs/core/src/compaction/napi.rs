@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compaction_evaluate_napi() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_compaction_evaluate_napi() -> napi::Result<()> {
         let config_json = serde_json::to_string(&CompactionConfig::default())?;
         let result = compaction_evaluate(config_json, 800, 0, 1000);
         let decision: CompactionDecision = serde_json::from_str(&result)?;
@@ -238,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sweep_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_sweep_lifecycle() -> napi::Result<()> {
         let config_json = serde_json::to_string(&CompactionConfig::default())?;
         let handle = compaction_sweep_new(config_json, 1, 1000, false, false, 1000.0);
         assert!(handle > 0);

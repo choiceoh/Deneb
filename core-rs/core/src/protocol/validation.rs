@@ -679,17 +679,16 @@ mod tests {
                 name: "sessions.create minimal",
                 method: "sessions.create",
                 params: json!({
-                    "key": "team-chat",
-                    "kind": "group"
+                    "key": "team-chat"
                 }),
                 valid: true,
                 expected_keyword: None,
             },
             GoldenCase {
-                name: "chat.send requires key",
+                name: "chat.send requires sessionKey",
                 method: "chat.send",
                 params: json!({
-                    "text": "hello"
+                    "message": "hello"
                 }),
                 valid: false,
                 expected_keyword: Some("required"),
@@ -698,9 +697,12 @@ mod tests {
                 name: "cron.add full",
                 method: "cron.add",
                 params: json!({
-                    "expr": "*/5 * * * *",
-                    "command": "echo hi",
-                    "enabled": true
+                    "name": "every-five",
+                    "enabled": true,
+                    "schedule": { "kind": "cron", "expr": "*/5 * * * *" },
+                    "sessionTarget": "main",
+                    "wakeMode": "now",
+                    "payload": { "kind": "systemEvent", "text": "tick" }
                 }),
                 valid: true,
                 expected_keyword: None,

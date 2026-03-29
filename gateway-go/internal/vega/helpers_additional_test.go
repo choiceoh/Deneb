@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -132,6 +134,9 @@ func TestEnhancedBackendSearchCacheHit(t *testing.T) {
 }
 
 func TestEnhancedBackendSearchWithVectorNoFFI(t *testing.T) {
+	if ffi.Available {
+		t.Skip("test only applies when FFI is not linked")
+	}
 	eb := &EnhancedBackend{logger: quietLogger()}
 	_, err := eb.searchWithVector(context.Background(), "query", []float32{0.1, 0.2}, SearchOpts{})
 	if err == nil {
