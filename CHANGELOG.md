@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.31.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.31.0...deneb-v3.31.1) (2026-03-29)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** pass context to gmail client.Search in morning letter ([b2226ae](https://github.com/choiceoh/Deneb/commit/b2226aea19d41fc7e308823a773c70b3a80c9820))
+* **commands:** fix build errors after dead code removal ([e269c19](https://github.com/choiceoh/Deneb/commit/e269c199f901b4ced47475e64b2fb52c056bbd84))
+* **commands:** fix two build errors after dead code removal ([db63b51](https://github.com/choiceoh/Deneb/commit/db63b5173409d12cb70e56af5720998e580c03a7))
+
 ## [3.31.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.30.1...deneb-v3.31.0) (2026-03-29)
 
 
