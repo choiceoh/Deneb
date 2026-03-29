@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config::types::DenebConfig;
 use crate::errors::CliError;
@@ -48,6 +48,19 @@ pub fn write_config(config_path: &Path, config: &DenebConfig) -> Result<(), CliE
 
     fs::write(config_path, json)?;
     Ok(())
+}
+
+/// Check whether a path exists.
+pub fn path_exists(path: &Path) -> bool {
+    path.exists()
+}
+
+/// Return the first existing path from the provided candidates.
+pub fn first_existing_path(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .find(|candidate| candidate.exists())
+        .cloned()
 }
 
 /// Set a value at a dot-separated path in the config.
