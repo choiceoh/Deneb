@@ -38,6 +38,9 @@ gateway-go/deneb-gateway
 /tmp/
 *.tmp
 
+# ML/OCR model data
+*.traineddata
+
 # Proto generation
 .proto-gen.lock
 .proto-gen.hash
