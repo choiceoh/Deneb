@@ -70,7 +70,6 @@ func (lm *LifecycleManager) StartAll(ctx context.Context) map[string]error {
 					lm.logger.Error("channel start panicked", "id", id, "panic", r)
 				}
 			}()
-			lm.logger.Info("starting channel", "id", id)
 			if err := p.Start(ctx); err != nil {
 				mu.Lock()
 				if errs == nil {
