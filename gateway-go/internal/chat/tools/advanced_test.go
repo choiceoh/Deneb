@@ -321,6 +321,35 @@ func TestToolApplyPatch_invalidPatch(t *testing.T) {
 	}
 }
 
+func TestToolApplyPatch_rejectsSymlinkPatch(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+
+	patch := `diff --git a/evil_link b/evil_link
+new file mode 120000
+index 0000000..1111111
+--- /dev/null
++++ b/evil_link
+@@ -0,0 +1 @@
++/etc/passwd
+`
+
+	_, err := callTool(t, ToolApplyPatch(tmp), map[string]any{
+		"patch": patch,
+		"strip": 1,
+	})
+	if err == nil {
+		t.Fatal("expected symlink patch to be rejected")
+	}
+	if !strings.Contains(err.Error(), "symlink patches are not allowed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, statErr := os.Lstat(filepath.Join(tmp, "evil_link")); !os.IsNotExist(statErr) {
+		t.Fatalf("symlink should not be created; lstat err=%v", statErr)
+	}
+}
+
 // ─── git helpers ───────────────────────────────────────────────────────────
 
 func initGitRepo(t *testing.T, dir string) {
