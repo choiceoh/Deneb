@@ -308,6 +308,184 @@ const (
 	StepError
 )
 
+// FormatMultiFileDiffEmbed builds an embed with per-file diff summaries.
+// Parses a full git diff output and groups changes by file.
+func FormatMultiFileDiffEmbed(fullDiff string) []Embed {
+	if fullDiff == "" {
+		return []Embed{{
+			Title:       "📊 Diff",
+			Description: "변경 사항 없음",
+			Color:       ColorInfo,
+		}}
+	}
+
+	// Split by "diff --git" to get per-file diffs.
+	parts := strings.Split(fullDiff, "diff --git ")
+	if len(parts) <= 1 {
+		// Not a multi-file diff; return single embed.
+		return []Embed{{
+			Title:       "📊 Diff",
+			Description: wrapCodeBlockIfNeeded(truncate(fullDiff, embedDescriptionLimit)),
+			Color:       ColorInfo,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		}}
+	}
+
+	var embeds []Embed
+	for _, part := range parts[1:] { // skip the first empty part
+		lines := strings.SplitN(part, "\n", 2)
+		if len(lines) == 0 {
+			continue
+		}
+
+		// Extract filename from "a/path b/path" header.
+		header := lines[0]
+		fileName := extractDiffFileName(header)
+
+		diffContent := ""
+		if len(lines) > 1 {
+			diffContent = lines[1]
+		}
+
+		// Count additions/deletions.
+		added, removed := countDiffLines(diffContent)
+
+		desc := "```diff\n" + truncate(diffContent, 900) + "\n```"
+		fields := []EmbedField{
+			{Name: "추가", Value: fmt.Sprintf("`+%d`", added), Inline: true},
+			{Name: "삭제", Value: fmt.Sprintf("`-%d`", removed), Inline: true},
+		}
+
+		embeds = append(embeds, Embed{
+			Title:       "📄 " + fileName,
+			Description: desc,
+			Color:       ColorInfo,
+			Fields:      fields,
+		})
+
+		// Cap at 5 embeds to stay within Discord's 10-embed limit.
+		if len(embeds) >= 5 {
+			remaining := len(parts) - 1 - 5
+			if remaining > 0 {
+				embeds = append(embeds, Embed{
+					Title:       fmt.Sprintf("... 외 %d개 파일", remaining),
+					Description: "전체 diff는 `/gdiff`로 확인하세요.",
+					Color:       ColorInfo,
+				})
+			}
+			break
+		}
+	}
+
+	return embeds
+}
+
+// extractDiffFileName extracts the file name from a diff header like "a/path/file.go b/path/file.go".
+func extractDiffFileName(header string) string {
+	parts := strings.Fields(header)
+	if len(parts) >= 2 {
+		name := parts[1]
+		if strings.HasPrefix(name, "b/") {
+			return name[2:]
+		}
+		return name
+	}
+	return header
+}
+
+// countDiffLines counts added (+) and removed (-) lines in a diff chunk.
+func countDiffLines(diff string) (added, removed int) {
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			added++
+		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			removed++
+		}
+	}
+	return
+}
+
+// FormatAgentSummaryEmbed builds a summary embed shown after an agent run completes.
+// Includes tool execution stats and a brief result preview.
+func FormatAgentSummaryEmbed(toolsUsed []string, totalDurationMs int64, replyPreview string) Embed {
+	// Deduplicate and count tool uses.
+	toolCounts := make(map[string]int)
+	for _, t := range toolsUsed {
+		toolCounts[t]++
+	}
+	var toolLines []string
+	for name, count := range toolCounts {
+		if count > 1 {
+			toolLines = append(toolLines, fmt.Sprintf("`%s` ×%d", name, count))
+		} else {
+			toolLines = append(toolLines, "`"+name+"`")
+		}
+	}
+
+	fields := []EmbedField{
+		{Name: "사용 도구", Value: strings.Join(toolLines, ", "), Inline: false},
+	}
+
+	if totalDurationMs > 0 {
+		dur := time.Duration(totalDurationMs) * time.Millisecond
+		fields = append(fields, EmbedField{
+			Name: "소요 시간", Value: fmt.Sprintf("`%s`", dur.Round(time.Millisecond)), Inline: true,
+		})
+	}
+
+	desc := ""
+	if replyPreview != "" {
+		desc = truncate(replyPreview, 300)
+	}
+
+	return Embed{
+		Title:       "✅ 에이전트 완료",
+		Description: desc,
+		Color:       ColorSuccess,
+		Fields:      fields,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// FormatHelpEmbed returns an embed listing all available Discord coding commands.
+func FormatHelpEmbed() Embed {
+	return FormatVibeCoderHelpEmbed()
+}
+
+// FormatVibeCoderHelpEmbed returns a help embed optimized for vibe coders.
+// Only shows commands that a non-developer needs: project status, commit, push.
+// Emphasizes that the user can just describe what they want in natural Korean.
+func FormatVibeCoderHelpEmbed() Embed {
+	fields := []EmbedField{
+		{
+			Name:   "💬 기본 사용법",
+			Value:  "원하는 것을 **한국어로 자유롭게** 설명하면 에이전트가 알아서 코딩합니다.\n예: \"로그인 기능 추가해줘\", \"빌드 에러 고쳐줘\", \"테스트 돌려봐\"",
+			Inline: false,
+		},
+		{
+			Name:   "📊 프로젝트 현황",
+			Value:  "`/dashboard` — 빌드·테스트·브랜치 상태 한눈에 보기",
+			Inline: false,
+		},
+		{
+			Name:   "💾 저장 & 배포",
+			Value:  "`/commit [메시지]` — 변경 사항 저장\n`/push` — 원격 저장소에 업로드",
+			Inline: false,
+		},
+		{
+			Name:   "🤖 세션 관리",
+			Value:  "`/new` — 새 작업 시작\n`/model [이름]` — AI 모델 변경",
+			Inline: false,
+		},
+	}
+	return Embed{
+		Title:       "📖 디스코드 코딩 채널 도움말",
+		Description: "코드를 직접 볼 필요 없이, 원하는 것을 말로 설명하세요!",
+		Color:       ColorInfo,
+		Fields:      fields,
+	}
+}
+
 // --- helpers ---
 
 // TruncateText truncates text to maxLen, appending "..." if truncated. Exported for use by other packages.

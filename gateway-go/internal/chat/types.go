@@ -20,6 +20,17 @@ type TypingFunc func(ctx context.Context, delivery *DeliveryContext) error
 // Pass an empty emoji to remove reactions.
 type ReactionFunc func(ctx context.Context, delivery *DeliveryContext, emoji string) error
 
+// ToolProgressFunc is called during agent execution to report tool execution events.
+// Used by Discord to update progress embeds in real-time.
+type ToolProgressFunc func(ctx context.Context, delivery *DeliveryContext, event ToolProgressEvent)
+
+// ToolProgressEvent describes a tool execution lifecycle event.
+type ToolProgressEvent struct {
+	Type    string // "start", "complete"
+	Name    string // tool name
+	IsError bool   // true if tool execution failed (only for "complete")
+}
+
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig struct {
 	APIKey  string `json:"apiKey"`

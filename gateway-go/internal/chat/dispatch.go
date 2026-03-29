@@ -201,6 +201,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		typingFn:         h.typingFn,
 		reactionFn:       h.reactionFn,
 		removeReactionFn: h.removeReactionFn,
+		toolProgressFn:   h.toolProgressFn,
 		channelUploadLimitFn: h.ChannelUploadLimit,
 		providerConfigs:  h.providerConfigs,
 		logger:           h.logger,

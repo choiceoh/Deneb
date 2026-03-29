@@ -303,6 +303,15 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 			b.logger.Error("decode INTERACTION_CREATE", "error", err)
 			return
 		}
+
+		// Application commands (slash commands from autocomplete) are type 2.
+		// Convert them to synthetic messages so the existing quick-command handler
+		// processes them seamlessly, then ACK the interaction.
+		if interaction.Type == 2 && interaction.Data.Name != "" {
+			b.handleSlashCommandAsMessage(ctx, &interaction)
+			return
+		}
+
 		b.stateMu.Lock()
 		ih := b.interactionHandler
 		b.stateMu.Unlock()
@@ -318,6 +327,58 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 			b.threadParents[ch.ID] = ch.ParentID
 			b.threadParentsMu.Unlock()
 		}
+	}
+}
+
+// handleSlashCommandAsMessage converts a Discord Application Command interaction
+// into a synthetic Message and dispatches it through the normal message handler.
+// This way slash commands from the autocomplete picker go through the same
+// quick-command pipeline as text-based /commands.
+func (b *Bot) handleSlashCommandAsMessage(ctx context.Context, interaction *Interaction) {
+	// ACK the interaction first to prevent Discord's "interaction failed" error.
+	// Use type 5 = deferred channel message with source (shows "thinking...").
+	if b.client != nil {
+		b.client.CreateInteractionResponse(ctx, interaction.ID, interaction.Token, &InteractionResponse{
+			Type: 5, // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
+		})
+	}
+
+	// Reconstruct the text command from interaction data.
+	text := "/" + interaction.Data.Name
+	if opts := interaction.Data.Options; len(opts) > 0 {
+		for _, opt := range opts {
+			if v := opt.StringValue(); v != "" {
+				text += " " + v
+			}
+		}
+	}
+
+	// Build a synthetic Message.
+	var author *User
+	if interaction.Member != nil && interaction.Member.User != nil {
+		author = interaction.Member.User
+	}
+
+	msg := &Message{
+		ID:        interaction.ID,
+		ChannelID: interaction.ChannelID,
+		Author:    author,
+		Content:   text,
+	}
+
+	// Check access control.
+	if !b.isChannelOrThreadAllowed(msg.ChannelID) {
+		return
+	}
+	if msg.Author != nil && !b.config.IsUserAllowed(msg.Author.ID) {
+		return
+	}
+
+	b.stateMu.Lock()
+	handler := b.handler
+	b.stateMu.Unlock()
+	if handler != nil {
+		go handler(ctx, msg)
 	}
 }
 

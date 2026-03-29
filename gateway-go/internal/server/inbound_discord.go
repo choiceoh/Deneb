@@ -316,8 +316,9 @@ func (p *InboundProcessor) tryCreateDiscordThread(sessionKey, channelID, message
 	return thread.ID
 }
 
-// handleCodingQuickCommand handles Discord-specific coding shortcuts that
-// return results directly without going through the agent.
+// handleCodingQuickCommand handles Discord-specific quick commands for vibe coders.
+// Only includes commands that make sense for someone who doesn't read/write code:
+// project status, commit, push, and dashboard.
 // Returns true if the command was handled.
 func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDir string) bool {
 	if workspaceDir == "" {
@@ -326,132 +327,14 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 
 	cmd := extractCommandKey(text)
 	switch cmd {
-	case "diff":
-		output := runGitCmd(workspaceDir, "diff", "--stat")
-		if output == "" {
-			p.sendDiscordEmbed(channelID, []discord.Embed{{
-				Title: "📊 Git Diff", Description: "변경 사항 없음", Color: discord.ColorInfo,
-			}})
-			return true
-		}
-		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatGitDiffEmbed(output)})
-		return true
 
-	case "gdiff":
-		output := runGitCmd(workspaceDir, "diff")
-		if output == "" {
-			p.sendDiscordEmbed(channelID, []discord.Embed{{
-				Title: "📊 Git Diff (full)", Description: "변경 사항 없음", Color: discord.ColorInfo,
-			}})
-			return true
-		}
-		// Full diff can be large — send as code block text (not embed) for readability.
-		p.sendDiscordQuickReply(channelID, "```diff\n"+output+"\n```")
-		return true
-
-	case "tree":
-		depth := "2"
-		parts := strings.Fields(text)
-		if len(parts) > 1 {
-			depth = parts[1]
-		}
-		output := runCmd(workspaceDir, "find", ".", "-maxdepth", depth,
-			"-not", "-path", "*/.*", "-not", "-path", "*/node_modules/*",
-			"-not", "-path", "*/target/*")
-		if output == "" {
-			output = "(empty)"
-		}
-		p.sendDiscordEmbed(channelID, []discord.Embed{{
-			Title:       "🌳 Directory Tree (depth " + depth + ")",
-			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
-			Color:       discord.ColorInfo,
-		}})
-		return true
-
-	case "branch", "branches":
-		output := runGitCmd(workspaceDir, "branch", "-v", "--no-color")
-		if output == "" {
-			output = "No git branches."
-		}
-		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatBranchEmbed(output)})
-		return true
-
-	case "log":
-		count := "10"
-		parts := strings.Fields(text)
-		if len(parts) > 1 {
-			count = parts[1]
-		}
-		output := runGitCmd(workspaceDir, "log", "--oneline", "-"+count, "--no-color")
-		if output == "" {
-			output = "No commits."
-		}
-		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatGitLogEmbed(output)})
-		return true
-
-	case "ws", "workspace", "status":
-		branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD")
-		status := runGitCmd(workspaceDir, "status", "--short")
-		diffStats := runGitCmd(workspaceDir, "diff", "--stat")
-		recentLog := runGitCmd(workspaceDir, "log", "--oneline", "-5", "--no-color")
-		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatStatusEmbed(branch, status, diffStats, recentLog)})
-		return true
-
-	case "test":
-		projType := detectProjectType(workspaceDir)
-		cmdName, cmdArgs := testCommand(projType)
-		if cmdName == "" {
-			p.sendDiscordEmbed(channelID, []discord.Embed{{
-				Title: "🧪 테스트", Description: "프로젝트 타입을 감지할 수 없습니다.", Color: discord.ColorWarning,
-			}})
-			return true
-		}
-		output := runCmdWithTimeout(workspaceDir, 60*time.Second, cmdName, cmdArgs...)
-		success := output != "" && !strings.Contains(output, "FAIL")
-		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatBuildEmbed(output, success)})
-		return true
-
-	case "build":
-		projType := detectProjectType(workspaceDir)
-		cmdName, cmdArgs := buildCommand(projType)
-		if cmdName == "" {
-			p.sendDiscordEmbed(channelID, []discord.Embed{{
-				Title: "🔨 빌드", Description: "프로젝트 타입을 감지할 수 없습니다.", Color: discord.ColorWarning,
-			}})
-			return true
-		}
-		output := runCmdWithTimeout(workspaceDir, 60*time.Second, cmdName, cmdArgs...)
-		success := !strings.Contains(strings.ToLower(output), "error")
-		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatBuildEmbed(output, success)})
-		return true
-
-	case "lint":
-		projType := detectProjectType(workspaceDir)
-		cmdName, cmdArgs := lintCommand(projType)
-		if cmdName == "" {
-			p.sendDiscordEmbed(channelID, []discord.Embed{{
-				Title: "🔍 린트", Description: "프로젝트 타입을 감지할 수 없습니다.", Color: discord.ColorWarning,
-			}})
-			return true
-		}
-		output := runCmdWithTimeout(workspaceDir, 30*time.Second, cmdName, cmdArgs...)
-		if output == "" {
-			output = "린트 이슈 없음 ✅"
-		}
-		hasIssues := strings.Contains(output, "error") || strings.Contains(output, "warning")
-		color := discord.ColorSuccess
-		if hasIssues {
-			color = discord.ColorWarning
-		}
-		p.sendDiscordEmbed(channelID, []discord.Embed{{
-			Title:       "🔍 린트",
-			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
-			Color:       color,
-		}})
+	case "dashboard", "d", "status", "ws":
+		// /dashboard — visual project health panel for vibe coders.
+		p.sendDiscordEmbed(channelID, p.buildDashboardEmbeds(workspaceDir))
 		return true
 
 	case "commit":
-		// /commit [message] — stage and commit. If no message, generate one.
+		// /commit [message] — stage all changes and commit with a message.
 		parts := strings.SplitN(text, " ", 2)
 		commitMsg := ""
 		if len(parts) > 1 {
@@ -466,37 +349,155 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 			output = "커밋할 변경 사항 없음"
 		}
 		success := strings.Contains(output, "file") || strings.Contains(output, "changed")
-		color := discord.ColorSuccess
-		title := "💾 커밋 완료"
-		if !success {
-			color = discord.ColorWarning
-			title = "💾 커밋"
+		if success {
+			sessionKey := "discord:" + channelID
+			p.sendDiscordEmbedWithButtons(channelID, []discord.Embed{{
+				Title:       "💾 커밋 완료",
+				Description: discord.TruncateText(output, 200),
+				Color:       discord.ColorSuccess,
+			}}, discord.AfterCommitButtons(sessionKey))
+		} else {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title:       "💾 커밋",
+				Description: output,
+				Color:       discord.ColorWarning,
+			}})
 		}
-		p.sendDiscordEmbed(channelID, []discord.Embed{{
-			Title:       title,
-			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
-			Color:       color,
-		}})
 		return true
 
 	case "push":
+		// /push — push current branch to remote.
 		branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD")
 		output := runCmdWithTimeout(workspaceDir, 30*time.Second, "git", "push", "-u", "origin", branch)
 		if output == "" {
 			output = "푸시 완료"
 		}
 		p.sendDiscordEmbed(channelID, []discord.Embed{{
-			Title:       "🚀 Push",
-			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+			Title:       "🚀 푸시 완료",
+			Description: "`" + branch + "` 브랜치를 원격 저장소에 업로드했습니다.",
 			Color:       discord.ColorSuccess,
 			Fields: []discord.EmbedField{
 				{Name: "브랜치", Value: "`" + branch + "`", Inline: true},
 			},
 		}})
 		return true
+
+	case "help":
+		// /help — show vibe-coder-friendly help.
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatVibeCoderHelpEmbed()})
+		return true
 	}
 
 	return false
+}
+
+// buildDashboardEmbeds creates a visual project health dashboard for vibe coders.
+// Shows build status, test status, branch, recent changes — all in Korean.
+func (p *InboundProcessor) buildDashboardEmbeds(workspaceDir string) []discord.Embed {
+	branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD")
+	status := runGitCmd(workspaceDir, "status", "--short")
+	recentLog := runGitCmd(workspaceDir, "log", "--oneline", "-3", "--no-color")
+
+	// Count changed files.
+	changedFiles := 0
+	if status != "" {
+		changedFiles = len(strings.Split(strings.TrimSpace(status), "\n"))
+	}
+
+	// Build status check (quick, 10s timeout).
+	projType := detectProjectType(workspaceDir)
+	buildStatus := "⏭️ 미확인"
+	testStatus := "⏭️ 미확인"
+
+	if cmdName, cmdArgs := buildCommand(projType); cmdName != "" {
+		buildOut := runCmdWithTimeout(workspaceDir, 15*time.Second, cmdName, cmdArgs...)
+		if buildOut != "" && !strings.Contains(strings.ToLower(buildOut), "error") {
+			buildStatus = "✅ 성공"
+		} else {
+			buildStatus = "❌ 실패"
+		}
+	}
+
+	if cmdName, cmdArgs := testCommand(projType); cmdName != "" {
+		testOut := runCmdWithTimeout(workspaceDir, 30*time.Second, cmdName, cmdArgs...)
+		if testOut != "" && !strings.Contains(testOut, "FAIL") && !strings.Contains(strings.ToLower(testOut), "error") {
+			testStatus = "✅ 전체 통과"
+		} else if testOut != "" {
+			testStatus = "❌ 일부 실패"
+		}
+	}
+
+	// Format changed files summary.
+	changedSummary := "변경 없음 (클린)"
+	if changedFiles > 0 {
+		changedSummary = fmt.Sprintf("%d개 파일 변경됨", changedFiles)
+	}
+
+	// Format recent commits in Korean-friendly way.
+	commitSummary := "커밋 없음"
+	if recentLog != "" {
+		lines := strings.Split(strings.TrimSpace(recentLog), "\n")
+		var commitLines []string
+		for _, line := range lines {
+			if len(line) > 0 {
+				commitLines = append(commitLines, "• "+line)
+			}
+		}
+		commitSummary = strings.Join(commitLines, "\n")
+	}
+
+	fields := []discord.EmbedField{
+		{Name: "🌿 브랜치", Value: "`" + branch + "`", Inline: true},
+		{Name: "📝 변경사항", Value: changedSummary, Inline: true},
+		{Name: "🔨 빌드", Value: buildStatus, Inline: true},
+		{Name: "🧪 테스트", Value: testStatus, Inline: true},
+		{Name: "📜 최근 커밋", Value: commitSummary, Inline: false},
+	}
+
+	// Determine overall health color.
+	color := discord.ColorSuccess
+	if strings.Contains(buildStatus, "❌") || strings.Contains(testStatus, "❌") {
+		color = discord.ColorError
+	} else if changedFiles > 0 {
+		color = discord.ColorInfo
+	}
+
+	return []discord.Embed{{
+		Title:  "📊 프로젝트 현황",
+		Color:  color,
+		Fields: fields,
+	}}
+}
+
+// sendDiscordEmbedWithButtons sends embeds with action buttons to a Discord channel.
+func (p *InboundProcessor) sendDiscordEmbedWithButtons(channelID string, embeds []discord.Embed, buttons []discord.Component) {
+	client := p.server.discordPlug.Client()
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := client.SendMessage(ctx, channelID, &discord.SendMessageRequest{
+		Embeds:          embeds,
+		Components:      buttons,
+		AllowedMentions: &discord.AllowedMentions{Parse: []string{}},
+	})
+	if err != nil {
+		p.logger.Warn("failed to send discord embed with buttons", "channelId", channelID, "error", err)
+	}
+}
+
+// sendDiscordFileReply sends a file attachment with a text summary to a Discord channel.
+func (p *InboundProcessor) sendDiscordFileReply(channelID, summary, fileName string, data []byte) {
+	client := p.server.discordPlug.Client()
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := client.SendMessageWithFile(ctx, channelID, summary, fileName, data); err != nil {
+		p.logger.Warn("failed to send discord file reply", "channelId", channelID, "error", err)
+	}
 }
 
 // sendDiscordQuickReply sends a quick reply to a Discord channel.
@@ -591,6 +592,27 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 		agentMessage = "테스트 실패를 수정해 주세요."
 	case "details":
 		agentMessage = "마지막 실행 결과를 자세히 보여주세요."
+	case "push":
+		// Push current branch to remote — handle inline for quick feedback.
+		wsChannelID := strings.TrimPrefix(sessionKey, "discord:")
+		if p.server.discordPlug != nil {
+			if ws := p.server.discordPlug.Config().WorkspaceForChannel(wsChannelID); ws != "" {
+				branch := runGitCmd(ws, "rev-parse", "--abbrev-ref", "HEAD")
+				runCmdWithTimeout(ws, 30*time.Second, "git", "push", "-u", "origin", branch)
+				p.sendDiscordEmbed(interaction.ChannelID, []discord.Embed{{
+					Title:       "🚀 푸시 완료",
+					Description: "`" + branch + "` 브랜치를 원격 저장소에 업로드했습니다.",
+					Color:       discord.ColorSuccess,
+				}})
+			}
+		}
+		return
+	case "new":
+		agentMessage = "새 작업을 시작합니다. 무엇을 도와드릴까요?"
+		// Clear session state for fresh start.
+		discordSessionSeenMu.Lock()
+		delete(discordSessionSeen, sessionKey)
+		discordSessionSeenMu.Unlock()
 	case "cancel":
 		// Acknowledge only, no action.
 		return
@@ -862,17 +884,3 @@ func buildCommand(projType string) (string, []string) {
 	return "", nil
 }
 
-// lintCommand returns the lint command for a project type.
-func lintCommand(projType string) (string, []string) {
-	switch projType {
-	case "go":
-		return "go", []string{"vet", "./..."}
-	case "rust":
-		return "cargo", []string{"clippy"}
-	case "node":
-		return "npx", []string{"eslint", "."}
-	case "python":
-		return "python", []string{"-m", "ruff", "check", "."}
-	}
-	return "", nil
-}
