@@ -7,12 +7,32 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
+// StripLeakedToolCallMarkup removes leaked tool-call envelope text that should
+// stay internal (e.g. "<function=read> ... </tool_call>").
+func StripLeakedToolCallMarkup(text string) string {
+	trimmed := text
+	for {
+		start := strings.Index(trimmed, "<function=")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(trimmed[start:], "</tool_call>")
+		if end < 0 {
+			break
+		}
+		end += start + len("</tool_call>")
+		trimmed = strings.TrimSpace(trimmed[:start] + "\n" + trimmed[end:])
+	}
+	return strings.TrimSpace(trimmed)
+}
+
 // NormalizeReplyPayload cleans up a reply payload before delivery:
 // - Filters empty/silent/heartbeat replies
 // - Strips silent tokens
 // - Applies response prefix templates
 func NormalizeReplyPayload(payload types.ReplyPayload, opts NormalizeOpts) (types.ReplyPayload, bool) {
 	text := strings.TrimSpace(payload.Text)
+	text = StripLeakedToolCallMarkup(text)
 
 	// Check for silent reply.
 	if tokens.IsSilentReplyText(text, "") {

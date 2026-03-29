@@ -164,6 +164,7 @@ func BuildReplyPayloads(params types.BuildReplyPayloadsParams) []types.ReplyPayl
 
 	// 2. Apply reply threading.
 	for i := range payloads {
+		payloads[i].Text = StripLeakedToolCallMarkup(payloads[i].Text)
 		payloads[i] = NormalizeReplyPayloadDirectives(payloads[i], params.CurrentMessageID, tokens.SilentReplyToken)
 	}
 
