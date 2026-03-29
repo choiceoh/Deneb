@@ -63,7 +63,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		defer func() {
 			if r := recover(); r != nil {
 				h.logger.Error("panic in agent run",
-					"session", params.SessionKey,
+					"session", abbreviateSession(params.SessionKey),
 					"runId", params.ClientRunID,
 					"panic", r,
 				)
