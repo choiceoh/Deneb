@@ -219,7 +219,7 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	if isThread {
 		// Already in a thread — replies stay here.
 		deliveryTarget = channelID
-	} else if isFirstMessage && p.server.discordThreadNamer != nil {
+	} else if isFirstMessage && p.server.discordSummarizer != nil && p.server.discordPlug.Config().AutoThreadNamesEnabled() {
 		// First message in channel: create a thread for this coding session.
 		if threadID := p.tryCreateDiscordThread(channelID, msg.ID, cleanMessageForTitle); threadID != "" {
 			deliveryTarget = threadID
@@ -315,7 +315,7 @@ func (p *InboundProcessor) tryCreateDiscordThread(channelID, messageID, content 
 		return ""
 	}
 
-	name := p.server.discordThreadNamer.Generate(ctx, content)
+	name := p.server.discordSummarizer.ThreadTitle(ctx, content)
 
 	thread, err := client.CreateThread(ctx, channelID, messageID, name)
 	if err != nil {
