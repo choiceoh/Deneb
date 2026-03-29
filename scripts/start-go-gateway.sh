@@ -58,7 +58,7 @@ fi
 CMD+=("${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")
 
 # Restart loop: allow one graceful restart (exit 75) per 30 minutes.
-RESTART_INTERVAL=1800
+RESTART_INTERVAL=600
 last_restart=0
 
 echo "Starting Go gateway: ${CMD[*]}"
