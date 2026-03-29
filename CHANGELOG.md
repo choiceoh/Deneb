@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.30.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.30.0...deneb-v3.30.1) (2026-03-29)
+
+
+### 🐛 Bug Fixes
+
+* **autoreply:** strip leaked tool-call envelopes before external delivery ([a7cb94a](https://github.com/choiceoh/Deneb/commit/a7cb94a36c88ccc8e5a1e050aebad86d20634d0c))
+* **telegram:** accept session-style chat IDs in outbound delivery paths ([bb57cf7](https://github.com/choiceoh/Deneb/commit/bb57cf796e94fe08b4f88df975f74929451e4ad8))
+* **telegram:** parse session-style chat targets when replying ([b84403e](https://github.com/choiceoh/Deneb/commit/b84403e4b16a6dc2ee7b6e0eae0252c714679e43))
+
 ## [3.30.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.29.0...deneb-v3.30.0) (2026-03-29)
 
 
