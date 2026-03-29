@@ -445,6 +445,7 @@ func BuildCodingSystemPrompt(params SystemPromptParams) string {
 
 	// Coding Workflow — with mandatory verification.
 	s.WriteString("## Coding Workflow\n")
+	s.WriteString("**코딩 시작 전 필수:** 워크스페이스에 `CLAUDE.md`가 있으면 반드시 먼저 읽으세요. 프로젝트 컨벤션, 빌드 방법, 금지 사항이 담겨 있습니다.\n\n")
 	s.WriteString("1. `tree` → understand project structure.\n")
 	s.WriteString("2. `analyze(action:'outline')` → see file structure (functions, types, imports).\n")
 	s.WriteString("3. `read` / `read(function:'FuncName')` → examine specific code.\n")
