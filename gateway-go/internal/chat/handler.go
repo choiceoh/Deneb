@@ -50,6 +50,12 @@ type Handler struct {
 	reactionFn       ReactionFunc  // optional: sets emoji reaction on triggering message
 	removeReactionFn ReactionFunc  // optional: removes emoji reaction (Discord additive)
 
+	// uploadLimitsMu guards uploadLimits.
+	uploadLimitsMu sync.RWMutex
+	// uploadLimits maps channelID → max file upload size in bytes.
+	// Populated by SetChannelUploadLimit during channel wiring.
+	uploadLimits map[string]int64
+
 	// shutdownCtx is the server lifecycle context. Set via SetShutdownCtx so
 	// background goroutines (auto-memory extraction) stop on server shutdown.
 	shutdownCtx context.Context
@@ -134,6 +140,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		defaultSystem:   cfg.DefaultSystem,
 		maxTokens:       cfg.MaxTokens,
 		abortMap:        make(map[string]*AbortEntry),
+		uploadLimits:    make(map[string]int64),
 		done:            make(chan struct{}),
 		maxHistoryBytes: cfg.MaxHistoryBytes,
 		maxHistoryCount: cfg.MaxHistoryCount,
@@ -177,6 +184,23 @@ func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 // from the triggering message. Needed for Discord's additive reaction model.
 func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
 	h.removeReactionFn = fn
+}
+
+// SetChannelUploadLimit registers the maximum file upload size for a channel.
+// Called once per channel during server wiring (e.g., wireTelegramChatHandler).
+func (h *Handler) SetChannelUploadLimit(channelID string, maxBytes int64) {
+	h.uploadLimitsMu.Lock()
+	h.uploadLimits[channelID] = maxBytes
+	h.uploadLimitsMu.Unlock()
+}
+
+// ChannelUploadLimit returns the registered upload limit for channelID,
+// or 0 if no limit has been registered for that channel.
+func (h *Handler) ChannelUploadLimit(channelID string) int64 {
+	h.uploadLimitsMu.RLock()
+	n := h.uploadLimits[channelID]
+	h.uploadLimitsMu.RUnlock()
+	return n
 }
 
 // RemoveReactionFunc returns the current remove reaction function (for chaining).

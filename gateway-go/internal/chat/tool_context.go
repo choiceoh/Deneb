@@ -16,6 +16,8 @@ const (
 	ctxKeyMediaSendFunc
 	// ctxKeyTurnContext stores the *TurnContext for cross-tool result sharing within a turn.
 	ctxKeyTurnContext
+	// ctxKeyMaxUploadBytes stores the channel-specific file upload size limit.
+	ctxKeyMaxUploadBytes
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -60,6 +62,19 @@ func WithMediaSendFunc(ctx context.Context, fn MediaSendFunc) context.Context {
 func MediaSendFuncFromContext(ctx context.Context) MediaSendFunc {
 	fn, _ := ctx.Value(ctxKeyMediaSendFunc).(MediaSendFunc)
 	return fn
+}
+
+// WithMaxUploadBytes attaches the channel-specific file upload limit to the context.
+// A value of 0 means no limit is set; tools should apply a safe default.
+func WithMaxUploadBytes(ctx context.Context, n int64) context.Context {
+	return context.WithValue(ctx, ctxKeyMaxUploadBytes, n)
+}
+
+// MaxUploadBytesFromContext returns the channel-specific upload limit.
+// Returns 0 if not set (caller should apply a safe default).
+func MaxUploadBytesFromContext(ctx context.Context) int64 {
+	n, _ := ctx.Value(ctxKeyMaxUploadBytes).(int64)
+	return n
 }
 
 // WithTurnContext attaches a TurnContext to the context for cross-tool result sharing.

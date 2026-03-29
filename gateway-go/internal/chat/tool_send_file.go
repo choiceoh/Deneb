@@ -42,10 +42,15 @@ func toolSendFile() ToolFunc {
 			return "", fmt.Errorf("path is a directory, not a file")
 		}
 
-		// Enforce Telegram's 50 MB upload limit.
-		const maxFileSize = 50 * 1024 * 1024
+		// Enforce the channel-specific upload limit injected at run start.
+		// Falls back to 50 MB (Telegram's limit) when no channel limit is registered.
+		maxFileSize := MaxUploadBytesFromContext(ctx)
+		if maxFileSize == 0 {
+			maxFileSize = 50 * 1024 * 1024 // safe default
+		}
 		if info.Size() > maxFileSize {
-			return "", fmt.Errorf("file too large (%d bytes); Telegram limit is 50 MB", info.Size())
+			return "", fmt.Errorf("file too large (%d bytes); channel limit is %d MB",
+				info.Size(), maxFileSize/(1024*1024))
 		}
 
 		// Auto-detect media type from MIME if not specified.
