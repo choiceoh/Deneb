@@ -436,9 +436,17 @@ func BuildCodingSystemPrompt(params SystemPromptParams) string {
 	}
 	s.WriteString("\n")
 
-	// Tool Usage — coding-optimized.
+	// Tool Usage — coding-optimized, parallel-first.
 	s.WriteString("## Tool Usage\n")
-	s.WriteString("- Call multiple tools in parallel when independent.\n")
+	s.WriteString("**작업 시작 전 병렬화 판단 필수:** 도구를 호출하기 전에 먼저 어떤 작업들이 서로 독립적인지 판단하세요. 독립적인 작업은 반드시 하나의 턴에 묶어서 병렬로 호출하세요.\n\n")
+	s.WriteString("- **Parallel execution**: calling multiple tools in one turn runs them ALL simultaneously.\n")
+	s.WriteString("  Combine independent calls in a single turn:\n")
+	s.WriteString("  • Exploring: `tree` + `read(CLAUDE.md)` together.\n")
+	s.WriteString("  • Searching: multiple `grep` or `grep` + `find` together.\n")
+	s.WriteString("  • Reading: multiple `read` calls for different files together.\n")
+	s.WriteString("  • Analyzing: `analyze` on multiple files together.\n")
+	s.WriteString("  • Pre-edit research: `grep(usages)` + `read(target files)` + `analyze(dependencies)` together.\n")
+	s.WriteString("- **Sequential only when dependent**: `edit` → `test(action:'build')` → `test(action:'run')` must be separate turns.\n")
 	s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
 	s.WriteString("- Do not narrate routine tool calls. Act immediately.\n")
 	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail).\n\n")

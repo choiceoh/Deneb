@@ -247,7 +247,17 @@ func FormatStatusEmbed(branch, status, diffStats, recentLog string) Embed {
 }
 
 // FormatProgressEmbed builds an orange embed showing agent execution progress.
+// Steps in the same parallel group (Group >= 1, count >= 2) are prefixed with
+// "┃ " to visually indicate they ran simultaneously.
 func FormatProgressEmbed(steps []ProgressStep) Embed {
+	// Count members per group to decide whether to show parallel indicator.
+	groupCount := map[int]int{}
+	for _, s := range steps {
+		if s.Group > 0 {
+			groupCount[s.Group]++
+		}
+	}
+
 	var lines []string
 	for _, s := range steps {
 		emoji := "⬜"
@@ -263,7 +273,11 @@ func FormatProgressEmbed(steps []ProgressStep) Embed {
 		if s.Reason != "" {
 			line += " — " + s.Reason
 		}
-		lines = append(lines, line)
+		if s.Group > 0 && groupCount[s.Group] >= 2 {
+			lines = append(lines, "┃ "+line)
+		} else {
+			lines = append(lines, line)
+		}
 	}
 
 	color := ColorProgress
@@ -301,6 +315,7 @@ type ProgressStep struct {
 	Name   string
 	Reason string // brief LLM reasoning summary (may be empty)
 	Status StepStatus
+	Group  int // parallel group ID; 0 = ungrouped, >=1 = same parallel batch
 }
 
 // StepStatus is the state of a progress step.

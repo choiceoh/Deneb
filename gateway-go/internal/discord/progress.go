@@ -35,6 +35,12 @@ var toolNameKorean = map[string]string{
 	"process":     "프로세스 관리",
 	"search_code": "코드 검색",
 	"glob":        "파일 패턴 검색",
+	"multi_edit":  "다중 파일 수정",
+	"tree":        "프로젝트 구조",
+	"diff":        "변경 비교",
+	"analyze":     "코드 분석",
+	"test":        "테스트 실행",
+	"git":         "Git 작업",
 }
 
 // KoreanToolName returns a Korean label for a tool name.
@@ -46,6 +52,12 @@ func KoreanToolName(name string) string {
 	return name
 }
 
+// parallelGroupWindow is the maximum time between StartStep calls that are
+// considered part of the same parallel batch. The executor fires all tool
+// goroutines from the same loop iteration — they call OnToolStart within
+// microseconds of each other, so 50ms is generous.
+const parallelGroupWindow = 50 * time.Millisecond
+
 // ProgressTracker manages a single Discord message that is edited to reflect
 // agent execution progress. Each tool execution becomes a step with a status.
 type ProgressTracker struct {
@@ -54,11 +66,13 @@ type ProgressTracker struct {
 	messageID  string // the progress message being edited
 	summarizer *ReasoningSummarizer // optional; summarizes thinking blocks for step reasons
 
-	mu        sync.Mutex
-	steps     []ProgressStep
-	lastEdit  time.Time
-	dirty     bool // true if steps changed since last edit
-	finalized bool
+	mu          sync.Mutex
+	steps       []ProgressStep
+	lastEdit    time.Time
+	dirty       bool // true if steps changed since last edit
+	finalized   bool
+	nextGroup   int       // incremented for each new parallel batch
+	groupWindow time.Time // timestamp of first StartStep in current batch
 }
 
 // NewProgressTracker sends an initial progress message and returns a tracker.
@@ -108,6 +122,8 @@ func (pt *ProgressTracker) AddStep(name string) {
 // rawThinking is the raw thinking block text from the LLM (may be empty).
 // If a ReasoningSummarizer is attached, it asynchronously generates a brief
 // summary and updates the step once ready.
+// Tools that start within parallelGroupWindow of each other are assigned the
+// same Group ID so the progress embed can visually group them.
 func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking string) {
 	if pt == nil {
 		return
@@ -115,11 +131,20 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking stri
 	kr := KoreanToolName(name)
 	pt.mu.Lock()
 
+	// Assign parallel group based on timing.
+	now := time.Now()
+	if pt.groupWindow.IsZero() || now.Sub(pt.groupWindow) > parallelGroupWindow {
+		pt.nextGroup++
+		pt.groupWindow = now
+	}
+	group := pt.nextGroup
+
 	var stepIdx int
 	found := false
 	for i := range pt.steps {
 		if pt.steps[i].Name == kr && pt.steps[i].Status == StepPending {
 			pt.steps[i].Status = StepRunning
+			pt.steps[i].Group = group
 			stepIdx = i
 			found = true
 			break
@@ -127,7 +152,7 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking stri
 	}
 	if !found {
 		stepIdx = len(pt.steps)
-		pt.steps = append(pt.steps, ProgressStep{Name: kr, Status: StepRunning})
+		pt.steps = append(pt.steps, ProgressStep{Name: kr, Status: StepRunning, Group: group})
 	}
 	needsSummary := rawThinking != "" && pt.summarizer != nil
 	pt.dirty = true
