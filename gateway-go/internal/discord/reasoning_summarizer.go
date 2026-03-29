@@ -66,6 +66,7 @@ func (rs *ReasoningSummarizer) Summarize(ctx context.Context, thinking string) s
 		Model: rs.model,
 		System: llm.SystemString(
 			"AI 에이전트의 추론 과정이 주어집니다. " +
+				"입력이 영어여도 반드시 한국어로 번역하여 요약하세요. " +
 				"지금 무엇을 하려는지 한국어로 한 문장(15자~30자)으로 요약하세요. " +
 				"반드시 '~하고 있습니다' 또는 '~합니다' 체로 끝내세요. " +
 				"설명 없이 요약만 출력하세요.",
