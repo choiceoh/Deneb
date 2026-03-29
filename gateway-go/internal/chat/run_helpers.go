@@ -69,9 +69,15 @@ func handleRunSuccess(
 			logger.Info("suppressing silent reply (NO_REPLY)")
 		} else {
 			replyText := StripSilentToken(result.Text)
-			replyText = jsonutil.StripThinkingTags(replyText)
-			replyText = reply.StripLeakedToolCallMarkup(replyText)
-			replyText = strings.TrimSpace(replyText)
+			// Telegram is the primary user-facing surface — strip internal
+			// LLM artifacts (thinking tags, leaked tool markup) so the user
+			// sees only the final answer.  Discord is used for coding/dev
+			// where seeing reasoning and tool invocations is useful.
+			if params.Delivery.Channel != "discord" {
+				replyText = jsonutil.StripThinkingTags(replyText)
+				replyText = reply.StripLeakedToolCallMarkup(replyText)
+				replyText = strings.TrimSpace(replyText)
+			}
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
