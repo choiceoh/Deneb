@@ -225,9 +225,33 @@ type Interaction struct {
 
 // InteractionData holds interaction-specific data.
 type InteractionData struct {
-	CustomID      string `json:"custom_id,omitempty"`
-	ComponentType int    `json:"component_type,omitempty"`
-	Name          string `json:"name,omitempty"` // for slash commands
+	CustomID      string                    `json:"custom_id,omitempty"`
+	ComponentType int                       `json:"component_type,omitempty"`
+	Name          string                    `json:"name,omitempty"`    // for slash commands
+	Options       []InteractionDataOption   `json:"options,omitempty"` // slash command options
+}
+
+// InteractionDataOption holds a resolved option value from a slash command.
+// Value is json.RawMessage because Discord sends different types (string, number, bool).
+type InteractionDataOption struct {
+	Name  string          `json:"name"`
+	Type  int             `json:"type"`
+	Value json.RawMessage `json:"value"`
+}
+
+// StringValue returns the option value as a string, handling quoted strings
+// and numeric values. Returns "" if the value is empty.
+func (o InteractionDataOption) StringValue() string {
+	if len(o.Value) == 0 {
+		return ""
+	}
+	// Try to unquote JSON string.
+	var s string
+	if json.Unmarshal(o.Value, &s) == nil {
+		return s
+	}
+	// For numbers and booleans, use the raw JSON representation.
+	return string(o.Value)
 }
 
 // InteractionResponse is sent in reply to an interaction.

@@ -494,9 +494,301 @@ func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDi
 			},
 		}})
 		return true
+
+	case "file", "cat":
+		// /file <path> [startLine] [endLine] — view file with syntax highlighting.
+		parts := strings.Fields(text)
+		if len(parts) < 2 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "📄 File", Description: "사용법: `/file <경로> [시작줄] [끝줄]`", Color: discord.ColorWarning,
+			}})
+			return true
+		}
+		filePath := resolveWorkspacePath(workspaceDir, parts[1])
+		startLine, endLine := 0, 0
+		if len(parts) >= 3 {
+			fmt.Sscanf(parts[2], "%d", &startLine)
+		}
+		if len(parts) >= 4 {
+			fmt.Sscanf(parts[3], "%d", &endLine)
+		}
+		content, lineCount, err := readFileWithLines(filePath, startLine, endLine)
+		if err != nil {
+			p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatErrorEmbed(err.Error(), parts[1], 0)})
+			return true
+		}
+		lang := discord.DetectCodeLanguage(parts[1])
+		rangeInfo := ""
+		if startLine > 0 || endLine > 0 {
+			rangeInfo = fmt.Sprintf(" (L%d–L%d)", startLine, endLine)
+		}
+		// If content is small enough, send as embed code block.
+		if len(content) < 3800 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title:       fmt.Sprintf("📄 %s%s", parts[1], rangeInfo),
+				Description: "```" + lang + "\n" + content + "\n```",
+				Color:       discord.ColorInfo,
+				Footer:      &discord.EmbedFooter{Text: fmt.Sprintf("%d줄", lineCount)},
+			}})
+		} else {
+			// Send as file attachment for large files.
+			ext := discord.DetectCodeLanguage(parts[1])
+			if ext == "" {
+				ext = "txt"
+			}
+			p.sendDiscordFileReply(channelID, fmt.Sprintf("📄 **%s**%s (%d줄)", parts[1], rangeInfo, lineCount),
+				parts[1], []byte(content))
+		}
+		return true
+
+	case "grep", "search":
+		// /grep <pattern> [glob] — search codebase with ripgrep.
+		parts := strings.SplitN(text, " ", 3)
+		if len(parts) < 2 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "🔎 Grep", Description: "사용법: `/grep <패턴> [파일패턴]`", Color: discord.ColorWarning,
+			}})
+			return true
+		}
+		pattern := parts[1]
+		rgArgs := []string{"--no-heading", "--line-number", "--color=never", "-m", "50", pattern}
+		if len(parts) >= 3 {
+			rgArgs = append(rgArgs, "--glob", parts[2])
+		}
+		output := runCmdWithTimeout(workspaceDir, 15*time.Second, "rg", rgArgs...)
+		if output == "" {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title:       "🔎 Grep: `" + pattern + "`",
+				Description: "일치하는 결과 없음",
+				Color:       discord.ColorInfo,
+			}})
+			return true
+		}
+		lines := strings.Split(output, "\n")
+		matchCount := len(lines)
+		if matchCount > 30 {
+			lines = lines[:30]
+			output = strings.Join(lines, "\n") + fmt.Sprintf("\n... 외 %d건", matchCount-30)
+		}
+		if len(output) < 3800 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title:       fmt.Sprintf("🔎 Grep: `%s` (%d건)", pattern, matchCount),
+				Description: "```\n" + output + "\n```",
+				Color:       discord.ColorInfo,
+			}})
+		} else {
+			p.sendDiscordFileReply(channelID,
+				fmt.Sprintf("🔎 **%s** — %d건 일치", pattern, matchCount),
+				"grep-results.txt", []byte(output))
+		}
+		return true
+
+	case "run", "exec":
+		// /run <command> — execute a shell command directly and show output.
+		parts := strings.SplitN(text, " ", 2)
+		if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "⚡ Run", Description: "사용법: `/run <명령어>`", Color: discord.ColorWarning,
+			}})
+			return true
+		}
+		shellCmd := strings.TrimSpace(parts[1])
+		start := time.Now()
+		output := runCmdWithTimeout(workspaceDir, 30*time.Second, "bash", "-c", shellCmd)
+		elapsed := time.Since(start)
+		if output == "" {
+			output = "(출력 없음)"
+		}
+		color := discord.ColorSuccess
+		title := "⚡ " + discord.TruncateText(shellCmd, 200)
+		if strings.Contains(strings.ToLower(output), "error") || strings.Contains(output, "FAIL") {
+			color = discord.ColorError
+		}
+		if len(output) < 3800 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title:       title,
+				Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+				Color:       color,
+				Footer:      &discord.EmbedFooter{Text: fmt.Sprintf("%dms", elapsed.Milliseconds())},
+			}})
+		} else {
+			p.sendDiscordFileReply(channelID,
+				fmt.Sprintf("⚡ `%s` (%dms)", discord.TruncateText(shellCmd, 150), elapsed.Milliseconds()),
+				"output.txt", []byte(output))
+		}
+		return true
+
+	case "stash":
+		// /stash [pop|list|show|drop] — git stash operations.
+		parts := strings.Fields(text)
+		subCmd := "push"
+		if len(parts) > 1 {
+			subCmd = parts[1]
+		}
+		var output string
+		switch subCmd {
+		case "list":
+			output = runGitCmd(workspaceDir, "stash", "list")
+			if output == "" {
+				output = "스태시 없음"
+			}
+		case "pop":
+			output = runGitCmd(workspaceDir, "stash", "pop")
+		case "show":
+			output = runGitCmd(workspaceDir, "stash", "show", "-p")
+		case "drop":
+			output = runGitCmd(workspaceDir, "stash", "drop")
+		default:
+			// Default: stash push with message.
+			msg := "Discord stash"
+			if len(parts) > 1 {
+				msg = strings.Join(parts[1:], " ")
+			}
+			output = runGitCmd(workspaceDir, "stash", "push", "-m", msg)
+		}
+		if output == "" {
+			output = "완료"
+		}
+		p.sendDiscordEmbed(channelID, []discord.Embed{{
+			Title:       "📦 Git Stash (" + subCmd + ")",
+			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+			Color:       discord.ColorInfo,
+		}})
+		return true
+
+	case "checkout", "switch":
+		// /checkout <branch> — switch git branch.
+		parts := strings.Fields(text)
+		if len(parts) < 2 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "🌿 Checkout", Description: "사용법: `/checkout <브랜치>`", Color: discord.ColorWarning,
+			}})
+			return true
+		}
+		branch := parts[1]
+		// Try checkout first; if it fails, try creating a new branch.
+		output := runGitCmd(workspaceDir, "checkout", branch)
+		if output == "" || strings.Contains(output, "error") {
+			output = runGitCmd(workspaceDir, "checkout", "-b", branch)
+		}
+		if output == "" {
+			output = "`" + branch + "`(으)로 전환 완료"
+		}
+		p.sendDiscordEmbed(channelID, []discord.Embed{{
+			Title:       "🌿 Checkout",
+			Description: "```\n" + discord.TruncateText(output, 4000) + "\n```",
+			Color:       discord.ColorSuccess,
+			Fields: []discord.EmbedField{
+				{Name: "브랜치", Value: "`" + branch + "`", Inline: true},
+			},
+		}})
+		return true
+
+	case "blame":
+		// /blame <file> [line] — show git blame for a file.
+		parts := strings.Fields(text)
+		if len(parts) < 2 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "🔍 Blame", Description: "사용법: `/blame <파일> [줄번호]`", Color: discord.ColorWarning,
+			}})
+			return true
+		}
+		filePath := parts[1]
+		blameArgs := []string{"blame", "--no-color", filePath}
+		if len(parts) >= 3 {
+			lineNum := parts[2]
+			blameArgs = []string{"blame", "--no-color", "-L", lineNum + "," + lineNum, filePath}
+			// Support range: /blame file.go 10 20
+			if len(parts) >= 4 {
+				blameArgs = []string{"blame", "--no-color", "-L", lineNum + "," + parts[3], filePath}
+			}
+		}
+		output := runCmdWithTimeout(workspaceDir, 10*time.Second, "git", blameArgs...)
+		if output == "" {
+			output = "blame 정보 없음"
+		}
+		if len(output) < 3800 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title:       "🔍 Blame: " + filePath,
+				Description: "```\n" + output + "\n```",
+				Color:       discord.ColorInfo,
+			}})
+		} else {
+			p.sendDiscordFileReply(channelID,
+				"🔍 **"+filePath+"** blame 결과",
+				"blame.txt", []byte(output))
+		}
+		return true
+
+	case "agents":
+		// /agents — list active agent sessions with status.
+		sessions := p.server.SessionManager.sessions.List()
+		if len(sessions) == 0 {
+			p.sendDiscordEmbed(channelID, []discord.Embed{{
+				Title: "🤖 에이전트", Description: "활성 세션 없음", Color: discord.ColorInfo,
+			}})
+			return true
+		}
+		var fields []discord.EmbedField
+		for _, s := range sessions {
+			statusEmoji := "⬜"
+			switch string(s.Status) {
+			case "running":
+				statusEmoji = "🔄"
+			case "done":
+				statusEmoji = "✅"
+			case "failed":
+				statusEmoji = "❌"
+			case "killed":
+				statusEmoji = "🛑"
+			case "timeout":
+				statusEmoji = "⏰"
+			}
+			value := statusEmoji + " " + string(s.Status)
+			if s.Model != "" {
+				value += " · `" + s.Model + "`"
+			}
+			if s.RuntimeMs != nil {
+				value += fmt.Sprintf(" · %dms", *s.RuntimeMs)
+			}
+			name := s.Key
+			if s.Label != "" {
+				name = s.Label
+			}
+			fields = append(fields, discord.EmbedField{
+				Name: name, Value: value, Inline: false,
+			})
+			if len(fields) >= 15 {
+				break
+			}
+		}
+		p.sendDiscordEmbed(channelID, []discord.Embed{{
+			Title:  fmt.Sprintf("🤖 에이전트 세션 (%d)", len(sessions)),
+			Color:  discord.ColorInfo,
+			Fields: fields,
+		}})
+		return true
+
+	case "help":
+		// /help — show all available coding commands.
+		p.sendDiscordEmbed(channelID, []discord.Embed{discord.FormatHelpEmbed()})
+		return true
 	}
 
 	return false
+}
+
+// sendDiscordFileReply sends a file attachment with a text summary to a Discord channel.
+func (p *InboundProcessor) sendDiscordFileReply(channelID, summary, fileName string, data []byte) {
+	client := p.server.discordPlug.Client()
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := client.SendMessageWithFile(ctx, channelID, summary, fileName, data); err != nil {
+		p.logger.Warn("failed to send discord file reply", "channelId", channelID, "error", err)
+	}
 }
 
 // sendDiscordQuickReply sends a quick reply to a Discord channel.
@@ -875,4 +1167,66 @@ func lintCommand(projType string) (string, []string) {
 		return "python", []string{"-m", "ruff", "check", "."}
 	}
 	return "", nil
+}
+
+// resolveWorkspacePath joins a relative path to the workspace root. Prevents
+// directory traversal by rejecting paths with "..".
+func resolveWorkspacePath(workspaceDir, relPath string) string {
+	if strings.Contains(relPath, "..") {
+		return ""
+	}
+	if strings.HasPrefix(relPath, "/") {
+		return relPath
+	}
+	return workspaceDir + "/" + relPath
+}
+
+// readFileWithLines reads a file and returns its content with optional line range.
+// Returns content, total line count, and error.
+func readFileWithLines(path string, startLine, endLine int) (string, int, error) {
+	if path == "" {
+		return "", 0, fmt.Errorf("잘못된 파일 경로")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", 0, fmt.Errorf("파일을 읽을 수 없습니다: %v", err)
+	}
+
+	allLines := strings.Split(string(data), "\n")
+	totalLines := len(allLines)
+
+	// Apply line range if specified.
+	if startLine > 0 || endLine > 0 {
+		if startLine < 1 {
+			startLine = 1
+		}
+		if endLine < 1 || endLine > totalLines {
+			endLine = totalLines
+		}
+		if startLine > totalLines {
+			return "", totalLines, fmt.Errorf("시작 줄(%d)이 파일 길이(%d줄)를 초과합니다", startLine, totalLines)
+		}
+		// Add line numbers for ranged output.
+		var numbered []string
+		for i := startLine - 1; i < endLine && i < totalLines; i++ {
+			numbered = append(numbered, fmt.Sprintf("%4d │ %s", i+1, allLines[i]))
+		}
+		return strings.Join(numbered, "\n"), endLine - startLine + 1, nil
+	}
+
+	// For full file, cap at 100 lines to keep Discord messages manageable.
+	if totalLines > 100 {
+		var numbered []string
+		for i := 0; i < 100; i++ {
+			numbered = append(numbered, fmt.Sprintf("%4d │ %s", i+1, allLines[i]))
+		}
+		return strings.Join(numbered, "\n") + fmt.Sprintf("\n... 외 %d줄", totalLines-100), totalLines, nil
+	}
+
+	var numbered []string
+	for i, line := range allLines {
+		numbered = append(numbered, fmt.Sprintf("%4d │ %s", i+1, line))
+	}
+	return strings.Join(numbered, "\n"), totalLines, nil
 }

@@ -48,7 +48,8 @@ type Handler struct {
 	mediaSendFn      MediaSendFunc // optional: delivers files to originating channel
 	typingFn         TypingFunc    // optional: sends typing indicator during agent run
 	reactionFn       ReactionFunc  // optional: sets emoji reaction on triggering message
-	removeReactionFn ReactionFunc  // optional: removes emoji reaction (Discord additive)
+	removeReactionFn ReactionFunc    // optional: removes emoji reaction (Discord additive)
+	toolProgressFn   ToolProgressFunc // optional: reports tool execution events (Discord progress)
 
 	// uploadLimitsMu guards uploadLimits.
 	uploadLimitsMu sync.RWMutex
@@ -184,6 +185,17 @@ func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 // from the triggering message. Needed for Discord's additive reaction model.
 func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
 	h.removeReactionFn = fn
+}
+
+// SetToolProgressFunc sets the function that reports tool execution events
+// (start/complete) to the originating channel for real-time progress display.
+func (h *Handler) SetToolProgressFunc(fn ToolProgressFunc) {
+	h.toolProgressFn = fn
+}
+
+// ToolProgressFunc returns the current tool progress function (for chaining).
+func (h *Handler) ToolProgressFunc() ToolProgressFunc {
+	return h.toolProgressFn
 }
 
 // SetChannelUploadLimit registers the maximum file upload size for a channel.

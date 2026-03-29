@@ -448,6 +448,67 @@ func (s *Server) wireDiscordChatHandler() {
 		return client.DeleteOwnReaction(ctx, delivery.To, delivery.MessageID, emoji)
 	})
 
+	// Wire tool progress tracking for Discord: when the agent executes tools,
+	// update a progress embed in-place to show real-time execution status.
+	var progressMu sync.Mutex
+	activeTrackers := make(map[string]*discord.ProgressTracker) // deliveryTarget → tracker
+
+	prevProgress := s.chatHandler.ToolProgressFunc()
+	s.chatHandler.SetToolProgressFunc(func(ctx context.Context, delivery *chat.DeliveryContext, event chat.ToolProgressEvent) {
+		if delivery == nil || delivery.Channel != "discord" {
+			if prevProgress != nil {
+				prevProgress(ctx, delivery, event)
+			}
+			return
+		}
+		dcClient := s.discordPlug.Client()
+		if dcClient == nil {
+			return
+		}
+
+		progressMu.Lock()
+		tracker := activeTrackers[delivery.To]
+		if tracker == nil && event.Type == "start" {
+			// Create progress tracker on first tool start.
+			tracker = discord.NewProgressTracker(ctx, dcClient, delivery.To)
+			if tracker != nil {
+				activeTrackers[delivery.To] = tracker
+			}
+		}
+		progressMu.Unlock()
+
+		if tracker == nil {
+			return
+		}
+
+		switch event.Type {
+		case "start":
+			tracker.StartStep(ctx, event.Name)
+		case "complete":
+			tracker.CompleteStep(ctx, event.Name, event.IsError)
+			// Check if all steps are done to finalize.
+			// Finalize is called lazily; the agent reply will come separately.
+		}
+	})
+
+	// Hook into reply func to finalize progress trackers when the agent responds.
+	prevReplyForProgress := s.chatHandler.ReplyFunc()
+	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
+		// Finalize any active progress tracker for this Discord target.
+		if delivery != nil && delivery.Channel == "discord" {
+			progressMu.Lock()
+			if tracker := activeTrackers[delivery.To]; tracker != nil {
+				tracker.Finalize(ctx)
+				delete(activeTrackers, delivery.To)
+			}
+			progressMu.Unlock()
+		}
+		if prevReplyForProgress != nil {
+			return prevReplyForProgress(ctx, delivery, text)
+		}
+		return nil
+	})
+
 	// Route Discord messages through the autoreply inbound processor for
 	// command detection (/reset, /model, etc.) and directive parsing before
 	// dispatching to the chat pipeline.

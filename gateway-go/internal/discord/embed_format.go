@@ -308,6 +308,161 @@ const (
 	StepError
 )
 
+// FormatMultiFileDiffEmbed builds an embed with per-file diff summaries.
+// Parses a full git diff output and groups changes by file.
+func FormatMultiFileDiffEmbed(fullDiff string) []Embed {
+	if fullDiff == "" {
+		return []Embed{{
+			Title:       "📊 Diff",
+			Description: "변경 사항 없음",
+			Color:       ColorInfo,
+		}}
+	}
+
+	// Split by "diff --git" to get per-file diffs.
+	parts := strings.Split(fullDiff, "diff --git ")
+	if len(parts) <= 1 {
+		// Not a multi-file diff; return single embed.
+		return []Embed{{
+			Title:       "📊 Diff",
+			Description: wrapCodeBlockIfNeeded(truncate(fullDiff, embedDescriptionLimit)),
+			Color:       ColorInfo,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		}}
+	}
+
+	var embeds []Embed
+	for _, part := range parts[1:] { // skip the first empty part
+		lines := strings.SplitN(part, "\n", 2)
+		if len(lines) == 0 {
+			continue
+		}
+
+		// Extract filename from "a/path b/path" header.
+		header := lines[0]
+		fileName := extractDiffFileName(header)
+
+		diffContent := ""
+		if len(lines) > 1 {
+			diffContent = lines[1]
+		}
+
+		// Count additions/deletions.
+		added, removed := countDiffLines(diffContent)
+
+		desc := "```diff\n" + truncate(diffContent, 900) + "\n```"
+		fields := []EmbedField{
+			{Name: "추가", Value: fmt.Sprintf("`+%d`", added), Inline: true},
+			{Name: "삭제", Value: fmt.Sprintf("`-%d`", removed), Inline: true},
+		}
+
+		embeds = append(embeds, Embed{
+			Title:       "📄 " + fileName,
+			Description: desc,
+			Color:       ColorInfo,
+			Fields:      fields,
+		})
+
+		// Cap at 5 embeds to stay within Discord's 10-embed limit.
+		if len(embeds) >= 5 {
+			remaining := len(parts) - 1 - 5
+			if remaining > 0 {
+				embeds = append(embeds, Embed{
+					Title:       fmt.Sprintf("... 외 %d개 파일", remaining),
+					Description: "전체 diff는 `/gdiff`로 확인하세요.",
+					Color:       ColorInfo,
+				})
+			}
+			break
+		}
+	}
+
+	return embeds
+}
+
+// extractDiffFileName extracts the file name from a diff header like "a/path/file.go b/path/file.go".
+func extractDiffFileName(header string) string {
+	parts := strings.Fields(header)
+	if len(parts) >= 2 {
+		name := parts[1]
+		if strings.HasPrefix(name, "b/") {
+			return name[2:]
+		}
+		return name
+	}
+	return header
+}
+
+// countDiffLines counts added (+) and removed (-) lines in a diff chunk.
+func countDiffLines(diff string) (added, removed int) {
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			added++
+		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			removed++
+		}
+	}
+	return
+}
+
+// FormatAgentSummaryEmbed builds a summary embed shown after an agent run completes.
+// Includes tool execution stats and a brief result preview.
+func FormatAgentSummaryEmbed(toolsUsed []string, totalDurationMs int64, replyPreview string) Embed {
+	// Deduplicate and count tool uses.
+	toolCounts := make(map[string]int)
+	for _, t := range toolsUsed {
+		toolCounts[t]++
+	}
+	var toolLines []string
+	for name, count := range toolCounts {
+		if count > 1 {
+			toolLines = append(toolLines, fmt.Sprintf("`%s` ×%d", name, count))
+		} else {
+			toolLines = append(toolLines, "`"+name+"`")
+		}
+	}
+
+	fields := []EmbedField{
+		{Name: "사용 도구", Value: strings.Join(toolLines, ", "), Inline: false},
+	}
+
+	if totalDurationMs > 0 {
+		dur := time.Duration(totalDurationMs) * time.Millisecond
+		fields = append(fields, EmbedField{
+			Name: "소요 시간", Value: fmt.Sprintf("`%s`", dur.Round(time.Millisecond)), Inline: true,
+		})
+	}
+
+	desc := ""
+	if replyPreview != "" {
+		desc = truncate(replyPreview, 300)
+	}
+
+	return Embed{
+		Title:       "✅ 에이전트 완료",
+		Description: desc,
+		Color:       ColorSuccess,
+		Fields:      fields,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// FormatHelpEmbed returns an embed listing all available Discord coding commands.
+func FormatHelpEmbed() Embed {
+	fields := []EmbedField{
+		{Name: "📄 파일", Value: "`/file <경로> [시작줄] [끝줄]` — 파일 보기\n`/grep <패턴> [파일패턴]` — 코드 검색\n`/tree [depth]` — 디렉토리 구조", Inline: false},
+		{Name: "🔀 Git", Value: "`/diff` — 변경 통계\n`/gdiff` — 전체 diff\n`/log [n]` — 커밋 로그\n`/branch` — 브랜치 목록\n`/blame <파일> [줄]` — blame 조회\n`/stash [pop|list|show|drop]` — 스태시\n`/checkout <브랜치>` — 브랜치 전환", Inline: false},
+		{Name: "🔨 빌드 & 테스트", Value: "`/build` — 프로젝트 빌드\n`/test` — 테스트 실행\n`/lint` — 린트 검사\n`/run <명령어>` — 셸 명령 실행", Inline: false},
+		{Name: "💾 배포", Value: "`/commit [메시지]` — 커밋\n`/push` — 푸시\n`/ws` — 워크스페이스 상태", Inline: false},
+		{Name: "🤖 에이전트", Value: "`/agents` — 활성 세션 목록\n`/new` — 새 세션 시작\n`/model [이름]` — 모델 변경", Inline: false},
+	}
+	return Embed{
+		Title:  "📖 디스코드 코딩 명령어",
+		Color:  ColorInfo,
+		Fields: fields,
+	}
+}
+
 // --- helpers ---
 
 // TruncateText truncates text to maxLen, appending "..." if truncated. Exported for use by other packages.

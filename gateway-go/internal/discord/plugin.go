@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
@@ -79,6 +80,16 @@ func (p *Plugin) Start(ctx context.Context) error {
 	}
 	p.logger.Info("discord bot verified", "username", me.Username, "id", me.ID)
 	p.botUser = me
+
+	// Register slash commands so they appear in Discord autocomplete.
+	// Uses guild-scoped registration for instant propagation.
+	go func() {
+		regCtx, regCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer regCancel()
+		if err := RegisterCommands(regCtx, p.client, me.ID, p.config.GuildID, p.logger); err != nil {
+			p.logger.Warn("discord: failed to register slash commands", "error", err)
+		}
+	}()
 
 	// Start Gateway connection in background.
 	p.bot = NewBot(p.client, p.config, p.handler, p.logger)
