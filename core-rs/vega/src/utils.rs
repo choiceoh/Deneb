@@ -4,30 +4,39 @@
 //! escape_like, fuzzy_find_project, find_project_id_in_text,
 //! extract_days, extract_limit, extract_bullets, build_search_suggestions.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 // Pre-compiled regex patterns for hot-path functions.
 #[allow(clippy::expect_used)]
-static KOREAN_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9]+").expect("valid regex"));
+static KOREAN_TOKEN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[가-힣A-Za-z0-9]+").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static DAYS_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--days\s+(\d+)").expect("valid regex"));
+static DAYS_FLAG_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"--days\s+(\d+)").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static DAYS_IL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*일").expect("valid regex"));
+static DAYS_IL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d+)\s*일").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static DAYS_JU_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*주").expect("valid regex"));
+static DAYS_JU_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d+)\s*주").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static DAYS_GAEWOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개월").expect("valid regex"));
+static DAYS_GAEWOL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d+)\s*개월").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static LIMIT_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--limit\s+(\d+)").expect("valid regex"));
+static LIMIT_FLAG_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"--limit\s+(\d+)").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static LIMIT_GAE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개").expect("valid regex"));
+static LIMIT_GAE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d+)\s*개").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static BULLET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\-•*]+\s*").expect("valid regex"));
+static BULLET_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[\-•*]+\s*").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static NUMBERED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+[.)]\s*").expect("valid regex"));
+static NUMBERED_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d+[.)]\s*").expect("valid regex"));
 
 /// Escape special SQL LIKE characters (%, _, \).
 /// Use with `ESCAPE '\'` in the LIKE clause.
@@ -172,11 +181,8 @@ pub fn extract_days(text: &str, default: i64) -> i64 {
     }
 
     // Korean patterns: N일, N주, N개월
-    let patterns: &[(&Lazy<Regex>, i64)] = &[
-        (&DAYS_IL_RE, 1),
-        (&DAYS_JU_RE, 7),
-        (&DAYS_GAEWOL_RE, 30),
-    ];
+    let patterns: &[(&LazyLock<Regex>, i64)] =
+        &[(&DAYS_IL_RE, 1), (&DAYS_JU_RE, 7), (&DAYS_GAEWOL_RE, 30)];
     for (re, mult) in patterns {
         if let Some(caps) = re.captures(text) {
             if let Ok(n) = caps[1].parse::<i64>() {

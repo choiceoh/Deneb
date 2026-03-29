@@ -166,7 +166,11 @@ fn insert_into_md_section(content: &str, section_name: &str, line: &str) -> Stri
 pub struct AddActionHandler;
 
 impl super::CommandHandler for AddActionHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_add_action(args, config)
     }
 }

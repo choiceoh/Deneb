@@ -1,14 +1,14 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use super::{open_db, CommandResult};
 use crate::config::VegaConfig;
 
 #[allow(clippy::expect_used)]
-static DATE_EXTRACT_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").expect("valid regex"));
+static DATE_EXTRACT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").expect("valid regex"));
 
 /// Urgent items query: red-status projects, stale projects, overdue actions, overloaded persons.
 pub fn cmd_urgent(_args: &Value, config: &VegaConfig) -> CommandResult {
@@ -323,7 +323,11 @@ mod tests {
 pub struct UrgentHandler;
 
 impl super::CommandHandler for UrgentHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_urgent(args, config)
     }
 

@@ -157,12 +157,7 @@ impl CommandContext {
         let mut stmt = self
             .conn
             .prepare(sql)
-            .map_err(|e| {
-                format!(
-                    "쿼리 준비 실패({}): {e}",
-                    self.config.db_path.display()
-                )
-            })?;
+            .map_err(|e| format!("쿼리 준비 실패({}): {e}", self.config.db_path.display()))?;
         let rows = stmt
             .query_map(params![pid], |r| {
                 let mut row = serde_json::Map::new();
@@ -184,12 +179,7 @@ impl CommandContext {
                 }
                 Ok(Value::Object(row))
             })
-            .map_err(|e| {
-                format!(
-                    "쿼리 실행 실패({}): {e}",
-                    self.config.db_path.display()
-                )
-            })?;
+            .map_err(|e| format!("쿼리 실행 실패({}): {e}", self.config.db_path.display()))?;
 
         Ok(rows.filter_map(Result::ok).collect())
     }
@@ -313,12 +303,10 @@ pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResul
     } else {
         // Default to search with command as query
         let search_args = json!({"query": command});
-        registry
-            .get("search")
-            .map_or_else(
-                || CommandResult::err("search", "검색 핸들러 없음"),
-                |h| h.execute(config, &search_args),
-            )
+        registry.get("search").map_or_else(
+            || CommandResult::err("search", "검색 핸들러 없음"),
+            |h| h.execute(config, &search_args),
+        )
     }
 }
 

@@ -66,7 +66,6 @@ pub fn cmd_changelog(args: &Value, config: &VegaConfig) -> CommandResult {
 // Snapshot types and helpers
 // ---------------------------------------------------------------------------
 
-
 /// Determine the path for `.snapshot.json` (sits next to the DB file).
 fn snapshot_path(config: &VegaConfig) -> PathBuf {
     let mut p = config.db_path.clone();
@@ -285,9 +284,27 @@ mod tests {
         let current: HashMap<i64, Value> = HashMap::new();
         let diff = diff_snapshots(&prev, &current);
 
-        assert_eq!(diff["new_projects"].as_array().expect("new_projects as array").len(), 0);
-        assert_eq!(diff["removed_projects"].as_array().expect("removed_projects as array").len(), 0);
-        assert_eq!(diff["status_changes"].as_array().expect("status_changes as array").len(), 0);
+        assert_eq!(
+            diff["new_projects"]
+                .as_array()
+                .expect("new_projects as array")
+                .len(),
+            0
+        );
+        assert_eq!(
+            diff["removed_projects"]
+                .as_array()
+                .expect("removed_projects as array")
+                .len(),
+            0
+        );
+        assert_eq!(
+            diff["status_changes"]
+                .as_array()
+                .expect("status_changes as array")
+                .len(),
+            0
+        );
     }
 
     #[test]
@@ -297,7 +314,9 @@ mod tests {
         current.insert(1, make_project("Project A", "active", 0));
 
         let diff = diff_snapshots(&prev, &current);
-        let new_projects = diff["new_projects"].as_array().expect("new_projects as array");
+        let new_projects = diff["new_projects"]
+            .as_array()
+            .expect("new_projects as array");
         assert_eq!(new_projects.len(), 1);
         assert_eq!(new_projects[0]["name"], "Project A");
     }
@@ -309,7 +328,9 @@ mod tests {
         let current: HashMap<i64, Value> = HashMap::new();
 
         let diff = diff_snapshots(&prev, &current);
-        let removed = diff["removed_projects"].as_array().expect("removed_projects as array");
+        let removed = diff["removed_projects"]
+            .as_array()
+            .expect("removed_projects as array");
         assert_eq!(removed.len(), 1);
         assert_eq!(removed[0]["name"], "Project A");
     }
@@ -323,7 +344,9 @@ mod tests {
         current.insert(1, make_project("Project A", "completed", 5));
 
         let diff = diff_snapshots(&prev, &current);
-        let changes = diff["status_changes"].as_array().expect("status_changes as array");
+        let changes = diff["status_changes"]
+            .as_array()
+            .expect("status_changes as array");
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0]["old_status"], "active");
         assert_eq!(changes[0]["new_status"], "completed");
@@ -375,7 +398,9 @@ mod tests {
         );
 
         let diff = diff_snapshots(&prev, &current);
-        let modified = diff["modified_chunks"].as_array().expect("modified_chunks as array");
+        let modified = diff["modified_chunks"]
+            .as_array()
+            .expect("modified_chunks as array");
         assert_eq!(modified.len(), 1);
         assert_eq!(modified[0]["heading"], "overview");
 
@@ -393,17 +418,45 @@ mod tests {
         current.insert(1, make_project("Project A", "active", 5));
 
         let diff = diff_snapshots(&prev, &current);
-        assert_eq!(diff["new_projects"].as_array().expect("new_projects as array").len(), 0);
-        assert_eq!(diff["removed_projects"].as_array().expect("removed_projects as array").len(), 0);
-        assert_eq!(diff["status_changes"].as_array().expect("status_changes as array").len(), 0);
-        assert_eq!(diff["new_comms"].as_array().expect("new_comms as array").len(), 0);
+        assert_eq!(
+            diff["new_projects"]
+                .as_array()
+                .expect("new_projects as array")
+                .len(),
+            0
+        );
+        assert_eq!(
+            diff["removed_projects"]
+                .as_array()
+                .expect("removed_projects as array")
+                .len(),
+            0
+        );
+        assert_eq!(
+            diff["status_changes"]
+                .as_array()
+                .expect("status_changes as array")
+                .len(),
+            0
+        );
+        assert_eq!(
+            diff["new_comms"]
+                .as_array()
+                .expect("new_comms as array")
+                .len(),
+            0
+        );
     }
 }
 
 pub struct ChangelogHandler;
 
 impl super::CommandHandler for ChangelogHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_changelog(args, config)
     }
 }

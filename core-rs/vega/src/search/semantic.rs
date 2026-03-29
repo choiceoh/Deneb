@@ -8,8 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use rayon::prelude::*;
 
-
-
 /// Semantic search result for a single chunk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticResult {
@@ -122,10 +120,7 @@ pub fn semantic_search_with_vec(
     // Separate embeddings from metadata for parallel SIMD computation.
     // Rayon can't par_iter over large tuples, so we split: compute scores
     // in parallel over (index, embedding) pairs, then build results sequentially.
-    let embeddings: Vec<Vec<f32>> = all_rows
-        .iter()
-        .map(|row| blob_to_f32_vec(&row.1))
-        .collect();
+    let embeddings: Vec<Vec<f32>> = all_rows.iter().map(|row| blob_to_f32_vec(&row.1)).collect();
 
     // Parallel cosine similarity (SIMD-accelerated, leverages DGX Spark cores).
     let scores: Vec<(usize, f64)> = (0..embeddings.len())

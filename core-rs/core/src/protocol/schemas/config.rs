@@ -113,7 +113,7 @@ pub fn validate_config_schema_lookup_params(
         check_non_empty_string(&obj["path"], &p_path, errors);
         check_max_length(&obj["path"], &p_path, 1024, errors);
         #[allow(clippy::expect_used)]
-        static PATH_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        static PATH_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
             regex::Regex::new(r"^[A-Za-z0-9_./\[\]\-*]+$").expect("valid regex")
         });
         check_pattern(&obj["path"], &p_path, &PATH_RE, errors);

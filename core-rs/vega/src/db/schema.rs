@@ -261,12 +261,11 @@ mod tests {
         )?;
 
         // FTS should find the chunk
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"Test\"'",
-                [],
-                |r| r.get(0),
-            )?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"Test\"'",
+            [],
+            |r| r.get(0),
+        )?;
         assert!(count > 0, "FTS trigger should have indexed the chunk");
         Ok(())
     }
@@ -290,12 +289,11 @@ mod tests {
 
         // Verify FTS works by searching (COUNT(*) on external-content FTS reads
         // from the content table, but MATCH queries use the actual index)
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"TestProj\"'",
-                [],
-                |r| r.get(0),
-            )?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"TestProj\"'",
+            [],
+            |r| r.get(0),
+        )?;
         assert!(count > 0, "FTS should find rebuilt index data");
         Ok(())
     }

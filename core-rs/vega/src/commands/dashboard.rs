@@ -241,7 +241,11 @@ fn get_key_metrics(conn: &Connection) -> Result<Value, String> {
 pub struct DashboardHandler;
 
 impl super::CommandHandler for DashboardHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_dashboard(args, config)
     }
 

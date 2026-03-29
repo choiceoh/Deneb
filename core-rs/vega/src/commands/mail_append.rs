@@ -174,7 +174,11 @@ fn insert_into_section(content: &str, section_name: &str, text: &str) -> String 
 pub struct MailAppendHandler;
 
 impl super::CommandHandler for MailAppendHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_mail_append(args, config)
     }
 }

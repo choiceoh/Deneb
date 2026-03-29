@@ -13,7 +13,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 regex.workspace = true
-once_cell.workspace = true
 
 [lints]
 workspace = true

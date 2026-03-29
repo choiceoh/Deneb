@@ -1,22 +1,22 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
 
 #[allow(clippy::expect_used)]
-static BILLIONS_RE: Lazy<Regex> = Lazy::new(|| {
+static BILLIONS_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").expect("valid regex")
 });
 #[allow(clippy::expect_used)]
-static TEN_THOUSANDS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").expect("valid regex"));
+static TEN_THOUSANDS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static WON_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d{1,3}(?:,\d{3})+)\s*원").expect("valid regex"));
+static WON_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d{1,3}(?:,\d{3})+)\s*원").expect("valid regex"));
 
 /// Pipeline analysis: extract monetary amounts from project text,
 /// classify project stages, and aggregate pipeline metrics.
@@ -335,7 +335,11 @@ mod tests {
 pub struct PipelineHandler;
 
 impl super::CommandHandler for PipelineHandler {
-    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
         cmd_pipeline(args, config)
     }
 

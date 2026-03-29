@@ -3,8 +3,8 @@
 //! Mirrors `src/routing/session-key.ts` and `src/sessions/session-key-utils.ts`
 //! (pure-logic subset). Keep in sync.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 use super::agent_ids::{
     normalize_account_id, normalize_agent_id, normalize_main_key, DEFAULT_AGENT_ID,
@@ -49,16 +49,21 @@ pub struct BuildAgentPeerSessionKeyParams<'a> {
 
 // Pre-compiled regexes used by multiple functions.
 #[allow(clippy::expect_used)]
-static DISCORD_LEGACY_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").expect("valid regex"));
+static DISCORD_LEGACY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").expect("valid regex")
+});
 #[allow(clippy::expect_used)]
-static CRON_RUN_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").expect("valid regex"));
+static CRON_RUN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").expect("valid regex"));
 
 /// Normalize `s` to lowercase, falling back to `"unknown"` when empty.
 fn normalize_or_unknown(s: &str) -> String {
     let t = s.trim().to_lowercase();
-    if t.is_empty() { "unknown".to_string() } else { t }
+    if t.is_empty() {
+        "unknown".to_string()
+    } else {
+        t
+    }
 }
 
 /// Parse an agent-scoped session key in canonical format "agent:<id>:<rest>".
@@ -340,7 +345,9 @@ fn resolve_linked_peer_id(
         }
         for id in ids {
             let normalized = id.trim().to_lowercase();
-            if !normalized.is_empty() && candidates.iter().any(|c| !c.is_empty() && *c == normalized) {
+            if !normalized.is_empty()
+                && candidates.iter().any(|c| !c.is_empty() && *c == normalized)
+            {
                 return Some(canonical_name.to_string());
             }
         }
@@ -416,7 +423,8 @@ mod tests {
 
     #[test]
     fn parse_agent_session_key_valid() -> Result<(), Box<dyn std::error::Error>> {
-        let parsed = parse_agent_session_key("agent:mybot:main").ok_or("parse_agent_session_key returned None")?;
+        let parsed = parse_agent_session_key("agent:mybot:main")
+            .ok_or("parse_agent_session_key returned None")?;
         assert_eq!(parsed.agent_id, "mybot");
         assert_eq!(parsed.rest, "main");
         Ok(())
@@ -424,7 +432,8 @@ mod tests {
 
     #[test]
     fn parse_agent_session_key_with_rest() -> Result<(), Box<dyn std::error::Error>> {
-        let parsed = parse_agent_session_key("agent:mybot:cron:daily:run:123").ok_or("parse_agent_session_key returned None")?;
+        let parsed = parse_agent_session_key("agent:mybot:cron:daily:run:123")
+            .ok_or("parse_agent_session_key returned None")?;
         assert_eq!(parsed.agent_id, "mybot");
         assert_eq!(parsed.rest, "cron:daily:run:123");
         Ok(())

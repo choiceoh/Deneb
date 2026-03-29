@@ -1,7 +1,7 @@
 //! Query expansion and keyword extraction for memory search.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 use super::stop_words;
 use super::types::ExpandedQuery;
@@ -14,20 +14,20 @@ fn make_set(words: &[&'static str]) -> std::collections::HashSet<&'static str> {
     words.iter().copied().collect()
 }
 
-static STOP_WORDS_EN: Lazy<std::collections::HashSet<&'static str>> =
-    Lazy::new(|| make_set(stop_words::EN));
-static STOP_WORDS_ES: Lazy<std::collections::HashSet<&'static str>> =
-    Lazy::new(|| make_set(stop_words::ES));
-static STOP_WORDS_PT: Lazy<std::collections::HashSet<&'static str>> =
-    Lazy::new(|| make_set(stop_words::PT));
-static STOP_WORDS_AR: Lazy<std::collections::HashSet<&'static str>> =
-    Lazy::new(|| make_set(stop_words::AR));
-static STOP_WORDS_KO: Lazy<std::collections::HashSet<&'static str>> =
-    Lazy::new(|| make_set(stop_words::KO));
-static STOP_WORDS_JA: Lazy<std::collections::HashSet<&'static str>> =
-    Lazy::new(|| make_set(stop_words::JA));
-static STOP_WORDS_ZH: Lazy<std::collections::HashSet<&'static str>> =
-    Lazy::new(|| make_set(stop_words::ZH));
+static STOP_WORDS_EN: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| make_set(stop_words::EN));
+static STOP_WORDS_ES: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| make_set(stop_words::ES));
+static STOP_WORDS_PT: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| make_set(stop_words::PT));
+static STOP_WORDS_AR: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| make_set(stop_words::AR));
+static STOP_WORDS_KO: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| make_set(stop_words::KO));
+static STOP_WORDS_JA: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| make_set(stop_words::JA));
+static STOP_WORDS_ZH: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| make_set(stop_words::ZH));
 
 /// Check if a token is a stop word in any supported language.
 pub fn is_query_stop_word_token(token: &str) -> bool {
@@ -45,15 +45,16 @@ pub fn is_query_stop_word_token(token: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 #[allow(clippy::expect_used)]
-static SPLIT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\s\p{P}]+").expect("valid regex"));
+static SPLIT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[\s\p{P}]+").expect("valid regex"));
 #[allow(clippy::expect_used)]
-static JP_PART_RE: Lazy<Regex> = Lazy::new(|| {
+static JP_PART_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"[a-z0-9_]+|[\x{30A0}-\x{30FF}ー]+|[\x{4E00}-\x{9FFF}]+|[\x{3040}-\x{309F}]{2,}")
         .expect("valid regex")
 });
 #[allow(clippy::expect_used)]
-static PUNCT_SYMBOL_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[\p{P}\p{S}]+$").expect("valid regex"));
+static PUNCT_SYMBOL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[\p{P}\p{S}]+$").expect("valid regex"));
 
 #[inline]
 fn contains_hiragana_katakana(s: &str) -> bool {
