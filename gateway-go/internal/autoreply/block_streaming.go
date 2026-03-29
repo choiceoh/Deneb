@@ -58,11 +58,22 @@ func (c *BlockCoalescer) Flush() []StreamBlock {
 	}
 
 	// Simple block detection: split on code fences.
+	// Use IndexByte scanning instead of strings.Split to avoid allocating a
+	// []string for every Flush call (which is invoked on every streamed chunk).
 	var blocks []StreamBlock
-	lines := strings.Split(text, "\n")
 	var current strings.Builder
+	remaining := text
 
-	for _, line := range lines {
+	for len(remaining) > 0 {
+		var line string
+		if idx := strings.IndexByte(remaining, '\n'); idx >= 0 {
+			line = remaining[:idx]
+			remaining = remaining[idx+1:]
+		} else {
+			line = remaining
+			remaining = ""
+		}
+
 		trimmed := strings.TrimSpace(line)
 
 		// Detect code fence start/end.

@@ -155,28 +155,47 @@ func splitMediaFromOutput(raw string) (text string, mediaURLs []string, mediaURL
 		fSpans = parseFenceSpans(trimmedRaw)
 	}
 
-	lines := strings.Split(trimmedRaw, "\n")
-	var keptLines []string
+	// Use IndexByte scanning + strings.Builder to avoid allocating a []string
+	// (from Split) and a second string (from Join) for every invocation.
+	var out strings.Builder
+	out.Grow(len(trimmedRaw))
 	lineOffset := 0
+	remaining := trimmedRaw
 
-	for _, line := range lines {
+	for len(remaining) > 0 {
+		var line string
+		if idx := strings.IndexByte(remaining, '\n'); idx >= 0 {
+			line = remaining[:idx]
+			remaining = remaining[idx+1:]
+		} else {
+			line = remaining
+			remaining = ""
+		}
+
+		keepLine := func(l string) {
+			if out.Len() > 0 {
+				out.WriteByte('\n')
+			}
+			out.WriteString(l)
+		}
+
 		// Skip MEDIA extraction inside fenced code blocks.
 		if hasFenceMarkers && isInsideFence(fSpans, lineOffset) {
-			keptLines = append(keptLines, line)
+			keepLine(line)
 			lineOffset += len(line) + 1
 			continue
 		}
 
 		trimmedStart := strings.TrimLeft(line, " \t")
 		if !strings.HasPrefix(strings.ToUpper(trimmedStart), "MEDIA:") {
-			keptLines = append(keptLines, line)
+			keepLine(line)
 			lineOffset += len(line) + 1
 			continue
 		}
 
 		matches := mediaTokenRe.FindAllStringSubmatch(line, -1)
 		if len(matches) == 0 {
-			keptLines = append(keptLines, line)
+			keepLine(line)
 			lineOffset += len(line) + 1
 			continue
 		}
@@ -212,18 +231,18 @@ func splitMediaFromOutput(raw string) (text string, mediaURLs []string, mediaURL
 			cleanedLine := mediaTokenRe.ReplaceAllString(line, "")
 			cleanedLine = strings.TrimSpace(cleanedLine)
 			if cleanedLine != "" {
-				keptLines = append(keptLines, cleanedLine)
+				keepLine(cleanedLine)
 			}
 		} else if isLikelyLocalPath(strings.TrimSpace(strings.SplitN(trimmedStart, ":", 2)[1])) {
 			// Strip MEDIA: lines with local paths even when invalid.
 			// They should never leak as visible text.
 		} else {
-			keptLines = append(keptLines, line)
+			keepLine(line)
 		}
 		lineOffset += len(line) + 1
 	}
 
-	cleanedText := strings.Join(keptLines, "\n")
+	cleanedText := out.String()
 	cleanedText = strings.TrimSpace(cleanedText)
 	// Collapse multiple newlines.
 	for strings.Contains(cleanedText, "\n\n\n") {
