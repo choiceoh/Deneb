@@ -286,6 +286,10 @@ func executeAgentRun(
 		maxTokens = defaultMaxTokens
 	}
 
+	// RunCache lives for the entire agent run (across all turns) and caches
+	// idempotent tool results (find, tree). Invalidated on mutation tools.
+	runCache := NewRunCache()
+
 	cfg := AgentConfig{
 		MaxTurns:  defaultMaxTurns,
 		Timeout:   defaultAgentTimeout,
@@ -296,8 +300,11 @@ func executeAgentRun(
 		APIType:   apiType,
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
+		// RunCache is injected once and persists across turns.
 		OnTurnInit: func(ctx context.Context) context.Context {
-			return WithTurnContext(ctx, NewTurnContext())
+			ctx = WithTurnContext(ctx, NewTurnContext())
+			ctx = WithRunCache(ctx, runCache)
+			return ctx
 		},
 	}
 

@@ -18,6 +18,8 @@ const (
 	ctxKeyTurnContext
 	// ctxKeyMaxUploadBytes stores the channel-specific file upload size limit.
 	ctxKeyMaxUploadBytes
+	// ctxKeyRunCache stores the *RunCache for cross-turn result caching within a run.
+	ctxKeyRunCache
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -86,4 +88,15 @@ func WithTurnContext(ctx context.Context, tc *TurnContext) context.Context {
 func TurnContextFromContext(ctx context.Context) *TurnContext {
 	tc, _ := ctx.Value(ctxKeyTurnContext).(*TurnContext)
 	return tc
+}
+
+// WithRunCache attaches a RunCache to the context for cross-turn result caching.
+func WithRunCache(ctx context.Context, rc *RunCache) context.Context {
+	return context.WithValue(ctx, ctxKeyRunCache, rc)
+}
+
+// RunCacheFromContext extracts the RunCache from a context.
+func RunCacheFromContext(ctx context.Context) *RunCache {
+	rc, _ := ctx.Value(ctxKeyRunCache).(*RunCache)
+	return rc
 }
