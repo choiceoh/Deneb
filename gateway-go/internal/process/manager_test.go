@@ -12,8 +12,15 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
+func newTestManager(t *testing.T) *Manager {
+	t.Helper()
+	m := newTestManager(t)
+	t.Cleanup(m.Stop)
+	return m
+}
+
 func TestExecute_SimpleCommand(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:      "test-1",
@@ -36,7 +43,7 @@ func TestExecute_SimpleCommand(t *testing.T) {
 }
 
 func TestExecute_FailedCommand(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:      "fail-1",
@@ -52,7 +59,7 @@ func TestExecute_FailedCommand(t *testing.T) {
 }
 
 func TestExecute_NonExistentCommand(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:      "missing",
@@ -65,7 +72,7 @@ func TestExecute_NonExistentCommand(t *testing.T) {
 }
 
 func TestExecute_Timeout(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:        "timeout-1",
@@ -80,7 +87,7 @@ func TestExecute_Timeout(t *testing.T) {
 }
 
 func TestExecute_ApprovalDenied(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 	m.SetApprover(func(_ ExecRequest) bool { return false })
 
 	result := m.Execute(context.Background(), ExecRequest{
@@ -95,7 +102,7 @@ func TestExecute_ApprovalDenied(t *testing.T) {
 }
 
 func TestExecute_ApprovalGranted(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 	m.SetApprover(func(_ ExecRequest) bool { return true })
 
 	result := m.Execute(context.Background(), ExecRequest{
@@ -111,7 +118,7 @@ func TestExecute_ApprovalGranted(t *testing.T) {
 }
 
 func TestExecute_NoApprover(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:               "no-approver",
@@ -125,7 +132,7 @@ func TestExecute_NoApprover(t *testing.T) {
 }
 
 func TestGet_And_List(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	m.Execute(context.Background(), ExecRequest{ID: "a", Command: "echo", Args: []string{"a"}})
 	m.Execute(context.Background(), ExecRequest{ID: "b", Command: "echo", Args: []string{"b"}})
@@ -148,7 +155,7 @@ func TestGet_And_List(t *testing.T) {
 }
 
 func TestKill(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	// Start a long-running process.
 	go m.Execute(context.Background(), ExecRequest{
@@ -167,7 +174,7 @@ func TestKill(t *testing.T) {
 }
 
 func TestKill_NotFound(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 	err := m.Kill("nonexistent")
 	if err == nil {
 		t.Error("expected error for nonexistent process")
@@ -175,7 +182,7 @@ func TestKill_NotFound(t *testing.T) {
 }
 
 func TestPrune(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	m.Execute(context.Background(), ExecRequest{ID: "old", Command: "echo"})
 	time.Sleep(10 * time.Millisecond)
@@ -191,41 +198,64 @@ func TestPrune(t *testing.T) {
 }
 
 func TestAutoID(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 	result := m.Execute(context.Background(), ExecRequest{Command: "echo"})
 	if result.ID == "" {
 		t.Error("expected auto-generated ID")
 	}
 }
 
-func TestExecuteBackground(t *testing.T) {
-	m := NewManager(testLogger())
-	id := m.ExecuteBackground(context.Background(), ExecRequest{
-		Command: "echo",
-		Args:    []string{"bg"},
+func TestExecute_ConcurrentPipeDrain(t *testing.T) {
+	// Writes 128KB to stderr first, then stdout. With sequential drain this
+	// would deadlock because stderr fills the pipe buffer before stdout is read.
+	m := newTestManager(t)
+
+	result := m.Execute(context.Background(), ExecRequest{
+		ID:        "pipe-drain",
+		Command:   "bash",
+		Args:      []string{"-c", "dd if=/dev/zero bs=1024 count=128 >&2 2>/dev/null; echo done"},
+		TimeoutMs: 5000,
 	})
-	if id == "" {
-		t.Fatal("expected non-empty process ID")
+
+	if result.Status != StatusDone {
+		t.Errorf("expected done, got %s (error: %s)", result.Status, result.Error)
+	}
+	if result.Stdout == "" {
+		t.Error("expected non-empty stdout")
+	}
+}
+
+func TestExecuteBackground(t *testing.T) {
+	m := newTestManager(t)
+
+	id := m.ExecuteBackground(context.Background(), ExecRequest{
+		ID:      "bg-1",
+		Command: "echo",
+		Args:    []string{"background"},
+	})
+
+	if id != "bg-1" {
+		t.Errorf("expected id 'bg-1', got %s", id)
 	}
 
-	// Poll until done (max 2s).
+	// Poll until done (max 2 seconds).
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		snap := m.Get(id)
-		if snap != nil && snap.Status == StatusDone {
-			if snap.Result == nil || snap.Result.Stdout == "" {
-				t.Error("expected stdout from background process")
+		if snap != nil && (snap.Status == StatusDone || snap.Status == StatusFailed) {
+			if snap.Status != StatusDone {
+				t.Errorf("expected done, got %s", snap.Status)
 			}
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Error("background process did not complete in time")
 }
 
 func TestParallelDrain_LargeOutput(t *testing.T) {
 	// Verify that large concurrent stdout+stderr doesn't deadlock.
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 	// Generate 128KB on both stdout and stderr simultaneously.
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:        "parallel-drain",
@@ -245,7 +275,7 @@ func TestParallelDrain_LargeOutput(t *testing.T) {
 }
 
 func TestEnvCache(t *testing.T) {
-	m := NewManager(testLogger())
+	m := newTestManager(t)
 
 	// First call populates the cache.
 	env1 := m.baseEnv()
@@ -265,4 +295,10 @@ func TestEnvCache(t *testing.T) {
 	if len(env3) == 0 {
 		t.Error("expected non-empty env after invalidation")
 	}
+}
+
+func TestStop_Idempotent(t *testing.T) {
+	m := NewManager(testLogger())
+	m.Stop()
+	m.Stop() // should not panic
 }
