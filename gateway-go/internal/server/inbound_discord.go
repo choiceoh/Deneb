@@ -768,6 +768,54 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 		agentMessage = "테스트 실패를 수정해 주세요."
 	case "details":
 		agentMessage = "마지막 실행 결과를 자세히 보여주세요."
+	case "mergecheck":
+		// Check for merge conflicts inline — run git merge --no-commit --no-ff
+		// then abort to leave worktree clean.
+		if ws := resolveDiscordWorkspaceDir(p, sessionKey); ws != "" {
+			branch := runGitCmd(ws, "rev-parse", "--abbrev-ref", "HEAD")
+			// Fetch latest remote refs.
+			runCmdWithTimeout(ws, 30*time.Second, "git", "fetch", "--all")
+			// Try a dry-run merge against the default branch.
+			target := detectDefaultBranch(ws)
+			mergeOut := runCmdWithTimeout(ws, 15*time.Second, "git", "merge", "--no-commit", "--no-ff", target)
+			conflictFiles := runGitCmd(ws, "diff", "--name-only", "--diff-filter=U")
+			hasConflict := strings.Contains(mergeOut, "conflict") ||
+				strings.Contains(mergeOut, "CONFLICT") ||
+				conflictFiles != ""
+			// Always abort the trial merge.
+			runGitCmd(ws, "merge", "--abort")
+
+			embed := discord.FormatMergeConflictCheckEmbed(hasConflict, conflictFiles, branch, target)
+			var buttons []discord.Component
+			if hasConflict {
+				buttons = discord.MergeConflictButtons(sessionKey)
+			}
+			p.sendDiscordEmbedWithButtons(interaction.ChannelID, []discord.Embed{embed}, buttons)
+		}
+		return
+	case "mergeabort":
+		// Abort an in-progress merge.
+		if ws := resolveDiscordWorkspaceDir(p, sessionKey); ws != "" {
+			abortOut := runGitCmd(ws, "merge", "--abort")
+			if strings.Contains(abortOut, "error") || strings.Contains(abortOut, "fatal") {
+				p.sendDiscordEmbed(interaction.ChannelID, []discord.Embed{{
+					Title:       "❌ 병합 중단 실패",
+					Description: "진행 중인 병합이 없거나 이미 중단되었습니다.",
+					Color:       discord.ColorError,
+				}})
+			} else {
+				p.sendDiscordEmbed(interaction.ChannelID, []discord.Embed{{
+					Title:       "⛔ 병합 중단 완료",
+					Description: "병합을 중단하고 이전 상태로 되돌렸습니다.",
+					Color:       discord.ColorSuccess,
+				}})
+			}
+		}
+		return
+	case "mergefix":
+		agentMessage = "현재 병합 충돌을 확인하고 자동으로 해결해 주세요. 충돌이 있는 파일들을 분석하고, 양쪽 변경 사항을 적절히 통합해서 충돌 마커를 제거해 주세요. 해결이 끝나면 결과를 요약해 주세요."
+	case "mergedetail":
+		agentMessage = "현재 병합 충돌 상태를 자세히 분석해 주세요. 충돌이 있는 파일 목록, 각 파일의 충돌 내용, 그리고 양쪽 브랜치에서 어떤 변경이 있었는지 설명해 주세요."
 	case "push":
 		// Push current branch to remote — handle inline for quick feedback.
 		if ws := resolveDiscordWorkspaceDir(p, sessionKey); ws != "" {
@@ -1001,6 +1049,27 @@ func runCmdWithTimeout(dir string, timeout time.Duration, name string, args ...s
 		return ""
 	}
 	return strings.TrimSpace(out.String())
+}
+
+// detectDefaultBranch returns the default branch name (main or master)
+// by checking the remote HEAD. Falls back to "main".
+func detectDefaultBranch(dir string) string {
+	ref := runGitCmd(dir, "symbolic-ref", "refs/remotes/origin/HEAD")
+	if ref != "" {
+		// e.g. "refs/remotes/origin/main" → "origin/main"
+		parts := strings.SplitN(ref, "refs/remotes/", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+	}
+	// Fallback: check if origin/main exists.
+	if out := runGitCmd(dir, "rev-parse", "--verify", "origin/main"); out != "" {
+		return "origin/main"
+	}
+	if out := runGitCmd(dir, "rev-parse", "--verify", "origin/master"); out != "" {
+		return "origin/master"
+	}
+	return "origin/main"
 }
 
 // detectProjectType determines the project type from marker files.

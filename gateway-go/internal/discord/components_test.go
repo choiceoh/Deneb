@@ -67,6 +67,55 @@ func TestParseButtonAction(t *testing.T) {
 	}
 }
 
+func TestMergeConflictButtons(t *testing.T) {
+	components := MergeConflictButtons("discord:thread:999")
+	if len(components) != 1 {
+		t.Fatalf("expected 1 action row, got %d", len(components))
+	}
+	row := components[0]
+	if row.Type != ComponentActionRow {
+		t.Errorf("expected ActionRow type %d, got %d", ComponentActionRow, row.Type)
+	}
+	if len(row.Components) != 3 {
+		t.Fatalf("expected 3 buttons, got %d", len(row.Components))
+	}
+
+	expectedPrefixes := []string{"mergefix:", "mergedetail:", "mergeabort:"}
+	expectedStyles := []int{ButtonPrimary, ButtonSecondary, ButtonDanger}
+	for i, btn := range row.Components {
+		if btn.Type != ComponentButton {
+			t.Errorf("button %d: expected type %d, got %d", i, ComponentButton, btn.Type)
+		}
+		if !strings.HasPrefix(btn.CustomID, expectedPrefixes[i]) {
+			t.Errorf("button %d: expected prefix %q, got %q", i, expectedPrefixes[i], btn.CustomID)
+		}
+		if btn.Style != expectedStyles[i] {
+			t.Errorf("button %d: expected style %d, got %d", i, expectedStyles[i], btn.Style)
+		}
+		if !strings.Contains(btn.CustomID, "discord:thread:999") {
+			t.Errorf("button %d: expected session key in custom_id, got %q", i, btn.CustomID)
+		}
+	}
+}
+
+func TestMergeConflictCheckButtons(t *testing.T) {
+	components := MergeConflictCheckButtons("discord:456")
+	if len(components) != 1 {
+		t.Fatalf("expected 1 action row, got %d", len(components))
+	}
+	row := components[0]
+	if len(row.Components) != 1 {
+		t.Fatalf("expected 1 button, got %d", len(row.Components))
+	}
+	btn := row.Components[0]
+	if !strings.HasPrefix(btn.CustomID, "mergecheck:") {
+		t.Errorf("expected mergecheck prefix, got %q", btn.CustomID)
+	}
+	if btn.Style != ButtonPrimary {
+		t.Errorf("expected Primary style, got %d", btn.Style)
+	}
+}
+
 func TestConfirmButtons(t *testing.T) {
 	components := ConfirmButtons("discord:123", "push")
 	if len(components) != 1 {

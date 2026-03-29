@@ -425,6 +425,83 @@ func countDiffLines(diff string) (added, removed int) {
 	return
 }
 
+// FormatMergeConflictEmbed builds a warning embed listing conflicting files.
+// conflictFiles is the output of `git diff --name-only --diff-filter=U`.
+func FormatMergeConflictEmbed(conflictFiles, currentBranch, mergeBranch string) Embed {
+	conflictFiles = strings.TrimSpace(conflictFiles)
+
+	var fields []EmbedField
+	if conflictFiles != "" {
+		files := strings.Split(conflictFiles, "\n")
+		var fileLines []string
+		for i, f := range files {
+			f = strings.TrimSpace(f)
+			if f == "" {
+				continue
+			}
+			fileLines = append(fileLines, fmt.Sprintf("`%s`", f))
+			if i >= 14 {
+				remaining := len(files) - 15
+				if remaining > 0 {
+					fileLines = append(fileLines, fmt.Sprintf("외 %d개 파일", remaining))
+				}
+				break
+			}
+		}
+		fields = append(fields, EmbedField{
+			Name:  fmt.Sprintf("⚠️ 충돌 파일 (%d개)", len(files)),
+			Value: truncate(strings.Join(fileLines, "\n"), embedFieldValueLimit),
+		})
+	}
+
+	if currentBranch != "" || mergeBranch != "" {
+		branchInfo := ""
+		if currentBranch != "" {
+			branchInfo = "`" + currentBranch + "`"
+		}
+		if mergeBranch != "" {
+			if branchInfo != "" {
+				branchInfo += " ← "
+			}
+			branchInfo += "`" + mergeBranch + "`"
+		}
+		fields = append(fields, EmbedField{
+			Name: "🌿 브랜치", Value: branchInfo, Inline: true,
+		})
+	}
+
+	desc := "같은 파일을 서로 다르게 수정하여 자동 병합이 실패했습니다.\n\"충돌 해결\" 버튼을 누르면 에이전트가 자동으로 해결합니다."
+
+	return Embed{
+		Title:       "⚠️ 병합 충돌 발견",
+		Description: desc,
+		Color:       ColorWarning,
+		Fields:      fields,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// FormatMergeConflictCheckEmbed builds an embed showing merge conflict check results.
+func FormatMergeConflictCheckEmbed(hasConflict bool, conflictFiles, currentBranch, targetBranch string) Embed {
+	if !hasConflict {
+		desc := "충돌 없이 병합할 수 있습니다."
+		fields := []EmbedField{}
+		if currentBranch != "" && targetBranch != "" {
+			fields = append(fields, EmbedField{
+				Name: "🌿 브랜치", Value: fmt.Sprintf("`%s` ← `%s`", currentBranch, targetBranch), Inline: true,
+			})
+		}
+		return Embed{
+			Title:       "✅ 충돌 없음",
+			Description: desc,
+			Color:       ColorSuccess,
+			Fields:      fields,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+	return FormatMergeConflictEmbed(conflictFiles, currentBranch, targetBranch)
+}
+
 // FormatAgentSummaryEmbed builds a summary embed shown after an agent run completes.
 // Includes tool execution stats and a brief result preview.
 func FormatAgentSummaryEmbed(toolsUsed []string, totalDurationMs int64, replyPreview string) Embed {

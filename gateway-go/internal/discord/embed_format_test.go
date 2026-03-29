@@ -174,6 +174,43 @@ func TestFormatProgressEmbed_ParallelGroup(t *testing.T) {
 	}
 }
 
+func TestFormatMergeConflictEmbed(t *testing.T) {
+	e := FormatMergeConflictEmbed("main.go\nserver.go\nconfig.go", "feature", "main")
+	if e.Color != ColorWarning {
+		t.Errorf("expected warning color %#x, got %#x", ColorWarning, e.Color)
+	}
+	if !strings.Contains(e.Title, "충돌") {
+		t.Errorf("expected '충돌' in title, got %q", e.Title)
+	}
+	if len(e.Fields) < 2 {
+		t.Errorf("expected at least 2 fields (files + branch), got %d", len(e.Fields))
+	}
+	// Check file count in field name.
+	if !strings.Contains(e.Fields[0].Name, "3") {
+		t.Errorf("expected 3 conflict files in field name, got %q", e.Fields[0].Name)
+	}
+}
+
+func TestFormatMergeConflictCheckEmbed_NoConflict(t *testing.T) {
+	e := FormatMergeConflictCheckEmbed(false, "", "feature", "main")
+	if e.Color != ColorSuccess {
+		t.Errorf("expected success color, got %#x", e.Color)
+	}
+	if !strings.Contains(e.Title, "없음") {
+		t.Errorf("expected '없음' in title, got %q", e.Title)
+	}
+}
+
+func TestFormatMergeConflictCheckEmbed_HasConflict(t *testing.T) {
+	e := FormatMergeConflictCheckEmbed(true, "file.go", "feature", "main")
+	if e.Color != ColorWarning {
+		t.Errorf("expected warning color, got %#x", e.Color)
+	}
+	if !strings.Contains(e.Title, "충돌") {
+		t.Errorf("expected '충돌' in title, got %q", e.Title)
+	}
+}
+
 func TestParseDiffSummary(t *testing.T) {
 	files, ins, del := parseDiffSummary("3 files changed, 10 insertions(+), 2 deletions(-)")
 	if files != 3 || ins != 10 || del != 2 {
