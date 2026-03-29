@@ -1,0 +1,12 @@
+// hooks.go — StreamHooks callbacks for agent streaming events.
+package agent
+
+// StreamHooks contains optional callbacks for agent streaming events.
+// All fields are optional — nil callbacks are silently skipped.
+type StreamHooks struct {
+	OnTextDelta  func(text string)                              // text delta streamed from LLM
+	OnThinking   func()                                        // reasoning/thinking delta received
+	OnToolStart  func(name string)                             // tool invocation about to execute
+	OnToolEmit   func(name, toolUseID string)                  // tool start broadcast (name + ID for streaming)
+	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
+}

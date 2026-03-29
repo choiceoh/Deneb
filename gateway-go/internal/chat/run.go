@@ -461,6 +461,11 @@ func executeAgentRun(
 		Tools:     tools,
 		MaxTokens: maxTokens,
 		APIType:   apiType,
+		// Inject a fresh TurnContext at the start of each turn so that tools
+		// executing in parallel within the same turn can share results via $ref.
+		OnTurnInit: func(ctx context.Context) context.Context {
+			return WithTurnContext(ctx, NewTurnContext())
+		},
 	}
 
 	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")

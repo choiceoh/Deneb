@@ -1,0 +1,18 @@
+// client.go — LLMStreamer interface for the agent executor.
+// *llm.Client satisfies this interface; it can also be implemented by test doubles.
+package agent
+
+import (
+	"context"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+)
+
+// LLMStreamer abstracts the streaming LLM API used by RunAgent.
+// *llm.Client implements this interface directly.
+type LLMStreamer interface {
+	// StreamChat calls the Anthropic-compatible streaming chat API.
+	StreamChat(ctx context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error)
+	// StreamChatOpenAI calls the OpenAI-compatible streaming chat API.
+	StreamChatOpenAI(ctx context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error)
+}
