@@ -29,7 +29,6 @@ func NewRustBackend(cfg RustBackendConfig) *RustBackend {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	cfg.Logger.Info("vega: using Rust backend (FFI)")
 	return &RustBackend{logger: cfg.Logger}
 }
 

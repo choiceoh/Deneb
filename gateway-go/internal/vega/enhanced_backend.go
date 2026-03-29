@@ -52,7 +52,7 @@ func NewEnhancedBackend(cfg EnhancedBackendConfig) *EnhancedBackend {
 		Logger: cfg.Logger,
 	})
 
-	cfg.Logger.Info("vega: using EnhancedBackend",
+	cfg.Logger.Info("vega: FFI ready (EnhancedBackend)",
 		"embedding", cfg.Embedder != nil,
 		"reranking", reranker != nil,
 	)
