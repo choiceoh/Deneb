@@ -250,12 +250,18 @@ func (s *Server) wireTelegramChatHandler() {
 // Returns nil if Telegram is not configured.
 func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 	snapshot, err := config.LoadConfigFromDefaultPath()
-	if err != nil || !snapshot.Valid {
+	if err != nil {
+		slog.Warn("telegram config: failed to load config", "error", err)
+		return nil
+	}
+	if snapshot == nil || !snapshot.Valid {
+		slog.Warn("telegram config: snapshot invalid or nil")
 		return nil
 	}
 
 	// Extract channels.telegram from raw config JSON.
 	if snapshot.Raw == "" {
+		slog.Warn("telegram config: snapshot.Raw is empty")
 		return nil
 	}
 
@@ -265,7 +271,11 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 		} `json:"channels"`
 	}
 	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		slog.Warn("telegram config: JSON unmarshal failed", "error", err)
 		return nil
+	}
+	if root.Channels.Telegram == nil {
+		slog.Warn("telegram config: channels.telegram section not found in config")
 	}
 	return root.Channels.Telegram
 }
