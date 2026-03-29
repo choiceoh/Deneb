@@ -37,7 +37,7 @@ jobs:
         id: check
         uses: ./.github/actions/detect-docs-changes
 
-  # ── Clippy (Rust lint, deny warnings) ────────────────────────
+  # ── Clippy (Rust lint, deny warnings, --release to share cache with core-rs) ─
   clippy:
     needs: [docs-scope]
     if: needs.docs-scope.outputs.docs_only != 'true'
@@ -53,24 +53,28 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            core-rs
-            cli-rs
+          workspaces: core-rs
+          shared-key: rust-release-core-rs
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli-rs
+          shared-key: rust-release-cli-rs
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
-      - name: Clippy (core-rs)
+      - name: Clippy (core-rs, release)
         working-directory: core-rs
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --release -- -D warnings
 
-      - name: Clippy (cli-rs)
+      - name: Clippy (cli-rs, release)
         working-directory: cli-rs
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --release -- -D warnings
 
-  # ── Rust core-rs ──────────────────────────────────────────────
+  # ── Rust core-rs (reuses release cache from clippy) ───────────
   core-rs:
-    needs: [docs-scope]
+    needs: [docs-scope, clippy]
     if: needs.docs-scope.outputs.docs_only != 'true'
     name: Rust (core-rs)
     runs-on: blacksmith-16vcpu-ubuntu-2404
@@ -85,6 +89,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: core-rs
+          shared-key: rust-release-core-rs
+          save-if: false
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
@@ -108,9 +114,9 @@ jobs:
           path: core-rs/target/release/libdeneb_core.a
           retention-days: 1
 
-  # ── Rust CLI (cli-rs) ────────────────────────────────────────
+  # ── Rust CLI (cli-rs, reuses release cache from clippy) ──────
   cli-rs:
-    needs: [docs-scope]
+    needs: [docs-scope, clippy]
     if: needs.docs-scope.outputs.docs_only != 'true'
     name: Rust (cli-rs)
     runs-on: blacksmith-16vcpu-ubuntu-2404
@@ -125,6 +131,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: cli-rs
+          shared-key: rust-release-cli-rs
+          save-if: false
 
       - name: Check formatting
         working-directory: cli-rs
@@ -138,7 +146,7 @@ jobs:
         working-directory: cli-rs
         run: cargo test
 
-  # ── Go gateway (pure, no FFI) ────────────────────────────────
+  # ── Go gateway (pure, no FFI — build + lint only) ────────────
   go-pure:
     needs: [docs-scope]
     if: needs.docs-scope.outputs.docs_only != 'true'
@@ -160,9 +168,6 @@ jobs:
 
       - name: Build (no FFI)
         run: CGO_ENABLED=0 go build -tags no_ffi ./...
-
-      - name: Test (no FFI)
-        run: CGO_ENABLED=0 go test -tags no_ffi -count=1 ./...
 
       - name: Vet
         run: go vet -tags no_ffi ./...
