@@ -9,15 +9,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
 const refWaitTimeout = 30 * time.Second
 
 // ToolExecutor executes a named tool with JSON input and returns the result.
-type ToolExecutor interface {
-	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
-}
+// Type alias — identical to agent.ToolExecutor; satisfies the unified interface.
+type ToolExecutor = agent.ToolExecutor
 
 // ToolFunc is an adapter to use ordinary functions as tool executors.
 type ToolFunc func(ctx context.Context, input json.RawMessage) (string, error)

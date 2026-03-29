@@ -1,18 +1,26 @@
 // runner_loop.go — Core LLM agent execution loop and memory management.
+//
+// DefaultAgentRunner wraps the unified agent.RunAgent executor with
+// autoreply-specific concerns: error recovery (transient HTTP, context
+// overflow, billing), model fallback, per-run memory management, and
+// ToolMeta tracking.  The core LLM loop logic lives in internal/agent/.
 package autoreply
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
 // AgentTurnConfig configures a single agent turn execution.
@@ -65,20 +73,11 @@ type AgentExecutor interface {
 	RunTurn(ctx context.Context, cfg AgentTurnConfig) (*AgentTurnResult, error)
 }
 
-// LLMClient abstracts the LLM HTTP API for the agent runner.
-type LLMClient interface {
-	// Chat sends a chat completion request and returns the response.
-	Chat(ctx context.Context, req AgentRunnerPayload) (*LLMResponse, error)
-	// ChatStream sends a streaming chat request and returns an event iterator.
-	ChatStream(ctx context.Context, req AgentRunnerPayload) (LLMStreamIterator, error)
-}
-
-// LLMResponse holds a non-streaming LLM response.
-type LLMResponse struct {
-	Content    string
-	ToolCalls  []ToolCall
-	Usage      session.TokenUsage
-	StopReason string // "end_turn", "tool_use", "max_tokens"
+// ToolExecutor runs tool calls and returns results.
+// Note: this interface uses a three-return signature (output, isError, error)
+// to distinguish tool-reported errors (isError=true) from executor failures.
+type ToolExecutor interface {
+	Execute(ctx context.Context, call ToolCall) (output string, isError bool, err error)
 }
 
 // ToolCall represents a tool invocation from the LLM.
@@ -86,29 +85,6 @@ type ToolCall struct {
 	ID    string         `json:"id"`
 	Name  string         `json:"name"`
 	Input map[string]any `json:"input"`
-}
-
-// LLMStreamIterator yields streaming events.
-type LLMStreamIterator interface {
-	// Next returns the next event, or nil when done.
-	Next() (*LLMStreamEvent, error)
-	// Close releases resources.
-	Close()
-}
-
-// LLMStreamEvent represents a single streaming event.
-type LLMStreamEvent struct {
-	Type       string              // "text", "tool_use_start", "tool_use_input", "tool_use_end", "thinking", "done"
-	Text       string              // for "text" events
-	ToolCall   *ToolCall           // for "tool_use_start"
-	ToolInput  string              // for "tool_use_input" (JSON delta)
-	Usage      *session.TokenUsage // for "done" events
-	StopReason string              // for "done" events
-}
-
-// ToolExecutor runs tool calls and returns results.
-type ToolExecutor interface {
-	Execute(ctx context.Context, call ToolCall) (output string, isError bool, err error)
 }
 
 // ExecHost represents where tools execute.
@@ -136,24 +112,24 @@ const (
 	ExecAskNever        ExecAsk = "never"
 )
 
-// DefaultAgentRunner implements AgentExecutor with the full LLM loop.
+// DefaultAgentRunner implements AgentExecutor using the unified agent.RunAgent loop.
 type DefaultAgentRunner struct {
-	llm          LLMClient
-	tools        ToolExecutor
-	logger       *slog.Logger
-	maxTurns     int
-	maxToolCalls int
-	// Error recovery state.
-	onSessionReset func(sessionKey, reason string) // callback for session reset
+	llm      agent.LLMStreamer
+	apiType  string // "anthropic" or "openai" (default)
+	tools    ToolExecutor
+	logger   *slog.Logger
+	maxTurns int
+	// Error recovery callback: called on context overflow or role ordering errors.
+	onSessionReset func(sessionKey, reason string)
 }
 
 // AgentRunnerConfig configures the default agent runner.
 type AgentRunnerConfig struct {
-	LLM          LLMClient
-	Tools        ToolExecutor
-	Logger       *slog.Logger
-	MaxTurns     int // max LLM round-trips (default 25)
-	MaxToolCalls int // max total tool calls per turn (default 100)
+	LLM      agent.LLMStreamer
+	APIType  string // "anthropic" or "openai" (default)
+	Tools    ToolExecutor
+	Logger   *slog.Logger
+	MaxTurns int // max LLM round-trips (default 25)
 }
 
 // NewDefaultAgentRunner creates a new agent runner.
@@ -162,20 +138,17 @@ func NewDefaultAgentRunner(cfg AgentRunnerConfig) *DefaultAgentRunner {
 	if maxTurns <= 0 {
 		maxTurns = 25
 	}
-	maxToolCalls := cfg.MaxToolCalls
-	if maxToolCalls <= 0 {
-		maxToolCalls = 100
-	}
 	return &DefaultAgentRunner{
-		llm:          cfg.LLM,
-		tools:        cfg.Tools,
-		logger:       cfg.Logger,
-		maxTurns:     maxTurns,
-		maxToolCalls: maxToolCalls,
+		llm:      cfg.LLM,
+		apiType:  cfg.APIType,
+		tools:    cfg.Tools,
+		logger:   cfg.Logger,
+		maxTurns: maxTurns,
 	}
 }
 
-// RunTurn executes the full agent loop: LLM call → tool execution → repeat.
+// RunTurn executes the full agent loop via agent.RunAgent, wrapping it with
+// error recovery, model fallback, memory management, and ToolMeta tracking.
 func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (*AgentTurnResult, error) {
 	startedAt := time.Now()
 	result := &AgentTurnResult{
@@ -192,7 +165,14 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
-	// Build initial memory with system prompt and user message.
+	// Check for immediate cancellation (covers TestDefaultAgentRunner_Timeout).
+	if runCtx.Err() != nil {
+		result.WasAborted = true
+		result.DurationMs = time.Since(startedAt).Milliseconds()
+		return result, nil
+	}
+
+	// Build initial message history.
 	memory := NewAgentRunnerMemory(cfg.ContextTokens)
 	if cfg.SystemPrompt != "" {
 		memory.Append(AgentMessage{Role: "system", Content: cfg.SystemPrompt})
@@ -201,216 +181,275 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 		memory.Append(AgentMessage{Role: "user", Content: cfg.Message})
 	}
 
-	// Build tools list (from ToolExecutor — could be extended to support
-	// tool filtering via cfg.SkillFilter).
-	var tools []AgentToolDef
-	// Tools are discovered from the ToolExecutor at call time.
-
-	reminderGuard := NewReminderGuard(3)
-	totalToolCalls := 0
-	var allPayloads []types.ReplyPayload
-
-	// Agent execution loop: send to LLM, process tool calls, repeat.
-	for turn := 0; turn < r.maxTurns; turn++ {
-		result.TurnCount = turn + 1
-
-		// Check context cancellation.
-		if runCtx.Err() != nil {
-			result.WasAborted = true
-			break
-		}
-
-		// Check if memory needs compaction.
-		if memory.UsedTokens() > memory.maxTokens*8/10 {
-			removed := memory.Compact()
-			if removed > 0 {
-				result.CompactedAt = time.Now().UnixMilli()
-				r.logger.Debug("memory compacted", "removed", removed, "session", cfg.SessionKey)
-			}
-		}
-
-		// Build LLM request.
-		payload := BuildAgentPayload(cfg, memory.History(), tools)
-
-		// Call LLM (streaming).
-		var response *LLMResponse
-		var llmErr error
-
-		if r.llm == nil {
-			llmErr = fmt.Errorf("no LLM client configured")
-		} else {
-			response, llmErr = r.llm.Chat(runCtx, payload)
-		}
-
-		if llmErr != nil {
-			errMsg := llmErr.Error()
-
-			// 1. Transient HTTP retry (502/503/521/429 → wait 2.5s, retry once).
-			if IsTransientHTTPError(errMsg) && turn == 0 {
-				r.logger.Warn("transient HTTP error, retrying",
-					"error", errMsg, "session", cfg.SessionKey)
-				select {
-				case <-runCtx.Done():
-					result.WasAborted = true
-					break
-				case <-time.After(TransientRetryDelayMs * time.Millisecond):
-				}
-				response, llmErr = r.llm.Chat(runCtx, payload)
-			}
-
-			// 2. Context overflow → auto-recovery.
-			if llmErr != nil && IsContextOverflowError(llmErr.Error()) {
-				if r.onSessionReset != nil {
-					r.onSessionReset(cfg.SessionKey, "context_overflow")
-				}
-				result.Error = nil
-				allPayloads = append(allPayloads, types.ReplyPayload{
-					Text:    ContextOverflowMessage,
-					IsError: true,
-				})
-				break
-			}
-
-			// 3. Billing error → specific message.
-			if llmErr != nil && IsBillingError(llmErr.Error()) {
-				result.Error = nil
-				allPayloads = append(allPayloads, types.ReplyPayload{
-					Text:    BillingErrorMessage,
-					IsError: true,
-				})
-				break
-			}
-
-			// 4. Role ordering → session reset.
-			if llmErr != nil && IsRoleOrderingError(llmErr.Error()) {
-				if r.onSessionReset != nil {
-					r.onSessionReset(cfg.SessionKey, "role_ordering")
-				}
-				result.Error = nil
-				allPayloads = append(allPayloads, types.ReplyPayload{
-					Text:    RoleOrderingMessage,
-					IsError: true,
-				})
-				break
-			}
-
-			// 5. Try fallback models if available.
-			if llmErr != nil && len(cfg.FallbackModels) > 0 && turn == 0 {
-				for i, fallback := range cfg.FallbackModels {
-					r.logger.Info("trying fallback model",
-						"model", fallback, "attempt", i+1, "session", cfg.SessionKey)
-					parts := splitProviderModel(fallback)
-					if parts[0] != "" {
-						cfg.Provider = parts[0]
-					}
-					cfg.Model = parts[1]
-					payload.Model = cfg.Model
-					result.FallbackActive = true
-					result.FallbackAttempts = append(result.FallbackAttempts, model.FallbackAttempt{
-						Provider: cfg.Provider,
-						Model:    cfg.Model,
-						Error:    llmErr.Error(),
-					})
-
-					response, llmErr = r.llm.Chat(runCtx, payload)
-					if llmErr == nil {
-						result.ModelUsed = cfg.Model
-						result.ProviderUsed = cfg.Provider
-						break
-					}
-				}
-			}
-
-			// 6. Final error — no recovery possible.
-			if llmErr != nil {
-				errText := llmErr.Error()
-				if IsTransientHTTPError(errText) {
-					errText = "⚠️ Provider temporarily unavailable. Please try again."
-				}
-				result.Error = llmErr
-				allPayloads = append(allPayloads, types.ReplyPayload{
-					Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(errText, ".")),
-					IsError: true,
-				})
-				break
-			}
-		}
-
-		// Accumulate usage.
-		result.TokensUsed.AddUsage(response.Usage)
-
-		// Process response content.
-		if response.Content != "" {
-			memory.Append(AgentMessage{Role: "assistant", Content: response.Content})
-			result.OutputText += response.Content
-		}
-
-		// No tool calls → we're done.
-		if len(response.ToolCalls) == 0 || response.StopReason == "end_turn" {
-			if response.Content != "" {
-				allPayloads = append(allPayloads, types.ReplyPayload{Text: response.Content})
-			}
-			break
-		}
-
-		// Process tool calls.
-		if response.StopReason == "tool_use" && len(response.ToolCalls) > 0 {
-			for _, call := range response.ToolCalls {
-				totalToolCalls++
-				if totalToolCalls > r.maxToolCalls {
-					r.logger.Warn("max tool calls exceeded",
-						"limit", r.maxToolCalls, "session", cfg.SessionKey)
-					// Inject a reminder to the agent.
-					if reminderGuard.TryRemind() {
-						memory.Append(AgentMessage{
-							Role:    "user",
-							Content: "[System: Tool call limit reached. Please provide your final response.]",
-						})
-					}
-					break
-				}
-
-				// Execute the tool.
-				toolStart := time.Now()
-				output, isError, toolErr := r.executeTool(runCtx, call, cfg)
-				toolDuration := time.Since(toolStart).Milliseconds()
-
-				result.ToolMeta.Record(media.ToolInvocation{
-					Name:     call.Name,
-					ID:       call.ID,
-					Input:    formatToolInput(call.Input),
-					Output:   truncateToolOutput(output, 2000),
-					IsError:  isError || toolErr != nil,
-					Duration: toolDuration,
-				})
-
-				if toolErr != nil {
-					output = fmt.Sprintf("Error: %s", toolErr.Error())
-					isError = true
-				}
-
-				// Add tool result to conversation.
-				toolResult := buildToolResultMessage(call.ID, output, isError)
-				memory.Append(toolResult)
-
-				// Emit tool result payload for block streaming.
-				if output != "" {
-					allPayloads = append(allPayloads, types.ReplyPayload{
-						Text:    output,
-						IsError: isError,
-					})
-				}
-			}
+	// Auto-compact if we're already over budget before the run starts.
+	if memory.UsedTokens() > memory.maxTokens*8/10 {
+		if removed := memory.Compact(); removed > 0 {
+			result.CompactedAt = time.Now().UnixMilli()
 		}
 	}
 
-	result.Payloads = allPayloads
+	// Build the agent.ToolExecutor adapter so the unified executor can call tools.
+	var toolExec agent.ToolExecutor
+	if r.tools != nil {
+		toolExec = &autoreplyToolAdapter{runner: r, cfg: cfg, meta: result.ToolMeta}
+	}
+
+	// Build thinking config from ThinkLevel.
+	var thinking *llm.ThinkingConfig
+	switch cfg.ThinkLevel {
+	case types.ThinkMinimal:
+		thinking = &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 1024}
+	case types.ThinkLow:
+		thinking = &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
+	case types.ThinkMedium:
+		thinking = &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 10240}
+	case types.ThinkHigh:
+		thinking = &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
+	case types.ThinkXHigh:
+		thinking = &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 65536}
+	case types.ThinkAdaptive:
+		thinking = &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
+	}
+
+	maxTokens := cfg.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = model.DefaultMaxTokens
+	}
+
+	agentCfg := agent.AgentConfig{
+		MaxTurns:  r.maxTurns,
+		Timeout:   time.Duration(timeoutMs) * time.Millisecond,
+		Model:     cfg.Model,
+		System:    llm.SystemString(cfg.SystemPrompt),
+		MaxTokens: maxTokens,
+		APIType:   r.apiType,
+	}
+
+	// Wrap the LLM streamer to inject ThinkingConfig if needed.
+	var client agent.LLMStreamer = r.llm
+	if thinking != nil {
+		client = &thinkingStreamer{inner: r.llm, thinking: thinking}
+	}
+
+	// Convert AgentRunnerMemory history to []llm.Message for the unified executor.
+	messages := agentMessagesToLLM(memory.History())
+
+	// Execute via unified agent loop, with error recovery around it.
+	logger := r.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	var agentResult *agent.AgentResult
+	var runErr error
+
+	agentResult, runErr = agent.RunAgent(runCtx, agentCfg, messages, client, toolExec, agent.StreamHooks{}, logger, nil)
+
+	if runErr != nil {
+		errMsg := runErr.Error()
+
+		// 1. Transient HTTP retry (502/503/521/429 → wait 2.5s, retry once).
+		if IsTransientHTTPError(errMsg) {
+			logger.Warn("transient HTTP error, retrying", "error", errMsg, "session", cfg.SessionKey)
+			select {
+			case <-runCtx.Done():
+				result.WasAborted = true
+				result.DurationMs = time.Since(startedAt).Milliseconds()
+				return result, nil
+			case <-time.After(TransientRetryDelayMs * time.Millisecond):
+			}
+			agentResult, runErr = agent.RunAgent(runCtx, agentCfg, messages, client, toolExec, agent.StreamHooks{}, logger, nil)
+		}
+
+		// 2. Context overflow → auto-recovery.
+		if runErr != nil && IsContextOverflowError(runErr.Error()) {
+			if r.onSessionReset != nil {
+				r.onSessionReset(cfg.SessionKey, "context_overflow")
+			}
+			result.Payloads = append(result.Payloads, types.ReplyPayload{Text: ContextOverflowMessage, IsError: true})
+			result.DurationMs = time.Since(startedAt).Milliseconds()
+			return result, nil
+		}
+
+		// 3. Billing error.
+		if runErr != nil && IsBillingError(runErr.Error()) {
+			result.Payloads = append(result.Payloads, types.ReplyPayload{Text: BillingErrorMessage, IsError: true})
+			result.DurationMs = time.Since(startedAt).Milliseconds()
+			return result, nil
+		}
+
+		// 4. Role ordering → session reset.
+		if runErr != nil && IsRoleOrderingError(runErr.Error()) {
+			if r.onSessionReset != nil {
+				r.onSessionReset(cfg.SessionKey, "role_ordering")
+			}
+			result.Payloads = append(result.Payloads, types.ReplyPayload{Text: RoleOrderingMessage, IsError: true})
+			result.DurationMs = time.Since(startedAt).Milliseconds()
+			return result, nil
+		}
+
+		// 5. Try fallback models if available.
+		if runErr != nil && len(cfg.FallbackModels) > 0 {
+			for i, fallback := range cfg.FallbackModels {
+				logger.Info("trying fallback model", "model", fallback, "attempt", i+1, "session", cfg.SessionKey)
+				parts := splitProviderModel(fallback)
+				if parts[0] != "" {
+					cfg.Provider = parts[0]
+				}
+				cfg.Model = parts[1]
+				agentCfg.Model = cfg.Model
+				result.FallbackActive = true
+				result.FallbackAttempts = append(result.FallbackAttempts, model.FallbackAttempt{
+					Provider: cfg.Provider,
+					Model:    cfg.Model,
+					Error:    runErr.Error(),
+				})
+				agentResult, runErr = agent.RunAgent(runCtx, agentCfg, messages, client, toolExec, agent.StreamHooks{}, logger, nil)
+				if runErr == nil {
+					result.ModelUsed = cfg.Model
+					result.ProviderUsed = cfg.Provider
+					break
+				}
+			}
+		}
+
+		// 6. Final error — no recovery possible.
+		if runErr != nil {
+			errText := runErr.Error()
+			if IsTransientHTTPError(errText) {
+				errText = "⚠️ Provider temporarily unavailable. Please try again."
+			}
+			result.Error = runErr
+			result.Payloads = append(result.Payloads, types.ReplyPayload{
+				Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(errText, ".")),
+				IsError: true,
+			})
+			result.DurationMs = time.Since(startedAt).Milliseconds()
+			return result, nil
+		}
+	}
+
+	// Check for context-cancelled abort.
+	if agentResult != nil && (agentResult.StopReason == "aborted" || agentResult.StopReason == "timeout") {
+		result.WasAborted = true
+	}
+
+	if agentResult != nil {
+		result.TurnCount = agentResult.Turns
+		result.OutputText = agentResult.Text
+		result.TokensUsed = session.TokenUsage{
+			InputTokens:  int64(agentResult.Usage.InputTokens),
+			OutputTokens: int64(agentResult.Usage.OutputTokens),
+			TotalTokens:  int64(agentResult.Usage.InputTokens + agentResult.Usage.OutputTokens),
+		}
+		if agentResult.Text != "" {
+			result.Payloads = append(result.Payloads, types.ReplyPayload{Text: agentResult.Text})
+			result.Summary = truncateToolOutput(agentResult.Text, 2000)
+		}
+	}
+
 	result.DurationMs = time.Since(startedAt).Milliseconds()
-	if result.OutputText != "" {
-		result.Summary = truncateToolOutput(result.OutputText, 2000)
+	return result, nil
+}
+
+// autoreplyToolAdapter adapts autoreply.ToolExecutor to agent.ToolExecutor.
+// It handles elevated-permission checks, records invocations in ToolMeta,
+// and converts the three-return signature to the two-return agent interface.
+type autoreplyToolAdapter struct {
+	runner *DefaultAgentRunner
+	cfg    AgentTurnConfig
+	meta   *media.ToolMeta
+}
+
+func (a *autoreplyToolAdapter) Execute(ctx context.Context, name string, input json.RawMessage) (string, error) {
+	var inputMap map[string]any
+	_ = json.Unmarshal(input, &inputMap)
+
+	call := ToolCall{Name: name, Input: inputMap}
+
+	start := time.Now()
+	output, isError, toolErr := a.runner.executeTool(ctx, call, a.cfg)
+	durationMs := time.Since(start).Milliseconds()
+
+	if toolErr != nil {
+		output = fmt.Sprintf("Error: %s", toolErr.Error())
+		isError = true
 	}
 
-	return result, nil
+	if a.meta != nil {
+		a.meta.Record(media.ToolInvocation{
+			Name:     name,
+			ID:       call.ID,
+			Input:    formatToolInput(inputMap),
+			Output:   truncateToolOutput(output, 2000),
+			IsError:  isError,
+			Duration: durationMs,
+		})
+	}
+
+	if isError {
+		return "", fmt.Errorf("%s", output)
+	}
+	return output, nil
+}
+
+// thinkingStreamer wraps an LLMStreamer to inject a ThinkingConfig into every request.
+type thinkingStreamer struct {
+	inner    agent.LLMStreamer
+	thinking *llm.ThinkingConfig
+}
+
+func (t *thinkingStreamer) StreamChat(ctx context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+	req.Thinking = t.thinking
+	return t.inner.StreamChat(ctx, req)
+}
+
+func (t *thinkingStreamer) StreamChatOpenAI(ctx context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+	req.Thinking = t.thinking
+	return t.inner.StreamChatOpenAI(ctx, req)
+}
+
+// agentMessagesToLLM converts AgentRunnerMemory history to llm.Message slice.
+// System messages are skipped (they belong in AgentConfig.System, not messages).
+func agentMessagesToLLM(history []AgentMessage) []llm.Message {
+	out := make([]llm.Message, 0, len(history))
+	for _, m := range history {
+		if m.Role == "system" {
+			continue // system goes in AgentConfig.System
+		}
+		if m.ToolUseID != "" {
+			block := llm.ContentBlock{
+				Type:      "tool_result",
+				ToolUseID: m.ToolUseID,
+				Content:   m.Content,
+				IsError:   m.IsError,
+			}
+			out = append(out, llm.NewBlockMessage("user", []llm.ContentBlock{block}))
+		} else if len(m.ContentBlocks) > 0 {
+			blocks := make([]llm.ContentBlock, 0, len(m.ContentBlocks))
+			for _, cb := range m.ContentBlocks {
+				blocks = append(blocks, llm.ContentBlock{
+					Type:  string(cb.Type),
+					Text:  cb.Text,
+					ID:    cb.ID,
+					Name:  cb.Name,
+					Input: marshalInput(cb.Input),
+				})
+			}
+			out = append(out, llm.NewBlockMessage(m.Role, blocks))
+		} else {
+			out = append(out, llm.NewTextMessage(m.Role, m.Content))
+		}
+	}
+	return out
+}
+
+func marshalInput(input map[string]any) json.RawMessage {
+	if input == nil {
+		return nil
+	}
+	raw, _ := json.Marshal(input)
+	return raw
 }
 
 // AgentRunnerMemory manages conversation context for agent execution.
@@ -458,10 +497,8 @@ func (m *AgentRunnerMemory) Compact() int {
 	}
 
 	removed := 0
-	// Keep system prompt (first) and at least 2 recent messages.
 	minKeep := 3
 	for m.usedTokens > m.maxTokens && len(m.history) > minKeep {
-		// Remove the second message (oldest non-system).
 		oldest := m.history[1]
 		m.history = append(m.history[:1], m.history[2:]...)
 		tokens := model.EstimateTokens(oldest.Content)
@@ -483,29 +520,26 @@ func (m *AgentRunnerMemory) CompactWithSummary(summary string) int {
 		return 0
 	}
 
-	// Count messages to remove (keep system + last 2).
 	keepTail := 2
 	removeCount := len(m.history) - 1 - keepTail
 	if removeCount <= 0 {
 		return 0
 	}
 
-	// Calculate tokens being removed.
 	removedTokens := 0
 	for i := 1; i <= removeCount; i++ {
 		removedTokens += model.EstimateTokens(m.history[i].Content)
 	}
 
-	// Replace removed messages with summary.
 	summaryMsg := AgentMessage{
 		Role:    "system",
 		Content: fmt.Sprintf("[Conversation summary: %s]", summary),
 	}
 
 	newHistory := make([]AgentMessage, 0, 1+1+keepTail)
-	newHistory = append(newHistory, m.history[0])                           // system prompt
-	newHistory = append(newHistory, summaryMsg)                             // summary
-	newHistory = append(newHistory, m.history[len(m.history)-keepTail:]...) // recent
+	newHistory = append(newHistory, m.history[0])
+	newHistory = append(newHistory, summaryMsg)
+	newHistory = append(newHistory, m.history[len(m.history)-keepTail:]...)
 
 	m.history = newHistory
 	m.usedTokens -= removedTokens

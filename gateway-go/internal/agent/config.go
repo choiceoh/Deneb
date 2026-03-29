@@ -1,0 +1,51 @@
+// config.go — Shared agent configuration and result types.
+// Used by both chat/ and autoreply/ as the common AgentConfig contract.
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+)
+
+// AgentConfig configures the agent execution loop.
+type AgentConfig struct {
+	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
+	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 10m.
+	Model     string
+	System    json.RawMessage // System prompt: JSON string or array of ContentBlocks.
+	Tools     []llm.Tool
+	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
+	APIType   string // "openai" (default) or "anthropic"
+
+	// OnTurn is called after each agent turn with accumulated token count.
+	// Used for mid-conversation hooks (e.g., memory extraction).
+	OnTurn TurnCallback
+
+	// OnTurnInit is called at the start of each turn to decorate the context.
+	// Use this to inject per-turn state (e.g., a TurnContext for cross-tool sharing).
+	// Returning nil is a no-op; returning a modified ctx replaces the turn context.
+	OnTurnInit func(ctx context.Context) context.Context
+}
+
+// TurnCallback is called after each agent turn with accumulated token count.
+type TurnCallback func(turn int, accumulatedTokens int)
+
+// DefaultAgentConfig returns sensible defaults.
+func DefaultAgentConfig() AgentConfig {
+	return AgentConfig{
+		MaxTurns:  25,
+		Timeout:   10 * time.Minute,
+		MaxTokens: 8192,
+	}
+}
+
+// AgentResult is the outcome of an agent run.
+type AgentResult struct {
+	Text       string
+	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns"
+	Usage      llm.TokenUsage
+	Turns      int
+}
