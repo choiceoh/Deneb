@@ -36,7 +36,7 @@ Every model run triggers four lifecycle points:
 - **aurora_expand_query**: deep recall (~120s). Expands a natural-language query into context-relevant messages. Expensive — use only when normal search is insufficient.
 
 ## Token Budget Constants
-- Go defaults: tokenBudget=100K, freshTailCount=48, maxMessages=100, charsPerToken=4
+- Go defaults: tokenBudget=100K, freshTailCount=48, maxMessages=100, runesPerToken=2 (for estimateTokens), charsPerToken=4 (bytes/token for knowledge budget)
 - Rust defaults: context threshold 0.75, fresh tail 32
 - Go compaction threshold: 0.85 (compact when usage exceeds 85% of Go-side budget)
 - Three-tier resolution order: env var > plugin config > hardcoded defaults
