@@ -78,7 +78,6 @@ type ServerRuntime struct {
 	ready         atomic.Bool
 	shutdownOnce  sync.Once
 	gatewaySubs   *events.GatewayEventSubscriptions
-	watchdog      *monitoring.Watchdog
 	channelHealth *monitoring.ChannelHealthMonitor
 	activity      *monitoring.ActivityTracker
 	channelEvents *monitoring.ChannelEventTracker

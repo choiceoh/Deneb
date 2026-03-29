@@ -91,7 +91,13 @@ func toolGateway(repoDir string) ToolFunc {
 			return fmt.Sprintf("Config applied successfully. Written to %s", cfgPath), nil
 
 		case "restart":
-			// Send SIGUSR1 to trigger graceful restart.
+			// Do NOT restart immediately. Ask the user for confirmation first.
+			// The agent must relay this message to the user and wait for explicit
+			// approval before calling "restart.confirmed".
+			return "⚠️ 게이트웨이 재시작이 필요합니다. 재시작하면 진행 중인 세션이 중단됩니다.\n\n사용자에게 재시작 확인을 요청하세요. 사용자가 승인하면 action: \"restart.confirmed\"로 다시 호출하세요.", nil
+
+		case "restart.confirmed":
+			// User has explicitly confirmed the restart.
 			proc, err := os.FindProcess(os.Getpid())
 			if err != nil {
 				return "Failed to find gateway process: " + err.Error(), nil
@@ -137,7 +143,7 @@ func toolGateway(repoDir string) ToolFunc {
 			return fmt.Sprintf("Update completed successfully.\nGit pull: %s\nBuild: OK\nRestart the gateway to apply changes.", strings.TrimSpace(string(pullOut))), nil
 
 		default:
-			return fmt.Sprintf("Unknown gateway action: %q. Supported: config.get, config.schema.lookup, config.patch, config.apply, restart, update.run", p.Action), nil
+			return fmt.Sprintf("Unknown gateway action: %q. Supported: config.get, config.schema.lookup, config.patch, config.apply, restart, restart.confirmed, update.run", p.Action), nil
 		}
 	}
 }

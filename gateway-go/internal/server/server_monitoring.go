@@ -3,8 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"os"
-	"syscall"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
@@ -43,31 +41,10 @@ func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {
 // registerPhase2Methods registers chat, config, monitoring, and event subscription methods.
 
 func (s *Server) StartMonitoring(ctx context.Context) {
-	// Gateway self-watchdog.
-	s.watchdog = monitoring.NewWatchdog(monitoring.WatchdogDeps{
-		IsServerListening: func() bool { return s.ready.Load() },
-		GetExpectedChannelCount: func() int {
-			return s.expectedWatchdogChannelCount()
-		},
-		GetConnectedChannelCount: func() int {
-			count := 0
-			statusAll := s.channels.StatusAll()
-			for _, st := range statusAll {
-				if st.Connected {
-					count++
-				}
-			}
-			return count
-		},
-		OnRestartNeeded: func(reason string) {
-			s.logger.Warn("watchdog restart requested, sending SIGUSR1", "reason", reason)
-			// Send SIGUSR1 to self to trigger graceful restart via main's signal handler.
-			if p, err := os.FindProcess(os.Getpid()); err == nil {
-				_ = p.Signal(syscall.SIGUSR1)
-			}
-		},
-	}, monitoring.DefaultWatchdogConfig(), s.logger)
-	s.safeGo("watchdog", func() { s.watchdog.Run(ctx) })
+	// Note: Gateway self-watchdog removed — it caused frequent false-positive
+	// restarts in a single-user deployment. Channel health monitor below is
+	// sufficient: it restarts individual stale channels without killing the
+	// entire gateway process.
 
 	// Channel health monitor.
 	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
@@ -117,28 +94,6 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 		},
 	}, monitoring.DefaultChannelHealthConfig(), s.logger)
 	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
-}
-
-// expectedWatchdogChannelCount returns the number of channels that should be
-// considered "expected connected" for self-watchdog restart decisions.
-// We count only channels that successfully completed Start().
-func (s *Server) expectedWatchdogChannelCount() int {
-	// Defensive fallback for tests/minimal stubs.
-	if s.channels == nil {
-		return 0
-	}
-	// Without lifecycle state we cannot know which channels really started.
-	// Fallback to registered count (legacy behavior).
-	if s.channelLifecycle == nil {
-		return len(s.channels.List())
-	}
-	count := 0
-	for _, id := range s.channels.List() {
-		if s.channelLifecycle.GetStartedAt(id) > 0 {
-			count++
-		}
-	}
-	return count
 }
 
 // emitChannelEvent fires the appropriate hook and broadcasts a channels.changed event.
