@@ -47,7 +47,7 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 	s.watchdog = monitoring.NewWatchdog(monitoring.WatchdogDeps{
 		IsServerListening: func() bool { return s.ready.Load() },
 		GetExpectedChannelCount: func() int {
-			return len(s.channels.List())
+			return s.expectedWatchdogChannelCount()
 		},
 		GetConnectedChannelCount: func() int {
 			count := 0
@@ -117,6 +117,28 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 		},
 	}, monitoring.DefaultChannelHealthConfig(), s.logger)
 	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
+}
+
+// expectedWatchdogChannelCount returns the number of channels that should be
+// considered "expected connected" for self-watchdog restart decisions.
+// We count only channels that successfully completed Start().
+func (s *Server) expectedWatchdogChannelCount() int {
+	// Defensive fallback for tests/minimal stubs.
+	if s.channels == nil {
+		return 0
+	}
+	// Without lifecycle state we cannot know which channels really started.
+	// Fallback to registered count (legacy behavior).
+	if s.channelLifecycle == nil {
+		return len(s.channels.List())
+	}
+	count := 0
+	for _, id := range s.channels.List() {
+		if s.channelLifecycle.GetStartedAt(id) > 0 {
+			count++
+		}
+	}
+	return count
 }
 
 // emitChannelEvent fires the appropriate hook and broadcasts a channels.changed event.
