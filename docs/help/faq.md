@@ -21,7 +21,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [Does it run on Raspberry Pi?](#does-it-run-on-raspberry-pi)
   - [Any tips for Raspberry Pi installs?](#any-tips-for-raspberry-pi-installs)
   - [It is stuck on "wake up my friend" / onboarding will not hatch. What now?](#it-is-stuck-on-wake-up-my-friend-onboarding-will-not-hatch-what-now)
-  - [Can I migrate my setup to a new machine (Mac mini) without redoing onboarding?](#can-i-migrate-my-setup-to-a-new-machine-mac-mini-without-redoing-onboarding)
+  - [Can I migrate my setup to a new machine without redoing onboarding?](#can-i-migrate-my-setup-to-a-new-machine-without-redoing-onboarding)
   - [Where do I see what is new in the latest version?](#where-do-i-see-what-is-new-in-the-latest-version)
   - [Cannot access docs.deneb.ai (SSL error)](#cannot-access-docsdenebai-ssl-error)
   - [Difference between stable and beta](#difference-between-stable-and-beta)
@@ -111,7 +111,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [Is there an API / RPC way to apply config?](#is-there-an-api-rpc-way-to-apply-config)
   - [Minimal sane config for a first install](#minimal-sane-config-for-a-first-install)
   - [How do I set up Tailscale on a VPS and connect from my Mac?](#how-do-i-set-up-tailscale-on-a-vps-and-connect-from-my-mac)
-  - [How do I connect a Mac node to a remote Gateway (Tailscale Serve)?](#how-do-i-connect-a-mac-node-to-a-remote-gateway-tailscale-serve)
+  - [How do I connect a node to a remote Gateway (Tailscale Serve)?](#how-do-i-connect-a-node-to-a-remote-gateway-tailscale-serve)
   - [Should I install on a second laptop or just add a node?](#should-i-install-on-a-second-laptop-or-just-add-a-node)
 - [Env vars and .env loading](#env-vars-and-env-loading)
   - [How does Deneb load environment variables?](#how-does-deneb-load-environment-variables)
@@ -401,7 +401,7 @@ deneb doctor
 If the Gateway is remote, ensure the tunnel/Tailscale connection is up and that the UI
 is pointed at the right Gateway. See [Remote access](/gateway/remote).
 
-### Can I migrate my setup to a new machine Mac mini without redoing onboarding
+### Can I migrate my setup to a new machine without redoing onboarding
 
 Yes. Copy the **state directory** and **workspace**, then run Doctor once. This
 keeps your bot "exactly the same" (memory, session history, auth, and channel
