@@ -115,8 +115,10 @@ func TestMergeAndRankWithNewWeights(t *testing.T) {
 		Category:   CategoryContext,
 		Importance: 0.6,
 	})
-	// Make context fact appear old by updating created_at.
-	s.db.Exec(`UPDATE facts SET created_at = ? WHERE id = ?`, past30.Format(time.RFC3339), idCtx)
+	// Make context fact appear old by updating both created_at and updated_at.
+	// Both must be set: recency scoring uses updated_at (content freshness).
+	s.db.Exec(`UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?`,
+		past30.Format(time.RFC3339), past30.Format(time.RFC3339), idCtx)
 
 	// Build fake search scores (equal hybrid scores).
 	ftsResults := map[int64]float64{idDec: 0.7, idCtx: 0.7}
@@ -138,6 +140,59 @@ func TestMergeAndRankWithNewWeights(t *testing.T) {
 	if results[0].Score <= results[1].Score {
 		t.Errorf("decision score (%.3f) should exceed context score (%.3f)",
 			results[0].Score, results[1].Score)
+	}
+}
+
+// TestRecencyUsesUpdatedAt verifies that a recently-updated low-importance fact
+// outranks a stale high-importance fact that was only recently accessed.
+// This is the core regression: importance 0.95 decision from 6 months ago should
+// not beat importance 0.7 fact updated yesterday.
+func TestRecencyUsesUpdatedAt(t *testing.T) {
+	s := tempStore(t)
+	ctx := context.Background()
+
+	now := time.Now()
+	past180 := now.Add(-180 * 24 * time.Hour) // 6 months ago
+	past1 := now.Add(-1 * 24 * time.Hour)     // yesterday
+
+	// Stale decision: high importance, content last updated 6 months ago.
+	// Simulate "recently accessed" via LastAccessedAt = now to confirm that
+	// access time no longer inflates recency.
+	idStale, _ := s.InsertFact(ctx, Fact{
+		Content:    "오래된 결정 사항",
+		Category:   CategoryDecision,
+		Importance: 0.95,
+	})
+	s.db.Exec(`UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?`,
+		past180.Format(time.RFC3339), past180.Format(time.RFC3339), idStale)
+	// Simulate recent access (should NOT affect recency score).
+	recentAccess := now
+	s.db.Exec(`UPDATE facts SET last_accessed_at = ? WHERE id = ?`,
+		recentAccess.Format(time.RFC3339), idStale)
+
+	// Fresh fact: lower importance, but updated yesterday.
+	idFresh, _ := s.InsertFact(ctx, Fact{
+		Content:    "어제 갱신된 사항",
+		Category:   CategoryDecision,
+		Importance: 0.7,
+	})
+	s.db.Exec(`UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?`,
+		past1.Format(time.RFC3339), past1.Format(time.RFC3339), idFresh)
+
+	// Give both equal hybrid search scores.
+	ftsResults := map[int64]float64{idStale: 0.7, idFresh: 0.7}
+	vecResults := map[int64]float64{idStale: 0.7, idFresh: 0.7}
+
+	results := s.mergeAndRank(ftsResults, vecResults, SearchOpts{Limit: 10})
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// Fresh fact should rank higher: lower importance is offset by much better recency.
+	if results[0].Fact.ID != idFresh {
+		t.Errorf("fresh fact (updated yesterday) should rank first over stale high-importance fact; "+
+			"got fact ID %d first (stale=%d, fresh=%d)", results[0].Fact.ID, idStale, idFresh)
 	}
 }
 

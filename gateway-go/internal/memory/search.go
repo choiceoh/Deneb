@@ -306,9 +306,12 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 		if hl, ok := categoryHalfLifeDays[fact.Category]; ok {
 			halfLife = hl
 		}
-		refTime := fact.CreatedAt
-		if fact.LastAccessedAt != nil {
-			refTime = *fact.LastAccessedAt
+		// Content freshness: use UpdatedAt (last verified/corrected) rather than
+		// LastAccessedAt. Access time ≠ content staleness — a stale decision
+		// accessed yesterday is still stale.
+		refTime := fact.UpdatedAt
+		if refTime.IsZero() {
+			refTime = fact.CreatedAt
 		}
 		daysSince := now.Sub(refTime).Hours() / 24
 		recencyScore := math.Exp(-math.Ln2 * daysSince / halfLife)
