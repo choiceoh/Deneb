@@ -14,8 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
@@ -30,18 +31,18 @@ const mediaDownloadTimeout = 30 * time.Second
 // InboundProcessor preprocesses incoming Telegram messages through the
 // autoreply pipeline before dispatching to the chat handler.
 type InboundProcessor struct {
-	cmdRegistry      *autoreply.CommandRegistry
-	cmdRouter        *autoreply.CommandRouter
-	chatHandler      *chat.Handler
-	server           *Server
-	logger           *slog.Logger
-	mediaGroupBatch  *MediaGroupBatcher
+	cmdRegistry     *handlers.CommandRegistry
+	cmdRouter       *handlers.CommandRouter
+	chatHandler     *chat.Handler
+	server          *Server
+	logger          *slog.Logger
+	mediaGroupBatch *MediaGroupBatcher
 }
 
 // NewInboundProcessor creates a processor with the full autoreply command set.
 func NewInboundProcessor(s *Server) *InboundProcessor {
-	registry := autoreply.NewCommandRegistry(autoreply.BuiltinChatCommands())
-	router := autoreply.NewCommandRouter(registry)
+	registry := handlers.NewCommandRegistry(handlers.BuiltinChatCommands())
+	router := handlers.NewCommandRouter(registry)
 
 	p := &InboundProcessor{
 		cmdRegistry: registry,
@@ -133,7 +134,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	if strings.HasPrefix(trimmed, "/") {
 		cmdKey := extractCommandKey(trimmed)
 		if cmdKey != "" && p.cmdRouter.HasHandler(cmdKey) {
-			result, err := p.cmdRouter.Dispatch(autoreply.CommandContext{
+			result, err := p.cmdRouter.Dispatch(handlers.CommandContext{
 				Command:    cmdKey,
 				Body:       msgCtx.Body,
 				SessionKey: sessionKey,
@@ -162,7 +163,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Parse inline directives (!model, !think, etc.) and clean the message body.
 	agentMessage := msgCtx.BodyForAgent
 	if agentMessage != "" {
-		directives := autoreply.ParseInlineDirectives(agentMessage, nil)
+		directives := rules.ParseInlineDirectives(agentMessage, nil)
 		if directives.Cleaned != "" {
 			agentMessage = directives.Cleaned
 		}
@@ -360,7 +361,7 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 }
 
 // sendCommandReply delivers a command result back to the Telegram chat.
-func (p *InboundProcessor) sendCommandReply(chatID string, result *autoreply.CommandResult) {
+func (p *InboundProcessor) sendCommandReply(chatID string, result *handlers.CommandResult) {
 	replyText := result.Reply
 	if replyText == "" && len(result.Payloads) > 0 {
 		replyText = result.Payloads[0].Text
@@ -390,8 +391,8 @@ func (p *InboundProcessor) sendCommandReply(chatID string, result *autoreply.Com
 
 // buildCommandDeps creates a CommandDeps populated with server-level status data.
 // sessionKey is used to look up the current session's last failure reason for /status.
-func (p *InboundProcessor) buildCommandDeps(sessionKey string) *autoreply.CommandDeps {
-	sd := &autoreply.StatusDeps{
+func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.CommandDeps {
+	sd := &handlers.StatusDeps{
 		Version:   p.server.version,
 		StartedAt: p.server.startedAt,
 		RustFFI:   p.server.rustFFI,
@@ -405,9 +406,9 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *autoreply.Comman
 	if p.server.usageTracker != nil {
 		report := p.server.usageTracker.Status()
 		if report != nil && len(report.Providers) > 0 {
-			sd.ProviderUsage = make(map[string]*autoreply.ProviderUsageStats, len(report.Providers))
+			sd.ProviderUsage = make(map[string]*handlers.ProviderUsageStats, len(report.Providers))
 			for name, ps := range report.Providers {
-				sd.ProviderUsage[name] = &autoreply.ProviderUsageStats{
+				sd.ProviderUsage[name] = &handlers.ProviderUsageStats{
 					Calls:  ps.Calls,
 					Input:  ps.Tokens.Input,
 					Output: ps.Tokens.Output,
@@ -420,9 +421,9 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *autoreply.Comman
 	if p.server.channelHealth != nil {
 		snapshot := p.server.channelHealth.HealthSnapshot()
 		if len(snapshot) > 0 {
-			sd.ChannelHealth = make([]autoreply.ChannelHealthEntry, len(snapshot))
+			sd.ChannelHealth = make([]handlers.ChannelHealthEntry, len(snapshot))
 			for i, ch := range snapshot {
-				sd.ChannelHealth[i] = autoreply.ChannelHealthEntry{
+				sd.ChannelHealth[i] = handlers.ChannelHealthEntry{
 					ID:      ch.ChannelID,
 					Healthy: ch.Healthy,
 					Reason:  ch.Reason,
@@ -462,7 +463,7 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *autoreply.Comman
 		}
 	}
 
-	return &autoreply.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn}
+	return &handlers.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn}
 }
 
 // extractCommandKey pulls the command name from a slash-prefixed message.

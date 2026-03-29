@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -153,7 +153,7 @@ func (p *InboundProcessor) sendDiscordEmbed(channelID string, embeds []discord.E
 }
 
 // sendDiscordCommandReply delivers a command result back to the Discord channel.
-func (p *InboundProcessor) sendDiscordCommandReply(channelID string, result *autoreply.CommandResult) {
+func (p *InboundProcessor) sendDiscordCommandReply(channelID string, result *handlers.CommandResult) {
 	replyText := result.Reply
 	if replyText == "" && len(result.Payloads) > 0 {
 		replyText = result.Payloads[0].Text
