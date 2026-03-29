@@ -139,7 +139,7 @@ func TestPostProcessRegistry_Apply(t *testing.T) {
 	})
 
 	result := pp.Apply(context.Background(), "grep", "data")
-	if result != "data [global] [grep-specific]" {
+	if result != "data [grep-specific] [global]" {
 		t.Errorf("unexpected result: %q", result)
 	}
 

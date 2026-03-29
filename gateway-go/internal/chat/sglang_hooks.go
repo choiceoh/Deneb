@@ -90,16 +90,8 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 		contextInfo.WriteString(strings.Join(names, ", "))
 	}
 
-	// Include memory file heads if they exist.
-	memoryPath := filepath.Join(workspaceDir, "MEMORY.md")
-	if data, err := os.ReadFile(memoryPath); err == nil {
-		snippet := string(data)
-		if len(snippet) > 2000 {
-			snippet = snippet[:2000]
-		}
-		contextInfo.WriteString("\n\nMEMORY.md (first 2000 chars):\n")
-		contextInfo.WriteString(snippet)
-	}
+	// Memory content is provided to the main LLM by PrefetchKnowledge (importance-weighted).
+	// Reading MEMORY.md here would be redundant I/O on every message.
 
 	result, err := callLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
 	if err != nil {
