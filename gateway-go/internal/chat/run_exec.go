@@ -53,15 +53,69 @@ func executeAgentRun(
 		}
 	}
 
-	// 2. Kick off proactive context in parallel with prompt + history assembly.
-	// The local sglang model analyzes the user message and returns a context
-	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
-	type proactiveResult struct{ hint string }
-	proactiveCh := make(chan proactiveResult, 1)
 	workspaceDir := params.WorkspaceDir
 	if workspaceDir == "" {
 		workspaceDir = resolveWorkspaceDirForPrompt()
 	}
+
+	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
+	// Must happen before the parallel section so apiType is known when building
+	// the system prompt in the parallel goroutine below.
+	//
+	// Agent tools pass role names ("main", "lightweight", "fallback", "image").
+	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
+	// are treated as direct overrides (no fallback chain).
+	model := params.Model
+	initialRole := modelrole.RoleMain
+
+	if deps.registry != nil && model != "" {
+		// Role name → resolve to actual model ID with fallback chain.
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		}
+		// Raw model ID → no role mapping, no fallback chain (direct override).
+	}
+	if model == "" {
+		model = deps.defaultModel
+	}
+	if model == "" && deps.registry != nil {
+		model = deps.registry.FullModelID(modelrole.RoleMain)
+	}
+	// If the request has image attachments, prefer the image model.
+	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
+		imgCfg := deps.registry.Config(modelrole.RoleImage)
+		if imgCfg.Model != "" {
+			model = deps.registry.FullModelID(modelrole.RoleImage)
+			initialRole = modelrole.RoleImage
+		}
+	}
+	// Parse provider prefix (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
+	providerID, modelName := parseModelID(model)
+	model = modelName
+
+	runLog.LogStart(agentlog.RunStartData{
+		Model:    model,
+		Provider: providerID,
+		Message:  params.Message,
+		Channel:  deliveryChannel(params.Delivery),
+	})
+
+	// 3. Resolve LLM client (no IO — reads in-memory config/auth store).
+	// apiType must be known before the parallel section to build the system prompt
+	// in the correct format (Anthropic ContentBlock array vs plain string).
+	client, apiType := resolveClient(deps, providerID, logger)
+	if client == nil {
+		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
+	}
+
+	// 4. Kick off proactive context as a fire-and-forget goroutine.
+	// The local sglang model analyzes the user message and returns a context
+	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
+	// We check for the result non-blocking after the parallel section: if the
+	// hint is ready it gets injected; if not, we skip it rather than stalling.
+	type proactiveResult struct{ hint string }
+	proactiveCh := make(chan proactiveResult, 1)
 	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
 		go func() {
 			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)
@@ -71,36 +125,14 @@ func executeAgentRun(
 		proactiveCh <- proactiveResult{} // no-op: skip for short messages
 	}
 
-	// 3. Collect system prompt params; actual build is deferred until after apiType
-	// is resolved, so dynamic prompts are built exactly once in the right format
-	// (Anthropic ContentBlock array vs plain string) without a redundant string pass.
-	var systemPrompt json.RawMessage
-	var systemPromptParams *prompt.SystemPromptParams // non-nil when dynamic build is needed
-	if params.System != "" {
-		systemPrompt = llm.SystemString(params.System)
-	} else if deps.defaultSystem != "" {
-		systemPrompt = llm.SystemString(deps.defaultSystem)
-	}
-	if len(systemPrompt) == 0 && deps.tools != nil {
-		tz, _ := prompt.LoadCachedTimezone()
-		spp := prompt.SystemPromptParams{
-			WorkspaceDir: workspaceDir,
-			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
-			UserTimezone: tz,
-			ContextFiles: prompt.LoadContextFiles(workspaceDir, memoryContextOpts(deps)...),
-			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:      deliveryChannel(params.Delivery),
-		}
-		systemPromptParams = &spp
-		// Build deferred — see "Finalize system prompt" block below.
-	}
-
 	prepStart := time.Now()
-	// 3.5 + 4. Run knowledge prefetch and context assembly in parallel.
-	// Both are independent: knowledge searches Vega/Memory, context loads transcript history.
+	// 5. Run knowledge prefetch, context assembly, and system prompt build in parallel.
+	// All three are now independent: apiType is known (step 3) so the system prompt
+	// can be built in the correct format without waiting for sequential resolution.
 	var knowledgeAddition string
 	var messages []llm.Message
 	var contextErr error
+	var systemPrompt json.RawMessage
 
 	var prepWg sync.WaitGroup
 
@@ -137,14 +169,52 @@ func executeAgentRun(
 		}
 	}()
 
+	// System prompt build (parallel — apiType resolved early so this no longer
+	// needs to be deferred until after the sequential model/client resolution).
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+		if params.System != "" {
+			systemPrompt = llm.SystemString(params.System)
+			return
+		}
+		if deps.defaultSystem != "" {
+			systemPrompt = llm.SystemString(deps.defaultSystem)
+			return
+		}
+		if deps.tools == nil {
+			return
+		}
+		tz, _ := prompt.LoadCachedTimezone()
+		spp := prompt.SystemPromptParams{
+			WorkspaceDir: workspaceDir,
+			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
+			UserTimezone: tz,
+			ContextFiles: prompt.LoadContextFiles(workspaceDir, memoryContextOpts(deps)...),
+			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:      deliveryChannel(params.Delivery),
+		}
+		if apiType == "anthropic" {
+			if spp.Channel == "discord" {
+				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(spp))
+			} else {
+				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+			}
+		} else {
+			if spp.Channel == "discord" {
+				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
+			} else {
+				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+			}
+		}
+	}()
+
 	prepWg.Wait()
-	logger.Info("pipeline: knowledge+context parallel prep done", "ms", time.Since(prepStart).Milliseconds())
+	logger.Info("pipeline: parallel prep done (knowledge+context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
 
 	if contextErr != nil {
 		logger.Warn("context assembly failed, using message only", "error", contextErr)
 	}
-	// Knowledge and proactive hints are applied in the "Finalize system prompt" block
-	// below, after apiType is resolved, so they are appended exactly once.
 
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
@@ -162,63 +232,36 @@ func executeAgentRun(
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
-	// 5. Collect proactive context hint (applied in "Finalize system prompt" block below).
-	proactiveWaitStart := time.Now()
-	proactive := <-proactiveCh
-	if pw := time.Since(proactiveWaitStart).Milliseconds(); pw > 50 {
-		logger.Info("pipeline: proactive context wait", "ms", pw)
-	}
-
-	// 6. Resolve model and provider.
-	// Agent tools pass role names ("main", "lightweight", "fallback", "image").
-	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
-	// are treated as direct overrides (no fallback chain).
-	model := params.Model
-	initialRole := modelrole.RoleMain
-
-	if deps.registry != nil && model != "" {
-		// Role name → resolve to actual model ID with fallback chain.
-		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
-			model = resolved
-			initialRole = role
+	// 6. Non-blocking check for proactive context hint.
+	// The goroutine runs concurrently with the parallel prep above; if it finished
+	// in time the hint is injected, otherwise we skip it to avoid stalling the run.
+	// Hit rate is logged here to inform future tuning decisions.
+	var proactiveHint string
+	select {
+	case proactive := <-proactiveCh:
+		if proactive.hint != "" {
+			logger.Info("proactive context hit", "chars", len(proactive.hint))
+			proactiveHint = "\n## Context Hint (from local analysis)\n" + proactive.hint
+		} else {
+			logger.Debug("proactive context miss (N/A or filtered)")
 		}
-		// Raw model ID → no role mapping, no fallback chain (direct override).
+	default:
+		logger.Debug("proactive context not ready, skipping (fire-and-forget)")
 	}
 
-	// If no explicit model, use handler default or registry main.
-	if model == "" {
-		model = deps.defaultModel
-	}
-	if model == "" && deps.registry != nil {
-		model = deps.registry.FullModelID(modelrole.RoleMain)
-	}
+	// 7. Append knowledge and proactive hint to the built system prompt.
+	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint)
+	logger.Info("pipeline: system prompt finalized",
+		"chars", len(systemPrompt),
+		"knowledgeChars", len(knowledgeAddition),
+		"proactiveInjected", proactiveHint != "")
 
-	// If the request has image attachments, prefer the image model.
-	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
-		imgCfg := deps.registry.Config(modelrole.RoleImage)
-		if imgCfg.Model != "" {
-			model = deps.registry.FullModelID(modelrole.RoleImage)
-			initialRole = modelrole.RoleImage
-		}
-	}
-
-	// Parse provider prefix from model (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
-	providerID, modelName := parseModelID(model)
-	model = modelName
-
-	// Log run.start with resolved model/provider info.
-	runLog.LogStart(agentlog.RunStartData{
-		Model:    model,
-		Provider: providerID,
-		Message:  params.Message,
-		Channel:  deliveryChannel(params.Delivery),
+	runLog.LogPrep(agentlog.RunPrepData{
+		SystemPromptChars: len(systemPrompt),
+		ContextMessages:   len(messages),
+		KnowledgeChars:    len(knowledgeAddition),
+		PrepMs:            time.Since(runStart).Milliseconds(),
 	})
-
-	// 7. Resolve LLM client from provider config, auth manager, or pre-configured client.
-	client, apiType := resolveClient(deps, providerID, logger)
-	if client == nil {
-		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
-	}
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
 	// Profile selection reduces per-turn schema token cost:
@@ -238,50 +281,12 @@ func executeAgentRun(
 		}
 	}
 
-	// 9. Finalize system prompt now that apiType is known.
-	// Dynamic prompts (systemPromptParams != nil) are built once in the correct format:
-	// Anthropic ContentBlock array with cache_control breakpoints, or plain string.
-	// Knowledge and proactive hints are appended once here for all cases.
-	promptStart := time.Now()
-	if systemPromptParams != nil {
-		if apiType == "anthropic" {
-			if systemPromptParams.Channel == "discord" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(*systemPromptParams))
-			} else {
-				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(*systemPromptParams))
-			}
-		} else {
-			if systemPromptParams.Channel == "discord" {
-				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(*systemPromptParams))
-			} else {
-				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(*systemPromptParams))
-			}
-		}
-	}
-	// Append knowledge and proactive hint in a single unmarshal/marshal cycle.
-	proactiveHint := ""
-	if proactive.hint != "" {
-		proactiveHint = "\n## Context Hint (from local analysis)\n" + proactive.hint
-	}
-	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint)
-	if proactive.hint != "" {
-		logger.Info("proactive context injected", "chars", len(proactive.hint))
-	}
-	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())
-
-	runLog.LogPrep(agentlog.RunPrepData{
-		SystemPromptChars: len(systemPrompt),
-		ContextMessages:   len(messages),
-		KnowledgeChars:    len(knowledgeAddition),
-		PrepMs:            time.Since(runStart).Milliseconds(),
-	})
-
 	// For Anthropic: mark the last tool for prompt caching.
 	if apiType == "anthropic" && len(tools) > 0 {
 		tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
 	}
 
-	// 10. Build agent config.
+	// 9. Build agent config.
 	maxTokens := deps.maxTokens
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokens
@@ -318,6 +323,7 @@ func executeAgentRun(
 	// producing low-quality facts. End-of-run extraction (below) has full response text.
 
 	// 10. Set up stream hooks: compose broadcaster (WS deltas) + typing + status reactions.
+	// (Numbered 10 to preserve the agent loop label below as 11.)
 	var hooks StreamHooks
 	if broadcaster != nil {
 		hooks.OnTextDelta = broadcaster.EmitDelta
