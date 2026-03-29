@@ -97,3 +97,50 @@ func TestDeduplicateReplyPayloads(t *testing.T) {
 		})
 	}
 }
+
+func TestStripLeakedToolCallMarkup(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "removes leaked tool envelope before final text",
+			in: `<function=read>
+<arg_key>file_path</arg_key>
+<arg_value>/tmp/HEARTBEAT.md</arg_value>
+</tool_call>
+HEARTBEAT_OK`,
+			want: "HEARTBEAT_OK",
+		},
+		{
+			name: "removes repeated tool envelope segments",
+			in: `<function=read>
+<arg_key>file_path</arg_key>
+</tool_call>
+<function=read>
+<arg_key>file_path</arg_key>
+</tool_call>
+Done`,
+			want: "Done",
+		},
+		{
+			name: "keeps normal text unchanged",
+			in:   "안녕하세요",
+			want: "안녕하세요",
+		},
+		{
+			name: "keeps incomplete envelope unchanged",
+			in:   "<function=read>\nmissing close tag",
+			want: "<function=read>\nmissing close tag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StripLeakedToolCallMarkup(tt.in); got != tt.want {
+				t.Fatalf("StripLeakedToolCallMarkup() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
