@@ -149,7 +149,28 @@ func TransferSummaryToMemory(
 	return store.MarkTransferred(summary.SummaryID)
 }
 
+// networkRetryBackoffs defines the sleep durations between retries for
+// transient network errors in LLM calls.
+var networkRetryBackoffs = []time.Duration{2 * time.Second, 4 * time.Second}
+
+// isNetworkError returns true if the error is likely a transient network issue
+// (as opposed to a response format error). Context errors are not retryable.
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "connection") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "502") ||
+		strings.Contains(msg, "503") ||
+		strings.Contains(msg, "529")
+}
+
 // extractFactsFromSummary calls the LLM to extract structured facts from a summary.
+// Network errors are retried with exponential backoff; parse errors retry once
+// (the LLM may produce valid JSON on a second attempt).
 func extractFactsFromSummary(
 	ctx context.Context,
 	client *llm.Client,
@@ -167,7 +188,32 @@ func extractFactsFromSummary(
 	for attempt := range 2 {
 		text, err := callTransferLLM(ctx, client, model, content)
 		if err != nil {
-			return nil, err
+			// Network errors: retry with backoff. Non-network errors: fail immediately.
+			if !isNetworkError(err) {
+				return nil, err
+			}
+			logger.Debug("aurora-transfer: network error, retrying with backoff",
+				"attempt", attempt, "error", err)
+			retried := false
+			for _, backoff := range networkRetryBackoffs {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(backoff):
+				}
+				text, err = callTransferLLM(ctx, client, model, content)
+				if err == nil {
+					retried = true
+					break
+				}
+				if !isNetworkError(err) {
+					return nil, err
+				}
+				logger.Debug("aurora-transfer: network retry failed", "backoff", backoff, "error", err)
+			}
+			if !retried {
+				return nil, fmt.Errorf("aurora-transfer: network error after retries: %w", err)
+			}
 		}
 		if text == "" || text == "[]" {
 			return nil, nil

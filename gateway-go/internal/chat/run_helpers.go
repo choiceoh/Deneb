@@ -22,6 +22,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// memoryExtractSem limits concurrent memory extraction goroutines to prevent
+// overloading the local sglang model during rapid successive messages (e.g.,
+// Telegram message bursts). At most 2 extractions run concurrently.
+var memoryExtractSem = make(chan struct{}, 2)
+
 // handleRunSuccess processes a successful agent run completion.
 func handleRunSuccess(
 	_ context.Context,
@@ -99,6 +104,15 @@ func handleRunSuccess(
 	// memory extraction and dreaming add latency without benefit.
 	if params.Message != "" && !isDiscordDelivery(params.Delivery) {
 		go func() {
+			// Limit concurrent extractions to avoid overloading sglang.
+			select {
+			case memoryExtractSem <- struct{}{}:
+				defer func() { <-memoryExtractSem }()
+			default:
+				logger.Debug("memory extraction skipped: semaphore full")
+				return
+			}
+
 			// Bound by the server shutdown context (if set) so the goroutine
 			// exits when the process is shutting down rather than leaking until
 			// autoMemoryTimeout fires against a dead process.

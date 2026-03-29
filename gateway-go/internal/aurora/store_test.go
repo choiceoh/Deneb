@@ -304,6 +304,11 @@ func TestPersistEvent(t *testing.T) {
 		t.Fatalf("PersistEvent: %v", err)
 	}
 
+	// Force debounced flush to disk before checking.
+	if err := s.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
 	// Verify file written.
 	if _, err := os.Stat(s.path); os.IsNotExist(err) {
 		t.Error("expected store file to exist after persist")

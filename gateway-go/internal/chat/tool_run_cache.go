@@ -60,13 +60,16 @@ var cacheableTools = map[string]bool{
 	"grep": true,
 }
 
-// mutationTools are tools that can modify the file system, requiring cache
-// invalidation to prevent stale results.
+// mutationTools are tools that deterministically modify the file system,
+// requiring cache invalidation to prevent stale results.
+// exec is excluded: while it *can* mutate files, the majority of exec calls
+// are read-only (cat, ls, curl, etc.) and invalidating the entire cache on
+// every exec call destroys find/tree/grep cache hit rates. True file-mutating
+// commands should use write/edit/apply_patch instead.
 var mutationTools = map[string]bool{
 	"write":       true,
 	"edit":        true,
 	"multi_edit":  true,
-	"exec":        true,
 	"apply_patch": true,
 	"git":         true,
 }

@@ -97,6 +97,11 @@ func TestTransferredSummaryTracking(t *testing.T) {
 		t.Error("expected summary-2 to NOT be transferred")
 	}
 
+	// Flush debounced writes before reloading from disk.
+	if err := store.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
 	// Verify persistence: reload store from disk.
 	store2, err := NewStore(StoreConfig{DatabasePath: storePath}, logger)
 	if err != nil {

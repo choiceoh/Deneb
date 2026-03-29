@@ -17,12 +17,24 @@ import (
 	"time"
 )
 
+// flushDebounce is the window during which consecutive writes are coalesced
+// into a single disk flush. This reduces I/O when multiple persist calls fire
+// in quick succession (e.g., PersistLeafSummary → PersistEvent).
+const flushDebounce = 100 * time.Millisecond
+
 // Store is the Aurora context store (in-memory + JSON file persistence).
 type Store struct {
 	mu     sync.RWMutex
 	path   string
 	logger *slog.Logger
 	data   storeData
+
+	// Debounced flush: consecutive writes within flushDebounce are coalesced
+	// into a single disk write. dirty is set by scheduleFlushed (under mu),
+	// and the timer goroutine calls flushIfDirty after the debounce window.
+	dirty      bool
+	flushTimer *time.Timer
+	flushErr   error // last async flush error, surfaced on next write or Close
 
 	closeOnce sync.Once
 	closeErr  error
@@ -228,7 +240,7 @@ func (s *Store) MarkTransferred(summaryID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.TransferredSummaries[summaryID] = time.Now().UnixMilli()
-	return s.flushLocked()
+	return s.scheduleFlushLocked()
 }
 
 // IsTransferred checks if a summary has already been transferred to the memory store.
@@ -239,15 +251,31 @@ func (s *Store) IsTransferred(summaryID string) bool {
 	return ok
 }
 
-// Close flushes data to disk.
+// Sync forces any pending dirty data to disk synchronously.
+// Safe to call multiple times. Use this when you need a read-after-write
+// guarantee (e.g., before passing the file path to another process).
+func (s *Store) Sync() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.flushTimer != nil {
+		s.flushTimer.Stop()
+	}
+	if s.dirty {
+		s.dirty = false
+		return s.flushLocked()
+	}
+	return s.flushErr
+}
+
+// Close flushes any pending dirty data to disk. Uses closeOnce to ensure
+// idempotency, and a timeout to avoid indefinite shutdown hangs if another
+// goroutine is stuck while holding s.mu.
 func (s *Store) Close() error {
 	s.closeOnce.Do(func() {
-		// Avoid indefinite shutdown hangs if another goroutine is stuck while
-		// holding s.mu. Flush runs in a goroutine and Close returns with timeout.
 		const closeFlushTimeout = 5 * time.Second
 		done := make(chan error, 1)
 		go func() {
-			done <- s.flush()
+			done <- s.syncLocked()
 		}()
 		select {
 		case err := <-done:
@@ -259,15 +287,20 @@ func (s *Store) Close() error {
 	return s.closeErr
 }
 
-func (s *Store) flush() error {
-	// Hold the exclusive write lock for the entire flush operation.
-	// Using RLock here was unsafe: between releasing the read lock after
-	// json.Marshal and writing the temp file, a concurrent PersistLeaf /
-	// PersistCondensed could call flushLocked() with newer data, then
-	// flush() would overwrite the file with the stale marshaled snapshot.
+// syncLocked acquires the write lock and flushes dirty data. Used by Close
+// via a goroutine so Close can apply a timeout without holding the lock.
+func (s *Store) syncLocked() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.flushLocked()
+	if s.flushTimer != nil {
+		s.flushTimer.Stop()
+		s.flushTimer = nil
+	}
+	if s.dirty {
+		s.dirty = false
+		return s.flushLocked()
+	}
+	return s.flushErr
 }
 
 // msgKey converts a uint64 message ID to a map key.
@@ -467,7 +500,7 @@ func (s *Store) PersistLeafSummary(input PersistLeafInput) error {
 		delete(s.data.Messages, msgKey(msgID))
 	}
 
-	return s.flushLocked()
+	return s.scheduleFlushLocked()
 }
 
 // PersistCondensedSummary inserts a condensed summary and replaces children.
@@ -537,7 +570,7 @@ func (s *Store) PersistCondensedSummary(input PersistCondensedInput) error {
 		delete(s.data.TransferredSummaries, parentID)
 	}
 
-	return s.flushLocked()
+	return s.scheduleFlushLocked()
 }
 
 // PersistEvent records a compaction event.
@@ -560,7 +593,7 @@ func (s *Store) PersistEvent(input PersistEventInput) error {
 		s.data.CompactionEvents = s.data.CompactionEvents[len(s.data.CompactionEvents)-maxCompactionEvents:]
 	}
 
-	return s.flushLocked()
+	return s.scheduleFlushLocked()
 }
 
 // ── Sync from chat ──────────────────────────────────────────────────────────
@@ -596,7 +629,7 @@ func (s *Store) SyncMessage(conversationID uint64, role, content string, tokenCo
 		CreatedAt:      now,
 	})
 
-	return msgID, s.flushLocked()
+	return msgID, s.scheduleFlushLocked()
 }
 
 // Reset clears all data for a conversation.
@@ -639,6 +672,43 @@ func (s *Store) Reset(conversationID uint64) error {
 	s.data.CompactionEvents = keptEvents
 
 	return s.flushLocked()
+}
+
+// scheduleFlushLocked marks the store as dirty and schedules a debounced disk
+// write. If a previous async flush failed, that error is returned immediately
+// so the caller knows persistence is degraded. Caller must hold s.mu.
+func (s *Store) scheduleFlushLocked() error {
+	// Surface any error from a previous async flush.
+	if err := s.flushErr; err != nil {
+		s.flushErr = nil
+		s.dirty = true
+		s.resetFlushTimerLocked()
+		return fmt.Errorf("previous flush failed: %w", err)
+	}
+
+	s.dirty = true
+	s.resetFlushTimerLocked()
+	return nil
+}
+
+// resetFlushTimerLocked resets (or starts) the debounce timer. Caller must hold s.mu.
+func (s *Store) resetFlushTimerLocked() {
+	if s.flushTimer != nil {
+		s.flushTimer.Stop()
+	}
+	s.flushTimer = time.AfterFunc(flushDebounce, s.flushIfDirty)
+}
+
+// flushIfDirty is called by the debounce timer. It acquires the lock and
+// writes to disk only if the store is still dirty.
+func (s *Store) flushIfDirty() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.dirty {
+		return
+	}
+	s.flushErr = s.flushLocked()
+	s.dirty = false
 }
 
 // flushLocked writes data to disk. Caller must hold s.mu.

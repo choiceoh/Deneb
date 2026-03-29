@@ -13,7 +13,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-const refWaitTimeout = 30 * time.Second
+const (
+	// refWaitInitial is the fast-path timeout for $ref resolution. Most tool
+	// results arrive within 1s, so a short initial wait avoids blocking the
+	// turn unnecessarily (e.g., read: ~50ms, grep: ~200ms).
+	refWaitInitial = 5 * time.Second
+	// refWaitMax is the absolute upper bound for $ref waits, used when the
+	// context deadline is far away or absent.
+	refWaitMax = 30 * time.Second
+)
 
 // ToolExecutor executes a named tool with JSON input and returns the result.
 // Type alias — identical to agent.ToolExecutor; satisfies the unified interface.
@@ -169,10 +177,32 @@ func resolveRef(ctx context.Context, input json.RawMessage) json.RawMessage {
 		return input
 	}
 
-	result, ok := tc.Wait(ctx, meta.Ref, refWaitTimeout)
+	// Progressive timeout: try a short initial wait first (handles the common
+	// case where the referenced tool completes quickly). If that misses, extend
+	// to the remaining context deadline (capped at refWaitMax).
+	timeout := refWaitInitial
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining < timeout {
+			timeout = remaining
+		}
+	}
+
+	result, ok := tc.Wait(ctx, meta.Ref, timeout)
+	if !ok && timeout < refWaitMax {
+		// First wait expired — try again up to the max.
+		extended := refWaitMax - timeout
+		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
+			if remaining := time.Until(deadline); remaining < extended {
+				extended = remaining
+			}
+		}
+		if extended > 0 {
+			result, ok = tc.Wait(ctx, meta.Ref, extended)
+		}
+	}
 	if !ok {
-		// Timeout — inject error message as ref content.
-		return injectRefContent(input, fmt.Sprintf("[ref timeout: %s not available within %s]", meta.Ref, refWaitTimeout))
+		return injectRefContent(input, fmt.Sprintf("[ref timeout: %s not available within %s]", meta.Ref, refWaitMax))
 	}
 
 	return injectRefContent(input, result.Output)
