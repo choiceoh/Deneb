@@ -133,25 +133,23 @@ func categoryDescription(entries []docEntry) string {
 
 // --- search action ---
 
-func polarisSearch(docsDir, query string) (string, error) {
-	if query == "" {
-		return "", fmt.Errorf("query is required for search action")
-	}
+// searchMatchResult is a structured search result for internal use.
+type searchMatchResult struct {
+	Path     string
+	Line     int
+	Snippet  string
+	HitCount int
+	IsGuide  bool
+}
 
+// polarisSearchInternal returns structured search results for programmatic use.
+func polarisSearchInternal(docsDir, query string) []searchMatchResult {
 	keywords := strings.Fields(strings.ToLower(query))
 	if len(keywords) == 0 {
-		return "No keywords provided.", nil
+		return nil
 	}
 
-	type searchMatch struct {
-		File     string
-		Line     int
-		Snippet  string
-		HitCount int // total keyword hits in document for relevance sorting
-		IsGuide  bool
-	}
-
-	var matches []searchMatch
+	var matches []searchMatchResult
 
 	// Search docs/ files.
 	if _, err := os.Stat(docsDir); err == nil {
@@ -194,8 +192,8 @@ func polarisSearch(docsDir, query string) (string, error) {
 						if end > len(lines) {
 							end = len(lines)
 						}
-						matches = append(matches, searchMatch{
-							File:     e.Path,
+						matches = append(matches, searchMatchResult{
+							Path:     e.Path,
 							Line:     i + 1,
 							Snippet:  strings.Join(lines[start:end], "\n"),
 							HitCount: hitCount,
@@ -238,8 +236,8 @@ func polarisSearch(docsDir, query string) (string, error) {
 					if end > len(lines) {
 						end = len(lines)
 					}
-					matches = append(matches, searchMatch{
-						File:     key,
+					matches = append(matches, searchMatchResult{
+						Path:     key,
 						Line:     i + 1,
 						Snippet:  strings.Join(lines[start:end], "\n"),
 						HitCount: hitCount,
@@ -251,14 +249,23 @@ func polarisSearch(docsDir, query string) (string, error) {
 		}
 	}
 
-	if len(matches) == 0 {
-		return fmt.Sprintf("No matches found for %q in documentation.", query), nil
-	}
-
 	// Sort by relevance (hit count descending).
 	sort.Slice(matches, func(i, j int) bool {
 		return matches[i].HitCount > matches[j].HitCount
 	})
+
+	return matches
+}
+
+func polarisSearch(docsDir, query string) (string, error) {
+	if query == "" {
+		return "", fmt.Errorf("query is required for search action")
+	}
+
+	matches := polarisSearchInternal(docsDir, query)
+	if len(matches) == 0 {
+		return fmt.Sprintf("No matches found for %q in documentation.", query), nil
+	}
 
 	// Cap results.
 	truncated := false
@@ -274,7 +281,7 @@ func polarisSearch(docsDir, query string) (string, error) {
 		if m.IsGuide {
 			tag = "[guide] "
 		}
-		fmt.Fprintf(&sb, "### %s%s (line %d)\n%s\n\n", tag, m.File, m.Line, m.Snippet)
+		fmt.Fprintf(&sb, "### %s%s (line %d)\n%s\n\n", tag, m.Path, m.Line, m.Snippet)
 	}
 	if truncated {
 		sb.WriteString("... (showing first 15 results, refine your query for more specific results)\n")

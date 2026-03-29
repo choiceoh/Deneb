@@ -408,6 +408,156 @@ func TestSystemManualGuidesRelated(t *testing.T) {
 	}
 }
 
+// --- ask action ---
+
+func TestPolarisAskBasic(t *testing.T) {
+	root := repoRoot(t)
+	called := false
+	mockLLM := func(_ context.Context, system, user string, maxTokens int) (string, error) {
+		called = true
+		// Verify the LLM receives structured context.
+		if !strings.Contains(user, "## Question") {
+			t.Error("expected '## Question' section in LLM input")
+		}
+		return "세션은 IDLE에서 RUNNING으로 전환됩니다.", nil
+	}
+	mockHealth := func() bool { return true }
+
+	fn := NewHandlerWithLLM(root, mockLLM, mockHealth)
+	input, _ := json.Marshal(map[string]string{
+		"action":   "ask",
+		"question": "세션 라이프사이클은 어떻게 동작하나요?",
+	})
+	result, err := fn(context.Background(), input)
+	if err != nil {
+		t.Fatalf("ask returned error: %v", err)
+	}
+	if !called {
+		t.Error("expected LLM synthesizer to be called")
+	}
+	if !strings.Contains(result, "세션") {
+		t.Errorf("expected synthesized answer about sessions, got: %s", result)
+	}
+}
+
+func TestPolarisAskFallback(t *testing.T) {
+	root := repoRoot(t)
+	mockLLM := func(_ context.Context, system, user string, maxTokens int) (string, error) {
+		t.Error("LLM should not be called when health check fails")
+		return "", nil
+	}
+	mockHealth := func() bool { return false }
+
+	fn := NewHandlerWithLLM(root, mockLLM, mockHealth)
+	input, _ := json.Marshal(map[string]string{
+		"action":   "ask",
+		"question": "session lifecycle",
+	})
+	result, err := fn(context.Background(), input)
+	if err != nil {
+		t.Fatalf("ask fallback returned error: %v", err)
+	}
+	if !strings.Contains(result, "sglang") {
+		t.Error("expected fallback message mentioning sglang")
+	}
+	if !strings.Contains(result, "session lifecycle") {
+		t.Error("expected question echoed in fallback")
+	}
+}
+
+func TestPolarisAskEmptyQuestion(t *testing.T) {
+	root := repoRoot(t)
+	fn := NewHandlerWithLLM(root, nil, nil)
+	input, _ := json.Marshal(map[string]string{
+		"action":   "ask",
+		"question": "",
+	})
+	_, err := fn(context.Background(), input)
+	if err == nil {
+		t.Error("expected error for empty question")
+	}
+}
+
+func TestPolarisAskNoLLM(t *testing.T) {
+	// NewHandler (without LLM) should gracefully handle ask action.
+	root := repoRoot(t)
+	fn := NewHandler(root)
+	input, _ := json.Marshal(map[string]string{
+		"action":   "ask",
+		"question": "aurora context engine",
+	})
+	result, err := fn(context.Background(), input)
+	if err != nil {
+		t.Fatalf("ask without LLM returned error: %v", err)
+	}
+	if !strings.Contains(result, "sglang") {
+		t.Error("expected fallback message when no LLM injected")
+	}
+}
+
+// --- polarisSearchInternal ---
+
+func TestPolarisSearchInternal(t *testing.T) {
+	root := repoRoot(t)
+	docsDir := root + "/docs"
+
+	results := polarisSearchInternal(docsDir, "session")
+	if len(results) == 0 {
+		t.Error("expected at least one result for 'session'")
+	}
+
+	// Results should be sorted by hit count descending.
+	for i := 1; i < len(results); i++ {
+		if results[i].HitCount > results[i-1].HitCount {
+			t.Errorf("results not sorted by relevance: [%d].HitCount=%d > [%d].HitCount=%d",
+				i, results[i].HitCount, i-1, results[i-1].HitCount)
+		}
+	}
+}
+
+// --- guide scoring ---
+
+func TestScoreGuideRelevance(t *testing.T) {
+	g := guideEntry{
+		Key:     "aurora",
+		Title:   "Aurora Context Engine",
+		Summary: "Context assembly lifecycle, token budgeting, aurora tools",
+		Content: "Aurora handles context assembly for sessions.",
+	}
+
+	score := scoreGuideRelevance(g, []string{"aurora"})
+	if score == 0 {
+		t.Error("expected non-zero score for 'aurora' keyword against aurora guide")
+	}
+
+	// Title matches should boost score.
+	scoreTitle := scoreGuideRelevance(g, []string{"aurora"})
+	scoreContent := scoreGuideRelevance(g, []string{"sessions"})
+	if scoreTitle <= scoreContent {
+		t.Errorf("title match (aurora=%d) should score higher than content-only match (sessions=%d)",
+			scoreTitle, scoreContent)
+	}
+}
+
+// --- keyword extraction ---
+
+func TestExtractSearchKeywords(t *testing.T) {
+	tests := []struct {
+		input    string
+		contains string
+	}{
+		{"세션 라이프사이클은 어떻게 동작하나요?", "세션"},
+		{"aurora context engine", "aurora"},
+		{"How does compaction work?", "compaction"},
+	}
+	for _, tc := range tests {
+		result := extractSearchKeywords(tc.input)
+		if !strings.Contains(result, tc.contains) {
+			t.Errorf("extractSearchKeywords(%q) = %q, expected to contain %q", tc.input, result, tc.contains)
+		}
+	}
+}
+
 // --- topics: category description ---
 
 func TestSystemManualTopicsCategoryDescription(t *testing.T) {

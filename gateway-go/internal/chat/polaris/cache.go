@@ -1,5 +1,6 @@
 // Package polaris implements the polaris agent tool: a searchable index of
-// Deneb's documentation tree plus AI-curated system guides.
+// Deneb's documentation tree plus AI-curated system guides, with an AI-powered
+// ask action that autonomously gathers relevant knowledge and synthesizes answers.
 package polaris
 
 import (
@@ -16,6 +17,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// LLMSynthesizer calls a local LLM for answer synthesis.
+// Injected from the chat package to avoid circular imports.
+type LLMSynthesizer func(ctx context.Context, system, userMessage string, maxTokens int) (string, error)
+
+// HealthChecker checks if the local LLM is available.
+type HealthChecker func() bool
+
 // polarisCacheTTL is the TTL for the doc tree index cache.
 // Docs rarely change in a running gateway, so 60s is generous.
 const polarisCacheTTL = 60 * time.Second
@@ -25,6 +33,26 @@ const polarisMaxReadChars = 8000
 
 // polarisMaxSearchResults caps keyword search results.
 const polarisMaxSearchResults = 15
+
+// ask action constants.
+const (
+	polarisAskMaxContextChars = 15000 // max chars of gathered content for LLM input
+	polarisAskMaxTokens       = 4096  // LLM output token budget
+	polarisAskMaxOutputChars  = 3500  // hard cap on final output (Telegram safety)
+	polarisAskMaxDocs         = 3     // max full docs to read
+	polarisAskMaxGuides       = 2     // max full guides to include
+	polarisAskPerSourceChars  = 4000  // max chars per individual source
+)
+
+const polarisAskSystemPrompt = `You are Polaris, Deneb's internal documentation expert.
+Given a question and relevant documentation/guides, provide a direct, comprehensive answer.
+Rules:
+- Answer in the same language as the question (Korean if Korean, English if English).
+- Be precise and cite specific docs/guides when relevant.
+- Output for Telegram (max 3500 chars). Be concise but complete.
+- Use markdown formatting sparingly (bold for key terms, code blocks for code).
+- If the documentation doesn't cover the topic, say so clearly.
+- No preamble or pleasantries. Direct answer only.`
 
 // --- Doc tree index cache ---
 
@@ -280,19 +308,33 @@ func hasDocsContent(dir string) bool {
 // --- Tool implementation ---
 
 // NewHandler returns the polaris tool handler function for use with ToolRegistry.
+// This handler supports all actions except ask (no LLM dependency).
 func NewHandler(workspaceDir string) func(context.Context, json.RawMessage) (string, error) {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return newHandler(workspaceDir, nil, nil)
+}
+
+// NewHandlerWithLLM returns the polaris tool handler with AI-powered ask action.
+// The llmFn and healthFn are injected from the chat package to avoid circular imports.
+func NewHandlerWithLLM(workspaceDir string, llmFn LLMSynthesizer, healthFn HealthChecker) func(context.Context, json.RawMessage) (string, error) {
+	return newHandler(workspaceDir, llmFn, healthFn)
+}
+
+func newHandler(workspaceDir string, llmFn LLMSynthesizer, healthFn HealthChecker) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		docsDir := resolveDocsDir(workspaceDir)
 		var p struct {
-			Action string `json:"action"`
-			Query  string `json:"query"`
-			Topic  string `json:"topic"`
+			Action   string `json:"action"`
+			Query    string `json:"query"`
+			Topic    string `json:"topic"`
+			Question string `json:"question"`
 		}
 		if err := jsonutil.UnmarshalInto("polaris params", input, &p); err != nil {
 			return "", err
 		}
 
 		switch p.Action {
+		case "ask":
+			return polarisAsk(ctx, docsDir, p.Question, llmFn, healthFn)
 		case "topics":
 			return polarisTopics(docsDir, p.Topic)
 		case "search":
@@ -302,7 +344,249 @@ func NewHandler(workspaceDir string) func(context.Context, json.RawMessage) (str
 		case "guides":
 			return polarisGuides(p.Topic)
 		default:
-			return "", fmt.Errorf("unknown action %q (valid: topics, search, read, guides)", p.Action)
+			return "", fmt.Errorf("unknown action %q (valid: ask, topics, search, read, guides)", p.Action)
 		}
 	}
+}
+
+// --- ask action ---
+
+// polarisAsk autonomously gathers relevant docs/guides and synthesizes an answer.
+func polarisAsk(ctx context.Context, docsDir, question string, llmFn LLMSynthesizer, healthFn HealthChecker) (string, error) {
+	if question == "" {
+		return "", fmt.Errorf("question is required for ask action")
+	}
+
+	// Phase 1: Gather relevant knowledge.
+	keywords := extractSearchKeywords(question)
+
+	// Search docs and guides by keywords.
+	searchResults := polarisSearchInternal(docsDir, keywords)
+
+	// Score guides by relevance independently (covers guides that match partially).
+	kwList := strings.Fields(strings.ToLower(keywords))
+	topGuides := scoreAndSelectGuides(kwList, polarisAskMaxGuides)
+
+	// Read top doc matches in full.
+	var docContents []namedContent
+	seen := make(map[string]bool)
+	for _, m := range searchResults {
+		if m.IsGuide {
+			continue
+		}
+		if seen[m.Path] {
+			continue
+		}
+		seen[m.Path] = true
+		body, err := polarisRead(docsDir, m.Path)
+		if err != nil || strings.HasPrefix(body, "Document not found") {
+			continue
+		}
+		docContents = append(docContents, namedContent{
+			name:    m.Path,
+			content: truncateChars(body, polarisAskPerSourceChars),
+		})
+		if len(docContents) >= polarisAskMaxDocs {
+			break
+		}
+	}
+
+	// Collect guide content.
+	var guideContents []namedContent
+	for _, g := range topGuides {
+		guideContents = append(guideContents, namedContent{
+			name:    g.Key + " (guide)",
+			content: truncateChars(g.Content, polarisAskPerSourceChars),
+		})
+	}
+
+	// Phase 2: Assemble context for LLM.
+	contextText := assembleAskContext(question, docContents, guideContents)
+
+	// Phase 3: Check LLM availability and synthesize.
+	if llmFn == nil || healthFn == nil || !healthFn() {
+		return buildAskFallback(question, docContents, guideContents), nil
+	}
+
+	result, err := llmFn(ctx, polarisAskSystemPrompt, contextText, polarisAskMaxTokens)
+	if err != nil {
+		return buildAskFallback(question, docContents, guideContents), nil
+	}
+
+	// Enforce output length for Telegram.
+	result = strings.TrimSpace(result)
+	if len(result) > polarisAskMaxOutputChars {
+		result = result[:polarisAskMaxOutputChars] + "\n..."
+	}
+
+	return result, nil
+}
+
+type namedContent struct {
+	name    string
+	content string
+}
+
+// extractSearchKeywords extracts meaningful search terms from a natural language question.
+func extractSearchKeywords(question string) string {
+	// Remove common Korean particles and question markers.
+	replacer := strings.NewReplacer(
+		"은", " ", "는", " ", "이", " ", "가", " ",
+		"을", " ", "를", " ", "에", " ", "의", " ",
+		"로", " ", "으로", " ", "에서", " ", "와", " ",
+		"과", " ", "도", " ", "까지", " ", "부터", " ",
+		"하나요", " ", "인가요", " ", "인지", " ", "할까요", " ",
+		"뭐야", " ", "뭔가요", " ", "무엇", " ",
+		"어떻게", " ", "어떤", " ", "왜", " ",
+		"?", " ", "？", " ", ".", " ",
+	)
+	cleaned := replacer.Replace(question)
+
+	// Split and filter short/stop words.
+	words := strings.Fields(cleaned)
+	var keywords []string
+	for _, w := range words {
+		w = strings.TrimSpace(w)
+		if len(w) < 2 {
+			continue
+		}
+		keywords = append(keywords, w)
+	}
+
+	if len(keywords) == 0 {
+		return question // fallback to full question
+	}
+	return strings.Join(keywords, " ")
+}
+
+// scoreAndSelectGuides scores all builtin guides by keyword relevance and returns the top N.
+func scoreAndSelectGuides(keywords []string, maxGuides int) []guideEntry {
+	if len(keywords) == 0 {
+		return nil
+	}
+
+	type scored struct {
+		guide guideEntry
+		score int
+	}
+
+	var results []scored
+	for _, key := range builtinGuideOrder {
+		g := builtinGuides[key]
+		score := scoreGuideRelevance(g, keywords)
+		if score > 0 {
+			results = append(results, scored{guide: g, score: score})
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score > results[j].score
+	})
+
+	var out []guideEntry
+	for i, r := range results {
+		if i >= maxGuides {
+			break
+		}
+		out = append(out, r.guide)
+	}
+	return out
+}
+
+// scoreGuideRelevance scores a guide by keyword hits.
+// Title hits weighted 3x, summary 2x, content 1x.
+func scoreGuideRelevance(g guideEntry, keywords []string) int {
+	titleLower := strings.ToLower(g.Title)
+	summaryLower := strings.ToLower(g.Summary)
+	contentLower := strings.ToLower(g.Content)
+
+	score := 0
+	for _, kw := range keywords {
+		score += strings.Count(titleLower, kw) * 3
+		score += strings.Count(summaryLower, kw) * 2
+		score += strings.Count(contentLower, kw)
+	}
+	return score
+}
+
+// assembleAskContext builds the user message for the LLM with gathered context.
+func assembleAskContext(question string, docs, guides []namedContent) string {
+	var sb strings.Builder
+	sb.WriteString("## Question\n")
+	sb.WriteString(question)
+	sb.WriteString("\n\n")
+
+	totalChars := len(question)
+
+	if len(guides) > 0 {
+		sb.WriteString("## Relevant System Guides\n\n")
+		for _, g := range guides {
+			if totalChars+len(g.content) > polarisAskMaxContextChars {
+				remaining := polarisAskMaxContextChars - totalChars
+				if remaining > 200 {
+					fmt.Fprintf(&sb, "### %s\n%s\n\n", g.name, g.content[:remaining])
+				}
+				break
+			}
+			fmt.Fprintf(&sb, "### %s\n%s\n\n", g.name, g.content)
+			totalChars += len(g.content)
+		}
+	}
+
+	if len(docs) > 0 {
+		sb.WriteString("## Relevant Documentation\n\n")
+		for _, d := range docs {
+			if totalChars+len(d.content) > polarisAskMaxContextChars {
+				remaining := polarisAskMaxContextChars - totalChars
+				if remaining > 200 {
+					fmt.Fprintf(&sb, "### %s\n%s\n\n", d.name, d.content[:remaining])
+				}
+				break
+			}
+			fmt.Fprintf(&sb, "### %s\n%s\n\n", d.name, d.content)
+			totalChars += len(d.content)
+		}
+	}
+
+	if len(guides) == 0 && len(docs) == 0 {
+		sb.WriteString("(No relevant documentation found for this question.)\n\n")
+	}
+
+	sb.WriteString("Answer the question based on the documentation above.")
+	return sb.String()
+}
+
+// buildAskFallback formats gathered content when sglang is unavailable.
+func buildAskFallback(question string, docs, guides []namedContent) string {
+	var sb strings.Builder
+	sb.WriteString("[polaris: sglang 서버에 연결할 수 없어 원본 검색 결과를 반환합니다]\n\n")
+	sb.WriteString("Question: ")
+	sb.WriteString(question)
+
+	for _, g := range guides {
+		sb.WriteString("\n\n--- ")
+		sb.WriteString(g.name)
+		sb.WriteString(" ---\n")
+		sb.WriteString(truncateChars(g.content, 2000))
+	}
+	for _, d := range docs {
+		sb.WriteString("\n\n--- ")
+		sb.WriteString(d.name)
+		sb.WriteString(" ---\n")
+		sb.WriteString(truncateChars(d.content, 2000))
+	}
+
+	return sb.String()
+}
+
+// truncateChars truncates a string to maxChars, cutting at the last newline.
+func truncateChars(s string, maxChars int) string {
+	if len(s) <= maxChars {
+		return s
+	}
+	cut := s[:maxChars]
+	if idx := strings.LastIndex(cut, "\n"); idx > maxChars/2 {
+		return cut[:idx] + "\n..."
+	}
+	return cut + "..."
 }

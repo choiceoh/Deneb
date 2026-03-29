@@ -84,9 +84,9 @@ var toolCategories = []struct {
 	{"Code", []string{"multi_edit", "tree", "diff", "analyze", "test"}},
 	{"Git", []string{"git"}},
 	{"Exec", []string{"exec", "process"}},
-	{"AI", []string{"pilot"}},
+	{"AI", []string{"pilot", "polaris"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory_search", "polaris", "vega"}},
+	{"Memory", []string{"memory_search", "vega"}},
 	{"System", []string{"cron", "message", "gateway"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
@@ -292,14 +292,12 @@ func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock
 
 // writePolarisSection writes the Polaris system manual usage guide.
 func writePolarisSection(sb *strings.Builder) {
-	sb.WriteString("## Polaris (System Manual)\n")
-	sb.WriteString("데네브 시스템에 대해 모를 때 polaris로 문서를 조회하세요.\n")
-	sb.WriteString("- polaris(action:'guides') → 27개 AI 시스템 가이드 (4개 카테고리: core, tools, runtime, infra)\n")
-	sb.WriteString("- polaris(action:'guides', topic:'core') → 카테고리별 가이드 목록\n")
-	sb.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기 + Related Guides\n")
-	sb.WriteString("- polaris(action:'topics') → 전체 문서 트리 구조\n")
-	sb.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색\n")
-	sb.WriteString("- polaris(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
+	sb.WriteString("## Polaris (AI 시스템 지식 에이전트)\n")
+	sb.WriteString("데네브 시스템에 대해 질문이 있으면 polaris ask를 사용하세요. 관련 문서/가이드를 자동 검색하고 종합 답변을 생성합니다.\n")
+	sb.WriteString("- polaris(action:'ask', question:'세션 라이프사이클은 어떻게 동작하나요?') → AI가 관련 문서를 검색하고 종합 답변\n")
+	sb.WriteString("- polaris(action:'guides') → 27개 AI 시스템 가이드 직접 탐색\n")
+	sb.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색 (원본 결과)\n")
+	sb.WriteString("- polaris(action:'read', topic:'concepts/session') → 특정 문서 읽기\n\n")
 }
 
 // writeCompactToolList writes a categorized tool name list (no descriptions).

@@ -135,9 +135,9 @@ func RegisterFSTools(registry *ToolRegistry, workspaceDir string) {
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "polaris",
-		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides in 4 categories: core, tools, runtime, infra). Use guides with category key to browse",
+		Description: "Deneb system knowledge agent. Use ask action with a question for AI-synthesized answers. Also supports: topics (doc tree), search (keyword), read (doc), guides (27 curated guides). Prefer ask for questions",
 		InputSchema: polarisToolSchema(),
-		Fn:          polaris.NewHandler(workspaceDir),
+		Fn:          polaris.NewHandlerWithLLM(workspaceDir, callLocalLLM, checkSglangHealth),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "gateway",
