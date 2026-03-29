@@ -108,6 +108,23 @@ Each fact object has:
 
 Example: {"facts": [{"content": "사용자가 Python보다 Go를 선호함 — 3번의 대화에서 일관되게 Go를 선택", "category": "preference", "importance": 0.8, "expiry_hint": null}]}
 
+## Speaker Attribution (화자 귀속) — CRITICAL
+The input has two clearly labeled sections: "User:" and "Assistant:".
+You MUST correctly attribute WHO said or did what:
+
+- **User said/did** = content from the "User:" section ONLY
+- **Assistant said/did** = content from the "Assistant:" section ONLY
+- If the Assistant summarized information, listed PRs, or explained something → that is the ASSISTANT's action, NOT the user's
+- If the Assistant asked a question (e.g. "머지할까?") → the ASSISTANT asked, the user did NOT ask
+- "사용자가 X에 관심을 가짐" is ONLY valid if the USER explicitly mentioned or asked about X
+- Do NOT infer user interest from topics the Assistant brought up unprompted
+- When the user's message is short/simple and the assistant's response is long/detailed, most of the content is the ASSISTANT's — do not attribute it to the user
+
+**Wrong**: AI가 PR 목록을 정리해줬는데 → "사용자가 PR들에 관심을 가짐" ❌
+**Right**: AI가 PR 목록을 정리해줬는데 → "AI가 디스코드 PR 현황을 정리해줌, 사용자는 간단히 확인" ✅
+**Wrong**: AI가 "머지할까?" 질문 → "사용자가 머지 여부를 물어봄" ❌
+**Right**: AI가 "머지할까?" 질문 → "AI가 PR #702 머지를 제안, 사용자 응답 대기" ✅
+
 ## Anti-patterns (절대 저장하지 마)
 - ❌ 루틴 코드 작업: "X 파일 수정함", "Y 버그 수정", "Z 기능 추가"
 - ❌ 일회성 디버깅: "로그 확인해서 에러 찾음", "타입 오류 수정"
@@ -115,6 +132,7 @@ Example: {"facts": [{"content": "사용자가 Python보다 Go를 선호함 — 3
 - ❌ 표준 도구 사용: "git commit", "npm install", "make build"
 - ❌ 구현 디테일: "함수 A를 B로 리팩토링", "인터페이스 C 추가"
 - ❌ 단순 정보 전달: AI가 설명한 내용을 그대로 기록
+- ❌ 잘못된 화자 귀속: AI가 한 말을 "사용자가 ~함"으로 기록
 
 ## Rules
 - Max 7 facts. Quality over quantity

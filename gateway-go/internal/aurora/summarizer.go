@@ -29,7 +29,8 @@ Rules:
 - Target the specified token count; do not pad or truncate artificially.
 - For tool calls: preserve tool name, key arguments, and outcome (success/failure). Format: [tool:NAME → result]
 - When summarizing decisions, include the reasoning or constraint that led to the choice. Preserve rejected alternatives if explicitly discussed.
-- Preserve file:line references and function/method names exactly. When code changes are discussed, keep the before→after pattern.`
+- Preserve file:line references and function/method names exactly. When code changes are discussed, keep the before→after pattern.
+- CRITICAL: Preserve speaker attribution. Clearly distinguish who said or did what — "사용자가 요청함" vs "AI가 제안함". Never attribute AI actions/statements to the user or vice versa.`
 
 	// aggressiveAddendum is appended for aggressive compression passes.
 	aggressiveAddendum = `
