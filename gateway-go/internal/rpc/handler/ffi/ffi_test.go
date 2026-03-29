@@ -6,20 +6,11 @@ import (
 	"testing"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// callHandler is a test helper that invokes a named handler from a map.
-func callHandler(m map[string]rpcutil.HandlerFunc, method string, params any) *protocol.ResponseFrame {
-	raw, _ := json.Marshal(params)
-	req := &protocol.RequestFrame{ID: "test-1", Method: method, Params: json.RawMessage(raw)}
-	h, ok := m[method]
-	if !ok {
-		return nil
-	}
-	return h(context.Background(), req)
-}
+var callHandler = rpctest.Call
 
 // ---------------------------------------------------------------------------
 // ProtocolMethods

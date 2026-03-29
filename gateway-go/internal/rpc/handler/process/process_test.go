@@ -6,20 +6,11 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// call invokes a handler by method name from the given map.
-func call(m map[string]rpcutil.HandlerFunc, method string, params any) *protocol.ResponseFrame {
-	raw, _ := json.Marshal(params)
-	req := &protocol.RequestFrame{ID: "t1", Method: method, Params: json.RawMessage(raw)}
-	h, ok := m[method]
-	if !ok {
-		return nil
-	}
-	return h(context.Background(), req)
-}
+var call = rpctest.Call
 
 // ---------------------------------------------------------------------------
 // ApprovalMethods
