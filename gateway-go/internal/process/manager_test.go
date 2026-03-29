@@ -197,3 +197,72 @@ func TestAutoID(t *testing.T) {
 		t.Error("expected auto-generated ID")
 	}
 }
+
+func TestExecuteBackground(t *testing.T) {
+	m := NewManager(testLogger())
+	id := m.ExecuteBackground(context.Background(), ExecRequest{
+		Command: "echo",
+		Args:    []string{"bg"},
+	})
+	if id == "" {
+		t.Fatal("expected non-empty process ID")
+	}
+
+	// Poll until done (max 2s).
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		snap := m.Get(id)
+		if snap != nil && snap.Status == StatusDone {
+			if snap.Result == nil || snap.Result.Stdout == "" {
+				t.Error("expected stdout from background process")
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Error("background process did not complete in time")
+}
+
+func TestParallelDrain_LargeOutput(t *testing.T) {
+	// Verify that large concurrent stdout+stderr doesn't deadlock.
+	m := NewManager(testLogger())
+	// Generate 128KB on both stdout and stderr simultaneously.
+	result := m.Execute(context.Background(), ExecRequest{
+		ID:        "parallel-drain",
+		Command:   "bash",
+		Args:      []string{"-c", "dd if=/dev/zero bs=1024 count=128 2>/dev/null | tr '\\0' 'A'; dd if=/dev/zero bs=1024 count=128 | tr '\\0' 'B' >&2"},
+		TimeoutMs: 10000,
+	})
+	if result.Status != StatusDone {
+		t.Errorf("expected done, got %s (error: %s)", result.Status, result.Error)
+	}
+	if len(result.Stdout) < 100000 {
+		t.Errorf("expected large stdout, got %d bytes", len(result.Stdout))
+	}
+	if len(result.Stderr) < 100000 {
+		t.Errorf("expected large stderr, got %d bytes", len(result.Stderr))
+	}
+}
+
+func TestEnvCache(t *testing.T) {
+	m := NewManager(testLogger())
+
+	// First call populates the cache.
+	env1 := m.baseEnv()
+	if len(env1) == 0 {
+		t.Fatal("expected non-empty base env")
+	}
+
+	// Second call should return the same slice (cached).
+	env2 := m.baseEnv()
+	if len(env1) != len(env2) {
+		t.Error("expected cached env to be identical")
+	}
+
+	// Invalidate and verify re-computation.
+	m.InvalidateEnvCache()
+	env3 := m.baseEnv()
+	if len(env3) == 0 {
+		t.Error("expected non-empty env after invalidation")
+	}
+}

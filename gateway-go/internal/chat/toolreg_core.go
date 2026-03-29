@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
@@ -327,6 +328,43 @@ func RegisterHiddenTools(registry *ToolRegistry, agentLog *agentlog.Writer) {
 
 // --- Exec tool ---
 
+// maxOutputRunes caps tool output sent to the LLM to avoid wasting tokens.
+// Head and tail are preserved for context; the middle is elided.
+const maxOutputRunes = 30000
+
+// truncateForLLM keeps the first half and last half of output when it exceeds
+// maxOutputRunes, inserting a clear elision marker in the middle.
+func truncateForLLM(s string) string {
+	runes := []rune(s)
+	if len(runes) <= maxOutputRunes {
+		return s
+	}
+	half := maxOutputRunes / 2
+	head := string(runes[:half])
+	tail := string(runes[len(runes)-half:])
+	omitted := len(runes) - maxOutputRunes
+	return fmt.Sprintf("%s\n\n... [%d chars omitted] ...\n\n%s", head, omitted, tail)
+}
+
+// workdirCache avoids redundant os.Stat calls for the same directory across
+// sequential exec invocations. Safe for concurrent use.
+var workdirCache sync.Map // map[string]bool
+
+func validateWorkdir(dir string) error {
+	if cached, ok := workdirCache.Load(dir); ok {
+		if cached.(bool) {
+			return nil
+		}
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		workdirCache.Store(dir, false)
+		return fmt.Errorf("working directory does not exist: %s", dir)
+	}
+	workdirCache.Store(dir, true)
+	return nil
+}
+
 func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -348,9 +386,8 @@ func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			workDir = defaultDir
 		}
 
-		// Validate working directory exists.
-		if info, err := os.Stat(workDir); err != nil || !info.IsDir() {
-			return "", fmt.Errorf("working directory does not exist: %s", workDir)
+		if err := validateWorkdir(workDir); err != nil {
+			return "", err
 		}
 
 		timeoutMs := int64(30000)
@@ -363,16 +400,25 @@ func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 		}
 
 		if procMgr != nil {
-			result := procMgr.Execute(ctx, process.ExecRequest{
+			req := process.ExecRequest{
 				Command:    "bash",
 				Args:       []string{"-c", p.Command},
 				WorkingDir: workDir,
 				TimeoutMs:  timeoutMs,
-			})
-			if p.Structured {
-				return formatExecResultJSON(result), nil
 			}
-			return formatExecResult(result), nil
+
+			// Background mode: launch asynchronously and return the process ID
+			// so the caller can poll via the process tool.
+			if p.Background {
+				id := procMgr.ExecuteBackground(ctx, req)
+				return fmt.Sprintf(`{"id":"%s","status":"running","message":"background process started, use process tool with action=poll to check"}`, id), nil
+			}
+
+			result := procMgr.Execute(ctx, req)
+			if p.Structured {
+				return truncateForLLM(formatExecResultJSON(result)), nil
+			}
+			return truncateForLLM(formatExecResult(result)), nil
 		}
 
 		// Fallback: direct exec without process manager.
@@ -401,13 +447,13 @@ func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 				"timed_out":  execCtx.Err() != nil,
 			}
 			data, _ := json.MarshalIndent(result, "", "  ")
-			return string(data), nil
+			return truncateForLLM(string(data)), nil
 		}
 
 		if err != nil {
-			return fmt.Sprintf("%s\n\nError: %s", string(out), err.Error()), nil
+			return truncateForLLM(fmt.Sprintf("%s\n\nError: %s", string(out), err.Error())), nil
 		}
-		return string(out), nil
+		return truncateForLLM(string(out)), nil
 	}
 }
 
