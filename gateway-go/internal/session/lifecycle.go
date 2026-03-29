@@ -11,12 +11,13 @@ const (
 
 // LifecycleEvent represents a session lifecycle state transition event.
 type LifecycleEvent struct {
-	Phase      LifecyclePhase `json:"phase"`
-	Ts         int64          `json:"ts"`
-	StopReason string         `json:"stopReason,omitempty"`
-	Aborted    bool           `json:"aborted,omitempty"`
-	StartedAt  *int64         `json:"startedAt,omitempty"`
-	EndedAt    *int64         `json:"endedAt,omitempty"`
+	Phase         LifecyclePhase `json:"phase"`
+	Ts            int64          `json:"ts"`
+	StopReason    string         `json:"stopReason,omitempty"`
+	Aborted       bool           `json:"aborted,omitempty"`
+	StartedAt     *int64         `json:"startedAt,omitempty"`
+	EndedAt       *int64         `json:"endedAt,omitempty"`
+	FailureReason string         `json:"failureReason,omitempty"`
 }
 
 // LifecycleSnapshot captures the derived session state after applying an event.
@@ -27,6 +28,7 @@ type LifecycleSnapshot struct {
 	RuntimeMs      *int64    `json:"runtimeMs,omitempty"`
 	UpdatedAt      *int64    `json:"updatedAt,omitempty"`
 	AbortedLastRun bool      `json:"abortedLastRun"`
+	FailureReason  string    `json:"failureReason,omitempty"`
 }
 
 // isFiniteTimestamp checks whether a timestamp pointer is valid (non-nil, > 0).
@@ -163,5 +165,6 @@ func DeriveLifecycleSnapshot(existing *Session, event LifecycleEvent) LifecycleS
 		RuntimeMs:      resolveRuntimeMs(startedAt, endedAt, existingRuntimeMs),
 		UpdatedAt:      updatedAt,
 		AbortedLastRun: status == StatusKilled,
+		FailureReason:  event.FailureReason,
 	}
 }

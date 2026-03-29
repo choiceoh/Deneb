@@ -76,7 +76,7 @@ func handleRunSuccess(
 		}
 	}
 
-	finishRun(deps, params, session.PhaseEnd, "completed", "done", now)
+	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
 	// Auto-memory: extract key learnings asynchronously via local sglang.
@@ -165,23 +165,26 @@ func handleRunError(
 		if broadcaster != nil {
 			broadcaster.EmitAborted("")
 		}
-		finishRun(deps, params, session.PhaseEnd, "aborted", "killed", now)
+		finishRun(deps, params, session.PhaseEnd, "aborted", "killed", "", now)
 		emitJobEvent(deps, params.ClientRunID, "end", true, err.Error(), now)
 	} else {
 		logger.Error("agent run failed", "error", err)
 		if broadcaster != nil {
 			broadcaster.EmitError(err.Error())
 		}
-		finishRun(deps, params, session.PhaseError, "error", "failed", now)
+		finishRun(deps, params, session.PhaseError, "error", "failed", classifyRunFailureReason(err.Error()), now)
 		emitJobEvent(deps, params.ClientRunID, "error", false, err.Error(), now)
 	}
 }
 
 // finishRun transitions the session out of running and broadcasts the change.
-func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, reason, status string, ts int64) {
+// failureReason is a human-readable Korean description of why the run failed;
+// pass "" for non-error completions.
+func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, reason, status, failureReason string, ts int64) {
 	deps.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
-		Phase: phase,
-		Ts:    ts,
+		Phase:         phase,
+		Ts:            ts,
+		FailureReason: failureReason,
 	})
 	if deps.broadcast != nil {
 		deps.broadcast("sessions.changed", map[string]any{
@@ -189,6 +192,35 @@ func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, rea
 			"reason":     reason,
 			"status":     status,
 		})
+	}
+}
+
+// classifyRunFailureReason returns a Korean-language description of a run error
+// for storage in Session.FailureReason. Returns "" for unrecognized errors.
+func classifyRunFailureReason(errMsg string) string {
+	lower := strings.ToLower(errMsg)
+	switch {
+	case strings.Contains(errMsg, "429"):
+		return "API 요청 한도 초과 (429)"
+	case strings.Contains(errMsg, "401") ||
+		strings.Contains(lower, "unauthorized") ||
+		strings.Contains(lower, "invalid_api_key") ||
+		strings.Contains(lower, "authentication_error"):
+		return "API 인증 실패 (401)"
+	case strings.Contains(lower, "billing") ||
+		strings.Contains(lower, "payment") ||
+		strings.Contains(lower, "insufficient_quota"):
+		return "결제 오류"
+	case strings.Contains(errMsg, "502") ||
+		strings.Contains(errMsg, "503") ||
+		strings.Contains(errMsg, "521") ||
+		strings.Contains(errMsg, "529"):
+		return "서버 일시 장애"
+	case strings.Contains(lower, "context") &&
+		(strings.Contains(lower, "overflow") || strings.Contains(lower, "too large") || strings.Contains(lower, "exceeded")):
+		return "컨텍스트 초과"
+	default:
+		return ""
 	}
 }
 

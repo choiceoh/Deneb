@@ -316,8 +316,9 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 		// 6. Final error — no recovery possible.
 		if runErr != nil {
 			errText := runErr.Error()
-			if IsTransientHTTPError(errText) {
-				errText = "⚠️ Provider temporarily unavailable. Please try again."
+			// Replace raw HTTP error strings with specific Korean messages.
+			if specific := ClassifyErrorMessage(errText); specific != "" {
+				errText = specific
 			}
 			result.Error = runErr
 			result.Payloads = append(result.Payloads, types.ReplyPayload{

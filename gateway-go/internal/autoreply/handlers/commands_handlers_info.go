@@ -39,6 +39,7 @@ func handleStatusCommand(ctx CommandContext) (*CommandResult, error) {
 		report.WSConnections = sd.WSConnections
 		report.ProviderUsage = sd.ProviderUsage
 		report.ChannelHealth = sd.ChannelHealth
+		report.LastFailureReason = sd.LastFailureReason
 	}
 	return &CommandResult{Reply: BuildStatusMessage(report), SkipAgent: true}, nil
 }
