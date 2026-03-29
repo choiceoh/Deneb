@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -101,18 +102,24 @@ func handleRunSuccess(
 			if deps.memoryStore != nil {
 				// Structured extraction: extract facts with importance scoring.
 				if result.Text != "" {
-					sglangClient := getSglangClient()
-					facts, err := memory.ExtractFacts(memCtx, sglangClient, sglangModel, params.Message, result.Text, logger)
-					if err != nil {
-						logger.Debug("structured memory extraction failed, falling back", "error", err)
-					}
-					if len(facts) > 0 {
-						memory.InsertExtractedFacts(memCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
-						// Debounced MEMORY.md export (export every 10 facts).
-						if count, _ := deps.memoryStore.ActiveFactCount(memCtx); count%10 == 0 {
-							workspaceDir := resolveWorkspaceDirForPrompt()
-							if err := deps.memoryStore.ExportToFile(memCtx, workspaceDir); err != nil {
-								logger.Debug("memory export failed", "error", err)
+					if !checkSglangHealth() {
+						logger.Debug("structured memory extraction skipped: sglang unhealthy")
+					} else {
+						sglangClient := getSglangClient()
+						facts, err := memory.ExtractFacts(memCtx, sglangClient, sglangModel, params.Message, result.Text, logger)
+						if err != nil {
+							if shouldLogStructuredMemoryExtractionError(err) {
+								logger.Debug("structured memory extraction failed, falling back", "error", err)
+							}
+						}
+						if len(facts) > 0 {
+							memory.InsertExtractedFacts(memCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
+							// Debounced MEMORY.md export (export every 10 facts).
+							if count, _ := deps.memoryStore.ActiveFactCount(memCtx); count%10 == 0 {
+								workspaceDir := resolveWorkspaceDirForPrompt()
+								if err := deps.memoryStore.ExportToFile(memCtx, workspaceDir); err != nil {
+									logger.Debug("memory export failed", "error", err)
+								}
 							}
 						}
 					}
@@ -139,6 +146,20 @@ func handleRunSuccess(
 		"inputTokens", result.Usage.InputTokens,
 		"outputTokens", result.Usage.OutputTokens,
 	)
+}
+
+func shouldLogStructuredMemoryExtractionError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Context timeouts/cancelation in best-effort auto-memory are expected under load
+	// or shutdown and should not spam logs.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return false
+	}
+
+	return true
 }
 
 // handleRunError processes a failed or aborted agent run.
