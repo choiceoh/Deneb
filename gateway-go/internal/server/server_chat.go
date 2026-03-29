@@ -89,7 +89,7 @@ func (s *Server) wireTelegramChatHandler() {
 		if client == nil {
 			return fmt.Errorf("telegram client not connected")
 		}
-		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		chatID, err := telegram.ParseChatID(delivery.To)
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}
@@ -133,7 +133,7 @@ func (s *Server) wireTelegramChatHandler() {
 		if client == nil {
 			return fmt.Errorf("telegram client not connected")
 		}
-		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		chatID, err := telegram.ParseChatID(delivery.To)
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}
@@ -193,7 +193,7 @@ func (s *Server) wireTelegramChatHandler() {
 		if client == nil {
 			return nil
 		}
-		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		chatID, err := telegram.ParseChatID(delivery.To)
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}
@@ -210,7 +210,7 @@ func (s *Server) wireTelegramChatHandler() {
 		if client == nil {
 			return nil
 		}
-		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		chatID, err := telegram.ParseChatID(delivery.To)
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}

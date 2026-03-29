@@ -17,6 +17,8 @@ func Test_parseChatID(t *testing.T) {
 	}{
 		{"valid positive", "12345", 12345, false},
 		{"valid negative", "-100", -100, false},
+		{"telegram prefix", "telegram:12345", 12345, false},
+		{"session-like key", "te:7074071666:fix-release-please:1774610514127", 7074071666, false},
 		{"invalid string", "abc", 0, true},
 		{"empty string", "", 0, true},
 		{"max int64", "9223372036854775807", 9223372036854775807, false},
