@@ -23,6 +23,16 @@ import (
 )
 
 // handleRunSuccess processes a successful agent run completion.
+//
+// Zen arch — Reorder Buffer: post-processing steps are dispatched out-of-order
+// to maximize parallelism, then "retired" (committed) in the correct observable
+// order. Independent operations (logging, Aurora sync, broadcast) run concurrently
+// with the critical path (transcript persist → channel delivery → session state).
+//
+// Dependency graph:
+//   [log, Aurora, broadcast] — independent, fire-and-forget
+//   transcript.Append → replyFunc → finishRun → emitJobEvent  (critical path)
+//   [auto-memory] — independent, async
 func handleRunSuccess(
 	_ context.Context,
 	params RunParams,
@@ -33,15 +43,39 @@ func handleRunSuccess(
 	now int64,
 	runLog *agentlog.RunLogger,
 ) {
-	// Log run completion to agent detail log.
-	runLog.LogEnd(agentlog.RunEndData{
+	// ── ROB: dispatch independent operations (no downstream dependencies) ──
+	// These can execute out-of-order relative to the critical path.
+
+	// Independent op 1: agent detail log (no external visibility).
+	go runLog.LogEnd(agentlog.RunEndData{
 		StopReason:   result.StopReason,
 		Turns:        result.Turns,
 		InputTokens:  result.Usage.InputTokens,
 		OutputTokens: result.Usage.OutputTokens,
 		TextLen:      len(result.Text),
 	})
-	// Persist assistant message to transcript + Aurora store.
+
+	// Independent op 2: Aurora sync (write-back buffer — fire-and-forget).
+	if deps.auroraStore != nil && result.Text != "" && !isDiscordDelivery(params.Delivery) {
+		auroraStore := deps.auroraStore
+		text := result.Text
+		go func() {
+			tokenCount := uint64(estimateTokens(text))
+			if _, err := auroraStore.SyncMessage(1, "assistant", text, tokenCount); err != nil {
+				logger.Warn("aurora: failed to sync assistant message", "error", err)
+			}
+		}()
+	}
+
+	// Independent op 3: broadcast completion event to WebSocket clients.
+	if broadcaster != nil {
+		broadcaster.EmitComplete(result.Text, result.Usage)
+	}
+
+	// ── Critical path: in-order retirement ──
+	// transcript persist → channel delivery → session state transition
+
+	// Step 1: persist assistant message (must complete before delivery).
 	if deps.transcript != nil && result.Text != "" {
 		assistantMsg := ChatMessage{
 			Role:      "assistant",
@@ -52,20 +86,8 @@ func handleRunSuccess(
 			logger.Error("failed to persist assistant message", "error", err)
 		}
 	}
-	// Skip Aurora sync for Discord: ephemeral coding sessions don't need compaction.
-	if deps.auroraStore != nil && result.Text != "" && !isDiscordDelivery(params.Delivery) {
-		tokenCount := uint64(estimateTokens(result.Text))
-		if _, err := deps.auroraStore.SyncMessage(1, "assistant", result.Text, tokenCount); err != nil {
-			logger.Warn("aurora: failed to sync assistant message", "error", err)
-		}
-	}
 
-	if broadcaster != nil {
-		broadcaster.EmitComplete(result.Text, result.Usage)
-	}
-
-	// Deliver response back to the originating channel (e.g., Telegram).
-	// Suppress delivery if the LLM returned the silent reply token (NO_REPLY).
+	// Step 2: deliver response to originating channel.
 	if deps.replyFunc != nil && params.Delivery != nil && result.Text != "" {
 		if IsSilentReply(result.Text) {
 			logger.Info("suppressing silent reply (NO_REPLY)")
@@ -84,6 +106,7 @@ func handleRunSuccess(
 		}
 	}
 
+	// Step 3: session state transition (in-order commit — after delivery).
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
