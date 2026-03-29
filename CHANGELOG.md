@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.0.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.33.1...deneb-v4.0.0) (2026-03-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* major version bump for accumulated changes
+
+### ✨ Features
+
+* bump to v4.0.0 ([0b300fe](https://github.com/choiceoh/Deneb/commit/0b300fe094a4c5603f5c2531d3f875d5fc48b363))
+* **discord:** display LLM reasoning summary alongside tool progress steps ([6bb9b76](https://github.com/choiceoh/Deneb/commit/6bb9b76b1f61ef9e6ad2c45990966207da2e7de8))
+* **discord:** enhance parallel tool execution with prompt guidance and visual grouping ([a29a91e](https://github.com/choiceoh/Deneb/commit/a29a91e0d1243b81222c87643d972e4e0002cc92))
+* **discord:** read CLAUDE.md before starting coding tasks ([12bf9d0](https://github.com/choiceoh/Deneb/commit/12bf9d0d94158dcedd6187ba91205178e1f9e41c))
+* **discord:** use lightweight LLM to summarize agent reasoning in progress steps ([3e52d45](https://github.com/choiceoh/Deneb/commit/3e52d458a5f414e23aad6bac5f282f00e65f05fa))
+
+
+### 🐛 Bug Fixes
+
+* **discord:** auto-init git repo when workspace is not a git repository ([2620d8e](https://github.com/choiceoh/Deneb/commit/2620d8e8bbda0a7a35dba0cf1a9f35500c4df5e1))
+* **discord:** check channel type before creating auto-thread ([eb3b3a7](https://github.com/choiceoh/Deneb/commit/eb3b3a7de2592b522e627927e1c2f6a5ae6cdc9e))
+* **discord:** fix three thread worktree bugs ([04dfbe8](https://github.com/choiceoh/Deneb/commit/04dfbe892ad67d3a4371320cea847b4155cec6e5))
+* **discord:** fix three thread worktree bugs from [#735](https://github.com/choiceoh/Deneb/issues/735) ([f28bb00](https://github.com/choiceoh/Deneb/commit/f28bb00d09e8c6eb04f60e3c17ec9cee9079aa72))
+* **telegram:** add diagnostic logging to config loading for missing channel startup ([4473f81](https://github.com/choiceoh/Deneb/commit/4473f8124810a583755c790ad9c2d032e998f732))
+
+
+### 🔧 Internal
+
+* **chat:** skip Aurora, Memory, Compaction, and Dreaming for Discord channel ([cd5ae8c](https://github.com/choiceoh/Deneb/commit/cd5ae8c2838b35b4571728688c1523d58da961b4))
+
 ## [3.33.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.33.0...deneb-v3.33.1) (2026-03-29)
 
 
