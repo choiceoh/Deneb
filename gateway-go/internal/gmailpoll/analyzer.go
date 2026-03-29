@@ -12,7 +12,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-const defaultPrompt = `다음 이메일을 분석하여 간결하게 요약해주세요:
+// DefaultPrompt is the default email analysis prompt.
+const DefaultPrompt = `다음 이메일을 분석하여 간결하게 요약해주세요:
 1. 발신자와 주요 내용 요약 (2-3문장)
 2. 중요도 판단 (높음/보통/낮음)
 3. 필요한 조치 사항이 있다면 명시
@@ -30,7 +31,7 @@ const (
 // Falls back to the default prompt if the file doesn't exist.
 func loadPrompt(promptFile string) string {
 	if promptFile == "" {
-		return defaultPrompt
+		return DefaultPrompt
 	}
 
 	// Expand ~ to home directory.
@@ -41,18 +42,18 @@ func loadPrompt(promptFile string) string {
 
 	data, err := os.ReadFile(promptFile)
 	if err != nil {
-		return defaultPrompt
+		return DefaultPrompt
 	}
 
 	content := strings.TrimSpace(string(data))
 	if content == "" {
-		return defaultPrompt
+		return DefaultPrompt
 	}
 	return content
 }
 
-// formatEmailForAnalysis builds the user message from email details.
-func formatEmailForAnalysis(msg *gmail.MessageDetail) string {
+// FormatEmailForAnalysis builds the user message from email details.
+func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\n", msg.From)
 	fmt.Fprintf(&sb, "To: %s\n", msg.To)
@@ -73,9 +74,9 @@ func formatEmailForAnalysis(msg *gmail.MessageDetail) string {
 	return sb.String()
 }
 
-// analyzeEmail sends an email to the LLM for analysis and returns the result.
-func analyzeEmail(ctx context.Context, client *llm.Client, model, prompt string, msg *gmail.MessageDetail) (string, error) {
-	userContent := prompt + "\n\n" + formatEmailForAnalysis(msg)
+// AnalyzeEmail sends an email to the LLM for analysis and returns the result.
+func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt string, msg *gmail.MessageDetail) (string, error) {
+	userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
 
 	req := llm.ChatRequest{
 		Model:     model,

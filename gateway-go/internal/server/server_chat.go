@@ -35,6 +35,7 @@ func (s *Server) initGmailPoll() {
 	cfg := gmailpoll.Config{
 		StateDir:   stateDir,
 		LLMBaseURL: "http://127.0.0.1:30000/v1",
+		Model:      resolveDefaultModel(s.logger), // use main model by default
 	}
 	if pollCfg.IntervalMin != nil {
 		cfg.IntervalMin = *pollCfg.IntervalMin
@@ -46,7 +47,7 @@ func (s *Server) initGmailPoll() {
 		cfg.MaxPerCycle = *pollCfg.MaxPerCycle
 	}
 	if pollCfg.Model != "" {
-		cfg.Model = pollCfg.Model
+		cfg.Model = pollCfg.Model // explicit override from config
 	}
 	if pollCfg.PromptFile != "" {
 		cfg.PromptFile = pollCfg.PromptFile

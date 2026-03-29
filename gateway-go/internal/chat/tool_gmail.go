@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -29,7 +31,7 @@ type gmailParams struct {
 }
 
 // toolGmail implements the gmail tool for structured Gmail operations via native API.
-func toolGmail() ToolFunc {
+func toolGmail(llmClient *llm.Client, defaultModel string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p gmailParams
 		if err := jsonutil.UnmarshalInto("gmail params", input, &p); err != nil {
@@ -54,8 +56,10 @@ func toolGmail() ToolFunc {
 			return gmailReply(ctx, client, p)
 		case "label":
 			return gmailLabel(ctx, client, p)
+		case "analyze":
+			return gmailAnalyze(ctx, client, llmClient, defaultModel, p)
 		default:
-			return fmt.Sprintf("알 수 없는 gmail 액션: %q. 지원: inbox, search, read, send, reply, label", p.Action), nil
+			return fmt.Sprintf("알 수 없는 gmail 액션: %q. 지원: inbox, search, read, send, reply, label, analyze", p.Action), nil
 		}
 	}
 }
@@ -256,6 +260,65 @@ func gmailLabel(ctx context.Context, client *gmail.Client, p gmailParams) (strin
 	default:
 		return fmt.Sprintf("알 수 없는 label 액션: %q. 지원: list, add, remove", action), nil
 	}
+}
+
+// --- analyze: LLM-based email analysis ---
+
+func gmailAnalyze(ctx context.Context, client *gmail.Client, llmClient *llm.Client, defaultModel string, p gmailParams) (string, error) {
+	if llmClient == nil {
+		return "LLM 클라이언트가 설정되지 않았습니다.", nil
+	}
+
+	// Determine which emails to analyze.
+	var messages []gmail.MessageSummary
+	if p.MessageID != "" {
+		// Analyze a specific message.
+		messages = []gmail.MessageSummary{{ID: p.MessageID}}
+	} else {
+		// Search and analyze matching emails.
+		query := p.Query
+		if query == "" {
+			query = "is:unread newer_than:1h"
+		}
+		max := clampGmailMax(p.Max, 5)
+		var err error
+		messages, err = client.Search(ctx, query, max)
+		if err != nil {
+			return "", fmt.Errorf("메일 검색 실패: %w", err)
+		}
+		if len(messages) == 0 {
+			return "분석할 메일이 없습니다.", nil
+		}
+	}
+
+	prompt := gmailpoll.DefaultPrompt
+	model := defaultModel
+
+	var sb strings.Builder
+	for i, summary := range messages {
+		detail, err := client.GetMessage(ctx, summary.ID)
+		if err != nil {
+			fmt.Fprintf(&sb, "⚠️ 메일 조회 실패 (ID: %s): %s\n\n", summary.ID, err)
+			continue
+		}
+
+		analysis, err := gmailpoll.AnalyzeEmail(ctx, llmClient, model, prompt, detail)
+		if err != nil {
+			fmt.Fprintf(&sb, "⚠️ 분석 실패 (%s): %s\n\n", detail.Subject, err)
+			continue
+		}
+
+		if i > 0 {
+			sb.WriteString("\n---\n\n")
+		}
+		fmt.Fprintf(&sb, "## 📬 %s\n", detail.Subject)
+		fmt.Fprintf(&sb, "**From:** %s\n", detail.From)
+		fmt.Fprintf(&sb, "**Date:** %s\n\n", detail.Date)
+		sb.WriteString(analysis)
+		sb.WriteString("\n")
+	}
+
+	return sb.String(), nil
 }
 
 // --- helpers ---

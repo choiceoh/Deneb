@@ -170,8 +170,9 @@ func (s *Server) registerSessionRPCMethods() {
 		Vega: chat.VegaDeps{
 			MemoryStore: chatCfg.MemoryStore,
 		},
-		LLMClient: chatCfg.LLMClient,
-		AgentLog:  agentLogWriter,
+		LLMClient:    chatCfg.LLMClient,
+		DefaultModel: chatCfg.DefaultModel,
+		AgentLog:     agentLogWriter,
 	}
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).

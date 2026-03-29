@@ -910,6 +910,7 @@
         - send
         - reply
         - label
+        - analyze
     query:
       type: string
       description: "Gmail search query (supports Gmail operators like from:, to:, subject:, newer_than:, is:unread, has:attachment, etc.)"

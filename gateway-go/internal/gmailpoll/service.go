@@ -15,7 +15,7 @@ const (
 	defaultIntervalMin = 30
 	defaultQuery       = "is:unread newer_than:1h"
 	defaultMaxPerCycle = 5
-	defaultModel       = "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+	defaultModel       = "" // resolved from main config via initGmailPoll
 	defaultPromptFile  = "~/.deneb/gmail-analysis-prompt.md"
 	searchMaxRetries   = 2
 )
@@ -213,7 +213,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		}
 
 		// Analyze via LLM.
-		analysis, err := analyzeEmail(ctx, s.llmClient, s.cfg.Model, prompt, detail)
+		analysis, err := AnalyzeEmail(ctx, s.llmClient, s.cfg.Model, prompt, detail)
 		if err != nil {
 			s.log.Warn("메일 분석 실패", "id", summary.ID, "error", err)
 			// Still report the email without analysis.

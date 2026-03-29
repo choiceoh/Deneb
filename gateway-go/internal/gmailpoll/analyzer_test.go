@@ -11,14 +11,14 @@ import (
 
 func TestLoadPrompt_Default(t *testing.T) {
 	prompt := loadPrompt("")
-	if prompt != defaultPrompt {
+	if prompt != DefaultPrompt {
 		t.Errorf("empty path should return default prompt")
 	}
 }
 
 func TestLoadPrompt_MissingFile(t *testing.T) {
 	prompt := loadPrompt("/nonexistent/path/prompt.md")
-	if prompt != defaultPrompt {
+	if prompt != DefaultPrompt {
 		t.Errorf("missing file should return default prompt")
 	}
 }
@@ -45,7 +45,7 @@ func TestLoadPrompt_EmptyFile(t *testing.T) {
 	}
 
 	prompt := loadPrompt(path)
-	if prompt != defaultPrompt {
+	if prompt != DefaultPrompt {
 		t.Errorf("empty file should return default prompt")
 	}
 }
@@ -59,7 +59,7 @@ func TestFormatEmailForAnalysis(t *testing.T) {
 		Body:    "Hello, this is the email body.",
 	}
 
-	result := formatEmailForAnalysis(msg)
+	result := FormatEmailForAnalysis(msg)
 
 	if !strings.Contains(result, "sender@example.com") {
 		t.Error("should contain From address")
@@ -81,7 +81,7 @@ func TestFormatEmailForAnalysis_LongBody(t *testing.T) {
 		Body:    longBody,
 	}
 
-	result := formatEmailForAnalysis(msg)
+	result := FormatEmailForAnalysis(msg)
 	if !strings.Contains(result, "본문 생략") {
 		t.Error("long body should be truncated with notice")
 	}
