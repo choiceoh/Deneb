@@ -215,12 +215,28 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::Strong | TagName::B,
                 ..
             } => push_to_active(
-                "**", &mut out, in_link, &mut link_buf, in_blockquote,
-                &mut blockquote_buf, in_table, &mut table_builder, in_title, &mut title_buf,
+                "**",
+                &mut out,
+                in_link,
+                &mut link_buf,
+                in_blockquote,
+                &mut blockquote_buf,
+                in_table,
+                &mut table_builder,
+                in_title,
+                &mut title_buf,
             ),
             Token::TagClose(TagName::Strong | TagName::B) => push_to_active(
-                "**", &mut out, in_link, &mut link_buf, in_blockquote,
-                &mut blockquote_buf, in_table, &mut table_builder, in_title, &mut title_buf,
+                "**",
+                &mut out,
+                in_link,
+                &mut link_buf,
+                in_blockquote,
+                &mut blockquote_buf,
+                in_table,
+                &mut table_builder,
+                in_title,
+                &mut title_buf,
             ),
 
             // --- Emphasis (italic) ---
@@ -228,12 +244,28 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::Em | TagName::I,
                 ..
             } => push_to_active(
-                "*", &mut out, in_link, &mut link_buf, in_blockquote,
-                &mut blockquote_buf, in_table, &mut table_builder, in_title, &mut title_buf,
+                "*",
+                &mut out,
+                in_link,
+                &mut link_buf,
+                in_blockquote,
+                &mut blockquote_buf,
+                in_table,
+                &mut table_builder,
+                in_title,
+                &mut title_buf,
             ),
             Token::TagClose(TagName::Em | TagName::I) => push_to_active(
-                "*", &mut out, in_link, &mut link_buf, in_blockquote,
-                &mut blockquote_buf, in_table, &mut table_builder, in_title, &mut title_buf,
+                "*",
+                &mut out,
+                in_link,
+                &mut link_buf,
+                in_blockquote,
+                &mut blockquote_buf,
+                in_table,
+                &mut table_builder,
+                in_title,
+                &mut title_buf,
             ),
 
             // --- Strikethrough ---
@@ -241,12 +273,28 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::S | TagName::Del | TagName::Strike,
                 ..
             } => push_to_active(
-                "~~", &mut out, in_link, &mut link_buf, in_blockquote,
-                &mut blockquote_buf, in_table, &mut table_builder, in_title, &mut title_buf,
+                "~~",
+                &mut out,
+                in_link,
+                &mut link_buf,
+                in_blockquote,
+                &mut blockquote_buf,
+                in_table,
+                &mut table_builder,
+                in_title,
+                &mut title_buf,
             ),
             Token::TagClose(TagName::S | TagName::Del | TagName::Strike) => push_to_active(
-                "~~", &mut out, in_link, &mut link_buf, in_blockquote,
-                &mut blockquote_buf, in_table, &mut table_builder, in_title, &mut title_buf,
+                "~~",
+                &mut out,
+                in_link,
+                &mut link_buf,
+                in_blockquote,
+                &mut blockquote_buf,
+                in_table,
+                &mut table_builder,
+                in_title,
+                &mut title_buf,
             ),
 
             // --- Pre blocks ---
@@ -278,8 +326,15 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                     out.push('\n');
                 } else {
                     push_to_active(
-                        "`", &mut out, in_link, &mut link_buf, in_blockquote,
-                        &mut blockquote_buf, in_table, &mut table_builder, in_title,
+                        "`",
+                        &mut out,
+                        in_link,
+                        &mut link_buf,
+                        in_blockquote,
+                        &mut blockquote_buf,
+                        in_table,
+                        &mut table_builder,
+                        in_title,
                         &mut title_buf,
                     );
                 }
@@ -290,8 +345,15 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                     in_code_in_pre = false;
                 } else {
                     push_to_active(
-                        "`", &mut out, in_link, &mut link_buf, in_blockquote,
-                        &mut blockquote_buf, in_table, &mut table_builder, in_title,
+                        "`",
+                        &mut out,
+                        in_link,
+                        &mut link_buf,
+                        in_blockquote,
+                        &mut blockquote_buf,
+                        in_table,
+                        &mut table_builder,
+                        in_title,
                         &mut title_buf,
                     );
                 }
@@ -315,12 +377,7 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 out.push(' ');
             }
             Token::TagClose(
-                TagName::H1
-                | TagName::H2
-                | TagName::H3
-                | TagName::H4
-                | TagName::H5
-                | TagName::H6,
+                TagName::H1 | TagName::H2 | TagName::H3 | TagName::H4 | TagName::H5 | TagName::H6,
             ) => {
                 out.push('\n');
             }

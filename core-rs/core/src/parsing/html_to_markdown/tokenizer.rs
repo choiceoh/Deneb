@@ -207,10 +207,7 @@ fn scan_tag<'a>(input: &'a str, pos: usize, tokens: &mut Vec<Token<'a>>) -> usiz
         let name_end = name_str
             .find(|c: char| c.is_ascii_whitespace() || c == '>')
             .unwrap_or(name_str.len());
-        let name_lower: String = name_str
-            .get(..name_end)
-            .unwrap_or("")
-            .to_ascii_lowercase();
+        let name_lower: String = name_str.get(..name_end).unwrap_or("").to_ascii_lowercase();
         let tag_name = TagName::from_lower(&name_lower);
         tokens.push(Token::TagClose(tag_name));
         return gt + 1;
@@ -231,8 +228,7 @@ fn scan_tag<'a>(input: &'a str, pos: usize, tokens: &mut Vec<Token<'a>>) -> usiz
     let tag_name = TagName::from_lower(&name_lower);
 
     // Check if self-closing: ends with `/` before `>`, or is a void element.
-    let is_self_closing =
-        inner.ends_with('/') || (tag_name.is_void() && !inner.starts_with('/'));
+    let is_self_closing = inner.ends_with('/') || (tag_name.is_void() && !inner.starts_with('/'));
 
     if is_self_closing {
         tokens.push(Token::SelfClosing {
@@ -249,7 +245,10 @@ fn scan_tag<'a>(input: &'a str, pos: usize, tokens: &mut Vec<Token<'a>>) -> usiz
     // For <script>, <style>, <noscript>: we need to find the matching
     // closing tag because their content may contain `<` and `&` that
     // should NOT be tokenized as HTML.
-    if matches!(tag_name, TagName::Script | TagName::Style | TagName::Noscript) {
+    if matches!(
+        tag_name,
+        TagName::Script | TagName::Style | TagName::Noscript
+    ) {
         let close_tag = format!("</{name_lower}>");
         let search_from = gt + 1;
         let lower_rest = input.get(search_from..).unwrap_or("").to_ascii_lowercase();
