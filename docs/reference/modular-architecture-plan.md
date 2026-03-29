@@ -1,371 +1,373 @@
 ---
 title: Modular Architecture Plan
-summary: Phased approach to improve maintainability and reduce coupling in the Deneb codebase.
-read_when: ["Planning codebase refactoring", "Understanding module boundaries", "Reviewing long-term architecture goals"]
+summary: Go/Rust refactoring roadmap v2 — phased approach to tighten package boundaries, reduce coupling, and improve testability across gateway-go, core-rs, and cli-rs.
+read_when:
+  - Planning codebase refactoring across Go or Rust modules
+  - Understanding package boundaries and FFI contracts
+  - Reviewing long-term architecture goals for the gateway
 ---
 
 # Deneb Modular Architecture Plan
 
+> **v2 — Go/Rust edition.** This document supersedes the earlier TypeScript-era plan. All
+> file paths, metrics, and phase targets reflect the current Go/Rust codebase.
+
 ## Executive Summary
 
-This document proposes a phased modularization of the Deneb codebase to improve maintainability, testability, and developer velocity. The core issues are:
+The Deneb runtime spans three language boundaries — Rust core (`core-rs`), Go gateway
+(`gateway-go`), and Rust CLI (`cli-rs`) — connected by CGo FFI and a shared Protobuf schema.
+The primary structural issues today are:
 
-1. **Gateway monolith** — `src/gateway/` has 266 files (67K+ LOC), importing from nearly every other module
-2. **Implicit module boundaries** — many `src/*` directories lack formal interfaces; consumers import deep internal paths
-3. **Global state coupling** — plugin runtime, channel registry, and config share process-global singletons
-4. **Extension SDK surface sprawl** — 30+ `plugin-sdk/*` subpaths with no stability tiers
+1. **`chat` package sprawl** — `gateway-go/internal/chat/` has 65 files (~19K LOC) covering
+   system-prompt assembly, tool registration (50+ tools), context files, silent replies, and
+   slash commands as a single unstructured package.
+2. **`autoreply` density** — `gateway-go/internal/autoreply/` (~18K LOC) mixes dispatch logic,
+   model-capability gating, and extended-thinking management.
+3. **`rpc` handler dilution** — 130+ RPC methods registered in a single registry
+   (`gateway-go/internal/rpc/`) with 14 sub-handler packages that have uneven internal
+   boundaries.
+4. **Implicit FFI surface** — `gateway-go/internal/ffi/` exposes Rust functions through 7
+   `*_cgo.go` files without a stable typed abstraction layer above them.
+5. **Proto schema drift risk** — `proto/` generates both Go and Rust types; no automated check
+   enforces that consumer packages use only the generated types (not hand-rolled duplicates).
 
-The plan is organized into 5 phases, from low-risk structural improvements to full domain isolation.
+The plan is organized into 4 phases, ordered by risk and dependency.
 
 ---
 
 ## Current Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                        CLI Layer                         │
-│  src/cli/  ─  program.ts, deps.ts, progress.ts          │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│                    Gateway (monolith)                     │
-│  src/gateway/  ─  266 files, 67K LOC                     │
-│  server.impl.ts, server-methods/*, boot.ts, auth.ts      │
-│  Imports: channels, plugins, auto-reply, routing,         │
-│           infra, config, agents, media, sessions          │
-└──┬────┬────┬────┬────┬────┬────┬────┬────┬──────────────┘
-   │    │    │    │    │    │    │    │    │
-   ▼    ▼    ▼    ▼    ▼    ▼    ▼    ▼    ▼
- channels plugins auto- routing infra config agents media sessions
-          │       reply                         │
-          ▼                                     ▼
-    plugin-sdk ◄──────────────────────── extensions/*
+┌──────────────────────────────────────────────────────────────────┐
+│                          cli-rs                                   │
+│  deneb-rs binary  ─  50+ subcommands, WebSocket client            │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │  WebSocket (local)
+┌────────────────────────────▼─────────────────────────────────────┐
+│                     gateway-go  (primary runtime)                 │
+│                                                                   │
+│  cmd/gateway/main.go                                              │
+│       ↓                                                           │
+│  internal/server/   ─  HTTP server, /health, /api/v1/rpc, hooks  │
+│       ↓                                                           │
+│  internal/rpc/      ─  registry, dispatcher, 130+ methods        │
+│       ↓                  ↓              ↓             ↓          │
+│  internal/chat/  internal/session/  internal/channel/  internal/auth/  │
+│  (65 files)      (14 files)         (29 files)         (12 files) │
+│       ↓                                                           │
+│  internal/ffi/      ─  CGo bindings to Rust core                 │
+│  (7 *_cgo.go files)                                               │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │  CGo (in-process)
+┌────────────────────────────▼─────────────────────────────────────┐
+│                        core-rs  (static library)                  │
+│                                                                   │
+│  deneb-core      ─  FFI exports, protocol, security, media,       │
+│                     memory_search, markdown, context_engine,       │
+│                     compaction, parsing                            │
+│  deneb-vega      ─  SQLite FTS5 search engine                     │
+│  deneb-agent-runtime  ─  agent lifecycle, model selection         │
+└──────────────────────────────────────────────────────────────────┘
+
+Proto schema (proto/) ──── generates ────► Go (pkg/protocol/gen/)
+                      └─── generates ────► Rust (core/src/protocol/)
 ```
 
-### Key Metrics
+### Current Package Metrics
 
-| Module                | Files | Approx LOC | Imports From                    | Risk   |
-| --------------------- | ----- | ---------- | ------------------------------- | ------ |
-| `src/gateway/`        | 266   | 67K        | 9+ modules                      | HIGH   |
-| `src/auto-reply/`     | ~40   | ~12K       | config, channels, agents, infra | MEDIUM |
-| `src/infra/outbound/` | ~70   | ~18K       | gateway/call, channels, config  | MEDIUM |
-| `src/plugins/`        | ~30   | ~8K        | config, media, web-search       | LOW    |
-| `src/routing/`        | ~20   | ~6K        | config, agents, channels        | MEDIUM |
-| `src/channels/`       | ~25   | ~7K        | (minimal)                       | LOW    |
-| `src/agents/`         | ~35   | ~10K       | config, routing                 | MEDIUM |
-| `src/media/`          | ~44   | ~10K       | (minimal)                       | LOW    |
-| `src/config/`         | ~20   | ~5K        | (minimal)                       | LOW    |
+| Package | Files | Approx LOC | Coupling | Risk |
+| --- | --- | --- | --- | --- |
+| `internal/chat/` | 65 | ~19K | ffi, llm, memory, skills, plugin, provider | HIGH |
+| `internal/autoreply/` | 22 | ~18K | thinking, llm, config, process, event, agent | HIGH |
+| `internal/rpc/` + `rpc/handler/` | 34 | ~8K | session, chat, channel, node, provider | MEDIUM |
+| `internal/server/` | 38 | ~7K | rpc, middleware, auth, channel | MEDIUM |
+| `internal/ffi/` | 26 | ~2K | CGo (no Go deps; Rust static lib) | MEDIUM |
+| `internal/channel/` | 29 | ~2K | telegram, discord | LOW |
+| `internal/session/` | 14 | ~1K | channel, event | LOW |
+| `internal/auth/` | 12 | ~900 | config | LOW |
+| `internal/provider/` | 24 | ~1K | config, llm | LOW |
 
 ---
 
-## Phase 1: Formal Module Boundaries (Low Risk)
+## Phase 1: Package Boundary Formalization (Low Risk)
 
-**Goal:** Define explicit public APIs for each `src/*` module without moving files.
+**Goal:** Define explicit public interfaces for each `internal/*` package without moving files.
+Pass `make check` (fmt + vet + all tests) before and after every change in this phase.
 
-### 1.1 Add barrel exports (`index.ts`) for each module
+### 1.1 Identify and document package contracts
 
-Each top-level `src/*` directory gets an `index.ts` that re-exports only its public API. Internal files are not re-exported.
+For each high-coupling package, write a `doc.go` file that declares:
 
-**Modules to add barrels:**
+- **Exported types** that are part of the stable API
+- **Unexported types** that are implementation details
+- **Allowed callers** (packages permitted to import this package)
 
-- `src/channels/index.ts` — `registerChannel`, `resolveChannel`, channel types
-- `src/routing/index.ts` — `resolveRoute`, `SessionKey`, binding utilities
-- `src/config/index.ts` — `loadConfig`, `ConfigSchema`, path utilities
-- `src/agents/index.ts` — `AgentScope`, agent CRUD, auth utilities
-- `src/media/index.ts` — `fetchMedia`, `convertMedia`, MIME utilities
-- `src/auto-reply/index.ts` — `dispatchInboundMessage`, `createReplyDispatcher`
-- `src/sessions/index.ts` — session store, session key types
-- `src/infra/index.ts` — outbound send, archive, backup interfaces
-
-**Rules:**
-
-- Consumers import from `src/<module>/index.ts`, not deep paths
-- ESLint `no-restricted-imports` rule enforces boundary (phase 2)
-- Existing deep imports continue working during migration
-
-### 1.2 Type-only boundary contracts
-
-Create `src/<module>/types.ts` for each module's public types. Consumers use `import type` for cross-module type references.
+Priority order:
 
 ```
-src/channels/types.ts    — ChannelId, ChannelConfig, ChannelPlugin
-src/routing/types.ts     — Route, SessionKey, Binding
-src/agents/types.ts      — AgentScope, AgentConfig, AgentId
-src/config/types.ts      — DenebConfig, ConfigPath
-src/media/types.ts       — MediaRef, MediaFormat, MimeType
-src/sessions/types.ts    — Session, SessionStore
+internal/ffi/       — defines CGo boundary; document every exported Go wrapper
+internal/session/   — state machine contract (IDLE→RUNNING→DONE/FAILED/KILLED/TIMEOUT)
+internal/channel/   — Plugin interface, ChannelRegistry, lifecycle manager
+internal/rpc/       — method registration contract, dispatcher interface
+internal/auth/      — token validation, allowlist, credential types
 ```
 
-### 1.3 Document dependency direction rules
+### 1.2 Enforce one-way dependency direction
+
+Current allowed direction (top → bottom):
 
 ```
-Allowed dependency direction (top → bottom):
-
-  CLI
-   ↓
-  Gateway
-   ↓
-  Commands
-   ↓
-  ┌──────────────────────────────────────┐
-  │  auto-reply, infra/outbound, agents  │  (application services)
-  └──────────┬───────────────────────────┘
-             ↓
-  ┌──────────────────────────────────────┐
-  │  routing, channels, sessions, plugins│  (domain core)
-  └──────────┬───────────────────────────┘
-             ↓
-  ┌──────────────────────────────────────┐
-  │  config, media, shared, types, utils │  (foundation)
-  └──────────────────────────────────────┘
-
-Forbidden:
-  - Foundation → Application Services
-  - Domain Core → Application Services
-  - Any module → Gateway (except CLI entry)
-  - Extensions → anything except plugin-sdk/*
+cmd/gateway/
+     ↓
+server/
+     ↓
+rpc/ + rpc/handler/
+     ↓
+chat/   autoreply/   session/   channel/   provider/   auth/
+     ↓
+ffi/   llm/   memory/   skills/   config/   logging/
+     ↓
+(no internal imports)
 ```
 
----
+Violations to fix:
 
-## Phase 2: Gateway Decomposition (Medium Risk)
+- `ffi/` must not import any `internal/*` except `logging/`
+- `config/` must not import `chat/`, `autoreply/`, or `rpc/`
+- `session/` must not import `chat/` or `rpc/`
 
-**Goal:** Break `src/gateway/` from 266 files into 6-8 focused submodules.
+Add `go vet` shadow checks and a `go-lint` target that flags circular or upward imports.
 
-### 2.1 Identify gateway subdomains
+### 1.3 Verification gate
 
-Based on file analysis, `src/gateway/` contains these distinct concerns:
-
-| Subdomain       | Files                                       | Description                             |
-| --------------- | ------------------------------------------- | --------------------------------------- |
-| **auth**        | auth.ts, auth-\*.ts, rate-limit             | Authentication, API keys, rate limiting |
-| **chat**        | chat-\*.ts, server-methods/chat.ts          | Chat session handling, abort, sanitize  |
-| **channels**    | channel-\*.ts, server-methods/channels.ts   | Channel health, status, registration    |
-| **agents**      | agent-_.ts, server-methods/agent_.ts        | Agent lifecycle, tools, events          |
-| **models**      | model-\*.ts, server-methods/models.ts       | Model provider routing, fallback        |
-| **sessions**    | session-\*.ts, server-methods/sessions.ts   | Session management, reset, history      |
-| **server-core** | server.impl.ts, boot.ts, call.ts, ws-log.ts | HTTP server, WebSocket, boot sequence   |
-| **config-api**  | server-methods/config.ts, connect.ts        | Config read/write API endpoints         |
-
-### 2.2 Extract subdomains into subdirectories
-
-```
-src/gateway/
-  auth/           ← auth.ts, auth-*.ts, rate-limit
-  chat/           ← chat-*.ts, attachments, sanitize, abort
-  channel-mgmt/   ← channel-health-*.ts, channel-status-*.ts
-  agent-mgmt/     ← agent-*.ts, tools-*.ts
-  model-routing/  ← model-*.ts, provider selection
-  session-mgmt/   ← session-*.ts, reset, history
-  server/         ← server.impl.ts, boot.ts, call.ts, ws
-  index.ts        ← re-exports server boot + registration
-```
-
-Each subdomain:
-
-- Has its own `index.ts` barrel
-- Declares handler registration functions (e.g., `registerChatHandlers(server)`)
-- Receives dependencies via function parameters, not global imports
-
-### 2.3 Handler registration pattern
-
-Replace monolithic server method wiring with composable registration:
-
-```typescript
-// src/gateway/server/boot.ts
-export function bootGateway(deps: GatewayDeps) {
-  const server = createServer(deps);
-  registerAuthHandlers(server, deps);
-  registerChatHandlers(server, deps);
-  registerChannelHandlers(server, deps);
-  registerAgentHandlers(server, deps);
-  registerModelHandlers(server, deps);
-  registerSessionHandlers(server, deps);
-  return server;
-}
-```
-
----
-
-## Phase 3: Dependency Injection Formalization (Medium Risk)
-
-**Goal:** Replace global state and ad-hoc singletons with explicit dependency passing.
-
-### 3.1 Formalize `GatewayDeps` interface
-
-Extend the existing `createDefaultDeps` pattern into a typed dependency container:
-
-```typescript
-// src/gateway/deps.ts
-export interface GatewayDeps {
-  config: ConfigReader;
-  channelRegistry: ChannelRegistry;
-  pluginRuntime: PluginRuntime;
-  sessionStore: SessionStore;
-  routeResolver: RouteResolver;
-  mediaService: MediaService;
-  replyDispatcher: ReplyDispatcherFactory;
-  agentService: AgentService;
-  outboundSender: OutboundSender;
-}
-```
-
-### 3.2 Eliminate process-global state
-
-| Current Global                            | Replacement                            |
-| ----------------------------------------- | -------------------------------------- |
-| `GATEWAY_SUBAGENT_SYMBOL` on `globalThis` | Pass `PluginRuntime` via `GatewayDeps` |
-| `registerChannel()` global map            | `ChannelRegistry` instance on deps     |
-| Config singleton                          | `ConfigReader` instance on deps        |
-
-### 3.3 Test isolation
-
-Each gateway subdomain can be tested with mock deps:
-
-```typescript
-const mockDeps = createMockGatewayDeps({
-  config: stubConfig({ channels: { telegram: { enabled: true } } }),
-  channelRegistry: new InMemoryChannelRegistry(),
-});
-const result = await handleChat(request, mockDeps);
-```
-
----
-
-## Phase 4: Plugin SDK Stabilization (Medium Risk)
-
-**Goal:** Tier the 30+ plugin-sdk subpaths and establish a versioning contract.
-
-### 4.1 Stability tiers
-
-```
-Tier 1 — Stable (semver guarantees):
-  deneb/plugin-sdk/channel-runtime
-  deneb/plugin-sdk/channel-reply-pipeline
-  deneb/plugin-sdk/reply-payload
-  deneb/plugin-sdk/agent-runtime
-  deneb/plugin-sdk/config-runtime
-
-Tier 2 — Beta (may change in minor versions):
-  deneb/plugin-sdk/reply-runtime
-  deneb/plugin-sdk/media-runtime
-  deneb/plugin-sdk/tools-runtime
-
-Tier 3 — Internal (no stability guarantee):
-  All other subpaths
-```
-
-### 4.2 SDK subpath consolidation
-
-Reduce 30+ subpaths to ~10-12 by grouping related exports:
-
-```
-deneb/plugin-sdk/channel   ← merge channel-runtime, channel-reply-pipeline, channel types
-deneb/plugin-sdk/agent     ← merge agent-runtime, agent tools, agent events
-deneb/plugin-sdk/reply     ← merge reply-payload, reply-runtime, reply dispatch
-deneb/plugin-sdk/config    ← merge config-runtime, config types
-deneb/plugin-sdk/media     ← merge media-runtime, media types
-deneb/plugin-sdk/core      ← shared types, utilities
-```
-
-### 4.3 Extension compliance validation
-
-Add a build-time check that verifies extensions import only from `deneb/plugin-sdk/*`:
+All of the following must pass after phase 1:
 
 ```bash
-# scripts/check-extension-imports.ts
-# Scans extensions/*/src/**/*.ts for forbidden imports
-# Fails CI if any extension imports from src/** directly
+make go-vet          # zero warnings
+make go-test         # all tests pass
+go mod tidy          # no unused deps
 ```
 
 ---
 
-## Phase 5: Workspace Package Extraction (High Risk, Long-term)
+## Phase 2: Chat and Autoreply Decomposition (Medium Risk)
 
-**Goal:** Extract foundational modules into workspace packages for independent versioning and faster builds.
+**Goal:** Reduce `chat/` and `autoreply/` from catch-all packages into cohesive sub-packages.
+Each sub-package gets its own `_test.go` files. Gate every sub-phase with `make go-test`.
 
-### 5.1 Candidate packages
+### 2.1 Extract from `internal/chat/`
 
-| Package           | Source                                    | Rationale                                  |
-| ----------------- | ----------------------------------------- | ------------------------------------------ |
-| `@deneb/config`   | `src/config/`                             | Pure data, no side effects, many consumers |
-| `@deneb/media`    | `src/media/`                              | Self-contained pipeline, clear interface   |
-| `@deneb/routing`  | `src/routing/`                            | Core domain logic, testable in isolation   |
-| `@deneb/channels` | `src/channels/`                           | Registry + types, minimal deps             |
-| `@deneb/shared`   | `src/shared/`, `src/types/`, `src/utils/` | Foundation utilities                       |
+Current `chat/` contains these distinct concerns:
 
-### 5.2 Package structure
+| Sub-package | Current files | Description |
+| --- | --- | --- |
+| `chat/systemprompt/` | `system_prompt.go`, runtime assembly | System-prompt builder (identity, tooling, skills, memory, workspace) |
+| `chat/tools/` | `tools/fs.go`, `toolreg_core.go`, `tool_schemas_gen.go` | Tool registry, schemas, FS/web/exec implementations |
+| `chat/contextfiles/` | `context_files.go` | Workspace context file loader (AGENTS.md, CLAUDE.md, etc.) |
+| `chat/dispatch/` | `silent_reply.go`, `slash_commands.go` | Slash command pre-processing, SILENT_REPLY detection |
+| `chat/` (core) | remaining files | LLM dispatch, streaming, session plumbing |
+
+**Migration rule:** move files one sub-package at a time; each move is its own commit with
+`refactor(chat):` prefix. Do not change logic during file moves.
+
+### 2.2 Extract from `internal/autoreply/`
+
+| Sub-package | Current location | Description |
+| --- | --- | --- |
+| `autoreply/thinking/` | `autoreply/thinking/` (already exists) | Extended thinking, model-capability gating |
+| `autoreply/pipeline/` | top-level autoreply files | Message dispatch pipeline, routing |
+| `autoreply/` (core) | remaining files | Entry points, orchestration |
+
+### 2.3 Handler grouping in `internal/rpc/handler/`
+
+Consolidate the 14 sub-handler packages into domain groups:
 
 ```
-packages/
-  config/
-    package.json
-    src/
-    tsconfig.json
-  media/
-    package.json
-    src/
-    tsconfig.json
-  routing/
-    ...
-  channels/
-    ...
-  shared/
-    ...
+rpc/handler/
+  agent/      — agent lifecycle, subagent, tools
+  chat/       — chat session, context, streaming
+  channel/    — channel health, status, registration
+  session/    — session state, history, reset
+  node/       — node management
+  system/     — config, auth, monitoring
 ```
 
-### 5.3 Migration strategy
+Each group registers itself via a `Register(registry *rpc.Registry)` function, matching the
+existing registry pattern.
 
-1. Create package with its own `package.json` and `tsconfig.json`
-2. Move source files
-3. Update imports across the monorepo (use `pnpm` workspace protocol)
-4. Verify with `pnpm build` — check for `[INEFFECTIVE_DYNAMIC_IMPORT]` warnings
-5. Run full test suite
+### 2.4 Verification gate
 
-**Note:** This phase is optional and should only be pursued if phases 1-4 demonstrate clear benefits. The workspace overhead may not be justified for a single-product monorepo.
+```bash
+make check        # proto-check + rust-test + go-test
+make go-vet       # no new warnings introduced
+```
 
 ---
 
-## Implementation Priority & Effort
+## Phase 3: FFI Abstraction Layer (Medium Risk)
 
-| Phase                       | Effort             | Risk   | Value   | Priority |
-| --------------------------- | ------------------ | ------ | ------- | -------- |
-| 1. Module Boundaries        | Small (1-2 weeks)  | Low    | High    | **P0**   |
-| 2. Gateway Decomposition    | Medium (3-4 weeks) | Medium | High    | **P0**   |
-| 3. Dependency Injection     | Medium (2-3 weeks) | Medium | Medium  | **P1**   |
-| 4. Plugin SDK Stabilization | Small (1-2 weeks)  | Medium | Medium  | **P1**   |
-| 5. Workspace Extraction     | Large (4-6 weeks)  | High   | Low-Med | **P2**   |
+**Goal:** Insert a typed Go abstraction above the raw CGo calls in `internal/ffi/` so that
+callers never reference `C.*` types directly, and the no-FFI fallback (`*_noffi.go`) stays
+in sync automatically.
+
+### 3.1 Current FFI modules
+
+| CGo file | Rust functions bound | Purpose |
+| --- | --- | --- |
+| `core_cgo.go` | `deneb_validate_frame`, `deneb_constant_time_eq`, `deneb_detect_mime`, `deneb_validate_session_key`, `deneb_sanitize_html`, `deneb_is_safe_url`, `deneb_validate_error_code`, `deneb_validate_params` | Validation, crypto, MIME, HTML sanitization, URL safety |
+| `memory_cgo.go` | `deneb_memory_cosine_similarity`, `deneb_memory_bm25_rank_to_score`, `deneb_memory_build_fts_query`, `deneb_memory_merge_hybrid_results`, `deneb_memory_extract_keywords` | SIMD vector similarity, BM25, FTS, hybrid merge |
+| `markdown_cgo.go` | `deneb_markdown_to_ir`, `deneb_markdown_detect_fences` | Markdown parsing, fence detection |
+| `parsing_cgo.go` | `deneb_parsing_extract_links`, `deneb_parsing_html_to_markdown`, `deneb_parsing_base64_decode`, `deneb_parsing_media_token_parse` | Link extraction, HTML conversion, media tokens |
+| `context_engine_cgo.go` | `deneb_context_assembly_new/start/step`, `deneb_context_expand_new/start/step`, `deneb_context_engine_drop` | Aurora context assembly (handle-based) |
+| `compaction_cgo.go` | `deneb_compaction_evaluate`, `deneb_compaction_sweep_new/start/step/drop` | Compaction evaluation, sweep state machine |
+| `vega_cgo.go` | `deneb_vega_*` | SQLite FTS5 search |
+
+### 3.2 Add a typed service layer
+
+Introduce `ffi/services/` with Go interfaces that mirror Rust module boundaries:
+
+```go
+// ffi/services/security.go
+type SecurityService interface {
+    ConstantTimeEq(a, b []byte) bool
+    SanitizeHTML(input string) (string, error)
+    IsSafeURL(url string) (bool, error)
+    IsValidSessionKey(key string) bool
+}
+
+// ffi/services/memory.go
+type MemoryService interface {
+    CosineSimilarity(a, b []float32) (float32, error)
+    BM25Score(tf, df, n, avgdl float64) float64
+    BuildFTSQuery(terms []string) (string, error)
+    MergeHybridResults(vector, bm25 []SearchResult, alpha float64) ([]SearchResult, error)
+    ExtractKeywords(text string, maxKeywords int) ([]string, error)
+}
+
+// ffi/services/context_engine.go
+type ContextEngine interface {
+    NewAssembly(params AssemblyParams) (Handle, error)
+    Start(handle Handle) error
+    Step(handle Handle, response []byte) (StepResult, error)
+    Drop(handle Handle)
+}
+```
+
+The CGo implementations in `*_cgo.go` satisfy these interfaces; the no-FFI stubs in
+`*_noffi.go` provide safe defaults for pure-Go builds.
+
+### 3.3 Handle-based lifecycle contract
+
+The stateful FFI pattern (`_new` → `_start` → `_step` → `_drop`) must be wrapped
+in a Go object that enforces correct lifecycle:
+
+```go
+// Enforces: Start before Step, Drop always called (via defer)
+type ContextAssemblyHandle struct { /* ... */ }
+
+func (h *ContextAssemblyHandle) Run(ctx context.Context, params AssemblyParams,
+    responses <-chan []byte) (*AssemblyResult, error)
+```
+
+### 3.4 Verification gate
+
+```bash
+make rust           # libdeneb_core.a rebuilt
+make go-test        # all Go tests pass with CGo
+make go-test-pure   # all Go tests pass without CGo (noffi fallbacks)
+```
+
+---
+
+## Phase 4: Proto Schema Integrity (Low Risk, High Value)
+
+**Goal:** Make schema drift between `proto/`, Rust types, and Go types impossible to miss at
+commit time.
+
+### 4.1 Current code-generation pipelines
+
+| Source | Generated target | Command |
+| --- | --- | --- |
+| `proto/gateway.proto` | `core-rs/core/src/protocol/error_codes.rs` | `make proto-error-codes-gen` |
+| `proto/gateway.proto` | `gateway-go/pkg/protocol/gen/*.pb.go` | `make proto-go` |
+| `core-rs/core/src/ffi_utils.rs` | `gateway-go/internal/ffi/ffi_error_codes_gen.go` | `make ffi-gen` |
+| `gateway-go/internal/chat/tool_schemas.yaml` | `internal/chat/tool_schemas_gen.go` | `make tool-schemas` |
+| `autoreply/thinking/model_caps.yaml` | `thinking/model_caps_gen.go` | `make model-caps` |
+
+### 4.2 Consistency tests
+
+`gateway-go/pkg/protocol/consistency_test.go` already validates hand-written JSON wire types
+against generated protobuf types. Extend this pattern to:
+
+- Verify every `ErrorCode` in `proto/gateway.proto` has a matching entry in `ffi_error_codes_gen.go`
+- Verify every tool in `tool_schemas.yaml` has a corresponding registration in `toolreg_core.go`
+- Verify every model in `model_caps.yaml` has a Go constant in the `thinking` package
+
+### 4.3 CI enforcement
+
+`make generate-check` (already exists) runs `git diff --exit-code` after regenerating all
+outputs. This must be a required check in every PR that touches `proto/`, `core-rs/`, or
+generated files.
+
+```bash
+make generate-check   # fails if any generated file is out of date
+make check            # proto-check + rust-test + go-test (required before push)
+```
+
+---
+
+## Implementation Priority and Effort
+
+| Phase | Effort | Risk | Value | Priority |
+| --- | --- | --- | --- | --- |
+| 1. Package boundary formalization | Small (1 week) | Low | High | **P0** |
+| 4. Proto schema integrity | Small (2-3 days) | Low | High | **P0** |
+| 2. Chat and autoreply decomposition | Medium (2-3 weeks) | Medium | High | **P1** |
+| 3. FFI abstraction layer | Medium (1-2 weeks) | Medium | Medium | **P1** |
 
 ---
 
 ## Success Criteria
 
-- [ ] No `src/*` module imports from `src/gateway/` (except CLI entry)
-- [ ] Gateway subdomains are independently testable with mock deps
-- [ ] `pnpm build` passes with zero `[INEFFECTIVE_DYNAMIC_IMPORT]` warnings
-- [ ] Extensions import only from `deneb/plugin-sdk/*`
-- [ ] Each `src/*` module has a barrel `index.ts` with documented public API
-- [ ] Circular dependency detector passes in CI
-- [ ] Gateway file count per subdomain < 50 files
-- [ ] Plugin SDK subpaths reduced from 30+ to ~12
+These are measurable gates, each verifiable via `make check` or `go vet`:
+
+- [ ] `make check` passes with zero warnings on a clean checkout
+- [ ] `make generate-check` passes — no generated files are stale
+- [ ] `make go-test-pure` passes — no logic depends on CGo being present
+- [ ] `internal/ffi/` callers use typed service interfaces, not raw `C.*` types
+- [ ] `internal/chat/` file count below 25 (remainder extracted to sub-packages)
+- [ ] `internal/autoreply/` file count below 10 (remainder extracted to sub-packages)
+- [ ] No `internal/config/` or `internal/session/` files import `internal/chat/` or `internal/rpc/`
+- [ ] Every `rpc/handler/` sub-package has at least one `*_test.go` file
+- [ ] Consistency tests cover all `ErrorCode` entries, all tools, all model capability entries
 
 ---
 
-## Risks & Mitigations
+## Risks and Mitigations
 
-| Risk                                       | Impact | Mitigation                                                       |
-| ------------------------------------------ | ------ | ---------------------------------------------------------------- |
-| Import path changes break extensions       | HIGH   | Phase 1 keeps old paths working; lint rule added gradually       |
-| Gateway decomposition causes regressions   | MEDIUM | Move files without logic changes; test before/after each move    |
-| DI overhead slows hot paths                | LOW    | Profile before/after; keep DI at initialization, not per-request |
-| Plugin SDK consolidation breaks extensions | HIGH   | Provide deprecated re-export shims for 2 minor versions          |
-| Multi-agent conflicts during refactor      | MEDIUM | Scope PRs to single subdomain; coordinate via branch naming      |
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| File moves break `go build` (import cycle) | HIGH | Move files without logic changes; run `make go-test` after each move |
+| CGo abstraction layer adds allocation overhead | MEDIUM | Profile hot paths; keep service interfaces thin (no extra copies) |
+| `*_noffi.go` stubs diverge from CGo behavior | MEDIUM | Shared test cases in `ffi_test.go` run against both build tags |
+| Proto regeneration breaks Rust prost types | MEDIUM | `make proto-check` catches drift before merge |
+| Multi-agent conflicts during large refactor | MEDIUM | Scope each PR to a single sub-package; use `refactor(<scope>):` commit prefix |
 
 ---
 
-## Next Steps
+## Relationship to `make check`
 
-1. **Immediately:** Add barrel `index.ts` files for `channels`, `config`, `routing`, `media`
-2. **This sprint:** Map all gateway files to subdomains (spreadsheet/issue)
-3. **Next sprint:** Begin gateway auth + chat extraction
-4. **Ongoing:** Add `no-restricted-imports` lint rules as modules stabilize
+Every phase is gated on `make check`. The targets it runs:
+
+```
+make check
+  ├── make proto-check     → regenerate proto + git diff (catches schema drift)
+  ├── make rust-test       → cargo test --workspace (all Rust unit tests)
+  ├── make go-test         → go test ./... (all Go tests, with CGo)
+  └── make ts              → TypeScript checks (docs tooling only)
+```
+
+**Hard gate:** do not push any phase without `make check` passing locally.
+
+Fast iteration: `make rust-debug` (debug symbols, faster) + `make go-dev` (auto-restart) is
+the recommended inner loop during refactor work. Run `make check` before each commit.
