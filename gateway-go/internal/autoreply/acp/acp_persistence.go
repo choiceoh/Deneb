@@ -111,8 +111,17 @@ func (s *BindingStore) Save(bindings []StoredBinding) error {
 }
 
 // SyncFromService saves the current state of a SessionBindingService to disk.
+// Skips the snapshot + marshal + hash cycle entirely when bindings are clean
+// (unchanged since the last successful save).
 func (s *BindingStore) SyncFromService(svc *SessionBindingService) error {
-	return s.Save(svc.Snapshot())
+	if !svc.IsDirty() {
+		return nil
+	}
+	if err := s.Save(svc.Snapshot()); err != nil {
+		return err
+	}
+	svc.MarkClean()
+	return nil
 }
 
 // RestoreToService loads bindings from disk and restores them into the service.

@@ -28,9 +28,17 @@ type ACPAgent struct {
 }
 
 // ACPRegistry tracks spawned sub-agents.
+//
+// Snapshot cache: every mutating operation bumps ver. List() rebuilds the
+// cached snapshot only when ver has advanced, so repeated List("") calls
+// between mutations return the same immutable slice at zero copy cost.
+// Callers MUST NOT modify the returned slice.
 type ACPRegistry struct {
-	mu     sync.RWMutex
-	agents map[string]*ACPAgent
+	mu      sync.RWMutex
+	agents  map[string]*ACPAgent
+	ver     uint64     // bumped on every mutation
+	snapVer uint64     // ver at which snapAll was built
+	snapAll []ACPAgent // immutable snapshot; rebuilt lazily on List
 }
 
 // NewACPRegistry creates a new ACP agent registry.
@@ -40,11 +48,17 @@ func NewACPRegistry() *ACPRegistry {
 	}
 }
 
+// bumpVer increments the version counter. Must be called under write lock.
+func (r *ACPRegistry) bumpVer() {
+	r.ver++
+}
+
 // Register adds a sub-agent to the registry.
 func (r *ACPRegistry) Register(agent ACPAgent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.agents[agent.ID] = &agent
+	r.bumpVer()
 }
 
 // Get returns an agent by ID.
@@ -60,28 +74,61 @@ func (r *ACPRegistry) Get(id string) *ACPAgent {
 }
 
 // List returns all agents, optionally filtered by parent.
+//
+// When parentID is empty the call is O(1) if the registry hasn't changed
+// since the last call — it returns the cached immutable snapshot directly.
+// When parentID is non-empty the snapshot is still used to avoid re-iterating
+// the internal map, but a filtered slice is allocated and returned.
+// Callers MUST NOT modify the returned slice.
 func (r *ACPRegistry) List(parentID string) []ACPAgent {
+	// Fast path: try to serve from snapshot under read lock.
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-	var result []ACPAgent
-	for _, a := range r.agents {
-		if parentID != "" && a.ParentID != parentID {
-			continue
+	if r.snapVer == r.ver && r.snapAll != nil {
+		snap := r.snapAll
+		r.mu.RUnlock()
+		if parentID == "" {
+			return snap
 		}
-		result = append(result, *a)
+		return filterByParent(snap, parentID)
+	}
+	r.mu.RUnlock()
+
+	// Slow path: rebuild snapshot under write lock.
+	r.mu.Lock()
+	// Re-check after acquiring write lock — another goroutine may have rebuilt already.
+	if r.snapVer != r.ver || r.snapAll == nil {
+		snap := make([]ACPAgent, 0, len(r.agents))
+		for _, a := range r.agents {
+			snap = append(snap, *a)
+		}
+		r.snapAll = snap
+		r.snapVer = r.ver
+	}
+	snap := r.snapAll
+	r.mu.Unlock()
+
+	if parentID == "" {
+		return snap
+	}
+	return filterByParent(snap, parentID)
+}
+
+// filterByParent returns agents whose ParentID matches. Allocates a new slice.
+func filterByParent(snap []ACPAgent, parentID string) []ACPAgent {
+	var result []ACPAgent
+	for i := range snap {
+		if snap[i].ParentID == parentID {
+			result = append(result, snap[i])
+		}
 	}
 	return result
 }
 
 // ActiveCount returns the number of active (non-terminal) agents.
 func (r *ACPRegistry) ActiveCount(parentID string) int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	snap := r.List(parentID)
 	count := 0
-	for _, a := range r.agents {
-		if parentID != "" && a.ParentID != parentID {
-			continue
-		}
+	for _, a := range snap {
 		if a.Status == "idle" || a.Status == "running" {
 			count++
 		}
@@ -99,6 +146,7 @@ func (r *ACPRegistry) Kill(id string) bool {
 	}
 	a.Status = "killed"
 	a.EndedAt = time.Now().UnixMilli()
+	r.bumpVer()
 	return true
 }
 
@@ -107,6 +155,7 @@ func (r *ACPRegistry) Remove(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.agents, id)
+	r.bumpVer()
 }
 
 // UpdateStatusBySessionKey finds an agent by session key and updates its status.
@@ -120,6 +169,7 @@ func (r *ACPRegistry) UpdateStatusBySessionKey(sessionKey, status string, endedA
 			if endedAt > 0 {
 				a.EndedAt = endedAt
 			}
+			r.bumpVer()
 			return true
 		}
 	}
