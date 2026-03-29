@@ -2,9 +2,9 @@
 //
 // The ConsoleHandler outputs compact, modern log lines with ANSI styling:
 //
-//	14:05:09 INF · [server] request handled status=200 latency=1.2s
+//	14:05:09 │ [server] request handled status=200 latency=1.2s
 //
-// Visual hierarchy: dim timestamp, bold colored level, dim · separator,
+// Visual hierarchy: dim timestamp, level-colored │ bar (dim=info, yellow=warn, red=error, cyan=debug),
 // dim cyan [pkg] tag, bold message, dim key= with normal values.
 // Error attribute values are highlighted in red for quick scanning.
 // Designed for direct log tailing (tail -f) on a single-server deployment.
@@ -99,7 +99,7 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 		t = time.Now()
 	}
 
-	lvl, lvlStyle := levelLabel(r.Level)
+	barStyle := levelBarStyle(r.Level)
 	isErr := r.Level >= slog.LevelError
 
 	// Extract pkg tag from preAttrs and record attrs.
@@ -119,16 +119,10 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 		buf = append(buf, ansiDim...)
 		buf = appendTimestamp(buf, t)
 		buf = append(buf, ansiReset...)
-		buf = append(buf, ' ')
 
-		// Bold colored level.
-		buf = append(buf, lvlStyle...)
-		buf = append(buf, lvl...)
-		buf = append(buf, ansiReset...)
-
-		// Dim separator bar.
+		// Level-colored separator bar (replaces text label).
 		buf = append(buf, ' ')
-		buf = append(buf, ansiDim...)
+		buf = append(buf, barStyle...)
 		buf = append(buf, "│"...)
 		buf = append(buf, ansiReset...)
 
@@ -155,7 +149,7 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 	} else {
 		buf = appendTimestamp(buf, t)
 		buf = append(buf, ' ')
-		buf = append(buf, lvl...)
+		buf = append(buf, levelText(r.Level)...)
 		buf = append(buf, " │ "...)
 
 		// Package tag (if present).
@@ -342,17 +336,31 @@ func appendTimestamp(buf []byte, t time.Time) []byte {
 	return buf
 }
 
-// levelLabel returns the 3-letter label and ANSI bold+color for a level.
-func levelLabel(l slog.Level) (string, string) {
+// levelText returns a short label used in no-color mode (color mode uses bar style instead).
+func levelText(l slog.Level) string {
 	switch {
 	case l < slog.LevelInfo:
-		return "DBG", ansiBoldCyn
+		return "DBG"
 	case l < slog.LevelWarn:
-		return "INF", ansiBoldBlu
+		return "INF"
 	case l < slog.LevelError:
-		return "WRN", ansiBoldYel
+		return "WRN"
 	default:
-		return "ERR", ansiBoldRed
+		return "ERR"
+	}
+}
+
+// levelBarStyle returns the ANSI style for the │ bar based on log level.
+func levelBarStyle(l slog.Level) string {
+	switch {
+	case l < slog.LevelInfo:
+		return ansiBoldCyn
+	case l < slog.LevelWarn:
+		return ansiDim
+	case l < slog.LevelError:
+		return ansiBoldYel
+	default:
+		return ansiBoldRed
 	}
 }
 
