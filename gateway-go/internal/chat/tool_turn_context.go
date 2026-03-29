@@ -15,8 +15,26 @@ import (
 // context.Context, and discarded when the turn ends.
 type TurnContext struct {
 	mu      sync.Mutex
-	results map[string]*turnResult_    // keyed by tool_use_id
+	results map[string]*turnResult_   // keyed by tool_use_id
 	waiters map[string][]chan struct{} // signals when a result is stored
+	stats   map[string]*toolStat      // per-tool-name timing stats
+}
+
+// toolStat accumulates completion-time samples for a single tool name within a turn.
+// Used to build adaptive timeout estimates for $ref resolution.
+type toolStat struct {
+	n     int
+	total time.Duration
+	min   time.Duration
+	max   time.Duration
+}
+
+// ToolTimingStats is a snapshot of aggregated completion times for a tool within a turn.
+type ToolTimingStats struct {
+	Count int
+	Mean  time.Duration
+	Min   time.Duration
+	Max   time.Duration
 }
 
 // turnResult_ holds the outcome of a single tool execution within a turn.
@@ -38,6 +56,7 @@ func NewTurnContext() *TurnContext {
 
 // Store records a tool's result, keyed by tool_use_id.
 // Any goroutines waiting on this ID via Wait are unblocked.
+// Per-tool-name timing statistics are updated for adaptive timeout use.
 func (tc *TurnContext) Store(toolUseID string, result *turnResult_) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -48,6 +67,26 @@ func (tc *TurnContext) Store(toolUseID string, result *turnResult_) {
 	}
 	tc.results[toolUseID] = result
 
+	// Record timing stats keyed by tool name.
+	if result.ToolName != "" && result.Duration > 0 {
+		if tc.stats == nil {
+			tc.stats = make(map[string]*toolStat, 4)
+		}
+		s := tc.stats[result.ToolName]
+		if s == nil {
+			s = &toolStat{min: result.Duration, max: result.Duration}
+			tc.stats[result.ToolName] = s
+		}
+		s.n++
+		s.total += result.Duration
+		if result.Duration < s.min {
+			s.min = result.Duration
+		}
+		if result.Duration > s.max {
+			s.max = result.Duration
+		}
+	}
+
 	// Unblock all waiters for this ID.
 	if chs, ok := tc.waiters[toolUseID]; ok {
 		for _, ch := range chs {
@@ -55,6 +94,23 @@ func (tc *TurnContext) Store(toolUseID string, result *turnResult_) {
 		}
 		delete(tc.waiters, toolUseID)
 	}
+}
+
+// ToolTiming returns aggregated completion-time stats for the named tool within
+// this turn. Returns false if no completions have been recorded yet.
+func (tc *TurnContext) ToolTiming(toolName string) (ToolTimingStats, bool) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	s, ok := tc.stats[toolName]
+	if !ok {
+		return ToolTimingStats{}, false
+	}
+	return ToolTimingStats{
+		Count: s.n,
+		Mean:  s.total / time.Duration(s.n),
+		Min:   s.min,
+		Max:   s.max,
+	}, true
 }
 
 // Load returns the result for the given tool_use_id, or nil if not yet stored.

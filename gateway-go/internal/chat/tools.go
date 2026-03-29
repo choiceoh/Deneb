@@ -17,7 +17,7 @@ const (
 	// refWaitInitial is the fast-path timeout for $ref resolution. Most tool
 	// results arrive within 1s, so a short initial wait avoids blocking the
 	// turn unnecessarily (e.g., read: ~50ms, grep: ~200ms).
-	refWaitInitial = 5 * time.Second
+	refWaitInitial = 2 * time.Second
 	// refWaitMax is the absolute upper bound for $ref waits, used when the
 	// context deadline is far away or absent.
 	refWaitMax = 30 * time.Second
