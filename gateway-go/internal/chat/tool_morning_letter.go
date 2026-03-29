@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -15,63 +14,71 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 )
 
-// toolMorningLetter returns the morning_letter tool — collects 6 data sections
-// in parallel and returns a fully formatted Korean briefing text (< 4000 chars).
+// toolMorningLetter returns the morning_letter tool — collects 5 data sections
+// in parallel and returns structured JSON for the LLM to compose the final letter.
 //
-// Sections: weather (Gwangju), exchange rates, copper price, calendar,
-// email summary, SMP power price.
+// The LLM receives raw data and is responsible for formatting, tone, and
+// contextual interpretation (e.g. "우산 챙기세요" for rain, email importance ranking).
+//
+// Sections: weather (Gwangju), exchange rates, copper price, calendar, email.
 func toolMorningLetter(tools ToolExecutor) ToolFunc {
 	return func(ctx context.Context, _ json.RawMessage) (string, error) {
 		now := time.Now().In(kstLocation)
 
 		var (
-			mu       sync.Mutex
-			sections = make([]section, 6)
+			mu      sync.Mutex
+			results = make([]any, 5)
 		)
 
-		// Each collector writes to its slot. Failures produce fallback text.
-		var wg sync.WaitGroup
-		collectors := []struct {
-			idx  int
-			name string
-			fn   func(ctx context.Context) string
-		}{
-			{0, "weather", func(ctx context.Context) string { return collectWeather(ctx) }},
-			{1, "exchange", func(ctx context.Context) string { return collectExchangeRates(ctx) }},
-			{2, "copper", func(ctx context.Context) string { return collectCopper(ctx, tools) }},
-			{3, "calendar", func(ctx context.Context) string { return collectCalendar(ctx) }},
-			{4, "email", func(ctx context.Context) string { return collectEmail(ctx) }},
-			{5, "smp", func(ctx context.Context) string { return collectSMP(ctx, tools) }},
+		type collector struct {
+			idx int
+			fn  func(ctx context.Context) any
+		}
+		collectors := []collector{
+			{0, func(ctx context.Context) any { return fetchWeather(ctx) }},
+			{1, func(ctx context.Context) any { return fetchExchangeRates(ctx) }},
+			{2, func(ctx context.Context) any { return fetchCopper(ctx, tools) }},
+			{3, func(ctx context.Context) any { return fetchCalendar(ctx) }},
+			{4, func(ctx context.Context) any { return fetchEmail(ctx) }},
 		}
 
+		var wg sync.WaitGroup
 		for _, c := range collectors {
 			wg.Add(1)
-			go func(idx int, name string, fn func(context.Context) string) {
+			go func(idx int, fn func(context.Context) any) {
 				defer wg.Done()
 				sectionCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
-				text := fn(sectionCtx)
+				data := fn(sectionCtx)
 				mu.Lock()
-				sections[idx] = section{name: name, text: text}
+				results[idx] = data
 				mu.Unlock()
-			}(c.idx, c.name, c.fn)
+			}(c.idx, c.fn)
 		}
 		wg.Wait()
 
-		// Assemble the letter.
-		letter := formatMorningLetter(now, sections)
-
-		// If over 4000 chars, truncate email section to 3 items.
-		if len(letter) > 4000 {
-			sections[4].text = collectEmailShort(ctx)
-			letter = formatMorningLetter(now, sections)
+		weekday := [...]string{"일", "월", "화", "수", "목", "금", "토"}[now.Weekday()]
+		envelope := map[string]any{
+			"date":      fmt.Sprintf("%d년 %d월 %d일 %s요일", now.Year(), int(now.Month()), now.Day(), weekday),
+			"timestamp": now.Format(time.RFC3339),
+			"sections": map[string]any{
+				"weather":  results[0],
+				"exchange": results[1],
+				"copper":   results[2],
+				"calendar": results[3],
+				"email":    results[4],
+			},
 		}
 
-		return letter, nil
+		out, err := json.MarshalIndent(envelope, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("marshal morning letter data: %w", err)
+		}
+		return string(out), nil
 	}
 }
 
-// --- Formatting ---
+// --- KST location ---
 
 var kstLocation = func() *time.Location {
 	loc, err := time.LoadLocation("Asia/Seoul")
@@ -81,86 +88,80 @@ var kstLocation = func() *time.Location {
 	return loc
 }()
 
-var koreanWeekdays = [...]string{"일", "월", "화", "수", "목", "금", "토"}
+// --- Section data types ---
 
-// section holds one morning letter data section.
-type section = struct {
-	name string
-	text string
+type weatherData struct {
+	OK          bool   `json:"ok"`
+	TempC       string `json:"temp_c,omitempty"`
+	FeelsLikeC  string `json:"feels_like_c,omitempty"`
+	Condition   string `json:"condition,omitempty"`
+	Humidity    string `json:"humidity,omitempty"`
+	MinTempC    string `json:"min_temp_c,omitempty"`
+	MaxTempC    string `json:"max_temp_c,omitempty"`
+	MaxRainPct  int    `json:"max_rain_pct,omitempty"`
+	MaxRainTime string `json:"max_rain_time,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
-func formatMorningLetter(now time.Time, sections []section) string {
-	weekday := koreanWeekdays[now.Weekday()]
-	header := fmt.Sprintf("🌅 모닝레터 — %d년 %d월 %d일 %s요일",
-		now.Year(), int(now.Month()), now.Day(), weekday)
-
-	var sb strings.Builder
-	sb.WriteString(header)
-	sb.WriteString("\n")
-
-	// Weather
-	sb.WriteString("\n☁\ufe0f 날씨 (광주광역시)\n")
-	sb.WriteString(sections[0].text)
-	sb.WriteString("\n")
-
-	// Exchange rates
-	sb.WriteString("\n💱 환율\n")
-	sb.WriteString(sections[1].text)
-	sb.WriteString("\n")
-
-	// Copper
-	sb.WriteString("\n🔶 구리시세\n")
-	sb.WriteString(sections[2].text)
-	sb.WriteString("\n")
-
-	// Calendar
-	sb.WriteString("\n📅 오늘 일정\n")
-	sb.WriteString(sections[3].text)
-	sb.WriteString("\n")
-
-	// Email
-	sb.WriteString("\n📧 전일 메일 주요사항\n")
-	sb.WriteString(sections[4].text)
-	sb.WriteString("\n")
-
-	// SMP
-	sb.WriteString("\n⚡ SMP 전력가격\n")
-	sb.WriteString(sections[5].text)
-	sb.WriteString("\n")
-
-	sb.WriteString("\n좋은 하루 되세요!")
-
-	return sb.String()
+type exchangeData struct {
+	OK     bool    `json:"ok"`
+	USDKRW float64 `json:"usd_krw,omitempty"`
+	EURKRW float64 `json:"eur_krw,omitempty"`
+	Error  string  `json:"error,omitempty"`
 }
 
-// --- Section collectors ---
+type webSearchData struct {
+	OK      bool   `json:"ok"`
+	RawText string `json:"raw_text,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
 
-// collectWeather fetches weather data from wttr.in JSON API.
-func collectWeather(ctx context.Context) string {
+type calendarData struct {
+	OK     bool     `json:"ok"`
+	Events []string `json:"events,omitempty"`
+	Error  string   `json:"error,omitempty"`
+}
+
+type emailData struct {
+	OK       bool         `json:"ok"`
+	Messages []emailEntry `json:"messages,omitempty"`
+	Error    string       `json:"error,omitempty"`
+}
+
+type emailEntry struct {
+	From    string `json:"from"`
+	Subject string `json:"subject"`
+	Date    string `json:"date,omitempty"`
+	Snippet string `json:"snippet,omitempty"`
+}
+
+// --- Section collectors (return structured data for LLM to format) ---
+
+func fetchWeather(ctx context.Context) any {
 	req, err := http.NewRequestWithContext(ctx, "GET",
 		"https://wttr.in/Gwangju,South+Korea?format=j1", nil)
 	if err != nil {
-		return "조회 실패"
+		return weatherData{Error: "request build failed"}
 	}
 	req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "조회 실패"
+		return weatherData{Error: "network error"}
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024))
 	if err != nil {
-		return "조회 실패"
+		return weatherData{Error: "read error"}
 	}
 
-	var data struct {
+	var raw struct {
 		CurrentCondition []struct {
-			TempC       string `json:"temp_C"`
-			FeelsLikeC  string `json:"FeelsLikeC"`
-			Humidity    string `json:"humidity"`
-			LangKo      []struct {
+			TempC      string `json:"temp_C"`
+			FeelsLikeC string `json:"FeelsLikeC"`
+			Humidity   string `json:"humidity"`
+			LangKo     []struct {
 				Value string `json:"value"`
 			} `json:"lang_ko"`
 		} `json:"current_condition"`
@@ -173,23 +174,25 @@ func collectWeather(ctx context.Context) string {
 			} `json:"hourly"`
 		} `json:"weather"`
 	}
-	if err := json.Unmarshal(body, &data); err != nil || len(data.CurrentCondition) == 0 {
-		return "조회 실패"
+	if err := json.Unmarshal(body, &raw); err != nil || len(raw.CurrentCondition) == 0 {
+		return weatherData{Error: "parse error"}
 	}
 
-	cc := data.CurrentCondition[0]
-	condition := "—"
+	cc := raw.CurrentCondition[0]
+	d := weatherData{
+		OK:         true,
+		TempC:      cc.TempC,
+		FeelsLikeC: cc.FeelsLikeC,
+		Humidity:   cc.Humidity,
+	}
 	if len(cc.LangKo) > 0 {
-		condition = cc.LangKo[0].Value
+		d.Condition = cc.LangKo[0].Value
 	}
+	if len(raw.Weather) > 0 {
+		w := raw.Weather[0]
+		d.MinTempC = w.MinTempC
+		d.MaxTempC = w.MaxTempC
 
-	result := fmt.Sprintf("현재 %s°C (체감 %s°C), %s\n", cc.TempC, cc.FeelsLikeC, condition)
-
-	if len(data.Weather) > 0 {
-		w := data.Weather[0]
-		result += fmt.Sprintf("최저 %s° / 최고 %s°, 습도 %s%%", w.MinTempC, w.MaxTempC, cc.Humidity)
-
-		// Find peak rain chance.
 		maxRain := 0
 		rainTime := ""
 		for _, h := range w.Hourly {
@@ -201,212 +204,136 @@ func collectWeather(ctx context.Context) string {
 			}
 		}
 		if maxRain >= 30 {
-			// Convert "600" → "06:00" style.
-			t := rainTime
-			if len(t) <= 2 {
-				t = t + ":00"
-			} else if len(t) == 3 {
-				t = "0" + string(t[0]) + ":" + t[1:]
-			} else if len(t) == 4 {
-				t = t[:2] + ":" + t[2:]
-			}
-			result += fmt.Sprintf("\n🌧 강수확률 %d%% (%s)", maxRain, t)
+			d.MaxRainPct = maxRain
+			d.MaxRainTime = normalizeWttrTime(rainTime)
 		}
 	}
-
-	return result
+	return d
 }
 
-// collectExchangeRates fetches USD/KRW and EUR/KRW from open.er-api.com.
-func collectExchangeRates(ctx context.Context) string {
+func fetchExchangeRates(ctx context.Context) any {
 	req, err := http.NewRequestWithContext(ctx, "GET",
 		"https://open.er-api.com/v6/latest/USD", nil)
 	if err != nil {
-		return "조회 실패"
+		return exchangeData{Error: "request build failed"}
 	}
 	req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "조회 실패"
+		return exchangeData{Error: "network error"}
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
 	if err != nil {
-		return "조회 실패"
+		return exchangeData{Error: "read error"}
 	}
 
-	var data struct {
+	var raw struct {
 		Result string             `json:"result"`
 		Rates  map[string]float64 `json:"rates"`
 	}
-	if err := json.Unmarshal(body, &data); err != nil || data.Result != "success" {
-		return "조회 실패"
+	if err := json.Unmarshal(body, &raw); err != nil || raw.Result != "success" {
+		return exchangeData{Error: "parse error"}
 	}
 
-	krw, ok := data.Rates["KRW"]
+	krw, ok := raw.Rates["KRW"]
 	if !ok {
-		return "조회 실패"
+		return exchangeData{Error: "KRW rate not found"}
 	}
 
-	result := fmt.Sprintf("USD/KRW: %s", formatNumber(krw, 2))
-
-	// Derive EUR/KRW: 1 EUR = (1/EUR_per_USD) * KRW_per_USD.
-	eurRate, ok := data.Rates["EUR"]
-	if ok && eurRate > 0 {
-		eurKrw := krw / eurRate
-		result += fmt.Sprintf("\nEUR/KRW: %s", formatNumber(eurKrw, 2))
+	d := exchangeData{OK: true, USDKRW: krw}
+	if eurRate, ok := raw.Rates["EUR"]; ok && eurRate > 0 {
+		d.EURKRW = krw / eurRate
 	}
-
-	return result
+	return d
 }
 
-// collectCopper uses web search for LME copper price.
-func collectCopper(ctx context.Context, tools ToolExecutor) string {
+func fetchCopper(ctx context.Context, tools ToolExecutor) any {
 	query := `{"query": "LME copper price today USD per ton", "count": 3}`
 	output, err := tools.Execute(ctx, "web", json.RawMessage(query))
-	if err != nil || output == "" {
-		return "조회 실패"
+	if err != nil {
+		return webSearchData{Error: err.Error()}
 	}
-	return extractCopperPrice(output)
+	if output == "" {
+		return webSearchData{Error: "empty result"}
+	}
+	if len(output) > 2000 {
+		output = output[:2000]
+	}
+	return webSearchData{OK: true, RawText: output}
 }
 
-// extractCopperPrice attempts to find a copper price from web search output.
-func extractCopperPrice(output string) string {
-	// Look for patterns like "$9,500" or "9,500.00" near "copper" or "LME".
-	priceRe := regexp.MustCompile(`\$?([\d,]+(?:\.\d{1,2})?)\s*(?:/ton|per\s*(?:metric\s*)?ton|USD)`)
-	matches := priceRe.FindStringSubmatch(output)
-	if len(matches) >= 2 {
-		return fmt.Sprintf("LME: $%s/ton", matches[1])
-	}
-	// Fallback: return a trimmed excerpt.
-	if len(output) > 200 {
-		output = output[:200]
-	}
-	return strings.TrimSpace(output)
-}
-
-// collectCalendar runs gcalcli to get today's agenda.
-func collectCalendar(ctx context.Context) string {
+func fetchCalendar(ctx context.Context) any {
 	if _, err := exec.LookPath("gcalcli"); err != nil {
-		return "일정 조회 불가 (gcalcli 미설치)"
+		return calendarData{Error: "gcalcli not installed"}
 	}
 
 	cmd := exec.CommandContext(ctx, "gcalcli", "agenda", "today", "tomorrow",
 		"--nostarted", "--details", "length")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "일정 조회 실패"
+		return calendarData{Error: "gcalcli failed"}
 	}
 
 	text := strings.TrimSpace(string(out))
 	if text == "" || strings.Contains(text, "No Events Found") {
-		return "오늘 일정 없음"
+		return calendarData{OK: true}
 	}
 
-	// Limit to 8 lines.
 	lines := strings.Split(text, "\n")
-	if len(lines) > 8 {
-		lines = lines[:8]
+	if len(lines) > 10 {
+		lines = lines[:10]
 	}
-
-	var result []string
+	var events []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" {
-			result = append(result, "• "+line)
+			events = append(events, line)
 		}
 	}
-	if len(result) == 0 {
-		return "오늘 일정 없음"
-	}
-	return strings.Join(result, "\n")
+	return calendarData{OK: true, Events: events}
 }
 
-// collectEmail fetches yesterday's important emails via native Gmail API.
-func collectEmail(_ context.Context) string {
-	return collectEmailWithMax(5)
-}
-
-// collectEmailShort fetches emails with reduced count for space savings.
-func collectEmailShort(_ context.Context) string {
-	return collectEmailWithMax(3)
-}
-
-func collectEmailWithMax(max int) string {
+func fetchEmail(_ context.Context) any {
 	client, err := gmail.GetClient()
 	if err != nil {
-		return "메일 조회 불가 (인증 정보 없음)"
+		return emailData{Error: "no credentials"}
 	}
 
-	msgs, err := client.Search("newer_than:1d", max)
+	msgs, err := client.Search("newer_than:1d", 10)
 	if err != nil {
-		return "메일 조회 실패"
+		return emailData{Error: err.Error()}
 	}
 	if len(msgs) == 0 {
-		return "어제 수신 메일 없음"
+		return emailData{OK: true}
 	}
 
-	var lines []string
-	for _, m := range msgs {
-		from := m.From
-		// Shorten "Name <email>" to just "Name".
-		if idx := strings.Index(from, "<"); idx > 0 {
-			from = strings.TrimSpace(from[:idx])
+	entries := make([]emailEntry, len(msgs))
+	for i, m := range msgs {
+		entries[i] = emailEntry{
+			From:    m.From,
+			Subject: m.Subject,
+			Date:    m.Date,
+			Snippet: m.Snippet,
 		}
-		lines = append(lines, fmt.Sprintf("• %s — %s", from, m.Subject))
 	}
-	return strings.Join(lines, "\n")
+	return emailData{OK: true, Messages: entries}
 }
 
-// collectSMP uses web search for Korea SMP electricity price.
-func collectSMP(ctx context.Context, tools ToolExecutor) string {
-	query := `{"query": "한국 SMP 전력시장 가격 전력거래소 KPX 오늘 육지", "count": 3}`
-	output, err := tools.Execute(ctx, "web", json.RawMessage(query))
-	if err != nil || output == "" {
-		return "조회 불가"
+// normalizeWttrTime converts wttr.in time format ("600", "1200") to "06:00", "12:00".
+func normalizeWttrTime(t string) string {
+	switch len(t) {
+	case 1:
+		return "0" + t + ":00"
+	case 2:
+		return t + ":00"
+	case 3:
+		return "0" + string(t[0]) + ":" + t[1:]
+	case 4:
+		return t[:2] + ":" + t[2:]
+	default:
+		return t
 	}
-	return extractSMPPrice(output)
-}
-
-// extractSMPPrice attempts to extract SMP price from web search output.
-func extractSMPPrice(output string) string {
-	// Look for patterns like "123.45 원/kWh" or "123.45원".
-	priceRe := regexp.MustCompile(`([\d,]+(?:\.\d{1,2})?)\s*원\s*/?(?:kWh)?`)
-	matches := priceRe.FindStringSubmatch(output)
-	if len(matches) >= 2 {
-		return fmt.Sprintf("육지: %s원/kWh", matches[1])
-	}
-	// Fallback: return a trimmed excerpt.
-	if len(output) > 200 {
-		output = output[:200]
-	}
-	return strings.TrimSpace(output)
-}
-
-// --- Helpers ---
-
-// formatNumber formats a float with thousand separators and decimal places.
-func formatNumber(n float64, decimals int) string {
-	// Format with decimals.
-	s := fmt.Sprintf("%.*f", decimals, n)
-
-	// Split integer and decimal parts.
-	parts := strings.SplitN(s, ".", 2)
-	intPart := parts[0]
-
-	// Add thousand separators.
-	var result []byte
-	for i, c := range intPart {
-		if i > 0 && (len(intPart)-i)%3 == 0 {
-			result = append(result, ',')
-		}
-		result = append(result, byte(c))
-	}
-
-	if len(parts) == 2 {
-		return string(result) + "." + parts[1]
-	}
-	return string(result)
 }

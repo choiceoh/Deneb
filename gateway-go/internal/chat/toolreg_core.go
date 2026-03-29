@@ -51,7 +51,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Morning letter: needs registry for web search calls.
 	registry.RegisterTool(ToolDef{
 		Name:        "morning_letter",
-		Description: "Generate daily morning briefing (모닝레터). Fetches weather, exchange rates, copper price, calendar, email summary, and SMP power price. Returns formatted Korean text",
+		Description: "Collect daily morning briefing data (모닝레터). Fetches weather, exchange rates, copper price, calendar, and email in parallel. Returns structured JSON for you to compose the final letter",
 		InputSchema: morningLetterToolSchema(),
 		Fn:          toolMorningLetter(registry),
 	})
