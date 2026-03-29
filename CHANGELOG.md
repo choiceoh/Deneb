@@ -1,5 +1,64 @@
 # Changelog
 
+## [4.2.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.1...deneb-v4.2.2) (2026-03-29)
+
+
+### ✨ Features
+
+* remove duplicate executeAgentRun from run.go ([6adb4af](https://github.com/choiceoh/Deneb/commit/6adb4af84e1f1366e9840f0adb03399e6d05dd5d))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** correct Korean token overestimation in estimateTokens ([98c3c70](https://github.com/choiceoh/Deneb/commit/98c3c70d76d718b42c81f669ab87630328eafaa0))
+* **chat:** critical fixes from Zen arch code review ([d9c6160](https://github.com/choiceoh/Deneb/commit/d9c6160a60451149b58a9502adf73350c25e6ca6))
+* **chat:** fix prefetcher context race and decoder duplicate key ([c94edc8](https://github.com/choiceoh/Deneb/commit/c94edc8d777e7565ec0ed1040fcc62145ae7f3da))
+* **memory:** seed transcript cache on first Append, raise memory file cache TTL ([bae9c2b](https://github.com/choiceoh/Deneb/commit/bae9c2bdbb3ad6b44087489c54411390c93b36d1))
+* **memory:** use UpdatedAt for recency scoring in SearchFacts ([ac25929](https://github.com/choiceoh/Deneb/commit/ac25929789325b00b4f5187586855a97b81d87e2))
+* **server:** remove duplicate inbound Discord implementations ([7669d86](https://github.com/choiceoh/Deneb/commit/7669d8674aad15cf2c0be946dd6c3fbbef307730))
+* **server:** remove duplicated discord inbound implementations ([66ecac4](https://github.com/choiceoh/Deneb/commit/66ecac429a5ce18e8302d69d3b4c8838b50966e5))
+* **test:** update stale test expectations across Rust and Go ([5ddaff8](https://github.com/choiceoh/Deneb/commit/5ddaff850f3e6029a6a41625830a14cfeb2f3b2f))
+
+
+### ⚡ Performance
+
+* **agent:** introduce Zen arch — reorder buffer and superscalar techniques ([4a8c0eb](https://github.com/choiceoh/Deneb/commit/4a8c0eb6b216ec8ba6d9f3a43a7b7d4aa65ea2ce))
+* **agent:** reduce per-turn token cost via tool profiling and image stripping ([afe2575](https://github.com/choiceoh/Deneb/commit/afe2575f2bd186a5b39ed18ff8eae5837c79faae))
+* **aurora:** batch FetchMessages/FetchSummaries in fetchContextItems ([e983196](https://github.com/choiceoh/Deneb/commit/e983196f8d9939a75fa9e356121f88aa3f742529))
+* **aurora:** debounce store flush and 6 runtime improvements ([9aad3de](https://github.com/choiceoh/Deneb/commit/9aad3de72a6e69c8e3d7c4b031c82fa7c10fa056))
+* **aurora:** eliminate redundant JSON unmarshal in sweep loop ([34e1f49](https://github.com/choiceoh/Deneb/commit/34e1f497fe17fb270750b1ec656ffd53f27412d3))
+* **autoreply:** reduce lock contention in registry, binding store, and dedup cache ([676c788](https://github.com/choiceoh/Deneb/commit/676c7887f801150093fa97ddab33fbde768249cf))
+* **chat:** apply CPU architecture techniques to optimize pipeline ([de03369](https://github.com/choiceoh/Deneb/commit/de03369d0f58cc01c6d9738a3d9279cc5683fae4))
+* **chat:** batch system prompt marshal and eliminate per-turn tool slice copy ([e9a237d](https://github.com/choiceoh/Deneb/commit/e9a237d58683a6799d6cce9ca6ca7429dde2bd60))
+* **chat:** extend Zen arch — SMT, prefetcher, decoder, interconnect ([a48d77c](https://github.com/choiceoh/Deneb/commit/a48d77c987c8353d0a1dc20c0ddd1471d59b039c))
+* **chat:** lazy-init TurnContext maps to avoid allocations on text-only turns ([37c0529](https://github.com/choiceoh/Deneb/commit/37c05294da6f678577abb26ca33be0234b675841))
+* **chat:** optimize context pipeline — 8 efficiency improvements ([bbea084](https://github.com/choiceoh/Deneb/commit/bbea084de50c3f64a9a23e6d9f5160f404a29923))
+* **chat:** optimize message conversion and system prompt assembly ([88709cd](https://github.com/choiceoh/Deneb/commit/88709cd6b7834a6f2b1f212280008b183e16c437))
+* **chat:** reduce refWaitInitial to 2s, move grep/find summarizers to per-tool, add TurnContext timing stats ([2316745](https://github.com/choiceoh/Deneb/commit/23167456d84f6e2c1f2778a4fd86872eaaf830fd))
+* **chat:** remove redundant Anthropic system prompt rebuild ([5633fda](https://github.com/choiceoh/Deneb/commit/5633fda4afa53770b183530f2bb9be121ba61533))
+* **chat:** skip sglang compression for structured-output tools ([274b7be](https://github.com/choiceoh/Deneb/commit/274b7becd6f4928e08cd7d343efbbc12ca1ddbc7))
+* **cli:** eliminate duplicate config loading and hot-path overhead ([70acc3e](https://github.com/choiceoh/Deneb/commit/70acc3e1307affea45174bfa19e8e106a4128392))
+* **compaction:** eliminate redundant passes and clone in sweep engine ([519388a](https://github.com/choiceoh/Deneb/commit/519388a88d96fd08551875fa08ce4495380dcdab))
+* **core:** add O(1) session_key reverse index to EmbeddedRunTracker ([e94e1af](https://github.com/choiceoh/Deneb/commit/e94e1afc09cfb48eb70618eaf10d8281ae42a73a))
+* **core:** optimize provider normalization, MMR, sanitize_html, and allocations ([2d303db](https://github.com/choiceoh/Deneb/commit/2d303dbe216cf1685546f57e1631ca4f5bb14787))
+* **core:** replace std HashMap with FxHashMap for internal registries ([ed8d400](https://github.com/choiceoh/Deneb/commit/ed8d400d2e2b5890a5eac1d010324183e3afba09))
+* **memory:** cache pre-split and pre-lowercased lines in memContentEntry ([562e177](https://github.com/choiceoh/Deneb/commit/562e177e6491c4461abac75808a37413dfe72872))
+* **memory:** reduce allocations in Compact, BlockCoalescer, and splitMediaFromOutput ([bdce44d](https://github.com/choiceoh/Deneb/commit/bdce44dd9c5ce1555de7e4cf567a9110ade990d7))
+* **memory:** restrict FTS scan to high-importance facts when embedder is nil ([f29670a](https://github.com/choiceoh/Deneb/commit/f29670afe60ebb32e72d5e70cef139bcab58f915))
+* **model:** reduce heap allocations via Cow&lt;'_, str&gt; on hot-path normalizers ([5094590](https://github.com/choiceoh/Deneb/commit/509459040449ea9e4adb21e21037a51ef4bf7764))
+* **pilot:** replace json.Unmarshal with fast string scan in collectStream ([562e177](https://github.com/choiceoh/Deneb/commit/562e177e6491c4461abac75808a37413dfe72872))
+* **web:** combine 7 noiseClassIDPatterns into one regex pass ([34e1f49](https://github.com/choiceoh/Deneb/commit/34e1f497fe17fb270750b1ec656ffd53f27412d3))
+
+
+### 🔧 Internal
+
+* **autoreply:** consolidate splitProviderModel into pipeline.SplitProviderModel ([78816e1](https://github.com/choiceoh/Deneb/commit/78816e14e4b9fb22f4c4d7ef386ecf2e1b6542e0))
+* **autoreply:** split runner_loop.go and remove compat shims ([6c701e0](https://github.com/choiceoh/Deneb/commit/6c701e078ba2fa3fc36a93f0b61d0c080f2ba366))
+* **cli:** eliminate gateway flag duplication across sub-commands ([03492d2](https://github.com/choiceoh/Deneb/commit/03492d29f7ef6ab4d5dcd75b4aceaf8fb470788d))
+* **core:** extract PassState from SweepEngine for clarity ([b8325f7](https://github.com/choiceoh/Deneb/commit/b8325f79a10fd1082d060effc3c7eca3aba01164))
+* **core:** introduce param structs for complex model selection functions ([4e553af](https://github.com/choiceoh/Deneb/commit/4e553afa54166b89662d8423e35313d348ad3eca))
+* **core:** migrate once_cell::Lazy to std::sync::LazyLock ([41e680e](https://github.com/choiceoh/Deneb/commit/41e680ec41ec0beaf4d3155b7b7179120a0b377c))
+
 ## [4.2.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.0...deneb-v4.2.1) (2026-03-29)
 
 
