@@ -22,6 +22,16 @@ const (
 	importanceMaxTokens = 1536
 )
 
+// SpeakerNames holds display names for the user and agent.
+// Used in extraction prompts so the LLM can distinguish speakers by name.
+var SpeakerNames = struct {
+	User  string
+	Agent string
+}{
+	User:  "선택님",
+	Agent: "네브",
+}
+
 // ExtractedFact is the structured output from the importance extraction LLM call.
 type ExtractedFact struct {
 	Content    string  `json:"content"`
@@ -108,6 +118,23 @@ Each fact object has:
 
 Example: {"facts": [{"content": "사용자가 Python보다 Go를 선호함 — 3번의 대화에서 일관되게 Go를 선택", "category": "preference", "importance": 0.8, "expiry_hint": null}]}
 
+## Speaker Attribution (화자 귀속) — CRITICAL
+The input has two clearly labeled speakers by their NICKNAMES:
+- **선택님 (사용자)** = the human user. Only content in their section was said by them.
+- **네브 (AI)** = the AI assistant. Only content in their section was said by the AI.
+
+You MUST correctly attribute WHO said or did what:
+- If 네브 summarized information, listed PRs, or explained something → that is 네브's action, NOT 선택님's
+- If 네브 asked a question (e.g. "머지할까?") → 네브 asked, 선택님 did NOT ask
+- "선택님이 X에 관심을 가짐" is ONLY valid if 선택님 explicitly mentioned or asked about X
+- Do NOT infer user interest from topics 네브 brought up unprompted
+- When 선택님's message is short/simple and 네브's response is long/detailed, most of the content is 네브's — do not attribute it to 선택님
+
+**Wrong**: 네브가 PR 목록을 정리해줬는데 → "선택님이 PR들에 관심을 가짐" ❌
+**Right**: 네브가 PR 목록을 정리해줬는데 → "네브가 디스코드 PR 현황을 정리해줌, 선택님은 간단히 확인" ✅
+**Wrong**: 네브가 "머지할까?" 질문 → "선택님이 머지 여부를 물어봄" ❌
+**Right**: 네브가 "머지할까?" 질문 → "네브가 PR #702 머지를 제안, 선택님 응답 대기" ✅
+
 ## Anti-patterns (절대 저장하지 마)
 - ❌ 루틴 코드 작업: "X 파일 수정함", "Y 버그 수정", "Z 기능 추가"
 - ❌ 일회성 디버깅: "로그 확인해서 에러 찾음", "타입 오류 수정"
@@ -115,6 +142,7 @@ Example: {"facts": [{"content": "사용자가 Python보다 Go를 선호함 — 3
 - ❌ 표준 도구 사용: "git commit", "npm install", "make build"
 - ❌ 구현 디테일: "함수 A를 B로 리팩토링", "인터페이스 C 추가"
 - ❌ 단순 정보 전달: AI가 설명한 내용을 그대로 기록
+- ❌ 잘못된 화자 귀속: AI가 한 말을 "사용자가 ~함"으로 기록
 
 ## Rules
 - Max 7 facts. Quality over quantity
@@ -129,9 +157,9 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 	ctx, cancel := context.WithTimeout(ctx, importanceTimeout)
 	defer cancel()
 
-	prompt := fmt.Sprintf("User:\n%s\n\nAssistant:\n%s",
-		truncate(userMessage, 4000),
-		truncate(agentResponse, 8000))
+	prompt := fmt.Sprintf("%s (사용자):\n%s\n\n%s (AI):\n%s",
+		SpeakerNames.User, truncate(userMessage, 4000),
+		SpeakerNames.Agent, truncate(agentResponse, 8000))
 
 	var facts []ExtractedFact
 	for attempt := range 2 {

@@ -64,11 +64,20 @@ The summary will eventually be deleted by further compaction, so anything import
 4. **사용자 모델 (User Model)**: Inferred traits about the user — expertise, values, habits
 5. **상호 인식 (Mutual)**: AI-user relationship dynamics — corrections, trust signals, expectations
 
+## Speaker Attribution (화자 귀속) — CRITICAL
+The summary contains actions by both 선택님 (사용자) and 네브 (AI).
+You MUST correctly attribute WHO said or did what:
+- If 네브 summarized, listed, or explained something → that is 네브's action
+- If 선택님 requested, asked, or decided something → that is 선택님's action
+- Do NOT write "선택님이 X에 관심을 가짐" unless 선택님 explicitly brought up X
+- Do NOT confuse 네브's proposals/suggestions with 선택님's requests
+
 ## What NOT to extract
 - ❌ 일시적 작업 상태: "X 파일 수정 중", "Y 브랜치 작업 중"
 - ❌ 루틴 코드 작업: "버그 수정", "기능 추가", "리팩토링"
 - ❌ 이미 완료된 단발성 작업
 - ❌ 구현 디테일: 함수명, 변수명, 파일 경로
+- ❌ 잘못된 화자 귀속: AI가 한 말을 "사용자가 ~함"으로 기록
 
 ## Output format
 Return a JSON object with a "facts" key containing an array of fact objects:
