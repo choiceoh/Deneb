@@ -12,6 +12,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
@@ -202,17 +203,38 @@ func (c *Client) GetCurrentUser(ctx context.Context) (*User, error) {
 	return &user, nil
 }
 
-// SendMessage sends a message to a channel.
+// SendMessage sends a message to a channel. If the message includes a reply
+// reference to a deleted/unknown message, it retries without the reference.
 func (c *Client) SendMessage(ctx context.Context, channelID string, req *SendMessageRequest) (*Message, error) {
 	result, err := c.Call(ctx, http.MethodPost, "/channels/"+channelID+"/messages", req)
 	if err != nil {
-		return nil, fmt.Errorf("sendMessage: %w", err)
+		if req.MessageReference != nil && isUnknownMessageRefError(err) {
+			c.logger.Warn("reply reference points to unknown message, retrying without reference",
+				"channel", channelID, "ref_message_id", req.MessageReference.MessageID)
+			req.MessageReference = nil
+			result, err = c.Call(ctx, http.MethodPost, "/channels/"+channelID+"/messages", req)
+			if err != nil {
+				return nil, fmt.Errorf("sendMessage: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("sendMessage: %w", err)
+		}
 	}
 	var msg Message
 	if err := json.Unmarshal(result, &msg); err != nil {
 		return nil, fmt.Errorf("decode message: %w", err)
 	}
 	return &msg, nil
+}
+
+// isUnknownMessageRefError checks if the error is a Discord 400 with
+// MESSAGE_REFERENCE_UNKNOWN_MESSAGE, meaning the referenced message was deleted.
+func isUnknownMessageRefError(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.StatusCode == 400 && strings.Contains(apiErr.Body, "MESSAGE_REFERENCE_UNKNOWN_MESSAGE")
 }
 
 // SendMessageWithFile sends a message with a file attachment.
