@@ -440,9 +440,9 @@ func resolveWorkspaceChannel(p *InboundProcessor, sessionKey string) string {
 	return strings.TrimPrefix(sessionKey, "discord:")
 }
 
-// resolveWorkspaceDir returns the actual workspace directory for a session key,
+// resolveDiscordWorkspaceDir returns the actual workspace directory for a session key,
 // preferring the thread's isolated worktree if one exists.
-func resolveWorkspaceDir(p *InboundProcessor, sessionKey string) string {
+func resolveDiscordWorkspaceDir(p *InboundProcessor, sessionKey string) string {
 	if p.server.discordPlug == nil {
 		return ""
 	}
@@ -738,7 +738,7 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 		agentMessage = "마지막 실행 결과를 자세히 보여주세요."
 	case "push":
 		// Push current branch to remote — handle inline for quick feedback.
-		if ws := resolveWorkspaceDir(p, sessionKey); ws != "" {
+		if ws := resolveDiscordWorkspaceDir(p, sessionKey); ws != "" {
 			branch := runGitCmd(ws, "rev-parse", "--abbrev-ref", "HEAD")
 			runCmdWithTimeout(ws, 30*time.Second, "git", "push", "-u", "origin", branch)
 			p.sendDiscordEmbed(interaction.ChannelID, []discord.Embed{{
@@ -775,7 +775,7 @@ func (p *InboundProcessor) HandleDiscordInteraction(ctx context.Context, interac
 	}
 
 	// Resolve workspace for the session (worktree if available).
-	if ws := resolveWorkspaceDir(p, sessionKey); ws != "" {
+	if ws := resolveDiscordWorkspaceDir(p, sessionKey); ws != "" {
 		sendParams["workspaceDir"] = ws
 	}
 
