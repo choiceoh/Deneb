@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
 
 // sharedTransport is a connection-pooled HTTP transport shared across all
@@ -83,7 +85,8 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 
 // DoStream sends an HTTP request and returns the response body for streaming.
 // The caller is responsible for closing the returned ReadCloser.
-// Retries on transient errors (429, 500, 502, 503, 529).
+// Retries on transient errors per httpretry.IsRetryable (rate limits, timeouts,
+// server overload — never on permanent 4xx or 501).
 func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser, error) {
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
@@ -132,8 +135,8 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
 		}
 
-		// Only retry on transient errors.
-		if !isRetryable(resp.StatusCode) {
+		// Only retry on transient errors (rate limit, timeout, server overload).
+		if !httpretry.IsRetryable(resp.StatusCode) {
 			return nil, lastErr
 		}
 	}
@@ -149,8 +152,9 @@ func (c *Client) backoffDelay(attempt int, err error) time.Duration {
 	}
 
 	base := c.baseDelay
-	// 429 rate limits need a higher floor than transient server errors.
-	if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 429 {
+	// Rate-limited responses need a higher floor than transient server errors.
+	if apiErr, ok := err.(*APIError); ok &&
+		httpretry.Classify(apiErr.StatusCode) == httpretry.CategoryRateLimit {
 		const rateLimitFloor = 2 * time.Second
 		if base < rateLimitFloor {
 			base = rateLimitFloor
@@ -168,16 +172,6 @@ func (c *Client) backoffDelay(attempt int, err error) time.Duration {
 		delay += jitter
 	}
 	return delay
-}
-
-// isRetryable returns true for HTTP status codes that warrant a retry.
-func isRetryable(status int) bool {
-	switch status {
-	case 429, 500, 502, 503, 529:
-		return true
-	default:
-		return false
-	}
 }
 
 // parseRetryAfter parses the Retry-After header value as seconds.

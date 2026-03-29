@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
 
 const apiBaseURL = "https://api.telegram.org/bot"
@@ -449,8 +451,10 @@ func (e *APIError) Error() string {
 }
 
 // IsRetryable returns true if the error suggests the request can be retried.
+// Uses the shared httpretry policy: rate limits, timeouts, and transient server
+// errors are retryable; permanent errors (including 501 Not Implemented) are not.
 func (e *APIError) IsRetryable() bool {
-	return e.Code == 429 || e.Code >= 500
+	return httpretry.IsRetryable(e.Code)
 }
 
 // IsParseError returns true if the error is an HTML/entity parsing failure.
