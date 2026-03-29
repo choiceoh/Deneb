@@ -274,14 +274,15 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 // chat handler for coding-focused agent sessions. It wraps the existing
 // channel handlers so both Telegram and Discord can coexist.
 func (s *Server) wireDiscordChatHandler() {
-	// Initialize auto thread namer using the lightweight model (local sglang).
+	// Initialize lightweight LLM features using the local sglang model.
 	discordCfg := s.discordPlug.Config()
 	if discordCfg.AutoThreadNamesEnabled() && s.chatHandler != nil && s.chatHandler.ModelRegistry() != nil {
 		reg := s.chatHandler.ModelRegistry()
 		lwClient := reg.Client(modelrole.RoleLightweight)
 		lwModel := reg.Model(modelrole.RoleLightweight)
 		s.discordThreadNamer = discord.NewThreadNamer(lwClient, lwModel)
-		s.logger.Info("discord: auto thread naming enabled", "model", lwModel)
+		s.discordReasoningSumm = discord.NewReasoningSummarizer(lwClient, lwModel)
+		s.logger.Info("discord: auto thread naming + reasoning summarizer enabled", "model", lwModel)
 	}
 
 	// Initialize per-thread worktree manager for workspace isolation.
@@ -478,6 +479,7 @@ func (s *Server) wireDiscordChatHandler() {
 			// Create progress tracker on first tool start.
 			tracker = discord.NewProgressTracker(ctx, dcClient, delivery.To)
 			if tracker != nil {
+				tracker.SetSummarizer(s.discordReasoningSumm)
 				activeTrackers[delivery.To] = tracker
 			}
 		}

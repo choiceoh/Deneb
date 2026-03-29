@@ -49,9 +49,10 @@ func KoreanToolName(name string) string {
 // ProgressTracker manages a single Discord message that is edited to reflect
 // agent execution progress. Each tool execution becomes a step with a status.
 type ProgressTracker struct {
-	client    *Client
-	channelID string
-	messageID string // the progress message being edited
+	client     *Client
+	channelID  string
+	messageID  string // the progress message being edited
+	summarizer *ReasoningSummarizer // optional; summarizes thinking blocks for step reasons
 
 	mu        sync.Mutex
 	steps     []ProgressStep
@@ -82,6 +83,14 @@ func NewProgressTracker(ctx context.Context, client *Client, channelID string) *
 	}
 }
 
+// SetSummarizer attaches a reasoning summarizer for async thinking summaries.
+func (pt *ProgressTracker) SetSummarizer(rs *ReasoningSummarizer) {
+	if pt == nil {
+		return
+	}
+	pt.summarizer = rs
+}
+
 // AddStep adds a new pending step. Does not trigger an edit.
 // Tool names are automatically translated to Korean for vibe coders.
 func (pt *ProgressTracker) AddStep(name string) {
@@ -96,30 +105,55 @@ func (pt *ProgressTracker) AddStep(name string) {
 
 // StartStep marks a step as running. Triggers a throttled edit.
 // Tool names are automatically translated to Korean for vibe coders.
-// reason is a brief LLM reasoning summary (may be empty).
-func (pt *ProgressTracker) StartStep(ctx context.Context, name, reason string) {
+// rawThinking is the raw thinking block text from the LLM (may be empty).
+// If a ReasoningSummarizer is attached, it asynchronously generates a brief
+// summary and updates the step once ready.
+func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking string) {
 	if pt == nil {
 		return
 	}
 	kr := KoreanToolName(name)
 	pt.mu.Lock()
 
+	var stepIdx int
 	found := false
 	for i := range pt.steps {
 		if pt.steps[i].Name == kr && pt.steps[i].Status == StepPending {
 			pt.steps[i].Status = StepRunning
-			if reason != "" {
-				pt.steps[i].Reason = reason
-			}
+			stepIdx = i
 			found = true
 			break
 		}
 	}
 	if !found {
-		// Auto-add if not pre-registered.
-		pt.steps = append(pt.steps, ProgressStep{Name: kr, Reason: reason, Status: StepRunning})
+		stepIdx = len(pt.steps)
+		pt.steps = append(pt.steps, ProgressStep{Name: kr, Status: StepRunning})
 	}
+	needsSummary := rawThinking != "" && pt.summarizer != nil
 	pt.dirty = true
+	pt.mu.Unlock()
+
+	pt.tryEdit(ctx)
+
+	// Fire async LLM summarization if we have raw thinking and a summarizer.
+	if needsSummary {
+		go pt.summarizeAndUpdate(ctx, stepIdx, rawThinking)
+	}
+}
+
+// summarizeAndUpdate calls the lightweight LLM to summarize thinking text,
+// then updates the step's reason and triggers an embed edit.
+func (pt *ProgressTracker) summarizeAndUpdate(ctx context.Context, stepIdx int, rawThinking string) {
+	summary := pt.summarizer.Summarize(ctx, rawThinking)
+	if summary == "" {
+		return
+	}
+
+	pt.mu.Lock()
+	if stepIdx < len(pt.steps) && pt.steps[stepIdx].Reason == "" {
+		pt.steps[stepIdx].Reason = summary
+		pt.dirty = true
+	}
 	pt.mu.Unlock()
 
 	pt.tryEdit(ctx)

@@ -12,10 +12,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -139,9 +137,9 @@ func RunAgent(
 		// Build assistant message with all content blocks from this turn.
 		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 
-		// Extract a brief reasoning summary from the turn's thinking blocks
-		// so Discord can display what the agent is thinking alongside each tool step.
-		turnReason := extractThinkingSummary(turnRes.contentBlocks)
+		// Extract raw thinking text from this turn's thinking blocks.
+		// Passed to OnToolStart so Discord can summarize it via lightweight LLM.
+		turnReason := extractThinkingText(turnRes.contentBlocks)
 
 		// Execute tools in parallel and build tool_result blocks.
 		// Each goroutine writes to its own index — no mutex needed for the slice.
@@ -331,47 +329,16 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 	}
 }
 
-// extractThinkingSummary returns a brief summary from the last thinking block
-// in a turn's content blocks. Used to show LLM reasoning alongside tool steps.
-// Returns empty string if no thinking block is found.
-func extractThinkingSummary(blocks []llm.ContentBlock) string {
-	// Find the last thinking block in this turn.
-	var thinkingText string
+// extractThinkingText returns the raw text from the last thinking block in a
+// turn's content blocks. The caller (e.g. Discord ProgressTracker) is
+// responsible for summarizing it. Returns empty string if no thinking found.
+func extractThinkingText(blocks []llm.ContentBlock) string {
 	for i := len(blocks) - 1; i >= 0; i-- {
 		if blocks[i].Thinking != "" {
-			thinkingText = blocks[i].Thinking
-			break
+			return blocks[i].Thinking
 		}
 	}
-	if thinkingText == "" {
-		return ""
-	}
-
-	// Extract a brief summary: take the last non-empty line (closest to the
-	// tool decision) and truncate to keep the progress embed compact.
-	lines := strings.Split(strings.TrimSpace(thinkingText), "\n")
-	var summary string
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line != "" && !strings.HasPrefix(line, "```") {
-			summary = line
-			break
-		}
-	}
-	if summary == "" {
-		return ""
-	}
-
-	// Strip leading markers like "- ", "* ", "1. " etc.
-	summary = strings.TrimLeft(summary, "-*•→> ")
-	summary = strings.TrimSpace(summary)
-
-	const maxRunes = 60
-	if utf8.RuneCountInString(summary) > maxRunes {
-		runes := []rune(summary)
-		summary = string(runes[:maxRunes]) + "…"
-	}
-	return summary
+	return ""
 }
 
 // stopReasonFromCtx determines the stop reason from a cancelled context.
