@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.33.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.32.0...deneb-v3.33.0) (2026-03-29)
+
+
+### ✨ Features
+
+* **discord:** isolate thread workspaces with git worktrees ([ab0a7e3](https://github.com/choiceoh/Deneb/commit/ab0a7e3187238cd1f5035b663e9dcc2d0818b0f1))
+* **discord:** map threads to independent coding sessions ([24c1eaf](https://github.com/choiceoh/Deneb/commit/24c1eaf0265ba1186610e2137639685096bd9bd9))
+* **memory:** use nicknames (선택님/네브) for speaker attribution in extraction prompts ([0b25eb2](https://github.com/choiceoh/Deneb/commit/0b25eb2699f0a38762170dcbe2472cd54d540809))
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** remove watchdog auto-restart and require user confirmation for agent restart ([aafe663](https://github.com/choiceoh/Deneb/commit/aafe6634be457f9f38e65c016aac4ab482fa882b))
+* **memory:** add speaker attribution rules to prevent misattributing AI statements to user ([588d882](https://github.com/choiceoh/Deneb/commit/588d882494c20624a1ae55bb77aa83d5292d331b))
+* **memory:** recover facts from malformed LLM JSON with unescaped quotes ([a44a5b2](https://github.com/choiceoh/Deneb/commit/a44a5b22a44e68dd79b7a35e0b1b6f33d4ce7267))
+
+
+### 🔧 Internal
+
+* **session:** remove startup heartbeat from session restore ([bcbdd6d](https://github.com/choiceoh/Deneb/commit/bcbdd6dcbb1cfc93ed8d1ac61370fe78394dc461))
+
 ## [3.32.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.31.1...deneb-v3.32.0) (2026-03-29)
 
 
