@@ -37,6 +37,37 @@ jobs:
         id: check
         uses: ./.github/actions/detect-docs-changes
 
+  # ── Clippy (Rust lint, deny warnings) ────────────────────────
+  clippy:
+    needs: [docs-scope]
+    if: needs.docs-scope.outputs.docs_only != 'true'
+    name: Clippy (Rust lint)
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            core-rs
+            cli-rs
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Clippy (core-rs)
+        working-directory: core-rs
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Clippy (cli-rs)
+        working-directory: cli-rs
+        run: cargo clippy --all-targets -- -D warnings
+
   # ── Rust core-rs ──────────────────────────────────────────────
   core-rs:
     needs: [docs-scope]
@@ -61,10 +92,6 @@ jobs:
       - name: Check formatting
         working-directory: core-rs
         run: cargo fmt -- --check
-
-      - name: Clippy lint
-        working-directory: core-rs
-        run: cargo clippy --workspace --all-targets
 
       - name: Build (release)
         working-directory: core-rs
@@ -102,10 +129,6 @@ jobs:
       - name: Check formatting
         working-directory: cli-rs
         run: cargo fmt -- --check
-
-      - name: Clippy lint
-        working-directory: cli-rs
-        run: cargo clippy --all-targets
 
       - name: Build (release)
         working-directory: cli-rs

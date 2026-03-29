@@ -51,7 +51,7 @@ rust-fmt:
 	cd core-rs && cargo fmt --all -- --check
 
 rust-clippy:
-	cd core-rs && cargo clippy --workspace --all-targets
+	cd core-rs && cargo clippy --workspace --all-targets -- -D warnings
 
 rust-clean:
 	cd core-rs && cargo clean
@@ -140,7 +140,7 @@ cli-fmt:
 	cd cli-rs && cargo fmt -- --check
 
 cli-clippy:
-	cd cli-rs && cargo clippy --all-targets
+	cd cli-rs && cargo clippy --all-targets -- -D warnings
 
 cli-bench:
 	cd cli-rs && cargo test --test startup_bench -- --nocapture
