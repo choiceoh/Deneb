@@ -21,6 +21,7 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -143,5 +144,5 @@ func (sc *SessionCache) InvalidateAllPrompts() {
 // These are the inputs that determine the prompt content — if any change,
 // the cache must be invalidated.
 func PromptCacheKey(channel string, toolCount int, workspaceDir string, apiType string) string {
-	return channel + "|" + apiType + "|" + workspaceDir + "|" + string(rune(toolCount))
+	return fmt.Sprintf("%s|%s|%s|%d", channel, apiType, workspaceDir, toolCount)
 }

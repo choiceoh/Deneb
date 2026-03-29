@@ -55,9 +55,14 @@ func RunAgent(
 	// Zen arch — Superscalar Unit Separation: wrap hooks with async dispatch
 	// so stream parsing (frontend) and hook execution (backend) run on
 	// independent goroutines. The parser never stalls on slow hooks.
+	//
+	// IMPORTANT: Close() must be called AFTER all tool goroutines finish,
+	// because tool goroutines enqueue hook events (OnToolResult). Closing
+	// the queue while goroutines are still writing would panic.
 	var hookDispatcher *AsyncHookDispatcher
 	hookDispatcher, hooks = NewAsyncHookDispatcher(hooks)
-	defer hookDispatcher.Close()
+	// NOT deferred here — closed explicitly after the loop to ensure
+	// all tool goroutines have finished writing to the hook queue.
 
 	result := &AgentResult{}
 
@@ -171,11 +176,19 @@ func RunAgent(
 
 		// Consume the stream, launching tool goroutines as tool_use blocks complete.
 		turnRes, err := consumeStream(ctx, events, hooks, onToolReady)
+
+		// ALWAYS wait for tool goroutines before proceeding, even on error.
+		// This prevents: (a) goroutine leaks, (b) writes to closed hook queue,
+		// (c) race on earlyTools slice.
+		wg.Wait()
+
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
+				hookDispatcher.Close()
 				return result, nil
 			}
+			hookDispatcher.Close()
 			return nil, fmt.Errorf("consume stream (turn %d): %w", turn, err)
 		}
 
@@ -208,33 +221,22 @@ func RunAgent(
 			if result.StopReason == "" {
 				result.StopReason = "end_turn"
 			}
+			hookDispatcher.Close()
 			return result, nil
 		}
 
 		// Build assistant message with all content blocks from this turn.
 		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 
-		// Wait for all early-issued tool goroutines to complete.
-		wgDone := make(chan struct{})
-		go func() { wg.Wait(); close(wgDone) }()
-		select {
-		case <-wgDone:
-		case <-ctx.Done():
-			result.StopReason = stopReasonFromCtx(ctx)
-			return result, nil
-		}
-
-		if ctx.Err() != nil {
-			result.StopReason = stopReasonFromCtx(ctx)
-			return result, nil
-		}
-
 		// Assemble tool results in the order LLM expects (matching toolCalls order).
+		// Safe to read earlyTools without lock — wg.Wait() above guarantees all
+		// tool goroutines have finished writing.
 		toolResults := buildToolResults(turnRes.toolCalls, earlyTools)
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
 	}
 
 	result.StopReason = "max_turns"
+	hookDispatcher.Close()
 	return result, nil
 }
 

@@ -204,3 +204,6 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now, runLog)
 }
+
+// executeAgentRun is defined in run_exec.go (split from this file in the refactor).
+// See run_exec.go for the implementation.

@@ -46,8 +46,9 @@ func handleRunSuccess(
 	// ── ROB: dispatch independent operations (no downstream dependencies) ──
 	// These can execute out-of-order relative to the critical path.
 
-	// Independent op 1: agent detail log (no external visibility).
-	go runLog.LogEnd(agentlog.RunEndData{
+	// Independent op 1: agent detail log — synchronous (fast file write,
+	// not worth goroutine overhead; avoids shutdown leak).
+	runLog.LogEnd(agentlog.RunEndData{
 		StopReason:   result.StopReason,
 		Turns:        result.Turns,
 		InputTokens:  result.Usage.InputTokens,
