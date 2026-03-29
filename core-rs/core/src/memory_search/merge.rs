@@ -4,7 +4,7 @@
 //! temporal decay (path-based date extraction) → sort by score → optional
 //! MMR diversity re-ranking.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::mmr;
 use super::temporal_decay;
@@ -16,7 +16,7 @@ use super::types::*;
 /// Filesystem operations (stat for mtime) are NOT included — only path-based
 /// date extraction is used for temporal decay.
 pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
-    let mut by_id: HashMap<&str, MergeEntry> = HashMap::new();
+    let mut by_id: FxHashMap<&str, MergeEntry> = FxHashMap::default();
 
     // Collect vector results
     for r in &params.vector {

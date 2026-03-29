@@ -119,6 +119,7 @@
 //! ```
 
 use super::*;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -229,10 +230,10 @@ pub enum SweepResponse {
         items: Vec<ContextItem>,
     },
     Messages {
-        messages: HashMap<u64, MessageRecord>,
+        messages: FxHashMap<u64, MessageRecord>,
     },
     Summaries {
-        summaries: HashMap<String, SummaryRecord>,
+        summaries: FxHashMap<String, SummaryRecord>,
     },
     TokenCount {
         count: u64,
@@ -368,8 +369,8 @@ pub struct SweepEngine {
 
     // Cached data from host
     context_items: Vec<ContextItem>,
-    messages: HashMap<u64, MessageRecord>,
-    summaries: HashMap<String, SummaryRecord>,
+    messages: FxHashMap<u64, MessageRecord>,
+    summaries: FxHashMap<String, SummaryRecord>,
     fresh_tail_ordinal: u64, // u64::MAX = sentinel for "no fresh tail protection"
 
     // Per-pass state
@@ -403,8 +404,8 @@ impl SweepEngine {
             created_summary_id: None,
             level: None,
             context_items: Vec::new(),
-            messages: HashMap::new(),
-            summaries: HashMap::new(),
+            messages: FxHashMap::default(),
+            summaries: FxHashMap::default(),
             fresh_tail_ordinal: u64::MAX,
             pass: PassState::default(),
             now_ms,

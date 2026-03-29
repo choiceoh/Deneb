@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -74,21 +74,21 @@ fn snapshot_path(config: &VegaConfig) -> PathBuf {
 }
 
 /// Load a previous snapshot from disk. Returns empty map if missing/corrupt.
-fn load_snapshot(path: &PathBuf) -> HashMap<i64, Value> {
+fn load_snapshot(path: &PathBuf) -> FxHashMap<i64, Value> {
     let data = match fs::read_to_string(path) {
         Ok(d) => d,
-        Err(_) => return HashMap::new(),
+        Err(_) => return FxHashMap::default(),
     };
     let val: Value = match serde_json::from_str(&data) {
         Ok(v) => v,
-        Err(_) => return HashMap::new(),
+        Err(_) => return FxHashMap::default(),
     };
     let obj = match val.as_object() {
         Some(o) => o,
-        None => return HashMap::new(),
+        None => return FxHashMap::default(),
     };
 
-    let mut map = HashMap::new();
+    let mut map = FxHashMap::default();
     for (k, v) in obj {
         if let Ok(id) = k.parse::<i64>() {
             map.insert(id, v.clone());
@@ -98,8 +98,8 @@ fn load_snapshot(path: &PathBuf) -> HashMap<i64, Value> {
 }
 
 /// Build a current snapshot from the DB.
-fn build_snapshot(conn: &Connection) -> Result<HashMap<i64, Value>, String> {
-    let mut map = HashMap::new();
+fn build_snapshot(conn: &Connection) -> Result<FxHashMap<i64, Value>, String> {
+    let mut map = FxHashMap::default();
 
     // Projects
     let mut stmt = conn
@@ -161,7 +161,7 @@ fn get_chunk_hashes(conn: &Connection, project_id: i64) -> Result<Value, String>
 }
 
 /// Save snapshot to disk.
-fn save_snapshot(path: &PathBuf, snapshot: &HashMap<i64, Value>) -> Result<(), String> {
+fn save_snapshot(path: &PathBuf, snapshot: &FxHashMap<i64, Value>) -> Result<(), String> {
     let mut obj = serde_json::Map::new();
     for (id, val) in snapshot {
         obj.insert(id.to_string(), val.clone());
@@ -171,7 +171,7 @@ fn save_snapshot(path: &PathBuf, snapshot: &HashMap<i64, Value>) -> Result<(), S
 }
 
 /// Diff two snapshots and produce a structured changelog.
-fn diff_snapshots(prev: &HashMap<i64, Value>, current: &HashMap<i64, Value>) -> Value {
+fn diff_snapshots(prev: &FxHashMap<i64, Value>, current: &FxHashMap<i64, Value>) -> Value {
     let mut new_projects: Vec<Value> = Vec::new();
     let mut removed_projects: Vec<Value> = Vec::new();
     let mut status_changes: Vec<Value> = Vec::new();
@@ -280,8 +280,8 @@ mod tests {
 
     #[test]
     fn test_diff_snapshots_empty() {
-        let prev: HashMap<i64, Value> = HashMap::new();
-        let current: HashMap<i64, Value> = HashMap::new();
+        let prev: FxHashMap<i64, Value> = FxHashMap::default();
+        let current: FxHashMap<i64, Value> = FxHashMap::default();
         let diff = diff_snapshots(&prev, &current);
 
         assert_eq!(
@@ -309,8 +309,8 @@ mod tests {
 
     #[test]
     fn test_diff_snapshots_new_project() {
-        let prev: HashMap<i64, Value> = HashMap::new();
-        let mut current: HashMap<i64, Value> = HashMap::new();
+        let prev: FxHashMap<i64, Value> = FxHashMap::default();
+        let mut current: FxHashMap<i64, Value> = FxHashMap::default();
         current.insert(1, make_project("Project A", "active", 0));
 
         let diff = diff_snapshots(&prev, &current);
@@ -323,9 +323,9 @@ mod tests {
 
     #[test]
     fn test_diff_snapshots_removed_project() {
-        let mut prev: HashMap<i64, Value> = HashMap::new();
+        let mut prev: FxHashMap<i64, Value> = FxHashMap::default();
         prev.insert(1, make_project("Project A", "active", 0));
-        let current: HashMap<i64, Value> = HashMap::new();
+        let current: FxHashMap<i64, Value> = FxHashMap::default();
 
         let diff = diff_snapshots(&prev, &current);
         let removed = diff["removed_projects"]
@@ -337,10 +337,10 @@ mod tests {
 
     #[test]
     fn test_diff_snapshots_status_change() {
-        let mut prev: HashMap<i64, Value> = HashMap::new();
+        let mut prev: FxHashMap<i64, Value> = FxHashMap::default();
         prev.insert(1, make_project("Project A", "active", 5));
 
-        let mut current: HashMap<i64, Value> = HashMap::new();
+        let mut current: FxHashMap<i64, Value> = FxHashMap::default();
         current.insert(1, make_project("Project A", "completed", 5));
 
         let diff = diff_snapshots(&prev, &current);
@@ -354,10 +354,10 @@ mod tests {
 
     #[test]
     fn test_diff_snapshots_new_comms() {
-        let mut prev: HashMap<i64, Value> = HashMap::new();
+        let mut prev: FxHashMap<i64, Value> = FxHashMap::default();
         prev.insert(1, make_project("Project A", "active", 3));
 
-        let mut current: HashMap<i64, Value> = HashMap::new();
+        let mut current: FxHashMap<i64, Value> = FxHashMap::default();
         current.insert(1, make_project("Project A", "active", 7));
 
         let diff = diff_snapshots(&prev, &current);
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_diff_snapshots_chunk_changes() {
-        let mut prev: HashMap<i64, Value> = HashMap::new();
+        let mut prev: FxHashMap<i64, Value> = FxHashMap::default();
         prev.insert(
             1,
             json!({
@@ -382,7 +382,7 @@ mod tests {
             }),
         );
 
-        let mut current: HashMap<i64, Value> = HashMap::new();
+        let mut current: FxHashMap<i64, Value> = FxHashMap::default();
         current.insert(
             1,
             json!({
@@ -411,10 +411,10 @@ mod tests {
 
     #[test]
     fn test_diff_snapshots_no_changes() {
-        let mut prev: HashMap<i64, Value> = HashMap::new();
+        let mut prev: FxHashMap<i64, Value> = FxHashMap::default();
         prev.insert(1, make_project("Project A", "active", 5));
 
-        let mut current: HashMap<i64, Value> = HashMap::new();
+        let mut current: FxHashMap<i64, Value> = FxHashMap::default();
         current.insert(1, make_project("Project A", "active", 5));
 
         let diff = diff_snapshots(&prev, &current);

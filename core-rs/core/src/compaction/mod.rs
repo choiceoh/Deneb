@@ -16,7 +16,7 @@ pub mod timestamp;
 
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use thiserror::Error;
 
 /// Errors that can occur during compaction operations.
@@ -390,7 +390,7 @@ pub fn resolve_summary_token_count(summary: &SummaryRecord) -> u64 {
 /// one message when any compactable message exists.
 pub fn select_leaf_chunk(
     items: &[ContextItem],
-    messages: &HashMap<u64, MessageRecord>,
+    messages: &FxHashMap<u64, MessageRecord>,
     fresh_tail_ordinal: u64,
     chunk_tokens_limit: u32,
 ) -> (Vec<u64>, Vec<u64>, u64) {
@@ -439,7 +439,7 @@ pub fn select_leaf_chunk(
 /// Count raw message tokens outside the fresh tail.
 pub fn count_raw_tokens_outside_fresh_tail(
     items: &[ContextItem],
-    messages: &HashMap<u64, MessageRecord>,
+    messages: &FxHashMap<u64, MessageRecord>,
     fresh_tail_ordinal: u64,
 ) -> u64 {
     let mut total: u64 = 0;
@@ -465,7 +465,7 @@ pub fn count_raw_tokens_outside_fresh_tail(
 /// Returns `(ordinals, summary_ids, tokens)` collected in a single pass.
 pub fn select_condensed_chunk(
     items: &[ContextItem],
-    summaries: &HashMap<String, SummaryRecord>,
+    summaries: &FxHashMap<String, SummaryRecord>,
     target_depth: u32,
     fresh_tail_ordinal: u64,
     chunk_tokens_limit: u32,
@@ -534,7 +534,7 @@ pub fn select_condensed_chunk(
 /// Returns `(target_depth, ordinals, summary_ids, chunk_tokens)` or `None`.
 pub fn find_shallowest_condensation_candidate(
     items: &[ContextItem],
-    summaries: &HashMap<String, SummaryRecord>,
+    summaries: &FxHashMap<String, SummaryRecord>,
     depth_levels: &[u32],
     fresh_tail_ordinal: u64,
     config: &CompactionConfig,
@@ -683,7 +683,7 @@ pub fn resolve_prior_summary_ids(
 /// most recent same-depth summaries before `start_ordinal`.
 pub fn resolve_prior_summary_ids_at_depth(
     items: &[ContextItem],
-    summaries: &HashMap<String, SummaryRecord>,
+    summaries: &FxHashMap<String, SummaryRecord>,
     start_ordinal: u64,
     target_depth: u32,
     max_count: usize,
@@ -808,7 +808,7 @@ mod tests {
                 created_at: 1000 + i as i64,
             })
             .collect();
-        let mut messages = HashMap::new();
+        let mut messages = FxHashMap::default();
         for i in 0..5u64 {
             messages.insert(
                 i,
@@ -843,7 +843,7 @@ mod tests {
                 created_at: 1000 + i as i64,
             })
             .collect();
-        let mut messages = HashMap::new();
+        let mut messages = FxHashMap::default();
         for i in 0..5u64 {
             messages.insert(
                 i,
@@ -877,7 +877,7 @@ mod tests {
                 created_at: 1000 + i as i64,
             })
             .collect();
-        let mut summaries = HashMap::new();
+        let mut summaries = FxHashMap::default();
         for i in 0..4u64 {
             summaries.insert(
                 format!("sum_{}", i),

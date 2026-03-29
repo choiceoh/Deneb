@@ -1,6 +1,6 @@
 //! Search command — full hybrid search with fusion ranking.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -130,7 +130,7 @@ pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
 
             // Group by project
             let mut projects: Vec<Value> = Vec::new();
-            let mut seen_pids: HashMap<i64, usize> = HashMap::new();
+            let mut seen_pids: FxHashMap<i64, usize> = FxHashMap::default();
 
             for item in &result.unified {
                 if let Some(&idx) = seen_pids.get(&item.project_id) {

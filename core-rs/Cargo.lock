@@ -288,6 +288,7 @@ name = "deneb-agent-runtime"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "rustc-hash",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -313,6 +314,7 @@ dependencies = [
  "pulldown-cmark",
  "rayon",
  "regex",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",
@@ -330,6 +332,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rusqlite",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tempfile",

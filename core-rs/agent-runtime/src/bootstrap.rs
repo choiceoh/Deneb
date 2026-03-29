@@ -6,7 +6,7 @@
 //! This module provides the cache data structure and lookup logic.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 /// A cached workspace bootstrap file entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub struct WorkspaceBootstrapFile {
 /// Pure-logic cache for workspace bootstrap files, keyed by session key.
 #[derive(Debug, Default)]
 pub struct BootstrapCache {
-    cache: HashMap<String, Vec<WorkspaceBootstrapFile>>,
+    cache: FxHashMap<String, Vec<WorkspaceBootstrapFile>>,
 }
 
 impl BootstrapCache {

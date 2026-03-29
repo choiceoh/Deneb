@@ -3,7 +3,7 @@
 //! Port of Python vega/search/router.py — _rerank_fusion section.
 //! Combines SQLite FTS results with semantic search results using project-level scoring.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,7 @@ pub struct UnifiedResult {
     pub entry_date: String,
     pub chunk_type: String,
     #[serde(default)]
-    pub metadata: HashMap<String, serde_json::Value>,
+    pub metadata: FxHashMap<String, serde_json::Value>,
 }
 
 /// Per-project score entry.
@@ -60,14 +60,14 @@ fn score_sqlite_chunks(
     chunks: &[ChunkRow],
     extracted: &ExtractedFields,
 ) -> (
-    HashMap<i64, f64>,
-    HashMap<i64, String>,
-    HashMap<String, i64>,
+    FxHashMap<i64, f64>,
+    FxHashMap<i64, String>,
+    FxHashMap<String, i64>,
 ) {
-    let mut project_scores: HashMap<i64, f64> = HashMap::new();
-    let mut project_chunk_count: HashMap<i64, usize> = HashMap::new();
-    let mut name_by_id: HashMap<i64, String> = HashMap::new();
-    let mut id_by_name: HashMap<String, i64> = HashMap::new();
+    let mut project_scores: FxHashMap<i64, f64> = FxHashMap::default();
+    let mut project_chunk_count: FxHashMap<i64, usize> = FxHashMap::default();
+    let mut name_by_id: FxHashMap<i64, String> = FxHashMap::default();
+    let mut id_by_name: FxHashMap<String, i64> = FxHashMap::default();
 
     // Pre-lowercase all tokens once to avoid per-chunk allocations.
     // Each token stores (lowered_text, bonus_weight) so scoring is self-contained.
@@ -202,7 +202,7 @@ pub fn sqlite_rows_to_unified(chunks: &[ChunkRow]) -> Vec<UnifiedResult> {
             source: "sqlite".into(),
             entry_date: r.entry_date.clone(),
             chunk_type: r.chunk_type.clone(),
-            metadata: HashMap::new(),
+            metadata: FxHashMap::default(),
         })
         .collect()
 }
@@ -224,7 +224,7 @@ pub fn rerank_fusion(
     let mut ranked: Vec<(i64, f64)> = project_scores.iter().map(|(&k, &v)| (k, v)).collect();
     ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    let order: HashMap<i64, usize> = ranked
+    let order: FxHashMap<i64, usize> = ranked
         .iter()
         .enumerate()
         .map(|(i, (pid, _))| (*pid, i))
