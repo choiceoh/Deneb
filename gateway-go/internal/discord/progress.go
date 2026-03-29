@@ -6,6 +6,7 @@ package discord
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -72,7 +73,12 @@ func NewProgressTracker(ctx context.Context, client *Client, channelID string) *
 		}},
 		AllowedMentions: &AllowedMentions{Parse: []string{}},
 	})
-	if err != nil || msg == nil {
+	if err != nil {
+		slog.Warn("progress tracker: failed to send initial embed", "channel", channelID, "error", err)
+		return nil
+	}
+	if msg == nil {
+		slog.Warn("progress tracker: initial embed returned nil message", "channel", channelID)
 		return nil
 	}
 
@@ -142,7 +148,9 @@ func (pt *ProgressTracker) StartStep(ctx context.Context, name, rawThinking stri
 }
 
 // summarizeAndUpdate calls the lightweight LLM to summarize thinking text,
-// then updates the step's reason and triggers an embed edit.
+// then updates the step's reason and triggers an embed edit. If the tracker
+// has already been finalized, it sends a direct edit to update the final
+// embed with the late-arriving summary.
 func (pt *ProgressTracker) summarizeAndUpdate(ctx context.Context, stepIdx int, rawThinking string) {
 	summary := pt.summarizer.Summarize(ctx, rawThinking)
 	if summary == "" {
@@ -150,13 +158,28 @@ func (pt *ProgressTracker) summarizeAndUpdate(ctx context.Context, stepIdx int, 
 	}
 
 	pt.mu.Lock()
-	if stepIdx < len(pt.steps) && pt.steps[stepIdx].Reason == "" {
-		pt.steps[stepIdx].Reason = summary
+	if stepIdx >= len(pt.steps) || pt.steps[stepIdx].Reason != "" {
+		pt.mu.Unlock()
+		return
+	}
+	pt.steps[stepIdx].Reason = summary
+	wasFinalized := pt.finalized
+	if !wasFinalized {
 		pt.dirty = true
 	}
+	steps := make([]ProgressStep, len(pt.steps))
+	copy(steps, pt.steps)
 	pt.mu.Unlock()
 
-	pt.tryEdit(ctx)
+	if wasFinalized {
+		// Embed already finalized — send a direct edit with the updated summary.
+		embed := FormatProgressEmbed(steps)
+		pt.client.EditMessage(ctx, pt.channelID, pt.messageID, &EditMessageRequest{
+			Embeds: []Embed{embed},
+		})
+	} else {
+		pt.tryEdit(ctx)
+	}
 }
 
 // CompleteStep marks a step as done. Triggers a throttled edit.

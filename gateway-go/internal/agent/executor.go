@@ -329,13 +329,22 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 	}
 }
 
-// extractThinkingText returns the raw text from the last thinking block in a
-// turn's content blocks. The caller (e.g. Discord ProgressTracker) is
-// responsible for summarizing it. Returns empty string if no thinking found.
+// extractThinkingText returns the raw reasoning text from a turn's content
+// blocks. Prefers thinking blocks (Anthropic extended thinking), but falls
+// back to the last text block (OpenAI-compatible models that explain their
+// reasoning in plain text before tool calls). The caller (e.g. Discord
+// ProgressTracker) is responsible for summarizing it.
 func extractThinkingText(blocks []llm.ContentBlock) string {
 	for i := len(blocks) - 1; i >= 0; i-- {
 		if blocks[i].Thinking != "" {
 			return blocks[i].Thinking
+		}
+	}
+	// Fallback: use the last text block as reasoning context.
+	// OpenAI-compatible models express intent in text before tool calls.
+	for i := len(blocks) - 1; i >= 0; i-- {
+		if blocks[i].Type == "text" && blocks[i].Text != "" {
+			return blocks[i].Text
 		}
 	}
 	return ""

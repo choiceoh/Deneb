@@ -286,13 +286,18 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 func (s *Server) wireDiscordChatHandler() {
 	// Initialize lightweight LLM features using the local sglang model.
 	discordCfg := s.discordPlug.Config()
-	if discordCfg.AutoThreadNamesEnabled() && s.chatHandler != nil && s.chatHandler.ModelRegistry() != nil {
+	if s.chatHandler != nil && s.chatHandler.ModelRegistry() != nil {
 		reg := s.chatHandler.ModelRegistry()
 		lwClient := reg.Client(modelrole.RoleLightweight)
 		lwModel := reg.Model(modelrole.RoleLightweight)
-		s.discordThreadNamer = discord.NewThreadNamer(lwClient, lwModel)
+		if discordCfg.AutoThreadNamesEnabled() {
+			s.discordThreadNamer = discord.NewThreadNamer(lwClient, lwModel)
+			s.logger.Info("discord: auto thread naming enabled", "model", lwModel)
+		}
 		s.discordReasoningSumm = discord.NewReasoningSummarizer(lwClient, lwModel)
-		s.logger.Info("discord: auto thread naming + reasoning summarizer enabled", "model", lwModel)
+		if s.discordReasoningSumm != nil {
+			s.logger.Info("discord: reasoning summarizer enabled", "model", lwModel)
+		}
 	}
 
 	// Initialize per-thread worktree manager for workspace isolation.
