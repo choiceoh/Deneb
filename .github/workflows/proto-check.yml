@@ -1,75 +1,16 @@
-# Verify protobuf definitions are valid and generated code is up to date.
-name: Proto Check
+# Detect breaking changes in protobuf wire format.
+# Generation correctness is checked separately in generate-check.yml.
+name: Proto Breaking
 
 on:
   pull_request:
     paths:
       - "proto/**"
-      - "core-rs/core/build.rs"
-      - "core-rs/core/Cargo.toml"
-      - "core-rs/Cargo.toml"
-      - "core-rs/core/src/protocol/error_codes.rs"
-      - "scripts/proto-gen.sh"
-      - "scripts/error-code-sync-check.sh"
-  push:
-    branches: [main]
-    paths:
-      - "proto/**"
-      - "core-rs/core/build.rs"
-      - "core-rs/core/Cargo.toml"
-      - "core-rs/Cargo.toml"
-      - "core-rs/core/src/protocol/error_codes.rs"
-      - "scripts/proto-gen.sh"
-      - "scripts/error-code-sync-check.sh"
-
-# Pin tool versions to match committed generated code.
-env:
-  PROTOC_GEN_GO_VERSION: v1.36.11
 
 jobs:
-  generate-check:
-    name: proto generate check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup buf and Go
-        uses: bufbuild/buf-setup-action@v1
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-          cache: true
-          cache-dependency-path: gateway-go/go.sum
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            core-rs/target
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: proto-rust-${{ hashFiles('core-rs/Cargo.lock') }}
-          restore-keys: proto-rust-
-
-      - name: Install protoc + codegen plugins
-        run: |
-          sudo apt-get install -y protobuf-compiler &
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@${{ env.PROTOC_GEN_GO_VERSION }} &
-          wait
-
-      - name: Generate and verify
-        run: ./scripts/proto-gen.sh --check
-
-      - name: Error code 3-way sync check
-        run: ./scripts/error-code-sync-check.sh
-
   breaking:
     name: buf breaking change detection
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
         with:

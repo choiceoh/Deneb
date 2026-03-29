@@ -10,7 +10,8 @@
        deny machete \
        test clean check fmt generate generate-check \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
-       tool-schemas model-caps \
+       tool-schemas tool-schemas-check \
+       model-caps model-caps-check \
        ffi-gen ffi-gen-check \
        proto-error-codes-gen proto-error-codes-gen-check error-code-sync \
        info
@@ -199,9 +200,19 @@ generate: proto tool-schemas model-caps ffi-gen proto-error-codes-gen
 	@echo "All code generation pipelines completed"
 
 # Verify generated sources are up to date.
+# Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@$(MAKE) generate
-	@git diff --exit-code -- .
+	@echo "==> [1/5] proto types (proto → Go + Rust)"
+	@$(MAKE) proto-check
+	@echo "==> [2/5] proto error codes (gateway.proto → error_codes.rs)"
+	@$(MAKE) proto-error-codes-gen-check
+	@echo "==> [3/5] ffi error codes (ffi_utils.rs → ffi_error_codes_gen.go)"
+	@$(MAKE) ffi-gen-check
+	@echo "==> [4/5] tool schemas (tool_schemas.yaml → tool_schemas_gen.go)"
+	@$(MAKE) tool-schemas-check
+	@echo "==> [5/5] model capabilities (model_caps.yaml → model_caps_gen.go)"
+	@$(MAKE) model-caps-check
+	@echo "All generation checks passed"
 
 fmt:
 	cd core-rs && cargo fmt --all
@@ -237,12 +248,26 @@ tool-schemas:
 		-yaml internal/chat/tool_schemas.yaml \
 		-out  internal/chat/tool_schemas_gen.go
 
+# Verify tool_schemas_gen.go is up to date (fails if yaml and Go are out of sync).
+tool-schemas-check:
+	cd gateway-go && python3 cmd/tool-schema-gen/gen.py \
+		-yaml internal/chat/tool_schemas.yaml \
+		-out  internal/chat/tool_schemas_gen.go
+	@git diff --exit-code -- gateway-go/internal/chat/tool_schemas_gen.go
+
 # Regenerate gateway-go/internal/autoreply/model_caps_gen.go from model_caps.yaml.
 # Requires: python3, pyyaml, gofmt
 model-caps:
 	cd gateway-go && python3 cmd/model-caps-gen/gen.py \
 		-yaml internal/autoreply/thinking/model_caps.yaml \
 		-out  internal/autoreply/thinking/model_caps_gen.go
+
+# Verify model_caps_gen.go is up to date (fails if yaml and Go are out of sync).
+model-caps-check:
+	cd gateway-go && python3 cmd/model-caps-gen/gen.py \
+		-yaml internal/autoreply/thinking/model_caps.yaml \
+		-out  internal/autoreply/thinking/model_caps_gen.go
+	@git diff --exit-code -- gateway-go/internal/autoreply/thinking/model_caps_gen.go
 
 # --- FFI error code generation ---
 #
@@ -289,8 +314,10 @@ info:
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"
 	@echo "  make check      - Run all checks (Rust + Go + CLI)"
-	@echo "  make generate   - Run all code generation pipelines"
-	@echo "  make generate-check - Verify generated files are up to date"
+	@echo "  make generate         - Run all code generation pipelines"
+	@echo "  make generate-check   - Verify all generated files (per domain, names failing group)"
+	@echo "  make tool-schemas-check  - Verify tool_schemas_gen.go is up to date"
+	@echo "  make model-caps-check    - Verify model_caps_gen.go is up to date"
 	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
 	@echo "  make go-bench   - Run Go gateway benchmarks"
 	@echo "  make deny       - Check Rust deps (security, license, bans)"
