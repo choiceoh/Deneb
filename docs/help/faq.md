@@ -2309,7 +2309,7 @@ Set `gateway.mode: "remote"` and point to a remote WebSocket URL, optionally wit
 Notes:
 
 - `deneb gateway` only starts when `gateway.mode` is `local` (or you pass the override flag).
-- The macOS app watches the config file and switches modes live when these values change.
+- The gateway watches the config file and applies mode changes live.
 
 ### The Control UI says unauthorized or keeps reconnecting What now
 
