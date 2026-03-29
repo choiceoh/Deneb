@@ -57,15 +57,8 @@ func BuiltinChatCommands() []ChatCommandDefinition {
 		// Allowlist
 		{Key: "allowlist", Description: "Manage sender allowlist", TextAliases: []string{"/allowlist"}, AcceptsArgs: true, Scope: ScopeText, Category: CategoryManagement},
 
-		// BTW (side question)
-		{Key: "btw", Description: "Ask a side question", TextAliases: []string{"/btw"}, AcceptsArgs: true, Scope: ScopeText, Category: CategorySession},
-
 		// Subagents
-		{Key: "agents", Description: "List subagents", TextAliases: []string{"/agents"}, Scope: ScopeText, Category: CategoryTools},
-		{Key: "agent", Description: "Subagent info", TextAliases: []string{"/agent"}, AcceptsArgs: true, Scope: ScopeText, Category: CategoryTools},
-		{Key: "spawn", Description: "Spawn a subagent", TextAliases: []string{"/spawn"}, AcceptsArgs: true, Scope: ScopeText, Category: CategoryTools},
-		{Key: "focus", Description: "Focus on a subagent", TextAliases: []string{"/focus"}, AcceptsArgs: true, Scope: ScopeText, Category: CategoryTools},
-		{Key: "unfocus", Description: "Unfocus subagent", TextAliases: []string{"/unfocus"}, Scope: ScopeText, Category: CategoryTools},
+		{Key: "agents", Description: "List active subagents", TextAliases: []string{"/agents"}, Scope: ScopeText, Category: CategoryTools},
 
 		// ACP
 		{Key: "acp", Description: "Agent Control Protocol", TextAliases: []string{"/acp"}, AcceptsArgs: true, Scope: ScopeText, Category: CategoryTools},
