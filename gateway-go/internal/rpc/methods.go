@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -22,19 +23,65 @@ type Deps struct {
 	Version          string // Server version string (from --version flag).
 }
 
-// registerCoreBuiltins registers the core Go-native RPC methods (health,
-// sessions CRUD, channels, system) that remain in the rpc package.
-// FFI-backed and domain-specific methods are now in handler/* subpackages.
-func registerCoreBuiltins(d *Dispatcher, deps Deps) {
-	d.Register("health.check", healthCheck(deps))
-	d.Register("sessions.list", sessionsList(deps))
-	d.Register("sessions.get", sessionsGet(deps))
-	d.Register("sessions.delete", sessionsDelete(deps))
-	d.Register("channels.list", channelsList(deps))
-	d.Register("channels.get", channelsGet(deps))
-	d.Register("channels.status", channelsStatus(deps))
-	d.Register("system.info", systemInfo(deps))
-	d.Register("channels.health", channelsHealth(deps))
+// MethodModule is a domain-scoped RPC registration unit.
+// Each module is responsible for registering its own methods.
+type MethodModule interface {
+	Register(*Dispatcher)
+}
+
+type namedMethodModule struct {
+	name   string
+	module MethodModule
+}
+
+// registerCoreBuiltins registers the core Go-native RPC methods via
+// per-domain modules (health/session/channel/system).
+// Duplicate method names are rejected during boot-time validation.
+func registerCoreBuiltins(d *Dispatcher, deps Deps) error {
+	modules := []namedMethodModule{
+		{name: "core.health", module: healthModule{deps: deps}},
+		{name: "core.session", module: sessionModule{deps: deps}},
+		{name: "core.channel", module: channelModule{deps: deps}},
+		{name: "core.system", module: systemModule{deps: deps}},
+	}
+	d.beginRegistryValidation()
+	for _, m := range modules {
+		d.setRegistryModule(m.name)
+		m.module.Register(d)
+	}
+	if err := d.endRegistryValidation(); err != nil {
+		return fmt.Errorf("core rpc module registration failed: %w", err)
+	}
+	return nil
+}
+
+type healthModule struct{ deps Deps }
+
+func (m healthModule) Register(d *Dispatcher) {
+	d.Register("health.check", healthCheck(m.deps))
+}
+
+type sessionModule struct{ deps Deps }
+
+func (m sessionModule) Register(d *Dispatcher) {
+	d.Register("sessions.list", sessionsList(m.deps))
+	d.Register("sessions.get", sessionsGet(m.deps))
+	d.Register("sessions.delete", sessionsDelete(m.deps))
+}
+
+type channelModule struct{ deps Deps }
+
+func (m channelModule) Register(d *Dispatcher) {
+	d.Register("channels.list", channelsList(m.deps))
+	d.Register("channels.get", channelsGet(m.deps))
+	d.Register("channels.status", channelsStatus(m.deps))
+	d.Register("channels.health", channelsHealth(m.deps))
+}
+
+type systemModule struct{ deps Deps }
+
+func (m systemModule) Register(d *Dispatcher) {
+	d.Register("system.info", systemInfo(m.deps))
 }
 
 func healthCheck(deps Deps) HandlerFunc {
@@ -177,4 +224,3 @@ func channelsHealth(deps Deps) HandlerFunc {
 		})
 	}
 }
-

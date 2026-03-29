@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -33,6 +34,13 @@ type Dispatcher struct {
 	logger   *slog.Logger
 	pool     *WorkerPool
 	mw       middleware.Middleware // composed middleware chain (may be nil)
+
+	registryValidation *registryValidationState
+}
+
+type registryValidationState struct {
+	module string
+	errs   []error
 }
 
 // NewDispatcher creates an empty RPC dispatcher with a default worker pool
@@ -69,7 +77,43 @@ func (d *Dispatcher) SetWorkerPool(pool *WorkerPool) {
 func (d *Dispatcher) Register(method string, handler HandlerFunc) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.registryValidation != nil {
+		if _, exists := d.handlers[method]; exists {
+			module := d.registryValidation.module
+			if module == "" {
+				module = "unknown"
+			}
+			d.registryValidation.errs = append(d.registryValidation.errs,
+				fmt.Errorf("duplicate rpc method %q in module %q", method, module))
+			return
+		}
+	}
 	d.handlers[method] = handler
+}
+
+func (d *Dispatcher) beginRegistryValidation() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.registryValidation = &registryValidationState{}
+}
+
+func (d *Dispatcher) setRegistryModule(module string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.registryValidation != nil {
+		d.registryValidation.module = module
+	}
+}
+
+func (d *Dispatcher) endRegistryValidation() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.registryValidation == nil {
+		return nil
+	}
+	err := errors.Join(d.registryValidation.errs...)
+	d.registryValidation = nil
+	return err
 }
 
 // Methods returns all registered method names.
