@@ -550,20 +550,21 @@ func executeAgentRun(
 
 	// Discord tool progress tracking: send tool start/complete events back to Discord
 	// so the ProgressTracker can update the progress embed in real-time.
-	if deps.toolProgressFn != nil && deliveryCtx != nil {
+	if deps.toolProgressFn != nil && params.Delivery != nil {
+		delivery := params.Delivery
 		prevOnToolStart := hooks.OnToolStart
 		hooks.OnToolStart = func(name string) {
 			if prevOnToolStart != nil {
 				prevOnToolStart(name)
 			}
-			deps.toolProgressFn(ctx, deliveryCtx, ToolProgressEvent{Type: "start", Name: name})
+			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "start", Name: name})
 		}
 		prevOnToolResult := hooks.OnToolResult
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
 			if prevOnToolResult != nil {
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
-			deps.toolProgressFn(ctx, deliveryCtx, ToolProgressEvent{Type: "complete", Name: name, IsError: isErr})
+			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "complete", Name: name, IsError: isErr})
 		}
 	}
 
