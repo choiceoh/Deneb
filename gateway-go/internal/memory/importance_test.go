@@ -2,6 +2,7 @@ package memory
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -92,6 +93,30 @@ func TestParseFactsResponse(t *testing.T) {
 			wantOK:    false,
 			wantCount: 0,
 		},
+		{
+			name:      "malformed JSON with unescaped quotes in content",
+			input:     `{"facts": [{"content": "사용자가 단축 반응 ("이제 됐나")", "category": "mutual", "importance": 0.7}]}`,
+			wantOK:    true,
+			wantCount: 1,
+		},
+		{
+			name:      "malformed JSON with unescaped quotes recovers content",
+			input:     `{"facts": [{"content": "사용자가 ("이제 됐나") 반응함", "category": "user_model", "importance": 0.6}]}`,
+			wantOK:    true,
+			wantCount: 1,
+		},
+		{
+			name:      "trailing comma in facts array",
+			input:     `{"facts": [{"content": "fact1", "category": "preference", "importance": 0.8},]}`,
+			wantOK:    true,
+			wantCount: 1,
+		},
+		{
+			name:      "wrong schema analysis memo",
+			input:     `{"user_query": "이제 됐나", "relationship_signal": "AI의 설명이 정확", "user_action": "에러 전달"}`,
+			wantOK:    false,
+			wantCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -104,6 +129,28 @@ func TestParseFactsResponse(t *testing.T) {
 				t.Errorf("parseFactsResponse() returned %d facts, want %d", len(facts), tt.wantCount)
 			}
 		})
+	}
+}
+
+func TestKeyBoundaryExtraction(t *testing.T) {
+	// Verify the key-boundary extractor recovers correct values from malformed JSON.
+	input := `{"facts": [{"content": "사용자가 단축 반응 ("이제 됐나")", "category": "mutual", "importance": 0.7}]}`
+	facts, ok := parseFactsResponse(input)
+	if !ok {
+		t.Fatal("parseFactsResponse() failed for malformed JSON with unescaped quotes")
+	}
+	if len(facts) != 1 {
+		t.Fatalf("got %d facts, want 1", len(facts))
+	}
+	f := facts[0]
+	if !strings.Contains(f.Content, "이제 됐나") {
+		t.Errorf("content missing Korean quote, got: %q", f.Content)
+	}
+	if f.Category != "mutual" {
+		t.Errorf("category = %q, want %q", f.Category, "mutual")
+	}
+	if f.Importance < 0.6 || f.Importance > 0.8 {
+		t.Errorf("importance = %v, want ~0.7", f.Importance)
 	}
 }
 
