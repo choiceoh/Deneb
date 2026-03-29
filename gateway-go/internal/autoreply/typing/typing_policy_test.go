@@ -19,12 +19,6 @@ func TestResolveRunTypingPolicy(t *testing.T) {
 			wantSuppress: true,
 		},
 		{
-			name:         "internal webchat forces internal_webchat policy and suppresses",
-			params:       ResolveRunTypingPolicyParams{OriginatingChannel: "webchat"},
-			wantPolicy:   types.TypingPolicyInternalWeb,
-			wantSuppress: true,
-		},
-		{
 			name:         "system event forces system_event policy and suppresses",
 			params:       ResolveRunTypingPolicyParams{SystemEvent: true},
 			wantPolicy:   types.TypingPolicySystemEvent,
@@ -52,12 +46,6 @@ func TestResolveRunTypingPolicy(t *testing.T) {
 			name:         "heartbeat takes priority over system event",
 			params:       ResolveRunTypingPolicyParams{IsHeartbeat: true, SystemEvent: true},
 			wantPolicy:   types.TypingPolicyHeartbeat,
-			wantSuppress: true,
-		},
-		{
-			name:         "internal webchat takes priority over system event",
-			params:       ResolveRunTypingPolicyParams{OriginatingChannel: "webchat", SystemEvent: true},
-			wantPolicy:   types.TypingPolicyInternalWeb,
 			wantSuppress: true,
 		},
 	}

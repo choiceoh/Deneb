@@ -1,5 +1,5 @@
 ---
-summary: "Group chat behavior across surfaces (WhatsApp/Telegram/Discord/Slack/Signal/iMessage/Microsoft Teams/Zalo)"
+summary: "Group chat behavior across surfaces (Telegram/Discord)"
 read_when:
   - Changing group chat behavior or mention gating
 title: "Groups"
@@ -7,11 +7,11 @@ title: "Groups"
 
 # Groups
 
-Deneb treats group chats consistently across surfaces: WhatsApp, Telegram, Discord, Slack, Signal, iMessage, Microsoft Teams, Zalo.
+Deneb treats group chats consistently across surfaces: Telegram and Discord.
 
 ## Beginner intro (2 minutes)
 
-Deneb “lives” on your own messaging accounts. There is no separate WhatsApp bot user.
+Deneb “lives” on your own messaging accounts. There is no separate bot user.
 If **you** are in a group, Deneb can see that group and respond there.
 
 Default behavior:
@@ -25,7 +25,7 @@ Translation: allowlisted senders can trigger Deneb by mentioning it.
 >
 > - **DM access** is controlled by `*.allowFrom`.
 > - **Group access** is controlled by `*.groupPolicy` + allowlists (`*.groups`, `*.groupAllowFrom`).
-> - **Reply triggering** is controlled by mention gating (`requireMention`, `/activation`).
+> - **Reply triggering** is controlled by mention gating (`requireMention`).
 
 Quick flow (what happens to a group message):
 
@@ -132,38 +132,14 @@ Control how group/room messages are handled per channel:
 ```json5
 {
   channels: {
-    whatsapp: {
-      groupPolicy: "disabled", // "open" | "disabled" | "allowlist"
-      groupAllowFrom: ["+15551234567"],
-    },
     telegram: {
-      groupPolicy: "disabled",
+      groupPolicy: "disabled", // "open" | "disabled" | "allowlist"
       groupAllowFrom: ["123456789"], // numeric Telegram user id (wizard can resolve @username)
-    },
-    signal: {
-      groupPolicy: "disabled",
-      groupAllowFrom: ["+15551234567"],
-    },
-    imessage: {
-      groupPolicy: "disabled",
-      groupAllowFrom: ["chat_id:123"],
     },
     discord: {
       groupPolicy: "allowlist",
       guilds: {
         GUILD_ID: { channels: { help: { allow: true } } },
-      },
-    },
-    slack: {
-      groupPolicy: "allowlist",
-      channels: { "#general": { allow: true } },
-    },
-    matrix: {
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["@owner:example.org"],
-      groups: {
-        "!roomId:example.org": { allow: true },
-        "#alias:example.org": { allow: true },
       },
     },
   },
@@ -179,12 +155,10 @@ Control how group/room messages are handled per channel:
 Notes:
 
 - `groupPolicy` is separate from mention-gating (which requires @mentions).
-- WhatsApp/Telegram/Signal/iMessage/Microsoft Teams/Zalo: use `groupAllowFrom` (fallback: explicit `allowFrom`).
+- Telegram: use `groupAllowFrom` (fallback: explicit `allowFrom`).
 - DM pairing approvals (`*-allowFrom` store entries) apply to DM access only; group sender authorization stays explicit to group allowlists.
 - Discord: allowlist uses `channels.discord.guilds.<id>.channels`.
-- Slack: allowlist uses `channels.slack.channels`.
-- Matrix: allowlist uses `channels.matrix.groups` (room IDs, aliases, or names). Use `channels.matrix.groupAllowFrom` to restrict senders; per-room `users` allowlists are also supported.
-- Group DMs are controlled separately (`channels.discord.dm.*`, `channels.slack.dm.*`).
+- Group DMs are controlled separately (`channels.discord.dm.*`).
 - Telegram allowlist can match user IDs (`"123456789"`, `"telegram:123456789"`, `"tg:123456789"`) or usernames (`"@alice"` or `"alice"`); prefixes are case-insensitive.
 - Default is `groupPolicy: "allowlist"`; if your group allowlist is empty, group messages are blocked.
 - Runtime safety: when a provider block is completely missing (`channels.<provider>` absent), group policy falls back to a fail-closed mode (typically `allowlist`) instead of inheriting `channels.defaults.groupPolicy`.
@@ -199,27 +173,15 @@ Quick mental model (evaluation order for group messages):
 
 Group messages require a mention unless overridden per group. Defaults live per subsystem under `*.groups."*"`.
 
-Replying to a bot message counts as an implicit mention (when the channel supports reply metadata). This applies to Telegram, WhatsApp, Slack, Discord, and Microsoft Teams.
+Replying to a bot message counts as an implicit mention (when the channel supports reply metadata). This applies to Telegram and Discord.
 
 ```json5
 {
   channels: {
-    whatsapp: {
-      groups: {
-        "*": { requireMention: true },
-        "123@g.us": { requireMention: false },
-      },
-    },
     telegram: {
       groups: {
         "*": { requireMention: true },
         "123456789": { requireMention: false },
-      },
-    },
-    imessage: {
-      groups: {
-        "*": { requireMention: true },
-        "123": { requireMention: false },
       },
     },
   },
@@ -228,7 +190,7 @@ Replying to a bot message counts as an implicit mention (when the channel suppor
       {
         id: "main",
         groupChat: {
-          mentionPatterns: ["@deneb", "deneb", "\\+15555550123"],
+          mentionPatterns: ["@deneb", "deneb"],
           historyLimit: 50,
         },
       },
@@ -286,7 +248,7 @@ Example (Telegram):
 Notes:
 
 - Group/channel tool restrictions are applied in addition to global/agent tool policy (deny still wins).
-- Some channels use different nesting for rooms/channels (e.g., Discord `guilds.*.channels.*`, Slack `channels.*`, MS Teams `teams.*.channels.*`).
+- Some channels use different nesting for rooms/channels (e.g., Discord `guilds.*.channels.*`).
 
 ## Group allowlists
 

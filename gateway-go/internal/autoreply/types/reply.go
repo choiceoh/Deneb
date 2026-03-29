@@ -19,7 +19,6 @@ type TypingPolicy string
 const (
 	TypingPolicyUserMessage TypingPolicy = "user_message"
 	TypingPolicySystemEvent TypingPolicy = "system_event"
-	TypingPolicyInternalWeb TypingPolicy = "internal_webchat"
 	TypingPolicyHeartbeat   TypingPolicy = "heartbeat"
 )
 

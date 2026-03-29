@@ -44,7 +44,7 @@ func TestResolveConversationLabel(t *testing.T) {
 			want:   "#general",
 		},
 		{
-			name:   "group appends whatsapp ID",
+			name:   "group appends JID-like ID",
 			fields: ConversationLabelFields{ChatType: "group", GroupSubject: "Family", From: "12345@g.us"},
 			want:   "Family id:12345@g.us",
 		},

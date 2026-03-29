@@ -46,7 +46,7 @@ func TestSnapshotStore_UpdateAccount(t *testing.T) {
 
 	snap := store.Snapshot()
 	if len(snap.ChannelAccounts["multi"]) != 2 {
-		t.Fatalf("expected 2 slack accounts, got %d", len(snap.ChannelAccounts["multi"]))
+		t.Fatalf("expected 2 accounts, got %d", len(snap.ChannelAccounts["multi"]))
 	}
 
 	ws1 := snap.ChannelAccounts["multi"]["workspace-1"]

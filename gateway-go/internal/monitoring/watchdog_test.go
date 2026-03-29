@@ -63,7 +63,7 @@ func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 	m.check()
 
 	if restarted != "telegram" {
-		t.Errorf("expected slack to be restarted, got %q", restarted)
+		t.Errorf("expected telegram to be restarted, got %q", restarted)
 	}
 }
 

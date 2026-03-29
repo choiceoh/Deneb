@@ -53,9 +53,6 @@ Use `channels.modelByChannel` to pin specific channel IDs to a model. Values acc
       discord: {
         "123456789012345678": "anthropic/claude-opus-4-6",
       },
-      slack: {
-        C1234567890: "openai/gpt-4.1",
-      },
       telegram: {
         "-1001234567890": "openai/gpt-4.1-mini",
         "-1001234567890:topic:99": "anthropic/claude-sonnet-4-6",
@@ -327,255 +324,6 @@ WhatsApp runs through the gateway's web channel (Baileys Web). It starts automat
 
 **Reaction notification modes:** `off` (none), `own` (bot's messages, default), `all` (all messages), `allowlist` (from `guilds.<id>.users` on all messages).
 
-### Google Chat
-
-```json5
-{
-  channels: {
-    googlechat: {
-      enabled: true,
-      serviceAccountFile: "/path/to/service-account.json",
-      audienceType: "app-url", // app-url | project-number
-      audience: "https://gateway.example.com/googlechat",
-      webhookPath: "/googlechat",
-      botUser: "users/1234567890",
-      dm: {
-        enabled: true,
-        policy: "pairing",
-        allowFrom: ["users/1234567890"],
-      },
-      groupPolicy: "allowlist",
-      groups: {
-        "spaces/AAAA": { allow: true, requireMention: true },
-      },
-      actions: { reactions: true },
-      typingIndicator: "message",
-      mediaMaxMb: 20,
-    },
-  },
-}
-```
-
-- Service account JSON: inline (`serviceAccount`) or file-based (`serviceAccountFile`).
-- Service account SecretRef is also supported (`serviceAccountRef`).
-- Env fallbacks: `GOOGLE_CHAT_SERVICE_ACCOUNT` or `GOOGLE_CHAT_SERVICE_ACCOUNT_FILE`.
-- Use `spaces/<spaceId>` or `users/<userId>` for delivery targets.
-- `channels.googlechat.dangerouslyAllowNameMatching` re-enables mutable email principal matching (break-glass compatibility mode).
-
-### Slack
-
-```json5
-{
-  channels: {
-    slack: {
-      enabled: true,
-      botToken: "xoxb-...",
-      appToken: "xapp-...",
-      dmPolicy: "pairing",
-      allowFrom: ["U123", "U456", "*"],
-      dm: { enabled: true, groupEnabled: false, groupChannels: ["G123"] },
-      channels: {
-        C123: { allow: true, requireMention: true, allowBots: false },
-        "#general": {
-          allow: true,
-          requireMention: true,
-          allowBots: false,
-          users: ["U123"],
-          skills: ["docs"],
-          systemPrompt: "Short answers only.",
-        },
-      },
-      historyLimit: 50,
-      allowBots: false,
-      reactionNotifications: "own",
-      reactionAllowlist: ["U123"],
-      replyToMode: "off", // off | first | all
-      thread: {
-        historyScope: "thread", // thread | channel
-        inheritParent: false,
-      },
-      actions: {
-        reactions: true,
-        messages: true,
-        pins: true,
-        memberInfo: true,
-        emojiList: true,
-      },
-      slashCommand: {
-        enabled: true,
-        name: "deneb",
-        sessionPrefix: "slack:slash",
-        ephemeral: true,
-      },
-      typingReaction: "hourglass_flowing_sand",
-      textChunkLimit: 4000,
-      chunkMode: "length",
-      streaming: "partial", // off | partial | block | progress (preview mode)
-      nativeStreaming: true, // use Slack native streaming API when streaming=partial
-      mediaMaxMb: 20,
-    },
-  },
-}
-```
-
-- **Socket mode** requires both `botToken` and `appToken` (`SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` for default account env fallback).
-- **HTTP mode** requires `botToken` plus `signingSecret` (at root or per-account).
-- `configWrites: false` blocks Slack-initiated config writes.
-- Optional `channels.slack.defaultAccount` overrides default account selection when it matches a configured account id.
-- `channels.slack.streaming` is the canonical stream mode key. Legacy `streamMode` and boolean `streaming` values are auto-migrated.
-- Use `user:<id>` (DM) or `channel:<id>` for delivery targets.
-
-**Reaction notification modes:** `off`, `own` (default), `all`, `allowlist` (from `reactionAllowlist`).
-
-**Thread session isolation:** `thread.historyScope` is per-thread (default) or shared across channel. `thread.inheritParent` copies parent channel transcript to new threads.
-
-- `typingReaction` adds a temporary reaction to the inbound Slack message while a reply is running, then removes it on completion. Use a Slack emoji shortcode such as `"hourglass_flowing_sand"`.
-
-| Action group | Default | Notes                  |
-| ------------ | ------- | ---------------------- |
-| reactions    | enabled | React + list reactions |
-| messages     | enabled | Read/send/edit/delete  |
-| pins         | enabled | Pin/unpin/list         |
-| memberInfo   | enabled | Member info            |
-| emojiList    | enabled | Custom emoji list      |
-
-### Mattermost
-
-Mattermost ships as a plugin: `deneb plugins install @deneb/mattermost`.
-
-```json5
-{
-  channels: {
-    mattermost: {
-      enabled: true,
-      botToken: "mm-token",
-      baseUrl: "https://chat.example.com",
-      dmPolicy: "pairing",
-      chatmode: "oncall", // oncall | onmessage | onchar
-      oncharPrefixes: [">", "!"],
-      commands: {
-        native: true, // opt-in
-        nativeSkills: true,
-        callbackPath: "/api/channels/mattermost/command",
-        // Optional explicit URL for reverse-proxy/public deployments
-        callbackUrl: "https://gateway.example.com/api/channels/mattermost/command",
-      },
-      textChunkLimit: 4000,
-      chunkMode: "length",
-    },
-  },
-}
-```
-
-Chat modes: `oncall` (respond on @-mention, default), `onmessage` (every message), `onchar` (messages starting with trigger prefix).
-
-When Mattermost native commands are enabled:
-
-- `commands.callbackPath` must be a path (for example `/api/channels/mattermost/command`), not a full URL.
-- `commands.callbackUrl` must resolve to the Deneb gateway endpoint and be reachable from the Mattermost server.
-- For private/tailnet/internal callback hosts, Mattermost may require
-  `ServiceSettings.AllowedUntrustedInternalConnections` to include the callback host/domain.
-  Use host/domain values, not full URLs.
-- `channels.mattermost.configWrites`: allow or deny Mattermost-initiated config writes.
-- `channels.mattermost.requireMention`: require `@mention` before replying in channels.
-- Optional `channels.mattermost.defaultAccount` overrides default account selection when it matches a configured account id.
-
-### Signal
-
-```json5
-{
-  channels: {
-    signal: {
-      enabled: true,
-      account: "+15555550123", // optional account binding
-      dmPolicy: "pairing",
-      allowFrom: ["+15551234567", "uuid:123e4567-e89b-12d3-a456-426614174000"],
-      configWrites: true,
-      reactionNotifications: "own", // off | own | all | allowlist
-      reactionAllowlist: ["+15551234567", "uuid:123e4567-e89b-12d3-a456-426614174000"],
-      historyLimit: 50,
-    },
-  },
-}
-```
-
-**Reaction notification modes:** `off`, `own` (default), `all`, `allowlist` (from `reactionAllowlist`).
-
-- `channels.signal.account`: pin channel startup to a specific Signal account identity.
-- `channels.signal.configWrites`: allow or deny Signal-initiated config writes.
-- Optional `channels.signal.defaultAccount` overrides default account selection when it matches a configured account id.
-
-### iMessage
-
-Deneb spawns `imsg rpc` (JSON-RPC over stdio). No daemon or port required.
-
-```json5
-{
-  channels: {
-    imessage: {
-      enabled: true,
-      cliPath: "imsg",
-      dbPath: "~/Library/Messages/chat.db",
-      remoteHost: "user@gateway-host",
-      dmPolicy: "pairing",
-      allowFrom: ["+15555550123", "user@example.com", "chat_id:123"],
-      historyLimit: 50,
-      includeAttachments: false,
-      attachmentRoots: ["/Users/*/Library/Messages/Attachments"],
-      remoteAttachmentRoots: ["/Users/*/Library/Messages/Attachments"],
-      mediaMaxMb: 16,
-      service: "auto",
-      region: "US",
-    },
-  },
-}
-```
-
-- Optional `channels.imessage.defaultAccount` overrides default account selection when it matches a configured account id.
-
-- Requires Full Disk Access to the Messages DB.
-- Prefer `chat_id:<id>` targets. Use `imsg chats --limit 20` to list chats.
-- `cliPath` can point to an SSH wrapper; set `remoteHost` (`host` or `user@host`) for SCP attachment fetching.
-- `attachmentRoots` and `remoteAttachmentRoots` restrict inbound attachment paths (default: `/Users/*/Library/Messages/Attachments`).
-- SCP uses strict host-key checking, so ensure the relay host key already exists in `~/.ssh/known_hosts`.
-- `channels.imessage.configWrites`: allow or deny iMessage-initiated config writes.
-
-<Accordion title="iMessage SSH wrapper example">
-
-```bash
-#!/usr/bin/env bash
-exec ssh -T gateway-host imsg "$@"
-```
-
-</Accordion>
-
-### IRC
-
-IRC is extension-backed and configured under `channels.irc`.
-
-```json5
-{
-  channels: {
-    irc: {
-      enabled: true,
-      dmPolicy: "pairing",
-      configWrites: true,
-      nickserv: {
-        enabled: true,
-        service: "NickServ",
-        password: "${IRC_NICKSERV_PASSWORD}",
-        register: false,
-        registerEmail: "bot@example.com",
-      },
-    },
-  },
-}
-```
-
-- Core key paths covered here: `channels.irc`, `channels.irc.dmPolicy`, `channels.irc.configWrites`, `channels.irc.nickserv.*`.
-- Optional `channels.irc.defaultAccount` overrides default account selection when it matches a configured account id.
-- Full IRC channel configuration (host/port/TLS/channels/allowlists/mention gating) is documented in the IRC channel guide.
-
 ### Multi-account (all channels)
 
 Run multiple accounts per channel (each with its own `accountId`):
@@ -607,14 +355,9 @@ Run multiple accounts per channel (each with its own `accountId`):
 - Existing channel-only bindings (no `accountId`) keep matching the default account; account-scoped bindings remain optional.
 - `deneb doctor --fix` also repairs mixed shapes by moving account-scoped top-level single-account values into `accounts.default` when named accounts exist but `default` is missing.
 
-### Other extension channels
-
-Many extension channels are configured as `channels.<id>` and documented in their dedicated channel pages (for example Feishu, Matrix, LINE, Nostr, Zalo, Nextcloud Talk, Synology Chat, and Twitch).
-See the full channel index: [Channels](/channels).
-
 ### Group chat mention gating
 
-Group messages default to **require mention** (metadata mention or safe regex patterns). Applies to WhatsApp, Telegram, Discord, Google Chat, and iMessage group chats.
+Group messages default to **require mention** (metadata mention or safe regex patterns). Applies to Telegram and Discord group chats.
 
 **Mention types:**
 
@@ -652,7 +395,7 @@ Group messages default to **require mention** (metadata mention or safe regex pa
 
 Resolution: per-DM override → provider default → no limit (all retained).
 
-Supported: `telegram`, `whatsapp`, `discord`, `slack`, `signal`, `imessage`.
+Supported: `telegram`, `discord`.
 
 #### Self-chat mode
 
@@ -701,7 +444,7 @@ Include your own number in `allowFrom` to enable self-chat mode (ignores native 
 <Accordion title="Command details">
 
 - Text commands must be **standalone** messages with leading `/`.
-- `native: "auto"` turns on native commands for Discord/Telegram, leaves Slack off.
+- `native: "auto"` turns on native commands for Discord/Telegram.
 - Override per channel: `channels.discord.commands.native` (bool or `"auto"`). `false` clears previously registered commands.
 - `channels.telegram.customCommands` adds extra Telegram bot menu entries.
 - `bash: true` enables `! <cmd>` for host shell. Requires `tools.elevated.enabled` and sender in `tools.elevated.allowFrom.<channel>`.
@@ -1060,7 +803,7 @@ See [Session Pruning](/concepts/session-pruning) for behavior details.
 ```
 
 - Non-Telegram channels require explicit `*.blockStreaming: true` to enable block replies.
-- Channel overrides: `channels.<channel>.blockStreamingCoalesce` (and per-account variants). Signal/Slack/Discord/Google Chat default `minChars: 1500`.
+- Channel overrides: `channels.<channel>.blockStreamingCoalesce` (and per-account variants). Discord defaults `minChars: 1500`.
 - `humanDelay`: randomized pause between block replies. `natural` = 800–2500ms. Per-agent override: `agents.list[].humanDelay`.
 
 See [Streaming](/concepts/streaming) for behavior + chunking details.
@@ -1482,9 +1225,7 @@ For `type: "acp"` entries, Deneb resolves by exact conversation identity (`match
             "sessions_send",
             "sessions_spawn",
             "session_status",
-            "whatsapp",
             "telegram",
-            "slack",
             "discord",
             "gateway",
           ],
@@ -1648,7 +1389,7 @@ Variables are case-insensitive. `{think}` is an alias for `{thinkingLevel}`.
 - Per-channel overrides: `channels.<channel>.ackReaction`, `channels.<channel>.accounts.<id>.ackReaction`.
 - Resolution order: account → channel → `messages.ackReaction` → identity fallback.
 - Scope: `group-mentions` (default), `group-all`, `direct`, `all`.
-- `removeAckAfterReply`: removes ack after reply (Slack/Discord/Telegram/Google Chat only).
+- `removeAckAfterReply`: removes ack after reply (Discord/Telegram only).
 
 ### Inbound debounce
 
@@ -1658,7 +1399,7 @@ Batches rapid text-only messages from the same sender into a single agent turn. 
 
 ## Talk
 
-Defaults for Talk mode (macOS/iOS/Android).
+Defaults for Talk mode.
 
 ```json5
 {
@@ -1681,7 +1422,7 @@ Defaults for Talk mode (macOS/iOS/Android).
 - `apiKey` and `providers.*.apiKey` accept plaintext strings or SecretRef objects.
 - `ELEVENLABS_API_KEY` fallback applies only when no Talk API key is configured.
 - `voiceAliases` lets Talk directives use friendly names.
-- `silenceTimeoutMs` controls how long Talk mode waits after user silence before it sends the transcript. Unset keeps the platform default pause window (`700 ms on macOS and Android, 900 ms on iOS`).
+- `silenceTimeoutMs` controls how long Talk mode waits after user silence before it sends the transcript. Unset keeps the platform default pause window.
 
 ---
 

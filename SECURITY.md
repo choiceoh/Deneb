@@ -58,9 +58,7 @@ These are frequently reported but are typically closed with no code change:
 - Reports that depend on replacing or rewriting an already-approved executable path on a trusted host (same-path inode/content swap) without showing an untrusted path to perform that write.
 - Reports that depend on pre-existing symlinked skill/workspace filesystem state (for example symlink chains involving `skills/*/SKILL.md`) without showing an untrusted path that can create/control that state.
 - Missing HSTS findings on default local/loopback deployments.
-- Slack webhook signature findings when HTTP mode already uses signing-secret verification.
 - Discord inbound webhook signature findings for paths not used by this repo's Discord integration.
-- Claims that Microsoft Teams `fileConsent/invoke` `uploadInfo.uploadUrl` is attacker-controlled without demonstrating one of: auth boundary bypass, a real authenticated Teams/Bot Framework event carrying attacker-chosen URL, or compromise of the Microsoft/Bot trust path.
 - Scanner-only claims against stale/nonexistent paths, or claims without a working repro.
 - Reports that restate an already-fixed issue against later released versions without showing the vulnerable path still exists in the shipped tag or published artifact for that later version.
 
@@ -127,7 +125,7 @@ Plugins/extensions are part of Deneb's trusted computing base for a gateway.
 - Reports whose only claim is that exec approvals do not semantically model every interpreter/runtime loader form, subcommand, flag combination, package script, or transitive module/config import. Exec approvals bind exact request context and best-effort direct local file operands; they are not a complete semantic model of everything a runtime may load.
 - Exposed secrets that are third-party/user-controlled credentials (not Deneb-owned and not granting access to Deneb-operated infrastructure/services) without demonstrated Deneb impact
 - Reports whose only claim is host-side exec when sandbox runtime is disabled/unavailable (documented default behavior in the trusted-operator model), without a boundary bypass.
-- Reports whose only claim is that a platform-provided upload destination URL is untrusted (for example Microsoft Teams `fileConsent/invoke` `uploadInfo.uploadUrl`) without proving attacker control in an authenticated production flow.
+- Reports whose only claim is that a platform-provided upload destination URL is untrusted without proving attacker control in an authenticated production flow.
 
 ## Deployment Assumptions
 
@@ -143,7 +141,7 @@ Deneb security guidance assumes:
 
 Deneb's security model is "personal assistant" (one trusted operator, potentially many agents), not "shared multi-tenant bus."
 
-- If multiple people can message the same tool-enabled agent (for example a shared Slack workspace), they can all steer that agent within its granted permissions.
+- If multiple people can message the same tool-enabled agent (for example a shared channel), they can all steer that agent within its granted permissions.
 - Non-owner sender status only affects owner-only tools/commands. If a non-owner can still access a non-owner-only tool on that same agent (for example `canvas`), that is within the granted tool boundary unless the report demonstrates an auth, policy, allowlist, approval, or sandbox bypass.
 - Session or memory scoping reduces context bleed, but does **not** create per-user host authorization boundaries.
 - For mixed-trust or adversarial users, isolate by OS user/host/gateway and use separate credentials per boundary.

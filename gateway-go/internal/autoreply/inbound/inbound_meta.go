@@ -132,7 +132,7 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 	chatType := normalizeChatType(ctx.ChatType)
 	isDirect := chatType == "" || chatType == "direct"
 	directChannelValue := resolveInboundChannel(ctx)
-	includeDirectConversationInfo := directChannelValue != "" && directChannelValue != "webchat"
+	includeDirectConversationInfo := directChannelValue != ""
 	shouldIncludeConversationInfo := !isDirect || includeDirectConversationInfo
 
 	resolvedMessageID := safeTrim(ctx.MessageSid)
@@ -274,18 +274,12 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 func resolveInboundChannel(ctx *InboundMetaContext) string {
 	channelValue := safeTrim(ctx.OriginatingChannel)
 	if channelValue == "" {
-		surface := safeTrim(ctx.Surface)
-		// Webchat/Hub Chat sessions: omit channel entirely rather than
-		// falling back to an unrelated provider.
-		if surface != "" && surface != "webchat" {
+		if surface := safeTrim(ctx.Surface); surface != "" {
 			channelValue = surface
 		}
 	}
 	if channelValue == "" {
-		provider := safeTrim(ctx.Provider)
-		if provider != "webchat" && safeTrim(ctx.Surface) != "webchat" {
-			channelValue = provider
-		}
+		channelValue = safeTrim(ctx.Provider)
 	}
 	return channelValue
 }
