@@ -3,6 +3,7 @@ package telegram
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestEscapeHTML(t *testing.T) {
@@ -304,5 +305,102 @@ func TestChunkByNewline(t *testing.T) {
 	chunks = ChunkByNewline(long, 10)
 	if len(chunks) != 2 {
 		t.Fatalf("expected 2 chunks for long line, got %d", len(chunks))
+	}
+}
+
+// --- truncateUTF8 tests ---
+
+func TestTruncateUTF8(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		maxBytes int
+		want     string
+	}{
+		{"ascii within limit", "hello", 10, "hello"},
+		{"ascii exact limit", "hello", 5, "hello"},
+		{"ascii over limit", "hello world", 5, "hello"},
+		// "안녕하세요" = 15 bytes (5 chars × 3 bytes)
+		{"korean exact boundary", "안녕하세요", 12, "안녕하세"},
+		{"korean mid-char byte 1", "안녕하세요", 13, "안녕하세"},
+		{"korean mid-char byte 2", "안녕하세요", 14, "안녕하세"},
+		{"korean full", "안녕하세요", 15, "안녕하세요"},
+		{"korean one char", "안녕하세요", 3, "안"},
+		{"korean below one char", "안녕하세요", 2, ""},
+		{"korean below one char 1", "안녕하세요", 1, ""},
+		// Mixed ASCII + Korean: "hi안녕" = 2 + 6 = 8 bytes
+		{"mixed cut in korean", "hi안녕", 4, "hi"},
+		{"mixed cut after first korean", "hi안녕", 5, "hi안"},
+		// 4-byte emoji: "😀" = 4 bytes
+		{"emoji full", "😀", 4, "😀"},
+		{"emoji partial", "😀", 3, ""},
+		{"emoji partial 2", "😀", 2, ""},
+		{"emoji partial 1", "😀", 1, ""},
+		{"empty string", "", 10, ""},
+		{"zero max", "hello", 0, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateUTF8(tt.input, tt.maxBytes)
+			if got != tt.want {
+				t.Errorf("truncateUTF8(%q, %d) = %q, want %q", tt.input, tt.maxBytes, got, tt.want)
+			}
+			if !utf8.ValidString(got) {
+				t.Errorf("truncateUTF8(%q, %d) produced invalid UTF-8: %q", tt.input, tt.maxBytes, got)
+			}
+		})
+	}
+}
+
+func TestChunkText_Korean_NoSpaces(t *testing.T) {
+	// Long Korean text with no spaces or newlines — exercises the fallback path.
+	text := strings.Repeat("가", 2000) // 6000 bytes, no spaces
+	chunks := ChunkText(text, 4000)
+	for i, chunk := range chunks {
+		if !utf8.ValidString(chunk) {
+			t.Errorf("chunk %d is invalid UTF-8 (len=%d)", i, len(chunk))
+		}
+		if len(chunk) > 4000 {
+			t.Errorf("chunk %d exceeds limit: %d bytes", i, len(chunk))
+		}
+	}
+	// Reassemble must equal original.
+	if joined := strings.Join(chunks, ""); joined != text {
+		t.Errorf("chunks don't reassemble to original (got %d bytes, want %d)", len(joined), len(text))
+	}
+}
+
+func TestSplitCaptionAndBody_Korean(t *testing.T) {
+	// Korean text exceeding caption limit with no spaces.
+	text := strings.Repeat("나", 500) // 1500 bytes, 500 chars
+	caption, body := SplitCaptionAndBody(text, MaxCaptionLength, TextChunkLimit)
+	if !utf8.ValidString(caption) {
+		t.Errorf("caption is invalid UTF-8")
+	}
+	if len(caption) > MaxCaptionLength {
+		t.Errorf("caption exceeds limit: %d bytes", len(caption))
+	}
+	// Caption should be a multiple of 3 (Korean char size).
+	if len(caption)%3 != 0 {
+		t.Errorf("caption length %d is not a multiple of 3 — likely split mid-char", len(caption))
+	}
+	for i, chunk := range body {
+		if !utf8.ValidString(chunk) {
+			t.Errorf("body chunk %d is invalid UTF-8", i)
+		}
+	}
+}
+
+func TestChunkHTML_Korean(t *testing.T) {
+	// HTML with long Korean text.
+	html := "<b>" + strings.Repeat("다", 1500) + "</b>" // ~4507 bytes
+	chunks := ChunkHTML(html, 4000)
+	for i, chunk := range chunks {
+		if !utf8.ValidString(chunk) {
+			t.Errorf("HTML chunk %d is invalid UTF-8 (len=%d)", i, len(chunk))
+		}
+		if len(chunk) > 4000 {
+			t.Errorf("HTML chunk %d exceeds limit: %d bytes", i, len(chunk))
+		}
 	}
 }

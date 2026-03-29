@@ -293,6 +293,9 @@ func ChunkText(text string, maxLen int) []string {
 		} else if idx := strings.LastIndex(remaining[:maxLen], " "); idx > maxLen/4 {
 			// Try to split at a space.
 			splitAt = idx + 1
+		} else {
+			// Fallback: ensure we don't split a multi-byte UTF-8 character.
+			splitAt = len(truncateUTF8(remaining, maxLen))
 		}
 
 		chunks = append(chunks, remaining[:splitAt])
@@ -385,6 +388,9 @@ func SplitCaptionAndBody(text string, captionMax, bodyMax int) (string, []string
 		splitAt = idx
 	} else if idx := strings.LastIndex(text[:captionMax], " "); idx > captionMax/4 {
 		splitAt = idx
+	} else {
+		// Fallback: ensure we don't split a multi-byte UTF-8 character.
+		splitAt = len(truncateUTF8(text, captionMax))
 	}
 
 	caption := text[:splitAt]
@@ -489,7 +495,21 @@ func findHTMLSplitPoint(html string, maxLen int) int {
 			break
 		}
 	}
-	return lastSafe
+	// Ensure we don't split a multi-byte UTF-8 character.
+	return len(truncateUTF8(html, lastSafe))
+}
+
+// truncateUTF8 truncates s to at most maxBytes bytes without splitting
+// a multi-byte UTF-8 character. The result is always valid UTF-8.
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	// Walk backward past any UTF-8 continuation bytes (10xxxxxx).
+	for maxBytes > 0 && s[maxBytes]&0xC0 == 0x80 {
+		maxBytes--
+	}
+	return s[:maxBytes]
 }
 
 // UTF16Len returns the UTF-16 code unit length of a string.
