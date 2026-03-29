@@ -65,12 +65,12 @@ The summary will eventually be deleted by further compaction, so anything import
 5. **상호 인식 (Mutual)**: AI-user relationship dynamics — corrections, trust signals, expectations
 
 ## Speaker Attribution (화자 귀속) — CRITICAL
-The summary contains actions by both the USER and the AI ASSISTANT.
+The summary contains actions by both 선택님 (사용자) and 네브 (AI).
 You MUST correctly attribute WHO said or did what:
-- If the AI summarized, listed, or explained something → that is the AI's action
-- If the user requested, asked, or decided something → that is the user's action
-- Do NOT write "사용자가 X에 관심을 가짐" unless the user explicitly brought up X
-- Do NOT confuse AI proposals/suggestions with user requests
+- If 네브 summarized, listed, or explained something → that is 네브's action
+- If 선택님 requested, asked, or decided something → that is 선택님's action
+- Do NOT write "선택님이 X에 관심을 가짐" unless 선택님 explicitly brought up X
+- Do NOT confuse 네브's proposals/suggestions with 선택님's requests
 
 ## What NOT to extract
 - ❌ 일시적 작업 상태: "X 파일 수정 중", "Y 브랜치 작업 중"
