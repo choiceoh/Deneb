@@ -1,7 +1,8 @@
 use std::future::Future;
 
+use crate::config::{self, DenebConfig};
 use crate::errors::CliError;
-use crate::gateway::{call_gateway, CallOptions};
+use crate::gateway::{call_gateway_with_config, CallOptions};
 use crate::terminal::{is_json_mode, Palette};
 
 /// Common gateway connection flags shared by many sub-CLI commands.
@@ -39,6 +40,14 @@ impl GatewayFlags {
     }
 }
 
+/// Load config once for use in gateway calls.
+/// All rpc_* helpers use this to avoid the double-load that occurs when
+/// `call_gateway` (no-config variant) resolves config internally.
+fn load_rpc_config() -> DenebConfig {
+    let path = config::resolve_config_path();
+    config::load_config_best_effort(&path)
+}
+
 /// Call a gateway RPC method and print the result (JSON or pretty text).
 pub async fn rpc_print(
     method: &str,
@@ -46,10 +55,11 @@ pub async fn rpc_print(
     gw: &GatewayFlags,
 ) -> Result<(), CliError> {
     let json_mode = is_json_mode(gw.json);
+    let cfg = load_rpc_config();
     let result = crate::terminal::progress::with_spinner(
         "Working...",
         !json_mode,
-        call_gateway(gw.call_options(method, params)),
+        call_gateway_with_config(gw.call_options(method, params), &cfg),
     )
     .await?;
     println!("{}", serde_json::to_string_pretty(&result)?);
@@ -64,10 +74,11 @@ pub async fn rpc_action(
     success_msg: &str,
 ) -> Result<(), CliError> {
     let json_mode = is_json_mode(gw.json);
+    let cfg = load_rpc_config();
     let result = crate::terminal::progress::with_spinner(
         "Working...",
         !json_mode,
-        call_gateway(gw.call_options(method, params)),
+        call_gateway_with_config(gw.call_options(method, params), &cfg),
     )
     .await?;
     if json_mode {
@@ -91,10 +102,11 @@ where
     F: FnOnce(serde_json::Value, bool) -> Result<(), CliError>,
 {
     let json_mode = is_json_mode(gw.json);
+    let cfg = load_rpc_config();
     let result = crate::terminal::progress::with_spinner(
         spinner_text,
         !json_mode,
-        call_gateway(gw.call_options(method, params)),
+        call_gateway_with_config(gw.call_options(method, params), &cfg),
     )
     .await?;
     formatter(result, json_mode)
