@@ -18,8 +18,10 @@ Primary runtime — HTTP/WS gateway server.
 - `internal/auth/` — Token auth, allowlists, security paths, credentials, probe auth.
 - `pkg/protocol/` — Hand-written JSON wire types + generated protobuf types in `gen/`.
 - `pkg/protocol/consistency_test.go` — Bidirectional reflection tests ensuring hand-written and generated types stay in sync.
-- `internal/chat/toolreg_core.go` — Core tool registration (exec, process, read, write, edit, grep, find, ls, web) with full JSON schemas.
-- `internal/chat/tools/fs.go` — File system tool implementations (read with line numbers, write with dir creation, edit with uniqueness check, grep via rg, find via WalkDir, ls).
+- `internal/chat/toolctx/` — Leaf package: shared types (ToolFunc, ToolDef, ToolRegistrar, ToolExecutor), context helpers (WithDeliveryContext, etc.), TurnContext, RunCache, dependency structs (CoreToolDeps, ProcessDeps, SessionDeps, etc.). Zero intra-chat imports.
+- `internal/chat/toolreg/` — Tool registration hub: wires tool implementations (from tools/) with JSON schemas (from tool_schemas_gen.go) into a ToolRegistrar. Contains tool_schemas.yaml (codegen source) and tool_schemas_gen.go (generated). Never imports chat/.
+- `internal/chat/tools/` — Pure tool implementations (fs, exec, git, health, vega, message, kv, gmail, etc.). Depends only on toolctx/ for types.
+- `internal/chat/toolreg_core.go` — Thin wrapper: calls toolreg.RegisterCoreTools() + registers pilot tool (sglang-coupled).
 - `internal/chat/system_prompt.go` — System prompt assembly (identity, tooling, tool call style, safety, skills, memory recall, workspace, reply tags, messaging, timestamp, context files, silent replies, runtime).
 - `internal/chat/context_files.go` — Workspace context file loader (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 20K chars/file, 150K total.
 - `internal/chat/silent_reply.go` — SILENT_REPLY_TOKEN (NO_REPLY) detection and stripping for delivery suppression.

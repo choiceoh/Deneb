@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"context"
@@ -7,14 +7,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// healthCheckToolSchema returns the JSON Schema for the health_check tool.
+// SglangProbe provides sglang health-check functions that live outside this
+// package (in chat/). Injected to avoid a circular import.
+type SglangProbe struct {
+	// CheckHealth returns true if the local sglang server is reachable.
+	CheckHealth func() bool
+	// BaseURL returns the base URL for the lightweight model.
+	BaseURL func() string
+}
 
-// toolHealthCheck creates the health_check ToolFunc.
-func toolHealthCheck(d *VegaDeps) ToolFunc {
+// ToolHealthCheck creates the health_check ToolFunc.
+func ToolHealthCheck(d *toolctx.VegaDeps, sglang SglangProbe) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Component string `json:"component"`
@@ -29,7 +37,7 @@ func toolHealthCheck(d *VegaDeps) ToolFunc {
 		// Single-component shortcuts that don't need vega backend.
 		switch p.Component {
 		case "sglang":
-			return formatSglangHealth(), nil
+			return formatSglangHealth(sglang), nil
 		case "memory":
 			return formatMemoryHealth(ctx, d), nil
 		}
@@ -70,11 +78,11 @@ func toolHealthCheck(d *VegaDeps) ToolFunc {
 
 		// Append gateway-level sglang health.
 		sglangGw := vega.ComponentHealth{Name: "sglang (gateway)"}
-		if checkSglangHealth() {
+		if sglang.CheckHealth() {
 			sglangGw.Available = true
 			sglangGw.Detail = "chat hooks + compression operational"
 		} else {
-			sglangGw.Detail = "unreachable at " + lightweightBaseURL()
+			sglangGw.Detail = "unreachable at " + sglang.BaseURL()
 		}
 		rows = append(rows, sglangGw)
 
@@ -88,7 +96,7 @@ func toolHealthCheck(d *VegaDeps) ToolFunc {
 // --- Memory health ---
 
 // checkMemoryComponent probes the aurora-memory store and returns a ComponentHealth.
-func checkMemoryComponent(ctx context.Context, d *VegaDeps) vega.ComponentHealth {
+func checkMemoryComponent(ctx context.Context, d *toolctx.VegaDeps) vega.ComponentHealth {
 	ch := vega.ComponentHealth{Name: "aurora-memory"}
 	if d.MemoryStore == nil {
 		ch.Detail = "not configured"
@@ -120,7 +128,7 @@ func checkMemoryComponent(ctx context.Context, d *VegaDeps) vega.ComponentHealth
 }
 
 // formatMemoryHealth returns a standalone aurora-memory health report.
-func formatMemoryHealth(ctx context.Context, d *VegaDeps) string {
+func formatMemoryHealth(ctx context.Context, d *toolctx.VegaDeps) string {
 	ch := checkMemoryComponent(ctx, d)
 	icon := "✅"
 	if !ch.Available {
@@ -178,10 +186,10 @@ func formatHealthStatus(status vega.HealthStatus) string {
 }
 
 // formatSglangHealth returns a standalone sglang health report.
-func formatSglangHealth() string {
-	healthy := checkSglangHealth()
+func formatSglangHealth(sglang SglangProbe) string {
+	healthy := sglang.CheckHealth()
 	icon := "✅"
-	baseURL := lightweightBaseURL()
+	baseURL := sglang.BaseURL()
 	detail := "operational at " + baseURL
 	if !healthy {
 		icon = "❌"
