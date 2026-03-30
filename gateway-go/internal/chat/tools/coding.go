@@ -127,7 +127,7 @@ var skipDirs = map[string]bool{
 }
 
 func ToolTree(defaultDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Path       string `json:"path"`
 			Depth      int    `json:"depth"`
@@ -151,6 +151,12 @@ func ToolTree(defaultDir string) ToolFunc {
 			maxDepth = 6
 		}
 
+		if p.Pattern == "" && !p.DirsOnly {
+			if out, used, err := treeWithEza(ctx, dir, maxDepth, p.ShowHidden); used {
+				return out, err
+			}
+		}
+
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "%s/\n", filepath.Base(dir))
 
@@ -159,6 +165,47 @@ func ToolTree(defaultDir string) ToolFunc {
 		fmt.Fprintf(&sb, "\n%d directories, %d files", dirCount, fileCount)
 		return sb.String(), nil
 	}
+}
+
+func treeWithEza(ctx context.Context, dir string, maxDepth int, showHidden bool) (string, bool, error) {
+	bin, ok := firstAvailableBinary("eza", "exa")
+	if !ok {
+		return "", false, nil
+	}
+
+	ignore := make([]string, 0, len(skipDirs))
+	for name := range skipDirs {
+		ignore = append(ignore, name)
+	}
+
+	args := []string{
+		"--tree",
+		fmt.Sprintf("--level=%d", maxDepth),
+		"--color=never",
+		"--icons=never",
+		"--group-directories-first",
+	}
+	if showHidden {
+		args = append(args, "--all")
+	}
+	args = append(args, "--ignore-glob", strings.Join(ignore, "|"), ".")
+
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return "", true, fmt.Errorf("eza tree failed: %w", err)
+		}
+		return "", true, fmt.Errorf("eza tree failed: %s", msg)
+	}
+
+	result := strings.TrimRight(string(out), "\n")
+	if result == "" {
+		result = filepath.Base(dir) + "/"
+	}
+	return result + "\n\n[fast eza tree listing; directories and files shown above]", true, nil
 }
 
 // buildTree recursively builds the tree string. Returns (fileCount, dirCount).

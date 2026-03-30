@@ -37,6 +37,7 @@
 - Colocated tests: `*_test.go` (Go), `#[cfg(test)]` (Rust)
 - Run `make check` before commits
 - Run `make test` for full test suite
+- When shell inspection is needed, prefer high-performance CLIs: `rg`, `fd`, `bat`, `eza`, `sd`, `dust`, `duf`, `procs`, `fx`, `ouch`, `btm`
 
 ## Commands
 
