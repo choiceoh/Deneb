@@ -61,6 +61,7 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		vegaResults      []vega.SearchResult
 		memMatches       []MemoryMatch
 		structFacts      []memory.SearchResult
+		unifiedResults   []unified.SearchResult
 		userModelEntries []memory.UserModelEntry
 		tier1Section     string // high-importance facts always-injected
 	)
@@ -125,6 +126,15 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			results, err := deps.UnifiedStore.Search(ctx, message, unified.SearchOpts{Limit: knowledgeMaxMemory})
+			if err == nil {
+				unifiedResults = filterUnifiedKnowledgeResults(message, results, deps.MemoryStore == nil)
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			tier1Section = deps.UnifiedStore.Tier1Section(ctx)
 		}()
 	}
@@ -140,8 +150,8 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	}
 
 	// Knowledge section (Vega + memory facts).
-	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 {
-		parts = append(parts, formatKnowledgeWithFacts(vegaResults, memMatches, structFacts))
+	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 || len(unifiedResults) > 0 {
+		parts = append(parts, formatKnowledgeWithFacts(vegaResults, memMatches, structFacts, unifiedResults))
 	}
 
 	// Mutual understanding section (user model).
@@ -288,12 +298,17 @@ func truncateRunes(s string, maxRunes int) string {
 
 // formatKnowledge builds the "## 관련 지식" section from search results (legacy).
 func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) string {
-	return formatKnowledgeWithFacts(vegaResults, memMatches, nil)
+	return formatKnowledgeWithFacts(vegaResults, memMatches, nil, nil)
 }
 
 // formatKnowledgeWithFacts builds the "## 관련 지식" section from search results,
 // respecting the token budget. Supports both legacy MemoryMatch and structured facts.
-func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []MemoryMatch, structFacts []memory.SearchResult) string {
+func formatKnowledgeWithFacts(
+	vegaResults []vega.SearchResult,
+	memMatches []MemoryMatch,
+	structFacts []memory.SearchResult,
+	unifiedResults []unified.SearchResult,
+) string {
 	now := time.Now() // capture once for consistent temporal annotations across all facts
 	var sb strings.Builder
 	sb.WriteString("## 관련 지식\n\n")
@@ -343,6 +358,29 @@ func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []Memo
 		}
 	}
 
+	// Unified recall (messages/summaries, plus fact fallback when structured search is absent).
+	if len(unifiedResults) > 0 && tokenCount < knowledgeMaxTokens {
+		before := sb.Len()
+		sb.WriteString("### 대화 기억\n")
+		tokenCount += (sb.Len() - before) / charsPerToken
+
+		for _, r := range unifiedResults {
+			before = sb.Len()
+			content := truncateRunes(r.Content, knowledgeMaxContentRunes)
+			label := unifiedItemLabel(r.ItemType)
+			if r.CreatedAt > 0 {
+				fmt.Fprintf(&sb, "- {%s} (%s) %s\n", label, relativeTimeSince(time.UnixMilli(r.CreatedAt), now), content)
+			} else {
+				fmt.Fprintf(&sb, "- {%s} %s\n", label, content)
+			}
+			tokenCount += (sb.Len() - before) / charsPerToken
+
+			if tokenCount >= knowledgeMaxTokens {
+				break
+			}
+		}
+	}
+
 	// Legacy memory matches (file-based fallback).
 	if len(memMatches) > 0 && len(structFacts) == 0 && tokenCount < knowledgeMaxTokens {
 		before := sb.Len()
@@ -365,6 +403,42 @@ func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []Memo
 		return "" // too little content to be useful
 	}
 	return sb.String()
+}
+
+func filterUnifiedKnowledgeResults(query string, results []unified.SearchResult, includeFacts bool) []unified.SearchResult {
+	normalizedQuery := normalizeKnowledgeRecallText(query)
+	filtered := make([]unified.SearchResult, 0, len(results))
+	for _, r := range results {
+		if r.Content == "" {
+			continue
+		}
+		if !includeFacts && r.ItemType == "fact" {
+			continue
+		}
+		if normalizedQuery != "" && r.ItemType == "message" && normalizeKnowledgeRecallText(r.Content) == normalizedQuery {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	return filtered
+}
+
+func normalizeKnowledgeRecallText(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(s))), " ")
+}
+
+func unifiedItemLabel(itemType string) string {
+	switch itemType {
+	case "summary":
+		return "요약"
+	case "fact":
+		return "기억"
+	default:
+		return "메시지"
+	}
 }
 
 // userProfileKeys defines display order and Korean labels for Phase 5 user model keys.
