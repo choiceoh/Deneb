@@ -161,50 +161,72 @@ func migrateAurora(tx *sql.Tx, dbPath string, logger *slog.Logger) error {
 	return nil
 }
 
-// migrateMemory imports all data from a legacy memory.db.
+// migrateMemory imports all data from a legacy memory.db using ATTACH.
+// This is more efficient than opening a separate connection.
 func migrateMemory(tx *sql.Tx, dbPath string, logger *slog.Logger) error {
 	logger.Info("unified store: migrating memory.db", "path", dbPath)
 
+	// ATTACH the memory DB to the current transaction's connection.
+	if _, err := tx.Exec(`ATTACH DATABASE ? AS memdb`, dbPath); err != nil {
+		// Fall back to row-by-row copy if ATTACH fails.
+		logger.Warn("unified store: ATTACH failed, using row-by-row copy", "error", err)
+		return migrateMemoryRowByRow(tx, dbPath, logger)
+	}
+	defer tx.Exec(`DETACH DATABASE memdb`)
+
+	// Bulk copy using INSERT ... SELECT (much faster than row-by-row).
+	tables := []struct {
+		name  string
+		query string
+	}{
+		{"facts", `INSERT OR IGNORE INTO main.facts SELECT * FROM memdb.facts`},
+		{"fact_embeddings", `INSERT OR IGNORE INTO main.fact_embeddings SELECT * FROM memdb.fact_embeddings`},
+		{"user_model", `INSERT OR REPLACE INTO main.user_model SELECT * FROM memdb.user_model`},
+		{"dreaming_log", `INSERT INTO main.dreaming_log (ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms) SELECT ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms FROM memdb.dreaming_log`},
+		{"metadata", `INSERT OR REPLACE INTO main.metadata SELECT * FROM memdb.metadata`},
+	}
+
+	for _, t := range tables {
+		if _, err := tx.Exec(t.query); err != nil {
+			logger.Debug("unified store: skip table (may not exist)", "table", t.name, "error", err)
+		}
+	}
+
+	// Rebuild FTS indices from facts data (FTS5 virtual tables can't be copied via ATTACH).
+	tx.Exec(`INSERT INTO facts_fts(rowid, content, category) SELECT id, content, category FROM facts WHERE active = 1`)
+	tx.Exec(`INSERT INTO facts_fts_trigram(rowid, content) SELECT id, content FROM facts WHERE active = 1`)
+
+	var factCount int
+	tx.QueryRow(`SELECT COUNT(*) FROM facts`).Scan(&factCount)
+	logger.Info("unified store: memory migration done", "facts", factCount)
+	return nil
+}
+
+// migrateMemoryRowByRow is the fallback when ATTACH is not available.
+func migrateMemoryRowByRow(tx *sql.Tx, dbPath string, logger *slog.Logger) error {
 	src, err := sql.Open("sqlite", dbPath+"?mode=ro")
 	if err != nil {
 		return fmt.Errorf("open memory.db: %w", err)
 	}
 	defer src.Close()
 
-	// facts
-	factCount, err := copyTable(tx, src, "facts",
+	copyTable(tx, src, "facts",
 		`SELECT id, content, category, importance, source, created_at, updated_at, last_accessed_at, access_count, verified_at, expires_at, superseded_by, active, merge_depth FROM facts`,
 		`INSERT OR IGNORE INTO facts (id, content, category, importance, source, created_at, updated_at, last_accessed_at, access_count, verified_at, expires_at, superseded_by, active, merge_depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		14)
-	if err != nil {
-		return fmt.Errorf("copy facts: %w", err)
-	}
-
-	// fact_embeddings
 	copyTable(tx, src, "fact_embeddings",
 		`SELECT fact_id, embedding, model_name, updated_at FROM fact_embeddings`,
 		`INSERT OR IGNORE INTO fact_embeddings (fact_id, embedding, model_name, updated_at) VALUES (?, ?, ?, ?)`,
 		4)
-
-	// user_model
 	copyTable(tx, src, "user_model",
 		`SELECT key, value, confidence, updated_at FROM user_model`,
 		`INSERT OR REPLACE INTO user_model (key, value, confidence, updated_at) VALUES (?, ?, ?, ?)`,
 		4)
-
-	// dreaming_log
-	copyTable(tx, src, "dreaming_log",
-		`SELECT ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms FROM dreaming_log`,
-		`INSERT INTO dreaming_log (ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		7)
-
-	// metadata
 	copyTable(tx, src, "metadata",
 		`SELECT key, value FROM metadata`,
 		`INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)`,
 		2)
 
-	logger.Info("unified store: memory migration done", "facts", factCount)
 	return nil
 }
 

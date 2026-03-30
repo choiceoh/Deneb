@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 )
 
 // Compaction defaults.
@@ -80,23 +78,29 @@ func handleContextOverflowAurora(
 		sweepCfg.ContextThreshold = deps.compactionCfg.ContextThreshold
 		sweepCfg.FreshTailCount = uint32(deps.compactionCfg.FreshTailCount)
 
-		// Flush important facts to memory in parallel with the sweep.
-		// Memory flush is best-effort — if it fails, compaction still proceeds.
-		// Both operations read from the in-memory store snapshot, so they don't
-		// conflict. The flush only writes to the memory store (separate from Aurora).
-		var flushDone chan struct{}
-		if deps.memoryStore != nil {
-			flushDone = make(chan struct{})
-			go func() {
-				defer close(flushDone)
-				flushMemoryBeforeCompaction(ctx, deps.auroraStore, deps.memoryStore, deps.memoryEmbedder,
-					deps.compactionCfg.FreshTailCount, logger)
-			}()
-		}
-
 		// Use lightweight model for cost-efficient compaction summaries.
 		lwClient := getLightweightClient()
-		summarizer := aurora.NewLLMSummarizer(lwClient, getLightweightModel(), "openai")
+		lwModel := getLightweightModel()
+		summarizer := aurora.NewLLMSummarizer(lwClient, lwModel, "openai")
+
+		// Build inline fact extractor: replaces the async flushMemory/transferSummary
+		// bridge with synchronous extraction during the sweep persist step.
+		// Facts are extracted from condensed summaries (depth >= 1) and stored
+		// directly in the memory store. Extraction failure is non-fatal.
+		var factExtractor aurora.FactExtractor
+		if deps.memoryStore != nil {
+			factExtractor = func(summaryContent string, depth uint32) error {
+				return aurora.TransferSummaryToMemory(
+					ctx,
+					aurora.SummaryRecord{Content: summaryContent, Depth: depth, Kind: "condensed"},
+					deps.auroraStore,
+					deps.memoryStore,
+					deps.memoryEmbedder,
+					lwClient, lwModel,
+					logger,
+				)
+			}
+		}
 
 		result, err := aurora.RunSweep(
 			deps.auroraStore,
@@ -107,20 +111,12 @@ func handleContextOverflowAurora(
 			true, // force (overflow already detected)
 			true, // hard trigger
 			logger,
+			factExtractor,
 		)
-		// Wait for the parallel memory flush to finish before proceeding.
-		if flushDone != nil {
-			<-flushDone
-		}
 
 		if err != nil {
 			logger.Warn("aurora sweep failed, falling back", "error", err)
 		} else if result != nil && result.ActionTaken {
-			// Transfer condensed summary knowledge to long-term memory (async, best-effort).
-			if result.Condensed && result.CreatedSummaryID != nil && deps.memoryStore != nil {
-				go transferSummaryToMemory(deps, *result.CreatedSummaryID, logger)
-			}
-
 			// Reassemble context from Aurora store.
 			asmCfg := aurora.AssemblyConfig{
 				TokenBudget:    deps.contextCfg.TokenBudget,
@@ -270,124 +266,6 @@ func runCompactionSweepLegacy(
 	}
 }
 
-// flushMemoryBeforeCompaction extracts and persists important facts from the messages
-// that are about to be compressed by the Aurora compaction sweep. This ensures
-// high-value information survives summarization in long-term structured memory.
-//
-// Only messages outside the fresh tail are considered — those are the ones that
-// will actually be summarized away. Errors are logged and silently ignored so
-// they never block the compaction path.
-func flushMemoryBeforeCompaction(
-	ctx context.Context,
-	store *aurora.Store,
-	memStore *memory.Store,
-	embedder *memory.Embedder,
-	freshTailCount int,
-	logger *slog.Logger,
-) {
-	const (
-		conversationID = uint64(1)
-		flushTimeout   = 35 * time.Second
-		// maxFlushTokens is an approximate character budget for the combined text
-		// sent to the extraction LLM (user 4000 + assistant 8000 from ExtractFacts).
-		maxUserChars      = 3800
-		maxAssistantChars = 7600
-	)
-
-	flushCtx, cancel := context.WithTimeout(ctx, flushTimeout)
-	defer cancel()
-
-	// Fetch all ordered context items for the conversation.
-	items, err := store.FetchContextItems(conversationID)
-	if err != nil {
-		logger.Warn("memory flush: failed to fetch context items", "error", err)
-		return
-	}
-
-	// Collect only raw message items (exclude summaries already persisted by past sweeps).
-	type msgItem struct {
-		ordinal uint64
-		id      uint64
-	}
-	var msgItems []msgItem
-	for _, ci := range items {
-		if ci.ItemType == "message" && ci.MessageID != nil {
-			msgItems = append(msgItems, msgItem{ordinal: ci.Ordinal, id: *ci.MessageID})
-		}
-	}
-	sort.Slice(msgItems, func(i, j int) bool { return msgItems[i].ordinal < msgItems[j].ordinal })
-
-	// Exclude the fresh tail — those messages won't be compacted.
-	if len(msgItems) <= freshTailCount {
-		logger.Debug("memory flush: all messages in fresh tail, nothing to flush")
-		return
-	}
-	flushable := msgItems[:len(msgItems)-freshTailCount]
-
-	// Fetch message records.
-	ids := make([]uint64, len(flushable))
-	for i, mi := range flushable {
-		ids[i] = mi.id
-	}
-	records, err := store.FetchMessages(ids)
-	if err != nil {
-		logger.Warn("memory flush: failed to fetch messages", "error", err)
-		return
-	}
-
-	// Build ordered user/assistant text blocks for the extraction prompt.
-	// Walk in ordinal order to preserve conversation sequence.
-	var userParts, assistantParts []string
-	for _, mi := range flushable {
-		rec, ok := records[mi.id]
-		if !ok {
-			continue
-		}
-		switch rec.Role {
-		case "user":
-			userParts = append(userParts, rec.Content)
-		case "assistant":
-			assistantParts = append(assistantParts, rec.Content)
-		}
-	}
-
-	userText := strings.Join(userParts, "\n\n---\n\n")
-	assistantText := strings.Join(assistantParts, "\n\n---\n\n")
-	if userText == "" && assistantText == "" {
-		return
-	}
-
-	// Trim to ExtractFacts budget so we don't overflow the extraction LLM.
-	userRunes := []rune(userText)
-	if len(userRunes) > maxUserChars {
-		userText = string(userRunes[len(userRunes)-maxUserChars:]) // keep recent tail
-	}
-	assistantRunes := []rune(assistantText)
-	if len(assistantRunes) > maxAssistantChars {
-		assistantText = string(assistantRunes[len(assistantRunes)-maxAssistantChars:])
-	}
-
-	logger.Info("memory flush: extracting facts before compaction",
-		"flushableMessages", len(flushable),
-		"userChars", len([]rune(userText)),
-		"assistantChars", len([]rune(assistantText)),
-	)
-
-	lwClient := getLightweightClient()
-	facts, err := memory.ExtractFacts(flushCtx, lwClient, getLightweightModel(), userText, assistantText, logger)
-	if err != nil {
-		logger.Warn("memory flush: extraction failed", "error", err)
-		return
-	}
-	if len(facts) == 0 {
-		logger.Debug("memory flush: no facts extracted")
-		return
-	}
-
-	memory.InsertExtractedFacts(flushCtx, memStore, embedder, facts, logger)
-	logger.Info("memory flush: completed", "factsExtracted", len(facts))
-}
-
 // handleSweepCommandLegacy is the original stub handler (kept for no-Aurora fallback).
 func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slog.Logger) (any, error) {
 	var cmd struct {
@@ -442,40 +320,5 @@ func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logge
 
 	default:
 		return map[string]any{"type": "empty"}, nil
-	}
-}
-
-// transferSummaryToMemory extracts important facts from a newly created
-// Aurora condensed summary and stores them in the structured memory store.
-// Runs as a background goroutine — errors are logged, not propagated.
-func transferSummaryToMemory(deps runDeps, summaryID string, logger *slog.Logger) {
-	// Use the server shutdown context to bound this background work.
-	ctx := deps.shutdownCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	summaries, err := deps.auroraStore.FetchSummaries([]string{summaryID})
-	if err != nil || len(summaries) == 0 {
-		logger.Debug("aurora-transfer: summary not found", "summaryId", summaryID, "error", err)
-		return
-	}
-	summary := summaries[summaryID]
-
-	cfg := aurora.DefaultMemoryTransferConfig()
-	if !aurora.ShouldTransfer(summary, cfg) {
-		logger.Debug("aurora-transfer: summary below transfer threshold",
-			"summaryId", summaryID, "depth", summary.Depth, "tokens", summary.TokenCount)
-		return
-	}
-
-	lwClient := getLightweightClient()
-	if err := aurora.TransferSummaryToMemory(
-		ctx, summary, deps.auroraStore,
-		deps.memoryStore, deps.memoryEmbedder,
-		lwClient, getLightweightModel(),
-		logger,
-	); err != nil {
-		logger.Warn("aurora-transfer: failed", "summaryId", summaryID, "error", err)
 	}
 }

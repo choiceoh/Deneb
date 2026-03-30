@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,13 +21,47 @@ const (
 	Tier1Threshold = 0.85
 	// Tier1MaxTokens is the soft token budget for tier-1 facts.
 	Tier1MaxTokens = 3000
+	// tier1CacheTTL is how long the tier-1 cache is valid before refresh.
+	tier1CacheTTL = 5 * time.Minute
 )
 
+// tier1Cache caches the formatted tier-1 section to avoid querying SQL every turn.
+type tier1Cache struct {
+	mu       sync.RWMutex
+	section  string
+	loadedAt time.Time
+}
+
+var t1Cache tier1Cache
+
+// InvalidateTier1Cache forces the next Tier1Section call to re-query the DB.
+// Call this when facts are inserted, updated, or deactivated.
+func InvalidateTier1Cache() {
+	t1Cache.mu.Lock()
+	t1Cache.loadedAt = time.Time{}
+	t1Cache.mu.Unlock()
+}
+
 // Tier1Section builds the "## 핵심 기억" system prompt section from
-// high-importance facts. Returns empty string if no qualifying facts exist.
+// high-importance facts. Results are cached for 5 minutes.
+// Returns empty string if no qualifying facts exist.
 func (s *Store) Tier1Section(ctx context.Context) string {
+	// Check cache first.
+	t1Cache.mu.RLock()
+	if !t1Cache.loadedAt.IsZero() && time.Since(t1Cache.loadedAt) < tier1CacheTTL {
+		cached := t1Cache.section
+		t1Cache.mu.RUnlock()
+		return cached
+	}
+	t1Cache.mu.RUnlock()
+
 	facts, err := s.Tier1Facts(ctx, Tier1Threshold, []string{"decision", "preference", "user_model"})
 	if err != nil || len(facts) == 0 {
+		// Cache empty result too.
+		t1Cache.mu.Lock()
+		t1Cache.section = ""
+		t1Cache.loadedAt = time.Now()
+		t1Cache.mu.Unlock()
 		return ""
 	}
 
@@ -45,7 +80,15 @@ func (s *Store) Tier1Section(ctx context.Context) string {
 		tokenCount += lineTokens
 	}
 
-	return b.String()
+	result := b.String()
+
+	// Update cache.
+	t1Cache.mu.Lock()
+	t1Cache.section = result
+	t1Cache.loadedAt = time.Now()
+	t1Cache.mu.Unlock()
+
+	return result
 }
 
 // AssignTier determines the tier for a new item based on type and importance.
