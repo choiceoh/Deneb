@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 // DefaultACPDir is the default directory for ACP data.
@@ -85,25 +87,8 @@ func (s *BindingStore) Save(bindings []StoredBinding) error {
 		return nil
 	}
 
-	// Ensure directory exists.
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create binding store dir: %w", err)
-	}
-
-	// Create .bak backup if file exists.
-	if _, err := os.Stat(s.path); err == nil {
-		_ = copyFile(s.path, s.path+".bak")
-	}
-
-	// Atomic write: temp file + rename.
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write binding store temp: %w", err)
-	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename binding store: %w", err)
+	if err := atomicfile.WriteFile(s.path, data, &atomicfile.Options{Backup: true}); err != nil {
+		return fmt.Errorf("save binding store: %w", err)
 	}
 
 	s.cachedHash = newHash
@@ -134,13 +119,4 @@ func (s *BindingStore) RestoreToService(svc *SessionBindingService) error {
 		svc.RestoreAll(bindings)
 	}
 	return nil
-}
-
-// copyFile copies src to dst. Best-effort; errors are ignored by callers.
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o644)
 }

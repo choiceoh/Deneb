@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // --- Read tool ---
@@ -230,13 +231,7 @@ func ToolWrite(defaultDir string) ToolFunc {
 
 		path := ResolvePath(p.FilePath, defaultDir)
 
-		// Ensure parent directory exists.
-		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return "", fmt.Errorf("failed to create directory: %w", err)
-		}
-
-		if err := os.WriteFile(path, []byte(p.Content), 0o644); err != nil {
+		if err := atomicfile.WriteFile(path, []byte(p.Content), nil); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
 		return fmt.Sprintf("Wrote %s", p.FilePath), nil
@@ -298,7 +293,7 @@ func ToolEdit(defaultDir string) ToolFunc {
 		} else {
 			newContent = strings.Replace(content, p.OldString, p.NewString, 1)
 		}
-		if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
+		if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
 		if count > 1 {
@@ -332,7 +327,7 @@ func editWithRegex(path, displayPath, content, pattern, replacement string, repl
 		newContent = content[:loc[0]] + re.ReplaceAllString(content[loc[0]:loc[1]], replacement) + content[loc[1]:]
 	}
 
-	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
+	if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return fmt.Sprintf("Edited %s (regex, %d matches)", displayPath, len(matches)), nil
@@ -353,7 +348,7 @@ func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) 
 	lines[idx] = strings.Replace(lines[idx], oldStr, newStr, 1)
 	newContent := strings.Join(lines, "\n")
 
-	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
+	if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return fmt.Sprintf("Edited %s (line %d)", displayPath, lineNum), nil

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 // ExportToMarkdown generates MEMORY.md content from active facts above ExportMinImportance.
@@ -59,7 +61,7 @@ func (s *Store) ExportToFile(ctx context.Context, dir string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(content), 0o644)
+	return atomicfile.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(content), nil)
 }
 
 // ImportFromMarkdown parses a legacy MEMORY.md file and imports its entries as facts.
