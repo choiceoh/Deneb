@@ -1,5 +1,7 @@
 ---
 name: nano-pdf
+version: "1.0.0"
+category: productivity
 description: Edit PDFs with natural-language instructions using the nano-pdf CLI.
 homepage: https://pypi.org/project/nano-pdf/
 metadata:

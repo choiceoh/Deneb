@@ -213,12 +213,13 @@ func (w *Watcher) pollSkillFiles(workspaceDir string, targets []string, state *w
 	}
 }
 
-// scanSkillFiles finds all SKILL.md files in a directory (1 level deep).
+// scanSkillFiles finds all SKILL.md files in a directory (up to 2 levels deep
+// to support both flat and nested category layouts).
 func scanSkillFiles(dir string, known map[string]time.Time) {
 	// Check dir/SKILL.md
 	checkFile(filepath.Join(dir, "SKILL.md"), known)
 
-	// Check dir/*/SKILL.md
+	// Check dir/*/SKILL.md (flat) and dir/*/*/SKILL.md (nested category)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -227,7 +228,20 @@ func scanSkillFiles(dir string, known map[string]time.Time) {
 		if !entry.IsDir() || defaultSkillsWatchIgnored[entry.Name()] {
 			continue
 		}
-		checkFile(filepath.Join(dir, entry.Name(), "SKILL.md"), known)
+		childDir := filepath.Join(dir, entry.Name())
+		checkFile(filepath.Join(childDir, "SKILL.md"), known)
+
+		// Nested category: dir/category/skill/SKILL.md
+		subEntries, err := os.ReadDir(childDir)
+		if err != nil {
+			continue
+		}
+		for _, sub := range subEntries {
+			if !sub.IsDir() || defaultSkillsWatchIgnored[sub.Name()] {
+				continue
+			}
+			checkFile(filepath.Join(childDir, sub.Name(), "SKILL.md"), known)
+		}
 	}
 }
 
@@ -244,7 +258,7 @@ func detectChanges(dir string, known map[string]time.Time) bool {
 	changed := false
 	current := make(map[string]time.Time)
 
-	// Scan current state.
+	// Scan current state (flat + nested category layouts).
 	path := filepath.Join(dir, "SKILL.md")
 	if info, err := os.Stat(path); err == nil {
 		current[path] = info.ModTime()
@@ -256,9 +270,23 @@ func detectChanges(dir string, known map[string]time.Time) bool {
 			if !entry.IsDir() || defaultSkillsWatchIgnored[entry.Name()] {
 				continue
 			}
-			p := filepath.Join(dir, entry.Name(), "SKILL.md")
+			childDir := filepath.Join(dir, entry.Name())
+			p := filepath.Join(childDir, "SKILL.md")
 			if info, err := os.Stat(p); err == nil {
 				current[p] = info.ModTime()
+			}
+			// Nested category: dir/category/skill/SKILL.md
+			subEntries, subErr := os.ReadDir(childDir)
+			if subErr == nil {
+				for _, sub := range subEntries {
+					if !sub.IsDir() || defaultSkillsWatchIgnored[sub.Name()] {
+						continue
+					}
+					sp := filepath.Join(childDir, sub.Name(), "SKILL.md")
+					if info, err := os.Stat(sp); err == nil {
+						current[sp] = info.ModTime()
+					}
+				}
 			}
 		}
 	}

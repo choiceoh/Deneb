@@ -1,5 +1,7 @@
 ---
 name: gog
+version: "1.0.0"
+category: productivity
 description: Google Workspace CLI for Calendar, Drive, Contacts, Sheets, and Docs. Gmail operations are handled natively by the `gmail` tool.
 homepage: https://gogcli.sh
 metadata:

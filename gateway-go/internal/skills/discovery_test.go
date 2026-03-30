@@ -131,3 +131,105 @@ func TestIsPathInside(t *testing.T) {
 		t.Error("expected /a/c NOT inside /a/b")
 	}
 }
+
+func TestDiscoverWorkspaceSkills_categoryFromFrontmatter(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillsDir := filepath.Join(tmpDir, "skills", "my-tool")
+	os.MkdirAll(skillsDir, 0o755)
+	content := "---\nname: my-tool\nversion: \"1.0.0\"\ncategory: devops\ndescription: A tool\n---\n# Body\n"
+	os.WriteFile(filepath.Join(skillsDir, "SKILL.md"), []byte(content), 0o644)
+
+	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Skill.Category != "devops" {
+		t.Errorf("expected category 'devops', got %q", entries[0].Skill.Category)
+	}
+	if entries[0].Skill.Version != "1.0.0" {
+		t.Errorf("expected version '1.0.0', got %q", entries[0].Skill.Version)
+	}
+}
+
+func TestDiscoverWorkspaceSkills_nestedCategoryDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create nested category layout: skills/coding/my-agent/SKILL.md
+	nestedSkillDir := filepath.Join(tmpDir, "skills", "coding", "my-agent")
+	os.MkdirAll(nestedSkillDir, 0o755)
+	content := "---\nname: my-agent\ndescription: An agent skill\n---\n# Body\n"
+	os.WriteFile(filepath.Join(nestedSkillDir, "SKILL.md"), []byte(content), 0o644)
+
+	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Skill.Name != "my-agent" {
+		t.Errorf("expected name 'my-agent', got %q", entries[0].Skill.Name)
+	}
+	// Category should be the parent directory name "coding".
+	if entries[0].Skill.Category != "coding" {
+		t.Errorf("expected category 'coding' from directory, got %q", entries[0].Skill.Category)
+	}
+}
+
+func TestDiscoverWorkspaceSkills_nestedCategoryOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Nested layout with frontmatter category override.
+	nestedSkillDir := filepath.Join(tmpDir, "skills", "tools", "my-cli")
+	os.MkdirAll(nestedSkillDir, 0o755)
+	content := "---\nname: my-cli\ncategory: integration\ndescription: A CLI tool\n---\n"
+	os.WriteFile(filepath.Join(nestedSkillDir, "SKILL.md"), []byte(content), 0o644)
+
+	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	// Frontmatter category "integration" should override directory category "tools".
+	if entries[0].Skill.Category != "integration" {
+		t.Errorf("expected category 'integration' (frontmatter override), got %q", entries[0].Skill.Category)
+	}
+}
+
+func TestDiscoverWorkspaceSkills_mixedFlatAndNested(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Flat skill: skills/flat-skill/SKILL.md
+	flatDir := filepath.Join(tmpDir, "skills", "flat-skill")
+	os.MkdirAll(flatDir, 0o755)
+	os.WriteFile(filepath.Join(flatDir, "SKILL.md"), []byte("---\nname: flat-skill\ndescription: flat\n---\n"), 0o644)
+
+	// Nested skill: skills/devops/nested-skill/SKILL.md
+	nestedDir := filepath.Join(tmpDir, "skills", "devops", "nested-skill")
+	os.MkdirAll(nestedDir, 0o755)
+	os.WriteFile(filepath.Join(nestedDir, "SKILL.md"), []byte("---\nname: nested-skill\ndescription: nested\n---\n"), 0o644)
+
+	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+
+	// Find each by name.
+	var flat, nested *SkillEntry
+	for i := range entries {
+		switch entries[i].Skill.Name {
+		case "flat-skill":
+			flat = &entries[i]
+		case "nested-skill":
+			nested = &entries[i]
+		}
+	}
+	if flat == nil {
+		t.Fatal("flat-skill not found")
+	}
+	if nested == nil {
+		t.Fatal("nested-skill not found")
+	}
+	if flat.Skill.Category != "" {
+		t.Errorf("flat skill should have empty category, got %q", flat.Skill.Category)
+	}
+	if nested.Skill.Category != "devops" {
+		t.Errorf("nested skill should have category 'devops', got %q", nested.Skill.Category)
+	}
+}

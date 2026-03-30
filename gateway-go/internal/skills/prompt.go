@@ -18,6 +18,8 @@ type PromptSkill struct {
 	Name                   string `json:"name"`
 	Description            string `json:"description,omitempty"`
 	FilePath               string `json:"filePath"`
+	Category               string `json:"category,omitempty"`
+	Version                string `json:"version,omitempty"`
 	DisableModelInvocation bool   `json:"disableModelInvocation,omitempty"`
 }
 
@@ -123,6 +125,11 @@ func formatSkillsFull(skills []PromptSkill) string {
 		b.WriteString("\n    <name>")
 		b.WriteString(escapeXml(s.Name))
 		b.WriteString("</name>")
+		if s.Category != "" {
+			b.WriteString("\n    <category>")
+			b.WriteString(escapeXml(s.Category))
+			b.WriteString("</category>")
+		}
 		if s.Description != "" {
 			b.WriteString("\n    <description>")
 			b.WriteString(escapeXml(s.Description))

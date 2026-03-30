@@ -11,6 +11,8 @@ import (
 // SkillSummary is a lightweight representation of a skill in a snapshot.
 type SkillSummary struct {
 	Name        string   `json:"name"`
+	Category    string   `json:"category,omitempty"`
+	Version     string   `json:"version,omitempty"`
 	PrimaryEnv  string   `json:"primaryEnv,omitempty"`
 	RequiredEnv []string `json:"requiredEnv,omitempty"`
 }
@@ -78,7 +80,11 @@ func BuildWorkspaceSkillSnapshot(cfg SnapshotConfig) *FullSkillSnapshot {
 	// Build skill summaries.
 	summaries := make([]SkillSummary, 0, len(filtered))
 	for _, entry := range filtered {
-		s := SkillSummary{Name: entry.Skill.Name}
+		s := SkillSummary{
+			Name:     entry.Skill.Name,
+			Category: entry.Skill.Category,
+			Version:  entry.Skill.Version,
+		}
 		if entry.Metadata != nil {
 			s.PrimaryEnv = entry.Metadata.PrimaryEnv
 			if entry.Metadata.Requires != nil && len(entry.Metadata.Requires.Env) > 0 {
@@ -113,6 +119,8 @@ func entriesToPromptSkills(entries []SkillEntry) []PromptSkill {
 			Name:                   entry.Skill.Name,
 			Description:            entry.Skill.Description,
 			FilePath:               entry.Skill.FilePath,
+			Category:               entry.Skill.Category,
+			Version:                entry.Skill.Version,
 			DisableModelInvocation: disableModel,
 		})
 	}

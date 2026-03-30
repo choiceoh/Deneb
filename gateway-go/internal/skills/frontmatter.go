@@ -18,6 +18,7 @@ type DenebSkillMetadata struct {
 	Emoji      string             `json:"emoji,omitempty"`
 	Homepage   string             `json:"homepage,omitempty"`
 	OS         []string           `json:"os,omitempty"`
+	Tags       []string           `json:"tags,omitempty"`
 	Requires   *SkillRequires     `json:"requires,omitempty"`
 	Install    []SkillInstallSpec `json:"install,omitempty"`
 }
@@ -63,6 +64,50 @@ var (
 // Allowed install spec kinds.
 var allowedInstallKinds = map[string]bool{
 	"brew": true, "node": true, "go": true, "uv": true, "download": true,
+}
+
+// ExtractFrontmatterBlock returns only the frontmatter portion of content
+// (between the first two "---" delimiters), enabling progressive loading
+// where Stage 1 reads only the header for metadata, not the full body.
+// Returns the raw frontmatter block (including delimiters) and the byte
+// offset where the body begins. If no valid frontmatter is found, returns
+// empty string and 0.
+func ExtractFrontmatterBlock(content string) (header string, bodyOffset int) {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		return "", 0
+	}
+
+	// Find opening delimiter.
+	startIdx := -1
+	offset := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "---" {
+			startIdx = i
+			break
+		}
+		if trimmed != "" {
+			return "", 0
+		}
+		offset += len(line) + 1 // +1 for newline
+	}
+	if startIdx < 0 {
+		return "", 0
+	}
+
+	// Find closing delimiter.
+	headerEnd := offset + len(lines[startIdx]) + 1
+	for i := startIdx + 1; i < len(lines); i++ {
+		headerEnd += len(lines[i]) + 1
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "---" {
+			return content[:headerEnd], headerEnd
+		}
+	}
+
+	// No closing delimiter found — treat entire content as frontmatter.
+	return content, len(content)
 }
 
 // ParseFrontmatter extracts frontmatter key-value pairs from a SKILL.md content.
@@ -146,6 +191,9 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 	parseJSONString(obj, "emoji", &meta.Emoji)
 	parseJSONString(obj, "homepage", &meta.Homepage)
 	meta.OS = parseJSONStringList(obj, "os")
+
+	// Parse tags.
+	meta.Tags = parseJSONStringList(obj, "tags")
 
 	// Parse requires.
 	if reqRaw, ok := obj["requires"]; ok {

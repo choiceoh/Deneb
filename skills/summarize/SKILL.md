@@ -1,5 +1,7 @@
 ---
 name: summarize
+version: “1.0.0”
+category: productivity
 description: Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for “transcribe this YouTube/video”).
 homepage: https://summarize.sh
 metadata:

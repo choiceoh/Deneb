@@ -1,5 +1,7 @@
 ---
 name: morning-letter
+version: "1.0.0"
+category: productivity
 description: "매일 아침 모닝레터 생성 및 발송. 날씨, 환율, 구리시세, 일정, 메일 요약을 수집하여 텔레그램용 브리핑 작성. Use when: 모닝레터, morning letter, 아침 브리핑, 오늘의 브리핑, daily briefing."
 metadata: { "deneb": { "emoji": "🌅" } }
 ---

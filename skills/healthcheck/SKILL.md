@@ -1,5 +1,7 @@
 ---
 name: healthcheck
+version: "1.0.0"
+category: devops
 description: Host security hardening and risk-tolerance configuration for Deneb deployments. Use when a user asks for security audits, firewall/SSH/update hardening, risk posture, exposure review, Deneb cron scheduling for periodic checks, or version status checks on a machine running Deneb (laptop, workstation, Pi, VPS).
 ---
 
