@@ -417,7 +417,7 @@ live coverage from that Docker lane.
 
 Manual ACP plain-language thread smoke (not CI):
 
-- `bun scripts/dev/discord-acp-plain-language-smoke.ts --channel <discord-channel-id> ...`
+- `bun scripts/dev/telegram-acp-plain-language-smoke.ts --channel <telegram-channel-id> ...`
 - Keep this script for regression/debug workflows. It may be needed again for ACP thread routing validation, so do not delete it.
 
 Useful env vars:

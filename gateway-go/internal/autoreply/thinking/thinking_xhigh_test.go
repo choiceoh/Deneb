@@ -1,8 +1,8 @@
 package thinking
 
 import (
-	"testing"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"testing"
 )
 
 func TestSupportsBuiltInXHighThinking(t *testing.T) {

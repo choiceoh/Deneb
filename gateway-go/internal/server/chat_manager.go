@@ -2,18 +2,13 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
 // ChatManager groups the chat pipeline and its channel delivery backends.
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type ChatManager struct {
-	chatHandler          *chat.Handler
-	toolDeps             *chat.CoreToolDeps
-	telegramPlug         *telegram.Plugin
-	discordPlug          *discord.Plugin
-	discordSummarizer *discord.Summarizer        // optional; thread titles + reasoning summaries
-	discordWorktrees  *discord.WorktreeManager   // per-thread git worktree isolation
-	discordThreadStore *discord.ThreadStore       // persistent thread→parent mapping
+	chatHandler  *chat.Handler
+	toolDeps     *chat.CoreToolDeps
+	telegramPlug *telegram.Plugin
 }

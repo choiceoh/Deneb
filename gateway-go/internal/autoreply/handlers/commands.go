@@ -51,7 +51,7 @@ type ChatCommandDefinition struct {
 	Category    CommandCategory        `json:"category,omitempty"`
 }
 
-// NativeCommandSpec describes a command for native platform registration (Discord).
+// NativeCommandSpec describes a command for native platform registration.
 type NativeCommandSpec struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`

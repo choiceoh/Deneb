@@ -222,7 +222,7 @@ Use `accountId` to target a specific account on multi-account channels like Tele
   - Session key formats: see [Sessions](/concepts/session) and [Groups](/channels/groups).
 - `target`:
   - `last`: deliver to the last used external channel.
-  - explicit channel: `telegram` / `discord`.
+  - explicit channel: `telegram` / `telegram`.
   - `none` (default): run the heartbeat but **do not deliver** externally.
 - `directPolicy`: controls direct/DM delivery behavior:
   - `allow` (default): allow direct/DM heartbeat delivery.
@@ -243,7 +243,7 @@ Use `accountId` to target a specific account on multi-account channels like Tele
 
 - Heartbeats run in the agent’s main session by default (`agent:<id>:<mainKey>`),
   or `global` when `session.scope = "global"`. Set `session` to override to a
-  specific channel session (Discord/Telegram/etc.).
+  specific channel session (Telegram/etc.).
 - `session` only affects the run context; delivery is controlled by `target` and `to`.
 - To deliver to a specific channel/recipient, set `target` + `to`. With
   `target: "last"`, delivery uses the last external channel for that session.
@@ -301,7 +301,7 @@ channels:
       ops:
         heartbeat:
           showAlerts: false # suppress alerts for the ops account only
-  discord:
+  telegram:
     heartbeat:
       showOk: true
 ```

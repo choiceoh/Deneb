@@ -230,7 +230,7 @@ const channelsGuide = `Channels are messaging surface plugins connecting externa
 - Typing signaler: 5s interval (matches Telegram TTL)
 
 ## Supported Channels
-Telegram (primary, fully optimized), Discord
+Telegram (primary, fully optimized)
 Note: only Telegram is the active deployment target per project philosophy
 
 ## Group Handling
@@ -514,4 +514,3 @@ const cronGuide = `Cron manages scheduled jobs that trigger agent turns at confi
 - Error backoff min 2s between refires; rapid failures don't spam
 - deleteAfterRun=true deletes the job definition after first run (one-shot)
 - Failure alerts have cooldown; consecutive failures within cooldownMs are suppressed`
-

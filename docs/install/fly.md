@@ -9,14 +9,14 @@ read_when:
 
 # Fly.io Deployment
 
-**Goal:** Deneb Gateway running on a [Fly.io](https://fly.io) machine with persistent storage, automatic HTTPS, and Discord/channel access.
+**Goal:** Deneb Gateway running on a [Fly.io](https://fly.io) machine with persistent storage, automatic HTTPS, and Telegram/channel access.
 
 ## What you need
 
 - [flyctl CLI](https://fly.io/docs/hands-on/install-flyctl/) installed
 - Fly.io account (free tier works)
 - Model auth: API key for your chosen model provider
-- Channel credentials: Discord bot token, Telegram token, etc.
+- Channel credentials: Telegram bot token, Telegram token, etc.
 
 ## Beginner quick path
 
@@ -104,7 +104,7 @@ fly secrets set OPENAI_API_KEY=sk-...
 fly secrets set GOOGLE_API_KEY=...
 
 # Channel tokens
-fly secrets set DISCORD_BOT_TOKEN=MTQ...
+fly secrets set TELEGRAM_BOT_TOKEN=MTQ...
 ```
 
 **Notes:**
@@ -132,7 +132,7 @@ You should see:
 
 ```
 [gateway] listening on ws://0.0.0.0:3000 (PID xxx)
-[discord] logged in to discord as xxx
+[telegram] logged in to telegram as xxx
 ```
 
 ## 5) Create config file
@@ -173,11 +173,11 @@ cat > /data/deneb.json << 'EOF'
   "bindings": [
     {
       "agentId": "main",
-      "match": { "channel": "discord" }
+      "match": { "channel": "telegram" }
     }
   ],
   "channels": {
-    "discord": {
+    "telegram": {
       "enabled": true,
       "groupPolicy": "allowlist",
       "guilds": {
@@ -201,12 +201,12 @@ EOF
 
 **Note:** With `DENEB_STATE_DIR=/data`, the config path is `/data/deneb.json`.
 
-**Note:** The Discord token can come from either:
+**Note:** The Telegram token can come from either:
 
-- Environment variable: `DISCORD_BOT_TOKEN` (recommended for secrets)
-- Config file: `channels.discord.token`
+- Environment variable: `TELEGRAM_BOT_TOKEN` (recommended for secrets)
+- Config file: `channels.telegram.token`
 
-If using env var, no need to add token to config. The gateway reads `DISCORD_BOT_TOKEN` automatically.
+If using env var, no need to add token to config. The gateway reads `TELEGRAM_BOT_TOKEN` automatically.
 
 Restart to apply:
 

@@ -66,35 +66,35 @@ func TestResolveThreadBindingsEnabled(t *testing.T) {
 }
 
 func TestResolveThreadBindingSpawnPolicy(t *testing.T) {
-	t.Run("default for non-discord", func(t *testing.T) {
+	t.Run("default for non-telegram", func(t *testing.T) {
 		policy := ResolveThreadBindingSpawnPolicy(nil, nil, "telegram", "default", SpawnKindSubagent)
 		if !policy.Enabled {
 			t.Error("expected enabled by default")
 		}
 		if !policy.SpawnEnabled {
-			t.Error("expected spawn enabled for non-discord")
+			t.Error("expected spawn enabled for non-telegram")
 		}
 	})
 
-	t.Run("default for discord disables spawn", func(t *testing.T) {
-		policy := ResolveThreadBindingSpawnPolicy(nil, nil, "discord", "default", SpawnKindSubagent)
+	t.Run("default for telegram disables spawn", func(t *testing.T) {
+		policy := ResolveThreadBindingSpawnPolicy(nil, nil, "telegram", "default", SpawnKindSubagent)
 		if !policy.Enabled {
 			t.Error("expected enabled by default")
 		}
 		if policy.SpawnEnabled {
-			t.Error("expected spawn disabled for discord by default")
+			t.Error("expected spawn disabled for telegram by default")
 		}
 	})
 
-	t.Run("config override for discord", func(t *testing.T) {
+	t.Run("config override for telegram", func(t *testing.T) {
 		channels := json.RawMessage(`{
-			"discord": {
+			"telegram": {
 				"threadBindings": {
 					"spawnSubagentSessions": true
 				}
 			}
 		}`)
-		policy := ResolveThreadBindingSpawnPolicy(channels, nil, "discord", "default", SpawnKindSubagent)
+		policy := ResolveThreadBindingSpawnPolicy(channels, nil, "telegram", "default", SpawnKindSubagent)
 		if !policy.SpawnEnabled {
 			t.Error("expected spawn enabled from config override")
 		}
@@ -102,7 +102,7 @@ func TestResolveThreadBindingSpawnPolicy(t *testing.T) {
 }
 
 func TestFormatThreadBindingDisabledError(t *testing.T) {
-	msg := FormatThreadBindingDisabledError("discord", "default")
+	msg := FormatThreadBindingDisabledError("telegram", "default")
 	if msg == "" {
 		t.Error("expected non-empty error message")
 	}

@@ -19,7 +19,7 @@ Local mode (default) walks you through:
 - Model and auth setup (OpenAI Code subscription OAuth, Anthropic API key or setup token, plus MiniMax, GLM, Ollama, Moonshot, and AI Gateway options)
 - Workspace location and bootstrap files
 - Gateway settings (port, bind, auth, tailscale)
-- Channels and providers (Telegram, Discord)
+- Channels and providers (Telegram, Telegram)
 - Daemon install (systemd user unit)
 - Health check
 - Skills setup
@@ -63,7 +63,7 @@ It does not install or modify anything on the remote host.
   </Step>
   <Step title="Channels">
     - [Telegram](/channels/telegram): bot token
-    - [Discord](/channels/discord): bot token
+    - [Telegram](/channels/telegram): bot token
     - DM security: default is pairing. First DM sends a code; approve via
       `deneb pairing approve <channel> <code>` or use allowlists.
   </Step>
@@ -244,8 +244,8 @@ Typical fields in `~/.deneb/deneb.json`:
 - `tools.profile` (local onboarding defaults to `"coding"` when unset; existing explicit values are preserved)
 - `gateway.*` (mode, bind, auth, tailscale)
 - `session.dmScope` (local onboarding defaults this to `per-channel-peer` when unset; existing explicit values are preserved)
-- `channels.telegram.botToken`, `channels.discord.token`
-- Channel allowlists (Discord) when you opt in during prompts (names resolve to IDs when possible)
+- `channels.telegram.botToken`, `channels.telegram.token`
+- Channel allowlists (Telegram) when you opt in during prompts (names resolve to IDs when possible)
 - `skills.install.nodeManager`
 - `wizard.lastRunAt`
 - `wizard.lastRunVersion`

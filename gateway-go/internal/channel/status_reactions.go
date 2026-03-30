@@ -18,7 +18,7 @@ type StatusReactionAdapter struct {
 	// SetReaction sets/replaces the current reaction emoji on a message.
 	SetReaction func(emoji string) error
 	// RemoveReaction removes a specific reaction emoji (optional — needed for
-	// Discord-style platforms where reactions are additive).
+	// platforms where reactions are additive).
 	RemoveReaction func(emoji string) error
 }
 
@@ -323,7 +323,6 @@ func (c *StatusReactionController) SetTool(toolName string) {
 	c.scheduleEmoji(emoji, false, false)
 }
 
-
 // SetDone sets the done reaction (terminal state).
 func (c *StatusReactionController) SetDone() {
 	c.finishWithEmoji(c.emojis.Done)
@@ -351,7 +350,6 @@ func (c *StatusReactionController) finishWithEmoji(emoji string) {
 		c.mu.Unlock()
 	})
 }
-
 
 // CloseAfterDrain waits for all enqueued operations (including the terminal
 // emoji from SetDone/SetError) to complete before stopping the run loop.

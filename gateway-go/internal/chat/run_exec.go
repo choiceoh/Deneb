@@ -47,8 +47,8 @@ func executeAgentRun(
 		}
 	}
 	// Sync to Aurora store for compaction tracking.
-	// Skip for Discord: ephemeral coding sessions don't need compaction.
-	if deps.auroraStore != nil && params.Message != "" && !isDiscordDelivery(params.Delivery) {
+	// Queue Aurora observer compaction for non-empty user messages.
+	if deps.auroraStore != nil && params.Message != "" {
 		tokenCount := uint64(estimateTokens(params.Message))
 		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync user message", "error", err)
@@ -140,7 +140,7 @@ func executeAgentRun(
 	var prepWg sync.WaitGroup
 
 	// Knowledge prefetch (parallel).
-	// For Discord, skip memory recall — coding sessions are ephemeral and
+	// Load memory recall for incoming messages and
 	// don't benefit from conversational memory. Vega (project knowledge) still runs.
 	prepWg.Add(1)
 	go func() {
@@ -150,7 +150,7 @@ func executeAgentRun(
 				VegaBackend:  deps.vegaBackend,
 				WorkspaceDir: workspaceDir,
 			}
-			if !isDiscordDelivery(params.Delivery) {
+			{
 				kDeps.MemoryStore = deps.memoryStore
 				kDeps.MemoryEmbedder = deps.memoryEmbedder
 				kDeps.UnifiedStore = deps.unifiedStore
@@ -211,22 +211,14 @@ func executeAgentRun(
 			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
 			UserTimezone: tz,
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
-			append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
-			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:      deliveryChannel(params.Delivery),
+				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
+			RuntimeInfo: prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:     deliveryChannel(params.Delivery),
 		}
 		if apiType == "anthropic" {
-			if spp.Channel == "discord" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(spp))
-			} else {
-				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
-			}
+			systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
 		} else {
-			if spp.Channel == "discord" {
-				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
-			} else {
-				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
-			}
+			systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
 		}
 	}()
 
@@ -271,7 +263,7 @@ func executeAgentRun(
 	}
 
 	// 7. Append knowledge, proactive hint, and Aurora systemAddition to the built system prompt.
-    systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint, auroraSystemAddition)
+	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint, auroraSystemAddition)
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt),
 		"knowledgeChars", len(knowledgeAddition),
@@ -286,15 +278,11 @@ func executeAgentRun(
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
 	// Profile selection reduces per-turn schema token cost:
-	//   discord  → "coding"  (13 tools): file-system and code-execution only.
-	//   telegram → "chat"    (~22 tools): web, email, media, memory — no FS/coding.
-	//              ""        (full, ~39): coding trigger keywords detected in message.
+	//   telegram → "chat" profile for general conversation, or full tools on coding triggers.
 	//   other    → full set (safe default).
 	var tools []llm.Tool
 	if deps.tools != nil {
 		switch deliveryChannel(params.Delivery) {
-		case "discord":
-			tools = deps.tools.LLMToolsForProfile("coding")
 		case "telegram":
 			tools = deps.tools.LLMToolsForProfile(classifyMessageProfile(params.Message))
 		default:
@@ -394,7 +382,7 @@ func executeAgentRun(
 		}
 	}
 
-	// Discord tool progress tracking: send tool start/complete events back to Discord
+	// Tool progress tracking hook for channel integrations
 	// so the ProgressTracker can update the progress embed in real-time.
 	if deps.toolProgressFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
@@ -433,9 +421,9 @@ func executeAgentRun(
 		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
 			// Check for context overflow error.
-			// Skip Aurora compaction for Discord: ephemeral coding sessions
+			// Retry with context compaction when provider reports overflow
 			// don't maintain Aurora state, so compaction would be a no-op.
-			if isContextOverflow(runErr) && attempt < maxCompactionRetries && !isDiscordDelivery(params.Delivery) {
+			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
 				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
 					ctx, deps, params, client, logger,

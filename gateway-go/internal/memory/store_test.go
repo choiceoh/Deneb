@@ -381,7 +381,7 @@ func TestFormatPreviousState(t *testing.T) {
 	}
 
 	m := map[string]string{
-		"user_sees_ai":    "만족도 높음",
+		"user_sees_ai":     "만족도 높음",
 		"adaptation_notes": "간결하게 답변할 것",
 	}
 	result := formatPreviousState(m)
@@ -407,4 +407,3 @@ func TestTruncateRuneSafe(t *testing.T) {
 		t.Errorf("short string should pass through unchanged")
 	}
 }
-

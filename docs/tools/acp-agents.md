@@ -3,7 +3,7 @@ summary: "Use ACP runtime sessions for Pi, Claude Code, Codex, OpenCode, Gemini 
 read_when:
   - Running coding harnesses through ACP
   - Setting up thread-bound ACP sessions on thread-capable channels
-  - Binding Discord channels or Telegram forum topics to persistent ACP sessions
+  - Binding Telegram channels or Telegram forum topics to persistent ACP sessions
   - Troubleshooting ACP backend and plugin wiring
   - Operating /acp commands from chat
 title: "ACP Agents"
@@ -78,14 +78,14 @@ Required feature flags for thread-bound ACP:
 - `acp.enabled=true`
 - `acp.dispatch.enabled` is on by default (set `false` to pause ACP dispatch)
 - Channel-adapter ACP thread-spawn flag enabled (adapter-specific)
-  - Discord: `channels.discord.threadBindings.spawnAcpSessions=true`
+  - Telegram: `channels.telegram.threadBindings.spawnAcpSessions=true`
   - Telegram: `channels.telegram.threadBindings.spawnAcpSessions=true`
 
 ### Thread supporting channels
 
 - Any channel adapter that exposes session/thread binding capability.
 - Current built-in support:
-  - Discord threads/channels
+  - Telegram threads/channels
   - Telegram topics (forum topics in groups/supergroups and DM topics)
 - Plugin channels can add support through the same binding interface.
 
@@ -97,7 +97,7 @@ For non-ephemeral workflows, configure persistent ACP bindings in top-level `bin
 
 - `bindings[].type="acp"` marks a persistent ACP conversation binding.
 - `bindings[].match` identifies the target conversation:
-  - Discord channel or thread: `match.channel="discord"` + `match.peer.id="<channelOrThreadId>"`
+  - Telegram channel or thread: `match.channel="telegram"` + `match.peer.id="<channelOrThreadId>"`
   - Telegram forum topic: `match.channel="telegram"` + `match.peer.id="<chatId>:topic:<topicId>"`
 - `bindings[].agentId` is the owning Deneb agent id.
 - Optional ACP overrides live under `bindings[].acp`:
@@ -154,7 +154,7 @@ Example:
       type: "acp",
       agentId: "codex",
       match: {
-        channel: "discord",
+        channel: "telegram",
         accountId: "default",
         peer: { kind: "channel", id: "222222222222222222" },
       },
@@ -173,7 +173,7 @@ Example:
     {
       type: "route",
       agentId: "main",
-      match: { channel: "discord", accountId: "default" },
+      match: { channel: "telegram", accountId: "default" },
     },
     {
       type: "route",
@@ -182,7 +182,7 @@ Example:
     },
   ],
   channels: {
-    discord: {
+    telegram: {
       guilds: {
         "111111111111111111": {
           channels: {
@@ -311,7 +311,7 @@ Notes:
 - Do not require `streamTo: "parent"` for the basic gate. That path depends on
   requester/session capabilities and is a separate integration check.
 - Treat thread-bound `mode: "session"` testing as a second, richer integration
-  pass from a real Discord thread or Telegram topic.
+  pass from a real Telegram thread or Telegram topic.
 
 ## Sandbox compatibility
 
@@ -374,7 +374,7 @@ Notes:
 
 - On non-thread binding surfaces, default behavior is effectively `off`.
 - Thread-bound spawn requires channel policy support:
-  - Discord: `channels.discord.threadBindings.spawnAcpSessions=true`
+  - Telegram: `channels.telegram.threadBindings.spawnAcpSessions=true`
   - Telegram: `channels.telegram.threadBindings.spawnAcpSessions=true`
 
 ## ACP controls
@@ -477,7 +477,7 @@ Core ACP baseline:
 }
 ```
 
-Thread binding config is channel-adapter specific. Example for Discord:
+Thread binding config is channel-adapter specific. Example for Telegram:
 
 ```json5
 {
@@ -489,7 +489,7 @@ Thread binding config is channel-adapter specific. Example for Discord:
     },
   },
   channels: {
-    discord: {
+    telegram: {
       threadBindings: {
         enabled: true,
         spawnAcpSessions: true,
@@ -501,7 +501,7 @@ Thread binding config is channel-adapter specific. Example for Discord:
 
 If thread-bound ACP spawn does not work, verify the adapter feature flag first:
 
-- Discord: `channels.discord.threadBindings.spawnAcpSessions=true`
+- Telegram: `channels.telegram.threadBindings.spawnAcpSessions=true`
 
 See [Configuration Reference](/gateway/configuration-reference).
 

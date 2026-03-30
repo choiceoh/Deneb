@@ -12,9 +12,9 @@ import (
 
 func TestParseModelID(t *testing.T) {
 	tests := []struct {
-		input      string
-		wantProv   string
-		wantModel  string
+		input     string
+		wantProv  string
+		wantModel string
 	}{
 		{"google/gemini-3.0-flash", "google", "gemini-3.0-flash"},
 		{"zai/glm-5-turbo", "zai", "glm-5-turbo"},

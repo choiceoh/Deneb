@@ -66,11 +66,11 @@ type runDeps struct {
 	mediaSendFn      MediaSendFunc              // optional; delivers files to originating channel
 	typingFn         TypingFunc                 // optional; sends typing indicator during run
 	reactionFn       ReactionFunc               // optional; sets emoji reaction for status phases
-	removeReactionFn ReactionFunc               // optional; removes emoji reaction (Discord additive)
+	removeReactionFn ReactionFunc               // optional; removes emoji reaction
 	// channelUploadLimitFn returns the max file upload size for a channel ID.
 	// Returns 0 if no limit is registered (tool applies its own default).
 	channelUploadLimitFn func(channelID string) int64 // optional
-	toolProgressFn       ToolProgressFunc             // optional; reports tool events to Discord
+	toolProgressFn       ToolProgressFunc             // optional; reports tool events to channel integrations
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
@@ -93,11 +93,10 @@ type runDeps struct {
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
-// e.g. "telegram:7074071666" → "te:7074071666", "discord:123" → "dc:123"
+// e.g. "telegram:7074071666" → "te:7074071666"
 func abbreviateSession(key string) string {
 	prefixes := [][2]string{
 		{"telegram:", "te:"},
-		{"discord:", "dc:"},
 	}
 	for _, p := range prefixes {
 		if len(key) > len(p[0]) && key[:len(p[0])] == p[0] {
@@ -209,14 +208,6 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 				defer cancel()
 				return deps.reactionFn(rctx, delivery, emoji)
 			},
-		}
-		// Discord uses additive reactions: need RemoveReaction to clear previous phase.
-		if deliveryChannel(params.Delivery) == "discord" && deps.removeReactionFn != nil {
-			adapter.RemoveReaction = func(emoji string) error {
-				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-				defer cancel()
-				return deps.removeReactionFn(rctx, delivery, emoji)
-			}
 		}
 		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
 			Enabled: true,

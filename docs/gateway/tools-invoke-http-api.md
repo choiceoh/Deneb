@@ -82,7 +82,7 @@ You can customize this deny list via `gateway.tools`:
 
 To help group policies resolve context, you can optionally set:
 
-- `x-deneb-message-channel: <channel>` (example: `telegram`, `discord`)
+- `x-deneb-message-channel: <channel>` (example: `telegram`, `telegram`)
 - `x-deneb-account-id: <accountId>` (when multiple accounts exist)
 
 ## Responses

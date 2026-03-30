@@ -81,13 +81,13 @@ Profiles:
 - `messaging`: `group:messaging`, `sessions_list`, `sessions_history`, `sessions_send`, `session_status`
 - `full`: no restriction (same as unset)
 
-Example (messaging-only by default, allow Discord tools too):
+Example (messaging-only by default, allow Telegram tools too):
 
 ```json5
 {
   tools: {
     profile: "messaging",
-    allow: ["discord"],
+    allow: ["telegram"],
   },
 }
 ```
@@ -478,12 +478,12 @@ For full behavior, limits, config, and examples, see [PDF tool](/tools/pdf).
 
 ### `message`
 
-Send messages and channel actions across Telegram and Discord.
+Send messages and channel actions across Telegram.
 
 Core actions:
 
 - `send` (text + optional media)
-- `poll` (Telegram/Discord polls)
+- `poll` (Telegram polls)
 - `react` / `reactions` / `read` / `edit` / `delete`
 - `pin` / `unpin` / `list-pins`
 - `permissions`
@@ -564,7 +564,7 @@ Notes:
   - If `thread: true` and `mode` is omitted, mode defaults to `session`.
   - `mode: "session"` requires `thread: true`.
   - If `runTimeoutSeconds` is omitted, Deneb uses `agents.defaults.subagents.runTimeoutSeconds` when set; otherwise timeout defaults to `0` (no timeout).
-  - Discord thread-bound flows depend on `session.threadBindings.*` and `channels.discord.threadBindings.*`.
+  - Telegram thread-bound flows depend on `session.threadBindings.*` and `channels.telegram.threadBindings.*`.
   - Reply format includes `Status`, `Result`, and compact stats.
   - `Result` is the assistant completion text; if missing, the latest `toolResult` is used as fallback.
 - Manual completion-mode spawns send directly first, with queue fallback and retry on transient failures (`status: "ok"` means run finished, not that announce delivered).

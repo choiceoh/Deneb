@@ -50,7 +50,7 @@ Use `channels.modelByChannel` to pin specific channel IDs to a model. Values acc
 {
   channels: {
     modelByChannel: {
-      discord: {
+      telegram: {
         "123456789012345678": "anthropic/claude-opus-4-6",
       },
       telegram: {
@@ -148,12 +148,12 @@ Use `channels.defaults` for shared group-policy and heartbeat behavior across pr
 - Telegram stream previews use `sendMessage` + `editMessageText` (works in direct and group chats).
 - Retry policy: see [Retry policy](/concepts/retry).
 
-### Discord
+### Telegram
 
 ```json5
 {
   channels: {
-    discord: {
+    telegram: {
       enabled: true,
       token: "your-bot-token",
       mediaMaxMb: 8,
@@ -201,7 +201,7 @@ Use `channels.defaults` for shared group-policy and heartbeat behavior across pr
       historyLimit: 20,
       textChunkLimit: 2000,
       chunkMode: "length", // length | newline
-      streaming: "off", // off | partial | block | progress (progress maps to partial on Discord)
+      streaming: "off", // off | partial | block | progress (progress maps to partial on Telegram)
       maxLinesPerMessage: 17,
       ui: {
         components: {
@@ -240,27 +240,27 @@ Use `channels.defaults` for shared group-policy and heartbeat behavior across pr
 }
 ```
 
-- Token: `channels.discord.token`, with `DISCORD_BOT_TOKEN` as fallback for the default account.
-- Direct outbound calls that provide an explicit Discord `token` use that token for the call; account retry/policy settings still come from the selected account in the active runtime snapshot.
-- Optional `channels.discord.defaultAccount` overrides default account selection when it matches a configured account id.
+- Token: `channels.telegram.token`, with `TELEGRAM_BOT_TOKEN` as fallback for the default account.
+- Direct outbound calls that provide an explicit Telegram `token` use that token for the call; account retry/policy settings still come from the selected account in the active runtime snapshot.
+- Optional `channels.telegram.defaultAccount` overrides default account selection when it matches a configured account id.
 - Use `user:<id>` (DM) or `channel:<id>` (guild channel) for delivery targets; bare numeric IDs are rejected.
 - Guild slugs are lowercase with spaces replaced by `-`; channel keys use the slugged name (no `#`). Prefer guild IDs.
 - Bot-authored messages are ignored by default. `allowBots: true` enables them; use `allowBots: "mentions"` to only accept bot messages that mention the bot (own messages still filtered).
-- `channels.discord.guilds.<id>.ignoreOtherMentions` (and channel overrides) drops messages that mention another user or role but not the bot (excluding @everyone/@here).
+- `channels.telegram.guilds.<id>.ignoreOtherMentions` (and channel overrides) drops messages that mention another user or role but not the bot (excluding @everyone/@here).
 - `maxLinesPerMessage` (default 17) splits tall messages even when under 2000 chars.
-- `channels.discord.threadBindings` controls Discord thread-bound routing:
-  - `enabled`: Discord override for thread-bound session features (`/focus`, `/unfocus`, `/agents`, `/session idle`, `/session max-age`, and bound delivery/routing)
-  - `idleHours`: Discord override for inactivity auto-unfocus in hours (`0` disables)
-  - `maxAgeHours`: Discord override for hard max age in hours (`0` disables)
+- `channels.telegram.threadBindings` controls Telegram thread-bound routing:
+  - `enabled`: Telegram override for thread-bound session features (`/focus`, `/unfocus`, `/agents`, `/session idle`, `/session max-age`, and bound delivery/routing)
+  - `idleHours`: Telegram override for inactivity auto-unfocus in hours (`0` disables)
+  - `maxAgeHours`: Telegram override for hard max age in hours (`0` disables)
   - `spawnSubagentSessions`: opt-in switch for `sessions_spawn({ thread: true })` auto thread creation/binding
 - Top-level `bindings[]` entries with `type: "acp"` configure persistent ACP bindings for channels and threads (use channel/thread id in `match.peer.id`). Field semantics are shared in [ACP Agents](/tools/acp-agents#channel-specific-settings).
-- `channels.discord.ui.components.accentColor` sets the accent color for Discord components v2 containers.
-- `channels.discord.voice` enables Discord voice channel conversations and optional auto-join + TTS overrides.
-- `channels.discord.voice.daveEncryption` and `channels.discord.voice.decryptionFailureTolerance` pass through to `@discordjs/voice` DAVE options (`true` and `24` by default).
+- `channels.telegram.ui.components.accentColor` sets the accent color for Telegram components v2 containers.
+- `channels.telegram.voice` enables Telegram voice channel conversations and optional auto-join + TTS overrides.
+- `channels.telegram.voice.daveEncryption` and `channels.telegram.voice.decryptionFailureTolerance` pass through to `@telegramjs/voice` DAVE options (`true` and `24` by default).
 - Deneb additionally attempts voice receive recovery by leaving/rejoining a voice session after repeated decrypt failures.
-- `channels.discord.streaming` is the canonical stream mode key. Legacy `streamMode` and boolean `streaming` values are auto-migrated.
-- `channels.discord.autoPresence` maps runtime availability to bot presence (healthy => online, degraded => idle, exhausted => dnd) and allows optional status text overrides.
-- `channels.discord.dangerouslyAllowNameMatching` re-enables mutable name/tag matching (break-glass compatibility mode).
+- `channels.telegram.streaming` is the canonical stream mode key. Legacy `streamMode` and boolean `streaming` values are auto-migrated.
+- `channels.telegram.autoPresence` maps runtime availability to bot presence (healthy => online, degraded => idle, exhausted => dnd) and allows optional status text overrides.
+- `channels.telegram.dangerouslyAllowNameMatching` re-enables mutable name/tag matching (break-glass compatibility mode).
 
 **Reaction notification modes:** `off` (none), `own` (bot's messages, default), `all` (all messages), `allowlist` (from `guilds.<id>.users` on all messages).
 
@@ -297,7 +297,7 @@ Run multiple accounts per channel (each with its own `accountId`):
 
 ### Group chat mention gating
 
-Group messages default to **require mention** (metadata mention or safe regex patterns). Applies to Telegram and Discord group chats.
+Group messages default to **require mention** (metadata mention or safe regex patterns). Applies to Telegram group chats.
 
 **Mention types:**
 
@@ -335,7 +335,7 @@ Group messages default to **require mention** (metadata mention or safe regex pa
 
 Resolution: per-DM override → provider default → no limit (all retained).
 
-Supported: `telegram`, `discord`.
+Supported: `telegram`, `telegram`.
 
 ### Commands (chat command handling)
 
@@ -351,7 +351,7 @@ Supported: `telegram`, `discord`.
     restart: false, // allow /restart + gateway restart tool
     allowFrom: {
       "*": ["user1"],
-      discord: ["user:123"],
+      telegram: ["user:123"],
     },
     useAccessGroups: true,
   },
@@ -361,8 +361,8 @@ Supported: `telegram`, `discord`.
 <Accordion title="Command details">
 
 - Text commands must be **standalone** messages with leading `/`.
-- `native: "auto"` turns on native commands for Discord/Telegram.
-- Override per channel: `channels.discord.commands.native` (bool or `"auto"`). `false` clears previously registered commands.
+- `native: "auto"` turns on native commands for Telegram.
+- Override per channel: `channels.telegram.commands.native` (bool or `"auto"`). `false` clears previously registered commands.
 - `channels.telegram.customCommands` adds extra Telegram bot menu entries.
 - `bash: true` enables `! <cmd>` for host shell. Requires `tools.elevated.enabled` and sender in `tools.elevated.allowFrom.<channel>`.
 - `config: true` enables `/config` (reads/writes `deneb.json`). For gateway `chat.send` clients, persistent `/config set|unset` writes also require `operator.admin`; read-only `/config show` stays available to normal write-scoped operator clients.
@@ -607,7 +607,7 @@ Periodic heartbeat runs.
         session: "main",
         to: "+15555550123",
         directPolicy: "allow", // allow (default) | block
-        target: "none", // default: none | options: last | telegram | discord
+        target: "none", // default: none | options: last | telegram | telegram
         prompt: "Read HEARTBEAT.md if it exists...",
         ackMaxChars: 300,
         suppressToolErrorWarnings: false,
@@ -720,7 +720,7 @@ See [Session Pruning](/concepts/session-pruning) for behavior details.
 ```
 
 - Non-Telegram channels require explicit `*.blockStreaming: true` to enable block replies.
-- Channel overrides: `channels.<channel>.blockStreamingCoalesce` (and per-account variants). Discord defaults `minChars: 1500`.
+- Channel overrides: `channels.<channel>.blockStreamingCoalesce` (and per-account variants). Telegram defaults `minChars: 1500`.
 - `humanDelay`: randomized pause between block replies. `natural` = 800–2500ms. Per-agent override: `agents.list[].humanDelay`.
 
 See [Streaming](/concepts/streaming) for behavior + chunking details.
@@ -833,7 +833,7 @@ Optional sandboxing for the embedded agent. See [Sandboxing](/gateway/sandboxing
           "sessions_spawn",
           "session_status",
         ],
-        deny: ["browser", "canvas", "nodes", "cron", "discord", "gateway"],
+        deny: ["browser", "canvas", "nodes", "cron", "telegram", "gateway"],
       },
     },
   },
@@ -1143,7 +1143,7 @@ For `type: "acp"` entries, Deneb resolves by exact conversation identity (`match
             "sessions_spawn",
             "session_status",
             "telegram",
-            "discord",
+            "telegram",
             "gateway",
           ],
           deny: [
@@ -1181,7 +1181,7 @@ See [Multi-Agent Sandbox & Tools](/tools/multi-agent-sandbox-tools) for preceden
     scope: "per-sender",
     dmScope: "main", // main | per-peer | per-channel-peer | per-account-channel-peer
     identityLinks: {
-      alice: ["telegram:123456789", "discord:987654321012345678"],
+      alice: ["telegram:123456789", "telegram:987654321012345678"],
     },
     reset: {
       mode: "daily", // daily | idle
@@ -1213,7 +1213,7 @@ See [Multi-Agent Sandbox & Tools](/tools/multi-agent-sandbox-tools) for preceden
     mainKey: "main", // legacy (runtime always uses "main")
     agentToAgent: { maxPingPongTurns: 5 },
     sendPolicy: {
-      rules: [{ action: "deny", match: { channel: "discord", chatType: "group" } }],
+      rules: [{ action: "deny", match: { channel: "telegram", chatType: "group" } }],
       default: "allow",
     },
   },
@@ -1244,7 +1244,7 @@ See [Multi-Agent Sandbox & Tools](/tools/multi-agent-sandbox-tools) for preceden
   - `maxDiskBytes`: optional sessions-directory disk budget. In `warn` mode it logs warnings; in `enforce` mode it removes oldest artifacts/sessions first.
   - `highWaterBytes`: optional target after budget cleanup. Defaults to `80%` of `maxDiskBytes`.
 - **`threadBindings`**: global defaults for thread-bound session features.
-  - `enabled`: master default switch (providers can override; Discord uses `channels.discord.threadBindings.enabled`)
+  - `enabled`: master default switch (providers can override; Telegram uses `channels.telegram.threadBindings.enabled`)
   - `idleHours`: default inactivity auto-unfocus in hours (`0` disables; providers can override)
   - `maxAgeHours`: default hard max age in hours (`0` disables; providers can override)
 
@@ -1268,14 +1268,14 @@ See [Multi-Agent Sandbox & Tools](/tools/multi-agent-sandbox-tools) for preceden
       drop: "summarize", // old | new | summarize
       byChannel: {
         telegram: "collect",
-        discord: "collect",
+        telegram: "collect",
       },
     },
     inbound: {
       debounceMs: 2000, // 0 disables
       byChannel: {
         telegram: 5000,
-        discord: 1500,
+        telegram: 1500,
       },
     },
   },
@@ -1306,7 +1306,7 @@ Variables are case-insensitive. `{think}` is an alias for `{thinkingLevel}`.
 - Per-channel overrides: `channels.<channel>.ackReaction`, `channels.<channel>.accounts.<id>.ackReaction`.
 - Resolution order: account → channel → `messages.ackReaction` → identity fallback.
 - Scope: `group-mentions` (default), `group-all`, `direct`, `all`.
-- `removeAckAfterReply`: removes ack after reply (Discord/Telegram only).
+- `removeAckAfterReply`: removes ack after reply (Telegram only).
 
 ### Inbound debounce
 
@@ -1410,7 +1410,7 @@ Controls elevated (host) exec access:
       enabled: true,
       allowFrom: {
         telegram: ["123456789"],
-        discord: ["1234567890123", "987654321098765432"],
+        telegram: ["1234567890123", "987654321098765432"],
       },
     },
   },
@@ -2614,7 +2614,7 @@ Template placeholders expanded in `tools.media.models[].args`:
 | `{{GroupMembers}}` | Group members preview (best effort)               |
 | `{{SenderName}}`   | Sender display name (best effort)                 |
 | `{{SenderE164}}`   | Sender phone number (best effort)                 |
-| `{{Provider}}`     | Provider hint (telegram, discord, etc.) |
+| `{{Provider}}`     | Provider hint (telegram, telegram, etc.) |
 
 ---
 

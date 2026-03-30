@@ -147,7 +147,7 @@ func RunAgent(
 		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 
 		// Extract raw thinking text from this turn's thinking blocks.
-		// Passed to OnToolStart so Discord can summarize it via lightweight LLM.
+		// Passed to OnToolStart so channel integrations can summarize it via lightweight LLM.
 		turnReason := extractThinkingText(turnRes.contentBlocks)
 
 		// Execute tools in parallel and build tool_result blocks.
@@ -341,7 +341,7 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 // extractThinkingText returns the raw reasoning text from a turn's content
 // blocks. Prefers thinking blocks (Anthropic extended thinking), but falls
 // back to the last text block (OpenAI-compatible models that explain their
-// reasoning in plain text before tool calls). The caller (e.g. Discord
+// reasoning in plain text before tool calls). The caller (e.g. channel adapters
 // ProgressTracker) is responsible for summarizing it.
 func extractThinkingText(blocks []llm.ContentBlock) string {
 	for i := len(blocks) - 1; i >= 0; i-- {

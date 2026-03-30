@@ -82,43 +82,43 @@ To modify a generated file: edit the source or generator, run the `make` target,
 
 ---
 
-## Discord Coding Channel — Architecture & Design Direction
+## Telegram Coding Channel — Architecture & Design Direction
 
-Discord is the **coding-specialized agent I/O channel**. Unlike Telegram (conversation-focused), Discord is purpose-built for vibe coding: the user describes what they want in natural Korean, and the agent does all the coding autonomously.
+Telegram is the **coding-specialized agent I/O channel**. Unlike Telegram (conversation-focused), Telegram is purpose-built for vibe coding: the user describes what they want in natural Korean, and the agent does all the coding autonomously.
 
 ### Critical Context: The User is a Vibe Coder
 
-The sole user **does not read or write code**. All development is done through natural language instructions to the AI agent. This is the single most important design constraint for the Discord channel:
+The sole user **does not read or write code**. All development is done through natural language instructions to the AI agent. This is the single most important design constraint for the Telegram channel:
 
-- **Never show raw code, diffs, or source files** in Discord messages. The user cannot read them.
+- **Never show raw code, diffs, or source files** in Telegram messages. The user cannot read them.
 - **Always explain in Korean** what was changed and why, in non-technical terms.
 - **Automate verification** — the user cannot manually run builds or tests. The system must do it automatically and report results visually.
-- **One-click workflows** — use Discord buttons for next steps (commit, push, fix, etc.) instead of requiring the user to type commands.
+- **One-click workflows** — use Telegram buttons for next steps (commit, push, fix, etc.) instead of requiring the user to type commands.
 
 ### File Map
 
 | File | Purpose |
 |------|---------|
-| `internal/discord/bot.go` | Gateway WebSocket connection, heartbeating, event dispatch |
-| `internal/discord/client.go` | Discord REST API client (send/edit messages, files, interactions) |
-| `internal/discord/config.go` | Channel config (bot token, guild, allowed channels, workspaces) |
-| `internal/discord/plugin.go` | `channel.Plugin` implementation, lifecycle, slash command registration |
-| `internal/discord/types.go` | Discord API types (Message, Embed, Component, Interaction, etc.) |
-| `internal/discord/components.go` | Button builders: context-aware action buttons per outcome type |
-| `internal/discord/embed_format.go` | Embed builders: progress, test results, errors, dashboard, help |
-| `internal/discord/format.go` | Reply formatter: code block collapsing, chunking, file extraction |
-| `internal/discord/progress.go` | ProgressTracker: edits a single embed in-place for real-time tool status |
-| `internal/discord/reply_analysis.go` | Reply outcome classifier + Korean error translation for vibe coders |
-| `internal/discord/slash_commands.go` | Application command registration (vibe-coder commands only) |
-| `internal/discord/thread_namer.go` | Auto thread naming via local sglang LLM |
-| `internal/discord/send.go` | SendText helper with auto-chunking |
-| `internal/server/inbound_discord.go` | Inbound message processing, quick commands, workspace context injection |
+| `internal/telegram/bot.go` | Gateway WebSocket connection, heartbeating, event dispatch |
+| `internal/telegram/client.go` | Telegram REST API client (send/edit messages, files, interactions) |
+| `internal/telegram/config.go` | Channel config (bot token, guild, allowed channels, workspaces) |
+| `internal/telegram/plugin.go` | `channel.Plugin` implementation, lifecycle, slash command registration |
+| `internal/telegram/types.go` | Telegram API types (Message, Embed, Component, Interaction, etc.) |
+| `internal/telegram/components.go` | Button builders: context-aware action buttons per outcome type |
+| `internal/telegram/embed_format.go` | Embed builders: progress, test results, errors, dashboard, help |
+| `internal/telegram/format.go` | Reply formatter: code block collapsing, chunking, file extraction |
+| `internal/telegram/progress.go` | ProgressTracker: edits a single embed in-place for real-time tool status |
+| `internal/telegram/reply_analysis.go` | Reply outcome classifier + Korean error translation for vibe coders |
+| `internal/telegram/slash_commands.go` | Application command registration (vibe-coder commands only) |
+| `internal/telegram/thread_namer.go` | Auto thread naming via local sglang LLM |
+| `internal/telegram/send.go` | SendText helper with auto-chunking |
+| `internal/server/inbound_telegram.go` | Inbound message processing, quick commands, workspace context injection |
 | `internal/server/server_chat.go` | Reply pipeline: formatting → buttons → error translation → auto-verify |
 | `internal/chat/prompt/system_prompt.go` | `BuildCodingSystemPrompt()` — vibe coder agent instructions |
 
-### Reply Pipeline (agent response → Discord message)
+### Reply Pipeline (agent response → Telegram message)
 
-The reply pipeline is a decorator chain in `server_chat.go:wireDiscordChatHandler()`:
+The reply pipeline is a decorator chain in `server_chat.go:wireTelegramChatHandler()`:
 
 1. **ProgressTracker finalize** — marks all tool steps as done, sends final progress embed
 2. **Dedup** — 10-second cache prevents duplicate sends
@@ -130,7 +130,7 @@ The reply pipeline is a decorator chain in `server_chat.go:wireDiscordChatHandle
    - Error Korean translation embed (when errors/failures detected)
    - Auto build/test verification embed (when code changes detected)
 
-### Quick Commands (Discord-only)
+### Quick Commands (Telegram-only)
 
 Only 4 commands exist. All developer-focused commands (file, grep, run, blame, stash, etc.) were **intentionally removed** because the user is a vibe coder:
 
@@ -143,9 +143,9 @@ Only 4 commands exist. All developer-focused commands (file, grep, run, blame, s
 
 ### Button Interaction Flow
 
-Discord buttons embed `action:sessionKey` in their `custom_id`. When clicked:
+Telegram buttons embed `action:sessionKey` in their `custom_id`. When clicked:
 
-1. `HandleDiscordInteraction` parses the action
+1. `HandleTelegramInteraction` parses the action
 2. Most actions (test, commit, fix, revert, details) dispatch an agent message via `chat.send`
 3. `push` runs git push inline for instant feedback
 4. `new` clears the session and starts fresh
@@ -167,18 +167,18 @@ The coding system prompt explicitly instructs the agent:
 
 ### Design Principles for Future Work
 
-1. **Zero code exposure** — if the user sees raw code in Discord, something is wrong. Fix the formatter or system prompt.
+1. **Zero code exposure** — if the user sees raw code in Telegram, something is wrong. Fix the formatter or system prompt.
 2. **Korean first** — all user-facing text, embeds, buttons, and error explanations must be in Korean.
 3. **Automate everything** — the user cannot verify anything manually. Build, test, lint, and commit verification must happen automatically.
 4. **Buttons over commands** — prefer one-click buttons for next steps. Typing commands is a fallback.
 5. **Explain, don't show** — "로그인 검증 로직을 추가했습니다" is correct. Showing the code is not.
 6. **Visual dashboards** — use embeds with fields, colors, and emojis for status. Never dump raw terminal output.
-7. **Narrow scope** — Discord is for coding tasks only. Conversation, casual chat, and general Q&A belong on Telegram. Don't add features that blur this boundary.
+7. **Narrow scope** — Telegram is for coding tasks only. Conversation, casual chat, and general Q&A belong on Telegram. Don't add features that blur this boundary.
 8. **Do not re-add developer commands** — commands like /file, /grep, /run, /blame, /stash, /checkout were intentionally removed. The agent handles all code operations through natural language.
 
 ### Adding New Features Checklist
 
-When extending the Discord channel:
+When extending the Telegram channel:
 - [ ] Does the feature respect the vibe coder constraint? (no code shown, Korean explanations)
 - [ ] Are follow-up actions provided as buttons?
 - [ ] Is error handling translated to Korean?

@@ -63,7 +63,7 @@ sudo -i -u deneb
 The post-install script will guide you through:
 
 1. **Onboarding wizard**: Configure Deneb settings
-2. **Provider login**: Connect WhatsApp/Telegram/Discord/Signal
+2. **Provider login**: Connect WhatsApp/Telegram/Signal
 3. **Gateway testing**: Verify the installation
 4. **Tailscale setup**: Connect to your VPN mesh
 

@@ -1,8 +1,8 @@
 package queue
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"sync"
 	"testing"
 	"time"

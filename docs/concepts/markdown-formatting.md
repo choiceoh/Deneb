@@ -19,7 +19,7 @@ stay consistent across channels.
 - **Consistency:** one parse step, multiple renderers.
 - **Safe chunking:** split text before rendering so inline formatting never
   breaks across chunks.
-- **Channel fit:** map the same IR to Telegram HTML and Discord Markdown
+- **Channel fit:** map the same IR to Telegram HTML and Telegram Markdown
   without re-parsing Markdown.
 
 ## Pipeline
@@ -32,7 +32,7 @@ stay consistent across channels.
    - Inline formatting does not split across chunks; spans are sliced per chunk.
 3. **Render per channel**
    - **Telegram:** HTML tags (`<b>`, `<i>`, `<s>`, `<code>`, `<pre><code>`, `<a href>`).
-   - **Discord:** standard Markdown (bold/italic/strike/code/spoiler), links as `[label](url)`.
+   - **Telegram:** standard Markdown (bold/italic/strike/code/spoiler), links as `[label](url)`.
 
 ## IR example
 
@@ -54,7 +54,7 @@ IR (schematic):
 
 ## Where it is used
 
-- Telegram and Discord outbound adapters render from the IR.
+- Telegram outbound adapters render from the IR.
 
 ## Table handling
 
@@ -69,7 +69,7 @@ Config keys:
 
 ```yaml
 channels:
-  discord:
+  telegram:
     markdown:
       tables: code
     accounts:
@@ -94,11 +94,11 @@ If you need more on chunking behavior across channels, see
 ## Link policy
 
 - **Telegram:** `[label](url)` -> `<a href="url">label</a>` (HTML parse mode).
-- **Discord:** `[label](url)` passes through as standard Markdown links.
+- **Telegram:** `[label](url)` passes through as standard Markdown links.
 
 ## Spoilers
 
-Spoiler markers (`||spoiler||`) are supported by Discord natively and are
+Spoiler markers (`||spoiler||`) are supported by Telegram natively and are
 rendered as spoiler tags.
 
 ## How to add or update a channel formatter

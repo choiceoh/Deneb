@@ -128,8 +128,8 @@ func TestIsTableLine(t *testing.T) {
 		{"| single |", true},
 		{"not a table", false},
 		{"|", false},
-		{"| a | b", false},  // no trailing pipe
-		{"a | b |", false},  // no leading pipe
+		{"| a | b", false}, // no trailing pipe
+		{"a | b |", false}, // no leading pipe
 		{"", false},
 	}
 	for _, tt := range tests {

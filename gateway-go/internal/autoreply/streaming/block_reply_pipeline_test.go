@@ -1,9 +1,9 @@
 package streaming
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"sync"
 	"testing"
 	"time"

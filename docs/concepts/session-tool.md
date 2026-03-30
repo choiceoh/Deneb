@@ -47,7 +47,7 @@ Row shape (JSON):
 
 - `key`: session key (string)
 - `kind`: `main | group | cron | hook | node | other`
-- `channel`: `telegram | discord | internal | unknown`
+- `channel`: `telegram | telegram | internal | unknown`
 - `displayName` (group display label if available)
 - `updatedAt` (ms)
 - `sessionId`
@@ -140,7 +140,7 @@ Policy-based blocking by channel/chat type (not per session id).
     "sendPolicy": {
       "rules": [
         {
-          "match": { "channel": "discord", "chatType": "group" },
+          "match": { "channel": "telegram", "chatType": "group" },
           "action": "deny"
         }
       ],
@@ -194,7 +194,7 @@ Behavior:
 - Sub-agents default to the full tool set **minus session tools** (configurable via `tools.subagents.tools`).
 - Sub-agents are not allowed to call `sessions_spawn` (no sub-agent → sub-agent spawning).
 - Always non-blocking: returns `{ status: "accepted", runId, childSessionKey }` immediately.
-- With `thread=true`, channel plugins can bind delivery/routing to a thread target (Discord support is controlled by `session.threadBindings.*` and `channels.discord.threadBindings.*`).
+- With `thread=true`, channel plugins can bind delivery/routing to a thread target (Telegram support is controlled by `session.threadBindings.*` and `channels.telegram.threadBindings.*`).
 - After completion, Deneb runs a sub-agent **announce step** and posts the result to the requester chat channel.
   - If the assistant final reply is empty, the latest `toolResult` from sub-agent history is included as `Result`.
 - Reply exactly `ANNOUNCE_SKIP` during the announce step to stay silent.

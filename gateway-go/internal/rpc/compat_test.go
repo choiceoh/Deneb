@@ -5,7 +5,6 @@ package rpc
 
 import (
 	"encoding/json"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
@@ -20,6 +19,7 @@ import (
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 )
 
 // --- Type aliases ---
@@ -62,50 +62,108 @@ type AuroraChannelDeps = handleraurorachannel.Deps
 
 // --- Registration wrappers ---
 
-func RegisterChatMethods(d *Dispatcher, deps ChatDeps)               { d.RegisterDomain(handlerchat.Methods(deps)) }
-func RegisterChatBtwMethods(d *Dispatcher, deps ChatBtwDeps)          { d.RegisterDomain(handlerchat.BtwMethods(deps)) }
-func RegisterSessionMethods(d *Dispatcher, deps SessionDeps)          { d.RegisterDomain(handlersession.Methods(deps)) }
-func RegisterSessionRepairMethods(d *Dispatcher, _ SessionDeps)       {} // no-op
-func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps)  { d.RegisterDomain(handlersession.ExecMethods(deps)) }
-func RegisterExtendedMethods(d *Dispatcher, deps ExtendedDeps)        { d.RegisterDomain(handleragent.ExtendedMethods(deps)) }
-func RegisterAgentsMethods(d *Dispatcher, deps AgentsDeps)            { d.RegisterDomain(handleragent.CRUDMethods(deps)) }
+func RegisterChatMethods(d *Dispatcher, deps ChatDeps) { d.RegisterDomain(handlerchat.Methods(deps)) }
+func RegisterChatBtwMethods(d *Dispatcher, deps ChatBtwDeps) {
+	d.RegisterDomain(handlerchat.BtwMethods(deps))
+}
+func RegisterSessionMethods(d *Dispatcher, deps SessionDeps) {
+	d.RegisterDomain(handlersession.Methods(deps))
+}
+func RegisterSessionRepairMethods(d *Dispatcher, _ SessionDeps) {} // no-op
+func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps) {
+	d.RegisterDomain(handlersession.ExecMethods(deps))
+}
+func RegisterExtendedMethods(d *Dispatcher, deps ExtendedDeps) {
+	d.RegisterDomain(handleragent.ExtendedMethods(deps))
+}
+func RegisterAgentsMethods(d *Dispatcher, deps AgentsDeps) {
+	d.RegisterDomain(handleragent.CRUDMethods(deps))
+}
 func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
 	d.RegisterDomain(handlerchannel.LifecycleMethods(deps))
 }
-func RegisterEventsMethods(d *Dispatcher, deps EventsDeps)           { d.RegisterDomain(handlerchannel.EventsMethods(deps)) }
-func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps)   { d.RegisterDomain(handlerchannel.BroadcastMethods(deps)) }
-func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps)     { d.RegisterDomain(handlerchannel.MessagingMethods(deps)) }
-func RegisterNodeMethods(d *Dispatcher, deps NodeDeps)               { d.RegisterDomain(handlernode.Methods(deps)) }
-func RegisterDeviceMethods(d *Dispatcher, deps DeviceDeps)           { d.RegisterDomain(handlernode.DeviceMethods(deps)) }
-func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps)       { d.RegisterDomain(handlerprocess.ApprovalMethods(deps)) }
-func RegisterACPMethods(d *Dispatcher, deps *ACPDeps)                { d.RegisterDomain(handlerprocess.ACPMethods(deps)) }
+func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
+	d.RegisterDomain(handlerchannel.EventsMethods(deps))
+}
+func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps) {
+	d.RegisterDomain(handlerchannel.BroadcastMethods(deps))
+}
+func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps) {
+	d.RegisterDomain(handlerchannel.MessagingMethods(deps))
+}
+func RegisterNodeMethods(d *Dispatcher, deps NodeDeps) { d.RegisterDomain(handlernode.Methods(deps)) }
+func RegisterDeviceMethods(d *Dispatcher, deps DeviceDeps) {
+	d.RegisterDomain(handlernode.DeviceMethods(deps))
+}
+func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps) {
+	d.RegisterDomain(handlerprocess.ApprovalMethods(deps))
+}
+func RegisterACPMethods(d *Dispatcher, deps *ACPDeps) {
+	d.RegisterDomain(handlerprocess.ACPMethods(deps))
+}
 func RegisterCronAdvancedMethods(d *Dispatcher, deps CronAdvancedDeps) {
 	d.RegisterDomain(handlerprocess.CronAdvancedMethods(deps))
 }
-func RegisterProviderMethods(d *Dispatcher, deps ProviderDeps)       { d.RegisterDomain(handlerprovider.Methods(deps)) }
-func RegisterModelsMethods(d *Dispatcher, deps ModelsDeps)           { d.RegisterDomain(handlerprovider.ModelsMethods(deps)) }
-func RegisterPluginMethods(d *Dispatcher, deps PluginDeps)           { d.RegisterDomain(handlerskill.PluginMethods(deps)) }
-func RegisterToolMethods(d *Dispatcher, deps ToolDeps)               { d.RegisterDomain(handlerskill.ToolMethods(deps)) }
-func RegisterSkillMethods(d *Dispatcher, deps SkillDeps)             { d.RegisterDomain(handlerskill.Methods(deps)) }
-func RegisterMonitoringMethods(d *Dispatcher, deps MonitoringDeps)   { d.RegisterDomain(handlersystem.MonitoringMethods(deps)) }
-func RegisterDoctorMethods(d *Dispatcher, deps DoctorDeps)           { d.RegisterDomain(handlersystem.DoctorMethods(deps)) }
-func RegisterMaintenanceMethods(d *Dispatcher, deps MaintenanceDeps) { d.RegisterDomain(handlersystem.MaintenanceMethods(deps)) }
-func RegisterUpdateMethods(d *Dispatcher, deps UpdateDeps)           { d.RegisterDomain(handlersystem.UpdateMethods(deps)) }
-func RegisterUsageMethods(d *Dispatcher, deps UsageDeps)             { d.RegisterDomain(handlersystem.UsageMethods(deps)) }
-func RegisterLogsMethods(d *Dispatcher, deps LogsDeps)               { d.RegisterDomain(handlersystem.LogsMethods(deps)) }
+func RegisterProviderMethods(d *Dispatcher, deps ProviderDeps) {
+	d.RegisterDomain(handlerprovider.Methods(deps))
+}
+func RegisterModelsMethods(d *Dispatcher, deps ModelsDeps) {
+	d.RegisterDomain(handlerprovider.ModelsMethods(deps))
+}
+func RegisterPluginMethods(d *Dispatcher, deps PluginDeps) {
+	d.RegisterDomain(handlerskill.PluginMethods(deps))
+}
+func RegisterToolMethods(d *Dispatcher, deps ToolDeps) {
+	d.RegisterDomain(handlerskill.ToolMethods(deps))
+}
+func RegisterSkillMethods(d *Dispatcher, deps SkillDeps) {
+	d.RegisterDomain(handlerskill.Methods(deps))
+}
+func RegisterMonitoringMethods(d *Dispatcher, deps MonitoringDeps) {
+	d.RegisterDomain(handlersystem.MonitoringMethods(deps))
+}
+func RegisterDoctorMethods(d *Dispatcher, deps DoctorDeps) {
+	d.RegisterDomain(handlersystem.DoctorMethods(deps))
+}
+func RegisterMaintenanceMethods(d *Dispatcher, deps MaintenanceDeps) {
+	d.RegisterDomain(handlersystem.MaintenanceMethods(deps))
+}
+func RegisterUpdateMethods(d *Dispatcher, deps UpdateDeps) {
+	d.RegisterDomain(handlersystem.UpdateMethods(deps))
+}
+func RegisterUsageMethods(d *Dispatcher, deps UsageDeps) {
+	d.RegisterDomain(handlersystem.UsageMethods(deps))
+}
+func RegisterLogsMethods(d *Dispatcher, deps LogsDeps) {
+	d.RegisterDomain(handlersystem.LogsMethods(deps))
+}
 func RegisterConfigReloadMethod(d *Dispatcher, deps ConfigReloadDeps) {
 	d.RegisterDomain(handlersystem.ConfigReloadMethods(deps))
 }
 func RegisterConfigAdvancedMethods(d *Dispatcher, deps ConfigAdvancedDeps) {
 	d.RegisterDomain(handlersystem.ConfigAdvancedMethods(deps))
 }
-func RegisterIdentityMethods(d *Dispatcher, version string)          { d.RegisterDomain(handlersystem.IdentityMethods(version)) }
-func RegisterWizardMethods(d *Dispatcher, deps WizardDeps)           { d.RegisterDomain(handlerplatform.WizardMethods(deps)) }
-func RegisterSecretMethods(d *Dispatcher, deps SecretDeps)           { d.RegisterDomain(handlerplatform.SecretMethods(deps)) }
-func RegisterTalkMethods(d *Dispatcher, deps TalkDeps)               { d.RegisterDomain(handlerplatform.TalkMethods(deps)) }
-func RegisterHeartbeatMethods(d *Dispatcher, deps HeartbeatDeps)     { d.RegisterDomain(handlerpresence.HeartbeatMethods(deps)) }
-func RegisterPresenceMethods(d *Dispatcher, deps PresenceDeps)       { d.RegisterDomain(handlerpresence.Methods(deps)) }
-func RegisterVegaMethods(d *Dispatcher, deps VegaDeps)               { d.RegisterDomain(handlerffi.VegaMethods(deps)) }
+func RegisterIdentityMethods(d *Dispatcher, version string) {
+	d.RegisterDomain(handlersystem.IdentityMethods(version))
+}
+func RegisterWizardMethods(d *Dispatcher, deps WizardDeps) {
+	d.RegisterDomain(handlerplatform.WizardMethods(deps))
+}
+func RegisterSecretMethods(d *Dispatcher, deps SecretDeps) {
+	d.RegisterDomain(handlerplatform.SecretMethods(deps))
+}
+func RegisterTalkMethods(d *Dispatcher, deps TalkDeps) {
+	d.RegisterDomain(handlerplatform.TalkMethods(deps))
+}
+func RegisterHeartbeatMethods(d *Dispatcher, deps HeartbeatDeps) {
+	d.RegisterDomain(handlerpresence.HeartbeatMethods(deps))
+}
+func RegisterPresenceMethods(d *Dispatcher, deps PresenceDeps) {
+	d.RegisterDomain(handlerpresence.Methods(deps))
+}
+func RegisterVegaMethods(d *Dispatcher, deps VegaDeps) {
+	d.RegisterDomain(handlerffi.VegaMethods(deps))
+}
 func RegisterAuroraChannelMethods(d *Dispatcher, deps AuroraChannelDeps) {
 	d.RegisterDomain(handleraurorachannel.Methods(deps))
 }

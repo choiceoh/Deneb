@@ -184,7 +184,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
 - [Chat commands, aborting tasks, and "it will not stop"](#chat-commands-aborting-tasks-and-it-will-not-stop)
   - [How do I stop internal system messages from showing in chat](#how-do-i-stop-internal-system-messages-from-showing-in-chat)
   - [How do I stop/cancel a running task?](#how-do-i-stopcancel-a-running-task)
-  - [How do I send a Discord message from Telegram? ("Cross-context messaging denied")](#how-do-i-send-a-discord-message-from-telegram-crosscontext-messaging-denied)
+  - [How do I send a Telegram message from Telegram? ("Cross-context messaging denied")](#how-do-i-send-a-telegram-message-from-telegram-crosscontext-messaging-denied)
   - [Why does it feel like the bot "ignores" rapid-fire messages?](#why-does-it-feel-like-the-bot-ignores-rapidfire-messages)
 
 ## First 60 seconds if something is broken
@@ -257,7 +257,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
 ### I am stuck - fastest way to get unstuck
 
 Use a local AI agent that can **see your machine**. That is far more effective than asking
-in Discord, because most "I'm stuck" cases are **local config or environment issues** that
+in Telegram, because most "I'm stuck" cases are **local config or environment issues** that
 remote helpers cannot inspect.
 
 - **Claude Code**: [https://www.anthropic.com/claude-code/](https://www.anthropic.com/claude-code/)
@@ -614,7 +614,7 @@ Docs: [Updating](/install/updating).
 - **Model/auth setup** (provider OAuth/setup-token flows and API keys supported, plus local model options such as LM Studio)
 - **Workspace** location + bootstrap files
 - **Gateway settings** (bind/port/auth/tailscale)
-- **Providers** (Telegram, Discord)
+- **Providers** (Telegram, Telegram)
 - **Daemon install** (systemd user unit on Linux)
 - **Health checks** and **skills** selection
 
@@ -720,11 +720,11 @@ Pick region-pinned endpoints. OpenRouter exposes US-hosted options for MiniMax, 
 
 ### Can I use Bun
 
-Bun is **not recommended**. We see runtime bugs, especially with Telegram and Discord.
+Bun is **not recommended**. We see runtime bugs, especially with Telegram.
 Use **Node** for stable gateways.
 
 If you still want to experiment with Bun, do it on a non-production gateway
-without Telegram/Discord.
+without Telegram.
 
 ### Telegram what goes in allowFrom
 
@@ -817,7 +817,7 @@ lowest friction and you're okay with sleep/restarts, run it locally.
 - **Pros:** always-on, stable network, no laptop sleep issues, easier to keep running.
 - **Cons:** often run headless (use screenshots), remote file access only, you must SSH for updates.
 
-**Deneb-specific note:** Telegram/Discord work fine from a VPS. The only real trade-off is **headless browser** vs a visible window. See [Browser](/tools/browser).
+**Deneb-specific note:** Telegram work fine from a VPS. The only real trade-off is **headless browser** vs a visible window. See [Browser](/tools/browser).
 
 **Recommended default:** VPS if you had gateway disconnects before. Local is great when you're actively using the Mac and want local file access or UI automation with a visible browser.
 
@@ -859,7 +859,7 @@ See [VPS hosting](/vps).
 
 ### What is Deneb in one paragraph
 
-Deneb is a personal AI assistant you run on your own devices. It replies on the messaging surfaces you already use (Telegram, Discord) and can also do voice + a live Canvas on supported platforms. The **Gateway** is the always-on control plane; the assistant is the product.
+Deneb is a personal AI assistant you run on your own devices. It replies on the messaging surfaces you already use (Telegram, Telegram) and can also do voice + a live Canvas on supported platforms. The **Gateway** is the always-on control plane; the assistant is the product.
 
 ### Value proposition
 
@@ -872,7 +872,7 @@ Highlights:
 
 - **Your devices, your data:** run the Gateway wherever you want (Mac, Linux, VPS) and keep the
   workspace + session history local.
-- **Real channels, not a web sandbox:** Telegram/Discord,
+- **Real channels, not a web sandbox:** Telegram,
   plus mobile voice and Canvas on supported platforms.
 - **Model-agnostic:** use Anthropic, OpenAI, MiniMax, OpenRouter, etc., with per-agent routing
   and failover.
@@ -926,7 +926,7 @@ want durable memory, cross-device access, and tool orchestration.
 Advantages:
 
 - **Persistent memory + workspace** across sessions
-- **Multi-platform access** (Telegram, Discord, TUI)
+- **Multi-platform access** (Telegram, Telegram, TUI)
 - **Tool orchestration** (browser, files, scheduling, hooks)
 - **Always-on Gateway** (run on a VPS, interact from anywhere)
 - **Nodes** for local browser/screen/camera/exec
@@ -966,9 +966,9 @@ cheaper model for sub-agents via `agents.defaults.subagents.model`.
 
 Docs: [Sub-agents](/tools/subagents).
 
-### How do thread-bound subagent sessions work on Discord
+### How do thread-bound subagent sessions work on Telegram
 
-Use thread bindings. You can bind a Discord thread to a subagent or session target so follow-up messages in that thread stay on that bound session.
+Use thread bindings. You can bind a Telegram thread to a subagent or session target so follow-up messages in that thread stay on that bound session.
 
 Basic flow:
 
@@ -981,8 +981,8 @@ Basic flow:
 Required config:
 
 - Global defaults: `session.threadBindings.enabled`, `session.threadBindings.idleHours`, `session.threadBindings.maxAgeHours`.
-- Discord overrides: `channels.discord.threadBindings.enabled`, `channels.discord.threadBindings.idleHours`, `channels.discord.threadBindings.maxAgeHours`.
-- Auto-bind on spawn: set `channels.discord.threadBindings.spawnSubagentSessions: true`.
+- Telegram overrides: `channels.telegram.threadBindings.enabled`, `channels.telegram.threadBindings.idleHours`, `channels.telegram.threadBindings.maxAgeHours`.
+- Auto-bind on spawn: set `channels.telegram.threadBindings.spawnSubagentSessions: true`.
 
 Docs: [Sub-agents](/tools/subagents), [Configuration Reference](/gateway/configuration-reference), [Slash commands](/tools/slash-commands).
 
@@ -1171,7 +1171,7 @@ No - **Deneb's state is local**, but **external services still see what you send
 - **Local by default:** sessions, memory files, config, and workspace live on the Gateway host
   (`~/.deneb` + your workspace directory).
 - **Remote by necessity:** messages you send to model providers (Anthropic/OpenAI/etc.) go to
-  their APIs, and chat platforms (Telegram/Discord) store message data on their
+  their APIs, and chat platforms (Telegram) store message data on their
   servers.
 - **You control the footprint:** using local models keeps prompts on your machine, but channel
   traffic still goes through the channel's servers.
@@ -1390,7 +1390,7 @@ Docs: [Web tools](/tools/web).
 
 The common pattern is **one Gateway** (e.g. Raspberry Pi) plus **nodes** and **agents**:
 
-- **Gateway (central):** owns channels (Telegram/Discord), routing, and sessions.
+- **Gateway (central):** owns channels (Telegram), routing, and sessions.
 - **Nodes (devices):** connect as peripherals and expose local tools (`system.run`, `canvas`, `camera`).
 - **Agents (workers):** separate brains/workspaces for special roles (e.g. "Hetzner ops", "Personal data").
 - **Sub-agents:** spawn background work from a main agent when you want parallelism.
@@ -1484,7 +1484,7 @@ Docs: [Tailscale](/gateway/tailscale), [Remote access](/gateway/remote), [Channe
 Yes. There is no built-in "bot-to-bot" bridge, but you can wire it up in a few
 reliable ways:
 
-**Simplest:** use a normal chat channel both bots can access (Telegram/Discord).
+**Simplest:** use a normal chat channel both bots can access (Telegram).
 Have Bot A send a message to Bot B, then let Bot B reply as usual.
 
 **CLI bridge (generic):** run a script that calls the other Gateway with
@@ -1827,7 +1827,7 @@ Per-agent overrides use `agents.list[].heartbeat`. Docs: [Heartbeat](/gateway/he
 
 ### Do groups/threads share context with DMs
 
-Direct chats collapse to the main session by default. Groups/channels have their own session keys, and Telegram topics / Discord threads are separate sessions. See [Groups](/channels/groups) and [Group messages](/channels/group-messages).
+Direct chats collapse to the main session by default. Groups/channels have their own session keys, and Telegram topics / Telegram threads are separate sessions. See [Groups](/channels/groups) and [Group messages](/channels/group-messages).
 
 ### How many workspaces and agents can I create
 
@@ -2678,10 +2678,10 @@ Slash commands overview: see [Slash commands](/tools/slash-commands).
 
 Most commands must be sent as a **standalone** message that starts with `/`, but a few shortcuts (like `/status`) also work inline for allowlisted senders.
 
-### How do I send a Discord message from Telegram Crosscontext messaging denied
+### How do I send a Telegram message from Telegram Crosscontext messaging denied
 
 Deneb blocks **cross-provider** messaging by default. If a tool call is bound
-to Telegram, it won't send to Discord unless you explicitly allow it.
+to Telegram, it won't send to Telegram unless you explicitly allow it.
 
 Enable cross-provider messaging for the agent:
 

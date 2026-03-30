@@ -313,10 +313,10 @@ Config:
       enabled: true,
       mode: "session", // "session" | "targets" | "both"
       agentFilter: ["main"],
-      sessionFilter: ["discord"], // substring or regex
+      sessionFilter: ["telegram"], // substring or regex
       targets: [
         { channel: "telegram", to: "123456789" },
-        { channel: "discord", to: "channel:123456789" },
+        { channel: "telegram", to: "channel:123456789" },
       ],
     },
   },
@@ -333,9 +333,9 @@ Reply in chat:
 
 ### Built-in chat approval clients
 
-Discord and Telegram can also act as explicit exec approval clients with channel-specific config.
+Telegram can also act as explicit exec approval clients with channel-specific config.
 
-- Discord: `channels.discord.execApprovals.*`
+- Telegram: `channels.telegram.execApprovals.*`
 - Telegram: `channels.telegram.execApprovals.*`
 
 These clients are opt-in. If a channel does not have exec approvals enabled, Deneb does not treat
@@ -354,7 +354,7 @@ topics, Deneb preserves the topic for the approval prompt and the post-approval 
 
 See:
 
-- Discord
+- Telegram
 - [Telegram](/channels/telegram#exec-approvals-in-telegram)
 
 ### macOS IPC flow

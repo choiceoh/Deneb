@@ -122,7 +122,7 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that user ID.
       drop: "summarize",
       byChannel: {
         telegram: "collect",
-        discord: "collect",
+        telegram: "collect",
       },
     },
   },
@@ -157,7 +157,7 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that user ID.
       idleMinutes: 60,
     },
     resetByChannel: {
-      discord: { mode: "idle", idleMinutes: 10080 },
+      telegram: { mode: "idle", idleMinutes: 10080 },
     },
     resetTriggers: ["/new", "/reset"],
     store: "~/.deneb/agents/default/sessions/sessions.json",
@@ -173,7 +173,7 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that user ID.
     typingIntervalSeconds: 5,
     sendPolicy: {
       default: "allow",
-      rules: [{ action: "deny", match: { channel: "discord", chatType: "group" } }],
+      rules: [{ action: "deny", match: { channel: "telegram", chatType: "group" } }],
     },
   },
 
@@ -188,9 +188,9 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that user ID.
       groups: { "*": { requireMention: true } },
     },
 
-    discord: {
+    telegram: {
       enabled: true,
-      token: "YOUR_DISCORD_BOT_TOKEN",
+      token: "YOUR_TELEGRAM_BOT_TOKEN",
       dm: { enabled: true, allowFrom: ["123456789012345678"] },
       guilds: {
         "123456789012345678": {
@@ -290,7 +290,7 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that user ID.
       enabled: true,
       allowFrom: {
         telegram: ["123456789"],
-        discord: ["123456789012345678"],
+        telegram: ["123456789012345678"],
       },
     },
   },
@@ -426,7 +426,7 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that user ID.
       botToken: "YOUR_TOKEN",
       allowFrom: ["123456789"],
     },
-    discord: {
+    telegram: {
       enabled: true,
       token: "YOUR_TOKEN",
       dm: { allowFrom: ["123456789012345678"] },
@@ -453,17 +453,17 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
       allowFrom: ["123456789", "987654321"],
     },
 
-    // Example: Discord multi-user inbox
-    discord: {
+    // Example: Telegram multi-user inbox
+    telegram: {
       enabled: true,
-      token: "YOUR_DISCORD_BOT_TOKEN",
+      token: "YOUR_TELEGRAM_BOT_TOKEN",
       dm: { enabled: true, allowFrom: ["123456789012345678", "987654321098765432"] },
     },
   },
 }
 ```
 
-For Discord, sender authorization is ID-first by default.
+For Telegram, sender authorization is ID-first by default.
 Only enable direct mutable name/email/nick matching with `dangerouslyAllowNameMatching: true` if you explicitly accept that risk.
 
 ### OAuth with API key failover
@@ -554,9 +554,9 @@ terms before depending on subscription auth.
     elevated: { enabled: false },
   },
   channels: {
-    discord: {
+    telegram: {
       enabled: true,
-      token: "YOUR_DISCORD_BOT_TOKEN",
+      token: "YOUR_TELEGRAM_BOT_TOKEN",
       guilds: {
         "123456789012345678": {
           slug: "work-server",

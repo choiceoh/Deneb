@@ -178,11 +178,11 @@ func TestCompaction_AuroraSyncDuringChat(t *testing.T) {
 // evaluation logic with various token counts.
 func TestCompaction_EvaluateCompactionThresholds(t *testing.T) {
 	tests := []struct {
-		name         string
-		stored       uint64
-		live         uint64
-		budget       uint64
-		wantCompact  bool
+		name        string
+		stored      uint64
+		live        uint64
+		budget      uint64
+		wantCompact bool
 	}{
 		{
 			name:        "under threshold",

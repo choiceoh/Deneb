@@ -1,8 +1,8 @@
 package thinking
 
 import (
-	"testing"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"testing"
 )
 
 // mockResolver implements ProviderThinkingResolver for testing.
@@ -33,7 +33,7 @@ func (m *mockResolver) ResolveDefaultThinkingLevel(provider string, ctx Provider
 	return "", false
 }
 
-func thinkingBoolPtr(v bool) *bool      { return &v }
+func thinkingBoolPtr(v bool) *bool                  { return &v }
 func thinkPtr(v types.ThinkLevel) *types.ThinkLevel { return &v }
 
 func TestThinkingRuntime_IsBinaryThinkingProvider_Builtin(t *testing.T) {

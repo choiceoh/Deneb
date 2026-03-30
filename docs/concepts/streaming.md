@@ -12,7 +12,7 @@ title: "Streaming and Chunking"
 Deneb has two separate streaming layers:
 
 - **Block streaming (channels):** emit completed **blocks** as the assistant writes. These are normal channel messages (not token deltas).
-- **Preview streaming (Telegram/Discord):** update a temporary **preview message** while generating.
+- **Preview streaming (Telegram):** update a temporary **preview message** while generating.
 
 There is **no true token-delta streaming** to channel messages today. Preview streaming is message-based (send + edits/appends).
 
@@ -45,7 +45,7 @@ Legend:
 - `agents.defaults.blockStreamingCoalesce`: `{ minChars?, maxChars?, idleMs? }` (merge streamed blocks before send).
 - Channel hard cap: `*.textChunkLimit` (e.g., `channels.telegram.textChunkLimit`).
 - Channel chunk mode: `*.chunkMode` (`length` default, `newline` splits on blank lines (paragraph boundaries) before length chunking).
-- Discord soft cap: `channels.discord.maxLinesPerMessage` (default 17) splits tall replies to avoid UI clipping.
+- Telegram soft cap: `channels.telegram.maxLinesPerMessage` (default 17) splits tall replies to avoid UI clipping.
 
 **Boundary semantics:**
 
@@ -78,7 +78,7 @@ progressive output.
 - Joiner is derived from `blockStreamingChunk.breakPreference`
   (`paragraph` → `\n\n`, `newline` → `\n`, `sentence` → space).
 - Channel overrides are available via `*.blockStreamingCoalesce` (including per-account configs).
-- Default coalesce `minChars` is bumped to 1500 for Discord unless overridden.
+- Default coalesce `minChars` is bumped to 1500 for Telegram unless overridden.
 
 ## Human-like pacing between blocks
 
@@ -121,12 +121,12 @@ Modes:
 | Channel  | `off` | `partial` | `block` | `progress`        |
 | -------- | ----- | --------- | ------- | ----------------- |
 | Telegram | ✅    | ✅        | ✅      | maps to `partial` |
-| Discord  | ✅    | ✅        | ✅      | maps to `partial` |
+| Telegram  | ✅    | ✅        | ✅      | maps to `partial` |
 
 Legacy key migration:
 
 - Telegram: `streamMode` + boolean `streaming` auto-migrate to `streaming` enum.
-- Discord: `streamMode` + boolean `streaming` auto-migrate to `streaming` enum.
+- Telegram: `streamMode` + boolean `streaming` auto-migrate to `streaming` enum.
 
 ### Runtime behavior
 
@@ -136,9 +136,9 @@ Telegram:
 - Preview streaming is skipped when Telegram block streaming is explicitly enabled (to avoid double-streaming).
 - `/reasoning stream` can write reasoning to preview.
 
-Discord:
+Telegram:
 
 - Uses send + edit preview messages.
 - `block` mode uses draft chunking (`draftChunk`).
-- Preview streaming is skipped when Discord block streaming is explicitly enabled.
+- Preview streaming is skipped when Telegram block streaming is explicitly enabled.
 

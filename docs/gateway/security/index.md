@@ -77,7 +77,7 @@ Deneb is designed as a personal assistant security model: one trusted operator b
 
 ### Shared workspace: real risk
 
-If everyone in a Discord server can message the bot, the core risk is delegated tool authority:
+If everyone in a Telegram server can message the bot, the core risk is delegated tool authority:
 
 - any allowed sender can induce tool calls (`exec`, browser, network/file tools) within the agent's policy;
 - prompt/content injection from one sender can cause actions that affect shared state, devices, or outputs;
@@ -129,7 +129,7 @@ These patterns are commonly reported and are usually closed as no-action unless 
 - Claims that assume hostile multi-tenant operation on one shared host/config.
 - Claims that classify normal operator read-path access (for example `sessions.list`/`sessions.preview`/`chat.history`) as IDOR in a shared-gateway setup.
 - Localhost-only deployment findings (for example HSTS on loopback-only gateway).
-- Discord inbound webhook signature findings for inbound paths that do not exist in this repo.
+- Telegram inbound webhook signature findings for inbound paths that do not exist in this repo.
 - "Missing per-user authorization" findings that treat `sessionKey` as an auth token.
 
 ## Researcher preflight checklist
@@ -200,7 +200,7 @@ If you run `--deep`, Deneb also attempts a best-effort live Gateway probe.
 Use this when auditing access or deciding what to back up:
 
 - **Telegram bot token**: config/env or `channels.telegram.tokenFile` (regular file only; symlinks rejected)
-- **Discord bot token**: config/env or SecretRef (env/file/exec providers)
+- **Telegram bot token**: config/env or SecretRef (env/file/exec providers)
 - **Pairing allowlists**:
   - `~/.deneb/credentials/<channel>-allowFrom.json` (default account)
   - `~/.deneb/credentials/<channel>-<accountId>-allowFrom.json` (non-default accounts)
@@ -298,8 +298,8 @@ schema:
 - `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback`
 - `gateway.controlUi.dangerouslyDisableDeviceAuth`
 - `browser.ssrfPolicy.dangerouslyAllowPrivateNetwork`
-- `channels.discord.dangerouslyAllowNameMatching`
-- `channels.discord.accounts.<accountId>.dangerouslyAllowNameMatching`
+- `channels.telegram.dangerouslyAllowNameMatching`
+- `channels.telegram.accounts.<accountId>.dangerouslyAllowNameMatching`
 - `agents.defaults.sandbox.docker.dangerouslyAllowReservedContainerTargets`
 - `agents.defaults.sandbox.docker.dangerouslyAllowExternalBindSources`
 - `agents.defaults.sandbox.docker.dangerouslyAllowContainerNamespaceJoin`
@@ -491,13 +491,13 @@ If you run multiple accounts on the same channel, use `per-account-channel-peer`
 
 Deneb has two separate “who can trigger me?” layers:
 
-- **DM allowlist** (`allowFrom` / `channels.discord.allowFrom`; legacy: `channels.discord.dm.allowFrom`): who is allowed to talk to the bot in direct messages.
+- **DM allowlist** (`allowFrom` / `channels.telegram.allowFrom`; legacy: `channels.telegram.dm.allowFrom`): who is allowed to talk to the bot in direct messages.
   - When `dmPolicy="pairing"`, approvals are written to the account-scoped pairing allowlist store under `~/.deneb/credentials/` (`<channel>-allowFrom.json` for default account, `<channel>-<accountId>-allowFrom.json` for non-default accounts), merged with config allowlists.
 - **Group allowlist** (channel-specific): which groups/channels/guilds the bot will accept messages from at all.
   - Common patterns:
     - `channels.telegram.groups`: per-group defaults like `requireMention`; when set, it also acts as a group allowlist (include `"*"` to keep allow-all behavior).
     - `groupPolicy="allowlist"` + `groupAllowFrom`: restrict who can trigger the bot _inside_ a group session (Telegram).
-    - `channels.discord.guilds`: per-surface allowlists + mention defaults.
+    - `channels.telegram.guilds`: per-surface allowlists + mention defaults.
   - Group checks run in this order: `groupPolicy`/group allowlists first, mention/reply activation second.
   - Replying to a bot message (implicit mention) does **not** bypass sender allowlists like `groupAllowFrom`.
   - **Security note:** treat `dmPolicy="open"` and `groupPolicy="open"` as last-resort settings. They should be barely used; prefer pairing + allowlists unless you fully trust every member of the room.
@@ -1038,7 +1038,7 @@ Common use cases:
             "sessions_spawn",
             "session_status",
             "telegram",
-            "discord",
+            "telegram",
           ],
           deny: [
             "read",
@@ -1088,7 +1088,7 @@ If your AI does something bad:
 
 1. Rotate Gateway auth (`gateway.auth.token` / `DENEB_GATEWAY_PASSWORD`) and restart.
 2. Rotate remote client secrets (`gateway.remote.token` / `.password`) on any machine that can call the Gateway.
-3. Rotate provider/API credentials (Telegram bot tokens, Discord tokens, model/API keys in `auth-profiles.json`, and encrypted secrets payload values when used).
+3. Rotate provider/API credentials (Telegram bot tokens, Telegram tokens, model/API keys in `auth-profiles.json`, and encrypted secrets payload values when used).
 
 ### Audit
 

@@ -26,7 +26,7 @@ Key knobs live in configuration:
 
 - `messages.*` for prefixes, queueing, and group behavior.
 - `agents.defaults.*` for block streaming and chunking defaults.
-- Channel overrides (`channels.telegram.*`, `channels.discord.*`, etc.) for caps and streaming toggles.
+- Channel overrides (`channels.telegram.*`, `channels.telegram.*`, etc.) for caps and streaming toggles.
 
 See [Configuration](/gateway/configuration) for full schema.
 
@@ -51,7 +51,7 @@ Config (global default + per-channel overrides):
       debounceMs: 2000,
       byChannel: {
         telegram: 2000,
-        discord: 1500,
+        telegram: 1500,
       },
     },
   },

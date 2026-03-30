@@ -37,9 +37,9 @@ var (
 // the sorted tool name list. Invalidated only when the tool set changes (i.e.
 // never during normal operation after server start).
 var (
-	staticPromptMu      sync.RWMutex
-	staticPromptKey     string
-	staticPromptCached  string
+	staticPromptMu     sync.RWMutex
+	staticPromptKey    string
+	staticPromptCached string
 )
 
 // LoadCachedTimezone resolves and caches timezone once.
@@ -136,74 +136,74 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		staticPromptMu.RUnlock()
 		var s strings.Builder
 
-	// Identity.
-	s.WriteString("You are a personal assistant running inside Deneb.\n\n")
+		// Identity.
+		s.WriteString("You are a personal assistant running inside Deneb.\n\n")
 
-	// Tooling: compact categorized list (descriptions are in tool schemas).
-	s.WriteString("## Tooling\n")
-	s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
-	writeCompactToolList(&s, toolSet)
-	s.WriteString("\n")
+		// Tooling: compact categorized list (descriptions are in tool schemas).
+		s.WriteString("## Tooling\n")
+		s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
+		writeCompactToolList(&s, toolSet)
+		s.WriteString("\n")
 
-	// Tool Usage (merged: Tool Call Style + Efficiency & Speed + Tool Selection Guide).
-	s.WriteString("## Tool Usage\n")
-	s.WriteString("- Call multiple tools in parallel when independent.\n")
-	s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, gmail not manual API calls.\n")
-	s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
-	s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")
-	s.WriteString("- Do not narrate routine tool calls. Narrate only for multi-step, complex, or sensitive actions.\n")
-	s.WriteString("- Do not ask confirmation for reversible operations (reads, searches, status checks). Act immediately.\n")
-	s.WriteString("- Never ask the user to perform an action you can do with your tools. If you can read, search, execute, or check something yourself, do it directly.\n")
-	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail), grep >200 lines capped, find >500 grouped.\n")
-	s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n\n")
+		// Tool Usage (merged: Tool Call Style + Efficiency & Speed + Tool Selection Guide).
+		s.WriteString("## Tool Usage\n")
+		s.WriteString("- Call multiple tools in parallel when independent.\n")
+		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, gmail not manual API calls.\n")
+		s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
+		s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")
+		s.WriteString("- Do not narrate routine tool calls. Narrate only for multi-step, complex, or sensitive actions.\n")
+		s.WriteString("- Do not ask confirmation for reversible operations (reads, searches, status checks). Act immediately.\n")
+		s.WriteString("- Never ask the user to perform an action you can do with your tools. If you can read, search, execute, or check something yourself, do it directly.\n")
+		s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail), grep >200 lines capped, find >500 grouped.\n")
+		s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n\n")
 
-	// Pilot & Chaining (merged: Pilot + pilot vs direct tools + Tool Chaining).
-	if toolSet["pilot"] {
-		s.WriteString("## Pilot & Chaining\n")
-		s.WriteString("- `pilot` runs tasks on local sglang (fast, free). Gathers tool outputs + analyzes in one call.\n")
-		s.WriteString("- Use pilot when you need analysis/summary of tool outputs, not just the raw data.\n")
-		s.WriteString("- Do NOT use pilot for: complex multi-turn reasoning, or when you need full uncompressed output.\n")
-		s.WriteString("- Multiple independent reads/greps → call them in parallel directly (no pilot needed).\n")
-		s.WriteString("- Long-running autonomous task → sessions_spawn instead of pilot.\n")
-		s.WriteString("- Common patterns:\n")
-		s.WriteString("  - Code review: `{\"task\": \"변경사항 리뷰해줘\", \"diff\": \"all\"}`\n")
-		s.WriteString("  - Test analysis: `{\"task\": \"테스트 실패 원인 분석\", \"test\": \"gateway-go/...\"}`\n")
-		s.WriteString("  - File analysis: `{\"task\": \"이 파일 구조 설명해줘\", \"file\": \"path/to/file.go\"}`\n")
-		s.WriteString("  - Multi-source: `{\"task\": \"비교 분석\", \"files\": [\"a.go\", \"b.go\"]}`\n")
-		s.WriteString("  - Diagnostics: `{\"task\": \"시스템 상태 확인\", \"health\": true}`\n")
-		s.WriteString("  - Project overview: `{\"task\": \"프로젝트 구조 파악\", \"tree\": \".\"}`\n")
-		s.WriteString("  - Commit history: `{\"task\": \"최근 변경 요약\", \"git_log\": \"recent\"}`\n")
-		s.WriteString("  - Agent logs: `{\"task\": \"이전 런에서 뭐가 실패했는지 분석해줘\", \"agent_logs\": \"errors\"}`\n")
-		s.WriteString("- Tool chaining: use `\"$ref\": \"<tool_use_id>\"` to pass one tool's output to another (injected as `_ref_content`, 30s timeout).\n\n")
-	}
+		// Pilot & Chaining (merged: Pilot + pilot vs direct tools + Tool Chaining).
+		if toolSet["pilot"] {
+			s.WriteString("## Pilot & Chaining\n")
+			s.WriteString("- `pilot` runs tasks on local sglang (fast, free). Gathers tool outputs + analyzes in one call.\n")
+			s.WriteString("- Use pilot when you need analysis/summary of tool outputs, not just the raw data.\n")
+			s.WriteString("- Do NOT use pilot for: complex multi-turn reasoning, or when you need full uncompressed output.\n")
+			s.WriteString("- Multiple independent reads/greps → call them in parallel directly (no pilot needed).\n")
+			s.WriteString("- Long-running autonomous task → sessions_spawn instead of pilot.\n")
+			s.WriteString("- Common patterns:\n")
+			s.WriteString("  - Code review: `{\"task\": \"변경사항 리뷰해줘\", \"diff\": \"all\"}`\n")
+			s.WriteString("  - Test analysis: `{\"task\": \"테스트 실패 원인 분석\", \"test\": \"gateway-go/...\"}`\n")
+			s.WriteString("  - File analysis: `{\"task\": \"이 파일 구조 설명해줘\", \"file\": \"path/to/file.go\"}`\n")
+			s.WriteString("  - Multi-source: `{\"task\": \"비교 분석\", \"files\": [\"a.go\", \"b.go\"]}`\n")
+			s.WriteString("  - Diagnostics: `{\"task\": \"시스템 상태 확인\", \"health\": true}`\n")
+			s.WriteString("  - Project overview: `{\"task\": \"프로젝트 구조 파악\", \"tree\": \".\"}`\n")
+			s.WriteString("  - Commit history: `{\"task\": \"최근 변경 요약\", \"git_log\": \"recent\"}`\n")
+			s.WriteString("  - Agent logs: `{\"task\": \"이전 런에서 뭐가 실패했는지 분석해줘\", \"agent_logs\": \"errors\"}`\n")
+			s.WriteString("- Tool chaining: use `\"$ref\": \"<tool_use_id>\"` to pass one tool's output to another (injected as `_ref_content`, 30s timeout).\n\n")
+		}
 
-	// Coding.
-	s.WriteString("## Coding\n")
-	s.WriteString("- Use `tree` to understand project structure before diving into code.\n")
-	s.WriteString("- Use `analyze(action:'outline')` to see file structure. `analyze(action:'symbols')` to find definitions.\n")
-	s.WriteString("- Use `edit` for single changes, `multi_edit` for coordinated changes across files.\n")
-	s.WriteString("- Use `diff` to review changes, `git(action:'status')` to check working tree.\n")
-	s.WriteString("- Use `test(action:'run')` for structured test results. Always verify with `test(action:'build')` after edits.\n")
-	s.WriteString("- Use `git(action:'commit')` to commit. `read(function:'FuncName')` reads a specific function.\n")
-	s.WriteString("- Workflow: tree/analyze → edit/multi_edit → diff → test → git(commit).\n\n")
+		// Coding.
+		s.WriteString("## Coding\n")
+		s.WriteString("- Use `tree` to understand project structure before diving into code.\n")
+		s.WriteString("- Use `analyze(action:'outline')` to see file structure. `analyze(action:'symbols')` to find definitions.\n")
+		s.WriteString("- Use `edit` for single changes, `multi_edit` for coordinated changes across files.\n")
+		s.WriteString("- Use `diff` to review changes, `git(action:'status')` to check working tree.\n")
+		s.WriteString("- Use `test(action:'run')` for structured test results. Always verify with `test(action:'build')` after edits.\n")
+		s.WriteString("- Use `git(action:'commit')` to commit. `read(function:'FuncName')` reads a specific function.\n")
+		s.WriteString("- Workflow: tree/analyze → edit/multi_edit → diff → test → git(commit).\n\n")
 
-	// Safety.
-	s.WriteString("## Safety\n")
-	s.WriteString("You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.\n")
-	s.WriteString("Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards.\n")
-	s.WriteString("Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.\n\n")
+		// Safety.
+		s.WriteString("## Safety\n")
+		s.WriteString("You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.\n")
+		s.WriteString("Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards.\n")
+		s.WriteString("Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.\n\n")
 
-	// Deneb CLI Quick Reference.
-	s.WriteString("## Deneb CLI Quick Reference\n")
-	s.WriteString("Deneb is controlled via subcommands. Do not invent commands.\n")
-	s.WriteString("Gateway management: deneb gateway {status|start|stop|restart}\n")
-	s.WriteString("If unsure, ask the user to run `deneb help` and paste the output.\n\n")
-	built := s.String()
-	staticPromptMu.Lock()
-	staticPromptKey = cacheKey
-	staticPromptCached = built
-	staticPromptMu.Unlock()
-	staticText = built
+		// Deneb CLI Quick Reference.
+		s.WriteString("## Deneb CLI Quick Reference\n")
+		s.WriteString("Deneb is controlled via subcommands. Do not invent commands.\n")
+		s.WriteString("Gateway management: deneb gateway {status|start|stop|restart}\n")
+		s.WriteString("If unsure, ask the user to run `deneb help` and paste the output.\n\n")
+		built := s.String()
+		staticPromptMu.Lock()
+		staticPromptKey = cacheKey
+		staticPromptCached = built
+		staticPromptMu.Unlock()
+		staticText = built
 	} // end else (cache miss)
 
 	// --- Semi-static block (skills — changes only when skills are added/removed) ---
@@ -338,7 +338,7 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 }
 
 // BuildCodingSystemPromptBlocks returns the coding system prompt as Anthropic
-// ContentBlocks with cache_control breakpoints for the Discord coding channel.
+// ContentBlocks with cache_control breakpoints for coding channel prompts.
 // The prompt is split into a static block (identity, tooling, safety, workflow —
 // rarely changes) and a dynamic block (workspace, context files, runtime —
 // changes per request). Each block gets an ephemeral cache_control marker so
@@ -459,7 +459,7 @@ var codingToolCategories = []struct {
 }
 
 // BuildCodingSystemPrompt builds a system prompt optimized for coding tasks
-// on the Discord channel. Strips non-coding sections and emphasizes the
+// for coding-focused channels. Strips non-coding sections and emphasizes the
 // code editing workflow.
 func BuildCodingSystemPrompt(params SystemPromptParams) string {
 	staticText, dynamicText := buildCodingPromptSections(params)
@@ -480,7 +480,7 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	var s strings.Builder
 
 	// Identity — coding-focused, vibe-coder aware.
-	s.WriteString("You are a coding assistant running inside Deneb (Discord coding channel).\n")
+	s.WriteString("You are a coding assistant running inside Deneb.\n")
 	s.WriteString("Your sole purpose is to help with code editing, debugging, testing, and version control.\n")
 	s.WriteString("Single-user, single-server (DGX Spark) deployment — no multi-tenant considerations.\n\n")
 
@@ -562,7 +562,7 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	// Response Style — vibe coder optimized.
 	s.WriteString("## Response Style (바이브 코더 최적화)\n")
 	s.WriteString("- **항상 한국어**로 응답하세요. 코드/명령어만 영어.\n")
-	s.WriteString("- Discord message limit: 2000 chars. Long outputs are sent as file attachments.\n")
+	s.WriteString("- Keep outputs concise and structured for chat delivery.\n")
 	s.WriteString("- **코드를 보여주지 마세요.** 대신 무엇을 바꿨는지 설명하세요:\n")
 	s.WriteString("  ✅ '로그인 화면에서 비밀번호 검증 로직을 추가했습니다'\n")
 	s.WriteString("  ❌ '```go\\nfunc validatePassword(...)```'\n")
@@ -583,7 +583,6 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	d.WriteString("## Workspace\n")
 	fmt.Fprintf(&d, "Your working directory is: %s\n", params.WorkspaceDir)
 	d.WriteString("Treat this directory as your isolated workspace for all file operations.\n")
-	d.WriteString("- Discord 스레드는 독립된 git worktree를 사용합니다. 다른 스레드의 작업과 충돌하지 않습니다.\n")
 	d.WriteString("- 이 워크스페이스 밖의 파일을 수정하지 마세요.\n\n")
 
 	// Context files.
@@ -610,7 +609,7 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 
 	// Runtime.
 	d.WriteString("## Runtime\n")
-	d.WriteString(buildRuntimeLine(params.RuntimeInfo, "discord"))
+	d.WriteString(buildRuntimeLine(params.RuntimeInfo, ""))
 	d.WriteString("\n")
 
 	return s.String(), d.String()

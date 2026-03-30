@@ -116,7 +116,7 @@ Channel tools return **provider-native timestamps** and add normalized fields fo
 Raw provider fields are preserved so nothing is lost.
 
 - Slack: epoch-like strings from the API
-- Discord: UTC ISO timestamps
+- Telegram: UTC ISO timestamps
 - Telegram/WhatsApp: provider-specific numeric/ISO timestamps
 
 If you need local time, convert it downstream using the known timezone.

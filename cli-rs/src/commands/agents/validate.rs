@@ -46,9 +46,9 @@ mod tests {
 
     #[test]
     fn parse_binding_with_account() {
-        let b = parse_binding("my-agent", "discord:123456");
+        let b = parse_binding("my-agent", "telegram:123456");
         assert_eq!(b["agentId"], "my-agent");
-        assert_eq!(b["channel"], "discord");
+        assert_eq!(b["channel"], "telegram");
         assert_eq!(b["accountId"], "123456");
     }
 

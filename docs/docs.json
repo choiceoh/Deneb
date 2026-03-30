@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "name": "Deneb",
-  "description": "Self-hosted gateway that connects Telegram and Discord to AI coding agents. Run a single Gateway process on your own machine and message your AI assistant from anywhere.",
+  "description": "Self-hosted gateway that connects Telegram to AI coding agents. Run a single Gateway process on your own machine and message your AI assistant from anywhere.",
   "theme": "mint",
   "icons": {
     "library": "lucide"
@@ -256,8 +256,8 @@
       "destination": "/web/dashboard"
     },
     {
-      "source": "/discord",
-      "destination": "/channels/discord"
+      "source": "/telegram",
+      "destination": "/channels/telegram"
     },
     {
       "source": "/discovery",

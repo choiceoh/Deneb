@@ -11,7 +11,7 @@ title: "Polls"
 ## Supported channels
 
 - Telegram
-- Discord
+- Telegram
 
 ## CLI
 
@@ -23,18 +23,18 @@ deneb message poll --channel telegram --target -1001234567890:topic:42 \
   --poll-question "Pick a time" --poll-option "10am" --poll-option "2pm" \
   --poll-duration-seconds 300
 
-# Discord
-deneb message poll --channel discord --target channel:123456789 \
+# Telegram
+deneb message poll --channel telegram --target channel:123456789 \
   --poll-question "Snack?" --poll-option "Pizza" --poll-option "Sushi"
-deneb message poll --channel discord --target channel:123456789 \
+deneb message poll --channel telegram --target channel:123456789 \
   --poll-question "Plan?" --poll-option "A" --poll-option "B" --poll-duration-hours 48
 ```
 
 Options:
 
-- `--channel`: `telegram` (default) or `discord`
+- `--channel`: `telegram` (default) or `telegram`
 - `--poll-multi`: allow selecting multiple options
-- `--poll-duration-hours`: Discord-only (defaults to 24 when omitted)
+- `--poll-duration-hours`: Telegram-only (defaults to 24 when omitted)
 - `--poll-duration-seconds`: Telegram-only (5-600 seconds)
 - `--poll-anonymous` / `--poll-public`: Telegram-only poll visibility
 
@@ -57,7 +57,7 @@ Params:
 ## Channel differences
 
 - Telegram: 2-10 options. Supports forum topics via `threadId` or `:topic:` targets. Uses `durationSeconds` instead of `durationHours`, limited to 5-600 seconds. Supports anonymous and public polls.
-- Discord: 2-10 options, `durationHours` clamped to 1-768 hours (default 24). `maxSelections > 1` enables multi-select; Discord does not support a strict selection count.
+- Telegram: 2-10 options, `durationHours` clamped to 1-768 hours (default 24). `maxSelections > 1` enables multi-select; Telegram does not support a strict selection count.
 
 ## Agent tool (Message)
 
@@ -67,4 +67,4 @@ For Telegram, the tool also accepts `pollDurationSeconds`, `pollAnonymous`, and 
 
 Use `action: "poll"` for poll creation. Poll fields passed with `action: "send"` are rejected.
 
-Note: Discord has no “pick exactly N” mode; `pollMulti` maps to multi-select.
+Note: Telegram has no “pick exactly N” mode; `pollMulti` maps to multi-select.

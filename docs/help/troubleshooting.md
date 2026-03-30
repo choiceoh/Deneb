@@ -106,7 +106,7 @@ flowchart TD
 
     Common log signatures:
 
-    - `drop guild message (mention required` → mention gating blocked the message in Discord.
+    - `drop guild message (mention required` → mention gating blocked the message in Telegram.
     - `pairing request` → sender is unapproved and waiting for DM pairing approval.
     - `blocked` / `allowlist` in channel logs → sender, room, or group is filtered.
 

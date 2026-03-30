@@ -11,7 +11,7 @@ title: "Features"
 
 <Columns>
   <Card title="Channels" icon="message-square">
-    Telegram and Discord with a single Gateway.
+    Telegram with a single Gateway.
   </Card>
   <Card title="Plugins" icon="plug">
     Add more channels with extensions.
@@ -33,7 +33,7 @@ title: "Features"
 ## Full list
 
 - Telegram bot support (grammY)
-- Discord bot support (channels.discord.js)
+- Telegram bot support (channels.telegram.js)
 - Agent bridge for Pi in RPC mode with tool streaming
 - Streaming and chunking for long responses
 - Multi-agent routing for isolated sessions per workspace or sender

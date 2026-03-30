@@ -109,7 +109,7 @@ deneb health
 Use this when debugging auth or deciding what to back up:
 
 - **Telegram bot token**: config/env or `channels.telegram.tokenFile` (regular file only; symlinks rejected)
-- **Discord bot token**: config/env or SecretRef (env/file/exec providers)
+- **Telegram bot token**: config/env or SecretRef (env/file/exec providers)
 - **Pairing allowlists**:
   - `~/.deneb/credentials/<channel>-allowFrom.json` (default account)
   - `~/.deneb/credentials/<channel>-<accountId>-allowFrom.json` (non-default accounts)

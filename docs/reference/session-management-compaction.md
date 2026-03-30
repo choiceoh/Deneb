@@ -111,7 +111,7 @@ Common patterns:
 
 - Main/direct chat (per agent): `agent:<agentId>:<mainKey>` (default `main`)
 - Group: `agent:<agentId>:<channel>:group:<id>`
-- Room/channel (Discord/Slack): `agent:<agentId>:<channel>:channel:<id>` or `...:room:<id>`
+- Room/channel (Telegram/Slack): `agent:<agentId>:<channel>:channel:<id>` or `...:room:<id>`
 - Cron: `cron:<job.id>`
 - Webhook: `hook:<uuid>` (unless overridden)
 

@@ -62,7 +62,7 @@ You can override this with:
 
 ## Tool payloads (raw provider data + normalized fields)
 
-Tool calls (`channels.discord.readMessages`, `channels.telegram.readMessages`, etc.) return **raw provider timestamps**.
+Tool calls (`channels.telegram.readMessages`, `channels.telegram.readMessages`, etc.) return **raw provider timestamps**.
 We also attach normalized fields for consistency:
 
 - `timestampMs` (UTC epoch milliseconds)

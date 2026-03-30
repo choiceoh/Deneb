@@ -11,15 +11,15 @@ func TestShouldUseThinking(t *testing.T) {
 		sourceCount int
 		want        bool
 	}{
-		{"리뷰해줘", 1, true},             // Korean keyword "리뷰"
-		{"분석해봐", 0, true},              // Korean keyword "분석"
-		{"analyze this code", 0, true},    // English keyword
-		{"compare these files", 0, true},  // English keyword
-		{"debug this issue", 1, true},     // English keyword
-		{"요약해줘", 1, false},              // No complex keyword
-		{"read this file", 1, false},      // Simple task
-		{"list files", 3, true},           // 3+ sources triggers thinking
-		{"hello", 5, true},                // Many sources
+		{"리뷰해줘", 1, true},                // Korean keyword "리뷰"
+		{"분석해봐", 0, true},                // Korean keyword "분석"
+		{"analyze this code", 0, true},   // English keyword
+		{"compare these files", 0, true}, // English keyword
+		{"debug this issue", 1, true},    // English keyword
+		{"요약해줘", 1, false},               // No complex keyword
+		{"read this file", 1, false},     // Simple task
+		{"list files", 3, true},          // 3+ sources triggers thinking
+		{"hello", 5, true},               // Many sources
 	}
 
 	for _, tt := range tests {

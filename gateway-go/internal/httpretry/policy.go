@@ -1,5 +1,5 @@
 // Package httpretry provides a shared HTTP status code retry policy used
-// across LLM, Discord, and Telegram API clients.
+// across LLM and channel API clients.
 //
 // # Retry Categories
 //

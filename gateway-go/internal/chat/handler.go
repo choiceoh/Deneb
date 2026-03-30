@@ -52,8 +52,8 @@ type Handler struct {
 	mediaSendFn      MediaSendFunc    // optional: delivers files to originating channel
 	typingFn         TypingFunc       // optional: sends typing indicator during agent run
 	reactionFn       ReactionFunc     // optional: sets emoji reaction on triggering message
-	removeReactionFn ReactionFunc     // optional: removes emoji reaction (Discord additive)
-	toolProgressFn   ToolProgressFunc // optional: reports tool execution events (Discord progress)
+	removeReactionFn ReactionFunc     // optional: removes emoji reaction
+	toolProgressFn   ToolProgressFunc // optional: reports tool execution events
 
 	// uploadLimitsMu guards uploadLimits.
 	uploadLimitsMu sync.RWMutex
@@ -194,7 +194,7 @@ func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 }
 
 // SetRemoveReactionFunc sets the function that removes an emoji reaction
-// from the triggering message. Needed for Discord's additive reaction model.
+// from the triggering message when channel adapters require explicit cleanup.
 func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
 	h.removeReactionFn = fn
 }

@@ -40,7 +40,7 @@ They run immediately, are stripped before the model sees the message, and the re
     debug: false,
     allowFrom: {
       "*": ["user1"],
-      discord: ["user:123"],
+      telegram: ["user:123"],
     },
     useAccessGroups: true,
   },
@@ -49,9 +49,9 @@ They run immediately, are stripped before the model sees the message, and the re
 
 - `commands.text` (default `true`) enables parsing `/...` in chat messages.
 - `commands.native` (default `"auto"`) registers native commands.
-  - Auto: on for Discord/Telegram.
-  - Set `channels.discord.commands.native` or `channels.telegram.commands.native` to override per provider (bool or `"auto"`).
-  - `false` clears previously registered commands on Discord/Telegram at startup.
+  - Auto: on for Telegram.
+  - Set `channels.telegram.commands.native` or `channels.telegram.commands.native` to override per provider (bool or `"auto"`).
+  - `false` clears previously registered commands on Telegram at startup.
 - `commands.bash` (default `false`) enables `! <cmd>` to run host shell commands (`/bash <cmd>` is an alias; requires `tools.elevated` allowlists).
 - `commands.bashForegroundMs` (default `2000`) controls how long bash waits before switching to background mode (`0` backgrounds immediately).
 - `commands.config` (default `false`) enables `/config` (reads/writes `deneb.json`).
@@ -79,8 +79,8 @@ Text + native (when enabled):
 - `/subagents list|kill|log|info|send|steer|spawn` (inspect, control, or spawn sub-agent runs for the current session)
 - `/acp spawn|cancel|steer|close|status|set-mode|set|cwd|permissions|timeout|model|reset-options|doctor|install|sessions` (inspect and control ACP runtime sessions)
 - `/agents` (list thread-bound agents for this session)
-- `/focus <target>` (Discord: bind this thread, or a new thread, to a session/subagent target)
-- `/unfocus` (Discord: remove the current thread binding)
+- `/focus <target>` (Telegram: bind this thread, or a new thread, to a session/subagent target)
+- `/unfocus` (Telegram: remove the current thread binding)
 - `/kill <id|#|all>` (immediately abort one or all running sub-agents for this session; no confirmation message)
 - `/steer <id|#> <message>` (steer a running sub-agent immediately: in-run when possible, otherwise abort current work and restart on the steer message)
 - `/tell <id|#> <message>` (alias for `/steer`)
@@ -116,10 +116,10 @@ Notes:
 - `/allowlist add|remove` requires `commands.config=true` and honors channel `configWrites`.
 - In multi-account channels, config-targeted `/allowlist --account <id>` and `/config set channels.<provider>.accounts.<id>...` also honor the target account's `configWrites`.
 - `/usage` controls the per-response usage footer; `/usage cost` prints a local cost summary from Deneb session logs.
-- Discord-only native command: `/vc join|leave|status` controls voice channels (requires `channels.discord.voice` and native commands; not available as text).
-- Discord thread-binding commands (`/focus`, `/unfocus`, `/agents`, `/session idle`, `/session max-age`) require effective thread bindings to be enabled (`session.threadBindings.enabled` and/or `channels.discord.threadBindings.enabled`).
+- Telegram-only native command: `/vc join|leave|status` controls voice channels (requires `channels.telegram.voice` and native commands; not available as text).
+- Telegram thread-binding commands (`/focus`, `/unfocus`, `/agents`, `/session idle`, `/session max-age`) require effective thread bindings to be enabled (`session.threadBindings.enabled` and/or `channels.telegram.threadBindings.enabled`).
 - ACP command reference and runtime behavior: [ACP Agents](/tools/acp-agents).
-- Native command arguments: Discord uses autocomplete for dynamic options (and button menus when you omit required args). Telegram shows a button menu when a command supports choices and you omit the arg.
+- Native command arguments: Telegram uses autocomplete for dynamic options (and button menus when you omit required args). Telegram shows a button menu when a command supports choices and you omit the arg.
 - `/verbose` is meant for debugging and extra visibility; keep it **off** in normal use.
 - `/fast on|off` persists a session override. Use the Sessions UI `inherit` option to clear it and fall back to config defaults.
 - Tool failure summaries are still shown when relevant, but detailed failure text is only included when `/verbose` is `on` or `full`.
@@ -130,7 +130,7 @@ Notes:
   - Example: `hey /status` triggers a status reply, and the remaining text continues through the normal flow.
   - Currently: `/help`, `/status`.
 - Unauthorized command-only messages are silently ignored, and inline `/...` tokens are treated as plain text.
-- **Native command arguments:** Discord uses autocomplete for dynamic options (and button menus when you omit required args). Telegram shows a button menu when a command supports choices and you omit the arg.
+- **Native command arguments:** Telegram uses autocomplete for dynamic options (and button menus when you omit required args). Telegram shows a button menu when a command supports choices and you omit the arg.
 
 ## Usage surfaces (what shows where)
 
@@ -156,7 +156,7 @@ Examples:
 Notes:
 
 - `/model` and `/model list` show a compact, numbered picker (model family + available providers).
-- On Discord, `/model` and `/models` open an interactive picker with provider and model dropdowns plus a Submit step.
+- On Telegram, `/model` and `/models` open an interactive picker with provider and model dropdowns plus a Submit step.
 - `/model <#>` selects from that picker (and prefers the current provider when possible).
 - `/model status` shows the detailed view, including configured provider endpoint (`baseUrl`) and API mode (`api`) when available.
 
@@ -240,7 +240,7 @@ Notes:
 
 - **Text commands** run in the normal chat session (DMs share `main`, groups have their own session).
 - **Native commands** use isolated sessions:
-  - Discord: `agent:<agentId>:discord:slash:<userId>`
+  - Telegram: `agent:<agentId>:telegram:slash:<userId>`
   - Telegram: `telegram:slash:<userId>` (targets the chat session via `CommandTargetSessionKey`)
 - **`/stop`** targets the active chat session so it can abort the current run.
 

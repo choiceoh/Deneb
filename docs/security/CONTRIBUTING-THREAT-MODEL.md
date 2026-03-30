@@ -91,7 +91,7 @@ If you're unsure about the risk level, just describe the impact and we'll assess
 
 - **Security vulnerabilities:** See our [Trust page](https://trust.deneb.ai) for reporting instructions
 - **Threat model questions:** Open an issue on [deneb/trust](https://github.com/deneb/trust/issues)
-- **General chat:** Discord #security channel
+- **General chat:** Telegram #security channel
 
 ## Recognition
 

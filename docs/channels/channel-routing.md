@@ -1,5 +1,5 @@
 ---
-summary: "Routing rules per channel (Telegram, Discord) and shared context"
+summary: "Routing rules per channel (Telegram, Telegram) and shared context"
 read_when:
   - Changing channel routing or inbox behavior
 title: "Channel Routing"
@@ -13,7 +13,7 @@ host configuration.
 
 ## Key terms
 
-- **Channel**: `telegram`, `discord`.
+- **Channel**: `telegram`, `telegram`.
 - **AccountId**: per‑channel account instance (when supported).
 - Optional channel default account: `channels.<channel>.defaultAccount` chooses
   which account is used when an outbound path does not specify `accountId`.
@@ -34,13 +34,13 @@ Groups and channels remain isolated per channel:
 
 Threads:
 
-- Discord threads append `:thread:<threadId>` to the base key.
+- Telegram threads append `:thread:<threadId>` to the base key.
 - Telegram forum topics embed `:topic:<topicId>` in the group key.
 
 Examples:
 
 - `agent:main:telegram:group:-1001234567890:topic:42`
-- `agent:main:discord:channel:123456:thread:987654`
+- `agent:main:telegram:channel:123456:thread:987654`
 
 ## Main DM route pinning
 
@@ -61,8 +61,8 @@ Routing picks **one agent** for each inbound message:
 
 1. **Exact peer match** (`bindings` with `peer.kind` + `peer.id`).
 2. **Parent peer match** (thread inheritance).
-3. **Guild + roles match** (Discord) via `guildId` + `roles`.
-4. **Guild match** (Discord) via `guildId`.
+3. **Guild + roles match** (Telegram) via `guildId` + `roles`.
+4. **Guild match** (Telegram) via `guildId`.
 5. **Account match** (`accountId` on the channel).
 7. **Channel match** (any account on that channel, `accountId: "*"`).
 8. **Default agent** (`agents.list[].default`, else first list entry, fallback to `main`).
@@ -103,7 +103,7 @@ Example:
   },
   bindings: [
     { match: { channel: "telegram", peer: { kind: "group", id: "-100123" } }, agentId: "support" },
-    { match: { channel: "discord", guildId: "123456789012345678" }, agentId: "support" },
+    { match: { channel: "telegram", guildId: "123456789012345678" }, agentId: "support" },
   ],
 }
 ```

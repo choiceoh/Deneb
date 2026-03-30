@@ -21,14 +21,14 @@ title: "Retry Policy"
 - Jitter: 0.1 (10 percent)
 - Provider defaults:
   - Telegram min delay: 400 ms
-  - Discord min delay: 500 ms
+  - Telegram min delay: 500 ms
 
 ## Behavior
 
-### Discord
+### Telegram
 
 - Retries only on rate-limit errors (HTTP 429).
-- Uses Discord `retry_after` when available, otherwise exponential backoff.
+- Uses Telegram `retry_after` when available, otherwise exponential backoff.
 
 ### Telegram
 
@@ -51,7 +51,7 @@ Set retry policy per provider in `~/.deneb/deneb.json`:
         jitter: 0.1,
       },
     },
-    discord: {
+    telegram: {
       retry: {
         attempts: 3,
         minDelayMs: 500,

@@ -57,8 +57,8 @@ func handleRunSuccess(
 			logger.Error("failed to persist assistant message", "error", err)
 		}
 	}
-	// Skip Aurora sync for Discord: ephemeral coding sessions don't need compaction.
-	if deps.auroraStore != nil && result.Text != "" && !isDiscordDelivery(params.Delivery) {
+	// Sync Aurora summaries for channel replies when available.
+	if deps.auroraStore != nil && result.Text != "" {
 		tokenCount := uint64(estimateTokens(result.Text))
 		if _, err := deps.auroraStore.SyncMessage(1, "assistant", result.Text, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync assistant message", "error", err)
@@ -100,9 +100,8 @@ func handleRunSuccess(
 	// regardless of whether the response is empty or memory extraction succeeds.
 	// This ensures dreaming triggers reliably even for tool-only or silent runs.
 	//
-	// Skip entirely for Discord: coding sessions are ephemeral and task-driven;
-	// memory extraction and dreaming add latency without benefit.
-	if params.Message != "" && !isDiscordDelivery(params.Delivery) {
+	// Execute auto-memory extraction/dreaming for successful runs with user input.
+	if params.Message != "" {
 		go func() {
 			// Limit concurrent extractions to avoid overloading sglang.
 			select {
@@ -574,13 +573,6 @@ func deliveryChannel(d *DeliveryContext) string {
 	return d.Channel
 }
 
-// isDiscordDelivery reports whether the run targets the Discord channel.
-// Discord is a coding-only channel with ephemeral sessions; heavy persistence
-// systems (Aurora, Memory, Compaction, Dreaming) are unnecessary overhead.
-func isDiscordDelivery(d *DeliveryContext) bool {
-	return d != nil && d.Channel == "discord"
-}
-
 // classifyMessageProfile heuristically selects the tool profile for a Telegram message.
 // Returns "chat" for general conversation tasks (web, email, media, memory) and ""
 // (full tool set) for messages that likely require coding / file-system operations.
@@ -588,9 +580,6 @@ func isDiscordDelivery(d *DeliveryContext) bool {
 // Conservative by design: when in doubt it returns "" (full set) so that the agent
 // never silently lacks a required tool. The "chat" profile is activated only when the
 // message contains no recognisable coding/FS trigger keywords.
-//
-// Callers should only invoke this for non-Discord channels; Discord always uses the
-// "coding" profile regardless of message content.
 func classifyMessageProfile(msg string) string {
 	if msg == "" {
 		return "chat"

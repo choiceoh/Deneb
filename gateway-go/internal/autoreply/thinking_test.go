@@ -1,8 +1,8 @@
 package autoreply
 
 import (
-	"testing"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"testing"
 )
 
 func TestNormalizeThinkLevel(t *testing.T) {

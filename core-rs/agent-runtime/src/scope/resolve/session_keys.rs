@@ -49,10 +49,6 @@ pub struct BuildAgentPeerSessionKeyParams<'a> {
 
 // Pre-compiled regexes used by multiple functions.
 #[allow(clippy::expect_used)]
-static DISCORD_LEGACY_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").expect("valid regex")
-});
-#[allow(clippy::expect_used)]
 static CRON_RUN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").expect("valid regex"));
 
@@ -186,10 +182,6 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
     }
     if has_direct {
         return SessionKeyChatType::Direct;
-    }
-    // Legacy Discord keys: discord:<accountId>:guild-<guildId>:channel-<channelId>
-    if DISCORD_LEGACY_RE.is_match(&scoped) {
-        return SessionKeyChatType::Channel;
     }
     SessionKeyChatType::Unknown
 }
@@ -709,7 +701,7 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_identity_links_no_match() {
         let mut links = std::collections::HashMap::new();
-        links.insert("other-user".to_string(), vec!["discord:other".to_string()]);
+        links.insert("other-user".to_string(), vec!["telegram:other".to_string()]);
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
                 agent_id: "bot",

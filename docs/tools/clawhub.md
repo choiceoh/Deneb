@@ -112,7 +112,7 @@ Reporting and moderation:
 - Moderators can view hidden skills, unhide them, delete them, or ban users.
 - Abusing the report feature can result in account bans.
 
-Interested in becoming a moderator? Ask in the Deneb Discord and contact a
+Interested in becoming a moderator? Ask in the Deneb Telegram and contact a
 moderator or maintainer.
 
 ## CLI commands and parameters

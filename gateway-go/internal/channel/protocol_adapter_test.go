@@ -26,8 +26,8 @@ func (p *mockPlugin) Status() channel.Status             { return p.stat }
 func TestProtocolAdapterListPlugins(t *testing.T) {
 	reg := channel.NewRegistry()
 	if err := reg.Register(&mockPlugin{
-		id:   "discord",
-		meta: channel.Meta{ID: "discord", Label: "Discord"},
+		id:   "telegram",
+		meta: channel.Meta{ID: "telegram", Label: "Telegram"},
 		stat: channel.Status{Connected: true},
 	}); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -38,8 +38,8 @@ func TestProtocolAdapterListPlugins(t *testing.T) {
 	if len(plugins) != 1 {
 		t.Fatalf("ListPlugins() returned %d, want 1", len(plugins))
 	}
-	if plugins[0].ID != "discord" {
-		t.Errorf("ID = %q, want %q", plugins[0].ID, "discord")
+	if plugins[0].ID != "telegram" {
+		t.Errorf("ID = %q, want %q", plugins[0].ID, "telegram")
 	}
 	if plugins[0].Kind != protocol.PluginKindChannel {
 		t.Errorf("Kind = %q, want %q", plugins[0].Kind, protocol.PluginKindChannel)

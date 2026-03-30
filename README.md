@@ -34,7 +34,7 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 
 We deliberately support fewer channels and architectures — **a smaller surface lets us move faster and ship fewer bugs.**
 
-- **One channel done right** (Telegram) > eight channels done halfway
+- **One channel done right** (Telegram) > many channels done halfway
 - **Every feature battle-tested in production** before landing in the repo
 - **Faster iteration** — fewer platforms to test, fewer edge cases to chase
 
@@ -97,7 +97,7 @@ Extensible skill plugins for domain-specific capabilities (16 skills):
 
 **Telegram** is the only channel with full, battle-tested production support — reactions, inline buttons, polls, topics, group policies, and all core features.
 
-**Discord** is the secondary coding-specialized channel. Other channels are not supported.
+Other channels are not supported.
 
 ### Tool System
 

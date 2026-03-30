@@ -10,7 +10,7 @@ func TestIsACPSessionFacade(t *testing.T) {
 	if !IsACPSession("acp:abc") {
 		t.Fatalf("expected ACP session prefix to be recognized")
 	}
-	if IsACPSession("discord:abc") {
+	if IsACPSession("telegram:abc") {
 		t.Fatalf("unexpected ACP recognition for non-ACP session")
 	}
 }

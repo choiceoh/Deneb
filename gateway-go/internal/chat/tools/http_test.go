@@ -166,7 +166,7 @@ func TestToolHTTP_truncatesLargeResponse(t *testing.T) {
 	defer srv.Close()
 
 	out, err := callHTTP(t, map[string]any{
-		"url":              srv.URL,
+		"url":                srv.URL,
 		"max_response_chars": 1000,
 	})
 	if err != nil {
