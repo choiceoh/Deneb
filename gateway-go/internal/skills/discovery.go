@@ -81,7 +81,8 @@ type discoveredSkill struct {
 	FilePath string
 	BaseDir  string
 	Source   SkillSource
-	Content  string // raw SKILL.md content
+	Content  string // raw SKILL.md content (frontmatter only for progressive loading)
+	Category string // parent category directory name (empty for flat layout)
 }
 
 // DiscoverWorkspaceSkills discovers skills from all configured sources and
@@ -156,9 +157,10 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 		fm := ParseFrontmatter(ds.Content)
 		entry := SkillEntry{
 			Skill: Skill{
-				Name:   ds.Name,
-				Dir:    ds.BaseDir,
-				Source: ds.Source,
+				Name:     ds.Name,
+				Dir:      ds.BaseDir,
+				Source:   ds.Source,
+				Category: ds.Category,
 			},
 			Frontmatter: fm,
 			Metadata:    ResolveDenebMetadata(fm),
@@ -169,6 +171,14 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 			entry.Skill.Description = desc
 		} else if ds.Desc != "" {
 			entry.Skill.Description = ds.Desc
+		}
+		// Version from frontmatter.
+		if v, ok := fm["version"]; ok && v != "" {
+			entry.Skill.Version = v
+		}
+		// Category from frontmatter overrides directory-based category.
+		if cat, ok := fm["category"]; ok && cat != "" {
+			entry.Skill.Category = cat
 		}
 		// Store file path for prompt building.
 		entry.Skill.FilePath = ds.FilePath
@@ -252,37 +262,83 @@ func loadSkillsFromSource(dir string, source SkillSource, limits SkillsLimits, l
 			continue
 		}
 		skillMd := filepath.Join(skillDir, "SKILL.md")
-		if !fileExists(skillMd) {
+		if fileExists(skillMd) {
+			// Flat layout: skills/skill-name/SKILL.md
+			ds := loadSingleSkill(skillMd, skillDir, dir, rootRealPath, "", source, limits, log)
+			if ds != nil {
+				loaded = append(loaded, *ds)
+				if len(loaded) >= limits.MaxSkillsLoadedPerSource {
+					break
+				}
+			}
 			continue
 		}
-		skillMdReal := resolveContainedPath(skillMd, dir, rootRealPath)
-		if skillMdReal == "" {
-			continue
+
+		// Nested category layout: skills/category/skill-name/SKILL.md
+		// Check if this directory contains subdirectories with SKILL.md files.
+		subDirs := listChildDirectories(skillDir)
+		sort.Strings(subDirs)
+		for _, subName := range subDirs {
+			subSkillDir := filepath.Join(skillDir, subName)
+			subSkillDirReal := resolveContainedPath(subSkillDir, dir, rootRealPath)
+			if subSkillDirReal == "" {
+				continue
+			}
+			subSkillMd := filepath.Join(subSkillDir, "SKILL.md")
+			if !fileExists(subSkillMd) {
+				continue
+			}
+			ds := loadSingleSkill(subSkillMd, subSkillDir, dir, rootRealPath, name, source, limits, log)
+			if ds != nil {
+				loaded = append(loaded, *ds)
+				if len(loaded) >= limits.MaxSkillsLoadedPerSource {
+					break
+				}
+			}
 		}
-		size := fileSize(skillMdReal)
-		if size > int64(limits.MaxSkillFileBytes) {
-			log.Warn("skipping skill: oversized SKILL.md",
-				"skill", name, "size", size, "max", limits.MaxSkillFileBytes)
-			continue
-		}
-		content, err := os.ReadFile(skillMdReal)
-		if err != nil {
-			continue
-		}
-		skillName, desc := extractSkillNameAndDesc(string(content), name)
-		loaded = append(loaded, discoveredSkill{
-			Name:     skillName,
-			Desc:     desc,
-			FilePath: skillMd,
-			BaseDir:  skillDir,
-			Source:   source,
-			Content:  string(content),
-		})
 		if len(loaded) >= limits.MaxSkillsLoadedPerSource {
 			break
 		}
 	}
 	return loaded
+}
+
+// loadSingleSkill loads a single skill from its SKILL.md file.
+// Uses progressive loading: only reads the frontmatter block for metadata
+// extraction, deferring the full body read to when the LLM requests it.
+func loadSingleSkill(skillMdPath, skillDir, rootDir, rootRealPath, category string, source SkillSource, limits SkillsLimits, log *slog.Logger) *discoveredSkill {
+	skillMdReal := resolveContainedPath(skillMdPath, rootDir, rootRealPath)
+	if skillMdReal == "" {
+		return nil
+	}
+	size := fileSize(skillMdReal)
+	if size > int64(limits.MaxSkillFileBytes) {
+		log.Warn("skipping skill: oversized SKILL.md",
+			"skill", filepath.Base(skillDir), "size", size, "max", limits.MaxSkillFileBytes)
+		return nil
+	}
+	content, err := os.ReadFile(skillMdReal)
+	if err != nil {
+		return nil
+	}
+
+	// Progressive loading: extract only the frontmatter block for metadata.
+	// The full body is read on demand by the LLM via the file path.
+	header, _ := ExtractFrontmatterBlock(string(content))
+	if header == "" {
+		header = string(content)
+	}
+
+	skillName, desc := extractSkillNameAndDesc(string(content), filepath.Base(skillDir))
+	return &discoveredSkill{
+		Name:     skillName,
+		Desc:     desc,
+		FilePath: skillMdPath,
+		BaseDir:  skillDir,
+		Source:   source,
+		Content:  header,
+		Category: category,
+	}
 }
 
 // resolveNestedSkillsRoot detects if dir has a nested skills/ subdirectory

@@ -1,5 +1,7 @@
 ---
 name: github
+version: "1.0.0"
+category: coding
 description: "GitHub operations via `gh` CLI: PRs (list, diff, review, comment, merge), issues (CRUD, labels, milestones), CI (status, logs, dispatch), search (code, PRs, issues), releases, repos, and API/GraphQL queries. Use when: (1) viewing PR diffs or changed files, (2) submitting PR reviews, (3) commenting on PRs/issues with safe heredoc, (4) managing labels, (5) searching code/PRs/issues, (6) checking or re-running CI, (7) creating releases, (8) dispatching workflows, (9) querying GitHub API or GraphQL. NOT for: local git operations (use git directly), non-GitHub hosts, complex code review (use coding-agent), or when gh auth is not configured."
 metadata:
   {

@@ -97,6 +97,22 @@ func TestEscapeXml(t *testing.T) {
 	}
 }
 
+func TestBuildSkillsPrompt_categoryIncluded(t *testing.T) {
+	skills := []PromptSkill{
+		{Name: "tmux", Description: "Terminal multiplexer", FilePath: "~/skills/tmux/SKILL.md", Category: "devops"},
+		{Name: "weather", Description: "Weather info", FilePath: "~/skills/weather/SKILL.md"},
+	}
+	result := BuildSkillsPrompt(skills, DefaultSkillsLimits())
+
+	if !strings.Contains(result.Prompt, "<category>devops</category>") {
+		t.Error("expected <category>devops</category> in prompt for tmux skill")
+	}
+	// Weather has no category — should not have a category tag.
+	if strings.Contains(result.Prompt, "weather") && strings.Count(result.Prompt, "<category>") != 1 {
+		t.Error("expected only 1 category tag (for tmux), weather should have none")
+	}
+}
+
 func TestBuildTruncationNote(t *testing.T) {
 	// No truncation, no compact.
 	note := BuildTruncationNote(PromptResult{}, 10)

@@ -1,5 +1,7 @@
 ---
 name: xurl
+version: "1.0.0"
+category: integration
 description: A CLI tool for making authenticated requests to the X (Twitter) API. Use this skill when you need to post tweets, reply, quote, search, read posts, manage followers, send DMs, upload media, or interact with any X API v2 endpoint.
 metadata:
   {

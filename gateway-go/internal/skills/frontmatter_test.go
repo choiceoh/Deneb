@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -320,5 +321,68 @@ func TestResolveDenebMetadata_WithRequires(t *testing.T) {
 	}
 	if len(meta.Requires.Env) != 1 {
 		t.Errorf("expected 1 env, got %d", len(meta.Requires.Env))
+	}
+}
+
+func TestResolveDenebMetadata_WithTags(t *testing.T) {
+	fm := ParsedFrontmatter{
+		"metadata": `{"deneb": {"tags": ["cli", "productivity", "google"]}}`,
+	}
+	meta := ResolveDenebMetadata(fm)
+	if meta == nil {
+		t.Fatal("expected non-nil metadata")
+	}
+	if len(meta.Tags) != 3 {
+		t.Fatalf("expected 3 tags, got %d", len(meta.Tags))
+	}
+	if meta.Tags[0] != "cli" || meta.Tags[1] != "productivity" || meta.Tags[2] != "google" {
+		t.Errorf("unexpected tags: %v", meta.Tags)
+	}
+}
+
+func TestExtractFrontmatterBlock_Valid(t *testing.T) {
+	content := "---\nname: test\ndescription: A test\n---\n# Body\n\nSome content here."
+	header, offset := ExtractFrontmatterBlock(content)
+	if header == "" {
+		t.Fatal("expected non-empty header")
+	}
+	if !strings.Contains(header, "name: test") {
+		t.Errorf("header should contain frontmatter, got %q", header)
+	}
+	if offset <= 0 {
+		t.Errorf("expected positive offset, got %d", offset)
+	}
+	body := content[offset:]
+	if !strings.Contains(body, "# Body") {
+		t.Errorf("body should contain content after frontmatter, got %q", body)
+	}
+}
+
+func TestExtractFrontmatterBlock_NoFrontmatter(t *testing.T) {
+	content := "Just some text\nNo frontmatter here"
+	header, offset := ExtractFrontmatterBlock(content)
+	if header != "" {
+		t.Errorf("expected empty header for no frontmatter, got %q", header)
+	}
+	if offset != 0 {
+		t.Errorf("expected 0 offset, got %d", offset)
+	}
+}
+
+func TestExtractFrontmatterBlock_NoClosing(t *testing.T) {
+	content := "---\nname: open\ndescription: No close"
+	header, _ := ExtractFrontmatterBlock(content)
+	if header == "" {
+		t.Fatal("expected non-empty header even without closing delimiter")
+	}
+	if !strings.Contains(header, "name: open") {
+		t.Errorf("header should contain frontmatter, got %q", header)
+	}
+}
+
+func TestExtractFrontmatterBlock_Empty(t *testing.T) {
+	header, offset := ExtractFrontmatterBlock("")
+	if header != "" || offset != 0 {
+		t.Errorf("expected empty result for empty content")
 	}
 }

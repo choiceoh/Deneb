@@ -1,5 +1,7 @@
 ---
 name: session-logs
+version: "1.0.0"
+category: productivity
 description: Search and analyze your own session logs (older/parent conversations) using jq.
 metadata: { "deneb": { "emoji": "📜", "requires": { "bins": ["jq", "rg"] } } }
 ---
