@@ -71,30 +71,19 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 		return nil
 	}
 
-	// Parse JSON array from response.
+	// Parse JSON array from response. The model may emit thinking tags,
+	// code fences, or prose before the actual JSON array. ExtractArray
+	// handles all cleanup (thinking tags, code fences, bracket extraction).
 	text = strings.TrimSpace(text)
-	// Strip markdown code fences if present.
-	if strings.HasPrefix(text, "```") {
-		if idx := strings.Index(text[3:], "\n"); idx >= 0 {
-			text = text[3+idx+1:]
-		}
-		text = strings.TrimSuffix(text, "```")
-		text = strings.TrimSpace(text)
-	}
-
-	// Parse JSON array from response. The model may emit thinking/reasoning
-	// text before the actual JSON, so extract the first valid JSON array.
 	var terms []string
-	if err := json.Unmarshal([]byte(text), &terms); err != nil {
-		if arr, ok := jsonutil.ExtractArray(text); ok {
-			if json.Unmarshal([]byte(arr), &terms) != nil {
-				e.logger.Debug("query expansion parse failed", "raw", text, "error", err)
-				return nil
-			}
-		} else {
-			e.logger.Debug("query expansion parse failed", "raw", text, "error", err)
+	if arr, ok := jsonutil.ExtractArray(text); ok {
+		if json.Unmarshal([]byte(arr), &terms) != nil {
+			e.logger.Debug("query expansion parse failed", "raw", text)
 			return nil
 		}
+	} else {
+		e.logger.Debug("query expansion parse failed", "raw", text)
+		return nil
 	}
 
 	if len(terms) > 10 {
