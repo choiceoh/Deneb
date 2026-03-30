@@ -118,6 +118,7 @@ func executeAgentRun(
 	// hint is ready it gets injected; if not, we skip it rather than stalling.
 	type proactiveResult struct{ hint string }
 	proactiveCh := make(chan proactiveResult, 1)
+	proactiveStart := time.Now()
 	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
 		go func() {
 			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)
@@ -247,8 +248,9 @@ func executeAgentRun(
 
 	// 6. Bounded wait for proactive context hint.
 	// The goroutine runs concurrently with the parallel prep above; after prep
-	// completes we wait briefly to improve hit-rate without adding noticeable
-	// latency. If still not ready, skip it to avoid stalling the run.
+	// completes we wait a little longer, using a dynamic budget based on how
+	// much time proactive already had during prep. If still not ready, skip it
+	// to avoid stalling the run.
 	// Hit rate is logged here to inform future tuning decisions.
 	var proactiveHint string
 	select {
@@ -260,20 +262,22 @@ func executeAgentRun(
 			logger.Debug("proactive context miss (N/A or filtered)")
 		}
 	default:
-		const proactiveGraceWait = 120 * time.Millisecond
+		proactiveGraceWait := computeProactiveGraceWait(time.Since(proactiveStart))
 		select {
 		case proactive := <-proactiveCh:
 			if proactive.hint != "" {
 				logger.Info("proactive context hit (after grace wait)",
 					"chars", len(proactive.hint),
-					"waitMs", proactiveGraceWait.Milliseconds())
+					"waitMs", proactiveGraceWait.Milliseconds(),
+					"elapsedMs", time.Since(proactiveStart).Milliseconds())
 				proactiveHint = "\n## Context Hint (from local analysis)\n" + proactive.hint
 			} else {
 				logger.Debug("proactive context miss (N/A or filtered)")
 			}
 		case <-time.After(proactiveGraceWait):
 			logger.Debug("proactive context not ready, skipping (fire-and-forget)",
-				"graceWaitMs", proactiveGraceWait.Milliseconds())
+				"graceWaitMs", proactiveGraceWait.Milliseconds(),
+				"elapsedMs", time.Since(proactiveStart).Milliseconds())
 		}
 	}
 
