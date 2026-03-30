@@ -29,7 +29,7 @@ type SglangDeps struct {
 //
 // sglang may be nil; tools that require sglang (polaris, pilot) degrade gracefully.
 func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, sglang *SglangDeps) {
-	RegisterFSTools(registry, deps.WorkspaceDir, sglang)
+	RegisterFSTools(registry, deps, sglang)
 	RegisterProcessTools(registry, &deps.Process)
 	RegisterWebTools(registry)
 	RegisterSessionTools(registry, &deps.Sessions)
@@ -55,7 +55,8 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 }
 
 // RegisterFSTools registers file-system, code analysis, and git tools.
-func RegisterFSTools(registry toolctx.ToolRegistrar, workspaceDir string, sglang *SglangDeps) {
+func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, sglang *SglangDeps) {
+	workspaceDir := deps.WorkspaceDir
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "read",
 		Description: "Read file contents with line numbers (default: 2000 lines). Use offset/limit for large files",
@@ -123,8 +124,14 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, workspaceDir string, sglang
 		Fn:          tools.ToolGit(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "memory",
+		Description: "Unified memory: search facts + files, get/set/forget individual facts, view status. Actions: search (default), get, set, forget, status",
+		InputSchema: memoryToolSchema(),
+		Fn:          tools.ToolMemory(&deps.Vega, workspaceDir),
+	})
+	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "memory_search",
-		Description: "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with context",
+		Description: "Deprecated: use memory action=search instead. Keyword search across MEMORY.md + memory/*.md",
 		InputSchema: memorySearchToolSchema(),
 		Fn:          tools.ToolMemorySearch(workspaceDir),
 	})

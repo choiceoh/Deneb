@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
@@ -131,6 +132,7 @@ func executeAgentRun(
 	// All three are now independent: apiType is known (step 3) so the system prompt
 	// can be built in the correct format without waiting for sequential resolution.
 	var knowledgeAddition string
+	var auroraSystemAddition string
 	var messages []llm.Message
 	var contextErr error
 	var systemPrompt json.RawMessage
@@ -158,10 +160,26 @@ func executeAgentRun(
 	}()
 
 	// Context assembly (parallel).
+	// Primary: Aurora store (includes summaries from compaction).
+	// Fallback: file transcript (no compaction awareness).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
-		if deps.transcript != nil {
+		if deps.auroraStore != nil {
+			asmCfg := aurora.AssemblyConfig{
+				TokenBudget:    deps.contextCfg.TokenBudget,
+				FreshTailCount: deps.contextCfg.FreshTailCount,
+				MaxMessages:    deps.contextCfg.MaxMessages,
+			}
+			asmResult, err := aurora.Assemble(deps.auroraStore, 1, asmCfg, logger)
+			if err != nil {
+				logger.Warn("aurora context assembly failed, falling back to transcript", "error", err)
+			} else if len(asmResult.Messages) > 0 {
+				messages = asmResult.Messages
+				auroraSystemAddition = asmResult.SystemPromptAddition
+			}
+		}
+		if len(messages) == 0 && deps.transcript != nil {
 			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
 			if err != nil {
 				contextErr = err
@@ -252,8 +270,8 @@ func executeAgentRun(
 		logger.Debug("proactive context not ready, skipping (fire-and-forget)")
 	}
 
-	// 7. Append knowledge and proactive hint to the built system prompt.
-	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint)
+	// 7. Append knowledge, proactive hint, and Aurora systemAddition to the built system prompt.
+    systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint, auroraSystemAddition)
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt),
 		"knowledgeChars", len(knowledgeAddition),

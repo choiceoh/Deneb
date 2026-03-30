@@ -82,7 +82,8 @@ var coreSections = []coreSection{
 		{"web", "Search the web, fetch URLs, or search+auto-fetch", []ToolProfileID{ProfileCoding}},
 	}},
 	{"memory", "Memory", []coreTool{
-		{"memory_search", "Semantic search", []ToolProfileID{ProfileCoding}},
+		{"memory", "Unified memory (search, get, set, forget, status)", []ToolProfileID{ProfileCoding}},
+		{"memory_search", "Legacy keyword search (deprecated)", []ToolProfileID{ProfileCoding}},
 	}},
 	{"sessions", "Sessions", []coreTool{
 		{"sessions_list", "List sessions", []ToolProfileID{ProfileCoding, ProfileMessaging}},

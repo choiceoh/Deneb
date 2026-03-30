@@ -96,7 +96,7 @@ var toolCategories = []struct {
 	{"Exec", []string{"exec", "process"}},
 	{"AI", []string{"pilot", "polaris"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory_search", "vega"}},
+	{"Memory", []string{"memory", "memory_search", "vega"}},
 	{"System", []string{"cron", "message", "gateway"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
@@ -223,7 +223,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	var d strings.Builder
 
 	// Memory Recall.
-	if toolSet["memory_search"] {
+	if toolSet["memory"] {
+		d.WriteString("## Memory Recall\n")
+		d.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
+		d.WriteString("추가 정보가 필요하면 `memory` 도구로 팩트 스토어와 파일 메모리를 검색하세요.\n")
+		d.WriteString("- `memory(action=search, query=...)`: 통합 검색 (팩트 + 파일)\n")
+		d.WriteString("- `memory(action=get, fact_id=N)`: 특정 팩트 상세 조회\n")
+		d.WriteString("- `memory(action=set, query=..., category=...)`: 새 팩트 생성\n")
+		d.WriteString("- `memory(action=forget, fact_id=N)`: 팩트 삭제\n")
+		d.WriteString("- `memory(action=status)`: 메모리 상태 요약\n\n")
+	} else if toolSet["memory_search"] {
 		d.WriteString("## Memory Recall\n")
 		d.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
 		d.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")

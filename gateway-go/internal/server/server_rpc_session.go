@@ -205,7 +205,8 @@ func (s *Server) registerSessionRPCMethods() {
 			Scheduler: s.cron,
 		},
 		Vega: chat.VegaDeps{
-			MemoryStore: chatCfg.MemoryStore,
+			MemoryStore:    chatCfg.MemoryStore,
+			MemoryEmbedder: chatCfg.MemoryEmbedder,
 		},
 		LLMClient:    chatCfg.LLMClient,
 		DefaultModel: chatCfg.DefaultModel,

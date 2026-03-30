@@ -46,6 +46,7 @@ type ChronoDeps struct {
 
 // VegaDeps holds dependencies for vega search and health-check tools.
 type VegaDeps struct {
-	Backend     vega.Backend  // may be nil until SetVega is called
-	MemoryStore *memory.Store // may be nil when aurora-memory is not configured
+	Backend       vega.Backend     // may be nil until SetVega is called
+	MemoryStore   *memory.Store    // may be nil when aurora-memory is not configured
+	MemoryEmbedder *memory.Embedder // may be nil when embedding is not configured
 }
