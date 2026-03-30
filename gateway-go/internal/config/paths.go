@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -268,14 +267,8 @@ func resolveHomeDir() string {
 	if home := os.Getenv("HOME"); home != "" {
 		return home
 	}
-	if home := os.Getenv("USERPROFILE"); home != "" {
-		return home
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		if runtime.GOOS == "windows" {
-			return `C:\`
-		}
 		return "/tmp"
 	}
 	return home

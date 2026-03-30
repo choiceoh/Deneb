@@ -100,15 +100,15 @@ func TestListNodes(t *testing.T) {
 
 func TestDescribeNode(t *testing.T) {
 	m := NewManager()
-	req := m.RequestPairing(PairRequest{NodeID: "node-x", Platform: "darwin"})
+	req := m.RequestPairing(PairRequest{NodeID: "node-x", Platform: "linux"})
 	m.ApprovePairing(req.RequestID)
 
 	info := m.DescribeNode("node-x")
 	if info == nil {
 		t.Fatal("expected node info")
 	}
-	if info.Platform != "darwin" {
-		t.Fatalf("expected 'darwin', got %q", info.Platform)
+	if info.Platform != "linux" {
+		t.Fatalf("expected 'linux', got %q", info.Platform)
 	}
 
 	if m.DescribeNode("nonexistent") != nil {

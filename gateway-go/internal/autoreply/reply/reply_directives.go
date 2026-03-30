@@ -39,9 +39,6 @@ var httpURLRe = regexp.MustCompile(`^https?://\S+`)
 // fenceRe matches code fence markers.
 var fenceRe = regexp.MustCompile("^\\s*(?:```|~~~)")
 
-// windowsDriveRe matches Windows drive paths.
-var windowsDriveRe = regexp.MustCompile(`^[a-zA-Z]:[/\\]`)
-
 // schemeRe matches URI schemes.
 var schemeRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
 
@@ -54,8 +51,6 @@ func isLikelyLocalPath(candidate string) bool {
 		strings.HasPrefix(candidate, "./") ||
 		strings.HasPrefix(candidate, "../") ||
 		strings.HasPrefix(candidate, "~") ||
-		windowsDriveRe.MatchString(candidate) ||
-		strings.HasPrefix(candidate, `\\`) ||
 		(!schemeRe.MatchString(candidate) && (strings.Contains(candidate, "/") || strings.Contains(candidate, `\`)))
 }
 

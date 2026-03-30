@@ -285,7 +285,7 @@ func TestResolveDenebMetadata_NoDenebKey(t *testing.T) {
 
 func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	fm := ParsedFrontmatter{
-		"metadata": `{"deneb": {"always": true, "skillKey": "weather", "emoji": "☀️", "os": ["linux", "macos"]}}`,
+		"metadata": `{"deneb": {"always": true, "skillKey": "weather", "emoji": "☀️", "os": ["linux"]}}`,
 	}
 	meta := ResolveDenebMetadata(fm)
 	if meta == nil {
@@ -300,8 +300,8 @@ func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	if meta.Emoji != "☀️" {
 		t.Errorf("expected emoji='☀️', got %q", meta.Emoji)
 	}
-	if len(meta.OS) != 2 {
-		t.Fatalf("expected 2 OS entries, got %d", len(meta.OS))
+	if len(meta.OS) != 1 {
+		t.Fatalf("expected 1 OS entry, got %d", len(meta.OS))
 	}
 }
 

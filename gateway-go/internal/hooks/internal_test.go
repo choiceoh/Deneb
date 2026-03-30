@@ -107,19 +107,13 @@ func TestEvaluateEligibility_AlwaysTrue(t *testing.T) {
 }
 
 func TestEvaluateEligibility_OSFilter(t *testing.T) {
-	meta := &DenebHookMetadata{OS: []string{"darwin"}}
+	meta := &DenebHookMetadata{OS: []string{"linux"}}
+	if !EvaluateEligibility(meta, EligibilityContext{Platform: "linux"}) {
+		t.Error("linux-only hook should pass on linux")
+	}
+	meta = &DenebHookMetadata{OS: []string{"freebsd"}}
 	if EvaluateEligibility(meta, EligibilityContext{Platform: "linux"}) {
-		t.Error("darwin-only hook should fail on linux")
-	}
-	if !EvaluateEligibility(meta, EligibilityContext{Platform: "darwin"}) {
-		t.Error("darwin-only hook should pass on darwin")
-	}
-}
-
-func TestEvaluateEligibility_Win32Mapping(t *testing.T) {
-	meta := &DenebHookMetadata{OS: []string{"win32"}}
-	if !EvaluateEligibility(meta, EligibilityContext{Platform: "windows"}) {
-		t.Error("win32 should match windows GOOS")
+		t.Error("freebsd-only hook should fail on linux")
 	}
 }
 

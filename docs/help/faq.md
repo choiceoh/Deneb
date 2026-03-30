@@ -1189,7 +1189,7 @@ Everything lives under `$DENEB_STATE_DIR` (default: `~/.deneb`):
 | `$DENEB_STATE_DIR/agents/<agentId>/agent/auth-profiles.json` | Auth profiles (OAuth, API keys, and optional `keyRef`/`tokenRef`)  |
 | `$DENEB_STATE_DIR/secrets.json`                              | Optional file-backed secret payload for `file` SecretRef providers |
 | `$DENEB_STATE_DIR/agents/<agentId>/agent/auth.json`          | Legacy compatibility file (static `api_key` entries scrubbed)      |
-| `$DENEB_STATE_DIR/credentials/`                              | Provider state (e.g. `whatsapp/<accountId>/creds.json`)            |
+| `$DENEB_STATE_DIR/credentials/`                              | Provider state (e.g. `telegram/<accountId>/creds.json`)            |
 | `$DENEB_STATE_DIR/agents/`                                   | Per-agent state (agentDir + sessions)                              |
 | `$DENEB_STATE_DIR/agents/<agentId>/sessions/`                | Conversation history & state (per agent)                           |
 | `$DENEB_STATE_DIR/agents/<agentId>/sessions/sessions.json`   | Session metadata (per agent)                                       |
@@ -1575,7 +1575,7 @@ Docs: [Doctor](/gateway/doctor).
 ```json5
 {
   agents: { defaults: { workspace: "~/.deneb/workspace" } },
-  channels: { whatsapp: { allowFrom: ["+15555550123"] } },
+  channels: { telegram: { allowFrom: ["123456789"] } },
 }
 ```
 

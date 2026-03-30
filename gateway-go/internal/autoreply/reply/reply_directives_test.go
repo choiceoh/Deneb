@@ -176,13 +176,6 @@ func TestSplitMediaFromOutput_Empty(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_WindowsPath(t *testing.T) {
-	_, urls, _, _ := splitMediaFromOutput("MEDIA: C:\\Users\\photo.jpg")
-	if len(urls) != 1 {
-		t.Fatalf("expected 1 URL for Windows path, got %d", len(urls))
-	}
-}
-
 func TestSplitMediaFromOutput_RelativePath(t *testing.T) {
 	_, urls, _, _ := splitMediaFromOutput("MEDIA: ./output/image.png")
 	if len(urls) != 1 {

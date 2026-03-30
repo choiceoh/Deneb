@@ -19,7 +19,6 @@ pub fn validate_send_params(
         "message",
         "mediaUrl",
         "mediaUrls",
-        "gifPlayback",
         "channel",
         "accountId",
         "agentId",
@@ -46,9 +45,6 @@ pub fn validate_send_params(
                 }
             }
         }
-    });
-    check_optional(obj, "gifPlayback", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
     });
     check_optional(obj, "channel", path, errors, |v, p, e| {
         check_string(v, p, e);

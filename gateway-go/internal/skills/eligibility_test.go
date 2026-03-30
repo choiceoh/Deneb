@@ -37,9 +37,9 @@ func TestShouldIncludeSkill_disabled(t *testing.T) {
 
 func TestShouldIncludeSkill_osRestriction(t *testing.T) {
 	entry := SkillEntry{
-		Skill: Skill{Name: "mac-only", Source: SourceBundled},
+		Skill: Skill{Name: "linux-only", Source: SourceBundled},
 		Metadata: &DenebSkillMetadata{
-			OS: []string{"darwin"},
+			OS: []string{"linux"},
 		},
 	}
 	ctx := EligibilityContext{
@@ -47,13 +47,13 @@ func TestShouldIncludeSkill_osRestriction(t *testing.T) {
 		EnvVars:      map[string]string{},
 		SkillConfigs: map[string]SkillConfig{},
 	}
-	if ShouldIncludeSkill(entry, ctx) {
-		t.Error("expected darwin-only skill to be excluded on linux")
+	if !ShouldIncludeSkill(entry, ctx) {
+		t.Error("expected linux-only skill to be included on linux")
 	}
 
-	ctx.Platform = "darwin"
-	if !ShouldIncludeSkill(entry, ctx) {
-		t.Error("expected darwin-only skill to be included on darwin")
+	ctx.Platform = "freebsd"
+	if ShouldIncludeSkill(entry, ctx) {
+		t.Error("expected linux-only skill to be excluded on freebsd")
 	}
 }
 
