@@ -14,9 +14,9 @@
 package modelrole
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -143,11 +143,11 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 	}
 
 	logger.Info("modelrole: registry initialized",
-		"main", fmt.Sprintf("%s/%s", models[RoleMain].ProviderID, models[RoleMain].Model),
-		"lightweight", fmt.Sprintf("%s/%s", models[RoleLightweight].ProviderID, models[RoleLightweight].Model),
-		"pilot", fmt.Sprintf("%s/%s", models[RolePilot].ProviderID, models[RolePilot].Model),
-		"fallback", fmt.Sprintf("%s/%s", models[RoleFallback].ProviderID, models[RoleFallback].Model),
-		"image", fmt.Sprintf("%s/%s", models[RoleImage].ProviderID, models[RoleImage].Model),
+		"main", logModelAlias(models[RoleMain]),
+		"lightweight", logModelAlias(models[RoleLightweight]),
+		"pilot", logModelAlias(models[RolePilot]),
+		"fallback", logModelAlias(models[RoleFallback]),
+		"image", logModelAlias(models[RoleImage]),
 	)
 
 	return r
@@ -264,6 +264,18 @@ func parseModelID(model string) (providerID, modelName string) {
 		}
 	}
 	return "", model
+}
+
+// logModelAlias returns a short, display-only alias for startup logs.
+func logModelAlias(cfg ModelConfig) string {
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		return strings.TrimSpace(cfg.ProviderID)
+	}
+	if idx := strings.LastIndex(model, "/"); idx >= 0 && idx < len(model)-1 {
+		model = model[idx+1:]
+	}
+	return model
 }
 
 // resolveBaseURL returns the default base URL for a known provider.

@@ -107,3 +107,35 @@ func TestFallbackChain(t *testing.T) {
 		})
 	}
 }
+
+func TestLogModelAlias(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  ModelConfig
+		want string
+	}{
+		{
+			name: "plain model",
+			cfg:  ModelConfig{ProviderID: "zai", Model: "glm-5-turbo"},
+			want: "glm-5-turbo",
+		},
+		{
+			name: "nested model path",
+			cfg:  ModelConfig{ProviderID: "sglang", Model: "Qwen/Qwen3.5-35B-A3B"},
+			want: "Qwen3.5-35B-A3B",
+		},
+		{
+			name: "empty model falls back to provider",
+			cfg:  ModelConfig{ProviderID: "google"},
+			want: "google",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := logModelAlias(tt.cfg); got != tt.want {
+				t.Errorf("logModelAlias(%+v) = %q, want %q", tt.cfg, got, tt.want)
+			}
+		})
+	}
+}
