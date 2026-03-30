@@ -21,9 +21,9 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout    = 5 * time.Second
-	proactiveMaxTokens  = 1024
-	proactiveMinMsgLen  = 20 // skip for very short messages
+	proactiveTimeout   = 5 * time.Second
+	proactiveMaxTokens = 1024
+	proactiveMinMsgLen = 20 // skip for very short messages
 )
 
 const proactiveSystemPrompt = `You are a context preparation assistant.
@@ -139,20 +139,20 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 // Called in the agent loop after tool execution, before feeding results back to LLM.
 
 const (
-	compressThreshold      = 16000 // chars — only compress very large outputs (saves sglang calls)
-	compressMaxTokens      = 1024
-	compressTimeout        = 10 * time.Second
+	compressThreshold = 16000 // chars — only compress very large outputs (saves sglang calls)
+	compressMaxTokens = 1024
+	compressTimeout   = 10 * time.Second
 	// Tools whose output should never be compressed (they're already structured/small).
 	toolCompressSkipPrefix = "pilot" // pilot already uses sglang, don't double-process
 )
 
 // toolCompressSkipSet contains tools whose output should not be compressed.
 // Two categories:
-//  - Already-structured outputs (grep, find, tree, git, analyze, diff): file:line:match
-//    or directory-tree format; LLM compression loses structure and is slower than
-//    the existing GrepResultSummarizer / OutputTrimmer pipeline.
-//  - Tools that already use sglang internally (pilot) or return small JSON (kv,
-//    sessions_list, memory_search) where compression adds no value.
+//   - Already-structured outputs (grep, find, tree, git, analyze, diff): file:line:match
+//     or directory-tree format; LLM compression loses structure and is slower than
+//     the existing GrepResultSummarizer / OutputTrimmer pipeline.
+//   - Tools that already use sglang internally (pilot) or return small JSON (kv,
+//     sessions_list, memory_search) where compression adds no value.
 var toolCompressSkipSet = map[string]bool{
 	// Structured-output tools — already handled by post-processors.
 	"grep":    true,
@@ -227,7 +227,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 const (
 	autoMemoryTimeout   = 45 * time.Second
 	autoMemoryMaxTokens = 512
-	autoMemoryMinInput  = 100  // skip for very short conversations
+	autoMemoryMinInput  = 100 // skip for very short conversations
 	autoMemoryMinOutput = 50
 )
 
