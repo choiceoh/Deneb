@@ -81,6 +81,11 @@ func (s *Store) Tier1Section(ctx context.Context) string {
 	}
 
 	result := b.String()
+	if len(result)/4 > Tier1MaxTokens {
+		// Hard safety cap: should not happen because we already budget per-line,
+		// but ensure header/preamble doesn't push us over budget.
+		result = "## 핵심 기억\n\n- 핵심 기억이 너무 길어 일부 항목을 생략했습니다.\n"
+	}
 
 	// Update cache.
 	t1Cache.mu.Lock()

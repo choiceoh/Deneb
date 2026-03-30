@@ -6,18 +6,27 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 // migrateSchema applies incremental schema changes for existing unified
 // databases that were created with an older schema version.
-func (s *Store) migrateSchema() {
+func (s *Store) migrateSchema() error {
 	// summaries: add structured section columns (Phase 2).
-	s.db.Exec(`ALTER TABLE summaries ADD COLUMN narrative TEXT`)
-	s.db.Exec(`ALTER TABLE summaries ADD COLUMN decisions TEXT`)
-	s.db.Exec(`ALTER TABLE summaries ADD COLUMN pending TEXT`)
-	s.db.Exec(`ALTER TABLE summaries ADD COLUMN refs TEXT`)
-	s.db.Exec(`ALTER TABLE summaries ADD COLUMN importance REAL NOT NULL DEFAULT 0.3`)
+	stmts := []string{
+		`ALTER TABLE summaries ADD COLUMN narrative TEXT`,
+		`ALTER TABLE summaries ADD COLUMN decisions TEXT`,
+		`ALTER TABLE summaries ADD COLUMN pending TEXT`,
+		`ALTER TABLE summaries ADD COLUMN refs TEXT`,
+		`ALTER TABLE summaries ADD COLUMN importance REAL NOT NULL DEFAULT 0.3`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.db.Exec(stmt); err != nil && !isIgnorableAlterError(err) {
+			return fmt.Errorf("schema migration failed (%s): %w", stmt, err)
+		}
+	}
+	return nil
 }
 
 // migrateFromLegacy detects legacy aurora.db and memory.db files and
@@ -128,34 +137,44 @@ func migrateAurora(tx *sql.Tx, dbPath string, logger *slog.Logger) error {
 	}
 
 	// context_items
-	copyTable(tx, src, "context_items",
+	if _, err := copyTable(tx, src, "context_items",
 		`SELECT conversation_id, ordinal, item_type, message_id, summary_id, created_at FROM context_items`,
 		`INSERT OR IGNORE INTO context_items (conversation_id, ordinal, item_type, message_id, summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		6)
+		6); err != nil {
+		return fmt.Errorf("copy context_items: %w", err)
+	}
 
 	// summary_parents
-	copyTable(tx, src, "summary_parents",
+	if _, err := copyTable(tx, src, "summary_parents",
 		`SELECT summary_id, parent_id FROM summary_parents`,
 		`INSERT OR IGNORE INTO summary_parents (summary_id, parent_id) VALUES (?, ?)`,
-		2)
+		2); err != nil {
+		return fmt.Errorf("copy summary_parents: %w", err)
+	}
 
 	// summary_messages
-	copyTable(tx, src, "summary_messages",
+	if _, err := copyTable(tx, src, "summary_messages",
 		`SELECT summary_id, message_id FROM summary_messages`,
 		`INSERT OR IGNORE INTO summary_messages (summary_id, message_id) VALUES (?, ?)`,
-		2)
+		2); err != nil {
+		return fmt.Errorf("copy summary_messages: %w", err)
+	}
 
 	// compaction_events
-	copyTable(tx, src, "compaction_events",
+	if _, err := copyTable(tx, src, "compaction_events",
 		`SELECT conversation_id, pass, level, tokens_before, tokens_after, created_summary_id, created_at FROM compaction_events`,
 		`INSERT INTO compaction_events (conversation_id, pass, level, tokens_before, tokens_after, created_summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		7)
+		7); err != nil {
+		return fmt.Errorf("copy compaction_events: %w", err)
+	}
 
 	// transferred_summaries
-	copyTable(tx, src, "transferred_summaries",
+	if _, err := copyTable(tx, src, "transferred_summaries",
 		`SELECT summary_id, transferred_at FROM transferred_summaries`,
 		`INSERT OR IGNORE INTO transferred_summaries (summary_id, transferred_at) VALUES (?, ?)`,
-		2)
+		2); err != nil {
+		return fmt.Errorf("copy transferred_summaries: %w", err)
+	}
 
 	logger.Info("unified store: aurora migration done", "messages", msgCount, "summaries", sumCount)
 	return nil
@@ -188,13 +207,21 @@ func migrateMemory(tx *sql.Tx, dbPath string, logger *slog.Logger) error {
 
 	for _, t := range tables {
 		if _, err := tx.Exec(t.query); err != nil {
-			logger.Debug("unified store: skip table (may not exist)", "table", t.name, "error", err)
+			if strings.Contains(strings.ToLower(err.Error()), "no such table") {
+				logger.Debug("unified store: skip table (missing in legacy db)", "table", t.name, "error", err)
+				continue
+			}
+			return fmt.Errorf("copy %s via attach: %w", t.name, err)
 		}
 	}
 
 	// Rebuild FTS indices from facts data (FTS5 virtual tables can't be copied via ATTACH).
-	tx.Exec(`INSERT INTO facts_fts(rowid, content, category) SELECT id, content, category FROM facts WHERE active = 1`)
-	tx.Exec(`INSERT INTO facts_fts_trigram(rowid, content) SELECT id, content FROM facts WHERE active = 1`)
+	if _, err := tx.Exec(`INSERT INTO facts_fts(rowid, content, category) SELECT id, content, category FROM facts WHERE active = 1`); err != nil {
+		return fmt.Errorf("rebuild facts_fts after attach copy: %w", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO facts_fts_trigram(rowid, content) SELECT id, content FROM facts WHERE active = 1`); err != nil {
+		return fmt.Errorf("rebuild facts_fts_trigram after attach copy: %w", err)
+	}
 
 	var factCount int
 	tx.QueryRow(`SELECT COUNT(*) FROM facts`).Scan(&factCount)
@@ -210,22 +237,30 @@ func migrateMemoryRowByRow(tx *sql.Tx, dbPath string, logger *slog.Logger) error
 	}
 	defer src.Close()
 
-	copyTable(tx, src, "facts",
+	if _, err := copyTable(tx, src, "facts",
 		`SELECT id, content, category, importance, source, created_at, updated_at, last_accessed_at, access_count, verified_at, expires_at, superseded_by, active, merge_depth FROM facts`,
 		`INSERT OR IGNORE INTO facts (id, content, category, importance, source, created_at, updated_at, last_accessed_at, access_count, verified_at, expires_at, superseded_by, active, merge_depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		14)
-	copyTable(tx, src, "fact_embeddings",
+		14); err != nil {
+		return fmt.Errorf("copy facts: %w", err)
+	}
+	if _, err := copyTable(tx, src, "fact_embeddings",
 		`SELECT fact_id, embedding, model_name, updated_at FROM fact_embeddings`,
 		`INSERT OR IGNORE INTO fact_embeddings (fact_id, embedding, model_name, updated_at) VALUES (?, ?, ?, ?)`,
-		4)
-	copyTable(tx, src, "user_model",
+		4); err != nil {
+		return fmt.Errorf("copy fact_embeddings: %w", err)
+	}
+	if _, err := copyTable(tx, src, "user_model",
 		`SELECT key, value, confidence, updated_at FROM user_model`,
 		`INSERT OR REPLACE INTO user_model (key, value, confidence, updated_at) VALUES (?, ?, ?, ?)`,
-		4)
-	copyTable(tx, src, "metadata",
+		4); err != nil {
+		return fmt.Errorf("copy user_model: %w", err)
+	}
+	if _, err := copyTable(tx, src, "metadata",
 		`SELECT key, value FROM metadata`,
 		`INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)`,
-		2)
+		2); err != nil {
+		return fmt.Errorf("copy metadata: %w", err)
+	}
 
 	return nil
 }
@@ -288,8 +323,12 @@ func buildMemoryIndex(tx *sql.Tx, logger *slog.Logger) error {
 // rebuildFTS rebuilds the unified FTS indices from scratch.
 func rebuildFTS(tx *sql.Tx) error {
 	// Clear existing FTS data.
-	tx.Exec(`DELETE FROM memory_fts`)
-	tx.Exec(`DELETE FROM memory_fts_trigram`)
+	if _, err := tx.Exec(`DELETE FROM memory_fts`); err != nil {
+		return fmt.Errorf("clear memory_fts: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM memory_fts_trigram`); err != nil {
+		return fmt.Errorf("clear memory_fts_trigram: %w", err)
+	}
 
 	// Insert message content.
 	_, err := tx.Exec(`
@@ -328,27 +367,33 @@ func rebuildFTS(tx *sql.Tx) error {
 	}
 
 	// Repeat for trigram index.
-	tx.Exec(`
+	if _, err = tx.Exec(`
 		INSERT INTO memory_fts_trigram(rowid, content)
 		SELECT mi.id, m.content
 		FROM memory_index mi
 		JOIN messages m ON CAST(m.message_id AS TEXT) = mi.item_id
 		WHERE mi.item_type = 'message'
-	`)
-	tx.Exec(`
+	`); err != nil {
+		return fmt.Errorf("FTS trigram messages: %w", err)
+	}
+	if _, err = tx.Exec(`
 		INSERT INTO memory_fts_trigram(rowid, content)
 		SELECT mi.id, COALESCE(s.narrative, s.content)
 		FROM memory_index mi
 		JOIN summaries s ON s.summary_id = mi.item_id
 		WHERE mi.item_type = 'summary'
-	`)
-	tx.Exec(`
+	`); err != nil {
+		return fmt.Errorf("FTS trigram summaries: %w", err)
+	}
+	if _, err = tx.Exec(`
 		INSERT INTO memory_fts_trigram(rowid, content)
 		SELECT mi.id, f.content
 		FROM memory_index mi
 		JOIN facts f ON CAST(f.id AS TEXT) = mi.item_id
 		WHERE mi.item_type = 'fact'
-	`)
+	`); err != nil {
+		return fmt.Errorf("FTS trigram facts: %w", err)
+	}
 
 	return nil
 }
@@ -359,7 +404,10 @@ func copyTable(tx *sql.Tx, src *sql.DB, tableName, selectSQL, insertSQL string, 
 	rows, err := src.Query(selectSQL)
 	if err != nil {
 		// Table might not exist in legacy DB — that's OK.
-		return 0, nil
+		if strings.Contains(strings.ToLower(err.Error()), "no such table") {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("query %s: %w", tableName, err)
 	}
 	defer rows.Close()
 
@@ -377,14 +425,23 @@ func copyTable(tx *sql.Tx, src *sql.DB, tableName, selectSQL, insertSQL string, 
 			ptrs[i] = &vals[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
-			continue
+			return count, fmt.Errorf("scan row %d in %s: %w", count+1, tableName, err)
 		}
 		if _, err := stmt.Exec(vals...); err != nil {
-			continue
+			return count, fmt.Errorf("insert row %d in %s: %w", count+1, tableName, err)
 		}
 		count++
 	}
+	if err := rows.Err(); err != nil {
+		return count, fmt.Errorf("iterate %s: %w", tableName, err)
+	}
 	return count, nil
+}
+
+func isIgnorableAlterError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate column name") ||
+		strings.Contains(msg, "already exists")
 }
 
 func fileExists(path string) bool {

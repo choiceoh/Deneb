@@ -14,6 +14,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
+const inlineFactExtractionTimeout = 2 * time.Second
+
 // parseConversationID extracts conversation_id from a command JSON,
 // accepting both snake_case (Rust FFI) and camelCase (test/direct) formats.
 func parseConversationID(cmdJSON json.RawMessage) uint64 {
@@ -383,16 +385,32 @@ func handlePersistCondensedSummary(store *Store, cmdJSON json.RawMessage, extrac
 	// transferSummaryToMemory bridge with synchronous extraction.
 	// Leaf summaries (depth=0) are skipped — too granular for long-term memory.
 	if extractFacts != nil && cmd.Input.Depth >= 1 && cmd.Input.Content != "" {
-		if err := extractFacts(cmd.Input.Content, cmd.Input.Depth); err != nil {
-			// Fact extraction failure is non-fatal: summary is already persisted.
-			if logger != nil {
-				logger.Warn("aurora sweep: inline fact extraction failed (summary saved)",
-					"summaryId", cmd.Input.SummaryID, "error", err)
+		go func(content string, depth uint32, summaryID string) {
+			start := time.Now()
+			done := make(chan error, 1)
+			go func() {
+				done <- extractFacts(content, depth)
+			}()
+			select {
+			case err := <-done:
+				if err != nil {
+					if logger != nil {
+						logger.Warn("aurora sweep: inline fact extraction failed (summary saved)",
+							"summaryId", summaryID, "error", err)
+					}
+					return
+				}
+				if logger != nil {
+					logger.Info("aurora sweep: inline fact extraction completed",
+						"summaryId", summaryID, "depth", depth, "durationMs", time.Since(start).Milliseconds())
+				}
+			case <-time.After(inlineFactExtractionTimeout):
+				if logger != nil {
+					logger.Warn("aurora sweep: inline fact extraction timeout (summary saved)",
+						"summaryId", summaryID, "depth", depth, "timeoutMs", inlineFactExtractionTimeout.Milliseconds())
+				}
 			}
-		} else if logger != nil {
-			logger.Info("aurora sweep: inline fact extraction completed",
-				"summaryId", cmd.Input.SummaryID, "depth", cmd.Input.Depth)
-		}
+		}(cmd.Input.Content, cmd.Input.Depth, cmd.Input.SummaryID)
 	}
 
 	return map[string]any{"type": "persistOk"}, nil
