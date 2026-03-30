@@ -62,6 +62,7 @@ const (
 	DefaultSglangModel   = "Qwen/Qwen3.5-35B-A3B"
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
+	DefaultZaiModel   = "glm-5-turbo"
 
 	DefaultGoogleBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 	DefaultFallbackModel = "gemini-3.1-pro"
@@ -74,6 +75,11 @@ const (
 func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 	if logger == nil {
 		logger = slog.Default()
+	}
+
+	// Fall back to default Z.AI model when no model is configured.
+	if mainModel == "" {
+		mainModel = "zai/" + DefaultZaiModel
 	}
 
 	// Parse main model provider/name.

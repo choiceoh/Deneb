@@ -68,6 +68,15 @@ func TestRoleForModel(t *testing.T) {
 	}
 }
 
+func TestEmptyMainModelDefaultsToZai(t *testing.T) {
+	reg := NewRegistry(slog.Default(), "")
+	got := reg.FullModelID(RoleMain)
+	want := "zai/" + DefaultZaiModel
+	if got != want {
+		t.Errorf("empty mainModel: FullModelID(RoleMain) = %q, want %q", got, want)
+	}
+}
+
 func TestFallbackChain(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test-model")
 
