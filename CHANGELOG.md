@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.4.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.4.0...deneb-v4.4.1) (2026-03-30)
+
+
+### 🐛 Bug Fixes
+
+* **memory:** normalize Korean tokens for search dedup ([260b533](https://github.com/choiceoh/Deneb/commit/260b53307026dff15abf63baf028416094d99996))
+* **rpcutil:** add missing context import in helpers ([38aa6b9](https://github.com/choiceoh/Deneb/commit/38aa6b9b702df0af73fc4f262f936d2b4325e3ad))
+* **rpcutil:** import context in helpers bind wrapper ([2268722](https://github.com/choiceoh/Deneb/commit/22687226874b43ae793945d54178bf2c087c7a36))
+* **rpcutil:** restore context import for BindHandler ([3f29772](https://github.com/choiceoh/Deneb/commit/3f29772c4b48591c38bf7476012cc9e21c900f2f))
+* **tools:** add missing memory import and remove duplicate map key in progress.go ([141a66d](https://github.com/choiceoh/Deneb/commit/141a66dba305fbc73f5dd2061c1cd8b340de6148))
+* **tools:** add missing memory import and remove duplicate map key in… ([c897787](https://github.com/choiceoh/Deneb/commit/c89778751c170acce7eff6572174a5207ee36f33))
+
+
+### 🔧 Internal
+
+* **config:** remove dead Rust config port from core-rs ([b27f25b](https://github.com/choiceoh/Deneb/commit/b27f25bf7d2c802a4ea5a1024c58efce0c0ef122))
+* **config:** remove dead Rust config port from core-rs ([2de7f34](https://github.com/choiceoh/Deneb/commit/2de7f3441b90f2cf1c0e1174a09e9f9fd433abeb))
+* unify default slog output with configured logger ([8e7a9c2](https://github.com/choiceoh/Deneb/commit/8e7a9c2d9e5d416fba9945043d912bb5f5ddadca))
+
 ## [4.4.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.3.0...deneb-v4.4.0) (2026-03-30)
 
 
