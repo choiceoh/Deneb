@@ -75,15 +75,6 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.JobTracker = s.jobTracker
 	chatCfg.AgentLog = agentLogWriter
 
-	// Initialize Aurora compaction store.
-	auroraStore, err := aurora.NewStore(aurora.DefaultStoreConfig(), s.logger)
-	if err != nil {
-		s.logger.Warn("aurora store unavailable, compaction will use legacy fallback", "error", err)
-	} else {
-		chatCfg.AuroraStore = auroraStore
-		s.logger.Info("aurora compaction store initialized")
-	}
-
 	// Initialize unified memory store (single DB for all tiers).
 	unifiedStore, err := unified.New(unified.DefaultConfig(), s.logger)
 	if err != nil {
@@ -91,6 +82,26 @@ func (s *Server) registerSessionRPCMethods() {
 	} else {
 		chatCfg.UnifiedStore = unifiedStore
 		s.logger.Info("unified memory store initialized")
+
+		// Prefer unified-backed Aurora store to keep compaction + facts in one DB.
+		if auroraStore, aErr := unifiedStore.NewAuroraStoreWithLogger(s.logger); aErr != nil {
+			s.logger.Warn("aurora store unavailable from unified db, compaction will use legacy fallback", "error", aErr)
+		} else {
+			chatCfg.AuroraStore = auroraStore
+			s.logger.Info("aurora compaction store initialized (unified)")
+		}
+	}
+
+	// Legacy fallback: initialize Aurora compaction store only when unified
+	// adapters were not available.
+	if chatCfg.AuroraStore == nil {
+		auroraStore, aErr := aurora.NewStore(aurora.DefaultStoreConfig(), s.logger)
+		if aErr != nil {
+			s.logger.Warn("aurora store unavailable, compaction will use legacy fallback", "error", aErr)
+		} else {
+			chatCfg.AuroraStore = auroraStore
+			s.logger.Info("aurora compaction store initialized")
+		}
 	}
 
 	// Resolve default model from config and create the model role registry.
@@ -101,12 +112,28 @@ func (s *Server) registerSessionRPCMethods() {
 	// Initialize structured memory store (Honcho-style).
 	if home, err := os.UserHomeDir(); err == nil {
 		dbPath := filepath.Join(home, ".deneb", "memory.db")
-		memStore, err := memory.NewStore(dbPath)
-		if err != nil {
-			s.logger.Warn("memory store unavailable", "error", err)
-		} else {
-			chatCfg.MemoryStore = memStore
-
+		memStore := chatCfg.MemoryStore
+		if memStore == nil && unifiedStore != nil {
+			unifiedMemStore, uErr := unifiedStore.NewMemoryStore()
+			if uErr != nil {
+				s.logger.Warn("memory store unavailable from unified db", "error", uErr)
+			} else {
+				memStore = unifiedMemStore
+				chatCfg.MemoryStore = memStore
+				s.logger.Info("aurora-memory: structured store initialized (unified)")
+			}
+		}
+		if memStore == nil {
+			legacyStore, mErr := memory.NewStore(dbPath)
+			if mErr != nil {
+				s.logger.Warn("memory store unavailable", "error", mErr)
+			} else {
+				memStore = legacyStore
+				chatCfg.MemoryStore = memStore
+				s.logger.Info("aurora-memory: structured store initialized", "db", dbPath)
+			}
+		}
+		if memStore != nil {
 			// Use the Gemini embedder set during gateway init.
 			if s.geminiEmbedder != nil {
 				embedder := memory.NewEmbedder(s.geminiEmbedder, memStore, s.logger)
@@ -156,11 +183,8 @@ func (s *Server) registerSessionRPCMethods() {
 					s.logger.Info("aurora-memory: imported legacy MEMORY.md", "facts", imported)
 				}
 			}
-
-			s.logger.Info("aurora-memory: structured store initialized", "db", dbPath)
 		}
 	}
-
 	// Resolve workspace directory for file tool operations.
 	workspaceDir := resolveWorkspaceDir()
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
