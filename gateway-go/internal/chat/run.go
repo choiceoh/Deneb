@@ -18,6 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
@@ -77,6 +78,7 @@ type runDeps struct {
 	vegaBackend    vega.Backend              // optional; enables knowledge prefetch
 	memoryStore    *memory.Store             // optional; structured memory (Honcho-style)
 	memoryEmbedder *memory.Embedder          // optional; fact embedding
+	unifiedStore   *unified.Store            // optional; unified memory (search + tier-1)
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
 	registry       *modelrole.Registry       // centralized model role registry

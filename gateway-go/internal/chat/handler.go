@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
@@ -35,6 +36,7 @@ type Handler struct {
 	vegaBackend     vega.Backend              // optional; knowledge prefetch
 	memoryStore     *memory.Store             // optional; structured memory (Honcho-style)
 	memoryEmbedder  *memory.Embedder          // optional; fact embedding
+	unifiedStore    *unified.Store            // optional; unified memory (search + tier-1)
 	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer          // optional; agent detail logging
 	registry        *modelrole.Registry       // centralized model role registry
@@ -46,11 +48,11 @@ type Handler struct {
 	defaultSystem string
 	maxTokens     int
 
-	replyFunc        ReplyFunc     // optional: delivers response to originating channel
-	mediaSendFn      MediaSendFunc // optional: delivers files to originating channel
-	typingFn         TypingFunc    // optional: sends typing indicator during agent run
-	reactionFn       ReactionFunc  // optional: sets emoji reaction on triggering message
-	removeReactionFn ReactionFunc    // optional: removes emoji reaction (Discord additive)
+	replyFunc        ReplyFunc        // optional: delivers response to originating channel
+	mediaSendFn      MediaSendFunc    // optional: delivers files to originating channel
+	typingFn         TypingFunc       // optional: sends typing indicator during agent run
+	reactionFn       ReactionFunc     // optional: sets emoji reaction on triggering message
+	removeReactionFn ReactionFunc     // optional: removes emoji reaction (Discord additive)
 	toolProgressFn   ToolProgressFunc // optional: reports tool execution events (Discord progress)
 
 	// uploadLimitsMu guards uploadLimits.
@@ -92,6 +94,7 @@ type HandlerConfig struct {
 	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
 	MemoryStore     *memory.Store             // optional; structured memory (Honcho-style)
 	MemoryEmbedder  *memory.Embedder          // optional; fact embedding via SGLang
+	UnifiedStore    *unified.Store            // optional; unified memory (search + tier-1)
 	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog        *agentlog.Writer          // optional; agent detail logging
 	Registry        *modelrole.Registry       // centralized model role registry
@@ -136,6 +139,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		vegaBackend:     cfg.VegaBackend,
 		memoryStore:     cfg.MemoryStore,
 		memoryEmbedder:  cfg.MemoryEmbedder,
+		unifiedStore:    cfg.UnifiedStore,
 		dreamTurnFn:     cfg.DreamTurnFn,
 		agentLog:        cfg.AgentLog,
 		registry:        cfg.Registry,
