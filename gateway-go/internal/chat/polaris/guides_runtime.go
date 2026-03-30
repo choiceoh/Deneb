@@ -382,10 +382,10 @@ Body: free-form Markdown instructions for the agent.
 const pilotGuide = `Pilot is a fast local AI (sglang) that orchestrates tool execution in a single round-trip, avoiding sequential LLM calls.
 
 ## When to Use Pilot
-- Multiple data gathering calls that can run in parallel (grep + read + exec)
-- Quick analysis tasks that don't need the main model's full reasoning
+- Noisy outputs such as exec/test/diff/logs that benefit from one local analysis pass
+- Multi-source synthesis where you would otherwise pass a larger combined payload to the main model
 - Chained lookups where result of one tool informs the next
-- NOT for: complex multi-step reasoning, creative writing, or tasks needing full context
+- NOT for: short single-file reads, short grep/find/tree/git/web/http/memory lookups, creative writing, or complex multi-step reasoning
 
 ## Execution Pipeline
 1. sglang health check (cached 30s TTL, GET /v1/models probe)
