@@ -103,7 +103,7 @@ Other channels are not supported.
 
 | Tool          | Description                                           |
 | ------------- | ----------------------------------------------------- |
-| File I/O      | Read, write, edit, grep, find, ls workspace files     |
+| File I/O      | Read, write, edit, rg-backed grep, fd-backed find, eza-style tree workspace files |
 | Exec          | Shell execution and background process management     |
 | Web           | Web fetch, search (Perplexity, Brave, auto-detect)    |
 | Media         | YouTube transcripts, image/video analysis             |

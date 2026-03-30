@@ -59,7 +59,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 	workspaceDir := deps.WorkspaceDir
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "read",
-		Description: "Read file contents with line numbers (default: 2000 lines). Use offset/limit for large files",
+		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
 		InputSchema: readToolSchema(),
 		Fn:          tools.ToolRead(workspaceDir),
 	})
@@ -77,13 +77,13 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "grep",
-		Description: "Regex search across files (ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
+		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
 		InputSchema: grepToolSchema(),
 		Fn:          tools.ToolGrep(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "find",
-		Description: "Find files by glob pattern (e.g. \"**/*.go\"). Use grep to search inside files instead",
+		Description: "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
 		InputSchema: findToolSchema(),
 		Fn:          tools.ToolFind(workspaceDir),
 	})
@@ -95,7 +95,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "tree",
-		Description: "Display directory tree with depth control. Filters: dirs_only, pattern glob, show_hidden. Skips node_modules/.git/target etc",
+		Description: "Display directory tree with depth control. Uses eza/exa for fast default listings when available. Filters: dirs_only, pattern glob, show_hidden. Skips node_modules/.git/target etc",
 		InputSchema: treeToolSchema(),
 		Fn:          tools.ToolTree(workspaceDir),
 	})

@@ -55,7 +55,7 @@ func ToolGrep(defaultDir string) ToolFunc {
 			contextLines = 10
 		}
 
-		// Try ripgrep first, fall back to grep.
+		// Use ripgrep directly. Do not fall back to slower system grep.
 		args := []string{"-n", fmt.Sprintf("--max-count=%d", maxResults)}
 		if p.IgnoreCase {
 			args = append(args, "-i")
@@ -101,33 +101,7 @@ func ToolGrep(defaultDir string) ToolFunc {
 			if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
 				return "No matches found.", nil
 			}
-			// Fall back to grep (fileType/multiline are rg-only, skip them here).
-			grepArgs := []string{"-rn", fmt.Sprintf("--max-count=%d", maxResults)}
-			if p.IgnoreCase {
-				grepArgs = append(grepArgs, "-i")
-			}
-			if contextLines > 0 {
-				grepArgs = append(grepArgs, fmt.Sprintf("-C%d", contextLines))
-			}
-			if p.Include != "" {
-				grepArgs = append(grepArgs, "--include="+p.Include)
-			}
-			switch p.Mode {
-			case "files_only":
-				grepArgs = append(grepArgs, "-l")
-			case "count":
-				grepArgs = append(grepArgs, "-c")
-			}
-			grepArgs = append(grepArgs, p.Pattern, searchPath)
-			cmd2 := exec.CommandContext(ctx, "grep", grepArgs...)
-			out2, err2 := cmd2.CombinedOutput()
-			if err2 != nil {
-				if cmd2.ProcessState != nil && cmd2.ProcessState.ExitCode() == 1 {
-					return "No matches found.", nil
-				}
-				return string(out2), nil
-			}
-			return string(out2), nil
+			return "", fmt.Errorf("ripgrep failed: %s", strings.TrimSpace(string(out)))
 		}
 		// Group content-mode output by file to reduce path repetition.
 		if p.Mode == "" || p.Mode == "content" {
@@ -242,6 +216,19 @@ func ToolFind(defaultDir string) ToolFunc {
 		}
 
 		const maxResults = 200
+		var err error
+
+		// Prefer fd for fast glob/path matching with sane defaults.
+		if _, ok := firstAvailableBinary("fd", "fdfind"); ok {
+			fdMatches, err := findWithFD(ctx, searchDir, p.Pattern, p.ShowHidden, maxResults)
+			if err != nil {
+				return "", err
+			}
+			if len(fdMatches) == 0 {
+				return "No files found matching pattern.", nil
+			}
+			return strings.Join(fdMatches, "\n"), nil
+		}
 
 		// Use ripgrep for ** glob patterns (filepath.Match doesn't support **).
 		if strings.Contains(p.Pattern, "**") {
@@ -256,7 +243,7 @@ func ToolFind(defaultDir string) ToolFunc {
 		}
 
 		var matches []string
-		err := filepath.WalkDir(searchDir, func(path string, d os.DirEntry, err error) error {
+		err = filepath.WalkDir(searchDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return nil // skip errors
 			}
@@ -291,6 +278,36 @@ func ToolFind(defaultDir string) ToolFunc {
 		}
 		return strings.Join(matches, "\n"), nil
 	}
+}
+
+func findWithFD(ctx context.Context, dir, pattern string, showHidden bool, maxResults int) ([]string, error) {
+	bin, ok := firstAvailableBinary("fd", "fdfind")
+	if !ok {
+		return nil, fmt.Errorf("fd unavailable")
+	}
+
+	args := []string{"--glob", "--type", "f"}
+	if showHidden {
+		args = append(args, "--hidden")
+	}
+	args = append(args, pattern, ".")
+
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// fd exit code 1 means no matches.
+		if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("fd failed: %s", strings.TrimSpace(string(out)))
+	}
+
+	lines := nonEmptyCommandLines(string(out))
+	if len(lines) > maxResults {
+		lines = lines[:maxResults]
+	}
+	return lines, nil
 }
 
 // findWithRipgrep uses `rg --files --glob` to find files matching ** patterns.
