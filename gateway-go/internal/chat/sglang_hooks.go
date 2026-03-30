@@ -41,16 +41,44 @@ Reply in Korean. Be extremely concise. If no special context is needed, reply wi
 // from proactive context (e.g., "응", "좋아 그렇게 해", "계속", "다음은?").
 // Uses rune count and simple keyword heuristics to avoid unnecessary sglang calls.
 func isLowInfoMessage(msg string) bool {
-	runes := []rune(strings.TrimSpace(msg))
+	trimmed := strings.TrimSpace(msg)
+	runes := []rune(trimmed)
 	runeCount := len(runes)
 	// Very short messages (< 8 runes) are almost always follow-ups.
 	if runeCount < 8 {
 		return true
 	}
-	// Short messages (< 30 runes) without a question mark or specific action words
-	// are typically confirmations like "좋아 그렇게 해", "계속", "알겠어".
-	if runeCount < 30 && !strings.ContainsAny(msg, "?？") {
+	// Short messages are only treated as low-info when they look like pure
+	// acknowledgements/continuations and do not contain obvious task intent.
+	// This avoids skipping concrete imperative asks such as
+	// "로그 보고 원인 분석해줘" that may not end with a question mark.
+	if runeCount < 30 && !strings.ContainsAny(trimmed, "?？") {
+		if containsTaskIntent(trimmed) {
+			return false
+		}
 		return true
+	}
+	return false
+}
+
+// containsTaskIntent returns true when the message includes clear ask/action
+// signals. This keeps proactive context enabled for concise but actionable
+// requests.
+func containsTaskIntent(msg string) bool {
+	lower := strings.ToLower(msg)
+	keywords := []string{
+		// Korean ask/action patterns.
+		"해줘", "해주세요", "해 줄", "해봐", "해 봐", "확인", "분석", "조사", "정리", "수정", "고쳐",
+		"원인", "왜", "어떻게", "찾아", "비교", "설명", "검토", "테스트", "추가", "삭제", "리팩토링",
+		"튜닝", "개선", "최적화", "해결", "보여", "알려",
+		// English ask/action patterns.
+		"please", "fix", "debug", "analyze", "investigate", "check", "review",
+		"compare", "explain", "summarize", "optimize", "improve", "why", "how",
+	}
+	for _, kw := range keywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
 	}
 	return false
 }
