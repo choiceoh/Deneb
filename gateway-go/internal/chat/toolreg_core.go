@@ -18,7 +18,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Pilot registered here: it depends on sglang hooks from chat/sglang_hooks.go.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Local AI analysis — gathers tool outputs and analyzes in one call (free). Shortcuts: file, exec, grep, find, url, diff, test, tree, git_log, health, memory, vega, image + more",
+		Description: "Local AI analysis for noisy outputs or multi-source orchestration. Prefer direct tools for simple read/grep/find/tree/git/web/http/memory-style lookups. Shortcuts: file, exec, grep, find, url, diff, test, tree, git_log, health, memory, vega, image + more",
 		InputSchema: toolreg.PilotToolSchema(),
 		Fn:          toolPilot(registry, deps.WorkspaceDir),
 	})

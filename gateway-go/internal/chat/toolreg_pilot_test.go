@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -27,6 +29,107 @@ func TestShouldUseThinking(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("shouldUseThinking(%q, %d) = %v, want %v", tt.task, tt.sourceCount, got, tt.want)
 		}
+	}
+}
+
+func TestShouldBypassPilotLLM(t *testing.T) {
+	tests := []struct {
+		name    string
+		p       pilotParams
+		sources []sourceSpec
+		gather  []sourceResult
+		want    bool
+	}{
+		{
+			name:    "single short read",
+			p:       pilotParams{Task: "explain"},
+			sources: []sourceSpec{{Tool: "read"}},
+			gather:  []sourceResult{{label: "main.go", content: "package main", sourceType: "file"}},
+			want:    true,
+		},
+		{
+			name:    "two short simple sources",
+			p:       pilotParams{Task: "compare"},
+			sources: []sourceSpec{{Tool: "read"}, {Tool: "grep"}},
+			gather: []sourceResult{
+				{label: "a.go", content: "func a() {}", sourceType: "file"},
+				{label: "grep: TODO", content: "a.go:1: TODO", sourceType: "grep"},
+			},
+			want: true,
+		},
+		{
+			name:    "single long read",
+			p:       pilotParams{Task: "explain"},
+			sources: []sourceSpec{{Tool: "read"}},
+			gather:  []sourceResult{{label: "main.go", content: strings.Repeat("a", 1001), sourceType: "file"}},
+			want:    false,
+		},
+		{
+			name:    "noisy exec stays on pilot",
+			p:       pilotParams{Task: "summarize"},
+			sources: []sourceSpec{{Tool: "exec"}},
+			gather:  []sourceResult{{label: "$ go test", content: "FAIL", sourceType: "exec"}},
+			want:    false,
+		},
+		{
+			name:    "chain disables bypass",
+			p:       pilotParams{Task: "summarize", Chain: true},
+			sources: []sourceSpec{{Tool: "read"}},
+			gather:  []sourceResult{{label: "main.go", content: "package main", sourceType: "file"}},
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldBypassPilotLLM(tt.p, tt.sources, tt.gather)
+			if got != tt.want {
+				t.Fatalf("shouldBypassPilotLLM() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildPilotPassthroughResult(t *testing.T) {
+	single := buildPilotPassthroughResult([]sourceResult{{label: "main.go", content: "package main", sourceType: "file"}})
+	if single != "package main" {
+		t.Fatalf("unexpected single passthrough result: %q", single)
+	}
+
+	multi := buildPilotPassthroughResult([]sourceResult{
+		{label: "a.go", content: "package a", sourceType: "file"},
+		{label: "b.go", content: "package b", sourceType: "file"},
+	})
+	if !contains(multi, "--- a.go ---") || !contains(multi, "package b") {
+		t.Fatalf("unexpected multi passthrough result: %q", multi)
+	}
+}
+
+type stubPilotExecutor struct {
+	calls int
+}
+
+func (s *stubPilotExecutor) Execute(_ context.Context, _ string, _ json.RawMessage) (string, error) {
+	s.calls++
+	return "short content", nil
+}
+
+func TestToolPilotBypassesLocalLLMForShortRead(t *testing.T) {
+	exec := &stubPilotExecutor{}
+	fn := toolPilot(exec, "")
+
+	out, err := fn(context.Background(), mustJSON(map[string]any{
+		"task": "explain this file",
+		"file": "README.md",
+	}))
+	if err != nil {
+		t.Fatalf("toolPilot() error = %v", err)
+	}
+	if exec.calls != 1 {
+		t.Fatalf("expected 1 tool execution, got %d", exec.calls)
+	}
+	if out != "short content" {
+		t.Fatalf("unexpected passthrough output: %q", out)
 	}
 }
 

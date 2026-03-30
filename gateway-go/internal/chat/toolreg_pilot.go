@@ -41,6 +41,22 @@ var thinkingKeywords = []string{
 	"analyze", "compare", "review", "debug", "diagnose", "investigate", "diff",
 }
 
+var pilotSimpleSourceTools = map[string]bool{
+	"find":          true,
+	"git":           true,
+	"gmail":         true,
+	"grep":          true,
+	"health_check":  true,
+	"http":          true,
+	"kv":            true,
+	"memory_search": true,
+	"polaris":       true,
+	"read":          true,
+	"tree":          true,
+	"vega":          true,
+	"web_fetch":     true,
+}
+
 // shouldUseThinking decides whether to enable Qwen3.5 thinking mode based on
 // task complexity (keywords) and number of sources.
 func shouldUseThinking(task string, sourceCount int) bool {
@@ -54,6 +70,49 @@ func shouldUseThinking(task string, sourceCount int) bool {
 		}
 	}
 	return false
+}
+
+func shouldBypassPilotLLM(p pilotParams, sources []sourceSpec, gathered []sourceResult) bool {
+	if len(sources) == 0 || len(sources) > 2 || len(gathered) < len(sources) {
+		return false
+	}
+	if p.Chain || len(p.PostProcess) > 0 || p.Content != "" || len(p.Items) > 0 {
+		return false
+	}
+
+	totalChars := 0
+	for i, src := range sources {
+		if src.OnlyIf != "" || src.SkipIf != "" {
+			return false
+		}
+		if !pilotSimpleSourceTools[src.Tool] {
+			return false
+		}
+		totalChars += len(gathered[i].content)
+	}
+
+	return totalChars > 0 && totalChars <= 1000
+}
+
+func buildPilotPassthroughResult(gathered []sourceResult) string {
+	if len(gathered) == 0 {
+		return ""
+	}
+	if len(gathered) == 1 {
+		return gathered[0].content
+	}
+
+	var sb strings.Builder
+	for i, g := range gathered {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString("--- ")
+		sb.WriteString(g.label)
+		sb.WriteString(" ---\n")
+		sb.WriteString(g.content)
+	}
+	return sb.String()
 }
 
 // --- System prompt ---
@@ -127,6 +186,16 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 		}
 		for i, item := range p.Items {
 			gathered = append(gathered, sourceResult{fmt.Sprintf("item[%d]", i+1), item, "content"})
+		}
+
+		if shouldBypassPilotLLM(p, sources, gathered) {
+			result := buildPilotPassthroughResult(gathered)
+			logger.Info("pilot: bypassed local llm for simple source set",
+				"task", p.Task,
+				"sources", len(sources),
+				"chars", len(result),
+			)
+			return result, nil
 		}
 
 		// Determine thinking mode and max tokens.

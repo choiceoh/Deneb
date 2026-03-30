@@ -44,6 +44,8 @@ All three execute at the same time and results come back in a single turn.
 <Tip>
 Prefer parallel direct tool calls for independent reads/greps. Use `pilot` with
 multiple sources when you also need the results analyzed together in one step.
+Simple short lookups should stay direct; `pilot` is best for noisy outputs such
+as `exec`/`test`/`diff`/logs or larger multi-source synthesis.
 </Tip>
 
 ---
