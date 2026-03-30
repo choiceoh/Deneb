@@ -11,14 +11,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// Pilot tool: the AI agent's fast local helper that can orchestrate other tools.
+// Pilot tool: the AI agent's fast helper that can orchestrate other tools.
 //
 // The agent specifies a task and data sources. Pilot:
-//  1. Checks sglang health (cached, 30s TTL)
-//  2. Executes source tool calls via the ToolRegistry (parallel, per-source timeout)
-//  3. Feeds all gathered data + task to the local sglang model
-//  4. Optionally chains: if chain=true, LLM can request follow-up tool calls
-//  5. Returns the result synchronously
+//  1. Executes source tool calls via the ToolRegistry (parallel, per-source timeout)
+//  2. Feeds all gathered data + task to the pilot model role
+//  3. Optionally chains: if chain=true, LLM can request follow-up tool calls
+//  4. Returns the result synchronously
 //
 // Shortcuts (file, exec, grep, find, url) expand to sources internally for convenience.
 
@@ -34,7 +33,7 @@ const (
 	sglangHealthPing = 3 * time.Second // HTTP timeout for health check
 )
 
-// --- Thinking mode for Qwen3.5 ---
+// --- Thinking mode for pilot analysis ---
 
 // thinkingKeywords triggers thinking mode when the task contains complex analysis keywords.
 var thinkingKeywords = []string{
@@ -61,7 +60,7 @@ func shouldUseThinking(task string, sourceCount int) bool {
 
 func buildPilotSystemPrompt(workspaceDir string, thinking bool) string {
 	var sb strings.Builder
-	sb.WriteString(`You are Pilot, a fast local AI assistant. Your output goes to Telegram (4096 char limit).
+	sb.WriteString(`You are Pilot, a fast AI assistant. Your output goes to Telegram (4096 char limit).
 Rules:
 - Execute the task directly. No preamble, no pleasantries.
 - Match the user's language (Korean if Korean input, English if English).
@@ -89,7 +88,7 @@ Rules:
 // --- Main pilot function ---
 
 // toolPilot creates the pilot ToolFunc. It uses the ToolExecutor to run
-// source tools from the registry before feeding results to the local LLM.
+// source tools from the registry before feeding results to the pilot LLM.
 func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		start := time.Now()
@@ -130,16 +129,6 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 			gathered = append(gathered, sourceResult{fmt.Sprintf("item[%d]", i+1), item, "content"})
 		}
 
-		// Check sglang health before LLM call.
-		if !checkSglangHealth() {
-			result := buildFallbackResult(p.Task, gathered)
-			logger.Warn("pilot: sglang unavailable, returning raw results",
-				"task", p.Task,
-				"sources", len(gathered),
-			)
-			return result, nil
-		}
-
 		// Determine thinking mode and max tokens.
 		// Brief mode disables thinking — not enough token budget for both.
 		thinking := p.MaxLength != "brief" && shouldUseThinking(p.Task, len(sources))
@@ -150,11 +139,11 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 			maxTokens = 1024
 		}
 
-		// Phase 2: Build prompt and call local LLM.
+		// Phase 2: Build prompt and call the pilot LLM.
 		systemPrompt := buildPilotSystemPrompt(workspaceDir, thinking)
 		userMsg := buildPilotPrompt(p.Task, p.OutputFormat, p.MaxLength, gathered)
 
-		result, err := callLocalLLM(ctx, systemPrompt, userMsg, maxTokens)
+		result, err := callPilotLLM(ctx, systemPrompt, userMsg, maxTokens)
 		if err != nil {
 			// Graceful degradation: return raw tool results if LLM fails.
 			logger.Warn("pilot: LLM call failed, falling back to raw results",

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -20,7 +21,7 @@ import (
 
 // --- Package-level model role registry ---
 // Set once during handler initialization via SetModelRoleRegistry.
-// Used by callLocalLLM, checkSglangHealth, and other sglang-dependent code.
+// Used by role-based LLM helpers, checkSglangHealth, and other lightweight-model code.
 
 var (
 	pkgRegistry     *modelrole.Registry
@@ -90,7 +91,7 @@ func checkSglangHealth() bool {
 	return healthy
 }
 
-// --- Thinking mode for Qwen3.5 ---
+// --- Thinking mode for pilot analysis ---
 
 // thinkingKeywords triggers thinking mode when the task contains complex analysis keywords.
 
@@ -337,7 +338,7 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	prompt := fmt.Sprintf("Task: %s\n\nInitial analysis:\n%s\n\nDo you need to call any follow-up tools to improve this answer?",
 		task, truncateHead(initialResult, 4000))
 
-	decision, err := callLocalLLM(ctx, chainSystemPrompt, prompt, 1024)
+	decision, err := callPilotLLM(ctx, chainSystemPrompt, prompt, 1024)
 	if err != nil {
 		logger.Debug("pilot chain: planning failed", "error", err)
 		return ""
@@ -399,7 +400,7 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	}
 
 	systemPrompt := buildPilotSystemPrompt(workspaceDir, false)
-	final, err := callLocalLLM(ctx, systemPrompt, sb.String(), pilotMaxTokens)
+	final, err := callPilotLLM(ctx, systemPrompt, sb.String(), pilotMaxTokens)
 	if err != nil {
 		logger.Debug("pilot chain: final synthesis failed", "error", err)
 		return ""
@@ -413,12 +414,12 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	return final
 }
 
-// --- Fallback (sglang unavailable) ---
+// --- Fallback (pilot model unavailable) ---
 
-// buildFallbackResult formats raw tool results when sglang is not available.
+// buildFallbackResult formats raw tool results when the pilot model is not available.
 func buildFallbackResult(task string, gathered []sourceResult) string {
 	var sb strings.Builder
-	sb.WriteString("[pilot: sglang 서버에 연결할 수 없어 원본 결과를 반환합니다]\n\n")
+	sb.WriteString("[pilot: pilot model unavailable, returning gathered results]\n\n")
 	sb.WriteString("Task: ")
 	sb.WriteString(task)
 
@@ -525,21 +526,36 @@ func parseLineCount(s string, defaultN int) int {
 
 // truncateInput is a simple head-only truncation. Used by sglang_hooks.go and pilot fallback.
 
+func getRoleClient(role modelrole.Role, defaultBaseURL, defaultAPIKey string) *llm.Client {
+	if pkgRegistry != nil {
+		return pkgRegistry.Client(role)
+	}
+	return llm.NewClient(defaultBaseURL, defaultAPIKey, llm.WithLogger(slog.Default()))
+}
+
+func getRoleModel(role modelrole.Role, defaultModel string) string {
+	if pkgRegistry != nil {
+		return pkgRegistry.Model(role)
+	}
+	return defaultModel
+}
+
 // getLightweightClient returns the cached LLM client for the lightweight model role.
 func getLightweightClient() *llm.Client {
-	if pkgRegistry != nil {
-		return pkgRegistry.Client(modelrole.RoleLightweight)
-	}
-	// Fallback: should not happen after initialization.
-	return llm.NewClient(modelrole.DefaultSglangBaseURL, "", llm.WithLogger(slog.Default()))
+	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultSglangBaseURL, "")
 }
 
 // getLightweightModel returns the model name for the lightweight role.
 func getLightweightModel() string {
-	if pkgRegistry != nil {
-		return pkgRegistry.Model(modelrole.RoleLightweight)
-	}
-	return modelrole.DefaultSglangModel
+	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultSglangModel)
+}
+
+func getPilotClient() *llm.Client {
+	return getRoleClient(modelrole.RolePilot, modelrole.DefaultGoogleBaseURL, os.Getenv("GEMINI_API_KEY"))
+}
+
+func getPilotModel() string {
+	return getRoleModel(modelrole.RolePilot, modelrole.DefaultPilotModel)
 }
 
 func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
@@ -589,6 +605,56 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 
 	if text == "" {
 		return "(no response from local model)", nil
+	}
+	return text, nil
+}
+
+func callPilotLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
+	defer cancel()
+
+	client := getPilotClient()
+	model := getPilotModel()
+
+	req := llm.ChatRequest{
+		Model:     model,
+		Messages:  []llm.Message{llm.NewTextMessage("user", userMessage)},
+		System:    llm.SystemString(system),
+		MaxTokens: maxTokens,
+		Stream:    true,
+	}
+
+	events, err := client.StreamChatOpenAI(ctx, req)
+	if err != nil {
+		if pkgRegistry != nil {
+			fbChain := pkgRegistry.FallbackChain(modelrole.RolePilot)
+			for _, role := range fbChain[1:] {
+				fbCfg := pkgRegistry.Config(role)
+				fbClient := pkgRegistry.Client(role)
+				if fbClient == nil {
+					continue
+				}
+				req.Model = fbCfg.Model
+				events, err = fbClient.StreamChatOpenAI(ctx, req)
+				if err == nil {
+					break
+				}
+			}
+			if err != nil {
+				return "", fmt.Errorf("all models failed: %w", err)
+			}
+		} else {
+			return "", fmt.Errorf("pilot stream: %w", err)
+		}
+	}
+
+	text, err := collectStream(ctx, events)
+	if err != nil {
+		return "", err
+	}
+
+	if text == "" {
+		return "(no response from pilot model)", nil
 	}
 	return text, nil
 }
