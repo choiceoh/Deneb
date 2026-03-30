@@ -328,8 +328,8 @@ func TestFactTemporalAnnotation(t *testing.T) {
 	t.Run("created/updated gap shows both", func(t *testing.T) {
 		f := memory.Fact{
 			Category:  "context",
-			CreatedAt: now.Add(-90 * 24 * time.Hour),  // 3 months ago
-			UpdatedAt: now.Add(-1 * 24 * time.Hour),    // yesterday
+			CreatedAt: now.Add(-90 * 24 * time.Hour), // 3 months ago
+			UpdatedAt: now.Add(-1 * 24 * time.Hour),  // yesterday
 		}
 		got := factTemporalAnnotation(f, now)
 		if !strings.Contains(got, "갱신:") {

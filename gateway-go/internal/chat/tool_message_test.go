@@ -72,7 +72,7 @@ func TestToolMessageSend(t *testing.T) {
 			"action":  "send",
 			"message": "hello",
 			"to":      "user2",
-			"channel": "discord",
+			"channel": "telegram",
 		})
 		_, err := fn(ctx, input)
 		if err != nil {
@@ -81,8 +81,8 @@ func TestToolMessageSend(t *testing.T) {
 		if sentDelivery.To != "user2" {
 			t.Errorf("to = %q, want %q", sentDelivery.To, "user2")
 		}
-		if sentDelivery.Channel != "discord" {
-			t.Errorf("channel = %q, want %q", sentDelivery.Channel, "discord")
+		if sentDelivery.Channel != "telegram" {
+			t.Errorf("channel = %q, want %q", sentDelivery.Channel, "telegram")
 		}
 	})
 }

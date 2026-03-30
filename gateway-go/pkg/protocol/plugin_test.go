@@ -42,10 +42,10 @@ func TestPluginMetaJSON(t *testing.T) {
 func TestPluginRegistrySnapshotJSON(t *testing.T) {
 	snapshot := protocol.PluginRegistrySnapshot{
 		Plugins: []protocol.PluginMeta{
-			{ID: "discord", Name: "Discord", Kind: protocol.PluginKindChannel, Version: "1.0.0", Enabled: true},
+			{ID: "telegram", Name: "Telegram", Kind: protocol.PluginKindChannel, Version: "1.0.0", Enabled: true},
 		},
 		Health: []protocol.PluginHealthStatus{
-			{PluginID: "discord", Healthy: true},
+			{PluginID: "telegram", Healthy: true},
 		},
 		SnapshotAt: 1711234567890,
 	}
@@ -60,8 +60,8 @@ func TestPluginRegistrySnapshotJSON(t *testing.T) {
 	if len(decoded.Plugins) != 1 {
 		t.Fatalf("Plugins length = %d, want 1", len(decoded.Plugins))
 	}
-	if decoded.Plugins[0].ID != "discord" {
-		t.Errorf("Plugins[0].ID = %q, want %q", decoded.Plugins[0].ID, "discord")
+	if decoded.Plugins[0].ID != "telegram" {
+		t.Errorf("Plugins[0].ID = %q, want %q", decoded.Plugins[0].ID, "telegram")
 	}
 	if len(decoded.Health) != 1 || !decoded.Health[0].Healthy {
 		t.Errorf("Health[0].Healthy = %v, want true", decoded.Health[0].Healthy)

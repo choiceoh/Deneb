@@ -10,7 +10,7 @@ func TestNormalizeDeliveryTarget(t *testing.T) {
 	}{
 		{"telegram", "12345", "12345"},
 		{"telegram", " 12345 ", "12345"},
-		{"discord", "user:abc", "user:abc"},
+		{"telegram", "user:abc", "user:abc"},
 	}
 	for _, tt := range tests {
 		got := NormalizeDeliveryTarget(tt.ch, tt.to)
@@ -33,7 +33,7 @@ func TestMatchesDeliveryTarget(t *testing.T) {
 	}{
 		{"exact match", "telegram", "12345", "", "telegram", "12345", "", true},
 		{"provider message", "message", "12345", "", "telegram", "12345", "", true},
-		{"wrong provider", "discord", "12345", "", "telegram", "12345", "", false},
+		{"wrong provider", "telegram", "12345", "", "telegram", "12345", "", false},
 		{"wrong target", "telegram", "12345", "", "telegram", "67890", "", false},
 		{"with topic suffix", "telegram", "12345:topic:99", "", "telegram", "12345", "", true},
 		{"account mismatch", "telegram", "12345", "acc1", "telegram", "12345", "acc2", false},
@@ -53,7 +53,7 @@ func TestResolveDeliveryTarget(t *testing.T) {
 	t.Run("explicit delivery", func(t *testing.T) {
 		target, err := ResolveDeliveryTarget(
 			&JobDeliveryConfig{Channel: "telegram", To: "12345"},
-			"discord", "99999",
+			"telegram", "99999",
 		)
 		if err != nil {
 			t.Fatal(err)

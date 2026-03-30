@@ -12,7 +12,7 @@ read_when:
 Real projects from the community. See what people are building with Deneb.
 
 <Info>
-**Want to be featured?** Share your project in [#showcase on Discord](https://discord.gg/deneb) or [tag @deneb on X](https://x.com/deneb).
+**Want to be featured?** Share your project in [#showcase on Telegram](https://telegram.gg/deneb) or [tag @deneb on X](https://x.com/deneb).
 </Info>
 
 ## 🎥 Deneb in Action
@@ -85,7 +85,7 @@ Full setup walkthrough (28m) by VelvetShark.
 
 [Watch on YouTube](https://www.youtube.com/watch?v=5kkIJNUGFho)
 
-## 🆕 Fresh from Discord
+## 🆕 Fresh from Telegram
 
 <CardGroup cols={2}>
 
@@ -394,7 +394,7 @@ Have something to share? We'd love to feature it!
 
 <Steps>
   <Step title="Share It">
-    Post in [#showcase on Discord](https://discord.gg/deneb) or [tweet @deneb](https://x.com/deneb)
+    Post in [#showcase on Telegram](https://telegram.gg/deneb) or [tweet @deneb](https://x.com/deneb)
   </Step>
   <Step title="Include Details">
     Tell us what it does, link to the repo/demo, share a screenshot if you have one

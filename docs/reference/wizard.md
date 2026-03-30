@@ -87,7 +87,7 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
   </Step>
   <Step title="Channels">
     - [Telegram](/channels/telegram): bot token.
-    - [Discord](/channels/discord): bot token.
+    - [Telegram](/channels/telegram): bot token.
     - DM security: default is pairing. First DM sends a code; approve via `deneb pairing approve <channel> <code>` or use allowlists.
   </Step>
   <Step title="Web search">
@@ -187,8 +187,8 @@ Typical fields in `~/.deneb/deneb.json`:
 - `tools.profile` (local onboarding defaults to `"coding"` when unset; existing explicit values are preserved)
 - `gateway.*` (mode, bind, auth, tailscale)
 - `session.dmScope` (behavior details: [CLI Setup Reference](/start/wizard-cli-reference#outputs-and-internals))
-- `channels.telegram.botToken`, `channels.discord.token`
-- Channel allowlists (Discord) when you opt in during the prompts (names resolve to IDs when possible).
+- `channels.telegram.botToken`, `channels.telegram.token`
+- Channel allowlists (Telegram) when you opt in during the prompts (names resolve to IDs when possible).
 - `skills.install.nodeManager`
 - `wizard.lastRunAt`
 - `wizard.lastRunVersion`

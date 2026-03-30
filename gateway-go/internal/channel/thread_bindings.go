@@ -110,12 +110,10 @@ func ResolveThreadBindingSpawnPolicy(
 	}
 	spawnEnabled = resolveSpawnFlag(account, root, spawnField)
 
-	// Default: non-discord channels have spawn enabled.
+	// Default: channels have spawn enabled.
 	finalSpawn := true
 	if spawnEnabled != nil {
 		finalSpawn = *spawnEnabled
-	} else if ch == "discord" {
-		finalSpawn = false
 	}
 
 	return ThreadBindingSpawnPolicy{
@@ -128,18 +126,11 @@ func ResolveThreadBindingSpawnPolicy(
 
 // FormatThreadBindingDisabledError returns a user-facing error message.
 func FormatThreadBindingDisabledError(channel, accountID string) string {
-	if channel == "discord" {
-		return "Discord thread bindings are disabled (set channels.discord.threadBindings.enabled=true to override for this account, or session.threadBindings.enabled=true globally)."
-	}
 	return fmt.Sprintf("Thread bindings are disabled for %s (set session.threadBindings.enabled=true to enable).", channel)
 }
 
 // FormatThreadBindingSpawnDisabledError returns a user-facing error message.
 func FormatThreadBindingSpawnDisabledError(channel, accountID string, kind ThreadBindingSpawnKind) string {
-	if channel == "discord" {
-		return fmt.Sprintf("Discord thread-bound %s spawns are disabled for this account (set channels.discord.threadBindings.spawn%sSessions=true to enable).",
-			kind, strings.Title(string(kind))) //nolint:staticcheck
-	}
 	return fmt.Sprintf("Thread-bound %s spawns are disabled for %s.", kind, channel)
 }
 

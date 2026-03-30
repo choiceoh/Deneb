@@ -70,7 +70,7 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Chat channels hub](/channels)
 - [Model providers hub](/providers/models)
 - [Telegram](/channels/telegram)
-- [Discord](/channels/discord)
+- [Telegram](/channels/telegram)
 - [Webhooks](/automation/webhook)
 - [Gmail Pub/Sub](/automation/gmail-pubsub)
 

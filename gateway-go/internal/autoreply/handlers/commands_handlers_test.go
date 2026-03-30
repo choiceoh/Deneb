@@ -31,4 +31,3 @@ func TestCommandRouter_UnknownCommand(t *testing.T) {
 		t.Error("expected error for unknown command")
 	}
 }
-

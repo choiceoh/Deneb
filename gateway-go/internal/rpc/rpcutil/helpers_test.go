@@ -63,10 +63,10 @@ func TestUnmarshalParams_InvalidJSON(t *testing.T) {
 
 func TestTruncateForError(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantLen  int
-		wantEnd  string
+		name    string
+		input   string
+		wantLen int
+		wantEnd string
 	}{
 		{
 			name:    "short string unchanged",

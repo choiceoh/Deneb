@@ -50,10 +50,10 @@ Scope intent:
 - `channels.telegram.webhookSecret`
 - `channels.telegram.accounts.*.botToken`
 - `channels.telegram.accounts.*.webhookSecret`
-- `channels.discord.token`
-- `channels.discord.pluralkit.token`
-- `channels.discord.accounts.*.token`
-- `channels.discord.accounts.*.pluralkit.token`
+- `channels.telegram.token`
+- `channels.telegram.pluralkit.token`
+- `channels.telegram.accounts.*.token`
+- `channels.telegram.accounts.*.pluralkit.token`
 
 ### `auth-profiles.json` targets (`secrets configure` + `secrets apply` + `secrets audit`)
 
@@ -86,7 +86,7 @@ Out-of-scope credentials include:
 - `hooks.gmail.pushToken`
 - `hooks.mappings[].sessionKey`
 - `auth-profiles.oauth.*`
-- `discord.threadBindings.*.webhookToken`
+- `telegram.threadBindings.*.webhookToken`
 
 [//]: # "secretref-unsupported-list-end"
 

@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn safe_common_patterns() {
-        assert!(!has_nested_repetition_impl("^agent:.*:discord:"));
+        assert!(!has_nested_repetition_impl("^agent:.*:telegram:"));
         assert!(!has_nested_repetition_impl("token=([A-Za-z0-9]+)"));
         assert!(!has_nested_repetition_impl("^agent:main$"));
     }

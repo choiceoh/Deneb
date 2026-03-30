@@ -8,7 +8,7 @@ title: "Personal Assistant Setup"
 
 # Building a personal assistant with Deneb
 
-Deneb is a multi-language gateway (Go server + Rust core + Node.js plugin host) for **Pi** agents, connecting messaging channels like Telegram and Discord. This guide is the "personal assistant" setup: one dedicated messaging account that behaves like your always-on agent.
+Deneb is a multi-language gateway (Go server + Rust core + Node.js plugin host) for **Pi** agents, connecting messaging channels like Telegram. This guide is the "personal assistant" setup: one dedicated messaging account that behaves like your always-on agent.
 
 ## ⚠️ Safety first
 
@@ -16,7 +16,7 @@ You’re putting an agent in a position to:
 
 - run commands on your machine (depending on your Pi tool setup)
 - read/write files in your workspace
-- send messages back out via Telegram/Discord
+- send messages back out via Telegram
 
 Start conservative:
 
@@ -178,7 +178,7 @@ Deneb extracts these and sends them as media alongside the text.
 ```bash
 deneb status          # local status (creds, sessions, queued events)
 deneb status --all    # full diagnosis (read-only, pasteable)
-deneb status --deep   # adds gateway health probes (Telegram + Discord)
+deneb status --deep   # adds gateway health probes (Telegram + Telegram)
 deneb health --json   # gateway health snapshot (WS)
 ```
 

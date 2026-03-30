@@ -115,7 +115,7 @@ If you want to share creds, copy `auth-profiles.json` into the other agent's `ag
     "list": [
       {
         "id": "support",
-        "tools": { "profile": "messaging", "allow": ["discord"] }
+        "tools": { "profile": "messaging", "allow": ["telegram"] }
       }
     ]
   }
@@ -125,7 +125,7 @@ If you want to share creds, copy `auth-profiles.json` into the other agent's `ag
 **Result:**
 
 - default agents get coding tools
-- `support` agent is messaging-only (+ Discord tool)
+- `support` agent is messaging-only (+ Telegram tool)
 
 ---
 

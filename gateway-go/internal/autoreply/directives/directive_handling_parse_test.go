@@ -1,8 +1,8 @@
 package directives
 
 import (
-	"testing"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"testing"
 )
 
 func TestParseFullInlineDirectives_WithExec(t *testing.T) {

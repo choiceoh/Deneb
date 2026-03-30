@@ -20,8 +20,8 @@ type SubagentFocusDeps struct {
 // HandleSubagentsFocusAction binds a conversation to a subagent session.
 func HandleSubagentsFocusAction(ctx *SubagentsCommandContext, deps *SubagentFocusDeps) *SubagentCommandResult {
 	channel := ctx.Channel
-	if channel != "discord" && channel != "telegram" {
-		return StopWithText("⚠️ /focus is only available on Discord and Telegram.")
+	if channel != "telegram" {
+		return StopWithText("⚠️ /focus is only available on Telegram.")
 	}
 
 	token := strings.TrimSpace(strings.Join(ctx.RestTokens, " "))
@@ -59,11 +59,7 @@ func HandleSubagentsFocusAction(ctx *SubagentsCommandContext, deps *SubagentFocu
 		BoundBy:          ctx.SenderID,
 	})
 	if err != nil {
-		labelNoun := "conversation"
-		if channel == "discord" {
-			labelNoun = "thread"
-		}
-		return StopWithText(fmt.Sprintf("⚠️ Failed to bind this %s to the target session.", labelNoun))
+		return StopWithText("⚠️ Failed to bind this conversation to the target session.")
 	}
 
 	return StopWithText(
@@ -84,15 +80,12 @@ type SubagentUnfocusDeps struct {
 // HandleSubagentsUnfocusAction unbinds a conversation from its session.
 func HandleSubagentsUnfocusAction(ctx *SubagentsCommandContext, deps *SubagentUnfocusDeps) *SubagentCommandResult {
 	channel := ctx.Channel
-	if channel != "discord" && channel != "telegram" {
-		return StopWithText("⚠️ /unfocus is only available on Discord and Telegram.")
+	if channel != "telegram" {
+		return StopWithText("⚠️ /unfocus is only available on Telegram.")
 	}
 
 	conversationID := ctx.ThreadID
 	if conversationID == "" {
-		if channel == "discord" {
-			return StopWithText("⚠️ /unfocus must be run inside a Discord thread.")
-		}
 		return StopWithText("⚠️ /unfocus on Telegram requires a topic context in groups, or a direct-message conversation.")
 	}
 
@@ -102,20 +95,12 @@ func HandleSubagentsUnfocusAction(ctx *SubagentsCommandContext, deps *SubagentUn
 
 	binding := deps.ResolveBinding(channel, ctx.AccountID, conversationID)
 	if binding == nil {
-		noun := "conversation"
-		if channel == "discord" {
-			noun = "thread"
-		}
-		return StopWithText(fmt.Sprintf("ℹ️ This %s is not currently focused.", noun))
+		return StopWithText("ℹ️ This conversation is not currently focused.")
 	}
 
 	// Check bound-by permission.
 	if binding.BoundBy != "" && binding.BoundBy != "system" && ctx.SenderID != "" && ctx.SenderID != binding.BoundBy {
-		noun := "conversation"
-		if channel == "discord" {
-			noun = "thread"
-		}
-		return StopWithText(fmt.Sprintf("⚠️ Only %s can unfocus this %s.", binding.BoundBy, noun))
+		return StopWithText(fmt.Sprintf("⚠️ Only %s can unfocus this conversation.", binding.BoundBy))
 	}
 
 	if deps.Unbind == nil {
@@ -123,9 +108,6 @@ func HandleSubagentsUnfocusAction(ctx *SubagentsCommandContext, deps *SubagentUn
 	}
 	if err := deps.Unbind(binding.BindingID); err != nil {
 		return StopWithText(fmt.Sprintf("⚠️ Failed to unfocus: %s", err))
-	}
-	if channel == "discord" {
-		return StopWithText("✅ Thread unfocused.")
 	}
 	return StopWithText("✅ Conversation unfocused.")
 }
@@ -158,8 +140,8 @@ func HandleSubagentsAgentsAction(ctx *SubagentsCommandContext, deps *SubagentAge
 				bindings := deps.ListBindings(entry.ChildSessionKey)
 				for _, b := range bindings {
 					if b.Status == "active" && b.Channel == ctx.Channel && b.AccountID == ctx.AccountID {
-						if b.Channel == "discord" {
-							bindingText = fmt.Sprintf("thread:%s", b.ConversationID)
+						if b.Channel == "telegram" {
+							bindingText = fmt.Sprintf("conversation:%s", b.ConversationID)
 						} else if b.Channel == "telegram" {
 							bindingText = fmt.Sprintf("conversation:%s", b.ConversationID)
 						} else {

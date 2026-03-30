@@ -45,7 +45,7 @@ title: "Elevated Mode"
 ## Availability + allowlists
 
 - Feature gate: `tools.elevated.enabled` (default can be off via config even if the code supports it).
-- Sender allowlist: `tools.elevated.allowFrom` with per-provider allowlists (e.g. `discord`, `whatsapp`).
+- Sender allowlist: `tools.elevated.allowFrom` with per-provider allowlists (e.g. `telegram`, `whatsapp`).
 - Unprefixed allowlist entries match sender-scoped identity values only (`SenderId`, `SenderE164`, `From`); recipient routing fields are never used for elevated authorization.
 - Mutable sender metadata requires explicit prefixes:
   - `name:<value>` matches `SenderName`
@@ -54,7 +54,7 @@ title: "Elevated Mode"
   - `id:<value>`, `from:<value>`, `e164:<value>` are available for explicit identity targeting
 - Per-agent gate: `agents.list[].tools.elevated.enabled` (optional; can only further restrict).
 - Per-agent allowlist: `agents.list[].tools.elevated.allowFrom` (optional; when set, the sender must match **both** global + per-agent allowlists).
-- Discord fallback: if `tools.elevated.allowFrom.discord` is omitted, the `channels.discord.allowFrom` list is used as a fallback (legacy: `channels.discord.dm.allowFrom`). Set `tools.elevated.allowFrom.discord` (even `[]`) to override. Per-agent allowlists do **not** use the fallback.
+- Telegram fallback: if `tools.elevated.allowFrom.telegram` is omitted, the `channels.telegram.allowFrom` list is used as a fallback (legacy: `channels.telegram.dm.allowFrom`). Set `tools.elevated.allowFrom.telegram` (even `[]`) to override. Per-agent allowlists do **not** use the fallback.
 - All gates must pass; otherwise elevated is treated as unavailable.
 
 ## Logging + status

@@ -15,5 +15,5 @@ Shared reaction semantics across channels:
 
 Channel notes:
 
-- **Discord**: empty `emoji` removes all of the bot's reactions on the message; `remove: true` removes just that emoji.
+- **Telegram**: empty `emoji` removes all of the bot's reactions on the message; `remove: true` removes just that emoji.
 - **Telegram**: empty `emoji` removes the bot's reactions; `remove: true` also removes reactions but still requires a non-empty `emoji` for tool validation.

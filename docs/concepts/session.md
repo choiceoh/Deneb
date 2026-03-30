@@ -210,7 +210,7 @@ the workspace is writable. See [Memory](/concepts/memory) and
 - Daily reset: defaults to **4:00 AM local time on the gateway host**. A session is stale once its last update is earlier than the most recent daily reset time.
 - Idle reset (optional): `idleMinutes` adds a sliding idle window. When both daily and idle resets are configured, **whichever expires first** forces a new session.
 - Legacy idle-only: if you set `session.idleMinutes` without any `session.reset`/`resetByType` config, Deneb stays in idle-only mode for backward compatibility.
-- Per-type overrides (optional): `resetByType` lets you override the policy for `direct`, `group`, and `thread` sessions (thread = Discord threads, Telegram topics).
+- Per-type overrides (optional): `resetByType` lets you override the policy for `direct`, `group`, and `thread` sessions (thread = Telegram threads, Telegram topics).
 - Per-channel overrides (optional): `resetByChannel` overrides the reset policy for a channel (applies to all session types for that channel and takes precedence over `reset`/`resetByType`).
 - Reset triggers: exact `/new` or `/reset` (plus any extras in `resetTriggers`) start a fresh session id and pass the remainder of the message through. `/new <model>` accepts a model alias, `provider/model`, or provider name (fuzzy match) to set the new session model. If `/new` or `/reset` is sent alone, Deneb runs a short “hello” greeting turn to confirm the reset.
 - Manual reset: delete specific keys from the store or remove the JSONL transcript; the next message recreates them.
@@ -225,10 +225,10 @@ Block delivery for specific session types without listing individual ids.
   session: {
     sendPolicy: {
       rules: [
-        { action: "deny", match: { channel: "discord", chatType: "group" } },
+        { action: "deny", match: { channel: "telegram", chatType: "group" } },
         { action: "deny", match: { keyPrefix: "cron:" } },
         // Match the raw session key (including the `agent:<id>:` prefix).
-        { action: "deny", match: { rawKeyPrefix: "agent:main:discord:" } },
+        { action: "deny", match: { rawKeyPrefix: "agent:main:telegram:" } },
       ],
       default: "allow",
     },
@@ -252,7 +252,7 @@ Runtime override (owner only):
     scope: "per-sender", // keep group keys separate
     dmScope: "main", // DM continuity (set per-channel-peer/per-account-channel-peer for shared inboxes)
     identityLinks: {
-      alice: ["telegram:123456789", "discord:987654321012345678"],
+      alice: ["telegram:123456789", "telegram:987654321012345678"],
     },
     reset: {
       // Defaults: mode=daily, atHour=4 (gateway host local time).
@@ -267,7 +267,7 @@ Runtime override (owner only):
       group: { mode: "idle", idleMinutes: 120 },
     },
     resetByChannel: {
-      discord: { mode: "idle", idleMinutes: 10080 },
+      telegram: { mode: "idle", idleMinutes: 10080 },
     },
     resetTriggers: ["/new", "/reset"],
     store: "~/.deneb/agents/{agentId}/sessions/sessions.json",

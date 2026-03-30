@@ -82,7 +82,7 @@ Proto schema (proto/) ──── generates ────► Go (pkg/protocol/ge
 | `internal/rpc/` + `rpc/handler/` | 34 | ~8K | session, chat, channel, node, provider | MEDIUM |
 | `internal/server/` | 38 | ~7K | rpc, middleware, auth, channel | MEDIUM |
 | `internal/ffi/` | 26 | ~2K | CGo (no Go deps; Rust static lib) | MEDIUM |
-| `internal/channel/` | 29 | ~2K | telegram, discord | LOW |
+| `internal/channel/` | 29 | ~2K | telegram, telegram | LOW |
 | `internal/session/` | 14 | ~1K | channel, event | LOW |
 | `internal/auth/` | 12 | ~900 | config | LOW |
 | `internal/provider/` | 24 | ~1K | config, llm | LOW |

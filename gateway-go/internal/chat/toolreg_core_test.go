@@ -122,18 +122,18 @@ func TestValidateWorkdir(t *testing.T) {
 func TestToolSchemas(t *testing.T) {
 	// Verify all schema generators return valid structures with required fields.
 	schemas := map[string]func() map[string]any{
-		"exec":               execToolSchema,
-		"process":            processToolSchema,
+		"exec":              execToolSchema,
+		"process":           processToolSchema,
 		"web":               webToolSchema,
-		"youtubeTranscript":  youtubeTranscriptToolSchema,
-		"memorySearch":       memorySearchToolSchema,
-		"message":            messageToolSchema,
-		"read":               readToolSchema,
-		"write":              writeToolSchema,
-		"edit":               editToolSchema,
-		"grep":               grepToolSchema,
-		"find":               findToolSchema,
-		"vega":               vegaToolSchema,
+		"youtubeTranscript": youtubeTranscriptToolSchema,
+		"memorySearch":      memorySearchToolSchema,
+		"message":           messageToolSchema,
+		"read":              readToolSchema,
+		"write":             writeToolSchema,
+		"edit":              editToolSchema,
+		"grep":              grepToolSchema,
+		"find":              findToolSchema,
+		"vega":              vegaToolSchema,
 	}
 
 	for name, fn := range schemas {

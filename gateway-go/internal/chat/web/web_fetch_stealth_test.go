@@ -8,11 +8,11 @@ import (
 
 func TestIsSoftBlock_CloudflareChallenge(t *testing.T) {
 	tests := []struct {
-		name    string
-		html    string
-		ct      string
-		size    int
-		want    bool
+		name string
+		html string
+		ct   string
+		size int
+		want bool
 	}{
 		{
 			"cloudflare challenge",

@@ -90,10 +90,10 @@ Each agent gets its own workspace with `SOUL.md`, `AGENTS.md`, and optional `USE
 
 Create one account per agent on your preferred channels:
 
-- Discord: one bot per agent, enable Message Content Intent, copy each token.
+- Telegram: one bot per agent, enable Message Content Intent, copy each token.
 - Telegram: one bot per agent via BotFather, copy each token.
 
-See channel guides: [Discord](/channels/discord), [Telegram](/channels/telegram).
+See channel guides: [Telegram](/channels/telegram), [Telegram](/channels/telegram).
 
   </Step>
 
@@ -130,8 +130,8 @@ Bindings are **deterministic** and **most-specific wins**:
 
 1. `peer` match (exact DM/group/channel id)
 2. `parentPeer` match (thread inheritance)
-3. `guildId + roles` (Discord role routing)
-4. `guildId` (Discord)
+3. `guildId + roles` (Telegram role routing)
+4. `guildId` (Telegram)
 5. `accountId` match for a channel
 6. channel-level match (`accountId: "*"`)
 7. fallback to default agent (`agents.list[].default`, else first list entry, default: `main`)
@@ -157,7 +157,7 @@ to `default` if present, otherwise the first configured account id (sorted).
 
 Channels supporting this pattern include:
 
-- `telegram`, `discord`
+- `telegram`, `telegram`
 
 ## Concepts
 
@@ -168,9 +168,9 @@ Channels supporting this pattern include:
 
 ## Platform examples
 
-### Discord bots per agent
+### Telegram bots per agent
 
-Each Discord bot account maps to a unique `accountId`. Bind each account to an agent and keep allowlists per bot.
+Each Telegram bot account maps to a unique `accountId`. Bind each account to an agent and keep allowlists per bot.
 
 ```json5
 {
@@ -181,15 +181,15 @@ Each Discord bot account maps to a unique `accountId`. Bind each account to an a
     ],
   },
   bindings: [
-    { agentId: "main", match: { channel: "discord", accountId: "default" } },
-    { agentId: "coding", match: { channel: "discord", accountId: "coding" } },
+    { agentId: "main", match: { channel: "telegram", accountId: "default" } },
+    { agentId: "coding", match: { channel: "telegram", accountId: "coding" } },
   ],
   channels: {
-    discord: {
+    telegram: {
       groupPolicy: "allowlist",
       accounts: {
         default: {
-          token: "DISCORD_BOT_TOKEN_MAIN",
+          token: "TELEGRAM_BOT_TOKEN_MAIN",
           guilds: {
             "123456789012345678": {
               channels: {
@@ -199,7 +199,7 @@ Each Discord bot account maps to a unique `accountId`. Bind each account to an a
           },
         },
         coding: {
-          token: "DISCORD_BOT_TOKEN_CODING",
+          token: "TELEGRAM_BOT_TOKEN_CODING",
           guilds: {
             "123456789012345678": {
               channels: {
@@ -217,7 +217,7 @@ Each Discord bot account maps to a unique `accountId`. Bind each account to an a
 Notes:
 
 - Invite each bot to the guild and enable Message Content Intent.
-- Tokens live in `channels.discord.accounts.<id>.token` (default account can use `DISCORD_BOT_TOKEN`).
+- Tokens live in `channels.telegram.accounts.<id>.token` (default account can use `TELEGRAM_BOT_TOKEN`).
 
 ### Telegram bots per agent
 
@@ -256,9 +256,9 @@ Notes:
 - Create one bot per agent with BotFather and copy each token.
 - Tokens live in `channels.telegram.accounts.<id>.botToken` (default account can use `TELEGRAM_BOT_TOKEN`).
 
-## Example: Telegram everyday + Discord deep work
+## Example: Telegram everyday + Telegram deep work
 
-Split by channel: route Telegram to a fast everyday agent and Discord to an Opus agent.
+Split by channel: route Telegram to a fast everyday agent and Telegram to an Opus agent.
 
 ```json5
 {
@@ -280,7 +280,7 @@ Split by channel: route Telegram to a fast everyday agent and Discord to an Opus
   },
   bindings: [
     { agentId: "chat", match: { channel: "telegram" } },
-    { agentId: "opus", match: { channel: "discord" } },
+    { agentId: "opus", match: { channel: "telegram" } },
   ],
 }
 ```

@@ -326,22 +326,22 @@ func TestClassifyFetchError(t *testing.T) {
 
 func TestFormatFetchResult(t *testing.T) {
 	meta := webFetchMeta{
-		Title:       "Test Page",
-		Description: "A test page description",
-		Author:      "Test Author",
-		SiteName:    "Test Site",
-		URL:         "https://example.com",
-		FinalURL:    "https://example.com/final",
-		Language:    "en",
-		OGType:      "article",
-		ContentType: "text/html",
-		StatusCode:  200,
-		FetchMs:     150,
-		OrigChars:   10000,
+		Title:        "Test Page",
+		Description:  "A test page description",
+		Author:       "Test Author",
+		SiteName:     "Test Site",
+		URL:          "https://example.com",
+		FinalURL:     "https://example.com/final",
+		Language:     "en",
+		OGType:       "article",
+		ContentType:  "text/html",
+		StatusCode:   200,
+		FetchMs:      150,
+		OrigChars:    10000,
 		ExtractChars: 5000,
-		Retention:   "50.0%",
-		WordCount:   800,
-		Signals:     []string{"cookie_consent"},
+		Retention:    "50.0%",
+		WordCount:    800,
+		Signals:      []string{"cookie_consent"},
 	}
 	content := "# Hello\n\nThis is the content."
 	result := formatFetchResult(meta, content)

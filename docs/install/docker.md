@@ -451,13 +451,13 @@ Telegram (bot token):
 docker compose run --rm deneb-cli channels add --channel telegram --token "<token>"
 ```
 
-Discord (bot token):
+Telegram (bot token):
 
 ```bash
-docker compose run --rm deneb-cli channels add --channel discord --token "<token>"
+docker compose run --rm deneb-cli channels add --channel telegram --token "<token>"
 ```
 
-Docs: WhatsApp, [Telegram](/channels/telegram), Discord
+Docs: WhatsApp, [Telegram](/channels/telegram), Telegram
 
 ### OpenAI Codex OAuth (headless Docker)
 
@@ -586,7 +586,7 @@ precedence, and troubleshooting.
   - `host` is blocked.
   - `container:<id>` is blocked by default (namespace-join risk).
 - Default allow: `exec`, `process`, `read`, `write`, `edit`, `sessions_list`, `sessions_history`, `sessions_send`, `sessions_spawn`, `session_status`
-- Default deny: `browser`, `canvas`, `nodes`, `cron`, `discord`, `gateway`
+- Default deny: `browser`, `canvas`, `nodes`, `cron`, `telegram`, `gateway`
 
 ### Enable sandboxing
 
@@ -656,7 +656,7 @@ If you plan to install packages in `setupCommand`, note:
           "sessions_spawn",
           "session_status",
         ],
-        deny: ["browser", "canvas", "nodes", "cron", "discord", "gateway"],
+        deny: ["browser", "canvas", "nodes", "cron", "telegram", "gateway"],
       },
     },
   },

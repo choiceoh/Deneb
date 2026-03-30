@@ -169,7 +169,7 @@ discovery boundary so the shared `message` tool exposes the right channel-owned
 surface for the current turn.
 
 For channel-owned execution helpers, bundled plugins should keep the execution
-runtime inside their own extension modules. Core no longer owns the Discord
+runtime inside their own extension modules. Core no longer owns the Telegram
 or Telegram message-action runtimes under `src/agents/tools`.
 We do not publish separate `plugin-sdk/*-action-runtime` subpaths, and bundled
 plugins should import their own local runtime code directly from their
@@ -247,7 +247,7 @@ Use this mental model when deciding where code belongs:
   merge rules, delivery semantics, and typed contracts
 - **vendor plugin layer**: vendor-specific APIs, auth, model catalogs, speech
   synthesis, image generation, future video backends, usage endpoints
-- **channel/feature plugin layer**: Telegram/Discord/etc. integration
+- **channel/feature plugin layer**: Telegram/etc. integration
   that consumes core capabilities and presents them on a surface
 
 For example, TTS follows this shape:
@@ -884,7 +884,7 @@ authoring plugins:
   `extensions/<id>/index.js` is the bundled plugin entry,
   and `extensions/<id>/setup-entry.js` is the setup plugin entry.
 - `deneb/plugin-sdk/telegram` for Telegram channel plugin types and shared channel-facing helpers. Built-in Telegram implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/discord` for Discord channel plugin types and shared channel-facing helpers. Built-in Discord implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/telegram` for Telegram channel plugin types and shared channel-facing helpers. Built-in Telegram implementation internals stay private to the bundled extension.
 
 Compatibility note:
 

@@ -27,7 +27,7 @@ New shell, same lobster soul. Third time's the charm.
 
 ## The First Molt (January 27, 2026)
 
-At 5am, the community gathered in Discord. Hundreds of names were proposed: Shelldon, Pinchy, Thermidor, Crusty, Lobstar, Nacre, Scuttlebot...
+At 5am, the community gathered in Telegram. Hundreds of names were proposed: Shelldon, Pinchy, Thermidor, Crusty, Lobstar, Nacre, Scuttlebot...
 
 In the end, **Deneb** won. Because molting is what lobsters do to grow. And growth was exactly what was happening.
 
@@ -127,7 +127,7 @@ In just 3 hours:
 - **ELU** created incredible logos including "THE CLAW IS THE LAW" western banner
 - **Whurley** (yes, THE William Hurley, quantum computing pioneer) made ASCII art
 - **Onur** handled GitHub, first to rock the affiliate badge
-- **Shadow** secured Discord vanity, nuked malware
+- **Shadow** secured Telegram vanity, nuked malware
 - **The whole Claw Crew** pulled an all-nighter
 
 **The Scammer Speedrun:** Crypto grifters launched a $DENEB token on Pump.fun within MINUTES. They stole artwork that was created 20 minutes earlier. Business-verified accounts pushed scams. The audacity was almost impressive.

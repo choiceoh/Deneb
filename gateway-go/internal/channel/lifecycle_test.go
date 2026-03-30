@@ -54,7 +54,7 @@ func (m *lifecycleMockPlugin) Stop(_ context.Context) error {
 func TestLifecycleStartAll(t *testing.T) {
 	reg := NewRegistry()
 	p1 := newLifecycleMock("telegram")
-	p2 := newLifecycleMock("discord")
+	p2 := newLifecycleMock("telegram")
 	_ = reg.Register(p1)
 	_ = reg.Register(p2)
 
@@ -72,7 +72,7 @@ func TestLifecycleStartAll(t *testing.T) {
 func TestLifecycleStartAllWithError(t *testing.T) {
 	reg := NewRegistry()
 	p1 := newLifecycleMock("telegram")
-	p2 := newLifecycleMock("discord")
+	p2 := newLifecycleMock("telegram")
 	p2.startErr = errors.New("connection refused")
 	_ = reg.Register(p1)
 	_ = reg.Register(p2)
@@ -83,8 +83,8 @@ func TestLifecycleStartAllWithError(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d", len(errs))
 	}
-	if errs["discord"] == nil {
-		t.Error("expected error for discord")
+	if errs["telegram"] == nil {
+		t.Error("expected error for telegram")
 	}
 }
 
@@ -108,7 +108,7 @@ func TestLifecycleStopAll(t *testing.T) {
 func TestLifecycleHealthCheck(t *testing.T) {
 	reg := NewRegistry()
 	p1 := newLifecycleMock("telegram")
-	p2 := newLifecycleMock("discord")
+	p2 := newLifecycleMock("telegram")
 	p2.status = Status{Connected: false, Error: "auth failed"}
 	_ = reg.Register(p1)
 	_ = reg.Register(p2)
@@ -121,9 +121,9 @@ func TestLifecycleHealthCheck(t *testing.T) {
 	}
 
 	for _, h := range health {
-		if h.ID == "discord" {
+		if h.ID == "telegram" {
 			if h.Connected {
-				t.Error("discord should not be connected")
+				t.Error("telegram should not be connected")
 			}
 			if h.Error != "auth failed" {
 				t.Errorf("expected 'auth failed', got %q", h.Error)

@@ -18,7 +18,7 @@ Deneb runs as a multi-language gateway with three cooperating runtimes:
 - **Rust core** (`core-rs`) — high-performance library linked into Go via CGo FFI. Handles protocol validation, security (constant-time compare, HTML sanitization, SSRF checks), media detection, markdown parsing, memory search (cosine similarity, BM25, hybrid merge), and context engine (assembly, compaction, sweep).
 - **Node.js plugin host** — subprocess managed by the Go gateway over a Unix domain socket. Runs channel extensions, skill plugins, and provider integrations that use the TypeScript plugin SDK.
 
-A single long-lived Gateway owns all messaging surfaces (Telegram via grammY, Discord, and extension channels).
+A single long-lived Gateway owns all messaging surfaces (Telegram via grammY, Telegram, and extension channels).
 
 <Tip>
 Telegram is the primary production channel. Other channels exist in the
@@ -101,7 +101,7 @@ End-to-end view of every major component and how data flows from messaging chann
 graph TB
     subgraph "Messaging Channels"
         TG["📱 Telegram<br>(primary channel)"]
-        DC["Discord"]
+        DC["Telegram"]
     end
 
     subgraph "Control Plane Clients"
@@ -229,7 +229,7 @@ graph LR
     subgraph "Inbound"
         REQ_HTTP["HTTP Request<br>/api/v1/rpc"]
         REQ_WS["WebSocket Frame<br>type: req"]
-        REQ_CHAN["Channel Message<br>Telegram, Discord"]
+        REQ_CHAN["Channel Message<br>Telegram, Telegram"]
     end
 
     subgraph "gateway-go/internal"
@@ -457,7 +457,7 @@ graph TB
 ### Plugin host (Node.js subprocess)
 
 - Communicates with Go gateway over Unix domain socket using a frame-based protocol (RequestFrame/ResponseFrame).
-- Runs channel extensions (Telegram, Discord, etc.).
+- Runs channel extensions (Telegram, Telegram, etc.).
 - Executes skill plugins and provider integrations via the TypeScript plugin SDK.
 - Auto-reconnects with exponential backoff (1s to 30s max) if the connection drops.
 

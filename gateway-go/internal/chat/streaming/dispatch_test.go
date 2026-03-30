@@ -72,14 +72,14 @@ func TestDispatch_SingleTarget(t *testing.T) {
 func TestDispatch_MultipleTargets(t *testing.T) {
 	reg := channel.NewRegistry()
 	tg := &mockChannelPlugin{id: "telegram"}
-	dc := &mockChannelPlugin{id: "discord"}
+	dc := &mockChannelPlugin{id: "telegram"}
 	reg.Register(tg)
 	reg.Register(dc)
 
 	results := Dispatch(context.Background(), reg,
 		[]DeliveryTarget{
 			{Channel: "telegram", To: "user1"},
-			{Channel: "discord", To: "user2"},
+			{Channel: "telegram", To: "user2"},
 		},
 		"Multi!", nil)
 
@@ -114,14 +114,14 @@ func TestDispatch_ChannelNotFound(t *testing.T) {
 func TestDispatch_PartialFailure(t *testing.T) {
 	reg := channel.NewRegistry()
 	ok := &mockChannelPlugin{id: "telegram"}
-	fail := &mockChannelPlugin{id: "discord", sendErr: fmt.Errorf("send failed")}
+	fail := &mockChannelPlugin{id: "telegram", sendErr: fmt.Errorf("send failed")}
 	reg.Register(ok)
 	reg.Register(fail)
 
 	results := Dispatch(context.Background(), reg,
 		[]DeliveryTarget{
 			{Channel: "telegram", To: "user1"},
-			{Channel: "discord", To: "user2"},
+			{Channel: "telegram", To: "user2"},
 		},
 		"Test", nil)
 

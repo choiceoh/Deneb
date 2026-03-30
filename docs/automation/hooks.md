@@ -222,7 +222,7 @@ Each event includes:
     sessionEntry?: SessionEntry,
     sessionId?: string,
     sessionFile?: string,
-    commandSource?: string,    // e.g., 'telegram', 'discord'
+    commandSource?: string,    // e.g., 'telegram', 'telegram'
     senderId?: string,
     workspaceDir?: string,
     bootstrapFiles?: WorkspaceBootstrapFile[],
@@ -286,7 +286,7 @@ Message events include rich context about the message:
   from: string,           // Sender identifier (phone number, user ID, etc.)
   content: string,        // Message content
   timestamp?: number,     // Unix timestamp when received
-  channelId: string,      // Channel (e.g., "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "telegram")
   accountId?: string,     // Provider account ID for multi-account setups
   conversationId?: string, // Chat/conversation ID
   messageId?: string,     // Message ID from the provider
@@ -307,7 +307,7 @@ Message events include rich context about the message:
   content: string,        // Message content that was sent
   success: boolean,       // Whether the send succeeded
   error?: string,         // Error message if sending failed
-  channelId: string,      // Channel (e.g., "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "telegram")
   accountId?: string,     // Provider account ID
   conversationId?: string, // Chat/conversation ID
   messageId?: string,     // Message ID returned by the provider
@@ -320,7 +320,7 @@ Message events include rich context about the message:
   body?: string,          // Raw inbound body before enrichment
   bodyForAgent?: string,  // Enriched body visible to the agent
   transcript: string,     // Audio transcript text
-  channelId: string,      // Channel (e.g., "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "telegram")
   conversationId?: string,
   messageId?: string,
 }
@@ -330,7 +330,7 @@ Message events include rich context about the message:
   body?: string,          // Raw inbound body
   bodyForAgent?: string,  // Final enriched body after media/link understanding
   transcript?: string,    // Transcript when audio was present
-  channelId: string,      // Channel (e.g., "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "telegram")
   conversationId?: string,
   messageId?: string,
   isGroup?: boolean,

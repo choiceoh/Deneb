@@ -146,4 +146,3 @@ func TestReadMemoryFile_CacheAndInvalidation(t *testing.T) {
 		t.Fatalf("got %q after modification, want %q", content, "v2")
 	}
 }
-

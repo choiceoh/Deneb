@@ -95,7 +95,7 @@ ephemeral:
 
 ### External channels
 
-On channels like Telegram, WhatsApp, and Discord, BTW is delivered as a
+On channels like Telegram, WhatsApp, and Telegram, BTW is delivered as a
 clearly labeled one-off reply because those surfaces do not have a local
 ephemeral overlay concept.
 

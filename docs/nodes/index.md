@@ -16,7 +16,7 @@ Legacy transport: [Bridge protocol](/gateway/bridge-protocol) (TCP JSONL; deprec
 Notes:
 
 - Nodes are **peripherals**, not gateways. They don’t run the gateway service.
-- Telegram/Discord messages land on the **gateway**, not on nodes.
+- Telegram messages land on the **gateway**, not on nodes.
 - Troubleshooting runbook: [/nodes/troubleshooting](/nodes/troubleshooting)
 
 ## Pairing + status

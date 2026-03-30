@@ -86,7 +86,7 @@ deneb onboard --install-daemon
 The wizard will walk you through:
 
 - Model auth (API keys or OAuth)
-- Channel setup (Telegram, WhatsApp, Discord, etc.)
+- Channel setup (Telegram, WhatsApp, Telegram, etc.)
 - Gateway token (auto-generated)
 - Daemon installation (systemd)
 

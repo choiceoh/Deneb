@@ -1,5 +1,5 @@
 ---
-summary: "Group chat behavior across surfaces (Telegram/Discord)"
+summary: "Group chat behavior across surfaces (Telegram)"
 read_when:
   - Changing group chat behavior or mention gating
 title: "Groups"
@@ -7,7 +7,7 @@ title: "Groups"
 
 # Groups
 
-Deneb treats group chats consistently across surfaces: Telegram and Discord.
+Deneb treats group chats consistently across surfaces: Telegram.
 
 ## Beginner intro (2 minutes)
 
@@ -136,7 +136,7 @@ Control how group/room messages are handled per channel:
       groupPolicy: "disabled", // "open" | "disabled" | "allowlist"
       groupAllowFrom: ["123456789"], // numeric Telegram user id (wizard can resolve @username)
     },
-    discord: {
+    telegram: {
       groupPolicy: "allowlist",
       guilds: {
         GUILD_ID: { channels: { help: { allow: true } } },
@@ -157,8 +157,8 @@ Notes:
 - `groupPolicy` is separate from mention-gating (which requires @mentions).
 - Telegram: use `groupAllowFrom` (fallback: explicit `allowFrom`).
 - DM pairing approvals (`*-allowFrom` store entries) apply to DM access only; group sender authorization stays explicit to group allowlists.
-- Discord: allowlist uses `channels.discord.guilds.<id>.channels`.
-- Group DMs are controlled separately (`channels.discord.dm.*`).
+- Telegram: allowlist uses `channels.telegram.guilds.<id>.channels`.
+- Group DMs are controlled separately (`channels.telegram.dm.*`).
 - Telegram allowlist can match user IDs (`"123456789"`, `"telegram:123456789"`, `"tg:123456789"`) or usernames (`"@alice"` or `"alice"`); prefixes are case-insensitive.
 - Default is `groupPolicy: "allowlist"`; if your group allowlist is empty, group messages are blocked.
 - Runtime safety: when a provider block is completely missing (`channels.<provider>` absent), group policy falls back to a fail-closed mode (typically `allowlist`) instead of inheriting `channels.defaults.groupPolicy`.
@@ -173,7 +173,7 @@ Quick mental model (evaluation order for group messages):
 
 Group messages require a mention unless overridden per group. Defaults live per subsystem under `*.groups."*"`.
 
-Replying to a bot message counts as an implicit mention (when the channel supports reply metadata). This applies to Telegram and Discord.
+Replying to a bot message counts as an implicit mention (when the channel supports reply metadata). This applies to Telegram.
 
 ```json5
 {
@@ -205,7 +205,7 @@ Notes:
 - Surfaces that provide explicit mentions still pass; patterns are a fallback.
 - Per-agent override: `agents.list[].groupChat.mentionPatterns` (useful when multiple agents share a group).
 - Mention gating is only enforced when mention detection is possible (native mentions or `mentionPatterns` are configured).
-- Discord defaults live in `channels.discord.guilds."*"` (overridable per guild/channel).
+- Telegram defaults live in `channels.telegram.guilds."*"` (overridable per guild/channel).
 - Group history context is wrapped uniformly across channels and is **pending-only** (messages skipped due to mention gating); use `messages.groupChat.historyLimit` for the global default and `channels.<channel>.historyLimit` (or `channels.<channel>.accounts.*.historyLimit`) for overrides. Set `0` to disable.
 
 ## Group/channel tool restrictions (optional)
@@ -248,11 +248,11 @@ Example (Telegram):
 Notes:
 
 - Group/channel tool restrictions are applied in addition to global/agent tool policy (deny still wins).
-- Some channels use different nesting for rooms/channels (e.g., Discord `guilds.*.channels.*`).
+- Some channels use different nesting for rooms/channels (e.g., Telegram `guilds.*.channels.*`).
 
 ## Group allowlists
 
-When `channels.telegram.groups` or `channels.discord.guilds` is configured, the keys act as a group allowlist. Use `"*"` to allow all groups while still setting default mention behavior.
+When `channels.telegram.groups` or `channels.telegram.guilds` is configured, the keys act as a group allowlist. Use `"*"` to allow all groups while still setting default mention behavior.
 
 Common intents (copy/paste):
 

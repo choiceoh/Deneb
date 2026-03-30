@@ -6,9 +6,9 @@ import (
 
 func TestNormalizeThinkLevel(t *testing.T) {
 	tests := []struct {
-		input   string
-		want    ThinkLevel
-		wantOk  bool
+		input  string
+		want   ThinkLevel
+		wantOk bool
 	}{
 		// Direct matches.
 		{"off", ThinkOff, true},
