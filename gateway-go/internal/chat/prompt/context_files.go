@@ -42,6 +42,42 @@ const (
 // EvalSymlinks + ReadFile calls are skipped entirely.
 var ctxCache = &contextFileCache{}
 
+// sessionSnapshots stores frozen context files per session.
+// Once populated on first load, subsequent loads for the same session
+// return the snapshot without checking disk — keeping the system prompt
+// stable for LLM prefix cache optimization.
+var sessionSnapshots = &sessionSnapshotCache{}
+
+type sessionSnapshotCache struct {
+	mu    sync.Mutex
+	store map[string][]ContextFile
+}
+
+func (c *sessionSnapshotCache) get(key string) ([]ContextFile, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.store == nil {
+		return nil, false
+	}
+	files, ok := c.store[key]
+	return files, ok
+}
+
+func (c *sessionSnapshotCache) set(key string, files []ContextFile) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.store == nil {
+		c.store = make(map[string][]ContextFile)
+	}
+	c.store[key] = files
+}
+
+func (c *sessionSnapshotCache) delete(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.store, key)
+}
+
 type contextFileCache struct {
 	mu        sync.Mutex
 	workspace string
@@ -51,15 +87,19 @@ type contextFileCache struct {
 	cachedAt time.Time
 }
 
-// ResetContextFileCacheForTest clears the package-level context-file cache.
-// Intended for tests to avoid cross-test cache state leakage.
+// ResetContextFileCacheForTest clears the package-level context-file cache
+// and all session snapshots. Intended for tests to avoid cross-test state leakage.
 func ResetContextFileCacheForTest() {
 	ctxCache.mu.Lock()
-	defer ctxCache.mu.Unlock()
 	ctxCache.workspace = ""
 	ctxCache.files = nil
 	ctxCache.resolved = nil
 	ctxCache.cachedAt = time.Time{}
+	ctxCache.mu.Unlock()
+
+	sessionSnapshots.mu.Lock()
+	sessionSnapshots.store = nil
+	sessionSnapshots.mu.Unlock()
 }
 
 // isValid checks whether the cache can be reused for the given workspace.
@@ -108,19 +148,33 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 		o(&cfg)
 	}
 
+	// Frozen snapshot: return cached files if this session already loaded.
+	if cfg.sessionKey != "" {
+		if frozen, ok := sessionSnapshots.get(cfg.sessionKey); ok {
+			if cfg.skipMemory {
+				return filterOutMemory(frozen)
+			}
+			return frozen
+		}
+	}
+
 	ctxCache.mu.Lock()
 	defer ctxCache.mu.Unlock()
 
+	var files []ContextFile
 	if ctxCache.isValid(workspaceDir) {
-		files := ctxCache.files
-		if cfg.skipMemory {
-			files = filterOutMemory(files)
-		}
-		return files
+		files = ctxCache.files
+	} else {
+		var resolved map[string]time.Time
+		files, resolved = loadContextFilesFromDisk(workspaceDir)
+		ctxCache.store(workspaceDir, files, resolved)
 	}
 
-	files, resolved := loadContextFilesFromDisk(workspaceDir)
-	ctxCache.store(workspaceDir, files, resolved)
+	// Freeze for this session (stores full list; skipMemory applied at return).
+	if cfg.sessionKey != "" {
+		sessionSnapshots.set(cfg.sessionKey, files)
+	}
+
 	if cfg.skipMemory {
 		files = filterOutMemory(files)
 	}
@@ -129,7 +183,8 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 
 // loadContextConfig holds options for LoadContextFiles.
 type loadContextConfig struct {
-	skipMemory bool // skip MEMORY.md (structured memory store provides this)
+	skipMemory bool   // skip MEMORY.md (structured memory store provides this)
+	sessionKey string // non-empty → use/populate frozen session snapshot
 }
 
 // LoadContextOption configures LoadContextFiles behavior.
@@ -139,6 +194,21 @@ type LoadContextOption func(*loadContextConfig)
 // is active, avoiding duplicate content in the context window.
 func WithSkipMemory() LoadContextOption {
 	return func(c *loadContextConfig) { c.skipMemory = true }
+}
+
+// WithSessionSnapshot enables the frozen snapshot pattern: on first call
+// for a given session key the loaded context files are cached and returned
+// unchanged for all subsequent calls within that session. This keeps the
+// system prompt stable across turns so the LLM prefix cache is not
+// invalidated by mid-session MEMORY.md writes.
+func WithSessionSnapshot(sessionKey string) LoadContextOption {
+	return func(c *loadContextConfig) { c.sessionKey = sessionKey }
+}
+
+// ClearSessionSnapshot removes the frozen context files for a session.
+// Call on session reset or terminal state transition.
+func ClearSessionSnapshot(sessionKey string) {
+	sessionSnapshots.delete(sessionKey)
 }
 
 // filterOutMemory removes MEMORY.md entries from a context file slice.

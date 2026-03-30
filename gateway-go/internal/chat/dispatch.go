@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -119,8 +120,9 @@ func (h *Handler) handleSlashCommand(
 ) *protocol.ResponseFrame {
 	switch cmd.Command {
 	case "reset":
-		// Abort any active run and clear transcript.
+		// Abort any active run, clear transcript, and discard frozen context snapshot.
 		h.InterruptActiveRun(sessionKey)
+		prompt.ClearSessionSnapshot(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
 				h.logger.Warn("failed to delete transcript on reset", "error", err)
