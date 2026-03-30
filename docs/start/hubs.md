@@ -69,9 +69,8 @@ Use these hubs to discover every page, including deep dives and reference docs t
 
 - [Chat channels hub](/channels)
 - [Model providers hub](/providers/models)
-- WhatsApp
 - [Telegram](/channels/telegram)
-- [WebChat](/web/webchat)
+- [Discord](/channels/discord)
 - [Webhooks](/automation/webhook)
 - [Gmail Pub/Sub](/automation/gmail-pubsub)
 
@@ -128,7 +127,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Web surfaces](/web)
 - [Dashboard](/web/dashboard)
 - [Control UI](/web/control-ui)
-- [WebChat](/web/webchat)
 - [Terminal UI](/web/tui)
 
 ## Extensions + plugins

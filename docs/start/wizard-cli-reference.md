@@ -19,8 +19,8 @@ Local mode (default) walks you through:
 - Model and auth setup (OpenAI Code subscription OAuth, Anthropic API key or setup token, plus MiniMax, GLM, Ollama, Moonshot, and AI Gateway options)
 - Workspace location and bootstrap files
 - Gateway settings (port, bind, auth, tailscale)
-- Channels and providers (Telegram, WhatsApp)
-- Daemon install (LaunchAgent or systemd user unit)
+- Channels and providers (Telegram, Discord)
+- Daemon install (systemd user unit)
 - Health check
 - Skills setup
 
@@ -62,18 +62,16 @@ It does not install or modify anything on the remote host.
     - Non-loopback binds still require auth.
   </Step>
   <Step title="Channels">
-    - WhatsApp: optional QR login
     - [Telegram](/channels/telegram): bot token
+    - [Discord](/channels/discord): bot token
     - DM security: default is pairing. First DM sends a code; approve via
       `deneb pairing approve <channel> <code>` or use allowlists.
   </Step>
   <Step title="Daemon install">
-    - macOS: LaunchAgent
-      - Requires logged-in user session; for headless, use a custom LaunchDaemon (not shipped).
-    - Linux and Windows via WSL2: systemd user unit
+    - Linux: systemd user unit
       - Wizard attempts `loginctl enable-linger <user>` so gateway stays up after logout.
       - May prompt for sudo (writes `/var/lib/systemd/linger`); it tries without sudo first.
-    - Runtime selection: Node (recommended; required for WhatsApp and Telegram). Bun is not recommended.
+    - Runtime selection: Node (recommended; required for Telegram). Bun is not recommended.
   </Step>
   <Step title="Health check">
     - Starts gateway (if needed) and runs `deneb health`.
@@ -82,7 +80,7 @@ It does not install or modify anything on the remote host.
   <Step title="Skills">
     - Reads available skills and checks requirements.
     - Lets you choose node manager: npm or pnpm (bun not recommended).
-    - Installs optional dependencies (some use Homebrew on macOS).
+    - Installs optional dependencies.
   </Step>
   <Step title="Finish">
     - Summary and next steps.
@@ -246,8 +244,8 @@ Typical fields in `~/.deneb/deneb.json`:
 - `tools.profile` (local onboarding defaults to `"coding"` when unset; existing explicit values are preserved)
 - `gateway.*` (mode, bind, auth, tailscale)
 - `session.dmScope` (local onboarding defaults this to `per-channel-peer` when unset; existing explicit values are preserved)
-- `channels.telegram.botToken`, `channels.discord.token`, `channels.signal.*`, `channels.imessage.*`
-- Channel allowlists (Slack, Discord, Matrix, Microsoft Teams) when you opt in during prompts (names resolve to IDs when possible)
+- `channels.telegram.botToken`, `channels.discord.token`
+- Channel allowlists (Discord) when you opt in during prompts (names resolve to IDs when possible)
 - `skills.install.nodeManager`
 - `wizard.lastRunAt`
 - `wizard.lastRunVersion`
@@ -257,7 +255,6 @@ Typical fields in `~/.deneb/deneb.json`:
 
 `deneb agents add` writes `agents.list[]` and optional `bindings`.
 
-WhatsApp credentials go under `~/.deneb/credentials/whatsapp/<accountId>/`.
 Sessions are stored under `~/.deneb/agents/<agentId>/sessions/`.
 
 <Note>
@@ -272,16 +269,7 @@ Gateway wizard RPC:
 - `wizard.cancel`
 - `wizard.status`
 
-Clients (macOS app and Control UI) can render steps without re-implementing onboarding logic.
-
-Signal setup behavior:
-
-- Downloads the appropriate release asset
-- Stores it under `~/.deneb/tools/signal-cli/<version>/`
-- Writes `channels.signal.cliPath` in config
-- JVM builds require Java 21
-- Native builds are used when available
-- Windows uses WSL2 and follows Linux signal-cli flow inside WSL
+Clients (Control UI) can render steps without re-implementing onboarding logic.
 
 ## Related docs
 

@@ -11,8 +11,8 @@ Last updated: 2026-01-10
 
 TypeBox is a TypeScript-first schema library. We use it to define the **Gateway
 WebSocket protocol** (handshake, request/response, server events). Those schemas
-drive **runtime validation**, **JSON Schema export**, and **Swift codegen** for
-the macOS app. One source of truth; everything else is generated.
+drive **runtime validation** and **JSON Schema export**. One source of truth;
+everything else is generated.
 
 If you want the higher-level protocol context, start with
 [Gateway architecture](/concepts/architecture).
@@ -60,16 +60,13 @@ Authoritative list lives in `src/gateway/server.ts` (`METHODS`, `EVENTS`).
 - Server handshake + method dispatch: `src/gateway/server.ts`
 - Node client: `src/gateway/client.ts`
 - Generated JSON Schema: `dist/protocol.schema.json`
-- Generated Swift models: `apps/macos/Sources/DenebProtocol/GatewayModels.swift`
 
 ## Current pipeline
 
 - `pnpm protocol:gen`
   - writes JSON Schema (draft‑07) to `dist/protocol.schema.json`
-- `pnpm protocol:gen:swift`
-  - generates Swift gateway models
 - `pnpm protocol:check`
-  - runs both generators and verifies the output is committed
+  - runs the generator and verifies the output is committed
 
 ## How the schemas are used at runtime
 
@@ -251,21 +248,10 @@ pnpm protocol:check
 
 Add a server test in `src/gateway/server.*.test.ts` and note the method in docs.
 
-## Swift codegen behavior
-
-The Swift generator emits:
-
-- `GatewayFrame` enum with `req`, `res`, `event`, and `unknown` cases
-- Strongly typed payload structs/enums
-- `ErrorCode` values and `GATEWAY_PROTOCOL_VERSION`
-
-Unknown frame types are preserved as raw payloads for forward compatibility.
-
 ## Versioning + compatibility
 
 - `PROTOCOL_VERSION` lives in `src/gateway/protocol/schema.ts`.
 - Clients send `minProtocol` + `maxProtocol`; the server rejects mismatches.
-- The Swift models keep unknown frame types to avoid breaking older clients.
 
 ## Schema patterns and conventions
 

@@ -8,9 +8,7 @@
 // ---------------------------------------------------------------------------
 
 pub const GATEWAY_CLIENT_IDS: &[&str] = &[
-    "webchat-ui",
     "deneb-control-ui",
-    "webchat",
     "cli",
     "gateway-client",
     "node-host",
@@ -24,7 +22,7 @@ pub const GATEWAY_CLIENT_IDS: &[&str] = &[
 // ---------------------------------------------------------------------------
 
 pub const GATEWAY_CLIENT_MODES: &[&str] =
-    &["webchat", "cli", "ui", "backend", "node", "probe", "test"];
+    &["cli", "ui", "backend", "node", "probe", "test"];
 
 // ---------------------------------------------------------------------------
 // Input provenance kinds — src/sessions/input-provenance.ts

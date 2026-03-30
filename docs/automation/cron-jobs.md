@@ -61,8 +61,8 @@ deneb cron add \
   --session isolated \
   --message "Summarize overnight updates." \
   --announce \
-  --channel slack \
-  --to "channel:C1234567890"
+  --channel telegram \
+  --to "-1001234567890"
 ```
 
 ## Tool-call equivalents (Gateway cron tool)
@@ -261,7 +261,7 @@ Isolated jobs (`agentTurn`) can set `lightContext: true` to run with lightweight
 Isolated jobs can deliver output to a channel via the top-level `delivery` config:
 
 - `delivery.mode`: `announce` (channel delivery), `webhook` (HTTP POST), or `none`.
-- `delivery.channel`: `whatsapp` / `telegram` / `discord` / `slack` / `mattermost` (plugin) / `signal` / `imessage` / `last`.
+- `delivery.channel`: `telegram` / `discord` / `last`.
 - `delivery.to`: channel-specific recipient target.
 
 `announce` delivery is only valid for isolated jobs (`sessionTarget: "isolated"`).
@@ -272,8 +272,7 @@ If `delivery.channel` or `delivery.to` is omitted, cron can fall back to the mai
 
 Target format reminders:
 
-- Slack/Discord/Mattermost (plugin) targets should use explicit prefixes (e.g. `channel:<id>`, `user:<id>`) to avoid ambiguity.
-  Mattermost bare 26-char IDs are resolved **user-first** (DM if user exists, channel otherwise) — use `user:<id>` or `channel:<id>` for deterministic routing.
+- Discord targets should use explicit prefixes (e.g. `channel:<id>`, `user:<id>`) to avoid ambiguity.
 - Telegram topics should use the `:topic:` form (see below).
 
 #### Telegram delivery targets (topics / forum threads)
@@ -325,8 +324,8 @@ Recurring, isolated job with delivery:
   },
   "delivery": {
     "mode": "announce",
-    "channel": "slack",
-    "to": "channel:C1234567890",
+    "channel": "telegram",
+    "to": "-1001234567890",
     "bestEffort": true
   }
 }
@@ -588,7 +587,7 @@ deneb cron add \
   --wake now
 ```
 
-Recurring isolated job (announce to WhatsApp):
+Recurring isolated job (announce to Telegram):
 
 ```bash
 deneb cron add \
@@ -598,8 +597,8 @@ deneb cron add \
   --session isolated \
   --message "Summarize inbox + calendar for today." \
   --announce \
-  --channel whatsapp \
-  --to "+15551234567"
+  --channel telegram \
+  --to "123456789"
 ```
 
 Recurring cron job with explicit 30-second stagger:
@@ -641,8 +640,8 @@ deneb cron add \
   --model "opus" \
   --thinking high \
   --announce \
-  --channel whatsapp \
-  --to "+15551234567"
+  --channel telegram \
+  --to "123456789"
 ```
 
 Agent selection (multi-agent setups):

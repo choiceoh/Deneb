@@ -169,8 +169,8 @@ discovery boundary so the shared `message` tool exposes the right channel-owned
 surface for the current turn.
 
 For channel-owned execution helpers, bundled plugins should keep the execution
-runtime inside their own extension modules. Core no longer owns the Discord,
-Slack, Telegram, or WhatsApp message-action runtimes under `src/agents/tools`.
+runtime inside their own extension modules. Core no longer owns the Discord
+or Telegram message-action runtimes under `src/agents/tools`.
 We do not publish separate `plugin-sdk/*-action-runtime` subpaths, and bundled
 plugins should import their own local runtime code directly from their
 extension-owned modules.
@@ -247,7 +247,7 @@ Use this mental model when deciding where code belongs:
   merge rules, delivery semantics, and typed contracts
 - **vendor plugin layer**: vendor-specific APIs, auth, model catalogs, speech
   synthesis, image generation, future video backends, usage endpoints
-- **channel/feature plugin layer**: Slack/Discord/MS Teams/etc. integration
+- **channel/feature plugin layer**: Telegram/Discord/etc. integration
   that consumes core capabilities and presents them on a surface
 
 For example, TTS follows this shape:
@@ -885,9 +885,6 @@ authoring plugins:
   and `extensions/<id>/setup-entry.js` is the setup plugin entry.
 - `deneb/plugin-sdk/telegram` for Telegram channel plugin types and shared channel-facing helpers. Built-in Telegram implementation internals stay private to the bundled extension.
 - `deneb/plugin-sdk/discord` for Discord channel plugin types and shared channel-facing helpers. Built-in Discord implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/slack` for Slack channel plugin types and shared channel-facing helpers. Built-in Slack implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/imessage` for iMessage channel plugin types and shared channel-facing helpers. Built-in iMessage implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/whatsapp` for WhatsApp channel plugin types and shared channel-facing helpers. Built-in WhatsApp implementation internals stay private to the bundled extension.
 
 Compatibility note:
 
@@ -1103,22 +1100,22 @@ Example:
 
 ```json
 {
-  "name": "@deneb/nextcloud-talk",
+  "name": "@deneb/example-channel",
   "deneb": {
     "extensions": ["./index.ts"],
     "channel": {
-      "id": "nextcloud-talk",
-      "label": "Nextcloud Talk",
-      "selectionLabel": "Nextcloud Talk (self-hosted)",
-      "docsPath": "/channels/nextcloud-talk",
-      "docsLabel": "nextcloud-talk",
-      "blurb": "Self-hosted chat via Nextcloud Talk webhook bots.",
+      "id": "example-channel",
+      "label": "Example Channel",
+      "selectionLabel": "Example Channel (self-hosted)",
+      "docsPath": "/channels/example-channel",
+      "docsLabel": "example-channel",
+      "blurb": "Example channel plugin.",
       "order": 65,
-      "aliases": ["nc-talk", "nc"]
+      "aliases": ["example"]
     },
     "install": {
-      "npmSpec": "@deneb/nextcloud-talk",
-      "localPath": "extensions/nextcloud-talk",
+      "npmSpec": "@deneb/example-channel",
+      "localPath": "extensions/example-channel",
       "defaultChoice": "npm"
     }
   }

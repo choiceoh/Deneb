@@ -7,7 +7,7 @@ status: active
 
 # Multi-Agent Routing
 
-Goal: multiple _isolated_ agents (separate workspace + `agentDir` + sessions), plus multiple channel accounts (e.g. two WhatsApps) in one running Gateway. Inbound is routed to an agent via bindings.
+Goal: multiple _isolated_ agents (separate workspace + `agentDir` + sessions), plus multiple channel accounts (e.g. two Telegram bots) in one running Gateway. Inbound is routed to an agent via bindings.
 
 ## What is "one agent"?
 
@@ -92,13 +92,8 @@ Create one account per agent on your preferred channels:
 
 - Discord: one bot per agent, enable Message Content Intent, copy each token.
 - Telegram: one bot per agent via BotFather, copy each token.
-- WhatsApp: link each phone number per account.
 
-```bash
-deneb channels login --channel whatsapp --account work
-```
-
-See channel guides: Discord, [Telegram](/channels/telegram), WhatsApp.
+See channel guides: [Discord](/channels/discord), [Telegram](/channels/telegram).
 
   </Step>
 
@@ -129,46 +124,6 @@ With **multiple agents**, each `agentId` becomes a **fully isolated persona**:
 
 This lets **multiple people** share one Gateway server while keeping their AI “brains” and data isolated.
 
-## One WhatsApp number, multiple people (DM split)
-
-You can route **different WhatsApp DMs** to different agents while staying on **one WhatsApp account**. Match on sender E.164 (like `+15551234567`) with `peer.kind: "direct"`. Replies still come from the same WhatsApp number (no per‑agent sender identity).
-
-Important detail: direct chats collapse to the agent’s **main session key**, so true isolation requires **one agent per person**.
-
-Example:
-
-```json5
-{
-  agents: {
-    list: [
-      { id: "alex", workspace: "~/.deneb/workspace-alex" },
-      { id: "mia", workspace: "~/.deneb/workspace-mia" },
-    ],
-  },
-  bindings: [
-    {
-      agentId: "alex",
-      match: { channel: "whatsapp", peer: { kind: "direct", id: "+15551230001" } },
-    },
-    {
-      agentId: "mia",
-      match: { channel: "whatsapp", peer: { kind: "direct", id: "+15551230002" } },
-    },
-  ],
-  channels: {
-    whatsapp: {
-      dmPolicy: "allowlist",
-      allowFrom: ["+15551230001", "+15551230002"],
-    },
-  },
-}
-```
-
-Notes:
-
-- DM access control is **global per WhatsApp account** (pairing/allowlist), not per agent.
-- For shared groups, bind the group to one agent or use broadcast groups.
-
 ## Routing rules (how messages pick an agent)
 
 Bindings are **deterministic** and **most-specific wins**:
@@ -177,10 +132,9 @@ Bindings are **deterministic** and **most-specific wins**:
 2. `parentPeer` match (thread inheritance)
 3. `guildId + roles` (Discord role routing)
 4. `guildId` (Discord)
-5. `teamId` (Slack)
-6. `accountId` match for a channel
-7. channel-level match (`accountId: "*"`)
-8. fallback to default agent (`agents.list[].default`, else first list entry, default: `main`)
+5. `accountId` match for a channel
+6. channel-level match (`accountId: "*"`)
+7. fallback to default agent (`agents.list[].default`, else first list entry, default: `main`)
 
 If multiple bindings match in the same tier, the first one in config order wins.
 If a binding sets multiple match fields (for example `peer` + `guildId`), all specified fields are required (`AND` semantics).
@@ -191,21 +145,19 @@ Important account-scope detail:
 - Use `accountId: "*"` for a channel-wide fallback across all accounts.
 - If you later add the same binding for the same agent with an explicit account id, Deneb upgrades the existing channel-only binding to account-scoped instead of duplicating it.
 
-## Multiple accounts / phone numbers
+## Multiple accounts
 
-Channels that support **multiple accounts** (e.g. WhatsApp) use `accountId` to identify
+Channels that support **multiple accounts** (e.g. Telegram) use `accountId` to identify
 each login. Each `accountId` can be routed to a different agent, so one server can host
-multiple phone numbers without mixing sessions.
+multiple bots without mixing sessions.
 
 If you want a channel-wide default account when `accountId` is omitted, set
 `channels.<channel>.defaultAccount` (optional). When unset, Deneb falls back
 to `default` if present, otherwise the first configured account id (sorted).
 
-Common channels supporting this pattern include:
+Channels supporting this pattern include:
 
-- `whatsapp`, `telegram`, `discord`, `slack`, `signal`, `imessage`
-- `irc`, `line`, `googlechat`, `mattermost`, `matrix`, `nextcloud-talk`
-- `nostr`, `feishu`
+- `telegram`, `discord`
 
 ## Concepts
 
@@ -304,81 +256,9 @@ Notes:
 - Create one bot per agent with BotFather and copy each token.
 - Tokens live in `channels.telegram.accounts.<id>.botToken` (default account can use `TELEGRAM_BOT_TOKEN`).
 
-### WhatsApp numbers per agent
+## Example: Telegram everyday + Discord deep work
 
-Link each account before starting the gateway:
-
-```bash
-deneb channels login --channel whatsapp --account personal
-deneb channels login --channel whatsapp --account biz
-```
-
-`~/.deneb/deneb.json` (JSON5):
-
-```js
-{
-  agents: {
-    list: [
-      {
-        id: "home",
-        default: true,
-        name: "Home",
-        workspace: "~/.deneb/workspace-home",
-        agentDir: "~/.deneb/agents/home/agent",
-      },
-      {
-        id: "work",
-        name: "Work",
-        workspace: "~/.deneb/workspace-work",
-        agentDir: "~/.deneb/agents/work/agent",
-      },
-    ],
-  },
-
-  // Deterministic routing: first match wins (most-specific first).
-  bindings: [
-    { agentId: "home", match: { channel: "whatsapp", accountId: "personal" } },
-    { agentId: "work", match: { channel: "whatsapp", accountId: "biz" } },
-
-    // Optional per-peer override (example: send a specific group to work agent).
-    {
-      agentId: "work",
-      match: {
-        channel: "whatsapp",
-        accountId: "personal",
-        peer: { kind: "group", id: "1203630...@g.us" },
-      },
-    },
-  ],
-
-  // Off by default: agent-to-agent messaging must be explicitly enabled + allowlisted.
-  tools: {
-    agentToAgent: {
-      enabled: false,
-      allow: ["home", "work"],
-    },
-  },
-
-  channels: {
-    whatsapp: {
-      accounts: {
-        personal: {
-          // Optional override. Default: ~/.deneb/credentials/whatsapp/personal
-          // authDir: "~/.deneb/credentials/whatsapp/personal",
-        },
-        biz: {
-          // Optional override. Default: ~/.deneb/credentials/whatsapp/biz
-          // authDir: "~/.deneb/credentials/whatsapp/biz",
-        },
-      },
-    },
-  },
-}
-```
-
-## Example: WhatsApp daily chat + Telegram deep work
-
-Split by channel: route WhatsApp to a fast everyday agent and Telegram to an Opus agent.
+Split by channel: route Telegram to a fast everyday agent and Discord to an Opus agent.
 
 ```json5
 {
@@ -399,20 +279,20 @@ Split by channel: route WhatsApp to a fast everyday agent and Telegram to an Opu
     ],
   },
   bindings: [
-    { agentId: "chat", match: { channel: "whatsapp" } },
-    { agentId: "opus", match: { channel: "telegram" } },
+    { agentId: "chat", match: { channel: "telegram" } },
+    { agentId: "opus", match: { channel: "discord" } },
   ],
 }
 ```
 
 Notes:
 
-- If you have multiple accounts for a channel, add `accountId` to the binding (for example `{ channel: "whatsapp", accountId: "personal" }`).
+- If you have multiple accounts for a channel, add `accountId` to the binding (for example `{ channel: "telegram", accountId: "alerts" }`).
 - To route a single DM/group to Opus while keeping the rest on chat, add a `match.peer` binding for that peer; peer matches always win over channel-wide rules.
 
 ## Example: same channel, one peer to Opus
 
-Keep WhatsApp on the fast agent, but route one DM to Opus:
+Keep Telegram on the fast agent, but route one group to Opus:
 
 ```json5
 {
@@ -435,18 +315,18 @@ Keep WhatsApp on the fast agent, but route one DM to Opus:
   bindings: [
     {
       agentId: "opus",
-      match: { channel: "whatsapp", peer: { kind: "direct", id: "+15551234567" } },
+      match: { channel: "telegram", peer: { kind: "group", id: "-1001234567890" } },
     },
-    { agentId: "chat", match: { channel: "whatsapp" } },
+    { agentId: "chat", match: { channel: "telegram" } },
   ],
 }
 ```
 
 Peer bindings always win, so keep them above the channel-wide rule.
 
-## Family agent bound to a WhatsApp group
+## Family agent bound to a Telegram group
 
-Bind a dedicated family agent to a single WhatsApp group, with mention gating
+Bind a dedicated family agent to a single Telegram group, with mention gating
 and a tighter tool policy:
 
 ```json5
@@ -484,8 +364,8 @@ and a tighter tool policy:
     {
       agentId: "family",
       match: {
-        channel: "whatsapp",
-        peer: { kind: "group", id: "120363999999999999@g.us" },
+        channel: "telegram",
+        peer: { kind: "group", id: "-1001234567890" },
       },
     },
   ],

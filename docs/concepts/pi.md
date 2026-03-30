@@ -245,7 +245,7 @@ to re-inject image payloads.
 1. **Base Tools**: pi's `codingTools` (read, bash, edit, write)
 2. **Custom Replacements**: Deneb replaces bash with `exec`/`process`, customizes read/edit/write for sandbox
 3. **Deneb Tools**: messaging, browser, canvas, sessions, cron, gateway, etc.
-4. **Channel Tools**: Discord/Telegram/Slack/WhatsApp-specific action tools
+4. **Channel Tools**: Telegram/Discord-specific action tools
 5. **Policy Filtering**: Tools filtered by profile, provider, agent, group, sandbox policies
 6. **Schema Normalization**: Schemas cleaned for Gemini/OpenAI quirks
 7. **AbortSignal Wrapping**: Tools wrapped to respect abort signals

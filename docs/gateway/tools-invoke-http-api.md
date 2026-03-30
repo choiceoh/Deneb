@@ -64,7 +64,6 @@ Gateway HTTP also applies a hard deny list by default (even if session policy al
 - `sessions_spawn`
 - `sessions_send`
 - `gateway`
-- `whatsapp_login`
 
 You can customize this deny list via `gateway.tools`:
 
@@ -83,7 +82,7 @@ You can customize this deny list via `gateway.tools`:
 
 To help group policies resolve context, you can optionally set:
 
-- `x-deneb-message-channel: <channel>` (example: `slack`, `telegram`)
+- `x-deneb-message-channel: <channel>` (example: `telegram`, `discord`)
 - `x-deneb-account-id: <accountId>` (when multiple accounts exist)
 
 ## Responses

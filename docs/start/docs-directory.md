@@ -29,18 +29,17 @@ For a complete map of the docs, see [Docs hubs](/start/hubs).
 - [Workspace templates](/reference/templates/AGENTS)
 - [RPC adapters](/reference/rpc)
 - [Gateway runbook](/gateway)
-- [Nodes (iOS and Android)](/nodes)
+- [Nodes (Android)](/nodes)
 - [Web surfaces (Control UI)](/web)
 - [Discovery and transports](/gateway/discovery)
 - [Remote access](/gateway/remote)
 
 ## Providers and UX
 
-- [WebChat](/web/webchat)
 - [Control UI (browser)](/web/control-ui)
 - [Telegram](/channels/telegram)
 - [Groups](/channels/groups)
-- [WhatsApp group messages](/channels/group-messages)
+- [Group messages](/channels/group-messages)
 - [Media images](/nodes/images)
 - [Media audio](/nodes/audio)
 

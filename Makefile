@@ -157,16 +157,7 @@ cli-cross-linux-x64:
 cli-cross-linux-arm64:
 	cd cli-rs && cargo build --release --target aarch64-unknown-linux-gnu
 
-cli-cross-darwin-x64:
-	cd cli-rs && cargo build --release --target x86_64-apple-darwin
-
-cli-cross-darwin-arm64:
-	cd cli-rs && cargo build --release --target aarch64-apple-darwin
-
-cli-cross-win-x64:
-	cd cli-rs && cargo build --release --target x86_64-pc-windows-msvc
-
-cli-cross-all: cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 cli-cross-win-x64
+cli-cross-all: cli-cross-linux-x64 cli-cross-linux-arm64
 
 cli-install: cli
 	./cli-rs/scripts/install.sh

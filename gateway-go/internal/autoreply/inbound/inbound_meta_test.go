@@ -41,20 +41,6 @@ func TestBuildInboundMetaSystemPrompt_GroupMessage(t *testing.T) {
 	}
 }
 
-func TestBuildInboundMetaSystemPrompt_WebchatOmitsChannel(t *testing.T) {
-	ctx := &InboundMetaContext{
-		Surface:  "webchat",
-		Provider: "webchat",
-	}
-
-	result := BuildInboundMetaSystemPrompt(ctx)
-
-	// Webchat should not include channel field.
-	if strings.Contains(result, `"channel"`) {
-		t.Error("webchat should omit channel field")
-	}
-}
-
 func TestBuildInboundUserContextPrefix_ConversationInfo(t *testing.T) {
 	ts := int64(1700000000000)
 	ctx := &InboundMetaContext{

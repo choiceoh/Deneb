@@ -51,7 +51,7 @@ type ChatCommandDefinition struct {
 	Category    CommandCategory        `json:"category,omitempty"`
 }
 
-// NativeCommandSpec describes a command for native platform registration (Discord, Slack).
+// NativeCommandSpec describes a command for native platform registration (Discord).
 type NativeCommandSpec struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
@@ -378,7 +378,7 @@ func BuildCommandText(commandName, args string) string {
 }
 
 // ListNativeCommandSpecs returns specs for native platform command registration.
-func (r *CommandRegistry) ListNativeCommandSpecs(provider string) []NativeCommandSpec {
+func (r *CommandRegistry) ListNativeCommandSpecs() []NativeCommandSpec {
 	r.mu.RLock()
 	commands := r.commands
 	r.mu.RUnlock()
@@ -388,7 +388,7 @@ func (r *CommandRegistry) ListNativeCommandSpecs(provider string) []NativeComman
 		if cmd.Scope == ScopeText || cmd.NativeName == "" {
 			continue
 		}
-		name := resolveNativeName(cmd, provider)
+		name := resolveNativeName(cmd)
 		specs = append(specs, NativeCommandSpec{
 			Name:        name,
 			Description: cmd.Description,
@@ -400,7 +400,7 @@ func (r *CommandRegistry) ListNativeCommandSpecs(provider string) []NativeComman
 }
 
 // FindCommandByNativeName finds a command by its native platform name.
-func (r *CommandRegistry) FindCommandByNativeName(name, provider string) *ChatCommandDefinition {
+func (r *CommandRegistry) FindCommandByNativeName(name string) *ChatCommandDefinition {
 	normalized := strings.ToLower(strings.TrimSpace(name))
 	r.mu.RLock()
 	commands := r.commands
@@ -410,7 +410,7 @@ func (r *CommandRegistry) FindCommandByNativeName(name, provider string) *ChatCo
 		if cmd.Scope == ScopeText {
 			continue
 		}
-		if strings.ToLower(resolveNativeName(cmd, provider)) == normalized {
+		if strings.ToLower(resolveNativeName(cmd)) == normalized {
 			c := cmd // copy
 			return &c
 		}
@@ -418,23 +418,9 @@ func (r *CommandRegistry) FindCommandByNativeName(name, provider string) *ChatCo
 	return nil
 }
 
-// Slack reserves /status — override with /agentstatus.
-var nativeNameOverrides = map[string]map[string]string{
-	"slack": {
-		"status": "agentstatus",
-	},
-}
-
-func resolveNativeName(cmd ChatCommandDefinition, provider string) string {
+func resolveNativeName(cmd ChatCommandDefinition) string {
 	if cmd.NativeName == "" {
 		return cmd.Key
-	}
-	if provider != "" {
-		if overrides, ok := nativeNameOverrides[provider]; ok {
-			if override, ok := overrides[cmd.Key]; ok {
-				return override
-			}
-		}
 	}
 	return cmd.NativeName
 }

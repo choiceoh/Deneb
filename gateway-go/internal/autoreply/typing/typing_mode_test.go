@@ -27,11 +27,6 @@ func TestResolveTypingMode(t *testing.T) {
 			want: TypingModeNever,
 		},
 		{
-			name: "internal_webchat policy returns never",
-			ctx:  TypingModeContext{TypingPolicy: types.TypingPolicyInternalWeb},
-			want: TypingModeNever,
-		},
-		{
 			name: "suppress typing returns never",
 			ctx:  TypingModeContext{SuppressTyping: true},
 			want: TypingModeNever,

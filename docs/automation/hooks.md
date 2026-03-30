@@ -178,7 +178,7 @@ The `metadata.deneb` object supports:
   - **`anyBins`**: At least one of these binaries must be present
   - **`env`**: Required environment variables
   - **`config`**: Required config paths (e.g., `["workspace.dir"]`)
-  - **`os`**: Required platforms (e.g., `["darwin", "linux"]`)
+  - **`os`**: Required platforms (e.g., `["linux"]`)
 - **`always`**: Bypass eligibility checks (boolean)
 - **`install`**: Installation methods (for bundled hooks: `[{"id":"bundled","kind":"bundled"}]`)
 
@@ -222,7 +222,7 @@ Each event includes:
     sessionEntry?: SessionEntry,
     sessionId?: string,
     sessionFile?: string,
-    commandSource?: string,    // e.g., 'whatsapp', 'telegram'
+    commandSource?: string,    // e.g., 'telegram', 'discord'
     senderId?: string,
     workspaceDir?: string,
     bootstrapFiles?: WorkspaceBootstrapFile[],
@@ -286,7 +286,7 @@ Message events include rich context about the message:
   from: string,           // Sender identifier (phone number, user ID, etc.)
   content: string,        // Message content
   timestamp?: number,     // Unix timestamp when received
-  channelId: string,      // Channel (e.g., "whatsapp", "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "discord")
   accountId?: string,     // Provider account ID for multi-account setups
   conversationId?: string, // Chat/conversation ID
   messageId?: string,     // Message ID from the provider
@@ -298,7 +298,6 @@ Message events include rich context about the message:
     senderId?: string,
     senderName?: string,
     senderUsername?: string,
-    senderE164?: string,
   }
 }
 
@@ -308,7 +307,7 @@ Message events include rich context about the message:
   content: string,        // Message content that was sent
   success: boolean,       // Whether the send succeeded
   error?: string,         // Error message if sending failed
-  channelId: string,      // Channel (e.g., "whatsapp", "telegram", "discord")
+  channelId: string,      // Channel (e.g., "telegram", "discord")
   accountId?: string,     // Provider account ID
   conversationId?: string, // Chat/conversation ID
   messageId?: string,     // Message ID returned by the provider
@@ -321,7 +320,7 @@ Message events include rich context about the message:
   body?: string,          // Raw inbound body before enrichment
   bodyForAgent?: string,  // Enriched body visible to the agent
   transcript: string,     // Audio transcript text
-  channelId: string,      // Channel (e.g., "telegram", "whatsapp")
+  channelId: string,      // Channel (e.g., "telegram", "discord")
   conversationId?: string,
   messageId?: string,
 }
@@ -331,7 +330,7 @@ Message events include rich context about the message:
   body?: string,          // Raw inbound body
   bodyForAgent?: string,  // Final enriched body after media/link understanding
   transcript?: string,    // Transcript when audio was present
-  channelId: string,      // Channel (e.g., "telegram", "whatsapp")
+  channelId: string,      // Channel (e.g., "telegram", "discord")
   conversationId?: string,
   messageId?: string,
   isGroup?: boolean,
@@ -431,7 +430,7 @@ deneb hooks list
 # Enable it
 deneb hooks enable my-hook
 
-# Restart your gateway process (menu bar app restart on macOS, or restart your dev process)
+# Restart your gateway process
 
 # Trigger the event
 # Send /new via your messaging channel
@@ -669,7 +668,7 @@ Logs all command events to a centralized audit file.
 
 ```jsonl
 {"timestamp":"2026-01-16T14:30:00.000Z","action":"new","sessionKey":"agent:main:main","senderId":"+1234567890","source":"telegram"}
-{"timestamp":"2026-01-16T15:45:22.000Z","action":"stop","sessionKey":"agent:main:main","senderId":"user@example.com","source":"whatsapp"}
+{"timestamp":"2026-01-16T15:45:22.000Z","action":"stop","sessionKey":"agent:main:main","senderId":"123456789","source":"telegram"}
 ```
 
 **View logs**:
@@ -824,10 +823,6 @@ Look for missing requirements in the output.
 Monitor gateway logs to see hook execution:
 
 ```bash
-# macOS
-./scripts/clawlog.sh -f
-
-# Other platforms
 tail -f ~/.deneb/gateway.log
 ```
 

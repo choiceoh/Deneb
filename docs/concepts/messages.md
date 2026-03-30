@@ -26,7 +26,7 @@ Key knobs live in configuration:
 
 - `messages.*` for prefixes, queueing, and group behavior.
 - `agents.defaults.*` for block streaming and chunking defaults.
-- Channel overrides (`channels.whatsapp.*`, `channels.telegram.*`, etc.) for caps and streaming toggles.
+- Channel overrides (`channels.telegram.*`, `channels.discord.*`, etc.) for caps and streaming toggles.
 
 See [Configuration](/gateway/configuration) for full schema.
 
@@ -50,8 +50,7 @@ Config (global default + per-channel overrides):
     inbound: {
       debounceMs: 2000,
       byChannel: {
-        whatsapp: 5000,
-        slack: 1500,
+        telegram: 2000,
         discord: 1500,
       },
     },
@@ -105,7 +104,7 @@ Directive stripping only applies to the **current message** section so history
 remains intact. Channels that wrap history should set `CommandBody` (or
 `RawBody`) to the original message text and keep `Body` as the combined prompt.
 History buffers are configurable via `messages.groupChat.historyLimit` (global
-default) and per-channel overrides like `channels.slack.historyLimit` or
+default) and per-channel overrides like `channels.telegram.historyLimit` or
 `channels.telegram.accounts.<id>.historyLimit` (set `0` to disable).
 
 ## Queueing and followups
@@ -148,7 +147,7 @@ Details: [Thinking + reasoning directives](/tools/thinking) and [Token use](/ref
 
 Outbound message formatting is centralized in `messages`:
 
-- `messages.responsePrefix`, `channels.<channel>.responsePrefix`, and `channels.<channel>.accounts.<id>.responsePrefix` (outbound prefix cascade), plus `channels.whatsapp.messagePrefix` (WhatsApp inbound prefix)
+- `messages.responsePrefix`, `channels.<channel>.responsePrefix`, and `channels.<channel>.accounts.<id>.responsePrefix` (outbound prefix cascade)
 - Reply threading via `replyToMode` and per-channel defaults
 
 Details: [Configuration](/gateway/configuration#messages) and channel docs.

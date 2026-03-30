@@ -45,24 +45,24 @@ You can override this with:
 **Local (default):**
 
 ```
-[Signal Alice +1555 2026-01-18 00:19 PST] hello
+[Telegram Alice 2026-01-18 00:19 PST] hello
 ```
 
 **Fixed timezone:**
 
 ```
-[Signal Alice +1555 2026-01-18 06:19 GMT+1] hello
+[Telegram Alice 2026-01-18 06:19 GMT+1] hello
 ```
 
 **Elapsed time:**
 
 ```
-[Signal Alice +1555 +2m 2026-01-18T05:19Z] follow-up
+[Telegram Alice +2m 2026-01-18T05:19Z] follow-up
 ```
 
 ## Tool payloads (raw provider data + normalized fields)
 
-Tool calls (`channels.discord.readMessages`, `channels.slack.readMessages`, etc.) return **raw provider timestamps**.
+Tool calls (`channels.discord.readMessages`, `channels.telegram.readMessages`, etc.) return **raw provider timestamps**.
 We also attach normalized fields for consistency:
 
 - `timestampMs` (UTC epoch milliseconds)

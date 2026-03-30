@@ -18,8 +18,8 @@ Last updated: 2026-03-25
 ## TL;DR
 
 - **Tailoring lives outside the repo:** `~/.deneb/workspace` (workspace) + `~/.deneb/deneb.json` (config).
-- **Stable workflow:** install the macOS app; let it run the bundled Gateway.
-- **Bleeding edge workflow:** run the Gateway yourself via `pnpm gateway:watch`, then let the macOS app attach in Local mode.
+- **Stable workflow:** install via `deneb onboard`; let systemd run the Gateway.
+- **Bleeding edge workflow:** run the Gateway yourself via `pnpm gateway:watch`.
 
 ## Prereqs (from source)
 
@@ -59,38 +59,24 @@ After `pnpm build`, you can run the packaged CLI directly:
 node deneb.mjs gateway --port 18789 --verbose
 ```
 
-## Stable workflow (macOS app first)
+## Stable workflow
 
-1. Install + launch **Deneb.app** (menu bar).
-2. Complete the onboarding/permissions checklist (TCC prompts).
-3. Ensure Gateway is **Local** and running (the app manages it).
-4. Link surfaces (example: WhatsApp):
+1. Run `deneb onboard` to complete setup.
+2. Start the Gateway:
 
 ```bash
-deneb channels login
+deneb gateway --port 18789
 ```
 
-5. Sanity check:
+3. Sanity check:
 
 ```bash
 deneb health
 ```
 
-If onboarding is not available in your build:
-
-- Run `deneb setup`, then `deneb channels login`, then start the Gateway manually (`deneb gateway`).
-
 ## Bleeding edge workflow (Gateway in a terminal)
 
-Goal: work on the TypeScript Gateway, get hot reload, keep the macOS app UI attached.
-
-### 0) (Optional) Run the macOS app from source too
-
-If you also want the macOS app on the bleeding edge:
-
-```bash
-./scripts/restart-mac.sh
-```
+Goal: work on the TypeScript Gateway, get hot reload.
 
 ### 1) Start the dev Gateway
 
@@ -102,17 +88,9 @@ pnpm gateway:watch
 `gateway:watch` runs the gateway in watch mode and reloads on relevant source,
 config, and bundled-plugin metadata changes.
 
-### 2) Point the macOS app at your running Gateway
+### 2) Verify
 
-In **Deneb.app**:
-
-- Connection Mode: **Local**
-  The app will attach to the running gateway on the configured port.
-
-### 3) Verify
-
-- In-app Gateway status should read **“Using existing gateway …”**
-- Or via CLI:
+Via CLI:
 
 ```bash
 deneb health
@@ -130,10 +108,8 @@ deneb health
 
 Use this when debugging auth or deciding what to back up:
 
-- **WhatsApp**: `~/.deneb/credentials/whatsapp/<accountId>/creds.json`
 - **Telegram bot token**: config/env or `channels.telegram.tokenFile` (regular file only; symlinks rejected)
 - **Discord bot token**: config/env or SecretRef (env/file/exec providers)
-- **Slack tokens**: config/env (`channels.slack.*`)
 - **Pairing allowlists**:
   - `~/.deneb/credentials/<channel>-allowFrom.json` (default account)
   - `~/.deneb/credentials/<channel>-<accountId>-allowFrom.json` (non-default accounts)

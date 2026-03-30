@@ -270,12 +270,6 @@ Automated Todoist tasks and had Deneb generate the skill directly in Telegram ch
 Logs into TradingView via browser automation, screenshots charts, and performs technical analysis on demand. No API needed—just browser control.
 </Card>
 
-<Card title="Slack Auto-Support" icon="slack">
-  **@henrymascot** • `slack` `automation` `support`
-
-Watches company Slack channel, responds helpfully, and forwards notifications to Telegram. Autonomously fixed a production bug in a deployed app without being asked.
-</Card>
-
 </CardGroup>
 
 ## 🧠 Knowledge & Memory

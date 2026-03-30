@@ -25,8 +25,8 @@ title: "Deneb"
 > _"EXFOLIATE! EXFOLIATE!"_ — A space lobster, probably
 
 <p align="center">
-  <strong>Any OS gateway for AI agents across WhatsApp, Telegram, Discord, iMessage, and more.</strong><br />
-  Send a message, get an agent response from your pocket. Plugins add Mattermost and more.
+  <strong>Gateway for AI agents across Telegram and Discord.</strong><br />
+  Send a message, get an agent response from your pocket.
 </p>
 
 <Columns>
@@ -43,14 +43,14 @@ title: "Deneb"
 
 ## What is Deneb?
 
-Deneb is a **self-hosted gateway** that connects your favorite chat apps — WhatsApp, Telegram, Discord, iMessage, and more — to AI coding agents like Pi. You run a single Gateway process on your own machine (or a server), and it becomes the bridge between your messaging apps and an always-available AI assistant.
+Deneb is a **self-hosted gateway** that connects Telegram and Discord to AI coding agents like Pi. You run a single Gateway process on your own machine (or a server), and it becomes the bridge between your messaging apps and an always-available AI assistant.
 
 **Who is it for?** Developers and power users who want a personal AI assistant they can message from anywhere — without giving up control of their data or relying on a hosted service.
 
 **What makes it different?**
 
 - **Self-hosted**: runs on your hardware, your rules
-- **Multi-channel**: one Gateway serves WhatsApp, Telegram, Discord, and more simultaneously
+- **Multi-channel**: one Gateway serves Telegram and Discord simultaneously
 - **Agent-native**: built for coding agents with tool use, sessions, memory, and multi-agent routing
 - **Open source**: MIT licensed, community-driven
 
@@ -64,8 +64,7 @@ flowchart LR
   B --> C["Pi agent"]
   B --> D["CLI"]
   B --> E["Web Control UI"]
-  B --> F["macOS app"]
-  B --> G["iOS and Android nodes"]
+  B --> F["Android nodes"]
 ```
 
 The Gateway is the single source of truth for sessions, routing, and channel connections.
@@ -74,10 +73,7 @@ The Gateway is the single source of truth for sessions, routing, and channel con
 
 <Columns>
   <Card title="Multi-channel gateway" icon="network">
-    WhatsApp, Telegram, Discord, and iMessage with a single Gateway process.
-  </Card>
-  <Card title="Plugin channels" icon="plug">
-    Add Mattermost and more with extension packages.
+    Telegram and Discord with a single Gateway process.
   </Card>
   <Card title="Multi-agent routing" icon="route">
     Isolated sessions per agent, workspace, or sender.
@@ -89,7 +85,7 @@ The Gateway is the single source of truth for sessions, routing, and channel con
     Browser dashboard for chat, config, sessions, and nodes.
   </Card>
   <Card title="Mobile nodes" icon="smartphone">
-    Pair iOS and Android nodes for Canvas, camera, and voice-enabled workflows.
+    Pair Android nodes for Canvas, camera, and voice-enabled workflows.
   </Card>
 </Columns>
 
@@ -106,9 +102,8 @@ The Gateway is the single source of truth for sessions, routing, and channel con
     deneb onboard --install-daemon
     ```
   </Step>
-  <Step title="Pair WhatsApp and start the Gateway">
+  <Step title="Start the Gateway">
     ```bash
-    deneb channels login
     deneb gateway --port 18789
     ```
   </Step>
@@ -124,7 +119,7 @@ Open the browser Control UI after the Gateway starts.
 - Remote access: [Web surfaces](/web) and [Tailscale](/gateway/tailscale)
 
 <p align="center">
-  <img src="/whatsapp-deneb.jpg" alt="Deneb" width="420" />
+  <img src="/assets/deneb-logo-text.png" alt="Deneb" width="420" />
 </p>
 
 ## Configuration (optional)
@@ -132,16 +127,15 @@ Open the browser Control UI after the Gateway starts.
 Config lives at `~/.deneb/deneb.json`.
 
 - If you **do nothing**, Deneb uses the bundled Pi binary in RPC mode with per-sender sessions.
-- If you want to lock it down, start with `channels.whatsapp.allowFrom` and (for groups) mention rules.
+- If you want to lock it down, start with channel allowlists and (for groups) mention rules.
 
 Example:
 
 ```json5
 {
   channels: {
-    whatsapp: {
-      allowFrom: ["+15555550123"],
-      groups: { "*": { requireMention: true } },
+    telegram: {
+      allowFrom: ["123456789"],
     },
   },
   messages: { groupChat: { mentionPatterns: ["@deneb"] } },
@@ -161,10 +155,10 @@ Example:
     SSH and tailnet access patterns.
   </Card>
   <Card title="Channels" href="/channels/telegram" icon="message-square">
-    Channel-specific setup for WhatsApp, Telegram, Discord, and more.
+    Channel-specific setup for Telegram and Discord.
   </Card>
   <Card title="Nodes" href="/nodes" icon="smartphone">
-    iOS and Android nodes with pairing, Canvas, camera, and device actions.
+    Android nodes with pairing, Canvas, camera, and device actions.
   </Card>
   <Card title="Help" href="/help" icon="life-buoy">
     Common fixes and troubleshooting entry point.

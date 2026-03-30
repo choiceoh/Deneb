@@ -12,7 +12,7 @@ title: "Streaming and Chunking"
 Deneb has two separate streaming layers:
 
 - **Block streaming (channels):** emit completed **blocks** as the assistant writes. These are normal channel messages (not token deltas).
-- **Preview streaming (Telegram/Discord/Slack):** update a temporary **preview message** while generating.
+- **Preview streaming (Telegram/Discord):** update a temporary **preview message** while generating.
 
 There is **no true token-delta streaming** to channel messages today. Preview streaming is message-based (send + edits/appends).
 
@@ -43,7 +43,7 @@ Legend:
 - `agents.defaults.blockStreamingBreak`: `"text_end"` or `"message_end"`.
 - `agents.defaults.blockStreamingChunk`: `{ minChars, maxChars, breakPreference? }`.
 - `agents.defaults.blockStreamingCoalesce`: `{ minChars?, maxChars?, idleMs? }` (merge streamed blocks before send).
-- Channel hard cap: `*.textChunkLimit` (e.g., `channels.whatsapp.textChunkLimit`).
+- Channel hard cap: `*.textChunkLimit` (e.g., `channels.telegram.textChunkLimit`).
 - Channel chunk mode: `*.chunkMode` (`length` default, `newline` splits on blank lines (paragraph boundaries) before length chunking).
 - Discord soft cap: `channels.discord.maxLinesPerMessage` (default 17) splits tall replies to avoid UI clipping.
 
@@ -78,7 +78,7 @@ progressive output.
 - Joiner is derived from `blockStreamingChunk.breakPreference`
   (`paragraph` → `\n\n`, `newline` → `\n`, `sentence` → space).
 - Channel overrides are available via `*.blockStreamingCoalesce` (including per-account configs).
-- Default coalesce `minChars` is bumped to 1500 for Signal/Slack/Discord unless overridden.
+- Default coalesce `minChars` is bumped to 1500 for Discord unless overridden.
 
 ## Human-like pacing between blocks
 
@@ -122,17 +122,11 @@ Modes:
 | -------- | ----- | --------- | ------- | ----------------- |
 | Telegram | ✅    | ✅        | ✅      | maps to `partial` |
 | Discord  | ✅    | ✅        | ✅      | maps to `partial` |
-| Slack    | ✅    | ✅        | ✅      | ✅                |
-
-Slack-only:
-
-- `channels.slack.nativeStreaming` toggles Slack native streaming API calls when `streaming=partial` (default: `true`).
 
 Legacy key migration:
 
 - Telegram: `streamMode` + boolean `streaming` auto-migrate to `streaming` enum.
 - Discord: `streamMode` + boolean `streaming` auto-migrate to `streaming` enum.
-- Slack: `streamMode` auto-migrates to `streaming` enum; boolean `streaming` auto-migrates to `nativeStreaming`.
 
 ### Runtime behavior
 
@@ -148,8 +142,3 @@ Discord:
 - `block` mode uses draft chunking (`draftChunk`).
 - Preview streaming is skipped when Discord block streaming is explicitly enabled.
 
-Slack:
-
-- `partial` can use Slack native streaming (`chat.startStream`/`append`/`stop`) when available.
-- `block` uses append-style draft previews.
-- `progress` uses status preview text, then final answer.

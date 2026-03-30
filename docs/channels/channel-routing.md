@@ -1,5 +1,5 @@
 ---
-summary: "Routing rules per channel (WhatsApp, Telegram, Discord, Slack) and shared context"
+summary: "Routing rules per channel (Telegram, Discord) and shared context"
 read_when:
   - Changing channel routing or inbox behavior
 title: "Channel Routing"
@@ -13,7 +13,7 @@ host configuration.
 
 ## Key terms
 
-- **Channel**: `whatsapp`, `telegram`, `discord`, `slack`, `signal`, `imessage`, `webchat`.
+- **Channel**: `telegram`, `discord`.
 - **AccountId**: per‑channel account instance (when supported).
 - Optional channel default account: `channels.<channel>.defaultAccount` chooses
   which account is used when an outbound path does not specify `accountId`.
@@ -34,7 +34,7 @@ Groups and channels remain isolated per channel:
 
 Threads:
 
-- Slack/Discord threads append `:thread:<threadId>` to the base key.
+- Discord threads append `:thread:<threadId>` to the base key.
 - Telegram forum topics embed `:topic:<topicId>` in the group key.
 
 Examples:
@@ -63,8 +63,7 @@ Routing picks **one agent** for each inbound message:
 2. **Parent peer match** (thread inheritance).
 3. **Guild + roles match** (Discord) via `guildId` + `roles`.
 4. **Guild match** (Discord) via `guildId`.
-5. **Team match** (Slack) via `teamId`.
-6. **Account match** (`accountId` on the channel).
+5. **Account match** (`accountId` on the channel).
 7. **Channel match** (any account on that channel, `accountId: "*"`).
 8. **Default agent** (`agents.list[].default`, else first list entry, fallback to `main`).
 
@@ -74,7 +73,7 @@ The matched agent determines which workspace and session store are used.
 
 ## Broadcast groups (run multiple agents)
 
-Broadcast groups let you run **multiple agents** for the same peer **when Deneb would normally reply** (for example: in WhatsApp groups, after mention/activation gating).
+Broadcast groups let you run **multiple agents** for the same peer **when Deneb would normally reply** (for example: in Telegram groups, after mention/activation gating).
 
 Config:
 
@@ -82,8 +81,8 @@ Config:
 {
   broadcast: {
     strategy: "parallel",
-    "120363403215116621@g.us": ["alfred", "baerbel"],
-    "+15555550123": ["support", "logger"],
+    "-1001234567890": ["alfred", "baerbel"],
+    "123456789012345678": ["support", "logger"],
   },
 }
 ```
@@ -103,8 +102,8 @@ Example:
     list: [{ id: "support", name: "Support", workspace: "~/.deneb/workspace-support" }],
   },
   bindings: [
-    { match: { channel: "slack", teamId: "T123" }, agentId: "support" },
     { match: { channel: "telegram", peer: { kind: "group", id: "-100123" } }, agentId: "support" },
+    { match: { channel: "discord", guildId: "123456789012345678" }, agentId: "support" },
   ],
 }
 ```
@@ -122,12 +121,6 @@ Gateway and ACP session discovery also scans disk-backed agent stores under the
 default `agents/` root and under templated `session.store` roots. Discovered
 stores must stay inside that resolved agent root and use a regular
 `sessions.json` file. Symlinks and out-of-root paths are ignored.
-
-## WebChat behavior
-
-WebChat attaches to the **selected agent** and defaults to the agent’s main
-session. Because of this, WebChat lets you see cross‑channel context for that
-agent in one place.
 
 ## Reply context
 

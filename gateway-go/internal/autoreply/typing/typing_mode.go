@@ -32,11 +32,10 @@ type TypingModeContext struct {
 //
 // Mirrors src/auto-reply/reply/typing-mode.ts resolveTypingMode().
 func ResolveTypingMode(ctx TypingModeContext) TypingMode {
-	// Suppress typing for heartbeats, system events, and internal webchat.
+	// Suppress typing for heartbeats and system events.
 	if ctx.IsHeartbeat ||
 		ctx.TypingPolicy == types.TypingPolicyHeartbeat ||
 		ctx.TypingPolicy == types.TypingPolicySystemEvent ||
-		ctx.TypingPolicy == types.TypingPolicyInternalWeb ||
 		ctx.SuppressTyping {
 		return TypingModeNever
 	}

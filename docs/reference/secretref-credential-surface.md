@@ -50,42 +50,10 @@ Scope intent:
 - `channels.telegram.webhookSecret`
 - `channels.telegram.accounts.*.botToken`
 - `channels.telegram.accounts.*.webhookSecret`
-- `channels.slack.botToken`
-- `channels.slack.appToken`
-- `channels.slack.userToken`
-- `channels.slack.signingSecret`
-- `channels.slack.accounts.*.botToken`
-- `channels.slack.accounts.*.appToken`
-- `channels.slack.accounts.*.userToken`
-- `channels.slack.accounts.*.signingSecret`
 - `channels.discord.token`
 - `channels.discord.pluralkit.token`
 - `channels.discord.accounts.*.token`
 - `channels.discord.accounts.*.pluralkit.token`
-- `channels.irc.password`
-- `channels.irc.nickserv.password`
-- `channels.irc.accounts.*.password`
-- `channels.irc.accounts.*.nickserv.password`
-- `channels.feishu.appSecret`
-- `channels.feishu.encryptKey`
-- `channels.feishu.verificationToken`
-- `channels.feishu.accounts.*.appSecret`
-- `channels.feishu.accounts.*.encryptKey`
-- `channels.feishu.accounts.*.verificationToken`
-- `channels.mattermost.botToken`
-- `channels.mattermost.accounts.*.botToken`
-- `channels.matrix.password`
-- `channels.matrix.accounts.*.password`
-- `channels.nextcloud-talk.botSecret`
-- `channels.nextcloud-talk.apiPassword`
-- `channels.nextcloud-talk.accounts.*.botSecret`
-- `channels.nextcloud-talk.accounts.*.apiPassword`
-- `channels.zalo.botToken`
-- `channels.zalo.webhookSecret`
-- `channels.zalo.accounts.*.botToken`
-- `channels.zalo.accounts.*.webhookSecret`
-- `channels.googlechat.serviceAccount` via sibling `serviceAccountRef` (compatibility exception)
-- `channels.googlechat.accounts.*.serviceAccount` via sibling `serviceAccountRef` (compatibility exception)
 
 ### `auth-profiles.json` targets (`secrets configure` + `secrets apply` + `secrets audit`)
 
@@ -114,14 +82,11 @@ Out-of-scope credentials include:
 [//]: # "secretref-unsupported-list-start"
 
 - `commands.ownerDisplaySecret`
-- `channels.matrix.accessToken`
-- `channels.matrix.accounts.*.accessToken`
 - `hooks.token`
 - `hooks.gmail.pushToken`
 - `hooks.mappings[].sessionKey`
 - `auth-profiles.oauth.*`
 - `discord.threadBindings.*.webhookToken`
-- `whatsapp.creds.json`
 
 [//]: # "secretref-unsupported-list-end"
 

@@ -16,7 +16,7 @@ The recommended way to run Deneb with Nix is via **[nix-deneb](https://github.co
 Paste this to your AI agent (Claude, Cursor, etc.):
 
 ```text
-I want to set up nix-deneb on my Mac.
+I want to set up nix-deneb on my Linux machine.
 Repository: github:deneb/nix-deneb
 
 What I need you to do:
@@ -25,7 +25,7 @@ What I need you to do:
 3. Help me create a Telegram bot (@BotFather) and get my chat ID (@userinfobot)
 4. Set up secrets (bot token, model provider API key) - plain files at ~/.secrets/ is fine
 5. Fill in the template placeholders and run home-manager switch
-6. Verify: launchd running, bot responds to messages
+6. Verify: systemd service running, bot responds to messages
 
 Reference the nix-deneb README for module options.
 ```
@@ -36,8 +36,8 @@ Reference the nix-deneb README for module options.
 
 ## What you get
 
-- Gateway + macOS app + tools (whisper, spotify, cameras) — all pinned
-- Launchd service that survives reboots
+- Gateway + tools (whisper, spotify, cameras) — all pinned
+- Systemd service that survives reboots
 - Plugin system with declarative config
 - Instant rollback: `home-manager switch --rollback`
 
@@ -52,13 +52,6 @@ Enable it by exporting:
 
 ```bash
 DENEB_NIX_MODE=1
-```
-
-On macOS, the GUI app does not automatically inherit shell env vars. You can
-also enable Nix mode via defaults:
-
-```bash
-defaults write ai.deneb.mac deneb.nixMode -bool true
 ```
 
 ### Config + state paths
@@ -78,18 +71,6 @@ stay out of the immutable store.
 - Auto-install and self-mutation flows are disabled
 - Missing dependencies surface Nix-specific remediation messages
 - UI surfaces a read-only Nix mode banner when present
-
-## Packaging note (macOS)
-
-The macOS packaging flow expects a stable Info.plist template at:
-
-```
-apps/macos/Sources/Deneb/Resources/Info.plist
-```
-
-[`scripts/package-mac-app.sh`](https://github.com/deneb/deneb/blob/main/scripts/package-mac-app.sh) copies this template into the app bundle and patches dynamic fields
-(bundle ID, version/build, Git SHA, Sparkle keys). This keeps the plist deterministic for SwiftPM
-packaging and Nix builds (which do not rely on a full Xcode toolchain).
 
 ## Related
 

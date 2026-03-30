@@ -97,7 +97,7 @@ Extensible skill plugins for domain-specific capabilities (16 skills):
 
 **Telegram** is the only channel with full, battle-tested production support — reactions, inline buttons, polls, topics, group policies, and all core features.
 
-Other channel configs (Discord, Signal, Slack, WhatsApp, iMessage) exist at the schema level as stubs and are not actively maintained.
+**Discord** is the secondary coding-specialized channel. Other channels are not supported.
 
 ### Tool System
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "name": "Deneb",
-  "description": "Self-hosted gateway that connects WhatsApp, Telegram, Discord, iMessage, and more to AI coding agents. Run a single Gateway process on your own machine and message your AI assistant from anywhere.",
+  "description": "Self-hosted gateway that connects Telegram and Discord to AI coding agents. Run a single Gateway process on your own machine and message your AI assistant from anywhere.",
   "theme": "mint",
   "icons": {
     "library": "lucide"
@@ -256,10 +256,6 @@
       "destination": "/web/dashboard"
     },
     {
-      "source": "/device-models",
-      "destination": "/reference/device-models"
-    },
-    {
       "source": "/discord",
       "destination": "/channels/discord"
     },
@@ -338,10 +334,6 @@
     {
       "source": "/images",
       "destination": "/nodes/images"
-    },
-    {
-      "source": "/imessage",
-      "destination": "/channels/imessage"
     },
     {
       "source": "/ios",
@@ -536,20 +528,12 @@
       "destination": "/start/showcase"
     },
     {
-      "source": "/signal",
-      "destination": "/channels/signal"
-    },
-    {
       "source": "/skills",
       "destination": "/tools/skills"
     },
     {
       "source": "/skills-config",
       "destination": "/tools/skills-config"
-    },
-    {
-      "source": "/slack",
-      "destination": "/channels/slack"
     },
     {
       "source": "/slash-commands",
@@ -632,20 +616,8 @@
       "destination": "/install/updating"
     },
     {
-      "source": "/webchat",
-      "destination": "/web/webchat"
-    },
-    {
       "source": "/webhook",
       "destination": "/automation/webhook"
-    },
-    {
-      "source": "/whatsapp",
-      "destination": "/channels/whatsapp"
-    },
-    {
-      "source": "/windows",
-      "destination": "/platforms/windows"
     },
     {
       "source": "/wizard",
@@ -1105,11 +1077,8 @@
                 "group": "Platforms overview",
                 "pages": [
                   "platforms/index",
-                  "platforms/macos",
                   "platforms/linux",
-                  "platforms/windows",
                   "platforms/android",
-                  "platforms/ios",
                   "platforms/digitalocean",
                   "platforms/oracle",
                   "platforms/raspberry-pi"
@@ -1207,7 +1176,7 @@
               },
               {
                 "group": "Web interfaces",
-                "pages": ["web/index", "web/control-ui", "web/dashboard", "web/webchat", "web/tui"]
+                "pages": ["web/index", "web/control-ui", "web/dashboard", "web/tui"]
               }
             ]
           },
@@ -1216,7 +1185,7 @@
             "groups": [
               {
                 "group": "RPC and API",
-                "pages": ["reference/rpc", "reference/device-models"]
+                "pages": ["reference/rpc"]
               },
               {
                 "group": "Templates",
@@ -1589,11 +1558,8 @@
                 "group": "平台概览",
                 "pages": [
                   "zh-CN/platforms/index",
-                  "zh-CN/platforms/macos",
                   "zh-CN/platforms/linux",
-                  "zh-CN/platforms/windows",
                   "zh-CN/platforms/android",
-                  "zh-CN/platforms/ios",
                   "zh-CN/platforms/digitalocean",
                   "zh-CN/platforms/oracle",
                   "zh-CN/platforms/raspberry-pi"
@@ -1697,7 +1663,6 @@
                   "zh-CN/web/index",
                   "zh-CN/web/control-ui",
                   "zh-CN/web/dashboard",
-                  "zh-CN/web/webchat",
                   "zh-CN/web/tui"
                 ]
               }
@@ -1708,7 +1673,7 @@
             "groups": [
               {
                 "group": "RPC 与 API",
-                "pages": ["zh-CN/reference/rpc", "zh-CN/reference/device-models"]
+                "pages": ["zh-CN/reference/rpc"]
               },
               {
                 "group": "模板",

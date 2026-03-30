@@ -44,7 +44,7 @@ type ChannelSnapshot struct {
 	// Channels maps channel ID to its primary account snapshot.
 	Channels map[string]AccountSnapshot `json:"channels"`
 	// ChannelAccounts maps channel ID to account ID to account snapshot
-	// (for multi-account channels like Slack workspaces).
+	// (for multi-account channels).
 	ChannelAccounts map[string]map[string]AccountSnapshot `json:"channelAccounts,omitempty"`
 }
 

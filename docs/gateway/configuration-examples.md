@@ -18,11 +18,11 @@ Examples below are aligned with the current config schema. For the exhaustive re
 ```json5
 {
   agent: { workspace: "~/.deneb/workspace" },
-  channels: { whatsapp: { allowFrom: ["+15555550123"] } },
+  channels: { telegram: { enabled: true, botToken: "YOUR_BOT_TOKEN", allowFrom: ["123456789"] } },
 }
 ```
 
-Save to `~/.deneb/deneb.json` and you can DM the bot from that number.
+Save to `~/.deneb/deneb.json` and you can DM the bot from that user ID.
 
 ### Recommended starter
 
@@ -38,8 +38,10 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that number.
     model: { primary: "anthropic/claude-sonnet-4-5" },
   },
   channels: {
-    whatsapp: {
-      allowFrom: ["+15555550123"],
+    telegram: {
+      enabled: true,
+      botToken: "YOUR_BOT_TOKEN",
+      allowFrom: ["123456789"],
       groups: { "*": { requireMention: true } },
     },
   },
@@ -119,13 +121,8 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that number.
       cap: 20,
       drop: "summarize",
       byChannel: {
-        whatsapp: "collect",
         telegram: "collect",
         discord: "collect",
-        slack: "collect",
-        signal: "collect",
-        imessage: "collect",
-        webchat: "collect",
       },
     },
   },
@@ -182,14 +179,6 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that number.
 
   // Channels
   channels: {
-    whatsapp: {
-      dmPolicy: "pairing",
-      allowFrom: ["+15555550123"],
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["+15555550123"],
-      groups: { "*": { requireMention: true } },
-    },
-
     telegram: {
       enabled: true,
       botToken: "YOUR_TELEGRAM_BOT_TOKEN",
@@ -212,22 +201,6 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that number.
             help: { allow: true, requireMention: true },
           },
         },
-      },
-    },
-
-    slack: {
-      enabled: true,
-      botToken: "xoxb-REPLACE_ME",
-      appToken: "xapp-REPLACE_ME",
-      channels: {
-        "#general": { allow: true, requireMention: true },
-      },
-      dm: { enabled: true, allowFrom: ["U123"] },
-      slashCommand: {
-        enabled: true,
-        name: "deneb",
-        sessionPrefix: "slack:slash",
-        ephemeral: true,
       },
     },
   },
@@ -316,13 +289,8 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that number.
     elevated: {
       enabled: true,
       allowFrom: {
-        whatsapp: ["+15555550123"],
         telegram: ["123456789"],
         discord: ["123456789012345678"],
-        slack: ["U123"],
-        signal: ["+15555550123"],
-        imessage: ["user@example.com"],
-        webchat: ["session:demo"],
       },
     },
   },
@@ -447,13 +415,12 @@ Save to `~/.deneb/deneb.json` and you can DM the bot from that number.
 
 ## Common patterns
 
-### Multi-platform setup
+### Multi-channel setup
 
 ```json5
 {
   agent: { workspace: "~/.deneb/workspace" },
   channels: {
-    whatsapp: { allowFrom: ["+15555550123"] },
     telegram: {
       enabled: true,
       botToken: "YOUR_TOKEN",
@@ -478,10 +445,12 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
   session: { dmScope: "per-channel-peer" },
 
   channels: {
-    // Example: WhatsApp multi-user inbox
-    whatsapp: {
+    // Example: Telegram multi-user inbox
+    telegram: {
+      enabled: true,
+      botToken: "YOUR_TELEGRAM_BOT_TOKEN",
       dmPolicy: "allowlist",
-      allowFrom: ["+15555550123", "+15555550124"],
+      allowFrom: ["123456789", "987654321"],
     },
 
     // Example: Discord multi-user inbox
@@ -494,8 +463,8 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
 }
 ```
 
-For Discord/Slack/Google Chat/MS Teams/Mattermost/IRC, sender authorization is ID-first by default.
-Only enable direct mutable name/email/nick matching with each channel's `dangerouslyAllowNameMatching: true` if you explicitly accept that risk.
+For Discord, sender authorization is ID-first by default.
+Only enable direct mutable name/email/nick matching with `dangerouslyAllowNameMatching: true` if you explicitly accept that risk.
 
 ### OAuth with API key failover
 
@@ -585,12 +554,18 @@ terms before depending on subscription auth.
     elevated: { enabled: false },
   },
   channels: {
-    slack: {
+    discord: {
       enabled: true,
-      botToken: "xoxb-...",
-      channels: {
-        "#engineering": { allow: true, requireMention: true },
-        "#general": { allow: true, requireMention: true },
+      token: "YOUR_DISCORD_BOT_TOKEN",
+      guilds: {
+        "123456789012345678": {
+          slug: "work-server",
+          requireMention: true,
+          channels: {
+            engineering: { allow: true, requireMention: true },
+            general: { allow: true, requireMention: true },
+          },
+        },
       },
     },
   },
@@ -633,5 +608,5 @@ terms before depending on subscription auth.
 
 - If you set `dmPolicy: "open"`, the matching `allowFrom` list must include `"*"`.
 - Provider IDs differ (phone numbers, user IDs, channel IDs). Use the provider docs to confirm the format.
-- Optional sections to add later: `web`, `browser`, `ui`, `discovery`, `canvasHost`, `talk`, `signal`, `imessage`.
+- Optional sections to add later: `web`, `browser`, `ui`, `discovery`, `canvasHost`, `talk`.
 - See [Providers](/providers) and [Troubleshooting](/gateway/troubleshooting) for deeper setup notes.

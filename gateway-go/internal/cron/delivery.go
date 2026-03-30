@@ -89,20 +89,7 @@ func ResolveDeliveryTarget(
 
 // NormalizeDeliveryTarget normalizes the "to" field for channel-specific formats.
 func NormalizeDeliveryTarget(ch, to string) string {
-	channelLower := strings.ToLower(strings.TrimSpace(ch))
-	toTrimmed := strings.TrimSpace(to)
-
-	// Feishu/Lark prefix stripping.
-	if channelLower == "feishu" || channelLower == "lark" {
-		lowered := strings.ToLower(toTrimmed)
-		if strings.HasPrefix(lowered, "user:") {
-			return strings.TrimSpace(toTrimmed[5:])
-		}
-		if strings.HasPrefix(lowered, "chat:") {
-			return strings.TrimSpace(toTrimmed[5:])
-		}
-	}
-	return toTrimmed
+	return strings.TrimSpace(to)
 }
 
 // MatchesDeliveryTarget checks if a messaging tool target matches a delivery target.

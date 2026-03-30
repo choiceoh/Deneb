@@ -8,10 +8,8 @@ title: "Platforms"
 
 # Platforms
 
-Deneb core is written in TypeScript. **Node is the recommended runtime**.
-Bun is not recommended for the Gateway (WhatsApp/Telegram bugs).
-
-The Gateway runs on macOS and Linux (including WSL2 on Windows).
+Deneb runs on **Linux** (DGX Spark). **Node is the recommended runtime**.
+Bun is not recommended for the Gateway (Telegram bugs).
 
 ## VPS & hosting
 
@@ -37,7 +35,6 @@ Use one of these (all supported):
 - Configure flow: `deneb configure` → select **Gateway service**
 - Repair/migrate: `deneb doctor` (offers to install or fix the service)
 
-The service target depends on OS:
+The service target on Linux:
 
-- macOS: LaunchAgent (`ai.deneb.gateway` or `ai.deneb.<profile>`; legacy `com.deneb.*`)
-- Linux/WSL2: systemd user service (`deneb-gateway[-<profile>].service`)
+- systemd user service (`deneb-gateway[-<profile>].service`)

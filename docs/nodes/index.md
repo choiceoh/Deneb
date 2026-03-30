@@ -1,7 +1,7 @@
 ---
 summary: "Nodes: pairing, capabilities, permissions, and CLI helpers for canvas/camera/screen/device/notifications/system"
 read_when:
-  - Pairing iOS/Android nodes to a gateway
+  - Pairing Android nodes to a gateway
   - Using node canvas/camera for agent context
   - Adding new node commands or CLI helpers
 title: "Nodes"
@@ -9,16 +9,14 @@ title: "Nodes"
 
 # Nodes
 
-A **node** is a companion device (macOS/iOS/Android/headless) that connects to the Gateway **WebSocket** (same port as operators) with `role: "node"` and exposes a command surface (e.g. `canvas.*`, `camera.*`, `device.*`, `notifications.*`, `system.*`) via `node.invoke`. Protocol details: [Gateway protocol](/gateway/protocol).
+A **node** is a companion device (Android/headless) that connects to the Gateway **WebSocket** (same port as operators) with `role: "node"` and exposes a command surface (e.g. `canvas.*`, `camera.*`, `device.*`, `notifications.*`, `system.*`) via `node.invoke`. Protocol details: [Gateway protocol](/gateway/protocol).
 
 Legacy transport: [Bridge protocol](/gateway/bridge-protocol) (TCP JSONL; deprecated/removed for current nodes).
-
-macOS can also run in **node mode**: the menubar app connects to the Gateway’s WS server and exposes its local canvas/camera commands as a node (so `deneb nodes …` works against this Mac).
 
 Notes:
 
 - Nodes are **peripherals**, not gateways. They don’t run the gateway service.
-- Telegram/WhatsApp/etc. messages land on the **gateway**, not on nodes.
+- Telegram/Discord messages land on the **gateway**, not on nodes.
 - Troubleshooting runbook: [/nodes/troubleshooting](/nodes/troubleshooting)
 
 ## Pairing + status
@@ -301,31 +299,24 @@ Notes:
 
 - Motion commands are capability-gated by available sensors.
 
-## System commands (node host / mac node)
+## System commands (node host)
 
-The macOS node exposes `system.run`, `system.notify`, and `system.execApprovals.get/set`.
 The headless node host exposes `system.run`, `system.which`, and `system.execApprovals.get/set`.
 
 Examples:
 
 ```bash
-deneb nodes run --node <idOrNameOrIp> -- echo "Hello from mac node"
-deneb nodes notify --node <idOrNameOrIp> --title "Ping" --body "Gateway ready"
+deneb nodes run --node <idOrNameOrIp> -- echo "Hello from node"
 ```
 
 Notes:
 
 - `system.run` returns stdout/stderr/exit code in the payload.
-- `system.notify` respects notification permission state on the macOS app.
 - Unrecognized node `platform` / `deviceFamily` metadata uses a conservative default allowlist that excludes `system.run` and `system.which`. If you intentionally need those commands for an unknown platform, add them explicitly via `gateway.nodes.allowCommands`.
 - `system.run` supports `--cwd`, `--env KEY=VAL`, `--command-timeout`, and `--needs-screen-recording`.
 - For shell wrappers (`bash|sh|zsh ... -c/-lc`), request-scoped `--env` values are reduced to an explicit allowlist (`TERM`, `LANG`, `LC_*`, `COLORTERM`, `NO_COLOR`, `FORCE_COLOR`).
 - For allow-always decisions in allowlist mode, known dispatch wrappers (`env`, `nice`, `nohup`, `stdbuf`, `timeout`) persist inner executable paths instead of wrapper paths. If unwrapping is not safe, no allowlist entry is persisted automatically.
-- On Windows node hosts in allowlist mode, shell-wrapper runs via `cmd.exe /c` require approval (allowlist entry alone does not auto-allow the wrapper form).
-- `system.notify` supports `--priority <passive|active|timeSensitive>` and `--delivery <system|overlay|auto>`.
-- Node hosts ignore `PATH` overrides and strip dangerous startup/shell keys (`DYLD_*`, `LD_*`, `NODE_OPTIONS`, `PYTHON*`, `PERL*`, `RUBYOPT`, `SHELLOPTS`, `PS4`). If you need extra PATH entries, configure the node host service environment (or install tools in standard locations) instead of passing `PATH` via `--env`.
-- On macOS node mode, `system.run` is gated by exec approvals in the macOS app (Settings → Exec approvals).
-  Ask/allowlist/full behave the same as the headless node host; denied prompts return `SYSTEM_RUN_DENIED`.
+- Node hosts ignore `PATH` overrides and strip dangerous startup/shell keys (`LD_*`, `NODE_OPTIONS`, `PYTHON*`, `PERL*`, `RUBYOPT`, `SHELLOPTS`, `PS4`). If you need extra PATH entries, configure the node host service environment (or install tools in standard locations) instead of passing `PATH` via `--env`.
 - On headless node host, `system.run` is gated by exec approvals (`~/.deneb/exec-approvals.json`).
 
 ## Exec node binding
@@ -360,8 +351,8 @@ Nodes may include a `permissions` map in `node.list` / `node.describe`, keyed by
 ## Headless node host (cross-platform)
 
 Deneb can run a **headless node host** (no UI) that connects to the Gateway
-WebSocket and exposes `system.run` / `system.which`. This is useful on Linux/Windows
-or for running a minimal node alongside a server.
+WebSocket and exposes `system.run` / `system.which`. This is useful for running
+a minimal node alongside the Gateway.
 
 Start it:
 
@@ -375,12 +366,5 @@ Notes:
 - The node host stores its node id, token, display name, and gateway connection info in `~/.deneb/node.json`.
 - Exec approvals are enforced locally via `~/.deneb/exec-approvals.json`
   (see [Exec approvals](/tools/exec-approvals)).
-- On macOS, the headless node host executes `system.run` locally by default. Set
-  `DENEB_NODE_EXEC_HOST=app` to route `system.run` through the companion app exec host; add
-  `DENEB_NODE_EXEC_FALLBACK=0` to require the app host and fail closed if it is unavailable.
 - Add `--tls` / `--tls-fingerprint` when the Gateway WS uses TLS.
 
-## Mac node mode
-
-- The macOS menubar app connects to the Gateway WS server as a node (so `deneb nodes …` works against this Mac).
-- In remote mode, the app opens an SSH tunnel for the Gateway port and connects to `localhost`.
