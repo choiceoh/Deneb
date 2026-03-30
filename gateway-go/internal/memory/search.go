@@ -92,12 +92,23 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 		}
 	}
 
-	// Phase 3: Merge and score.
-	results := s.mergeAndRank(ftsResults, vecResults, opts)
+	// Phase 3: Merge and score (fetches extra candidates for dedup headroom).
+	mergeOpts := opts
+	mergeOpts.Limit = opts.Limit * 2
+	results := s.mergeAndRank(ftsResults, vecResults, mergeOpts)
+
+	// Phase 3.5: Content deduplication — remove near-duplicate facts so the
+	// LLM context isn't wasted on 3-5 copies of the same information.
+	results = dedupResults(results, dedupJaccardThreshold)
 
 	// Phase 4: Cross-encoder reranking (optional).
 	if s.reranker != nil && len(results) > 1 {
 		results = s.rerankFacts(ctx, query, results)
+	}
+
+	// Final truncation after all post-processing.
+	if len(results) > opts.Limit {
+		results = results[:opts.Limit]
 	}
 
 	return results, nil
