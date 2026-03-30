@@ -9,6 +9,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 )
 
@@ -26,6 +27,9 @@ func Run(compiledVersion string) int {
 
 	// Phase 2: logging — build full structured logger from config.
 	log := BuildLogger(&cfg.Bootstrap.Config, flags.LogLevel)
+	// Keep package-level slog users (slog.Default()) on the same handler format
+	// as the gateway logger so all runtime lines share one console style.
+	slog.SetDefault(log.Logger)
 
 	if cfg.Bootstrap.GeneratedToken != "" {
 		log.Logger.Info("gateway auth token auto-generated",
