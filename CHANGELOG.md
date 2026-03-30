@@ -1,5 +1,28 @@
 # Changelog
 
+## [4.4.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.3.0...deneb-v4.4.0) (2026-03-30)
+
+
+### ✨ Features
+
+* **chat:** update main model default to glm-5-turbo ([4ed74ea](https://github.com/choiceoh/Deneb/commit/4ed74ea940423a0e6e445b5f614dd8345c4e01cf))
+* **gateway:** add atomicfile package with flock + atomic rename ([ceb2f2b](https://github.com/choiceoh/Deneb/commit/ceb2f2b50b143b1842801778e0a5bf3c0ef33f54))
+* **memory:** add Jaccard-based content deduplication to search results ([2e1f091](https://github.com/choiceoh/Deneb/commit/2e1f091122af2c6007bf9f10d5c232a7d2421821))
+* **skills:** standardize skills architecture with progressive loading and categories ([d53b30a](https://github.com/choiceoh/Deneb/commit/d53b30a733b178038fe0b8acff81345d5d34d5ba))
+
+
+### 🔧 Internal
+
+* **chat:** separate tool registration, implementation, and schema into subpackages ([4da1d2c](https://github.com/choiceoh/Deneb/commit/4da1d2ced69fe37914c19d1eb132a27730f76cfc))
+* clean channel/platform refs from channels, concepts, start docs ([13b2e77](https://github.com/choiceoh/Deneb/commit/13b2e7700aff75e426401fcfdb8df2f288df88a7))
+* clean channel/platform refs from reference, install, web, nodes docs ([198dd0a](https://github.com/choiceoh/Deneb/commit/198dd0ad8988ad46a303cbaff5404bd863919962))
+* clean channel/platform refs from tools, help, automation docs ([e45e019](https://github.com/choiceoh/Deneb/commit/e45e0198c33a42c7526da964a33c78bc2440af09))
+* clean unused channel/platform refs from docs ([6f3f30c](https://github.com/choiceoh/Deneb/commit/6f3f30c8e8489eb62aa7ea37694e55f073d381f3))
+* **ffi,rpc:** reduce boilerplate with ffi_write_json/ffi_write_bytes helpers and BindHandler generic ([bba1043](https://github.com/choiceoh/Deneb/commit/bba1043b76bdd8fc4f83946a83d20aff652dbe6b))
+* **ffi,rpc:** reduce boilerplate with ffi_write_json/ffi_write_bytes helpers and BindHandler generic ([a57d19f](https://github.com/choiceoh/Deneb/commit/a57d19f23a1999c7500352e54ab6351b90575694))
+* fix remaining faq channel reference ([542d1ed](https://github.com/choiceoh/Deneb/commit/542d1ed2912063a777502fe4593f622730083ab4))
+* remove unused channel and platform references ([8a4716b](https://github.com/choiceoh/Deneb/commit/8a4716b3a23e1b9dec79f39bd3281484f2232d48))
+
 ## [4.3.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.2.3...deneb-v4.3.0) (2026-03-29)
 
 
