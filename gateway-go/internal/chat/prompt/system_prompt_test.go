@@ -163,7 +163,7 @@ func TestBuildRuntimeLine_NilInfo(t *testing.T) {
 func TestBuildRuntimeLine_NoChannel(t *testing.T) {
 	info := &RuntimeInfo{
 		Host: "my-host",
-		OS:   "darwin",
+		OS:   "linux",
 		Arch: "arm64",
 	}
 	line := buildRuntimeLine(info, "")
@@ -173,7 +173,7 @@ func TestBuildRuntimeLine_NoChannel(t *testing.T) {
 	if !strings.Contains(line, "host=my-host") {
 		t.Error("missing host")
 	}
-	if !strings.Contains(line, "os=darwin(arm64)") {
+	if !strings.Contains(line, "os=linux(arm64)") {
 		t.Error("missing os(arch)")
 	}
 }

@@ -12,7 +12,7 @@ func TestConnectParamsRoundTrip(t *testing.T) {
 		Client: ConnectClientInfo{
 			ID:       "control-ui",
 			Version:  "1.0.0",
-			Platform: "darwin",
+			Platform: "linux",
 			Mode:     "control",
 		},
 		Caps: []string{"streaming", "canvas"},

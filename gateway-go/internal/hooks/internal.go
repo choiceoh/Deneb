@@ -303,18 +303,9 @@ func EvaluateEligibility(meta *DenebHookMetadata, ectx EligibilityContext) bool 
 	return true
 }
 
-// matchPlatform maps Node.js platform names to Go GOOS values.
+// matchPlatform checks if a platform identifier matches the Go GOOS value.
 func matchPlatform(nodePlatform, goOS string) bool {
-	switch nodePlatform {
-	case "darwin":
-		return goOS == "darwin"
-	case "linux":
-		return goOS == "linux"
-	case "win32":
-		return goOS == "windows"
-	default:
-		return strings.EqualFold(nodePlatform, goOS)
-	}
+	return strings.EqualFold(nodePlatform, goOS)
 }
 
 // hasBinary checks if a binary is available in PATH.

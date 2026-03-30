@@ -48,10 +48,6 @@ pub struct SendArgs {
     #[arg(long)]
     pub thread_id: Option<String>,
 
-    /// Send media as GIF (WhatsApp).
-    #[arg(long)]
-    pub gif_playback: bool,
-
     /// Force media as document attachment (Telegram).
     #[arg(long)]
     pub force_document: bool,
@@ -101,9 +97,6 @@ async fn cmd_send(args: &SendArgs) -> Result<(), CliError> {
     }
     if let Some(tid) = &args.thread_id {
         params["threadId"] = serde_json::json!(tid);
-    }
-    if args.gif_playback {
-        params["gifPlayback"] = serde_json::json!(true);
     }
     if args.force_document {
         params["forceDocument"] = serde_json::json!(true);

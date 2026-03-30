@@ -142,7 +142,7 @@ RPCInstrumentation() middleware wraps RPC handlers:
 - gateway-go/internal/middleware/ (RPCInstrumentation)
 - gateway-go/internal/server/ (/metrics endpoint registration)`
 
-const nodesGuide = `Nodes are companion devices (iOS/Android/macOS/headless) that connect to the Gateway WebSocket with role:"node" and expose command surfaces via node.invoke.
+const nodesGuide = `Nodes are companion devices (Android/headless) that connect to the Gateway WebSocket with role:"node" and expose command surfaces via node.invoke.
 
 ## What Nodes Are
 - Peripherals, NOT gateways. They don't run the gateway service.

@@ -5,8 +5,7 @@
 .PHONY: all rust rust-vega rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
-       cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
-       cli-cross-win-x64 cli-cross-all \
+       cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-all \
        deny machete \
        test clean check fmt generate generate-check \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
@@ -315,7 +314,7 @@ info:
 	@echo "  make deny       - Check Rust deps (security, license, bans)"
 	@echo "  make machete    - Detect unused Rust dependencies"
 	@echo "  make cli-bench  - Run CLI startup benchmark"
-	@echo "  make cli-cross-all - Cross-compile CLI for all platforms"
+	@echo "  make cli-cross-all - Cross-compile CLI for Linux (x64 + arm64)"
 	@echo "  make proto      - Generate protobuf code (Go + Rust)"
 	@echo "  make proto-go   - Generate Go protobuf structs"
 	@echo "  make proto-rust - Generate Rust protobuf structs"

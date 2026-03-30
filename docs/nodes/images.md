@@ -28,7 +28,6 @@ The WhatsApp channel runs via **Baileys Web**. This document captures the curren
   - **Images:** resize & recompress to JPEG (max side 2048px) targeting `agents.defaults.mediaMaxMb` (default 5 MB), capped at 6 MB.
   - **Audio/Voice/Video:** pass-through up to 16 MB; audio is sent as a voice note (`ptt: true`).
   - **Documents:** anything else, up to 100 MB, with filename preserved when available.
-- WhatsApp GIF-style playback: send an MP4 with `gifPlayback: true` (CLI: `--gif-playback`) so mobile clients loop inline.
 - MIME detection prefers magic bytes, then headers, then file extension.
 - Caption comes from `--message` or `reply.text`; empty caption is allowed.
 - Logging: non-verbose shows `↩️`/`✅`; verbose includes size and source path/URL.
