@@ -58,12 +58,22 @@ chrono-tz.workspace = true
 # Markdown parsing
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 
+# Hex encoding (config token generation, hash output)
+hex = "0.4"
+
+# Cryptographic random (config token auto-generation)
+rand = "0.9"
+
+# Platform home directory resolution
+dirs = "6"
+
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
 
 
 [dev-dependencies]
 proptest = "1.5"
+tempfile = "3"
 
 [lints]
 workspace = true
