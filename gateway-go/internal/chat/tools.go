@@ -300,7 +300,7 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 	return tools
 }
 
-// codingTools is the set of tools included in the "coding" profile (Discord).
+// codingTools is the set of tools included in the "coding" profile.
 // 13 focused tools for file-system and code-execution operations.
 var codingTools = map[string]bool{
 	"read":       true,
@@ -358,7 +358,7 @@ var chatTools = map[string]bool{
 
 // LLMToolsForProfile returns tools filtered by profile.
 // If profile is empty, returns all tools (same as LLMTools).
-// If profile is "coding", returns only coding-related tools (Discord channel).
+// If profile is "coding", returns only coding-related tools.
 // If profile is "chat", returns general-conversation tools, excluding coding/FS tools.
 // Results are cached per profile and only rebuilt when tools change.
 func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {

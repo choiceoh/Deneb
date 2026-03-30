@@ -28,7 +28,7 @@ pub struct SendArgs {
     #[arg(short = 'm', long)]
     pub message: Option<String>,
 
-    /// Channel name (e.g. telegram, discord).
+    /// Channel name (e.g. telegram).
     #[arg(long)]
     pub channel: Option<String>,
 

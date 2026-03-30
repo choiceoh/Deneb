@@ -1,13 +1,13 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -92,7 +92,7 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 }
 
 func (s *Server) registerNativeSystemMethods(denebDir string) {
-	// Usage, logs, doctor, maintenance, update, Telegram, and Discord methods.
+	// Usage, logs, doctor, maintenance, update, and Telegram methods.
 	s.registerSystemServiceMethods(denebDir)
 }
 

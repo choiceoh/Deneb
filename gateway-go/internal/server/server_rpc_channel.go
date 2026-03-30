@@ -8,7 +8,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
 	handlernode "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/node"
@@ -150,7 +149,7 @@ func (s *Server) registerAdvancedChannelMethods(broadcastFn func(string, any) (i
 }
 
 // registerSystemServiceMethods registers native system management (usage, logs, doctor,
-// maintenance, update) and channel plugin (Telegram, Discord) methods.
+// maintenance, update) and channel plugin (Telegram) methods.
 func (s *Server) registerSystemServiceMethods(denebDir string) {
 	s.dispatcher.RegisterDomain(handlersystem.UsageMethods(handlersystem.UsageDeps{
 		Tracker: s.usageTracker,
@@ -193,17 +192,4 @@ func (s *Server) registerSystemServiceMethods(denebDir string) {
 		s.wireTelegramChatHandler()
 	}
 
-	// Discord native channel plugin (coding-focused).
-	if s.runtimeCfg != nil {
-		dcCfg := loadDiscordConfig(s.runtimeCfg)
-		if dcCfg != nil && dcCfg.BotToken != "" {
-			s.discordPlug = discord.NewPlugin(dcCfg, s.logger)
-			s.channels.Register(s.discordPlug)
-		}
-	}
-
-	// Wire Discord message handler → chat.send pipeline.
-	if s.discordPlug != nil && s.chatHandler != nil {
-		s.wireDiscordChatHandler()
-	}
 }

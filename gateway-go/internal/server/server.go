@@ -20,11 +20,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
-	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
-	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
-	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
@@ -45,6 +42,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
+	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -68,11 +68,11 @@ type ServerTransport struct {
 
 // ServerRPC owns dispatcher construction and RPC/auth wiring state.
 type ServerRPC struct {
-	dispatcher        *rpc.Dispatcher
-	authValidator     *auth.Validator
-	providers         *provider.Registry
-	authManager       *provider.AuthManager
-	authRateLimiter   *auth.AuthRateLimiter
+	dispatcher             *rpc.Dispatcher
+	authValidator          *auth.Validator
+	providers              *provider.Registry
+	authManager            *provider.AuthManager
+	authRateLimiter        *auth.AuthRateLimiter
 	acpDeps                *handlerprocess.ACPDeps
 	acpLifecycleUnsub      func()
 	snapshotLifecycleUnsub func()
@@ -132,7 +132,7 @@ type Server struct {
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
-	*ChatManager    // chatHandler, toolDeps, telegramPlug, discordPlug
+	*ChatManager    // chatHandler, toolDeps, telegramPlug
 	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
 
 	// OnListening is called after the TCP listener is bound successfully.

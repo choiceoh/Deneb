@@ -10,7 +10,7 @@ Welcome to Deneb!
 ## How to Contribute
 
 1. **Bugs & small fixes** → Open a PR!
-2. **New features / architecture** → Start a [GitHub Discussion](https://github.com/choiceoh/Deneb/discussions) or ask in Discord first
+2. **New features / architecture** → Start a [GitHub Discussion](https://github.com/choiceoh/Deneb/discussions) or ask in GitHub Discussions first
 3. **Test/CI-only PRs for known `main` failures** → Don't open a PR, the Maintainer team is already tracking it and such PRs will be closed automatically. If you've spotted a _new_ regression not yet shown in main CI, report it as an issue first.
 4. **Questions** → Open a [GitHub Discussion](https://github.com/choiceoh/Deneb/discussions) or file an issue
 
