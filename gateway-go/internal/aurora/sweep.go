@@ -32,6 +32,12 @@ func parseConversationID(cmdJSON json.RawMessage) uint64 {
 // The host provides an implementation that calls the active LLM provider.
 type Summarizer func(text string, aggressive bool, opts *SummarizeOptions) (string, error)
 
+// FactExtractor is called after a summary is persisted to extract important
+// facts for long-term memory. This replaces the async flushMemory/transferSummary
+// bridge with synchronous inline extraction during the sweep.
+// Returns nil if no facts should be extracted (e.g., leaf summaries).
+type FactExtractor func(summaryContent string, depth uint32) error
+
 // SummarizeOptions passed from Rust for LLM hint tuning.
 type SummarizeOptions struct {
 	PreviousSummary *string `json:"previousSummary,omitempty"`
@@ -91,6 +97,7 @@ func RunSweep(
 	force bool,
 	hardTrigger bool,
 	logger *slog.Logger,
+	extractFacts ...FactExtractor, // optional: inline fact extraction during persist
 ) (*SweepResult, error) {
 	if !ffi.Available {
 		return nil, fmt.Errorf("aurora sweep: FFI unavailable")
@@ -140,7 +147,11 @@ func RunSweep(
 			return &done.Result, nil
 		}
 
-		resp, err := handleCommand(store, cmd.Type, cmdJSON, summarize, logger)
+		var fe FactExtractor
+		if len(extractFacts) > 0 {
+			fe = extractFacts[0]
+		}
+		resp, err := handleCommand(store, cmd.Type, cmdJSON, summarize, fe, logger)
 		if err != nil {
 			return nil, fmt.Errorf("aurora sweep: handle %s: %w", cmd.Type, err)
 		}
@@ -166,6 +177,7 @@ func handleCommand(
 	cmdType string,
 	cmdJSON json.RawMessage,
 	summarize Summarizer,
+	extractFacts FactExtractor,
 	logger *slog.Logger,
 ) (any, error) {
 	switch cmdType {
@@ -182,9 +194,9 @@ func handleCommand(
 	case "summarize":
 		return handleSummarize(cmdJSON, summarize, logger)
 	case "persistLeafSummary":
-		return handlePersistLeafSummary(store, cmdJSON, logger)
+		return handlePersistLeafSummary(store, cmdJSON, extractFacts, logger)
 	case "persistCondensedSummary":
-		return handlePersistCondensedSummary(store, cmdJSON, logger)
+		return handlePersistCondensedSummary(store, cmdJSON, extractFacts, logger)
 	case "persistEvent":
 		return handlePersistEvent(store, cmdJSON, logger)
 	default:
@@ -312,7 +324,7 @@ func handleSummarize(
 	}, nil
 }
 
-func handlePersistLeafSummary(store *Store, cmdJSON json.RawMessage, logger *slog.Logger) (any, error) {
+func handlePersistLeafSummary(store *Store, cmdJSON json.RawMessage, extractFacts FactExtractor, logger *slog.Logger) (any, error) {
 	var cmd struct {
 		Input PersistLeafInput `json:"input"`
 	}
@@ -340,7 +352,7 @@ func handlePersistLeafSummary(store *Store, cmdJSON json.RawMessage, logger *slo
 	return map[string]any{"type": "persistOk"}, nil
 }
 
-func handlePersistCondensedSummary(store *Store, cmdJSON json.RawMessage, logger *slog.Logger) (any, error) {
+func handlePersistCondensedSummary(store *Store, cmdJSON json.RawMessage, extractFacts FactExtractor, logger *slog.Logger) (any, error) {
 	var cmd struct {
 		Input PersistCondensedInput `json:"input"`
 	}
@@ -365,6 +377,24 @@ func handlePersistCondensedSummary(store *Store, cmdJSON json.RawMessage, logger
 			"tokenCount", cmd.Input.TokenCount,
 		)
 	}
+
+	// Inline fact extraction: extract important facts from the condensed
+	// summary and store them in long-term memory. This replaces the async
+	// transferSummaryToMemory bridge with synchronous extraction.
+	// Leaf summaries (depth=0) are skipped — too granular for long-term memory.
+	if extractFacts != nil && cmd.Input.Depth >= 1 && cmd.Input.Content != "" {
+		if err := extractFacts(cmd.Input.Content, cmd.Input.Depth); err != nil {
+			// Fact extraction failure is non-fatal: summary is already persisted.
+			if logger != nil {
+				logger.Warn("aurora sweep: inline fact extraction failed (summary saved)",
+					"summaryId", cmd.Input.SummaryID, "error", err)
+			}
+		} else if logger != nil {
+			logger.Info("aurora sweep: inline fact extraction completed",
+				"summaryId", cmd.Input.SummaryID, "depth", cmd.Input.Depth)
+		}
+	}
+
 	return map[string]any{"type": "persistOk"}, nil
 }
 

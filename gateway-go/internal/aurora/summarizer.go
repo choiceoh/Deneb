@@ -16,29 +16,44 @@ import (
 )
 
 const (
-	// compactionSystemPrompt instructs the LLM to produce summaries for compaction.
-	compactionSystemPrompt = `You are a context compaction assistant. Your task is to summarize conversation segments into concise, information-dense summaries that preserve all actionable details.
+	// compactionSystemPrompt instructs the LLM to produce structured summaries.
+	compactionSystemPrompt = `You are a context compaction assistant. Summarize conversation segments into structured XML summaries.
+
+Output format — use only the sections that apply, omit empty sections:
+
+<summary>
+Concise chronological narrative of what happened. Always include this section.
+</summary>
+
+<decisions>
+- What was decided and why. Include rejected alternatives if discussed.
+- Preserve the reasoning or constraint behind each choice.
+</decisions>
+
+<pending>
+- [TODO] Unresolved questions or tasks.
+- [BLOCKED] Items waiting on external input.
+</pending>
+
+<references>
+- file:line paths, tool calls as [tool:NAME → result], URLs.
+</references>
 
 Rules:
-- Preserve all file paths, function names, variable names, URLs, and numeric values exactly.
-- Preserve the chronological order of events and decisions.
-- Preserve all unresolved questions, pending tasks, and action items.
-- Remove redundant greetings, filler, and repeated information.
-- Use bullet points for distinct facts; use prose for connected narratives.
+- Preserve file paths, function names, variable names, URLs, and numeric values exactly.
+- Preserve speaker attribution: "사용자가 요청함" vs "AI가 제안함".
 - Write in the same language as the source material.
-- Target the specified token count; do not pad or truncate artificially.
-- For tool calls: preserve tool name, key arguments, and outcome (success/failure). Format: [tool:NAME → result]
-- When summarizing decisions, include the reasoning or constraint that led to the choice. Preserve rejected alternatives if explicitly discussed.
-- Preserve file:line references and function/method names exactly. When code changes are discussed, keep the before→after pattern.
-- CRITICAL: Preserve speaker attribution. Clearly distinguish who said or did what — "사용자가 요청함" vs "AI가 제안함". Never attribute AI actions/statements to the user or vice versa.`
+- Target the specified token count.
+- CRITICAL: Always include <summary>. Omit other sections if they have no content.`
 
 	// aggressiveAddendum is appended for aggressive compression passes.
 	aggressiveAddendum = `
 
-IMPORTANT: This is an aggressive compression pass. Be significantly more concise:
-- Merge related points into single sentences.
-- Drop examples that merely illustrate already-stated facts.
-- Keep only the most critical details: decisions made, files changed, errors encountered, next steps.
+IMPORTANT: Aggressive compression pass. Respect the XML structure but be much more concise:
+- <summary>: 2-3 sentences maximum.
+- <decisions>: Keep only critical decisions (drop obvious/minor ones).
+- <pending>: Merge related items.
+- <references>: Keep only files that were actually modified.
 - Aim for 40-60% of the previous summary length.`
 
 	// summarizeTimeout is the max time for a single LLM summarization call.
@@ -65,6 +80,12 @@ func NewLLMSummarizer(client *llm.Client, model string, apiType string) Summariz
 		if opts != nil {
 			if opts.IsCondensed != nil && *opts.IsCondensed {
 				fmt.Fprintf(&userMsg, "[Condensed summary pass, depth=%d]\n", safeUint32(opts.Depth))
+				userMsg.WriteString(`The input contains previously structured XML summaries. Merge them:
+- Combine <summary> sections into a higher-level narrative.
+- Deduplicate <decisions> (keep the final decision if a topic was revisited).
+- Remove <pending> items that were resolved in later summaries.
+- Merge <references>, keeping only still-relevant file paths.
+`)
 			}
 			if opts.TargetTokens != nil {
 				fmt.Fprintf(&userMsg, "[Target: ~%d tokens]\n", *opts.TargetTokens)

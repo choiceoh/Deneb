@@ -90,6 +90,7 @@ type Store struct {
 	mu       sync.RWMutex
 	reranker RerankFunc // optional cross-encoder reranker (nil = disabled)
 	logger   *slog.Logger
+	shared   bool // true when DB is owned by unified store (don't close)
 
 	// In-memory embedding cache: avoids full table scan on every search.
 	// Populated on first LoadEmbeddings call, invalidated on mutations.
@@ -210,6 +211,18 @@ func migrateSchema(db *sql.DB) {
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_fact_embeddings_fact_id ON fact_embeddings(fact_id)`)
 }
 
+// NewStoreFromDB creates a memory store using a pre-opened database connection.
+// Used by the unified store to share a single DB across subsystems.
+// The caller owns the DB lifecycle — Close() on this store is a no-op.
+func NewStoreFromDB(db *sql.DB) (*Store, error) {
+	store := &Store{
+		db:     db,
+		logger: slog.Default(),
+		shared: true,
+	}
+	return store, nil
+}
+
 // NewStore opens or creates a memory database at dbPath.
 func NewStore(dbPath string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
@@ -255,6 +268,9 @@ func (s *Store) SetReranker(fn RerankFunc) {
 
 // Close closes the database connection.
 func (s *Store) Close() error {
+	if s.shared {
+		return nil // owned by unified store
+	}
 	return s.db.Close()
 }
 

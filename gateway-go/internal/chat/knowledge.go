@@ -14,23 +14,25 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // KnowledgeDeps holds optional dependencies for knowledge prefetch.
 type KnowledgeDeps struct {
-	VegaBackend    vega.Backend            // nil → skip Vega search
-	WorkspaceDir   string                  // empty → skip file-based Memory search
-	MemoryStore    *memory.Store           // nil → skip structured memory search
-	MemoryEmbedder *memory.Embedder        // nil → FTS-only structured search
+	VegaBackend    vega.Backend     // nil → skip Vega search
+	WorkspaceDir   string           // empty → skip file-based Memory search
+	MemoryStore    *memory.Store    // nil → skip structured memory search
+	MemoryEmbedder *memory.Embedder // nil → FTS-only structured search
+	UnifiedStore   *unified.Store   // nil → skip unified search + tier-1 injection
 }
 
 // Knowledge prefetch limits.
 const (
-	knowledgeMaxTokens     = 5000 // ~20KB of text budget
-	knowledgeMaxVega       = 5    // top Vega results
-	knowledgeMaxMemory     = 10   // top memory matches (token budget is the real ceiling)
-	knowledgeTimeout       = 5 * time.Second
+	knowledgeMaxTokens       = 5000 // ~20KB of text budget
+	knowledgeMaxVega         = 5    // top Vega results
+	knowledgeMaxMemory       = 10   // top memory matches (token budget is the real ceiling)
+	knowledgeTimeout         = 5 * time.Second
 	knowledgeMaxContentRunes = 500 // truncate individual result content (in runes, not bytes)
 )
 
@@ -47,7 +49,7 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	}
 	// Early return when no knowledge sources are configured (common for Telegram
 	// chat profiles without Vega or memory). Avoids WaitGroup + goroutine overhead.
-	if deps.VegaBackend == nil && deps.MemoryStore == nil && deps.WorkspaceDir == "" {
+	if deps.VegaBackend == nil && deps.MemoryStore == nil && deps.WorkspaceDir == "" && deps.UnifiedStore == nil {
 		return ""
 	}
 
@@ -55,11 +57,12 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	defer cancel()
 
 	var (
-		wg              sync.WaitGroup
-		vegaResults     []vega.SearchResult
-		memMatches      []MemoryMatch
-		structFacts     []memory.SearchResult
+		wg               sync.WaitGroup
+		vegaResults      []vega.SearchResult
+		memMatches       []MemoryMatch
+		structFacts      []memory.SearchResult
 		userModelEntries []memory.UserModelEntry
+		tier1Section     string // high-importance facts always-injected
 	)
 
 	// Vega search (project knowledge DB).
@@ -117,10 +120,24 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		}()
 	}
 
+	// Tier 1: always-inject high-importance facts (unified store).
+	if deps.UnifiedStore != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tier1Section = deps.UnifiedStore.Tier1Section(ctx)
+		}()
+	}
+
 	wg.Wait()
 
 	// Build the combined knowledge section.
 	var parts []string
+
+	// Tier 1: high-importance facts always at the top.
+	if tier1Section != "" {
+		parts = append(parts, tier1Section)
+	}
 
 	// Knowledge section (Vega + memory facts).
 	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 {

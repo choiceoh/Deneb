@@ -23,6 +23,7 @@ import (
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
+	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -81,6 +82,15 @@ func (s *Server) registerSessionRPCMethods() {
 	} else {
 		chatCfg.AuroraStore = auroraStore
 		s.logger.Info("aurora compaction store initialized")
+	}
+
+	// Initialize unified memory store (single DB for all tiers).
+	unifiedStore, err := unified.New(unified.DefaultConfig(), s.logger)
+	if err != nil {
+		s.logger.Warn("unified store unavailable", "error", err)
+	} else {
+		chatCfg.UnifiedStore = unifiedStore
+		s.logger.Info("unified memory store initialized")
 	}
 
 	// Resolve default model from config and create the model role registry.

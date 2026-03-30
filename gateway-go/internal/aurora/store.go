@@ -261,6 +261,21 @@ CREATE TABLE IF NOT EXISTS transferred_summaries (
 
 // ── Constructor ─────────────────────────────────────────────────────────────
 
+// NewStoreFromDB creates an Aurora store using a pre-opened database connection.
+// Used by the unified store to share a single DB across subsystems.
+// The caller owns the DB lifecycle — Close() on this store is a no-op.
+func NewStoreFromDB(db *sql.DB, logger *slog.Logger) (*Store, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	s := &Store{
+		db:     db,
+		dbPath: "(shared)",
+		logger: logger,
+	}
+	return s, nil
+}
+
 // NewStore opens or creates an Aurora SQLite store.
 // If a legacy JSON file (aurora.json) exists alongside the DB path,
 // it is migrated automatically.
@@ -468,7 +483,8 @@ func (s *Store) Sync() error {
 // Close closes the database connection.
 func (s *Store) Close() error {
 	s.closeOnce.Do(func() {
-		if s.db != nil {
+		// Don't close shared DB connections (managed by unified store).
+		if s.db != nil && s.dbPath != "(shared)" {
 			s.closeErr = s.db.Close()
 		}
 	})
@@ -740,6 +756,14 @@ func (s *Store) PersistLeafSummary(input PersistLeafInput) error {
 		return err
 	}
 
+	// Parse structured XML sections and store in extended columns.
+	// Best-effort: columns may not exist in legacy aurora.db.
+	parsed := ParseStructuredSummary(input.Content)
+	tx.Exec(
+		`UPDATE summaries SET narrative = ?, decisions = ?, pending = ?, refs = ?
+		 WHERE summary_id = ?`,
+		parsed.Narrative, parsed.Decisions, parsed.Pending, parsed.Refs, input.SummaryID)
+
 	// Link messages to summary.
 	smStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_messages (summary_id, message_id) VALUES (?, ?)`)
 	defer smStmt.Close()
@@ -808,6 +832,13 @@ func (s *Store) PersistCondensedSummary(input PersistCondensedInput) error {
 		input.SourceMessageTokenCount, now); err != nil {
 		return err
 	}
+
+	// Parse structured XML sections and store in extended columns.
+	parsed := ParseStructuredSummary(input.Content)
+	tx.Exec(
+		`UPDATE summaries SET narrative = ?, decisions = ?, pending = ?, refs = ?
+		 WHERE summary_id = ?`,
+		parsed.Narrative, parsed.Decisions, parsed.Pending, parsed.Refs, input.SummaryID)
 
 	// Link parent summaries.
 	spStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_parents (summary_id, parent_id) VALUES (?, ?)`)

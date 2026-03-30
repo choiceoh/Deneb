@@ -151,6 +151,7 @@ func executeAgentRun(
 			if !isDiscordDelivery(params.Delivery) {
 				kDeps.MemoryStore = deps.memoryStore
 				kDeps.MemoryEmbedder = deps.memoryEmbedder
+				kDeps.UnifiedStore = deps.unifiedStore
 			}
 			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
 		}
