@@ -7,9 +7,10 @@ package unified
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -87,6 +88,9 @@ func (s *Store) Search(ctx context.Context, query string, opts SearchOpts) ([]Se
 		}
 		candidates = append(candidates, c)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("unified search row iteration: %w", err)
+	}
 
 	// If no FTS results, try trigram (Korean/CJK).
 	if len(candidates) == 0 {
@@ -140,9 +144,13 @@ func (s *Store) Tier1Facts(ctx context.Context, threshold float64, categories []
 		r.ItemType = "fact"
 		r.Tier = "long"
 		r.Score = r.Importance
-		// Parse created_at (facts use TEXT format).
+		// Parse created_at (facts use TEXT format; legacy rows may use unix ms string).
 		if t, err := time.Parse(time.RFC3339Nano, createdAtStr); err == nil {
 			r.CreatedAt = t.UnixMilli()
+		} else if t, err := time.Parse(time.RFC3339, createdAtStr); err == nil {
+			r.CreatedAt = t.UnixMilli()
+		} else if ms, err := strconv.ParseInt(createdAtStr, 10, 64); err == nil {
+			r.CreatedAt = ms
 		}
 		results = append(results, r)
 	}
@@ -204,11 +212,9 @@ func (s *Store) scoreCandidates(ctx context.Context, candidates []searchCandidat
 	}
 
 	// Sort by score descending.
-	for i := 1; i < len(results); i++ {
-		for j := i; j > 0 && results[j].score > results[j-1].score; j-- {
-			results[j], results[j-1] = results[j-1], results[j]
-		}
-	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score > results[j].score
+	})
 
 	// Limit results.
 	if len(results) > opts.Limit {
@@ -256,7 +262,7 @@ func (s *Store) trigramSearch(ctx context.Context, query string, opts SearchOpts
 
 	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, nil // give up silently
+		return nil, fmt.Errorf("trigram search query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -268,6 +274,9 @@ func (s *Store) trigramSearch(ctx context.Context, query string, opts SearchOpts
 			continue
 		}
 		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("trigram search row iteration: %w", err)
 	}
 
 	return s.scoreCandidates(ctx, candidates, opts)

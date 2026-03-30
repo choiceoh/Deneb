@@ -75,15 +75,15 @@ CREATE INDEX IF NOT EXISTS idx_sum_importance ON summaries(importance DESC);
 
 -- Summary DAG relationships.
 CREATE TABLE IF NOT EXISTS summary_parents (
-	summary_id TEXT NOT NULL,
-	parent_id  TEXT NOT NULL,
+	summary_id TEXT NOT NULL REFERENCES summaries(summary_id) ON DELETE CASCADE,
+	parent_id  TEXT NOT NULL REFERENCES summaries(summary_id) ON DELETE CASCADE,
 	PRIMARY KEY (summary_id, parent_id)
 );
 
 -- Summary-to-message links.
 CREATE TABLE IF NOT EXISTS summary_messages (
-	summary_id TEXT NOT NULL,
-	message_id INTEGER NOT NULL,
+	summary_id TEXT NOT NULL REFERENCES summaries(summary_id) ON DELETE CASCADE,
+	message_id INTEGER NOT NULL REFERENCES messages(message_id) ON DELETE CASCADE,
 	PRIMARY KEY (summary_id, message_id)
 );
 
@@ -92,8 +92,8 @@ CREATE TABLE IF NOT EXISTS context_items (
 	conversation_id INTEGER NOT NULL,
 	ordinal         INTEGER NOT NULL,
 	item_type       TEXT NOT NULL,  -- 'message' or 'summary'
-	message_id      INTEGER,
-	summary_id      TEXT,
+	message_id      INTEGER REFERENCES messages(message_id) ON DELETE CASCADE,
+	summary_id      TEXT REFERENCES summaries(summary_id) ON DELETE CASCADE,
 	created_at      INTEGER NOT NULL,
 	PRIMARY KEY (conversation_id, ordinal)
 );
@@ -230,7 +230,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts_trigram USING fts5(
 
 -- Vector embeddings keyed by memory_index ID (for semantic search).
 CREATE TABLE IF NOT EXISTS embeddings (
-	memory_index_id INTEGER PRIMARY KEY REFERENCES memory_index(id),
+	memory_index_id INTEGER PRIMARY KEY REFERENCES memory_index(id) ON DELETE CASCADE,
 	embedding       BLOB NOT NULL,       -- float32 little-endian
 	created_at      INTEGER NOT NULL     -- epoch ms
 );

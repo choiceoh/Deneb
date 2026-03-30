@@ -81,7 +81,9 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 	}
 
 	// Apply incremental migrations for existing databases.
-	s.migrateSchema()
+	if err := s.migrateSchema(); err != nil {
+		logger.Warn("unified store: schema migration failed", "error", err)
+	}
 
 	// Auto-migrate from legacy separate DBs if they exist.
 	if err := s.migrateFromLegacy(dir); err != nil {
