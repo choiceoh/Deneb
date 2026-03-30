@@ -271,8 +271,11 @@ impl AssemblyEngine {
 const MINIMAL_AURORA_GUIDANCE: &str = "\
 ## Context Recall (Aurora)
 
-Some earlier conversation has been summarized. If you need details from \
-summarized sections, use the available recall tools:
+Some earlier conversation has been summarized with structured sections \
+(Summary, Decisions, Pending, References). Check Pending for unresolved \
+items from earlier context.
+
+If you need details from summarized sections, use recall tools:
 
 1. `aurora_grep` — Search messages and summaries (regex or full-text)
 2. `aurora_describe` — Inspect a summary's lineage and metadata
@@ -305,6 +308,13 @@ Condensed summaries compress multiple layers of earlier context.
 - `aurora_expand_query` with `summaryIds`: expand specific summaries
 - `aurora_expand_query` with `query`: search-then-expand in one call
 - Add `maxTokens`, `conversationId`, or `allConversations` for scoping
+
+### Structured Sections
+
+Summaries contain structured sections: Summary, Decisions, Pending, References.
+- Check **Decisions** before re-discussing topics that were already resolved
+- Check **Pending** for items that may still need attention
+- **References** contain exact file paths and tool outcomes from that segment
 
 ### Precision Rules
 

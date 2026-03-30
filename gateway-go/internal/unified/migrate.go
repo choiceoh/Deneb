@@ -1,0 +1,380 @@
+package unified
+
+import (
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+// migrateSchema applies incremental schema changes for existing unified
+// databases that were created with an older schema version.
+func (s *Store) migrateSchema() {
+	// summaries: add structured section columns (Phase 2).
+	s.db.Exec(`ALTER TABLE summaries ADD COLUMN narrative TEXT`)
+	s.db.Exec(`ALTER TABLE summaries ADD COLUMN decisions TEXT`)
+	s.db.Exec(`ALTER TABLE summaries ADD COLUMN pending TEXT`)
+	s.db.Exec(`ALTER TABLE summaries ADD COLUMN refs TEXT`)
+	s.db.Exec(`ALTER TABLE summaries ADD COLUMN importance REAL NOT NULL DEFAULT 0.3`)
+}
+
+// migrateFromLegacy detects legacy aurora.db and memory.db files and
+// imports their data into the unified store. After successful migration,
+// legacy files are renamed to *.migrated.
+//
+// This is idempotent: if the unified DB already has data from both
+// sources, migration is skipped.
+func (s *Store) migrateFromLegacy(dir string) error {
+	auroraPath := filepath.Join(dir, "aurora.db")
+	memoryDir := filepath.Join(dir, "memory")
+	memoryPath := filepath.Join(memoryDir, "memory.db")
+
+	auroraExists := fileExists(auroraPath)
+	memoryExists := fileExists(memoryPath)
+
+	if !auroraExists && !memoryExists {
+		return nil
+	}
+
+	// Check if we already migrated (have data from both sources).
+	var msgCount, factCount int
+	s.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&msgCount)
+	s.db.QueryRow(`SELECT COUNT(*) FROM facts`).Scan(&factCount)
+
+	if msgCount > 0 && factCount > 0 {
+		s.logger.Debug("unified store: migration skipped, already has data from both sources")
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if auroraExists && msgCount == 0 {
+		if err := migrateAurora(tx, auroraPath, s.logger); err != nil {
+			return fmt.Errorf("migrate aurora: %w", err)
+		}
+	}
+
+	if memoryExists && factCount == 0 {
+		if err := migrateMemory(tx, memoryPath, s.logger); err != nil {
+			return fmt.Errorf("migrate memory: %w", err)
+		}
+	}
+
+	// Build the memory_index from imported data.
+	if err := buildMemoryIndex(tx, s.logger); err != nil {
+		return fmt.Errorf("build memory index: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration: %w", err)
+	}
+
+	// Rename legacy files so we don't re-migrate.
+	if auroraExists {
+		renameLegacy(auroraPath, s.logger)
+	}
+	if memoryExists {
+		renameLegacy(memoryPath, s.logger)
+	}
+
+	s.logger.Info("unified store: legacy migration complete")
+	return nil
+}
+
+// migrateAurora imports all data from a legacy aurora.db.
+func migrateAurora(tx *sql.Tx, dbPath string, logger *slog.Logger) error {
+	logger.Info("unified store: migrating aurora.db", "path", dbPath)
+
+	src, err := sql.Open("sqlite", dbPath+"?mode=ro")
+	if err != nil {
+		return fmt.Errorf("open aurora.db: %w", err)
+	}
+	defer src.Close()
+
+	// sequences
+	rows, err := src.Query(`SELECT name, value FROM sequences`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			var value int64
+			rows.Scan(&name, &value)
+			tx.Exec(`INSERT OR REPLACE INTO sequences (name, value) VALUES (?, ?)`, name, value)
+		}
+	}
+
+	// messages
+	msgCount, err := copyTable(tx, src, "messages",
+		`SELECT message_id, conversation_id, seq, role, content, token_count, created_at FROM messages`,
+		`INSERT OR IGNORE INTO messages (message_id, conversation_id, seq, role, content, token_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		7)
+	if err != nil {
+		return fmt.Errorf("copy messages: %w", err)
+	}
+
+	// summaries (without structured columns — they don't exist in legacy)
+	sumCount, err := copyTable(tx, src, "summaries",
+		`SELECT summary_id, conversation_id, kind, depth, content, token_count, file_ids, earliest_at, latest_at, descendant_count, descendant_token_count, source_message_token_count, created_at FROM summaries`,
+		`INSERT OR IGNORE INTO summaries (summary_id, conversation_id, kind, depth, content, token_count, file_ids, earliest_at, latest_at, descendant_count, descendant_token_count, source_message_token_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		13)
+	if err != nil {
+		return fmt.Errorf("copy summaries: %w", err)
+	}
+
+	// context_items
+	copyTable(tx, src, "context_items",
+		`SELECT conversation_id, ordinal, item_type, message_id, summary_id, created_at FROM context_items`,
+		`INSERT OR IGNORE INTO context_items (conversation_id, ordinal, item_type, message_id, summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		6)
+
+	// summary_parents
+	copyTable(tx, src, "summary_parents",
+		`SELECT summary_id, parent_id FROM summary_parents`,
+		`INSERT OR IGNORE INTO summary_parents (summary_id, parent_id) VALUES (?, ?)`,
+		2)
+
+	// summary_messages
+	copyTable(tx, src, "summary_messages",
+		`SELECT summary_id, message_id FROM summary_messages`,
+		`INSERT OR IGNORE INTO summary_messages (summary_id, message_id) VALUES (?, ?)`,
+		2)
+
+	// compaction_events
+	copyTable(tx, src, "compaction_events",
+		`SELECT conversation_id, pass, level, tokens_before, tokens_after, created_summary_id, created_at FROM compaction_events`,
+		`INSERT INTO compaction_events (conversation_id, pass, level, tokens_before, tokens_after, created_summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		7)
+
+	// transferred_summaries
+	copyTable(tx, src, "transferred_summaries",
+		`SELECT summary_id, transferred_at FROM transferred_summaries`,
+		`INSERT OR IGNORE INTO transferred_summaries (summary_id, transferred_at) VALUES (?, ?)`,
+		2)
+
+	logger.Info("unified store: aurora migration done", "messages", msgCount, "summaries", sumCount)
+	return nil
+}
+
+// migrateMemory imports all data from a legacy memory.db.
+func migrateMemory(tx *sql.Tx, dbPath string, logger *slog.Logger) error {
+	logger.Info("unified store: migrating memory.db", "path", dbPath)
+
+	src, err := sql.Open("sqlite", dbPath+"?mode=ro")
+	if err != nil {
+		return fmt.Errorf("open memory.db: %w", err)
+	}
+	defer src.Close()
+
+	// facts
+	factCount, err := copyTable(tx, src, "facts",
+		`SELECT id, content, category, importance, source, created_at, updated_at, last_accessed_at, access_count, verified_at, expires_at, superseded_by, active, merge_depth FROM facts`,
+		`INSERT OR IGNORE INTO facts (id, content, category, importance, source, created_at, updated_at, last_accessed_at, access_count, verified_at, expires_at, superseded_by, active, merge_depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		14)
+	if err != nil {
+		return fmt.Errorf("copy facts: %w", err)
+	}
+
+	// fact_embeddings
+	copyTable(tx, src, "fact_embeddings",
+		`SELECT fact_id, embedding, model_name, updated_at FROM fact_embeddings`,
+		`INSERT OR IGNORE INTO fact_embeddings (fact_id, embedding, model_name, updated_at) VALUES (?, ?, ?, ?)`,
+		4)
+
+	// user_model
+	copyTable(tx, src, "user_model",
+		`SELECT key, value, confidence, updated_at FROM user_model`,
+		`INSERT OR REPLACE INTO user_model (key, value, confidence, updated_at) VALUES (?, ?, ?, ?)`,
+		4)
+
+	// dreaming_log
+	copyTable(tx, src, "dreaming_log",
+		`SELECT ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms FROM dreaming_log`,
+		`INSERT INTO dreaming_log (ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		7)
+
+	// metadata
+	copyTable(tx, src, "metadata",
+		`SELECT key, value FROM metadata`,
+		`INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)`,
+		2)
+
+	logger.Info("unified store: memory migration done", "facts", factCount)
+	return nil
+}
+
+// buildMemoryIndex populates the memory_index table and FTS indices from
+// the existing messages, summaries, and facts tables.
+func buildMemoryIndex(tx *sql.Tx, logger *slog.Logger) error {
+	nowMs := time.Now().UnixMilli()
+	var total int
+
+	// Index messages (tier=short, importance=0).
+	res, err := tx.Exec(`
+		INSERT OR IGNORE INTO memory_index (item_type, item_id, tier, importance, created_at)
+		SELECT 'message', CAST(message_id AS TEXT), 'short', 0.0, created_at
+		FROM messages
+	`)
+	if err != nil {
+		return fmt.Errorf("index messages: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		total += int(n)
+	}
+
+	// Index summaries (tier=medium, importance from column or default 0.3).
+	res, err = tx.Exec(`
+		INSERT OR IGNORE INTO memory_index (item_type, item_id, tier, importance, created_at)
+		SELECT 'summary', summary_id, 'medium', COALESCE(importance, 0.3), created_at
+		FROM summaries
+	`)
+	if err != nil {
+		return fmt.Errorf("index summaries: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		total += int(n)
+	}
+
+	// Index active facts (tier=long, importance from column).
+	res, err = tx.Exec(`
+		INSERT OR IGNORE INTO memory_index (item_type, item_id, tier, importance, created_at, updated_at)
+		SELECT 'fact', CAST(id AS TEXT), 'long', importance, ?, ?
+		FROM facts WHERE active = 1
+	`, nowMs, nowMs)
+	if err != nil {
+		return fmt.Errorf("index facts: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		total += int(n)
+	}
+
+	// Populate unified FTS from indexed items.
+	// We need to join memory_index with source tables to get content.
+	if err := rebuildFTS(tx); err != nil {
+		return fmt.Errorf("rebuild FTS: %w", err)
+	}
+
+	logger.Info("unified store: memory index built", "indexed", total)
+	return nil
+}
+
+// rebuildFTS rebuilds the unified FTS indices from scratch.
+func rebuildFTS(tx *sql.Tx) error {
+	// Clear existing FTS data.
+	tx.Exec(`DELETE FROM memory_fts`)
+	tx.Exec(`DELETE FROM memory_fts_trigram`)
+
+	// Insert message content.
+	_, err := tx.Exec(`
+		INSERT INTO memory_fts(rowid, content)
+		SELECT mi.id, m.content
+		FROM memory_index mi
+		JOIN messages m ON CAST(m.message_id AS TEXT) = mi.item_id
+		WHERE mi.item_type = 'message'
+	`)
+	if err != nil {
+		return fmt.Errorf("FTS messages: %w", err)
+	}
+
+	// Insert summary content (use narrative if available, else full content).
+	_, err = tx.Exec(`
+		INSERT INTO memory_fts(rowid, content)
+		SELECT mi.id, COALESCE(s.narrative, s.content)
+		FROM memory_index mi
+		JOIN summaries s ON s.summary_id = mi.item_id
+		WHERE mi.item_type = 'summary'
+	`)
+	if err != nil {
+		return fmt.Errorf("FTS summaries: %w", err)
+	}
+
+	// Insert fact content.
+	_, err = tx.Exec(`
+		INSERT INTO memory_fts(rowid, content)
+		SELECT mi.id, f.content
+		FROM memory_index mi
+		JOIN facts f ON CAST(f.id AS TEXT) = mi.item_id
+		WHERE mi.item_type = 'fact'
+	`)
+	if err != nil {
+		return fmt.Errorf("FTS facts: %w", err)
+	}
+
+	// Repeat for trigram index.
+	tx.Exec(`
+		INSERT INTO memory_fts_trigram(rowid, content)
+		SELECT mi.id, m.content
+		FROM memory_index mi
+		JOIN messages m ON CAST(m.message_id AS TEXT) = mi.item_id
+		WHERE mi.item_type = 'message'
+	`)
+	tx.Exec(`
+		INSERT INTO memory_fts_trigram(rowid, content)
+		SELECT mi.id, COALESCE(s.narrative, s.content)
+		FROM memory_index mi
+		JOIN summaries s ON s.summary_id = mi.item_id
+		WHERE mi.item_type = 'summary'
+	`)
+	tx.Exec(`
+		INSERT INTO memory_fts_trigram(rowid, content)
+		SELECT mi.id, f.content
+		FROM memory_index mi
+		JOIN facts f ON CAST(f.id AS TEXT) = mi.item_id
+		WHERE mi.item_type = 'fact'
+	`)
+
+	return nil
+}
+
+// copyTable copies rows from src to dst using the given queries.
+// Returns the number of rows copied.
+func copyTable(tx *sql.Tx, src *sql.DB, tableName, selectSQL, insertSQL string, colCount int) (int, error) {
+	rows, err := src.Query(selectSQL)
+	if err != nil {
+		// Table might not exist in legacy DB — that's OK.
+		return 0, nil
+	}
+	defer rows.Close()
+
+	stmt, err := tx.Prepare(insertSQL)
+	if err != nil {
+		return 0, fmt.Errorf("prepare insert for %s: %w", tableName, err)
+	}
+	defer stmt.Close()
+
+	count := 0
+	for rows.Next() {
+		vals := make([]any, colCount)
+		ptrs := make([]any, colCount)
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			continue
+		}
+		if _, err := stmt.Exec(vals...); err != nil {
+			continue
+		}
+		count++
+	}
+	return count, nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func renameLegacy(path string, logger *slog.Logger) {
+	dest := path + ".migrated"
+	if err := os.Rename(path, dest); err != nil {
+		logger.Warn("unified store: could not rename legacy file", "path", path, "error", err)
+	} else {
+		logger.Info("unified store: renamed legacy file", "from", path, "to", dest)
+	}
+}

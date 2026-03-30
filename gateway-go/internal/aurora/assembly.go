@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -263,14 +264,9 @@ func parseAssemblyDone(store *Store, cmdJSON json.RawMessage) (*AssemblyResult, 
 		} else {
 			hasSummaries = true
 			if s, ok := summaries[item.sumID]; ok {
-				prefix := "[Aurora Summary"
-				if s.Kind == "condensed" {
-					prefix += fmt.Sprintf(" depth=%d", s.Depth)
-				}
-				prefix += "]"
 				llmMsgs = append(llmMsgs, llm.NewTextMessage(
 					"user",
-					fmt.Sprintf("%s\n%s", prefix, s.Content),
+					formatSummaryForLLM(s),
 				))
 			}
 		}
@@ -337,7 +333,7 @@ func assembleFallback(
 			hasSums = true
 			if s, ok := summaries[*ci.SummaryID]; ok {
 				llmMsgs = append(llmMsgs, llm.NewTextMessage("user",
-					fmt.Sprintf("[Aurora Summary]\n%s", s.Content)))
+					formatSummaryForLLM(s)))
 			}
 		} else if ci.ItemType == "message" && ci.MessageID != nil {
 			if hasSums && !boundaryDone {
@@ -360,4 +356,75 @@ func assembleFallback(
 		TotalMessages: len(items),
 		SummaryCount:  len(sumIDs),
 	}, nil
+}
+
+// formatSummaryForLLM renders a SummaryRecord for inclusion in the LLM context.
+// Includes kind, depth, time range, and strips XML tags for clean reading.
+func formatSummaryForLLM(s SummaryRecord) string {
+	var b strings.Builder
+	b.WriteString("[Aurora Summary")
+	if s.Kind == "condensed" {
+		fmt.Fprintf(&b, " depth=%d", s.Depth)
+	}
+	if s.EarliestAt != nil && s.LatestAt != nil {
+		b.WriteString(" ")
+		b.WriteString(formatEpochRange(*s.EarliestAt, *s.LatestAt))
+	}
+	b.WriteString("]\n")
+
+	// If content has XML tags, strip them for cleaner LLM reading.
+	// The structured sections are already stored in separate columns;
+	// here we present the content in a readable format.
+	parsed := ParseStructuredSummary(s.Content)
+	if parsed.Narrative != "" {
+		b.WriteString(parsed.Narrative)
+	} else {
+		b.WriteString(s.Content)
+	}
+
+	// Append decisions and pending if available.
+	if parsed.Decisions != "" {
+		b.WriteString("\n\nDecisions:\n")
+		b.WriteString(jsonArrayToBullets(parsed.Decisions))
+	}
+	if parsed.Pending != "" {
+		b.WriteString("\n\nPending:\n")
+		b.WriteString(jsonArrayToBullets(parsed.Pending))
+	}
+
+	return b.String()
+}
+
+// formatEpochRange formats two epoch-ms timestamps as a concise range.
+func formatEpochRange(earliest, latest int64) string {
+	if earliest == 0 || latest == 0 {
+		return ""
+	}
+	e := time.Unix(0, earliest*int64(time.Millisecond)).UTC()
+	l := time.Unix(0, latest*int64(time.Millisecond)).UTC()
+	if e.Format("2006-01-02") == l.Format("2006-01-02") {
+		return fmt.Sprintf("%s %s–%s",
+			e.Format("2006-01-02"),
+			e.Format("15:04"),
+			l.Format("15:04"))
+	}
+	return fmt.Sprintf("%s – %s",
+		e.Format("2006-01-02 15:04"),
+		l.Format("2006-01-02 15:04"))
+}
+
+// jsonArrayToBullets converts a JSON array of strings to bullet-point text.
+func jsonArrayToBullets(jsonArr string) string {
+	if jsonArr == "" {
+		return ""
+	}
+	var items []string
+	if err := json.Unmarshal([]byte(jsonArr), &items); err != nil {
+		return jsonArr // not JSON, return as-is
+	}
+	var b strings.Builder
+	for _, item := range items {
+		fmt.Fprintf(&b, "- %s\n", item)
+	}
+	return b.String()
 }
