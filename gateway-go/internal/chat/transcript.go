@@ -8,34 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 )
 
-// SearchResult holds matching messages from a single session.
-type SearchResult struct {
-	SessionKey string       `json:"sessionKey"`
-	Matches    []MatchedMsg `json:"matches"`
-}
-
-// MatchedMsg is a single matching message with surrounding context.
-type MatchedMsg struct {
-	Index   int           `json:"index"`   // position in transcript
-	Message ChatMessage   `json:"message"` // the matched message
-	Context []ChatMessage `json:"context"` // surrounding messages (+-1)
-}
-
-// TranscriptStore loads and persists session transcripts.
-type TranscriptStore interface {
-	// Load returns up to limit messages for the given session, plus the total count.
-	Load(sessionKey string, limit int) ([]ChatMessage, int, error)
-	// Append adds a message to the session transcript.
-	Append(sessionKey string, msg ChatMessage) error
-	// Delete removes the transcript for a session (used by /reset).
-	Delete(sessionKey string) error
-	// ListKeys returns all session keys that have transcripts.
-	ListKeys() ([]string, error)
-	// Search scans all session transcripts for messages containing the query string.
-	Search(query string, maxResults int) ([]SearchResult, error)
-}
+// Type aliases — canonical interface and result types are in toolctx/.
+type SearchResult = toolctx.SearchResult
+type MatchedMsg = toolctx.MatchedMsg
+type TranscriptStore = toolctx.TranscriptStore
 
 // FileTranscriptStore stores transcripts as JSONL files on disk.
 // Each session gets a file at {baseDir}/{sessionKey}.jsonl.

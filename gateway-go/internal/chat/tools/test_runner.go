@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"bufio"
@@ -16,7 +16,7 @@ import (
 // --- Test/Build runner tool ---
 // Provides structured test results, build output, and lint/vet checks.
 
-func toolTest(defaultDir string) ToolFunc {
+func ToolTest(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p testParams
 		if err := jsonutil.UnmarshalInto("test params", input, &p); err != nil {

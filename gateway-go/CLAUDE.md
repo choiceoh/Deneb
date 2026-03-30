@@ -52,9 +52,9 @@ Protocol error codes (`ErrorCode` enum) are defined in `proto/gateway.proto` and
 4. Follow existing patterns for request/response types
 
 ### Adding a New Agent Tool
-1. Register tool schema in `internal/chat/toolreg_core.go`
-2. Implement handler in `internal/chat/tools/fs.go` (or new `tool_<name>.go` for non-FS tools)
-3. Tool schemas use full JSON Schema definitions
+1. Add schema to `internal/chat/toolreg/tool_schemas.yaml`, run `make tool-schemas`
+2. Implement handler in `internal/chat/tools/<name>.go`
+3. Register in `internal/chat/toolreg/core.go` (appropriate Register*Tools function)
 
 ### Working with Generated Files
 
@@ -62,7 +62,7 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 
 | File | Source | Command |
 |------|--------|---------|
-| `internal/chat/tool_schemas_gen.go` | `internal/chat/tool_schemas.yaml` | `make tool-schemas` |
+| `internal/chat/toolreg/tool_schemas_gen.go` | `internal/chat/toolreg/tool_schemas.yaml` | `make tool-schemas` |
 | `internal/autoreply/thinking/model_caps_gen.go` | `internal/autoreply/thinking/model_caps.yaml` | `make model-caps` |
 | `internal/ffi/ffi_error_codes_gen.go` | `core-rs/core/src/ffi_utils.rs` | `make ffi-gen` |
 | `pkg/protocol/gen/*.pb.go` | `proto/*.proto` | `make proto` |

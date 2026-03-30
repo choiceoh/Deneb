@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // Dedicated git operations with structured output.
 // Complements the existing diff tool (which focuses on viewing diffs).
 
-func toolGit(defaultDir string) ToolFunc {
+func ToolGit(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p gitParams
 		if err := jsonutil.UnmarshalInto("git params", input, &p); err != nil {

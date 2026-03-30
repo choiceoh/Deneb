@@ -11,7 +11,7 @@ import (
 func TestTurnContext_StoreAndLoad(t *testing.T) {
 	tc := NewTurnContext()
 
-	tc.Store("toolu_1", &turnResult_{
+	tc.Store("toolu_1", &TurnResult{
 		ToolName: "read",
 		Output:   "file contents",
 		IsError:  false,
@@ -37,7 +37,7 @@ func TestTurnContext_StoreAndLoad(t *testing.T) {
 
 func TestTurnContext_Wait_AlreadyAvailable(t *testing.T) {
 	tc := NewTurnContext()
-	tc.Store("toolu_1", &turnResult_{ToolName: "grep", Output: "match"})
+	tc.Store("toolu_1", &TurnResult{ToolName: "grep", Output: "match"})
 
 	r, ok := tc.Wait(context.Background(), "toolu_1", 1*time.Second)
 	if !ok {
@@ -54,7 +54,7 @@ func TestTurnContext_Wait_BlocksUntilStored(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var result *turnResult_
+	var result *TurnResult
 	var ok bool
 	go func() {
 		defer wg.Done()
@@ -63,7 +63,7 @@ func TestTurnContext_Wait_BlocksUntilStored(t *testing.T) {
 
 	// Simulate delayed store.
 	time.Sleep(50 * time.Millisecond)
-	tc.Store("toolu_1", &turnResult_{ToolName: "exec", Output: "done"})
+	tc.Store("toolu_1", &TurnResult{ToolName: "exec", Output: "done"})
 
 	wg.Wait()
 	if !ok {
@@ -120,7 +120,7 @@ func TestTurnContext_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			key := "toolu_" + string(rune('a'+id))
-			tc.Store(key, &turnResult_{ToolName: "test", Output: key})
+			tc.Store(key, &TurnResult{ToolName: "test", Output: key})
 			tc.Load(key)
 		}(i)
 	}

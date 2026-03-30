@@ -233,19 +233,21 @@ proto-watch:
 
 # --- Tool schema code generation ---
 
-# Regenerate gateway-go/internal/chat/tool_schemas_gen.go from tool_schemas.yaml.
+# Regenerate gateway-go/internal/chat/toolreg/tool_schemas_gen.go from tool_schemas.yaml.
 # Requires: python3, pyyaml, gofmt
 tool-schemas:
 	cd gateway-go && python3 cmd/tool-schema-gen/gen.py \
-		-yaml internal/chat/tool_schemas.yaml \
-		-out  internal/chat/tool_schemas_gen.go
+		-yaml internal/chat/toolreg/tool_schemas.yaml \
+		-out  internal/chat/toolreg/tool_schemas_gen.go \
+		-pkg  toolreg
 
 # Verify tool_schemas_gen.go is up to date (fails if yaml and Go are out of sync).
 tool-schemas-check:
 	cd gateway-go && python3 cmd/tool-schema-gen/gen.py \
-		-yaml internal/chat/tool_schemas.yaml \
-		-out  internal/chat/tool_schemas_gen.go
-	@git diff --exit-code -- gateway-go/internal/chat/tool_schemas_gen.go
+		-yaml internal/chat/toolreg/tool_schemas.yaml \
+		-out  internal/chat/toolreg/tool_schemas_gen.go \
+		-pkg  toolreg
+	@git diff --exit-code -- gateway-go/internal/chat/toolreg/tool_schemas_gen.go
 
 # Regenerate gateway-go/internal/autoreply/model_caps_gen.go from model_caps.yaml.
 # Requires: python3, pyyaml, gofmt

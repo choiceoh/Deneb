@@ -10,35 +10,21 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
 const (
-	// refWaitInitial is the fast-path timeout for $ref resolution. Most tool
-	// results arrive within 1s, so a short initial wait avoids blocking the
-	// turn unnecessarily (e.g., read: ~50ms, grep: ~200ms).
 	refWaitInitial = 2 * time.Second
-	// refWaitMax is the absolute upper bound for $ref waits, used when the
-	// context deadline is far away or absent.
-	refWaitMax = 30 * time.Second
+	refWaitMax     = 30 * time.Second
 )
 
 // ToolExecutor executes a named tool with JSON input and returns the result.
-// Type alias — identical to agent.ToolExecutor; satisfies the unified interface.
 type ToolExecutor = agent.ToolExecutor
 
-// ToolFunc is an adapter to use ordinary functions as tool executors.
-type ToolFunc func(ctx context.Context, input json.RawMessage) (string, error)
-
-// ToolDef describes a tool with its schema, description, and executor function.
-type ToolDef struct {
-	Name        string
-	Description string
-	InputSchema map[string]any
-	Fn          ToolFunc
-	Hidden      bool   // if true, excluded from LLMTools() but still callable via Execute (e.g. pilot-only tools)
-	Profile     string // optional: "coding" = coding-only, "" = available in all profiles
-}
+// Type aliases — canonical definitions are in toolctx/.
+type ToolFunc = toolctx.ToolFunc
+type ToolDef = toolctx.ToolDef
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {

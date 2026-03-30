@@ -1,9 +1,7 @@
 package tools
 
-import (
-	"context"
-	"encoding/json"
-)
+import "github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 
-// ToolFunc executes a tool with JSON input.
-type ToolFunc func(ctx context.Context, input json.RawMessage) (string, error)
+// ToolFunc is a type alias for the canonical definition in toolctx/.
+// This eliminates the need for the adaptTool bridge between packages.
+type ToolFunc = toolctx.ToolFunc
