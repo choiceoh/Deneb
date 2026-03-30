@@ -310,6 +310,24 @@ func TestExtractArray(t *testing.T) {
 			wantOK: false,
 		},
 		{
+			name:   "code fence no newline",
+			input:  "```json[\"a\", \"b\"]```",
+			want:   `["a", "b"]`,
+			wantOK: true,
+		},
+		{
+			name:   "code fence with trailing text",
+			input:  "```json\n[\"a\", \"b\"]\n``` extra text",
+			want:   `["a", "b"]`,
+			wantOK: true,
+		},
+		{
+			name:   "thinking tags + code fence",
+			input:  "<think>hmm</think>\n```json\n[\"a\",\"b\"]\n```",
+			want:   `["a","b"]`,
+			wantOK: true,
+		},
+		{
 			name:   "empty string",
 			input:  "",
 			want:   "",
