@@ -21,6 +21,7 @@ mod ffi_utils;
 use ffi_utils::*;
 
 // Core modules (C FFI + Rust API)
+pub mod auth;
 pub mod compaction;
 pub mod context_engine;
 pub mod markdown;

@@ -48,8 +48,10 @@ fancy-regex.workspace = true
 # Compression (PNG encoding)
 flate2 = "1"
 
-# Hashing (summary ID generation)
+# Hashing (summary ID generation, HMAC token signing)
 sha2.workspace = true
+hmac = "0.12"
+hex = "0.4"
 
 # Timezone-aware timestamps (compaction)
 chrono.workspace = true
