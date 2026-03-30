@@ -17,6 +17,7 @@ func TestResolveModel(t *testing.T) {
 		// Role names resolve to full model IDs.
 		{"main", "zai/test-model", RoleMain, true},
 		{"lightweight", "sglang/" + DefaultSglangModel, RoleLightweight, true},
+		{"pilot", "google/" + DefaultPilotModel, RolePilot, true},
 		{"fallback", "google/" + DefaultFallbackModel, RoleFallback, true},
 		{"image", "google/" + DefaultImageModel, RoleImage, true},
 		// Actual model names pass through unchanged.
@@ -51,6 +52,7 @@ func TestRoleForModel(t *testing.T) {
 	}{
 		{"zai/test-model", RoleMain, true},
 		{"sglang/" + DefaultSglangModel, RoleLightweight, true},
+		{"google/" + DefaultPilotModel, RolePilot, true},
 		{"google/" + DefaultFallbackModel, RoleFallback, true}, // fallback and image share the same model
 		{"unknown/model", "", false},
 	}
@@ -86,6 +88,7 @@ func TestFallbackChain(t *testing.T) {
 	}{
 		{RoleMain, []Role{RoleMain, RoleLightweight, RoleFallback}},
 		{RoleLightweight, []Role{RoleLightweight, RoleFallback}},
+		{RolePilot, []Role{RolePilot, RoleFallback}},
 		{RoleImage, []Role{RoleImage, RoleFallback}},
 		{RoleFallback, []Role{RoleFallback}},
 	}

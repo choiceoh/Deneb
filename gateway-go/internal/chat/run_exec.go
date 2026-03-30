@@ -64,7 +64,7 @@ func executeAgentRun(
 	// Must happen before the parallel section so apiType is known when building
 	// the system prompt in the parallel goroutine below.
 	//
-	// Agent tools pass role names ("main", "lightweight", "fallback", "image").
+	// Agent tools pass role names ("main", "lightweight", "pilot", "fallback", "image").
 	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
 	// are treated as direct overrides (no fallback chain).
 	model := params.Model
