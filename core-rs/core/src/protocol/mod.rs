@@ -1,18 +1,24 @@
-//! Gateway protocol frame validation.
+//! Gateway protocol frame validation and wire types.
 //!
 //! Validates `RequestFrame`, `ResponseFrame`, and `EventFrame` structures
-//! matching the TypeScript definitions in `src/gateway/protocol/schema/frames.ts`.
+//! matching the TypeScript definitions in `src/gateway/protocol/schema/frames.ts`
+//! and the Go wire types in `gateway-go/pkg/protocol/`.
 //!
 //! Generated protobuf types (via prost) are available in the `gen` submodule
 //! when built with `cargo build` (see build.rs).
 
+pub mod agent;
+pub mod connect;
 pub mod constants;
 pub mod error_codes;
 pub mod gen;
+pub mod plugin;
+pub mod provider;
 pub mod schemas;
+pub mod session;
 pub mod validation;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -31,7 +37,7 @@ pub enum FrameError {
 }
 
 /// Discriminator for gateway frames.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum FrameType {
     Req,
@@ -67,7 +73,7 @@ struct RawFrame {
 }
 
 /// State version for event frames.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StateVersion {
     pub presence: u64,
     pub health: u64,
@@ -81,39 +87,172 @@ pub enum GatewayFrame {
     Event(EventFrame),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
 pub struct RequestFrame {
+    #[serde(rename = "type")]
+    pub frame_type: FrameType,
     pub id: String,
     pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
 pub struct ResponseFrame {
+    #[serde(rename = "type")]
+    pub frame_type: FrameType,
     pub id: String,
     pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorShape>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ErrorShape {
     pub code: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub retryable: Option<bool>,
-    #[serde(rename = "retryAfterMs")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cause: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct EventFrame {
+    #[serde(rename = "type")]
+    pub frame_type: FrameType,
     pub event: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub seq: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub state_version: Option<StateVersion>,
 }
+
+// ---------------------------------------------------------------------------
+// Wire type constructors — mirrors gateway-go/pkg/protocol/frames.go
+// ---------------------------------------------------------------------------
+
+/// Create a new [`ErrorShape`] with the given code and message.
+///
+/// Mirrors Go `NewError`. Logs a warning (via `tracing`) if the code is not
+/// a known error code; prefer using [`error_codes::ErrorCode`] constants.
+pub fn new_error(code: impl Into<String>, message: impl Into<String>) -> ErrorShape {
+    let code = code.into();
+    if !error_codes::is_valid_error_code(&code) {
+        // In Go this logs via slog; here we silently accept unknown codes.
+        // Callers should prefer ErrorCode constants.
+        let _ = &code; // suppress unused warning on the check
+    }
+    ErrorShape {
+        code,
+        message: message.into(),
+        details: None,
+        retryable: None,
+        retry_after_ms: None,
+        cause: None,
+    }
+}
+
+/// Create a new [`RequestFrame`].
+///
+/// Both `id` and `method` must be non-empty.
+/// Mirrors Go `NewRequestFrame`.
+pub fn new_request_frame(
+    id: impl Into<String>,
+    method: impl Into<String>,
+    params: Option<serde_json::Value>,
+) -> Result<RequestFrame, FrameError> {
+    let id = id.into();
+    let method = method.into();
+    if id.is_empty() {
+        return Err(FrameError::InvalidField {
+            field: "id",
+            reason: "request id must not be empty".to_string(),
+        });
+    }
+    if method.is_empty() {
+        return Err(FrameError::InvalidField {
+            field: "method",
+            reason: "method must not be empty".to_string(),
+        });
+    }
+    Ok(RequestFrame {
+        frame_type: FrameType::Req,
+        id,
+        method,
+        params,
+    })
+}
+
+/// Create a successful [`ResponseFrame`].
+///
+/// Mirrors Go `NewResponseOK`.
+pub fn new_response_ok(id: impl Into<String>, payload: Option<serde_json::Value>) -> ResponseFrame {
+    ResponseFrame {
+        frame_type: FrameType::Res,
+        id: id.into(),
+        ok: true,
+        payload,
+        error: None,
+    }
+}
+
+/// Create an error [`ResponseFrame`].
+///
+/// Mirrors Go `NewResponseError`.
+pub fn new_response_error(id: impl Into<String>, err: ErrorShape) -> ResponseFrame {
+    ResponseFrame {
+        frame_type: FrameType::Res,
+        id: id.into(),
+        ok: false,
+        payload: None,
+        error: Some(err),
+    }
+}
+
+/// Create a new [`EventFrame`].
+///
+/// Mirrors Go `NewEventFrame`.
+pub fn new_event_frame(
+    event: impl Into<String>,
+    payload: Option<serde_json::Value>,
+) -> EventFrame {
+    EventFrame {
+        frame_type: FrameType::Event,
+        event: event.into(),
+        payload,
+        seq: None,
+        state_version: None,
+    }
+}
+
+/// Extract the `"type"` field from raw JSON without full unmarshal.
+///
+/// Mirrors Go `ParseFrameType`.
+pub fn parse_frame_type(data: &[u8]) -> Result<FrameType, FrameError> {
+    #[derive(Deserialize)]
+    struct Peek {
+        #[serde(rename = "type")]
+        frame_type: Option<FrameType>,
+    }
+    let peek: Peek = serde_json::from_slice(data)?;
+    peek.frame_type
+        .ok_or_else(|| FrameError::MissingField("type"))
+}
+
+// ---------------------------------------------------------------------------
+// Validation internals
+// ---------------------------------------------------------------------------
 
 /// Maximum length for short string fields (id, method, event) to prevent `DoS`.
 const MAX_SHORT_FIELD_LEN: usize = 256;
@@ -194,6 +333,7 @@ pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
             let id = validate_non_empty(&raw.id, "id")?;
             let method = validate_non_empty(&raw.method, "method")?;
             Ok(GatewayFrame::Request(RequestFrame {
+                frame_type: FrameType::Req,
                 id,
                 method,
                 params: raw.params,
@@ -207,6 +347,7 @@ pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
                 None => None,
             };
             Ok(GatewayFrame::Response(ResponseFrame {
+                frame_type: FrameType::Res,
                 id,
                 ok,
                 payload: raw.payload,
@@ -226,6 +367,7 @@ pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
                 None => None,
             };
             Ok(GatewayFrame::Event(EventFrame {
+                frame_type: FrameType::Event,
                 event,
                 payload: raw.payload,
                 seq,

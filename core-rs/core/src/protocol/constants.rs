@@ -65,6 +65,34 @@ pub const EXEC_SECRET_REF_ID_PATTERN: &str =
 
 pub const PROTOCOL_VERSION: u32 = 3;
 
+// ---------------------------------------------------------------------------
+// Network limits — mirrors gateway-go/pkg/protocol/constants.go
+// ---------------------------------------------------------------------------
+
+/// Maximum size of an authenticated message (25 MB).
+pub const MAX_PAYLOAD_BYTES: usize = 25 * 1024 * 1024;
+
+/// Per-connection send buffer limit (50 MB).
+pub const MAX_BUFFERED_BYTES: usize = 50 * 1024 * 1024;
+
+/// Maximum size of a pre-handshake message (64 KB).
+pub const MAX_PRE_AUTH_PAYLOAD_BYTES: usize = 64 * 1024;
+
+/// Default handshake timeout in milliseconds.
+pub const HANDSHAKE_TIMEOUT_MS: u64 = 3_000;
+
+/// Server heartbeat interval in milliseconds.
+pub const TICK_INTERVAL_MS: u64 = 30_000;
+
+/// Health snapshot refresh interval in milliseconds.
+pub const HEALTH_REFRESH_INTERVAL_MS: u64 = 60_000;
+
+/// Idempotency window in milliseconds (5 minutes).
+pub const DEDUPE_TTL_MS: u64 = 5 * 60_000;
+
+/// Maximum number of dedupe entries before cleanup.
+pub const DEDUPE_MAX: usize = 1000;
+
 #[cfg(test)]
 mod tests {
     use super::*;
