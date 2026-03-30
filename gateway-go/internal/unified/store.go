@@ -89,6 +89,9 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 	if err := s.migrateFromLegacy(dir); err != nil {
 		logger.Warn("unified store: legacy migration failed", "error", err)
 	}
+	if err := s.repairMemoryIndex(); err != nil {
+		logger.Warn("unified store: memory index repair failed", "error", err)
+	}
 
 	s.logStats()
 	return s, nil

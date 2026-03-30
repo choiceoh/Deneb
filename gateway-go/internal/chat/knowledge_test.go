@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
@@ -106,6 +107,72 @@ func TestPrefetchKnowledge_NoResults(t *testing.T) {
 
 	if result != "" {
 		t.Errorf("expected empty for no results, got: %q", result)
+	}
+}
+
+func TestPrefetchKnowledge_UnifiedRecallOnly(t *testing.T) {
+	dir := t.TempDir()
+	store, err := unified.New(unified.Config{
+		DatabasePath: filepath.Join(dir, "deneb.db"),
+	}, nil)
+	if err != nil {
+		t.Fatalf("new unified store: %v", err)
+	}
+	defer store.Close()
+
+	_, err = store.DB().Exec(
+		`INSERT INTO messages (message_id, conversation_id, seq, role, content, token_count, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		1, 1, 1, "assistant", "search index repair completed for historical context", 12, time.Now().Add(-2*time.Hour).UnixMilli(),
+	)
+	if err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+
+	result := PrefetchKnowledge(context.Background(), "search index repair", KnowledgeDeps{
+		UnifiedStore: store,
+	})
+
+	if !strings.Contains(result, "대화 기억") {
+		t.Fatalf("expected unified recall section, got: %q", result)
+	}
+	if !strings.Contains(result, "search index repair completed for historical context") {
+		t.Fatalf("expected unified message content, got: %q", result)
+	}
+}
+
+func TestPrefetchKnowledge_StructuredFactsDoNotDuplicateUnifiedFacts(t *testing.T) {
+	dir := t.TempDir()
+	store, err := unified.New(unified.Config{
+		DatabasePath: filepath.Join(dir, "deneb.db"),
+	}, nil)
+	if err != nil {
+		t.Fatalf("new unified store: %v", err)
+	}
+	defer store.Close()
+
+	memStore, err := store.NewMemoryStore()
+	if err != nil {
+		t.Fatalf("new memory store: %v", err)
+	}
+
+	content := "prefer concise code review summaries for follow-ups"
+	if _, err := memStore.InsertFact(context.Background(), memory.Fact{
+		Content:    content,
+		Category:   memory.CategoryPreference,
+		Importance: 0.95,
+		Source:     memory.SourceManual,
+	}); err != nil {
+		t.Fatalf("insert fact: %v", err)
+	}
+
+	result := PrefetchKnowledge(context.Background(), "concise code review summaries", KnowledgeDeps{
+		MemoryStore:  memStore,
+		UnifiedStore: store,
+	})
+
+	if count := strings.Count(result, content); count != 1 {
+		t.Fatalf("expected fact to appear once, got %d in %q", count, result)
 	}
 }
 
@@ -399,7 +466,7 @@ func TestFormatKnowledgeWithFacts_TemporalAnnotation(t *testing.T) {
 			},
 			Score: 0.9,
 		}}
-		result := formatKnowledgeWithFacts(nil, nil, facts)
+		result := formatKnowledgeWithFacts(nil, nil, facts, nil)
 		if !strings.Contains(result, "(3일 전)") {
 			t.Errorf("expected temporal label '(3일 전)', got: %q", result)
 		}
@@ -416,7 +483,7 @@ func TestFormatKnowledgeWithFacts_TemporalAnnotation(t *testing.T) {
 			},
 			Score: 0.8,
 		}}
-		result := formatKnowledgeWithFacts(nil, nil, facts)
+		result := formatKnowledgeWithFacts(nil, nil, facts, nil)
 		if !strings.Contains(result, "갱신:") {
 			t.Errorf("expected created/updated separation, got: %q", result)
 		}
@@ -434,7 +501,7 @@ func TestFormatKnowledgeWithFacts_TemporalAnnotation(t *testing.T) {
 			},
 			Score: 0.7,
 		}}
-		result := formatKnowledgeWithFacts(nil, nil, facts)
+		result := formatKnowledgeWithFacts(nil, nil, facts, nil)
 		if strings.Contains(result, "()") {
 			t.Errorf("should not show empty parens, got: %q", result)
 		}

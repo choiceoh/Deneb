@@ -43,6 +43,64 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id);
 
+-- Keep the unified cross-tier search index in sync with message mutations.
+CREATE TRIGGER IF NOT EXISTS messages_ai_unified_index AFTER INSERT ON messages BEGIN
+	INSERT INTO memory_index (item_type, item_id, tier, importance, created_at, updated_at)
+	VALUES ('message', CAST(new.message_id AS TEXT), 'short', 0.0, new.created_at, NULL)
+	ON CONFLICT(item_type, item_id) DO UPDATE SET
+		tier = excluded.tier,
+		importance = excluded.importance,
+		created_at = excluded.created_at,
+		updated_at = excluded.updated_at;
+	INSERT OR REPLACE INTO memory_fts(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'message' AND item_id = CAST(new.message_id AS TEXT)),
+		new.content
+	);
+	INSERT OR REPLACE INTO memory_fts_trigram(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'message' AND item_id = CAST(new.message_id AS TEXT)),
+		new.content
+	);
+END;
+
+CREATE TRIGGER IF NOT EXISTS messages_au_unified_index AFTER UPDATE OF content, created_at ON messages BEGIN
+	INSERT INTO memory_index (item_type, item_id, tier, importance, created_at, updated_at)
+	VALUES ('message', CAST(new.message_id AS TEXT), 'short', 0.0, new.created_at, NULL)
+	ON CONFLICT(item_type, item_id) DO UPDATE SET
+		tier = excluded.tier,
+		importance = excluded.importance,
+		created_at = excluded.created_at,
+		updated_at = excluded.updated_at;
+	INSERT OR REPLACE INTO memory_fts(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'message' AND item_id = CAST(new.message_id AS TEXT)),
+		new.content
+	);
+	INSERT OR REPLACE INTO memory_fts_trigram(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'message' AND item_id = CAST(new.message_id AS TEXT)),
+		new.content
+	);
+END;
+
+CREATE TRIGGER IF NOT EXISTS messages_ad_unified_index AFTER DELETE ON messages BEGIN
+	INSERT INTO memory_fts(memory_fts, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'message' AND item_id = CAST(old.message_id AS TEXT)),
+		old.content
+	);
+	INSERT INTO memory_fts_trigram(memory_fts_trigram, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'message' AND item_id = CAST(old.message_id AS TEXT)),
+		old.content
+	);
+	DELETE FROM memory_index
+	WHERE item_type = 'message' AND item_id = CAST(old.message_id AS TEXT);
+END;
+
 -- ════════════════════════════════════════════════════════════════════════════
 -- Medium-term: Summaries (compacted context)
 -- ════════════════════════════════════════════════════════════════════════════
@@ -72,6 +130,64 @@ CREATE TABLE IF NOT EXISTS summaries (
 
 CREATE INDEX IF NOT EXISTS idx_sum_conv ON summaries(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_sum_importance ON summaries(importance DESC);
+
+-- Keep the unified cross-tier search index in sync with summary mutations.
+CREATE TRIGGER IF NOT EXISTS summaries_ai_unified_index AFTER INSERT ON summaries BEGIN
+	INSERT INTO memory_index (item_type, item_id, tier, importance, created_at, updated_at)
+	VALUES ('summary', new.summary_id, 'medium', COALESCE(new.importance, 0.3), new.created_at, NULL)
+	ON CONFLICT(item_type, item_id) DO UPDATE SET
+		tier = excluded.tier,
+		importance = excluded.importance,
+		created_at = excluded.created_at,
+		updated_at = excluded.updated_at;
+	INSERT OR REPLACE INTO memory_fts(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'summary' AND item_id = new.summary_id),
+		COALESCE(new.narrative, new.content)
+	);
+	INSERT OR REPLACE INTO memory_fts_trigram(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'summary' AND item_id = new.summary_id),
+		COALESCE(new.narrative, new.content)
+	);
+END;
+
+CREATE TRIGGER IF NOT EXISTS summaries_au_unified_index AFTER UPDATE OF content, narrative, importance, created_at ON summaries BEGIN
+	INSERT INTO memory_index (item_type, item_id, tier, importance, created_at, updated_at)
+	VALUES ('summary', new.summary_id, 'medium', COALESCE(new.importance, 0.3), new.created_at, NULL)
+	ON CONFLICT(item_type, item_id) DO UPDATE SET
+		tier = excluded.tier,
+		importance = excluded.importance,
+		created_at = excluded.created_at,
+		updated_at = excluded.updated_at;
+	INSERT OR REPLACE INTO memory_fts(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'summary' AND item_id = new.summary_id),
+		COALESCE(new.narrative, new.content)
+	);
+	INSERT OR REPLACE INTO memory_fts_trigram(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'summary' AND item_id = new.summary_id),
+		COALESCE(new.narrative, new.content)
+	);
+END;
+
+CREATE TRIGGER IF NOT EXISTS summaries_ad_unified_index AFTER DELETE ON summaries BEGIN
+	INSERT INTO memory_fts(memory_fts, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'summary' AND item_id = old.summary_id),
+		COALESCE(old.narrative, old.content)
+	);
+	INSERT INTO memory_fts_trigram(memory_fts_trigram, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'summary' AND item_id = old.summary_id),
+		COALESCE(old.narrative, old.content)
+	);
+	DELETE FROM memory_index
+	WHERE item_type = 'summary' AND item_id = old.summary_id;
+END;
 
 -- Summary DAG relationships.
 CREATE TABLE IF NOT EXISTS summary_parents (
@@ -158,6 +274,117 @@ CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE OF content, category ON facts
 	INSERT INTO facts_fts(rowid, content, category) VALUES (new.id, new.content, new.category);
 	INSERT INTO facts_fts_trigram(facts_fts_trigram, rowid, content) VALUES ('delete', old.id, old.content);
 	INSERT INTO facts_fts_trigram(rowid, content) VALUES (new.id, new.content);
+END;
+
+-- Keep the unified cross-tier search index in sync with fact mutations.
+CREATE TRIGGER IF NOT EXISTS facts_ai_unified_index AFTER INSERT ON facts
+WHEN new.active = 1 BEGIN
+	INSERT INTO memory_index (item_type, item_id, tier, importance, created_at, updated_at)
+	VALUES (
+		'fact',
+		CAST(new.id AS TEXT),
+		'long',
+		new.importance,
+		COALESCE(
+			CASE
+				WHEN new.created_at GLOB '[0-9]*' THEN CAST(new.created_at AS INTEGER)
+				WHEN strftime('%s', new.created_at) IS NOT NULL THEN CAST(strftime('%s', new.created_at) AS INTEGER) * 1000
+			END,
+			CAST(strftime('%s', 'now') AS INTEGER) * 1000
+		),
+		CASE
+			WHEN new.updated_at GLOB '[0-9]*' THEN CAST(new.updated_at AS INTEGER)
+			WHEN strftime('%s', new.updated_at) IS NOT NULL THEN CAST(strftime('%s', new.updated_at) AS INTEGER) * 1000
+		END
+	)
+	ON CONFLICT(item_type, item_id) DO UPDATE SET
+		tier = excluded.tier,
+		importance = excluded.importance,
+		created_at = excluded.created_at,
+		updated_at = excluded.updated_at;
+	INSERT OR REPLACE INTO memory_fts(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(new.id AS TEXT)),
+		new.content
+	);
+	INSERT OR REPLACE INTO memory_fts_trigram(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(new.id AS TEXT)),
+		new.content
+	);
+END;
+
+CREATE TRIGGER IF NOT EXISTS facts_au_unified_index AFTER UPDATE OF content, importance, created_at, updated_at, active ON facts
+WHEN new.active = 1 BEGIN
+	INSERT INTO memory_index (item_type, item_id, tier, importance, created_at, updated_at)
+	VALUES (
+		'fact',
+		CAST(new.id AS TEXT),
+		'long',
+		new.importance,
+		COALESCE(
+			CASE
+				WHEN new.created_at GLOB '[0-9]*' THEN CAST(new.created_at AS INTEGER)
+				WHEN strftime('%s', new.created_at) IS NOT NULL THEN CAST(strftime('%s', new.created_at) AS INTEGER) * 1000
+			END,
+			CAST(strftime('%s', 'now') AS INTEGER) * 1000
+		),
+		CASE
+			WHEN new.updated_at GLOB '[0-9]*' THEN CAST(new.updated_at AS INTEGER)
+			WHEN strftime('%s', new.updated_at) IS NOT NULL THEN CAST(strftime('%s', new.updated_at) AS INTEGER) * 1000
+		END
+	)
+	ON CONFLICT(item_type, item_id) DO UPDATE SET
+		tier = excluded.tier,
+		importance = excluded.importance,
+		created_at = excluded.created_at,
+		updated_at = excluded.updated_at;
+	INSERT OR REPLACE INTO memory_fts(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(new.id AS TEXT)),
+		new.content
+	);
+	INSERT OR REPLACE INTO memory_fts_trigram(rowid, content)
+	VALUES (
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(new.id AS TEXT)),
+		new.content
+	);
+END;
+
+CREATE TRIGGER IF NOT EXISTS facts_au_unified_delete AFTER UPDATE OF active ON facts
+WHEN old.active = 1 AND new.active <> 1 BEGIN
+	INSERT INTO memory_fts(memory_fts, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(old.id AS TEXT)),
+		old.content
+	);
+	INSERT INTO memory_fts_trigram(memory_fts_trigram, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(old.id AS TEXT)),
+		old.content
+	);
+	DELETE FROM memory_index
+	WHERE item_type = 'fact' AND item_id = CAST(old.id AS TEXT);
+END;
+
+CREATE TRIGGER IF NOT EXISTS facts_ad_unified_index AFTER DELETE ON facts
+WHEN old.active = 1 BEGIN
+	INSERT INTO memory_fts(memory_fts, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(old.id AS TEXT)),
+		old.content
+	);
+	INSERT INTO memory_fts_trigram(memory_fts_trigram, rowid, content)
+	VALUES (
+		'delete',
+		(SELECT id FROM memory_index WHERE item_type = 'fact' AND item_id = CAST(old.id AS TEXT)),
+		old.content
+	);
+	DELETE FROM memory_index
+	WHERE item_type = 'fact' AND item_id = CAST(old.id AS TEXT);
 END;
 
 -- Fact embeddings (vector storage for semantic search).
