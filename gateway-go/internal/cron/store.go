@@ -1,13 +1,13 @@
 package cron
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 // DefaultCronDir is the default directory for cron data.
@@ -139,52 +139,13 @@ func (s *Store) Save(store *CronStoreFile) error {
 		return nil
 	}
 
-	// Ensure directory exists with restricted permissions.
-	storeDir := filepath.Dir(s.path)
-	if err := os.MkdirAll(storeDir, 0o700); err != nil {
-		return fmt.Errorf("create cron store dir: %w", err)
-	}
-
-	// Write to temp file first, then rename for atomicity.
-	randBytes := make([]byte, 8)
-	rand.Read(randBytes)
-	tmp := fmt.Sprintf("%s.%d.%s.tmp", s.path, os.Getpid(), hex.EncodeToString(randBytes))
-
-	// Write and fsync the temp file before renaming so the data is durable
-	// even if the process crashes between write and rename.
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("create cron store temp: %w", err)
-	}
-	if _, err := f.Write(serialized); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return fmt.Errorf("write cron store temp: %w", err)
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return fmt.Errorf("fsync cron store temp: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("close cron store temp: %w", err)
-	}
-
-	// Backup existing file (best-effort).
-	if s.cachedJSON != "" {
-		backupPath := s.path + ".bak"
-		_ = copyFile(s.path, backupPath)
-	}
-
-	// Atomic rename. The temp file is in the same directory as s.path so
-	// this is always an intra-filesystem rename on Linux (POSIX-atomic).
-	// The non-atomic copy fallback is intentionally removed: if os.Rename
-	// fails on the same filesystem it indicates a real OS error that the
-	// caller should surface rather than silently writing a partial file.
-	if err := os.Rename(tmp, s.path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename cron store: %w", err)
+	if err := atomicfile.WriteFile(s.path, serialized, &atomicfile.Options{
+		Perm:    0o600,
+		DirPerm: 0o700,
+		Fsync:   true,
+		Backup:  s.cachedJSON != "",
+	}); err != nil {
+		return fmt.Errorf("save cron store: %w", err)
 	}
 
 	s.cached = store
@@ -260,12 +221,4 @@ func (s *Store) UpdateJobState(id string, state JobState) error {
 		}
 	}
 	return fmt.Errorf("job %q not found", id)
-}
-
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o600)
 }

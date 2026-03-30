@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 const (
@@ -131,21 +133,7 @@ func (ts *ThreadStore) save() {
 		return
 	}
 
-	// Ensure directory exists.
-	dir := filepath.Dir(ts.filePath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		ts.logger.Warn("discord: failed to create thread store dir", "dir", dir, "error", err)
-		return
-	}
-
-	// Atomic write: temp file + rename.
-	tmpPath := ts.filePath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
-		ts.logger.Warn("discord: failed to write thread store", "path", tmpPath, "error", err)
-		return
-	}
-	if err := os.Rename(tmpPath, ts.filePath); err != nil {
-		ts.logger.Warn("discord: failed to rename thread store", "error", err)
-		os.Remove(tmpPath)
+	if err := atomicfile.WriteFile(ts.filePath, data, nil); err != nil {
+		ts.logger.Warn("discord: failed to save thread store", "error", err)
 	}
 }
