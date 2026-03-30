@@ -49,7 +49,9 @@ var toolNameKorean = map[string]string{
 	"image":       "이미지 분석",
 	"gmail":       "Gmail",
 	"cron":        "예약 작업",
+	"memory":        "메모리",
 	"memory_search": "메모리 검색",
+	"memory":       "메모리",
 	"health_check":  "상태 점검",
 }
 

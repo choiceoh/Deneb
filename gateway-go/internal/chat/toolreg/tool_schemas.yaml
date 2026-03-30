@@ -587,11 +587,51 @@
 # Memory / search tools
 # ---------------------------------------------------------------------------
 
+- name: memory
+  properties:
+    action:
+      type: string
+      enum:
+        - search
+        - get
+        - set
+        - forget
+        - status
+      description: "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), status (memory stats)"
+    query:
+      type: string
+      description: "Search query (for search action) or fact content (for set action)"
+    fact_id:
+      type: integer
+      description: "Fact ID (for get/forget actions)"
+    category:
+      type: string
+      enum:
+        - decision
+        - preference
+        - solution
+        - context
+        - user_model
+        - mutual
+      description: "Category filter (search) or category assignment (set)"
+    importance:
+      type: number
+      description: "Importance score 0.0-1.0 (for set action, default: 0.5)"
+      minimum: 0
+      maximum: 1
+    limit:
+      type: integer
+      description: "Max results to return (search action, default: 10)"
+      minimum: 1
+      maximum: 50
+  required:
+    - action
+
 - name: memory_search
   properties:
     query:
       type: string
-      description: Search query for memory files
+      description: "Search query for memory files (deprecated: use memory action=search)"
   required:
     - query
 

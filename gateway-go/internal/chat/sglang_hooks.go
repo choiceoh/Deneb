@@ -135,6 +135,7 @@ var toolCompressSkipSet = map[string]bool{
 	"diff":    true,
 	// Internal / already-small tools.
 	"pilot":         true,
+	"memory":        true,
 	"memory_search": true,
 	"kv":            true,
 	"sessions_list": true,

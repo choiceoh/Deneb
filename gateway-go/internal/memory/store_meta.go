@@ -84,6 +84,27 @@ func (s *Store) InsertDreamingLog(ctx context.Context, entry DreamingLogEntry) e
 	return err
 }
 
+// LastDreamingLog returns the most recent dreaming log entry, or nil if none exist.
+func (s *Store) LastDreamingLog(ctx context.Context) (*DreamingLogEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var e DreamingLogEntry
+	var ranAt string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms
+		 FROM dreaming_log ORDER BY id DESC LIMIT 1`,
+	).Scan(&e.ID, &ranAt, &e.FactsVerified, &e.FactsMerged, &e.FactsExpired, &e.FactsPruned, &e.PatternsExtracted, &e.DurationMs)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	e.RanAt, _ = time.Parse(time.RFC3339, ranAt)
+	return &e, nil
+}
+
 // ── Metadata ─────────────────────────────────────────────────────────────────
 
 // GetMeta retrieves a metadata value.

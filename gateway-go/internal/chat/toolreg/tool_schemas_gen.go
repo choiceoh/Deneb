@@ -667,13 +667,52 @@ func httpToolSchema() map[string]any {
 	}
 }
 
+func memoryToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"enum":        []string{"search", "get", "set", "forget", "status"},
+				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), status (memory stats)",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search query (for search action) or fact content (for set action)",
+			},
+			"fact_id": map[string]any{
+				"type":        "integer",
+				"description": "Fact ID (for get/forget actions)",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"enum":        []string{"decision", "preference", "solution", "context", "user_model", "mutual"},
+				"description": "Category filter (search) or category assignment (set)",
+			},
+			"importance": map[string]any{
+				"type":        "number",
+				"description": "Importance score 0.0-1.0 (for set action, default: 0.5)",
+				"minimum":     0,
+				"maximum":     1,
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "Max results to return (search action, default: 10)",
+				"minimum":     1,
+				"maximum":     50,
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func memorySearchToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query for memory files",
+				"description": "Search query for memory files (deprecated: use memory action=search)",
 			},
 		},
 		"required": []string{"query"},
