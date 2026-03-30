@@ -191,7 +191,8 @@ func executeAgentRun(
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
 			UserTimezone: tz,
-			ContextFiles: prompt.LoadContextFiles(workspaceDir, memoryContextOpts(deps)...),
+			ContextFiles: prompt.LoadContextFiles(workspaceDir,
+			append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
 			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:      deliveryChannel(params.Delivery),
 		}

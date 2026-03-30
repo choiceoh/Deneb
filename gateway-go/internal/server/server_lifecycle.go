@@ -238,6 +238,9 @@ func (s *Server) doShutdown() error {
 	if s.acpLifecycleUnsub != nil {
 		s.acpLifecycleUnsub()
 	}
+	if s.snapshotLifecycleUnsub != nil {
+		s.snapshotLifecycleUnsub()
+	}
 
 	return httpErr
 }

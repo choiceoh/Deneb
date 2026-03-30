@@ -76,6 +76,65 @@ func TestFormatContextFilesForPrompt(t *testing.T) {
 	}
 }
 
+func TestSessionSnapshotFrozen(t *testing.T) {
+	ResetContextFileCacheForTest()
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("fact-v1"), 0o644)
+
+	// First load with session key — populates snapshot.
+	files := LoadContextFiles(dir, WithSessionSnapshot("s1"))
+	if len(files) != 1 || files[0].Content != "fact-v1" {
+		t.Fatalf("expected MEMORY.md with fact-v1, got %v", files)
+	}
+
+	// Mutate file on disk (simulates mid-session memory export).
+	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("fact-v2"), 0o644)
+
+	// Same session key — must return frozen snapshot (fact-v1).
+	files = LoadContextFiles(dir, WithSessionSnapshot("s1"))
+	if len(files) != 1 || files[0].Content != "fact-v1" {
+		t.Fatalf("expected frozen snapshot fact-v1, got %q", files[0].Content)
+	}
+
+	// Different session key — gets fresh content.
+	ResetContextFileCacheForTest() // clear mtime cache to force re-read
+	files = LoadContextFiles(dir, WithSessionSnapshot("s2"))
+	if len(files) != 1 || files[0].Content != "fact-v2" {
+		t.Fatalf("expected fresh fact-v2 for new session, got %q", files[0].Content)
+	}
+
+	// Clear snapshot — next call for s1 loads fresh.
+	ClearSessionSnapshot("s1")
+	ResetContextFileCacheForTest()
+	files = LoadContextFiles(dir, WithSessionSnapshot("s1"))
+	if len(files) != 1 || files[0].Content != "fact-v2" {
+		t.Fatalf("expected fresh fact-v2 after clear, got %q", files[0].Content)
+	}
+}
+
+func TestSessionSnapshotWithSkipMemory(t *testing.T) {
+	ResetContextFileCacheForTest()
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("agent"), 0o644)
+	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("facts"), 0o644)
+
+	// Load with session key (no skip) — snapshot stores both files.
+	files := LoadContextFiles(dir, WithSessionSnapshot("s3"))
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+
+	// Load with same session key + skipMemory — returns snapshot minus MEMORY.md.
+	files = LoadContextFiles(dir, WithSessionSnapshot("s3"), WithSkipMemory())
+	if len(files) != 1 || files[0].Path != "CLAUDE.md" {
+		t.Fatalf("expected only CLAUDE.md with skipMemory, got %v", files)
+	}
+
+	ClearSessionSnapshot("s3")
+}
+
 func TestFormatContextFilesForPrompt_NoSoul(t *testing.T) {
 	files := []ContextFile{
 		{Path: "CLAUDE.md", Content: "agent content"},

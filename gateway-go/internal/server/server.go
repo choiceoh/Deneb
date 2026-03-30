@@ -23,6 +23,7 @@ import (
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -72,8 +73,9 @@ type ServerRPC struct {
 	providers         *provider.Registry
 	authManager       *provider.AuthManager
 	authRateLimiter   *auth.AuthRateLimiter
-	acpDeps           *handlerprocess.ACPDeps
-	acpLifecycleUnsub func()
+	acpDeps                *handlerprocess.ACPDeps
+	acpLifecycleUnsub      func()
+	snapshotLifecycleUnsub func()
 }
 
 // ServerRuntime owns long-running runtime health/activity trackers.
@@ -306,6 +308,14 @@ func New(addr string, opts ...Option) *Server {
 		s.logger.Warn("failed to restore ACP bindings", "error", err)
 	}
 	s.acpLifecycleUnsub = acp.StartACPLifecycleSync(acpRegistry, s.sessions.EventBusRef())
+
+	// Clear frozen context snapshots when sessions are evicted or deleted,
+	// preventing stale snapshot accumulation in long-running gateways.
+	s.snapshotLifecycleUnsub = s.sessions.EventBusRef().Subscribe(func(e session.Event) {
+		if e.Kind == session.EventDeleted {
+			prompt.ClearSessionSnapshot(e.Key)
+		}
+	})
 	s.acpDeps = &handlerprocess.ACPDeps{
 		Registry:     acpRegistry,
 		Bindings:     acpBindings,
