@@ -245,9 +245,10 @@ func executeAgentRun(
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
-	// 6. Non-blocking check for proactive context hint.
-	// The goroutine runs concurrently with the parallel prep above; if it finished
-	// in time the hint is injected, otherwise we skip it to avoid stalling the run.
+	// 6. Bounded wait for proactive context hint.
+	// The goroutine runs concurrently with the parallel prep above; after prep
+	// completes we wait briefly to improve hit-rate without adding noticeable
+	// latency. If still not ready, skip it to avoid stalling the run.
 	// Hit rate is logged here to inform future tuning decisions.
 	var proactiveHint string
 	select {
@@ -259,7 +260,21 @@ func executeAgentRun(
 			logger.Debug("proactive context miss (N/A or filtered)")
 		}
 	default:
-		logger.Debug("proactive context not ready, skipping (fire-and-forget)")
+		const proactiveGraceWait = 120 * time.Millisecond
+		select {
+		case proactive := <-proactiveCh:
+			if proactive.hint != "" {
+				logger.Info("proactive context hit (after grace wait)",
+					"chars", len(proactive.hint),
+					"waitMs", proactiveGraceWait.Milliseconds())
+				proactiveHint = "\n## Context Hint (from local analysis)\n" + proactive.hint
+			} else {
+				logger.Debug("proactive context miss (N/A or filtered)")
+			}
+		case <-time.After(proactiveGraceWait):
+			logger.Debug("proactive context not ready, skipping (fire-and-forget)",
+				"graceWaitMs", proactiveGraceWait.Milliseconds())
+		}
 	}
 
 	// 7. Append knowledge, proactive hint, and Aurora systemAddition to the built system prompt.
