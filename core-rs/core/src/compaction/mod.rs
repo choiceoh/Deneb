@@ -14,9 +14,9 @@ pub mod napi;
 pub mod sweep;
 pub mod timestamp;
 
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use rustc_hash::FxHashMap;
 use thiserror::Error;
 
 /// Errors that can occur during compaction operations.
