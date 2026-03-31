@@ -185,6 +185,18 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 		memory.Append(AgentMessage{Role: "user", Content: cfg.Message})
 	}
 
+	// Pre-compaction memory flush: persist conversation history before trimming.
+	if ShouldRunMemoryFlush(ShouldRunMemoryFlushParams{
+		TotalTokens:         memory.UsedTokens(),
+		ContextWindowTokens: memory.maxTokens,
+	}) {
+		flush := BuildMemoryFlush(memory, cfg.SessionKey, cfg.AgentID, session.TokenUsage{})
+		r.logger.Info("pre-compaction memory flush",
+			"sessionKey", flush.SessionKey,
+			"messages", len(flush.Messages),
+			"ts", flush.Timestamp)
+	}
+
 	// Auto-compact if we're already over budget before the run starts.
 	if memory.UsedTokens() > memory.maxTokens*8/10 {
 		if removed := memory.Compact(); removed > 0 {
