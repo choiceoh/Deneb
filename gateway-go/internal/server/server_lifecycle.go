@@ -124,7 +124,8 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	// Create the run state machine to track active agent runs.
 	s.runStateMachine = channel.NewRunStateMachine(ctx, func(patch channel.StatusPatch) {
-		if s.snapshotStore != nil && patch.ActiveRuns != nil {
+		// Skip logging for periodic heartbeat ticks — only log real transitions.
+		if s.snapshotStore != nil && patch.ActiveRuns != nil && !patch.Heartbeat {
 			s.logger.Debug("run state changed", "activeRuns", *patch.ActiveRuns)
 		}
 	}, 30*time.Second)

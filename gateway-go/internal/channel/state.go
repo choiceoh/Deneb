@@ -12,6 +12,10 @@ type StatusPatch struct {
 	Busy              *bool  `json:"busy,omitempty"`
 	ActiveRuns        *int   `json:"activeRuns,omitempty"`
 	LastRunActivityAt *int64 `json:"lastRunActivityAt,omitempty"`
+	// Heartbeat is true when the patch originates from a periodic tick rather
+	// than an actual state transition. Sinks can use this to suppress noisy
+	// no-op log entries.
+	Heartbeat bool `json:"heartbeat,omitempty"`
 }
 
 // StatusSink is a callback for run state changes.
@@ -109,7 +113,7 @@ func (sm *RunStateMachine) heartbeatLoop(ctx context.Context) {
 			active := sm.active
 			sm.mu.Unlock()
 			busy := active > 0
-			sm.sink(StatusPatch{Busy: &busy, ActiveRuns: &active})
+			sm.sink(StatusPatch{Busy: &busy, ActiveRuns: &active, Heartbeat: true})
 		}
 	}
 }
