@@ -169,6 +169,13 @@ func handleRunSuccess(
 		}
 	}
 
+	// Store last output on the session so cron and other consumers can read it.
+	if result.Text != "" {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+			sess.LastOutput = result.Text
+		}
+	}
+
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 

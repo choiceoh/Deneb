@@ -375,6 +375,16 @@ func executeAgentRun(
 		// By the time turn 0 completes (LLM stream + tool exec), the goroutine
 		// launched at step 4 has had several seconds to finish.
 		DeferredSystemText: deferredProactiveHint(proactiveCh, proactiveStart, logger),
+		// Emit heartbeat at each turn so WS clients know the agent is alive.
+		OnTurn: func(turn int, accumulatedTokens int) {
+			if deps.emitAgentFn != nil {
+				deps.emitAgentFn("heartbeat", params.SessionKey, params.ClientRunID, map[string]any{
+					"turn":   turn,
+					"tokens": accumulatedTokens,
+					"ts":     time.Now().UnixMilli(),
+				})
+			}
+		},
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
 		// RunCache is injected once and persists across turns.

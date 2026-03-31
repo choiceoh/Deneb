@@ -299,6 +299,36 @@ func New(addr string, opts ...Option) *Server {
 		}, nil, s.logger) // agent runner wired later during chat handler setup
 	}
 	s.hooks = hooks.NewRegistry(s.logger)
+	// Load user-defined hooks from config so they fire on gateway events.
+	if s.runtimeCfg != nil && s.runtimeCfg.Gateway.Hooks != nil {
+		for _, entry := range s.runtimeCfg.Gateway.Hooks.Entries {
+			enabled := true
+			if entry.Enabled != nil {
+				enabled = *entry.Enabled
+			}
+			timeoutMs := int64(30000)
+			if entry.TimeoutMs != nil {
+				timeoutMs = int64(*entry.TimeoutMs)
+			}
+			blocking := false
+			if entry.Blocking != nil {
+				blocking = *entry.Blocking
+			}
+			if err := s.hooks.Register(hooks.Hook{
+				ID:        entry.ID,
+				Event:     hooks.Event(entry.Event),
+				Command:   entry.Command,
+				TimeoutMs: timeoutMs,
+				Blocking:  blocking,
+				Enabled:   enabled,
+			}); err != nil {
+				s.logger.Warn("failed to register hook", "id", entry.ID, "error", err)
+			}
+		}
+		if len(s.runtimeCfg.Gateway.Hooks.Entries) > 0 {
+			s.logger.Info("loaded user-defined hooks from config", "count", len(s.runtimeCfg.Gateway.Hooks.Entries))
+		}
+	}
 	s.internalHooks = hooks.NewInternalRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
 	s.snapshotStore = channel.NewSnapshotStore()
