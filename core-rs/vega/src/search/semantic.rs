@@ -179,7 +179,10 @@ fn blob_to_f32_vec(blob: &[u8]) -> Vec<f32> {
 }
 
 /// Dot product of two f32 vectors (cosine similarity for L2-normalized vectors).
-/// SIMD-optimized: uses NEON on aarch64, SSE on x86_64, scalar fallback otherwise.
+///
+/// On aarch64 (production), uses NEON 128-bit FMA processing 4 f32 per iteration.
+/// Scalar fallback on other architectures (CI).
+#[allow(unsafe_code)]
 fn dot_product_simd(a: &[f32], b: &[f32]) -> f64 {
     let len = a.len().min(b.len());
     if len == 0 {
@@ -188,55 +191,42 @@ fn dot_product_simd(a: &[f32], b: &[f32]) -> f64 {
 
     #[cfg(target_arch = "aarch64")]
     {
-        dot_product_neon(&a[..len], &b[..len])
+        use std::arch::aarch64::*;
+
+        let chunks = len / 4;
+        let remainder = len % 4;
+
+        // SAFETY: NEON is always available on aarch64.
+        unsafe {
+            let mut acc = vdupq_n_f32(0.0);
+
+            for i in 0..chunks {
+                let offset = i * 4;
+                let va = vld1q_f32(a.as_ptr().add(offset));
+                let vb = vld1q_f32(b.as_ptr().add(offset));
+                acc = vfmaq_f32(acc, va, vb);
+            }
+
+            let mut sum = vaddvq_f32(acc) as f64;
+
+            // Scalar tail for remaining elements.
+            let tail_start = chunks * 4;
+            for i in 0..remainder {
+                sum += a[tail_start + i] as f64 * b[tail_start + i] as f64;
+            }
+
+            sum
+        }
     }
 
     #[cfg(not(target_arch = "aarch64"))]
     {
-        dot_product_scalar(&a[..len], &b[..len])
+        a[..len]
+            .iter()
+            .zip(b[..len].iter())
+            .map(|(&x, &y)| x as f64 * y as f64)
+            .sum()
     }
-}
-
-/// NEON-accelerated f32 dot product for aarch64.
-/// Processes 4 f32 elements per iteration using 128-bit NEON registers.
-#[cfg(target_arch = "aarch64")]
-#[allow(unsafe_code)]
-fn dot_product_neon(a: &[f32], b: &[f32]) -> f64 {
-    use std::arch::aarch64::*;
-
-    let len = a.len();
-    let chunks = len / 4;
-    let remainder = len % 4;
-
-    // SAFETY: NEON is always available on aarch64.
-    unsafe {
-        let mut acc = vdupq_n_f32(0.0);
-
-        for i in 0..chunks {
-            let offset = i * 4;
-            let va = vld1q_f32(a.as_ptr().add(offset));
-            let vb = vld1q_f32(b.as_ptr().add(offset));
-            acc = vfmaq_f32(acc, va, vb);
-        }
-
-        let mut sum = vaddvq_f32(acc) as f64;
-
-        // Scalar tail for remaining elements.
-        let tail_start = chunks * 4;
-        for i in 0..remainder {
-            sum += a[tail_start + i] as f64 * b[tail_start + i] as f64;
-        }
-
-        sum
-    }
-}
-
-/// Scalar f32 dot product fallback.
-fn dot_product_scalar(a: &[f32], b: &[f32]) -> f64 {
-    a.iter()
-        .zip(b.iter())
-        .map(|(&x, &y)| x as f64 * y as f64)
-        .sum()
 }
 
 #[cfg(test)]
