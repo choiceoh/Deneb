@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -95,11 +96,10 @@ func ToolMultiEdit(defaultDir string) ToolFunc {
 			successCount++
 		}
 
-		// Write all modified files back to disk.
+		// Write all modified files back to disk atomically (flock + tmp + rename).
 		writtenFiles := make(map[string]bool)
 		for path, content := range fileCache {
-			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-				// Find the display name for error reporting.
+			if err := atomicfile.WriteFile(path, []byte(content), nil); err != nil {
 				results = append(results, fmt.Sprintf("WRITE FAIL %s: %v", path, err))
 				failCount++
 				successCount-- // undo the OK count

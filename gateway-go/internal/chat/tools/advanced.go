@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -19,9 +20,10 @@ import (
 // batch_read — Read multiple files in one call
 // ---------------------------------------------------------------------------
 
-// ToolBatchRead reads up to 20 files in a single call.
+// ToolBatchRead reads up to 20 files in a single call using parallel I/O.
 // Each file supports the same options as the read tool (offset, limit, function).
 // Per-file errors are reported inline without aborting the entire batch.
+// Results are reassembled in the original request order.
 func ToolBatchRead(defaultDir string) ToolFunc {
 	readFn := ToolRead(defaultDir)
 
@@ -41,33 +43,52 @@ func ToolBatchRead(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("files is required and must not be empty")
 		}
 
+		type fileResult struct {
+			output string
+			err    error
+		}
+
+		n := len(p.Files)
+		results := make([]fileResult, n)
+
+		// Read all files concurrently — file I/O benefits from parallelism.
+		var wg sync.WaitGroup
+		wg.Add(n)
+		for i, f := range p.Files {
+			go func(idx int, f struct {
+				FilePath string `json:"file_path"`
+				Offset   int    `json:"offset"`
+				Limit    int    `json:"limit"`
+				Function string `json:"function"`
+			}) {
+				defer wg.Done()
+				fileInput, _ := json.Marshal(map[string]any{
+					"file_path": f.FilePath,
+					"offset":    f.Offset,
+					"limit":     f.Limit,
+					"function":  f.Function,
+				})
+				results[idx].output, results[idx].err = readFn(ctx, fileInput)
+			}(i, f)
+		}
+		wg.Wait()
+
+		// Reassemble in original order.
 		var sb strings.Builder
 		successCount := 0
-
-		for i, f := range p.Files {
+		for i, r := range results {
 			if i > 0 {
 				sb.WriteString("\n---\n\n")
 			}
-
-			// Marshal individual file request to reuse the read tool.
-			fileInput, _ := json.Marshal(map[string]any{
-				"file_path": f.FilePath,
-				"offset":    f.Offset,
-				"limit":     f.Limit,
-				"function":  f.Function,
-			})
-
-			result, err := readFn(ctx, fileInput)
-			if err != nil {
-				fmt.Fprintf(&sb, "[Error reading %s: %s]\n", f.FilePath, err.Error())
+			if r.err != nil {
+				fmt.Fprintf(&sb, "[Error reading %s: %s]\n", p.Files[i].FilePath, r.err.Error())
 				continue
 			}
-
-			sb.WriteString(result)
+			sb.WriteString(r.output)
 			successCount++
 		}
 
-		fmt.Fprintf(&sb, "\n---\n[batch_read: %d/%d files read successfully]\n", successCount, len(p.Files))
+		fmt.Fprintf(&sb, "\n---\n[batch_read: %d/%d files read successfully]\n", successCount, n)
 		return sb.String(), nil
 	}
 }

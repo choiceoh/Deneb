@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,13 +41,13 @@ func ToolRead(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("failed to read file: %w", err)
 		}
 
-		// Function extraction mode.
+		// Function extraction mode — needs the full content as string.
 		if p.Function != "" {
 			return readFunction(path, p.FilePath, string(data), p.Function)
 		}
 
-		lines := strings.Split(string(data), "\n")
-		totalLines := len(lines)
+		// Count total lines cheaply (byte scan, no allocation).
+		totalLines := bytes.Count(data, []byte{'\n'}) + 1
 
 		// Apply offset (1-based).
 		start := 0
@@ -66,11 +68,21 @@ func ToolRead(defaultDir string) ToolFunc {
 			end = totalLines
 		}
 
-		// Format with line numbers (cat -n style) and file metadata.
+		// Stream through the byte slice, materializing only the lines in range.
+		// This avoids strings.Split() which allocates a string per line.
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "[File: %s | %d lines]\n", p.FilePath, totalLines)
-		for i := start; i < end; i++ {
-			fmt.Fprintf(&sb, "%d\t%s\n", i+1, lines[i])
+		scanner := bufio.NewScanner(bytes.NewReader(data))
+		scanner.Buffer(nil, bufio.MaxScanTokenSize)
+		lineNum := 0
+		for scanner.Scan() {
+			if lineNum >= end {
+				break
+			}
+			if lineNum >= start {
+				fmt.Fprintf(&sb, "%d\t%s\n", lineNum+1, scanner.Text())
+			}
+			lineNum++
 		}
 		if end < totalLines {
 			fmt.Fprintf(&sb, "[... %d more lines. Use offset=%d to continue reading.]\n", totalLines-end, end+1)
