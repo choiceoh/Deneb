@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -27,7 +26,6 @@ func testLogger() *slog.Logger {
 func testDeps() Deps {
 	return Deps{
 		Sessions: session.NewManager(),
-		Channels: channel.NewRegistry(),
 	}
 }
 
@@ -259,7 +257,7 @@ func TestSessionsDelete(t *testing.T) {
 	sm.Set(&session.Session{Key: "test-1", Kind: session.KindDirect})
 
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm, Channels: channel.NewRegistry()})
+	RegisterBuiltinMethods(d, Deps{Sessions: sm})
 
 	resp := dispatch(t, d, "sessions.delete", map[string]string{"key": "test-1"})
 	if !resp.OK {
@@ -275,7 +273,7 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 	sm.Set(&session.Session{Key: "run-1", Kind: session.KindDirect, Status: session.StatusRunning})
 
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm, Channels: channel.NewRegistry()})
+	RegisterBuiltinMethods(d, Deps{Sessions: sm})
 
 	// Without force: should be rejected.
 	resp := dispatch(t, d, "sessions.delete", map[string]any{"key": "run-1"})
@@ -479,7 +477,7 @@ func TestSessionsList(t *testing.T) {
 	sm.Set(&session.Session{Key: "s2", Kind: session.KindGroup})
 
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm, Channels: channel.NewRegistry()})
+	RegisterBuiltinMethods(d, Deps{Sessions: sm})
 
 	resp := dispatch(t, d, "sessions.list", nil)
 	if !resp.OK {

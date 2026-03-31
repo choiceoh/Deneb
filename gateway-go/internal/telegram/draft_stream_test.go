@@ -1,4 +1,4 @@
-package channel
+package telegram
 
 import (
 	"sync"
@@ -10,7 +10,7 @@ func TestDraftStreamLoop_ImmediateFlush(t *testing.T) {
 	var mu sync.Mutex
 	var sent []string
 
-	loop := NewDraftStreamLoop(0, func() bool { return false }, func(text string) (bool, error) {
+	loop := NewDraftStreamLoop(0, func(text string) (bool, error) {
 		mu.Lock()
 		sent = append(sent, text)
 		mu.Unlock()
@@ -35,7 +35,7 @@ func TestDraftStreamLoop_Throttled(t *testing.T) {
 	var mu sync.Mutex
 	var sent []string
 
-	loop := NewDraftStreamLoop(100, func() bool { return false }, func(text string) (bool, error) {
+	loop := NewDraftStreamLoop(100, func(text string) (bool, error) {
 		mu.Lock()
 		sent = append(sent, text)
 		mu.Unlock()
@@ -60,32 +60,23 @@ func TestDraftStreamLoop_Throttled(t *testing.T) {
 }
 
 func TestDraftStreamLoop_Stop(t *testing.T) {
-	var mu sync.Mutex
-	var sent []string
-
-	loop := NewDraftStreamLoop(50, func() bool { return false }, func(text string) (bool, error) {
-		mu.Lock()
-		sent = append(sent, text)
-		mu.Unlock()
+	loop := NewDraftStreamLoop(50, func(text string) (bool, error) {
 		return true, nil
 	})
 
 	loop.Update("hello")
 	loop.Stop()
 
+	// After stop, further updates are no-ops.
+	loop.Update("ignored")
 	time.Sleep(100 * time.Millisecond)
-
-	mu.Lock()
-	// After stop, pending should be cleared.
-	// The first update may or may not have been sent depending on timing.
-	mu.Unlock()
 }
 
 func TestDraftStreamLoop_FlushSendsPending(t *testing.T) {
 	var mu sync.Mutex
 	var sent []string
 
-	loop := NewDraftStreamLoop(500, func() bool { return false }, func(text string) (bool, error) {
+	loop := NewDraftStreamLoop(500, func(text string) (bool, error) {
 		mu.Lock()
 		sent = append(sent, text)
 		mu.Unlock()
@@ -109,23 +100,20 @@ func TestDraftStreamLoop_FlushSendsPending(t *testing.T) {
 	}
 }
 
-func TestFinalizableDraftStreamControls_UpdateAndStop(t *testing.T) {
+func TestDraftStreamLoop_FinalizeFlushesAndStops(t *testing.T) {
 	var mu sync.Mutex
 	var sent []string
 
-	c := NewFinalizableDraftStreamControls(FinalizableDraftParams{
-		ThrottleMs: 0,
-		SendOrEdit: func(text string) (bool, error) {
-			mu.Lock()
-			sent = append(sent, text)
-			mu.Unlock()
-			return true, nil
-		},
+	loop := NewDraftStreamLoop(0, func(text string) (bool, error) {
+		mu.Lock()
+		sent = append(sent, text)
+		mu.Unlock()
+		return true, nil
 	})
 
-	c.Update("hello world")
+	loop.Update("hello world")
 	time.Sleep(50 * time.Millisecond)
-	c.Stop()
+	loop.Finalize()
 
 	mu.Lock()
 	if len(sent) == 0 {
@@ -134,8 +122,8 @@ func TestFinalizableDraftStreamControls_UpdateAndStop(t *testing.T) {
 	}
 	mu.Unlock()
 
-	// After stop, further updates should be ignored.
-	c.Update("ignored")
+	// After finalize, further updates should be ignored.
+	loop.Update("ignored")
 	time.Sleep(50 * time.Millisecond)
 
 	mu.Lock()
@@ -143,21 +131,18 @@ func TestFinalizableDraftStreamControls_UpdateAndStop(t *testing.T) {
 	mu.Unlock()
 
 	if lastSent == "ignored" {
-		t.Error("update after stop should be ignored")
+		t.Error("update after finalize should be ignored")
 	}
 }
 
-func TestFinalizableDraftStreamControls_StopForClear(t *testing.T) {
-	c := NewFinalizableDraftStreamControls(FinalizableDraftParams{
-		ThrottleMs: 500,
-		SendOrEdit: func(text string) (bool, error) {
-			return true, nil
-		},
+func TestDraftStreamLoop_StopForClear(t *testing.T) {
+	loop := NewDraftStreamLoop(500, func(text string) (bool, error) {
+		return true, nil
 	})
 
-	c.Update("text")
-	c.StopForClear()
+	loop.Update("text")
+	loop.StopForClear()
 
 	// After StopForClear, updates should be no-ops.
-	c.Update("should not send")
+	loop.Update("should not send")
 }

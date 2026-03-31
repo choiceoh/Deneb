@@ -1,6 +1,6 @@
 package cron
 
-import "github.com/choiceoh/deneb/gateway-go/internal/channel"
+import "github.com/choiceoh/deneb/gateway-go/internal/telegram"
 
 // CronEvent describes a cron system event for listeners.
 type CronEvent struct {
@@ -21,7 +21,7 @@ type ServiceConfig struct {
 	DefaultTo      string
 	Enabled        bool
 	RetentionMs    int64 // session retention (0 = default 24h)
-	Channels       *channel.Registry
+	TelegramPlugin *telegram.Plugin
 }
 
 // ServiceStatus is a snapshot of the cron service health and pending jobs.

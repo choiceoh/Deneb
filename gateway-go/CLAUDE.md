@@ -22,7 +22,6 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | `internal/server/` | HTTP server: `/health`, `/api/v1/rpc`, OpenAI APIs, hooks |
 | `internal/rpc/` | Registry-based RPC dispatcher, 130+ methods |
 | `internal/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
-| `internal/channel/` | Channel plugin registry (`Plugin` interface, lifecycle manager) |
 | `internal/chat/` | System prompt, tool registration, context files, slash commands |
 | `internal/ffi/` | CGo bindings to Rust core (8 modules) |
 | `internal/auth/` | Token auth, allowlists, credentials |

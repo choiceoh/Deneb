@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -26,7 +25,6 @@ func testExtendedDeps() ExtendedDeps {
 	gs := newTestGatewaySubs()
 	return ExtendedDeps{
 		Sessions:    session.NewManager(),
-		Channels:    channel.NewRegistry(),
 		GatewaySubs: gs,
 	}
 }
@@ -35,7 +33,6 @@ func testAgentDispatcher(deps ExtendedDeps) *Dispatcher {
 	d := NewDispatcher(testLogger())
 	RegisterBuiltinMethods(d, Deps{
 		Sessions:    deps.Sessions,
-		Channels:    deps.Channels,
 		GatewaySubs: deps.GatewaySubs,
 	})
 	RegisterExtendedMethods(d, deps)

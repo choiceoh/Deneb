@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -22,7 +21,6 @@ func sessionDispatcher(t *testing.T) (*Dispatcher, SessionDeps) {
 	d := NewDispatcher(testLogger())
 	RegisterBuiltinMethods(d, Deps{
 		Sessions: deps.Sessions,
-		Channels: channel.NewRegistry(),
 	})
 	RegisterSessionMethods(d, deps)
 	return d, deps

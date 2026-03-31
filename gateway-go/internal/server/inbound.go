@@ -21,7 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/streaming"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -146,9 +146,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Thread bindings: when processing a message in a forum topic thread,
 	// create a thread-specific session key so each topic gets its own context.
 	if msg.MessageThreadID != 0 && msg.IsTopicMessage {
-		if channel.ResolveThreadBindingsEnabled(nil, nil) {
-			sessionKey = fmt.Sprintf("telegram:%s:thread:%d", chatID, msg.MessageThreadID)
-		}
+		sessionKey = fmt.Sprintf("telegram:%s:thread:%d", chatID, msg.MessageThreadID)
 	}
 
 	// Build autoreply MsgContext from the Telegram message.
@@ -190,13 +188,8 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
-	shouldAck := channel.ShouldAckReaction(channel.AckReactionGateParams{
-		Scope:    channel.AckScopeAll,
-		IsDirect: !msgCtx.IsGroup,
-		IsGroup:  msgCtx.IsGroup,
-	})
 	var didAck bool
-	if shouldAck {
+	{
 		client := p.server.telegramPlug.Client()
 		if client != nil {
 			chatIDInt, _ := telegram.ParseChatID(chatID)
@@ -207,12 +200,10 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// --- Part B: Conversation label — resolve a display label for this session.
-	convLabel := channel.ResolveConversationLabel(channel.ConversationLabelFields{
-		ChatType:     msg.Chat.Type,
-		SenderName:   senderName,
-		From:         chatID,
-		GroupSubject: msg.Chat.Title,
-	})
+	convLabel := senderName
+	if convLabel == "" && msg.Chat.Title != "" {
+		convLabel = msg.Chat.Title
+	}
 	if convLabel != "" && p.server.sessions != nil {
 		p.server.sessions.Patch(sessionKey, session.PatchFields{Label: &convLabel})
 	}
@@ -389,21 +380,14 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// Remove ack reaction after the reply is sent.
-	channel.RemoveAckReactionAfterReply(channel.RemoveAckReactionAfterReplyParams{
-		RemoveAfterReply: true,
-		DidAck:           didAck,
-		Remove: func() error {
-			client := p.server.telegramPlug.Client()
-			if client == nil {
-				return nil
-			}
+	if didAck {
+		if client := p.server.telegramPlug.Client(); client != nil {
 			chatIDInt, _ := telegram.ParseChatID(chatID)
-			return client.SetMessageReaction(context.Background(), chatIDInt, msg.MessageID, "")
-		},
-		OnError: func(err error) {
-			p.logger.Warn("failed to remove ack reaction", "error", err)
-		},
-	})
+			if err := client.SetMessageReaction(context.Background(), chatIDInt, msg.MessageID, ""); err != nil {
+				p.logger.Warn("failed to remove ack reaction", "error", err)
+			}
+		}
+	}
 }
 
 // extractAttachments downloads media from a Telegram message with a bounded timeout.

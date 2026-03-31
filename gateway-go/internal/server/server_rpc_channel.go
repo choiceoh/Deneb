@@ -58,9 +58,9 @@ func (s *Server) registerConfigLifecycleMethods() {
 		},
 	}))
 	s.dispatcher.RegisterDomain(handlerchannel.LifecycleMethods(handlerchannel.LifecycleDeps{
-		ChannelLifecycle: s.channelLifecycle,
-		Hooks:            s.hooks,
-		Broadcaster:      s.broadcaster,
+		TelegramPlugin: s.telegramPlug,
+		Hooks:          s.hooks,
+		Broadcaster:    s.broadcaster,
 	}))
 }
 
@@ -176,8 +176,7 @@ func (s *Server) registerSystemServiceMethods(denebDir string) {
 			s.logger.Warn("telegram channel config found but botToken is empty")
 		} else {
 			s.telegramPlug = telegram.NewPlugin(tgCfg, s.logger)
-			s.channels.Register(s.telegramPlug)
-			s.logger.Info("telegram channel registered")
+			s.logger.Info("telegram channel configured")
 		}
 	}
 	s.dispatcher.RegisterDomain(handlerchannel.MessagingMethods(handlerchannel.MessagingDeps{
@@ -211,23 +210,19 @@ func (s *Server) propagateConfigReload(snap *config.ConfigSnapshot, deferralTime
 		s.processes.InvalidateEnvCache()
 	}
 
-	// Restart channels to pick up config changes, bounded by deferralTimeoutMs.
-	if s.channelLifecycle != nil {
-		s.safeGo("config:restart-channels", func() {
+	// Restart Telegram to pick up config changes, bounded by deferralTimeoutMs.
+	if s.telegramPlug != nil {
+		s.safeGo("config:restart-telegram", func() {
 			timeout := time.Duration(deferralTimeoutMs) * time.Millisecond
 			reloadCtx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			if errs := s.channelLifecycle.StopAll(reloadCtx); len(errs) > 0 {
-				for id, err := range errs {
-					s.logger.Warn("config reload: channel stop failed", "channel", id, "error", err)
-				}
+			if err := s.telegramPlug.Stop(reloadCtx); err != nil {
+				s.logger.Warn("config reload: telegram stop failed", "error", err)
 			}
-			if errs := s.channelLifecycle.StartAll(reloadCtx); len(errs) > 0 {
-				for id, err := range errs {
-					s.logger.Warn("config reload: channel start failed", "channel", id, "error", err)
-				}
+			if err := s.telegramPlug.Start(reloadCtx); err != nil {
+				s.logger.Warn("config reload: telegram start failed", "error", err)
 			}
-			s.logger.Info("config reload: channels restarted")
+			s.logger.Info("config reload: telegram restarted")
 		})
 	}
 	// Restart cron scheduler.

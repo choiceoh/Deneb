@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
 
@@ -57,7 +57,7 @@ type AgentTurnParams struct {
 // RunnerDeps holds the dependencies for the cron job runner.
 type RunnerDeps struct {
 	Sessions       *session.Manager
-	Channels       *channel.Registry
+	TelegramPlugin *telegram.Plugin
 	Agent          AgentRunner
 	Logger         *slog.Logger
 	DefaultChannel string // default delivery channel (e.g., "telegram")
@@ -140,7 +140,7 @@ func RunJob(ctx context.Context, job Job, deps RunnerDeps) RunOutcome {
 			if job.Delivery != nil {
 				bestEffort = job.Delivery.BestEffort
 			}
-			dr := DeliverCronOutput(runCtx, deps.Channels, *target, payloads, DeliverOutputOptions{
+			dr := DeliverCronOutput(runCtx, deps.TelegramPlugin, *target, payloads, DeliverOutputOptions{
 				ChunkLimit: chunk.DefaultLimit,
 				ChunkMode:  "length",
 				BestEffort: bestEffort,

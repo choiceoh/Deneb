@@ -27,7 +27,7 @@ globs: ["cmd/**", "internal/**", "pkg/**", "src/**"]
 
 ## Key Architectural Flows
 
-1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/server` (HTTP/WS) -> `internal/rpc` (dispatch) -> `internal/session` (state) -> `internal/channel` (plugins).
+1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/server` (HTTP/WS) -> `internal/rpc` (dispatch) -> `internal/session` (state) -> `internal/telegram` (plugin).
 2. **Rust FFI flow:** `core-rs/core/src/lib.rs` (C ABI) -> `gateway-go/internal/ffi/*_cgo.go` (Go wrappers) -> RPC methods / chat pipeline.
 3. **Protobuf type flow:** `proto/*.proto` -> `scripts/proto-gen.sh` -> Go (`gen/*.pb.go`), Rust (prost `OUT_DIR`).
 4. **Stateful FFI pattern:** `*_new()` -> handle -> `*_start(handle)` -> `*_step(handle, response)` -> `*_drop(handle)` (context engine, compaction).

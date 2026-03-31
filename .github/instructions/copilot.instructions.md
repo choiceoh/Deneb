@@ -21,7 +21,7 @@
 
 - RPC methods: `internal/rpc/`
 - Session management: `internal/session/`
-- Channel plugins: `internal/channel/`
+- Telegram plugin: `internal/telegram/`
 - HTTP server: `internal/server/`
 - Chat/LLM: `internal/chat/`
 

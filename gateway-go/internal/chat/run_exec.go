@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -56,7 +56,7 @@ func executeAgentRun(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler *typing.FullTypingSignaler,
-	statusCtrl *channel.StatusReactionController,
+	statusCtrl *telegram.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
 ) (*agent.AgentResult, error) {
@@ -540,7 +540,7 @@ func executeAgentRun(
 	// Draft stream hook: real-time message editing during LLM streaming.
 	// Creates a throttled draft loop that sends/edits a Telegram message as
 	// text deltas arrive, giving the user immediate visual feedback.
-	var draftCtrl *channel.FinalizableDraftStreamControls
+	var draftCtrl *telegram.DraftStreamLoop
 	if deps.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
 		delivery := params.Delivery
 		var draftMu sync.Mutex
@@ -569,26 +569,23 @@ func executeAgentRun(
 			}
 		}()
 
-		draftCtrl = channel.NewFinalizableDraftStreamControls(channel.FinalizableDraftParams{
-			ThrottleMs: 800, // edit at most ~1.25x/sec to stay within Telegram rate limits
-			SendOrEdit: func(text string) (bool, error) {
-				draftMu.Lock()
-				currentID := draftMsgID
-				draftMu.Unlock()
+		draftCtrl = telegram.NewDraftStreamLoop(800, func(text string) (bool, error) {
+			draftMu.Lock()
+			currentID := draftMsgID
+			draftMu.Unlock()
 
-				editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-				defer cancel()
+			editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
 
-				newID, err := deps.draftEditFn(editCtx, delivery, currentID, text)
-				if err != nil {
-					logger.Warn("draft stream send/edit failed", "error", err)
-					return false, err
-				}
-				draftMu.Lock()
-				draftMsgID = newID
-				draftMu.Unlock()
-				return true, nil
-			},
+			newID, err := deps.draftEditFn(editCtx, delivery, currentID, text)
+			if err != nil {
+				logger.Warn("draft stream send/edit failed", "error", err)
+				return false, err
+			}
+			draftMu.Lock()
+			draftMsgID = newID
+			draftMu.Unlock()
+			return true, nil
 		})
 
 		prevOnDelta := hooks.OnTextDelta

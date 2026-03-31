@@ -1,26 +1,13 @@
-// Package channel status reaction controller.
-//
-// Provides a channel-agnostic interface for displaying agent status via
-// message reactions (emoji). Features promise-chain serialization,
-// debouncing, stall timers, and terminal state protection.
-//
-// Mirrors src/channels/status-reactions.ts.
-package channel
+// Status reaction controller for Telegram agent status display via emoji reactions.
+// Features promise-chain serialization, debouncing, stall timers, and terminal
+// state protection.
+package telegram
 
 import (
 	"strings"
 	"sync"
 	"time"
 )
-
-// StatusReactionAdapter connects the controller to a channel's reaction API.
-type StatusReactionAdapter struct {
-	// SetReaction sets/replaces the current reaction emoji on a message.
-	SetReaction func(emoji string) error
-	// RemoveReaction removes a specific reaction emoji (optional — needed for
-	// platforms where reactions are additive).
-	RemoveReaction func(emoji string) error
-}
 
 // StatusReactionEmojis configures the emoji for each agent phase.
 type StatusReactionEmojis struct {
@@ -102,19 +89,21 @@ func ResolveToolEmoji(toolName string, emojis StatusReactionEmojis) string {
 
 // StatusReactionControllerParams configures a new StatusReactionController.
 type StatusReactionControllerParams struct {
-	Enabled      bool
-	Adapter      StatusReactionAdapter
-	InitialEmoji string
-	Emojis       *StatusReactionEmojis
-	Timing       *StatusReactionTiming
-	OnError      func(err error)
+	Enabled        bool
+	SetReaction    func(emoji string) error // sets/replaces the current reaction emoji
+	RemoveReaction func(emoji string) error // removes a reaction emoji (optional)
+	InitialEmoji   string
+	Emojis         *StatusReactionEmojis
+	Timing         *StatusReactionTiming
+	OnError        func(err error)
 }
 
 // StatusReactionController manages agent status display via message reactions.
 type StatusReactionController struct {
 	mu             sync.Mutex
 	enabled        bool
-	adapter        StatusReactionAdapter
+	setReaction    func(emoji string) error
+	removeReaction func(emoji string) error
 	emojis         StatusReactionEmojis
 	timing         StatusReactionTiming
 	onError        func(err error)
@@ -159,9 +148,10 @@ func NewStatusReactionController(params StatusReactionControllerParams) *StatusR
 	}
 
 	c := &StatusReactionController{
-		enabled:     params.Enabled,
-		adapter:     params.Adapter,
-		emojis:      emojis,
+		enabled:        params.Enabled,
+		setReaction:    params.SetReaction,
+		removeReaction: params.RemoveReaction,
+		emojis:         emojis,
 		timing:      timing,
 		onError:     params.OnError,
 		knownEmojis: known,
@@ -200,14 +190,14 @@ func (c *StatusReactionController) applyEmoji(newEmoji string) {
 		return
 	}
 	previousEmoji := c.currentEmoji
-	if err := c.adapter.SetReaction(newEmoji); err != nil {
+	if err := c.setReaction(newEmoji); err != nil {
 		if c.onError != nil {
 			c.onError(err)
 		}
 		return
 	}
-	if c.adapter.RemoveReaction != nil && previousEmoji != "" && previousEmoji != newEmoji {
-		if err := c.adapter.RemoveReaction(previousEmoji); err != nil {
+	if c.removeReaction != nil && previousEmoji != "" && previousEmoji != newEmoji {
+		if err := c.removeReaction(previousEmoji); err != nil {
 			if c.onError != nil {
 				c.onError(err)
 			}

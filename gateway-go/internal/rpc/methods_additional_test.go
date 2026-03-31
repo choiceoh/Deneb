@@ -1,26 +1,13 @@
 package rpc
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
-
-type stubChannel struct{}
-
-func (stubChannel) ID() string         { return "stub" }
-func (stubChannel) Meta() channel.Meta { return channel.Meta{ID: "stub", Label: "Stub"} }
-func (stubChannel) Capabilities() channel.Capabilities {
-	return channel.Capabilities{ChatTypes: []string{"dm"}}
-}
-func (stubChannel) Start(context.Context) error { return nil }
-func (stubChannel) Stop(context.Context) error  { return nil }
-func (stubChannel) Status() channel.Status      { return channel.Status{Connected: true} }
 
 func TestUnmarshalParamsErrors(t *testing.T) {
 	var dst map[string]any
@@ -52,7 +39,7 @@ func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 	sm := session.NewManager()
 	sm.Set(&session.Session{Key: "abc", Kind: session.KindDirect})
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm, Channels: channel.NewRegistry()})
+	RegisterBuiltinMethods(d, Deps{Sessions: sm})
 
 	resp := dispatch(t, d, "sessions.get", map[string]any{})
 	if resp.OK || resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
@@ -65,13 +52,9 @@ func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 	}
 }
 
-func TestChannelsGetMissingAndSuccess(t *testing.T) {
-	reg := channel.NewRegistry()
-	if err := reg.Register(stubChannel{}); err != nil {
-		t.Fatalf("register stub channel: %v", err)
-	}
+func TestChannelsGetMissingAndNotFound(t *testing.T) {
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager(), Channels: reg})
+	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager()})
 
 	missing := dispatch(t, d, "channels.get", map[string]any{})
 	if missing.OK || missing.Error == nil || missing.Error.Code != protocol.ErrMissingParam {
@@ -83,22 +66,16 @@ func TestChannelsGetMissingAndSuccess(t *testing.T) {
 		t.Fatalf("expected not found error, got %+v", notFound)
 	}
 
-	ok := dispatch(t, d, "channels.get", map[string]any{"id": "stub"})
-	if !ok.OK {
-		t.Fatalf("expected success, got error %+v", ok.Error)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(ok.Payload, &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	if payload["id"] != "stub" {
-		t.Fatalf("expected id=stub, got %v", payload["id"])
+	// Without TelegramPlugin set, "telegram" should also be not found.
+	notFound = dispatch(t, d, "channels.get", map[string]any{"id": "telegram"})
+	if notFound.OK || notFound.Error == nil || notFound.Error.Code != protocol.ErrNotFound {
+		t.Fatalf("expected not found for telegram without plugin, got %+v", notFound)
 	}
 }
 
 func TestSystemInfoUnknownVersion(t *testing.T) {
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager(), Channels: channel.NewRegistry()})
+	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager()})
 	resp := dispatch(t, d, "system.info", nil)
 	if !resp.OK {
 		t.Fatalf("expected success, got %+v", resp.Error)

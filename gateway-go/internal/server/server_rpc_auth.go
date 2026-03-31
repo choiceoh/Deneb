@@ -39,18 +39,15 @@ func (s *Server) registerAuthRPCMethods() {
 				protocol.ErrMissingParam, "channel is required"))
 		}
 		// Validate channel exists.
-		ch := s.channels.Get(p.Channel)
-		if ch == nil {
+		if p.Channel != "telegram" || s.telegramPlug == nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrNotFound, "channel not found: "+p.Channel))
 		}
 		// Stop the channel (logout = stop + clear).
 		loggedOut := true
-		if s.channelLifecycle != nil {
-			if err := s.channelLifecycle.StopChannel(ctx, p.Channel); err != nil {
-				s.logger.Warn("channels.logout: stop failed", "channel", p.Channel, "error", err)
-				loggedOut = false
-			}
+		if err := s.telegramPlug.Stop(ctx); err != nil {
+			s.logger.Warn("channels.logout: stop failed", "channel", p.Channel, "error", err)
+			loggedOut = false
 		}
 		// Broadcast channel change event.
 		if loggedOut {

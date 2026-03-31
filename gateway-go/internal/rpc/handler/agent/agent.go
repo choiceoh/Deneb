@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 
 	agentpkg "github.com/choiceoh/deneb/gateway-go/internal/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
@@ -27,8 +27,7 @@ type BroadcastFunc func(event string, payload any) (int, []error)
 // process, cron, and hooks management.
 type ExtendedDeps struct {
 	Sessions         *session.Manager
-	Channels         *channel.Registry
-	ChannelLifecycle *channel.LifecycleManager
+	TelegramPlugin   *telegram.Plugin
 	GatewaySubs      *events.GatewayEventSubscriptions
 	Processes        *process.Manager
 	Cron             *cron.Scheduler
@@ -260,7 +259,12 @@ func agentStatus(deps ExtendedDeps) rpcutil.HandlerFunc {
 		result := map[string]any{
 			"activeSessions": activeSessions,
 			"totalSessions":  deps.Sessions.Count(),
-			"channels":       deps.Channels.List(),
+			"channels": func() []string {
+			if deps.TelegramPlugin != nil {
+				return []string{"telegram"}
+			}
+			return nil
+		}(),
 		}
 
 		if deps.Processes != nil {
