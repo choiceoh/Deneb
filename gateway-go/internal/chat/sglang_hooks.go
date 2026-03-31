@@ -21,8 +21,8 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout       = 5 * time.Second
-	proactiveRemoteTimeout = 8 * time.Second  // remote fallback (Gemini Flash) needs more time
+	proactiveTimeout       = 25 * time.Second // local sglang: inference can take 10-20s
+	proactiveRemoteTimeout = 20 * time.Second // remote fallback (Gemini Flash) needs more time
 	proactiveMaxTokens     = 1024
 	proactiveMinMsgLen     = 20 // skip for very short messages
 )
