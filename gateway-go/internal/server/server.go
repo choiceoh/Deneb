@@ -18,7 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
@@ -118,7 +118,6 @@ type ServerIntegrations struct {
 	dreamingAdapter    *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
 	memoryStore        *memory.Store           // structured memory store; used by flush task
 	gmailPollSvc       *gmailpoll.Service
-	autoresearchRunner *autoresearch.Runner
 }
 
 // Server is the main gateway server.
