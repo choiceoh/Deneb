@@ -135,6 +135,12 @@ func (s *Server) registerAdvancedChannelMethods(broadcastFn func(string, any) (i
 		Broadcaster: broadcastFn,
 	}))
 
+	// cron.Service-backed methods: cron.listPage (paginated list with search/sort)
+	// and cron.get (single job lookup by ID).
+	s.dispatcher.RegisterDomain(handlerprocess.CronServiceMethods(handlerprocess.CronServiceDeps{
+		Service: s.cronService,
+	}))
+
 	s.dispatcher.RegisterDomain(handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{
 		Broadcaster: broadcastFn,
 	}))
