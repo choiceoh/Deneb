@@ -208,6 +208,14 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 				defer cancel()
 				return deps.reactionFn(rctx, delivery, emoji)
 			},
+			RemoveReaction: func(emoji string) error {
+				if deps.removeReactionFn == nil {
+					return nil
+				}
+				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+				return deps.removeReactionFn(rctx, delivery, emoji)
+			},
 		}
 		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
 			Enabled: true,

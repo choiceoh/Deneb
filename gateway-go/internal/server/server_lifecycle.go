@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -64,6 +65,28 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 			if err := s.cronService.Start(ctx); err != nil {
 				s.logger.Error("cron service start failed", "error", err)
 			}
+		})
+	}
+
+	// Start cron session reaper to prune expired cron run sessions.
+	if s.cronService != nil {
+		reaper := cron.NewSessionReaper(0, s.logger)
+		s.safeGo("cron-session-reaper", func() {
+			reaper.SweepPeriodically(
+				ctx.Done(),
+				0,
+				func() []string {
+					sessions := s.sessions.List()
+					keys := make([]string, len(sessions))
+					for i, sess := range sessions {
+						keys[i] = sess.Key
+					}
+					return keys
+				},
+				func(key string) {
+					s.sessions.Delete(key)
+				},
+			)
 		})
 	}
 

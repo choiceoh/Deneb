@@ -457,7 +457,7 @@ func devicePairApprove(deps DeviceDeps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("device.pair.approved", map[string]any{"deviceId": dev.DeviceID})
+			deps.Broadcaster("device.pair.resolved", map[string]any{"deviceId": dev.DeviceID, "action": "approved"})
 		}
 		return map[string]any{"device": dev}, nil
 	})
@@ -490,7 +490,7 @@ func devicePairRemove(deps DeviceDeps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("device.pair.removed", map[string]any{"deviceId": p.DeviceID})
+			deps.Broadcaster("device.pair.resolved", map[string]any{"deviceId": p.DeviceID, "action": "removed"})
 		}
 		return map[string]bool{"ok": true}, nil
 	})

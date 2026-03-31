@@ -283,6 +283,7 @@ func New(addr string, opts ...Option) *Server {
 		}, nil, s.logger) // agent runner wired later during chat handler setup
 	}
 	s.hooks = hooks.NewRegistry(s.logger)
+	s.internalHooks = hooks.NewInternalRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
@@ -361,7 +362,7 @@ func New(addr string, opts ...Option) *Server {
 	// Initialize plugin full registry and register RPC methods.
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
 	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
-		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
+		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry, channelAdapter: channel.NewProtocolAdapter(s.channels)},
 	}))
 
 	// Plugin HTTP router with auth check backed by the gateway auth validator.

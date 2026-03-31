@@ -9,9 +9,10 @@ import (
 // scheduled-task (cron) subsystems.
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type HookManager struct {
-	hooks       *hooks.Registry
-	hooksHTTP   *HooksHTTPHandler
-	cron        *cron.Scheduler
-	cronRunLog  *cron.PersistentRunLog
-	cronService *cron.Service
+	hooks         *hooks.Registry
+	hooksHTTP     *HooksHTTPHandler
+	internalHooks *hooks.InternalRegistry
+	cron          *cron.Scheduler
+	cronRunLog    *cron.PersistentRunLog
+	cronService   *cron.Service
 }

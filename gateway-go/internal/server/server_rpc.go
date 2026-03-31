@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
@@ -137,9 +138,11 @@ func (s *Server) registerBuiltinMethods() {
 	}))
 }
 
-// pluginRegistryAdapter bridges plugin.FullRegistry to the rpc.PluginRegistry interface.
+// pluginRegistryAdapter bridges plugin.FullRegistry and channel.ProtocolAdapter
+// to the rpc.PluginRegistry interface, merging both plugin and channel sources.
 type pluginRegistryAdapter struct {
-	registry *plugin.FullRegistry
+	registry       *plugin.FullRegistry
+	channelAdapter *channel.ProtocolAdapter
 }
 
 func (a *pluginRegistryAdapter) ListPlugins() []protocol.PluginMeta {
@@ -154,18 +157,24 @@ func (a *pluginRegistryAdapter) ListPlugins() []protocol.PluginMeta {
 			Enabled: p.Enabled,
 		}
 	}
+	if a.channelAdapter != nil {
+		result = append(result, a.channelAdapter.ListPlugins()...)
+	}
 	return result
 }
 
 func (a *pluginRegistryAdapter) GetPluginHealth(id string) *protocol.PluginHealthStatus {
 	p := a.registry.GetPlugin(id)
-	if p == nil {
-		return nil
+	if p != nil {
+		return &protocol.PluginHealthStatus{
+			PluginID: p.ID,
+			Healthy:  p.Enabled,
+		}
 	}
-	return &protocol.PluginHealthStatus{
-		PluginID: p.ID,
-		Healthy:  p.Enabled,
+	if a.channelAdapter != nil {
+		return a.channelAdapter.GetPluginHealth(id)
 	}
+	return nil
 }
 
 // truncateForDedup returns at most maxLen bytes of s for use as a dedup key.
