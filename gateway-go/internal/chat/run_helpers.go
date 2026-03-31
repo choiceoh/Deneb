@@ -18,6 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -299,14 +300,23 @@ func parseModelID(model string) (providerID, modelName string) {
 func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.Client, string) {
 	// 1. Try provider config from deneb.json.
 	if deps.providerConfigs != nil && providerID != "" {
-		if cfg, ok := deps.providerConfigs[providerID]; ok && cfg.APIKey != "" {
-			apiType := cfg.API
-			if apiType == "" {
-				apiType = inferAPIType(providerID)
+		if cfg, ok := deps.providerConfigs[providerID]; ok {
+			baseURL := strings.TrimSpace(provider.ExpandEnvVars(cfg.BaseURL))
+			if baseURL == "" {
+				baseURL = resolveDefaultBaseURL(providerID)
 			}
-			client := llm.NewClient(cfg.BaseURL, cfg.APIKey, llm.WithLogger(logger))
-			logger.Info("using provider from config", "provider", providerID, "apiType", apiType)
-			return client, apiType
+			apiKey := strings.TrimSpace(provider.ExpandEnvVars(cfg.APIKey))
+			if baseURL == "" {
+				logger.Warn("provider config missing base URL", "provider", providerID)
+			} else {
+				apiType := cfg.API
+				if apiType == "" {
+					apiType = inferAPIType(providerID)
+				}
+				client := llm.NewClient(baseURL, apiKey, llm.WithLogger(logger))
+				logger.Info("using provider from config", "provider", providerID, "apiType", apiType)
+				return client, apiType
+			}
 		}
 	}
 
@@ -394,6 +404,8 @@ func resolveDefaultBaseURL(providerID string) string {
 		return "https://generativelanguage.googleapis.com/v1beta/openai"
 	case "sglang":
 		return modelrole.DefaultSglangBaseURL
+	case "vllm":
+		return modelrole.DefaultVllmBaseURL
 	default:
 		return ""
 	}

@@ -199,7 +199,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	setOpenAIBearerAuth(httpReq, c.apiKey)
 
 	respBody, err := c.DoStream(ctx, httpReq)
 	if err != nil {
@@ -483,6 +483,13 @@ func emit(ctx context.Context, ch chan<- StreamEvent, ev StreamEvent) {
 	}
 }
 
+func setOpenAIBearerAuth(req *http.Request, apiKey string) {
+	if strings.TrimSpace(apiKey) == "" {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+}
+
 // CompleteOpenAI sends a non-streaming request to an OpenAI-compatible
 // /chat/completions endpoint and returns the full response text.
 // Intended for lightweight single-turn tasks (e.g. thread title generation).
@@ -523,7 +530,7 @@ func (c *Client) CompleteOpenAI(ctx context.Context, req ChatRequest) (string, e
 		return "", fmt.Errorf("create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	setOpenAIBearerAuth(httpReq, c.apiKey)
 
 	respBody, err := c.DoStream(ctx, httpReq)
 	if err != nil {
