@@ -28,10 +28,9 @@ func (s *Server) initGmailPoll() {
 	stateDir := filepath.Join(home, ".deneb")
 
 	cfg := gmailpoll.Config{
-		StateDir:   stateDir,
-		LLMBaseURL: modelrole.DefaultGoogleBaseURL,
-		LLMAPIKey:  os.Getenv("GEMINI_API_KEY"),
-		Model:      modelrole.DefaultFallbackModel,
+		StateDir:  stateDir,
+		LLMClient: s.modelRegistry.Client(modelrole.RoleFallback),
+		Model:     s.modelRegistry.Model(modelrole.RoleFallback),
 	}
 	if pollCfg.IntervalMin != nil {
 		cfg.IntervalMin = *pollCfg.IntervalMin

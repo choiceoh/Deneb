@@ -108,6 +108,7 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
 	reg := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
 	chatCfg.Registry = reg
+	s.modelRegistry = reg
 
 	// Initialize structured memory store (Honcho-style).
 	if home, err := os.UserHomeDir(); err == nil {
