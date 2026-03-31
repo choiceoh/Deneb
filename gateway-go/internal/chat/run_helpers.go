@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
@@ -32,7 +31,7 @@ var memoryExtractSem = make(chan struct{}, 2)
 
 // handleRunSuccess processes a successful agent run completion.
 func handleRunSuccess(
-	_ context.Context,
+	ctx context.Context,
 	params RunParams,
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
@@ -95,6 +94,25 @@ func handleRunSuccess(
 			}
 
 			if replyText != "" {
+				// Plugin hook: allow plugins to mutate or cancel the outbound message.
+				if deps.pluginHookRunner != nil {
+					msResult := deps.pluginHookRunner.RunMessageSending(ctx, map[string]any{
+						"to":         params.Delivery.To,
+						"content":    replyText,
+						"channel":    params.Delivery.Channel,
+						"sessionKey": params.SessionKey,
+					})
+					if msResult != nil {
+						if msResult.Cancel {
+							logger.Info("message delivery cancelled by plugin hook")
+							replyText = ""
+						} else if msResult.ModifiedText != "" {
+							replyText = msResult.ModifiedText
+						}
+					}
+				}
+			}
+			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
 				if deps.replyFunc != nil {
@@ -151,25 +169,15 @@ func handleRunSuccess(
 		}
 	}
 
-	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
-	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
-
-	// Pre-compaction memory flush: check whether token usage is high enough
-	// to warrant flushing durable memories before the next compaction cycle.
-	if result.Usage.InputTokens > 0 {
-		flushSettings := autoreply.ResolveMemoryFlushSettings(nil)
-		shouldFlush := autoreply.ShouldRunMemoryFlush(autoreply.ShouldRunMemoryFlushParams{
-			TotalTokens:         result.Usage.InputTokens + result.Usage.OutputTokens,
-			ContextWindowTokens: int(deps.contextCfg.TokenBudget),
-			ReserveTokensFloor:  flushSettings.ReserveTokensFloor,
-			SoftThresholdTokens: flushSettings.SoftThresholdTokens,
-		})
-		if shouldFlush {
-			logger.Info("memory flush: threshold reached, flush recommended",
-				"totalTokens", result.Usage.InputTokens+result.Usage.OutputTokens,
-				"contextWindow", deps.contextCfg.TokenBudget)
+	// Store last output on the session so cron and other consumers can read it.
+	if result.Text != "" {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+			sess.LastOutput = result.Text
 		}
 	}
+
+	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
+	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
 	// Auto-memory: extract key learnings asynchronously via local sglang.
 	// When structured memory store is available, use Honcho-style importance extraction.

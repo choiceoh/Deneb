@@ -254,6 +254,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		maxTokens:            h.maxTokens,
 		shutdownCtx:          h.shutdownCtx,
 		hookRegistry:         h.hookRegistry,
+		pluginHookRunner:     h.pluginHookRunner,
 	}
 }
 

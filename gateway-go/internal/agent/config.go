@@ -36,6 +36,10 @@ type AgentConfig struct {
 	// the first turn.
 	DeferredSystemText func() string
 
+	// Thinking configures Anthropic extended thinking for this run.
+	// nil = disabled (default). Set via session ThinkingLevel or /think command.
+	Thinking *llm.ThinkingConfig
+
 	// StripImagesAfterFirstTurn drops base64 image data from the message history
 	// after the first LLM turn. On turn 0 the image is sent normally; from turn 1
 	// onward each image block is replaced with a lightweight text placeholder so

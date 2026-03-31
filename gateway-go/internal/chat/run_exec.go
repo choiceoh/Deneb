@@ -21,7 +21,32 @@ import (
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
+	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 )
+
+// cachedSkillsPrompt caches the workspace skills prompt at startup to avoid
+// re-scanning the filesystem on every chat message. Single-user deployment:
+// skills don't change at runtime.
+var (
+	cachedSkillsPrompt     string
+	cachedSkillsPromptOnce sync.Once
+)
+
+// loadCachedSkillsPrompt returns the cached skills prompt, building it on first call.
+func loadCachedSkillsPrompt(workspaceDir string) string {
+	cachedSkillsPromptOnce.Do(func() {
+		snapshot := skills.BuildWorkspaceSkillSnapshot(skills.SnapshotConfig{
+			DiscoverConfig: skills.DiscoverConfig{
+				WorkspaceDir: workspaceDir,
+			},
+		})
+		if snapshot != nil {
+			cachedSkillsPrompt = snapshot.Prompt
+		}
+	})
+	return cachedSkillsPrompt
+}
 
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
 // run agent loop, persist result.
@@ -236,8 +261,9 @@ func executeAgentRun(
 			UserTimezone: tz,
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
-			RuntimeInfo: prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:     ch,
+			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:      ch,
+			SkillsPrompt: loadCachedSkillsPrompt(workspaceDir),
 		}
 		// Telegram is the coding-specialized channel: use the coding
 		// system prompt which strips non-coding sections and emphasizes
@@ -325,6 +351,12 @@ func executeAgentRun(
 	// idempotent tool results (find, tree). Invalidated on mutation tools.
 	runCache := NewRunCache()
 
+	// Resolve thinking config from the session's ThinkingLevel setting.
+	var thinkingCfg *llm.ThinkingConfig
+	if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.ThinkingLevel != "" {
+		thinkingCfg = resolveThinkingConfig(sess.ThinkingLevel)
+	}
+
 	cfg := agent.AgentConfig{
 		MaxTurns:  defaultMaxTurns,
 		Timeout:   defaultAgentTimeout,
@@ -333,6 +365,7 @@ func executeAgentRun(
 		Tools:     tools,
 		MaxTokens: maxTokens,
 		APIType:   apiType,
+		Thinking:  thinkingCfg,
 		// Drop base64 image bytes from the message history after turn 0 so that
 		// subsequent tool-call turns don't retransmit the full image payload.
 		// Each inline image is ~1600 tokens; stripping saves that cost per turn
@@ -342,6 +375,16 @@ func executeAgentRun(
 		// By the time turn 0 completes (LLM stream + tool exec), the goroutine
 		// launched at step 4 has had several seconds to finish.
 		DeferredSystemText: deferredProactiveHint(proactiveCh, proactiveStart, logger),
+		// Emit heartbeat at each turn so WS clients know the agent is alive.
+		OnTurn: func(turn int, accumulatedTokens int) {
+			if deps.emitAgentFn != nil {
+				deps.emitAgentFn("heartbeat", params.SessionKey, params.ClientRunID, map[string]any{
+					"turn":   turn,
+					"tokens": accumulatedTokens,
+					"ts":     time.Now().UnixMilli(),
+				})
+			}
+		},
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
 		// RunCache is injected once and persists across turns.
@@ -457,6 +500,23 @@ func executeAgentRun(
 				"tool":    name,
 				"isError": isErr,
 				"ts":      time.Now().UnixMilli(),
+			})
+		}
+	}
+
+	// Plugin typed hook: fire after_tool_call event after each tool completes.
+	if deps.pluginHookRunner != nil {
+		prevOnToolResult := hooks.OnToolResult
+		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+			if prevOnToolResult != nil {
+				prevOnToolResult(name, toolUseID, result, isErr)
+			}
+			go deps.pluginHookRunner.RunVoidHook(context.Background(), plugin.HookAfterToolCall, map[string]any{
+				"toolName":   name,
+				"toolCallId": toolUseID,
+				"sessionKey": params.SessionKey,
+				"runId":      params.ClientRunID,
+				"isError":    isErr,
 			})
 		}
 	}
@@ -625,12 +685,59 @@ func executeAgentRun(
 		break
 	}
 
+	agentMs := time.Since(agentStart).Milliseconds()
+	totalMs := time.Since(runStart).Milliseconds()
 	logger.Info("pipeline: agent loop complete",
-		"agentMs", time.Since(agentStart).Milliseconds(),
-		"totalMs", time.Since(runStart).Milliseconds(),
+		"agentMs", agentMs,
+		"totalMs", totalMs,
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens)
 
+	// Fire agent_end plugin hook (void, non-blocking).
+	if deps.pluginHookRunner != nil {
+		go deps.pluginHookRunner.RunVoidHook(context.Background(), plugin.HookAgentEnd, map[string]any{
+			"sessionKey": params.SessionKey,
+			"runId":      params.ClientRunID,
+			"model":      model,
+			"turns":      agentResult.Turns,
+			"durationMs": totalMs,
+			"success":    agentResult.StopReason == "end_turn",
+		})
+	}
+
+	// Emit agent run.end event to gateway subscriptions.
+	if deps.emitAgentFn != nil {
+		deps.emitAgentFn("run.end", params.SessionKey, params.ClientRunID, map[string]any{
+			"model":        model,
+			"turns":        agentResult.Turns,
+			"durationMs":   totalMs,
+			"inputTokens":  agentResult.Usage.InputTokens,
+			"outputTokens": agentResult.Usage.OutputTokens,
+			"stopReason":   agentResult.StopReason,
+		})
+	}
+
 	return agentResult, nil
+}
+
+// resolveThinkingConfig maps a session ThinkingLevel string to an llm.ThinkingConfig.
+// Returns nil for "off", empty, or unrecognized levels (disables extended thinking).
+func resolveThinkingConfig(level string) *llm.ThinkingConfig {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "minimal":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 1024}
+	case "low":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
+	case "medium":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 10240}
+	case "high":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
+	case "xhigh":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 65536}
+	case "adaptive":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
+	default:
+		return nil
+	}
 }

@@ -156,7 +156,11 @@ func (s *Server) registerSessionRPCMethods() {
 
 				lwClient := reg.Client(modelrole.RoleLightweight)
 				lwModel := reg.Model(modelrole.RoleLightweight)
-				s.dreamingAdapter = memory.NewDreamingAdapter(memStore, embedder, lwClient, lwModel, s.logger)
+				if lwClient == nil || lwModel == "" {
+					s.logger.Warn("aurora-memory: dreaming disabled (lightweight model not configured)")
+				} else {
+					s.dreamingAdapter = memory.NewDreamingAdapter(memStore, embedder, lwClient, lwModel, s.logger)
+				}
 				// DreamTurnFn is wired after autonomous service is created (phase 3).
 				// Use a closure that captures s so the autonomous svc reference resolves at call time.
 				chatCfg.DreamTurnFn = func(ctx context.Context) {
