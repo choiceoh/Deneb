@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -140,7 +141,11 @@ func (r *ToolRegistry) SetPostProcess(pp *PostProcessRegistry) {
 }
 
 // extractCompressFlag checks if input JSON contains "compress": true.
+// Fast-path: skip json.Unmarshal when the key is absent (common case).
 func extractCompressFlag(input json.RawMessage) bool {
+	if !bytes.Contains(input, []byte(`"compress"`)) {
+		return false
+	}
 	var meta struct {
 		Compress bool `json:"compress"`
 	}
@@ -155,6 +160,10 @@ func extractCompressFlag(input json.RawMessage) bool {
 // "_ref_content" into the input JSON. This enables tool chaining: one tool can
 // consume the output of a previously (or concurrently) executed tool.
 func resolveRef(ctx context.Context, input json.RawMessage) json.RawMessage {
+	// Fast-path: skip json.Unmarshal when $ref is absent (vast majority of calls).
+	if !bytes.Contains(input, []byte(`"$ref"`)) {
+		return input
+	}
 	var meta struct {
 		Ref string `json:"$ref"`
 	}
@@ -279,7 +288,9 @@ func (r *ToolRegistry) LLMToolsAnthropic() []llm.Tool {
 	return anthropic
 }
 
-// buildLLMToolsLocked builds the base tool slice. Caller must hold s.mu (write).
+// buildLLMToolsLocked builds the base tool slice with pre-serialized schemas.
+// Pre-serialization avoids re-marshaling deeply nested map[string]any via
+// reflection on every LLM API call. Caller must hold r.mu (write).
 func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 	tools := make([]llm.Tool, 0, len(r.order))
 	for _, name := range r.order {
@@ -291,11 +302,13 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 		if schema == nil {
 			schema = map[string]any{"type": "object"}
 		}
-		tools = append(tools, llm.Tool{
+		t := llm.Tool{
 			Name:        def.Name,
 			Description: def.Description,
 			InputSchema: schema,
-		})
+		}
+		t.PreSerialize()
+		tools = append(tools, t)
 	}
 	return tools
 }
@@ -361,19 +374,18 @@ var chatTools = map[string]bool{
 // If profile is "coding", returns only coding-related tools.
 // If profile is "chat", returns general-conversation tools, excluding coding/FS tools.
 // Results are cached per profile and only rebuilt when tools change.
+// The returned slice is shared — callers must not mutate it.
 func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {
 	if profile == "" {
 		return r.LLMTools()
 	}
 
-	// Cache read fast-path.
+	// Cache read fast-path — return shared slice (callers must not mutate).
 	r.mu.RLock()
 	if r.cachedLLMToolsForProfile != nil {
 		if cached, ok := r.cachedLLMToolsForProfile[profile]; ok {
-			out := make([]llm.Tool, len(cached))
-			copy(out, cached)
 			r.mu.RUnlock()
-			return out
+			return cached
 		}
 	}
 	r.mu.RUnlock()
@@ -384,9 +396,7 @@ func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {
 	// Double-check after acquiring write lock.
 	if r.cachedLLMToolsForProfile != nil {
 		if cached, ok := r.cachedLLMToolsForProfile[profile]; ok {
-			out := make([]llm.Tool, len(cached))
-			copy(out, cached)
-			return out
+			return cached
 		}
 	} else {
 		r.cachedLLMToolsForProfile = make(map[string][]llm.Tool)
@@ -403,17 +413,19 @@ func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {
 		return r.buildLLMToolsLocked()
 	}
 
-	all := r.buildLLMToolsLocked()
-	tools := make([]llm.Tool, 0, len(all))
+	// Build from cached base list if available; avoids redundant rebuild.
+	if r.cachedLLMTools == nil {
+		r.cachedLLMTools = r.buildLLMToolsLocked()
+	}
+	all := r.cachedLLMTools
+	tools := make([]llm.Tool, 0, len(profileMap))
 	for _, t := range all {
 		if profileMap[t.Name] {
 			tools = append(tools, t)
 		}
 	}
 	r.cachedLLMToolsForProfile[profile] = tools
-	out := make([]llm.Tool, len(tools))
-	copy(out, tools)
-	return out
+	return tools
 }
 
 // Summaries returns a map of tool name → description for system prompt assembly.

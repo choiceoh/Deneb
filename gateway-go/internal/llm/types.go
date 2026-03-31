@@ -267,11 +267,27 @@ type CacheControl struct {
 }
 
 // Tool describes a tool available to the model.
+//
+// InputSchema holds the schema as a Go map for programmatic access.
+// RawInputSchema holds the pre-serialized JSON bytes used during API
+// request marshaling — this avoids re-serializing the deeply nested
+// map[string]any via reflection on every LLM call (~40 tools × multiple
+// turns). Call PreSerialize() or set RawInputSchema directly.
 type Tool struct {
-	Name         string         `json:"name"`
-	Description  string         `json:"description"`
-	InputSchema  map[string]any `json:"input_schema"`
-	CacheControl *CacheControl  `json:"cache_control,omitempty"` // Anthropic prompt caching
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	InputSchema     map[string]any  `json:"-"`                              // programmatic access; excluded from JSON
+	RawInputSchema  json.RawMessage `json:"input_schema"`                   // pre-serialized; used in API requests
+	CacheControl    *CacheControl   `json:"cache_control,omitempty"`        // Anthropic prompt caching
+}
+
+// PreSerialize computes RawInputSchema from InputSchema if not already set.
+// This is called automatically by ToolRegistry.buildLLMToolsLocked but can
+// also be called manually for tools constructed outside the registry.
+func (t *Tool) PreSerialize() {
+	if t.InputSchema != nil && t.RawInputSchema == nil {
+		t.RawInputSchema, _ = json.Marshal(t.InputSchema)
+	}
 }
 
 // StreamEvent represents a single server-sent event from the LLM API.
