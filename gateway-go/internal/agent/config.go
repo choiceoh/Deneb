@@ -50,15 +50,6 @@ type AgentConfig struct {
 // TurnCallback is called after each agent turn with accumulated token count.
 type TurnCallback func(turn int, accumulatedTokens int)
 
-// DefaultAgentConfig returns sensible defaults.
-func DefaultAgentConfig() AgentConfig {
-	return AgentConfig{
-		MaxTurns:  25,
-		Timeout:   10 * time.Minute,
-		MaxTokens: 8192,
-	}
-}
-
 // AgentResult is the outcome of an agent run.
 type AgentResult struct {
 	Text       string
