@@ -273,7 +273,14 @@ func New(addr string, opts ...Option) *Server {
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
-		s.cronRunLog = cron.NewPersistentRunLog(cron.DefaultCronStorePath(homeDir))
+		storePath := cron.DefaultCronStorePath(homeDir)
+		s.cronRunLog = cron.NewPersistentRunLog(storePath)
+		s.cronService = cron.NewService(cron.ServiceConfig{
+			StorePath:      storePath,
+			DefaultChannel: "telegram",
+			Enabled:        true,
+			Channels:       s.channels,
+		}, nil, s.logger) // agent runner wired later during chat handler setup
 	}
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
