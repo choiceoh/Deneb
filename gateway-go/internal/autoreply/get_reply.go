@@ -161,6 +161,15 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 				result.Payloads = append([]types.ReplyPayload{{Text: notice}}, result.Payloads...)
 			}
 		}
+		if transition.FallbackCleared {
+			cleared := model.BuildFallbackClearedNotice(
+				selection.Provider, selection.Model,
+				transition.PreviousState.ActiveModel,
+			)
+			if cleared != "" {
+				result.Payloads = append([]types.ReplyPayload{{Text: cleared}}, result.Payloads...)
+			}
+		}
 	}
 
 	// 12. Normalize and filter payloads.

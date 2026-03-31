@@ -40,6 +40,14 @@ func DispatchInbound(
 		normalizedText = params.Registry.NormalizeCommandBody(params.Text, params.BotUsername)
 	}
 
+	// Resolve text aliases (e.g., "/d" → "/dashboard") so downstream handlers
+	// see the canonical command form.
+	if params.Registry != nil {
+		if canonical := params.Registry.MaybeResolveTextAlias(normalizedText); canonical != "" {
+			normalizedText = canonical
+		}
+	}
+
 	// Check for control commands.
 	if params.Registry != nil && params.Registry.HasControlCommand(normalizedText, "") {
 		return InboundDispatchResult{

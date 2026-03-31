@@ -195,10 +195,11 @@ func (s *Server) registerSystemServiceMethods(denebDir string) {
 // restart (bounded by deferralTimeoutMs), cron restart, and process env cache
 // invalidation.
 func (s *Server) propagateConfigReload(snap *config.ConfigSnapshot, deferralTimeoutMs int) {
-	// Notify hooks of config change.
+	// Notify hooks of config change, passing the config path as metadata.
 	if s.hooks != nil {
+		hookEnv := map[string]string{"DENEB_CONFIG_PATH": snap.Path}
 		s.safeGo("hooks:config.reloaded", func() {
-			s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
+			s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), hookEnv)
 		})
 	}
 	// Broadcast config change to subscribers via publisher.
