@@ -162,20 +162,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// Pilot & Chaining (merged: Pilot + pilot vs direct tools + Tool Chaining).
 		if toolSet["pilot"] {
 			s.WriteString("## Pilot & Chaining\n")
-			s.WriteString("- `pilot` runs tasks on local sglang (fast, free). Gathers tool outputs + analyzes in one call.\n")
-			s.WriteString("- Use pilot when you need analysis/summary of tool outputs, not just the raw data.\n")
-			s.WriteString("- Do NOT use pilot for: complex multi-turn reasoning, or when you need full uncompressed output.\n")
-			s.WriteString("- Multiple independent reads/greps → call them in parallel directly (no pilot needed).\n")
-			s.WriteString("- Long-running autonomous task → sessions_spawn instead of pilot.\n")
-			s.WriteString("- Common patterns:\n")
-			s.WriteString("  - Code review: `{\"task\": \"변경사항 리뷰해줘\", \"diff\": \"all\"}`\n")
-			s.WriteString("  - Test analysis: `{\"task\": \"테스트 실패 원인 분석\", \"test\": \"gateway-go/...\"}`\n")
-			s.WriteString("  - File analysis: `{\"task\": \"이 파일 구조 설명해줘\", \"file\": \"path/to/file.go\"}`\n")
-			s.WriteString("  - Multi-source: `{\"task\": \"비교 분석\", \"files\": [\"a.go\", \"b.go\"]}`\n")
-			s.WriteString("  - Diagnostics: `{\"task\": \"시스템 상태 확인\", \"health\": true}`\n")
-			s.WriteString("  - Project overview: `{\"task\": \"프로젝트 구조 파악\", \"tree\": \".\"}`\n")
-			s.WriteString("  - Commit history: `{\"task\": \"최근 변경 요약\", \"git_log\": \"recent\"}`\n")
-			s.WriteString("  - Agent logs: `{\"task\": \"이전 런에서 뭐가 실패했는지 분석해줘\", \"agent_logs\": \"errors\"}`\n")
+			s.WriteString("- `pilot`: local sglang으로 소스를 수집+분석 (fast, free).\n")
+			s.WriteString("- pilot은 여러 소스의 결과를 종합/요약할 때 쓰는 도구.\n")
+			s.WriteString("- 파일 읽기, 검색, 실행 등 단일 작업은 read/grep/exec 직접 호출. pilot으로 감싸지 마 — 네가 직접 결과를 보고 판단하는 게 더 정확해.\n")
 			s.WriteString("- Tool chaining: use `\"$ref\": \"<tool_use_id>\"` to pass one tool's output to another (injected as `_ref_content`, 30s timeout).\n\n")
 		}
 
