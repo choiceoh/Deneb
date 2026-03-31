@@ -7,10 +7,8 @@
 ///
 /// Ports `crc32`, `pngChunk`, `fillPixel`, and `encodePngRgba` from
 /// `src/media/png-encode.ts`.
-use flate2::Compression;
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::Buffer;
-use std::io::Write;
 
 // ---------------------------------------------------------------------------
 // CRC32 table (precomputed at compile time)
@@ -119,14 +117,8 @@ pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
     }
 
     // PNG IDAT uses zlib (deflate with zlib header)
-    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), Compression::default());
-    if encoder.write_all(&raw).is_err() {
-        return Vec::new();
-    }
-    let compressed = match encoder.finish() {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
+    let compressed =
+        miniz_oxide::deflate::compress_to_vec_zlib(&raw, 6);
 
     // Build PNG
     let signature: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];

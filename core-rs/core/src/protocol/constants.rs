@@ -102,10 +102,19 @@ mod tests {
         for p in std_patterns {
             assert!(Regex::new(p).is_ok(), "pattern should compile: {p}");
         }
-        // EXEC pattern uses negative lookahead — requires fancy-regex.
-        assert!(
-            fancy_regex::Regex::new(EXEC_SECRET_REF_ID_PATTERN).is_ok(),
-            "exec pattern should compile with fancy-regex"
-        );
+        // EXEC pattern validation — uses pure Rust function (no fancy-regex).
+        use super::super::validation::is_valid_exec_secret_ref_id;
+        // Valid cases
+        assert!(is_valid_exec_secret_ref_id("a"));
+        assert!(is_valid_exec_secret_ref_id("A0"));
+        assert!(is_valid_exec_secret_ref_id("cmd/run"));
+        assert!(is_valid_exec_secret_ref_id("my.secret:v1/path-name"));
+        // Invalid cases
+        assert!(!is_valid_exec_secret_ref_id("")); // empty
+        assert!(!is_valid_exec_secret_ref_id(".hidden")); // starts with dot
+        assert!(!is_valid_exec_secret_ref_id("a/../b")); // path traversal
+        assert!(!is_valid_exec_secret_ref_id("a/./b")); // dot segment
+        assert!(!is_valid_exec_secret_ref_id("a/b/..")); // trailing ..
+        assert!(!is_valid_exec_secret_ref_id("../a")); // leading ..
     }
 }

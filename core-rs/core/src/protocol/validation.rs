@@ -178,18 +178,48 @@ pub fn check_pattern(
     }
 }
 
-/// Check that a string matches a fancy-regex pattern (supports lookahead/lookbehind).
-pub fn check_fancy_pattern(
+/// Validate an exec secret ref ID without regex.
+///
+/// Equivalent to the pattern `^(?!.*(?:^|/)\.{1,2}(?:/|$))[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$`:
+/// - First char must be ASCII alphanumeric
+/// - Remaining chars (up to 255) must be `[A-Za-z0-9._:/-]`
+/// - No `.` or `..` path segments (between `/` delimiters)
+pub fn is_valid_exec_secret_ref_id(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() || bytes.len() > 256 {
+        return false;
+    }
+    if !bytes[0].is_ascii_alphanumeric() {
+        return false;
+    }
+    for &b in &bytes[1..] {
+        if !(b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b':' || b == b'/' || b == b'-') {
+            return false;
+        }
+    }
+    // Reject path traversal: `.` or `..` as path segments
+    for segment in s.split('/') {
+        if segment == "." || segment == ".." {
+            return false;
+        }
+    }
+    true
+}
+
+/// Check that a string is a valid exec secret ref ID.
+pub fn check_exec_secret_ref_id(
     value: &serde_json::Value,
     path: &str,
-    pattern: &LazyLock<fancy_regex::Regex>,
     errors: &mut Vec<ValidationError>,
 ) {
     if let Some(s) = value.as_str() {
-        if !pattern.is_match(s).unwrap_or(false) {
+        if !is_valid_exec_secret_ref_id(s) {
             errors.push(ValidationError {
                 path: path.to_string(),
-                message: format!("must match pattern \"{}\"", pattern.as_str()),
+                message: format!(
+                    "must match pattern \"{}\"",
+                    super::constants::EXEC_SECRET_REF_ID_PATTERN
+                ),
                 keyword: "pattern",
             });
         }
