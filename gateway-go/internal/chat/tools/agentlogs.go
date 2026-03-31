@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// ToolAgentLogs returns a tool that reads structured agent run logs written by w.
 func ToolAgentLogs(w *agentlog.Writer) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if w == nil {
