@@ -165,7 +165,10 @@ func (c *Client) refresh() (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("토큰 응답 읽기 실패: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("토큰 갱신 실패 (HTTP %d): %s", resp.StatusCode, body)
 	}
@@ -235,7 +238,10 @@ func (c *Client) readJSON(ctx context.Context, path string, dest any) error {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Gmail API 오류 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500))
 	}
@@ -255,7 +261,10 @@ func (c *Client) postJSON(ctx context.Context, path string, payload any, dest an
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Gmail API 오류 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500))
 	}

@@ -138,7 +138,10 @@ func (r *Reranker) Rerank(ctx context.Context, query string, documents []string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if readErr != nil {
+			return nil, fmt.Errorf("reranker: HTTP %d (failed to read error body)", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("reranker: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
