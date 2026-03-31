@@ -58,9 +58,12 @@ func (rb *RustBackend) Execute(ctx context.Context, cmd string, args map[string]
 // Search runs a Vega search query via Rust FFI.
 func (rb *RustBackend) Search(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
 	// Build the search JSON expected by deneb_vega_search:
-	// {"query": "검색어"}
+	// {"query": "검색어", "mode": "bm25|semantic|hybrid"}
 	payload := map[string]any{
 		"query": query,
+	}
+	if opts.Mode != "" {
+		payload["mode"] = opts.Mode
 	}
 
 	queryJSON, err := json.Marshal(payload)
@@ -108,7 +111,12 @@ func (rb *RustBackend) Search(ctx context.Context, query string, opts SearchOpts
 		})
 	}
 
-	// Apply limit
+	// Apply offset then limit.
+	if opts.Offset > 0 && opts.Offset < len(results) {
+		results = results[opts.Offset:]
+	} else if opts.Offset > 0 {
+		results = nil
+	}
 	if opts.Limit > 0 && len(results) > opts.Limit {
 		results = results[:opts.Limit]
 	}

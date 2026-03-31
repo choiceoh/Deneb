@@ -49,3 +49,40 @@ const (
 	SessionPhaseEnd   SessionLifecyclePhase = "end"
 	SessionPhaseError SessionLifecyclePhase = "error"
 )
+
+// SessionTransition represents a state transition event.
+// Mirrors proto/session.proto SessionTransition.
+type SessionTransition struct {
+	Key         string           `json:"key"`
+	FromStatus  SessionRunStatus `json:"fromStatus"`
+	ToStatus    SessionRunStatus `json:"toStatus"`
+	TimestampMs int64            `json:"timestampMs"`
+	Reason      string           `json:"reason,omitempty"`
+	StopReason  string           `json:"stopReason,omitempty"`
+	Aborted     *bool            `json:"aborted,omitempty"`
+}
+
+// SessionLifecycleEvent represents a session lifecycle event.
+// Mirrors proto/session.proto SessionLifecycleEvent.
+type SessionLifecycleEvent struct {
+	Key         string                `json:"key"`
+	Phase       SessionLifecyclePhase `json:"phase"`
+	TimestampMs int64                 `json:"timestampMs"`
+	StopReason  string                `json:"stopReason,omitempty"`
+	Aborted     *bool                 `json:"aborted,omitempty"`
+}
+
+// SessionPreviewItem is a single item in a session preview.
+// Mirrors proto/session.proto SessionPreviewItem.
+type SessionPreviewItem struct {
+	Role string `json:"role"` // "user" | "assistant" | "tool" | "system" | "other"
+	Text string `json:"text"`
+}
+
+// SessionsPreviewEntry is a preview of a session.
+// Mirrors proto/session.proto SessionsPreviewEntry.
+type SessionsPreviewEntry struct {
+	Key    string               `json:"key"`
+	Status string               `json:"status"` // "ok" | "empty" | "missing" | "error"
+	Items  []SessionPreviewItem `json:"items,omitempty"`
+}

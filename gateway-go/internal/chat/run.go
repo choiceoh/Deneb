@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
@@ -54,23 +55,26 @@ const (
 // Optional fields (may be nil): transcript, tools, authManager,
 // broadcast, broadcastRaw, jobTracker. Required: sessions, logger.
 type runDeps struct {
-	sessions         *session.Manager           // required
-	llmClient        *llm.Client                // optional; resolved from authManager if nil
-	transcript       TranscriptStore            // optional; history unavailable without it
-	tools            *ToolRegistry              // optional; no tool use if nil
-	authManager      *provider.AuthManager      // optional; uses pre-configured client if nil
-	broadcast        BroadcastFunc              // optional
-	broadcastRaw     streaming.BroadcastRawFunc // optional
-	jobTracker       *agent.JobTracker          // optional
-	replyFunc        ReplyFunc                  // optional; delivers response to originating channel
-	mediaSendFn      MediaSendFunc              // optional; delivers files to originating channel
-	typingFn         TypingFunc                 // optional; sends typing indicator during run
-	reactionFn       ReactionFunc               // optional; sets emoji reaction for status phases
-	removeReactionFn ReactionFunc               // optional; removes emoji reaction
+	sessions         *session.Manager                  // required
+	llmClient        *llm.Client                       // optional; resolved from authManager if nil
+	transcript       TranscriptStore                   // optional; history unavailable without it
+	tools            *ToolRegistry                     // optional; no tool use if nil
+	authManager      *provider.AuthManager             // optional; uses pre-configured client if nil
+	providerRuntime  *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
+	broadcast        BroadcastFunc                     // optional
+	broadcastRaw     streaming.BroadcastRawFunc        // optional
+	jobTracker       *agent.JobTracker                 // optional
+	channels         *channel.Registry                 // optional; multi-target delivery via streaming.Dispatch
+	replyFunc        ReplyFunc                         // optional; delivers response to originating channel
+	mediaSendFn      MediaSendFunc                     // optional; delivers files to originating channel
+	typingFn         TypingFunc                        // optional; sends typing indicator during run
+	reactionFn       ReactionFunc                      // optional; sets emoji reaction for status phases
+	removeReactionFn ReactionFunc                      // optional; removes emoji reaction
 	// channelUploadLimitFn returns the max file upload size for a channel ID.
 	// Returns 0 if no limit is registered (tool applies its own default).
 	channelUploadLimitFn func(channelID string) int64 // optional
 	toolProgressFn       ToolProgressFunc             // optional; reports tool events to channel integrations
+	draftEditFn          DraftEditFunc                // optional; sends/edits streaming draft messages
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
@@ -82,14 +86,22 @@ type runDeps struct {
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
 	registry       *modelrole.Registry       // centralized model role registry
-	contextCfg     ContextConfig
-	compactionCfg  CompactionConfig
-	defaultModel   string
-	defaultSystem  string
-	maxTokens      int
+	// emitAgentFn sends agent lifecycle events (run.start, tool.start, tool.end)
+	// to the gateway event subscription pipeline. Optional; nil if not wired.
+	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
+	// emitTranscriptFn sends transcript updates (user/assistant message appends)
+	// to the gateway event subscription pipeline. Optional; nil if not wired.
+	emitTranscriptFn func(sessionKey string, message any, messageID string)
+	contextCfg       ContextConfig
+	compactionCfg    CompactionConfig
+	defaultModel     string
+	defaultSystem    string
+	maxTokens        int
 	// shutdownCtx is the server lifecycle context; used to bound background
 	// goroutines (e.g., auto-memory extraction) so they stop on server shutdown.
 	shutdownCtx context.Context
+	// hookRegistry fires user-defined shell hooks on message/tool events.
+	hookRegistry *hooks.Registry
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
@@ -174,7 +186,10 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// Set up phase-aware typing indicator for channel delivery (e.g., Telegram).
 	// Uses TypingController (5s keepalive matching Telegram's sendChatAction TTL)
 	// with FullTypingSignaler for phase-aware signals (text, thinking, tool use).
+	// A simpler TypingSignaler is also created for granular phase tracking
+	// (SetPhase/Signal) which downstream consumers can use for phase-aware dispatch.
 	var typingSignaler *typing.FullTypingSignaler
+	var phaseSignaler *typing.TypingSignaler
 	if deps.typingFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
 		typingCtrl := typing.NewTypingController(typing.TypingControllerConfig{
@@ -183,6 +198,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		})
 		typingSignaler = typing.NewFullTypingSignaler(typingCtrl, typing.TypingModeInstant, false)
 		typingSignaler.SignalRunStart()
+
+		// Phase signaler wraps the same controller for simpler SetPhase/Signal use.
+		phaseSignaler = typing.NewTypingSignaler(typingCtrl)
+		phaseSignaler.SetPhase("text")
+		phaseSignaler.Signal()
 	}
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
@@ -208,6 +228,14 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 				defer cancel()
 				return deps.reactionFn(rctx, delivery, emoji)
 			},
+			RemoveReaction: func(emoji string) error {
+				if deps.removeReactionFn == nil {
+					return nil
+				}
+				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+				return deps.removeReactionFn(rctx, delivery, emoji)
+			},
 		}
 		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
 			Enabled: true,
@@ -226,9 +254,12 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// Run the agent and capture result.
 	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
 
-	// Stop typing indicator before delivering the reply.
+	// Stop typing indicators before delivering the reply.
 	if typingSignaler != nil {
 		typingSignaler.Stop()
+	}
+	if phaseSignaler != nil {
+		phaseSignaler.Stop()
 	}
 
 	// Handle completion.

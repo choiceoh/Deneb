@@ -14,13 +14,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -71,6 +74,35 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		return
 	}
 
+	// Handle edited messages: log the edit for observability. In a single-user
+	// deployment the original session context is not retroactively updated, but
+	// the edit is surfaced in logs so the operator can correlate if needed.
+	if update.EditedMessage != nil {
+		p.logger.Debug("telegram message edited",
+			"chatId", update.EditedMessage.Chat.ID,
+			"msgId", update.EditedMessage.MessageID,
+		)
+		return
+	}
+
+	// Handle channel posts (messages posted to a Telegram channel the bot is in).
+	if update.ChannelPost != nil {
+		p.logger.Debug("telegram channel post",
+			"chatId", update.ChannelPost.Chat.ID,
+			"msgId", update.ChannelPost.MessageID,
+		)
+		return
+	}
+
+	// Handle message reactions (emoji reactions added/removed by users).
+	if update.MessageReaction != nil {
+		p.logger.Debug("telegram message reaction",
+			"chatId", update.MessageReaction.Chat.ID,
+			"msgId", update.MessageReaction.MessageID,
+		)
+		return
+	}
+
 	msg := update.Message
 	if msg == nil {
 		return
@@ -96,6 +128,26 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 
 	chatID := fmt.Sprintf("%d", msg.Chat.ID)
 	sessionKey := "telegram:" + chatID
+
+	// Plugin conversation binding: if a plugin has bound this conversation
+	// to a specific session key, use it instead of the default.
+	if p.server.conversationBindings != nil {
+		bindings := p.server.conversationBindings.ListByChannel("telegram")
+		for _, b := range bindings {
+			if b.AccountID == chatID && b.Approved && b.SessionKey != "" {
+				sessionKey = b.SessionKey
+				break
+			}
+		}
+	}
+
+	// Thread bindings: when processing a message in a forum topic thread,
+	// create a thread-specific session key so each topic gets its own context.
+	if msg.MessageThreadID != 0 && msg.IsTopicMessage {
+		if channel.ResolveThreadBindingsEnabled(nil, nil) {
+			sessionKey = fmt.Sprintf("telegram:%s:thread:%d", chatID, msg.MessageThreadID)
+		}
+	}
 
 	// Build autoreply MsgContext from the Telegram message.
 	var senderID string
@@ -123,53 +175,72 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
 	inbound.FinalizeInboundContext(msgCtx)
 
+	// Fire message.receive hook after parsing, before dispatch.
+	if p.server.hooks != nil {
+		p.server.safeGo("hooks:message.receive", func() {
+			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
+				"DENEB_CHANNEL":    "telegram",
+				"DENEB_CHAT_ID":    chatID,
+				"DENEB_MESSAGE":    msgText,
+				"DENEB_SESSION_KEY": sessionKey,
+			})
+		})
+	}
+
+	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
+	shouldAck := channel.ShouldAckReaction(channel.AckReactionGateParams{
+		Scope:    channel.AckScopeAll,
+		IsDirect: !msgCtx.IsGroup,
+		IsGroup:  msgCtx.IsGroup,
+	})
+	var didAck bool
+	if shouldAck {
+		client := p.server.telegramPlug.Client()
+		if client != nil {
+			chatIDInt, _ := telegram.ParseChatID(chatID)
+			if err := client.SetMessageReaction(context.Background(), chatIDInt, msg.MessageID, "👀"); err == nil {
+				didAck = true
+			}
+		}
+	}
+
+	// --- Part B: Conversation label — resolve a display label for this session.
+	convLabel := channel.ResolveConversationLabel(channel.ConversationLabelFields{
+		ChatType:     msg.Chat.Type,
+		SenderName:   senderName,
+		From:         chatID,
+		GroupSubject: msg.Chat.Title,
+	})
+	if convLabel != "" && p.server.sessions != nil {
+		p.server.sessions.Patch(sessionKey, session.PatchFields{Label: &convLabel})
+	}
+
 	// Strip bot mentions in group chats.
 	if msgCtx.IsGroup {
 		msgCtx.BodyForAgent = inbound.StripMentions(msgCtx.BodyForAgent, "")
 		msgCtx.BodyForCommands = inbound.StripMentions(msgCtx.BodyForCommands, "")
-	}
 
-	// Try slash command dispatch (only for text messages with commands).
-	trimmed := strings.TrimSpace(msgCtx.BodyForCommands)
-	if strings.HasPrefix(trimmed, "/") {
-		cmdKey := extractCommandKey(trimmed)
-		if cmdKey != "" && p.cmdRouter.HasHandler(cmdKey) {
-			result, err := p.cmdRouter.Dispatch(handlers.CommandContext{
-				Command:    cmdKey,
-				Body:       msgCtx.Body,
-				SessionKey: sessionKey,
-				Channel:    "telegram",
-				IsGroup:    msgCtx.IsGroup,
-				Msg:        msgCtx,
-				Session: &types.SessionState{
-					SessionKey: sessionKey,
-					Channel:    "telegram",
-					IsGroup:    msgCtx.IsGroup,
-				},
-				Deps: p.buildCommandDeps(sessionKey),
-			})
-			if err == nil && result != nil && result.SkipAgent {
-				// Command handled; send reply back to Telegram.
-				p.sendCommandReply(chatID, result)
-				return
+		// Handle /activation command to change group activation mode.
+		if hasCmd, activationMode := autoreply.ParseActivationCommand(msgCtx.BodyForCommands, p.cmdRegistry); hasCmd {
+			if activationMode != "" && p.server.sessions != nil {
+				activationStr := string(activationMode)
+				p.server.sessions.Patch(sessionKey, session.PatchFields{GroupActivation: &activationStr})
+				p.sendCommandReply(chatID, &handlers.CommandResult{
+					Reply: fmt.Sprintf("👥 Group activation: **%s**", activationMode), SkipAgent: true,
+				})
+			} else {
+				p.sendCommandReply(chatID, &handlers.CommandResult{
+					Reply: "👥 Usage: /activation mention|always", SkipAgent: true,
+				})
 			}
-			// Command processed but agent should continue (e.g., /btw).
-			if err == nil && result != nil && result.Reply != "" {
-				p.sendCommandReply(chatID, result)
-			}
+			return
 		}
 	}
 
-	// Parse inline directives (!model, !think, etc.) and clean the message body.
-	agentMessage := msgCtx.BodyForAgent
-	if agentMessage != "" {
-		directives := rules.ParseInlineDirectives(agentMessage, nil)
-		if directives.Cleaned != "" {
-			agentMessage = directives.Cleaned
-		}
-	}
+	// --- Enrich the agent message before dispatch ---
 
 	// Interactive replies: extract reply context when user replies to a message.
+	agentMessage := msgCtx.BodyForAgent
 	if rc := ExtractReplyContext(msg, p.server.telegramPlug.BotUserID()); rc != nil {
 		msgCtx.ReplyToID = rc.ReplyToID
 		if prefix := FormatReplyPrefix(rc); prefix != "" {
@@ -218,45 +289,106 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		agentMessage = agentMessage + "\n\n" + linkSummary
 	}
 
-	// Build delivery context with triggering message ID for reply threading.
-	delivery := map[string]any{
-		"channel": "telegram",
-		"to":      chatID,
-	}
-	if msg.MessageID != 0 {
-		delivery["messageId"] = strconv.FormatInt(msg.MessageID, 10)
+	// Update msgCtx with the fully enriched message body for the dispatch pipeline.
+	msgCtx.BodyForAgent = agentMessage
+
+	// --- Subagent command intercept ---
+	// Check for /subagents, /kill (subagent), /steer, /tell, /focus, /unfocus,
+	// /agents commands and dispatch them through the subagent command handler
+	// before the general autoreply pipeline.
+	if normalized := strings.ToLower(strings.TrimSpace(msgCtx.BodyForCommands)); normalized != "" {
+		if subagentpkg.ResolveHandledPrefix(normalized) != "" {
+			var threadID string
+			if msg.MessageThreadID != 0 {
+				threadID = fmt.Sprintf("%d", msg.MessageThreadID)
+			}
+			subagentResult := p.dispatchSubagentCommand(
+				normalized, sessionKey, "telegram", msgCtx.AccountID,
+				threadID, msgCtx.SenderID, msgCtx.IsGroup,
+			)
+			if subagentResult != nil && subagentResult.ShouldStop {
+				if subagentResult.Reply != "" {
+					p.sendCommandReply(chatID, &handlers.CommandResult{Reply: subagentResult.Reply})
+				}
+				return
+			}
+		}
 	}
 
-	// Build chat.send params.
-	sendParams := map[string]any{
-		"sessionKey": sessionKey,
-		"message":    agentMessage,
-		"delivery":   delivery,
-	}
-	if len(attachments) > 0 {
-		sendParams["attachments"] = attachments
+	// --- Dispatch through the autoreply pipeline ---
+	// DispatchFromConfig handles: abort detection, command dispatch, inline
+	// directive parsing, model resolution, and agent execution (via bridge
+	// executor that delegates to chat.send).
+
+	dispatchCfg := autoreply.DispatchConfig{
+		SessionKey: sessionKey,
+		Channel:    "telegram",
+		To:         chatID,
+		AccountID:  msgCtx.AccountID,
+		ThreadID:   msgCtx.ThreadID,
+		IsGroup:    msgCtx.IsGroup,
 	}
 
-	// Dispatch to chat.send with the preprocessed message and media attachments.
-	req, err := protocol.NewRequestFrame(
-		"tg-"+chatID+"-"+strconv.FormatInt(msg.MessageID, 10),
-		"chat.send",
-		sendParams,
+	executor := &chatSendExecutor{
+		chatHandler: p.chatHandler,
+		chatID:      chatID,
+		messageID:   msg.MessageID,
+		attachments: attachments,
+		logger:      p.logger,
+	}
+
+	dispatchDeps := autoreply.ReplyDeps{
+		Agent:       executor,
+		Registry:    p.cmdRegistry,
+		Router:      p.cmdRouter,
+		CommandDeps: p.buildCommandDeps(sessionKey),
+		History:     p.server.historyTracker,
+		AbortMemory: p.server.abortMemory,
+		SessionFunc: func(key string) *types.SessionState {
+			return &types.SessionState{
+				SessionKey: key,
+				Channel:    "telegram",
+				IsGroup:    msgCtx.IsGroup,
+			}
+		},
+	}
+
+	dispatchResult := autoreply.DispatchFromConfig(
+		context.Background(), msgCtx, dispatchCfg, dispatchDeps,
 	)
-	if err != nil {
-		p.logger.Error("failed to build chat.send request", "error", err)
-		return
-	}
 
-	sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer sendCancel()
-	resp := p.chatHandler.Send(sendCtx, req)
-	if resp != nil && !resp.OK {
-		p.logger.Warn("chat.send failed for telegram message",
+	// If DispatchFromConfig produced command reply payloads (abort/command
+	// handled without agent), deliver them directly to Telegram.
+	if dispatchResult.Error != nil {
+		p.logger.Warn("autoreply dispatch error",
 			"chatId", chatID,
-			"error", resp.Error,
+			"error", dispatchResult.Error,
 		)
 	}
+	if len(dispatchResult.Payloads) > 0 && !executor.didSend {
+		for _, payload := range dispatchResult.Payloads {
+			if payload.Text != "" {
+				p.sendCommandReply(chatID, &handlers.CommandResult{Reply: payload.Text})
+			}
+		}
+	}
+
+	// Remove ack reaction after the reply is sent.
+	channel.RemoveAckReactionAfterReply(channel.RemoveAckReactionAfterReplyParams{
+		RemoveAfterReply: true,
+		DidAck:           didAck,
+		Remove: func() error {
+			client := p.server.telegramPlug.Client()
+			if client == nil {
+				return nil
+			}
+			chatIDInt, _ := telegram.ParseChatID(chatID)
+			return client.SetMessageReaction(context.Background(), chatIDInt, msg.MessageID, "")
+		},
+		OnError: func(err error) {
+			p.logger.Warn("failed to remove ack reaction", "error", err)
+		},
+	})
 }
 
 // extractAttachments downloads media from a Telegram message with a bounded timeout.
@@ -295,6 +427,19 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 	first := messages[0]
 	chatID := fmt.Sprintf("%d", first.Chat.ID)
 	sessionKey := "telegram:" + chatID
+
+	// Fire message.receive hook for the media group.
+	if p.server.hooks != nil {
+		caption := media.MessageText(first)
+		p.server.safeGo("hooks:message.receive", func() {
+			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
+				"DENEB_CHANNEL":    "telegram",
+				"DENEB_CHAT_ID":    chatID,
+				"DENEB_MESSAGE":    caption,
+				"DENEB_SESSION_KEY": sessionKey,
+			})
+		})
+	}
 
 	// Collect caption from whichever message has one (Telegram puts the caption
 	// on only one of the media group messages, usually the first).
@@ -466,6 +611,71 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 	return &handlers.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn}
 }
 
+// chatSendExecutor bridges the autoreply.AgentExecutor interface to
+// chat.Handler.Send. When the autoreply pipeline decides the message should
+// go to the agent (not handled by a command or abort), RunTurn builds a
+// chat.send request frame and dispatches it through the existing async
+// chat handler pipeline.
+type chatSendExecutor struct {
+	chatHandler *chat.Handler
+	chatID      string
+	messageID   int64
+	attachments []chat.ChatAttachment
+	logger      *slog.Logger
+	didSend     bool // set to true after chat.send dispatch
+}
+
+func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnConfig) (*autoreply.AgentTurnResult, error) {
+	// Build delivery context with triggering message ID for reply threading.
+	delivery := map[string]any{
+		"channel": "telegram",
+		"to":      e.chatID,
+	}
+	if e.messageID != 0 {
+		delivery["messageId"] = strconv.FormatInt(e.messageID, 10)
+	}
+
+	sendParams := map[string]any{
+		"sessionKey": cfg.SessionKey,
+		"message":    cfg.Message,
+		"delivery":   delivery,
+	}
+	if cfg.Model != "" {
+		sendParams["model"] = cfg.Model
+	}
+	if len(e.attachments) > 0 {
+		sendParams["attachments"] = e.attachments
+	}
+
+	req, err := protocol.NewRequestFrame(
+		"tg-"+e.chatID+"-"+strconv.FormatInt(e.messageID, 10),
+		"chat.send",
+		sendParams,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build chat.send request: %w", err)
+	}
+
+	sendCtx, sendCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer sendCancel()
+	resp := e.chatHandler.Send(sendCtx, req)
+	if resp != nil && !resp.OK {
+		errMsg := "unknown error"
+		if resp.Error != nil {
+			errMsg = resp.Error.Message
+		}
+		e.logger.Warn("chat.send failed via autoreply executor",
+			"chatId", e.chatID,
+			"error", errMsg,
+		)
+	}
+
+	e.didSend = true
+
+	// Return empty result — actual reply delivery is async via chat handler.
+	return &autoreply.AgentTurnResult{}, nil
+}
+
 // extractCommandKey pulls the command name from a slash-prefixed message.
 // "/model gpt-4" → "model", "/new" → "new".
 func extractCommandKey(text string) string {
@@ -508,6 +718,18 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 	chatID := fmt.Sprintf("%d", cb.Message.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
+	// Fire message.receive hook for callback query.
+	if p.server.hooks != nil {
+		p.server.safeGo("hooks:message.receive", func() {
+			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
+				"DENEB_CHANNEL":    "telegram",
+				"DENEB_CHAT_ID":    chatID,
+				"DENEB_MESSAGE":    cb.Data,
+				"DENEB_SESSION_KEY": sessionKey,
+			})
+		})
+	}
+
 	// Acknowledge to Telegram (stops the loading spinner on the button).
 	client := p.server.telegramPlug.Client()
 	if client != nil {
@@ -547,4 +769,41 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 			"error", resp.Error,
 		)
 	}
+}
+
+// dispatchSubagentCommand routes a subagent command through the subagent
+// dispatcher, wiring ACP registry deps when available.
+func (p *InboundProcessor) dispatchSubagentCommand(
+	normalized string,
+	sessionKey string,
+	channelName string,
+	accountID string,
+	threadID string,
+	senderID string,
+	isGroup bool,
+) *subagentpkg.SubagentCommandResult {
+	var deps *subagentpkg.SubagentCommandDeps
+	if p.server.acpDeps != nil && p.server.acpDeps.Registry != nil {
+		cfg := subagentpkg.ACPCommandDepsConfig{
+			Infra: p.server.acpDeps.Infra,
+		}
+		// Wire SessionSendFn from the ACP deps when available so that
+		// /subagents send, /steer, and spawn initial-message delivery work.
+		if p.server.acpDeps.SessionSendFn != nil {
+			cfg.SessionSendFn = p.server.acpDeps.SessionSendFn
+		}
+		// Wire SessionBindings so /focus, /unfocus, and /agents commands
+		// can resolve and mutate conversation-to-session bindings.
+		if p.server.acpDeps.Bindings != nil {
+			cfg.SessionBindings = p.server.acpDeps.Bindings
+		}
+		deps = subagentpkg.NewSubagentCommandDepsFromACP(
+			p.server.acpDeps.Registry, cfg,
+		)
+	}
+	return subagentpkg.HandleSubagentsCommand(
+		normalized, sessionKey, channelName, accountID, threadID,
+		senderID, isGroup, true, // isAuthorized: single-user deployment
+		deps,
+	)
 }

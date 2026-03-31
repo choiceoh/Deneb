@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -34,6 +38,27 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 			return ctx
 		},
 	}
+
+	// Wire TLS termination from gateway.tls config when enabled with cert/key paths.
+	if s.runtimeCfg != nil && s.runtimeCfg.TLSConfig != nil &&
+		s.runtimeCfg.TLSConfig.Enabled != nil && *s.runtimeCfg.TLSConfig.Enabled {
+		tlsCfg := s.runtimeCfg.TLSConfig
+		if tlsCfg.CertPath != "" && tlsCfg.KeyPath != "" {
+			cert, err := tls.LoadX509KeyPair(tlsCfg.CertPath, tlsCfg.KeyPath)
+			if err != nil {
+				ln.Close()
+				return nil, fmt.Errorf("failed to load TLS cert/key: %w", err)
+			}
+			tlsConfig := &tls.Config{
+				Certificates: []tls.Certificate{cert},
+				MinVersion:   tls.VersionTLS12,
+			}
+			ln = tls.NewListener(ln, tlsConfig)
+			s.logger.Info("TLS enabled", "cert", tlsCfg.CertPath)
+		} else {
+			s.logger.Warn("gateway.tls.enabled=true but certPath/keyPath not configured; serving plain HTTP")
+		}
+	}
 	s.startedAt = time.Now()
 	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)
@@ -44,6 +69,14 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// goroutines (auto-memory extraction) stop cleanly on shutdown.
 	if s.chatHandler != nil {
 		s.chatHandler.SetShutdownCtx(ctx)
+	}
+
+	// Discover and load plugins.
+	if s.pluginDiscoverer != nil {
+		s.safeGo("plugin-discovery", func() {
+			result := s.pluginDiscoverer.DiscoverPlugins(plugin.DiscoverPluginsParams{})
+			s.logger.Info("plugins discovered", "count", len(result.Candidates))
+		})
 	}
 
 	// Auto-start all registered channel plugins synchronously so that RPC
@@ -65,6 +98,40 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 				s.logger.Error("cron service start failed", "error", err)
 			}
 		})
+	}
+
+	// Start cron session reaper to prune expired cron run sessions.
+	if s.cronService != nil {
+		reaper := cron.NewSessionReaper(0, s.logger)
+		s.safeGo("cron-session-reaper", func() {
+			reaper.SweepPeriodically(
+				ctx.Done(),
+				0,
+				func() []string {
+					sessions := s.sessions.List()
+					keys := make([]string, len(sessions))
+					for i, sess := range sessions {
+						keys[i] = sess.Key
+					}
+					return keys
+				},
+				func(key string) {
+					s.sessions.Delete(key)
+				},
+			)
+		})
+	}
+
+	// Create the run state machine to track active agent runs.
+	s.runStateMachine = channel.NewRunStateMachine(ctx, func(patch channel.StatusPatch) {
+		if s.snapshotStore != nil && patch.ActiveRuns != nil {
+			s.logger.Debug("run state changed", "activeRuns", *patch.ActiveRuns)
+		}
+	}, 30*time.Second)
+
+	// Wire the run state machine to the chat handler.
+	if s.chatHandler != nil {
+		s.chatHandler.SetRunStateMachine(s.runStateMachine)
 	}
 
 	// Mark ready only after all channel plugins have had a chance to start.
@@ -226,7 +293,12 @@ func (s *Server) doShutdown() error {
 		stopCancel()
 	}
 
-	// 9. Close chat handler.
+	// 9. Close run state machine.
+	if s.runStateMachine != nil {
+		s.runStateMachine.Close()
+	}
+
+	// 10. Close chat handler.
 	if s.chatHandler != nil {
 		s.chatHandler.Close()
 	}

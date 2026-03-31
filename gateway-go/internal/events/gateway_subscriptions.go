@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 // AgentEvent represents an agent bus event (agent run lifecycle, tool use, etc.).
@@ -54,6 +55,9 @@ type GatewayEventSubscriptions struct {
 	lifecycleCh  chan LifecycleChangeEvent
 	done         chan struct{}
 
+	// Optional publisher for enriched event delivery (set after construction).
+	publisher unsafe.Pointer // *Publisher, accessed atomically
+
 	// Drop counters for observability (atomic, no lock needed).
 	agentDrops      atomic.Int64
 	heartbeatDrops  atomic.Int64
@@ -85,6 +89,17 @@ func NewGatewayEventSubscriptions(params GatewaySubscriptionParams) *GatewayEven
 	go g.runDropLogger(params.Logger)
 
 	return g
+}
+
+// SetPublisher sets the enrichment publisher for transcript and agent events.
+// Safe to call after construction; the running loops pick it up atomically.
+func (g *GatewayEventSubscriptions) SetPublisher(p *Publisher) {
+	atomic.StorePointer(&g.publisher, unsafe.Pointer(p))
+}
+
+// getPublisher returns the current publisher, or nil if none is set.
+func (g *GatewayEventSubscriptions) getPublisher() *Publisher {
+	return (*Publisher)(atomic.LoadPointer(&g.publisher))
 }
 
 // EmitAgent sends an agent event into the subscription pipeline.
@@ -140,6 +155,12 @@ func (g *GatewayEventSubscriptions) runAgentLoop(params GatewaySubscriptionParam
 		case <-g.done:
 			return
 		case evt := <-g.agentCh:
+			// Delegate to publisher for sequenced delivery when available.
+			if pub := g.getPublisher(); pub != nil {
+				pub.PublishAgentEvent(evt)
+				continue
+			}
+			// Fallback: direct broadcast without sequencing.
 			params.Broadcaster.BroadcastWithOpts("agent", evt, BroadcastOpts{DropIfSlow: true})
 		}
 	}
@@ -162,6 +183,13 @@ func (g *GatewayEventSubscriptions) runTranscriptLoop(params GatewaySubscription
 		case <-g.done:
 			return
 		case update := <-g.transcriptCh:
+			// Delegate to publisher for enriched delivery when available.
+			if pub := g.getPublisher(); pub != nil {
+				pub.PublishSessionMessage(update)
+				continue
+			}
+
+			// Fallback: direct broadcast without session snapshot enrichment.
 			if update.SessionKey == "" || update.Message == nil {
 				continue
 			}

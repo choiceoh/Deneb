@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -44,6 +45,33 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	// Pre-process slash commands before dispatching to agent.
 	if slashResult := ParseSlashCommand(p.Message); slashResult != nil && slashResult.Handled {
 		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult)
+	}
+
+	// Resolve queue action when a run is already active for this session.
+	// Decides whether to run now (interrupting), enqueue as followup, or drop.
+	isActive := h.hasActiveRunForSession(p.SessionKey)
+	action := queue.ResolveActiveRunQueueAction(
+		isActive,
+		false, // isHeartbeat: inbound user messages are never heartbeats
+		false, // shouldFollowup: no followup queue wired yet
+		queue.QueueModeOff,
+	)
+	switch action {
+	case queue.QueueActionDrop:
+		h.logger.Info("queue policy: dropping message (active run)",
+			"sessionKey", p.SessionKey)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"status": "dropped",
+			"reason": "active-run",
+		})
+		return resp
+	case queue.QueueActionEnqueueFollowup:
+		h.logger.Info("queue policy: enqueue-followup (active run)",
+			"sessionKey", p.SessionKey)
+		// Fall through to interrupt + run for now; a full followup queue
+		// can be wired later without changing this call site.
+	case queue.QueueActionRunNow:
+		// Default path: interrupt and run immediately.
 	}
 
 	// Interrupt any active run on this session to prevent concurrent runs.

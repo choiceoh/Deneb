@@ -21,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
+	arSession "github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -73,6 +74,7 @@ type ServerRPC struct {
 	authValidator          *auth.Validator
 	providers              *provider.Registry
 	authManager            *provider.AuthManager
+	providerRuntime        *provider.ProviderRuntimeResolver
 	authRateLimiter        *auth.AuthRateLimiter
 	acpDeps                *handlerprocess.ACPDeps
 	acpLifecycleUnsub      func()
@@ -86,7 +88,9 @@ type ServerRuntime struct {
 	gatewaySubs   *events.GatewayEventSubscriptions
 	channelHealth *monitoring.ChannelHealthMonitor
 	activity      *monitoring.ActivityTracker
-	channelEvents *monitoring.ChannelEventTracker
+	channelEvents   *monitoring.ChannelEventTracker
+	snapshotStore   *channel.SnapshotStore
+	runStateMachine *channel.RunStateMachine
 }
 
 // ServerIntegrations owns optional domain/integration subsystems.
@@ -105,10 +109,14 @@ type ServerIntegrations struct {
 	usageTracker       *usage.Tracker
 	maintRunner        *maintenance.Runner
 	jobTracker         *agent.JobTracker
-	pluginFullRegistry *plugin.FullRegistry
-	pluginRouter       *pluginrouter.Router
+	pluginFullRegistry      *plugin.FullRegistry
+	pluginDiscoverer        *plugin.PluginDiscoverer
+	pluginTypedHookRunner   *plugin.TypedHookRunner
+	pluginRouter            *pluginrouter.Router
+	conversationBindings    *plugin.ConversationBindingStore
 	autonomousSvc      *autonomous.Service
 	dreamingAdapter    *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
+	memoryStore        *memory.Store           // structured memory store; used by flush task
 	gmailPollSvc       *gmailpoll.Service
 	autoresearchRunner *autoresearch.Runner
 }
@@ -124,6 +132,7 @@ type Server struct {
 	channelLifecycle *channel.LifecycleManager
 	dedupe           *dedupe.Tracker
 	broadcaster      *events.Broadcaster
+	publisher        *events.Publisher
 	processes        *process.Manager
 	daemon           *daemon.Daemon
 	runtimeCfg       *config.GatewayRuntimeConfig
@@ -255,7 +264,12 @@ func New(addr string, opts ...Option) *Server {
 		),
 		version:        "0.1.0-go",
 		logger:         slog.New(slog.NewJSONHandler(os.Stderr, nil)),
-		SessionManager: &SessionManager{sessions: session.NewManager()},
+		SessionManager: &SessionManager{
+			sessions:       session.NewManager(),
+			abortMemory:    arSession.NewAbortMemory(2000),
+			historyTracker: arSession.NewHistoryTracker(),
+			sessionUsage:   &arSession.SessionUsage{},
+		},
 		ChatManager:    &ChatManager{},
 		HookManager:    &HookManager{},
 	}
@@ -270,6 +284,8 @@ func New(addr string, opts ...Option) *Server {
 		Broadcaster: s.broadcaster,
 		Logger:      s.logger,
 	})
+	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotAdapter{sessions: s.sessions}, s.logger)
+	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
@@ -283,14 +299,18 @@ func New(addr string, opts ...Option) *Server {
 		}, nil, s.logger) // agent runner wired later during chat handler setup
 	}
 	s.hooks = hooks.NewRegistry(s.logger)
+	s.internalHooks = hooks.NewInternalRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
+	s.snapshotStore = channel.NewSnapshotStore()
+	s.channelLifecycle.SetSnapshotStore(s.snapshotStore)
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
-	// Provider auth manager.
+	// Provider auth manager and runtime resolver.
 	if s.providers != nil {
 		s.authManager = provider.NewAuthManager(s.providers, s.logger)
+		s.providerRuntime = provider.NewProviderRuntimeResolver(s.providers, s.logger)
 	}
 
 	// Phase 3: Advanced workflow subsystems.
@@ -343,6 +363,7 @@ func New(addr string, opts ...Option) *Server {
 		Sessions:         s.sessions,
 		Channels:         s.channels,
 		ChannelLifecycle: s.channelLifecycle,
+		SnapshotStore:    s.snapshotStore,
 		GatewaySubs:      s.gatewaySubs,
 		Version:          s.version,
 	})
@@ -358,10 +379,13 @@ func New(addr string, opts ...Option) *Server {
 		}))
 	}
 
-	// Initialize plugin full registry and register RPC methods.
+	// Initialize plugin full registry, discoverer, typed hook runner, conversation bindings, and register RPC methods.
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
+	s.pluginDiscoverer = plugin.NewPluginDiscoverer(s.logger)
+	s.conversationBindings = plugin.NewConversationBindingStore()
+	s.pluginTypedHookRunner = plugin.NewTypedHookRunner(s.logger)
 	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
-		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
+		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry, channelAdapter: channel.NewProtocolAdapter(s.channels)},
 	}))
 
 	// Plugin HTTP router with auth check backed by the gateway auth validator.

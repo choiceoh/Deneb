@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
@@ -170,38 +171,46 @@ type DirectiveHandlingOptions struct {
 
 // PersistDirectives applies directive results to the session store.
 // Mirrors directive-handling.persist.ts persistInlineDirectives().
-func PersistDirectives(session *types.SessionState, result DirectiveHandlingResult) {
+// Delegates to session.ApplySessionUpdate for fields that overlap with
+// the structured SessionUpdate type.
+func PersistDirectives(sess *types.SessionState, result DirectiveHandlingResult) {
 	if result.SessionMod == nil {
 		return
 	}
 	mod := result.SessionMod
-	if mod.ThinkLevel != "" {
-		session.ThinkLevel = mod.ThinkLevel
-	}
-	if mod.VerboseLevel != "" {
-		session.VerboseLevel = mod.VerboseLevel
-	}
-	if mod.FastMode != nil {
-		session.FastMode = *mod.FastMode
-	}
-	if mod.ReasoningLevel != "" {
-		session.ReasoningLevel = mod.ReasoningLevel
-	}
-	if mod.ElevatedLevel != "" {
-		session.ElevatedLevel = mod.ElevatedLevel
-	}
+
+	// Build a SessionUpdate from the directive modification and apply it.
+	// This ensures timestamp tracking and field-level consistency via the
+	// session sub-package.
+	update := session.SessionUpdate{}
 	if mod.Model != "" {
-		session.Model = mod.Model
+		update.Model = &mod.Model
 	}
 	if mod.Provider != "" {
-		session.Provider = mod.Provider
+		update.Provider = &mod.Provider
+	}
+	if mod.ThinkLevel != "" {
+		update.ThinkLevel = &mod.ThinkLevel
+	}
+	if mod.FastMode != nil {
+		update.FastMode = mod.FastMode
+	}
+	if mod.VerboseLevel != "" {
+		update.VerboseLevel = &mod.VerboseLevel
+	}
+	if mod.ReasoningLevel != "" {
+		update.ReasoningLevel = &mod.ReasoningLevel
+	}
+	if mod.ElevatedLevel != "" {
+		update.ElevatedLevel = &mod.ElevatedLevel
 	}
 	if mod.SendPolicy != "" {
-		session.SendPolicy = mod.SendPolicy
+		update.SendPolicy = &mod.SendPolicy
 	}
 	if mod.GroupActivation != "" {
-		session.GroupActivation = mod.GroupActivation
+		update.GroupActivation = &mod.GroupActivation
 	}
+	session.ApplySessionUpdate(sess, update)
 }
 
 // ResolveCurrentDirectiveLevels resolves effective levels from session + config.

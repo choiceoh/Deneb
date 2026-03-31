@@ -13,27 +13,40 @@ import (
 // Capabilities describes what a channel supports.
 // Mirrors proto/channel.proto ChannelCapabilities.
 type Capabilities struct {
-	ChatTypes      []string `json:"chatTypes"`
-	Polls          bool     `json:"polls,omitempty"`
-	Reactions      bool     `json:"reactions,omitempty"`
-	Edit           bool     `json:"edit,omitempty"`
-	Unsend         bool     `json:"unsend,omitempty"`
-	Reply          bool     `json:"reply,omitempty"`
-	Threads        bool     `json:"threads,omitempty"`
-	Media          bool     `json:"media,omitempty"`
-	BlockStreaming bool     `json:"blockStreaming,omitempty"`
+	ChatTypes       []string `json:"chatTypes"`
+	Polls           bool     `json:"polls,omitempty"`
+	Reactions       bool     `json:"reactions,omitempty"`
+	Edit            bool     `json:"edit,omitempty"`
+	Unsend          bool     `json:"unsend,omitempty"`
+	Reply           bool     `json:"reply,omitempty"`
+	Effects         bool     `json:"effects,omitempty"`
+	GroupManagement bool     `json:"groupManagement,omitempty"`
+	Threads         bool     `json:"threads,omitempty"`
+	Media           bool     `json:"media,omitempty"`
+	NativeCommands  bool     `json:"nativeCommands,omitempty"`
+	BlockStreaming  bool     `json:"blockStreaming,omitempty"`
 }
 
 // Meta describes channel metadata.
 // Mirrors proto/channel.proto ChannelMeta.
 type Meta struct {
-	ID             string   `json:"id"`
-	Label          string   `json:"label"`
-	SelectionLabel string   `json:"selectionLabel"`
-	DocsPath       string   `json:"docsPath"`
-	Blurb          string   `json:"blurb"`
-	Order          int      `json:"order,omitempty"`
-	Aliases        []string `json:"aliases,omitempty"`
+	ID                    string   `json:"id"`
+	Label                 string   `json:"label"`
+	SelectionLabel        string   `json:"selectionLabel"`
+	DocsPath              string   `json:"docsPath"`
+	DocsLabel             string   `json:"docsLabel,omitempty"`
+	Blurb                 string   `json:"blurb"`
+	Order                 int      `json:"order,omitempty"`
+	Aliases               []string `json:"aliases,omitempty"`
+	SelectionDocsPrefix   string   `json:"selectionDocsPrefix,omitempty"`
+	SelectionDocsOmitLabel bool    `json:"selectionDocsOmitLabel,omitempty"`
+	SelectionExtras       []string `json:"selectionExtras,omitempty"`
+	DetailLabel           string   `json:"detailLabel,omitempty"`
+	SystemImage           string   `json:"systemImage,omitempty"`
+	ShowConfigured        bool     `json:"showConfigured,omitempty"`
+	QuickstartAllowFrom   bool     `json:"quickstartAllowFrom,omitempty"`
+	ForceAccountBinding   bool     `json:"forceAccountBinding,omitempty"`
+	PreferOver            []string `json:"preferOver,omitempty"`
 }
 
 // Status represents the current runtime state of a channel.

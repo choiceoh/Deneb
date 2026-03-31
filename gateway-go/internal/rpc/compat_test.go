@@ -35,6 +35,7 @@ type DeviceDeps = handlernode.DeviceDeps
 type ApprovalDeps = handlerprocess.ApprovalDeps
 type ACPDeps = handlerprocess.ACPDeps
 type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
+type CronServiceDeps = handlerprocess.CronServiceDeps
 type ProviderDeps = handlerprovider.Deps
 type ModelsDeps = handlerprovider.ModelsDeps
 type PluginDeps = handlerskill.PluginDeps
@@ -103,6 +104,9 @@ func RegisterACPMethods(d *Dispatcher, deps *ACPDeps) {
 }
 func RegisterCronAdvancedMethods(d *Dispatcher, deps CronAdvancedDeps) {
 	d.RegisterDomain(handlerprocess.CronAdvancedMethods(deps))
+}
+func RegisterCronServiceMethods(d *Dispatcher, deps CronServiceDeps) {
+	d.RegisterDomain(handlerprocess.CronServiceMethods(deps))
 }
 func RegisterProviderMethods(d *Dispatcher, deps ProviderDeps) {
 	d.RegisterDomain(handlerprovider.Methods(deps))

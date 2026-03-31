@@ -61,6 +61,15 @@ type StateVersion struct {
 	Health   uint64 `json:"health"`
 }
 
+// GatewayFrame is a union of all frame types, discriminated by the Type field.
+// Mirrors proto/gateway.proto GatewayFrame. Exactly one of Request, Response,
+// or Event is non-nil.
+type GatewayFrame struct {
+	Request  *RequestFrame  `json:"request,omitempty"`
+	Response *ResponseFrame `json:"response,omitempty"`
+	Event    *EventFrame    `json:"event,omitempty"`
+}
+
 // ProtocolVersion is the current gateway protocol version.
 const ProtocolVersion = 3
 

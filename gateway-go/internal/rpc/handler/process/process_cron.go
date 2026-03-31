@@ -295,3 +295,78 @@ func cronRuns(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		return resp
 	}
 }
+
+// CronServiceDeps holds the dependencies for cron.Service-backed RPC methods.
+type CronServiceDeps struct {
+	Service *cron.Service
+}
+
+// CronServiceMethods returns RPC handlers backed by cron.Service
+// (cron.listPage, cron.get). These complement CronAdvancedMethods which
+// use cron.Scheduler.
+func CronServiceMethods(deps CronServiceDeps) map[string]rpcutil.HandlerFunc {
+	if deps.Service == nil {
+		return nil
+	}
+	return map[string]rpcutil.HandlerFunc{
+		"cron.listPage": cronListPage(deps),
+		"cron.getJob":   cronGetJob(deps),
+	}
+}
+
+func cronListPage(deps CronServiceDeps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Limit           int    `json:"limit,omitempty"`
+			Offset          int    `json:"offset,omitempty"`
+			IncludeDisabled bool   `json:"includeDisabled,omitempty"`
+			Query           string `json:"query,omitempty"`
+			SortBy          string `json:"sortBy,omitempty"`
+			SortDir         string `json:"sortDir,omitempty"`
+		}
+		if req.Params != nil {
+			_ = json.Unmarshal(req.Params, &p)
+		}
+
+		result := deps.Service.ListPage(cron.ListPageOptions{
+			Limit:           p.Limit,
+			Offset:          p.Offset,
+			IncludeDisabled: p.IncludeDisabled,
+			Query:           p.Query,
+			SortBy:          p.SortBy,
+			SortDir:         p.SortDir,
+		})
+
+		return protocol.MustResponseOK(req.ID, result)
+	}
+}
+
+func cronGetJob(deps CronServiceDeps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ID    string `json:"id,omitempty"`
+			JobID string `json:"jobId,omitempty"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+
+		id := p.ID
+		if id == "" {
+			id = p.JobID
+		}
+		if id == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "id or jobId is required"))
+		}
+
+		job := deps.Service.GetJob(id)
+		if job == nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrNotFound, "job not found: "+id))
+		}
+
+		return protocol.MustResponseOK(req.ID, job)
+	}
+}

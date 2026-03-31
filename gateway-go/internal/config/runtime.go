@@ -30,6 +30,9 @@ type GatewayRuntimeConfig struct {
 	ChannelHealthCheckMinutes     int
 	ChannelStaleEventThresholdMin int
 	ChannelMaxRestartsPerHour     int
+	ReloadConfig                  GatewayReloadConfig
+	TLSConfig                     *GatewayTLSConfig
+	RemoteConfig                  *GatewayRemoteConfig
 }
 
 // RuntimeConfigParams are the inputs for resolving the runtime config.
@@ -233,6 +236,12 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		channelMaxRestarts = *gw.ChannelMaxRestartsPerHour
 	}
 
+	// Reload config (always populated with defaults by loader).
+	reloadCfg := GatewayReloadConfig{Mode: "hybrid"}
+	if gw.Reload != nil {
+		reloadCfg = *gw.Reload
+	}
+
 	return &GatewayRuntimeConfig{
 		BindHost:                      bindHost,
 		Port:                          params.Port,
@@ -253,6 +262,9 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		ChannelHealthCheckMinutes:     channelHealthCheck,
 		ChannelStaleEventThresholdMin: channelStale,
 		ChannelMaxRestartsPerHour:     channelMaxRestarts,
+		ReloadConfig:                  reloadCfg,
+		TLSConfig:                     gw.TLS,
+		RemoteConfig:                  gw.Remote,
 	}, nil
 }
 

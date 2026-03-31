@@ -60,6 +60,10 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
 	go func() {
+		if h.runStateMachine != nil {
+			h.runStateMachine.StartRun()
+			defer h.runStateMachine.EndRun()
+		}
 		defer runCancel()
 		defer h.cleanupAbort(params.ClientRunID)
 		defer func() {
@@ -92,6 +96,18 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		"status": "started",
 	})
 	return resp
+}
+
+// hasActiveRunForSession reports whether at least one run is active for the session.
+func (h *Handler) hasActiveRunForSession(sessionKey string) bool {
+	h.abortMu.Lock()
+	defer h.abortMu.Unlock()
+	for _, entry := range h.abortMap {
+		if entry.SessionKey == sessionKey {
+			return true
+		}
+	}
+	return false
 }
 
 // InterruptActiveRun cancels all active runs for a session key.
@@ -205,15 +221,18 @@ func (h *Handler) buildRunDeps() runDeps {
 		transcript:           h.transcript,
 		tools:                h.tools,
 		authManager:          h.authManager,
+		providerRuntime:      h.providerRuntime,
 		broadcast:            h.broadcast,
 		broadcastRaw:         h.broadcastRaw,
 		jobTracker:           h.jobTracker,
+		channels:             h.channels,
 		replyFunc:            h.replyFunc,
 		mediaSendFn:          h.mediaSendFn,
 		typingFn:             h.typingFn,
 		reactionFn:           h.reactionFn,
 		removeReactionFn:     h.removeReactionFn,
 		toolProgressFn:       h.toolProgressFn,
+		draftEditFn:          h.draftEditFn,
 		channelUploadLimitFn: h.ChannelUploadLimit,
 		providerConfigs:      h.providerConfigs,
 		logger:               h.logger,
@@ -225,12 +244,15 @@ func (h *Handler) buildRunDeps() runDeps {
 		dreamTurnFn:          h.dreamTurnFn,
 		agentLog:             h.agentLog,
 		registry:             h.registry,
+		emitAgentFn:          h.emitAgentFn,
+		emitTranscriptFn:     h.emitTranscriptFn,
 		contextCfg:           h.contextCfg,
 		compactionCfg:        h.compactionCfg,
 		defaultModel:         h.defaultModel,
 		defaultSystem:        h.defaultSystem,
 		maxTokens:            h.maxTokens,
 		shutdownCtx:          h.shutdownCtx,
+		hookRegistry:         h.hookRegistry,
 	}
 }
 

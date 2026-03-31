@@ -23,5 +23,9 @@ func BuiltinChatCommands() []ChatCommandDefinition {
 
 		// Subagents
 		{Key: "agents", Description: "List active subagents", TextAliases: []string{"/agents"}, Scope: ScopeText, Category: CategoryTools},
+
+		// Help & info
+		{Key: "help", Description: "Show available commands", TextAliases: []string{"/help"}, Scope: ScopeText, Category: CategoryStatus},
+		{Key: "commands", Description: "List commands (paginated)", TextAliases: []string{"/commands"}, AcceptsArgs: true, Args: []CommandArgDefinition{{Name: "page", Description: "Page number (0-indexed)", Type: "number"}}, Scope: ScopeText, Category: CategoryStatus},
 	}
 }

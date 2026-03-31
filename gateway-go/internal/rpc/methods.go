@@ -21,6 +21,7 @@ type Deps struct {
 	Sessions         *session.Manager
 	Channels         *channel.Registry
 	ChannelLifecycle *channel.LifecycleManager
+	SnapshotStore    *channel.SnapshotStore
 	GatewaySubs      *events.GatewayEventSubscriptions
 	Version          string // Server version string (from --version flag).
 }
@@ -191,6 +192,9 @@ func channelsGet(deps Deps) HandlerFunc {
 
 func channelsStatus(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if deps.SnapshotStore != nil {
+			return rpcutil.RespondOK(req.ID, deps.SnapshotStore.Snapshot())
+		}
 		return rpcutil.RespondOK(req.ID, deps.Channels.StatusAll())
 	}
 }

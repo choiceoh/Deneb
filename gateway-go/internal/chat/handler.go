@@ -8,9 +8,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -40,6 +43,7 @@ type Handler struct {
 	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer          // optional; agent detail logging
 	registry        *modelrole.Registry       // centralized model role registry
+	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -54,6 +58,11 @@ type Handler struct {
 	reactionFn       ReactionFunc     // optional: sets emoji reaction on triggering message
 	removeReactionFn ReactionFunc     // optional: removes emoji reaction
 	toolProgressFn   ToolProgressFunc // optional: reports tool execution events
+	draftEditFn      DraftEditFunc    // optional: sends/edits streaming draft messages
+	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
+	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
+	// emitTranscriptFn sends transcript updates to gateway event subscriptions.
+	emitTranscriptFn func(sessionKey string, message any, messageID string)
 
 	// uploadLimitsMu guards uploadLimits.
 	uploadLimitsMu sync.RWMutex
@@ -68,6 +77,20 @@ type Handler struct {
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
 	done     chan struct{}          // signals abortGCLoop to stop
+
+	// channels is the channel plugin registry, used for multi-target delivery
+	// via streaming.Dispatch when replyFunc is not set.
+	channels *channel.Registry
+
+	// runStateMachine tracks active agent runs for status broadcasting.
+	runStateMachine *channel.RunStateMachine
+
+	// pluginHookRunner runs typed plugin hooks (before_model_resolve,
+	// before_prompt_build, message_sending, etc.) during chat execution.
+	pluginHookRunner *plugin.TypedHookRunner
+
+	// hookRegistry fires user-defined shell hooks on message/tool events.
+	hookRegistry *hooks.Registry
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -163,6 +186,11 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	return h
 }
 
+// SetChannels sets the channel plugin registry for multi-target delivery.
+func (h *Handler) SetChannels(reg *channel.Registry) {
+	h.channels = reg
+}
+
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {
 	h.broadcastRaw = fn
@@ -210,6 +238,24 @@ func (h *Handler) ToolProgressFunc() ToolProgressFunc {
 	return h.toolProgressFn
 }
 
+// SetDraftEditFunc sets the function that sends/edits streaming draft messages
+// on the originating channel for real-time LLM output display.
+func (h *Handler) SetDraftEditFunc(fn DraftEditFunc) {
+	h.draftEditFn = fn
+}
+
+// SetEmitAgentFunc sets the callback that sends agent lifecycle events
+// (run.start, tool.start, tool.end) to the gateway event subscription pipeline.
+func (h *Handler) SetEmitAgentFunc(fn func(kind, sessionKey, runID string, payload map[string]any)) {
+	h.emitAgentFn = fn
+}
+
+// SetEmitTranscriptFunc sets the callback that sends transcript updates
+// (user/assistant message appends) to the gateway event subscription pipeline.
+func (h *Handler) SetEmitTranscriptFunc(fn func(sessionKey string, message any, messageID string)) {
+	h.emitTranscriptFn = fn
+}
+
 // SetChannelUploadLimit registers the maximum file upload size for a channel.
 // Called once per channel during server wiring (e.g., wireTelegramChatHandler).
 func (h *Handler) SetChannelUploadLimit(channelID string, maxBytes int64) {
@@ -252,10 +298,36 @@ func (h *Handler) ReactionFunc() ReactionFunc {
 	return h.reactionFn
 }
 
+// SetProviderRuntime sets the provider runtime resolver for runtime auth
+// and missing-auth message generation during LLM client resolution.
+func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {
+	h.providerRuntime = pr
+}
+
 // SetShutdownCtx sets the server lifecycle context so background goroutines
 // (e.g., auto-memory extraction) are cancelled when the server shuts down.
 func (h *Handler) SetShutdownCtx(ctx context.Context) {
 	h.shutdownCtx = ctx
+}
+
+// SetRunStateMachine sets the state machine that tracks active agent runs.
+func (h *Handler) SetRunStateMachine(sm *channel.RunStateMachine) {
+	h.runStateMachine = sm
+}
+
+// SetPluginHookRunner sets the typed hook runner for plugin lifecycle events.
+func (h *Handler) SetPluginHookRunner(r *plugin.TypedHookRunner) {
+	h.pluginHookRunner = r
+}
+
+// PluginHookRunner returns the typed hook runner (may be nil).
+func (h *Handler) PluginHookRunner() *plugin.TypedHookRunner {
+	return h.pluginHookRunner
+}
+
+// SetHookRegistry sets the user-defined hook registry for message/tool events.
+func (h *Handler) SetHookRegistry(r *hooks.Registry) {
+	h.hookRegistry = r
 }
 
 // DefaultModel returns the configured default LLM model name.

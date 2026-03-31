@@ -166,6 +166,108 @@ func (s *Server) wireTelegramChatHandler() {
 		return client.SetMessageReaction(ctx, chatID, msgID, emoji)
 	})
 
+	// Set remove-reaction function: clears the status emoji when transitioning
+	// between agent phases (Telegram replaces reactions, so passing "" removes).
+	s.chatHandler.SetRemoveReactionFunc(func(ctx context.Context, delivery *chat.DeliveryContext, emoji string) error {
+		if delivery == nil || delivery.Channel != "telegram" || delivery.MessageID == "" {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return nil
+		}
+		chatID, err := telegram.ParseChatID(delivery.To)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		msgID, err := strconv.ParseInt(delivery.MessageID, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid message ID %q: %w", delivery.MessageID, err)
+		}
+		return client.SetMessageReaction(ctx, chatID, msgID, "")
+	})
+
+	// Set tool progress function: sends/edits a progress message showing
+	// real-time tool execution status (Korean labels, checkmarks on completion).
+	var trackerMu sync.Mutex
+	trackers := make(map[string]*telegram.ProgressTracker) // key: "chatID:messageID"
+	s.chatHandler.SetToolProgressFunc(func(ctx context.Context, delivery *chat.DeliveryContext, event chat.ToolProgressEvent) {
+		if delivery == nil || delivery.Channel != "telegram" {
+			return
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return
+		}
+		chatID, err := telegram.ParseChatID(delivery.To)
+		if err != nil {
+			return
+		}
+
+		// One tracker per delivery (keyed by chat + triggering message).
+		trackerKey := delivery.To + ":" + delivery.MessageID
+		trackerMu.Lock()
+		pt := trackers[trackerKey]
+		if pt == nil {
+			pt = telegram.NewProgressTracker(client, chatID)
+			trackers[trackerKey] = pt
+		}
+		trackerMu.Unlock()
+
+		switch event.Type {
+		case "start":
+			pt.OnToolStart(ctx, event.Name)
+		case "complete":
+			pt.OnToolComplete(ctx, event.Name, event.IsError)
+		case "finalize":
+			pt.Finalize(ctx)
+			// Clean up tracker after finalization.
+			trackerMu.Lock()
+			delete(trackers, trackerKey)
+			trackerMu.Unlock()
+		}
+	})
+
+	// Set draft edit function: sends or edits a streaming draft message in Telegram.
+	// Used by DraftStreamLoop for real-time message editing during LLM streaming.
+	s.chatHandler.SetDraftEditFunc(func(ctx context.Context, delivery *chat.DeliveryContext, msgID string, text string) (string, error) {
+		if delivery == nil || delivery.Channel != "telegram" {
+			return "", nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return "", fmt.Errorf("telegram client not connected")
+		}
+		chatID, err := telegram.ParseChatID(delivery.To)
+		if err != nil {
+			return "", fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		html := telegram.MarkdownToTelegramHTML(text)
+
+		if msgID == "" {
+			// First call: send a new message.
+			results, err := telegram.SendText(ctx, client, chatID, html, telegram.SendOptions{
+				ParseMode:          "HTML",
+				DisableLinkPreview: true,
+			})
+			if err != nil || len(results) == 0 {
+				return "", err
+			}
+			return strconv.FormatInt(results[0].MessageID, 10), nil
+		}
+
+		// Subsequent calls: edit the existing message.
+		editMsgID, err := strconv.ParseInt(msgID, 10, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid message ID %q: %w", msgID, err)
+		}
+		_, err = telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML")
+		if err != nil {
+			return msgID, err
+		}
+		return msgID, nil
+	})
+
 	// Create the inbound processor that routes Telegram messages through
 	// the autoreply command/directive pipeline before dispatching to chat.send.
 	inbound := NewInboundProcessor(s)

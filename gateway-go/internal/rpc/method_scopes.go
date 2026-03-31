@@ -37,6 +37,8 @@ var methodScopes = map[string]auth.Scope{
 	"sessions.unsubscribe":          auth.ScopeRead,
 	"sessions.messages.subscribe":   auth.ScopeRead,
 	"sessions.messages.unsubscribe": auth.ScopeRead,
+	"sessions.tools.subscribe":      auth.ScopeRead,
+	"sessions.tools.unsubscribe":    auth.ScopeRead,
 	"sessions.create":               auth.ScopeWrite,
 	"sessions.send":                 auth.ScopeWrite,
 	"sessions.steer":                auth.ScopeWrite,
@@ -101,7 +103,9 @@ var methodScopes = map[string]auth.Scope{
 	// --- Cron (read/write) ---
 	"wake":            auth.ScopeWrite,
 	"cron.list":       auth.ScopeRead,
+	"cron.listPage":   auth.ScopeRead,
 	"cron.get":        auth.ScopeRead,
+	"cron.getJob":     auth.ScopeRead,
 	"cron.status":     auth.ScopeRead,
 	"cron.runs":       auth.ScopeRead,
 	"cron.add":        auth.ScopeWrite,

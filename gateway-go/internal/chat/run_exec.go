@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
+	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
@@ -35,6 +38,14 @@ func executeAgentRun(
 ) (*agent.AgentResult, error) {
 	runStart := time.Now()
 
+	// Emit agent run.start event to gateway subscriptions.
+	if deps.emitAgentFn != nil {
+		deps.emitAgentFn("run.start", params.SessionKey, params.ClientRunID, map[string]any{
+			"model": params.Model,
+			"ts":    runStart.UnixMilli(),
+		})
+	}
+
 	// 1. Persist user message to transcript + Aurora store.
 	if deps.transcript != nil && params.Message != "" {
 		userMsg := ChatMessage{
@@ -44,6 +55,9 @@ func executeAgentRun(
 		}
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
+		}
+		if deps.emitTranscriptFn != nil {
+			deps.emitTranscriptFn(params.SessionKey, userMsg, "")
 		}
 	}
 	// Sync to Aurora store for compaction tracking.
@@ -108,6 +122,12 @@ func executeAgentRun(
 	// in the correct format (Anthropic ContentBlock array vs plain string).
 	client, apiType := resolveClient(deps, providerID, logger)
 	if client == nil {
+		// Use provider-specific missing-auth message when available.
+		if deps.providerRuntime != nil && providerID != "" {
+			if msg := deps.providerRuntime.BuildMissingAuthMessage(providerID); msg != "" {
+				return nil, fmt.Errorf("%s", msg)
+			}
+		}
 		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
@@ -210,6 +230,7 @@ func executeAgentRun(
 			return
 		}
 		tz, _ := prompt.LoadCachedTimezone()
+		ch := deliveryChannel(params.Delivery)
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
@@ -217,12 +238,23 @@ func executeAgentRun(
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
 			RuntimeInfo: prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:     deliveryChannel(params.Delivery),
+			Channel:     ch,
 		}
-		if apiType == "anthropic" {
-			systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+		// Telegram is the coding-specialized channel: use the coding
+		// system prompt which strips non-coding sections and emphasizes
+		// the vibe-coder workflow (no raw code, Korean explanations).
+		if ch == "telegram" {
+			if apiType == "anthropic" {
+				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(spp))
+			} else {
+				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
+			}
 		} else {
-			systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+			if apiType == "anthropic" {
+				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+			} else {
+				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+			}
 		}
 	}()
 
@@ -332,6 +364,15 @@ func executeAgentRun(
 		hooks.OnToolEmit = broadcaster.EmitToolStart
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
+			if deps.broadcast != nil {
+				deps.broadcast("session.tool", map[string]any{
+					"sessionKey": params.SessionKey,
+					"runId":      params.ClientRunID,
+					"tool":       name,
+					"toolUseId":  toolUseID,
+					"isError":    isErr,
+				})
+			}
 		}
 	}
 	if typingSignaler != nil {
@@ -392,6 +433,107 @@ func executeAgentRun(
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
 			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "complete", Name: name, IsError: isErr})
+		}
+	}
+
+	// Gateway event subscription hooks: emit tool.start / tool.end so WebSocket
+	// clients receive real-time agent activity events via the event bus.
+	if deps.emitAgentFn != nil {
+		prevOnToolStart := hooks.OnToolStart
+		hooks.OnToolStart = func(name, reason string) {
+			if prevOnToolStart != nil {
+				prevOnToolStart(name, reason)
+			}
+			deps.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
+				"tool": name,
+				"ts":   time.Now().UnixMilli(),
+			})
+		}
+		prevOnToolResult := hooks.OnToolResult
+		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+			if prevOnToolResult != nil {
+				prevOnToolResult(name, toolUseID, result, isErr)
+			}
+			deps.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
+				"tool":    name,
+				"isError": isErr,
+				"ts":      time.Now().UnixMilli(),
+			})
+		}
+	}
+
+	// User-defined hook registry: fire tool.use event after each tool completes.
+	if deps.hookRegistry != nil {
+		prevOnToolResult := hooks.OnToolResult
+		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+			if prevOnToolResult != nil {
+				prevOnToolResult(name, toolUseID, result, isErr)
+			}
+			go deps.hookRegistry.Fire(context.Background(), hookspkg.EventToolUse, map[string]string{
+				"DENEB_TOOL":        name,
+				"DENEB_TOOL_USE_ID": toolUseID,
+				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
+				"DENEB_SESSION_KEY": params.SessionKey,
+			})
+		}
+	}
+
+	// Draft stream hook: real-time message editing during LLM streaming.
+	// Creates a throttled draft loop that sends/edits a Telegram message as
+	// text deltas arrive, giving the user immediate visual feedback.
+	var draftCtrl *channel.FinalizableDraftStreamControls
+	if deps.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
+		delivery := params.Delivery
+		var draftMu sync.Mutex
+		var draftMsgID string // tracks the sent message ID across edits
+		var accum strings.Builder
+
+		// Defer cleanup so the draft is stopped on all exit paths (success, error, fallback).
+		defer func() {
+			if draftCtrl != nil {
+				draftCtrl.StopForClear()
+			}
+		}()
+
+		draftCtrl = channel.NewFinalizableDraftStreamControls(channel.FinalizableDraftParams{
+			ThrottleMs: 800, // edit at most ~1.25x/sec to stay within Telegram rate limits
+			SendOrEdit: func(text string) (bool, error) {
+				draftMu.Lock()
+				currentID := draftMsgID
+				draftMu.Unlock()
+
+				editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+
+				newID, err := deps.draftEditFn(editCtx, delivery, currentID, text)
+				if err != nil {
+					logger.Warn("draft stream send/edit failed", "error", err)
+					return false, err
+				}
+				draftMu.Lock()
+				draftMsgID = newID
+				draftMu.Unlock()
+				return true, nil
+			},
+		})
+
+		prevOnDelta := hooks.OnTextDelta
+		hooks.OnTextDelta = func(text string) {
+			if prevOnDelta != nil {
+				prevOnDelta(text)
+			}
+			accum.WriteString(text)
+			draftCtrl.Update(accum.String())
+		}
+
+		// On tool start, stop the draft loop so partial text is flushed before
+		// the tool runs. The final reply will be delivered by the normal pipeline.
+		prevOnToolStart := hooks.OnToolStart
+		hooks.OnToolStart = func(name, reason string) {
+			draftCtrl.StopForClear()
+			if prevOnToolStart != nil {
+				prevOnToolStart(name, reason)
+			}
 		}
 	}
 

@@ -32,6 +32,11 @@ func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
 }
 
+// Publisher returns the event publisher for enriched event delivery.
+func (s *Server) Publisher() *events.Publisher {
+	return s.publisher
+}
+
 // GatewaySubscriptions returns the gateway event subscription manager
 // for emitting agent, heartbeat, transcript, and lifecycle events.
 func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {

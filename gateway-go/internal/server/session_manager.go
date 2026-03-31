@@ -1,6 +1,7 @@
 package server
 
 import (
+	arSession "github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
@@ -15,4 +16,9 @@ type SessionManager struct {
 	transcript     *transcript.Writer
 	presenceStore  *handlerpresence.Store
 	heartbeatState *handlerpresence.HeartbeatState
+
+	// Autoreply session subsystems.
+	abortMemory    *arSession.AbortMemory    // tracks recently aborted sessions for dedup
+	historyTracker *arSession.HistoryTracker  // per-session conversation history
+	sessionUsage   *arSession.SessionUsage    // aggregate token usage for /status reporting
 }

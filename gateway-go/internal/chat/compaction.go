@@ -165,9 +165,22 @@ func handleContextOverflowAurora(
 		var factExtractor aurora.FactExtractor
 		if deps.memoryStore != nil {
 			factExtractor = func(summaryContent string, depth uint32) error {
+				// Estimate token count from content length (~4 chars/token).
+				estimatedTokens := uint64(len([]rune(summaryContent)) / 4)
+				summary := aurora.SummaryRecord{
+					Content:    summaryContent,
+					Depth:      depth,
+					Kind:       "condensed",
+					TokenCount: estimatedTokens,
+				}
+				if !aurora.ShouldTransfer(summary, aurora.DefaultMemoryTransferConfig()) {
+					logger.Debug("aurora-transfer: summary below transfer threshold",
+						"depth", depth, "tokens", estimatedTokens)
+					return nil
+				}
 				return aurora.TransferSummaryToMemory(
 					ctx,
-					aurora.SummaryRecord{Content: summaryContent, Depth: depth, Kind: "condensed"},
+					summary,
 					deps.auroraStore,
 					deps.memoryStore,
 					deps.memoryEmbedder,

@@ -26,12 +26,19 @@ const (
 
 // LifecycleManager orchestrates channel plugin lifecycle (start/stop/health).
 type LifecycleManager struct {
-	registry *Registry
-	logger   *slog.Logger
+	registry      *Registry
+	logger        *slog.Logger
+	snapshotStore *SnapshotStore // optional; updated on start/stop events
 
 	mu           sync.RWMutex
 	startedAt    map[string]int64 // guarded by mu — channel ID → start timestamp
 	restartCount map[string]int   // guarded by mu — channel ID → consecutive restart attempts
+}
+
+// SetSnapshotStore attaches a SnapshotStore so lifecycle events
+// automatically update channel account snapshots.
+func (lm *LifecycleManager) SetSnapshotStore(s *SnapshotStore) {
+	lm.snapshotStore = s
 }
 
 // NewLifecycleManager creates a lifecycle manager for the given registry.
@@ -216,10 +223,24 @@ func (lm *LifecycleManager) StartChannel(ctx context.Context, id string) error {
 	if err := p.Start(ctx); err != nil {
 		return err
 	}
+	now := time.Now().UnixMilli()
 	lm.mu.Lock()
-	lm.startedAt[id] = time.Now().UnixMilli()
+	lm.startedAt[id] = now
 	lm.restartCount[id] = 0 // reset on successful start
 	lm.mu.Unlock()
+
+	// Update the snapshot store with post-start state.
+	if lm.snapshotStore != nil {
+		status := p.Status()
+		lm.snapshotStore.Update(id, AccountSnapshot{
+			AccountID:   id,
+			Enabled:     true,
+			Running:     true,
+			Connected:   status.Connected,
+			LastError:   status.Error,
+			LastStartAt: now,
+		})
+	}
 	return nil
 }
 
@@ -271,8 +292,20 @@ func (lm *LifecycleManager) StopChannel(ctx context.Context, id string) error {
 	if err := p.Stop(ctx); err != nil {
 		return err
 	}
+	now := time.Now().UnixMilli()
 	lm.mu.Lock()
 	delete(lm.startedAt, id)
 	lm.mu.Unlock()
+
+	// Update the snapshot store with post-stop state.
+	if lm.snapshotStore != nil {
+		lm.snapshotStore.Update(id, AccountSnapshot{
+			AccountID:  id,
+			Enabled:    true,
+			Running:    false,
+			Connected:  false,
+			LastStopAt: now,
+		})
+	}
 	return nil
 }

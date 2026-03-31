@@ -125,7 +125,7 @@ func nodePairApprove(deps Deps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("node.pair.approved", map[string]any{"nodeId": paired.NodeID})
+			deps.Broadcaster("node.pair.resolved", map[string]any{"nodeId": paired.NodeID, "action": "approved"})
 		}
 		return map[string]any{"node": paired}, nil
 	})
@@ -144,7 +144,7 @@ func nodePairReject(deps Deps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("node.pair.rejected", map[string]any{"nodeId": nodeID})
+			deps.Broadcaster("node.pair.resolved", map[string]any{"nodeId": nodeID, "action": "rejected"})
 		}
 		return map[string]any{"nodeId": nodeID}, nil
 	})
@@ -457,7 +457,7 @@ func devicePairApprove(deps DeviceDeps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("device.pair.approved", map[string]any{"deviceId": dev.DeviceID})
+			deps.Broadcaster("device.pair.resolved", map[string]any{"deviceId": dev.DeviceID, "action": "approved"})
 		}
 		return map[string]any{"device": dev}, nil
 	})
@@ -490,7 +490,7 @@ func devicePairRemove(deps DeviceDeps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("device.pair.removed", map[string]any{"deviceId": p.DeviceID})
+			deps.Broadcaster("device.pair.resolved", map[string]any{"deviceId": p.DeviceID, "action": "removed"})
 		}
 		return map[string]bool{"ok": true}, nil
 	})

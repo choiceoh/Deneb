@@ -75,6 +75,8 @@ var tsBaseMethods = []string{
 	"sessions.unsubscribe",
 	"sessions.messages.subscribe",
 	"sessions.messages.unsubscribe",
+	"sessions.tools.subscribe",
+	"sessions.tools.unsubscribe",
 	"sessions.preview",
 	"sessions.create",
 	"sessions.send",
@@ -110,6 +112,8 @@ var tsBaseMethods = []string{
 	"node.event",
 	"node.canvas.capability.refresh",
 	"cron.list",
+	"cron.listPage",
+	"cron.getJob",
 	"cron.status",
 	"cron.add",
 	"cron.update",
@@ -150,6 +154,7 @@ func fullDispatcher() *Dispatcher {
 	RegisterNodeMethods(d, NodeDeps{Nodes: node.NewManager(), Broadcaster: broadcastFn})
 	RegisterDeviceMethods(d, DeviceDeps{Devices: device.NewManager(), Broadcaster: broadcastFn})
 	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Cron: cron.NewScheduler(testLogger()), Broadcaster: broadcastFn})
+	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
 	RegisterAgentsMethods(d, AgentsDeps{Agents: agent.NewStore(), Broadcaster: broadcastFn})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})
 	RegisterSkillMethods(d, SkillDeps{Skills: skill.NewManager(), Broadcaster: broadcastFn})
@@ -202,6 +207,7 @@ func fullDispatcher() *Dispatcher {
 		"subscribe.session.messages", "unsubscribe.session.messages",
 		"sessions.subscribe", "sessions.unsubscribe",
 		"sessions.messages.subscribe", "sessions.messages.unsubscribe",
+		"sessions.tools.subscribe", "sessions.tools.unsubscribe",
 	} {
 		d.Register(m, stub)
 	}

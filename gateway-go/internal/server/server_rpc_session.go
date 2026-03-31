@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
@@ -49,7 +50,18 @@ func (s *Server) registerSessionRPCMethods() {
 	// Session repair methods are now included in handlersession.Methods().
 
 	// Chat methods — native agent execution.
+	// For "session.tool" events, check if a specific tool event recipient is
+	// registered for the run and target the broadcast to that connection only.
 	broadcastFn := func(event string, payload any) (int, []error) {
+		if event == "session.tool" {
+			if m, ok := payload.(map[string]any); ok {
+				if runID, _ := m["runId"].(string); runID != "" {
+					if connID := s.broadcaster.GetToolEventRecipient(runID); connID != "" {
+						return s.broadcaster.BroadcastToConnIDs(event, payload, map[string]bool{connID: true})
+					}
+				}
+			}
+		}
 		return s.broadcaster.Broadcast(event, payload)
 	}
 
@@ -182,6 +194,9 @@ func (s *Server) registerSessionRPCMethods() {
 			// appear in the system prompt immediately (not after 5-min TTL).
 			memStore.SetFactMutateCallback(unified.InvalidateTier1Cache)
 
+			// Store reference for autonomous memory flush task (registered in phase 3).
+			s.memoryStore = memStore
+
 			// Auto-migrate existing MEMORY.md on first run.
 			count, _ := memStore.ActiveFactCount(context.Background())
 			if count == 0 {
@@ -225,6 +240,28 @@ func (s *Server) registerSessionRPCMethods() {
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
+	// Register plugin-provided tools.
+	if s.pluginFullRegistry != nil {
+		for _, t := range s.pluginFullRegistry.ListTools() {
+			pluginTool := t // capture loop variable
+			chatCfg.Tools.RegisterTool(chat.ToolDef{
+				Name:        pluginTool.Definition.Name,
+				Description: pluginTool.Definition.Description,
+				InputSchema: pluginTool.Definition.InputSchema,
+				Fn: func(ctx context.Context, input json.RawMessage) (string, error) {
+					var m map[string]any
+					if err := json.Unmarshal(input, &m); err != nil {
+						return "", err
+					}
+					return pluginTool.Handler(ctx, m)
+				},
+			})
+		}
+		if count := len(s.pluginFullRegistry.ListTools()); count > 0 {
+			s.logger.Info("plugin tools registered", "count", count)
+		}
+	}
+
 	// Initialize autoresearch runner and register tool.
 	s.autoresearchRunner = autoresearch.NewRunner(s.logger)
 	if mainClient := reg.Client(modelrole.RoleMain); mainClient != nil {
@@ -262,10 +299,48 @@ func (s *Server) registerSessionRPCMethods() {
 	s.toolDeps.Chrono.SendFn = sendFn
 	s.dispatcher.RegisterDomain(handlerchat.Methods(handlerchat.Deps{Chat: s.chatHandler}))
 
+	// Wire provider runtime resolver for runtime auth and missing-auth messages.
+	if s.providerRuntime != nil {
+		s.chatHandler.SetProviderRuntime(s.providerRuntime)
+	}
+
+	// Wire typed plugin hook runner into the chat pipeline.
+	if s.pluginTypedHookRunner != nil {
+		s.chatHandler.SetPluginHookRunner(s.pluginTypedHookRunner)
+	}
+
+	// Wire user-defined hook registry into the chat pipeline for message.send / tool.use events.
+	if s.hooks != nil {
+		s.chatHandler.SetHookRegistry(s.hooks)
+	}
+
+	// Wire channel registry for fallback delivery via streaming.Dispatch.
+	s.chatHandler.SetChannels(s.channels)
+
 	// Wire raw broadcast directly to chat handler for streaming event relay.
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)
 	})
+
+	// Wire gateway event subscriptions (agent lifecycle + transcript updates)
+	// into the chat execution pipeline via function callbacks.
+	if s.gatewaySubs != nil {
+		s.chatHandler.SetEmitAgentFunc(func(kind, sessionKey, runID string, payload map[string]any) {
+			s.gatewaySubs.EmitAgent(events.AgentEvent{
+				Kind:       kind,
+				SessionKey: sessionKey,
+				RunID:      runID,
+				Payload:    payload,
+			})
+		})
+		s.chatHandler.SetEmitTranscriptFunc(func(sessionKey string, message any, messageID string) {
+			s.gatewaySubs.EmitTranscript(events.TranscriptUpdate{
+				SessionKey: sessionKey,
+				Message:    message,
+				MessageID:  messageID,
+			})
+		})
+	}
 
 	// Wire agent runner to cron service so scheduled jobs can execute agent turns.
 	if s.cronService != nil {
@@ -365,6 +440,24 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 			if s.autoresearchRunner != nil {
 				s.autoresearchRunner.SetNotifier(notifier)
 			}
+		}
+	}
+
+	// Register periodic memory flush task: appends high-importance facts
+	// to date-stamped markdown files (~/.deneb/memory/YYYY-MM-DD.md).
+	if s.memoryStore != nil {
+		denebDir := ""
+		if home, err := os.UserHomeDir(); err == nil {
+			denebDir = filepath.Join(home, ".deneb")
+		}
+		if denebDir != "" {
+			s.autonomousSvc.RegisterTask(&memoryFlushTask{
+				store:    s.memoryStore,
+				dir:      denebDir,
+				timezone: "Asia/Seoul",
+				logger:   s.logger,
+			})
+			s.logger.Info("memory flush task registered with autonomous service")
 		}
 	}
 }
