@@ -172,8 +172,19 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		}
 	}
 
-	// 12. Normalize and filter payloads.
-	normalized := reply.FilterReplyPayloads(result.Payloads, reply.NormalizeOpts{
+	// 12. Build deliverable reply payloads via the full reply pipeline:
+	// heartbeat stripping, leaked tool-call removal, threading directives,
+	// messaging tool dedup, and silent reply suppression.
+	built := reply.BuildReplyPayloads(types.BuildReplyPayloadsParams{
+		Payloads:         result.Payloads,
+		IsHeartbeat:      cfg.IsHeartbeat,
+		CurrentMessageID: msg.MessageSid,
+		OriginTo:         msg.To,
+		AccountID:        msg.AccountID,
+	})
+
+	// 13. Final normalization pass (response prefix, heartbeat ack mode).
+	normalized := reply.FilterReplyPayloads(built, reply.NormalizeOpts{
 		HeartbeatMode:        tokens.StripModeMessage,
 		HeartbeatAckMaxChars: tokens.DefaultHeartbeatAckChars,
 	})
