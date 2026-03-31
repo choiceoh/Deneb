@@ -191,7 +191,7 @@ const (
 //     or directory-tree format; LLM compression loses structure and is slower than
 //     the existing GrepResultSummarizer / OutputTrimmer pipeline.
 //   - Tools that already use sglang internally (pilot) or return small JSON (kv,
-//     sessions_list, memory_search) where compression adds no value.
+//     sessions_list) where compression adds no value.
 var toolCompressSkipSet = map[string]bool{
 	// Structured-output tools — already handled by post-processors.
 	"grep":    true,
@@ -202,9 +202,8 @@ var toolCompressSkipSet = map[string]bool{
 	"diff":    true,
 	// Internal / already-small tools.
 	"pilot":         true,
-	"memory":        true,
-	"memory_search": true,
-	"kv":            true,
+	"memory": true,
+	"kv":     true,
 	"sessions_list": true,
 }
 

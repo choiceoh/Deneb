@@ -153,8 +153,8 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 
 	if p.Memory != "" {
 		specs = append(specs, sourceSpec{
-			Tool:  "memory_search",
-			Input: mustJSON(map[string]any{"query": p.Memory}),
+			Tool:  "memory",
+			Input: mustJSON(map[string]any{"action": "search", "query": p.Memory}),
 			Label: "memory: " + p.Memory,
 		})
 	}

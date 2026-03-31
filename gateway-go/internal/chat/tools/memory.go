@@ -1,16 +1,12 @@
 package tools
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // Extended to 5m for single-user DGX Spark: memory files rarely change,
@@ -116,8 +112,6 @@ func (c *memoryFileListCache) set(workspace string, files []string) {
 	c.expiresAt = time.Now().Add(memoryFileCacheTTL)
 }
 
-// memorySearchToolSchema returns the JSON Schema for the memory_search tool.
-
 // MemoryMatch represents a single keyword match in a memory file.
 type MemoryMatch struct {
 	File    string // relative path from workspace
@@ -190,39 +184,6 @@ func SearchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMat
 	return matches
 }
 
-// ToolMemorySearch implements keyword-based search across MEMORY.md and memory/*.md.
-func ToolMemorySearch(workspaceDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Query string `json:"query"`
-		}
-		if err := jsonutil.UnmarshalInto("memory_search params", input, &p); err != nil {
-			return "", err
-		}
-		if p.Query == "" {
-			return "", fmt.Errorf("query is required")
-		}
-
-		matches := SearchMemoryFiles(workspaceDir, p.Query, 20)
-		if matches == nil {
-			return fmt.Sprintf("No memory files found in workspace %q (looked for MEMORY.md, memory.md, memory/*.md).", workspaceDir), nil
-		}
-		if len(matches) == 0 {
-			return fmt.Sprintf("No matches found for %q in memory files.", p.Query), nil
-		}
-
-		results := make([]string, 0, len(matches))
-		for _, m := range matches {
-			results = append(results, fmt.Sprintf("### %s (line %d)\n%s", m.File, m.Line, m.Snippet))
-		}
-
-		if len(matches) == 20 {
-			results = append(results, "\n... and more results (showing 20 of total)")
-		}
-
-		return strings.Join(results, "\n\n"), nil
-	}
-}
 
 // CollectMemoryFiles finds MEMORY.md and memory/*.md in the workspace.
 // Results are cached with a short TTL to avoid repeated directory scans

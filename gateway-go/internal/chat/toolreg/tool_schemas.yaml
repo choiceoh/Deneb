@@ -627,14 +627,6 @@
   required:
     - action
 
-- name: memory_search
-  properties:
-    query:
-      type: string
-      description: "Search query for memory files (deprecated: use memory action=search)"
-  required:
-    - query
-
 - name: polaris
   properties:
     question:
@@ -1212,7 +1204,7 @@
       description: "Shortcut: get this key from KV store (expands to sources:[{tool:'kv', input:{action:'get', key:...}}])"
     memory:
       type: string
-      description: "Shortcut: search memory for this query (expands to sources:[{tool:'memory_search', input:{query:...}}])"
+      description: "Shortcut: search memory for this query (expands to sources:[{tool:'memory', input:{action:'search', query:...}}])"
     gmail:
       type: string
       description: "Shortcut: search Gmail for this query (expands to sources:[{tool:'gmail', input:{action:'search', query:...}}])"

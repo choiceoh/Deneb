@@ -706,19 +706,6 @@ func memoryToolSchema() map[string]any {
 	}
 }
 
-func memorySearchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search query for memory files (deprecated: use memory action=search)",
-			},
-		},
-		"required": []string{"query"},
-	}
-}
-
 func polarisToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1409,7 +1396,7 @@ func pilotToolSchema() map[string]any {
 			},
 			"memory": map[string]any{
 				"type":        "string",
-				"description": "Shortcut: search memory for this query (expands to sources:[{tool:'memory_search', input:{query:...}}])",
+				"description": "Shortcut: search memory for this query (expands to sources:[{tool:'memory', input:{action:'search', query:...}}])",
 			},
 			"gmail": map[string]any{
 				"type":        "string",
