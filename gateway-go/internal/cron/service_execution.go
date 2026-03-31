@@ -63,7 +63,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 		} else {
 			// Deliver output to target channel.
 			var deliveryResult *DeliveryResult
-			if output != "" && target != nil && s.cfg.Channels != nil {
+			if output != "" && target != nil && s.cfg.TelegramPlugin != nil {
 				stripped := tokens.StripHeartbeatToken(output, tokens.StripModeHeartbeat, tokens.DefaultHeartbeatAckChars)
 				if !stripped.ShouldSkip {
 					deliveryText := output
@@ -72,7 +72,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 					}
 					payloads := []types.ReplyPayload{{Text: deliveryText}}
 					bestEffort := isBestEffort(deliveryCfg)
-					dr := DeliverCronOutput(runCtx, s.cfg.Channels, *target, payloads, DeliverOutputOptions{
+					dr := DeliverCronOutput(runCtx, s.cfg.TelegramPlugin, *target, payloads, DeliverOutputOptions{
 						ChunkLimit: chunk.DefaultLimit,
 						ChunkMode:  "length",
 						BestEffort: bestEffort,
@@ -105,7 +105,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	s.applyJobResult(job, outcome)
 
 	// Send failure alert if configured and conditions are met.
-	if s.cfg.Channels != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
+	if s.cfg.TelegramPlugin != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
 		s.sendFailureAlert(ctx, job, outcome)
 	}
 
@@ -203,7 +203,7 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 	target := DeliveryTarget{Channel: ch, To: to, AccountID: alert.AccountID}
 	payloads := []types.ReplyPayload{{Text: text}}
 
-	dr := DeliverCronOutput(ctx, s.cfg.Channels, target, payloads, DeliverOutputOptions{
+	dr := DeliverCronOutput(ctx, s.cfg.TelegramPlugin, target, payloads, DeliverOutputOptions{
 		BestEffort: true,
 		Logger:     s.logger,
 	})

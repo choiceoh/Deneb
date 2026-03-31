@@ -141,7 +141,6 @@ func fullDispatcher() *Dispatcher {
 	RegisterBuiltinMethods(d, deps)
 	RegisterExtendedMethods(d, ExtendedDeps{
 		Sessions:    deps.Sessions,
-		Channels:    deps.Channels,
 		GatewaySubs: deps.GatewaySubs,
 		Processes:   process.NewManager(testLogger()),
 		Cron:        cron.NewScheduler(testLogger()),
