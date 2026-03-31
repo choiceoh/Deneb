@@ -14,7 +14,7 @@ func testLogger() *slog.Logger {
 
 func newTestManager(t *testing.T) *Manager {
 	t.Helper()
-	m := newTestManager(t)
+	m := NewManager(testLogger())
 	t.Cleanup(m.Stop)
 	return m
 }

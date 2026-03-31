@@ -156,6 +156,11 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		unifiedResults = deduplicateAcrossSources(structFacts, unifiedResults)
 	}
 
+	// Tier1-vs-structured dedup: remove structured facts already shown in tier1.
+	if tier1Section != "" && len(structFacts) > 0 {
+		structFacts = deduplicateFactsAgainstTier1(structFacts, tier1Section)
+	}
+
 	// Knowledge section (Vega + memory facts).
 	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 || len(unifiedResults) > 0 {
 		parts = append(parts, formatKnowledgeWithFacts(vegaResults, memMatches, structFacts, unifiedResults))
@@ -609,6 +614,22 @@ func normalizeKnowledgePrefix(s string) string {
 		runes = runes[:100]
 	}
 	return strings.Join(strings.Fields(string(runes)), " ")
+}
+
+// deduplicateFactsAgainstTier1 removes structured facts whose content already
+// appears in the tier1 section string. This prevents the same high-importance fact
+// from appearing in both "핵심 기억" and "관련 지식 > 메모리".
+func deduplicateFactsAgainstTier1(facts []memory.SearchResult, tier1 string) []memory.SearchResult {
+	normalizedTier1 := strings.ToLower(tier1)
+	filtered := make([]memory.SearchResult, 0, len(facts))
+	for _, f := range facts {
+		prefix := normalizeKnowledgePrefix(f.Fact.Content)
+		if prefix != "" && strings.Contains(normalizedTier1, prefix) {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered
 }
 
 // formatKeySection formats a set of user_model keys into "- Label: value" lines.

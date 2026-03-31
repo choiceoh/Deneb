@@ -126,11 +126,14 @@ func (c *CachedTranscriptStore) Search(query string, maxResults int) ([]SearchRe
 	return c.inner.Search(query, maxResults)
 }
 
-// applyLimit returns the last `limit` messages (or all if limit <= 0).
-// Returns a slice alias into msgs — callers must not modify the returned elements.
+// applyLimit returns a copy of the last `limit` messages (or all if limit <= 0).
+// Returns a defensive copy so callers cannot corrupt the cached data.
 func applyLimit(msgs []ChatMessage, limit int) []ChatMessage {
-	if limit > 0 && len(msgs) > limit {
-		return msgs[len(msgs)-limit:]
+	src := msgs
+	if limit > 0 && len(src) > limit {
+		src = src[len(src)-limit:]
 	}
-	return msgs
+	cp := make([]ChatMessage, len(src))
+	copy(cp, src)
+	return cp
 }

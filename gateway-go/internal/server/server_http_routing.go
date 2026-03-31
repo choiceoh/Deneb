@@ -9,6 +9,17 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /ready", s.handleReady)
 	mux.HandleFunc("GET /readyz", s.handleReady)
+
+	// Explicit method-not-allowed for health/ready endpoints.
+	// Without these, non-GET requests fall through to the catch-all "/" handler
+	// and return 404 instead of the correct 405.
+	methodNotAllowed := func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	}
+	mux.HandleFunc("/health", methodNotAllowed)
+	mux.HandleFunc("/healthz", methodNotAllowed)
+	mux.HandleFunc("/ready", methodNotAllowed)
+	mux.HandleFunc("/readyz", methodNotAllowed)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)

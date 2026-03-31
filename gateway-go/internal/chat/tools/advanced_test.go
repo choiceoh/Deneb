@@ -259,7 +259,7 @@ func TestToolApplyPatch_dryRunValid(t *testing.T) {
 	fpath := filepath.Join(tmp, "test.txt")
 	os.WriteFile(fpath, []byte(original), 0o644)
 	gitAdd(t, tmp, "test.txt")
-	gitCommit(t, tmp, "initial")
+	testGitCommit(t, tmp, "initial")
 
 	// Use strip=0 with direct file paths (no a/ b/ prefixes).
 	patch := "--- test.txt\n+++ test.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+line2_modified\n line3\n"
@@ -288,7 +288,7 @@ func TestToolApplyPatch_apply(t *testing.T) {
 	fpath := filepath.Join(tmp, "test.txt")
 	os.WriteFile(fpath, []byte("line1\nline2\nline3\n"), 0o644)
 	gitAdd(t, tmp, "test.txt")
-	gitCommit(t, tmp, "initial")
+	testGitCommit(t, tmp, "initial")
 
 	patch := "--- test.txt\n+++ test.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+line2_modified\n line3\n"
 
@@ -345,7 +345,7 @@ func TestToolApplyPatch_rejectsExistingSymlinkUpdatePatch(t *testing.T) {
 		t.Fatalf("failed to create symlink: %v", err)
 	}
 	gitAdd(t, tmp, "link")
-	gitCommit(t, tmp, "add symlink")
+	testGitCommit(t, tmp, "add symlink")
 
 	patch := `diff --git a/link b/link
 index 1111111..2222222 120000
@@ -420,7 +420,7 @@ func gitAdd(t *testing.T, dir, file string) {
 	runCmd(t, dir, "git", "add", file)
 }
 
-func gitCommit(t *testing.T, dir, msg string) {
+func testGitCommit(t *testing.T, dir, msg string) {
 	t.Helper()
 	runCmd(t, dir, "git", "commit", "-m", msg)
 }

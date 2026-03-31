@@ -252,9 +252,12 @@ func TestService_ExecuteTask_SkipsIfRunning(t *testing.T) {
 // with ShouldDream returning true.
 func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
 	svc := NewService(nil)
-	d := &fakeDreamer{
+	// Use a slow dreamer so the dream cycle outlasts all concurrent triggers,
+	// ensuring the dreamRunning guard reliably deduplicates.
+	d := &slowFakeDreamer{
 		shouldDream: true,
-		runReport:   &DreamReport{FactsVerified: 1, DurationMs: 10},
+		holdTime:    200 * time.Millisecond,
+		report:      &DreamReport{FactsVerified: 1, DurationMs: 200},
 	}
 	events := make(chan CycleEvent, 20)
 	svc.OnEvent(func(ev CycleEvent) { events <- ev })
@@ -271,10 +274,9 @@ func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Wait for the dream cycle to complete (at most one should run).
+	// Wait for the dream cycle to complete (exactly one should run).
 	_ = waitForEvent(t, events, "dreaming_completed")
 
-	// Verify RunDream was called exactly once despite 10 concurrent triggers.
 	d.mu.Lock()
 	runCount := d.runCount
 	d.mu.Unlock()

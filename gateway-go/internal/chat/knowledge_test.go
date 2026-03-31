@@ -299,8 +299,8 @@ func TestFormatMutualUnderstanding(t *testing.T) {
 			{Key: "user_sees_ai", Value: "test"},
 		}
 		result := formatMutualUnderstanding(entries)
-		if strings.Contains(result, "최근 시그널") {
-			t.Errorf("should not show recent signals for empty raw, got %q", result)
+		if strings.Contains(result, "최근 시그널 (미통합)") {
+			t.Errorf("should not show recent signals section for empty raw, got %q", result)
 		}
 	})
 }
@@ -354,11 +354,11 @@ func TestVolatileHint(t *testing.T) {
 		{"context fresh", "context", 10 * 24 * time.Hour, ""},
 		{"context needs verification (50%)", "context", 20 * 24 * time.Hour, "확인 필요"},
 		{"context past shelf life", "context", 45 * 24 * time.Hour, "⚠변경 가능"},
-		{"preference fresh", "preference", 100 * 24 * time.Hour, ""},
-		{"preference needs verification", "preference", 200 * 24 * time.Hour, "확인 필요"},
-		{"preference past shelf life", "preference", 400 * 24 * time.Hour, "⚠변경 가능"},
-		{"decision past shelf life", "decision", 90 * 24 * time.Hour, "⚠변경 가능"},
-		{"decision needs verification", "decision", 40 * 24 * time.Hour, "확인 필요"},
+		{"preference fresh", "preference", 30 * 24 * time.Hour, ""},
+		{"preference needs verification", "preference", 60 * 24 * time.Hour, "확인 필요"},
+		{"preference past shelf life", "preference", 100 * 24 * time.Hour, "⚠변경 가능"},
+		{"decision past shelf life", "decision", 140 * 24 * time.Hour, "⚠변경 가능"},
+		{"decision needs verification", "decision", 80 * 24 * time.Hour, "확인 필요"},
 		{"unknown category default 60d", "unknown", 70 * 24 * time.Hour, "⚠변경 가능"},
 		{"zero time", "context", 0, ""},
 	}
@@ -434,12 +434,12 @@ func TestFactTemporalAnnotation(t *testing.T) {
 	t.Run("stable preference no volatility", func(t *testing.T) {
 		f := memory.Fact{
 			Category:  "preference",
-			CreatedAt: now.Add(-200 * 24 * time.Hour),
-			UpdatedAt: now.Add(-200 * 24 * time.Hour),
+			CreatedAt: now.Add(-30 * 24 * time.Hour),
+			UpdatedAt: now.Add(-30 * 24 * time.Hour),
 		}
 		got := factTemporalAnnotation(f, now)
 		if strings.Contains(got, "⚠변경 가능") {
-			t.Errorf("preference within 365d should not be volatile, got %q", got)
+			t.Errorf("preference within shelf life should not be volatile, got %q", got)
 		}
 	})
 

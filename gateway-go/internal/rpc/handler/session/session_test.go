@@ -45,11 +45,15 @@ func TestSessionsReset_missingKey(t *testing.T) {
 	}
 }
 
-func TestSessionsPreview_missingKey(t *testing.T) {
+func TestSessionsPreview_emptyKeys(t *testing.T) {
 	m := Methods(Deps{})
 	resp := callMethod(m, "sessions.preview", map[string]any{})
-	if resp == nil || resp.Error == nil {
-		t.Fatal("expected error for missing key")
+	if resp == nil {
+		t.Fatal("expected response")
+	}
+	// sessions.preview with no keys returns an empty previews array, not an error.
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
 	}
 }
 

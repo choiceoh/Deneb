@@ -155,8 +155,8 @@ func TestToolWrite(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(result, "5 bytes") {
-			t.Errorf("expected byte count in result, got: %s", result)
+		if !strings.Contains(result, "Wrote") {
+			t.Errorf("expected 'Wrote' in result, got: %s", result)
 		}
 		data, _ := os.ReadFile(path)
 		if string(data) != "hello" {

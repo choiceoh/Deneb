@@ -25,7 +25,7 @@ func TestHandlePing(t *testing.T) {
 	}
 
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(resp.Payload, &result); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 	if result["ok"] != true {

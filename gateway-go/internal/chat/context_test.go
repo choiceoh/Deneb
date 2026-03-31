@@ -34,8 +34,8 @@ func TestEstimateTokens(t *testing.T) {
 		// Korean: 3 bytes/rune in UTF-8 — rune count is used, not byte count.
 		// "비금도 해상태양광" = 9 runes → 9/2 = 4 tokens (was 27 bytes/4 = 6 with old formula)
 		{"Korean 9 runes = 4 tokens", "비금도 해상태양광", 4},
-		// 26-rune Korean sentence → 13 tokens (was 78 bytes/4 = 19 with old formula)
-		{"Korean 26 runes = 13 tokens", "비금도 해상태양광 프로젝트 현황 보고서를 작성해 주세요", 13},
+		// 30-rune Korean sentence → 15 tokens (was 78 bytes/4 = 19 with old formula)
+		{"Korean 30 runes = 15 tokens", "비금도 해상태양광 프로젝트 현황 보고서를 작성해 주세요", 15},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
