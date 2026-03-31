@@ -217,6 +217,8 @@ func (s *Server) registerSessionRPCMethods() {
 		},
 		LLMClient:    reg.Client(modelrole.RoleFallback),
 		DefaultModel: reg.Model(modelrole.RoleFallback),
+		ImageClient:  reg.Client(modelrole.RoleLightweight),
+		ImageModel:   reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
 	}
 

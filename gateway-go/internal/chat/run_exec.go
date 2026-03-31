@@ -64,7 +64,7 @@ func executeAgentRun(
 	// Must happen before the parallel section so apiType is known when building
 	// the system prompt in the parallel goroutine below.
 	//
-	// Agent tools pass role names ("main", "lightweight", "pilot", "fallback", "image").
+	// Agent tools pass role names ("main", "lightweight", "pilot", "fallback").
 	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
 	// are treated as direct overrides (no fallback chain).
 	model := params.Model
@@ -84,12 +84,12 @@ func executeAgentRun(
 	if model == "" && deps.registry != nil {
 		model = deps.registry.FullModelID(modelrole.RoleMain)
 	}
-	// If the request has image attachments, prefer the image model.
+	// If the request has image attachments, prefer the lightweight model.
 	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
-		imgCfg := deps.registry.Config(modelrole.RoleImage)
-		if imgCfg.Model != "" {
-			model = deps.registry.FullModelID(modelrole.RoleImage)
-			initialRole = modelrole.RoleImage
+		lwCfg := deps.registry.Config(modelrole.RoleLightweight)
+		if lwCfg.Model != "" {
+			model = deps.registry.FullModelID(modelrole.RoleLightweight)
+			initialRole = modelrole.RoleLightweight
 		}
 	}
 	// Parse provider prefix (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").

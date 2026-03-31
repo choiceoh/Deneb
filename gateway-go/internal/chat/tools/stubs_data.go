@@ -292,7 +292,7 @@ func resolveChildTarget(children []*session.Session, target string) (*session.Se
 
 // --- image tool ---
 
-func ToolImage(client *llm.Client) ToolFunc {
+func ToolImage(client *llm.Client, defaultModel string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Prompt string   `json:"prompt"`
@@ -339,7 +339,7 @@ func ToolImage(client *llm.Client) ToolFunc {
 
 		model := p.Model
 		if model == "" {
-			model = "claude-sonnet-4-20250514"
+			model = defaultModel
 		}
 
 		// Call LLM with vision.

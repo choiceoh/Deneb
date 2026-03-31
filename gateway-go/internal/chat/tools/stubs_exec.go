@@ -365,7 +365,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		var p struct {
 			Task  string `json:"task"`
 			Label string `json:"label"`
-			Model string `json:"model"` // role name: "main","lightweight","pilot","fallback","image"
+			Model string `json:"model"` // role name: "main","lightweight","pilot","fallback"
 		}
 		if err := jsonutil.UnmarshalInto("sessions_spawn params", input, &p); err != nil {
 			return "", err

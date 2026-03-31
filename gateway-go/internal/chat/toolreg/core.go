@@ -36,7 +36,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterVegaTools(registry, &deps.Vega, sglang)
-	RegisterMediaTools(registry, deps.LLMClient)
+	RegisterMediaTools(registry, deps.ImageClient, deps.ImageModel)
 	RegisterDataTools(registry)
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, &deps.Vega)
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
@@ -322,12 +322,13 @@ func RegisterVegaTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sgla
 }
 
 // RegisterMediaTools registers image analysis and media delivery tools.
-func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client) {
+// imageClient and imageModel specify the lightweight model used for image analysis.
+func RegisterMediaTools(registry toolctx.ToolRegistrar, imageClient *llm.Client, imageModel string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "image",
 		Description: "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
 		InputSchema: imageToolSchema(),
-		Fn:          tools.ToolImage(llmClient),
+		Fn:          tools.ToolImage(imageClient, imageModel),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "youtube_transcript",

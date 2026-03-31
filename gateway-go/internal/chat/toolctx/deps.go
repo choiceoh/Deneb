@@ -20,6 +20,8 @@ type CoreToolDeps struct {
 	Vega         VegaDeps
 	LLMClient    *llm.Client
 	DefaultModel string
+	ImageClient  *llm.Client // lightweight model client for image analysis
+	ImageModel   string      // lightweight model name for image analysis
 	AgentLog     *agentlog.Writer
 }
 
