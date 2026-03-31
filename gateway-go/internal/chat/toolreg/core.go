@@ -34,22 +34,13 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterProcessTools(registry, &deps.Process)
 	RegisterWebTools(registry)
 	RegisterSessionTools(registry, &deps.Sessions)
-	RegisterChronoTools(registry, &deps.Chrono)
+	RegisterChronoTools(registry)
 	RegisterVegaTools(registry, &deps.Vega, sglang)
 	RegisterMediaTools(registry, deps.LLMClient)
-	RegisterDataTools(registry, deps.LLMClient, deps.DefaultModel)
+	RegisterDataTools(registry)
+	RegisterPeriodicTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel)
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
 	RegisterHiddenTools(registry, deps.AgentLog)
-
-	// Morning letter: needs executor for web search calls.
-	if exec, ok := registry.(toolctx.ToolExecutor); ok {
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:        "morning_letter",
-			Description: "Collect daily morning briefing data (모닝레터). Fetches weather, exchange rates, copper price (MetalpriceAPI), calendar, and email in parallel. Returns structured JSON for you to compose the final letter",
-			InputSchema: morningLetterToolSchema(),
-			Fn:          tools.ToolMorningLetter(exec),
-		})
-	}
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on sglang hooks that live in the chat package.
@@ -250,20 +241,41 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 	})
 }
 
-// RegisterChronoTools registers the cron scheduling tool.
-func RegisterChronoTools(registry toolctx.ToolRegistrar, d *toolctx.ChronoDeps) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "cron",
-		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
-		InputSchema: cronToolSchema(),
-		Fn:          tools.ToolCron(d),
-	})
+// RegisterChronoTools registers messaging tools (non-periodic).
+func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "message",
 		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends",
 		InputSchema: messageToolSchema(),
 		Fn:          tools.ToolMessage(),
 	})
+}
+
+// RegisterPeriodicTools registers tools for recurring/scheduled tasks —
+// things that sit between always-on core tools and on-demand skills.
+// Typical trigger: cron scheduler, daily routines, periodic checks.
+func RegisterPeriodicTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string) {
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "cron",
+		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
+		InputSchema: cronToolSchema(),
+		Fn:          tools.ToolCron(chrono),
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "gmail",
+		Description: "Gmail (native OAuth2): inbox, search, read, send, reply, labels, analyze (LLM 이메일 분석). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
+		InputSchema: gmailToolSchema(),
+		Fn:          tools.ToolGmail(llmClient, defaultModel),
+	})
+	// Morning letter: needs executor for web search calls.
+	if exec, ok := registry.(toolctx.ToolExecutor); ok {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:        "morning_letter",
+			Description: "Collect daily morning briefing data (모닝레터). Fetches weather, exchange rates, copper price (MetalpriceAPI), calendar, and email in parallel. Returns structured JSON for you to compose the final letter",
+			InputSchema: morningLetterToolSchema(),
+			Fn:          tools.ToolMorningLetter(exec),
+		})
+	}
 }
 
 // buildSglangProbe converts toolreg SglangDeps into the tools.SglangProbe
@@ -322,18 +334,12 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client) {
 }
 
 // RegisterDataTools registers persistent storage tools.
-func RegisterDataTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
+func RegisterDataTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "kv",
 		Description: "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 		InputSchema: kvToolSchema(),
 		Fn:          tools.ToolKV(),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "gmail",
-		Description: "Gmail (native OAuth2): inbox, search, read, send, reply, labels, analyze (LLM 이메일 분석). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
-		InputSchema: gmailToolSchema(),
-		Fn:          tools.ToolGmail(llmClient, defaultModel),
 	})
 }
 
