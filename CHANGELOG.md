@@ -1,5 +1,47 @@
 # Changelog
 
+## [4.7.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.6.0...deneb-v4.7.0) (2026-03-31)
+
+
+### ✨ Features
+
+* **autoreply:** wire dispatch entry + reply pipeline completion ([f32f2a1](https://github.com/choiceoh/Deneb/commit/f32f2a17562c8c96d30ccf7bc0e090801f31b590))
+* **autoreply:** wire model override + runner config in dispatch pipeline ([085ab9e](https://github.com/choiceoh/Deneb/commit/085ab9e2273789170d9dfadb701f0fed00287889))
+* **autoreply:** wire remaining autoreply subsystems — directives, runners, session, model ([9f5fa4b](https://github.com/choiceoh/Deneb/commit/9f5fa4bfdb3b2410a3af8c206b460b58de584110))
+* **autoreply:** wire reply normalization + subagent spawn in get_reply pipeline ([da9aa07](https://github.com/choiceoh/Deneb/commit/da9aa072be00d67c892d0d1eba0e3b64c4b8a1d3))
+* **autoreply:** wire session handler commands + reply pipeline improvements ([bc398e2](https://github.com/choiceoh/Deneb/commit/bc398e27a26677470556736aa2e5e85644e64e6a))
+* **autoreply:** wire subagent spawn + reply pipeline + streaming preprocess hooks ([0755905](https://github.com/choiceoh/Deneb/commit/0755905c7be87fedd7c7be09296ff4471bb052ce))
+* **chat:** extend BuildCodingSystemPrompt with comprehensive Korean vibe coder instructions ([defc4a5](https://github.com/choiceoh/Deneb/commit/defc4a5fac89ba89bbac10be79e7ffcf37bbbf8e))
+* **chat:** wire plugin hook runner and EmitHeartbeat into chat handler ([09e7eb1](https://github.com/choiceoh/Deneb/commit/09e7eb11d051d6d535c4621d9379c7db26b9dbc3))
+* **chat:** wire streaming.Dispatch fallback delivery in run_helpers ([28d8ee0](https://github.com/choiceoh/Deneb/commit/28d8ee02fa1ba917be0359fda541f3fef161d41b))
+* **cron:** register cron.listPage and cron.get RPC methods in channel setup ([6c7a084](https://github.com/choiceoh/Deneb/commit/6c7a08417a60827f9d2e9fa82d471fb3af72c032))
+* **gateway:** wire autoreply reply pipeline + extend coding system prompt ([ae03a9c](https://github.com/choiceoh/Deneb/commit/ae03a9c224afcfa0fc716b35f0c515a5acaa2bb8))
+* **gateway:** wire config reload debounce + Telegram update type handlers ([a8fff4a](https://github.com/choiceoh/Deneb/commit/a8fff4a326afa4636782d7b649e96f6e01195ee7))
+* **gateway:** wire missing subsystems batch 2 — Publisher, SnapshotStore, RunStateMachine, ack reactions, conversation labels, event fixes ([96f847b](https://github.com/choiceoh/Deneb/commit/96f847b61189956392c72c603f52f2ffb0f8c590))
+* **gateway:** wire missing subsystems batch 3 — ProviderRuntime, plugin discovery, EmitAgent/EmitTranscript ([6a889ee](https://github.com/choiceoh/Deneb/commit/6a889eecf9156bf56876883f420c1ba7c66fc612))
+* **gateway:** wire missing subsystems batch 4 — aurora, agent stats, cron CRUD, thread bindings, hooks fire ([fce4f00](https://github.com/choiceoh/Deneb/commit/fce4f00574573ec39074dd850699dd79162cc127))
+* **gateway:** wire missing subsystems batch 5 — hooks fire, memory flush, queue policy, draft stream ([141002c](https://github.com/choiceoh/Deneb/commit/141002c700258a919f3824c8da8362d582015b1b))
+* **gateway:** wire missing subsystems batch 6 — vega mode, draft stream, broadcaster, autoreply queue/flush ([611bf09](https://github.com/choiceoh/Deneb/commit/611bf09dfa7c17caacd98c1f661014869365e58a))
+* **gateway:** wire missing subsystems batch 7 — autoreply dispatch pipeline, directives, memory flush, streaming hooks ([0633392](https://github.com/choiceoh/Deneb/commit/0633392bb55ee63e005cb97db2a04e1a11aba554))
+* **gateway:** wire missing subsystems batch 8 — Telegram components, progress, reply analysis, slash commands, autoreply handlers, proto sync ([c7533ff](https://github.com/choiceoh/Deneb/commit/c7533ff3c8ea68d2445fe8d11fd5df8342300f1a))
+* **gateway:** wire missing subsystems batch 9 — proto type sync, thread namer ([a390da6](https://github.com/choiceoh/Deneb/commit/a390da67071b4b73435dcf7fdd305fcf3b0a55ef))
+* **gateway:** wire plugin conversation binding + tools registration + directive handling ([a6f7513](https://github.com/choiceoh/Deneb/commit/a6f75136f137492b414509c4cf8e7a2cf818f74f))
+* **server:** wire autoreply session store + plugin binding store in server init ([117a11f](https://github.com/choiceoh/Deneb/commit/117a11f4c35c8a770500b634b7733406b69b5676))
+* **telegram:** implement embed_format.go + wire autoreply group activation in inbound ([7f890fe](https://github.com/choiceoh/Deneb/commit/7f890fe232d30912df4c808d61ce0a0d0406e015))
+* **telegram:** implement inbound_telegram.go vibe coder reply pipeline ([af52955](https://github.com/choiceoh/Deneb/commit/af529551dd10d694ec33cc6884589b8c484e5a5c))
+
+
+### 🐛 Bug Fixes
+
+* **autoreply:** cleanup dispatch_config unused import ([cfe00a7](https://github.com/choiceoh/Deneb/commit/cfe00a74f3eb0e8f5cc051fe4d3cf94aa5fd601d))
+* **autoreply:** wire block_streaming + reply normalize into dispatch pipeline ([682cb6d](https://github.com/choiceoh/Deneb/commit/682cb6dd7ceaea4dc569d9252c776d76abe88bf1))
+* **gateway:** wire 6 missing connections across server subsystems ([32a5d05](https://github.com/choiceoh/Deneb/commit/32a5d0586ea9c2ac68a817a2b7389112ed66a55c))
+
+
+### 🔧 Internal
+
+* **chat:** improve run.go draft stream finalization and cleanup ([afea29c](https://github.com/choiceoh/Deneb/commit/afea29c5a1abe734aaa735ae9997d63758ba758e))
+
 ## [4.6.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.5.0...deneb-v4.6.0) (2026-03-31)
 
 
