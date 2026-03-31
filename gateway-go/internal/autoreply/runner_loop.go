@@ -58,6 +58,7 @@ type AgentTurnResult struct {
 	Payloads         []types.ReplyPayload
 	ToolMeta         *media.ToolMeta
 	OutputText       string
+	OutputBlocks     []StreamBlock // structured text/code blocks from output coalescing
 	Summary          string
 	TokensUsed       session.TokenUsage
 	ModelUsed        string
@@ -265,6 +266,15 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 				// Streaming directive detected in output — log but don't
 				// act on it (directives in output are informational only).
 				_ = sd
+			}
+
+			// Coalesce output into structured blocks (text vs code) for
+			// downstream formatters (e.g., Telegram code block extraction).
+			coalescer := NewBlockCoalescer()
+			coalescer.Feed(sanitized)
+			blocks := coalescer.Flush()
+			if len(blocks) > 0 {
+				result.OutputBlocks = blocks
 			}
 
 			result.Payloads = append(result.Payloads, types.ReplyPayload{Text: sanitized})

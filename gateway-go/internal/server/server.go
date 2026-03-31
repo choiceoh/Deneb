@@ -108,10 +108,11 @@ type ServerIntegrations struct {
 	usageTracker       *usage.Tracker
 	maintRunner        *maintenance.Runner
 	jobTracker         *agent.JobTracker
-	pluginFullRegistry    *plugin.FullRegistry
-	pluginDiscoverer      *plugin.PluginDiscoverer
-	pluginTypedHookRunner *plugin.TypedHookRunner
-	pluginRouter          *pluginrouter.Router
+	pluginFullRegistry      *plugin.FullRegistry
+	pluginDiscoverer        *plugin.PluginDiscoverer
+	pluginTypedHookRunner   *plugin.TypedHookRunner
+	pluginRouter            *pluginrouter.Router
+	conversationBindings    *plugin.ConversationBindingStore
 	autonomousSvc      *autonomous.Service
 	dreamingAdapter    *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
 	memoryStore        *memory.Store           // structured memory store; used by flush task
@@ -372,9 +373,10 @@ func New(addr string, opts ...Option) *Server {
 		}))
 	}
 
-	// Initialize plugin full registry, discoverer, typed hook runner, and register RPC methods.
+	// Initialize plugin full registry, discoverer, typed hook runner, conversation bindings, and register RPC methods.
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
 	s.pluginDiscoverer = plugin.NewPluginDiscoverer(s.logger)
+	s.conversationBindings = plugin.NewConversationBindingStore()
 	s.pluginTypedHookRunner = plugin.NewTypedHookRunner(s.logger)
 	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
 		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry, channelAdapter: channel.NewProtocolAdapter(s.channels)},

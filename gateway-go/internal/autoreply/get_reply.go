@@ -110,9 +110,25 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		AuthProfile:    selection.AuthProfile,
 	}
 
+	// Record inbound user message in history tracker.
+	if deps.History != nil && cleanedBody != "" {
+		deps.History.Append(sess.SessionKey, session.HistoryEntry{
+			Role: "user",
+			Text: cleanedBody,
+		})
+	}
+
 	result, err := deps.Agent.RunTurn(ctx, agentCfg)
 	if err != nil {
 		return nil, err
+	}
+
+	// Record assistant reply in history tracker.
+	if deps.History != nil && result != nil && result.OutputText != "" {
+		deps.History.Append(sess.SessionKey, session.HistoryEntry{
+			Role: "assistant",
+			Text: result.OutputText,
+		})
 	}
 
 	// 10b. Record run accounting on the session.

@@ -81,6 +81,14 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 		}
 	}
 
+	// 2b. Check for inline command tokens (e.g., "!model gpt-4" embedded in text).
+	// These indicate the message body contains inline commands that should be
+	// processed as directives during agent reply generation.
+	if handlers.HasInlineCommandTokens(msg.Body) {
+		// Inline commands are handled during directive parsing in GetReplyFromConfig.
+		// This detection point allows future pre-processing or logging.
+	}
+
 	// 3. Generate reply via agent.
 	payloads, err := GetReplyFromConfig(ctx, msg, cfg.ReplyOptions, deps)
 	if err != nil {
