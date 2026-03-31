@@ -300,9 +300,6 @@ func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	if meta.Emoji != "☀️" {
 		t.Errorf("expected emoji='☀️', got %q", meta.Emoji)
 	}
-	if len(meta.OS) != 1 {
-		t.Fatalf("expected 1 OS entry, got %d", len(meta.OS))
-	}
 }
 
 func TestResolveDenebMetadata_WithRequires(t *testing.T) {

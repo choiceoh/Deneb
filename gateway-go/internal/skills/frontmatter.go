@@ -17,7 +17,6 @@ type DenebSkillMetadata struct {
 	PrimaryEnv string             `json:"primaryEnv,omitempty"`
 	Emoji      string             `json:"emoji,omitempty"`
 	Homepage   string             `json:"homepage,omitempty"`
-	OS         []string           `json:"os,omitempty"`
 	Tags       []string           `json:"tags,omitempty"`
 	Requires   *SkillRequires     `json:"requires,omitempty"`
 	Install    []SkillInstallSpec `json:"install,omitempty"`
@@ -37,7 +36,6 @@ type SkillInstallSpec struct {
 	Kind            string   `json:"kind"`
 	Label           string   `json:"label,omitempty"`
 	Bins            []string `json:"bins,omitempty"`
-	OS              []string `json:"os,omitempty"`
 	Formula         string   `json:"formula,omitempty"`
 	Package         string   `json:"package,omitempty"`
 	Module          string   `json:"module,omitempty"`
@@ -190,8 +188,6 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 	parseJSONString(obj, "primaryEnv", &meta.PrimaryEnv)
 	parseJSONString(obj, "emoji", &meta.Emoji)
 	parseJSONString(obj, "homepage", &meta.Homepage)
-	meta.OS = parseJSONStringList(obj, "os")
-
 	// Parse tags.
 	meta.Tags = parseJSONStringList(obj, "tags")
 
@@ -248,7 +244,6 @@ func parseInstallSpec(raw json.RawMessage) *SkillInstallSpec {
 	parseJSONString(obj, "id", &spec.ID)
 	parseJSONString(obj, "label", &spec.Label)
 	spec.Bins = parseJSONStringList(obj, "bins")
-	spec.OS = parseJSONStringList(obj, "os")
 
 	switch kind {
 	case "brew":

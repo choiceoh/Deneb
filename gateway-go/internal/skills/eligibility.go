@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 )
@@ -23,7 +22,6 @@ type SkillConfig struct {
 
 // EligibilityContext holds all external state needed for eligibility evaluation.
 type EligibilityContext struct {
-	Platform     string            // runtime.GOOS
 	EnvVars      map[string]string // relevant environment variables snapshot
 	SkillConfigs map[string]SkillConfig
 	AllowBundled []string // config.skills.allowBundled
@@ -33,7 +31,6 @@ type EligibilityContext struct {
 // DefaultEligibilityContext creates a context using the current runtime environment.
 func DefaultEligibilityContext() EligibilityContext {
 	return EligibilityContext{
-		Platform:     runtime.GOOS,
 		EnvVars:      envSnapshot(),
 		SkillConfigs: make(map[string]SkillConfig),
 		ConfigValues: make(map[string]bool),
@@ -93,20 +90,6 @@ func isBundledSkillAllowed(entry SkillEntry, allowBundled []string) bool {
 
 func evaluateRuntimeEligibility(entry SkillEntry, skillCfg SkillConfig, ctx EligibilityContext) bool {
 	meta := entry.Metadata
-
-	// OS check.
-	if meta != nil && len(meta.OS) > 0 {
-		found := false
-		for _, osName := range meta.OS {
-			if osName == ctx.Platform {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
 
 	// Always flag bypasses requirements.
 	if meta != nil && meta.Always {

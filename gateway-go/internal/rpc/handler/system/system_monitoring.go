@@ -103,12 +103,8 @@ func doctorMemoryStatus(deps DoctorDeps) rpcutil.HandlerFunc {
 }
 
 // readProcMeminfo reads total and available memory from /proc/meminfo.
-// Returns (0, 0) on non-Linux or if reading fails.
+// Returns (0, 0) if reading fails.
 func readProcMeminfo() (total, available uint64) {
-	if runtime.GOOS != "linux" {
-		return 0, 0
-	}
-
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0, 0

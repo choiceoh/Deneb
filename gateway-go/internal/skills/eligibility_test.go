@@ -9,7 +9,6 @@ func TestShouldIncludeSkill_basic(t *testing.T) {
 		Skill: Skill{Name: "test", Source: SourceWorkspace},
 	}
 	ctx := EligibilityContext{
-		Platform:     "linux",
 		EnvVars:      map[string]string{},
 		SkillConfigs: map[string]SkillConfig{},
 	}
@@ -24,36 +23,13 @@ func TestShouldIncludeSkill_disabled(t *testing.T) {
 		Skill: Skill{Name: "test", Source: SourceWorkspace},
 	}
 	ctx := EligibilityContext{
-		Platform: "linux",
-		EnvVars:  map[string]string{},
+		EnvVars: map[string]string{},
 		SkillConfigs: map[string]SkillConfig{
 			"test": {Enabled: &f},
 		},
 	}
 	if ShouldIncludeSkill(entry, ctx) {
 		t.Error("expected disabled skill to be excluded")
-	}
-}
-
-func TestShouldIncludeSkill_osRestriction(t *testing.T) {
-	entry := SkillEntry{
-		Skill: Skill{Name: "linux-only", Source: SourceBundled},
-		Metadata: &DenebSkillMetadata{
-			OS: []string{"linux"},
-		},
-	}
-	ctx := EligibilityContext{
-		Platform:     "linux",
-		EnvVars:      map[string]string{},
-		SkillConfigs: map[string]SkillConfig{},
-	}
-	if !ShouldIncludeSkill(entry, ctx) {
-		t.Error("expected linux-only skill to be included on linux")
-	}
-
-	ctx.Platform = "freebsd"
-	if ShouldIncludeSkill(entry, ctx) {
-		t.Error("expected linux-only skill to be excluded on freebsd")
 	}
 }
 
@@ -68,7 +44,6 @@ func TestShouldIncludeSkill_alwaysFlag(t *testing.T) {
 		},
 	}
 	ctx := EligibilityContext{
-		Platform:     "linux",
 		EnvVars:      map[string]string{},
 		SkillConfigs: map[string]SkillConfig{},
 	}
@@ -89,7 +64,6 @@ func TestShouldIncludeSkill_envRequired(t *testing.T) {
 	}
 	// No env var set.
 	ctx := EligibilityContext{
-		Platform:     "linux",
 		EnvVars:      map[string]string{},
 		SkillConfigs: map[string]SkillConfig{},
 	}
@@ -115,8 +89,7 @@ func TestShouldIncludeSkill_apiKeyMatchesPrimaryEnv(t *testing.T) {
 		},
 	}
 	ctx := EligibilityContext{
-		Platform: "linux",
-		EnvVars:  map[string]string{},
+		EnvVars: map[string]string{},
 		SkillConfigs: map[string]SkillConfig{
 			"needs-token": {APIKey: "ghp_secret"},
 		},
@@ -131,7 +104,6 @@ func TestShouldIncludeSkill_bundledAllowlist(t *testing.T) {
 		Skill: Skill{Name: "github", Source: SourceBundled},
 	}
 	ctx := EligibilityContext{
-		Platform:     "linux",
 		EnvVars:      map[string]string{},
 		SkillConfigs: map[string]SkillConfig{},
 		AllowBundled: []string{"weather"},

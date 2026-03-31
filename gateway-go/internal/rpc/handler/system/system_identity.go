@@ -23,7 +23,7 @@ func IdentityMethods(version string) map[string]rpcutil.HandlerFunc {
 				"hostname": hostname,
 				"version":  version,
 				"runtime":  "go",
-				"os":       runtime.GOOS,
+				"os":       "linux",
 				"arch":     runtime.GOARCH,
 				"stateDir": stateDir,
 			})
