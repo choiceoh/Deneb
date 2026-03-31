@@ -467,17 +467,197 @@ func TestBuildPrompt(t *testing.T) {
 }
 
 func TestBuildPromptStuckRecovery(t *testing.T) {
+	tests := []struct {
+		name     string
+		failures int
+		want     string
+	}{
+		{"3+ failures", 3, "CONSECUTIVE FAILURES"},
+		{"5+ failures", 5, "WARNING"},
+		{"8+ failures", 8, "CRITICAL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				MetricName:          "loss",
+				MetricDirection:     "minimize",
+				TimeBudgetSec:       60,
+				ConsecutiveFailures: tt.failures,
+			}
+			runner := NewRunner(nil)
+			p := runner.buildPrompt(cfg, nil, "", 10)
+			if !contains(p.system, tt.want) {
+				t.Errorf("expected %q in system prompt for %d failures", tt.want, tt.failures)
+			}
+		})
+	}
+}
+
+func TestBuildPromptPhases(t *testing.T) {
 	cfg := &Config{
-		MetricName:          "loss",
-		MetricDirection:     "minimize",
-		TimeBudgetSec:       60,
-		ConsecutiveFailures: 5,
+		MetricName:      "loss",
+		MetricDirection: "minimize",
+		TimeBudgetSec:   60,
 	}
 	runner := NewRunner(nil)
-	p := runner.buildPrompt(cfg, nil, "", 10)
 
-	if !contains(p.system, "fundamentally different") {
-		t.Error("system prompt should include stuck recovery for 5+ failures")
+	tests := []struct {
+		iteration int
+		want      string
+	}{
+		{1, "EARLY"},
+		{5, "EXPLORATION"},
+		{20, "EXPLOITATION"},
+		{35, "FINE-TUNING"},
+	}
+	for _, tt := range tests {
+		p := runner.buildPrompt(cfg, nil, "", tt.iteration)
+		if !contains(p.user, tt.want) {
+			t.Errorf("iteration %d: expected phase %q in user prompt", tt.iteration, tt.want)
+		}
+	}
+}
+
+func TestBuildPromptHardConstraints(t *testing.T) {
+	cfg := &Config{
+		MetricName:      "val_bpb",
+		MetricDirection: "minimize",
+		TimeBudgetSec:   300,
+	}
+	runner := NewRunner(nil)
+	p := runner.buildPrompt(cfg, nil, "", 1)
+
+	// Check for key program.md-level constraints.
+	constraints := []string{
+		"HARD CONSTRAINTS",
+		"ONLY modify the target files",
+		"Do NOT add new dependencies",
+		"Do NOT hardcode",
+		"STRATEGY GUIDANCE",
+		"EXPLORATION vs EXPLOITATION",
+		"CHANGE GRANULARITY",
+		"LEARNING FROM HISTORY",
+		"TIME BUDGET AWARENESS",
+		"RESPONSE FORMAT",
+	}
+	for _, c := range constraints {
+		if !contains(p.system, c) {
+			t.Errorf("system prompt missing constraint: %q", c)
+		}
+	}
+}
+
+func TestBuildPromptKeptAndFailedHistory(t *testing.T) {
+	dir := t.TempDir()
+	// Write some results to test kept/failed sections.
+	rows := []ResultRow{
+		{Iteration: 0, Timestamp: time.Now(), Hypothesis: "baseline", MetricValue: 1.0, Kept: true, BestSoFar: 1.0},
+		{Iteration: 1, Timestamp: time.Now(), Hypothesis: "double lr", MetricValue: 0.95, Kept: true, CommitHash: "abc", BestSoFar: 0.95, DeltaFromBest: -0.05},
+		{Iteration: 2, Timestamp: time.Now(), Hypothesis: "bad change", MetricValue: 1.2, Kept: false, BestSoFar: 0.95, DeltaFromBest: 0.25},
+	}
+	for _, r := range rows {
+		AppendResult(dir, r)
+	}
+
+	cfg := &Config{
+		MetricName:      "loss",
+		MetricDirection: "minimize",
+		TimeBudgetSec:   60,
+	}
+	runner := NewRunner(nil)
+	runner.workdir = dir
+	p := runner.buildPrompt(cfg, nil, "", 3)
+
+	if !contains(p.user, "SUCCESSFUL CHANGES") {
+		t.Error("should include successful changes section")
+	}
+	if !contains(p.user, "double lr") {
+		t.Error("should list kept hypothesis")
+	}
+	if !contains(p.user, "RECENT FAILURES") {
+		t.Error("should include recent failures section")
+	}
+	if !contains(p.user, "bad change") {
+		t.Error("should list failed hypothesis")
+	}
+}
+
+func TestExtractMetricWithPattern(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		pattern string
+		want    float64
+		wantErr bool
+	}{
+		{
+			name:    "key-value pattern",
+			output:  "epoch 10 | val_bpb: 1.087 | train_loss: 0.95",
+			pattern: `val_bpb:\s*([\d.]+)`,
+			want:    1.087,
+		},
+		{
+			name:    "coverage pattern",
+			output:  "ok  coverage: 85.3% of statements",
+			pattern: `coverage:\s*([\d.]+)`,
+			want:    85.3,
+		},
+		{
+			name:    "multi-line finds last match",
+			output:  "step 1: loss=2.0\nstep 2: loss=1.5\nstep 3: loss=1.2",
+			pattern: `loss=([\d.]+)`,
+			want:    1.2,
+		},
+		{
+			name:    "no match",
+			output:  "done successfully",
+			pattern: `accuracy:\s*([\d.]+)`,
+			wantErr: true,
+		},
+		{
+			name:    "invalid regex",
+			output:  "1.0",
+			pattern: `[invalid`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractMetricWithPattern(tt.output, tt.pattern)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("got %f, want %f", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractMetricSmartValidation(t *testing.T) {
+	// NaN detection.
+	_, err := extractMetricSmart("NaN\n", "")
+	if err == nil {
+		t.Error("expected error for NaN")
+	}
+
+	// Pattern mode.
+	val, err := extractMetricSmart("loss: 0.5\n", `loss:\s*([\d.]+)`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != 0.5 {
+		t.Errorf("got %f, want 0.5", val)
+	}
+
+	// Heuristic mode fallback.
+	val, err = extractMetricSmart("42.0\n", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != 42.0 {
+		t.Errorf("got %f, want 42.0", val)
 	}
 }
 

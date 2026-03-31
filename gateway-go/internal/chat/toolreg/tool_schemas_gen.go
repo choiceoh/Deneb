@@ -1557,6 +1557,10 @@ func autoresearchToolSchema() map[string]any {
 				"type":        "string",
 				"description": "LLM model for hypothesis generation (init only, default: claude-sonnet-4-20250514)",
 			},
+			"metric_pattern": map[string]any{
+				"type":        "string",
+				"description": "Regex with one capture group to extract the metric value from experiment output (init only). Example: 'val_bpb:\\s*([\\d.]+)' extracts 1.087 from 'val_bpb: 1.087'. If omitted, uses default heuristic (last number on last stdout line).",
+			},
 			"format": map[string]any{
 				"type":        "string",
 				"enum":        []string{"tsv", "summary"},

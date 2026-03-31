@@ -23,6 +23,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 			TimeBudgetSec  int      `json:"time_budget_sec"`
 			BranchTag      string   `json:"branch_tag"`
 			Model          string   `json:"model"`
+			MetricPattern  string   `json:"metric_pattern"`
 			Format         string   `json:"format"`
 		}
 		if err := jsonutil.UnmarshalInto("autoresearch params", input, &p); err != nil {
@@ -35,7 +36,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 		switch p.Action {
 		case "init":
 			return autoresearchInit(ctx, runner, p.Workdir, p.TargetFiles, p.MetricCmd,
-				p.MetricName, p.MetricDirection, p.TimeBudgetSec, p.BranchTag, p.Model)
+				p.MetricName, p.MetricDirection, p.TimeBudgetSec, p.BranchTag, p.Model, p.MetricPattern)
 		case "start":
 			return autoresearchStart(runner, p.Workdir)
 		case "stop":
@@ -52,7 +53,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 
 func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir string,
 	targetFiles []string, metricCmd, metricName, metricDirection string,
-	timeBudgetSec int, branchTag, model string) (string, error) {
+	timeBudgetSec int, branchTag, model, metricPattern string) (string, error) {
 
 	if runner.IsRunning() {
 		return "", fmt.Errorf("autoresearch already running — stop it first")
@@ -66,6 +67,7 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		TimeBudgetSec:   timeBudgetSec,
 		BranchTag:       branchTag,
 		Model:           model,
+		MetricPattern:   metricPattern,
 	}
 	if err := cfg.Validate(); err != nil {
 		return "", err
@@ -103,10 +105,11 @@ func autoresearchStart(runner *autoresearch.Runner, workdir string) (string, err
 	cfg, _ := autoresearch.LoadConfig(workdir)
 	if cfg != nil {
 		return fmt.Sprintf("Autoresearch started: optimizing %s (%s)\n"+
+			"Branch: autoresearch/%s\n"+
 			"Target: %v\n"+
 			"Time budget: %ds/experiment\n"+
 			"The loop runs autonomously. Use action=status to check progress, action=stop to halt.",
-			cfg.MetricName, cfg.MetricDirection, cfg.TargetFiles, cfg.TimeBudgetSec), nil
+			cfg.MetricName, cfg.MetricDirection, cfg.BranchTag, cfg.TargetFiles, cfg.TimeBudgetSec), nil
 	}
 	return "Autoresearch started.", nil
 }

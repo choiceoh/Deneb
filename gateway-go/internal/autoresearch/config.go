@@ -31,6 +31,14 @@ type Config struct {
 	BranchTag string `json:"branch_tag"`
 	// Model is the LLM model to use for hypothesis generation.
 	Model string `json:"model,omitempty"`
+	// MetricPattern is an optional regex to extract the metric from experiment
+	// output. Must contain exactly one capture group for the numeric value.
+	// Example: `val_bpb:\s*([\d.]+)` extracts 1.087 from "val_bpb: 1.087".
+	// If empty, the runner uses the default heuristic (last number on last line).
+	MetricPattern string `json:"metric_pattern,omitempty"`
+	// OriginalBranch records the branch autoresearch was started from,
+	// so we know where to return after the experiment completes.
+	OriginalBranch string `json:"original_branch,omitempty"`
 
 	// --- Mutable state updated during the run ---
 

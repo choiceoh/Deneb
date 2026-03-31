@@ -1,6 +1,6 @@
 ---
 name: autoresearch
-version: "1.0.0"
+version: "1.1.0"
 category: coding
 description: "Autonomous AI experiment loop: iteratively modify code, run experiments with a fixed time budget, evaluate a scalar metric, and keep improvements or revert failures — all without human intervention. Inspired by karpathy/autoresearch. Use when: optimizing ML training (loss, accuracy), improving benchmark scores, reducing build size, increasing test coverage, or any codebase with a measurable fitness metric. NOT for: tasks without a clear numeric metric, UI/UX work, creative writing, or one-off code changes."
 metadata:
@@ -17,8 +17,9 @@ improvements automatically. Designed for overnight/unattended execution on DGX S
 
 ```
 1. autoresearch action=init workdir=/path/to/project target_files=["train.py"] \
-     metric_cmd="python train.py 2>&1 | tail -1" metric_name="val_bpb" \
-     metric_direction="minimize" time_budget_sec=300 branch_tag="mar31"
+     metric_cmd="python train.py" metric_name="val_bpb" \
+     metric_direction="minimize" time_budget_sec=300 branch_tag="mar31" \
+     metric_pattern="val_bpb:\s*([\d.]+)"
 
 2. autoresearch action=start workdir=/path/to/project
 
@@ -34,11 +35,12 @@ improvements automatically. Designed for overnight/unattended execution on DGX S
 ### `init` — Initialize experiment workspace
 
 Sets up the experiment configuration in `<workdir>/.autoresearch/config.json`.
+Automatically runs the baseline measurement to establish a reference point.
 
 **Required parameters:**
-- `workdir` — Path to the project directory
+- `workdir` — Path to the project directory (must be a git repo with clean working tree)
 - `target_files` — Array of files the agent may modify (relative to workdir)
-- `metric_cmd` — Shell command that runs the experiment and prints the metric value as its last output line
+- `metric_cmd` — Shell command that runs the experiment and prints the metric
 - `metric_name` — Human-readable name for the metric (e.g., "val_bpb", "accuracy", "build_size_kb")
 - `metric_direction` — `"minimize"` or `"maximize"`
 - `branch_tag` — Tag for the experiment branch (`autoresearch/<tag>`)
@@ -46,27 +48,36 @@ Sets up the experiment configuration in `<workdir>/.autoresearch/config.json`.
 **Optional parameters:**
 - `time_budget_sec` — Time budget per experiment in seconds (default: 300)
 - `model` — LLM model for hypothesis generation (default: claude-sonnet-4-20250514)
+- `metric_pattern` — Regex with one capture group to extract the metric from output.
+  Example: `val_bpb:\s*([\d.]+)` extracts `1.087` from `val_bpb: 1.087`.
+  If omitted, uses default heuristic (last number on last stdout line).
 
 ### `start` — Begin autonomous loop
 
-Launches the background experiment loop. The loop runs indefinitely until stopped.
+Creates an isolated experiment branch (`autoresearch/<tag>`) and launches the
+background experiment loop. Requires a clean git working tree.
+
 Each iteration:
-1. Reads current target file contents and experiment history
-2. Asks LLM for a hypothesis and code modifications
-3. Applies changes and git commits
-4. Runs the experiment within the time budget
-5. Evaluates the metric — keeps if improved, reverts if not
-6. Records results to `.autoresearch/results.tsv`
-7. Sends Telegram notification with iteration outcome
+1. Reads target file contents and full experiment history
+2. Analyzes trends: success rate, improvement velocity, plateau detection
+3. Feeds trend analysis + kept/failed history to LLM for pattern-aware hypothesis generation
+4. Applies code changes and git commits
+5. Runs the experiment within the time budget
+6. Extracts metric (via `metric_pattern` or heuristic), validates (NaN/Inf rejection)
+7. Keeps if improved, reverts if not
+8. Records to results.tsv with delta_from_best and best_so_far tracking
+9. Saves full stdout/stderr to per-iteration log files
+10. Sends Telegram notification with outcome and improvement %
 
 ### `stop` — Halt the loop
 
-Gracefully stops the running experiment loop and returns a final summary.
+Gracefully stops the running experiment loop and returns a final summary
+including trend analysis, top improvements, and overall improvement from baseline.
 
 ### `status` — Check progress
 
 Returns current state (RUNNING/STOPPED) with experiment summary: iterations,
-best metric, improvement percentage, consecutive failures.
+best metric, improvement %, success rate, trend analysis, consecutive failures.
 
 ### `results` — View experiment log
 
@@ -74,36 +85,67 @@ Returns the full experiment history. Use `format="tsv"` for raw TSV data.
 
 ## Metric Command Guidelines
 
-The `metric_cmd` must:
-- Print a single numeric value as the last non-empty line of stdout
-- Complete within `time_budget_sec` (the runner enforces a timeout)
-- Use the `TIME_BUDGET` environment variable if the experiment can self-limit
+The `metric_cmd` should produce output containing the metric value.
+Use `metric_pattern` for structured output, or ensure the metric is the
+last number printed to stdout.
 
 Examples:
 ```bash
-# ML training: run for N seconds, print validation loss
-python train.py 2>&1 | tail -1
+# ML training: structured output + pattern extraction
+# metric_cmd: "python train.py"
+# metric_pattern: "val_bpb:\s*([\d.]+)"
+python train.py
+# Output: "epoch 10 | val_bpb: 1.087 | train_loss: 0.95"
 
-# Test coverage
+# Test coverage (heuristic extraction — last number)
 go test -cover ./... 2>&1 | grep 'coverage:' | grep -oP '[\d.]+'
 
 # Build size
 make build && du -b ./build/output | cut -f1
 
-# Benchmark score
-cargo bench 2>&1 | grep 'time:' | grep -oP '[\d.]+'
+# Benchmark score with pattern
+# metric_cmd: "cargo bench"
+# metric_pattern: "time:\s*(\d+\.?\d*)"
+cargo bench
 ```
+
+The `TIME_BUDGET` environment variable is set to the configured seconds,
+so experiments can self-limit if they support it.
+
+## Branch Isolation
+
+On `start`, autoresearch automatically:
+1. Checks that the working tree is clean (no uncommitted changes)
+2. Records the current branch (for potential return)
+3. Creates `autoresearch/<tag>` branch from current HEAD (or switches to it if it exists)
+4. All experiment commits happen on this isolated branch
+
+This keeps your main branch clean. The experiment branch contains
+the full git history of all kept changes.
 
 ## Stuck Recovery
 
-The runner automatically detects when the agent is stuck:
-- **3+ consecutive failures**: prompts the LLM to change strategy
-- **5+ consecutive failures**: prompts a fundamental rethinking of approach
+The runner automatically detects when the agent is stuck and progressively
+escalates its strategy guidance:
+- **3+ consecutive failures**: suggests changing strategy (e.g., switch from hyperparameter tuning to architecture changes)
+- **5+ consecutive failures**: demands abandoning the current approach entirely
+- **8+ consecutive failures**: forces reversion to simplest known-working configuration
 
-## File Structure
+## LLM Strategy Phases
+
+The prompt automatically adapts to the experiment phase:
+- **Early (1-10)**: Explore broadly — try different approaches
+- **Exploration (11-30)**: Balance new ideas with refining winners
+- **Exploitation (30+)**: Focus on fine-tuning the best-performing approaches
+
+## Data Tracking
 
 ```
 <workdir>/.autoresearch/
-  config.json    — experiment configuration + mutable state
-  results.tsv    — iteration log (TSV format)
+  config.json      — experiment config + mutable state (best, baseline, consecutive failures)
+  results.tsv      — iteration log with delta_from_best, best_so_far tracking
+  runs/
+    0000.log       — baseline stdout/stderr
+    0001.log       — iteration 1 stdout/stderr
+    ...            — full experiment output preserved for debugging
 ```
