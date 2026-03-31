@@ -230,20 +230,11 @@ func executeAgentRun(
 		logger.Warn("context assembly failed, using message only", "error", contextErr)
 	}
 
-	// Proactive compaction: check if stored tokens exceed the compaction threshold
-	// and run a sweep. Without this, assembly silently truncates old messages to
-	// fit within the token budget, so the LLM never returns a context overflow
-	// error, and compaction (summary generation) never triggers.
-	// The sweep runs in the background with a cooldown; cached results from a
-	// previous sweep are applied immediately if available.
-	if compactedMsgs, sysAddition, ok := maybeProactiveCompaction(
-		ctx, deps, params, client, logger,
-	); ok && len(compactedMsgs) > 0 {
-		messages = compactedMsgs
-		if sysAddition != "" {
-			auroraSystemAddition = sysAddition
-		}
-	}
+	// Proactive compaction: if stored tokens exceed the threshold, fire a
+	// background sweep. The sweep writes summaries into the Aurora DB; the NEXT
+	// request's normal assembly will include them. The current request proceeds
+	// with its already-assembled context (no blocking, no stale cache).
+	triggerProactiveCompaction(deps.shutdownCtx, deps, params, client, logger)
 
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
