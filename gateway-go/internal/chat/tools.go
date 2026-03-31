@@ -35,7 +35,6 @@ type ToolRegistry struct {
 	postProcess              *PostProcessRegistry
 	cachedLLMTools           []llm.Tool            // cached tool list; invalidated on RegisterTool
 	cachedLLMToolsAnthropic  []llm.Tool            // same list with CacheControl on last tool for Anthropic prompt caching
-	cachedLLMToolsForProfile map[string][]llm.Tool // per-profile cache; invalidated on RegisterTool
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -64,9 +63,8 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 		r.order = append(r.order, def.Name)
 	}
 	r.tools[def.Name] = def
-	r.cachedLLMTools = nil           // invalidate full-set cache
-	r.cachedLLMToolsAnthropic = nil  // invalidate Anthropic variant
-	r.cachedLLMToolsForProfile = nil // invalidate per-profile cache
+	r.cachedLLMTools = nil          // invalidate full-set cache
+	r.cachedLLMToolsAnthropic = nil // invalidate Anthropic variant
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
@@ -310,126 +308,6 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 		t.PreSerialize()
 		tools = append(tools, t)
 	}
-	return tools
-}
-
-// codingTools is the set of tools included in the "coding" profile.
-// 13 focused tools for file-system and code-execution operations.
-var codingTools = map[string]bool{
-	"read":       true,
-	"write":      true,
-	"edit":       true,
-	"multi_edit": true,
-	"grep":       true,
-	"find":       true,
-	"tree":       true,
-	"diff":       true,
-	"analyze":    true,
-	"test":       true,
-	"git":        true,
-	"exec":       true,
-	"process":    true,
-}
-
-// chatTools is the set of tools included in the "chat" profile (Telegram general chat).
-// Covers read-only FS tools, web, email, media, memory, session, scheduling, system
-// tools, and enable_coding_tools for self-upgrading to the full coding tool set.
-// Write/edit/exec/test/git tools require enable_coding_tools or a coding keyword.
-// ~27 tools vs ~44 full set → saves ~6–8 K tokens of schema per turn.
-var chatTools = map[string]bool{
-	// Read-only file system (workspace inspection without mutation)
-	"read": true,
-	"grep": true,
-	"find": true,
-	"tree": true,
-	// Web & HTTP
-	"web":  true,
-	"http": true,
-	// Knowledge & memory
-	"memory":  true,
-	"polaris": true,
-	// Session management
-	"sessions_list":    true,
-	"sessions_history": true,
-	"sessions_search":  true,
-	"sessions_send":    true,
-	"sessions_spawn":   true,
-	"subagents":        true,
-	// Scheduling & messaging
-	"cron":    true,
-	"message": true,
-	// Media
-	"image":              true,
-	"youtube_transcript": true,
-	"send_file":          true,
-	// Persistent data & email
-	"kv":    true,
-	"gmail": true,
-	// Briefing & meta
-	"morning_letter": true,
-	"pilot":          true,
-	"health_check":   true,
-	"gateway":        true,
-	// Profile switch: lets agent self-upgrade to full coding tools.
-	"enable_coding_tools": true,
-}
-
-// LLMToolsForProfile returns tools filtered by profile.
-// If profile is empty, returns all tools (same as LLMTools).
-// If profile is "coding", returns only coding-related tools.
-// If profile is "chat", returns general-conversation tools, excluding coding/FS tools.
-// Results are cached per profile and only rebuilt when tools change.
-// The returned slice is shared — callers must not mutate it.
-func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {
-	if profile == "" {
-		return r.LLMTools()
-	}
-
-	// Cache read fast-path — return shared slice (callers must not mutate).
-	r.mu.RLock()
-	if r.cachedLLMToolsForProfile != nil {
-		if cached, ok := r.cachedLLMToolsForProfile[profile]; ok {
-			r.mu.RUnlock()
-			return cached
-		}
-	}
-	r.mu.RUnlock()
-
-	// Cache miss — build under write lock.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// Double-check after acquiring write lock.
-	if r.cachedLLMToolsForProfile != nil {
-		if cached, ok := r.cachedLLMToolsForProfile[profile]; ok {
-			return cached
-		}
-	} else {
-		r.cachedLLMToolsForProfile = make(map[string][]llm.Tool)
-	}
-
-	var profileMap map[string]bool
-	switch profile {
-	case "coding":
-		profileMap = codingTools
-	case "chat":
-		profileMap = chatTools
-	default:
-		// Unknown profile → fall back to full set (safe default, not cached).
-		return r.buildLLMToolsLocked()
-	}
-
-	// Build from cached base list if available; avoids redundant rebuild.
-	if r.cachedLLMTools == nil {
-		r.cachedLLMTools = r.buildLLMToolsLocked()
-	}
-	all := r.cachedLLMTools
-	tools := make([]llm.Tool, 0, len(profileMap))
-	for _, t := range all {
-		if profileMap[t.Name] {
-			tools = append(tools, t)
-		}
-	}
-	r.cachedLLMToolsForProfile[profile] = tools
 	return tools
 }
 

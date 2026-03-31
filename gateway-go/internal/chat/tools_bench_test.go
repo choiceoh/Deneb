@@ -77,19 +77,6 @@ func BenchmarkLLMToolsAnthropic_Marshal(b *testing.B) {
 	}
 }
 
-func BenchmarkLLMToolsForProfile(b *testing.B) {
-	reg := NewToolRegistry()
-	registerSampleTools(reg, 40)
-	// Prime the cache.
-	reg.LLMToolsForProfile("coding")
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		reg.LLMToolsForProfile("coding")
-	}
-}
-
 func BenchmarkExtractCompressFlag(b *testing.B) {
 	input := json.RawMessage(`{"file_path":"/tmp/test.go","pattern":"func.*","max_results":100}`)
 	b.ResetTimer()

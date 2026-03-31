@@ -13,23 +13,7 @@ const (
 	ctxKeyTurnContext
 	ctxKeyMaxUploadBytes
 	ctxKeyRunCache
-	ctxKeyCodingUpgrade
 )
-
-// CodingUpgradeSignal is called by the enable_coding_tools tool to request
-// a mid-run switch to the full coding tool set.
-type CodingUpgradeSignal func()
-
-// WithCodingUpgradeSignal attaches a coding-upgrade signal function to the context.
-func WithCodingUpgradeSignal(ctx context.Context, fn CodingUpgradeSignal) context.Context {
-	return context.WithValue(ctx, ctxKeyCodingUpgrade, fn)
-}
-
-// CodingUpgradeSignalFromContext extracts the coding-upgrade signal function.
-func CodingUpgradeSignalFromContext(ctx context.Context) CodingUpgradeSignal {
-	fn, _ := ctx.Value(ctxKeyCodingUpgrade).(CodingUpgradeSignal)
-	return fn
-}
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
 func WithDeliveryContext(ctx context.Context, d *DeliveryContext) context.Context {

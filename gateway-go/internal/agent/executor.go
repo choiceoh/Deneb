@@ -238,19 +238,6 @@ func RunAgent(
 		}
 
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
-
-		// Dynamic tool-set switching: notify callback with this turn's tool names.
-		// The callback decides whether to upgrade (e.g., enable_coding_tools called)
-		// or downgrade (e.g., no coding tools used for N turns).
-		if cfg.OnToolsUpgrade != nil {
-			names := make([]string, len(turnRes.toolCalls))
-			for i, tc := range turnRes.toolCalls {
-				names[i] = tc.Name
-			}
-			if updated := cfg.OnToolsUpgrade(names); updated != nil {
-				cfg.Tools = updated
-			}
-		}
 	}
 
 	result.StopReason = "max_turns"

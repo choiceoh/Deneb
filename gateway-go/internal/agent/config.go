@@ -36,12 +36,6 @@ type AgentConfig struct {
 	// the first turn.
 	DeferredSystemText func() string
 
-	// OnToolsUpgrade is called after tool execution each turn with the names
-	// of tools invoked in that turn. If it returns a non-nil slice, cfg.Tools
-	// is replaced for subsequent turns. The callback manages its own state
-	// (e.g., upgrade on enable_coding_tools, downgrade after N idle turns).
-	OnToolsUpgrade func(toolNames []string) []llm.Tool
-
 	// StripImagesAfterFirstTurn drops base64 image data from the message history
 	// after the first LLM turn. On turn 0 the image is sent normally; from turn 1
 	// onward each image block is replaced with a lightweight text placeholder so
