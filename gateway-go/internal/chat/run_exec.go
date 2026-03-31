@@ -230,6 +230,7 @@ func executeAgentRun(
 			return
 		}
 		tz, _ := prompt.LoadCachedTimezone()
+		ch := deliveryChannel(params.Delivery)
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
@@ -237,12 +238,23 @@ func executeAgentRun(
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
 			RuntimeInfo: prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:     deliveryChannel(params.Delivery),
+			Channel:     ch,
 		}
-		if apiType == "anthropic" {
-			systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+		// Telegram is the coding-specialized channel: use the coding
+		// system prompt which strips non-coding sections and emphasizes
+		// the vibe-coder workflow (no raw code, Korean explanations).
+		if ch == "telegram" {
+			if apiType == "anthropic" {
+				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(spp))
+			} else {
+				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
+			}
 		} else {
-			systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+			if apiType == "anthropic" {
+				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+			} else {
+				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+			}
 		}
 	}()
 

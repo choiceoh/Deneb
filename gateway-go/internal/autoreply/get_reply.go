@@ -115,6 +115,19 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		return nil, err
 	}
 
+	// 10b. Record run accounting on the session.
+	if result != nil {
+		accounting := &session.SessionRunAccounting{}
+		accounting.RecordRun(session.TokenUsage{
+			InputTokens:  result.TokensUsed.InputTokens,
+			OutputTokens: result.TokensUsed.OutputTokens,
+			TotalTokens:  result.TokensUsed.TotalTokens,
+		}, result.DurationMs)
+	}
+
+	// 10c. Build delivery info from session state for reply routing.
+	_ = session.BuildSessionDelivery(sess, msg)
+
 	// 11. Track model fallback transitions for user notification.
 	if result != nil && result.FallbackActive {
 		transition := model.ResolveFallbackTransition(

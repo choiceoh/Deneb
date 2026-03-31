@@ -310,9 +310,10 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	dispatchDeps := autoreply.ReplyDeps{
-		Agent:    executor,
-		Registry: p.cmdRegistry,
-		Router:   p.cmdRouter,
+		Agent:       executor,
+		Registry:    p.cmdRegistry,
+		Router:      p.cmdRouter,
+		CommandDeps: p.buildCommandDeps(sessionKey),
 		SessionFunc: func(key string) *types.SessionState {
 			return &types.SessionState{
 				SessionKey: key,
