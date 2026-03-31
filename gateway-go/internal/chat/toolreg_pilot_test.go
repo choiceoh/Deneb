@@ -543,14 +543,6 @@ func TestExpandShortcuts_Image(t *testing.T) {
 	}
 }
 
-func TestExpandShortcuts_Vega(t *testing.T) {
-	p := pilotParams{Task: "search", Vega: "비금도 진행상황"}
-	specs := expandShortcuts(p)
-	if len(specs) != 1 || specs[0].Tool != "vega" {
-		t.Errorf("expected 1 vega spec, got %d", len(specs))
-	}
-}
-
 func TestExpandShortcuts_AllNew(t *testing.T) {
 	p := pilotParams{
 		Task:    "analyze everything",
@@ -558,17 +550,16 @@ func TestExpandShortcuts_AllNew(t *testing.T) {
 		YouTube: "https://youtube.com/watch?v=x",
 		Polaris: "tools",
 		Image:   "/tmp/img.png",
-		Vega:    "프로젝트 현황",
 	}
 	specs := expandShortcuts(p)
-	if len(specs) != 5 {
-		t.Fatalf("expected 5 specs, got %d", len(specs))
+	if len(specs) != 4 {
+		t.Fatalf("expected 4 specs, got %d", len(specs))
 	}
 	tools := make([]string, len(specs))
 	for i, s := range specs {
 		tools[i] = s.Tool
 	}
-	expected := []string{"gmail", "youtube_transcript", "polaris", "image", "vega"}
+	expected := []string{"gmail", "youtube_transcript", "polaris", "image"}
 	for i, want := range expected {
 		if tools[i] != want {
 			t.Errorf("spec[%d].Tool = %q, want %q", i, tools[i], want)
@@ -582,7 +573,6 @@ func TestSourceTypeFromTool_NewTools(t *testing.T) {
 		"youtube_transcript": "content",
 		"polaris":            "content",
 		"image":              "content",
-		"vega":               "content",
 		"diff":               "file",
 		"test":               "exec",
 		"tree":               "file",

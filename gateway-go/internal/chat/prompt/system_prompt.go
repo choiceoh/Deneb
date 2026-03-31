@@ -96,7 +96,7 @@ var toolCategories = []struct {
 	{"Exec", []string{"exec", "process"}},
 	{"AI", []string{"pilot", "polaris"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory", "memory_search", "vega"}},
+	{"Memory", []string{"memory", "memory_search"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},

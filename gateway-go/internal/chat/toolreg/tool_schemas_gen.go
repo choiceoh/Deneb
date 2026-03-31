@@ -719,33 +719,6 @@ func memorySearchToolSchema() map[string]any {
 	}
 }
 
-func vegaToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"enum":        []string{"search", "ask"},
-				"description": "Action: search (FTS/semantic search across projects), ask (question answering via Vega backend)",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search query or question text",
-			},
-			"limit": map[string]any{
-				"type":        "integer",
-				"description": "Max results to return (default: 10, max: 50)",
-			},
-			"mode": map[string]any{
-				"type":        "string",
-				"enum":        []string{"bm25", "semantic", "hybrid"},
-				"description": "Search mode (default: hybrid). bm25=keyword, semantic=embedding, hybrid=both",
-			},
-		},
-		"required": []string{"query"},
-	}
-}
-
 func polarisToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1453,10 +1426,6 @@ func pilotToolSchema() map[string]any {
 			"image": map[string]any{
 				"type":        "string",
 				"description": "Shortcut: analyze image file or URL (expands to sources:[{tool:'image', input:{paths:[...]}}])",
-			},
-			"vega": map[string]any{
-				"type":        "string",
-				"description": "Shortcut: search project knowledge base (expands to sources:[{tool:'vega', input:{query:...}}])",
 			},
 			"agent_logs": map[string]any{
 				"type":        "string",
