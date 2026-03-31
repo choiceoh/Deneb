@@ -263,7 +263,12 @@ func New(addr string, opts ...Option) *Server {
 		),
 		version:        "0.1.0-go",
 		logger:         slog.New(slog.NewJSONHandler(os.Stderr, nil)),
-		SessionManager: &SessionManager{sessions: session.NewManager()},
+		SessionManager: &SessionManager{
+			sessions:       session.NewManager(),
+			abortMemory:    arSession.NewAbortMemory(2000),
+			historyTracker: arSession.NewHistoryTracker(),
+			sessionUsage:   &arSession.SessionUsage{},
+		},
 		ChatManager:    &ChatManager{},
 		HookManager:    &HookManager{},
 	}
