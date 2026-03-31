@@ -71,7 +71,18 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		return "", err
 	}
 
-	// Save config to workspace.
+	// Run baseline measurement so we have a reference point.
+	baselineMsg := ""
+	baselineMetric, baseErr := autoresearch.RunBaseline(ctx, workdir, cfg)
+	if baseErr != nil {
+		baselineMsg = fmt.Sprintf("\nBaseline run failed: %v\nYou can still start the loop — first successful iteration becomes the baseline.", baseErr)
+	} else {
+		cfg.BaselineMetric = &baselineMetric
+		cfg.BestMetric = &baselineMetric
+		baselineMsg = fmt.Sprintf("\nBaseline %s: %.6f", metricName, baselineMetric)
+	}
+
+	// Save config to workspace (with baseline if available).
 	if err := autoresearch.SaveConfig(workdir, cfg); err != nil {
 		return "", fmt.Errorf("save config: %w", err)
 	}
@@ -80,9 +91,9 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		"Metric: %s (%s)\n"+
 		"Target files: %v\n"+
 		"Time budget: %ds/experiment\n"+
-		"Branch tag: autoresearch/%s\n\n"+
+		"Branch tag: autoresearch/%s%s\n\n"+
 		"Run autoresearch with action=start to begin the autonomous loop.",
-		workdir, metricName, metricDirection, targetFiles, cfg.TimeBudgetSec, branchTag), nil
+		workdir, metricName, metricDirection, targetFiles, cfg.TimeBudgetSec, branchTag, baselineMsg), nil
 }
 
 func autoresearchStart(runner *autoresearch.Runner, workdir string) (string, error) {

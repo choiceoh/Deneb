@@ -132,22 +132,26 @@ func TestAppendAndReadResults(t *testing.T) {
 	dir := t.TempDir()
 
 	row1 := ResultRow{
-		Iteration:   1,
-		Timestamp:   time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC),
-		Hypothesis:  "increase lr",
-		MetricValue: 1.087,
-		Kept:        true,
-		CommitHash:  "abc1234",
-		DurationSec: 300,
+		Iteration:     1,
+		Timestamp:     time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC),
+		Hypothesis:    "increase lr",
+		MetricValue:   1.087,
+		Kept:          true,
+		CommitHash:    "abc1234",
+		DurationSec:   300,
+		BestSoFar:     1.087,
+		DeltaFromBest: 0,
 	}
 	row2 := ResultRow{
-		Iteration:   2,
-		Timestamp:   time.Date(2026, 3, 31, 0, 5, 0, 0, time.UTC),
-		Hypothesis:  "add layer norm",
-		MetricValue: 1.095,
-		Kept:        false,
-		CommitHash:  "",
-		DurationSec: 300,
+		Iteration:     2,
+		Timestamp:     time.Date(2026, 3, 31, 0, 5, 0, 0, time.UTC),
+		Hypothesis:    "add layer norm",
+		MetricValue:   1.095,
+		Kept:          false,
+		CommitHash:    "",
+		DurationSec:   300,
+		BestSoFar:     1.087,
+		DeltaFromBest: 0.008,
 	}
 
 	if err := AppendResult(dir, row1); err != nil {
@@ -166,6 +170,82 @@ func TestAppendAndReadResults(t *testing.T) {
 	lines := splitNonEmpty(content)
 	if len(lines) != 3 {
 		t.Errorf("expected 3 lines (header + 2 rows), got %d:\n%s", len(lines), content)
+	}
+}
+
+func TestParseResults(t *testing.T) {
+	dir := t.TempDir()
+
+	rows := []ResultRow{
+		{Iteration: 0, Timestamp: time.Now(), Hypothesis: "baseline", MetricValue: 1.1, Kept: true, BestSoFar: 1.1},
+		{Iteration: 1, Timestamp: time.Now(), Hypothesis: "double lr", MetricValue: 1.05, Kept: true, CommitHash: "abc", BestSoFar: 1.05, DeltaFromBest: -0.05},
+		{Iteration: 2, Timestamp: time.Now(), Hypothesis: "add norm", MetricValue: 1.12, Kept: false, BestSoFar: 1.05, DeltaFromBest: 0.07},
+	}
+	for _, r := range rows {
+		if err := AppendResult(dir, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	parsed, err := ParseResults(dir)
+	if err != nil {
+		t.Fatalf("ParseResults: %v", err)
+	}
+	if len(parsed) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(parsed))
+	}
+	if parsed[0].Hypothesis != "baseline" {
+		t.Errorf("first row hypothesis = %q, want baseline", parsed[0].Hypothesis)
+	}
+	if parsed[1].MetricValue != 1.05 {
+		t.Errorf("second row metric = %f, want 1.05", parsed[1].MetricValue)
+	}
+	if parsed[2].Kept {
+		t.Error("third row should not be kept")
+	}
+}
+
+func TestTrendAnalysis(t *testing.T) {
+	cfg := &Config{MetricName: "loss", MetricDirection: "minimize"}
+	now := time.Now()
+	rows := []ResultRow{
+		{Iteration: 0, Timestamp: now, MetricValue: 1.0, Kept: true, BestSoFar: 1.0},
+		{Iteration: 1, Timestamp: now.Add(5 * time.Minute), MetricValue: 0.95, Kept: true, BestSoFar: 0.95, DeltaFromBest: -0.05},
+		{Iteration: 2, Timestamp: now.Add(10 * time.Minute), MetricValue: 1.1, Kept: false, BestSoFar: 0.95, DeltaFromBest: 0.15},
+		{Iteration: 3, Timestamp: now.Add(15 * time.Minute), MetricValue: 0.90, Kept: true, BestSoFar: 0.90, DeltaFromBest: -0.05},
+	}
+
+	analysis := TrendAnalysis(rows, cfg)
+	if analysis == "" {
+		t.Fatal("expected non-empty trend analysis")
+	}
+	if !contains(analysis, "success rate") {
+		t.Error("should mention success rate")
+	}
+	if !contains(analysis, "Top improvements") {
+		t.Error("should mention top improvements")
+	}
+}
+
+func TestSaveExperimentOutput(t *testing.T) {
+	dir := t.TempDir()
+	err := SaveExperimentOutput(dir, 5, "metric: 1.05\n", "warning: slow\n")
+	if err != nil {
+		t.Fatalf("SaveExperimentOutput: %v", err)
+	}
+
+	// Verify file exists.
+	path := dir + "/.autoresearch/runs/0005.log"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	content := string(data)
+	if !contains(content, "metric: 1.05") {
+		t.Error("stdout not saved")
+	}
+	if !contains(content, "warning: slow") {
+		t.Error("stderr not saved")
 	}
 }
 

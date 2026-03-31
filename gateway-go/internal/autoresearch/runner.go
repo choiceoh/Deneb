@@ -21,6 +21,44 @@ type Notifier interface {
 	Notify(ctx context.Context, message string) error
 }
 
+// RunBaseline executes the metric command once to establish a baseline value.
+// Called during init before any modifications are made.
+func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, error) {
+	timeout := time.Duration(cfg.TimeBudgetSec) * time.Second
+	expCtx, cancel := context.WithTimeout(ctx, timeout+30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(expCtx, "bash", "-c", cfg.MetricCmd)
+	cmd.Dir = workdir
+	cmd.Env = append(os.Environ(), fmt.Sprintf("TIME_BUDGET=%d", cfg.TimeBudgetSec))
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, fmt.Errorf("baseline command failed: %w\nOutput: %s", err, string(output))
+	}
+
+	metric, err := extractMetric(string(output))
+	if err != nil {
+		return 0, fmt.Errorf("baseline metric extraction failed: %w", err)
+	}
+
+	// Save baseline output.
+	_ = SaveExperimentOutput(workdir, 0, string(output), "")
+
+	// Record baseline as iteration 0 in results.
+	_ = AppendResult(workdir, ResultRow{
+		Iteration:   0,
+		Timestamp:   time.Now(),
+		Hypothesis:  "baseline",
+		MetricValue: metric,
+		Kept:        true,
+		DurationSec: int(timeout.Seconds()),
+		BestSoFar:   metric,
+	})
+
+	return metric, nil
+}
+
 // Runner manages the autoresearch experiment loop.
 type Runner struct {
 	mu       sync.Mutex
@@ -229,8 +267,15 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 
 	// Step 7: Run experiment with time budget.
 	startTime := time.Now()
-	metricValue, runErr := r.runExperiment(ctx, workdir, cfg)
+	expResult, runErr := r.runExperiment(ctx, workdir, cfg)
 	duration := int(time.Since(startTime).Seconds())
+
+	// Save experiment output for debugging/analysis.
+	if expResult != nil {
+		if saveErr := SaveExperimentOutput(workdir, iteration, expResult.stdout, expResult.stderr); saveErr != nil {
+			r.logger.Error("failed to save experiment output", "error", saveErr)
+		}
+	}
 
 	// Step 8: Evaluate and decide.
 	row := ResultRow{
@@ -240,6 +285,12 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 		DurationSec: duration,
 	}
 
+	// Track the running best for the results table.
+	currentBest := float64(0)
+	if cfg.BestMetric != nil {
+		currentBest = *cfg.BestMetric
+	}
+
 	if runErr != nil {
 		// Experiment crashed — revert.
 		r.logger.Warn("experiment crashed", "error", runErr, "iteration", iteration)
@@ -247,31 +298,48 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 		row.MetricValue = 0
 		row.Kept = false
 		row.CommitHash = ""
+		row.BestSoFar = currentBest
+		row.DeltaFromBest = 0
 		cfg.ConsecutiveFailures++
 		r.notify(ctx, fmt.Sprintf("Iteration #%d CRASHED: %s\nHypothesis: %s", iteration, runErr, hypothesis))
 	} else {
+		metricValue := expResult.metric
 		row.MetricValue = metricValue
 		bestMetric := cfg.BestMetric
 		if bestMetric == nil {
 			// First successful iteration — always keep.
 			row.Kept = true
+			row.DeltaFromBest = 0
 		} else {
 			row.Kept = cfg.IsBetter(metricValue, *bestMetric)
+			row.DeltaFromBest = metricValue - *bestMetric
 		}
 
 		if row.Kept {
 			row.CommitHash = commitHash
+			row.BestSoFar = metricValue
 			cfg.BestMetric = &metricValue
 			cfg.BestCommit = commitHash
 			cfg.KeptCommit = commitHash
 			cfg.KeptIterations++
 			cfg.ConsecutiveFailures = 0
-			r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f\nHypothesis: %s",
-				iteration, cfg.MetricName, metricValue, hypothesis))
+
+			// Build improvement info for notification.
+			improvementInfo := ""
+			if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
+				improvement := (*cfg.BaselineMetric - metricValue) / *cfg.BaselineMetric * 100
+				if cfg.MetricDirection == "maximize" {
+					improvement = (metricValue - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+				}
+				improvementInfo = fmt.Sprintf(" (%.2f%% from baseline)", improvement)
+			}
+			r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s",
+				iteration, cfg.MetricName, metricValue, improvementInfo, hypothesis))
 		} else {
 			// Revert to last kept commit.
 			gitResetHard(ctx, workdir, cfg.KeptCommit)
 			row.CommitHash = ""
+			row.BestSoFar = currentBest
 			cfg.ConsecutiveFailures++
 			r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARDED: %s=%.6f (best=%.6f)\nHypothesis: %s",
 				iteration, cfg.MetricName, metricValue, *bestMetric, hypothesis))
@@ -332,16 +400,35 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	}
 
 	if results != "" {
-		usr.WriteString("=== EXPERIMENT HISTORY ===\n")
+		usr.WriteString("=== EXPERIMENT HISTORY (TSV) ===\n")
 		usr.WriteString(results)
+		usr.WriteString("\n")
+	}
+
+	// Add trend analysis to help the LLM learn from patterns.
+	rows, _ := ParseResults(r.workdir)
+	if len(rows) > 0 {
+		usr.WriteString("=== TREND ANALYSIS ===\n")
+		usr.WriteString(TrendAnalysis(rows, cfg))
 		usr.WriteString("\n")
 	}
 
 	usr.WriteString(fmt.Sprintf("\n=== ITERATION %d ===\n", iteration))
 	usr.WriteString("Propose ONE change to improve " + cfg.MetricName + ". ")
+	if cfg.BaselineMetric != nil {
+		usr.WriteString(fmt.Sprintf("Baseline: %.6f. ", *cfg.BaselineMetric))
+	}
 	if cfg.BestMetric != nil {
 		usr.WriteString(fmt.Sprintf("Current best: %.6f. ", *cfg.BestMetric))
+		if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
+			improvement := (*cfg.BaselineMetric - *cfg.BestMetric) / *cfg.BaselineMetric * 100
+			if cfg.MetricDirection == "maximize" {
+				improvement = (*cfg.BestMetric - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+			}
+			usr.WriteString(fmt.Sprintf("(%.2f%% improved from baseline). ", improvement))
+		}
 	}
+	usr.WriteString("Study the trend analysis above to understand what worked and what didn't. ")
 	usr.WriteString("Output the hypothesis and complete modified file(s).")
 
 	return promptParts{system: sys.String(), user: usr.String()}
@@ -376,8 +463,15 @@ func parseLLMResponse(resp string, targetFiles []string) (string, map[string]str
 	return hypothesis, changes
 }
 
+// experimentResult holds the full output of an experiment run.
+type experimentResult struct {
+	metric float64
+	stdout string
+	stderr string
+}
+
 // runExperiment executes the metric command with a time budget.
-func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config) (float64, error) {
+func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config) (*experimentResult, error) {
 	timeout := time.Duration(cfg.TimeBudgetSec) * time.Second
 	expCtx, cancel := context.WithTimeout(ctx, timeout+30*time.Second) // grace period
 	defer cancel()
@@ -386,18 +480,36 @@ func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config)
 	cmd.Dir = workdir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("TIME_BUDGET=%d", cfg.TimeBudgetSec))
 
-	output, err := cmd.CombinedOutput()
+	var stdoutBuf, stderrBuf strings.Builder
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	err := cmd.Run()
+	stdout := stdoutBuf.String()
+	stderr := stderrBuf.String()
+
 	if err != nil {
-		return 0, fmt.Errorf("experiment command failed: %w\nOutput: %s", err, string(output))
+		return &experimentResult{stdout: stdout, stderr: stderr},
+			fmt.Errorf("experiment command failed: %w", err)
 	}
 
-	// Parse metric from last non-empty line of output.
-	metric, err := extractMetric(string(output))
-	if err != nil {
-		return 0, fmt.Errorf("metric extraction failed: %w\nOutput: %s", err, string(output))
+	// Parse metric from last non-empty line of stdout.
+	metric, mErr := extractMetric(stdout)
+	if mErr != nil {
+		return &experimentResult{stdout: stdout, stderr: stderr},
+			fmt.Errorf("metric extraction failed: %w\nStdout tail: %s", mErr, tailLines(stdout, 5))
 	}
 
-	return metric, nil
+	return &experimentResult{metric: metric, stdout: stdout, stderr: stderr}, nil
+}
+
+// tailLines returns the last n lines of s.
+func tailLines(s string, n int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
 }
 
 // extractMetric finds a floating-point number in the last non-empty line of output.
