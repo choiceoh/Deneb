@@ -30,8 +30,13 @@ func (s *Store) CompactMemory(ctx context.Context) (int64, error) {
 	return result.RowsAffected()
 }
 
+// insertDedupJaccardThreshold is the Jaccard similarity above which a new fact
+// is considered a semantic duplicate of an existing fact during insertion.
+// Lower than search dedup (0.60) to catch paraphrased duplicates at write time.
+const insertDedupJaccardThreshold = 0.55
+
 // InsertFact stores a new fact and returns its ID.
-// Checks for exact content duplicates before inserting.
+// Two-stage dedup: (1) exact content match, (2) semantic similarity via FTS + Jaccard.
 func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -47,14 +52,13 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 		f.Source = SourceAutoExtract
 	}
 
-	// Dedup: skip if an active fact with identical content exists.
+	// Stage 1: exact content match.
 	var existingID int64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id FROM facts WHERE content = ? AND active = 1 LIMIT 1`,
 		f.Content,
 	).Scan(&existingID)
 	if err == nil {
-		// Exact duplicate exists — update importance if new one is higher.
 		if f.Importance > 0 {
 			_, _ = s.db.ExecContext(ctx,
 				`UPDATE facts SET importance = MAX(importance, ?), updated_at = ? WHERE id = ?`,
@@ -62,6 +66,18 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 			)
 		}
 		return existingID, nil
+	}
+
+	// Stage 2: semantic dedup — find similar facts in the same category via FTS,
+	// then check Jaccard similarity to catch paraphrased duplicates.
+	if dupID := s.findSemanticDuplicate(ctx, f.Content, f.Category); dupID > 0 {
+		if f.Importance > 0 {
+			_, _ = s.db.ExecContext(ctx,
+				`UPDATE facts SET importance = MAX(importance, ?), updated_at = ? WHERE id = ?`,
+				f.Importance, now, dupID,
+			)
+		}
+		return dupID, nil
 	}
 
 	result, err := s.db.ExecContext(ctx,
@@ -74,6 +90,43 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 		return 0, fmt.Errorf("insert fact: %w", err)
 	}
 	return result.LastInsertId()
+}
+
+// findSemanticDuplicate checks if a semantically similar fact already exists
+// in the same category. Returns the existing fact ID, or 0 if no duplicate found.
+// Uses FTS to find candidates, then Jaccard similarity for precise comparison.
+// Must be called with s.mu held.
+func (s *Store) findSemanticDuplicate(ctx context.Context, content, category string) int64 {
+	ftsQuery := escapeFTS(content)
+	if ftsQuery == "" {
+		return 0
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT f.id, f.content
+		 FROM facts_fts fts
+		 JOIN facts f ON f.id = fts.rowid
+		 WHERE facts_fts MATCH ? AND f.active = 1 AND f.category = ?
+		 ORDER BY fts.rank
+		 LIMIT 10`,
+		ftsQuery, category,
+	)
+	if err != nil {
+		return 0
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int64
+		var existingContent string
+		if err := rows.Scan(&id, &existingContent); err != nil {
+			continue
+		}
+		if JaccardTextSimilarity(content, existingContent) >= insertDedupJaccardThreshold {
+			return id
+		}
+	}
+	return 0
 }
 
 // GetFact retrieves a fact by ID and increments its access count.

@@ -93,9 +93,11 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 			}
 			searchOpts := memory.SearchOpts{Limit: knowledgeMaxMemory}
 			if deps.MemoryEmbedder == nil {
-				// No semantic search available: restrict FTS scan to high-importance facts
+				// No semantic search available: restrict FTS scan to moderately important facts
 				// so hundreds of low-signal facts don't get scanned on every message.
-				searchOpts.MinImportance = 0.7
+				// Lowered from 0.7 to 0.6 to avoid missing solution/preference facts
+				// in the 0.6–0.7 range.
+				searchOpts.MinImportance = 0.6
 			}
 			results, err := deps.MemoryStore.SearchFacts(ctx, message, queryVec, searchOpts)
 			if err == nil {
@@ -149,6 +151,11 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		parts = append(parts, tier1Section)
 	}
 
+	// Cross-source dedup: remove unified results that overlap with structured facts.
+	if len(structFacts) > 0 && len(unifiedResults) > 0 {
+		unifiedResults = deduplicateAcrossSources(structFacts, unifiedResults)
+	}
+
 	// Knowledge section (Vega + memory facts).
 	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 || len(unifiedResults) > 0 {
 		parts = append(parts, formatKnowledgeWithFacts(vegaResults, memMatches, structFacts, unifiedResults))
@@ -167,15 +174,15 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 
 // categoryVolatileDays defines "shelf life" per fact category.
 // Facts older than this threshold (relative to UpdatedAt) get a staleness hint.
-// Stable facts (names, preferences) have long shelf lives; volatile facts (context, decisions)
-// go stale faster.
+// Aligned with categoryHalfLifeDays in search.go: shelfLife ≈ halfLife × 1.5,
+// so the staleness warning appears when the decay score drops to ~33%.
 var categoryVolatileDays = map[string]int{
-	"context":    30,  // project context changes frequently
-	"decision":   60,  // decisions may be revisited
-	"solution":   90,  // solutions stay relevant longer
-	"preference": 365, // preferences are relatively stable
-	"user_model": 365, // user traits rarely change
-	"mutual":     180, // relationship dynamics evolve slowly
+	"context":    21,  // half-life 14d × 1.5 — project context changes frequently
+	"decision":   135, // half-life 90d × 1.5 — decisions are long-lived
+	"solution":   68,  // half-life 45d × 1.5 — solutions stay relevant moderately
+	"preference": 90,  // half-life 60d × 1.5 — preferences are relatively stable
+	"user_model": 180, // half-life 120d × 1.5 — user traits rarely change
+	"mutual":     90,  // half-life 60d × 1.5 — relationship dynamics evolve slowly
 }
 
 // volatileHint returns a staleness hint based on how far past the category shelf life:
@@ -568,6 +575,40 @@ func formatMutualUnderstanding(entries []memory.UserModelEntry) string {
 	}
 
 	return sb.String()
+}
+
+// deduplicateAcrossSources removes unified results whose content overlaps with
+// structured memory facts. Compares normalized prefixes (first 100 runes) to
+// catch near-duplicates across sources. Structured facts take priority.
+func deduplicateAcrossSources(facts []memory.SearchResult, unified []unified.SearchResult) []unified.SearchResult {
+	// Build a set of normalized fact content prefixes.
+	factPrefixes := make(map[string]struct{}, len(facts))
+	for _, f := range facts {
+		prefix := normalizeKnowledgePrefix(f.Fact.Content)
+		if prefix != "" {
+			factPrefixes[prefix] = struct{}{}
+		}
+	}
+
+	filtered := make([]unified.SearchResult, 0, len(unified))
+	for _, u := range unified {
+		prefix := normalizeKnowledgePrefix(u.Content)
+		if _, dup := factPrefixes[prefix]; dup && prefix != "" {
+			continue
+		}
+		filtered = append(filtered, u)
+	}
+	return filtered
+}
+
+// normalizeKnowledgePrefix returns a normalized prefix of content for cross-source dedup.
+// Takes first 100 runes, lowercases, and collapses whitespace.
+func normalizeKnowledgePrefix(s string) string {
+	runes := []rune(strings.ToLower(strings.TrimSpace(s)))
+	if len(runes) > 100 {
+		runes = runes[:100]
+	}
+	return strings.Join(strings.Fields(string(runes)), " ")
 }
 
 // formatKeySection formats a set of user_model keys into "- Label: value" lines.
