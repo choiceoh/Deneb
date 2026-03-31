@@ -1,222 +1,144 @@
 package polaris
 
-const providerGuide = `The provider system manages LLM provider plugins, model discovery, and runtime model resolution.
+const providerGuide = `프로바이더는 LLM 제공자 플러그인 시스템이다. 모델 검색, 인증, 기능 감지를 관리한다.
 
-## Plugin Interface (gateway-go/internal/provider/)
-Every provider implements the base Plugin interface:
-- ID(): canonical provider ID (e.g. "anthropic", "openai", "zai")
-- Label(): human-readable name
-- AuthMethods(): supported auth kinds (api_key, bearer, oauth, token, none)
+## 모델 사용 흐름
+1. 사용자/설정에서 provider/model 지정
+2. 프로바이더 ID 정규화 (z.ai→zai, qwen→qwen-portal 등)
+3. 모델 해석 → 인증 준비 → 기능 감지 (스트리밍, 캐싱, 도구 지원)
 
-Optional adapter interfaces enable provider-specific hooks:
-- DynamicModelResolver: custom model ID lookup
-- ModelNormalizer: rewrite model IDs before inference
-- CapabilitiesProvider: feature flags (streaming, caching, tools)
-- RuntimeAuthProvider: credential exchange at call time
-- ThinkingPolicyProvider: binary thinking, extended thinking support
-- ModelSuppressionProvider: hide built-in models from catalog
-- CatalogAugmenter: inject supplemental catalog entries
+## 프로바이더 설정 (ConnectorConfig)
+- BaseURL: API 엔드포인트
+- APIKey: 인증 키
+- AuthMode: api_key, bearer, oauth, token, none
+- Headers: 커스텀 헤더 (${VAR} 확장 지원)
 
-## Model Resolution Flow
-1. Parse provider/model from user input or config
-2. NormalizeProviderID(): canonical ID conversion
-3. GetByNormalizedID(): provider lookup with alias support
-4. ResolveDynamicModel(): optional custom model ID resolution
-5. NormalizeModel(): rewrite model ID for wire format
-6. PrepareAuth(): exchange credentials (API key, OAuth, device code)
-7. DetectCapabilities(): streaming, caching, tools support
+## 모델 카탈로그
+각 모델 엔트리에 포함되는 정보:
+- Provider, ModelID, Label
+- ContextWindow, Reasoning 지원 여부
+- APIType (openai, anthropic 등)
 
-## Provider ID Normalization
-- z.ai → zai
-- opencode-zen → opencode
-- qwen → qwen-portal
-- bedrock → amazon-bedrock
-- bytedance, doubao → volcengine
-- Aliases supported: AliasProvider interface
+## 프로바이더 기능 확장
+플러그인 인터페이스로 다양한 훅 제공:
+- DynamicModelResolver: 커스텀 모델 ID 조회
+- ThinkingPolicyProvider: 사고 모드 지원 여부
+- CatalogAugmenter: 추가 모델 항목 주입
+- CapabilitiesProvider: 스트리밍/캐싱/도구 지원 플래그
 
-## ConnectorConfig
-- BaseURL (string): provider API endpoint
-- APIKey (string): credential for requests
-- AuthMode (string): api_key, bearer, oauth, token, none
-- Headers (map[string]string): custom request headers (supports ${VAR} expansion)
-- TimeoutMs (int64): per-request timeout
+## 문제 해결
+- "모델을 못 찾아요" → 프로바이더 ID 정규화 규칙 확인 (z.ai→zai 등)
+- "인증 실패" → APIKey, AuthMode 설정 확인. AuthDoctorProvider가 진단 힌트 제공
+- "모델 변경" → gateway(action:'config.patch', patch:{agents:{defaults:{model:'provider/model-id'}}})`
 
-## Key Types
-- CatalogEntry: Provider, ModelID, Label, ContextWindow, Reasoning, APIType
-- RuntimeModel: resolved model for inference (provider, model, baseURL, apiType)
-- PreparedAuth: runtime auth result (apiKey, baseURL, expiresAt)
-- Capabilities: SupportsStreaming, SupportsCaching, SupportsTools
+const liteparseGuide = `LiteParse는 PDF, Office 문서 등 바이너리 파일에서 텍스트를 추출한다.
 
-## Advanced Hooks
-- ThinkingPolicyProvider: IsBinaryThinking, SupportsXHighThinking
-- CatalogAugmenter: AugmentModelCatalog() adds extra entries
-- UsageAuthProvider: billing auth resolution
-- ApiKeyFormatter: profile credential formatting
-- AuthDoctorProvider: auth failure diagnostic hints
+## 지원 형식
+- PDF
+- Office: DOCX, XLSX, PPTX (+ 레거시 DOC, XLS, PPT)
+- OpenDocument: ODT, ODS, ODP
+- CSV
 
-## Key Files
-- gateway-go/internal/provider/registry.go (plugin registration)
-- gateway-go/internal/provider/discovery.go (ID normalization, lookup)
-- gateway-go/internal/provider/connector.go (HTTP connector, auth injection)
-- gateway-go/internal/provider/runtime.go (runtime model preparation)
-- gateway-go/internal/provider/catalog.go (model catalog building)`
+## 사용 방식
+web 도구로 문서 URL을 가져오면 자동으로 LiteParse가 텍스트 추출.
+별도 호출 불필요 — MIME 타입 감지 후 자동 처리.
 
-const liteparseGuide = `LiteParse provides local document parsing for PDFs, Office documents, and other binary formats.
+## 제한
+- 입력 파일 최대 50MB
+- 출력 텍스트 최대 200KB
+- 파싱 타임아웃 60초
 
-## What It Does
-Wraps the LiteParse CLI (lit) to extract text content from binary documents.
-Used by the web tool to process downloaded documents and by other tools needing text extraction.
-
-## Supported Formats
-- PDF: application/pdf
-- Office Open XML: DOCX, XLSX, PPTX (application/vnd.openxmlformats-officedocument.*)
-- Legacy Office: DOC, XLS, PPT (application/msword, vnd.ms-excel, vnd.ms-powerpoint)
-- OpenDocument: ODT, ODS, ODP (application/vnd.oasis.opendocument.*)
-- CSV: text/csv
-
-## Configuration Constants
-- maxOutputBytes: 200 KB (text output cap per document)
-- maxDocumentSize: 50 MB (maximum input file size)
-- parseTimeout: 60 seconds (per-parse execution timeout)
-
-## Parsing Flow
-1. Check if lit CLI is available (cached check, npm i -g @llamaindex/liteparse)
-2. Validate file size (< 50 MB)
-3. Create temp directory with original file extension preserved
-4. Execute: lit parse <inputPath>
-5. Read stdout, truncate if > 200 KB
-6. Return trimmed text content
-
-## Web Tool Integration
-- web tool's processDocument() detects binary MIME types
-- Routes to liteparse.Parse(ctx, data, filename)
-- Falls back gracefully on parse failures
-- Korean error messages: "문서 파싱 실패" / "문서에서 텍스트를 추출하지 못했습니다"
-
-## Installation
+## 설치
 npm i -g @llamaindex/liteparse
-Availability auto-detected at runtime; if missing, document parsing is skipped.
+설치 안 되어 있으면 문서 파싱이 자동 스킵됨.
 
-## Key Files
-- gateway-go/internal/liteparse/ (Parse function, MIME detection)
-- gateway-go/internal/chat/web_fetch.go (processDocument integration)`
+## 문제 해결
+- "문서 파싱 실패" → lit CLI 설치 여부 확인: which lit
+- "출력이 잘려요" → 200KB 제한. 큰 문서는 핵심 부분만 추출됨
+- "지원 안 되는 형식" → 위 목록의 형식만 지원. 이미지/영상은 불가`
 
-const metricsGuide = `The metrics package provides Prometheus-compatible instrumentation with lock-free atomic counters.
+const metricsGuide = `Prometheus 호환 메트릭 시스템. /metrics 엔드포인트에서 수집.
 
-## Metric Types
-- Counter: monotonically increasing (labeled). Methods: Inc(labels...)
-- Gauge: up/down value. Methods: Inc(), Dec(), Set(v)
-- Histogram: value distribution with configurable buckets. Methods: Observe(v), ObserveDuration(start, labels...)
+## 확인 방법
+curl http://localhost:18789/metrics
 
-All types use sync/atomic for lock-free, concurrent-safe recording.
-
-## Registered Metrics
-
+## 주요 메트릭
 ### RPC
-- deneb_rpc_requests_total (Counter, labels: method, status)
-- deneb_rpc_duration_seconds (Histogram, labels: method)
-  Buckets: 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10
+- deneb_rpc_requests_total: 요청 수 (method, status 라벨)
+- deneb_rpc_duration_seconds: 응답 시간 분포
 
 ### LLM
-- deneb_llm_request_duration_seconds (Histogram, labels: provider, model)
-  Buckets: 0.1, 0.5, 1, 2, 5, 10, 30, 60, 120
-- deneb_llm_tokens_total (Counter, labels: direction, model)
+- deneb_llm_request_duration_seconds: LLM 호출 시간 (provider, model 라벨)
+- deneb_llm_tokens_total: 토큰 사용량 (direction, model 라벨)
 
-### Sessions
-- deneb_active_sessions (Gauge)
-- deneb_websocket_clients (Gauge)
+### 세션
+- deneb_active_sessions: 활성 세션 수
+- deneb_websocket_clients: 웹소켓 연결 수
 
-## Middleware Integration
-RPCInstrumentation() middleware wraps RPC handlers:
-- Records RPCRequestsTotal.Inc(method, status) per request
-- Records RPCDuration.ObserveDuration(start, method) for latency
+## 메트릭 타입
+- Counter: 증가만 (요청 수 등)
+- Gauge: 증감 (활성 세션 수 등)
+- Histogram: 분포 (응답 시간 등)
 
-## Endpoint
-- Path: /metrics
-- Format: Prometheus text exposition format
-- Implementation: WriteMetrics(w io.Writer)
-- Usage: curl http://localhost:18789/metrics or Prometheus scraper
+모두 atomic 연산으로 lock-free, 동시성 안전.
 
-## Key Files
-- gateway-go/internal/metrics/ (Counter, Gauge, Histogram types)
-- gateway-go/internal/middleware/ (RPCInstrumentation)
-- gateway-go/internal/server/ (/metrics endpoint registration)`
+## 문제 해결
+- "메트릭이 안 나와요" → /metrics 경로 확인, 게이트웨이 포트 확인
+- "Prometheus 연동" → scrape_configs에 localhost:18789 추가
+- "특정 메트릭 찾기" → curl ... | grep deneb_`
 
-const nodesGuide = `Nodes are companion devices (Android/headless) that connect to the Gateway WebSocket with role:"node" and expose command surfaces via node.invoke.
+const nodesGuide = `노드는 DGX Spark 게이트웨이에 연결되는 보조 디바이스(Android/headless).
 
-## What Nodes Are
-- Peripherals, NOT gateways. They don't run the gateway service.
-- Connect via WebSocket (same port as operators) with device pairing.
-- Expose command families: canvas.*, camera.*, device.*, notifications.*, system.*, location.*, sms.*, screen.*
+## 노드란?
+- 게이트웨이가 아님. 게이트웨이에 웹소켓으로 연결되는 주변기기
+- 디바이스 페어링으로 인증
+- 카메라, 스크린, 위치, 시스템 명령 등 제공
 
-## Pairing + Status
-- WS nodes use device pairing: node presents identity during connect, Gateway creates pairing request.
-- CLI: deneb devices list, deneb devices approve <requestId>, deneb nodes status
+## 명령 모음
+- **Canvas**: 스냅샷, 프레젠트, JS 실행
+- **Camera**: 촬영 (snap), 클립 녹화 (최대 60초)
+- **Screen**: 화면 녹화 (최대 60초)
+- **Location**: GPS 위치 (기본 꺼짐)
+- **System**: 셸 명령 실행 (승인 필요)
+- **Android**: 알림, 사진, 연락처, 캘린더, SMS, 모션 센서
 
-## Command Families
-- Canvas: snapshot, present, navigate, eval (JS), hide, A2UI push/reset
-- Camera: list, snap (--facing), clip (--duration, --no-audio, max 60s)
-- Screen: record (--duration, --fps, --no-audio, max 60s)
-- Location: get (lat/lon, accuracy, timestamp; off by default)
-- System: run (shell), notify, which; gated by exec approvals
-- Android: device.*, notifications.*, photos.*, contacts.*, calendar.*, callLog.*, sms.*, motion.*
+## 페어링
+노드가 연결하면 게이트웨이에 페어링 요청 생성.
+deneb devices approve <requestId>로 승인.
 
-## Remote Node Host
-- Config: tools.exec.host=node, tools.exec.node=<id>
-- Start: deneb node run --host <gateway-host> --port 18789
+## 원격 실행
+tools.exec.host=node, tools.exec.node=<id> 설정으로 원격 노드에서 명령 실행.
 
-## Key Files
-- docs/nodes/ (index, audio, camera, images, location-command, media-understanding, talk, troubleshooting)
-- gateway-go/internal/events/node_events.go (event relay)
-- gateway-go/internal/rpc/handler/node/node.go (RPC handlers)
+## 문제 해결
+- "카메라 에러 NODE_BACKGROUND_UNAVAILABLE" → 포그라운드 앱 필요. 타임아웃 아님
+- "녹화가 60초에서 끊김" → 최대 60초 제한. 초과 시 자동 잘림
+- "위험한 환경변수" → system.run은 DYLD_*, LD_* 등 자동 제거`
 
-## Gotchas
-- camera.snap/clip require foreground; background returns NODE_BACKGROUND_UNAVAILABLE, not timeout
-- system.run strips dangerous env vars (DYLD_*, LD_*, NODE_OPTIONS) silently
-- screen.record max 60s; exceeding silently truncates`
+const transcriptGuide = `트랜스크립트는 세션 대화 기록을 JSONL 파일로 영구 저장한다.
 
-const transcriptGuide = `The transcript system persists session conversation history as JSONL (newline-delimited JSON) files.
+## 저장 형식
+~/.deneb/agents/<agentId>/sessions/<sessionId>.jsonl
+- 첫 줄: 세션 헤더 (type, version, id, timestamp)
+- 이후: 메시지 (role, content, timestamp, tokenCount)
+- 컴팩션 후: 요약 메시지 (compacted: true)
 
-## Storage Format
-Each session has one .jsonl file at ~/.deneb/agents/<agentId>/sessions/<sessionId>.jsonl
+## 주요 동작
+- 메시지 추가: 원자적 쓰기 (append-only)
+- 메시지 읽기: 전체 또는 최근 N개 미리보기
+- 세션 삭제: 파일 삭제
+- 실시간 업데이트: 콜백 리스너 등록 가능
 
-### Session Header (first line)
-{type: "session", version: int, id: string, timestamp: int64, cwd: string}
+## 컴팩션 연동
+- 토큰 사용률 75% 초과 시 트리거
+- 오래된 메시지를 요약으로 교체
+- 최근 8개 메시지는 항상 보존
+- 원자적 파일 교체 (크래시 안전)
 
-### Message Lines (subsequent lines)
-TranscriptMessage: {Type, Role (user/assistant/system), Content, ID, Timestamp (unix ms), TokenCount}
+## 제한
+- 줄당 최대 버퍼: 10MB (큰 도구 출력 처리용)
+- 초기 버퍼: 512KB
 
-### Summary Lines (after compaction)
-{type: "summary", role: "system", content: "Summary of N earlier messages...", metadata: {compacted: true, originalCount: N, compactedAt: int64}}
-
-## Writer Operations
-- EnsureSession(): create transcript file with header
-- AppendMessage(): append JSON line (atomic write)
-- ReadMessages(): get all non-header messages
-- ReadPreview(): last N messages (truncated for efficiency)
-- DeleteSession(): remove transcript file
-- OnAppend(): register listener callback for real-time updates
-
-## Scanner Configuration
-- Initial buffer: 512 KB
-- Maximum buffer: 10 MB per line (handles large tool outputs)
-
-## Compaction Integration (transcript/compressor.go)
-CompactionConfig defaults:
-- ContextThreshold: 0.75 (compact when token usage exceeds 75%)
-- FreshTailCount: 8 (recent messages always preserved)
-- MaxUncompactedMessages: 200 (trigger at message count)
-
-Compaction flow:
-1. Evaluate: check token ratio and message count
-2. Split: head (to compact) + tail (preserve recent messages)
-3. Build: generate summary message from head portion
-4. Write: header + summary + tail to temp file
-5. Atomic: rename temp file to original (crash-safe)
-
-CompactionResult: {OK, Compacted, Reason, OriginalMessages, RetainedMessages, SummaryCount}
-
-## Key Files
-- gateway-go/internal/transcript/ (Writer, Reader, Compressor)
-- gateway-go/internal/session/ (session manager uses transcript for persistence)
-- gateway-go/internal/chat/compaction.go (agent-level compaction orchestration)`
+## 문제 해결
+- "대화 기록이 사라짐" → 컴팩션으로 요약된 것. 원본은 요약으로 대체됨
+- "파일이 너무 커요" → /compact 수동 실행으로 크기 줄이기
+- "기록 검색" → sessions_search(query:'...') 또는 aurora_grep 사용`
