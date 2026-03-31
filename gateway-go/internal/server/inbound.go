@@ -784,11 +784,21 @@ func (p *InboundProcessor) dispatchSubagentCommand(
 ) *subagentpkg.SubagentCommandResult {
 	var deps *subagentpkg.SubagentCommandDeps
 	if p.server.acpDeps != nil && p.server.acpDeps.Registry != nil {
+		cfg := subagentpkg.ACPCommandDepsConfig{
+			Infra: p.server.acpDeps.Infra,
+		}
+		// Wire SessionSendFn from the ACP deps when available so that
+		// /subagents send, /steer, and spawn initial-message delivery work.
+		if p.server.acpDeps.SessionSendFn != nil {
+			cfg.SessionSendFn = p.server.acpDeps.SessionSendFn
+		}
+		// Wire SessionBindings so /focus, /unfocus, and /agents commands
+		// can resolve and mutate conversation-to-session bindings.
+		if p.server.acpDeps.Bindings != nil {
+			cfg.SessionBindings = p.server.acpDeps.Bindings
+		}
 		deps = subagentpkg.NewSubagentCommandDepsFromACP(
-			p.server.acpDeps.Registry,
-			subagentpkg.ACPCommandDepsConfig{
-				Infra: p.server.acpDeps.Infra,
-			},
+			p.server.acpDeps.Registry, cfg,
 		)
 	}
 	return subagentpkg.HandleSubagentsCommand(
