@@ -76,7 +76,7 @@ pub fn semantic_search_with_vec(
     let mut stmt = match conn.prepare(&sql) {
         Ok(s) => s,
         Err(e) => {
-            log::debug!("Semantic search (vec): prepare failed: {}", e);
+            let _ = e;
             return Vec::new();
         }
     };
@@ -107,7 +107,7 @@ pub fn semantic_search_with_vec(
     let rows = match rows {
         Ok(r) => r,
         Err(e) => {
-            log::debug!("Semantic search (vec): query failed: {}", e);
+            let _ = e;
             return Vec::new();
         }
     };
