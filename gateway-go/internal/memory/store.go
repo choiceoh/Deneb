@@ -189,6 +189,42 @@ CREATE TABLE IF NOT EXISTS fact_embeddings (
 	updated_at TEXT NOT NULL
 );
 
+-- Fact relations (knowledge graph edges between facts).
+CREATE TABLE IF NOT EXISTS fact_relations (
+	id            INTEGER PRIMARY KEY AUTOINCREMENT,
+	from_fact_id  INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+	to_fact_id    INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+	relation_type TEXT NOT NULL CHECK(relation_type IN ('evolves','contradicts','supports','causes','related')),
+	confidence    REAL NOT NULL DEFAULT 1.0,
+	created_at    TEXT NOT NULL,
+	UNIQUE(from_fact_id, to_fact_id, relation_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_relations_from ON fact_relations(from_fact_id);
+CREATE INDEX IF NOT EXISTS idx_relations_to ON fact_relations(to_fact_id);
+
+-- Named entities for object-centric fact grouping.
+CREATE TABLE IF NOT EXISTS entities (
+	id            INTEGER PRIMARY KEY AUTOINCREMENT,
+	name          TEXT NOT NULL UNIQUE,
+	entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization')),
+	first_seen    TEXT NOT NULL,
+	last_seen     TEXT NOT NULL,
+	mention_count INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+
+-- Fact-entity associations with role context.
+CREATE TABLE IF NOT EXISTS fact_entities (
+	fact_id   INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+	entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+	role      TEXT NOT NULL DEFAULT 'mentioned',
+	PRIMARY KEY (fact_id, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fact_entities_entity ON fact_entities(entity_id);
+
 CREATE TABLE IF NOT EXISTS user_model (
 	key TEXT PRIMARY KEY,
 	value TEXT NOT NULL,
@@ -223,6 +259,40 @@ func migrateSchema(db *sql.DB) {
 	// performance. Older databases created before fact_id was the PRIMARY KEY
 	// may not have an implicit B-tree index, causing O(N) scans on fact deletion.
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_fact_embeddings_fact_id ON fact_embeddings(fact_id)`)
+
+	// v4 → v5: knowledge graph tables (fact_relations, entities, fact_entities).
+	graphDDL := []string{
+		`CREATE TABLE IF NOT EXISTS fact_relations (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			from_fact_id  INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+			to_fact_id    INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+			relation_type TEXT NOT NULL CHECK(relation_type IN ('evolves','contradicts','supports','causes','related')),
+			confidence    REAL NOT NULL DEFAULT 1.0,
+			created_at    TEXT NOT NULL,
+			UNIQUE(from_fact_id, to_fact_id, relation_type)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_relations_from ON fact_relations(from_fact_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_relations_to ON fact_relations(to_fact_id)`,
+		`CREATE TABLE IF NOT EXISTS entities (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			name          TEXT NOT NULL UNIQUE,
+			entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization')),
+			first_seen    TEXT NOT NULL,
+			last_seen     TEXT NOT NULL,
+			mention_count INTEGER NOT NULL DEFAULT 1
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)`,
+		`CREATE TABLE IF NOT EXISTS fact_entities (
+			fact_id   INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+			entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+			role      TEXT NOT NULL DEFAULT 'mentioned',
+			PRIMARY KEY (fact_id, entity_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_fact_entities_entity ON fact_entities(entity_id)`,
+	}
+	for _, ddl := range graphDDL {
+		_, _ = db.Exec(ddl)
+	}
 }
 
 // NewStoreFromDB creates a memory store using a pre-opened database connection.

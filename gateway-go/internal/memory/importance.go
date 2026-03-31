@@ -34,10 +34,12 @@ var SpeakerNames = struct {
 
 // ExtractedFact is the structured output from the importance extraction LLM call.
 type ExtractedFact struct {
-	Content    string  `json:"content"`
-	Category   string  `json:"category"`
-	Importance float64 `json:"importance"`
-	ExpiryHint string  `json:"expiry_hint,omitempty"` // ISO8601 or empty
+	Content      string   `json:"content"`
+	Category     string   `json:"category"`
+	Importance   float64  `json:"importance"`
+	ExpiryHint   string   `json:"expiry_hint,omitempty"`   // ISO8601 or empty
+	Entities     []string `json:"entities,omitempty"`       // related entity names (max 5)
+	RelationType string   `json:"relation_type,omitempty"` // 'evolves', 'contradicts', 'supports', 'causes'
 }
 
 // factsResponse is the expected top-level JSON object from the LLM.
@@ -106,7 +108,14 @@ System/technical facts should ONLY be stored if they meet at least one criterion
 ### Step 4: Output
 Return a JSON object with a "facts" key containing an array of fact objects.
 Each fact object has:
-- "content": Korean, concise (1-2 sentences). Include the reasoning basis
+- "content": Korean, 2-4 sentences. MUST include:
+    1. WHAT was observed or decided
+    2. WHY — the reasoning, motivation, or situation that led to it
+    3. CONTEXT — what was being discussed, what alternatives were considered
+    4. CONNECTION — how this relates to past observations if applicable (e.g., "동일 패턴", "이전과 반대")
+
+    ❌ "선택님은 SQLite를 선호한다" (결론만, 맥락 없음)
+    ✅ "SGLang 설정 논의 중 PostgreSQL 도입을 검토했으나, 선택님이 조직화 복잡성 부담을 이유로 SQLite 유지를 명확히 선호. 이전 memory migration 논의에서도 동일한 패턴으로 단순 구조를 선택했음."
 - "category": one of:
   - "mutual": 상호 인식 — AI-user relationship signals. Format: "[signal_type:intensity] description". signal_type: correction|satisfaction|frustration|trust|expectation. intensity: strong|mild|subtle
   - "user_model": expertise areas, personality, habits (INFERRED)
@@ -120,8 +129,17 @@ Each fact object has:
   - 0.5-0.7: subtle relationship cues, useful context
   - Below 0.5: routine operations — should almost never be extracted
 - "expiry_hint": null or "YYYY-MM-DD" (e.g. "2026-04-15") if time-sensitive
+  - "entities": array of entity names central to this observation (max 5). Include projects, tools, people, systems.
+    Examples: ["SGLang", "ClaudeCode", "Fred/JOCA Cable", "PostgreSQL"]
+    Only include entities that are central to the observation.
+  - "relation_type": optional. One of:
+    - "evolves": this observation updates/develops a past observation (e.g. preference changed)
+    - "contradicts": contradicts a past observation
+    - "supports": reinforces a past observation (same pattern repeated)
+    - "causes": this observation caused another outcome
+    Omit if no clear relation to past observations exists.
 
-Example: {"facts": [{"content": "사용자가 Python보다 Go를 선호함 — 3번의 대화에서 일관되게 Go를 선택", "category": "preference", "importance": 0.8, "expiry_hint": null}]}
+Example: {"facts": [{"content": "SGLang 설정 논의 중 PostgreSQL 도입을 검토했으나, 선택님이 조직화 복잡성 부담을 이유로 SQLite 유지를 명확히 선호. 이전 memory migration 논의에서도 동일한 패턴.", "category": "preference", "importance": 0.8, "expiry_hint": null, "entities": ["SGLang", "PostgreSQL", "SQLite"], "relation_type": "supports"}]}
 
 ## Speaker Attribution (화자 귀속) — CRITICAL
 The input has two clearly labeled speakers by their NICKNAMES:
@@ -261,6 +279,10 @@ func insertExtractedFactsWithSource(ctx context.Context, store *Store, embedder 
 				}
 			}(id, ef.Content)
 		}
+
+		// Process entities and relations (best-effort).
+		store.processEntities(ctx, id, ef, *logger)
+		store.resolveRelations(ctx, id, ef, *logger)
 
 		// If this is a user_model or mutual fact, also update the user model table.
 		if ef.Category == CategoryUserModel || ef.Category == CategoryMutual {
