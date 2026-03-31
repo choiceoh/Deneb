@@ -264,6 +264,29 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Update msgCtx with the fully enriched message body for the dispatch pipeline.
 	msgCtx.BodyForAgent = agentMessage
 
+	// --- Subagent command intercept ---
+	// Check for /subagents, /kill (subagent), /steer, /tell, /focus, /unfocus,
+	// /agents commands and dispatch them through the subagent command handler
+	// before the general autoreply pipeline.
+	if normalized := strings.ToLower(strings.TrimSpace(msgCtx.BodyForCommands)); normalized != "" {
+		if subagentpkg.ResolveHandledPrefix(normalized) != "" {
+			var threadID string
+			if msg.MessageThreadID != 0 {
+				threadID = fmt.Sprintf("%d", msg.MessageThreadID)
+			}
+			subagentResult := p.dispatchSubagentCommand(
+				normalized, sessionKey, "telegram", msgCtx.AccountID,
+				threadID, msgCtx.SenderID, msgCtx.IsGroup,
+			)
+			if subagentResult != nil && subagentResult.ShouldStop {
+				if subagentResult.Reply != "" {
+					p.sendCommandReply(chatID, &handlers.CommandResult{Reply: subagentResult.Reply})
+				}
+				return
+			}
+		}
+	}
+
 	// --- Dispatch through the autoreply pipeline ---
 	// DispatchFromConfig handles: abort detection, command dispatch, inline
 	// directive parsing, model resolution, and agent execution (via bridge
@@ -715,4 +738,31 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 			"error", resp.Error,
 		)
 	}
+}
+
+// dispatchSubagentCommand routes a subagent command through the subagent
+// dispatcher, wiring ACP registry deps when available.
+func (p *InboundProcessor) dispatchSubagentCommand(
+	normalized string,
+	sessionKey string,
+	channelName string,
+	accountID string,
+	threadID string,
+	senderID string,
+	isGroup bool,
+) *subagentpkg.SubagentCommandResult {
+	var deps *subagentpkg.SubagentCommandDeps
+	if p.server.acpDeps != nil && p.server.acpDeps.Registry != nil {
+		deps = subagentpkg.NewSubagentCommandDepsFromACP(
+			p.server.acpDeps.Registry,
+			subagentpkg.ACPCommandDepsConfig{
+				Infra: p.server.acpDeps.Infra,
+			},
+		)
+	}
+	return subagentpkg.HandleSubagentsCommand(
+		normalized, sessionKey, channelName, accountID, threadID,
+		senderID, isGroup, true, // isAuthorized: single-user deployment
+		deps,
+	)
 }
