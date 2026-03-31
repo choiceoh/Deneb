@@ -112,8 +112,7 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 	// These indicate the message body contains inline commands that should be
 	// processed as directives during agent reply generation.
 	if handlers.HasInlineCommandTokens(msg.Body) {
-		// Inline commands are handled during directive parsing in GetReplyFromConfig.
-		// This detection point allows future pre-processing or logging.
+		msg.CommandSource = "inline"
 	}
 
 	// 3. Generate reply via agent.
