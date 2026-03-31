@@ -238,4 +238,19 @@ func (s *Server) propagateConfigReload(snap *config.ConfigSnapshot, deferralTime
 			s.logger.Info("config reload: cron scheduler restarted")
 		})
 	}
+	// Restart autonomous service so periodic tasks pick up config changes.
+	if s.autonomousSvc != nil {
+		s.safeGo("config:restart-autonomous", func() {
+			s.autonomousSvc.Stop()
+			s.autonomousSvc.Start()
+			s.logger.Info("config reload: autonomous service restarted")
+		})
+	}
+	// Stop autoresearch if running; user can re-trigger via tool.
+	if s.autoresearchRunner != nil && s.autoresearchRunner.IsRunning() {
+		s.safeGo("config:stop-autoresearch", func() {
+			s.autoresearchRunner.Stop()
+			s.logger.Info("config reload: autoresearch runner stopped")
+		})
+	}
 }
