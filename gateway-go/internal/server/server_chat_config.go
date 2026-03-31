@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
 
@@ -28,9 +29,21 @@ func (s *Server) initGmailPoll() {
 	stateDir := filepath.Join(home, ".deneb")
 
 	cfg := gmailpoll.Config{
-		StateDir:  stateDir,
-		LLMClient: s.modelRegistry.Client(modelrole.RoleFallback),
-		Model:     s.modelRegistry.Model(modelrole.RoleFallback),
+		StateDir:    stateDir,
+		LLMClient:   s.modelRegistry.Client(modelrole.RoleFallback),
+		Model:       s.modelRegistry.Model(modelrole.RoleFallback),
+		LocalClient: s.modelRegistry.Client(modelrole.RoleLightweight),
+		LocalModel:  s.modelRegistry.Model(modelrole.RoleLightweight),
+	}
+
+	// Wire memory store for pipeline context recall (read-only).
+	dbPath := filepath.Join(stateDir, "memory.db")
+	if memStore, err := memory.NewStore(dbPath); err == nil {
+		cfg.MemStore = memStore
+		if s.geminiEmbedder != nil {
+			cfg.MemEmbed = memory.NewEmbedder(s.geminiEmbedder, memStore, s.logger)
+		}
+		s.logger.Info("gmailpoll: memory pipeline enabled")
 	}
 	if pollCfg.IntervalMin != nil {
 		cfg.IntervalMin = *pollCfg.IntervalMin

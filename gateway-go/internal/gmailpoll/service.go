@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 )
 
 const (
@@ -34,6 +35,12 @@ type Config struct {
 	PromptFile  string
 	StateDir    string      // directory for state persistence (default ~/.deneb)
 	LLMClient   *llm.Client // pre-configured LLM client from modelrole registry
+
+	// Multi-stage pipeline deps (all optional — nil = skip that stage).
+	LocalClient *llm.Client      // local SGLang for stage-1 extractors
+	LocalModel  string           // SGLang model name
+	MemStore    *memory.Store    // for memory recall
+	MemEmbed    *memory.Embedder // for vector search query embedding
 }
 
 // Service implements autonomous.PeriodicTask for Gmail polling.
@@ -207,8 +214,8 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 			continue
 		}
 
-		// Analyze via LLM.
-		analysis, err := AnalyzeEmail(ctx, s.llmClient, s.cfg.Model, prompt, detail)
+		// Analyze via multi-stage pipeline (falls back to single LLM if deps missing).
+		analysis, err := s.analyzeWithPipeline(ctx, client, prompt, detail)
 		if err != nil {
 			s.log.Warn("메일 분석 실패", "id", summary.ID, "error", err)
 			// Still report the email without analysis.
@@ -227,6 +234,28 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	pollState.LastPollAt = time.Now().UnixMilli()
 	s.saveState(pollState)
 	return nil
+}
+
+// analyzeWithPipeline runs the multi-stage pipeline if deps are available,
+// otherwise falls back to single-LLM analysis.
+func (s *Service) analyzeWithPipeline(ctx context.Context, gmailClient *gmail.Client, prompt string, msg *gmail.MessageDetail) (string, error) {
+	deps := PipelineDeps{
+		GmailClient: gmailClient,
+		LLMClient:   s.llmClient,
+		LocalClient: s.cfg.LocalClient,
+		LocalModel:  s.cfg.LocalModel,
+		MainModel:   s.cfg.Model,
+		MemStore:    s.cfg.MemStore,
+		MemEmbed:    s.cfg.MemEmbed,
+	}
+
+	if deps.canRunPipeline() {
+		s.log.Debug("multi-stage pipeline 실행", "subject", msg.Subject)
+		return AnalyzeEmailPipeline(ctx, deps, msg)
+	}
+
+	// Fallback to simple single-LLM analysis.
+	return AnalyzeEmail(ctx, s.llmClient, s.cfg.Model, prompt, msg)
 }
 
 func (s *Service) saveState(state *PollState) {

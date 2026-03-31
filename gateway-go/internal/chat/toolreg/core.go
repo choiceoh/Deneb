@@ -38,7 +38,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterVegaTools(registry, &deps.Vega, sglang)
 	RegisterMediaTools(registry, deps.LLMClient)
 	RegisterDataTools(registry)
-	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel)
+	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, &deps.Vega)
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
 	RegisterHiddenTools(registry, deps.AgentLog)
 
@@ -254,18 +254,28 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // RegisterRoutineTools registers tools for recurring/scheduled tasks —
 // things that sit between always-on core tools and on-demand skills.
 // Typical trigger: cron scheduler, daily routines, periodic checks.
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string) {
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string, vega *toolctx.VegaDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          tools.ToolCron(chrono),
 	})
+
+	// Build gmail pipeline deps from available subsystems.
+	gmailPipelineDeps := tools.GmailPipelineDeps{
+		LLMClient:    llmClient,
+		DefaultModel: defaultModel,
+	}
+	if vega != nil {
+		gmailPipelineDeps.MemStore = vega.MemoryStore
+		gmailPipelineDeps.MemEmbed = vega.MemoryEmbedder
+	}
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gmail",
-		Description: "Gmail (native OAuth2): inbox, search, read, send, reply, labels, analyze (LLM 이메일 분석). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
+		Description: "Gmail (native OAuth2): inbox, search, read, send, reply, labels, analyze (LLM 이메일 분석, multi-stage pipeline). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
-		Fn:          tools.ToolGmail(llmClient, defaultModel),
+		Fn:          tools.ToolGmail(gmailPipelineDeps),
 	})
 	// Morning letter: needs executor for web search calls.
 	if exec, ok := registry.(toolctx.ToolExecutor); ok {
