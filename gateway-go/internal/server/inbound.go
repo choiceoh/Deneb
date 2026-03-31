@@ -342,6 +342,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		Registry:    p.cmdRegistry,
 		Router:      p.cmdRouter,
 		CommandDeps: p.buildCommandDeps(sessionKey),
+		History:     p.server.historyTracker,
 		SessionFunc: func(key string) *types.SessionState {
 			return &types.SessionState{
 				SessionKey: key,

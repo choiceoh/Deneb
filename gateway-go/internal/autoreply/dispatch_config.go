@@ -8,6 +8,7 @@ package autoreply
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/dispatch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
@@ -41,7 +42,33 @@ type DispatchResult struct {
 func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg DispatchConfig, deps ReplyDeps) DispatchResult {
 	// 1. Check for abort trigger.
 	if session.IsAbortRequestText(msg.Body) {
+		// Record abort in memory so subsequent messages within the cooldown
+		// window are not re-dispatched to the agent.
+		if deps.AbortMemory != nil {
+			deps.AbortMemory.Record(cfg.SessionKey, time.Now().UnixMilli())
+		}
+		session.EmitSessionHook(session.SessionHookEvent{
+			Type:       "abort",
+			SessionKey: cfg.SessionKey,
+			Reason:     "user abort trigger",
+			Timestamp:  time.Now().UnixMilli(),
+		})
 		return DispatchResult{Handled: true}
+	}
+
+	// 1b. Skip messages to recently aborted sessions (3-second cooldown).
+	if deps.AbortMemory != nil && deps.AbortMemory.WasRecentlyAborted(cfg.SessionKey, 3000) {
+		return DispatchResult{Handled: true}
+	}
+
+	// 1c. Skip messages that fall before the abort cutoff marker.
+	if deps.AbortCutoff != nil {
+		cutoff := session.ReadAbortCutoffFromSessionEntry(deps.AbortCutoff)
+		if cutoff != nil {
+			if session.ShouldSkipMessageByAbortCutoff(cutoff.MessageSid, cutoff.Timestamp, msg.MessageSid, nil) {
+				return DispatchResult{Handled: true}
+			}
+		}
 	}
 
 	// 2. Check for command.
