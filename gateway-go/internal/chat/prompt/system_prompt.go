@@ -97,10 +97,11 @@ var toolCategories = []struct {
 	{"AI", []string{"pilot", "polaris"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory", "memory_search", "vega"}},
-	{"System", []string{"cron", "message", "gateway"}},
+	{"System", []string{"message", "gateway"}},
+	{"Periodic", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
-	{"Data", []string{"gmail", "kv"}},
+	{"Data", []string{"kv"}},
 }
 
 // buildStaticCacheKey returns a stable string key for the static prompt block
