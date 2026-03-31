@@ -39,6 +39,15 @@ type Service struct {
 	maxTimerDelay int64 // milliseconds (default 60000)
 }
 
+// SetAgentRunner sets the agent runner after construction.
+// This allows the cron service to be created before the chat handler is ready,
+// then wired up once the chat handler is initialized.
+func (s *Service) SetAgentRunner(agent AgentRunner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.agent = agent
+}
+
 // NewService creates a new cron service.
 func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Service {
 	retentionMs := ResolveRetentionMs(cfg.RetentionMs)
