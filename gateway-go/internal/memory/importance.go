@@ -300,10 +300,12 @@ func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFa
 		value = fact.Content
 	}
 
-	// Keep only last 20 entries to bound growth; dreaming consolidates periodically.
+	// Keep only last 40 entries to bound growth; dreaming consolidates periodically.
+	// Raised from 20 to reduce signal loss between dreaming cycles (50 turns apart).
+	const maxSignalsRaw = 40
 	lines := strings.Split(value, "\n")
-	if len(lines) > 20 {
-		lines = lines[len(lines)-20:]
+	if len(lines) > maxSignalsRaw {
+		lines = lines[len(lines)-maxSignalsRaw:]
 		value = strings.Join(lines, "\n")
 	}
 

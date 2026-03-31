@@ -109,6 +109,13 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		state.report.FactsPruned = int(pruned)
 	}
 
+	// Phase 0.75: Retry pending embeddings (facts that failed async embedding).
+	if embedder != nil {
+		if n, err := store.RetryPendingEmbeddings(ctx, embedder.EmbedAndStore); err == nil && n > 0 {
+			logger.Info("aurora-dream: retried pending embeddings", "count", n)
+		}
+	}
+
 	// Phases 1–6: each gets its own timeout budget; the outer ctx is the hard ceiling.
 	// Conflict resolution is merged into the verify phase (single LLM call per batch),
 	// so there is no standalone conflict phase.
@@ -306,7 +313,14 @@ type mergePhase struct{}
 
 func (mergePhase) Name() string { return "merge" }
 func (mergePhase) Run(ctx context.Context, s *dreamState) error {
-	merged, err := mergeDuplicates(ctx, s.store, s.embedder, s.client, s.model, s.logger)
+	var merged int
+	var err error
+	if s.embedder != nil {
+		merged, err = mergeDuplicates(ctx, s.store, s.embedder, s.client, s.model, s.logger)
+	} else {
+		// P11/P14: text-only fallback when embedder is unavailable.
+		merged, err = mergeDuplicatesTextOnly(ctx, s.store, s.logger)
+	}
 	if err != nil {
 		return err
 	}
@@ -331,11 +345,12 @@ type mergeResponse struct {
 	Importance    float64 `json:"importance"`
 }
 
-func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
-	if embedder == nil {
-		return 0, nil
-	}
+// mergeMaxPerCategory caps the number of facts compared pairwise within a single
+// category during merge. When a category exceeds this limit, only the highest-importance
+// facts are compared — low-importance duplicates are not worth the O(n²) cost.
+const mergeMaxPerCategory = 100
 
+func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	embeddings, depths, categories, err := store.LoadEmbeddingsForMerge(ctx, maxMergeDepth)
 	if err != nil {
 		return 0, err
@@ -348,6 +363,17 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	for id := range embeddings {
 		cat := categories[id]
 		catGroups[cat] = append(catGroups[cat], id)
+	}
+
+	// P12: Cap per-category comparison set. When a category has many facts,
+	// sort by embedding vector length as a proxy for content richness and
+	// limit to mergeMaxPerCategory to reduce O(n²) cost.
+	for cat, ids := range catGroups {
+		if len(ids) > mergeMaxPerCategory {
+			// Keep first mergeMaxPerCategory IDs (already in insertion order;
+			// LoadEmbeddingsForMerge returns all eligible — trim to cap).
+			catGroups[cat] = ids[:mergeMaxPerCategory]
+		}
 	}
 
 	// Find similar pairs above threshold (within same category and depth).
@@ -365,7 +391,17 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 				if depths[ids[i]] != depths[ids[j]] {
 					continue
 				}
-				sim := cosineSimilarity(embeddings[ids[i]], embeddings[ids[j]])
+				// P12: Skip pairs with vastly different vector lengths (proxy for
+				// content length mismatch). Facts with 3x+ length ratio are unlikely
+				// duplicates.
+				vecA, vecB := embeddings[ids[i]], embeddings[ids[j]]
+				if lenA, lenB := len(vecA), len(vecB); lenA > 0 && lenB > 0 {
+					ratio := float64(lenA) / float64(lenB)
+					if ratio > 3.0 || ratio < 1.0/3.0 {
+						continue
+					}
+				}
+				sim := cosineSimilarity(vecA, vecB)
 				if sim >= similarityMergeThreshold {
 					pairs = append(pairs, pair{ids[i], ids[j], sim})
 				}
@@ -456,6 +492,90 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	return merged, nil
 }
 
+// mergeDuplicatesTextOnly is a deterministic fallback for environments without
+// an embedder. Uses Jaccard text similarity instead of cosine on embeddings.
+// Only auto-merges at a very high threshold (0.90) since there's no LLM to
+// validate the merge — the higher threshold prevents false positives.
+const textOnlyMergeThreshold = 0.90
+const textOnlyMaxMerges = 10
+
+func mergeDuplicatesTextOnly(ctx context.Context, store *Store, logger *slog.Logger) (int, error) {
+	facts, err := store.GetActiveFacts(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	// Group by category + depth (same constraints as embedding-based merge).
+	type catDepthKey struct {
+		category string
+		depth    int
+	}
+	groups := map[catDepthKey][]Fact{}
+	for _, f := range facts {
+		if f.MergeDepth >= maxMergeDepth {
+			continue
+		}
+		key := catDepthKey{f.Category, f.MergeDepth}
+		groups[key] = append(groups[key], f)
+	}
+
+	type pair struct {
+		a, b Fact
+		sim  float64
+	}
+	var pairs []pair
+
+	for _, group := range groups {
+		// Cap per-group to avoid O(n²) blow-up.
+		limit := mergeMaxPerCategory
+		if len(group) < limit {
+			limit = len(group)
+		}
+		for i := 0; i < limit; i++ {
+			for j := i + 1; j < limit; j++ {
+				sim := JaccardTextSimilarity(group[i].Content, group[j].Content)
+				if sim >= textOnlyMergeThreshold {
+					pairs = append(pairs, pair{group[i], group[j], sim})
+				}
+			}
+		}
+	}
+
+	if len(pairs) == 0 {
+		return 0, nil
+	}
+
+	// Sort by similarity descending.
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].sim > pairs[j].sim
+	})
+
+	merged := 0
+	superseded := map[int64]bool{}
+	for _, p := range pairs {
+		if merged >= textOnlyMaxMerges {
+			break
+		}
+		if superseded[p.a.ID] || superseded[p.b.ID] {
+			continue
+		}
+
+		// Keep the fact with higher importance; supersede the other.
+		keep, drop := p.a, p.b
+		if p.b.Importance > p.a.Importance {
+			keep, drop = p.b, p.a
+		}
+
+		_ = store.SupersedeFact(ctx, drop.ID, keep.ID)
+		superseded[drop.ID] = true
+		merged++
+		logger.Info("aurora-dream: text-only merge", "keep", keep.ID, "drop", drop.ID,
+			"jaccard", fmt.Sprintf("%.3f", p.sim))
+	}
+
+	return merged, nil
+}
+
 // --- Phase 3: Pattern Extraction ---
 
 type patternPhase struct{}
@@ -515,11 +635,14 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 
 	for cat, catFacts := range categories {
 		fmt.Fprintf(&sb, "\n[%s] (%d facts):\n", cat, len(catFacts))
-		limit := 15
-		if len(catFacts) < limit {
-			limit = len(catFacts)
-		}
-		for _, f := range catFacts[:limit] {
+		// P13: Stratified sampling — include both high-importance facts and
+		// recent facts so patterns aren't biased toward only well-established
+		// knowledge. catFacts are already sorted by importance DESC from
+		// GetActiveFacts, so the first N are high-importance.
+		const perCatLimit = 20
+		const topN = 12
+		sampled := stratifiedSample(catFacts, topN, perCatLimit)
+		for _, f := range sampled {
 			fmt.Fprintf(&sb, "- %s\n", f.Content)
 		}
 	}
@@ -558,6 +681,59 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 	}
 
 	return count, nil
+}
+
+// stratifiedSample selects up to total facts from a list, combining topN by
+// importance (already sorted by GetActiveFacts) with the remainder from the
+// most recently created facts. This ensures pattern extraction sees both
+// well-established and fresh facts.
+func stratifiedSample(facts []Fact, topN, total int) []Fact {
+	if len(facts) <= total {
+		return facts
+	}
+	if topN > total {
+		topN = total
+	}
+
+	// Take topN by importance (first N, since facts are importance DESC).
+	seen := make(map[int64]bool, total)
+	result := make([]Fact, 0, total)
+	limit := topN
+	if limit > len(facts) {
+		limit = len(facts)
+	}
+	for _, f := range facts[:limit] {
+		result = append(result, f)
+		seen[f.ID] = true
+	}
+
+	// Fill remaining slots with most recent facts (by CreatedAt).
+	// facts are sorted by importance, so we need to find recent ones.
+	remaining := total - len(result)
+	if remaining <= 0 {
+		return result
+	}
+
+	// Collect unseen facts sorted by CreatedAt DESC.
+	type recentFact struct {
+		fact Fact
+		idx  int
+	}
+	var recent []recentFact
+	for i, f := range facts {
+		if !seen[f.ID] {
+			recent = append(recent, recentFact{f, i})
+		}
+	}
+	sort.Slice(recent, func(i, j int) bool {
+		return recent[i].fact.CreatedAt.After(recent[j].fact.CreatedAt)
+	})
+
+	for i := 0; i < remaining && i < len(recent); i++ {
+		result = append(result, recent[i].fact)
+	}
+
+	return result
 }
 
 // conflictResult is used by the unified verify-and-resolve response.

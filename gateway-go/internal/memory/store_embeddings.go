@@ -85,6 +85,47 @@ func (s *Store) LoadEmbeddings(ctx context.Context) (map[int64][]float32, error)
 	return result, nil
 }
 
+// PendingEmbeddings returns active facts that don't have embeddings yet.
+// Used by the dreaming cycle to retry failed embeddings. Returns up to limit facts
+// ordered by importance (most important first).
+func (s *Store) PendingEmbeddings(ctx context.Context, limit int) ([]Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	return s.queryFacts(ctx,
+		`SELECT f.* FROM facts f
+		 LEFT JOIN fact_embeddings fe ON fe.fact_id = f.id
+		 WHERE f.active = 1 AND fe.fact_id IS NULL
+		 ORDER BY f.importance DESC
+		 LIMIT ?`, limit)
+}
+
+// RetryPendingEmbeddings embeds facts that are missing embeddings.
+// Returns the number of successfully embedded facts.
+// Designed to run during dreaming Phase 0 as a best-effort recovery.
+func (s *Store) RetryPendingEmbeddings(ctx context.Context, embedFn func(ctx context.Context, factID int64, content string) error) (int, error) {
+	pending, err := s.PendingEmbeddings(ctx, 50)
+	if err != nil {
+		return 0, err
+	}
+
+	embedded := 0
+	for _, f := range pending {
+		if ctx.Err() != nil {
+			break
+		}
+		if err := embedFn(ctx, f.ID, f.Content); err != nil {
+			continue // best-effort: skip failures, try next
+		}
+		embedded++
+	}
+	return embedded, nil
+}
+
 // LoadEmbeddingsForMerge returns embeddings, merge depths, and categories for
 // active facts eligible for merging. Facts with merge_depth >= maxDepth are
 // excluded to prevent cascading merges. Categories are returned so callers can

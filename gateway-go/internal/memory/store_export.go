@@ -64,6 +64,112 @@ func (s *Store) ExportToFile(ctx context.Context, dir string) error {
 	return atomicfile.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(content), nil)
 }
 
+// FlushToDateFile appends important facts to a date-stamped markdown file
+// (memory/YYYY-MM-DD.md). This is a deterministic fallback for LLM-based
+// memory flush — works without any LLM calls.
+//
+// Only facts with importance >= flushMinImportance that haven't been flushed
+// before (tracked via metadata) are written. Returns the number of facts flushed.
+func (s *Store) FlushToDateFile(ctx context.Context, dir string, timezone string) (int, error) {
+	const flushMinImportance = 0.6
+
+	// Resolve date-stamped path.
+	now := time.Now()
+	if timezone != "" {
+		if loc, err := time.LoadLocation(timezone); err == nil {
+			now = now.In(loc)
+		}
+	}
+	dateStr := now.Format("2006-01-02")
+	memDir := filepath.Join(dir, "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		return 0, fmt.Errorf("flush: create memory dir: %w", err)
+	}
+	datePath := filepath.Join(memDir, dateStr+".md")
+
+	// Load existing file content to avoid duplicates.
+	existingPrefixes := make(map[string]struct{})
+	if data, err := os.ReadFile(datePath); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "- ") && len(line) > 20 {
+				// Use first 60 runes as prefix for dedup.
+				content := strings.TrimPrefix(line, "- ")
+				prefix := normalizeFlushPrefix(content)
+				if prefix != "" {
+					existingPrefixes[prefix] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// Get last flush fact ID to only export new facts.
+	lastFlushIDStr, _ := s.GetMeta(ctx, "flush_last_fact_id")
+	var lastFlushID int64
+	if lastFlushIDStr != "" {
+		fmt.Sscanf(lastFlushIDStr, "%d", &lastFlushID)
+	}
+
+	facts, err := s.GetActiveFactsAboveImportance(ctx, flushMinImportance)
+	if err != nil {
+		return 0, err
+	}
+
+	var newEntries []string
+	var maxID int64
+	for _, f := range facts {
+		if f.ID <= lastFlushID {
+			continue
+		}
+		// Skip if already in file.
+		prefix := normalizeFlushPrefix(f.Content)
+		if _, dup := existingPrefixes[prefix]; dup && prefix != "" {
+			continue
+		}
+		newEntries = append(newEntries, fmt.Sprintf("- [%s] %s", f.Category, f.Content))
+		if f.ID > maxID {
+			maxID = f.ID
+		}
+	}
+
+	if len(newEntries) == 0 {
+		return 0, nil
+	}
+
+	// Append to file.
+	f, err := os.OpenFile(datePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return 0, fmt.Errorf("flush: open file: %w", err)
+	}
+	defer f.Close()
+
+	// Write header if file is new.
+	if info, err := f.Stat(); err == nil && info.Size() == 0 {
+		fmt.Fprintf(f, "## %s\n\n", dateStr)
+	}
+
+	for _, entry := range newEntries {
+		fmt.Fprintln(f, entry)
+	}
+
+	// Update flush cursor.
+	if maxID > 0 {
+		_ = s.SetMeta(ctx, "flush_last_fact_id", fmt.Sprintf("%d", maxID))
+	}
+
+	return len(newEntries), nil
+}
+
+// normalizeFlushPrefix returns the first 60 runes of content, lowercased and
+// whitespace-collapsed, for duplicate detection during flush.
+func normalizeFlushPrefix(s string) string {
+	runes := []rune(strings.ToLower(strings.TrimSpace(s)))
+	if len(runes) > 60 {
+		runes = runes[:60]
+	}
+	return strings.Join(strings.Fields(string(runes)), " ")
+}
+
 // ImportFromMarkdown parses a legacy MEMORY.md file and imports its entries as facts.
 // Handles the format produced by sglang_hooks.go: "## YYYY-MM-DD HH:MM\n\n- bullet\n- bullet\n"
 // Returns the number of imported facts.
