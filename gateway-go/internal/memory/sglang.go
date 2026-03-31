@@ -69,6 +69,12 @@ func callLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, 
 			return zero, err
 		}
 
+		// Empty response — the model returned no content. Don't retry since
+		// a second call is unlikely to produce a different result.
+		if strings.TrimSpace(raw) == "" {
+			return zero, fmt.Errorf("callLLMJSON: empty response from model")
+		}
+
 		result, err := jsonutil.UnmarshalLLM[T](raw)
 		if err == nil {
 			return result, nil
@@ -106,7 +112,8 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 			if !ok {
 				return strings.TrimSpace(sb.String()), nil
 			}
-			if ev.Type == "content_block_delta" {
+			switch ev.Type {
+			case "content_block_delta":
 				var delta struct {
 					Delta struct {
 						Text string `json:"text"`
@@ -115,6 +122,15 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 				if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
 					sb.WriteString(delta.Delta.Text)
 				}
+			case "error":
+				var errBody struct {
+					Message string `json:"message"`
+					Type    string `json:"type"`
+				}
+				if json.Unmarshal(ev.Payload, &errBody) == nil && errBody.Message != "" {
+					return "", fmt.Errorf("sglang stream error: %s", errBody.Message)
+				}
+				return "", fmt.Errorf("sglang stream error: %s", string(ev.Payload))
 			}
 		}
 	}

@@ -787,7 +787,8 @@ func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				}
 				return result, nil
 			}
-			if ev.Type == "content_block_delta" {
+			switch ev.Type {
+			case "content_block_delta":
 				var delta struct {
 					Delta struct {
 						Text string `json:"text"`
@@ -796,6 +797,14 @@ func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
 					sb.WriteString(delta.Delta.Text)
 				}
+			case "error":
+				var errBody struct {
+					Message string `json:"message"`
+				}
+				if json.Unmarshal(ev.Payload, &errBody) == nil && errBody.Message != "" {
+					return "", fmt.Errorf("LLM stream error: %s", errBody.Message)
+				}
+				return "", fmt.Errorf("LLM stream error: %s", string(ev.Payload))
 			}
 		}
 	}
