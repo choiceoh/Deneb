@@ -1537,9 +1537,3 @@ func autoresearchToolSchema() map[string]any {
 		"required": []string{"action", "workdir"},
 	}
 }
-
-func enableCodingToolsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-	}
-}

@@ -159,13 +159,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Fn:          tools.ToolGateway(workspaceDir),
 	})
 
-	// Profile switch: unlocks full coding/FS tool set mid-run.
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "enable_coding_tools",
-		Description: "Unlock file-system and coding tools (read, write, edit, grep, git, test, exec, etc.) for this conversation. Call this when you need to read, modify, or search files in the workspace",
-		InputSchema: enableCodingToolsToolSchema(),
-		Fn:          tools.ToolEnableCodingTools(),
-	})
 }
 
 // RegisterProcessTools registers exec and process management tools.
