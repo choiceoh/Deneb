@@ -120,7 +120,12 @@ func executeAgentRun(
 	proactiveStart := time.Now()
 	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
 		go func() {
-			proactiveCh <- buildProactiveContext(ctx, params.Message, workspaceDir, logger)
+			// Use shutdownCtx instead of the request ctx so the proactive
+			// goroutine is not canceled when the current request completes.
+			// The hint is consumed via DeferredSystemText on turn 1+, so it
+			// must outlive the initial request. Its own timeout (25s/20s)
+			// still bounds the LLM call.
+			proactiveCh <- buildProactiveContext(deps.shutdownCtx, params.Message, workspaceDir, logger)
 		}()
 	} else {
 		proactiveCh <- "" // no-op: skip for short messages
