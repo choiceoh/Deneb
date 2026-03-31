@@ -1,220 +1,112 @@
 package polaris
 
 // Guide content constants for the polaris tool's "guides" action.
-// Each guide is a curated summary of a Deneb subsystem, written for AI agents.
+// Each guide is a practical cookbook for a Deneb subsystem.
+// Focus: what it does, how to use it, what goes wrong.
 
-const auroraGuide = `Aurora is the context engine that controls how Deneb assembles model context.
+const auroraGuide = `Aurora manages how conversation history is assembled into model context.
 
-## Lifecycle
-Every model run triggers four lifecycle points:
-1. **Ingest** — store/index new messages
-2. **Assemble** — build ordered message set within token budget, return optional systemPromptAddition
-3. **Compact** — summarize older history when context is full (or /compact)
-4. **After turn** — persist state, trigger background work
+## 핵심 개념
+대화가 길어지면 모든 메시지를 모델에 넣을 수 없다. Aurora가 토큰 예산(기본 100K) 안에서 메시지를 선별하고, 넘치면 자동으로 컴팩션(요약)한다.
 
-## Engine Selection
-- Default: "legacy" engine (pass-through assembly, built-in summarization)
-- Plugin engines: selected via plugins.slots.contextEngine in deneb.json
-- Only one engine active per run
+## 사용자가 알아야 할 것
+- 대화가 길어지면 자동으로 오래된 메시지가 요약됨 (자동 컴팩션, 85% 임계치)
+- /compact 명령으로 수동 컴팩션 가능
+- 컴팩션 전에 중요한 정보는 자동으로 메모리에 저장됨 (memory flush)
 
-## ownsCompaction
-- true: engine owns all compaction (Deneb disables built-in auto-compaction)
-- false/unset: Deneb's built-in auto-compaction may still run; engine's compact() handles /compact and overflow
+## Aurora 에이전트 도구
+- aurora_grep: 대화 기록에서 키워드 검색
+- aurora_describe: 메시지의 요약 계보 조회
+- aurora_expand_query: 심층 검색 (~120초 소요, 정말 필요할 때만)
 
-## Two Plugin Patterns
-- **Owning mode**: implement custom compaction, set ownsCompaction: true
-- **Delegating mode**: set ownsCompaction: false, call delegateCompactionToRuntime() in compact()
+## 설정 (deneb.json)
+- agents.defaults.context.tokenBudget: 토큰 예산 (기본 100K)
+- agents.defaults.context.freshTailCount: 항상 보존할 최근 메시지 수 (기본 48)
+- agents.defaults.compaction.memoryFlush.enabled: 컴팩션 전 메모리 저장 (기본 true)
 
-## AssembleResult
-- messages: ordered messages for the model (required)
-- estimatedTokens: engine's token estimate for threshold decisions (required — drives compaction decisions)
-- systemPromptAddition: prepended to system prompt (optional)
+## 문제 해결
+- "대화 내용을 까먹었어요" → aurora_grep으로 검색하거나 memory_search로 저장된 내용 확인
+- "컨텍스트 오버플로우" → 자동 컴팩션이 최대 2회 재시도. 계속 실패하면 /compact 수동 실행
+- aurora_expand_query는 120초 걸리므로 단순 키워드 검색에는 aurora_grep 사용`
 
-## Aurora Tools (agent-callable)
-- **aurora_grep**: search messages and summaries by keyword. Returns matching message IDs + snippets.
-- **aurora_describe**: inspect a message's lineage — parents, children, summaries, depth.
-- **aurora_expand_query**: deep recall (~120s). Expands a natural-language query into context-relevant messages. Expensive — use only when normal search is insufficient.
+const vegaGuide = `Vega는 프로젝트 지식 검색 엔진이다. 이메일, 문서, 메모 등을 인덱싱해서 검색한다.
 
-## Token Budget Constants
-- Go defaults: tokenBudget=100K, freshTailCount=48, maxMessages=100, runesPerToken=2 (for estimateTokens), charsPerToken=4 (bytes/token for knowledge budget)
-- Rust defaults: context threshold 0.75, fresh tail 32
-- Go compaction threshold: 0.85 (compact when usage exceeds 85% of Go-side budget)
-- Three-tier resolution order: env var > plugin config > hardcoded defaults
+## 검색 방식
+- **BM25**: 키워드 정확 매칭 (짧은 검색어에 적합)
+- **시맨틱**: 의미 기반 벡터 검색 (개념적 질문에 적합)
+- **하이브리드**: 둘 다 합쳐서 최적 결과 (기본값)
 
-## Rust Implementation (core-rs/core/src/context_engine/)
-- assembler.rs: DAG-aware token budgeting state machine
-- retrieval.rs: message retrieval with lineage tracking
-- mod.rs: handle-based FFI pattern — aurora_new() → handle → aurora_start(handle) → aurora_step(handle, response) → aurora_drop(handle)
+자연어 질문을 넣으면 Vega가 자동으로 최적 모드를 선택한다.
 
-## Go Integration
-- gateway-go/internal/chat/compaction.go: context overflow handling via Aurora sweep
-- gateway-go/internal/server/server.go: Aurora store initialization
-- gateway-go/internal/aurora/: Aurora desktop RPC channel handlers
+## 사용법
+- vega(action:'search', query:'세션 라이프사이클')
+- vega(action:'dashboard') — 프로젝트 현황 대시보드
+- vega(action:'brief') — 오늘의 요약 브리핑
 
-## Key Files
-- docs/concepts/context-engine.md
-- core-rs/core/src/context_engine/mod.rs, assembler.rs, retrieval.rs
-- gateway-go/internal/chat/compaction.go
-- gateway-go/internal/aurora/
+## 설정
+- GEMINI_API_KEY 환경변수 필요 (시맨틱 검색용 Gemini Embedding)
+- 키 없으면 BM25 키워드 검색만 동작 (시맨틱 비활성화)
 
-## Common Tasks
-- Check context budget config: grep(pattern:'tokenBudget\|freshTailCount', path:'gateway-go/internal/chat/')
-- View Aurora FFI exports: grep(pattern:'deneb_context', path:'core-rs/core/src/lib.rs')
-- Search message history: aurora_grep with keyword
-- Trace compaction trigger: grep(pattern:'compaction.*threshold\|0.85', path:'gateway-go/internal/chat/')
+## 빌드
+- make rust-vega: FTS만 (시맨틱 없음)
+- make rust-dgx: 풀 프로덕션 (시맨틱 + CUDA)
 
-## Gotchas
-- estimatedTokens in AssembleResult drives compaction; returning 0 disables auto-compaction silently
-- aurora_expand_query takes ~120s; do not use for simple keyword lookups
-- Go and Rust have different default thresholds (0.85 vs 0.75); check which side triggers first`
+## 문제 해결
+- "검색 결과가 없어요" → GEMINI_API_KEY가 설정되었는지 확인. 없으면 키워드만 매칭됨
+- "시맨틱 검색이 안 돼요" → make rust-dgx로 빌드했는지 확인`
 
-const vegaGuide = `Vega is Deneb's project search engine providing BM25 + semantic hybrid search over indexed content.
+const agentLoopGuide = `에이전트 루프는 사용자 메시지를 받아서 도구를 실행하고 응답하는 핵심 실행 사이클이다.
 
-## Search Modes
-- **bm25**: SQLite FTS5 full-text search (exact token matching)
-- **semantic**: embedding-based vector similarity (meaning-based)
-- **hybrid**: weighted fusion of BM25 + semantic scores (best of both)
+## 실행 흐름 (간략)
+사용자 메시지 → 세션 큐잉 → 컨텍스트 조립 → LLM 호출 → 도구 실행 → 응답 전달
+도구 호출이 있으면 결과를 다시 LLM에 넣어 반복 (최대 25턴).
 
-## Query Routing (query_analyzer.rs)
-Natural language queries are analyzed and routed to the best search mode:
-- Short exact terms → BM25
-- Conceptual/semantic questions → semantic
-- Mixed or complex queries → hybrid fusion
-- Fusion: BM25 + semantic score weighted merge, MMR re-ranking for diversity
+## 기본 설정
+- MaxTurns: 25 (도구 호출 반복 최대 횟수)
+- Timeout: 10분 (전체 실행 시간 제한)
+- MaxTokens: 8192 (LLM 응답 최대 토큰)
+- 기본 모델: deneb.json의 agents.defaultModel로 설정
 
-## Architecture
-Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/).
+## 텔레그램 상태 이모지
+- 👀 대기 중 → 🤔 생각 중 → 🔥 도구 실행 → ⚡ 웹 검색 → 👍 완료 / 😱 에러
 
-### Rust Side (core-rs/vega/)
-- search/fts_search.rs: SQLite FTS5 query builder
-- search/semantic.rs: embedding-based vector search
-- search/fusion.rs: score fusion and reranking (BM25 + semantic)
-- search/query_analyzer.rs: natural language query routing
-- db/: schema, importer, parser, classifier (mail/project categorization)
-- commands/: 20+ handlers (health, changelog, dashboard, brief, weekly, urgent, contacts, search, import)
-- ai.rs: LLM-based command expansion
+## 도구 실행
+- 독립적인 도구는 병렬 실행 (더 빠름)
+- $ref로 도구 간 결과 전달 가능 (30초 타임아웃)
+- 도구 출력이 64K자 넘으면 자동 트리밍 (앞뒤 보존, 중간 생략)
 
-### Go Side (gateway-go/internal/vega/)
-- types.go: Backend interface, SearchOpts, SearchResult
-- autodetect.go: Vega activation checks
-- enhanced_backend.go: full Vega with Gemini embedding support
-- rust_backend.go: FFI wrapper to Rust crate
-- llm_expander.go: LLM query expansion
+## 큐 모드 (메시지가 실행 중에 들어오면)
+- collect: 모아서 한 번에 처리
+- steer: 실행 중인 에이전트에 주입
+- followup: 현재 실행 끝나면 다음으로 처리
 
-### Embedding (gateway-go/internal/embedding/)
-- gemini.go: Gemini Embedding API client (gemini-embedding-2-preview)
+## 문제 해결
+- "25턴 넘어서 멈췄어요" → MaxTurns 한도. 복잡한 작업은 나눠서 요청
+- "타임아웃 됐어요" → 10분 한도. 오래 걸리는 작업은 exec background 모드 사용
+- "응답이 잘렸어요" → MaxTokens 8192 한도. 긴 응답은 나눠서 받기`
 
-## Embedding Backends
-- Gemini Embedding API (gemini-embedding-2-preview, via GEMINI_API_KEY)
-- No-op fallback (BM25 only, used when no API key available)
+const compactionGuide = `컴팩션은 대화가 길어졌을 때 오래된 메시지를 요약해서 컨텍스트 공간을 확보하는 기능이다.
 
-## Environment Variables
-- GEMINI_API_KEY: Google AI API key for Gemini embedding
+## 작동 방식
+1. 대화 토큰이 예산의 85%를 넘으면 자동 실행
+2. 오래된 메시지들을 요약본으로 교체
+3. 최근 메시지는 항상 보존 (기본 8개)
+4. 요약은 세션 기록(JSONL)에 영구 저장
 
-## Build Variants
-- make rust: minimal (no Vega)
-- make rust-vega: FTS-only (no ML/CUDA)
-- make rust-dgx: full production (Vega + semantic + CUDA)
+## 수동 실행
+/compact — 즉시 컴팩션
+/compact 코드 변경사항 위주로 — 포커스 지시 가능
 
-## Key Files
-- core-rs/vega/src/search/
-- gateway-go/internal/vega/
-- docs/concepts/architecture.md (Vega section)
+## 설정 (deneb.json: agents.defaults.compaction)
+- model: 요약에 사용할 모델 지정 가능
+- reserveTokensFloor: 컴팩션 전 예약 토큰 (기본 20000)
+- memoryFlush.enabled: 컴팩션 전 중요 정보 메모리 저장 (기본 true)
 
-## Common Tasks
-- Search project knowledge: vega(action:'search', query:'session lifecycle')
-- Check Vega activation: grep(pattern:'VegaActivation\|autodetect', path:'gateway-go/internal/vega/')
-- Verify embedding config: exec(command:'echo $GEMINI_API_KEY | head -c 8')
+## 컴팩션 vs 프루닝
+- 컴팩션: 요약 후 영구 저장 (재시작 후에도 유지)
+- 프루닝: 오래된 도구 결과를 메모리에서만 트리밍 (임시)
 
-## Gotchas
-- Without GEMINI_API_KEY, Vega falls back to BM25-only (no semantic search)
-- Hybrid fusion weights are internal; there's no user-facing config to adjust BM25 vs semantic balance
-- FTS5 queries are tokenized differently from semantic queries; exact matches work better with BM25 mode`
-
-const agentLoopGuide = `The agent loop is the core execution cycle: intake → context assembly → model inference → tool execution → streaming → persistence.
-
-## Entry Points
-- Gateway RPC: agent and agent.wait methods
-- CLI: agent command (WebSocket to gateway)
-
-## Execution Flow
-1. agent RPC validates params, resolves session, returns {runId, acceptedAt}
-2. Resolve model + thinking/verbose defaults, load skills snapshot
-3. Serialize via per-session + global queues (prevents races)
-4. Persist user message to transcript + Aurora store
-5. Spawn proactive context (parallel, min 50 chars trigger)
-6. Build system prompt (deferred format for Anthropic cache_control)
-7. Run knowledge prefetch + context assembly in parallel
-8. Resolve model & LLM client from provider config
-9. LLM call → parse tool_use blocks → execute tools in parallel → feed results back
-10. Repeat until end_turn or limits hit
-11. Emit lifecycle end/error event, persist result
-
-## AgentConfig Defaults
-- MaxTurns: 25
-- Timeout: 10 minutes (wall-time)
-- MaxTokens: 8192 (max output tokens per LLM call)
-- defaultModel: "google/gemini-3.0-flash"
-- maxCompactionRetries: 2 (retry with compacted context on overflow)
-- Context: tokenBudget=100K, freshTailCount=48, maxMessages=100
-- Stop reasons: end_turn, max_tokens, timeout, aborted, max_turns
-
-## Go Implementation (gateway-go/internal/chat/)
-- internal/agent/: AgentConfig, RunAgent(), StreamHooks (OnTextDelta, OnThinking, OnToolStart)
-- run.go: RunParams, runDeps (sessions, llmClient, transcript, tools, aurora, vega, memory, etc.)
-
-## Queueing
-- Runs serialized per session key (session lane) + optional global lane
-- Prevents tool/session races and keeps history consistent
-- Channel queue modes: collect, steer, followup
-
-## Status Emojis (Telegram reactions)
-Queued: 👀, Thinking: 🤔, Tool/Coding: 🔥, Web: ⚡, Done: 👍, Error: 😱, StallSoft: 🥱, StallHard: 😨, Compacting: 🤔
-
-## Typing Signaler
-- Interval: 5000ms (matches Telegram's 5s typing action TTL)
-- Mode: TypingModeInstant (sends immediately on run start)
-
-## Event Streams
-Three streams emitted during a run:
-- lifecycle: phase start/end/error
-- assistant: text deltas from model
-- tool: tool start/update/end events
-
-## Hook Points
-### Internal Hooks (Gateway)
-- agent:bootstrap: modify bootstrap files before system prompt
-
-### Plugin Hooks
-- before_model_resolve: override provider/model
-- before_prompt_build: inject prependContext, systemPrompt additions
-- before_tool_call / after_tool_call: intercept tool params/results
-- agent_end: inspect final message list
-- before_compaction / after_compaction: observe compaction
-- message_received / message_sending / message_sent
-
-## Streaming
-- Assistant deltas streamed as events
-- Block streaming: partial replies on text_end or message_end
-- NO_REPLY (__SILENT_REPLY__) token filtered from outgoing payloads
-
-## Tool Execution
-- Tools execute in parallel goroutines within each turn (WaitGroup)
-- TurnContext enables cross-tool result sharing via $ref
-- 30s timeout for $ref resolution (refWaitTimeout)
-- Post-processors: OutputTrimmer (64K), ErrorEnricher, GrepSummarizer (200 lines), FindSummarizer (500 entries)
-
-## Key Files
-- docs/concepts/agent-loop.md
-- gateway-go/internal/chat/agent.go, run.go
-- gateway-go/internal/chat/tools.go (ToolRegistry, Execute)
-
-## Common Tasks
-- Check agent config defaults: grep(pattern:'MaxTurns\|Timeout.*10\|MaxTokens.*8192', path:'gateway-go/internal/chat/agent.go')
-- View current run flow: read(file_path:'gateway-go/internal/chat/run.go')
-- Check hook points: grep(pattern:'before_tool_call\|after_tool_call\|agent_end', path:'gateway-go/internal/chat/')
-
-## Gotchas
-- MaxTurns=25 is a hard limit; hitting it ends the run without error, just stop_reason=max_turns
-- Tool outputs over 64K are silently trimmed by OutputTrimmer (head+tail preserved)
-- $ref resolution has 30s timeout; slow tools may cause dependent tools to fail`
+## 문제 해결
+- "짧은 대화인데 컴팩션이 안 돼요" → 최근 8개 메시지는 항상 보호됨. 대화가 충분히 길어야 함
+- "컨텍스트 오버플로우" → 자동 컴팩션 최대 2회 재시도. 계속 실패하면 /compact 수동 실행
+- "메모리 플러시가 안 돼요" → 워크스페이스가 읽기 전용이면 스킵됨`

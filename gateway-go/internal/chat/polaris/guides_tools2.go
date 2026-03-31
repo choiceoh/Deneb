@@ -1,470 +1,159 @@
 package polaris
 
-const webGuide = `The web tool provides search, fetch, and combined search+fetch capabilities for retrieving web content.
-
-## Three Modes
-1. **Fetch**: {"url": "https://..."} — extract content from a URL
-2. **Search**: {"query": "..."} — web search, returns ranked results
-3. **Search+Fetch**: {"query": "...", "fetch": N} — search then auto-fetch top N (1-3) results
-
-## Schema
-- url (string): URL to fetch (triggers fetch mode)
-- query (string): search query (triggers search mode)
-- fetch (number): auto-fetch top N results from search (1-3, default 0)
-- maxChars (number): total output limit (default 50000)
-- count (number): search results count (default 5)
-
-## Content Processing Pipeline
-- **HTML**: metadata extraction → signal detection → noise stripping (nav/ads/comments) → SGLang extraction or FFI conversion
-- **JSON**: pretty-print via json.MarshalIndent
-- **Binary/Documents**: parsed via LiteParse CLI (PDF, Office docs, etc.)
-- **YouTube URLs**: auto-detected, extracts transcript via media.ExtractYouTubeTranscript
-
-## SGLang Extraction (local AI content cleaning)
-- Base URL: SGLANG_BASE_URL (default: http://127.0.0.1:30000/v1)
-- Model: SGLANG_MODEL (default: Qwen/Qwen3.5-35B-A3B)
-- Timeout: 45s per extraction
-- Input cap: 100K chars
-- Probe: GET /v1/models (3s timeout), re-probe every 5min if unavailable
-- Fallback: FFI-based extraction if SGLang unavailable
-
-## Output Format
-<metadata>
-Title, URL, FinalURL, ContentType, StatusCode, FetchMs
-OrigChars, ExtractedChars, Retention%, WordCount
-</metadata>
-<content>
-Extracted text content (truncated at maxChars)
-</content>
-
-## Error Classification (machine-readable)
-- http_{STATUS}: HTTP errors (5xx retryable, 4xx not)
-- content_too_large: exceeds 5MB (not retryable)
-- ssrf_blocked: SSRF protection triggered (not retryable)
-- dns_failure, redirect_loop, tls_error: not retryable
-- connection_refused, connection_reset, timeout: retryable
-- Each error includes a "retryable" boolean flag
-
-## Document Parsing (LiteParse Integration)
-Binary documents (PDF, Office, CSV) detected by MIME type are automatically parsed:
-- processDocument() extracts filename from URL, calls liteparse.Parse()
-- Supported: PDF, DOCX/XLSX/PPTX, DOC/XLS/PPT, ODT/ODS/ODP, CSV
-- Max document size: 50 MB, max extracted text: 200 KB
-- Requires lit CLI (npm i -g @llamaindex/liteparse); skipped gracefully if unavailable
-
-## Stealth Fetch (Bot Detection Bypass)
-Three-stage escalation for blocked requests:
-1. Chrome 131 macOS profile (no cookie jar, no backoff)
-2. Firefox 133 Windows profile (cookie jar enabled, 800ms backoff)
-3. Chrome macOS + Google Cache fallback (1200ms backoff)
-
-Soft block detection: Cloudflare challenges (cf-challenge-running, cf_chl_opt), CAPTCHAs (reCAPTCHA, hCaptcha, Turnstile), bot management (PerimeterX, DataDome, Imperva/Incapsula).
-
-## Limits
-- Max download: 5 MB
-- Default maxChars: 50,000
-- Truncation: preserves metadata + section boundaries, appends "[...truncated: N chars remaining]"
-
-## Key Files
-- gateway-go/internal/chat/tool_web.go (tool implementation)
-- gateway-go/internal/chat/web_fetch.go (fetch pipeline, document processing)
-- gateway-go/internal/chat/web_fetch_stealth.go (stealth profiles, block detection)
-- gateway-go/internal/liteparse/ (document parsing)
-- docs/tools/web.md (17KB, comprehensive user docs)
-
-## Common Tasks
-- Fetch a URL: web(url:'https://example.com')
-- Web search: web(query:'golang error handling')
-- Search + auto-fetch: web(query:'kubernetes pods', fetch:2)
-
-## When to Use Which Mode
-- Specific URL content → fetch (url only)
-- Current info on a topic → search (query only)
-- Research + synthesize → search+fetch (query + fetch:2)
-
-## Gotchas
-- Max download 5 MB; larger files return content_too_large
-- SSRF protection blocks private IPs; internal URLs return ssrf_blocked
-- Stealth fetch escalates through 3 profiles; some sites still block all 3`
-
-const execGuide = `The exec tool runs shell commands, and the process tool manages long-running background sessions.
-
-## Exec Tool
-### Schema
-- command (string, required): shell command to execute
-- workdir (string): working directory (defaults to agent workspace)
-- timeout (number): seconds, default 30, min 1, max 300 (5 min)
-- background (boolean): run in background, return sessionId immediately
-
-### Execution
-- Uses process.Manager if available (managed sessions with log/poll/kill)
-- Fallback: direct exec via bash -c (no background support)
-- Timeout enforced: timeout * 1000 milliseconds
-- Output: stdout + stderr combined, exit code emphasized on failure
-
-### Background Mode
-- Returns sessionId immediately (no waiting for completion)
-- Use process tool to poll/log/kill background sessions
-- Useful for long-running builds, servers, watchers
-
-## Process Tool (background session management)
-### Actions
-- list: all active process sessions with status
-- poll: check status + new output (sessionId required; optional timeout in ms)
-- log: full output log (sessionId required)
-- write: send input to stdin (sessionId required; content field)
-- kill: terminate process (sessionId required)
-
-### Session Lifecycle
-- Created by exec with background=true
-- Persists until killed or process exits naturally
-- Each session has unique sessionId for tracking
-
-## Safety Notes
-- Commands run in the agent's workspace directory by default
-- No sandbox escape — respects gateway sandboxing settings
-- Timeout prevents runaway commands (max 5 minutes)
-
-## Key Files
-- gateway-go/internal/chat/tools_core.go (exec tool registration)
-- gateway-go/internal/process/ (Manager, session lifecycle)
-- docs/tools/exec.md (9KB, user docs)
-
-## Common Tasks
-- Run a command: exec(command:'ls -la', timeout:10)
-- Background build: exec(command:'make all', background:true)
-- Check background job: process(action:'poll', sessionId:'...')
-- Kill stuck process: process(action:'kill', sessionId:'...')
-
-## Gotchas
-- Default timeout is 30s; long builds need explicit timeout or background mode
-- background=true requires process.Manager; without it, background mode is unavailable
-- Exit code 0 doesn't appear in output; non-zero exit code is emphasized`
-
-const gatewayToolGuide = `The gateway tool provides self-management capabilities: config CRUD, restart, and self-update.
-
-## Actions (6)
-
-### restart
-- Sends SIGUSR1 to the gateway process itself
-- Gateway performs graceful restart (drain connections, reload config)
-- No downtime if connection tracking is healthy
-
-### config.get
-- Returns current deneb.json config
-- Output: {path, exists, valid, hash, config}
-
-### config.schema.lookup
-- Takes a dotted path (e.g., "agents.defaults.model")
-- Returns the JSON Schema node for that config key
-- Useful for validating values before patching
-
-### config.patch
-- Merges a patch object into existing deneb.json
-- Deep merge: only specified keys are updated
-- Preserves unmodified config values
-
-### config.apply
-- Replaces entire deneb.json with provided config
-- Use with caution — overwrites all existing settings
-
-### update.run
-- Executes: git pull --rebase + make all
-- Timeout: 2 minutes
-- Writes sentinel file on completion
-- Use for self-update from git repository
-
-## Key Files
-- gateway-go/internal/chat/tool_gateway.go
-- docs/gateway/configuration.md (22KB)
-
-## Common Tasks
-- Read config: gateway(action:'config.get')
-- Patch config: gateway(action:'config.patch', patch:{agents:{defaults:{model:'anthropic/claude-sonnet-4-20250514'}}})
-- Restart gateway: gateway(action:'restart')
-
-## Gotchas
-- config.apply replaces entire config; use config.patch for partial updates
-- SIGUSR1 restart drains connections; in-flight requests may be interrupted
-- update.run has 2min timeout; large repos may exceed this`
-
-const mediaGuide = `Media tools: image analysis (vision), YouTube transcripts, and file delivery.
-
-## image Tool (vision analysis)
-### Schema
-- image (string): single image path or URL
-- images (array): multiple images (up to 20)
-- prompt (string): analysis prompt (default: "Describe this image in detail")
-- model (string): vision model (default: "claude-sonnet-4-20250514")
-
-### Processing
-- Local files: read + base64-encode, MIME type auto-detected (21 formats via Rust FFI)
-- URLs: passed as image_url blocks (OpenAI format)
-- Timeout: 60s per analysis call
-- MaxTokens: 4096 per response
-- Supports: PNG, JPEG, GIF, WebP, BMP, SVG, TIFF, HEIC, AVIF, etc.
-
-## youtube_transcript Tool
-- Input: YouTube URL (validated)
-- Calls media.ExtractYouTubeTranscript (90s timeout)
-- Returns formatted transcript via media.FormatYouTubeResult
-- Useful for summarizing video content
-
-## send_file Tool
-- Sends files to the user via their current channel
-- File size limit: 50 MB (Telegram constraint)
-- MIME type auto-detected from file content (magic bytes, 21 formats)
-- Supports: documents, images, audio, video
-- Delivery via MediaSendFn callback (channel-specific formatting)
-
-## MIME Detection (Rust FFI: core-rs/core/src/media/)
-- 21 formats detected by magic bytes (not extension)
-- 35+ MIME-to-extension mappings
-- MediaCategory: image, video, audio, document, archive, other
-
-## Key Files
-- gateway-go/internal/chat/tool_media.go (image, youtube_transcript, send_file)
-- gateway-go/internal/media/ (extraction, formatting)
-- core-rs/core/src/media/ (MIME detection, magic bytes)
-- docs/tools/index.md
-
-## Common Tasks
-- Analyze image: image(image:'/path/to/screenshot.png', prompt:'이 화면에서 에러가 뭔지 알려줘')
-- Get YouTube transcript: youtube_transcript(url:'https://youtube.com/watch?v=...')
-- Send file to user: send_file(path:'/path/to/report.pdf')
-
-## Gotchas
-- Image tool defaults to claude-sonnet-4 vision model; ensure provider is configured
-- send_file is limited to 50 MB (Telegram); larger files fail silently
-- YouTube transcript extraction has 90s timeout; long videos may fail`
-
-const gmailGuide = `Gmail tool provides native OAuth2 access to Gmail for inbox management, search, read, send, reply, and labeling.
-
-## Actions (6)
-
-### inbox
-- Parallel fetch: unread messages + important messages
-- Returns formatted summary with sender, subject, date, snippet
-- Default max: 10 messages per category
-
-### search
-- query (string, required): Gmail search syntax
-- Supports: from:, to:, subject:, is:unread, has:attachment, after:, before:, label:, in:
-- max (number): results limit (default 10, max 50)
-- Returns formatted search results
-
-### read
-- message_id (string, required): email or thread ID
-- Returns full email content via FormatMessage
-- Includes: from, to, cc, date, subject, body
-
-### send
-- to (string, required): recipient email
-- subject (string, required): email subject
-- body (string, required): email content
-- cc, bcc (strings): comma-separated additional recipients
-- html (boolean): send body as HTML (default: plain text)
-- Auto-learns contact alias after successful send
-
-### reply
-- message_id (string, required): original email ID
-- body (string, required): reply content
-- Optional to override (otherwise replies to original sender)
-
-### label
-- label_action (enum): list, add, remove
-- label_name (string): label name for add/remove
-- message_id (string): target email for add/remove
-
-## Contact Alias Resolution
-- KV store key format: "gmail.contacts.{localpart}" → full email
-- If input contains '@', used as-is
-- Auto-learned after send (stores alias → email mapping)
-
-## Configuration
-- OAuth2 credentials required (Gmail API access)
-- Timeout: 30s default, 60s max
-- Output language: Korean (한국어)
-
-## Key Files
-- gateway-go/internal/chat/tool_gmail.go
-- gateway-go/internal/gmail/ (OAuth2, API client)
-
-## Common Tasks
-- Check inbox: gmail(action:'inbox')
-- Search email: gmail(action:'search', query:'from:user@example.com subject:report')
-- Send email: gmail(action:'send', to:'user@example.com', subject:'Hi', body:'Hello')
-
-## Gotchas
-- OAuth2 credentials must be at ~/.deneb/credentials/gmail_client.json + gmail_token.json
-- Contact aliases are auto-learned after send; first send to a new contact requires full email
-- Output language is Korean by default`
-
-const dataToolsGuide = `Data tools: KV store (persistent) and HTTP API client.
-
-## KV Store (kv tool)
-### Storage
-- File: ~/.deneb/kv.json (JSON object, persisted to disk)
-- Thread-safe singleton (sync.RWMutex)
-- Auto-creates directory with 0o755, file with 0o644
-
-### Actions
-- get: requires key; returns value or "Key not found"
-- set: requires key + value; returns "Stored" confirmation
-- delete: requires key; returns success or "Key not found"
-- list: optional prefix filter; returns sorted key list
-
-### Use Cases
-- Contact aliases (gmail.contacts.*)
-- User preferences, cached lookups
-- Cross-session persistent state
-
-## HTTP Tool (http tool)
-### Schema
-- url (string, required): HTTP/HTTPS URL
-- method (string): GET/POST/PUT/PATCH/DELETE (default: GET)
-- headers (object): custom request headers
-- body (string): raw request body
-- json (object): JSON body (auto-sets Content-Type: application/json)
-- timeout (number): seconds, default 30, max 120
-- max_response_chars (number): default 50000
-
-### Response Format
-- HTTP status code + phrase
-- Selected headers: Content-Type, Content-Length, Location
-- Response body (truncated with "[...truncated]" if exceeds limit)
-
-### Details
-- User-Agent: "Deneb-Gateway/1.0"
-- Max response: capped at 5 MB download
-- Follows redirects (default Go behavior)
-
-## Key Files
-- gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_http.go (HTTP client)
-
-## Common Tasks
-- Store a value: kv(action:'set', key:'my_key', value:'my_value')
-- Read a value: kv(action:'get', key:'my_key')
-- List keys: kv(action:'list', prefix:'gmail.')
-- API call: http(url:'https://api.example.com/data', method:'GET')
-
-## Gotchas
-- KV store is a single JSON file (~/.deneb/kv.json); not suitable for large datasets
-- HTTP tool max response is 5 MB; larger responses are truncated
-- http tool follows redirects by default; 3xx responses are auto-followed`
-
-const sessionToolsGuide = `Session tools provide full session lifecycle management: list, browse history, search, restore, cross-session messaging, and sub-agent spawning.
-
-## sessions_list (browse active sessions)
-- limit (number): default 50, min 1
-- kinds (array): filter by "main", "group", "cron", "hook"
-- Returns: session key, kind, status, model, marker if current session
-
-## sessions_history (read past messages)
-- sessionKey (string, required): target session
-- limit (number): default 20, min 1
-- Returns: session key, total message count, formatted message list (role + timestamp + content)
-
-## sessions_search (full-text search across transcripts)
-- query (string, required): search terms
-- maxResults (number): default 20, min 1, max 100
-- Returns: matched messages with surrounding context [before, after]
-
-## sessions_restore (import history from another session)
-- sourceSessionKey (string, required): session to import from
-- limit (number): default 0 (import all messages)
-- Copies messages into current session's history
-
-## sessions_send (cross-session messaging)
-- sessionKey (string): target session (default: "main")
-- message (string, required): message to inject
-- Triggers an agent run in the target session with the given message
-
-## sessions_spawn (create sub-agent)
-- task (string, required): task description for the sub-agent
-- label (string): human-readable label (used in session key)
-- model (string): model override for sub-agent
-- Session key format: {parentKey}:{label}:{unixMs}
-- Sub-agent runs independently with its own transcript
-
-## subagents (monitor/control sub-agents)
-- action (enum): list, kill, steer
-- target (string): index (1-based), label, session key, or "all" (for kill)
-- message (string): for steer action (injects message into running sub-agent)
-- List: sorted by running first, then by UpdatedAt descending
-
-## session_status (current session info)
-- sessionKey (string): optional (defaults to current session)
-- Returns: session key, time, kind, status, model, token usage, runtime info
-
-## Key Files
-- gateway-go/internal/chat/tool_sessions.go (all 8 tools)
-- gateway-go/internal/session/ (Manager, state machine)
-- docs/concepts/session.md, docs/concepts/session-tool.md
-
-## Common Tasks
-- List sessions: sessions_list(kinds:['main','group'])
-- Read history: sessions_history(sessionKey:'agent:default:main', limit:10)
-- Spawn sub-agent: sessions_spawn(task:'research X', label:'research')
-- Monitor sub-agents: subagents(action:'list')
-
-## Gotchas
-- sessions_search max is 100 results; broad queries may miss older matches
-- sessions_restore copies messages into current session; this is irreversible
-- Sub-agent session keys include unix timestamp; they're unique per spawn`
-
-const messageGuide = `The message tool sends messages to users via channels, with support for replies, threads, and reactions.
-
-## Actions (4)
-
-### send
-- message (string, required): text content to send
-- to (string): recipient (chat ID or user ID)
-- channel (string): target channel (e.g., "telegram")
-- silent (boolean): send without notification
-- Uses context delivery + replyFunc for routing
-- Timeout: 30s
-
-### reply
-- message (string, required): reply text
-- replyTo (string): message ID to reply to (required)
-- Sends as a native reply (quoted message in Telegram)
-- Timeout: 30s
-
-### thread-reply
-- message (string, required): reply text
-- replyTo (string): message ID (required)
-- Like reply but threaded (creates/continues a thread)
-- Timeout: 30s
-
-### react
-- emoji (string, required): reaction emoji (e.g., "👍", "❤️")
-- messageId (string, required): message to react to
-- Internal payload format: "__react:{msgId}:{emoji}"
-- Timeout: 10s (shorter than text sends)
-
-## Routing
-- Default: sends to current conversation (same channel + chat)
-- Cross-channel: specify channel + to for routing to different destination
-- Cross-session: use sessions_send tool instead (triggers agent run in target session)
-
-## Telegram-Specific
-- Messages auto-formatted as MarkdownV2
-- Respects 4096-char message limit (auto-split if needed)
-- Inline keyboards can be attached via channel-specific extensions
-- Silent mode: sends without push notification
-
-## Key Files
-- gateway-go/internal/chat/tool_message.go
-- docs/concepts/messages.md
-
-## Common Tasks
-- Send message: message(action:'send', message:'안녕하세요')
-- Reply to message: message(action:'reply', message:'답변입니다', replyTo:'<msgId>')
-- React to message: message(action:'react', emoji:'👍', messageId:'<msgId>')
-
-## Gotchas
-- react timeout is 10s (shorter than send's 30s)
-- Cross-session messaging requires sessions_send, not message tool
-- Telegram 4096 char limit applies; long messages are auto-split`
+const webGuide = `web 도구는 웹 검색, URL 페치, 검색+자동페치 3가지 모드를 제공한다.
+
+## 사용법
+- URL 내용 가져오기: web(url:'https://example.com')
+- 웹 검색: web(query:'golang error handling')
+- 검색 후 상위 결과 자동 페치: web(query:'kubernetes pods', fetch:2)
+
+## 언제 어떤 모드?
+- 특정 URL 내용 → url만 지정
+- 최신 정보 탐색 → query만 지정
+- 리서치 + 종합 → query + fetch:2
+
+## 문서 자동 파싱
+PDF, Office(DOCX/XLSX/PPTX), CSV 등 바이너리 문서는 자동으로 텍스트 추출 (LiteParse CLI 필요: npm i -g @llamaindex/liteparse)
+
+## 제한사항
+- 다운로드 최대 5MB, 출력 기본 50,000자
+- SSRF 보호: 내부 IP 접근 차단
+- 봇 차단 사이트: 3단계 스텔스 프로필 자동 에스컬레이션
+
+## YouTube
+YouTube URL을 web에 넣으면 자동으로 자막 추출. 또는 youtube_transcript 도구 직접 사용.`
+
+const execGuide = `exec 도구는 셸 명령 실행, process 도구는 백그라운드 프로세스 관리.
+
+## exec 사용법
+- 기본: exec(command:'ls -la')
+- 타임아웃 지정: exec(command:'make test', timeout:120)
+- 백그라운드: exec(command:'npm start', background:true)
+
+## 기본값
+- 타임아웃: 30초 (최대 300초/5분)
+- 작업 디렉토리: 에이전트 워크스페이스
+
+## 백그라운드 모드
+background:true로 실행하면 sessionId를 즉시 반환. 이후 process 도구로 관리:
+- process(action:'poll', sessionId:'...') — 상태 확인
+- process(action:'log', sessionId:'...') — 전체 로그
+- process(action:'kill', sessionId:'...') — 종료
+
+## 주의사항
+- 30초 넘는 빌드는 timeout 지정하거나 background:true 사용
+- 출력이 길면 pilot으로 감싸서 요약: pilot(task:'결과 요약', exec:'make test')`
+
+const gatewayToolGuide = `gateway 도구는 Deneb 게이트웨이 자체를 관리한다.
+
+## 설정 읽기
+gateway(action:'config.get') — 현재 deneb.json 설정 반환
+
+## 설정 변경 (추천)
+gateway(action:'config.patch', patch:{agents:{defaults:{model:'anthropic/claude-sonnet-4-20250514'}}})
+지정한 키만 업데이트, 나머지는 보존.
+
+## 설정 전체 교체 (주의)
+gateway(action:'config.apply', config:{...}) — 전체 덮어씀, 위험
+
+## 설정 스키마 조회
+gateway(action:'config.schema.lookup', path:'agents.defaults.model') — 해당 키의 타입/설명 확인
+
+## 재시작
+gateway(action:'restart') — SIGUSR1로 그레이스풀 재시작
+
+## 셀프 업데이트
+gateway(action:'update.run') — git pull + make all 실행 (2분 타임아웃)`
+
+const mediaGuide = `미디어 도구: 이미지 분석, YouTube 자막, 파일 전송.
+
+## 이미지 분석 (비전)
+- 단일: image(image:'/path/to/screenshot.png', prompt:'이 에러 뭐야?')
+- 여러 장: image(images:['/img1.png', '/img2.png'], prompt:'차이점 설명')
+- URL도 가능: image(image:'https://example.com/photo.jpg')
+- 최대 20장, 응답 4096 토큰
+
+## YouTube 자막
+youtube_transcript(url:'https://youtube.com/watch?v=...')
+동영상 자막을 텍스트로 추출 (90초 타임아웃)
+
+## 파일 전송
+send_file(path:'/path/to/report.pdf')
+텔레그램으로 파일 전송 (최대 50MB, 자동 MIME 타입 감지)`
+
+const gmailGuide = `Gmail 도구는 OAuth2로 Gmail에 접근한다.
+
+## 빠른 사용법
+- 받은편지함: gmail(action:'inbox')
+- 검색: gmail(action:'search', query:'from:user@example.com is:unread')
+- 읽기: gmail(action:'read', message_id:'...')
+- 전송: gmail(action:'send', to:'user@example.com', subject:'제목', body:'내용')
+- 답장: gmail(action:'reply', message_id:'...', body:'답변 내용')
+- 라벨: gmail(action:'label', label_action:'add', label_name:'중요', message_id:'...')
+
+## 연락처 별칭
+한 번 이메일을 보내면 자동으로 별칭이 KV에 저장됨.
+이후에는 gmail(action:'send', to:'peter', ...) 처럼 별칭만으로 전송 가능.
+
+## 설정
+~/.deneb/credentials/gmail_client.json + gmail_token.json 필요 (OAuth2)`
+
+const dataToolsGuide = `KV 스토어와 HTTP 클라이언트.
+
+## KV 스토어 (영구 저장소)
+~/.deneb/kv.json에 JSON으로 저장. 세션 간 데이터 유지.
+- 저장: kv(action:'set', key:'my_key', value:'my_value')
+- 읽기: kv(action:'get', key:'my_key')
+- 삭제: kv(action:'delete', key:'my_key')
+- 목록: kv(action:'list', prefix:'gmail.')
+
+활용: 연락처 별칭, 사용자 선호, 캐시된 데이터 등.
+
+## HTTP (API 호출)
+- GET: http(url:'https://api.example.com/data')
+- POST: http(url:'https://api.example.com/data', method:'POST', json:{key:'value'})
+- 커스텀 헤더: http(url:'...', headers:{"Authorization": "Bearer ..."})
+- 타임아웃: 기본 30초, 최대 120초
+- 응답 최대 5MB, 50,000자`
+
+const sessionToolsGuide = `세션 관리 도구 모음.
+
+## 세션 목록/검색
+- sessions_list() — 활성 세션 목록 (kind: main/group/cron/hook 필터 가능)
+- sessions_history(sessionKey:'...', limit:10) — 대화 기록 읽기
+- sessions_search(query:'검색어') — 모든 세션에서 전문 검색
+
+## 크로스 세션 메시징
+sessions_send(sessionKey:'agent:default:main', message:'메시지')
+다른 세션에 메시지를 보내고 해당 세션에서 에이전트 실행 트리거.
+
+## 서브 에이전트
+- 생성: sessions_spawn(task:'리서치 해줘', label:'research', model:'...')
+- 모니터링: subagents(action:'list')
+- 조종: subagents(action:'steer', target:'research', message:'추가 지시')
+- 종료: subagents(action:'kill', target:'all')
+
+서브 에이전트는 독립 세션에서 실행되므로 메인 대화와 분리됨.
+
+## 현재 세션 상태
+session_status() — 세션 키, 종류, 모델, 토큰 사용량 등`
+
+const messageGuide = `메시지 도구로 사용자에게 메시지를 보내거나 반응한다.
+
+## 사용법
+- 보내기: message(action:'send', message:'안녕하세요')
+- 답장: message(action:'reply', message:'네!', replyTo:'메시지ID')
+- 스레드 답장: message(action:'thread-reply', message:'내용', replyTo:'메시지ID')
+- 리액션: message(action:'react', emoji:'👍', messageId:'메시지ID')
+
+## 라우팅
+- 기본: 현재 대화로 전송
+- 다른 채널: channel + to 파라미터 지정
+- 다른 세션: sessions_send 도구 사용 (message 도구 아님)
+
+## 무음 응답 (NO_REPLY)
+message 도구로 이미 응답을 보냈으면, LLM 응답에 NO_REPLY만 적어서 중복 전달 방지.
+
+## 텔레그램
+- 4096자 넘으면 자동 분할
+- MarkdownV2 자동 포맷팅`

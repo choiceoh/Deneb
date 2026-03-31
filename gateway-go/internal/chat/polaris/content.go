@@ -63,9 +63,8 @@ func polarisTopics(docsDir, filter string) (string, error) {
 				fmt.Fprintf(&sb, "  %-16s (%2d docs)  — %s\n", cat+"/", len(g.entries), desc)
 			}
 		}
-		sb.WriteString("\nUse polaris(action:'topics', topic:'<category>') to browse a category.\n")
-		sb.WriteString("Use polaris(action:'search', query:'<keyword>') to search.\n")
-		sb.WriteString("Use polaris(action:'guides') for AI-curated system guides.\n")
+		sb.WriteString("\nUse polaris(question:'<category> 문서 목록') to browse a category.\n")
+		sb.WriteString("Use polaris(question:'<keyword> 관련 정보') to search.\n")
 		return sb.String(), nil
 	}
 
@@ -100,8 +99,8 @@ func polarisTopics(docsDir, filter string) (string, error) {
 		}
 	}
 
-	sb.WriteString("\nUse polaris(action:'read', topic:'<path>') to read a doc.\n")
-	sb.WriteString("Use polaris(action:'search', query:'<keyword>') to search.\n")
+	sb.WriteString("\nUse polaris(question:'<path> 문서 내용') to read a doc.\n")
+	sb.WriteString("Use polaris(question:'<keyword> 관련 정보') to search.\n")
 	return sb.String(), nil
 }
 
@@ -442,7 +441,7 @@ var builtinGuides = map[string]guideEntry{
 	"architecture": {
 		Key:     "architecture",
 		Title:   "System Architecture",
-		Summary: "Go + Rust FFI + Node.js, IPC boundaries, hardware profiles",
+		Summary: "Go + Rust FFI, IPC boundaries, hardware profiles",
 		Content: architectureGuide,
 	},
 	"channels": {
@@ -568,8 +567,8 @@ func polarisGuides(topic string) (string, error) {
 			}
 			sb.WriteString("\n")
 		}
-		sb.WriteString("Use polaris(action:'guides', topic:'<key>') to read a guide.\n")
-		sb.WriteString("Use polaris(action:'guides', topic:'core|tools|runtime|infra') to browse a category.\n")
+		sb.WriteString("Use polaris(question:'<key> 가이드') to read a guide.\n")
+		sb.WriteString("Use polaris(question:'core|tools|runtime|infra 가이드 목록') to browse a category.\n")
 		return sb.String(), nil
 	}
 
@@ -582,7 +581,7 @@ func polarisGuides(topic string) (string, error) {
 				g := builtinGuides[key]
 				fmt.Fprintf(&sb, "  %-16s — %s\n", g.Key, g.Summary)
 			}
-			sb.WriteString("\nUse polaris(action:'guides', topic:'<key>') to read a guide.\n")
+			sb.WriteString("\nUse polaris(question:'<key> 가이드') to read a guide.\n")
 			return sb.String(), nil
 		}
 	}
@@ -590,7 +589,7 @@ func polarisGuides(topic string) (string, error) {
 	// Read a specific guide.
 	g, ok := builtinGuides[topic]
 	if !ok {
-		return fmt.Sprintf("Unknown guide %q. Use polaris(action:'guides') to list available guides.", topic), nil
+		return fmt.Sprintf("Unknown guide %q. Use polaris(question:'시스템 가이드 목록') to list available guides.", topic), nil
 	}
 
 	var sb strings.Builder
