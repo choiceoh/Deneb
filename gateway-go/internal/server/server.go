@@ -295,9 +295,9 @@ func New(addr string, opts ...Option) *Server {
 		}, nil, s.logger) // agent runner wired later during chat handler setup
 	}
 	s.hooks = hooks.NewRegistry(s.logger)
-	// Load user-defined hooks from config so they fire on gateway events.
-	if s.runtimeCfg != nil && s.runtimeCfg.Gateway.Hooks != nil {
-		for _, entry := range s.runtimeCfg.Gateway.Hooks.Entries {
+	// Load user-defined hooks from deneb.json so they fire on gateway events.
+	if snap, err := config.LoadConfigFromDefaultPath(); err == nil && snap != nil && snap.Config.Hooks != nil {
+		for _, entry := range snap.Config.Hooks.Entries {
 			enabled := true
 			if entry.Enabled != nil {
 				enabled = *entry.Enabled
@@ -321,8 +321,8 @@ func New(addr string, opts ...Option) *Server {
 				s.logger.Warn("failed to register hook", "id", entry.ID, "error", err)
 			}
 		}
-		if len(s.runtimeCfg.Gateway.Hooks.Entries) > 0 {
-			s.logger.Info("loaded user-defined hooks from config", "count", len(s.runtimeCfg.Gateway.Hooks.Entries))
+		if len(snap.Config.Hooks.Entries) > 0 {
+			s.logger.Info("loaded user-defined hooks from config", "count", len(snap.Config.Hooks.Entries))
 		}
 	}
 	s.internalHooks = hooks.NewInternalRegistry(s.logger)
