@@ -201,11 +201,9 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 
 	s.log.Info("새 메일 발견", "count", len(newMessages))
 
-	// Load the analysis prompt (re-read each cycle so edits take effect).
-	prompt := loadPrompt(s.cfg.PromptFile)
-
+	// Fetch full details for all new messages.
+	var details []*gmail.MessageDetail
 	for _, summary := range newMessages {
-		// Fetch full message.
 		detail, err := client.GetMessage(ctx, summary.ID)
 		if err != nil {
 			s.log.Warn("메일 본문 조회 실패", "id", summary.ID, "error", err)
@@ -213,32 +211,37 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 			s.saveState(pollState)
 			continue
 		}
-
-		// Analyze via multi-stage pipeline (falls back to single LLM if deps missing).
-		analysis, err := s.analyzeWithPipeline(ctx, client, prompt, detail)
-		if err != nil {
-			s.log.Warn("메일 분석 실패", "id", summary.ID, "error", err)
-			// Still report the email without analysis.
-			analysis = "(분석 실패)"
-		}
-
-		// Send report.
-		report := formatReport(detail, analysis)
-		s.sendNotification(ctx, report)
-
-		// Save state after each email to prevent re-notification on crash.
-		pollState.markSeen(summary.ID)
-		s.saveState(pollState)
+		details = append(details, detail)
 	}
 
+	if len(details) == 0 {
+		pollState.LastPollAt = time.Now().UnixMilli()
+		s.saveState(pollState)
+		return nil
+	}
+
+	// Batch analysis: all emails → one consolidated report.
+	report, err := s.batchAnalyze(ctx, client, details)
+	if err != nil {
+		s.log.Warn("배치 분석 실패", "error", err, "count", len(details))
+		report = "(분석 실패)"
+	}
+
+	// Send single consolidated report.
+	s.sendNotification(ctx, report)
+
+	// Mark all as seen after successful notification.
+	for _, summary := range newMessages {
+		pollState.markSeen(summary.ID)
+	}
 	pollState.LastPollAt = time.Now().UnixMilli()
 	s.saveState(pollState)
 	return nil
 }
 
-// analyzeWithPipeline runs the multi-stage pipeline if deps are available,
-// otherwise falls back to single-LLM analysis.
-func (s *Service) analyzeWithPipeline(ctx context.Context, gmailClient *gmail.Client, prompt string, msg *gmail.MessageDetail) (string, error) {
+// batchAnalyze runs the multi-stage pipeline on a batch of emails.
+// For a single email, AnalyzeBatch delegates to AnalyzeEmailPipeline internally.
+func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, msgs []*gmail.MessageDetail) (string, error) {
 	deps := PipelineDeps{
 		GmailClient: gmailClient,
 		LLMClient:   s.llmClient,
@@ -250,13 +253,8 @@ func (s *Service) analyzeWithPipeline(ctx context.Context, gmailClient *gmail.Cl
 		Logger:      s.log,
 	}
 
-	if deps.canRunPipeline() {
-		s.log.Debug("multi-stage pipeline 실행", "subject", msg.Subject)
-		return AnalyzeEmailPipeline(ctx, deps, msg)
-	}
-
-	// Fallback to simple single-LLM analysis.
-	return AnalyzeEmail(ctx, s.llmClient, s.cfg.Model, prompt, msg)
+	s.log.Debug("batch analysis 실행", "count", len(msgs))
+	return AnalyzeBatch(ctx, deps, msgs)
 }
 
 func (s *Service) saveState(state *PollState) {

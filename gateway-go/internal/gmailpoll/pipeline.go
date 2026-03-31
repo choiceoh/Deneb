@@ -27,7 +27,8 @@ const (
 	// Stage 1 LLM token limits.
 	stage1MaxTokens = 768
 	// Stage 2 (final analysis) token limit.
-	stage2MaxTokens = 1536
+	stage2MaxTokens    = 1536
+	batchStage2Tokens  = 4096 // batch analysis needs more tokens
 
 	// Stage 3: memory extraction.
 	stage3Timeout   = 30 * time.Second
@@ -239,6 +240,236 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	}
 
 	return analysis, nil
+}
+
+// --- batch analysis ---
+
+const batchAnalysisSystem = `당신은 비서 역할의 이메일 분석 어시스턴트입니다.
+여러 이메일을 한꺼번에 분석하여 프로젝트별로 그룹핑하고, 우선순위를 매겨 통합 리포트를 작성합니다.`
+
+const batchAnalysisPrompt = `다음 %d건의 이메일을 분석하여 통합 리포트를 작성해주세요.
+
+## 리포트 형식
+1. 첫 줄: 📬 메일 N건 분석 (HH:MM 기준)
+2. 프로젝트/안건별로 그룹핑
+3. 우선순위별 이모지:
+   - 🔴 긴급/즉시 조치 필요
+   - 🟠 중요/이번 주 내 결정 필요
+   - 🟡 일반 진행사항/확인 필요
+   - 🔵 참고/단순 정보
+4. 각 항목 형식:
+   - 이모지 + 프로젝트명 — 한 줄 제목
+   - 발신자 → 수신자
+   - 핵심 내용 불릿 (•)
+   - → 필요한 조치사항
+5. 같은 프로젝트 관련 메일은 합쳐서 하나로
+6. 단순 진행사항은 🔵 일반 진행사항으로 묶어서 간략히
+
+## 구분선
+우선순위 그룹 사이에 ━━━━━━━━━━━━━━━━━━━━ 사용
+
+## 규칙
+- 한국어로 작성
+- 간결하고 핵심만
+- 발신자 이름은 실명 사용
+- 금액, 날짜, 수량 등 구체적 수치 포함
+- 생략하지 말고 모든 메일을 포함
+
+%s`
+
+// emailWithContext pairs an email with its pre-extracted Stage 1 context.
+type emailWithContext struct {
+	Msg       *gmail.MessageDetail
+	ThreadCtx ThreadContext
+	MemoryCtx MemoryContext
+}
+
+// AnalyzeBatch runs the multi-stage pipeline on a batch of emails,
+// producing a single consolidated report grouped by project and priority.
+// For a single email, delegates to AnalyzeEmailPipeline.
+func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageDetail) (string, error) {
+	if len(msgs) == 0 {
+		return "", fmt.Errorf("no emails to analyze")
+	}
+
+	// Single email — use the individual pipeline.
+	if len(msgs) == 1 {
+		return AnalyzeEmailPipeline(ctx, deps, msgs[0])
+	}
+
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	// Stage 1: extract context for each email in parallel.
+	enriched := make([]emailWithContext, len(msgs))
+	var wg sync.WaitGroup
+
+	for i, msg := range msgs {
+		enriched[i].Msg = msg
+
+		if !deps.canRunPipeline() {
+			continue
+		}
+
+		// Thread context.
+		wg.Add(1)
+		go func(idx int, m *gmail.MessageDetail) {
+			defer wg.Done()
+			s1Ctx, cancel := context.WithTimeout(ctx, stage1Timeout)
+			defer cancel()
+			tc, err := extractThreadContext(s1Ctx, deps, m)
+			if err == nil {
+				enriched[idx].ThreadCtx = tc
+			}
+		}(i, msg)
+
+		// Memory context.
+		if deps.MemStore != nil {
+			wg.Add(1)
+			go func(idx int, m *gmail.MessageDetail) {
+				defer wg.Done()
+				s1Ctx, cancel := context.WithTimeout(ctx, stage1Timeout)
+				defer cancel()
+				mc, err := extractMemoryContext(s1Ctx, deps, m)
+				if err == nil {
+					enriched[idx].MemoryCtx = mc
+				}
+			}(i, msg)
+		}
+	}
+
+	wg.Wait()
+
+	// Stage 2: batch synthesis — all emails in one LLM call.
+	stage2Ctx, cancel := context.WithTimeout(ctx, stage2Timeout)
+	defer cancel()
+	report, err := synthesizeBatchReport(stage2Ctx, deps, enriched)
+	if err != nil {
+		return "", err
+	}
+
+	// Stage 3: store facts from each email (fire-and-forget).
+	if deps.MemStore != nil && deps.LocalClient != nil {
+		go storeBatchFacts(deps, enriched, report)
+	}
+
+	return report, nil
+}
+
+// synthesizeBatchReport generates the consolidated report from all enriched emails.
+func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, emails []emailWithContext) (string, error) {
+	// Build the combined email block with context annotations.
+	var sb strings.Builder
+	for i, e := range emails {
+		if i > 0 {
+			sb.WriteString("\n---\n\n")
+		}
+		fmt.Fprintf(&sb, "### 메일 %d\n", i+1)
+		sb.WriteString(FormatEmailForAnalysis(e.Msg))
+
+		if hasThreadContext(e.ThreadCtx) {
+			sb.WriteString("\n[이전 맥락] ")
+			if e.ThreadCtx.ThreadSummary != "" {
+				sb.WriteString(e.ThreadCtx.ThreadSummary)
+			}
+			if e.ThreadCtx.PriorExchanges != "" {
+				sb.WriteString(" / ")
+				sb.WriteString(e.ThreadCtx.PriorExchanges)
+			}
+			sb.WriteString("\n")
+		}
+
+		if hasMemoryContext(e.MemoryCtx) {
+			sb.WriteString("[기억] ")
+			if e.MemoryCtx.SenderFacts != "" {
+				sb.WriteString(e.MemoryCtx.SenderFacts)
+			}
+			if e.MemoryCtx.TopicFacts != "" {
+				sb.WriteString(" / ")
+				sb.WriteString(e.MemoryCtx.TopicFacts)
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	userPrompt := fmt.Sprintf(batchAnalysisPrompt, len(emails), sb.String())
+
+	req := llm.ChatRequest{
+		Model:     deps.MainModel,
+		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:    llm.SystemString(batchAnalysisSystem),
+		MaxTokens: batchStage2Tokens,
+		Stream:    true,
+	}
+
+	events, err := deps.LLMClient.StreamChatOpenAI(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("batch analysis LLM call failed: %w", err)
+	}
+
+	return collectStreamText(ctx, events)
+}
+
+// storeBatchFacts extracts and stores facts from a batch of analyzed emails.
+func storeBatchFacts(deps PipelineDeps, emails []emailWithContext, report string) {
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	// Store facts based on the full batch report for richer context.
+	ctx, cancel := context.WithTimeout(context.Background(), stage3Timeout)
+	defer cancel()
+
+	// Build a summary of all senders and subjects for the extraction prompt.
+	var emailSummary strings.Builder
+	for _, e := range emails {
+		fmt.Fprintf(&emailSummary, "- From: %s / Subject: %s\n", e.Msg.From, e.Msg.Subject)
+	}
+
+	userPrompt := fmt.Sprintf(emailFactExtractorPrompt,
+		emailSummary.String(), "(배치 분석)", time.Now().Format("2006-01-02"), report)
+
+	result, err := callLocalLLMJSON[emailFactsResponse](ctx, deps.LocalClient, deps.LocalModel, emailFactExtractorSystem, userPrompt, stage3MaxTokens)
+	if err != nil {
+		logger.Debug("batch fact extraction failed", "error", err)
+		return
+	}
+
+	if len(result.Facts) == 0 {
+		return
+	}
+
+	var extracted []memory.ExtractedFact
+	for _, ef := range result.Facts {
+		if ef.Content == "" {
+			continue
+		}
+		content := ef.Content
+		if ef.Project != "" {
+			content = fmt.Sprintf("[%s] %s", ef.Project, ef.Content)
+		}
+		imp := ef.Importance
+		if imp < 0 {
+			imp = 0
+		}
+		if imp > 1 {
+			imp = 1
+		}
+		extracted = append(extracted, memory.ExtractedFact{
+			Content:    content,
+			Category:   normalizeCategory(ef.Category),
+			Importance: imp,
+			ExpiryHint: ef.ExpiryHint,
+		})
+	}
+
+	if len(extracted) > 0 {
+		memory.InsertExtractedFactsAs(ctx, deps.MemStore, deps.MemEmbed, extracted, SourceEmailAnalysis, logger)
+		logger.Info("batch email facts stored", "count", len(extracted), "emails", len(emails))
+	}
 }
 
 // extractThreadContext fetches related emails and extracts thread context via local LLM.
