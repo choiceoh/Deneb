@@ -243,6 +243,33 @@ func UploadPhoto(ctx context.Context, c *Client, chatID int64, fileName string, 
 	return parseSendResult(result)
 }
 
+// EditMessageText edits the text of an existing message.
+// Returns the edited message result.
+func EditMessageText(ctx context.Context, c *Client, chatID int64, messageID int64, text string, parseMode string) (*SendResult, error) {
+	params := map[string]any{
+		"chat_id":    chatID,
+		"message_id": messageID,
+		"text":       text,
+	}
+	if parseMode != "" {
+		params["parse_mode"] = parseMode
+	}
+	params["link_preview_options"] = LinkPreviewOptions{IsDisabled: true}
+
+	result, err := c.Call(ctx, "editMessageText", params)
+	if err != nil {
+		// If HTML parse fails, retry as plain text.
+		if parseMode == "HTML" && isHTMLParseError(err) {
+			delete(params, "parse_mode")
+			result, err = c.Call(ctx, "editMessageText", params)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("editMessageText: %w", err)
+		}
+	}
+	return parseSendResult(result)
+}
+
 // AnswerCallbackQuery acknowledges a callback query.
 func AnswerCallbackQuery(ctx context.Context, c *Client, queryID string, text string) error {
 	params := map[string]any{
