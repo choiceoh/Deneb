@@ -368,7 +368,9 @@ func (c *Client) SendChatAction(ctx context.Context, chatID int64, action string
 // SetMessageReaction sets an emoji reaction on a message.
 // Pass an empty emoji to remove all reactions.
 func (c *Client) SetMessageReaction(ctx context.Context, chatID, messageID int64, emoji string) error {
-	var reaction []map[string]string
+	// Use an empty slice (not nil) so JSON encodes as [] instead of null.
+	// Telegram requires an explicit empty array to clear reactions.
+	reaction := []map[string]string{}
 	if emoji != "" {
 		reaction = []map[string]string{{"type": "emoji", "emoji": emoji}}
 	}
