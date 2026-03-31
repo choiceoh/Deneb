@@ -23,15 +23,6 @@ type AssemblyConfig struct {
 	MaxMessages    int    `json:"maxMessages"` // fallback limit when FFI unavailable
 }
 
-// DefaultAssemblyConfig returns production defaults.
-func DefaultAssemblyConfig() AssemblyConfig {
-	return AssemblyConfig{
-		TokenBudget:    100_000,
-		FreshTailCount: 32,
-		MaxMessages:    100,
-	}
-}
-
 // AssemblyResult holds the output of context assembly.
 type AssemblyResult struct {
 	Messages             []llm.Message

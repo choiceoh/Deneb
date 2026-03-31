@@ -33,28 +33,6 @@ impl<'a> CatalogIndex<'a> {
         let key = (provider_key, model.to_lowercase());
         self.map.get(&key).copied()
     }
-
-    /// Convenience: check `in_catalog` + allowlist status (mirrors `get_model_ref_status`).
-    #[allow(dead_code)]
-    pub fn ref_status(
-        &self,
-        model_ref: &ModelRef,
-        allowed_keys: Option<&std::collections::HashSet<String>>,
-    ) -> ModelRefStatus {
-        let key = model_key(&model_ref.provider, &model_ref.model).into_owned();
-        let in_catalog = self.find(&model_ref.provider, &model_ref.model).is_some();
-        let allow_any = allowed_keys.is_none();
-        let allowed = allow_any
-            || allowed_keys
-                .map(|keys| keys.contains(&key))
-                .unwrap_or(false);
-        ModelRefStatus {
-            key,
-            in_catalog,
-            allow_any,
-            allowed,
-        }
-    }
 }
 
 /// Check if a model supports vision (image input) based on catalog lookup.
