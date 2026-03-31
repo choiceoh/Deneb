@@ -114,14 +114,14 @@ func TestDispatch_ChannelNotFound(t *testing.T) {
 func TestDispatch_PartialFailure(t *testing.T) {
 	reg := channel.NewRegistry()
 	ok := &mockChannelPlugin{id: "telegram"}
-	fail := &mockChannelPlugin{id: "telegram", sendErr: fmt.Errorf("send failed")}
+	fail := &mockChannelPlugin{id: "slack", sendErr: fmt.Errorf("send failed")}
 	reg.Register(ok)
 	reg.Register(fail)
 
 	results := Dispatch(context.Background(), reg,
 		[]DeliveryTarget{
 			{Channel: "telegram", To: "user1"},
-			{Channel: "telegram", To: "user2"},
+			{Channel: "slack", To: "user2"},
 		},
 		"Test", nil)
 

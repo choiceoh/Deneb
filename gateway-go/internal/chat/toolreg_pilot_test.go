@@ -280,8 +280,8 @@ func TestBuildFallbackResult(t *testing.T) {
 	}
 
 	result := buildFallbackResult("리뷰해줘", gathered)
-	if !contains(result, "sglang") {
-		t.Error("fallback should mention sglang")
+	if !contains(result, "pilot model unavailable") {
+		t.Error("fallback should mention pilot model unavailable")
 	}
 	if !contains(result, "Task: 리뷰해줘") {
 		t.Error("fallback should contain task")

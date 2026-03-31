@@ -54,7 +54,7 @@ func TestRegistryGetNotFound(t *testing.T) {
 func TestRegistryList(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register(&mockPlugin{id: "telegram"})
-	reg.Register(&mockPlugin{id: "telegram"})
+	reg.Register(&mockPlugin{id: "discord"})
 
 	list := reg.List()
 	if len(list) != 2 {
@@ -65,7 +65,7 @@ func TestRegistryList(t *testing.T) {
 func TestRegistryStatusAll(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register(&mockPlugin{id: "telegram", status: Status{Connected: true}})
-	reg.Register(&mockPlugin{id: "telegram", status: Status{Connected: false, Error: "token expired"}})
+	reg.Register(&mockPlugin{id: "discord", status: Status{Connected: false, Error: "token expired"}})
 
 	statuses := reg.StatusAll()
 	if len(statuses) != 2 {
@@ -74,7 +74,7 @@ func TestRegistryStatusAll(t *testing.T) {
 	if !statuses["telegram"].Connected {
 		t.Error("telegram should be connected")
 	}
-	if statuses["telegram"].Error != "token expired" {
-		t.Errorf("telegram error = %q, want %q", statuses["telegram"].Error, "token expired")
+	if statuses["discord"].Error != "token expired" {
+		t.Errorf("discord error = %q, want %q", statuses["discord"].Error, "token expired")
 	}
 }

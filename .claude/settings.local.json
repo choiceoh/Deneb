@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /home/user/Deneb && ./scripts/check-dev-env.sh"
+            "command": "cd /home/user/Deneb && ./scripts/setup-dev-env.sh"
           }
         ]
       }

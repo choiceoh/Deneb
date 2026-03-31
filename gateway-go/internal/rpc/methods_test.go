@@ -3,6 +3,8 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,6 +19,10 @@ const (
 	ciValidFrame   = `{"type":"req","id":"1","method":"ping"}`
 	ciInvalidFrame = `{"type":"unknown"}`
 )
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+}
 
 func testDeps() Deps {
 	return Deps{

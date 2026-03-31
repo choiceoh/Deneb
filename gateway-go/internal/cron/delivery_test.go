@@ -33,7 +33,7 @@ func TestMatchesDeliveryTarget(t *testing.T) {
 	}{
 		{"exact match", "telegram", "12345", "", "telegram", "12345", "", true},
 		{"provider message", "message", "12345", "", "telegram", "12345", "", true},
-		{"wrong provider", "telegram", "12345", "", "telegram", "12345", "", false},
+		{"wrong provider", "slack", "12345", "", "telegram", "12345", "", false},
 		{"wrong target", "telegram", "12345", "", "telegram", "67890", "", false},
 		{"with topic suffix", "telegram", "12345:topic:99", "", "telegram", "12345", "", true},
 		{"account mismatch", "telegram", "12345", "acc1", "telegram", "12345", "acc2", false},

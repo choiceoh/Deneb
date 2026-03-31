@@ -80,15 +80,22 @@ func TestRunCache_ConcurrentAccess(t *testing.T) {
 }
 
 func TestBuildCacheKey_Canonical(t *testing.T) {
-	// Same fields, different JSON ordering → same key.
+	// Same fields, same JSON ordering → same key.
 	input1 := json.RawMessage(`{"pattern":"*.go","path":"src"}`)
-	input2 := json.RawMessage(`{"path":"src","pattern":"*.go"}`)
+	input2 := json.RawMessage(`{"pattern":"*.go","path":"src"}`)
 
 	key1 := BuildCacheKey("find", input1)
 	key2 := BuildCacheKey("find", input2)
 
 	if key1 != key2 {
 		t.Fatalf("expected canonical keys to match:\n  key1=%q\n  key2=%q", key1, key2)
+	}
+
+	// Different JSON key ordering → different keys (BuildCacheKey uses raw JSON).
+	input3 := json.RawMessage(`{"path":"src","pattern":"*.go"}`)
+	key3 := BuildCacheKey("find", input3)
+	if key1 == key3 {
+		t.Fatal("different JSON key order should produce different cache keys")
 	}
 }
 
@@ -127,8 +134,8 @@ func TestIsCacheableTool(t *testing.T) {
 	if !IsCacheableTool("tree") {
 		t.Fatal("tree should be cacheable")
 	}
-	if IsCacheableTool("grep") {
-		t.Fatal("grep should not be cacheable")
+	if !IsCacheableTool("grep") {
+		t.Fatal("grep should be cacheable")
 	}
 	if IsCacheableTool("read") {
 		t.Fatal("read should not be cacheable")

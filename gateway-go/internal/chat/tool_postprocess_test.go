@@ -70,10 +70,12 @@ func TestGrepResultSummarizer_Long(t *testing.T) {
 }
 
 func TestGrepResultSummarizer_WrongTool(t *testing.T) {
+	// GrepResultSummarizer no longer checks tool name — it processes any input.
+	// With 300 lines exceeding grepMaxMatches (200), it should still summarize.
 	output := strings.Repeat("line\n", 300)
 	result := GrepResultSummarizer(context.Background(), "read", output)
-	if result != output {
-		t.Error("expected no change for non-grep tool")
+	if !strings.Contains(result, "more matches omitted") {
+		t.Error("expected omission notice for long output regardless of tool name")
 	}
 }
 

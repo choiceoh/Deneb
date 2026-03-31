@@ -285,19 +285,20 @@ func callTransferLLM(ctx context.Context, client *llm.Client, model, summaryCont
 
 // parseTransferResponse parses the LLM JSON output into extracted facts.
 func parseTransferResponse(text string) ([]memory.ExtractedFact, bool) {
-	text = jsonutil.ExtractObject(text)
+	extracted := jsonutil.ExtractObject(text)
 
 	// Expected: {"facts": [...]}
 	var resp struct {
 		Facts []memory.ExtractedFact `json:"facts"`
 	}
-	if err := json.Unmarshal([]byte(text), &resp); err == nil && resp.Facts != nil {
+	if err := json.Unmarshal([]byte(extracted), &resp); err == nil && resp.Facts != nil {
 		return resp.Facts, true
 	}
 
-	// Fallback: bare array.
+	// Fallback: bare array (ExtractObject may return "" for non-object JSON).
+	raw := strings.TrimSpace(text)
 	var arr []memory.ExtractedFact
-	if err := json.Unmarshal([]byte(text), &arr); err == nil {
+	if err := json.Unmarshal([]byte(raw), &arr); err == nil {
 		return arr, true
 	}
 

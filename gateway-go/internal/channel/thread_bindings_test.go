@@ -67,7 +67,7 @@ func TestResolveThreadBindingsEnabled(t *testing.T) {
 
 func TestResolveThreadBindingSpawnPolicy(t *testing.T) {
 	t.Run("default for non-telegram", func(t *testing.T) {
-		policy := ResolveThreadBindingSpawnPolicy(nil, nil, "telegram", "default", SpawnKindSubagent)
+		policy := ResolveThreadBindingSpawnPolicy(nil, nil, "discord", "default", SpawnKindSubagent)
 		if !policy.Enabled {
 			t.Error("expected enabled by default")
 		}
@@ -76,13 +76,13 @@ func TestResolveThreadBindingSpawnPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("default for telegram disables spawn", func(t *testing.T) {
+	t.Run("default for telegram enables spawn", func(t *testing.T) {
 		policy := ResolveThreadBindingSpawnPolicy(nil, nil, "telegram", "default", SpawnKindSubagent)
 		if !policy.Enabled {
 			t.Error("expected enabled by default")
 		}
-		if policy.SpawnEnabled {
-			t.Error("expected spawn disabled for telegram by default")
+		if !policy.SpawnEnabled {
+			t.Error("expected spawn enabled for telegram by default")
 		}
 	})
 

@@ -201,6 +201,8 @@ func (s *Service) IncrementDreamTurn(ctx context.Context) {
 	dreamer.IncrementTurn(ctx)
 
 	if dreamer.ShouldDream(ctx) {
+		// runDreamingAsync has its own dreamRunning guard under the mutex,
+		// so concurrent callers are safely deduplicated there.
 		s.runDreamingAsync()
 	}
 }

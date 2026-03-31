@@ -10,7 +10,7 @@ import (
 
 func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs: func() []string { return []string{"telegram", "telegram"} },
+		ListChannelIDs: func() []string { return []string{"telegram", "slack"} },
 		GetChannelStatus: func(id string) string {
 			if id == "telegram" {
 				return "running"
@@ -29,8 +29,8 @@ func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 		if ch.ChannelID == "telegram" && !ch.Healthy {
 			t.Error("telegram should be healthy")
 		}
-		if ch.ChannelID == "telegram" && ch.Healthy {
-			t.Error("telegram should be unhealthy (stopped)")
+		if ch.ChannelID == "slack" && ch.Healthy {
+			t.Error("slack should be unhealthy (stopped)")
 		}
 	}
 }
