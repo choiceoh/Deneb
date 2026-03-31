@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -35,10 +34,8 @@ func (s *Server) registerConfigLifecycleMethods() {
 					s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
 				})
 			}
-			// Broadcast config change to subscribers.
-			s.broadcaster.Broadcast("config.changed", map[string]any{
-				"ts": time.Now().UnixMilli(),
-			})
+			// Broadcast config change to subscribers via publisher.
+			s.publisher.PublishConfigChanged("config")
 			// Restart channels to pick up config changes.
 			if s.channelLifecycle != nil {
 				s.safeGo("config:restart-channels", func() {

@@ -19,8 +19,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -122,6 +124,34 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
 	inbound.FinalizeInboundContext(msgCtx)
+
+	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
+	shouldAck := channel.ShouldAckReaction(channel.AckReactionGateParams{
+		Scope:    channel.AckScopeAll,
+		IsDirect: !msgCtx.IsGroup,
+		IsGroup:  msgCtx.IsGroup,
+	})
+	var didAck bool
+	if shouldAck {
+		client := p.server.telegramPlug.Client()
+		if client != nil {
+			chatIDInt, _ := telegram.ParseChatID(chatID)
+			if err := client.SetMessageReaction(context.Background(), chatIDInt, msg.MessageID, "👀"); err == nil {
+				didAck = true
+			}
+		}
+	}
+
+	// --- Part B: Conversation label — resolve a display label for this session.
+	convLabel := channel.ResolveConversationLabel(channel.ConversationLabelFields{
+		ChatType:     msg.Chat.Type,
+		SenderName:   senderName,
+		From:         chatID,
+		GroupSubject: msg.Chat.Title,
+	})
+	if convLabel != "" && p.server.sessions != nil {
+		p.server.sessions.Patch(sessionKey, session.PatchFields{Label: &convLabel})
+	}
 
 	// Strip bot mentions in group chats.
 	if msgCtx.IsGroup {
@@ -257,6 +287,23 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 			"error", resp.Error,
 		)
 	}
+
+	// Remove ack reaction after the reply is sent.
+	channel.RemoveAckReactionAfterReply(channel.RemoveAckReactionAfterReplyParams{
+		RemoveAfterReply: true,
+		DidAck:           didAck,
+		Remove: func() error {
+			client := p.server.telegramPlug.Client()
+			if client == nil {
+				return nil
+			}
+			chatIDInt, _ := telegram.ParseChatID(chatID)
+			return client.SetMessageReaction(context.Background(), chatIDInt, msg.MessageID, "")
+		},
+		OnError: func(err error) {
+			p.logger.Warn("failed to remove ack reaction", "error", err)
+		},
+	})
 }
 
 // extractAttachments downloads media from a Telegram message with a bounded timeout.

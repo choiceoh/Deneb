@@ -332,6 +332,15 @@ func executeAgentRun(
 		hooks.OnToolEmit = broadcaster.EmitToolStart
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
+			if deps.broadcast != nil {
+				deps.broadcast("session.tool", map[string]any{
+					"sessionKey": params.SessionKey,
+					"runId":      params.ClientRunID,
+					"tool":       name,
+					"toolUseId":  toolUseID,
+					"isError":    isErr,
+				})
+			}
 		}
 	}
 	if typingSignaler != nil {

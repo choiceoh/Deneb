@@ -125,7 +125,7 @@ func nodePairApprove(deps Deps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("node.pair.approved", map[string]any{"nodeId": paired.NodeID})
+			deps.Broadcaster("node.pair.resolved", map[string]any{"nodeId": paired.NodeID, "action": "approved"})
 		}
 		return map[string]any{"node": paired}, nil
 	})
@@ -144,7 +144,7 @@ func nodePairReject(deps Deps) rpcutil.HandlerFunc {
 			return nil, rpcerr.NotFound(err.Error())
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("node.pair.rejected", map[string]any{"nodeId": nodeID})
+			deps.Broadcaster("node.pair.resolved", map[string]any{"nodeId": nodeID, "action": "rejected"})
 		}
 		return map[string]any{"nodeId": nodeID}, nil
 	})

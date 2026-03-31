@@ -82,7 +82,13 @@ type runDeps struct {
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
 	registry       *modelrole.Registry       // centralized model role registry
-	contextCfg     ContextConfig
+	// emitAgentFn sends agent lifecycle events (run.start, tool.start, tool.end)
+	// to the gateway event subscription pipeline. Optional; nil if not wired.
+	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
+	// emitTranscriptFn sends transcript updates (user/assistant message appends)
+	// to the gateway event subscription pipeline. Optional; nil if not wired.
+	emitTranscriptFn func(sessionKey string, message any, messageID string)
+	contextCfg       ContextConfig
 	compactionCfg  CompactionConfig
 	defaultModel   string
 	defaultSystem  string

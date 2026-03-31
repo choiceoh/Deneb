@@ -86,7 +86,9 @@ type ServerRuntime struct {
 	gatewaySubs   *events.GatewayEventSubscriptions
 	channelHealth *monitoring.ChannelHealthMonitor
 	activity      *monitoring.ActivityTracker
-	channelEvents *monitoring.ChannelEventTracker
+	channelEvents   *monitoring.ChannelEventTracker
+	snapshotStore   *channel.SnapshotStore
+	runStateMachine *channel.RunStateMachine
 }
 
 // ServerIntegrations owns optional domain/integration subsystems.
@@ -124,6 +126,7 @@ type Server struct {
 	channelLifecycle *channel.LifecycleManager
 	dedupe           *dedupe.Tracker
 	broadcaster      *events.Broadcaster
+	publisher        *events.Publisher
 	processes        *process.Manager
 	daemon           *daemon.Daemon
 	runtimeCfg       *config.GatewayRuntimeConfig
@@ -270,6 +273,8 @@ func New(addr string, opts ...Option) *Server {
 		Broadcaster: s.broadcaster,
 		Logger:      s.logger,
 	})
+	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotAdapter{sessions: s.sessions}, s.logger)
+	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
@@ -285,6 +290,8 @@ func New(addr string, opts ...Option) *Server {
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.internalHooks = hooks.NewInternalRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
+	s.snapshotStore = channel.NewSnapshotStore()
+	s.channelLifecycle.SetSnapshotStore(s.snapshotStore)
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
@@ -344,6 +351,7 @@ func New(addr string, opts ...Option) *Server {
 		Sessions:         s.sessions,
 		Channels:         s.channels,
 		ChannelLifecycle: s.channelLifecycle,
+		SnapshotStore:    s.snapshotStore,
 		GatewaySubs:      s.gatewaySubs,
 		Version:          s.version,
 	})

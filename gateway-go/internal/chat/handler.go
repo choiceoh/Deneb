@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -54,6 +55,10 @@ type Handler struct {
 	reactionFn       ReactionFunc     // optional: sets emoji reaction on triggering message
 	removeReactionFn ReactionFunc     // optional: removes emoji reaction
 	toolProgressFn   ToolProgressFunc // optional: reports tool execution events
+	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
+	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
+	// emitTranscriptFn sends transcript updates to gateway event subscriptions.
+	emitTranscriptFn func(sessionKey string, message any, messageID string)
 
 	// uploadLimitsMu guards uploadLimits.
 	uploadLimitsMu sync.RWMutex
@@ -68,6 +73,9 @@ type Handler struct {
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
 	done     chan struct{}          // signals abortGCLoop to stop
+
+	// runStateMachine tracks active agent runs for status broadcasting.
+	runStateMachine *channel.RunStateMachine
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -210,6 +218,18 @@ func (h *Handler) ToolProgressFunc() ToolProgressFunc {
 	return h.toolProgressFn
 }
 
+// SetEmitAgentFunc sets the callback that sends agent lifecycle events
+// (run.start, tool.start, tool.end) to the gateway event subscription pipeline.
+func (h *Handler) SetEmitAgentFunc(fn func(kind, sessionKey, runID string, payload map[string]any)) {
+	h.emitAgentFn = fn
+}
+
+// SetEmitTranscriptFunc sets the callback that sends transcript updates
+// (user/assistant message appends) to the gateway event subscription pipeline.
+func (h *Handler) SetEmitTranscriptFunc(fn func(sessionKey string, message any, messageID string)) {
+	h.emitTranscriptFn = fn
+}
+
 // SetChannelUploadLimit registers the maximum file upload size for a channel.
 // Called once per channel during server wiring (e.g., wireTelegramChatHandler).
 func (h *Handler) SetChannelUploadLimit(channelID string, maxBytes int64) {
@@ -256,6 +276,11 @@ func (h *Handler) ReactionFunc() ReactionFunc {
 // (e.g., auto-memory extraction) are cancelled when the server shuts down.
 func (h *Handler) SetShutdownCtx(ctx context.Context) {
 	h.shutdownCtx = ctx
+}
+
+// SetRunStateMachine sets the state machine that tracks active agent runs.
+func (h *Handler) SetRunStateMachine(sm *channel.RunStateMachine) {
+	h.runStateMachine = sm
 }
 
 // DefaultModel returns the configured default LLM model name.

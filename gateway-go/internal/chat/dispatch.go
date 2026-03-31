@@ -60,6 +60,10 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
 	go func() {
+		if h.runStateMachine != nil {
+			h.runStateMachine.StartRun()
+			defer h.runStateMachine.EndRun()
+		}
 		defer runCancel()
 		defer h.cleanupAbort(params.ClientRunID)
 		defer func() {
@@ -225,6 +229,8 @@ func (h *Handler) buildRunDeps() runDeps {
 		dreamTurnFn:          h.dreamTurnFn,
 		agentLog:             h.agentLog,
 		registry:             h.registry,
+		emitAgentFn:          h.emitAgentFn,
+		emitTranscriptFn:     h.emitTranscriptFn,
 		contextCfg:           h.contextCfg,
 		compactionCfg:        h.compactionCfg,
 		defaultModel:         h.defaultModel,

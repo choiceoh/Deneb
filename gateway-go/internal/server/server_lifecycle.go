@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
@@ -88,6 +89,18 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 				},
 			)
 		})
+	}
+
+	// Create the run state machine to track active agent runs.
+	s.runStateMachine = channel.NewRunStateMachine(ctx, func(patch channel.StatusPatch) {
+		if s.snapshotStore != nil && patch.ActiveRuns != nil {
+			s.logger.Debug("run state changed", "activeRuns", *patch.ActiveRuns)
+		}
+	}, 30*time.Second)
+
+	// Wire the run state machine to the chat handler.
+	if s.chatHandler != nil {
+		s.chatHandler.SetRunStateMachine(s.runStateMachine)
 	}
 
 	// Mark ready only after all channel plugins have had a chance to start.
@@ -249,7 +262,12 @@ func (s *Server) doShutdown() error {
 		stopCancel()
 	}
 
-	// 9. Close chat handler.
+	// 9. Close run state machine.
+	if s.runStateMachine != nil {
+		s.runStateMachine.Close()
+	}
+
+	// 10. Close chat handler.
 	if s.chatHandler != nil {
 		s.chatHandler.Close()
 	}
