@@ -635,30 +635,6 @@
   required:
     - query
 
-- name: vega
-  properties:
-    action:
-      type: string
-      enum:
-        - search
-        - ask
-      description: "Action: search (FTS/semantic search across projects), ask (question answering via Vega backend)"
-    query:
-      type: string
-      description: Search query or question text
-    limit:
-      type: integer
-      description: "Max results to return (default: 10, max: 50)"
-    mode:
-      type: string
-      enum:
-        - bm25
-        - semantic
-        - hybrid
-      description: "Search mode (default: hybrid). bm25=keyword, semantic=embedding, hybrid=both"
-  required:
-    - query
-
 - name: polaris
   properties:
     question:
@@ -1249,9 +1225,6 @@
     image:
       type: string
       description: "Shortcut: analyze image file or URL (expands to sources:[{tool:'image', input:{paths:[...]}}])"
-    vega:
-      type: string
-      description: "Shortcut: search project knowledge base (expands to sources:[{tool:'vega', input:{query:...}}])"
     agent_logs:
       type: string
       description: "Shortcut: query agent run logs for diagnostics (expands to sources:[{tool:'agent_logs', input:{...}}]). Value: 'all' for recent logs, 'tools' for tool calls only, 'errors' for errors only, or a specific run_id"

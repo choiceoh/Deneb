@@ -191,14 +191,6 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		})
 	}
 
-	if p.Vega != "" {
-		specs = append(specs, sourceSpec{
-			Tool:  "vega",
-			Input: mustJSON(map[string]any{"query": p.Vega}),
-			Label: "vega: " + p.Vega,
-		})
-	}
-
 	if p.AgentLogs != "" {
 		input := map[string]any{"limit": 50}
 		switch p.AgentLogs {
@@ -261,7 +253,7 @@ func sourceTypeFromTool(tool string) string {
 		return "file"
 	case "agent_logs", "gateway_logs", "test", "http":
 		return "exec"
-	case "gmail", "youtube_transcript", "polaris", "image", "vega":
+	case "gmail", "youtube_transcript", "polaris", "image":
 		return "content"
 	default:
 		return "content"

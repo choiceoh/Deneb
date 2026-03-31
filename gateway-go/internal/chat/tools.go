@@ -341,7 +341,6 @@ var chatTools = map[string]bool{
 	"web":  true,
 	"http": true,
 	// Knowledge & memory
-	"vega":          true,
 	"memory":        true,
 	"memory_search": true,
 	"polaris":       true,

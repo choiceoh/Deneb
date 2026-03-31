@@ -35,7 +35,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterWebTools(registry)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	RegisterVegaTools(registry, &deps.Vega, sglang)
+	RegisterInfraTools(registry, &deps.Vega, sglang)
 	RegisterMediaTools(registry, deps.ImageClient, deps.ImageModel)
 	RegisterDataTools(registry)
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, &deps.Vega)
@@ -305,14 +305,8 @@ func buildSglangProbe(sglang *SglangDeps) tools.SglangProbe {
 	return probe
 }
 
-// RegisterVegaTools registers vega search and health-check tools.
-func RegisterVegaTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sglang *SglangDeps) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "vega",
-		Description: "Search project knowledge base (Vega). Hybrid BM25 + semantic search across all projects. Actions: search (default), ask",
-		InputSchema: vegaToolSchema(),
-		Fn:          tools.ToolVega(d),
-	})
+// RegisterInfraTools registers infrastructure health-check tools.
+func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sglang *SglangDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "health_check",
 		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",

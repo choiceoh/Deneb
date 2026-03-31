@@ -53,7 +53,6 @@ var pilotSimpleSourceTools = map[string]bool{
 	"polaris":       true,
 	"read":          true,
 	"tree":          true,
-	"vega":          true,
 	"web_fetch":     true,
 }
 
@@ -291,7 +290,6 @@ type pilotParams struct {
 	Polaris     string   `json:"polaris"`
 	Image       string   `json:"image"`
 	Ls          string   `json:"ls"`
-	Vega        string   `json:"vega"`
 	AgentLogs   string   `json:"agent_logs"`
 	GatewayLogs string   `json:"gateway_logs"`
 }
