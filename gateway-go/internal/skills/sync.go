@@ -6,7 +6,6 @@ package skills
 import (
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,6 +170,3 @@ func BuildWorkspaceSkillStatus(cfg DiscoverConfig, eligCtx EligibilityContext) *
 		EligibleCount: eligibleCount,
 	}
 }
-
-// Suppress unused import warning for slog.
-var _ *slog.Logger

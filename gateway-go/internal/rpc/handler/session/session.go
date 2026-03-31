@@ -22,13 +22,10 @@ import (
 
 // Deps holds dependencies for session RPC methods.
 type Deps struct {
-	Sessions         *session.Manager
-	Channels         interface{} // *channel.Registry — unused by session handlers but kept for parity.
-	ChannelLifecycle interface{} // *channel.LifecycleManager — unused by session handlers.
-	GatewaySubs      *events.GatewayEventSubscriptions
-	Version          string
-	Transcripts      *transcript.Writer
-	Compressor       *transcript.Compressor
+	Sessions    *session.Manager
+	GatewaySubs *events.GatewayEventSubscriptions
+	Transcripts *transcript.Writer
+	Compressor  *transcript.Compressor
 }
 
 // ExecDeps holds dependencies for native session execution and agent RPC methods.

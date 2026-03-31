@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
@@ -86,22 +85,6 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 
 	deps := h.buildRunDeps()
 
-	// Create a custom broadcaster that calls the onDelta callback.
-	// We reuse executeAgentRun's emitDelta path via a custom streamBroadcaster.
-	var dummyBroadcast streaming.BroadcastRawFunc = func(_ string, _ []byte) int { return 0 }
-	broadcaster := streaming.NewBroadcaster(dummyBroadcast, sessionKey, params.ClientRunID)
-
-	// Override the emitDelta on the agent run by calling onDelta directly.
-	// We achieve this by passing the onDelta via the broadcaster's EmitDelta,
-	// but since executeAgentRun uses broadcaster.EmitDelta, we need a different approach.
-	// Instead, we directly call executeAgentRun with a nil broadcaster and provide
-	// emitDelta through the run deps. However, executeAgentRun doesn't support that.
-	// The simplest approach: run executeAgentRun with our broadcaster and also
-	// hook into the delta path.
-	_ = broadcaster // unused in this approach
-
-	// Direct approach: call the agent run inline, mimicking executeAgentRun
-	// but with our delta callback.
 	result, err := executeAgentRunWithDelta(ctx, params, deps, onDelta, h.logger)
 	if err != nil {
 		return nil, err
