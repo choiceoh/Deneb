@@ -85,6 +85,15 @@ func handleRunSuccess(
 		} else {
 			replyText := jsonutil.StripThinkingTags(directives.Text)
 			replyText = strings.TrimSpace(replyText)
+
+			// Use reply-to ID from directives ([[reply_to_current]],
+			// [[reply_to:<id>]]) when available; fall back to the
+			// triggering message ID for thread continuity.
+			replyToID := directives.ReplyToID
+			if replyToID == "" {
+				replyToID = params.Delivery.MessageID
+			}
+
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
@@ -110,7 +119,7 @@ func handleRunSuccess(
 						To:        params.Delivery.To,
 						AccountID: params.Delivery.AccountID,
 						ThreadID:  params.Delivery.ThreadID,
-						ReplyTo:   params.Delivery.MessageID,
+						ReplyTo:   replyToID,
 					}}
 					results := streaming.Dispatch(replyCtx, deps.channels, targets, replyText, nil)
 					for _, dr := range results {
@@ -118,6 +127,24 @@ func handleRunSuccess(
 							logger.Error("dispatch delivery failed",
 								"channel", dr.Channel, "error", dr.Error)
 						}
+					}
+				}
+			}
+
+			// Deliver MEDIA: tokens extracted by ParseReplyDirectives.
+			// Each media URL is sent via mediaSendFn (photo/document/audio
+			// auto-detected by the channel adapter). [[audio_as_voice]] tag
+			// forces voice mode for audio files.
+			if deps.mediaSendFn != nil && len(directives.MediaURLs) > 0 {
+				mediaCtx, mediaCancel := context.WithTimeout(context.Background(), 60*time.Second)
+				defer mediaCancel()
+				for _, mediaURL := range directives.MediaURLs {
+					mediaType := ""
+					if directives.AudioAsVoice {
+						mediaType = "voice"
+					}
+					if err := deps.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
+						logger.Warn("media delivery failed", "url", mediaURL, "error", err)
 					}
 				}
 			}
