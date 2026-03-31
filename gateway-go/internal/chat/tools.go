@@ -332,10 +332,10 @@ var codingTools = map[string]bool{
 }
 
 // chatTools is the set of tools included in the "chat" profile (Telegram general chat).
-// Covers web, email, media, memory, session, scheduling, and system tools — everything
-// except pure coding/file-system tools. Used when classifyMessageProfile detects that
-// the current message is a general conversation, not a coding task.
-// ~22 tools vs ~39 full set → saves ~8–10 K tokens of schema per turn.
+// Covers web, email, media, memory, session, scheduling, system tools, and the
+// enable_coding_tools profile-switch tool — everything except pure coding/FS tools.
+// When the agent needs file access, it calls enable_coding_tools to self-upgrade.
+// ~23 tools vs ~44 full set → saves ~8–10 K tokens of schema per turn.
 var chatTools = map[string]bool{
 	// Web & HTTP
 	"web":  true,
@@ -365,6 +365,8 @@ var chatTools = map[string]bool{
 	"pilot":          true,
 	"health_check":   true,
 	"gateway":        true,
+	// Profile switch: lets agent self-upgrade to full coding tools.
+	"enable_coding_tools": true,
 }
 
 // LLMToolsForProfile returns tools filtered by profile.
