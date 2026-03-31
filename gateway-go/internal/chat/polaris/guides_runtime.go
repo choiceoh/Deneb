@@ -1,22 +1,37 @@
 package polaris
 
-const memoryGuide = `Deneb memory is plain Markdown in the agent workspace. Files on disk are the source of truth.
+const memoryGuide = `Deneb memory uses a unified tool combining a structured fact store (database-backed) with file-based memory search.
 
-## Memory Files
-Two-layer layout:
-- memory/YYYY-MM-DD.md: daily log (append-only). Today + yesterday loaded at session start.
-- MEMORY.md: curated long-term memory (optional). Only loaded in main private session.
+## Unified Memory Tool (memory)
+The memory tool provides 5 actions:
+- **search**: unified search across fact store + memory files (query required)
+- **get**: retrieve a specific fact by ID (fact_id required)
+- **set**: create/store a new fact (query + category required)
+- **forget**: delete a fact (fact_id required)
+- **status**: memory system summary
+
+## Memory Files (file-based layer)
+File sources scanned for keyword search:
+- MEMORY.md: curated long-term memory at workspace root
+- memory.md: lowercase variant
+- memory/*.md: all markdown files in memory/ directory
 
 Location: agents.defaults.workspace (default ~/.deneb/workspace)
+File cache TTL: 5 minutes (memoryFileCacheTTL, tuned for single-user DGX Spark)
 
-## Memory Tools
-- memory_search: keyword/semantic search over MEMORY.md + memory/*.md. Returns ranked snippets with file + line info.
-- memory_get: read specific file/line range. Params: file (required), startLine, endLine. Degrades gracefully if file missing.
+## Structured Fact Store (database layer)
+- SQLite-backed persistent fact database
+- Facts have: content, category, importance score (0-1), timestamps
+- Semantic search via embedding vectors (when embedder available)
+- Falls back gracefully to file-only search when fact store is nil
 
-## When to Write (via write tool, not memory tools)
-- Decisions, preferences, durable facts → MEMORY.md (append to relevant section)
-- Day-to-day notes, running context → memory/YYYY-MM-DD.md (append chronologically)
-- Memory tools are read-only; use the write/edit tools to modify memory files
+## Search Behavior
+When search action is called:
+1. Queries fact store (if available) with optional embedding vector
+2. Searches memory files via keyword matching
+3. Returns combined ranked results from both sources
+- Default limit: 10 results
+- MinImportance: 0.7 (applied when no embedder available)
 
 ## Auto Memory Flush (Pre-Compaction)
 Silent agentic turn before compaction to store durable notes from conversation.
@@ -25,31 +40,22 @@ Config: agents.defaults.compaction.memoryFlush:
 - softThresholdTokens: 4000 (triggers at contextWindow - reserve - threshold)
 - One flush per compaction cycle; skipped if workspace is read-only
 
-## Vector Memory Search
-- Hybrid: BM25 (keyword) + vector (semantic) weighted fusion
-- MMR re-ranking: Maximal Marginal Relevance for result diversity (avoids duplicate-ish results)
-- Temporal decay: recency boost with configurable halfLife (default 30 days)
-- Index: ~/.deneb/memory/<agentId>.sqlite (auto-created on first search)
-- Embedding providers: gemini, openai, voyage, mistral, ollama
-- Provider config: agents.defaults.memory.embedding.provider + model
-
-## Importance Extraction
-On message ingest, memory system extracts importance score (0-1) to prioritize what to index. JSON parse from LLM output; failures logged but don't block.
-
 ## Key Files
-- docs/concepts/memory.md
-- gateway-go/internal/chat/tool_memory.go (memory_search, memory_get tools)
-- gateway-go/internal/memory/ (Store, Embedder, indexing)
+- gateway-go/internal/chat/tools/memory_unified.go (unified memory tool)
+- gateway-go/internal/chat/tools/memory.go (file-based keyword search)
+- gateway-go/internal/memory/ (Store, Embedder, fact database)
 
 ## Common Tasks
-- Search memory: memory_search(query:'user timezone preference')
-- Read today's log: read(file_path:'memory/2026-03-28.md')
-- Store a decision: write(file_path:'MEMORY.md', content:'## Decision: ...', mode:'append')
+- Search memory: memory(action:'search', query:'user timezone preference')
+- Store a fact: memory(action:'set', query:'User prefers dark theme', category:'preference')
+- Get fact details: memory(action:'get', fact_id:42)
+- Check status: memory(action:'status')
+- Manual file edit: use write/edit tools for MEMORY.md
 
 ## Gotchas
-- memory_search is read-only; use write/edit tools to modify memory files
-- MEMORY.md only loaded in main private session, not sub-agent sessions
-- Auto-flush before compaction is skipped if workspace is read-only`
+- Without an embedder, fact search falls back to keyword-only with MinImportance 0.7 filter
+- File-based search uses mtime-based content caching (avoids redundant reads)
+- memory(action:'search') is the default action (empty action also triggers search)`
 
 const sessionsGuide = `Sessions represent individual conversations with lifecycle management.
 
@@ -108,7 +114,7 @@ IDLE → RUNNING → DONE / FAILED / KILLED / TIMEOUT
 ## Key Files
 - docs/concepts/session.md
 - gateway-go/internal/session/ (Manager, lifecycle, state machine)
-- gateway-go/internal/chat/tool_sessions.go (8 session tools)
+- gateway-go/internal/chat/toolreg/core.go (session tool registration)
 
 ## Common Tasks
 - Check current session: session_status()
@@ -120,16 +126,14 @@ IDLE → RUNNING → DONE / FAILED / KILLED / TIMEOUT
 - State transitions are validated; cannot go DONE → RUNNING (must create new run)
 - Session GC evicts terminal sessions after 1 hour; in-memory data is lost`
 
-const architectureGuide = `Deneb: multi-language gateway with three cooperating runtimes on DGX Spark hardware.
+const architectureGuide = `Deneb: multi-language gateway with two cooperating runtimes on DGX Spark hardware.
 
-## Three Runtimes
-1. **Go Gateway** (primary): HTTP/WS server, RPC (130+ methods), sessions, auth, cron, chat/agent loop
+## Two Runtimes
+1. **Go Gateway** (primary): HTTP/WS server, RPC (130+ methods), sessions, auth, cron, chat/agent loop, channels, skills, providers — the sole runtime
 2. **Rust Core** (CGo FFI): protocol validation, security, media detection (21 formats), markdown parsing, memory search (SIMD cosine), context engine, compaction, parsing utilities
-3. **Node.js Plugin Host** (subprocess): channels, skills, providers via TypeScript SDK
 
 ## IPC Boundaries
 - Go ↔ Rust: CGo FFI (zero overhead, in-process). Build tag: !no_ffi && cgo
-- Go ↔ Node.js: Unix socket + frame protocol (subprocess)
 - CLI ↔ Gateway: WebSocket
 - Proto schemas (proto/): shared cross-language types (gateway.proto, channel.proto, session.proto)
 
@@ -158,11 +162,10 @@ FFI_ERR_NULL_PTR=-1, INVALID_UTF8=-2, OUTPUT_TOO_SMALL=-3, INPUT_TOO_LARGE=-4, J
 *_new() → handle → *_start(handle) → *_step(handle, response) → *_drop(handle)
 Rust yields commands (FetchMessages, Summarize), Go executes I/O, feeds responses back. Avoids callbacks across FFI.
 
-## Rust Crates (core-rs/)
+## Rust Crates (core-rs/, 3 crates)
 - deneb-core: 30+ FFI exports. Modules: protocol, security, media, memory_search, markdown, context_engine, compaction, parsing
-- deneb-vega: SQLite FTS5 search engine with semantic search (pre-computed embeddings)
-- deneb-agent-runtime: agent lifecycle, model selection
-- Feature flags: default → vega
+- deneb-vega: SQLite FTS5 search engine with optional semantic search (ml feature)
+- deneb-agent-runtime: agent lifecycle, model selection, subagent scope
 
 ## RPC System (gateway-go/internal/rpc/)
 - Dispatcher: routes methods, middleware chain, panic recovery
@@ -225,7 +228,7 @@ const channelsGuide = `Channels are messaging surface plugins connecting externa
 - Inline keyboards for interactive buttons/callbacks
 - 50 MB file upload limit for media
 - Forum topics: isolated sessions per thread (:topic:<topicId>)
-- grammY framework, long polling (default) or webhook
+- Custom Go Bot API client with long polling (default) or webhook
 - Status reactions: 👀🤔🔥⚡👍😱 (mapped to agent lifecycle phases)
 - Typing signaler: 5s interval (matches Telegram TTL)
 
@@ -249,7 +252,7 @@ Note: only Telegram is the active deployment target per project philosophy
 - Forum topics create separate sessions; non-forum groups share one session
 - groupAllowFrom falls back to allowFrom; missing both means no access control`
 
-const telegramGuide = `Telegram is Deneb's primary and most optimized channel, using the grammY framework with native Bot API support.
+const telegramGuide = `Telegram is Deneb's primary and most optimized channel, using a custom Go Bot API client with long polling.
 
 ## Bot Setup
 - Token: channels.telegram.botToken in config or TELEGRAM_BOT_TOKEN env
@@ -430,7 +433,7 @@ const pilotGuide = `Pilot is a fast local AI (sglang) that orchestrates tool exe
 - LLM call fails: graceful degradation with raw results
 
 ## Key Files
-- gateway-go/internal/chat/tools_pilot.go
+- gateway-go/internal/chat/toolreg_pilot.go (pilot tool implementation)
 
 ## Common Tasks
 - Quick file analysis: pilot(task:'이 파일 구조 설명', file:'path/to/file.go')
@@ -501,7 +504,7 @@ const cronGuide = `Cron manages scheduled jobs that trigger agent turns at confi
 
 ## Key Files
 - gateway-go/internal/cron/service.go, types.go, scheduler.go, isolated_agent.go
-- gateway-go/internal/chat/tool_cron.go (cron tool implementation)
+- gateway-go/internal/chat/toolreg/core.go (cron tool registration)
 - docs/automation/cron-jobs.md (25KB, comprehensive user docs)
 
 ## Common Tasks

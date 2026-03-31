@@ -66,11 +66,9 @@ Soft block detection: Cloudflare challenges (cf-challenge-running, cf_chl_opt), 
 - Truncation: preserves metadata + section boundaries, appends "[...truncated: N chars remaining]"
 
 ## Key Files
-- gateway-go/internal/chat/tool_web.go (tool implementation)
-- gateway-go/internal/chat/web_fetch.go (fetch pipeline, document processing)
-- gateway-go/internal/chat/web_fetch_stealth.go (stealth profiles, block detection)
+- gateway-go/internal/chat/web/ (tool implementation, fetch pipeline, stealth profiles)
 - gateway-go/internal/liteparse/ (document parsing)
-- docs/tools/web.md (17KB, comprehensive user docs)
+- docs/tools/web.md (user docs)
 
 ## Common Tasks
 - Fetch a URL: web(url:'https://example.com')
@@ -126,9 +124,10 @@ const execGuide = `The exec tool runs shell commands, and the process tool manag
 - Timeout prevents runaway commands (max 5 minutes)
 
 ## Key Files
-- gateway-go/internal/chat/tools_core.go (exec tool registration)
+- gateway-go/internal/chat/tools/exec.go (exec tool implementation)
+- gateway-go/internal/chat/toolreg/core.go (tool registration)
 - gateway-go/internal/process/ (Manager, session lifecycle)
-- docs/tools/exec.md (9KB, user docs)
+- docs/tools/exec.md (user docs)
 
 ## Common Tasks
 - Run a command: exec(command:'ls -la', timeout:10)
@@ -175,8 +174,8 @@ const gatewayToolGuide = `The gateway tool provides self-management capabilities
 - Use for self-update from git repository
 
 ## Key Files
-- gateway-go/internal/chat/tool_gateway.go
-- docs/gateway/configuration.md (22KB)
+- gateway-go/internal/chat/tools/gateway.go
+- docs/gateway/configuration.md
 
 ## Common Tasks
 - Read config: gateway(action:'config.get')
@@ -223,10 +222,10 @@ const mediaGuide = `Media tools: image analysis (vision), YouTube transcripts, a
 - MediaCategory: image, video, audio, document, archive, other
 
 ## Key Files
-- gateway-go/internal/chat/tool_media.go (image, youtube_transcript, send_file)
+- gateway-go/internal/chat/tools/send_file.go (send_file tool)
+- gateway-go/internal/chat/tools/youtube.go (youtube_transcript tool)
 - gateway-go/internal/media/ (extraction, formatting)
 - core-rs/core/src/media/ (MIME detection, magic bytes)
-- docs/tools/index.md
 
 ## Common Tasks
 - Analyze image: image(image:'/path/to/screenshot.png', prompt:'이 화면에서 에러가 뭔지 알려줘')
@@ -287,7 +286,7 @@ const gmailGuide = `Gmail tool provides native OAuth2 access to Gmail for inbox 
 - Output language: Korean (한국어)
 
 ## Key Files
-- gateway-go/internal/chat/tool_gmail.go
+- gateway-go/internal/chat/tools/gmail.go
 - gateway-go/internal/gmail/ (OAuth2, API client)
 
 ## Common Tasks
@@ -340,8 +339,8 @@ const dataToolsGuide = `Data tools: KV store (persistent) and HTTP API client.
 - Follows redirects (default Go behavior)
 
 ## Key Files
-- gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_http.go (HTTP client)
+- gateway-go/internal/chat/tools/kv.go (KV store)
+- gateway-go/internal/chat/tools/http.go (HTTP client)
 
 ## Common Tasks
 - Store a value: kv(action:'set', key:'my_key', value:'my_value')
@@ -399,9 +398,9 @@ const sessionToolsGuide = `Session tools provide full session lifecycle manageme
 - Returns: session key, time, kind, status, model, token usage, runtime info
 
 ## Key Files
-- gateway-go/internal/chat/tool_sessions.go (all 8 tools)
+- gateway-go/internal/chat/toolreg/core.go (session tool registration)
 - gateway-go/internal/session/ (Manager, state machine)
-- docs/concepts/session.md, docs/concepts/session-tool.md
+- docs/concepts/session.md
 
 ## Common Tasks
 - List sessions: sessions_list(kinds:['main','group'])
@@ -456,7 +455,7 @@ const messageGuide = `The message tool sends messages to users via channels, wit
 - Silent mode: sends without push notification
 
 ## Key Files
-- gateway-go/internal/chat/tool_message.go
+- gateway-go/internal/chat/tools/message.go
 - docs/concepts/messages.md
 
 ## Common Tasks

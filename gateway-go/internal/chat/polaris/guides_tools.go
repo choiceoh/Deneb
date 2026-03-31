@@ -71,11 +71,11 @@ The active context engine owns compaction behavior:
 - Memory flush runs silently before compaction; if workspace is read-only, it's skipped without error
 - maxCompactionRetries=2; after that the agent run fails with context overflow`
 
-const toolsGuide = `The tool system provides the AI agent with 34 capabilities to interact with the filesystem, execute commands, search the web, and more.
+const toolsGuide = `The tool system provides the AI agent with 42+ capabilities to interact with the filesystem, execute commands, search the web, and more.
 
 ## Core Architecture
 
-### ToolDef (gateway-go/internal/chat/tools.go)
+### ToolDef (gateway-go/internal/chat/toolctx/types.go)
 - Name: tool name (case-sensitive)
 - Description: one-line for LLM
 - InputSchema: JSON Schema for input validation
@@ -88,14 +88,12 @@ const toolsGuide = `The tool system provides the AI agent with 34 capabilities t
 - Names(): registration order; SortedNames(): alphabetical
 - Summaries(): name → description map
 
-### CoreToolDeps (injected at registration)
-- ProcessMgr (*process.Manager): background exec sessions
-- WorkspaceDir (string): agent workspace root
-- CronSched (*cron.Scheduler): cron job management
-- Sessions (*session.Manager): session lifecycle
-- LLMClient (*llm.Client): vision/image analysis
-- Transcript (TranscriptStore): history access
-- SessionSendFn: cross-session message delivery
+### Dependency Injection (gateway-go/internal/chat/toolctx/)
+Tool dependencies are injected via typed dep structs:
+- CoreToolDeps: ProcessMgr, WorkspaceDir, CronSched, Sessions, Transcript, SessionSendFn
+- ProcessDeps: process manager, health checker
+- SessionDeps: session manager, transcript store
+- VegaDeps: Vega backend, memory store, embedder
 All fields gracefully degrade to friendly error when nil.
 
 ## Tool Execution Flow
@@ -125,16 +123,19 @@ Tool-specific:
 - find: FindResultSummarizer — caps at 500 entries, groups by directory; max results: 200
 - exec: ExecAnnotator — emphasizes exit code on failure
 
-## Tool Categories (34 tools)
-File: read, write, edit, apply_patch, grep, find, ls
+## Tool Categories (42+ tools)
+File: read, write, edit, grep, find
+Code: multi_edit, tree, diff, analyze, test
+Git: git
 Exec: exec, process
-AI: pilot (local sglang orchestrator)
+AI: pilot (local sglang orchestrator), polaris (system knowledge)
 Web: web (search + fetch + search+fetch), http
-Memory: memory_search, memory_get, polaris
+Memory: memory (unified fact store + file search), memory_search, vega
 System: cron, message, gateway
-Sessions: sessions_list/history/search/restore/send/spawn, subagents, session_status
+Sessions: sessions_list/history/search/send/spawn, subagents
 Media: image, youtube_transcript, send_file
 Data: gmail, kv
+Utilities: batch_read, search_and_read, inspect, apply_patch, health_check, agent_logs, gateway_logs
 
 ## Compression
 Any tool call accepts "compress": true. Large outputs auto-summarized by local sglang (SGLANG_BASE_URL, default http://127.0.0.1:30000/v1).
@@ -149,22 +150,21 @@ Tools access runtime context via context.Context:
 - TypingFn: typing indicator control
 
 ## Key Files
-- gateway-go/internal/chat/tools.go (types, registry)
-- gateway-go/internal/chat/tools_core.go (registration, 35 tools)
-- gateway-go/internal/chat/tools_fs.go (filesystem: read/write/edit/grep/find/ls)
-- gateway-go/internal/chat/tools_pilot.go (pilot orchestrator)
-- gateway-go/internal/chat/tool_postprocess.go (post-processing)
-- gateway-go/internal/chat/tool_web.go (web search/fetch)
-- gateway-go/internal/chat/tool_http.go (HTTP API)
-- gateway-go/internal/chat/tool_sessions.go (session management)
-- gateway-go/internal/chat/tool_message.go (messaging)
-- gateway-go/internal/chat/tool_media.go (image/youtube/send_file)
-- gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_gmail.go (Gmail)
+- gateway-go/internal/chat/toolctx/ (shared types: ToolFunc, ToolDef, ToolRegistrar, context helpers)
+- gateway-go/internal/chat/toolreg/core.go (tool registration hub, wires implementations with schemas)
+- gateway-go/internal/chat/toolreg/tool_schemas.yaml (JSON schema definitions, source of truth)
+- gateway-go/internal/chat/tools/ (tool implementations by domain):
+  - fs.go (read/write/edit), fs_search.go (grep/find), coding.go (multi_edit/diff/test)
+  - exec.go (exec/process), advanced.go (batch_read/search_and_read/inspect/apply_patch)
+  - memory_unified.go (unified memory), memory.go (file-based search)
+  - gmail.go, http.go, kv.go, message.go, vega.go, gateway.go
+  - git.go, analyze.go, health.go, send_file.go, youtube.go
+  - agentlogs.go, gatewaylogs.go, morning_letter.go, test_runner.go
+- gateway-go/internal/chat/tool_postprocess.go (post-processing pipeline)
 
 ## Common Tasks
-- List all registered tools: grep(pattern:'Name:.*"', path:'gateway-go/internal/chat/tools_core.go')
-- Check tool schema: grep(pattern:'func.*ToolSchema', path:'gateway-go/internal/chat/')
+- List all tool schemas: read(file_path:'gateway-go/internal/chat/toolreg/tool_schemas.yaml')
+- View tool registration: read(file_path:'gateway-go/internal/chat/toolreg/core.go')
 - View post-processors: read(file_path:'gateway-go/internal/chat/tool_postprocess.go')
 
 ## Gotchas
@@ -174,35 +174,41 @@ Tools access runtime context via context.Context:
 
 const systemPromptGuide = `The system prompt is the instruction set injected into every LLM call. It defines the agent's identity, available tools, and behavioral rules.
 
-## Assembly (gateway-go/internal/chat/system_prompt.go)
-Two build modes:
+## Assembly (gateway-go/internal/chat/prompt/system_prompt.go)
+Three build modes:
 - BuildSystemPrompt(): single string (default, for OpenAI-compatible providers)
-- BuildSystemPromptBlocks(): Anthropic ContentBlocks with cache_control breakpoints
-  - Static block: identity + tooling + safety (rarely changes → "ephemeral" cache, reused across turns)
-  - Dynamic block: skills + context files + runtime (changes per request → not cached)
-  - This halves prompt token costs on Anthropic by caching the stable portion
+- BuildSystemPromptBlocks(): Anthropic ContentBlocks with cache_control (3 blocks: static + semi-static + dynamic)
+- BuildCodingSystemPromptBlocks(): coding channel variant with vibe-coder optimizations
+
+The 3-block split enables fine-grained Anthropic prompt caching:
+- **Static block** (cached): rarely changes after server start
+- **Semi-static block** (cached): changes only when skills are added/removed
+- **Dynamic block** (per-request): changes every request
 
 ## Prompt Sections (in order)
-**Static block (cached on Anthropic):**
+**Static block:**
 1. Identity: "You are a personal assistant running inside Deneb"
-2. Tooling: compact categorized tool names — File, Exec, AI, Web, Memory, System, Sessions, Media, Data
-3. Tool Usage: parallel calls, first-class tools, compress flag, auto-trimming
-4. Pilot & Chaining: when to use pilot, $ref chaining patterns, when NOT to use pilot
-5. Safety: no self-preservation, prioritize oversight
-6. Deneb CLI Quick Reference
+2. Tooling: compact categorized tool names — File, Code, Git, Exec, AI, Web, Memory, System, Sessions, Media, Data
+3. Tool Usage: parallel calls, first-class tools, compress flag, auto-trimming, preferred CLIs (rg, fd, bat, etc.)
+4. Pilot & Chaining (conditional on pilot tool): sglang guidance, $ref chaining, Korean usage hints
+5. Coding: tree/analyze → edit/multi_edit → diff → test → git workflow
+6. Safety: no self-preservation, prioritize oversight
+7. Deneb CLI Quick Reference
 
-**Dynamic block (per-request):**
-7. Skills: XML <available_skills> block (from skills/prompt.go, max 150 skills, 30K chars)
-8. Memory Recall: guidance on memory_search / memory_get availability
-9. Polaris: system manual tool guidance (Korean + English examples)
-10. Workspace: working directory path
-11. Reply Tags: [[reply_to_current]] for native replies
-12. Messaging: channel routing, sessions_send, message tool
-13. Response Style: Korean default, concise for Telegram (4096 char limit), bullet points, natural emoji
-14. Current Date & Time: local time with timezone (Asia/Seoul)
-15. Context Files: workspace + ancestor directories
-16. Silent Replies: __SILENT_REPLY__ (NO_REPLY) token for suppressing delivery
-17. Runtime: agentId, host, OS, model, channel
+**Semi-static block:**
+8. Skills (mandatory): scan <available_skills>, select and read SKILL.md (max 150 skills, 30K chars)
+
+**Dynamic block:**
+9. Memory Recall: unified memory tool guidance (search/get/set/forget/status)
+10. Polaris: system knowledge agent guidance (Korean + English examples)
+11. Workspace: working directory path
+12. Reply Tags: [[reply_to_current]] for native replies
+13. Messaging: channel routing, sessions_send, message tool, NO_REPLY token
+14. Response Style: Korean default, concise for Telegram (4096 char limit), emoji
+15. Current Date & Time: local time with timezone
+16. Context Files: workspace + ancestor directories
+17. Silent Replies: NO_REPLY token for suppressing delivery
+18. Runtime: agentId, host, OS, model, defaultModel, channel
 
 ## Context Files (context_files.go)
 Load order: CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md
@@ -210,29 +216,30 @@ Load order: CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md
 - Budget: max 20K chars per file, 150K chars total
 - Mtime-based caching with 5-minute revalidation
 - Truncation: head 70% + "[...truncated...]" + tail 20%
-- AGENTS.md + TOOLS.md: loaded in minimal mode (sub-agents)
-
-## Prompt Modes
-- full (default): all 17 sections included
-- minimal: sub-agents get only AGENTS.md + TOOLS.md (lightweight)
-- none: no system prompt (raw LLM call)
 
 ## Tool Display
-- toolCategories: 9 groups (File, Exec, AI, Web, Memory, System, Sessions, Media, Data)
-- Tool descriptions live in ToolDef.Description (sent via tool JSON schemas, not duplicated in prompt text)
-- Only tool names listed in prompt → keeps static block small and cacheable
+- toolCategories: 10 groups (File, Code, Git, Exec, AI, Web, Memory, System, Sessions, Media, Data)
+- Tool descriptions in JSON schemas, not duplicated in prompt text
+- Only tool names listed → keeps static block small and cacheable
+
+## Vibe Coder Variant (BuildCodingSystemPromptBlocks)
+Alternate prompt for Telegram coding channel:
+- Zero code exposure: never show raw code or diffs
+- Korean first: all user-facing text in Korean
+- Structured summary: 📝 변경 요약 → 🔨 빌드 → 🧪 테스트
+- Auto-commit/push workflow via buttons
 
 ## Key Files
-- gateway-go/internal/chat/system_prompt.go (assembly, writePolarisSection, writeMessagingSection, etc.)
+- gateway-go/internal/chat/prompt/system_prompt.go (assembly, all sections)
 - gateway-go/internal/chat/context_files.go (file loader, budget enforcement, caching)
-- gateway-go/internal/chat/run.go (SystemPromptParams construction, deferred format for Anthropic)
+- gateway-go/internal/chat/run.go (SystemPromptParams construction)
 
 ## Common Tasks
-- View system prompt assembly: read(file_path:'gateway-go/internal/chat/system_prompt.go')
+- View system prompt assembly: read(file_path:'gateway-go/internal/chat/prompt/system_prompt.go')
 - Check context file loading: grep(pattern:'CLAUDE.md\|SOUL.md\|MEMORY.md', path:'gateway-go/internal/chat/context_files.go')
 - View skill injection: grep(pattern:'BuildSkillsPrompt\|available_skills', path:'gateway-go/internal/')
 
 ## Gotchas
 - Context files have a 20K char/file and 150K total budget; exceeding triggers truncation (head 70% + tail 20%)
 - Anthropic cache_control requires static block to be stable across turns; modifying it invalidates the cache
-- AGENTS.md is only loaded in minimal mode (sub-agents); CLAUDE.md is loaded in full mode`
+- Semi-static skills block is separate from static for finer caching granularity`

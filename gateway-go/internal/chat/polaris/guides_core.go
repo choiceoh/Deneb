@@ -83,7 +83,7 @@ Natural language queries are analyzed and routed to the best search mode:
 - Fusion: BM25 + semantic score weighted merge, MMR re-ranking for diversity
 
 ## Architecture
-Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/).
+Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/) and Go tool (gateway-go/internal/chat/tools/vega.go).
 
 ### Rust Side (core-rs/vega/)
 - search/fts_search.rs: SQLite FTS5 query builder
@@ -106,7 +106,7 @@ Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/
 
 ## Embedding Backends
 - Gemini Embedding API (gemini-embedding-2-preview, via GEMINI_API_KEY)
-- No-op fallback (BM25 only, used when no API key available)
+- No-op fallback (BM25-only mode, used when no API key available)
 
 ## Environment Variables
 - GEMINI_API_KEY: Google AI API key for Gemini embedding
@@ -154,14 +154,14 @@ const agentLoopGuide = `The agent loop is the core execution cycle: intake → c
 - MaxTurns: 25
 - Timeout: 10 minutes (wall-time)
 - MaxTokens: 8192 (max output tokens per LLM call)
-- defaultModel: "google/gemini-3.0-flash"
+- defaultModel: config-driven via agents.defaultModel in deneb.json (no hardcoded default)
 - maxCompactionRetries: 2 (retry with compacted context on overflow)
 - Context: tokenBudget=100K, freshTailCount=48, maxMessages=100
 - Stop reasons: end_turn, max_tokens, timeout, aborted, max_turns
 
-## Go Implementation (gateway-go/internal/chat/)
-- internal/agent/: AgentConfig, RunAgent(), StreamHooks (OnTextDelta, OnThinking, OnToolStart)
-- run.go: RunParams, runDeps (sessions, llmClient, transcript, tools, aurora, vega, memory, etc.)
+## Go Implementation
+- gateway-go/internal/agent/: AgentConfig, RunAgent(), StreamHooks (OnTextDelta, OnThinking, OnToolStart)
+- gateway-go/internal/chat/run.go: RunParams, runDeps (sessions, llmClient, transcript, tools, aurora, vega, memory, etc.)
 
 ## Queueing
 - Runs serialized per session key (session lane) + optional global lane
@@ -206,11 +206,13 @@ Three streams emitted during a run:
 
 ## Key Files
 - docs/concepts/agent-loop.md
-- gateway-go/internal/chat/agent.go, run.go
+- gateway-go/internal/agent/config.go (AgentConfig, defaults)
+- gateway-go/internal/agent/executor.go (RunAgent, execution loop)
+- gateway-go/internal/chat/run.go (RunParams, run orchestration)
 - gateway-go/internal/chat/tools.go (ToolRegistry, Execute)
 
 ## Common Tasks
-- Check agent config defaults: grep(pattern:'MaxTurns\|Timeout.*10\|MaxTokens.*8192', path:'gateway-go/internal/chat/agent.go')
+- Check agent config defaults: grep(pattern:'MaxTurns\|Timeout.*10\|MaxTokens.*8192', path:'gateway-go/internal/agent/config.go')
 - View current run flow: read(file_path:'gateway-go/internal/chat/run.go')
 - Check hook points: grep(pattern:'before_tool_call\|after_tool_call\|agent_end', path:'gateway-go/internal/chat/')
 
