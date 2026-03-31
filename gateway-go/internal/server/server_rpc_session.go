@@ -267,6 +267,11 @@ func (s *Server) registerSessionRPCMethods() {
 		return s.broadcaster.BroadcastRaw(event, data)
 	})
 
+	// Wire agent runner to cron service so scheduled jobs can execute agent turns.
+	if s.cronService != nil {
+		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler})
+	}
+
 	// Side-question (/btw) method — routes through chat handler natively.
 	s.dispatcher.RegisterDomain(handlerchat.BtwMethods(handlerchat.BtwDeps{
 		Chat:        s.chatHandler,
