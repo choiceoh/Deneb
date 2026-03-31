@@ -5,6 +5,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use sha2::Digest;
+
 use rusqlite::{params, Connection};
 
 use crate::config::VegaConfig;
@@ -232,7 +234,7 @@ pub fn upsert_md_file(
     let text = text.replace("\r\n", "\n");
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
 
-    let content_hash = format!("{:x}", md5::compute(text.as_bytes()));
+    let content_hash = format!("{:x}", sha2::Sha256::digest(text.as_bytes()));
 
     // Skip if hash unchanged
     if existing_hashes.get(&fpath_str) == Some(&content_hash)

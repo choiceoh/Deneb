@@ -42,11 +42,9 @@ rustc-hash.workspace = true
 
 # Regex (ReDoS-safe by design)
 regex.workspace = true
-# Fancy regex for patterns with lookahead/lookbehind (e.g., secret ref ID validation).
-fancy-regex.workspace = true
 
-# Compression (PNG encoding)
-flate2 = "1"
+# Compression (PNG encoding — uses miniz_oxide directly, already a transitive dep)
+miniz_oxide = "0.8"
 
 # Hashing (summary ID generation)
 sha2.workspace = true
@@ -63,9 +61,6 @@ hex = "0.4"
 
 # Cryptographic random (config token auto-generation)
 rand = "0.9"
-
-# Platform home directory resolution
-dirs = "6"
 
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
