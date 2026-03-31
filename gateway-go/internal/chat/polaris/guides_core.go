@@ -25,7 +25,7 @@ const auroraGuide = `Aurora manages how conversation history is assembled into m
 - agents.defaults.compaction.memoryFlush.enabled: 컴팩션 전 메모리 저장 (기본 true)
 
 ## 문제 해결
-- "대화 내용을 까먹었어요" → aurora_grep으로 검색하거나 memory_search로 저장된 내용 확인
+- "대화 내용을 까먹었어요" → aurora_grep으로 검색하거나 memory(action=search)로 저장된 내용 확인
 - "컨텍스트 오버플로우" → 자동 컴팩션이 최대 2회 재시도. 계속 실패하면 /compact 수동 실행
 - aurora_expand_query는 120초 걸리므로 단순 키워드 검색에는 aurora_grep 사용`
 

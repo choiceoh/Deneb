@@ -24,7 +24,7 @@ func TestResolveToolEmoji(t *testing.T) {
 		{"edit", "edit", emojis.Coding},
 		{"bash", "bash", emojis.Coding},
 		{"process", "process", emojis.Coding},
-		{"unknown", "memory_search", emojis.Tool},
+		{"unknown", "kv", emojis.Tool},
 		{"case insensitive", "WEB_SEARCH", emojis.Web},
 		{"whitespace", "  exec  ", emojis.Coding},
 	}

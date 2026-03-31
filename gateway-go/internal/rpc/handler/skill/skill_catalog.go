@@ -83,7 +83,6 @@ var coreSections = []coreSection{
 	}},
 	{"memory", "Memory", []coreTool{
 		{"memory", "Unified memory (search, get, set, forget, status)", []ToolProfileID{ProfileCoding}},
-		{"memory_search", "Legacy keyword search (deprecated)", []ToolProfileID{ProfileCoding}},
 	}},
 	{"sessions", "Sessions", []coreTool{
 		{"sessions_list", "List sessions", []ToolProfileID{ProfileCoding, ProfileMessaging}},

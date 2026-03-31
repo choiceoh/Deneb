@@ -503,8 +503,8 @@ func TestExpandShortcuts_KVKey(t *testing.T) {
 func TestExpandShortcuts_Memory(t *testing.T) {
 	p := pilotParams{Task: "summarize", Memory: "배포 결정"}
 	specs := expandShortcuts(p)
-	if len(specs) != 1 || specs[0].Tool != "memory_search" {
-		t.Errorf("expected 1 memory_search spec, got %d", len(specs))
+	if len(specs) != 1 || specs[0].Tool != "memory" {
+		t.Errorf("expected 1 memory spec, got %d", len(specs))
 	}
 }
 

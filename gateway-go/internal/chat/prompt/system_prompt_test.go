@@ -11,7 +11,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 		ToolDefs: []ToolDef{
 			{Name: "read"},
 			{Name: "exec"},
-			{Name: "memory_search"},
+			{Name: "memory"},
 		},
 		UserTimezone: "Asia/Seoul",
 		RuntimeInfo: &RuntimeInfo{

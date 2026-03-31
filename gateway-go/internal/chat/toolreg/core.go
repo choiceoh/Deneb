@@ -136,13 +136,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		InputSchema: memoryToolSchema(),
 		Fn:          tools.ToolMemory(&deps.Vega, workspaceDir),
 	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "memory_search",
-		Description: "Deprecated: use memory action=search instead. Keyword search across MEMORY.md + memory/*.md",
-		InputSchema: memorySearchToolSchema(),
-		Fn:          tools.ToolMemorySearch(workspaceDir),
-	})
-
 	// Polaris: requires sglang deps for local LLM and uses a read-only executor.
 	var polarisDeps polaris.Deps
 	if sglang != nil {

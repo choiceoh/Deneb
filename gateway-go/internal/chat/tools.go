@@ -341,9 +341,8 @@ var chatTools = map[string]bool{
 	"web":  true,
 	"http": true,
 	// Knowledge & memory
-	"memory":        true,
-	"memory_search": true,
-	"polaris":       true,
+	"memory":  true,
+	"polaris": true,
 	// Session management
 	"sessions_list":    true,
 	"sessions_history": true,
