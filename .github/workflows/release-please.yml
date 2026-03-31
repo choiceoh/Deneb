@@ -40,9 +40,6 @@ jobs:
           - goos: linux
             goarch: arm64
             suffix: linux-arm64
-          - goos: linux
-            goarch: amd64
-            suffix: linux-amd64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -127,16 +124,14 @@ jobs:
           | Lines added | ${{ steps.stats.outputs.added }} |
           | Lines deleted | ${{ steps.stats.outputs.deleted }} |
 
-          ### Binaries
+          ### Binary
           | Platform | File |
           |----------|------|
           | linux/arm64 | \`deneb-linux-arm64\` |
-          | linux/amd64 | \`deneb-linux-amd64\` |
 
           ### Deploy on DGX Spark
           \`\`\`bash
-          ARCH=\$(uname -m)
-          curl -sL -o deneb https://github.com/choiceoh/Deneb/releases/download/${{ needs.release-please.outputs.tag }}/deneb-linux-\${ARCH/arm64/aarch64}
+          curl -sL -o deneb https://github.com/choiceoh/Deneb/releases/download/${{ needs.release-please.outputs.tag }}/deneb-linux-arm64
           chmod +x deneb && sudo mv deneb /usr/local/bin/
           deneb gateway restart
           \`\`\`

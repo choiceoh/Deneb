@@ -4,7 +4,7 @@
 //! `cos(θ) = (A·B) / (‖A‖ × ‖B‖)`, yielding a value in [-1, 1].
 //!
 //! SIMD acceleration is provided by the sibling [`super::simd`] module, which
-//! dispatches to SSE2 (x86_64), NEON (aarch64), or scalar at compile time.
+//! dispatches to NEON (aarch64) or scalar at compile time.
 
 /// Cosine similarity between two f64 vectors.
 /// Returns 0.0 for empty or zero-norm vectors.

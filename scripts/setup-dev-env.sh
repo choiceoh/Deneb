@@ -29,7 +29,14 @@ install_protoc() {
     if command -v protoc &>/dev/null; then return 0; fi
     echo "  [setup] Installing protoc..."
     local version="25.1"
-    curl -sSL "https://github.com/protocolbuffers/protobuf/releases/download/v${version}/protoc-${version}-linux-x86_64.zip" -o /tmp/protoc.zip
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        aarch64|arm64) arch="linux-aarch_64" ;;
+        x86_64)        arch="linux-x86_64" ;;
+        *) echo "  [fail] unsupported arch: $arch"; return 1 ;;
+    esac
+    curl -sSL "https://github.com/protocolbuffers/protobuf/releases/download/v${version}/protoc-${version}-${arch}.zip" -o /tmp/protoc.zip
     unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' >/dev/null 2>&1
     rm -f /tmp/protoc.zip
     if command -v protoc &>/dev/null; then
