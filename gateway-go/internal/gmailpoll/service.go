@@ -32,9 +32,8 @@ type Config struct {
 	MaxPerCycle int
 	Model       string
 	PromptFile  string
-	StateDir    string // directory for state persistence (default ~/.deneb)
-	LLMBaseURL  string // LLM API endpoint (e.g., sglang or OpenRouter)
-	LLMAPIKey   string // optional API key for LLM endpoint
+	StateDir    string      // directory for state persistence (default ~/.deneb)
+	LLMClient   *llm.Client // pre-configured LLM client from modelrole registry
 }
 
 // Service implements autonomous.PeriodicTask for Gmail polling.
@@ -73,14 +72,10 @@ func NewService(cfg Config, logger *slog.Logger) *Service {
 		cfg.PromptFile = defaultPromptFile
 	}
 
-	var llmOpts []llm.ClientOption
-	llmOpts = append(llmOpts, llm.WithLogger(logger))
-	llmClient := llm.NewClient(cfg.LLMBaseURL, cfg.LLMAPIKey, llmOpts...)
-
 	return &Service{
 		cfg:       cfg,
 		log:       logger.With("pkg", "gmailpoll"),
-		llmClient: llmClient,
+		llmClient: cfg.LLMClient,
 		state:     newStateStore(cfg.StateDir),
 	}
 }
