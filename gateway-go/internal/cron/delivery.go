@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
 // DeliveryTarget specifies where to deliver cron job output.
@@ -127,7 +127,7 @@ func stripTopicSuffix(to string) string {
 // This is the Go equivalent of dispatchCronDelivery() from the TS codebase.
 func DeliverCronOutput(
 	ctx context.Context,
-	channels *channel.Registry,
+	tgPlugin *telegram.Plugin,
 	target DeliveryTarget,
 	payloads []types.ReplyPayload,
 	opts DeliverOutputOptions,
@@ -143,16 +143,8 @@ func DeliverCronOutput(
 		return result
 	}
 
-	plugin := channels.Get(target.Channel)
-	if plugin == nil {
-		result.Error = fmt.Sprintf("channel %q not found", target.Channel)
-		result.LatencyMs = time.Since(start).Milliseconds()
-		return result
-	}
-
-	messenger, ok := plugin.(channel.MessagingAdapter)
-	if !ok {
-		result.Error = fmt.Sprintf("channel %q does not support messaging", target.Channel)
+	if target.Channel != "telegram" || tgPlugin == nil {
+		result.Error = fmt.Sprintf("channel %q not available", target.Channel)
 		result.LatencyMs = time.Since(start).Milliseconds()
 		return result
 	}
@@ -175,7 +167,7 @@ func DeliverCronOutput(
 		}
 
 		for i, text := range texts {
-			msg := channel.OutboundMessage{
+			msg := telegram.OutboundMessage{
 				To:   target.To,
 				Text: text,
 			}
@@ -187,7 +179,7 @@ func DeliverCronOutput(
 				}
 			}
 
-			if err := messenger.SendMessage(ctx, msg); err != nil {
+			if err := tgPlugin.SendMessage(ctx, msg); err != nil {
 				result.Error = err.Error()
 				result.LatencyMs = time.Since(start).Milliseconds()
 				if opts.Logger != nil {

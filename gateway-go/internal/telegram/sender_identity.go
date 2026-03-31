@@ -1,7 +1,7 @@
 // Sender identity validation — validates sender information in inbound messages.
 //
 // Mirrors src/channels/sender-identity.ts.
-package channel
+package telegram
 
 import (
 	"fmt"

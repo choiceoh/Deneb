@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
@@ -79,15 +79,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
-	// Auto-start all registered channel plugins synchronously so that RPC
-	// serving only becomes available after all channels are ready.
-	// Running in a goroutine (as before) caused requests to be routed to
-	// plugins that had not yet completed Start(), leading to spurious errors.
-	if s.channelLifecycle != nil {
-		if errs := s.channelLifecycle.StartAll(ctx); len(errs) > 0 {
-			for id, err := range errs {
-				s.logger.Warn("channel auto-start failed", "channel", id, "error", err)
-			}
+	// Start the Telegram plugin synchronously so that RPC serving only
+	// becomes available after the channel is ready.
+	if s.telegramPlug != nil {
+		if err := s.telegramPlug.Start(ctx); err != nil {
+			s.logger.Warn("telegram start failed", "error", err)
+		} else {
+			s.logger.Info("telegram channel started")
 		}
 	}
 
@@ -123,7 +121,7 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	}
 
 	// Create the run state machine to track active agent runs.
-	s.runStateMachine = channel.NewRunStateMachine(ctx, func(patch channel.StatusPatch) {
+	s.runStateMachine = telegram.NewRunStateMachine(ctx, func(patch telegram.StatusPatch) {
 		// Skip logging for periodic heartbeat ticks — only log real transitions.
 		if s.snapshotStore != nil && patch.ActiveRuns != nil && !patch.Heartbeat {
 			s.logger.Debug("run state changed", "activeRuns", *patch.ActiveRuns)
@@ -287,10 +285,10 @@ func (s *Server) doShutdown() error {
 		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
 	}
 
-	// 8. Stop all channel plugins.
-	if s.channelLifecycle != nil {
+	// 8. Stop Telegram plugin.
+	if s.telegramPlug != nil {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		s.channelLifecycle.StopAll(stopCtx)
+		s.telegramPlug.Stop(stopCtx)
 		stopCancel()
 	}
 

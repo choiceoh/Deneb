@@ -5,7 +5,7 @@
 // draft message (update, finalize, or clear/delete).
 //
 // Mirrors src/channels/draft-stream-loop.ts and draft-stream-controls.ts.
-package channel
+package telegram
 
 import (
 	"sync"

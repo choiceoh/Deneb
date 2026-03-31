@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
@@ -13,17 +12,18 @@ import (
 	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // Deps holds the subsystems that built-in RPC methods need.
 type Deps struct {
-	Sessions         *session.Manager
-	Channels         *channel.Registry
-	ChannelLifecycle *channel.LifecycleManager
-	SnapshotStore    *channel.SnapshotStore
-	GatewaySubs      *events.GatewayEventSubscriptions
-	Version          string // Server version string (from --version flag).
+	Sessions      *session.Manager
+	SnapshotStore *telegram.SnapshotStore
+	GatewaySubs   *events.GatewayEventSubscriptions
+	Version       string // Server version string (from --version flag).
+	// TelegramPlugin is set after channel wiring; may be nil in tests.
+	TelegramPlugin *telegram.Plugin
 }
 
 // MethodModule is a domain-scoped RPC registration unit.
@@ -89,12 +89,16 @@ func (m systemModule) Register(d *Dispatcher) {
 
 func healthCheck(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var channels []string
+		if deps.TelegramPlugin != nil {
+			channels = []string{"telegram"}
+		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"status":   "ok",
 			"runtime":  "go",
 			"ffi":      ffi.Available,
 			"sessions": deps.Sessions.Count(),
-			"channels": deps.Channels.List(),
+			"channels": channels,
 		})
 	}
 }
@@ -160,7 +164,11 @@ func sessionsDelete(deps Deps) HandlerFunc {
 
 func channelsList(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.RespondOK(req.ID, deps.Channels.List())
+		var channels []string
+		if deps.TelegramPlugin != nil {
+			channels = []string{"telegram"}
+		}
+		return rpcutil.RespondOK(req.ID, channels)
 	}
 }
 
@@ -175,17 +183,16 @@ func channelsGet(deps Deps) HandlerFunc {
 		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		ch := deps.Channels.Get(p.ID)
-		if ch == nil {
+		if p.ID != "telegram" || deps.TelegramPlugin == nil {
 			return rpcerr.NotFound("channel").
 				WithChannel(rpcutil.TruncateForError(p.ID)).
 				Response(req.ID)
 		}
+		plug := deps.TelegramPlugin
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"id":           ch.ID(),
-			"meta":         ch.Meta(),
-			"capabilities": ch.Capabilities(),
-			"status":       ch.Status(),
+			"id":           plug.ID(),
+			"capabilities": plug.Capabilities(),
+			"status":       plug.Status(),
 		})
 	}
 }
@@ -195,7 +202,12 @@ func channelsStatus(deps Deps) HandlerFunc {
 		if deps.SnapshotStore != nil {
 			return rpcutil.RespondOK(req.ID, deps.SnapshotStore.Snapshot())
 		}
-		return rpcutil.RespondOK(req.ID, deps.Channels.StatusAll())
+		if deps.TelegramPlugin != nil {
+			return rpcutil.RespondOK(req.ID, map[string]telegram.Status{
+				"telegram": deps.TelegramPlugin.Status(),
+			})
+		}
+		return rpcutil.RespondOK(req.ID, map[string]telegram.Status{})
 	}
 }
 
@@ -222,11 +234,16 @@ func systemInfo(deps Deps) HandlerFunc {
 
 func channelsHealth(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if deps.ChannelLifecycle == nil {
+		if deps.TelegramPlugin == nil {
 			return rpcutil.RespondOK(req.ID, map[string]any{"channels": []any{}})
 		}
+		status := deps.TelegramPlugin.Status()
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"channels": deps.ChannelLifecycle.HealthCheck(),
+			"channels": []map[string]any{{
+				"id":        "telegram",
+				"connected": status.Connected,
+				"error":     status.Error,
+			}},
 		})
 	}
 }

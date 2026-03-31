@@ -22,7 +22,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -48,6 +47,7 @@ import (
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
@@ -89,8 +89,8 @@ type ServerRuntime struct {
 	channelHealth *monitoring.ChannelHealthMonitor
 	activity      *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
-	snapshotStore   *channel.SnapshotStore
-	runStateMachine *channel.RunStateMachine
+	snapshotStore   *telegram.SnapshotStore
+	runStateMachine *telegram.RunStateMachine
 }
 
 // ServerIntegrations owns optional domain/integration subsystems.
@@ -128,8 +128,6 @@ type Server struct {
 	*ServerRuntime
 	*ServerIntegrations
 
-	channels         *channel.Registry
-	channelLifecycle *channel.LifecycleManager
 	dedupe           *dedupe.Tracker
 	broadcaster      *events.Broadcaster
 	publisher        *events.Publisher
@@ -256,7 +254,6 @@ func New(addr string, opts ...Option) *Server {
 		ServerRPC:          &ServerRPC{},
 		ServerRuntime:      &ServerRuntime{},
 		ServerIntegrations: &ServerIntegrations{},
-		channels:           channel.NewRegistry(),
 		rustFFI:            ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
@@ -295,14 +292,11 @@ func New(addr string, opts ...Option) *Server {
 			StorePath:      storePath,
 			DefaultChannel: "telegram",
 			Enabled:        true,
-			Channels:       s.channels,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
 	}
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.internalHooks = hooks.NewInternalRegistry(s.logger)
-	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
-	s.snapshotStore = channel.NewSnapshotStore()
-	s.channelLifecycle.SetSnapshotStore(s.snapshotStore)
+	s.snapshotStore = telegram.NewSnapshotStore()
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
@@ -360,12 +354,10 @@ func New(addr string, opts ...Option) *Server {
 	s.dispatcher.UseMiddleware(metrics.RPCInstrumentation(), middleware.Logging(s.logger))
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
-		Sessions:         s.sessions,
-		Channels:         s.channels,
-		ChannelLifecycle: s.channelLifecycle,
-		SnapshotStore:    s.snapshotStore,
-		GatewaySubs:      s.gatewaySubs,
-		Version:          s.version,
+		Sessions:      s.sessions,
+		SnapshotStore: s.snapshotStore,
+		GatewaySubs:   s.gatewaySubs,
+		Version:       s.version,
 	})
 	s.registerExtendedMethods()
 	s.registerPhase2Methods()
@@ -385,7 +377,7 @@ func New(addr string, opts ...Option) *Server {
 	s.conversationBindings = plugin.NewConversationBindingStore()
 	s.pluginTypedHookRunner = plugin.NewTypedHookRunner(s.logger)
 	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
-		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry, channelAdapter: channel.NewProtocolAdapter(s.channels)},
+		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
 	}))
 
 	// Plugin HTTP router with auth check backed by the gateway auth validator.

@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
 // UpdateHandler is called for each incoming update.
@@ -16,7 +15,7 @@ type UpdateHandler func(ctx context.Context, update *Update)
 // Bot manages the Telegram bot lifecycle: long-polling for updates,
 // dispatching to handlers, and tracking update offsets.
 type Bot struct {
-	channel.RunState             // provides IsRunning(), Stop(), BeginRun(), EndRun()
+	RunState                     // provides IsRunning(), Stop(), BeginRun(), EndRun()
 	client    *Client
 	config    *Config
 	logger    *slog.Logger

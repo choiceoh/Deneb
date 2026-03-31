@@ -19,7 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -144,7 +144,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Thread bindings: when processing a message in a forum topic thread,
 	// create a thread-specific session key so each topic gets its own context.
 	if msg.MessageThreadID != 0 && msg.IsTopicMessage {
-		if channel.ResolveThreadBindingsEnabled(nil, nil) {
+		if telegram.ResolveThreadBindingsEnabled(nil, nil) {
 			sessionKey = fmt.Sprintf("telegram:%s:thread:%d", chatID, msg.MessageThreadID)
 		}
 	}
@@ -188,8 +188,8 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
-	shouldAck := channel.ShouldAckReaction(channel.AckReactionGateParams{
-		Scope:    channel.AckScopeAll,
+	shouldAck := telegram.ShouldAckReaction(telegram.AckReactionGateParams{
+		Scope:    telegram.AckScopeAll,
 		IsDirect: !msgCtx.IsGroup,
 		IsGroup:  msgCtx.IsGroup,
 	})
@@ -205,7 +205,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// --- Part B: Conversation label — resolve a display label for this session.
-	convLabel := channel.ResolveConversationLabel(channel.ConversationLabelFields{
+	convLabel := telegram.ResolveConversationLabel(telegram.ConversationLabelFields{
 		ChatType:     msg.Chat.Type,
 		SenderName:   senderName,
 		From:         chatID,
@@ -374,7 +374,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// Remove ack reaction after the reply is sent.
-	channel.RemoveAckReactionAfterReply(channel.RemoveAckReactionAfterReplyParams{
+	telegram.RemoveAckReactionAfterReply(telegram.RemoveAckReactionAfterReplyParams{
 		RemoveAfterReply: true,
 		DidAck:           didAck,
 		Remove: func() error {

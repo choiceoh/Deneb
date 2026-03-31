@@ -2,7 +2,7 @@
 // for inbound message processing.
 //
 // Mirrors src/channels/session-envelope.ts.
-package channel
+package telegram
 
 import "time"
 

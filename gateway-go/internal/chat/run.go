@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -64,7 +64,7 @@ type runDeps struct {
 	broadcast        BroadcastFunc                     // optional
 	broadcastRaw     streaming.BroadcastRawFunc        // optional
 	jobTracker       *agent.JobTracker                 // optional
-	channels         *channel.Registry                 // optional; multi-target delivery via streaming.Dispatch
+	channels         *telegram.Plugin                 // optional; multi-target delivery via streaming.Dispatch
 	replyFunc        ReplyFunc                         // optional; delivers response to originating channel
 	mediaSendFn      MediaSendFunc                     // optional; delivers files to originating channel
 	typingFn         TypingFunc                        // optional; sends typing indicator during run
@@ -208,10 +208,10 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
 	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → ⚡ web → 👍 done.
-	var statusCtrl *channel.StatusReactionController
+	var statusCtrl *telegram.StatusReactionController
 	if deps.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
 		delivery := params.Delivery
-		phaseEmojis := channel.StatusReactionEmojis{
+		phaseEmojis := telegram.StatusReactionEmojis{
 			Queued:     "👀",
 			Thinking:   "🤔",
 			Tool:       "🔥",
@@ -223,7 +223,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			StallHard:  "😨",
 			Compacting: "🤔",
 		}
-		adapter := channel.StatusReactionAdapter{
+		adapter := telegram.StatusReactionAdapter{
 			SetReaction: func(emoji string) error {
 				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 				defer cancel()
@@ -238,7 +238,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 				return deps.removeReactionFn(rctx, delivery, emoji)
 			},
 		}
-		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
+		statusCtrl = telegram.NewStatusReactionController(telegram.StatusReactionControllerParams{
 			Enabled: true,
 			Adapter: adapter,
 			Emojis:  &phaseEmojis,

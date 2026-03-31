@@ -2,7 +2,7 @@
 // based on available context fields.
 //
 // Mirrors src/channels/conversation-label.ts.
-package channel
+package telegram
 
 import (
 	"regexp"

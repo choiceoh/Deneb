@@ -16,7 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
 // IsolatedAgentConfig configures an isolated cron agent turn.
@@ -56,7 +56,7 @@ func RunIsolatedAgentTurn(
 	ctx context.Context,
 	cfg IsolatedAgentConfig,
 	agent AgentRunner,
-	channels *channel.Registry,
+	tgPlugin *telegram.Plugin,
 	logger *slog.Logger,
 ) IsolatedAgentResult {
 	startedAt := time.Now().UnixMilli()
@@ -152,7 +152,7 @@ func RunIsolatedAgentTurn(
 
 	// 7. Deliver to target.
 	if cfg.DeliveryTarget != nil && len(result.Payloads) > 0 && !result.WasHeartbeat {
-		dr := DeliverCronOutput(runCtx, channels, *cfg.DeliveryTarget, result.Payloads, DeliverOutputOptions{
+		dr := DeliverCronOutput(runCtx, tgPlugin, *cfg.DeliveryTarget, result.Payloads, DeliverOutputOptions{
 			ChunkLimit: chunk.DefaultLimit,
 			ChunkMode:  "length",
 			BestEffort: cfg.DeliveryBestEffort,

@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -31,7 +31,7 @@ func executeAgentRun(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler *typing.FullTypingSignaler,
-	statusCtrl *channel.StatusReactionController,
+	statusCtrl *telegram.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
 ) (*agent.AgentResult, error) {
@@ -480,7 +480,7 @@ func executeAgentRun(
 	// Draft stream hook: real-time message editing during LLM streaming.
 	// Creates a throttled draft loop that sends/edits a Telegram message as
 	// text deltas arrive, giving the user immediate visual feedback.
-	var draftCtrl *channel.FinalizableDraftStreamControls
+	var draftCtrl *telegram.FinalizableDraftStreamControls
 	if deps.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
 		delivery := params.Delivery
 		var draftMu sync.Mutex
@@ -509,7 +509,7 @@ func executeAgentRun(
 			}
 		}()
 
-		draftCtrl = channel.NewFinalizableDraftStreamControls(channel.FinalizableDraftParams{
+		draftCtrl = telegram.NewFinalizableDraftStreamControls(telegram.FinalizableDraftParams{
 			ThrottleMs: 800, // edit at most ~1.25x/sec to stay within Telegram rate limits
 			SendOrEdit: func(text string) (bool, error) {
 				draftMu.Lock()

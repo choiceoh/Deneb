@@ -2,7 +2,7 @@
 // per channel and account, including spawn policy for subagents and ACP.
 //
 // Mirrors src/channels/thread-bindings-policy.ts.
-package channel
+package telegram
 
 import (
 	"encoding/json"

@@ -7,27 +7,21 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
-// RouteReply delivers a reply to a specific channel, chunking text as needed.
+// RouteReply delivers a reply to Telegram, chunking text as needed.
 func RouteReply(
 	ctx context.Context,
-	channels *channel.Registry,
+	tgPlugin *telegram.Plugin,
 	channelID string,
 	to string,
 	payload types.ReplyPayload,
 	chunkLimit int,
 	chunkMode chunk.Mode,
 ) error {
-	plugin := channels.Get(channelID)
-	if plugin == nil {
-		return fmt.Errorf("channel %q not found", channelID)
-	}
-
-	messenger, ok := plugin.(channel.MessagingAdapter)
-	if !ok {
-		return fmt.Errorf("channel %q does not support messaging", channelID)
+	if channelID != "telegram" || tgPlugin == nil {
+		return fmt.Errorf("channel %q not available", channelID)
 	}
 
 	// Chunk text if it exceeds the limit.
@@ -37,7 +31,7 @@ func RouteReply(
 	}
 
 	for i, text := range texts {
-		msg := channel.OutboundMessage{
+		msg := telegram.OutboundMessage{
 			To:      to,
 			Text:    text,
 			ReplyTo: payload.ReplyToID,
@@ -55,7 +49,7 @@ func RouteReply(
 			}
 		}
 
-		if err := messenger.SendMessage(ctx, msg); err != nil {
+		if err := tgPlugin.SendMessage(ctx, msg); err != nil {
 			return fmt.Errorf("send to %s failed (chunk %d/%d): %w", channelID, i+1, len(texts), err)
 		}
 

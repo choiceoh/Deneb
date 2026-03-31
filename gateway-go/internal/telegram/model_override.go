@@ -2,7 +2,7 @@
 // model selection from the channels.modelByChannel configuration.
 //
 // Mirrors src/channels/model-overrides.ts.
-package channel
+package telegram
 
 import (
 	"encoding/json"

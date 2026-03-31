@@ -11,14 +11,21 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
-// Plugin implements the channel.Plugin interface for Telegram.
+// OutboundMessage represents a message to be sent through Telegram.
+type OutboundMessage struct {
+	To      string `json:"to"`
+	Text    string `json:"text"`
+	ReplyTo string `json:"replyTo,omitempty"`
+	// Media is a list of media attachment URLs or paths.
+	Media []string `json:"media,omitempty"`
+}
+
+// Plugin implements the Telegram Bot API channel.
 type Plugin struct {
-	channel.PluginBase          // status field + Status() + SetStatus()
-	mu      sync.Mutex          // protects client, bot, botUser, handler
+	PluginBase                 // status field + Status() + SetStatus()
+	mu      sync.Mutex        // protects client, bot, botUser, handler
 	client  *Client
 	bot     *Bot
 	config  *Config
@@ -35,21 +42,28 @@ func NewPlugin(cfg *Config, logger *slog.Logger) *Plugin {
 	}
 }
 
-// ID implements channel.Plugin.
+// ID returns the channel identifier.
 func (p *Plugin) ID() string { return "telegram" }
 
-// Meta implements channel.Plugin.
-func (p *Plugin) Meta() channel.Meta {
-	return channel.Meta{
-		ID:    "telegram",
-		Label: "Telegram",
-		Blurb: "Telegram Bot API channel",
-	}
+// Capabilities returns the capabilities of the Telegram channel.
+type Capabilities struct {
+	ChatTypes      []string `json:"chatTypes"`
+	Polls          bool     `json:"polls,omitempty"`
+	Reactions      bool     `json:"reactions,omitempty"`
+	Edit           bool     `json:"edit,omitempty"`
+	Unsend         bool     `json:"unsend,omitempty"`
+	Reply          bool     `json:"reply,omitempty"`
+	Effects        bool     `json:"effects,omitempty"`
+	GroupManagement bool    `json:"groupManagement,omitempty"`
+	Threads        bool     `json:"threads,omitempty"`
+	Media          bool     `json:"media,omitempty"`
+	NativeCommands bool     `json:"nativeCommands,omitempty"`
+	BlockStreaming bool     `json:"blockStreaming,omitempty"`
 }
 
-// Capabilities implements channel.Plugin.
-func (p *Plugin) Capabilities() channel.Capabilities {
-	return channel.Capabilities{
+// Capabilities returns Telegram's capabilities.
+func (p *Plugin) Capabilities() Capabilities {
+	return Capabilities{
 		ChatTypes:      []string{"private", "group", "supergroup"},
 		Media:          true,
 		Threads:        true,
@@ -59,18 +73,18 @@ func (p *Plugin) Capabilities() channel.Capabilities {
 	}
 }
 
-// Start implements channel.Plugin.
+// Start initializes the Telegram bot and begins long-polling.
 func (p *Plugin) Start(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if !p.config.IsEnabled() {
-		p.SetStatus(channel.Status{Connected: false, Error: "account disabled"})
+		p.SetStatus(Status{Connected: false, Error: "account disabled"})
 		return nil
 	}
 
 	if p.config.BotToken == "" {
-		p.SetStatus(channel.Status{Connected: false, Error: "no bot token configured"})
+		p.SetStatus(Status{Connected: false, Error: "no bot token configured"})
 		return nil
 	}
 
@@ -82,7 +96,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	if p.config.Proxy != "" {
 		proxyURL, err := url.Parse(p.config.Proxy)
 		if err != nil {
-			p.SetStatus(channel.Status{Connected: false, Error: "invalid proxy URL: " + err.Error()})
+			p.SetStatus(Status{Connected: false, Error: "invalid proxy URL: " + err.Error()})
 			return nil
 		}
 		// Overlay proxy on the existing transport.
@@ -100,7 +114,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// Verify bot token.
 	me, err := p.client.GetMe(ctx)
 	if err != nil {
-		p.SetStatus(channel.Status{Connected: false, Error: "getMe failed: " + err.Error()})
+		p.SetStatus(Status{Connected: false, Error: "getMe failed: " + err.Error()})
 		return nil
 	}
 	p.logger.Info("telegram bot verified")
@@ -119,11 +133,11 @@ func (p *Plugin) Start(ctx context.Context) error {
 		}
 	}()
 
-	p.SetStatus(channel.Status{Connected: true})
+	p.SetStatus(Status{Connected: true})
 	return nil
 }
 
-// Stop implements channel.Plugin.
+// Stop stops the Telegram bot polling.
 func (p *Plugin) Stop(_ context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -131,7 +145,7 @@ func (p *Plugin) Stop(_ context.Context) error {
 	if p.bot != nil {
 		p.bot.Stop()
 	}
-	p.SetStatus(channel.Status{Connected: false})
+	p.SetStatus(Status{Connected: false})
 	return nil
 }
 
@@ -183,13 +197,11 @@ func (p *Plugin) BotUserID() int64 {
 	return p.botUser.ID
 }
 
-// MaxUploadBytes implements channel.FileUploadAdapter.
-// Telegram Bot API allows up to 50 MB per file upload.
+// MaxUploadBytes returns the maximum upload size (50 MB for Telegram Bot API).
 func (p *Plugin) MaxUploadBytes() int64 { return 50 * 1024 * 1024 }
 
-// SendMessage implements channel.MessagingAdapter.
-// Delivers a text message (with optional media) to the given Telegram chat ID.
-func (p *Plugin) SendMessage(ctx context.Context, msg channel.OutboundMessage) error {
+// SendMessage delivers a text message (with optional media) to the given Telegram chat ID.
+func (p *Plugin) SendMessage(ctx context.Context, msg OutboundMessage) error {
 	p.mu.Lock()
 	c := p.client
 	p.mu.Unlock()
@@ -228,7 +240,7 @@ func parseChatID(s string) (int64, error) {
 	return strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 }
 
-// Ensure Plugin satisfies the channel.Plugin interface at compile time.
-var _ channel.Plugin = (*Plugin)(nil)
-var _ channel.FileUploadAdapter = (*Plugin)(nil)
-var _ channel.MessagingAdapter = (*Plugin)(nil)
+// ParseChatID is the exported version of parseChatID.
+func ParseChatID(s string) (int64, error) {
+	return parseChatID(s)
+}

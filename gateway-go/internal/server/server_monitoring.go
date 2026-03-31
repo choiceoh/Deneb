@@ -51,17 +51,19 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 	// sufficient: it restarts individual stale channels without killing the
 	// entire gateway process.
 
-	// Channel health monitor.
+	// Channel health monitor — simplified for single Telegram channel.
 	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
 		ListChannelIDs: func() []string {
-			return s.channels.List()
+			if s.telegramPlug != nil {
+				return []string{"telegram"}
+			}
+			return nil
 		},
 		GetChannelStatus: func(id string) string {
-			ch := s.channels.Get(id)
-			if ch == nil {
+			if id != "telegram" || s.telegramPlug == nil {
 				return "unknown"
 			}
-			st := ch.Status()
+			st := s.telegramPlug.Status()
 			if st.Connected {
 				return "running"
 			}
@@ -76,22 +78,20 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			}
 			return 0
 		},
-		GetChannelStartedAt: func(id string) int64 {
-			if s.channelLifecycle != nil {
-				return s.channelLifecycle.GetStartedAt(id)
-			}
+		GetChannelStartedAt: func(_ string) int64 {
 			return 0
 		},
 		RestartChannel: func(id string) error {
-			if s.channelLifecycle == nil {
-				return fmt.Errorf("channel lifecycle manager not available")
+			if id != "telegram" || s.telegramPlug == nil {
+				return fmt.Errorf("channel %q not available", id)
 			}
-			s.logger.Info("restarting channel via watchdog", "channel", id)
+			s.logger.Info("restarting telegram via watchdog")
 			restartCtx, restartCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer restartCancel()
-			err := s.channelLifecycle.RestartChannel(restartCtx, id)
+			s.telegramPlug.Stop(restartCtx)
+			err := s.telegramPlug.Start(restartCtx)
 			if err != nil {
-				s.logger.Error("channel restart failed", "channel", id, "error", err)
+				s.logger.Error("telegram restart failed", "error", err)
 			} else {
 				s.emitChannelEvent(id, hooks.EventChannelConnect, "restarted")
 			}

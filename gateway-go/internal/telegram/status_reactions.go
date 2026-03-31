@@ -5,7 +5,7 @@
 // debouncing, stall timers, and terminal state protection.
 //
 // Mirrors src/channels/status-reactions.ts.
-package channel
+package telegram
 
 import (
 	"strings"

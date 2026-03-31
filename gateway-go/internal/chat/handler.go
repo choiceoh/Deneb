@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -81,10 +81,10 @@ type Handler struct {
 
 	// channels is the channel plugin registry, used for multi-target delivery
 	// via streaming.Dispatch when replyFunc is not set.
-	channels *channel.Registry
+	channels *telegram.Plugin
 
 	// runStateMachine tracks active agent runs for status broadcasting.
-	runStateMachine *channel.RunStateMachine
+	runStateMachine *telegram.RunStateMachine
 
 	// pluginHookRunner runs typed plugin hooks (before_model_resolve,
 	// before_prompt_build, message_sending, etc.) during chat execution.
@@ -188,7 +188,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 }
 
 // SetChannels sets the channel plugin registry for multi-target delivery.
-func (h *Handler) SetChannels(reg *channel.Registry) {
+func (h *Handler) SetChannels(reg *telegram.Plugin) {
 	h.channels = reg
 }
 
@@ -318,7 +318,7 @@ func (h *Handler) SetShutdownCtx(ctx context.Context) {
 }
 
 // SetRunStateMachine sets the state machine that tracks active agent runs.
-func (h *Handler) SetRunStateMachine(sm *channel.RunStateMachine) {
+func (h *Handler) SetRunStateMachine(sm *telegram.RunStateMachine) {
 	h.runStateMachine = sm
 }
 

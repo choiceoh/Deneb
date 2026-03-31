@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"time"
 
-	channelpkg "github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
@@ -26,9 +25,9 @@ import (
 // LifecycleDeps holds the dependencies for channel lifecycle RPC methods
 // (channels.start, channels.stop, channels.restart).
 type LifecycleDeps struct {
-	ChannelLifecycle *channelpkg.LifecycleManager
-	Hooks            *hooks.Registry
-	Broadcaster      *events.Broadcaster
+	TelegramPlugin *telegram.Plugin
+	Hooks          *hooks.Registry
+	Broadcaster    *events.Broadcaster
 }
 
 // EventsDeps holds the dependencies for event subscription RPC methods
@@ -49,9 +48,9 @@ type MessagingDeps struct {
 // ---------------------------------------------------------------------------
 
 // LifecycleMethods returns channel start/stop/restart RPC handlers.
-// Returns nil if ChannelLifecycle is not configured.
+// Returns nil if TelegramPlugin is not configured.
 func LifecycleMethods(deps LifecycleDeps) map[string]rpcutil.HandlerFunc {
-	if deps.ChannelLifecycle == nil {
+	if deps.TelegramPlugin == nil {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
@@ -253,7 +252,10 @@ func channelStart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		if err := deps.ChannelLifecycle.StartChannel(ctx, p.ID); err != nil {
+		if p.ID != "telegram" {
+			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
+		}
+		if err := deps.TelegramPlugin.Start(ctx); err != nil {
 			return rpcerr.Unavailable("channel start failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
 		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
@@ -270,7 +272,10 @@ func channelStop(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		if err := deps.ChannelLifecycle.StopChannel(ctx, p.ID); err != nil {
+		if p.ID != "telegram" {
+			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
+		}
+		if err := deps.TelegramPlugin.Stop(ctx); err != nil {
 			return rpcerr.Unavailable("channel stop failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
 		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
@@ -287,7 +292,11 @@ func channelRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		if err := deps.ChannelLifecycle.RestartChannel(ctx, p.ID); err != nil {
+		if p.ID != "telegram" {
+			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
+		}
+		deps.TelegramPlugin.Stop(ctx)
+		if err := deps.TelegramPlugin.Start(ctx); err != nil {
 			return rpcerr.Unavailable("channel restart failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
 		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")

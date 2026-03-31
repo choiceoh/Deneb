@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -26,12 +26,12 @@ type DeliveryTarget struct {
 	ReplyTo   string `json:"replyTo,omitempty"`
 }
 
-// Dispatch delivers a message to multiple channels concurrently using errgroup.
-// Each delivery is independent: a failure in one channel does not cancel others.
+// Dispatch delivers a message to multiple targets concurrently using errgroup.
+// Each delivery is independent: a failure in one does not cancel others.
 // Returns a result for each target.
 func Dispatch(
 	ctx context.Context,
-	channels *channel.Registry,
+	tgPlugin *telegram.Plugin,
 	targets []DeliveryTarget,
 	text string,
 	media []string,
@@ -45,7 +45,7 @@ func Dispatch(
 
 	for i, t := range targets {
 		g.Go(func() error {
-			results[i] = deliverToChannel(gctx, channels, t, text, media)
+			results[i] = deliverToTelegram(gctx, tgPlugin, t, text, media)
 			return nil // Never return error — collect per-target, don't cancel siblings.
 		})
 	}
@@ -54,9 +54,9 @@ func Dispatch(
 	return results
 }
 
-func deliverToChannel(
+func deliverToTelegram(
 	ctx context.Context,
-	channels *channel.Registry,
+	tgPlugin *telegram.Plugin,
 	target DeliveryTarget,
 	text string,
 	media []string,
@@ -64,21 +64,13 @@ func deliverToChannel(
 	start := time.Now()
 	result := DispatchResult{Channel: target.Channel}
 
-	plugin := channels.Get(target.Channel)
-	if plugin == nil {
-		result.Error = fmt.Errorf("channel %q not found", target.Channel)
+	if target.Channel != "telegram" || tgPlugin == nil {
+		result.Error = fmt.Errorf("channel %q not available", target.Channel)
 		result.Latency = time.Since(start)
 		return result
 	}
 
-	messenger, ok := plugin.(channel.MessagingAdapter)
-	if !ok {
-		result.Error = fmt.Errorf("channel %q does not support messaging", target.Channel)
-		result.Latency = time.Since(start)
-		return result
-	}
-
-	err := messenger.SendMessage(ctx, channel.OutboundMessage{
+	err := tgPlugin.SendMessage(ctx, telegram.OutboundMessage{
 		To:      target.To,
 		Text:    text,
 		ReplyTo: target.ReplyTo,

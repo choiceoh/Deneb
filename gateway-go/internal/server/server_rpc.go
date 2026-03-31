@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
@@ -26,13 +26,13 @@ func (s *Server) registerAgentMethods() {
 	s.dispatcher.RegisterDomain(handlerprocess.ACPMethods(s.acpDeps))
 
 	s.dispatcher.RegisterDomain(handleragent.ExtendedMethods(handleragent.ExtendedDeps{
-		Sessions:    s.sessions,
-		Channels:    s.channels,
-		GatewaySubs: s.gatewaySubs,
-		Processes:   s.processes,
-		Cron:        s.cron,
-		Hooks:       s.hooks,
-		Broadcaster: s.broadcaster,
+		Sessions:       s.sessions,
+		TelegramPlugin: s.telegramPlug,
+		GatewaySubs:    s.gatewaySubs,
+		Processes:      s.processes,
+		Cron:           s.cron,
+		Hooks:          s.hooks,
+		Broadcaster:    s.broadcaster,
 	}))
 }
 
@@ -102,7 +102,12 @@ func (s *Server) registerBuiltinMethods() {
 		Version:         s.version,
 		StartedAt:       s.startedAt,
 		RustFFI:         s.rustFFI,
-		ChannelsStatus:  func() any { return s.channels.StatusAll() },
+		ChannelsStatus: func() any {
+			if s.telegramPlug != nil {
+				return map[string]telegram.Status{"telegram": s.telegramPlug.Status()}
+			}
+			return map[string]telegram.Status{}
+		},
 		SessionCount:    s.sessions.Count,
 		ConnectionCount: func() int64 { return int64(s.clientCnt.Load()) },
 		LastHeartbeatMs: func() int64 {
@@ -150,11 +155,9 @@ func (s *Server) registerBuiltinMethods() {
 	}))
 }
 
-// pluginRegistryAdapter bridges plugin.FullRegistry and channel.ProtocolAdapter
-// to the rpc.PluginRegistry interface, merging both plugin and channel sources.
+// pluginRegistryAdapter bridges plugin.FullRegistry to the rpc.PluginRegistry interface.
 type pluginRegistryAdapter struct {
-	registry       *plugin.FullRegistry
-	channelAdapter *channel.ProtocolAdapter
+	registry *plugin.FullRegistry
 }
 
 func (a *pluginRegistryAdapter) ListPlugins() []protocol.PluginMeta {
@@ -169,9 +172,6 @@ func (a *pluginRegistryAdapter) ListPlugins() []protocol.PluginMeta {
 			Enabled: p.Enabled,
 		}
 	}
-	if a.channelAdapter != nil {
-		result = append(result, a.channelAdapter.ListPlugins()...)
-	}
 	return result
 }
 
@@ -182,9 +182,6 @@ func (a *pluginRegistryAdapter) GetPluginHealth(id string) *protocol.PluginHealt
 			PluginID: p.ID,
 			Healthy:  p.Enabled,
 		}
-	}
-	if a.channelAdapter != nil {
-		return a.channelAdapter.GetPluginHealth(id)
 	}
 	return nil
 }

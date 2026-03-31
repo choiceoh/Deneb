@@ -2,7 +2,7 @@
 // reaction based on scope, chat type, and mention state.
 //
 // Mirrors src/channels/ack-reactions.ts.
-package channel
+package telegram
 
 // AckReactionScope controls when ack reactions are sent.
 type AckReactionScope string
