@@ -488,9 +488,24 @@ func executeAgentRun(
 		var accum strings.Builder
 
 		// Defer cleanup so the draft is stopped on all exit paths (success, error, fallback).
+		// After stopping the loop, delete the draft message from Telegram so the
+		// user doesn't see both the partial draft and the final reply.
 		defer func() {
 			if draftCtrl != nil {
 				draftCtrl.StopForClear()
+			}
+			// Delete the draft message if one was sent.
+			if deps.draftDeleteFn != nil {
+				draftMu.Lock()
+				msgID := draftMsgID
+				draftMu.Unlock()
+				if msgID != "" {
+					delCtx, delCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+					defer delCancel()
+					if err := deps.draftDeleteFn(delCtx, delivery, msgID); err != nil {
+						logger.Warn("draft stream delete failed", "msgId", msgID, "error", err)
+					}
+				}
 			}
 		}()
 

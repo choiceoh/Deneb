@@ -52,6 +52,10 @@ type ReactionFunc func(ctx context.Context, delivery *DeliveryContext, emoji str
 // On subsequent calls, it edits the message with the given ID.
 type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID string, text string) (newMsgID string, err error)
 
+// DraftDeleteFunc deletes a streaming draft message from the originating channel.
+// Used to clean up the partial draft before the final reply is delivered.
+type DraftDeleteFunc func(ctx context.Context, delivery *DeliveryContext, msgID string) error
+
 // ToolProgressFunc is called during agent execution to report tool execution events.
 type ToolProgressFunc func(ctx context.Context, delivery *DeliveryContext, event ToolProgressEvent)
 

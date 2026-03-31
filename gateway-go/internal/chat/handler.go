@@ -59,6 +59,7 @@ type Handler struct {
 	removeReactionFn ReactionFunc     // optional: removes emoji reaction
 	toolProgressFn   ToolProgressFunc // optional: reports tool execution events
 	draftEditFn      DraftEditFunc    // optional: sends/edits streaming draft messages
+	draftDeleteFn    DraftDeleteFunc  // optional: deletes streaming draft messages
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
 	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
 	// emitTranscriptFn sends transcript updates to gateway event subscriptions.
@@ -242,6 +243,12 @@ func (h *Handler) ToolProgressFunc() ToolProgressFunc {
 // on the originating channel for real-time LLM output display.
 func (h *Handler) SetDraftEditFunc(fn DraftEditFunc) {
 	h.draftEditFn = fn
+}
+
+// SetDraftDeleteFunc sets the function that deletes streaming draft messages
+// on the originating channel, used to clean up partial drafts before the final reply.
+func (h *Handler) SetDraftDeleteFunc(fn DraftDeleteFunc) {
+	h.draftDeleteFn = fn
 }
 
 // SetEmitAgentFunc sets the callback that sends agent lifecycle events
