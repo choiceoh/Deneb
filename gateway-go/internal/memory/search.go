@@ -37,10 +37,10 @@ type SearchResult struct {
 
 // Scoring weights.
 const (
-	weightHybrid     = 0.45
-	weightImportance = 0.25
-	weightRecency    = 0.15
-	weightFrequency  = 0.15
+	weightHybrid       = 0.50
+	weightImportance   = 0.25
+	weightRecency      = 0.15
+	weightVerification = 0.10
 )
 
 // categoryImportanceMultiplier adjusts the importance weight by fact category.
@@ -94,7 +94,7 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 
 	// Phase 3: Merge and score (fetches extra candidates for dedup headroom).
 	mergeOpts := opts
-	mergeOpts.Limit = opts.Limit * 2
+	mergeOpts.Limit = opts.Limit * 3
 	results := s.mergeAndRank(ftsResults, vecResults, mergeOpts)
 
 	// Phase 3.5: Content deduplication — remove near-duplicate facts so the
@@ -115,64 +115,28 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 }
 
 // ftsSearch performs FTS5 search and returns scored fact IDs.
+// Uses a two-stage strategy: AND first (all tokens must match) for precision,
+// falling back to OR (any token matches) when AND yields < ftsAndMinResults.
 func (s *Store) ftsSearch(ctx context.Context, query string, opts SearchOpts) (map[int64]float64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var rows_query string
-	var args []any
+	tokens := splitTokens(query)
 
-	switch {
-	case opts.Category != "" && opts.MinImportance > 0:
-		rows_query = `SELECT f.id, fts.rank
-			FROM facts_fts fts
-			JOIN facts f ON f.id = fts.rowid
-			WHERE facts_fts MATCH ? AND f.active = 1 AND f.category = ? AND f.importance >= ?
-			ORDER BY fts.rank
-			LIMIT 50`
-		args = []any{escapeFTS(query), opts.Category, opts.MinImportance}
-	case opts.Category != "":
-		rows_query = `SELECT f.id, fts.rank
-			FROM facts_fts fts
-			JOIN facts f ON f.id = fts.rowid
-			WHERE facts_fts MATCH ? AND f.active = 1 AND f.category = ?
-			ORDER BY fts.rank
-			LIMIT 50`
-		args = []any{escapeFTS(query), opts.Category}
-	case opts.MinImportance > 0:
-		rows_query = `SELECT f.id, fts.rank
-			FROM facts_fts fts
-			JOIN facts f ON f.id = fts.rowid
-			WHERE facts_fts MATCH ? AND f.active = 1 AND f.importance >= ?
-			ORDER BY fts.rank
-			LIMIT 50`
-		args = []any{escapeFTS(query), opts.MinImportance}
-	default:
-		rows_query = `SELECT f.id, fts.rank
-			FROM facts_fts fts
-			JOIN facts f ON f.id = fts.rowid
-			WHERE facts_fts MATCH ? AND f.active = 1
-			ORDER BY fts.rank
-			LIMIT 50`
-		args = []any{escapeFTS(query)}
-	}
+	// Stage 1: AND query (all tokens must match) for higher precision.
+	andQuery := buildFTSQuery(tokens, "AND")
+	results := s.runFTSQuery(ctx, andQuery, opts)
 
-	rows, err := s.db.QueryContext(ctx, rows_query, args...)
-	if err != nil {
-		// FTS match can fail on malformed queries; return empty rather than error.
-		return make(map[int64]float64), nil
-	}
-	defer rows.Close()
-
-	results := make(map[int64]float64)
-	for rows.Next() {
-		var id int64
-		var rank float64
-		if err := rows.Scan(&id, &rank); err != nil {
-			continue
+	// Stage 2: OR fallback when AND yields too few results.
+	if len(results) < ftsAndMinResults && len(tokens) > 1 {
+		orQuery := buildFTSQuery(tokens, "OR")
+		orResults := s.runFTSQuery(ctx, orQuery, opts)
+		for id, score := range orResults {
+			if _, exists := results[id]; !exists {
+				// Slightly penalize OR-only results vs AND matches.
+				results[id] = score * 0.85
+			}
 		}
-		// FTS5 rank is negative (lower = better). Normalize to 0-1.
-		results[id] = rankToScore(rank)
 	}
 
 	// Korean/CJK fallback: if unicode61 found nothing, try trigram index.
@@ -184,6 +148,73 @@ func (s *Store) ftsSearch(ctx context.Context, query string, opts SearchOpts) (m
 	}
 
 	return results, nil
+}
+
+// ftsAndMinResults is the minimum number of AND-query results before falling
+// back to OR. Below this threshold, AND was too restrictive.
+const ftsAndMinResults = 3
+
+// runFTSQuery executes an FTS5 MATCH query with the given opts and returns scored IDs.
+func (s *Store) runFTSQuery(ctx context.Context, ftsQuery string, opts SearchOpts) map[int64]float64 {
+	if ftsQuery == "" {
+		return make(map[int64]float64)
+	}
+
+	var rowsQuery string
+	var args []any
+
+	switch {
+	case opts.Category != "" && opts.MinImportance > 0:
+		rowsQuery = `SELECT f.id, fts.rank
+			FROM facts_fts fts
+			JOIN facts f ON f.id = fts.rowid
+			WHERE facts_fts MATCH ? AND f.active = 1 AND f.category = ? AND f.importance >= ?
+			ORDER BY fts.rank
+			LIMIT 50`
+		args = []any{ftsQuery, opts.Category, opts.MinImportance}
+	case opts.Category != "":
+		rowsQuery = `SELECT f.id, fts.rank
+			FROM facts_fts fts
+			JOIN facts f ON f.id = fts.rowid
+			WHERE facts_fts MATCH ? AND f.active = 1 AND f.category = ?
+			ORDER BY fts.rank
+			LIMIT 50`
+		args = []any{ftsQuery, opts.Category}
+	case opts.MinImportance > 0:
+		rowsQuery = `SELECT f.id, fts.rank
+			FROM facts_fts fts
+			JOIN facts f ON f.id = fts.rowid
+			WHERE facts_fts MATCH ? AND f.active = 1 AND f.importance >= ?
+			ORDER BY fts.rank
+			LIMIT 50`
+		args = []any{ftsQuery, opts.MinImportance}
+	default:
+		rowsQuery = `SELECT f.id, fts.rank
+			FROM facts_fts fts
+			JOIN facts f ON f.id = fts.rowid
+			WHERE facts_fts MATCH ? AND f.active = 1
+			ORDER BY fts.rank
+			LIMIT 50`
+		args = []any{ftsQuery}
+	}
+
+	rows, err := s.db.QueryContext(ctx, rowsQuery, args...)
+	if err != nil {
+		// FTS match can fail on malformed queries; return empty rather than error.
+		return make(map[int64]float64)
+	}
+	defer rows.Close()
+
+	results := make(map[int64]float64)
+	for rows.Next() {
+		var id int64
+		var rank float64
+		if err := rows.Scan(&id, &rank); err != nil {
+			continue
+		}
+		results[id] = rankToScore(rank)
+	}
+	return results
 }
 
 // trigramSearch uses the trigram FTS5 index for CJK/Korean substring matching.
@@ -238,7 +269,7 @@ func (s *Store) vectorSearch(ctx context.Context, queryVec []float32) (map[int64
 	results := make(map[int64]float64, len(embeddings))
 	for factID, vec := range embeddings {
 		sim := cosineSimilarity(queryVec, vec)
-		if sim > 0.20 { // min threshold (lowered to catch thematically related facts)
+		if sim > 0.35 { // min threshold — filters out thematically unrelated facts
 			results[factID] = sim
 		}
 	}
@@ -276,15 +307,6 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 
 	now := time.Now()
 	var results []SearchResult
-
-	// Find max access count across candidates for frequency normalization.
-	maxAccessCount := 1
-	for _, f := range factMap {
-		if f.AccessCount > maxAccessCount {
-			maxAccessCount = f.AccessCount
-		}
-	}
-	logMaxAccess := math.Log2(1 + float64(maxAccessCount))
 
 	for _, id := range ids {
 		fact, ok := factMap[id]
@@ -327,13 +349,18 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 		daysSince := now.Sub(refTime).Hours() / 24
 		recencyScore := math.Exp(-math.Ln2 * daysSince / halfLife)
 
-		// Frequency score: logarithmic scaling of access count.
-		frequencyScore := math.Log2(1+float64(fact.AccessCount)) / logMaxAccess
+		// Verification score: dreaming-verified facts are more trustworthy.
+		// Replaces the old frequency score which amplified noise by boosting
+		// frequently accessed (but not necessarily accurate) facts.
+		verificationScore := 0.3 // base score for unverified facts
+		if fact.VerifiedAt != nil && !fact.VerifiedAt.IsZero() {
+			verificationScore = 1.0
+		}
 
 		finalScore := weightHybrid*hybridScore +
 			weightImportance*adjustedImportance +
 			weightRecency*recencyScore +
-			weightFrequency*frequencyScore
+			weightVerification*verificationScore
 
 		if opts.MinScore > 0 && finalScore < opts.MinScore {
 			continue
@@ -359,26 +386,34 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 	return results
 }
 
-// escapeFTS escapes special characters for FTS5 MATCH queries.
-func escapeFTS(query string) string {
-	// FTS5 reserved: AND, OR, NOT, NEAR, double quotes.
-	// For safety, wrap each token in double quotes.
-	tokens := splitTokens(query)
+// buildFTSQuery constructs an FTS5 MATCH expression from tokens joined by op ("AND" or "OR").
+// Each token is double-quoted to escape FTS5 reserved words (AND, OR, NOT, NEAR).
+func buildFTSQuery(tokens []string, op string) string {
 	if len(tokens) == 0 {
-		return query
+		return ""
 	}
 	var escaped []string
 	for _, t := range tokens {
-		// Strip existing quotes and re-wrap.
 		t = stripQuotes(t)
 		if t != "" {
 			escaped = append(escaped, `"`+t+`"`)
 		}
 	}
 	if len(escaped) == 0 {
-		return `"` + query + `"`
+		return ""
 	}
-	return joinOr(escaped)
+	result := escaped[0]
+	for _, p := range escaped[1:] {
+		result += " " + op + " " + p
+	}
+	return result
+}
+
+// escapeFTS escapes special characters for FTS5 MATCH queries (OR mode).
+// Kept for backward compatibility with trigram search and other callers.
+func escapeFTS(query string) string {
+	tokens := splitTokens(query)
+	return buildFTSQuery(tokens, "OR")
 }
 
 func splitTokens(s string) []string {
@@ -415,14 +450,6 @@ func stripQuotes(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
-}
-
-func joinOr(parts []string) string {
-	result := parts[0]
-	for _, p := range parts[1:] {
-		result += " OR " + p
-	}
-	return result
 }
 
 // rerankFacts reorders memory search results using the cross-encoder reranker.

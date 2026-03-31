@@ -119,6 +119,13 @@ func jaccardSimilarity(a, b map[string]struct{}) float64 {
 	return float64(intersection) / float64(union)
 }
 
+// JaccardTextSimilarity computes Jaccard similarity between two text strings.
+// Tokenizes both strings and compares their token sets. Exported for use in
+// InsertFact dedup and AutoExtractFacts pre-check.
+func JaccardTextSimilarity(a, b string) float64 {
+	return jaccardSimilarity(jaccardTokenize(a), jaccardTokenize(b))
+}
+
 // dedupResults removes near-duplicate results using greedy Jaccard filtering.
 // Results must arrive sorted by score descending (from mergeAndRank).
 // For each candidate, if its content has Jaccard similarity > threshold with

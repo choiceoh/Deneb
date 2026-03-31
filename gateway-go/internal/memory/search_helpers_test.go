@@ -39,8 +39,11 @@ func TestTokenHelpers(t *testing.T) {
 		t.Fatalf("stripQuotes plain = %q, want hello", got)
 	}
 
-	if got := joinOr([]string{"\"a\"", "\"b\"", "\"c\""}); got != `"a" OR "b" OR "c"` {
-		t.Fatalf("joinOr returned %q", got)
+	if got := buildFTSQuery([]string{"a", "b", "c"}, "OR"); got != `"a" OR "b" OR "c"` {
+		t.Fatalf("buildFTSQuery OR returned %q", got)
+	}
+	if got := buildFTSQuery([]string{"a", "b"}, "AND"); got != `"a" AND "b"` {
+		t.Fatalf("buildFTSQuery AND returned %q", got)
 	}
 }
 
