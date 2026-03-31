@@ -81,6 +81,7 @@ func RunAgent(
 			MaxTokens: cfg.MaxTokens,
 			Tools:     cfg.Tools,
 			Stream:    true,
+			Thinking:  cfg.Thinking,
 		}
 
 		var events <-chan llm.StreamEvent
