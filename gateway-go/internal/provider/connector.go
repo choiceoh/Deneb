@@ -109,7 +109,10 @@ func (c *Connector) JSON(ctx context.Context, method, path string, reqBody, resp
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		errBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if readErr != nil {
+			errBody = []byte("(failed to read error body)")
+		}
 		return &ConnectorError{
 			StatusCode: resp.StatusCode,
 			Method:     method,

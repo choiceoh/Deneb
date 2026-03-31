@@ -128,8 +128,11 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 		}
 
 		// Read error body for diagnostics.
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		resp.Body.Close()
+		if readErr != nil {
+			body = []byte("(failed to read error body)")
+		}
 		lastErr = &APIError{
 			StatusCode: resp.StatusCode,
 			Body:       string(body),
