@@ -76,7 +76,9 @@ func memorySearch(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string,
 			Category: p.Category,
 		}
 		if d.MemoryEmbedder == nil {
-			opts.MinImportance = 0.7
+			// Match knowledge prefetch threshold (knowledge.go) for consistent
+			// recall between tool search and automatic knowledge injection.
+			opts.MinImportance = 0.6
 		}
 		results, err := d.MemoryStore.SearchFacts(ctx, p.Query, queryVec, opts)
 		if err != nil {
