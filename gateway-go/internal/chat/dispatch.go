@@ -98,6 +98,18 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	return resp
 }
 
+// hasActiveRunForSession reports whether at least one run is active for the session.
+func (h *Handler) hasActiveRunForSession(sessionKey string) bool {
+	h.abortMu.Lock()
+	defer h.abortMu.Unlock()
+	for _, entry := range h.abortMap {
+		if entry.SessionKey == sessionKey {
+			return true
+		}
+	}
+	return false
+}
+
 // InterruptActiveRun cancels all active runs for a session key.
 func (h *Handler) InterruptActiveRun(sessionKey string) {
 	h.abortMu.Lock()

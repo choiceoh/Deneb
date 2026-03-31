@@ -19,6 +19,9 @@ type TypingFunc = toolctx.TypingFunc
 // ReactionFunc sets or removes an emoji reaction on the triggering message.
 type ReactionFunc = toolctx.ReactionFunc
 
+// DraftEditFunc sends or edits a streaming draft message on the originating channel.
+type DraftEditFunc = toolctx.DraftEditFunc
+
 // ToolProgressFunc is called during agent execution to report tool lifecycle events.
 type ToolProgressFunc = toolctx.ToolProgressFunc
 

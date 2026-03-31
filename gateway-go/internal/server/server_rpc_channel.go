@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -26,41 +28,33 @@ func (s *Server) registerEventsBroadcastMethods() {
 }
 
 func (s *Server) registerConfigLifecycleMethods() {
+	// Resolve reload debounce/deferral settings from config.
+	debounceMs := 300 // default
+	deferralTimeoutMs := 300000
+	if s.runtimeCfg != nil {
+		if s.runtimeCfg.ReloadConfig.DebounceMs != nil {
+			debounceMs = *s.runtimeCfg.ReloadConfig.DebounceMs
+		}
+		if s.runtimeCfg.ReloadConfig.DeferralTimeoutMs != nil {
+			deferralTimeoutMs = *s.runtimeCfg.ReloadConfig.DeferralTimeoutMs
+		}
+	}
+
+	// Debounce timer: collapses rapid config.reload calls into a single
+	// propagation pass using gateway.reload.debounceMs.
+	var debounceMu sync.Mutex
+	var debounceTimer *time.Timer
+
 	s.dispatcher.RegisterDomain(handlersystem.ConfigReloadMethods(handlersystem.ConfigReloadDeps{
-		OnReloaded: func(_ *config.ConfigSnapshot) {
-			// Notify hooks of config change.
-			if s.hooks != nil {
-				s.safeGo("hooks:config.reloaded", func() {
-					s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
-				})
+		OnReloaded: func(snap *config.ConfigSnapshot) {
+			debounceMu.Lock()
+			if debounceTimer != nil {
+				debounceTimer.Stop()
 			}
-			// Broadcast config change to subscribers via publisher.
-			s.publisher.PublishConfigChanged("config")
-			// Restart channels to pick up config changes.
-			if s.channelLifecycle != nil {
-				s.safeGo("config:restart-channels", func() {
-					reloadCtx := context.Background()
-					if errs := s.channelLifecycle.StopAll(reloadCtx); len(errs) > 0 {
-						for id, err := range errs {
-							s.logger.Warn("config reload: channel stop failed", "channel", id, "error", err)
-						}
-					}
-					if errs := s.channelLifecycle.StartAll(reloadCtx); len(errs) > 0 {
-						for id, err := range errs {
-							s.logger.Warn("config reload: channel start failed", "channel", id, "error", err)
-						}
-					}
-					s.logger.Info("config reload: channels restarted")
-				})
-			}
-			// Restart cron scheduler.
-			if s.cron != nil {
-				s.safeGo("config:restart-cron", func() {
-					s.cron.Close()
-					s.cron = cron.NewScheduler(s.logger)
-					s.logger.Info("config reload: cron scheduler restarted")
-				})
-			}
+			debounceTimer = time.AfterFunc(time.Duration(debounceMs)*time.Millisecond, func() {
+				s.propagateConfigReload(snap, deferralTimeoutMs)
+			})
+			debounceMu.Unlock()
 		},
 	}))
 	s.dispatcher.RegisterDomain(handlerchannel.LifecycleMethods(handlerchannel.LifecycleDeps{
@@ -195,4 +189,52 @@ func (s *Server) registerSystemServiceMethods(denebDir string) {
 		s.wireTelegramChatHandler()
 	}
 
+}
+
+// propagateConfigReload performs the post-reload side effects: hooks, channel
+// restart (bounded by deferralTimeoutMs), cron restart, and process env cache
+// invalidation.
+func (s *Server) propagateConfigReload(snap *config.ConfigSnapshot, deferralTimeoutMs int) {
+	// Notify hooks of config change.
+	if s.hooks != nil {
+		s.safeGo("hooks:config.reloaded", func() {
+			s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
+		})
+	}
+	// Broadcast config change to subscribers via publisher.
+	s.publisher.PublishConfigChanged("config")
+
+	// Invalidate the process manager's cached environment so new processes
+	// pick up any env changes introduced by the reloaded config.
+	if s.processes != nil {
+		s.processes.InvalidateEnvCache()
+	}
+
+	// Restart channels to pick up config changes, bounded by deferralTimeoutMs.
+	if s.channelLifecycle != nil {
+		s.safeGo("config:restart-channels", func() {
+			timeout := time.Duration(deferralTimeoutMs) * time.Millisecond
+			reloadCtx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			if errs := s.channelLifecycle.StopAll(reloadCtx); len(errs) > 0 {
+				for id, err := range errs {
+					s.logger.Warn("config reload: channel stop failed", "channel", id, "error", err)
+				}
+			}
+			if errs := s.channelLifecycle.StartAll(reloadCtx); len(errs) > 0 {
+				for id, err := range errs {
+					s.logger.Warn("config reload: channel start failed", "channel", id, "error", err)
+				}
+			}
+			s.logger.Info("config reload: channels restarted")
+		})
+	}
+	// Restart cron scheduler.
+	if s.cron != nil {
+		s.safeGo("config:restart-cron", func() {
+			s.cron.Close()
+			s.cron = cron.NewScheduler(s.logger)
+			s.logger.Info("config reload: cron scheduler restarted")
+		})
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
@@ -57,6 +58,7 @@ type Handler struct {
 	reactionFn       ReactionFunc     // optional: sets emoji reaction on triggering message
 	removeReactionFn ReactionFunc     // optional: removes emoji reaction
 	toolProgressFn   ToolProgressFunc // optional: reports tool execution events
+	draftEditFn      DraftEditFunc    // optional: sends/edits streaming draft messages
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
 	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
 	// emitTranscriptFn sends transcript updates to gateway event subscriptions.
@@ -82,6 +84,9 @@ type Handler struct {
 	// pluginHookRunner runs typed plugin hooks (before_model_resolve,
 	// before_prompt_build, message_sending, etc.) during chat execution.
 	pluginHookRunner *plugin.TypedHookRunner
+
+	// hookRegistry fires user-defined shell hooks on message/tool events.
+	hookRegistry *hooks.Registry
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -224,6 +229,12 @@ func (h *Handler) ToolProgressFunc() ToolProgressFunc {
 	return h.toolProgressFn
 }
 
+// SetDraftEditFunc sets the function that sends/edits streaming draft messages
+// on the originating channel for real-time LLM output display.
+func (h *Handler) SetDraftEditFunc(fn DraftEditFunc) {
+	h.draftEditFn = fn
+}
+
 // SetEmitAgentFunc sets the callback that sends agent lifecycle events
 // (run.start, tool.start, tool.end) to the gateway event subscription pipeline.
 func (h *Handler) SetEmitAgentFunc(fn func(kind, sessionKey, runID string, payload map[string]any)) {
@@ -303,6 +314,11 @@ func (h *Handler) SetPluginHookRunner(r *plugin.TypedHookRunner) {
 // PluginHookRunner returns the typed hook runner (may be nil).
 func (h *Handler) PluginHookRunner() *plugin.TypedHookRunner {
 	return h.pluginHookRunner
+}
+
+// SetHookRegistry sets the user-defined hook registry for message/tool events.
+func (h *Handler) SetHookRegistry(r *hooks.Registry) {
+	h.hookRegistry = r
 }
 
 // DefaultModel returns the configured default LLM model name.

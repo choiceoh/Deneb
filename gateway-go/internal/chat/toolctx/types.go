@@ -46,6 +46,12 @@ type TypingFunc func(ctx context.Context, delivery *DeliveryContext) error
 // ReactionFunc sets/removes an emoji reaction on the triggering message.
 type ReactionFunc func(ctx context.Context, delivery *DeliveryContext, emoji string) error
 
+// DraftEditFunc sends or edits a streaming draft message on the originating channel.
+// Returns the message ID of the sent/edited message and an error.
+// On the first call (msgID == ""), it sends a new message and returns its ID.
+// On subsequent calls, it edits the message with the given ID.
+type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID string, text string) (newMsgID string, err error)
+
 // ToolProgressFunc is called during agent execution to report tool execution events.
 type ToolProgressFunc func(ctx context.Context, delivery *DeliveryContext, event ToolProgressEvent)
 
