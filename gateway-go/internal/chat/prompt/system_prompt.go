@@ -98,7 +98,7 @@ var toolCategories = []struct {
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory", "memory_search", "vega"}},
 	{"System", []string{"message", "gateway"}},
-	{"Periodic", []string{"cron", "gmail", "morning_letter"}},
+	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
 	{"Data", []string{"kv"}},
