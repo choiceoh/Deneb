@@ -105,6 +105,7 @@ var methodScopes = map[string]auth.Scope{
 	"cron.list":       auth.ScopeRead,
 	"cron.listPage":   auth.ScopeRead,
 	"cron.get":        auth.ScopeRead,
+	"cron.getJob":     auth.ScopeRead,
 	"cron.status":     auth.ScopeRead,
 	"cron.runs":       auth.ScopeRead,
 	"cron.add":        auth.ScopeWrite,

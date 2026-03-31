@@ -187,6 +187,47 @@ func (s *Server) wireTelegramChatHandler() {
 		return client.SetMessageReaction(ctx, chatID, msgID, "")
 	})
 
+	// Set tool progress function: sends/edits a progress message showing
+	// real-time tool execution status (Korean labels, checkmarks on completion).
+	var trackerMu sync.Mutex
+	trackers := make(map[string]*telegram.ProgressTracker) // key: "chatID:messageID"
+	s.chatHandler.SetToolProgressFunc(func(ctx context.Context, delivery *chat.DeliveryContext, event chat.ToolProgressEvent) {
+		if delivery == nil || delivery.Channel != "telegram" {
+			return
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return
+		}
+		chatID, err := telegram.ParseChatID(delivery.To)
+		if err != nil {
+			return
+		}
+
+		// One tracker per delivery (keyed by chat + triggering message).
+		trackerKey := delivery.To + ":" + delivery.MessageID
+		trackerMu.Lock()
+		pt := trackers[trackerKey]
+		if pt == nil {
+			pt = telegram.NewProgressTracker(client, chatID)
+			trackers[trackerKey] = pt
+		}
+		trackerMu.Unlock()
+
+		switch event.Type {
+		case "start":
+			pt.OnToolStart(ctx, event.Name)
+		case "complete":
+			pt.OnToolComplete(ctx, event.Name, event.IsError)
+		case "finalize":
+			pt.Finalize(ctx)
+			// Clean up tracker after finalization.
+			trackerMu.Lock()
+			delete(trackers, trackerKey)
+			trackerMu.Unlock()
+		}
+	})
+
 	// Set draft edit function: sends or edits a streaming draft message in Telegram.
 	// Used by DraftStreamLoop for real-time message editing during LLM streaming.
 	s.chatHandler.SetDraftEditFunc(func(ctx context.Context, delivery *chat.DeliveryContext, msgID string, text string) (string, error) {

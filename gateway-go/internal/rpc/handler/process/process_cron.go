@@ -310,7 +310,7 @@ func CronServiceMethods(deps CronServiceDeps) map[string]rpcutil.HandlerFunc {
 	}
 	return map[string]rpcutil.HandlerFunc{
 		"cron.listPage": cronListPage(deps),
-		"cron.get":      cronGetJob(deps),
+		"cron.getJob":   cronGetJob(deps),
 	}
 }
 

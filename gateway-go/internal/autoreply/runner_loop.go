@@ -188,6 +188,15 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 	if memory.UsedTokens() > memory.maxTokens*8/10 {
 		if removed := memory.Compact(); removed > 0 {
 			result.CompactedAt = time.Now().UnixMilli()
+			// Add a compaction hint to the conversation so the model
+			// knows context was trimmed.
+			hint := BuildPostCompactionHint(PostCompactionContext{
+				CompactedAt:  result.CompactedAt,
+				TotalRemoved: removed,
+			})
+			if hint != "" {
+				memory.Append(AgentMessage{Role: "system", Content: hint})
+			}
 		}
 	}
 
@@ -248,8 +257,18 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 			TotalTokens:  int64(agentResult.Usage.InputTokens + agentResult.Usage.OutputTokens),
 		}
 		if agentResult.Text != "" {
-			result.Payloads = append(result.Payloads, types.ReplyPayload{Text: agentResult.Text})
-			result.Summary = truncateToolOutput(agentResult.Text, 2000)
+			// Sanitize untrusted content in the output.
+			sanitized := SanitizeUntrustedContent(agentResult.Text, DefaultUntrustedContentPolicy())
+
+			// Detect and strip streaming directives from output text.
+			if sd := DetectStreamingDirective(sanitized); sd != nil {
+				// Streaming directive detected in output — log but don't
+				// act on it (directives in output are informational only).
+				_ = sd
+			}
+
+			result.Payloads = append(result.Payloads, types.ReplyPayload{Text: sanitized})
+			result.Summary = truncateToolOutput(sanitized, 2000)
 		}
 	}
 

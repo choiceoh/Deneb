@@ -29,6 +29,10 @@ type StatusReport struct {
 	GroupActivation types.GroupActivationMode
 	RunCount int
 
+	// Context usage.
+	ContextUsedTokens  int
+	ContextTotalTokens int
+
 	// Server-level fields (populated from StatusDeps).
 	Version           string
 	StartedAt         time.Time
@@ -72,6 +76,12 @@ func BuildStatusMessage(report StatusReport) string {
 	}
 	if len(modes) > 0 {
 		sections = append(sections, "⚙️ **Modes:** "+strings.Join(modes, " | "))
+	}
+
+	// Context usage section.
+	if report.ContextTotalTokens > 0 {
+		sections = append(sections, fmt.Sprintf("📊 **Context:** %s",
+			FormatContextUsageShort(report.ContextUsedTokens, report.ContextTotalTokens)))
 	}
 
 	// Channel section.

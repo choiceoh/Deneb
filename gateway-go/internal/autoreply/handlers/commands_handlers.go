@@ -9,6 +9,7 @@ package handlers
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,13 +116,31 @@ func (r *CommandRouter) registerBuiltinHandlers() {
 	r.Handle("kill", handleKillCommand)
 	r.Handle("compact", handleCompactCommand)
 
-	// Status
+	// Status & info
 	r.Handle("status", handleStatusCommand)
 	r.Handle("agents", handleAgentsCommand)
+	r.Handle("help", r.handleHelpCommand)
+	r.Handle("commands", r.handleCommandsCommand)
 
 	// Model
 	r.Handle("model", handleModelCommand)
 	r.Handle("verbose", handleVerboseCommand)
+}
+
+func (r *CommandRouter) handleHelpCommand(ctx CommandContext) (*CommandResult, error) {
+	commands := r.registry.Commands()
+	return &CommandResult{Reply: BuildHelpMessage(commands), SkipAgent: true}, nil
+}
+
+func (r *CommandRouter) handleCommandsCommand(ctx CommandContext) (*CommandResult, error) {
+	commands := r.registry.Commands()
+	page := 0
+	if ctx.Args != nil && ctx.Args.Raw != "" {
+		if p, err := strconv.Atoi(strings.TrimSpace(ctx.Args.Raw)); err == nil && p >= 0 {
+			page = p
+		}
+	}
+	return &CommandResult{Reply: BuildCommandsMessage(commands, page, 20), SkipAgent: true}, nil
 }
 
 // --- Helper functions ---

@@ -49,7 +49,17 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 		normalized := deps.Registry.NormalizeCommandBody(msg.Body, "")
 		if deps.Registry.HasControlCommand(normalized, "") {
 			cmdKey := extractCommandKey(normalized)
+			// Use ParseCommandArgs for proper positional argument parsing
+			// when the command definition has typed args.
 			args := extractCommandArgs(normalized, cmdKey)
+			if args != nil {
+				if cmd := deps.Registry.FindCommandByNativeName(cmdKey); cmd != nil {
+					parsed := handlers.ParseCommandArgs(cmd, args.Raw)
+					if parsed != nil {
+						args = parsed
+					}
+				}
+			}
 			result, err := deps.Router.Dispatch(handlers.CommandContext{
 				Command:    cmdKey,
 				Args:       args,
