@@ -228,6 +228,28 @@ func (s *Server) wireTelegramChatHandler() {
 		}
 	})
 
+	// Set draft delete function: deletes a streaming draft message from Telegram.
+	// Called when the draft loop stops to clean up the partial message before
+	// the final reply is delivered, preventing duplicate messages.
+	s.chatHandler.SetDraftDeleteFunc(func(ctx context.Context, delivery *chat.DeliveryContext, msgID string) error {
+		if delivery == nil || delivery.Channel != "telegram" || msgID == "" {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return fmt.Errorf("telegram client not connected")
+		}
+		chatID, err := telegram.ParseChatID(delivery.To)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		editMsgID, err := strconv.ParseInt(msgID, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid message ID %q: %w", msgID, err)
+		}
+		return client.DeleteMessage(ctx, chatID, editMsgID)
+	})
+
 	// Set draft edit function: sends or edits a streaming draft message in Telegram.
 	// Used by DraftStreamLoop for real-time message editing during LLM streaming.
 	s.chatHandler.SetDraftEditFunc(func(ctx context.Context, delivery *chat.DeliveryContext, msgID string, text string) (string, error) {

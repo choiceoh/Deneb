@@ -75,6 +75,7 @@ type runDeps struct {
 	channelUploadLimitFn func(channelID string) int64 // optional
 	toolProgressFn       ToolProgressFunc             // optional; reports tool events to channel integrations
 	draftEditFn          DraftEditFunc                // optional; sends/edits streaming draft messages
+	draftDeleteFn        DraftDeleteFunc              // optional; deletes streaming draft messages
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 

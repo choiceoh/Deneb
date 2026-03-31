@@ -233,6 +233,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		removeReactionFn:     h.removeReactionFn,
 		toolProgressFn:       h.toolProgressFn,
 		draftEditFn:          h.draftEditFn,
+		draftDeleteFn:        h.draftDeleteFn,
 		channelUploadLimitFn: h.ChannelUploadLimit,
 		providerConfigs:      h.providerConfigs,
 		logger:               h.logger,

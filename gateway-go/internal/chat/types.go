@@ -22,6 +22,9 @@ type ReactionFunc = toolctx.ReactionFunc
 // DraftEditFunc sends or edits a streaming draft message on the originating channel.
 type DraftEditFunc = toolctx.DraftEditFunc
 
+// DraftDeleteFunc deletes a streaming draft message from the originating channel.
+type DraftDeleteFunc = toolctx.DraftDeleteFunc
+
 // ToolProgressFunc is called during agent execution to report tool lifecycle events.
 type ToolProgressFunc = toolctx.ToolProgressFunc
 
