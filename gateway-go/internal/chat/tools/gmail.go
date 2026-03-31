@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -30,8 +31,16 @@ type GmailParams struct {
 	LabelName   string  `json:"label_name"`
 }
 
+// GmailPipelineDeps holds dependencies for the gmail tool including pipeline support.
+type GmailPipelineDeps struct {
+	LLMClient    *llm.Client
+	DefaultModel string
+	MemStore     *memory.Store    // nil = no memory recall in pipeline
+	MemEmbed     *memory.Embedder // nil = FTS-only memory search
+}
+
 // ToolGmail implements the gmail tool for structured Gmail operations via native API.
-func ToolGmail(llmClient *llm.Client, defaultModel string) ToolFunc {
+func ToolGmail(deps GmailPipelineDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p GmailParams
 		if err := jsonutil.UnmarshalInto("gmail params", input, &p); err != nil {
@@ -57,7 +66,7 @@ func ToolGmail(llmClient *llm.Client, defaultModel string) ToolFunc {
 		case "label":
 			return gmailLabel(ctx, client, p)
 		case "analyze":
-			return gmailAnalyze(ctx, client, llmClient, defaultModel, p)
+			return gmailAnalyze(ctx, client, deps, p)
 		default:
 			return fmt.Sprintf("알 수 없는 gmail 액션: %q. 지원: inbox, search, read, send, reply, label, analyze", p.Action), nil
 		}
@@ -264,18 +273,16 @@ func gmailLabel(ctx context.Context, client *gmail.Client, p GmailParams) (strin
 
 // --- analyze: LLM-based email analysis ---
 
-func gmailAnalyze(ctx context.Context, client *gmail.Client, llmClient *llm.Client, defaultModel string, p GmailParams) (string, error) {
-	if llmClient == nil {
+func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineDeps, p GmailParams) (string, error) {
+	if deps.LLMClient == nil {
 		return "LLM 클라이언트가 설정되지 않았습니다.", nil
 	}
 
 	// Determine which emails to analyze.
 	var messages []gmail.MessageSummary
 	if p.MessageID != "" {
-		// Analyze a specific message.
 		messages = []gmail.MessageSummary{{ID: p.MessageID}}
 	} else {
-		// Search and analyze matching emails.
 		query := p.Query
 		if query == "" {
 			query = "is:unread newer_than:1h"
@@ -291,8 +298,16 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, llmClient *llm.Clie
 		}
 	}
 
-	prompt := gmailpoll.DefaultPrompt
-	model := defaultModel
+	// Build pipeline deps.
+	pipeDeps := gmailpoll.PipelineDeps{
+		GmailClient: client,
+		LLMClient:   deps.LLMClient,
+		MainModel:   deps.DefaultModel,
+		MemStore:    deps.MemStore,
+		MemEmbed:    deps.MemEmbed,
+		// LocalClient/LocalModel not available in tool context — pipeline
+		// will fall back to single-LLM analysis (stage 1 skipped).
+	}
 
 	var sb strings.Builder
 	for i, summary := range messages {
@@ -302,7 +317,7 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, llmClient *llm.Clie
 			continue
 		}
 
-		analysis, err := gmailpoll.AnalyzeEmail(ctx, llmClient, model, prompt, detail)
+		analysis, err := gmailpoll.AnalyzeEmailPipeline(ctx, pipeDeps, detail)
 		if err != nil {
 			fmt.Fprintf(&sb, "⚠️ 분석 실패 (%s): %s\n\n", detail.Subject, err)
 			continue
