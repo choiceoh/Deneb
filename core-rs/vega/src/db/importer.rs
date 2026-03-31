@@ -46,7 +46,6 @@ pub fn import_files(config: &VegaConfig) -> Result<ImportStats, Box<dyn std::err
     let mut stats = ImportStats::default();
 
     for fpath in &md_files {
-        let fpath_str = fpath.to_string_lossy().to_string();
         let fname = fpath
             .file_name()
             .unwrap_or_default()
@@ -62,7 +61,6 @@ pub fn import_files(config: &VegaConfig) -> Result<ImportStats, Box<dyn std::err
             }
             Err(e) => {
                 stats.errors.push(format!("{}: {}", fname, e));
-                log::warn!("Import error for {}: {}", fpath_str, e);
             }
         }
     }
@@ -426,20 +424,28 @@ fn insert_sections_and_tags(
 /// Collect all .md files from a directory (recursive, no symlinks).
 fn collect_md_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    if let Ok(walker) = walkdir::WalkDir::new(dir)
-        .follow_links(false)
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-    {
-        for entry in walker {
-            let path = entry.path().to_path_buf();
-            if path.extension().is_some_and(|ext| ext == "md") && !path.is_symlink() {
-                files.push(path);
-            }
-        }
-    }
+    collect_md_files_recursive(dir, &mut files);
     files.sort();
     files
+}
+
+fn collect_md_files_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        // Skip symlinks
+        if path.is_symlink() {
+            continue;
+        }
+        if path.is_dir() {
+            collect_md_files_recursive(&path, out);
+        } else if path.extension().is_some_and(|ext| ext == "md") {
+            out.push(path);
+        }
+    }
 }
 
 #[cfg(test)]

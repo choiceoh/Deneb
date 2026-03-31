@@ -23,7 +23,6 @@ vega = ["dep:deneb-vega"]
 serde.workspace = true
 serde_json.workspace = true
 memchr = "2"
-parking_lot = "0.12"
 
 # Protobuf runtime
 prost.workspace = true
@@ -55,12 +54,6 @@ chrono-tz.workspace = true
 
 # Markdown parsing
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
-
-# Hex encoding (config token generation, hash output)
-hex = "0.4"
-
-# Cryptographic random (config token auto-generation)
-rand = "0.9"
 
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
