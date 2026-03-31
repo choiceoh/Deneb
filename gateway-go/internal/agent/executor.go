@@ -64,6 +64,16 @@ func RunAgent(
 			ctx = cfg.OnTurnInit(ctx)
 		}
 
+		// Deferred system text injection: from turn 1 onward, check if
+		// late-arriving context (e.g., proactive hints) is ready. Once
+		// injected, clear the hook so subsequent turns skip the check.
+		if turn > 0 && cfg.DeferredSystemText != nil {
+			if extra := cfg.DeferredSystemText(); extra != "" {
+				cfg.System = llm.AppendSystemText(cfg.System, extra)
+				cfg.DeferredSystemText = nil
+			}
+		}
+
 		req := llm.ChatRequest{
 			Model:     cfg.Model,
 			Messages:  messages,

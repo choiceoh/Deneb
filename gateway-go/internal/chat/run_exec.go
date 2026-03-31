@@ -252,47 +252,16 @@ func executeAgentRun(
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
-	// 6. Bounded wait for proactive context hint.
-	// The goroutine runs concurrently with the parallel prep above; after prep
-	// completes we wait a little longer, using a dynamic budget based on how
-	// much time proactive already had during prep. If still not ready, skip it
-	// to avoid stalling the run.
-	// Hit rate is logged here to inform future tuning decisions.
-	var proactiveHint string
-	select {
-	case proactive := <-proactiveCh:
-		if proactive.hint != "" {
-			logger.Info("proactive context hit", "chars", len(proactive.hint))
-			proactiveHint = "\n## Context Hint (from local analysis)\n" + proactive.hint
-		} else {
-			logger.Debug("proactive context miss (N/A or filtered)")
-		}
-	default:
-		proactiveGraceWait := computeProactiveGraceWait(time.Since(proactiveStart))
-		select {
-		case proactive := <-proactiveCh:
-			if proactive.hint != "" {
-				logger.Info("proactive context hit (after grace wait)",
-					"chars", len(proactive.hint),
-					"waitMs", proactiveGraceWait.Milliseconds(),
-					"elapsedMs", time.Since(proactiveStart).Milliseconds())
-				proactiveHint = "\n## Context Hint (from local analysis)\n" + proactive.hint
-			} else {
-				logger.Debug("proactive context miss (N/A or filtered)")
-			}
-		case <-time.After(proactiveGraceWait):
-			logger.Debug("proactive context not ready, skipping (fire-and-forget)",
-				"graceWaitMs", proactiveGraceWait.Milliseconds(),
-				"elapsedMs", time.Since(proactiveStart).Milliseconds())
-		}
-	}
+	// 6. Proactive context: no blocking wait. The hint is injected via
+	// DeferredSystemText on turn 1+. By then the goroutine has had the full
+	// duration of turn 0 (LLM response + tool execution) to complete — typically
+	// several seconds — giving effectively 100% hit rate with zero user wait.
 
-	// 7. Append knowledge, proactive hint, and Aurora systemAddition to the built system prompt.
-	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, proactiveHint, auroraSystemAddition)
+	// 7. Append knowledge and Aurora systemAddition to the built system prompt.
+	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, auroraSystemAddition)
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt),
-		"knowledgeChars", len(knowledgeAddition),
-		"proactiveInjected", proactiveHint != "")
+		"knowledgeChars", len(knowledgeAddition))
 
 	runLog.LogPrep(agentlog.RunPrepData{
 		SystemPromptChars: len(systemPrompt),
@@ -343,6 +312,22 @@ func executeAgentRun(
 		// Each inline image is ~1600 tokens; stripping saves that cost per turn
 		// from turn 1 onward for multi-turn runs that start with an image.
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
+		// Deferred proactive context: injected on turn 1+ without blocking turn 0.
+		// By the time turn 0 completes (LLM stream + tool exec), the goroutine
+		// launched at step 4 has had several seconds to finish.
+		DeferredSystemText: func() string {
+			select {
+			case p := <-proactiveCh:
+				if p.hint != "" {
+					logger.Info("proactive context hit (deferred injection)",
+						"chars", len(p.hint),
+						"elapsedMs", time.Since(proactiveStart).Milliseconds())
+					return "\n## Context Hint (from local analysis)\n" + p.hint
+				}
+			default:
+			}
+			return ""
+		},
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
 		// RunCache is injected once and persists across turns.
