@@ -20,7 +20,8 @@ impl<'a> CatalogIndex<'a> {
     pub fn new(catalog: &'a [ModelCatalogEntry]) -> Self {
         let mut map = HashMap::with_capacity(catalog.len());
         for entry in catalog {
-            let key = (normalize_provider_id(&entry.provider), entry.id.to_lowercase());
+            let provider_key = normalize_provider_id(&entry.provider).into_owned();
+            let key = (provider_key, entry.id.to_lowercase());
             map.insert(key, entry);
         }
         Self { map }
@@ -28,17 +29,19 @@ impl<'a> CatalogIndex<'a> {
 
     /// O(1) lookup — returns the entry if provider+model are in the catalog.
     pub fn find(&self, provider: &str, model: &str) -> Option<&'a ModelCatalogEntry> {
-        let key = (normalize_provider_id(provider), model.to_lowercase());
+        let provider_key = normalize_provider_id(provider).into_owned();
+        let key = (provider_key, model.to_lowercase());
         self.map.get(&key).copied()
     }
 
     /// Convenience: check `in_catalog` + allowlist status (mirrors `get_model_ref_status`).
+    #[allow(dead_code)]
     pub fn ref_status(
         &self,
         model_ref: &ModelRef,
         allowed_keys: Option<&std::collections::HashSet<String>>,
     ) -> ModelRefStatus {
-        let key = model_key(&model_ref.provider, &model_ref.model);
+        let key = model_key(&model_ref.provider, &model_ref.model).into_owned();
         let in_catalog = self.find(&model_ref.provider, &model_ref.model).is_some();
         let allow_any = allowed_keys.is_none();
         let allowed = allow_any
@@ -123,6 +126,7 @@ mod tests {
         find_model_in_catalog, get_model_ref_status, model_supports_document,
         model_supports_vision, resolve_reasoning_default,
     };
+    use super::CatalogIndex;
 
     #[test]
     fn model_catalog_support_checks() {
@@ -182,6 +186,23 @@ mod tests {
         let status = get_model_ref_status(&model_ref, &[], None);
         assert!(status.allow_any);
         assert!(status.allowed);
+    }
+
+    #[test]
+    fn catalog_index_normalizes_provider_string_keys() {
+        let catalog = vec![ModelCatalogEntry {
+            provider: "Aws-Bedrock".to_string(),
+            id: "claude-opus-4-6".to_string(),
+            ..Default::default()
+        }];
+        let index = CatalogIndex::new(&catalog);
+
+        assert!(
+            index
+                .find("amazon-bedrock", "claude-opus-4-6")
+                .is_some()
+        );
+        assert!(index.find("bedrock", "claude-opus-4-6").is_some());
     }
 
     #[test]
