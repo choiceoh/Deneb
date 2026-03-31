@@ -62,6 +62,8 @@ const (
 	DefaultSglangBaseURL = "http://127.0.0.1:30000/v1"
 	DefaultSglangModel   = "Qwen/Qwen3.5-35B-A3B"
 
+	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
+
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 	DefaultZaiModel   = "glm-5-turbo"
 
@@ -285,6 +287,8 @@ func resolveBaseURL(providerID string) string {
 		return DefaultZaiBaseURL
 	case "sglang":
 		return DefaultSglangBaseURL
+	case "vllm":
+		return DefaultVllmBaseURL
 	case "google":
 		return DefaultGoogleBaseURL
 	case "anthropic":

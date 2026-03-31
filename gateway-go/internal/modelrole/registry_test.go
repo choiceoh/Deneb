@@ -79,6 +79,12 @@ func TestEmptyMainModelDefaultsToZai(t *testing.T) {
 	}
 }
 
+func TestResolveBaseURLVllm(t *testing.T) {
+	if got := resolveBaseURL("vllm"); got != DefaultVllmBaseURL {
+		t.Fatalf("resolveBaseURL(%q) = %q, want %q", "vllm", got, DefaultVllmBaseURL)
+	}
+}
+
 func TestFallbackChain(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test-model")
 

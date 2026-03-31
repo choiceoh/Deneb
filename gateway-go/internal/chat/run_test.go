@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -48,6 +52,7 @@ func TestInferAPIType(t *testing.T) {
 		{"zai", "openai"},
 		{"deepseek", "openai"},
 		{"sglang", "openai"},
+		{"vllm", "openai"},
 		{"", "openai"},
 	}
 	for _, tt := range tests {
@@ -130,6 +135,7 @@ func TestResolveDefaultBaseURL(t *testing.T) {
 		{"google", "https://generativelanguage.googleapis.com/v1beta/openai"},
 		{"zai", defaultZaiBaseURL},
 		{"sglang", modelrole.DefaultSglangBaseURL},
+		{"vllm", modelrole.DefaultVllmBaseURL},
 		{"openai", ""},
 		{"", ""},
 	}
@@ -140,6 +146,84 @@ func TestResolveDefaultBaseURL(t *testing.T) {
 				t.Errorf("resolveDefaultBaseURL(%q) = %q, want %q", tt.provider, got, tt.wantURL)
 			}
 		})
+	}
+}
+
+func TestResolveClient_UsesProviderConfigWithoutAPIKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("Authorization header = %q, want empty", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	deps := runDeps{
+		providerConfigs: map[string]ProviderConfig{
+			"vllm": {
+				BaseURL: server.URL,
+			},
+		},
+	}
+
+	client, apiType := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if client == nil {
+		t.Fatal("expected client from provider config")
+	}
+	if apiType != "openai" {
+		t.Fatalf("apiType = %q, want %q", apiType, "openai")
+	}
+
+	got, err := client.CompleteOpenAI(context.Background(), llm.ChatRequest{
+		Model:     "local-model",
+		Messages:  []llm.Message{llm.NewTextMessage("user", "hello")},
+		MaxTokens: 32,
+	})
+	if err != nil {
+		t.Fatalf("CompleteOpenAI error: %v", err)
+	}
+	if got != "ok" {
+		t.Fatalf("CompleteOpenAI = %q, want %q", got, "ok")
+	}
+}
+
+func TestResolveClient_ExpandsProviderConfigEnvVars(t *testing.T) {
+	t.Setenv("VLLM_API_KEY", "vllm-test-key")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer vllm-test-key" {
+			t.Fatalf("Authorization header = %q, want %q", got, "Bearer vllm-test-key")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"expanded"}}]}`))
+	}))
+	defer server.Close()
+
+	deps := runDeps{
+		providerConfigs: map[string]ProviderConfig{
+			"vllm": {
+				BaseURL: server.URL,
+				APIKey:  "${VLLM_API_KEY}",
+			},
+		},
+	}
+
+	client, _ := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if client == nil {
+		t.Fatal("expected client from provider config")
+	}
+
+	got, err := client.CompleteOpenAI(context.Background(), llm.ChatRequest{
+		Model:     "local-model",
+		Messages:  []llm.Message{llm.NewTextMessage("user", "hello")},
+		MaxTokens: 32,
+	})
+	if err != nil {
+		t.Fatalf("CompleteOpenAI error: %v", err)
+	}
+	if got != "expanded" {
+		t.Fatalf("CompleteOpenAI = %q, want %q", got, "expanded")
 	}
 }
 
