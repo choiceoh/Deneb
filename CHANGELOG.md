@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.5.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.4.1...deneb-v4.5.0) (2026-03-31)
+
+
+### ✨ Features
+
+* **memory:** add semantic dedup on fact insertion ([0cff1de](https://github.com/choiceoh/Deneb/commit/0cff1defedabd7679c352b8997a2a109b77505ed))
+
+
+### 🐛 Bug Fixes
+
+* **aurora:** add cooldown and background execution for proactive compaction ([a4ff030](https://github.com/choiceoh/Deneb/commit/a4ff03088e2b345501a6f6c3751b2f56ecb14e20))
+* **aurora:** add proactive compaction to prevent summaries=0 deadlock ([ef2c858](https://github.com/choiceoh/Deneb/commit/ef2c858a68f8ddbb03c0db4a7ede6381f30736a4))
+* **aurora:** fix stale context and ctx cancellation in proactive compaction ([7f8d0a1](https://github.com/choiceoh/Deneb/commit/7f8d0a15f6aaed79f56abad46aed1a6beae0c6a7))
+* **memory:** align knowledge prefetch volatility with decay half-lives ([9c078f2](https://github.com/choiceoh/Deneb/commit/9c078f2ac7130e5a136cdc805eca3ee3d6c6fec3))
+
+
+### 🔧 Internal
+
+* **memory:** improve retrieval scoring and FTS search strategy ([f469468](https://github.com/choiceoh/Deneb/commit/f46946870a70e6b4f0c98c388eb7e0faf608cf65))
+* **pilot:** tighten system prompt to reduce pilot overuse ([e468ac3](https://github.com/choiceoh/Deneb/commit/e468ac3e1099529216464e06ecee6dc8e9923404))
+
 ## [4.4.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.4.0...deneb-v4.4.1) (2026-03-30)
 
 
