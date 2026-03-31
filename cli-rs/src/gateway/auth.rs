@@ -34,9 +34,7 @@ pub fn resolve_gateway_auth(
     // Token resolution
     let (token, source) = if let Some(t) = cli_token.filter(|s| !s.trim().is_empty()) {
         (Some(t.trim().to_string()), AuthSource::CliFlag)
-    } else if let Some(t) =
-        get_env_trimmed("DENEB_GATEWAY_TOKEN").or_else(|| get_env_trimmed("CLAWDBOT_GATEWAY_TOKEN"))
-    {
+    } else if let Some(t) = get_env_trimmed("DENEB_GATEWAY_TOKEN") {
         (Some(t), AuthSource::EnvVar)
     } else if let Some(t) = config.auth_token() {
         (Some(t.to_string()), AuthSource::Config)
@@ -47,9 +45,7 @@ pub fn resolve_gateway_auth(
     // Password resolution
     let password = if let Some(p) = cli_password.filter(|s| !s.trim().is_empty()) {
         Some(p.trim().to_string())
-    } else if let Some(p) = get_env_trimmed("DENEB_GATEWAY_PASSWORD")
-        .or_else(|| get_env_trimmed("CLAWDBOT_GATEWAY_PASSWORD"))
-    {
+    } else if let Some(p) = get_env_trimmed("DENEB_GATEWAY_PASSWORD") {
         Some(p)
     } else {
         config

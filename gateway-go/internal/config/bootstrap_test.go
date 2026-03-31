@@ -122,7 +122,6 @@ func TestBootstrapGatewayConfigPasswordModeNoPassword(t *testing.T) {
 	data, _ := json.Marshal(cfg)
 	os.WriteFile(cfgPath, data, 0644)
 	t.Setenv("DENEB_GATEWAY_PASSWORD", "")
-	t.Setenv("CLAWDBOT_GATEWAY_PASSWORD", "")
 
 	_, err := BootstrapGatewayConfig(BootstrapOptions{
 		ConfigPath: cfgPath,
@@ -138,7 +137,6 @@ func TestBootstrapPersistToken(t *testing.T) {
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	// No config file — should create one.
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
-	t.Setenv("CLAWDBOT_GATEWAY_TOKEN", "")
 
 	result, err := BootstrapGatewayConfig(BootstrapOptions{
 		ConfigPath: cfgPath,
@@ -182,7 +180,6 @@ func TestBootstrapAuthOverride(t *testing.T) {
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	os.WriteFile(cfgPath, []byte("{}"), 0644)
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
-	t.Setenv("CLAWDBOT_GATEWAY_TOKEN", "")
 
 	result, err := BootstrapGatewayConfig(BootstrapOptions{
 		ConfigPath: cfgPath,

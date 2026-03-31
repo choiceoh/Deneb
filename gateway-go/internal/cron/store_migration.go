@@ -18,7 +18,6 @@ type StoreMigrationIssues struct {
 	LegacyPayloadKind            int `json:"legacyPayloadKind,omitempty"`
 	LegacyPayloadProvider        int `json:"legacyPayloadProvider,omitempty"`
 	LegacyTopLevelPayloadFields  int `json:"legacyTopLevelPayloadFields,omitempty"`
-	LegacyTopLevelDeliveryFields int `json:"legacyTopLevelDeliveryFields,omitempty"`
 	LegacyDeliveryMode           int `json:"legacyDeliveryMode,omitempty"`
 }
 
@@ -156,10 +155,6 @@ func normalizeOneStoredJob(raw map[string]any, issues *StoreMigrationIssues) boo
 		mutated = true
 		issues.LegacyTopLevelPayloadFields++
 	}
-	if stripLegacyTopLevelDeliveryFields(raw) {
-		mutated = true
-		issues.LegacyTopLevelDeliveryFields++
-	}
 
 	// Migrate legacy payload provider.
 	if payloadIsMap && payload != nil {
@@ -243,26 +238,12 @@ func normalizeOneStoredJob(raw map[string]any, issues *StoreMigrationIssues) boo
 		strings.HasPrefix(sessionTarget, "session:") ||
 		(sessionTarget == "" && payloadKind == "agentTurn")
 
-	_, hasDelivery := raw["delivery"].(map[string]any)
-	legacyResult := NormalizeLegacyDeliveryInputMap(
-		mapOrNil(raw, "delivery"),
-		mapOrNil(raw, "payload"),
-	)
-
+	// Auto-set delivery for isolated agentTurn jobs that don't have one.
 	if isIsolatedAgentTurn && payloadKind == "agentTurn" {
-		if !hasDelivery && legacyResult.Delivery != nil {
-			raw["delivery"] = legacyResult.Delivery
-			mutated = true
-		} else if !hasDelivery {
+		if _, hasDelivery := raw["delivery"].(map[string]any); !hasDelivery {
 			raw["delivery"] = map[string]any{"mode": "announce"}
 			mutated = true
-		} else if legacyResult.Mutated && legacyResult.Delivery != nil {
-			raw["delivery"] = legacyResult.Delivery
-			mutated = true
 		}
-	} else if legacyResult.Mutated && legacyResult.Delivery != nil {
-		raw["delivery"] = legacyResult.Delivery
-		mutated = true
 	}
 
 	return mutated
@@ -401,17 +382,6 @@ func stripLegacyTopLevelFields(raw map[string]any) bool {
 	return found
 }
 
-func stripLegacyTopLevelDeliveryFields(raw map[string]any) bool {
-	fields := []string{"deliver", "channel", "to", "bestEffortDeliver", "provider"}
-	found := false
-	for _, f := range fields {
-		if _, has := raw[f]; has {
-			delete(raw, f)
-			found = true
-		}
-	}
-	return found
-}
 
 func normalizeScheduleMap(sched map[string]any, raw map[string]any) bool {
 	mutated := false

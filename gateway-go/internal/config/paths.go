@@ -31,11 +31,9 @@ const (
 // StateDirPolicy encodes the precedence rules for resolving the state directory.
 //
 // Precedence (first match wins):
-//  1. EnvVars[0] (DENEB_STATE_DIR)
-//  2. EnvVars[1] (CLAWDBOT_STATE_DIR, legacy)
-//  3. ~/.deneb if it already exists on disk
-//  4. First existing legacy directory (.clawdbot, .moldbot, .moltbot)
-//  5. ~/.deneb (default fallback — directory need not exist)
+//  1. DENEB_STATE_DIR env var
+//  2. ~/.deneb if it already exists on disk
+//  3. ~/.deneb (default fallback — directory need not exist)
 type StateDirPolicy struct {
 	// EnvVars are checked in order for an explicit path override.
 	EnvVars []string
@@ -46,7 +44,7 @@ type StateDirPolicy struct {
 // DefaultStateDirPolicy returns the standard production policy.
 func DefaultStateDirPolicy() StateDirPolicy {
 	return StateDirPolicy{
-		EnvVars: []string{"DENEB_STATE_DIR", "CLAWDBOT_STATE_DIR"},
+		EnvVars: []string{"DENEB_STATE_DIR"},
 		Dirname: DefaultStateDirname,
 	}
 }
@@ -63,17 +61,12 @@ func (p StateDirPolicy) ResolveFrom(home string) string {
 
 	newDir := filepath.Join(home, p.Dirname)
 
-	// 3. Canonical dir exists.
+	// 2. Canonical dir exists.
 	if dirExists(newDir) {
 		return newDir
 	}
 
-	// 4. First existing legacy dir.
-	if legacy := findLegacyStateDir(home); legacy != "" {
-		return legacy
-	}
-
-	// 5. Default.
+	// 3. Default.
 	return newDir
 }
 
@@ -87,10 +80,9 @@ func (p StateDirPolicy) Resolve() string {
 // ConfigPathPolicy encodes the precedence rules for resolving the config path.
 //
 // Precedence (first match wins):
-//  1. EnvVars[0] (DENEB_CONFIG_PATH)
-//  2. EnvVars[1] (CLAWDBOT_CONFIG_PATH, legacy)
-//  3. First existing config candidate in stateDir (canonical, then legacy names)
-//  4. {stateDir}/deneb.json (default fallback — file need not exist)
+//  1. DENEB_CONFIG_PATH env var
+//  2. {stateDir}/deneb.json if it exists on disk
+//  3. {stateDir}/deneb.json (default fallback — file need not exist)
 type ConfigPathPolicy struct {
 	// EnvVars are checked in order for an explicit path override.
 	EnvVars []string
@@ -101,7 +93,7 @@ type ConfigPathPolicy struct {
 // DefaultConfigPathPolicy returns the standard production policy.
 func DefaultConfigPathPolicy() ConfigPathPolicy {
 	return ConfigPathPolicy{
-		EnvVars:  []string{"DENEB_CONFIG_PATH", "CLAWDBOT_CONFIG_PATH"},
+		EnvVars:  []string{"DENEB_CONFIG_PATH"},
 		Filename: DefaultConfigFilename,
 	}
 }
@@ -109,56 +101,26 @@ func DefaultConfigPathPolicy() ConfigPathPolicy {
 // ResolveFrom resolves the config path given an explicit stateDir.
 // Useful in tests where the state directory is known up front.
 func (p ConfigPathPolicy) ResolveFrom(stateDir string) string {
-	// 1–2. Env override.
+	// 1. Env override.
 	for _, key := range p.EnvVars {
 		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 			return expandHomePath(v)
 		}
 	}
 
-	// 3. First existing candidate.
-	for _, candidate := range p.Candidates(stateDir) {
-		if fileExists(candidate) {
-			return candidate
-		}
+	// 2. Existing canonical file.
+	candidate := filepath.Join(stateDir, p.Filename)
+	if fileExists(candidate) {
+		return candidate
 	}
 
-	// 4. Default.
-	return filepath.Join(stateDir, p.Filename)
+	// 3. Default.
+	return candidate
 }
 
 // Resolve resolves using the auto-resolved state directory.
 func (p ConfigPathPolicy) Resolve() string {
-	stateDir := DefaultStateDirPolicy().Resolve()
-
-	// Also check legacy config files stored directly inside legacy home dirs
-	// when the resolved state dir is the canonical default.
-	home := resolveHomeDir()
-	defaultStateDir := filepath.Join(home, DefaultStateDirname)
-	if filepath.Clean(stateDir) == filepath.Clean(defaultStateDir) {
-		for _, legacyDir := range legacyStateDirnames {
-			dir := filepath.Join(home, legacyDir)
-			allNames := append([]string{DefaultConfigFilename}, legacyConfigFilenames...)
-			for _, name := range allNames {
-				candidate := filepath.Join(dir, name)
-				if fileExists(candidate) {
-					return candidate
-				}
-			}
-		}
-	}
-
-	return p.ResolveFrom(stateDir)
-}
-
-// Candidates returns the ordered list of config file paths to probe in stateDir.
-func (p ConfigPathPolicy) Candidates(stateDir string) []string {
-	out := make([]string, 0, 1+len(legacyConfigFilenames))
-	out = append(out, filepath.Join(stateDir, p.Filename))
-	for _, name := range legacyConfigFilenames {
-		out = append(out, filepath.Join(stateDir, name))
-	}
-	return out
+	return p.ResolveFrom(DefaultStateDirPolicy().Resolve())
 }
 
 // ── GatewayPortPolicy ─────────────────────────────────────────────────────────
@@ -166,10 +128,9 @@ func (p ConfigPathPolicy) Candidates(stateDir string) []string {
 // GatewayPortPolicy encodes the precedence rules for resolving the gateway port.
 //
 // Precedence (first match wins):
-//  1. EnvVars[0] (DENEB_GATEWAY_PORT)
-//  2. EnvVars[1] (CLAWDBOT_GATEWAY_PORT, legacy)
-//  3. Caller-supplied config port
-//  4. DefaultPort (18789)
+//  1. DENEB_GATEWAY_PORT env var
+//  2. Caller-supplied config port
+//  3. DefaultPort (18789)
 type GatewayPortPolicy struct {
 	// EnvVars are checked in order for an explicit port override.
 	EnvVars []string
@@ -180,7 +141,7 @@ type GatewayPortPolicy struct {
 // DefaultGatewayPortPolicy returns the standard production policy.
 func DefaultGatewayPortPolicy() GatewayPortPolicy {
 	return GatewayPortPolicy{
-		EnvVars:     []string{"DENEB_GATEWAY_PORT", "CLAWDBOT_GATEWAY_PORT"},
+		EnvVars:     []string{"DENEB_GATEWAY_PORT"},
 		DefaultPort: DefaultGatewayPort,
 	}
 }

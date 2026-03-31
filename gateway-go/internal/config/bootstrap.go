@@ -157,7 +157,7 @@ func resolveStartupAuth(cfg *DenebConfig, logger *slog.Logger) (*ResolvedGateway
 		// No auth required.
 
 	case "token":
-		token := resolveSecretValue(authCfg.Token, "DENEB_GATEWAY_TOKEN", "CLAWDBOT_GATEWAY_TOKEN")
+		token := resolveSecretValue(authCfg.Token, "DENEB_GATEWAY_TOKEN")
 		if token == "" {
 			// Auto-generate a random token.
 			generated, err := generateRandomToken()
@@ -171,7 +171,7 @@ func resolveStartupAuth(cfg *DenebConfig, logger *slog.Logger) (*ResolvedGateway
 		resolved.Token = token
 
 	case "password":
-		password := resolveSecretValue(authCfg.Password, "DENEB_GATEWAY_PASSWORD", "CLAWDBOT_GATEWAY_PASSWORD")
+		password := resolveSecretValue(authCfg.Password, "DENEB_GATEWAY_PASSWORD")
 		if password == "" {
 			return nil, "", fmt.Errorf("gateway auth mode=password requires a password (set gateway.auth.password or DENEB_GATEWAY_PASSWORD)")
 		}
