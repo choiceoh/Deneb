@@ -12,6 +12,10 @@ const schemaSQL = `
 PRAGMA journal_mode = WAL;
 PRAGMA busy_timeout = 5000;
 PRAGMA foreign_keys = ON;
+PRAGMA synchronous = NORMAL;
+PRAGMA cache_size = -16000;
+PRAGMA mmap_size = 268435456;
+PRAGMA temp_store = MEMORY;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- Sequences & metadata
@@ -241,6 +245,11 @@ CREATE INDEX IF NOT EXISTS idx_facts_active ON facts(active);
 CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
 CREATE INDEX IF NOT EXISTS idx_facts_importance ON facts(importance DESC);
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
+
+-- Composite indexes for common filtered queries (active=1 prefix).
+CREATE INDEX IF NOT EXISTS idx_facts_active_importance ON facts(active, importance DESC);
+CREATE INDEX IF NOT EXISTS idx_facts_active_category ON facts(active, category, importance DESC);
+CREATE INDEX IF NOT EXISTS idx_facts_active_created ON facts(active, created_at DESC);
 
 -- Fact-level FTS indices (used by memory.Store search path).
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(

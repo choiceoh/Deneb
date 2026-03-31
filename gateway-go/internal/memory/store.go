@@ -96,6 +96,11 @@ type Store struct {
 	// Populated on first LoadEmbeddings call, invalidated on mutations.
 	embCache      map[int64][]float32
 	embCacheReady bool
+
+	// onFactMutate is called when high-importance facts are inserted/updated/deleted.
+	// Used to invalidate the Tier-1 cache so new facts appear in the system prompt
+	// immediately rather than waiting for the 5-minute cache TTL.
+	onFactMutate func()
 }
 
 // schema v1 for the memory store.
@@ -103,6 +108,10 @@ const schemaSQL = `
 PRAGMA journal_mode = WAL;
 PRAGMA busy_timeout = 5000;
 PRAGMA foreign_keys = ON;
+PRAGMA synchronous = NORMAL;
+PRAGMA cache_size = -16000;
+PRAGMA mmap_size = 268435456;
+PRAGMA temp_store = MEMORY;
 
 CREATE TABLE IF NOT EXISTS facts (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,6 +134,11 @@ CREATE INDEX IF NOT EXISTS idx_facts_active ON facts(active);
 CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
 CREATE INDEX IF NOT EXISTS idx_facts_importance ON facts(importance DESC);
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
+
+-- Composite indexes for common filtered queries (active=1 prefix).
+CREATE INDEX IF NOT EXISTS idx_facts_active_importance ON facts(active, importance DESC);
+CREATE INDEX IF NOT EXISTS idx_facts_active_category ON facts(active, category, importance DESC);
+CREATE INDEX IF NOT EXISTS idx_facts_active_created ON facts(active, created_at DESC);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
 	content,
@@ -264,6 +278,21 @@ func NewStore(dbPath string) (*Store, error) {
 // When set, SearchFacts will rerank results after hybrid scoring.
 func (s *Store) SetReranker(fn RerankFunc) {
 	s.reranker = fn
+}
+
+// SetFactMutateCallback registers a function called when facts are mutated
+// (insert with importance >= Tier1Threshold, update importance, deactivate, supersede).
+// Typically wired to unified.InvalidateTier1Cache to keep the system prompt fresh.
+func (s *Store) SetFactMutateCallback(fn func()) {
+	s.onFactMutate = fn
+}
+
+// notifyFactMutate calls the onFactMutate callback if set.
+// Must NOT be called while holding s.mu to avoid potential deadlocks.
+func (s *Store) notifyFactMutate() {
+	if s.onFactMutate != nil {
+		s.onFactMutate()
+	}
 }
 
 // Close closes the database connection.
