@@ -8,26 +8,20 @@ import (
 )
 
 func TestResolveStateDirDefault(t *testing.T) {
-	// Unset overrides for this test.
 	t.Setenv("DENEB_STATE_DIR", "")
-	t.Setenv("CLAWDBOT_STATE_DIR", "")
 
 	dir := ResolveStateDir()
 	if dir == "" {
 		t.Fatal("expected non-empty state dir")
 	}
-	// Should end with .deneb or a legacy dirname.
-	base := filepath.Base(dir)
-	valid := base == ".deneb" || base == ".clawdbot" || base == ".moldbot" || base == ".moltbot"
-	if !valid {
-		t.Errorf("unexpected state dir basename: %q", base)
+	if filepath.Base(dir) != ".deneb" {
+		t.Errorf("unexpected state dir basename: %q", filepath.Base(dir))
 	}
 }
 
 func TestResolveStateDirOverride(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", tmp)
-	t.Setenv("CLAWDBOT_STATE_DIR", "")
 
 	dir := ResolveStateDir()
 	if dir != tmp {
@@ -42,7 +36,6 @@ func TestResolveConfigPathOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DENEB_CONFIG_PATH", cfgPath)
-	t.Setenv("CLAWDBOT_CONFIG_PATH", "")
 
 	got := ResolveConfigPath()
 	if got != cfgPath {
@@ -181,7 +174,6 @@ func TestResolveGatewayPort(t *testing.T) {
 
 	// Env override takes precedence.
 	t.Setenv("DENEB_GATEWAY_PORT", "54321")
-	t.Setenv("CLAWDBOT_GATEWAY_PORT", "")
 	port = ResolveGatewayPort(cfg)
 	if port != 54321 {
 		t.Errorf("expected 54321, got %d", port)

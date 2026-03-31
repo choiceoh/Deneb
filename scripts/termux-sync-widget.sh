@@ -6,7 +6,7 @@
 termux-toast "Syncing Deneb auth..."
 
 # Run sync on l36 server
-SERVER="${DENEB_SERVER:-${CLAWDBOT_SERVER:-l36}}"
+SERVER="${DENEB_SERVER:-l36}"
 RESULT=$(ssh "$SERVER" '/home/admin/deneb/scripts/sync-claude-code-auth.sh' 2>&1)
 EXIT_CODE=$?
 
