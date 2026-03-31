@@ -247,6 +247,7 @@ func (s *Service) analyzeWithPipeline(ctx context.Context, gmailClient *gmail.Cl
 		MainModel:   s.cfg.Model,
 		MemStore:    s.cfg.MemStore,
 		MemEmbed:    s.cfg.MemEmbed,
+		Logger:      s.log,
 	}
 
 	if deps.canRunPipeline() {

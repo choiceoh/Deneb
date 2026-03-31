@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,10 @@ const (
 	stage1MaxTokens = 768
 	// Stage 2 (final analysis) token limit.
 	stage2MaxTokens = 1536
+
+	// Stage 3: memory extraction.
+	stage3Timeout   = 30 * time.Second
+	stage3MaxTokens = 768
 )
 
 // PipelineDeps holds dependencies for the multi-stage analysis pipeline.
@@ -36,8 +41,9 @@ type PipelineDeps struct {
 	LocalClient *llm.Client    // local SGLang for extractors (stage 1)
 	LocalModel  string         // SGLang model name
 	MainModel   string         // main LLM model name
-	MemStore    *memory.Store  // for memory recall (nil = skip stage 1b)
+	MemStore    *memory.Store    // for memory recall (nil = skip stage 1b)
 	MemEmbed    *memory.Embedder // for vector search query embedding (nil = FTS only)
+	Logger      *slog.Logger     // optional; nil = slog.Default()
 }
 
 // canRunPipeline returns true if we have enough deps for the multi-stage pipeline.
@@ -51,6 +57,19 @@ type ThreadContext struct {
 	PriorExchanges string   `json:"prior_exchanges"`
 	OngoingTopics  []string `json:"ongoing_topics"`
 	SenderRelation string   `json:"sender_relation"`
+}
+
+// EmailFact is a fact extracted from email analysis, with optional project tag.
+type EmailFact struct {
+	Content    string  `json:"content"`
+	Category   string  `json:"category"`
+	Importance float64 `json:"importance"`
+	ExpiryHint string  `json:"expiry_hint,omitempty"`
+	Project    string  `json:"project,omitempty"`
+}
+
+type emailFactsResponse struct {
+	Facts []EmailFact `json:"facts"`
 }
 
 // MemoryContext holds extracted context from memory recall.
@@ -103,6 +122,49 @@ From: %s
 Subject: %s
 
 ## 메모리 검색 결과
+%s`
+
+// SourceEmailAnalysis is the fact source identifier for email-derived facts.
+const SourceEmailAnalysis = "email_analysis"
+
+const emailFactExtractorSystem = `당신은 이메일 정보 분류기입니다. 이메일 분석 결과에서 장기적으로 기억할 가치가 있는 사실을 추출합니다.
+반드시 JSON으로만 응답하세요.`
+
+const emailFactExtractorPrompt = `다음은 이메일과 그 분석 결과입니다.
+장기적으로 기억할 가치가 있는 사실을 추출해주세요.
+
+## 추출 기준
+- 발신자에 대한 정보 (역할, 소속, 관계)
+- 프로젝트/업무 관련 결정사항이나 약속
+- 반복될 수 있는 요청 패턴
+- 향후 이메일 분석에 도움이 될 맥락
+
+## 추출하지 않을 것
+- 일회성 알림이나 뉴스레터 내용
+- 인증 코드, 배송 추적 등 일시적 정보
+- 단순한 안부 인사
+
+JSON으로 응답하세요:
+{
+  "facts": [
+    {
+      "content": "사실 내용 (한국어, 1-2문장)",
+      "category": "context|decision|preference|solution",
+      "importance": 0.5-0.9,
+      "expiry_hint": null 또는 "YYYY-MM-DD",
+      "project": "관련 프로젝트명 (없으면 빈 문자열)"
+    }
+  ]
+}
+
+기억할 것이 없으면 {"facts": []}으로 응답하세요. 최대 5개.
+
+## 이메일
+From: %s
+Subject: %s
+Date: %s
+
+## 분석 결과
 %s`
 
 const finalAnalysisSystem = `당신은 이메일 분석 어시스턴트입니다. 이메일 본문, 이전 메일 맥락, 관련 기억을 종합하여 깊이 있는 분석을 제공합니다.`
@@ -166,7 +228,17 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	// Stage 2: final analysis combining all context.
 	stage2Ctx, cancel := context.WithTimeout(ctx, stage2Timeout)
 	defer cancel()
-	return synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, memoryCtx)
+	analysis, err := synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, memoryCtx)
+	if err != nil {
+		return "", err
+	}
+
+	// Stage 3: extract facts from analysis and store in memory (fire-and-forget).
+	if deps.MemStore != nil && deps.LocalClient != nil {
+		go storeEmailFacts(deps, msg, analysis)
+	}
+
+	return analysis, nil
 }
 
 // extractThreadContext fetches related emails and extracts thread context via local LLM.
@@ -356,6 +428,72 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	}
 
 	return collectStreamText(ctx, events)
+}
+
+// storeEmailFacts extracts facts from the email analysis and stores them in memory.
+// Runs as a fire-and-forget goroutine — errors are logged, not propagated.
+func storeEmailFacts(deps PipelineDeps, msg *gmail.MessageDetail, analysis string) {
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), stage3Timeout)
+	defer cancel()
+
+	userPrompt := fmt.Sprintf(emailFactExtractorPrompt, msg.From, msg.Subject, msg.Date, analysis)
+
+	result, err := callLocalLLMJSON[emailFactsResponse](ctx, deps.LocalClient, deps.LocalModel, emailFactExtractorSystem, userPrompt, stage3MaxTokens)
+	if err != nil {
+		logger.Debug("email fact extraction failed", "error", err, "subject", msg.Subject)
+		return
+	}
+
+	if len(result.Facts) == 0 {
+		return
+	}
+
+	// Convert to memory.ExtractedFact and store.
+	var extracted []memory.ExtractedFact
+	for _, ef := range result.Facts {
+		if ef.Content == "" {
+			continue
+		}
+		// Prepend project tag to content for searchability.
+		content := ef.Content
+		if ef.Project != "" {
+			content = fmt.Sprintf("[%s] %s", ef.Project, ef.Content)
+		}
+		// Clamp importance.
+		imp := ef.Importance
+		if imp < 0 {
+			imp = 0
+		}
+		if imp > 1 {
+			imp = 1
+		}
+		extracted = append(extracted, memory.ExtractedFact{
+			Content:    content,
+			Category:   normalizeCategory(ef.Category),
+			Importance: imp,
+			ExpiryHint: ef.ExpiryHint,
+		})
+	}
+
+	if len(extracted) > 0 {
+		memory.InsertExtractedFactsAs(ctx, deps.MemStore, deps.MemEmbed, extracted, SourceEmailAnalysis, logger)
+		logger.Info("email facts stored", "count", len(extracted), "subject", msg.Subject)
+	}
+}
+
+// normalizeCategory ensures the category is valid for the memory store.
+func normalizeCategory(cat string) string {
+	switch cat {
+	case "context", "decision", "preference", "solution", "user_model", "mutual":
+		return cat
+	default:
+		return "context"
+	}
 }
 
 // --- helpers ---
