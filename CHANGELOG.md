@@ -1,5 +1,64 @@
 # Changelog
 
+## [4.6.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.5.0...deneb-v4.6.0) (2026-03-31)
+
+
+### ✨ Features
+
+* **autoresearch:** add autonomous experiment loop inspired by karpathy/autoresearch ([47b243c](https://github.com/choiceoh/Deneb/commit/47b243cf6872166b90703984bf3156c1fb19c89a))
+* **autoresearch:** strengthen measurement, recording, and data analysis ([78f66fe](https://github.com/choiceoh/Deneb/commit/78f66fe81c54dc0d93d0dfc38784b25afec7ea59))
+* **autoresearch:** surpass karpathy original in all dimensions ([4899916](https://github.com/choiceoh/Deneb/commit/48999162423c3837101bb80de41c4efa9aa6e91d))
+* **chat:** add enable_coding_tools for dynamic profile switching ([1df49b3](https://github.com/choiceoh/Deneb/commit/1df49b37625a893eedde069032cfdefb5f62f205))
+* **chat:** add read-only FS tools to chat profile ([4b9bde8](https://github.com/choiceoh/Deneb/commit/4b9bde81b6c8faec7ce0b8829a453e8c1ebbbe26))
+* **gmail:** add batch analysis mode for multi-email reports ([0c52817](https://github.com/choiceoh/Deneb/commit/0c528170b634e331b2577b61c69cd7fce046ec00))
+* **gmail:** add multi-stage LLM email analysis pipeline ([842455b](https://github.com/choiceoh/Deneb/commit/842455b91be216fe781c5c4d406976670f92aa5b))
+* **gmail:** add Stage 3 — store email analysis facts in memory ([d88f166](https://github.com/choiceoh/Deneb/commit/d88f166db1b32dc89749e570494eb01d1b314e7b))
+* **memory:** add browse action for keyword-free memory discovery ([0e08b3e](https://github.com/choiceoh/Deneb/commit/0e08b3e0ebc2129d0caf5d0435255e4d98de7eaf))
+* **memory:** improve reliability and graceful degradation across memory pipeline ([6a16157](https://github.com/choiceoh/Deneb/commit/6a1615728c45fa9eae898410d0e559ef0e8be53d))
+* **toolreg:** add Periodic tool category for recurring tasks ([33c393e](https://github.com/choiceoh/Deneb/commit/33c393eb61bfc188b3591a3d66a4ecf9d4c01a6e))
+* **toolreg:** add Routine tool category ([cf31a3f](https://github.com/choiceoh/Deneb/commit/cf31a3f1b3c69f56d92bc6ad7de00768f603b1d0))
+
+
+### 🐛 Bug Fixes
+
+* **autonomous:** eliminate flaky dreaming test races ([a0ec9e0](https://github.com/choiceoh/Deneb/commit/a0ec9e08b072215afe0d35bbeda27e23b0adf8ef))
+* **chat:** fallback to Gemini Flash for proactive context when sglang is down ([5b4e19f](https://github.com/choiceoh/Deneb/commit/5b4e19f54b35e970fab92fc2839426310906820b))
+* **chat:** increase proactive context timeout to prevent premature deadline ([cf732b2](https://github.com/choiceoh/Deneb/commit/cf732b2e6be9d2371e66f1c8297f43481014dd35))
+* **chat:** rename shadowed parameter in deduplicateAcrossSources ([437c38a](https://github.com/choiceoh/Deneb/commit/437c38a186617b9be7efc750498894397397fa56))
+* **chat:** resolve rebase conflicts from memory_search/vega removal ([950f80b](https://github.com/choiceoh/Deneb/commit/950f80b811a9da7110039ff7d06839682e863bcb))
+* **chat:** use shutdownCtx for proactive context to avoid context canceled errors ([57bb445](https://github.com/choiceoh/Deneb/commit/57bb445b321132f6b7dfe79527bd0b613ce89680))
+* **cron:** wire agent runner to cron service via chat handler ([1223386](https://github.com/choiceoh/Deneb/commit/1223386cec3717ba6812101f61551cc95f2d98a4))
+* **cron:** wire delivery chain for scheduled job results ([f0494dc](https://github.com/choiceoh/Deneb/commit/f0494dc1e179db55aa4a7a94d4c08b887a1953ad))
+* **cron:** wire delivery chain into executeJobFull and implement Telegram MessagingAdapter ([c0ea8d0](https://github.com/choiceoh/Deneb/commit/c0ea8d0e70e5a8b62109c360b884ce18b145b03e))
+* **gateway:** handle ignored io.ReadAll errors and add missing defer ([f1cc632](https://github.com/choiceoh/Deneb/commit/f1cc632e9f6f8454f98fd707cf812f92ee58145e))
+* **gmail:** update toolGmail wrapper for new GmailPipelineDeps signature ([6844d61](https://github.com/choiceoh/Deneb/commit/6844d614476e0ace12ef8a1fcb08022684624b88))
+* **gmail:** wire LLM client for email analysis and polling ([406b68d](https://github.com/choiceoh/Deneb/commit/406b68d5e2922e7c1c0fa46ddf5655385f69b655))
+
+
+### ⚡ Performance
+
+* **chat:** optimize tool implementations for higher throughput ([cc5867b](https://github.com/choiceoh/Deneb/commit/cc5867b6312dc57ec937b06af2a4eb561ee49d13))
+* **chat:** pre-serialize tool schemas for faster LLM API calls ([4bef9af](https://github.com/choiceoh/Deneb/commit/4bef9af5b0dc27d143fa62b1108680101fde247c))
+* **memory:** optimize SQL memory store utilization ([c5a5b52](https://github.com/choiceoh/Deneb/commit/c5a5b5275818844b772c37cc47134ec6ede0be50))
+
+
+### 🔧 Internal
+
+* **chat:** deferred proactive context injection — zero blocking, zero miss ([0039a61](https://github.com/choiceoh/Deneb/commit/0039a61f86458d6b6b1215bf3186c2086f1c17a2))
+* **chat:** extract deferredProactiveHint with consumed guard ([8158886](https://github.com/choiceoh/Deneb/commit/815888631d7c1d65724299a4fe6ed4bcfb0fa426))
+* **chat:** improve general system prompt structure and content ([9eaf95d](https://github.com/choiceoh/Deneb/commit/9eaf95de0ab71d0b23ab13ac8ab8e898ee4d7e3f))
+* **chat:** remove standalone vega tool ([8302ec3](https://github.com/choiceoh/Deneb/commit/8302ec37ce7203e84333dcaf96e48e352a078214))
+* **config:** remove all legacy product-name compat code ([f719b1c](https://github.com/choiceoh/Deneb/commit/f719b1ca7b7fb17fbf2fd4c4d45c0930e3cba05f))
+* **core:** reduce Rust dependencies by 52% ([ba9a123](https://github.com/choiceoh/Deneb/commit/ba9a123c6df992ecd9fc4a2573a34d5fb7959074))
+* **core:** remove 5 more low-usage Rust dependencies ([f64f105](https://github.com/choiceoh/Deneb/commit/f64f1059f68350b9b40d2aba96d9acd8352d5f38))
+* **core:** remove 5 unnecessary Rust dependencies ([1e3f626](https://github.com/choiceoh/Deneb/commit/1e3f626a3ed2ee7edb76950dee96c29b2a47c996))
+* **gmail:** centralize LLM client via modelrole registry ([c466ec3](https://github.com/choiceoh/Deneb/commit/c466ec329ac6baa8aca7a229fe7803af178b2580))
+* **memory:** remove deprecated memory_search tool ([17c29df](https://github.com/choiceoh/Deneb/commit/17c29df11cbc9122f601eb7ca5829f23d4c08bbb))
+* **modelrole:** remove RoleImage, use lightweight model for image analysis ([bbf5165](https://github.com/choiceoh/Deneb/commit/bbf51654d7f3b08756b21b77334851aa49308173))
+* remove dead code, unused fields, and stale artifacts ([be29f41](https://github.com/choiceoh/Deneb/commit/be29f41783d488f018f310cc2ba3da876730715f))
+* remove more dead functions and files ([d536f75](https://github.com/choiceoh/Deneb/commit/d536f75dd57c8d17315078156931ef8603cd0802))
+* **toolreg:** rename Periodic category to Routine ([9d7cf0f](https://github.com/choiceoh/Deneb/commit/9d7cf0fb5d2d0d3ac0d76901a843dfb17fac9bfc))
+
 ## [4.5.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.4.1...deneb-v4.5.0) (2026-03-31)
 
 
