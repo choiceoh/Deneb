@@ -212,8 +212,8 @@ func (s *Server) registerSessionRPCMethods() {
 			MemoryStore:    chatCfg.MemoryStore,
 			MemoryEmbedder: chatCfg.MemoryEmbedder,
 		},
-		LLMClient:    chatCfg.LLMClient,
-		DefaultModel: chatCfg.DefaultModel,
+		LLMClient:    reg.Client(modelrole.RoleFallback),
+		DefaultModel: reg.Model(modelrole.RoleFallback),
 		AgentLog:     agentLogWriter,
 	}
 

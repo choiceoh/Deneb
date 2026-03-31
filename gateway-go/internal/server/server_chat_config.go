@@ -29,8 +29,9 @@ func (s *Server) initGmailPoll() {
 
 	cfg := gmailpoll.Config{
 		StateDir:   stateDir,
-		LLMBaseURL: modelrole.DefaultSglangBaseURL,
-		Model:      resolveDefaultModel(s.logger), // use main model by default
+		LLMBaseURL: modelrole.DefaultGoogleBaseURL,
+		LLMAPIKey:  os.Getenv("GEMINI_API_KEY"),
+		Model:      modelrole.DefaultFallbackModel,
 	}
 	if pollCfg.IntervalMin != nil {
 		cfg.IntervalMin = *pollCfg.IntervalMin
