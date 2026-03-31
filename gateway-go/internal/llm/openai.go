@@ -33,13 +33,18 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	}
 
 	// Convert tools to OpenAI function-calling format.
+	// Use pre-serialized schema when available to avoid re-marshaling map[string]any.
 	for _, t := range req.Tools {
+		params := t.RawInputSchema
+		if params == nil && t.InputSchema != nil {
+			params, _ = json.Marshal(t.InputSchema)
+		}
 		oaiReq.Tools = append(oaiReq.Tools, openAITool{
 			Type: "function",
 			Function: openAIFunction{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  t.InputSchema,
+				Parameters:  params,
 			},
 		})
 	}
@@ -593,9 +598,9 @@ type openAITool struct {
 }
 
 type openAIFunction struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
 }
 
 // openAIMessage represents a message in the OpenAI chat format.
