@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -338,12 +339,13 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	dispatchDeps := autoreply.ReplyDeps{
-		Agent:       executor,
-		Registry:    p.cmdRegistry,
-		Router:      p.cmdRouter,
-		CommandDeps: p.buildCommandDeps(sessionKey),
-		History:     p.server.historyTracker,
-		AbortMemory: p.server.abortMemory,
+		Agent:           executor,
+		Registry:        p.cmdRegistry,
+		Router:          p.cmdRouter,
+		CommandDeps:     p.buildCommandDeps(sessionKey),
+		History:         p.server.historyTracker,
+		AbortMemory:     p.server.abortMemory,
+		ModelCandidates: p.buildModelCandidates(),
 		SessionFunc: func(key string) *types.SessionState {
 			return &types.SessionState{
 				SessionKey: key,
@@ -609,6 +611,34 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 	}
 
 	return &handlers.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn}
+}
+
+// buildModelCandidates converts the model role registry into autoreply
+// ModelCandidates for directive-based model resolution (/model, !model).
+func (p *InboundProcessor) buildModelCandidates() []model.ModelCandidate {
+	reg := p.server.modelRegistry
+	if reg == nil {
+		return nil
+	}
+	configured := reg.ConfiguredModels()
+	seen := make(map[string]bool)
+	var candidates []model.ModelCandidate
+	for role, cfg := range configured {
+		if cfg.Model == "" {
+			continue
+		}
+		fullID := cfg.ProviderID + "/" + cfg.Model
+		if seen[fullID] {
+			continue
+		}
+		seen[fullID] = true
+		candidates = append(candidates, model.ModelCandidate{
+			Provider: cfg.ProviderID,
+			Model:    cfg.Model,
+			Label:    string(role),
+		})
+	}
+	return candidates
 }
 
 // chatSendExecutor bridges the autoreply.AgentExecutor interface to

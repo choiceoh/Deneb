@@ -244,6 +244,18 @@ func (r *Registry) FallbackChain(role Role) []Role {
 	}
 }
 
+// ConfiguredModels returns all configured role→model entries.
+// Used to build model candidate lists for directive resolution.
+func (r *Registry) ConfiguredModels() map[Role]ModelConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[Role]ModelConfig, len(r.models))
+	for role, cfg := range r.models {
+		out[role] = cfg
+	}
+	return out
+}
+
 // parseModelID splits "provider/model" into provider and model name.
 // If no "/" prefix, returns empty provider and the original string.
 func parseModelID(model string) (providerID, modelName string) {
