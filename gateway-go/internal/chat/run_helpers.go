@@ -160,7 +160,7 @@ func handleRunSuccess(
 		flushSettings := autoreply.ResolveMemoryFlushSettings(nil)
 		shouldFlush := autoreply.ShouldRunMemoryFlush(autoreply.ShouldRunMemoryFlushParams{
 			TotalTokens:         result.Usage.InputTokens + result.Usage.OutputTokens,
-			ContextWindowTokens: deps.contextCfg.TokenBudget,
+			ContextWindowTokens: int(deps.contextCfg.TokenBudget),
 			ReserveTokensFloor:  flushSettings.ReserveTokensFloor,
 			SoftThresholdTokens: flushSettings.SoftThresholdTokens,
 		})
