@@ -7,4 +7,4 @@ import (
 )
 
 func toolSubagents(d *SessionDeps) ToolFunc { return chattools.ToolSubagents(d) }
-func toolImage(client *llm.Client) ToolFunc { return chattools.ToolImage(client) }
+func toolImage(client *llm.Client, model string) ToolFunc { return chattools.ToolImage(client, model) }

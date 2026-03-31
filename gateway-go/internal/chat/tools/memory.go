@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
