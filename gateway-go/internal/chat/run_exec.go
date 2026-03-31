@@ -116,16 +116,14 @@ func executeAgentRun(
 	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
 	// We check for the result non-blocking after the parallel section: if the
 	// hint is ready it gets injected; if not, we skip it rather than stalling.
-	type proactiveResult struct{ hint string }
-	proactiveCh := make(chan proactiveResult, 1)
+	proactiveCh := make(chan string, 1)
 	proactiveStart := time.Now()
 	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
 		go func() {
-			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)
-			proactiveCh <- proactiveResult{hint: hint}
+			proactiveCh <- buildProactiveContext(ctx, params.Message, workspaceDir, logger)
 		}()
 	} else {
-		proactiveCh <- proactiveResult{} // no-op: skip for short messages
+		proactiveCh <- "" // no-op: skip for short messages
 	}
 
 	prepStart := time.Now()
@@ -315,19 +313,7 @@ func executeAgentRun(
 		// Deferred proactive context: injected on turn 1+ without blocking turn 0.
 		// By the time turn 0 completes (LLM stream + tool exec), the goroutine
 		// launched at step 4 has had several seconds to finish.
-		DeferredSystemText: func() string {
-			select {
-			case p := <-proactiveCh:
-				if p.hint != "" {
-					logger.Info("proactive context hit (deferred injection)",
-						"chars", len(p.hint),
-						"elapsedMs", time.Since(proactiveStart).Milliseconds())
-					return "\n## Context Hint (from local analysis)\n" + p.hint
-				}
-			default:
-			}
-			return ""
-		},
+		DeferredSystemText: deferredProactiveHint(proactiveCh, proactiveStart, logger),
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
 		// RunCache is injected once and persists across turns.

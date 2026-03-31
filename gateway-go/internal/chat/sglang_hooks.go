@@ -149,6 +149,31 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	return result
 }
 
+// deferredProactiveHint returns a DeferredSystemText function that non-blocking
+// reads the proactive channel. Returns the hint text when ready, empty string
+// while waiting, or signals done (empty hint consumed / hint delivered) so the
+// executor clears the hook and stops calling it.
+func deferredProactiveHint(ch <-chan string, start time.Time, logger *slog.Logger) func() string {
+	var consumed bool
+	return func() string {
+		if consumed {
+			return ""
+		}
+		select {
+		case hint := <-ch:
+			consumed = true
+			if hint != "" {
+				logger.Info("proactive context hit (deferred injection)",
+					"chars", len(hint),
+					"elapsedMs", time.Since(start).Milliseconds())
+				return "\n## Context Hint (from local analysis)\n" + hint
+			}
+		default:
+		}
+		return ""
+	}
+}
+
 // --- 2. Tool Output Compression ---
 // Called in the agent loop after tool execution, before feeding results back to LLM.
 
