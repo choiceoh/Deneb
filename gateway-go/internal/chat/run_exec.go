@@ -231,31 +231,17 @@ func executeAgentRun(
 	}
 
 	// Proactive compaction: check if stored tokens exceed the compaction threshold
-	// and run a sweep BEFORE the LLM call. Without this, assembly silently truncates
-	// old messages to fit within the token budget, so the LLM never returns a context
-	// overflow error, and compaction (summary generation) never triggers.
-	if deps.auroraStore != nil {
-		storedTokens, err := deps.auroraStore.FetchTokenCount(1)
-		if err == nil && storedTokens > 0 {
-			threshold := uint64(deps.compactionCfg.ContextThreshold * float64(deps.contextCfg.TokenBudget))
-			if storedTokens > threshold {
-				logger.Info("proactive compaction: stored tokens exceed threshold",
-					"storedTokens", storedTokens,
-					"threshold", threshold,
-					"budget", deps.contextCfg.TokenBudget,
-				)
-				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
-					ctx, deps, params, client, logger,
-				)
-				if compErr != nil {
-					logger.Warn("proactive compaction failed, using existing context", "error", compErr)
-				} else if len(compactedMsgs) > 0 {
-					messages = compactedMsgs
-					if sysAddition != "" {
-						auroraSystemAddition = sysAddition
-					}
-				}
-			}
+	// and run a sweep. Without this, assembly silently truncates old messages to
+	// fit within the token budget, so the LLM never returns a context overflow
+	// error, and compaction (summary generation) never triggers.
+	// The sweep runs in the background with a cooldown; cached results from a
+	// previous sweep are applied immediately if available.
+	if compactedMsgs, sysAddition, ok := maybeProactiveCompaction(
+		ctx, deps, params, client, logger,
+	); ok && len(compactedMsgs) > 0 {
+		messages = compactedMsgs
+		if sysAddition != "" {
+			auroraSystemAddition = sysAddition
 		}
 	}
 

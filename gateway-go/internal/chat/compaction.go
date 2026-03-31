@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
@@ -16,7 +18,20 @@ import (
 // Compaction defaults.
 const (
 	defaultContextThreshold = 0.75
+	// proactiveCompactionCooldown is the minimum interval between proactive sweeps.
+	// Prevents repeated LLM summarization calls on consecutive messages.
+	proactiveCompactionCooldown = 5 * time.Minute
 )
+
+// proactiveCompactionState tracks cooldown and in-flight status for proactive compaction.
+var proactiveCompaction struct {
+	lastRun atomic.Int64 // epoch millis of last successful sweep
+	running atomic.Bool  // prevents concurrent sweeps
+	mu      sync.Mutex   // protects result fields
+	// Cached result from the last background sweep so the next request can use it.
+	pendingMessages       []llm.Message
+	pendingSystemAddition string
+}
 
 // CompactionConfig configures compaction behavior.
 type CompactionConfig struct {
@@ -38,6 +53,90 @@ type CompactionDecision struct {
 	Reason        string `json:"reason"`
 	CurrentTokens uint64 `json:"currentTokens"`
 	Threshold     uint64 `json:"threshold"`
+}
+
+// maybeProactiveCompaction checks if proactive compaction should run and either
+// returns cached results from a previous background sweep or kicks off a new one.
+// Returns (messages, systemAddition, ran) where ran=true if compaction produced new context.
+func maybeProactiveCompaction(
+	ctx context.Context,
+	deps runDeps,
+	params RunParams,
+	client *llm.Client,
+	logger *slog.Logger,
+) ([]llm.Message, string, bool) {
+	if deps.auroraStore == nil {
+		return nil, "", false
+	}
+
+	// Check for cached results from a previous background sweep.
+	proactiveCompaction.mu.Lock()
+	if msgs := proactiveCompaction.pendingMessages; len(msgs) > 0 {
+		sysAdd := proactiveCompaction.pendingSystemAddition
+		proactiveCompaction.pendingMessages = nil
+		proactiveCompaction.pendingSystemAddition = ""
+		proactiveCompaction.mu.Unlock()
+		logger.Info("proactive compaction: using cached background sweep result",
+			"messages", len(msgs))
+		return msgs, sysAdd, true
+	}
+	proactiveCompaction.mu.Unlock()
+
+	// Cooldown check.
+	lastMs := proactiveCompaction.lastRun.Load()
+	if lastMs > 0 {
+		elapsed := time.Since(time.UnixMilli(lastMs))
+		if elapsed < proactiveCompactionCooldown {
+			return nil, "", false
+		}
+	}
+
+	// Threshold check.
+	storedTokens, err := deps.auroraStore.FetchTokenCount(1)
+	if err != nil || storedTokens == 0 {
+		return nil, "", false
+	}
+	threshold := uint64(deps.compactionCfg.ContextThreshold * float64(deps.contextCfg.TokenBudget))
+	if storedTokens <= threshold {
+		return nil, "", false
+	}
+
+	// Prevent concurrent sweeps.
+	if !proactiveCompaction.running.CompareAndSwap(false, true) {
+		return nil, "", false
+	}
+
+	logger.Info("proactive compaction: stored tokens exceed threshold, running background sweep",
+		"storedTokens", storedTokens,
+		"threshold", threshold,
+		"budget", deps.contextCfg.TokenBudget,
+	)
+
+	// Run sweep in a background goroutine so the current request isn't blocked.
+	// Results are cached for the next request to pick up.
+	go func() {
+		defer proactiveCompaction.running.Store(false)
+
+		compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
+			ctx, deps, params, client, logger,
+		)
+		if compErr != nil {
+			logger.Warn("proactive compaction: sweep failed", "error", compErr)
+			return
+		}
+		proactiveCompaction.lastRun.Store(time.Now().UnixMilli())
+
+		if len(compactedMsgs) > 0 {
+			proactiveCompaction.mu.Lock()
+			proactiveCompaction.pendingMessages = compactedMsgs
+			proactiveCompaction.pendingSystemAddition = sysAddition
+			proactiveCompaction.mu.Unlock()
+			logger.Info("proactive compaction: background sweep completed, results cached for next request",
+				"messages", len(compactedMsgs))
+		}
+	}()
+
+	return nil, "", false
 }
 
 // evaluateCompaction checks whether context compaction is needed.
