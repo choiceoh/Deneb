@@ -597,7 +597,8 @@
         - set
         - forget
         - status
-      description: "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), status (memory stats)"
+        - browse
+      description: "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), status (memory stats + top fact previews), browse (list/explore facts by category with pagination and sorting)"
     query:
       type: string
       description: "Search query (for search action) or fact content (for set action)"
@@ -613,7 +614,7 @@
         - context
         - user_model
         - mutual
-      description: "Category filter (search) or category assignment (set)"
+      description: "Category filter (search/browse) or category assignment (set)"
     importance:
       type: number
       description: "Importance score 0.0-1.0 (for set action, default: 0.5)"
@@ -621,9 +622,20 @@
       maximum: 1
     limit:
       type: integer
-      description: "Max results to return (search action, default: 10)"
+      description: "Max results to return (search: default 10, browse: default 20)"
       minimum: 1
       maximum: 50
+    sort:
+      type: string
+      enum:
+        - importance
+        - recent
+        - created
+      description: "Sort order for browse action: importance (default), recent (updated_at desc), created (created_at desc)"
+    offset:
+      type: integer
+      description: "Pagination offset for browse action (default: 0)"
+      minimum: 0
   required:
     - action
 
