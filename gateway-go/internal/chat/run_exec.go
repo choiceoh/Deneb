@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
@@ -17,6 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
@@ -276,12 +278,67 @@ func executeAgentRun(
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
 	// Profile selection reduces per-turn schema token cost:
 	//   telegram → "chat" profile for general conversation, or full tools on coding triggers.
+	//              Agent can self-upgrade via enable_coding_tools; auto-downgrades
+	//              back to chat after 3 consecutive turns without coding tool use.
 	//   other    → full set (safe default).
 	var tools []llm.Tool
+	var toolsUpgradeHook func(toolNames []string) []llm.Tool
+	var codingUpgradeSignal toolctx.CodingUpgradeSignal // injected into context per turn
+
 	if deps.tools != nil {
 		switch deliveryChannel(params.Delivery) {
 		case "telegram":
-			tools = deps.tools.LLMToolsForProfile(classifyMessageProfile(params.Message))
+			profile := classifyMessageProfile(params.Message)
+			tools = deps.tools.LLMToolsForProfile(profile)
+
+			if profile == "chat" {
+				// Upgrade/downgrade state. The signal is set by enable_coding_tools
+				// tool handler (runs in a tool goroutine, hence atomic).
+				var upgradeRequested atomic.Bool
+				var upgraded bool     // true while in coding mode
+				var idleTurns int     // consecutive turns without coding tool use
+				const idleLimit = 3   // downgrade after this many idle turns
+
+				codingUpgradeSignal = func() { upgradeRequested.Store(true) }
+
+				chatTools := tools // capture initial chat-profile tools
+				fullTools := deps.tools.LLMTools()
+
+				toolsUpgradeHook = func(toolNames []string) []llm.Tool {
+					// Check if upgrade was requested this turn.
+					if upgradeRequested.CompareAndSwap(true, false) {
+						upgraded = true
+						idleTurns = 0
+						return fullTools
+					}
+
+					if !upgraded {
+						return nil // still in chat mode, no change
+					}
+
+					// In coding mode: track whether coding tools were used this turn.
+					usedCoding := false
+					for _, name := range toolNames {
+						if codingTools[name] {
+							usedCoding = true
+							break
+						}
+					}
+					if usedCoding {
+						idleTurns = 0
+						return nil // stay in coding mode
+					}
+
+					idleTurns++
+					if idleTurns >= idleLimit {
+						// Downgrade back to chat profile.
+						upgraded = false
+						idleTurns = 0
+						return chatTools
+					}
+					return nil // still in coding mode, waiting
+				}
+			}
 		default:
 			tools = deps.tools.LLMTools()
 		}
@@ -319,12 +376,18 @@ func executeAgentRun(
 		// By the time turn 0 completes (LLM stream + tool exec), the goroutine
 		// launched at step 4 has had several seconds to finish.
 		DeferredSystemText: deferredProactiveHint(proactiveCh, proactiveStart, logger),
+		// Dynamic tool-set switching for Telegram chat profile.
+		OnToolsUpgrade: toolsUpgradeHook,
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
 		// RunCache is injected once and persists across turns.
+		// Also injects the coding-upgrade signal so enable_coding_tools can fire it.
 		OnTurnInit: func(ctx context.Context) context.Context {
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
+			if codingUpgradeSignal != nil {
+				ctx = toolctx.WithCodingUpgradeSignal(ctx, codingUpgradeSignal)
+			}
 			return ctx
 		},
 	}

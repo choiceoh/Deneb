@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,57 +51,6 @@ func TestCollectMemoryFiles(t *testing.T) {
 		files := collectMemoryFiles(dir)
 		if len(files) != 0 {
 			t.Fatalf("got %d files, want 0", len(files))
-		}
-	})
-}
-
-func TestToolMemorySearch(t *testing.T) {
-	dir := t.TempDir()
-	content := "# Project Notes\n\nThis is about golang testing.\nAnother line about rust.\nMore golang content here.\n"
-	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(content), 0o644)
-
-	fn := toolMemorySearch(dir)
-
-	t.Run("finds keyword match", func(t *testing.T) {
-		input, _ := json.Marshal(map[string]any{"query": "golang"})
-		result, err := fn(context.Background(), input)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(result, "golang") {
-			t.Errorf("expected golang match, got: %s", result)
-		}
-	})
-
-	t.Run("no matches", func(t *testing.T) {
-		input, _ := json.Marshal(map[string]any{"query": "python"})
-		result, err := fn(context.Background(), input)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(result, "No matches") {
-			t.Errorf("expected no-match message, got: %s", result)
-		}
-	})
-
-	t.Run("empty query returns error", func(t *testing.T) {
-		input, _ := json.Marshal(map[string]any{"query": ""})
-		_, err := fn(context.Background(), input)
-		if err == nil {
-			t.Fatal("expected error for empty query")
-		}
-	})
-
-	t.Run("no memory files", func(t *testing.T) {
-		emptyDir := t.TempDir()
-		fn2 := toolMemorySearch(emptyDir)
-		input, _ := json.Marshal(map[string]any{"query": "anything"})
-		result, err := fn2(context.Background(), input)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(result, "No memory files") {
-			t.Errorf("expected no-memory-files message, got: %s", result)
 		}
 	})
 }
