@@ -580,7 +580,7 @@ func formatMutualUnderstanding(entries []memory.UserModelEntry) string {
 // deduplicateAcrossSources removes unified results whose content overlaps with
 // structured memory facts. Compares normalized prefixes (first 100 runes) to
 // catch near-duplicates across sources. Structured facts take priority.
-func deduplicateAcrossSources(facts []memory.SearchResult, unified []unified.SearchResult) []unified.SearchResult {
+func deduplicateAcrossSources(facts []memory.SearchResult, unifiedRes []unified.SearchResult) []unified.SearchResult {
 	// Build a set of normalized fact content prefixes.
 	factPrefixes := make(map[string]struct{}, len(facts))
 	for _, f := range facts {
@@ -590,8 +590,8 @@ func deduplicateAcrossSources(facts []memory.SearchResult, unified []unified.Sea
 		}
 	}
 
-	filtered := make([]unified.SearchResult, 0, len(unified))
-	for _, u := range unified {
+	filtered := make([]unified.SearchResult, 0, len(unifiedRes))
+	for _, u := range unifiedRes {
 		prefix := normalizeKnowledgePrefix(u.Content)
 		if _, dup := factPrefixes[prefix]; dup && prefix != "" {
 			continue
