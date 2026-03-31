@@ -28,23 +28,20 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 
 	// Check required sections exist.
 	sections := []string{
-		"You are a personal assistant running inside Deneb.",
+		"You are Nev — a personal assistant running inside Deneb.",
+		"## Communication",
+		"## Attitude",
+		"## How to Act",
+		"## Trust and Respect",
 		"## Tooling",
 		"## Tool Usage",
-		"## Safety",
 		"## Memory Recall",
-		"## Workspace",
-		"/home/user/project",
-		"## Reply Tags",
 		"## Messaging",
-		"## Current Date & Time",
+		"## Context",
+		"/home/user/project",
 		"Asia/Seoul",
-		"## Silent Replies",
-		"NO_REPLY",
-		"## Runtime",
 		"host=dgx-spark",
 		"channel=telegram",
-		"## Deneb CLI Quick Reference",
 	}
 
 	for _, s := range sections {
@@ -215,8 +212,8 @@ func TestBuildSystemPrompt_NoMessageTool(t *testing.T) {
 	}
 
 	prompt := BuildSystemPrompt(params)
-	// The silent reply section always appears, but the message-specific guidance should not
-	if strings.Contains(prompt, "duplicate replies") {
+	// The message-specific guidance (proactive sends, NO_REPLY) should not appear without message tool
+	if strings.Contains(prompt, "proactive sends") {
 		t.Error("message-specific guidance should not appear without message tool")
 	}
 }
@@ -249,11 +246,11 @@ func TestBuildSystemPromptPilotSection(t *testing.T) {
 	}
 
 	prompt := BuildSystemPrompt(params)
-	if !strings.Contains(prompt, "## Pilot & Chaining") {
-		t.Error("expected Pilot & Chaining section when pilot tool registered")
+	if !strings.Contains(prompt, "pilot") {
+		t.Error("expected pilot guidance in Tool Usage when pilot tool registered")
 	}
 	if !strings.Contains(prompt, "$ref") {
-		t.Error("expected tool chaining info in Pilot & Chaining section")
+		t.Error("expected tool chaining info when pilot tool registered")
 	}
 }
 
