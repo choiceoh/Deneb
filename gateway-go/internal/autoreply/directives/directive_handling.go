@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 

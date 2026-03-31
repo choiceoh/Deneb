@@ -240,6 +240,28 @@ func (s *Server) registerSessionRPCMethods() {
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
+	// Register plugin-provided tools.
+	if s.pluginFullRegistry != nil {
+		for _, t := range s.pluginFullRegistry.ListTools() {
+			pluginTool := t // capture loop variable
+			chatCfg.Tools.RegisterTool(chat.ToolDef{
+				Name:        pluginTool.Definition.Name,
+				Description: pluginTool.Definition.Description,
+				InputSchema: pluginTool.Definition.InputSchema,
+				Fn: func(ctx context.Context, input json.RawMessage) (string, error) {
+					var m map[string]any
+					if err := json.Unmarshal(input, &m); err != nil {
+						return "", err
+					}
+					return pluginTool.Handler(ctx, m)
+				},
+			})
+		}
+		if count := len(s.pluginFullRegistry.ListTools()); count > 0 {
+			s.logger.Info("plugin tools registered", "count", count)
+		}
+	}
+
 	// Initialize autoresearch runner and register tool.
 	s.autoresearchRunner = autoresearch.NewRunner(s.logger)
 	if mainClient := reg.Client(modelrole.RoleMain); mainClient != nil {

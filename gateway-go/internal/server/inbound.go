@@ -207,6 +207,22 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	if msgCtx.IsGroup {
 		msgCtx.BodyForAgent = inbound.StripMentions(msgCtx.BodyForAgent, "")
 		msgCtx.BodyForCommands = inbound.StripMentions(msgCtx.BodyForCommands, "")
+
+		// Handle /activation command to change group activation mode.
+		if hasCmd, activationMode := autoreply.ParseActivationCommand(msgCtx.BodyForCommands, p.cmdRegistry); hasCmd {
+			if activationMode != "" && p.server.sessions != nil {
+				activationStr := string(activationMode)
+				p.server.sessions.Patch(sessionKey, session.PatchFields{GroupActivation: &activationStr})
+				p.sendCommandReply(chatID, &handlers.CommandResult{
+					Reply: fmt.Sprintf("👥 Group activation: **%s**", activationMode), SkipAgent: true,
+				})
+			} else {
+				p.sendCommandReply(chatID, &handlers.CommandResult{
+					Reply: "👥 Usage: /activation mention|always", SkipAgent: true,
+				})
+			}
+			return
+		}
 	}
 
 	// --- Enrich the agent message before dispatch ---
