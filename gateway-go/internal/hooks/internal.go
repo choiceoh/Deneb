@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
-	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
@@ -53,7 +51,6 @@ type DenebHookMetadata struct {
 	Homepage string            `json:"homepage,omitempty"`
 	Events   []string          `json:"events"`
 	Export   string            `json:"export,omitempty"`
-	OS       []string          `json:"os,omitempty"`
 	Requires *HookRequires     `json:"requires,omitempty"`
 	Install  []HookInstallSpec `json:"install,omitempty"`
 }
@@ -215,7 +212,6 @@ func (r *InternalRegistry) ListHandlers() map[string][]string {
 
 // EligibilityContext provides runtime info for evaluating hook eligibility.
 type EligibilityContext struct {
-	Platform     string // runtime.GOOS
 	EnvLookup    func(string) string
 	BinLookup    func(string) bool
 	ConfigLookup func(string) bool
@@ -224,7 +220,6 @@ type EligibilityContext struct {
 // DefaultEligibilityContext creates an eligibility context using the current runtime.
 func DefaultEligibilityContext(envLookup func(string) string, configLookup func(string) bool) EligibilityContext {
 	return EligibilityContext{
-		Platform:     runtime.GOOS,
 		EnvLookup:    envLookup,
 		BinLookup:    hasBinary,
 		ConfigLookup: configLookup,
@@ -238,20 +233,6 @@ func EvaluateEligibility(meta *DenebHookMetadata, ectx EligibilityContext) bool 
 	}
 	if meta.Always {
 		return true
-	}
-
-	// OS check.
-	if len(meta.OS) > 0 {
-		matched := false
-		for _, os := range meta.OS {
-			if matchPlatform(os, ectx.Platform) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
 	}
 
 	// Requires check.
@@ -303,10 +284,6 @@ func EvaluateEligibility(meta *DenebHookMetadata, ectx EligibilityContext) bool 
 	return true
 }
 
-// matchPlatform checks if a platform identifier matches the Go GOOS value.
-func matchPlatform(nodePlatform, goOS string) bool {
-	return strings.EqualFold(nodePlatform, goOS)
-}
 
 // hasBinary checks if a binary is available in PATH.
 func hasBinary(name string) bool {

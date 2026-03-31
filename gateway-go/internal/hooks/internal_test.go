@@ -100,20 +100,9 @@ func TestInternalRegistry_NoHandlers(t *testing.T) {
 }
 
 func TestEvaluateEligibility_AlwaysTrue(t *testing.T) {
-	meta := &DenebHookMetadata{Always: true, OS: []string{"nonexistent"}}
-	if !EvaluateEligibility(meta, EligibilityContext{Platform: "linux"}) {
+	meta := &DenebHookMetadata{Always: true}
+	if !EvaluateEligibility(meta, EligibilityContext{}) {
 		t.Error("always=true should bypass all checks")
-	}
-}
-
-func TestEvaluateEligibility_OSFilter(t *testing.T) {
-	meta := &DenebHookMetadata{OS: []string{"linux"}}
-	if !EvaluateEligibility(meta, EligibilityContext{Platform: "linux"}) {
-		t.Error("linux-only hook should pass on linux")
-	}
-	meta = &DenebHookMetadata{OS: []string{"freebsd"}}
-	if EvaluateEligibility(meta, EligibilityContext{Platform: "linux"}) {
-		t.Error("freebsd-only hook should fail on linux")
 	}
 }
 
@@ -122,7 +111,6 @@ func TestEvaluateEligibility_RequiredBins(t *testing.T) {
 		Requires: &HookRequires{Bins: []string{"curl", "missing-bin"}},
 	}
 	ectx := EligibilityContext{
-		Platform: "linux",
 		BinLookup: func(name string) bool {
 			return name == "curl"
 		},
@@ -137,7 +125,6 @@ func TestEvaluateEligibility_AnyBins(t *testing.T) {
 		Requires: &HookRequires{AnyBins: []string{"bash", "zsh"}},
 	}
 	ectx := EligibilityContext{
-		Platform:  "linux",
 		BinLookup: func(name string) bool { return name == "zsh" },
 	}
 	if !EvaluateEligibility(meta, ectx) {
@@ -150,7 +137,6 @@ func TestEvaluateEligibility_RequiredEnv(t *testing.T) {
 		Requires: &HookRequires{Env: []string{"MY_API_KEY"}},
 	}
 	ectx := EligibilityContext{
-		Platform:  "linux",
 		EnvLookup: func(name string) string { return "" },
 	}
 	if EvaluateEligibility(meta, ectx) {

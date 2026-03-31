@@ -388,7 +388,7 @@ func BuildDefaultRuntimeInfo(model, defaultModel string) *RuntimeInfo {
 	hostname, _ := os.Hostname()
 	return &RuntimeInfo{
 		Host:         hostname,
-		OS:           runtime.GOOS,
+		OS:           "linux",
 		Arch:         runtime.GOARCH,
 		Model:        model,
 		DefaultModel: defaultModel,

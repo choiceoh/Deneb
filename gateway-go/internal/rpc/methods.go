@@ -221,7 +221,7 @@ func systemInfo(deps Deps) HandlerFunc {
 			"runtime":      "go",
 			"version":      version,
 			"goVersion":    runtime.Version(),
-			"os":           runtime.GOOS,
+			"os":           "linux",
 			"arch":         runtime.GOARCH,
 			"numCPU":       runtime.NumCPU(),
 			"ffiAvailable": ffi.Available,
