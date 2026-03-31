@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -225,7 +223,7 @@ func (p *Plugin) SendMessage(ctx context.Context, msg OutboundMessage) error {
 		return errors.New("telegram client not initialized")
 	}
 
-	chatID, err := parseChatID(msg.To)
+	chatID, err := ParseChatID(msg.To)
 	if err != nil {
 		return fmt.Errorf("invalid chat ID %q: %w", msg.To, err)
 	}
@@ -248,14 +246,4 @@ func (p *Plugin) SendMessage(ctx context.Context, msg OutboundMessage) error {
 	}
 
 	return nil
-}
-
-// parseChatID parses a string chat ID to int64.
-func parseChatID(s string) (int64, error) {
-	return strconv.ParseInt(strings.TrimSpace(s), 10, 64)
-}
-
-// ParseChatID is the exported version of parseChatID.
-func ParseChatID(s string) (int64, error) {
-	return parseChatID(s)
 }
