@@ -6,6 +6,12 @@ package telegram
 
 import "encoding/json"
 
+// Status represents the plugin's connection state.
+type Status struct {
+	Connected bool   `json:"connected"`
+	Error     string `json:"error,omitempty"`
+}
+
 // --- Telegram Bot API constants ---
 
 const (
