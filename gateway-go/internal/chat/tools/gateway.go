@@ -14,6 +14,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// ToolGateway returns a tool that exposes gateway management actions (config inspection,
+// patching, and restart) rooted at repoDir.
 func ToolGateway(repoDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {

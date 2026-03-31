@@ -145,6 +145,7 @@ type HookLLMOutputEvent struct {
 	Usage          *HookUsageInfo `json:"usage,omitempty"`
 }
 
+// HookUsageInfo reports token consumption for an LLM call.
 type HookUsageInfo struct {
 	Input      int `json:"input,omitempty"`
 	Output     int `json:"output,omitempty"`
@@ -172,6 +173,7 @@ type HookBeforeCompactionEvent struct {
 	SessionFile     string `json:"sessionFile,omitempty"`
 }
 
+// HookAfterCompactionEvent is delivered after the compaction sweep completes.
 type HookAfterCompactionEvent struct {
 	MessageCount   int    `json:"messageCount"`
 	TokenCount     int    `json:"tokenCount,omitempty"`
@@ -206,6 +208,8 @@ type HookInboundClaimContext struct {
 	MessageID            string `json:"messageId,omitempty"`
 }
 
+// HookInboundClaimEvent is delivered when the gateway receives an inbound message
+// and a plugin has an opportunity to claim (handle) it before normal routing.
 type HookInboundClaimEvent struct {
 	Content              string         `json:"content"`
 	Body                 string         `json:"body,omitempty"`
@@ -227,6 +231,8 @@ type HookInboundClaimEvent struct {
 	Metadata             map[string]any `json:"metadata,omitempty"`
 }
 
+// HookInboundClaimResult lets a plugin signal that it has claimed the message,
+// preventing further processing by other handlers.
 type HookInboundClaimResult struct {
 	Handled bool `json:"handled"`
 }
@@ -248,6 +254,8 @@ type HookMessageSendingEvent struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
+// HookMessageSendingResult lets a plugin mutate or cancel an outbound message.
+// Set Cancel to true to suppress delivery entirely.
 type HookMessageSendingResult struct {
 	Content string `json:"content,omitempty"`
 	Cancel  bool   `json:"cancel,omitempty"`
@@ -282,6 +290,8 @@ type HookBeforeToolCallEvent struct {
 	ToolCallID string         `json:"toolCallId,omitempty"`
 }
 
+// HookBeforeToolCallResult lets a plugin mutate tool parameters or block the call.
+// Set Block to true (with an optional BlockReason) to prevent tool execution.
 type HookBeforeToolCallResult struct {
 	Params      map[string]any `json:"params,omitempty"`
 	Block       bool           `json:"block,omitempty"`
@@ -309,6 +319,8 @@ type HookToolResultPersistContext struct {
 	ToolCallID string `json:"toolCallId,omitempty"`
 }
 
+// HookToolResultPersistEvent is delivered just before a tool result message is
+// written to the session transcript, allowing plugins to inspect or modify it.
 type HookToolResultPersistEvent struct {
 	ToolName    string         `json:"toolName,omitempty"`
 	ToolCallID  string         `json:"toolCallId,omitempty"`
@@ -316,6 +328,7 @@ type HookToolResultPersistEvent struct {
 	IsSynthetic bool           `json:"isSynthetic,omitempty"`
 }
 
+// HookToolResultPersistResult lets a plugin replace the message that gets persisted.
 type HookToolResultPersistResult struct {
 	Message map[string]any `json:"message,omitempty"`
 }
@@ -328,6 +341,8 @@ type HookBeforeMessageWriteEvent struct {
 	AgentID    string         `json:"agentId,omitempty"`
 }
 
+// HookBeforeMessageWriteResult lets a plugin block or replace a message before it
+// is written to the session transcript.
 type HookBeforeMessageWriteResult struct {
 	Block   bool           `json:"block,omitempty"`
 	Message map[string]any `json:"message,omitempty"`
@@ -406,6 +421,8 @@ type HookSubagentDeliveryTargetEvent struct {
 	ExpectsCompletionMessage bool                    `json:"expectsCompletionMessage"`
 }
 
+// HookSubagentDeliveryTargetResult lets a plugin override the delivery origin for
+// a subagent's response messages.
 type HookSubagentDeliveryTargetResult struct {
 	Origin *SubagentSpawnRequester `json:"origin,omitempty"`
 }

@@ -126,6 +126,8 @@ var skipDirs = map[string]bool{
 	".next": true, ".nuxt": true, ".cache": true,
 }
 
+// ToolTree returns a tool that renders a directory tree rooted at defaultDir.
+// Uses eza/exa when available for fast output; falls back to a pure-Go walker.
 func ToolTree(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {

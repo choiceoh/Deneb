@@ -63,6 +63,8 @@ func validateWorkdir(dir string) error {
 	return nil
 }
 
+// ToolExec returns a tool that runs shell commands via procMgr with defaultDir as the
+// working directory when no explicit workdir is provided.
 func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {

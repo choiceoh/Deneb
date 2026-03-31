@@ -18,6 +18,8 @@ const (
 	GatewayLogDefault  = 100
 )
 
+// ToolGatewayLogs returns a tool that reads and filters the gateway log file at
+// GatewayLogPath, returning up to GatewayLogMaxLines tail lines.
 func ToolGatewayLogs() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {

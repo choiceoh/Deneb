@@ -21,6 +21,7 @@ type ServiceConfig struct {
 	RetentionMs    int64 // session retention (0 = default 24h)
 }
 
+// ServiceStatus is a snapshot of the cron service health and pending jobs.
 type ServiceStatus struct {
 	Running     bool         `json:"running"`
 	TaskCount   int          `json:"taskCount"`
@@ -28,10 +29,12 @@ type ServiceStatus struct {
 	Tasks       []TaskStatus `json:"tasks,omitempty"`
 }
 
+// ListOptions controls simple job list queries (no pagination).
 type ListOptions struct {
 	IncludeDisabled bool
 }
 
+// ListPageOptions controls paginated job list queries with optional filtering and sorting.
 type ListPageOptions struct {
 	Limit           int
 	Offset          int
@@ -41,6 +44,7 @@ type ListPageOptions struct {
 	SortDir         string // "asc" or "desc" (default: asc)
 }
 
+// ListPageResult is a single page of jobs returned by a paginated list query.
 type ListPageResult struct {
 	Jobs    []StoreJob `json:"jobs"`
 	Total   int        `json:"total"`

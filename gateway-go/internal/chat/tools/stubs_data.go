@@ -18,6 +18,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// ToolSubagents returns a tool that manages subagent sessions: listing active agents,
+// sending messages, and waiting for results via d.
 func ToolSubagents(d *toolctx.SessionDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
