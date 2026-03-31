@@ -29,6 +29,13 @@ type AgentConfig struct {
 	// Returning nil is a no-op; returning a modified ctx replaces the turn context.
 	OnTurnInit func(ctx context.Context) context.Context
 
+	// DeferredSystemText is called before each turn starting from turn 1.
+	// When it returns a non-empty string, that text is appended to System
+	// once and the hook is cleared. Use this for late-arriving context
+	// (e.g., proactive hints) that should be injected without blocking
+	// the first turn.
+	DeferredSystemText func() string
+
 	// StripImagesAfterFirstTurn drops base64 image data from the message history
 	// after the first LLM turn. On turn 0 the image is sent normally; from turn 1
 	// onward each image block is replaced with a lightweight text placeholder so

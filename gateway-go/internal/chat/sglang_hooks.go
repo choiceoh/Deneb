@@ -21,9 +21,10 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout   = 5 * time.Second
-	proactiveMaxTokens = 1024
-	proactiveMinMsgLen = 20 // skip for very short messages
+	proactiveTimeout       = 5 * time.Second
+	proactiveRemoteTimeout = 8 * time.Second  // remote fallback (Gemini Flash) needs more time
+	proactiveMaxTokens     = 1024
+	proactiveMinMsgLen     = 20 // skip for very short messages
 )
 
 const proactiveSystemPrompt = `You are a context preparation assistant.
@@ -90,12 +91,18 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	if isLowInfoMessage(userMessage) {
 		return ""
 	}
-	// Skip if sglang was recently confirmed down (cached result only, no probe).
-	if !sglangHealthy.Load() && sglangLastCheck.Load() > 0 {
+	// Check sglang health (cached probe, no per-call overhead).
+	sglangUp := checkSglangHealth()
+	if !sglangUp && pkgRegistry == nil {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
+	timeout := proactiveTimeout
+	if !sglangUp {
+		timeout = proactiveRemoteTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Gather workspace signals: recent file list + memory file snippets.
@@ -121,9 +128,16 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	// Memory content is provided to the main LLM by PrefetchKnowledge (importance-weighted).
 	// Reading MEMORY.md here would be redundant I/O on every message.
 
-	result, err := callLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+	var result string
+	var err error
+	if sglangUp {
+		result, err = callLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+	} else {
+		// sglang down — use pilot model (Gemini Flash) for proactive context.
+		result, err = callPilotLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+	}
 	if err != nil {
-		logger.Debug("proactive context failed", "error", err)
+		logger.Debug("proactive context failed", "error", err, "remote", !sglangUp)
 		return ""
 	}
 
@@ -133,6 +147,31 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	}
 
 	return result
+}
+
+// deferredProactiveHint returns a DeferredSystemText function that non-blocking
+// reads the proactive channel. Returns the hint text when ready, empty string
+// while waiting, or signals done (empty hint consumed / hint delivered) so the
+// executor clears the hook and stops calling it.
+func deferredProactiveHint(ch <-chan string, start time.Time, logger *slog.Logger) func() string {
+	var consumed bool
+	return func() string {
+		if consumed {
+			return ""
+		}
+		select {
+		case hint := <-ch:
+			consumed = true
+			if hint != "" {
+				logger.Info("proactive context hit (deferred injection)",
+					"chars", len(hint),
+					"elapsedMs", time.Since(start).Milliseconds())
+				return "\n## Context Hint (from local analysis)\n" + hint
+			}
+		default:
+		}
+		return ""
+	}
 }
 
 // --- 2. Tool Output Compression ---
