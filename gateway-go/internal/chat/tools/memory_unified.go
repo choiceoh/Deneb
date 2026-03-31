@@ -250,12 +250,42 @@ func memoryStatus(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string)
 		}
 		sb.WriteString(fmt.Sprintf("### Structured Store\n- **Active facts**: %d\n", count))
 
+		// Category breakdown.
+		if cats, err := d.MemoryStore.CategoryCounts(ctx); err == nil && len(cats) > 0 {
+			sb.WriteString("- **Categories**:")
+			for cat, n := range cats {
+				sb.WriteString(fmt.Sprintf(" %s=%d", cat, n))
+			}
+			sb.WriteString("\n")
+		}
+
+		// Tier-1 (always-injected) fact count.
+		if t1, err := d.MemoryStore.Tier1FactCount(ctx); err == nil {
+			sb.WriteString(fmt.Sprintf("- **Tier-1 (always-injected)**: %d\n", t1))
+		}
+
+		// Embedding coverage.
+		if embedded, total, err := d.MemoryStore.EmbeddingCoverage(ctx); err == nil && total > 0 {
+			pct := float64(embedded) / float64(total) * 100
+			sb.WriteString(fmt.Sprintf("- **Embedding coverage**: %d/%d (%.0f%%)\n", embedded, total, pct))
+		}
+
+		sb.WriteString(fmt.Sprintf("- **Embedding API**: %s\n", boolLabel(d.MemoryEmbedder != nil)))
+
+		// User model.
 		entries, err := d.MemoryStore.GetUserModel(ctx)
 		if err == nil && len(entries) > 0 {
 			sb.WriteString(fmt.Sprintf("- **User model keys**: %d\n", len(entries)))
 		}
 
-		sb.WriteString(fmt.Sprintf("- **Embedding**: %s\n", boolLabel(d.MemoryEmbedder != nil)))
+		// Last dreaming cycle.
+		if lastDream, err := d.MemoryStore.LastDreamingLog(ctx); err == nil && lastDream != nil {
+			ago := time.Since(lastDream.RanAt)
+			sb.WriteString(fmt.Sprintf("- **Last dreaming**: %s (%s ago, verified=%d merged=%d pruned=%d)\n",
+				lastDream.RanAt.Format("2006-01-02 15:04"),
+				formatDuration(ago),
+				lastDream.FactsVerified, lastDream.FactsMerged, lastDream.FactsPruned))
+		}
 	} else {
 		sb.WriteString("### Structured Store\n- **Status**: not configured\n")
 	}
@@ -269,6 +299,16 @@ func memoryStatus(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string)
 	}
 
 	return sb.String(), nil
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
 func formatFactTime(f memory.Fact) string {

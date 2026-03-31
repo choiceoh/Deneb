@@ -175,6 +175,10 @@ func (s *Server) registerSessionRPCMethods() {
 				}
 			}
 
+			// Wire Tier-1 cache invalidation so new high-importance facts
+			// appear in the system prompt immediately (not after 5-min TTL).
+			memStore.SetFactMutateCallback(unified.InvalidateTier1Cache)
+
 			// Auto-migrate existing MEMORY.md on first run.
 			count, _ := memStore.ActiveFactCount(context.Background())
 			if count == 0 {

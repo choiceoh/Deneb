@@ -35,6 +35,9 @@ func (s *Store) CompactMemory(ctx context.Context) (int64, error) {
 // Lower than search dedup (0.60) to catch paraphrased duplicates at write time.
 const insertDedupJaccardThreshold = 0.55
 
+// tier1Threshold mirrors unified.Tier1Threshold to avoid an import cycle.
+const tier1Threshold = 0.85
+
 // InsertFact stores a new fact and returns its ID.
 // Two-stage dedup: (1) exact content match, (2) semantic similarity via FTS + Jaccard.
 func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
@@ -64,6 +67,11 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 				`UPDATE facts SET importance = MAX(importance, ?), updated_at = ? WHERE id = ?`,
 				f.Importance, now, existingID,
 			)
+			if f.Importance >= tier1Threshold {
+				s.mu.Unlock()
+				s.notifyFactMutate()
+				s.mu.Lock()
+			}
 		}
 		return existingID, nil
 	}
@@ -76,6 +84,11 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 				`UPDATE facts SET importance = MAX(importance, ?), updated_at = ? WHERE id = ?`,
 				f.Importance, now, dupID,
 			)
+			if f.Importance >= tier1Threshold {
+				s.mu.Unlock()
+				s.notifyFactMutate()
+				s.mu.Lock()
+			}
 		}
 		return dupID, nil
 	}
@@ -89,6 +102,13 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("insert fact: %w", err)
 	}
+
+	if f.Importance >= tier1Threshold {
+		s.mu.Unlock()
+		s.notifyFactMutate()
+		s.mu.Lock()
+	}
+
 	return result.LastInsertId()
 }
 
@@ -189,12 +209,14 @@ func (s *Store) GetFactsForDreaming(ctx context.Context) ([]Fact, error) {
 // UpdateImportance sets a fact's importance score.
 func (s *Store) UpdateImportance(ctx context.Context, id int64, importance float64) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE facts SET importance = ?, updated_at = ? WHERE id = ?`,
-		importance, now, id,
+		importance, time.Now().UTC().Format(time.RFC3339), id,
 	)
+	s.mu.Unlock()
+	if err == nil && importance >= tier1Threshold {
+		s.notifyFactMutate()
+	}
 	return err
 }
 
@@ -213,14 +235,16 @@ func (s *Store) MarkVerified(ctx context.Context, id int64) error {
 // DeactivateFact marks a fact as inactive.
 func (s *Store) DeactivateFact(ctx context.Context, id int64) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE facts SET active = 0, updated_at = ? WHERE id = ?`,
-		now, id,
+		time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err == nil {
 		s.embCacheReady = false
+	}
+	s.mu.Unlock()
+	if err == nil {
+		s.notifyFactMutate()
 	}
 	return err
 }
@@ -278,14 +302,16 @@ func (s *Store) PruneNoiseFacts(ctx context.Context, maxImportance float64, maxA
 // SupersedeFact marks oldID as superseded by newID and deactivates it.
 func (s *Store) SupersedeFact(ctx context.Context, oldID, newID int64) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE facts SET active = 0, superseded_by = ?, updated_at = ? WHERE id = ?`,
-		newID, now, oldID,
+		newID, time.Now().UTC().Format(time.RFC3339), oldID,
 	)
 	if err == nil {
 		s.embCacheReady = false
+	}
+	s.mu.Unlock()
+	if err == nil {
+		s.notifyFactMutate()
 	}
 	return err
 }
@@ -297,4 +323,57 @@ func (s *Store) ActiveFactCount(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM facts WHERE active = 1`).Scan(&count)
 	return count, err
+}
+
+// CategoryCounts returns the number of active facts per category.
+func (s *Store) CategoryCounts(ctx context.Context) (map[string]int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT category, COUNT(*) FROM facts WHERE active = 1 GROUP BY category ORDER BY COUNT(*) DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var cat string
+		var n int
+		if err := rows.Scan(&cat, &n); err != nil {
+			return nil, err
+		}
+		counts[cat] = n
+	}
+	return counts, rows.Err()
+}
+
+// Tier1FactCount returns the number of active facts eligible for always-on prompt injection.
+func (s *Store) Tier1FactCount(ctx context.Context) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM facts WHERE active = 1 AND importance >= ? AND category IN ('decision','preference','user_model')`,
+		tier1Threshold,
+	).Scan(&count)
+	return count, err
+}
+
+// EmbeddingCoverage returns (embedded count, total active count) for active facts.
+func (s *Store) EmbeddingCoverage(ctx context.Context) (int, int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var embedded, total int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM facts WHERE active = 1`).Scan(&total)
+	if err != nil {
+		return 0, 0, err
+	}
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM fact_embeddings fe JOIN facts f ON f.id = fe.fact_id WHERE f.active = 1`).Scan(&embedded)
+	if err != nil {
+		return 0, 0, err
+	}
+	return embedded, total, nil
 }

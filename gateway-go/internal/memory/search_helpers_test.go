@@ -11,7 +11,7 @@ func TestEscapeFTS(t *testing.T) {
 		{name: "single token", input: "memory", want: `"memory"`},
 		{name: "multi token", input: "memory search", want: `"memory" OR "search"`},
 		{name: "quoted token", input: `"exact" term`, want: `"exact" OR "term"`},
-		{name: "whitespace only", input: "   ", want: "   "},
+		{name: "whitespace only", input: "   ", want: ""},
 	}
 
 	for _, tt := range tests {

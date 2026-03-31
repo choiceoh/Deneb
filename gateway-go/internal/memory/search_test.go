@@ -197,7 +197,7 @@ func TestRecencyUsesUpdatedAt(t *testing.T) {
 }
 
 func TestWeightsSumToOne(t *testing.T) {
-	sum := weightHybrid + weightImportance + weightRecency + weightFrequency
+	sum := weightHybrid + weightImportance + weightRecency + weightVerification
 	if math.Abs(sum-1.0) > 0.001 {
 		t.Errorf("weights should sum to 1.0, got %f", sum)
 	}
