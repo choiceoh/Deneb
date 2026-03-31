@@ -673,8 +673,8 @@ func memoryToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"enum":        []string{"search", "get", "set", "forget", "status"},
-				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), status (memory stats)",
+				"enum":        []string{"search", "get", "set", "forget", "status", "browse"},
+				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), status (memory stats + top fact previews), browse (list/explore facts by category with pagination and sorting)",
 			},
 			"query": map[string]any{
 				"type":        "string",
@@ -687,7 +687,7 @@ func memoryToolSchema() map[string]any {
 			"category": map[string]any{
 				"type":        "string",
 				"enum":        []string{"decision", "preference", "solution", "context", "user_model", "mutual"},
-				"description": "Category filter (search) or category assignment (set)",
+				"description": "Category filter (search/browse) or category assignment (set)",
 			},
 			"importance": map[string]any{
 				"type":        "number",
@@ -697,9 +697,19 @@ func memoryToolSchema() map[string]any {
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "Max results to return (search action, default: 10)",
+				"description": "Max results to return (search: default 10, browse: default 20)",
 				"minimum":     1,
 				"maximum":     50,
+			},
+			"sort": map[string]any{
+				"type":        "string",
+				"enum":        []string{"importance", "recent", "created"},
+				"description": "Sort order for browse action: importance (default), recent (updated_at desc), created (created_at desc)",
+			},
+			"offset": map[string]any{
+				"type":        "integer",
+				"description": "Pagination offset for browse action (default: 0)",
+				"minimum":     0,
 			},
 		},
 		"required": []string{"action"},

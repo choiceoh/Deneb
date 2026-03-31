@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,19 +13,24 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// memoryParams is the shared parameter struct for all memory tool actions.
+type memoryParams struct {
+	Action     string  `json:"action"`
+	Query      string  `json:"query"`
+	FactID     *int64  `json:"fact_id"`
+	Category   string  `json:"category"`
+	Importance float64 `json:"importance"`
+	Limit      int     `json:"limit"`
+	Sort       string  `json:"sort"`
+	Offset     int     `json:"offset"`
+}
+
 // ToolMemory creates the unified memory tool that combines structured fact store
 // with file-based memory search. Degrades gracefully when memory store is nil
 // (falls back to file-based search only).
 func ToolMemory(d *toolctx.VegaDeps, workspaceDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Action     string  `json:"action"`
-			Query      string  `json:"query"`
-			FactID     *int64  `json:"fact_id"`
-			Category   string  `json:"category"`
-			Importance float64 `json:"importance"`
-			Limit      int     `json:"limit"`
-		}
+		var p memoryParams
 		if err := jsonutil.UnmarshalInto("memory params", input, &p); err != nil {
 			return "", err
 		}
@@ -38,22 +44,17 @@ func ToolMemory(d *toolctx.VegaDeps, workspaceDir string) ToolFunc {
 			return memorySet(ctx, d, p)
 		case "forget":
 			return memoryForget(ctx, d, p)
+		case "browse":
+			return memoryBrowse(ctx, d, p)
 		case "status":
 			return memoryStatus(ctx, d, workspaceDir)
 		default:
-			return "", fmt.Errorf("unknown action: %s (use: search, get, set, forget, status)", p.Action)
+			return "", fmt.Errorf("unknown action: %s (use: search, get, set, forget, status, browse)", p.Action)
 		}
 	}
 }
 
-func memorySearch(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string, p struct {
-	Action     string  `json:"action"`
-	Query      string  `json:"query"`
-	FactID     *int64  `json:"fact_id"`
-	Category   string  `json:"category"`
-	Importance float64 `json:"importance"`
-	Limit      int     `json:"limit"`
-}) (string, error) {
+func memorySearch(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string, p memoryParams) (string, error) {
 	if p.Query == "" {
 		return "", fmt.Errorf("query is required for search")
 	}
@@ -116,14 +117,7 @@ func memorySearch(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string,
 	return header + strings.Join(parts, "\n"), nil
 }
 
-func memoryGet(ctx context.Context, d *toolctx.VegaDeps, p struct {
-	Action     string  `json:"action"`
-	Query      string  `json:"query"`
-	FactID     *int64  `json:"fact_id"`
-	Category   string  `json:"category"`
-	Importance float64 `json:"importance"`
-	Limit      int     `json:"limit"`
-}) (string, error) {
+func memoryGet(ctx context.Context, d *toolctx.VegaDeps, p memoryParams) (string, error) {
 	if p.FactID == nil {
 		return "", fmt.Errorf("fact_id is required for get")
 	}
@@ -171,14 +165,7 @@ func memoryGet(ctx context.Context, d *toolctx.VegaDeps, p struct {
 	return sb.String(), nil
 }
 
-func memorySet(ctx context.Context, d *toolctx.VegaDeps, p struct {
-	Action     string  `json:"action"`
-	Query      string  `json:"query"`
-	FactID     *int64  `json:"fact_id"`
-	Category   string  `json:"category"`
-	Importance float64 `json:"importance"`
-	Limit      int     `json:"limit"`
-}) (string, error) {
+func memorySet(ctx context.Context, d *toolctx.VegaDeps, p memoryParams) (string, error) {
 	if p.Query == "" {
 		return "", fmt.Errorf("query (fact content) is required for set")
 	}
@@ -219,14 +206,7 @@ func memorySet(ctx context.Context, d *toolctx.VegaDeps, p struct {
 	return fmt.Sprintf("Fact #%d created: {%s} [%.2f] %s", id, category, importance, p.Query), nil
 }
 
-func memoryForget(ctx context.Context, d *toolctx.VegaDeps, p struct {
-	Action     string  `json:"action"`
-	Query      string  `json:"query"`
-	FactID     *int64  `json:"fact_id"`
-	Category   string  `json:"category"`
-	Importance float64 `json:"importance"`
-	Limit      int     `json:"limit"`
-}) (string, error) {
+func memoryForget(ctx context.Context, d *toolctx.VegaDeps, p memoryParams) (string, error) {
 	if p.FactID == nil {
 		return "", fmt.Errorf("fact_id is required for forget")
 	}
@@ -241,6 +221,64 @@ func memoryForget(ctx context.Context, d *toolctx.VegaDeps, p struct {
 	return fmt.Sprintf("Fact #%d deactivated.", *p.FactID), nil
 }
 
+func memoryBrowse(ctx context.Context, d *toolctx.VegaDeps, p memoryParams) (string, error) {
+	if d.MemoryStore == nil {
+		return "[memory store not configured]", nil
+	}
+
+	limit := p.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	offset := p.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	sortOrder := p.Sort
+	if sortOrder == "" {
+		sortOrder = "importance"
+	}
+
+	facts, total, err := d.MemoryStore.BrowseFacts(ctx, p.Category, sortOrder, limit, offset)
+	if err != nil {
+		return "", fmt.Errorf("browse facts: %w", err)
+	}
+
+	var sb strings.Builder
+
+	// Header with filter/sort info.
+	var header string
+	if p.Category != "" {
+		header = fmt.Sprintf("## Memory browse: category=%s, sort=%s", p.Category, sortOrder)
+	} else {
+		header = fmt.Sprintf("## Memory browse: all categories, sort=%s", sortOrder)
+	}
+	fmt.Fprintf(&sb, "%s (%d\u2013%d / %d\uAC1C)\n", header, offset+1, offset+len(facts), total)
+
+	if len(facts) == 0 {
+		sb.WriteString("\n\uB354 \uC774\uC0C1 \uACB0\uACFC \uC5C6\uC74C.\n")
+		return sb.String(), nil
+	}
+
+	for _, f := range facts {
+		timeLabel := formatFactTime(f)
+		if timeLabel != "" {
+			fmt.Fprintf(&sb, "- [#%d] [%.2f] {%s} (%s) %s\n", f.ID, f.Importance, f.Category, timeLabel, f.Content)
+		} else {
+			fmt.Fprintf(&sb, "- [#%d] [%.2f] {%s} %s\n", f.ID, f.Importance, f.Category, f.Content)
+		}
+	}
+
+	if offset+limit < total {
+		fmt.Fprintf(&sb, "\n_\uB2E4\uC74C \uD398\uC774\uC9C0: action=browse offset=%d limit=%d_", offset+limit, limit)
+	}
+
+	return sb.String(), nil
+}
+
 func memoryStatus(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("## Memory Status\n\n")
@@ -252,8 +290,9 @@ func memoryStatus(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string)
 		}
 		sb.WriteString(fmt.Sprintf("### Structured Store\n- **Active facts**: %d\n", count))
 
-		// Category breakdown.
-		if cats, err := d.MemoryStore.CategoryCounts(ctx); err == nil && len(cats) > 0 {
+		// Category breakdown with top fact previews.
+		cats, catsErr := d.MemoryStore.CategoryCounts(ctx)
+		if catsErr == nil && len(cats) > 0 {
 			sb.WriteString("- **Categories**:")
 			for cat, n := range cats {
 				sb.WriteString(fmt.Sprintf(" %s=%d", cat, n))
@@ -287,6 +326,27 @@ func memoryStatus(ctx context.Context, d *toolctx.VegaDeps, workspaceDir string)
 				lastDream.RanAt.Format("2006-01-02 15:04"),
 				formatDuration(ago),
 				lastDream.FactsVerified, lastDream.FactsMerged, lastDream.FactsPruned))
+		}
+
+		// Top fact previews per category for discoverability.
+		if catsErr == nil && len(cats) > 0 {
+			sb.WriteString("\n### Fact Previews (top by importance)\n")
+			// Sort category names for stable output.
+			catNames := make([]string, 0, len(cats))
+			for cat := range cats {
+				catNames = append(catNames, cat)
+			}
+			sort.Strings(catNames)
+			for _, cat := range catNames {
+				previewFacts, _, previewErr := d.MemoryStore.BrowseFacts(ctx, cat, "importance", 2, 0)
+				if previewErr != nil || len(previewFacts) == 0 {
+					continue
+				}
+				sb.WriteString(fmt.Sprintf("**%s** (%d\uAC1C):\n", cat, cats[cat]))
+				for _, f := range previewFacts {
+					sb.WriteString(fmt.Sprintf("  - [#%d] [%.2f] %s\n", f.ID, f.Importance, f.Content))
+				}
+			}
 		}
 	} else {
 		sb.WriteString("### Structured Store\n- **Status**: not configured\n")

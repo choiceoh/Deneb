@@ -196,6 +196,58 @@ func (s *Store) GetFactsByCategory(ctx context.Context, category string) ([]Fact
 		`SELECT * FROM facts WHERE active = 1 AND category = ? ORDER BY importance DESC`, category)
 }
 
+// BrowseFacts returns active facts with optional category filter, paginated and sorted.
+// sortOrder: "importance" (default), "recent" (updated_at DESC), "created" (created_at DESC).
+// Returns (facts, totalCount, error) where totalCount is the unfiltered count for pagination.
+func (s *Store) BrowseFacts(ctx context.Context, category, sortOrder string, limit, offset int) ([]Fact, int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Determine ORDER BY clause.
+	var orderBy string
+	switch sortOrder {
+	case "recent":
+		orderBy = "updated_at DESC, importance DESC"
+	case "created":
+		orderBy = "created_at DESC, importance DESC"
+	default: // "importance"
+		orderBy = "importance DESC, created_at DESC"
+	}
+
+	// Count total matching facts for pagination.
+	var total int
+	if category != "" {
+		err := s.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM facts WHERE active = 1 AND category = ?`, category).Scan(&total)
+		if err != nil {
+			return nil, 0, fmt.Errorf("browse count: %w", err)
+		}
+	} else {
+		err := s.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM facts WHERE active = 1`).Scan(&total)
+		if err != nil {
+			return nil, 0, fmt.Errorf("browse count: %w", err)
+		}
+	}
+
+	// Fetch paginated results.
+	var query string
+	var args []any
+	if category != "" {
+		query = fmt.Sprintf(`SELECT * FROM facts WHERE active = 1 AND category = ? ORDER BY %s LIMIT ? OFFSET ?`, orderBy)
+		args = []any{category, limit, offset}
+	} else {
+		query = fmt.Sprintf(`SELECT * FROM facts WHERE active = 1 ORDER BY %s LIMIT ? OFFSET ?`, orderBy)
+		args = []any{limit, offset}
+	}
+
+	facts, err := s.queryFacts(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("browse facts: %w", err)
+	}
+	return facts, total, nil
+}
+
 // GetFactsForDreaming returns active facts not verified in the last 24 hours.
 func (s *Store) GetFactsForDreaming(ctx context.Context) ([]Fact, error) {
 	s.mu.RLock()
