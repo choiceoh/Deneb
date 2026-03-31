@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -209,47 +209,10 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		msgCtx.BodyForCommands = inbound.StripMentions(msgCtx.BodyForCommands, "")
 	}
 
-	// Try slash command dispatch (only for text messages with commands).
-	trimmed := strings.TrimSpace(msgCtx.BodyForCommands)
-	if strings.HasPrefix(trimmed, "/") {
-		cmdKey := extractCommandKey(trimmed)
-		if cmdKey != "" && p.cmdRouter.HasHandler(cmdKey) {
-			result, err := p.cmdRouter.Dispatch(handlers.CommandContext{
-				Command:    cmdKey,
-				Body:       msgCtx.Body,
-				SessionKey: sessionKey,
-				Channel:    "telegram",
-				IsGroup:    msgCtx.IsGroup,
-				Msg:        msgCtx,
-				Session: &types.SessionState{
-					SessionKey: sessionKey,
-					Channel:    "telegram",
-					IsGroup:    msgCtx.IsGroup,
-				},
-				Deps: p.buildCommandDeps(sessionKey),
-			})
-			if err == nil && result != nil && result.SkipAgent {
-				// Command handled; send reply back to Telegram.
-				p.sendCommandReply(chatID, result)
-				return
-			}
-			// Command processed but agent should continue (e.g., /btw).
-			if err == nil && result != nil && result.Reply != "" {
-				p.sendCommandReply(chatID, result)
-			}
-		}
-	}
-
-	// Parse inline directives (!model, !think, etc.) and clean the message body.
-	agentMessage := msgCtx.BodyForAgent
-	if agentMessage != "" {
-		directives := rules.ParseInlineDirectives(agentMessage, nil)
-		if directives.Cleaned != "" {
-			agentMessage = directives.Cleaned
-		}
-	}
+	// --- Enrich the agent message before dispatch ---
 
 	// Interactive replies: extract reply context when user replies to a message.
+	agentMessage := msgCtx.BodyForAgent
 	if rc := ExtractReplyContext(msg, p.server.telegramPlug.BotUserID()); rc != nil {
 		msgCtx.ReplyToID = rc.ReplyToID
 		if prefix := FormatReplyPrefix(rc); prefix != "" {
@@ -298,44 +261,62 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		agentMessage = agentMessage + "\n\n" + linkSummary
 	}
 
-	// Build delivery context with triggering message ID for reply threading.
-	delivery := map[string]any{
-		"channel": "telegram",
-		"to":      chatID,
-	}
-	if msg.MessageID != 0 {
-		delivery["messageId"] = strconv.FormatInt(msg.MessageID, 10)
+	// Update msgCtx with the fully enriched message body for the dispatch pipeline.
+	msgCtx.BodyForAgent = agentMessage
+
+	// --- Dispatch through the autoreply pipeline ---
+	// DispatchFromConfig handles: abort detection, command dispatch, inline
+	// directive parsing, model resolution, and agent execution (via bridge
+	// executor that delegates to chat.send).
+
+	dispatchCfg := autoreply.DispatchConfig{
+		SessionKey: sessionKey,
+		Channel:    "telegram",
+		To:         chatID,
+		AccountID:  msgCtx.AccountID,
+		ThreadID:   msgCtx.ThreadID,
+		IsGroup:    msgCtx.IsGroup,
 	}
 
-	// Build chat.send params.
-	sendParams := map[string]any{
-		"sessionKey": sessionKey,
-		"message":    agentMessage,
-		"delivery":   delivery,
-	}
-	if len(attachments) > 0 {
-		sendParams["attachments"] = attachments
+	executor := &chatSendExecutor{
+		chatHandler: p.chatHandler,
+		chatID:      chatID,
+		messageID:   msg.MessageID,
+		attachments: attachments,
+		logger:      p.logger,
 	}
 
-	// Dispatch to chat.send with the preprocessed message and media attachments.
-	req, err := protocol.NewRequestFrame(
-		"tg-"+chatID+"-"+strconv.FormatInt(msg.MessageID, 10),
-		"chat.send",
-		sendParams,
+	dispatchDeps := autoreply.ReplyDeps{
+		Agent:    executor,
+		Registry: p.cmdRegistry,
+		Router:   p.cmdRouter,
+		SessionFunc: func(key string) *types.SessionState {
+			return &types.SessionState{
+				SessionKey: key,
+				Channel:    "telegram",
+				IsGroup:    msgCtx.IsGroup,
+			}
+		},
+	}
+
+	dispatchResult := autoreply.DispatchFromConfig(
+		context.Background(), msgCtx, dispatchCfg, dispatchDeps,
 	)
-	if err != nil {
-		p.logger.Error("failed to build chat.send request", "error", err)
-		return
-	}
 
-	sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer sendCancel()
-	resp := p.chatHandler.Send(sendCtx, req)
-	if resp != nil && !resp.OK {
-		p.logger.Warn("chat.send failed for telegram message",
+	// If DispatchFromConfig produced command reply payloads (abort/command
+	// handled without agent), deliver them directly to Telegram.
+	if dispatchResult.Error != nil {
+		p.logger.Warn("autoreply dispatch error",
 			"chatId", chatID,
-			"error", resp.Error,
+			"error", dispatchResult.Error,
 		)
+	}
+	if len(dispatchResult.Payloads) > 0 && !executor.didSend {
+		for _, payload := range dispatchResult.Payloads {
+			if payload.Text != "" {
+				p.sendCommandReply(chatID, &handlers.CommandResult{Reply: payload.Text})
+			}
+		}
 	}
 
 	// Remove ack reaction after the reply is sent.
@@ -574,6 +555,71 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 	}
 
 	return &handlers.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn}
+}
+
+// chatSendExecutor bridges the autoreply.AgentExecutor interface to
+// chat.Handler.Send. When the autoreply pipeline decides the message should
+// go to the agent (not handled by a command or abort), RunTurn builds a
+// chat.send request frame and dispatches it through the existing async
+// chat handler pipeline.
+type chatSendExecutor struct {
+	chatHandler *chat.Handler
+	chatID      string
+	messageID   int64
+	attachments []chat.ChatAttachment
+	logger      *slog.Logger
+	didSend     bool // set to true after chat.send dispatch
+}
+
+func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnConfig) (*autoreply.AgentTurnResult, error) {
+	// Build delivery context with triggering message ID for reply threading.
+	delivery := map[string]any{
+		"channel": "telegram",
+		"to":      e.chatID,
+	}
+	if e.messageID != 0 {
+		delivery["messageId"] = strconv.FormatInt(e.messageID, 10)
+	}
+
+	sendParams := map[string]any{
+		"sessionKey": cfg.SessionKey,
+		"message":    cfg.Message,
+		"delivery":   delivery,
+	}
+	if cfg.Model != "" {
+		sendParams["model"] = cfg.Model
+	}
+	if len(e.attachments) > 0 {
+		sendParams["attachments"] = e.attachments
+	}
+
+	req, err := protocol.NewRequestFrame(
+		"tg-"+e.chatID+"-"+strconv.FormatInt(e.messageID, 10),
+		"chat.send",
+		sendParams,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build chat.send request: %w", err)
+	}
+
+	sendCtx, sendCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer sendCancel()
+	resp := e.chatHandler.Send(sendCtx, req)
+	if resp != nil && !resp.OK {
+		errMsg := "unknown error"
+		if resp.Error != nil {
+			errMsg = resp.Error.Message
+		}
+		e.logger.Warn("chat.send failed via autoreply executor",
+			"chatId", e.chatID,
+			"error", errMsg,
+		)
+	}
+
+	e.didSend = true
+
+	// Return empty result — actual reply delivery is async via chat handler.
+	return &autoreply.AgentTurnResult{}, nil
 }
 
 // extractCommandKey pulls the command name from a slash-prefixed message.

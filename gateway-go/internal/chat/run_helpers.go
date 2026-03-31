@@ -77,7 +77,7 @@ func handleRunSuccess(
 
 	// Deliver response back to the originating channel (e.g., Telegram).
 	// Suppress delivery if the LLM returned the silent reply token (NO_REPLY).
-	if deps.replyFunc != nil && params.Delivery != nil && result.Text != "" {
+	if params.Delivery != nil && result.Text != "" {
 		if IsSilentReply(result.Text) {
 			logger.Info("suppressing silent reply (NO_REPLY)")
 		} else {
@@ -88,15 +88,37 @@ func handleRunSuccess(
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
-				if err := deps.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
-					logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
-				} else if deps.hookRegistry != nil {
-					// Fire message.send hook after successful delivery.
-					go deps.hookRegistry.Fire(context.Background(), hooks.EventMessageSend, map[string]string{
-						"DENEB_CHANNEL":     params.Delivery.Channel,
-						"DENEB_TO":          params.Delivery.To,
-						"DENEB_SESSION_KEY": params.SessionKey,
-					})
+				if deps.replyFunc != nil {
+					// Primary path: channel-specific reply function (handles dedup,
+					// formatting, chunking, etc.).
+					if err := deps.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
+						logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
+					} else if deps.hookRegistry != nil {
+						// Fire message.send hook after successful delivery.
+						go deps.hookRegistry.Fire(context.Background(), hooks.EventMessageSend, map[string]string{
+							"DENEB_CHANNEL":     params.Delivery.Channel,
+							"DENEB_TO":          params.Delivery.To,
+							"DENEB_SESSION_KEY": params.SessionKey,
+						})
+					}
+				} else if deps.channels != nil {
+					// Fallback: deliver via channel registry when no reply function
+					// is wired. Uses streaming.Dispatch for concurrent multi-target
+					// delivery through the MessagingAdapter interface.
+					targets := []streaming.DeliveryTarget{{
+						Channel:   params.Delivery.Channel,
+						To:        params.Delivery.To,
+						AccountID: params.Delivery.AccountID,
+						ThreadID:  params.Delivery.ThreadID,
+						ReplyTo:   params.Delivery.MessageID,
+					}}
+					results := streaming.Dispatch(replyCtx, deps.channels, targets, replyText, nil)
+					for _, dr := range results {
+						if dr.Error != nil {
+							logger.Error("dispatch delivery failed",
+								"channel", dr.Channel, "error", dr.Error)
+						}
+					}
 				}
 			}
 		}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
+	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
@@ -444,6 +447,81 @@ func executeAgentRun(
 				"isError": isErr,
 				"ts":      time.Now().UnixMilli(),
 			})
+		}
+	}
+
+	// User-defined hook registry: fire tool.use event after each tool completes.
+	if deps.hookRegistry != nil {
+		prevOnToolResult := hooks.OnToolResult
+		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+			if prevOnToolResult != nil {
+				prevOnToolResult(name, toolUseID, result, isErr)
+			}
+			go deps.hookRegistry.Fire(context.Background(), hookspkg.EventToolUse, map[string]string{
+				"DENEB_TOOL":        name,
+				"DENEB_TOOL_USE_ID": toolUseID,
+				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
+				"DENEB_SESSION_KEY": params.SessionKey,
+			})
+		}
+	}
+
+	// Draft stream hook: real-time message editing during LLM streaming.
+	// Creates a throttled draft loop that sends/edits a Telegram message as
+	// text deltas arrive, giving the user immediate visual feedback.
+	var draftCtrl *channel.FinalizableDraftStreamControls
+	if deps.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
+		delivery := params.Delivery
+		var draftMu sync.Mutex
+		var draftMsgID string // tracks the sent message ID across edits
+		var accum strings.Builder
+
+		// Defer cleanup so the draft is stopped on all exit paths (success, error, fallback).
+		defer func() {
+			if draftCtrl != nil {
+				draftCtrl.StopForClear()
+			}
+		}()
+
+		draftCtrl = channel.NewFinalizableDraftStreamControls(channel.FinalizableDraftParams{
+			ThrottleMs: 800, // edit at most ~1.25x/sec to stay within Telegram rate limits
+			SendOrEdit: func(text string) (bool, error) {
+				draftMu.Lock()
+				currentID := draftMsgID
+				draftMu.Unlock()
+
+				editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+
+				newID, err := deps.draftEditFn(editCtx, delivery, currentID, text)
+				if err != nil {
+					logger.Warn("draft stream send/edit failed", "error", err)
+					return false, err
+				}
+				draftMu.Lock()
+				draftMsgID = newID
+				draftMu.Unlock()
+				return true, nil
+			},
+		})
+
+		prevOnDelta := hooks.OnTextDelta
+		hooks.OnTextDelta = func(text string) {
+			if prevOnDelta != nil {
+				prevOnDelta(text)
+			}
+			accum.WriteString(text)
+			draftCtrl.Update(accum.String())
+		}
+
+		// On tool start, stop the draft loop so partial text is flushed before
+		// the tool runs. The final reply will be delivered by the normal pipeline.
+		prevOnToolStart := hooks.OnToolStart
+		hooks.OnToolStart = func(name, reason string) {
+			draftCtrl.StopForClear()
+			if prevOnToolStart != nil {
+				prevOnToolStart(name, reason)
+			}
 		}
 	}
 

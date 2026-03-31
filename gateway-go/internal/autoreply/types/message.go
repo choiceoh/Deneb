@@ -82,6 +82,9 @@ type GetReplyOptions struct {
 	SuppressToolErrors     bool
 	SkillFilter            []string
 	TimeoutOverrideMs      int64
+	// Token budget overrides (0 = use model defaults).
+	ContextTokens int
+	MaxTokens     int
 	// Callbacks
 	OnAgentRunStart func(params AgentRunStartParams)
 	OnReplyStart    func()

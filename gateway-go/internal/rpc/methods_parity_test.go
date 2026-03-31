@@ -75,6 +75,8 @@ var tsBaseMethods = []string{
 	"sessions.unsubscribe",
 	"sessions.messages.subscribe",
 	"sessions.messages.unsubscribe",
+	"sessions.tools.subscribe",
+	"sessions.tools.unsubscribe",
 	"sessions.preview",
 	"sessions.create",
 	"sessions.send",
@@ -202,6 +204,7 @@ func fullDispatcher() *Dispatcher {
 		"subscribe.session.messages", "unsubscribe.session.messages",
 		"sessions.subscribe", "sessions.unsubscribe",
 		"sessions.messages.subscribe", "sessions.messages.unsubscribe",
+		"sessions.tools.subscribe", "sessions.tools.unsubscribe",
 	} {
 		d.Register(m, stub)
 	}

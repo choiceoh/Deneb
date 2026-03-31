@@ -50,7 +50,18 @@ func (s *Server) registerSessionRPCMethods() {
 	// Session repair methods are now included in handlersession.Methods().
 
 	// Chat methods — native agent execution.
+	// For "session.tool" events, check if a specific tool event recipient is
+	// registered for the run and target the broadcast to that connection only.
 	broadcastFn := func(event string, payload any) (int, []error) {
+		if event == "session.tool" {
+			if m, ok := payload.(map[string]any); ok {
+				if runID, _ := m["runId"].(string); runID != "" {
+					if connID := s.broadcaster.GetToolEventRecipient(runID); connID != "" {
+						return s.broadcaster.BroadcastToConnIDs(event, payload, map[string]bool{connID: true})
+					}
+				}
+			}
+		}
 		return s.broadcaster.Broadcast(event, payload)
 	}
 
@@ -280,6 +291,9 @@ func (s *Server) registerSessionRPCMethods() {
 	if s.hooks != nil {
 		s.chatHandler.SetHookRegistry(s.hooks)
 	}
+
+	// Wire channel registry for fallback delivery via streaming.Dispatch.
+	s.chatHandler.SetChannels(s.channels)
 
 	// Wire raw broadcast directly to chat handler for streaming event relay.
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {

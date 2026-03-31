@@ -6,6 +6,7 @@ package autoreply
 
 import (
 	"context"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/directives"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
@@ -18,32 +19,68 @@ import (
 )
 
 // GetReplyFromConfig is the main entry point for generating a reply.
-// It orchestrates the full pipeline: session init → directives → model selection
-// → agent execution → reply normalization.
+// It orchestrates the full pipeline: session init → preprocess hooks →
+// directives (parse + handle) → model selection → agent execution →
+// fallback tracking → reply normalization.
 func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetReplyOptions, deps ReplyDeps) ([]types.ReplyPayload, error) {
 	// 1. Initialize session state.
-	session := InitSessionForReply(msg, deps)
+	sess := InitSessionForReply(msg, deps)
 
-	// 2. Parse inline directives from message body.
+	// 2. Run preprocess hooks on the inbound message before directive parsing.
+	if err := RunPreprocessHooks(msg, deps.PreprocessHooks); err != nil {
+		return nil, err
+	}
+
+	// 3. Parse inline directives from message body.
 	inline := rules.ParseInlineDirectives(msg.BodyForAgent, nil)
-	cleanedBody := inline.Cleaned
 
-	// 3. Handle directive-only messages (no user text).
-	if rules.IsDirectiveOnly(inline) {
-		result := ApplyDirectivesToSession(inline, session, deps)
-		if result != nil {
-			return result, nil
+	// 4. Run full directive handling (model resolution, queue changes, ack text,
+	//    session modifications) as a secondary processor after basic parsing.
+	directiveResult := directives.HandleDirectives(msg.BodyForAgent, sess, directives.DirectiveHandlingOptions{
+		ModelCandidates: deps.ModelCandidates,
+		StatusHandler: func(session *types.SessionState) string {
+			if deps.Router == nil {
+				return ""
+			}
+			r, _ := deps.Router.Dispatch(handlers.CommandContext{
+				Command: "status",
+				Session: session,
+			})
+			if r != nil {
+				return r.Reply
+			}
+			return ""
+		},
+	})
+
+	// 5. Handle directive-only messages (no user text after directive removal).
+	cleanedBody := directiveResult.CleanedBody
+	if directiveResult.IsDirectiveOnly {
+		// Persist directive changes to session.
+		directives.PersistDirectives(sess, directiveResult)
+		// Return immediate reply (e.g., ack text or status).
+		if directiveResult.ImmediateReply != nil {
+			return []types.ReplyPayload{*directiveResult.ImmediateReply}, nil
+		}
+		if directiveResult.AckText != "" {
+			return []types.ReplyPayload{{Text: directiveResult.AckText}}, nil
 		}
 		return nil, nil
 	}
 
-	// 4. Apply directives to session state.
-	ApplyDirectivesToSession(inline, session, deps)
+	// 6. Apply parsed directive changes to session state.
+	directives.PersistDirectives(sess, directiveResult)
+	// Also apply basic directive fields that PersistDirectives may not cover.
+	ApplyDirectivesToSession(inline, sess, deps)
 
-	// 5. Resolve model.
-	selection := ResolveModelForReply(session, inline, deps)
+	// 7. Resolve model using the full model selection pipeline.
+	selection := ResolveModelForReply(sess, inline, deps)
 
-	// 6. Build typing controller.
+	// 8. Resolve token limits from model runtime info.
+	contextTokens := model.ResolveContextTokens(opts.ContextTokens, 0)
+	maxTokens := model.ResolveMaxTokens(opts.MaxTokens, 0)
+
+	// 9. Build typing controller.
 	var typingCtrl *typing.TypingController
 	if !opts.SuppressTyping && opts.OnReplyStart != nil {
 		typingCtrl = typing.NewTypingController(typing.TypingControllerConfig{
@@ -55,18 +92,21 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		defer typingCtrl.Stop()
 	}
 
-	// 7. Run agent turn.
+	// 10. Run agent turn.
 	agentCfg := AgentTurnConfig{
-		SessionKey:     session.SessionKey,
-		AgentID:        session.AgentID,
+		SessionKey:     sess.SessionKey,
+		AgentID:        sess.AgentID,
 		Model:          selection.Model,
 		Provider:       selection.Provider,
 		Message:        cleanedBody,
-		ThinkLevel:     session.ThinkLevel,
-		FastMode:       session.FastMode,
-		VerboseLevel:   session.VerboseLevel,
-		ReasoningLevel: session.ReasoningLevel,
-		ElevatedLevel:  session.ElevatedLevel,
+		ThinkLevel:     sess.ThinkLevel,
+		FastMode:       sess.FastMode,
+		VerboseLevel:   sess.VerboseLevel,
+		ReasoningLevel: sess.ReasoningLevel,
+		ElevatedLevel:  sess.ElevatedLevel,
+		ContextTokens:  contextTokens,
+		MaxTokens:      maxTokens,
+		AuthProfile:    selection.AuthProfile,
 	}
 
 	result, err := deps.Agent.RunTurn(ctx, agentCfg)
@@ -74,7 +114,26 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		return nil, err
 	}
 
-	// 8. Normalize and filter payloads.
+	// 11. Track model fallback transitions for user notification.
+	if result != nil && result.FallbackActive {
+		transition := model.ResolveFallbackTransition(
+			selection.Provider, selection.Model,
+			result.ProviderUsed, result.ModelUsed,
+			result.FallbackAttempts, nil,
+		)
+		if transition.FallbackTransitioned {
+			notice := model.BuildFallbackNotice(
+				selection.Provider, selection.Model,
+				result.ProviderUsed, result.ModelUsed,
+				result.FallbackAttempts,
+			)
+			if notice != "" {
+				result.Payloads = append([]types.ReplyPayload{{Text: notice}}, result.Payloads...)
+			}
+		}
+	}
+
+	// 12. Normalize and filter payloads.
 	normalized := reply.FilterReplyPayloads(result.Payloads, reply.NormalizeOpts{
 		HeartbeatMode:        tokens.StripModeMessage,
 		HeartbeatAckMaxChars: tokens.DefaultHeartbeatAckChars,
@@ -85,11 +144,13 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 
 // ReplyDeps provides dependencies for reply generation.
 type ReplyDeps struct {
-	Agent       AgentExecutor
-	Registry    *handlers.CommandRegistry
-	Router      *handlers.CommandRouter
-	History     *session.HistoryTracker
-	SessionFunc func(key string) *types.SessionState // resolve session by key
+	Agent           AgentExecutor
+	Registry        *handlers.CommandRegistry
+	Router          *handlers.CommandRouter
+	History         *session.HistoryTracker
+	SessionFunc     func(key string) *types.SessionState // resolve session by key
+	PreprocessHooks []MessagePreprocessHook               // hooks to run before directive parsing
+	ModelCandidates []model.ModelCandidate                 // available models for directive resolution
 }
 
 // InitSessionForReply initializes or retrieves session state for a reply.
@@ -145,25 +206,33 @@ func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.Sess
 	return nil
 }
 
-// ResolveModelForReply determines the model to use for a reply.
-func ResolveModelForReply(session *types.SessionState, inline rules.InlineDirectives, deps ReplyDeps) model.ModelSelection {
-	modelName := session.Model
-	provider := session.Provider
-
+// ResolveModelForReply determines the model to use for a reply via the full
+// model selection pipeline: directive > session > config > default.
+func ResolveModelForReply(sess *types.SessionState, inline rules.InlineDirectives, deps ReplyDeps) model.ModelSelection {
+	// Parse directive provider/model if present.
+	var directiveProvider, directiveModel, directiveProfile string
 	if inline.HasModelDirective && inline.RawModelDirective != "" {
-		// Parse provider/model from directive.
 		parts := pipeline.SplitProviderModel(inline.RawModelDirective)
-		if parts[0] != "" {
-			provider = parts[0]
-		}
-		if parts[1] != "" {
-			modelName = parts[1]
-		}
+		directiveProvider = parts[0]
+		directiveModel = parts[1]
+		directiveProfile = inline.RawModelProfile
 	}
 
+	// Run the full model resolution pipeline.
+	state := model.ResolveModelSelection(model.ModelSelectionConfig{
+		DirectiveProvider: directiveProvider,
+		DirectiveModel:    directiveModel,
+		DirectiveProfile:  directiveProfile,
+		SessionModel:      sess.Model,
+		SessionProvider:   sess.Provider,
+		Candidates:        deps.ModelCandidates,
+	})
+
 	return model.ModelSelection{
-		Provider:   provider,
-		Model:      modelName,
-		IsOverride: inline.HasModelDirective,
+		Provider:    state.Provider,
+		Model:       state.Model,
+		IsOverride:  state.IsOverride,
+		IsFallback:  state.IsFallback,
+		AuthProfile: state.AuthProfile,
 	}
 }
