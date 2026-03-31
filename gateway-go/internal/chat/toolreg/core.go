@@ -38,7 +38,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterVegaTools(registry, &deps.Vega, sglang)
 	RegisterMediaTools(registry, deps.LLMClient)
 	RegisterDataTools(registry)
-	RegisterPeriodicTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel)
+	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel)
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
 	RegisterHiddenTools(registry, deps.AgentLog)
 
@@ -251,10 +251,10 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 	})
 }
 
-// RegisterPeriodicTools registers tools for recurring/scheduled tasks —
+// RegisterRoutineTools registers tools for recurring/scheduled tasks —
 // things that sit between always-on core tools and on-demand skills.
 // Typical trigger: cron scheduler, daily routines, periodic checks.
-func RegisterPeriodicTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string) {
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
