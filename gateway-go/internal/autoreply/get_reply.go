@@ -177,7 +177,7 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	// messaging tool dedup, and silent reply suppression.
 	built := reply.BuildReplyPayloads(types.BuildReplyPayloadsParams{
 		Payloads:         result.Payloads,
-		IsHeartbeat:      cfg.IsHeartbeat,
+		IsHeartbeat:      opts.IsHeartbeat,
 		CurrentMessageID: msg.MessageSid,
 		OriginTo:         msg.To,
 		AccountID:        msg.AccountID,
