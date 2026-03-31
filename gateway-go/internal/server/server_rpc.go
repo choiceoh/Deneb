@@ -135,6 +135,18 @@ func (s *Server) registerBuiltinMethods() {
 			}
 			return s.daemon.Status(), true
 		},
+		AgentActiveRuns: func() int {
+			if s.jobTracker == nil {
+				return 0
+			}
+			return s.jobTracker.ActiveRunCount()
+		},
+		AgentCacheSize: func() int {
+			if s.jobTracker == nil {
+				return 0
+			}
+			return s.jobTracker.CacheSize()
+		},
 	}))
 }
 

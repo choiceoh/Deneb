@@ -114,6 +114,7 @@ type ServerIntegrations struct {
 	pluginRouter          *pluginrouter.Router
 	autonomousSvc      *autonomous.Service
 	dreamingAdapter    *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
+	memoryStore        *memory.Store           // structured memory store; used by flush task
 	gmailPollSvc       *gmailpoll.Service
 	autoresearchRunner *autoresearch.Runner
 }

@@ -24,7 +24,9 @@ type Deps struct {
 	Broadcast       func(event string, payload any) (int, []error)
 	Models          func() any
 	RuntimeConfig   func() map[string]any
-	DaemonStatus    func() (any, bool)
+	DaemonStatus      func() (any, bool)
+	AgentActiveRuns   func() int
+	AgentCacheSize    func() int
 }
 
 // RuntimeMethods returns the health/status/runtime handler map.
@@ -66,11 +68,19 @@ func status(deps Deps) rpcutil.HandlerFunc {
 		if deps.ConnectionCount != nil {
 			connections = deps.ConnectionCount()
 		}
+		agentStats := map[string]int{}
+		if deps.AgentActiveRuns != nil {
+			agentStats["activeRuns"] = deps.AgentActiveRuns()
+		}
+		if deps.AgentCacheSize != nil {
+			agentStats["cacheSize"] = deps.AgentCacheSize()
+		}
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"version":     deps.Version,
 			"channels":    channels,
 			"sessions":    sessions,
 			"connections": connections,
+			"agents":      agentStats,
 		})
 	}
 }

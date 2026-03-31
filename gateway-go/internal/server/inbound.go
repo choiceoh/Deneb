@@ -21,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -73,6 +74,35 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		return
 	}
 
+	// Handle edited messages: log the edit for observability. In a single-user
+	// deployment the original session context is not retroactively updated, but
+	// the edit is surfaced in logs so the operator can correlate if needed.
+	if update.EditedMessage != nil {
+		p.logger.Debug("telegram message edited",
+			"chatId", update.EditedMessage.Chat.ID,
+			"msgId", update.EditedMessage.MessageID,
+		)
+		return
+	}
+
+	// Handle channel posts (messages posted to a Telegram channel the bot is in).
+	if update.ChannelPost != nil {
+		p.logger.Debug("telegram channel post",
+			"chatId", update.ChannelPost.Chat.ID,
+			"msgId", update.ChannelPost.MessageID,
+		)
+		return
+	}
+
+	// Handle message reactions (emoji reactions added/removed by users).
+	if update.MessageReaction != nil {
+		p.logger.Debug("telegram message reaction",
+			"chatId", update.MessageReaction.Chat.ID,
+			"msgId", update.MessageReaction.MessageID,
+		)
+		return
+	}
+
 	msg := update.Message
 	if msg == nil {
 		return
@@ -99,6 +129,14 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	chatID := fmt.Sprintf("%d", msg.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
+	// Thread bindings: when processing a message in a forum topic thread,
+	// create a thread-specific session key so each topic gets its own context.
+	if msg.MessageThreadID != 0 && msg.IsTopicMessage {
+		if channel.ResolveThreadBindingsEnabled(nil, nil) {
+			sessionKey = fmt.Sprintf("telegram:%s:thread:%d", chatID, msg.MessageThreadID)
+		}
+	}
+
 	// Build autoreply MsgContext from the Telegram message.
 	var senderID string
 	var senderName string
@@ -124,6 +162,18 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
 	inbound.FinalizeInboundContext(msgCtx)
+
+	// Fire message.receive hook after parsing, before dispatch.
+	if p.server.hooks != nil {
+		p.server.safeGo("hooks:message.receive", func() {
+			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
+				"DENEB_CHANNEL":    "telegram",
+				"DENEB_CHAT_ID":    chatID,
+				"DENEB_MESSAGE":    msgText,
+				"DENEB_SESSION_KEY": sessionKey,
+			})
+		})
+	}
 
 	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
 	shouldAck := channel.ShouldAckReaction(channel.AckReactionGateParams{
@@ -343,6 +393,19 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 	chatID := fmt.Sprintf("%d", first.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
+	// Fire message.receive hook for the media group.
+	if p.server.hooks != nil {
+		caption := media.MessageText(first)
+		p.server.safeGo("hooks:message.receive", func() {
+			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
+				"DENEB_CHANNEL":    "telegram",
+				"DENEB_CHAT_ID":    chatID,
+				"DENEB_MESSAGE":    caption,
+				"DENEB_SESSION_KEY": sessionKey,
+			})
+		})
+	}
+
 	// Collect caption from whichever message has one (Telegram puts the caption
 	// on only one of the media group messages, usually the first).
 	var caption string
@@ -554,6 +617,18 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 
 	chatID := fmt.Sprintf("%d", cb.Message.Chat.ID)
 	sessionKey := "telegram:" + chatID
+
+	// Fire message.receive hook for callback query.
+	if p.server.hooks != nil {
+		p.server.safeGo("hooks:message.receive", func() {
+			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
+				"DENEB_CHANNEL":    "telegram",
+				"DENEB_CHAT_ID":    chatID,
+				"DENEB_MESSAGE":    cb.Data,
+				"DENEB_SESSION_KEY": sessionKey,
+			})
+		})
+	}
 
 	// Acknowledge to Telegram (stops the loading spinner on the button).
 	client := p.server.telegramPlug.Client()

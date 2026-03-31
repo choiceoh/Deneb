@@ -183,6 +183,9 @@ func (s *Server) registerSessionRPCMethods() {
 			// appear in the system prompt immediately (not after 5-min TTL).
 			memStore.SetFactMutateCallback(unified.InvalidateTier1Cache)
 
+			// Store reference for autonomous memory flush task (registered in phase 3).
+			s.memoryStore = memStore
+
 			// Auto-migrate existing MEMORY.md on first run.
 			count, _ := memStore.ActiveFactCount(context.Background())
 			if count == 0 {
@@ -396,6 +399,24 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 			if s.autoresearchRunner != nil {
 				s.autoresearchRunner.SetNotifier(notifier)
 			}
+		}
+	}
+
+	// Register periodic memory flush task: appends high-importance facts
+	// to date-stamped markdown files (~/.deneb/memory/YYYY-MM-DD.md).
+	if s.memoryStore != nil {
+		denebDir := ""
+		if home, err := os.UserHomeDir(); err == nil {
+			denebDir = filepath.Join(home, ".deneb")
+		}
+		if denebDir != "" {
+			s.autonomousSvc.RegisterTask(&memoryFlushTask{
+				store:    s.memoryStore,
+				dir:      denebDir,
+				timezone: "Asia/Seoul",
+				logger:   s.logger,
+			})
+			s.logger.Info("memory flush task registered with autonomous service")
 		}
 	}
 }
