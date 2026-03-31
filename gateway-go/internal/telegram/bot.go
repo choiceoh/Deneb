@@ -15,8 +15,10 @@ type UpdateHandler func(ctx context.Context, update *Update)
 // Bot manages the Telegram bot lifecycle: long-polling for updates,
 // dispatching to handlers, and tracking update offsets.
 type Bot struct {
-	RunState                     // provides IsRunning(), Stop(), BeginRun(), EndRun()
-	client    *Client
+	runMu    sync.Mutex
+	running  bool
+	stopFunc context.CancelFunc
+	client   *Client
 	config    *Config
 	logger    *slog.Logger
 	handlerMu sync.Mutex
@@ -41,13 +43,40 @@ func NewBot(client *Client, config *Config, handler UpdateHandler, logger *slog.
 	}
 }
 
+// IsRunning returns whether the polling loop is currently running.
+func (b *Bot) IsRunning() bool {
+	b.runMu.Lock()
+	defer b.runMu.Unlock()
+	return b.running
+}
+
+// Stop cancels the polling loop context. No-op if not running.
+func (b *Bot) Stop() {
+	b.runMu.Lock()
+	defer b.runMu.Unlock()
+	if b.stopFunc != nil {
+		b.stopFunc()
+	}
+}
+
 // Start begins the long-polling loop. Blocks until context is cancelled.
 func (b *Bot) Start(ctx context.Context) error {
-	pollCtx, ok := b.BeginRun(ctx)
-	if !ok {
+	b.runMu.Lock()
+	if b.running {
+		b.runMu.Unlock()
 		return nil
 	}
-	defer b.EndRun()
+	pollCtx, cancel := context.WithCancel(ctx)
+	b.running = true
+	b.stopFunc = cancel
+	b.runMu.Unlock()
+
+	defer func() {
+		b.runMu.Lock()
+		b.running = false
+		b.stopFunc = nil
+		b.runMu.Unlock()
+	}()
 
 	b.logger.Info("telegram bot polling started")
 	return b.pollLoop(pollCtx)

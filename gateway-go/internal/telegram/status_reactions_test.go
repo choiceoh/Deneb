@@ -42,20 +42,16 @@ func TestStatusReactionController_BasicFlow(t *testing.T) {
 	var mu sync.Mutex
 	var reactions []string
 
-	adapter := StatusReactionAdapter{
+	c := NewStatusReactionController(StatusReactionControllerParams{
+		Enabled:      true,
+		InitialEmoji: "👀",
 		SetReaction: func(emoji string) error {
 			mu.Lock()
 			reactions = append(reactions, emoji)
 			mu.Unlock()
 			return nil
 		},
-	}
-
-	c := NewStatusReactionController(StatusReactionControllerParams{
-		Enabled:      true,
-		Adapter:      adapter,
-		InitialEmoji: "👀",
-		Timing:       &StatusReactionTiming{DebounceMs: 10, StallSoftMs: 100_000, StallHardMs: 200_000},
+		Timing: &StatusReactionTiming{DebounceMs: 10, StallSoftMs: 100_000, StallHardMs: 200_000},
 	})
 	defer c.Close()
 
@@ -77,20 +73,16 @@ func TestStatusReactionController_DoneIsTerminal(t *testing.T) {
 	var mu sync.Mutex
 	var reactions []string
 
-	adapter := StatusReactionAdapter{
+	c := NewStatusReactionController(StatusReactionControllerParams{
+		Enabled:      true,
+		InitialEmoji: "👀",
 		SetReaction: func(emoji string) error {
 			mu.Lock()
 			reactions = append(reactions, emoji)
 			mu.Unlock()
 			return nil
 		},
-	}
-
-	c := NewStatusReactionController(StatusReactionControllerParams{
-		Enabled:      true,
-		Adapter:      adapter,
-		InitialEmoji: "👀",
-		Timing:       &StatusReactionTiming{DebounceMs: 10, StallSoftMs: 100_000, StallHardMs: 200_000},
+		Timing: &StatusReactionTiming{DebounceMs: 10, StallSoftMs: 100_000, StallHardMs: 200_000},
 	})
 	defer c.Close()
 
@@ -113,17 +105,14 @@ func TestStatusReactionController_DoneIsTerminal(t *testing.T) {
 
 func TestStatusReactionController_Disabled(t *testing.T) {
 	called := false
-	adapter := StatusReactionAdapter{
+
+	c := NewStatusReactionController(StatusReactionControllerParams{
+		Enabled:      false,
+		InitialEmoji: "👀",
 		SetReaction: func(emoji string) error {
 			called = true
 			return nil
 		},
-	}
-
-	c := NewStatusReactionController(StatusReactionControllerParams{
-		Enabled:      false,
-		Adapter:      adapter,
-		InitialEmoji: "👀",
 	})
 	defer c.Close()
 
@@ -133,7 +122,7 @@ func TestStatusReactionController_Disabled(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	if called {
-		t.Error("adapter should not be called when disabled")
+		t.Error("SetReaction should not be called when disabled")
 	}
 }
 

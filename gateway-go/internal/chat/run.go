@@ -223,7 +223,8 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			StallHard:  "😨",
 			Compacting: "🤔",
 		}
-		adapter := telegram.StatusReactionAdapter{
+		statusCtrl = telegram.NewStatusReactionController(telegram.StatusReactionControllerParams{
+			Enabled: true,
 			SetReaction: func(emoji string) error {
 				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 				defer cancel()
@@ -237,11 +238,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 				defer cancel()
 				return deps.removeReactionFn(rctx, delivery, emoji)
 			},
-		}
-		statusCtrl = telegram.NewStatusReactionController(telegram.StatusReactionControllerParams{
-			Enabled: true,
-			Adapter: adapter,
-			Emojis:  &phaseEmojis,
+			Emojis: &phaseEmojis,
 			OnError: func(err error) {
 				logger.Warn("status reaction failed", "error", err)
 			},

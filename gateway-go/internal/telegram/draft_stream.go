@@ -1,10 +1,7 @@
-// Draft stream controls — throttled streaming message edit/delete lifecycle.
+// Draft stream loop — throttled streaming message edit/delete lifecycle.
 //
-// Provides a DraftStreamLoop for rate-limited message updates during streaming,
-// and FinalizableDraftStreamControls for managing the full lifecycle of a
-// draft message (update, finalize, or clear/delete).
-//
-// Mirrors src/channels/draft-stream-loop.ts and draft-stream-controls.ts.
+// DraftStreamLoop manages rate-limited message updates during LLM streaming,
+// with lifecycle controls for finalization and clear/delete.
 package telegram
 
 import (
@@ -16,35 +13,34 @@ import (
 // message was sent/edited successfully, false to retry with the same text.
 type SendOrEditFunc func(text string) (bool, error)
 
-// DraftStreamLoop provides throttled streaming message updates.
+// DraftStreamLoop provides throttled streaming message updates with lifecycle.
 type DraftStreamLoop struct {
 	mu          sync.Mutex
 	throttleMs  int
-	isStopped   func() bool
 	sendOrEdit  SendOrEditFunc
 	lastSentAt  time.Time
 	pendingText string
 	inFlight    bool
 	inFlightCh  chan struct{} // closed when in-flight completes
 	timer       *time.Timer
-	stopCh      chan struct{}
+	stopped     bool // marks loop as stopped (no new updates accepted)
+	finalized   bool // marks loop as finalized (flush then stop)
 }
 
 // NewDraftStreamLoop creates a new throttled draft stream loop.
-func NewDraftStreamLoop(throttleMs int, isStopped func() bool, sendOrEdit SendOrEditFunc) *DraftStreamLoop {
+func NewDraftStreamLoop(throttleMs int, sendOrEdit SendOrEditFunc) *DraftStreamLoop {
 	return &DraftStreamLoop{
 		throttleMs: throttleMs,
-		isStopped:  isStopped,
 		sendOrEdit: sendOrEdit,
-		stopCh:     make(chan struct{}),
 	}
 }
 
 // Update queues a text update. If enough time has passed since the last send,
 // it flushes immediately; otherwise it schedules a throttled send.
+// No-op if the loop is stopped or finalized.
 func (l *DraftStreamLoop) Update(text string) {
 	l.mu.Lock()
-	if l.isStopped() {
+	if l.stopped || l.finalized {
 		l.mu.Unlock()
 		return
 	}
@@ -75,12 +71,13 @@ func (l *DraftStreamLoop) Flush() {
 	l.mu.Unlock()
 
 	for {
-		if l.isStopped() {
+		l.mu.Lock()
+		if l.stopped {
+			l.mu.Unlock()
 			return
 		}
 
 		// Wait for in-flight.
-		l.mu.Lock()
 		ch := l.inFlightCh
 		l.mu.Unlock()
 		if ch != nil {
@@ -119,10 +116,20 @@ func (l *DraftStreamLoop) Flush() {
 	}
 }
 
-// Stop clears pending text and cancels timers.
+// Finalize flushes any remaining text then marks the loop as done.
+// Further Update calls are ignored.
+func (l *DraftStreamLoop) Finalize() {
+	l.mu.Lock()
+	l.finalized = true
+	l.mu.Unlock()
+	l.Flush()
+}
+
+// Stop clears pending text and cancels timers without flushing.
 func (l *DraftStreamLoop) Stop() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.stopped = true
 	l.pendingText = ""
 	if l.timer != nil {
 		l.timer.Stop()
@@ -130,6 +137,12 @@ func (l *DraftStreamLoop) Stop() {
 	}
 }
 
+// StopForClear marks the loop as stopped, clears pending text, and waits
+// for any in-flight send to complete before returning.
+func (l *DraftStreamLoop) StopForClear() {
+	l.Stop()
+	l.WaitForInFlight()
+}
 
 // WaitForInFlight waits for any in-flight send to complete.
 func (l *DraftStreamLoop) WaitForInFlight() {
@@ -181,67 +194,4 @@ func isBlank(s string) bool {
 		}
 	}
 	return true
-}
-
-// FinalizableDraftStreamControls manages the lifecycle of a finalizable
-// draft message: update while streaming, stop to finalize, or clear to delete.
-type FinalizableDraftStreamControls struct {
-	mu      sync.Mutex
-	stopped bool
-	final   bool
-	loop    *DraftStreamLoop
-}
-
-// FinalizableDraftParams configures a FinalizableDraftStreamControls.
-type FinalizableDraftParams struct {
-	ThrottleMs int
-	SendOrEdit SendOrEditFunc
-}
-
-// NewFinalizableDraftStreamControls creates a new finalizable draft controller.
-func NewFinalizableDraftStreamControls(p FinalizableDraftParams) *FinalizableDraftStreamControls {
-	c := &FinalizableDraftStreamControls{}
-	c.loop = NewDraftStreamLoop(
-		p.ThrottleMs,
-		func() bool {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			return c.stopped
-		},
-		p.SendOrEdit,
-	)
-	return c
-}
-
-// Update queues a text update for the draft message.
-func (c *FinalizableDraftStreamControls) Update(text string) {
-	c.mu.Lock()
-	if c.stopped || c.final {
-		c.mu.Unlock()
-		return
-	}
-	c.mu.Unlock()
-	c.loop.Update(text)
-}
-
-// Stop finalizes the draft message by flushing any remaining text.
-func (c *FinalizableDraftStreamControls) Stop() {
-	c.mu.Lock()
-	c.final = true
-	c.mu.Unlock()
-	c.loop.Flush()
-}
-
-// StopForClear marks the draft as stopped and waits for in-flight to complete.
-func (c *FinalizableDraftStreamControls) StopForClear() {
-	c.mu.Lock()
-	c.stopped = true
-	c.mu.Unlock()
-	c.loop.Stop()
-	c.loop.WaitForInFlight()
-}
-
-// Loop returns the underlying DraftStreamLoop.
-func (c *FinalizableDraftStreamControls) Loop() *DraftStreamLoop {
-	return c.loop
 }

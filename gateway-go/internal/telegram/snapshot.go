@@ -2,12 +2,7 @@ package telegram
 
 import "sync"
 
-// AccountSnapshot represents the full runtime state of a channel account.
-// Mirrors proto/channel.proto ChannelAccountSnapshot and the TypeScript
-// ChannelAccountSnapshot type in src/channels/plugins/types.ts.
-//
-// The Go gateway maintains this snapshot for RPC handlers such as
-// channels.status to return accurate state.
+// AccountSnapshot represents the runtime state of the Telegram bot account.
 type AccountSnapshot struct {
 	AccountID         string `json:"accountId"`
 	Name              string `json:"name,omitempty"`
@@ -38,64 +33,41 @@ type AccountSnapshot struct {
 	LastProbeAt       int64  `json:"lastProbeAt,omitempty"`
 }
 
-// ChannelSnapshot holds the aggregated account snapshots for all channels.
-// This is the aggregated snapshot payload returned by channels.status.
+// ChannelSnapshot is the JSON payload returned by channels.status.
+// Single-channel: always contains exactly one "telegram" entry.
 type ChannelSnapshot struct {
-	// Channels maps channel ID to its primary account snapshot.
 	Channels map[string]AccountSnapshot `json:"channels"`
-	// ChannelAccounts maps channel ID to account ID to account snapshot
-	// (for multi-account channels).
-	ChannelAccounts map[string]map[string]AccountSnapshot `json:"channelAccounts,omitempty"`
 }
 
-// SnapshotStore maintains an in-memory channel snapshot that can be
-// updated incrementally and synced to the Plugin Host.
+// SnapshotStore maintains the Telegram account snapshot in memory.
 type SnapshotStore struct {
-	mu       sync.RWMutex
-	channels map[string]AccountSnapshot
-	accounts map[string]map[string]AccountSnapshot
+	mu   sync.RWMutex
+	snap AccountSnapshot
 }
 
 // NewSnapshotStore creates an empty snapshot store.
 func NewSnapshotStore() *SnapshotStore {
-	return &SnapshotStore{
-		channels: make(map[string]AccountSnapshot),
-		accounts: make(map[string]map[string]AccountSnapshot),
-	}
+	return &SnapshotStore{}
 }
 
-// Update sets the snapshot for a channel account.
-func (s *SnapshotStore) Update(channelID string, snap AccountSnapshot) {
+// Update sets the current account snapshot.
+func (s *SnapshotStore) Update(snap AccountSnapshot) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.channels[channelID] = snap
+	s.snap = snap
+	s.mu.Unlock()
 }
 
-// UpdateAccount sets the snapshot for a specific account within a channel.
-func (s *SnapshotStore) UpdateAccount(channelID, accountID string, snap AccountSnapshot) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.accounts[channelID] == nil {
-		s.accounts[channelID] = make(map[string]AccountSnapshot)
-	}
-	s.accounts[channelID][accountID] = snap
-}
-
-// Snapshot returns a copy of the full channel snapshot.
-func (s *SnapshotStore) Snapshot() ChannelSnapshot {
+// Get returns a copy of the current account snapshot.
+func (s *SnapshotStore) Get() AccountSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	channels := make(map[string]AccountSnapshot, len(s.channels))
-	for k, v := range s.channels {
-		channels[k] = v
+	return s.snap
+}
+
+// Snapshot returns the full channel snapshot for the channels.status RPC.
+func (s *SnapshotStore) Snapshot() ChannelSnapshot {
+	snap := s.Get()
+	return ChannelSnapshot{
+		Channels: map[string]AccountSnapshot{"telegram": snap},
 	}
-	accounts := make(map[string]map[string]AccountSnapshot, len(s.accounts))
-	for chID, accts := range s.accounts {
-		acctsCopy := make(map[string]AccountSnapshot, len(accts))
-		for aID, v := range accts {
-			acctsCopy[aID] = v
-		}
-		accounts[chID] = acctsCopy
-	}
-	return ChannelSnapshot{Channels: channels, ChannelAccounts: accounts}
 }

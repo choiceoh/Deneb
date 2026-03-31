@@ -24,8 +24,9 @@ type OutboundMessage struct {
 
 // Plugin implements the Telegram Bot API channel.
 type Plugin struct {
-	PluginBase                 // status field + Status() + SetStatus()
-	mu      sync.Mutex        // protects client, bot, botUser, handler
+	statusMu sync.Mutex // protects status
+	status   Status
+	mu       sync.Mutex // protects client, bot, botUser, handler
 	client  *Client
 	bot     *Bot
 	config  *Config
@@ -44,6 +45,20 @@ func NewPlugin(cfg *Config, logger *slog.Logger) *Plugin {
 
 // ID returns the channel identifier.
 func (p *Plugin) ID() string { return "telegram" }
+
+// Status returns the plugin's current connection status.
+func (p *Plugin) Status() Status {
+	p.statusMu.Lock()
+	defer p.statusMu.Unlock()
+	return p.status
+}
+
+// SetStatus updates the plugin's connection status. Safe to call from any goroutine.
+func (p *Plugin) SetStatus(s Status) {
+	p.statusMu.Lock()
+	defer p.statusMu.Unlock()
+	p.status = s
+}
 
 // Capabilities returns the capabilities of the Telegram channel.
 type Capabilities struct {
