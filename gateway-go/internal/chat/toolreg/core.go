@@ -8,6 +8,7 @@ package toolreg
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
@@ -52,6 +53,21 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on sglang hooks that live in the chat package.
+}
+
+// RegisterAutoresearchTool registers the autoresearch tool with the given runner.
+// Called separately from RegisterCoreTools because the runner is created by the
+// server layer and not part of CoreToolDeps.
+func RegisterAutoresearchTool(registry toolctx.ToolRegistrar, runner *autoresearch.Runner) {
+	if runner == nil {
+		return
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "autoresearch",
+		Description: "Autonomous experiment loop (karpathy/autoresearch). Iteratively modifies code, runs experiments, evaluates a scalar metric, and keeps improvements or reverts failures — all without human intervention. Actions: init (configure), start (begin loop), stop (halt), status (check progress), results (get log)",
+		InputSchema: autoresearchToolSchema(),
+		Fn:          tools.ToolAutoresearch(runner),
+	})
 }
 
 // RegisterFSTools registers file-system, code analysis, and git tools.

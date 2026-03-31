@@ -11,8 +11,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -215,6 +217,14 @@ func (s *Server) registerSessionRPCMethods() {
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
+
+	// Initialize autoresearch runner and register tool.
+	s.autoresearchRunner = autoresearch.NewRunner(s.logger)
+	if mainClient := reg.Client(modelrole.RoleMain); mainClient != nil {
+		s.autoresearchRunner.SetLLMClient(mainClient)
+	}
+	toolreg.RegisterAutoresearchTool(chatCfg.Tools, s.autoresearchRunner)
+
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
@@ -330,15 +340,19 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 		broadcastFn("dreaming.cycle", event)
 	})
 
-	// Wire Telegram notifier for dreaming events.
+	// Wire Telegram notifier for dreaming and autoresearch events.
 	if s.telegramPlug != nil {
 		tgCfg := s.telegramPlug.Config()
 		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
-			s.autonomousSvc.SetNotifier(&telegramNotifier{
+			notifier := &telegramNotifier{
 				plugin: s.telegramPlug,
 				chatID: tgCfg.AllowFrom.IDs[0],
 				logger: s.logger,
-			})
+			}
+			s.autonomousSvc.SetNotifier(notifier)
+			if s.autoresearchRunner != nil {
+				s.autoresearchRunner.SetNotifier(notifier)
+			}
 		}
 	}
 }
