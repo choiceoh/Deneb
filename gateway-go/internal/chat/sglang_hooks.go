@@ -21,9 +21,10 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout   = 5 * time.Second
-	proactiveMaxTokens = 1024
-	proactiveMinMsgLen = 20 // skip for very short messages
+	proactiveTimeout       = 5 * time.Second
+	proactiveRemoteTimeout = 8 * time.Second  // remote fallback (Gemini Flash) needs more time
+	proactiveMaxTokens     = 1024
+	proactiveMinMsgLen     = 20 // skip for very short messages
 )
 
 const proactiveSystemPrompt = `You are a context preparation assistant.
@@ -90,12 +91,18 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	if isLowInfoMessage(userMessage) {
 		return ""
 	}
-	// Skip if sglang was recently confirmed down (cached result only, no probe).
-	if !sglangHealthy.Load() && sglangLastCheck.Load() > 0 {
+	// Check sglang health (cached probe, no per-call overhead).
+	sglangUp := checkSglangHealth()
+	if !sglangUp && pkgRegistry == nil {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
+	timeout := proactiveTimeout
+	if !sglangUp {
+		timeout = proactiveRemoteTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Gather workspace signals: recent file list + memory file snippets.
@@ -121,9 +128,16 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	// Memory content is provided to the main LLM by PrefetchKnowledge (importance-weighted).
 	// Reading MEMORY.md here would be redundant I/O on every message.
 
-	result, err := callLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+	var result string
+	var err error
+	if sglangUp {
+		result, err = callLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+	} else {
+		// sglang down — use pilot model (Gemini Flash) for proactive context.
+		result, err = callPilotLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+	}
 	if err != nil {
-		logger.Debug("proactive context failed", "error", err)
+		logger.Debug("proactive context failed", "error", err, "remote", !sglangUp)
 		return ""
 	}
 

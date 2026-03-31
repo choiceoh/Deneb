@@ -3,9 +3,9 @@ package chat
 import "time"
 
 const (
-	proactiveTargetReadyBudget = 2 * time.Second
+	proactiveTargetReadyBudget = 3 * time.Second
 	proactiveMinGraceWait      = 120 * time.Millisecond
-	proactiveMaxGraceWait      = 1 * time.Second
+	proactiveMaxGraceWait      = 1500 * time.Millisecond
 )
 
 // computeProactiveGraceWait returns how much extra time executeAgentRun should
