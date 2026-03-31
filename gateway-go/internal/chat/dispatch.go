@@ -231,6 +231,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		reactionFn:           h.reactionFn,
 		removeReactionFn:     h.removeReactionFn,
 		toolProgressFn:       h.toolProgressFn,
+		draftEditFn:          h.draftEditFn,
 		channelUploadLimitFn: h.ChannelUploadLimit,
 		providerConfigs:      h.providerConfigs,
 		logger:               h.logger,
@@ -250,6 +251,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		defaultSystem:        h.defaultSystem,
 		maxTokens:            h.maxTokens,
 		shutdownCtx:          h.shutdownCtx,
+		hookRegistry:         h.hookRegistry,
 	}
 }
 

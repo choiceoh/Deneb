@@ -139,6 +139,33 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 		return resp
 	}
 
+	// Tool event subscription: routes session.tool events for a specific run
+	// to a single connection instead of broadcasting to all subscribers.
+	subscribeToolEvents := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ConnID string `json:"connId"`
+			RunID  string `json:"runId"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.RunID == "" {
+			return rpcerr.MissingParam("connId and runId").Response(req.ID)
+		}
+		deps.Broadcaster.RegisterToolEventRecipient(p.RunID, p.ConnID)
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
+		return resp
+	}
+
+	unsubscribeToolEvents := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			RunID string `json:"runId"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.RunID == "" {
+			return rpcerr.MissingParam("runId").Response(req.ID)
+		}
+		deps.Broadcaster.UnregisterToolEventRecipient(p.RunID)
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		return resp
+	}
+
 	return map[string]rpcutil.HandlerFunc{
 		// Node event relay.
 		"node.event": nodeEvent,
@@ -154,6 +181,10 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 		"sessions.unsubscribe":          unsubscribeSession,
 		"sessions.messages.subscribe":   subscribeMessages,
 		"sessions.messages.unsubscribe": unsubscribeMessages,
+
+		// Tool event routing.
+		"sessions.tools.subscribe":   subscribeToolEvents,
+		"sessions.tools.unsubscribe": unsubscribeToolEvents,
 	}
 }
 

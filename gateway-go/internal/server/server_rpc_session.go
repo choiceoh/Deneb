@@ -276,6 +276,11 @@ func (s *Server) registerSessionRPCMethods() {
 		s.chatHandler.SetPluginHookRunner(s.pluginTypedHookRunner)
 	}
 
+	// Wire user-defined hook registry into the chat pipeline for message.send / tool.use events.
+	if s.hooks != nil {
+		s.chatHandler.SetHookRegistry(s.hooks)
+	}
+
 	// Wire raw broadcast directly to chat handler for streaming event relay.
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)

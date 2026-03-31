@@ -78,6 +78,10 @@ type Handler struct {
 	abortMap map[string]*AbortEntry // clientRunId -> entry
 	done     chan struct{}          // signals abortGCLoop to stop
 
+	// channels is the channel plugin registry, used for multi-target delivery
+	// via streaming.Dispatch when replyFunc is not set.
+	channels *channel.Registry
+
 	// runStateMachine tracks active agent runs for status broadcasting.
 	runStateMachine *channel.RunStateMachine
 
@@ -180,6 +184,11 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	}
 	go h.abortGCLoop()
 	return h
+}
+
+// SetChannels sets the channel plugin registry for multi-target delivery.
+func (h *Handler) SetChannels(reg *channel.Registry) {
+	h.channels = reg
 }
 
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.

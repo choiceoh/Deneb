@@ -63,12 +63,41 @@ impl SearchRouter {
         self.search_with_embedding(query, None)
     }
 
+    /// Execute a full search with an explicit mode override.
+    /// `mode_override` maps: "bm25" → Sqlite, "semantic" → Semantic, "hybrid" → Hybrid.
+    /// When `None`, the route is determined by query analysis (default behavior).
+    pub fn search_with_mode(
+        &self,
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        mode_override: Option<&str>,
+    ) -> Result<SearchResult, Box<dyn std::error::Error>> {
+        let forced_route = mode_override.and_then(|m| match m {
+            "bm25" => Some(SearchRoute::Sqlite),
+            "semantic" => Some(SearchRoute::Semantic),
+            "hybrid" => Some(SearchRoute::Hybrid),
+            _ => None,
+        });
+        self.search_inner(query, query_embedding, forced_route)
+    }
+
     /// Execute a full search: analyze → SQLite FTS → semantic (optional) → fusion → unified.
     /// When `query_embedding` is provided (from SGLang/Gemini), uses it for semantic search.
     pub fn search_with_embedding(
         &self,
         query: &str,
         query_embedding: Option<&[f32]>,
+    ) -> Result<SearchResult, Box<dyn std::error::Error>> {
+        self.search_inner(query, query_embedding, None)
+    }
+
+    /// Internal search implementation. `forced_route` overrides the query-analysis route
+    /// when the caller explicitly selects bm25/semantic/hybrid.
+    fn search_inner(
+        &self,
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        forced_route: Option<SearchRoute>,
     ) -> Result<SearchResult, Box<dyn std::error::Error>> {
         let query = normalize_query(query);
         if query.is_empty() {
@@ -95,7 +124,18 @@ impl SearchRouter {
         }
 
         // 1. Analyze query
-        let analysis = analyze_query(&query);
+        let mut analysis = analyze_query(&query);
+
+        // Apply mode override if provided.
+        if let Some(route) = forced_route {
+            analysis.route = route;
+            analysis.reason = format!("forced:{}", match route {
+                SearchRoute::Sqlite => "bm25",
+                SearchRoute::Semantic => "semantic",
+                SearchRoute::Hybrid => "hybrid",
+            });
+        }
+
         let extracted = &analysis.extracted;
 
         // 2. Run SQLite search

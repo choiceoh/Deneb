@@ -136,6 +136,11 @@ fn vega_search_impl(query_json: &str) -> String {
                 .collect()
         });
 
+    // Parse optional mode override ("bm25", "semantic", "hybrid").
+    let mode: Option<&str> = parsed
+        .get("mode")
+        .and_then(|v| v.as_str());
+
     let base = cached_vega_config();
     let config = if let Some(cfg) = parsed.get("config") {
         let mut vc = base.clone();
@@ -150,22 +155,23 @@ fn vega_search_impl(query_json: &str) -> String {
         base.clone()
     };
 
-    vega_search_with_config(query, query_embedding.as_deref(), &config)
+    vega_search_with_config(query, query_embedding.as_deref(), mode, &config)
 }
 
 #[cfg(feature = "vega")]
 fn vega_search_direct(query: &str) -> String {
-    vega_search_with_config(query, None, cached_vega_config())
+    vega_search_with_config(query, None, None, cached_vega_config())
 }
 
 #[cfg(feature = "vega")]
 fn vega_search_with_config(
     query: &str,
     query_embedding: Option<&[f32]>,
+    mode: Option<&str>,
     config: &deneb_vega::config::VegaConfig,
 ) -> String {
     let router = deneb_vega::search::SearchRouter::new(config.clone());
-    match router.search_with_embedding(query, query_embedding) {
+    match router.search_with_mode(query, query_embedding, mode) {
         Ok(result) => serde_json::to_string(&result)
             .unwrap_or_else(|e| format!(r#"{{"error":"serialize","detail":"{}"}}"#, e)),
         Err(e) => format!(r#"{{"error":"search_failed","detail":"{}"}}"#, e),

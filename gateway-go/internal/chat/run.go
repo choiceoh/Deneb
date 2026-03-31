@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
@@ -72,6 +73,7 @@ type runDeps struct {
 	// Returns 0 if no limit is registered (tool applies its own default).
 	channelUploadLimitFn func(channelID string) int64 // optional
 	toolProgressFn       ToolProgressFunc             // optional; reports tool events to channel integrations
+	draftEditFn          DraftEditFunc                // optional; sends/edits streaming draft messages
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
@@ -97,6 +99,8 @@ type runDeps struct {
 	// shutdownCtx is the server lifecycle context; used to bound background
 	// goroutines (e.g., auto-memory extraction) so they stop on server shutdown.
 	shutdownCtx context.Context
+	// hookRegistry fires user-defined shell hooks on message/tool events.
+	hookRegistry *hooks.Registry
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
@@ -181,7 +185,10 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// Set up phase-aware typing indicator for channel delivery (e.g., Telegram).
 	// Uses TypingController (5s keepalive matching Telegram's sendChatAction TTL)
 	// with FullTypingSignaler for phase-aware signals (text, thinking, tool use).
+	// A simpler TypingSignaler is also created for granular phase tracking
+	// (SetPhase/Signal) which downstream consumers can use for phase-aware dispatch.
 	var typingSignaler *typing.FullTypingSignaler
+	var phaseSignaler *typing.TypingSignaler
 	if deps.typingFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
 		typingCtrl := typing.NewTypingController(typing.TypingControllerConfig{
@@ -190,6 +197,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		})
 		typingSignaler = typing.NewFullTypingSignaler(typingCtrl, typing.TypingModeInstant, false)
 		typingSignaler.SignalRunStart()
+
+		// Phase signaler wraps the same controller for simpler SetPhase/Signal use.
+		phaseSignaler = typing.NewTypingSignaler(typingCtrl)
+		phaseSignaler.SetPhase("text")
+		phaseSignaler.Signal()
 	}
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
@@ -241,9 +253,12 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// Run the agent and capture result.
 	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
 
-	// Stop typing indicator before delivering the reply.
+	// Stop typing indicators before delivering the reply.
 	if typingSignaler != nil {
 		typingSignaler.Stop()
+	}
+	if phaseSignaler != nil {
+		phaseSignaler.Stop()
 	}
 
 	// Handle completion.

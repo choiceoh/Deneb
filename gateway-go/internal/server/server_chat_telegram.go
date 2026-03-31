@@ -187,6 +187,46 @@ func (s *Server) wireTelegramChatHandler() {
 		return client.SetMessageReaction(ctx, chatID, msgID, "")
 	})
 
+	// Set draft edit function: sends or edits a streaming draft message in Telegram.
+	// Used by DraftStreamLoop for real-time message editing during LLM streaming.
+	s.chatHandler.SetDraftEditFunc(func(ctx context.Context, delivery *chat.DeliveryContext, msgID string, text string) (string, error) {
+		if delivery == nil || delivery.Channel != "telegram" {
+			return "", nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return "", fmt.Errorf("telegram client not connected")
+		}
+		chatID, err := telegram.ParseChatID(delivery.To)
+		if err != nil {
+			return "", fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		html := telegram.MarkdownToTelegramHTML(text)
+
+		if msgID == "" {
+			// First call: send a new message.
+			results, err := telegram.SendText(ctx, client, chatID, html, telegram.SendOptions{
+				ParseMode:          "HTML",
+				DisableLinkPreview: true,
+			})
+			if err != nil || len(results) == 0 {
+				return "", err
+			}
+			return strconv.FormatInt(results[0].MessageID, 10), nil
+		}
+
+		// Subsequent calls: edit the existing message.
+		editMsgID, err := strconv.ParseInt(msgID, 10, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid message ID %q: %w", msgID, err)
+		}
+		_, err = telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML")
+		if err != nil {
+			return msgID, err
+		}
+		return msgID, nil
+	})
+
 	// Create the inbound processor that routes Telegram messages through
 	// the autoreply command/directive pipeline before dispatching to chat.send.
 	inbound := NewInboundProcessor(s)

@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
@@ -89,6 +90,13 @@ func handleRunSuccess(
 				defer replyCancel()
 				if err := deps.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
 					logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
+				} else if deps.hookRegistry != nil {
+					// Fire message.send hook after successful delivery.
+					go deps.hookRegistry.Fire(context.Background(), hooks.EventMessageSend, map[string]string{
+						"DENEB_CHANNEL":     params.Delivery.Channel,
+						"DENEB_TO":          params.Delivery.To,
+						"DENEB_SESSION_KEY": params.SessionKey,
+					})
 				}
 			}
 		}
@@ -96,6 +104,23 @@ func handleRunSuccess(
 
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
+
+	// Pre-compaction memory flush: check whether token usage is high enough
+	// to warrant flushing durable memories before the next compaction cycle.
+	if result.Usage.InputTokens > 0 {
+		flushSettings := autoreply.ResolveMemoryFlushSettings(nil)
+		shouldFlush := autoreply.ShouldRunMemoryFlush(autoreply.ShouldRunMemoryFlushParams{
+			TotalTokens:         result.Usage.InputTokens + result.Usage.OutputTokens,
+			ContextWindowTokens: deps.contextCfg.TokenBudget,
+			ReserveTokensFloor:  flushSettings.ReserveTokensFloor,
+			SoftThresholdTokens: flushSettings.SoftThresholdTokens,
+		})
+		if shouldFlush {
+			logger.Info("memory flush: threshold reached, flush recommended",
+				"totalTokens", result.Usage.InputTokens+result.Usage.OutputTokens,
+				"contextWindow", deps.contextCfg.TokenBudget)
+		}
+	}
 
 	// Auto-memory: extract key learnings asynchronously via local sglang.
 	// When structured memory store is available, use Honcho-style importance extraction.
