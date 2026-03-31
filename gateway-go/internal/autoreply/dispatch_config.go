@@ -68,6 +68,7 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 				Channel:    cfg.Channel,
 				IsGroup:    cfg.IsGroup,
 				Msg:        msg,
+				Deps:       deps.CommandDeps,
 			})
 			if err == nil && result != nil && result.SkipAgent {
 				var payloads []types.ReplyPayload

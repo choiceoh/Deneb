@@ -76,14 +76,14 @@ func handleRunSuccess(
 	}
 
 	// Deliver response back to the originating channel (e.g., Telegram).
-	// Suppress delivery if the LLM returned the silent reply token (NO_REPLY).
+	// Use reply.ParseReplyDirectives for unified processing: silent token
+	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
 	if params.Delivery != nil && result.Text != "" {
-		if IsSilentReply(result.Text) {
+		directives := reply.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
+		if directives.IsSilent {
 			logger.Info("suppressing silent reply (NO_REPLY)")
 		} else {
-			replyText := StripSilentToken(result.Text)
-			replyText = jsonutil.StripThinkingTags(replyText)
-			replyText = reply.StripLeakedToolCallMarkup(replyText)
+			replyText := jsonutil.StripThinkingTags(directives.Text)
 			replyText = strings.TrimSpace(replyText)
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)

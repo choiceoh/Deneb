@@ -45,6 +45,7 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 			r, _ := deps.Router.Dispatch(handlers.CommandContext{
 				Command: "status",
 				Session: session,
+				Deps:    deps.CommandDeps,
 			})
 			if r != nil {
 				return r.Reply
@@ -151,6 +152,7 @@ type ReplyDeps struct {
 	SessionFunc     func(key string) *types.SessionState // resolve session by key
 	PreprocessHooks []MessagePreprocessHook               // hooks to run before directive parsing
 	ModelCandidates []model.ModelCandidate                 // available models for directive resolution
+	CommandDeps     *handlers.CommandDeps                  // server-level deps for command handlers (status, subagents, etc.)
 }
 
 // InitSessionForReply initializes or retrieves session state for a reply.
@@ -197,6 +199,7 @@ func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.Sess
 		result, _ := deps.Router.Dispatch(handlers.CommandContext{
 			Command: "status",
 			Session: session,
+			Deps:    deps.CommandDeps,
 		})
 		if result != nil && result.Reply != "" {
 			return []types.ReplyPayload{{Text: result.Reply}}
