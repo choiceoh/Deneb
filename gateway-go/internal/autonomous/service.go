@@ -231,8 +231,8 @@ func (s *Service) runDreamingAsync() {
 		report, err := dreamer.RunDream(svcCtx)
 		if err != nil {
 			s.logger.Error("aurora-dream: cycle failed", "error", err)
-			s.emit(CycleEvent{Type: "dreaming_failed"})
 			s.notifyDreaming(nil, err)
+			s.emit(CycleEvent{Type: "dreaming_failed"})
 			return
 		}
 
@@ -243,8 +243,8 @@ func (s *Service) runDreamingAsync() {
 			"patterns", report.PatternsExtracted,
 			"durationMs", report.DurationMs,
 		)
-		s.emit(CycleEvent{Type: "dreaming_completed", DreamReport: report})
 		s.notifyDreaming(report, nil)
+		s.emit(CycleEvent{Type: "dreaming_completed", DreamReport: report})
 	}()
 }
 

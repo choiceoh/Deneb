@@ -252,9 +252,12 @@ func TestService_ExecuteTask_SkipsIfRunning(t *testing.T) {
 // with ShouldDream returning true.
 func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
 	svc := NewService(nil)
-	d := &fakeDreamer{
+	// Use a slow dreamer so the dream cycle outlasts all concurrent triggers,
+	// ensuring the dreamRunning guard reliably deduplicates.
+	d := &slowFakeDreamer{
 		shouldDream: true,
-		runReport:   &DreamReport{FactsVerified: 1, DurationMs: 10},
+		holdTime:    200 * time.Millisecond,
+		report:      &DreamReport{FactsVerified: 1, DurationMs: 200},
 	}
 	events := make(chan CycleEvent, 20)
 	svc.OnEvent(func(ev CycleEvent) { events <- ev })
@@ -271,17 +274,14 @@ func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Wait for the dream cycle to complete (at most one should run).
+	// Wait for the dream cycle to complete (exactly one should run).
 	_ = waitForEvent(t, events, "dreaming_completed")
 
-	// Verify RunDream was called a small number of times despite 10 concurrent triggers.
-	// Due to the TOCTOU window between dreamRunning check and runDreamingAsync guard,
-	// more than one execution is possible when the dream cycle completes quickly.
 	d.mu.Lock()
 	runCount := d.runCount
 	d.mu.Unlock()
-	if runCount < 1 || runCount > 3 {
-		t.Errorf("RunDream called %d times, want 1-3 (bounded by dreamRunning guard)", runCount)
+	if runCount != 1 {
+		t.Errorf("RunDream called %d times, want exactly 1", runCount)
 	}
 }
 
