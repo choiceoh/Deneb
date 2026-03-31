@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
 // --- Job execution (mirrors execute-job.ts, job-result.ts) ---
@@ -45,17 +49,43 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 		})
 
 		if runErr != nil {
+			status := "error"
+			if runCtx.Err() == context.DeadlineExceeded {
+				status = "timeout"
+			}
 			outcome = RunOutcome{
-				Status:     "error",
+				Status:     status,
 				Error:      runErr.Error(),
 				StartedAt:  startedAt,
 				EndedAt:    time.Now().UnixMilli(),
 				DurationMs: time.Now().UnixMilli() - startedAt,
 			}
 		} else {
+			// Deliver output to target channel.
+			var deliveryResult *DeliveryResult
+			if output != "" && target != nil && s.cfg.Channels != nil {
+				stripped := tokens.StripHeartbeatToken(output, tokens.StripModeHeartbeat, tokens.DefaultHeartbeatAckChars)
+				if !stripped.ShouldSkip {
+					deliveryText := output
+					if stripped.DidStrip && stripped.Text != "" {
+						deliveryText = stripped.Text
+					}
+					payloads := []types.ReplyPayload{{Text: deliveryText}}
+					bestEffort := isBestEffort(deliveryCfg)
+					dr := DeliverCronOutput(runCtx, s.cfg.Channels, *target, payloads, DeliverOutputOptions{
+						ChunkLimit: chunk.DefaultLimit,
+						ChunkMode:  "length",
+						BestEffort: bestEffort,
+						Logger:     s.logger,
+					})
+					deliveryResult = &dr
+				}
+			}
+
 			outcome = RunOutcome{
 				Status:     "ok",
 				Output:     output,
+				Delivery:   deliveryResult,
 				StartedAt:  startedAt,
 				EndedAt:    time.Now().UnixMilli(),
 				DurationMs: time.Now().UnixMilli() - startedAt,
@@ -73,6 +103,11 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 
 	// Apply result to job state (mirrors job-result.ts applyJobResult).
 	s.applyJobResult(job, outcome)
+
+	// Send failure alert if configured and conditions are met.
+	if s.cfg.Channels != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
+		s.sendFailureAlert(ctx, job, outcome)
+	}
 
 	// Log run.
 	s.runLog.Append(RunLogEntry{
@@ -146,6 +181,40 @@ func ShouldSendFailureAlert(state JobState, failureAlert *CronFailureAlert, outc
 		}
 	}
 	return true
+}
+
+// sendFailureAlert delivers a failure notification for a cron job.
+func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome RunOutcome) {
+	alert := job.FailureAlert
+	ch := alert.Channel
+	if ch == "" {
+		ch = s.cfg.DefaultChannel
+	}
+	to := alert.To
+	if to == "" {
+		to = s.cfg.DefaultTo
+	}
+	if ch == "" || to == "" {
+		s.logger.Warn("failure alert skipped: no channel/to", "jobID", job.ID)
+		return
+	}
+
+	text := fmt.Sprintf("⚠️ Cron job %q failed: %s", job.Name, outcome.Error)
+	target := DeliveryTarget{Channel: ch, To: to, AccountID: alert.AccountID}
+	payloads := []types.ReplyPayload{{Text: text}}
+
+	dr := DeliverCronOutput(ctx, s.cfg.Channels, target, payloads, DeliverOutputOptions{
+		BestEffort: true,
+		Logger:     s.logger,
+	})
+	if !dr.Delivered {
+		s.logger.Warn("failure alert delivery failed", "jobID", job.ID, "error", dr.Error)
+	}
+
+	// Update last failure alert timestamp.
+	state := job.State
+	state.LastFailureAlertAtMs = time.Now().UnixMilli()
+	s.store.UpdateJobState(job.ID, state)
 }
 
 func resolveJobCommand(job StoreJob) string {

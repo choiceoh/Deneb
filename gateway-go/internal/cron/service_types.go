@@ -1,5 +1,7 @@
 package cron
 
+import "github.com/choiceoh/deneb/gateway-go/internal/channel"
+
 // CronEvent describes a cron system event for listeners.
 type CronEvent struct {
 	Type   string `json:"type"` // "job_started", "job_finished", "job_failed", "job_added", "job_removed"
@@ -19,6 +21,7 @@ type ServiceConfig struct {
 	DefaultTo      string
 	Enabled        bool
 	RetentionMs    int64 // session retention (0 = default 24h)
+	Channels       *channel.Registry
 }
 
 // ServiceStatus is a snapshot of the cron service health and pending jobs.

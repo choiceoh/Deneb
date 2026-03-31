@@ -58,6 +58,15 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		}
 	}
 
+	// Start persistent cron service (loads jobs from disk, schedules with delivery).
+	if s.cronService != nil {
+		s.safeGo("cron-service-start", func() {
+			if err := s.cronService.Start(ctx); err != nil {
+				s.logger.Error("cron service start failed", "error", err)
+			}
+		})
+	}
+
 	// Mark ready only after all channel plugins have had a chance to start.
 	s.ready.Store(true)
 
@@ -185,7 +194,10 @@ func (s *Server) doShutdown() error {
 	// 5. Stop dedupe background GC.
 	s.dedupe.Close()
 
-	// 6. Stop cron scheduler.
+	// 6. Stop cron scheduler and service.
+	if s.cronService != nil {
+		s.cronService.Stop()
+	}
 	if s.cron != nil {
 		s.cron.Close()
 	}

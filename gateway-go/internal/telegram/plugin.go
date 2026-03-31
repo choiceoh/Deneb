@@ -3,9 +3,12 @@ package telegram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -184,6 +187,48 @@ func (p *Plugin) BotUserID() int64 {
 // Telegram Bot API allows up to 50 MB per file upload.
 func (p *Plugin) MaxUploadBytes() int64 { return 50 * 1024 * 1024 }
 
+// SendMessage implements channel.MessagingAdapter.
+// Delivers a text message (with optional media) to the given Telegram chat ID.
+func (p *Plugin) SendMessage(ctx context.Context, msg channel.OutboundMessage) error {
+	p.mu.Lock()
+	c := p.client
+	p.mu.Unlock()
+
+	if c == nil {
+		return errors.New("telegram client not initialized")
+	}
+
+	chatID, err := parseChatID(msg.To)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID %q: %w", msg.To, err)
+	}
+
+	// Send text message.
+	if msg.Text != "" {
+		_, err := SendText(ctx, c, chatID, msg.Text, SendOptions{
+			ParseMode: "HTML",
+		})
+		if err != nil {
+			return fmt.Errorf("send text: %w", err)
+		}
+	}
+
+	// Send media attachments (URLs or file_ids).
+	for _, media := range msg.Media {
+		if _, err := SendDocument(ctx, c, chatID, media, "", SendOptions{}); err != nil {
+			return fmt.Errorf("send media: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// parseChatID parses a string chat ID to int64.
+func parseChatID(s string) (int64, error) {
+	return strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+}
+
 // Ensure Plugin satisfies the channel.Plugin interface at compile time.
 var _ channel.Plugin = (*Plugin)(nil)
 var _ channel.FileUploadAdapter = (*Plugin)(nil)
+var _ channel.MessagingAdapter = (*Plugin)(nil)

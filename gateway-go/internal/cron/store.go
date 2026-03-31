@@ -32,8 +32,9 @@ type StoreJob struct {
 	Enabled     bool               `json:"enabled"`
 	Schedule    StoreSchedule      `json:"schedule"`
 	Payload     StorePayload       `json:"payload"`
-	Delivery    *JobDeliveryConfig `json:"delivery,omitempty"`
-	State       JobState           `json:"state"`
+	Delivery     *JobDeliveryConfig `json:"delivery,omitempty"`
+	FailureAlert *CronFailureAlert  `json:"failureAlert,omitempty"`
+	State        JobState           `json:"state"`
 	CreatedAtMs int64              `json:"createdAtMs,omitempty"`
 	UpdatedAtMs int64              `json:"updatedAtMs,omitempty"`
 }
