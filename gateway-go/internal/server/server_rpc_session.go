@@ -263,6 +263,16 @@ func (s *Server) registerSessionRPCMethods() {
 	s.toolDeps.Chrono.SendFn = sendFn
 	s.dispatcher.RegisterDomain(handlerchat.Methods(handlerchat.Deps{Chat: s.chatHandler}))
 
+	// Wire provider runtime resolver for runtime auth and missing-auth messages.
+	if s.providerRuntime != nil {
+		s.chatHandler.SetProviderRuntime(s.providerRuntime)
+	}
+
+	// Wire typed plugin hook runner into the chat pipeline.
+	if s.pluginTypedHookRunner != nil {
+		s.chatHandler.SetPluginHookRunner(s.pluginTypedHookRunner)
+	}
+
 	// Wire raw broadcast directly to chat handler for streaming event relay.
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)

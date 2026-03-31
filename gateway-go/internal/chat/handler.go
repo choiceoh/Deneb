@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -77,6 +78,10 @@ type Handler struct {
 
 	// runStateMachine tracks active agent runs for status broadcasting.
 	runStateMachine *channel.RunStateMachine
+
+	// pluginHookRunner runs typed plugin hooks (before_model_resolve,
+	// before_prompt_build, message_sending, etc.) during chat execution.
+	pluginHookRunner *plugin.TypedHookRunner
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -288,6 +293,16 @@ func (h *Handler) SetShutdownCtx(ctx context.Context) {
 // SetRunStateMachine sets the state machine that tracks active agent runs.
 func (h *Handler) SetRunStateMachine(sm *channel.RunStateMachine) {
 	h.runStateMachine = sm
+}
+
+// SetPluginHookRunner sets the typed hook runner for plugin lifecycle events.
+func (h *Handler) SetPluginHookRunner(r *plugin.TypedHookRunner) {
+	h.pluginHookRunner = r
+}
+
+// PluginHookRunner returns the typed hook runner (may be nil).
+func (h *Handler) PluginHookRunner() *plugin.TypedHookRunner {
+	return h.pluginHookRunner
 }
 
 // DefaultModel returns the configured default LLM model name.
