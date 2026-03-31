@@ -230,6 +230,12 @@ func executeAgentRun(
 		logger.Warn("context assembly failed, using message only", "error", contextErr)
 	}
 
+	// Proactive compaction: if stored tokens exceed the threshold, fire a
+	// background sweep. The sweep writes summaries into the Aurora DB; the NEXT
+	// request's normal assembly will include them. The current request proceeds
+	// with its already-assembled context (no blocking, no stale cache).
+	triggerProactiveCompaction(deps.shutdownCtx, deps, params, client, logger)
+
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
 		// No history — build the user message from scratch.
