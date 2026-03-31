@@ -1,6 +1,6 @@
 // Package modelrole provides a centralized model role registry for the gateway.
 //
-// Five model roles are defined (main, lightweight, pilot, fallback, image), each with
+// Four model roles are defined (main, lightweight, pilot, fallback), each with
 // a provider, model name, base URL, and API type. Subsystems declare which ROLE
 // they need (e.g., "lightweight"); the registry resolves the concrete model
 // config and provides a cached LLM client.
@@ -9,7 +9,6 @@
 //
 //	Main       → Lightweight → Fallback
 //	Lightweight → Fallback
-//	Image      → Fallback
 //	Fallback   → (none)
 package modelrole
 
@@ -30,7 +29,6 @@ const (
 	RoleLightweight Role = "lightweight"
 	RolePilot       Role = "pilot"
 	RoleFallback    Role = "fallback"
-	RoleImage       Role = "image"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -70,7 +68,6 @@ const (
 	DefaultGoogleBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 	DefaultPilotModel    = "gemini-3-flash-preview"
 	DefaultFallbackModel = "gemini-3.1-pro"
-	DefaultImageModel    = "gemini-3.1-pro"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
@@ -92,7 +89,7 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 	mainAPIType := inferAPIType(mainProvider)
 	mainAPIKey := resolveAPIKey(mainProvider)
 
-	// Resolve Google API key for fallback/image models.
+	// Resolve Google API key for fallback/pilot models.
 	googleAPIKey := os.Getenv("GEMINI_API_KEY")
 
 	models := map[Role]ModelConfig{
@@ -124,13 +121,6 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 			APIType:    "openai",
 			APIKey:     googleAPIKey,
 		},
-		RoleImage: {
-			ProviderID: "google",
-			Model:      DefaultImageModel,
-			BaseURL:    DefaultGoogleBaseURL,
-			APIType:    "openai",
-			APIKey:     googleAPIKey,
-		},
 	}
 
 	r := &Registry{
@@ -149,7 +139,6 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 		"lightweight", logModelAlias(models[RoleLightweight]),
 		"pilot", logModelAlias(models[RolePilot]),
 		"fallback", logModelAlias(models[RoleFallback]),
-		"image", logModelAlias(models[RoleImage]),
 	)
 
 	return r
@@ -205,12 +194,12 @@ func (r *Registry) Client(role Role) *llm.Client {
 }
 
 // ResolveModel resolves a model string that may be a role name ("main", "lightweight",
-// "pilot", "fallback", "image") into the actual full model ID. If the string is already a
+// "pilot", "fallback") into the actual full model ID. If the string is already a
 // model name (not a role), it is returned unchanged along with ok=false.
 // This allows callers to accept either role names or raw model names.
 func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Role, ok bool) {
 	switch Role(modelOrRole) {
-	case RoleMain, RoleLightweight, RolePilot, RoleFallback, RoleImage:
+	case RoleMain, RoleLightweight, RolePilot, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
 	}
@@ -222,7 +211,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for _, role := range []Role{RoleMain, RoleLightweight, RolePilot, RoleFallback, RoleImage} {
+	for _, role := range []Role{RoleMain, RoleLightweight, RolePilot, RoleFallback} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -248,8 +237,6 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		return []Role{RoleLightweight, RoleFallback}
 	case RolePilot:
 		return []Role{RolePilot, RoleFallback}
-	case RoleImage:
-		return []Role{RoleImage, RoleFallback}
 	case RoleFallback:
 		return []Role{RoleFallback}
 	default:

@@ -35,7 +35,7 @@ type RunParams struct {
 	SessionKey   string
 	Message      string
 	Attachments  []ChatAttachment
-	Model        string // role name ("main", "lightweight", "pilot", "fallback", "image"); raw model ID only via /model override
+	Model        string // role name ("main", "lightweight", "pilot", "fallback"); raw model ID only via /model override
 	System       string // system prompt override
 	ClientRunID  string
 	Delivery     *DeliveryContext
