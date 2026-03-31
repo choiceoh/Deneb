@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
@@ -266,6 +267,26 @@ func (s *Server) registerSessionRPCMethods() {
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)
 	})
+
+	// Wire gateway event subscriptions (agent lifecycle + transcript updates)
+	// into the chat execution pipeline via function callbacks.
+	if s.gatewaySubs != nil {
+		s.chatHandler.SetEmitAgentFunc(func(kind, sessionKey, runID string, payload map[string]any) {
+			s.gatewaySubs.EmitAgent(events.AgentEvent{
+				Kind:       kind,
+				SessionKey: sessionKey,
+				RunID:      runID,
+				Payload:    payload,
+			})
+		})
+		s.chatHandler.SetEmitTranscriptFunc(func(sessionKey string, message any, messageID string) {
+			s.gatewaySubs.EmitTranscript(events.TranscriptUpdate{
+				SessionKey: sessionKey,
+				Message:    message,
+				MessageID:  messageID,
+			})
+		})
+	}
 
 	// Wire agent runner to cron service so scheduled jobs can execute agent turns.
 	if s.cronService != nil {

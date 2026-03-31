@@ -59,6 +59,7 @@ type runDeps struct {
 	transcript       TranscriptStore            // optional; history unavailable without it
 	tools            *ToolRegistry              // optional; no tool use if nil
 	authManager      *provider.AuthManager      // optional; uses pre-configured client if nil
+	providerRuntime  *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 	broadcast        BroadcastFunc              // optional
 	broadcastRaw     streaming.BroadcastRawFunc // optional
 	jobTracker       *agent.JobTracker          // optional

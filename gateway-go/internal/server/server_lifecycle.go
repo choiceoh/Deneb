@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -46,6 +47,14 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// goroutines (auto-memory extraction) stop cleanly on shutdown.
 	if s.chatHandler != nil {
 		s.chatHandler.SetShutdownCtx(ctx)
+	}
+
+	// Discover and load plugins.
+	if s.pluginDiscoverer != nil {
+		s.safeGo("plugin-discovery", func() {
+			result := s.pluginDiscoverer.DiscoverPlugins(plugin.DiscoverPluginsParams{})
+			s.logger.Info("plugins discovered", "count", len(result.Candidates))
+		})
 	}
 
 	// Auto-start all registered channel plugins synchronously so that RPC

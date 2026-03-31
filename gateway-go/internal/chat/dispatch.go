@@ -209,6 +209,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		transcript:           h.transcript,
 		tools:                h.tools,
 		authManager:          h.authManager,
+		providerRuntime:      h.providerRuntime,
 		broadcast:            h.broadcast,
 		broadcastRaw:         h.broadcastRaw,
 		jobTracker:           h.jobTracker,

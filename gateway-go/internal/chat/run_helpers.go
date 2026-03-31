@@ -57,6 +57,9 @@ func handleRunSuccess(
 		if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
 			logger.Error("failed to persist assistant message", "error", err)
 		}
+		if deps.emitTranscriptFn != nil {
+			deps.emitTranscriptFn(params.SessionKey, assistantMsg, "")
+		}
 	}
 	// Sync Aurora summaries for channel replies when available.
 	if deps.auroraStore != nil && result.Text != "" {
@@ -295,8 +298,8 @@ func parseModelID(model string) (providerID, modelName string) {
 }
 
 // resolveClient creates an LLM client from provider configs, auth manager,
-// or falls back to the pre-configured client. Returns the client and API type
-// ("anthropic" or "openai").
+// provider runtime resolver, or falls back to the pre-configured client.
+// Returns the client and API type ("anthropic" or "openai").
 func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.Client, string) {
 	// 1. Try provider config from deneb.json.
 	if deps.providerConfigs != nil && providerID != "" {
@@ -306,6 +309,28 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 				baseURL = resolveDefaultBaseURL(providerID)
 			}
 			apiKey := strings.TrimSpace(provider.ExpandEnvVars(cfg.APIKey))
+
+			// Apply provider runtime auth override (e.g., token exchange).
+			if deps.providerRuntime != nil && providerID != "" {
+				authResult, err := deps.providerRuntime.PrepareRuntimeAuth(
+					context.Background(), providerID,
+					provider.RuntimeAuthContext{
+						Provider: providerID,
+						APIKey:   apiKey,
+					},
+				)
+				if err != nil {
+					logger.Warn("provider runtime auth failed", "provider", providerID, "error", err)
+				} else if authResult != nil {
+					if authResult.APIKey != "" {
+						apiKey = authResult.APIKey
+					}
+					if authResult.BaseURL != "" {
+						baseURL = authResult.BaseURL
+					}
+				}
+			}
+
 			if baseURL == "" {
 				logger.Warn("provider config missing base URL", "provider", providerID)
 			} else {
@@ -329,11 +354,34 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 		cred := deps.authManager.Resolve(target, "")
 		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
 			base := cred.BaseURL
+			apiKey := cred.APIKey
 			apiType := inferAPIType(target)
 			if base == "" {
 				base = resolveDefaultBaseURL(target)
 			}
-			return llm.NewClient(base, cred.APIKey, llm.WithLogger(logger)), apiType
+
+			// Apply provider runtime auth override on auth-manager credentials.
+			if deps.providerRuntime != nil {
+				authResult, err := deps.providerRuntime.PrepareRuntimeAuth(
+					context.Background(), target,
+					provider.RuntimeAuthContext{
+						Provider: target,
+						APIKey:   apiKey,
+					},
+				)
+				if err != nil {
+					logger.Warn("provider runtime auth failed", "provider", target, "error", err)
+				} else if authResult != nil {
+					if authResult.APIKey != "" {
+						apiKey = authResult.APIKey
+					}
+					if authResult.BaseURL != "" {
+						base = authResult.BaseURL
+					}
+				}
+			}
+
+			return llm.NewClient(base, apiKey, llm.WithLogger(logger)), apiType
 		}
 	}
 

@@ -73,6 +73,7 @@ type ServerRPC struct {
 	authValidator          *auth.Validator
 	providers              *provider.Registry
 	authManager            *provider.AuthManager
+	providerRuntime        *provider.ProviderRuntimeResolver
 	authRateLimiter        *auth.AuthRateLimiter
 	acpDeps                *handlerprocess.ACPDeps
 	acpLifecycleUnsub      func()
@@ -107,8 +108,10 @@ type ServerIntegrations struct {
 	usageTracker       *usage.Tracker
 	maintRunner        *maintenance.Runner
 	jobTracker         *agent.JobTracker
-	pluginFullRegistry *plugin.FullRegistry
-	pluginRouter       *pluginrouter.Router
+	pluginFullRegistry    *plugin.FullRegistry
+	pluginDiscoverer      *plugin.PluginDiscoverer
+	pluginTypedHookRunner *plugin.TypedHookRunner
+	pluginRouter          *pluginrouter.Router
 	autonomousSvc      *autonomous.Service
 	dreamingAdapter    *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
 	gmailPollSvc       *gmailpoll.Service
@@ -296,9 +299,10 @@ func New(addr string, opts ...Option) *Server {
 	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
-	// Provider auth manager.
+	// Provider auth manager and runtime resolver.
 	if s.providers != nil {
 		s.authManager = provider.NewAuthManager(s.providers, s.logger)
+		s.providerRuntime = provider.NewProviderRuntimeResolver(s.providers, s.logger)
 	}
 
 	// Phase 3: Advanced workflow subsystems.
@@ -367,8 +371,10 @@ func New(addr string, opts ...Option) *Server {
 		}))
 	}
 
-	// Initialize plugin full registry and register RPC methods.
+	// Initialize plugin full registry, discoverer, typed hook runner, and register RPC methods.
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
+	s.pluginDiscoverer = plugin.NewPluginDiscoverer(s.logger)
+	s.pluginTypedHookRunner = plugin.NewTypedHookRunner(s.logger)
 	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
 		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry, channelAdapter: channel.NewProtocolAdapter(s.channels)},
 	}))

@@ -35,6 +35,14 @@ func executeAgentRun(
 ) (*agent.AgentResult, error) {
 	runStart := time.Now()
 
+	// Emit agent run.start event to gateway subscriptions.
+	if deps.emitAgentFn != nil {
+		deps.emitAgentFn("run.start", params.SessionKey, params.ClientRunID, map[string]any{
+			"model": params.Model,
+			"ts":    runStart.UnixMilli(),
+		})
+	}
+
 	// 1. Persist user message to transcript + Aurora store.
 	if deps.transcript != nil && params.Message != "" {
 		userMsg := ChatMessage{
@@ -44,6 +52,9 @@ func executeAgentRun(
 		}
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
+		}
+		if deps.emitTranscriptFn != nil {
+			deps.emitTranscriptFn(params.SessionKey, userMsg, "")
 		}
 	}
 	// Sync to Aurora store for compaction tracking.
@@ -108,6 +119,12 @@ func executeAgentRun(
 	// in the correct format (Anthropic ContentBlock array vs plain string).
 	client, apiType := resolveClient(deps, providerID, logger)
 	if client == nil {
+		// Use provider-specific missing-auth message when available.
+		if deps.providerRuntime != nil && providerID != "" {
+			if msg := deps.providerRuntime.BuildMissingAuthMessage(providerID); msg != "" {
+				return nil, fmt.Errorf("%s", msg)
+			}
+		}
 		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
@@ -401,6 +418,32 @@ func executeAgentRun(
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
 			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "complete", Name: name, IsError: isErr})
+		}
+	}
+
+	// Gateway event subscription hooks: emit tool.start / tool.end so WebSocket
+	// clients receive real-time agent activity events via the event bus.
+	if deps.emitAgentFn != nil {
+		prevOnToolStart := hooks.OnToolStart
+		hooks.OnToolStart = func(name, reason string) {
+			if prevOnToolStart != nil {
+				prevOnToolStart(name, reason)
+			}
+			deps.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
+				"tool": name,
+				"ts":   time.Now().UnixMilli(),
+			})
+		}
+		prevOnToolResult := hooks.OnToolResult
+		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+			if prevOnToolResult != nil {
+				prevOnToolResult(name, toolUseID, result, isErr)
+			}
+			deps.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
+				"tool":    name,
+				"isError": isErr,
+				"ts":      time.Now().UnixMilli(),
+			})
 		}
 	}
 

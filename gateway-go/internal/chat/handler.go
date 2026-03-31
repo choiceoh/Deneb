@@ -41,6 +41,7 @@ type Handler struct {
 	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer          // optional; agent detail logging
 	registry        *modelrole.Registry       // centralized model role registry
+	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -270,6 +271,12 @@ func (h *Handler) TypingFunc() TypingFunc {
 // ReactionFunc returns the current reaction function (for chaining).
 func (h *Handler) ReactionFunc() ReactionFunc {
 	return h.reactionFn
+}
+
+// SetProviderRuntime sets the provider runtime resolver for runtime auth
+// and missing-auth message generation during LLM client resolution.
+func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {
+	h.providerRuntime = pr
 }
 
 // SetShutdownCtx sets the server lifecycle context so background goroutines
