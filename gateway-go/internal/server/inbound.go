@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"sort"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
@@ -21,12 +23,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/streaming"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -622,7 +626,15 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 		}
 	}
 
-	return &handlers.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn}
+	var zeroCallsFn func() *handlers.RPCZeroCallsReport
+	if p.server.dispatcher != nil {
+		disp := p.server.dispatcher
+		zeroCallsFn = func() *handlers.RPCZeroCallsReport {
+			return buildZeroCallsReport(disp)
+		}
+	}
+
+	return &handlers.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn, ZeroCallsFn: zeroCallsFn}
 }
 
 // buildModelCandidates converts the model role registry into autoreply
@@ -848,4 +860,27 @@ func (p *InboundProcessor) dispatchSubagentCommand(
 		senderID, isGroup, true, // isAuthorized: single-user deployment
 		deps,
 	)
+}
+
+// buildZeroCallsReport cross-references registered RPC methods with
+// RPCRequestsTotal to find methods that have never been called.
+func buildZeroCallsReport(disp *rpc.Dispatcher) *handlers.RPCZeroCallsReport {
+	methods := disp.Methods()
+	sort.Strings(methods)
+
+	counts := metrics.RPCRequestsTotal.Snapshot()
+
+	var zeroCalls []string
+	for _, m := range methods {
+		okKey := m + "\x00" + "ok"
+		errKey := m + "\x00" + "error"
+		if counts[okKey]+counts[errKey] == 0 {
+			zeroCalls = append(zeroCalls, m)
+		}
+	}
+
+	return &handlers.RPCZeroCallsReport{
+		ZeroCalls:    zeroCalls,
+		TotalMethods: len(methods),
+	}
 }
