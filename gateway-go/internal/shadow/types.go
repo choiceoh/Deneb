@@ -59,13 +59,51 @@ type Notifier interface {
 // ExtendedStatus is the full shadow status including all modules.
 type ExtendedStatus struct {
 	ServiceStatus
-	Analytics       *UsageReport        `json:"analytics,omitempty"`
-	CronSuggestions []CronSuggestion    `json:"cronSuggestions,omitempty"`
-	RecentReviews   []CodeReviewResult  `json:"recentReviews,omitempty"`
-	ExtractedFacts  int                 `json:"extractedFacts"`
-	RecurringErrors int                 `json:"recurringErrors"`
-	Continuity      *ContinuitySnapshot `json:"continuity,omitempty"`
-	PrefetchedCtx   []PrefetchedContext `json:"prefetchedContexts,omitempty"`
+	Analytics       *UsageReport            `json:"analytics,omitempty"`
+	CronSuggestions []CronSuggestion        `json:"cronSuggestions,omitempty"`
+	RecentReviews   []CodeReviewResult      `json:"recentReviews,omitempty"`
+	ExtractedFacts  int                     `json:"extractedFacts"`
+	RecurringErrors int                     `json:"recurringErrors"`
+	Continuity      *ContinuitySnapshot     `json:"continuity,omitempty"`
+	PrefetchedCtx   []PrefetchedContext     `json:"prefetchedContexts,omitempty"`
+	GitHubActivity  *GitHubActivitySummary  `json:"githubActivity,omitempty"`
+}
+
+// GitHubEventRecord captures a single GitHub webhook event.
+type GitHubEventRecord struct {
+	EventType string `json:"eventType"`
+	Repo      string `json:"repo"`
+	Actor     string `json:"actor"`
+	Summary   string `json:"summary"` // Korean one-liner
+	Ts        int64  `json:"ts"`      // unix ms
+}
+
+// PRActivityRecord tracks pull request activity from webhooks.
+type PRActivityRecord struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Action string `json:"action"` // opened, closed, review_requested, etc.
+	Actor  string `json:"actor"`
+	URL    string `json:"url"`
+	Ts     int64  `json:"ts"`
+}
+
+// CIRunRecord tracks a CI workflow run result from webhooks.
+type CIRunRecord struct {
+	Workflow   string `json:"workflow"`
+	Branch     string `json:"branch"`
+	Conclusion string `json:"conclusion"` // success, failure, cancelled
+	URL        string `json:"url"`
+	Ts         int64  `json:"ts"`
+}
+
+// GitHubActivitySummary is the aggregate view of recent GitHub activity.
+type GitHubActivitySummary struct {
+	RecentEvents []GitHubEventRecord `json:"recentEvents"`
+	TotalPushes  int                 `json:"totalPushes"`
+	PRActivity   []PRActivityRecord  `json:"prActivity,omitempty"`
+	CIRuns       []CIRunRecord       `json:"ciRuns,omitempty"`
+	LastEventAt  int64               `json:"lastEventAt"`
 }
 
 // digestInterval is how often the shadow service sends a periodic summary.
@@ -79,3 +117,12 @@ const maxHealthAlerts = 50
 
 // maxTopicHistory caps the topic change log.
 const maxTopicHistory = 20
+
+// maxGitHubEvents caps the in-memory GitHub event ring buffer.
+const maxGitHubEvents = 100
+
+// maxPRActivity caps the in-memory PR activity list.
+const maxPRActivity = 50
+
+// maxCIRuns caps the in-memory CI run list.
+const maxCIRuns = 50

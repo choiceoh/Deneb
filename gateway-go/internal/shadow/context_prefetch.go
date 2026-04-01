@@ -115,6 +115,37 @@ func (cp *ContextPrefetcher) prefetchForTopic(topic string) {
 	cp.svc.emit(ShadowEvent{Type: "context_prefetched", Payload: ctx})
 }
 
+// OnPRActivity prefetches context for files related to a PR.
+// Called when a pull_request webhook arrives with an interesting action.
+func (cp *ContextPrefetcher) OnPRActivity(pr map[string]any) {
+	title, _ := pr["title"].(string)
+	number, _ := pr["number"].(float64)
+	url, _ := pr["html_url"].(string)
+
+	// Use the PR title to detect a topic via the same keyword matching.
+	topic := detectTopic(title)
+	if topic == "" {
+		topic = "pull_request"
+	}
+
+	files, _ := topicKeywords[topic]
+	ctx := PrefetchedContext{
+		Topic:      topic,
+		Files:      files,
+		Notes:      fmt.Sprintf("PR #%d '%s' 관련 컨텍스트 준비\n%s", int(number), truncate(title, 60), url),
+		PreparedAt: time.Now().UnixMilli(),
+	}
+
+	cp.svc.mu.Lock()
+	if len(cp.prefetchedCtx) >= 5 {
+		cp.prefetchedCtx = cp.prefetchedCtx[1:]
+	}
+	cp.prefetchedCtx = append(cp.prefetchedCtx, ctx)
+	cp.svc.mu.Unlock()
+
+	cp.svc.emit(ShadowEvent{Type: "context_prefetched", Payload: ctx})
+}
+
 // GetPrefetchedContexts returns available prefetched contexts.
 func (cp *ContextPrefetcher) GetPrefetchedContexts() []PrefetchedContext {
 	cp.svc.mu.Lock()
