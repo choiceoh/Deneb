@@ -321,6 +321,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		contextCfg:           h.contextCfg,
 		compactionCfg:        h.compactionCfg,
 		defaultModel:         h.defaultModel,
+		subagentDefaultModel: h.subagentDefaultModel,
 		defaultSystem:        h.defaultSystem,
 		maxTokens:            h.maxTokens,
 		shutdownCtx:          h.shutdownCtx,

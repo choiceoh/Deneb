@@ -49,8 +49,9 @@ type Handler struct {
 	// Agent run configuration.
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
-	defaultModel  string
-	defaultSystem string
+	defaultModel         string
+	subagentDefaultModel string
+	defaultSystem        string
 	maxTokens     int
 
 	// callbackMu guards all late-bind callback fields below. These are set
@@ -138,8 +139,9 @@ type HandlerConfig struct {
 	Registry        *modelrole.Registry       // centralized model role registry
 	ContextCfg      ContextConfig
 	CompactionCfg   CompactionConfig
-	DefaultModel    string
-	DefaultSystem   string
+	DefaultModel         string
+	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
+	DefaultSystem        string
 	MaxTokens       int
 
 	// Fields below were previously Set*() after construction. They are all
@@ -197,8 +199,9 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		registry:        cfg.Registry,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
-		defaultModel:    cfg.DefaultModel,
-		defaultSystem:   cfg.DefaultSystem,
+		defaultModel:         cfg.DefaultModel,
+		subagentDefaultModel: cfg.SubagentDefaultModel,
+		defaultSystem:        cfg.DefaultSystem,
 		maxTokens:       cfg.MaxTokens,
 		providerRuntime:  cfg.ProviderRuntime,
 		pluginHookRunner: cfg.PluginHookRunner,

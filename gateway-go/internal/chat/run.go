@@ -117,9 +117,10 @@ type runDeps struct {
 	sessionMemory    *SessionMemoryStore // optional; structured session state
 	contextCfg       ContextConfig
 	compactionCfg    CompactionConfig
-	toolDenySet      map[string]bool // tools to hide from the model (deny-rule filtering)
-	defaultModel     string
-	defaultSystem    string
+	toolDenySet          map[string]bool // tools to hide from the model (deny-rule filtering)
+	defaultModel         string
+	subagentDefaultModel string
+	defaultSystem        string
 	maxTokens        int
 	// shutdownCtx is the server lifecycle context; used to bound background
 	// goroutines (e.g., auto-memory extraction) so they stop on server shutdown.

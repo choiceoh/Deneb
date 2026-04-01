@@ -54,6 +54,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 
 	// Model role registry.
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
+	chatCfg.SubagentDefaultModel = resolveSubagentDefaultModel(s.logger)
+	if chatCfg.SubagentDefaultModel != "" {
+		s.logger.Info("subagent default model configured", "model", chatCfg.SubagentDefaultModel)
+	}
 	reg2 := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
 	*reg = *reg2
 	chatCfg.Registry = reg

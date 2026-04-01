@@ -142,6 +142,49 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	return "" // empty: registry will provide the default
 }
 
+// resolveSubagentDefaultModel reads agents.defaults.subagents.model from
+// deneb.json for separate sub-agent model configuration.
+func resolveSubagentDefaultModel(logger *slog.Logger) string {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return ""
+	}
+	var root struct {
+		Agents struct {
+			Defaults json.RawMessage `json:"defaults"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		return ""
+	}
+	if len(root.Agents.Defaults) == 0 {
+		return ""
+	}
+	var defaults struct {
+		Subagents struct {
+			Model json.RawMessage `json:"model"`
+		} `json:"subagents"`
+	}
+	if err := json.Unmarshal(root.Agents.Defaults, &defaults); err != nil {
+		return ""
+	}
+	if len(defaults.Subagents.Model) == 0 {
+		return ""
+	}
+	// Try string first, then object with primary field.
+	var s string
+	if err := json.Unmarshal(defaults.Subagents.Model, &s); err == nil && s != "" {
+		return s
+	}
+	var obj struct {
+		Primary string `json:"primary"`
+	}
+	if err := json.Unmarshal(defaults.Subagents.Model, &obj); err == nil && obj.Primary != "" {
+		return obj.Primary
+	}
+	return ""
+}
+
 // extractModelFromDefaults handles both string and object forms of the model field.
 func extractModelFromDefaults(raw json.RawMessage) string {
 	var defaults struct {
