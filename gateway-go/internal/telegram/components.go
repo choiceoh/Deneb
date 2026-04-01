@@ -20,7 +20,8 @@ const (
 	ActionNext    = "new"
 	ActionFix     = "fix"
 	ActionDetails = "details"
-	ActionRetry   = "retry"
+	ActionRetry       = "retry"
+	ActionModelSwitch = "model"
 )
 
 // buttonDef is an internal helper for declaring button templates.
