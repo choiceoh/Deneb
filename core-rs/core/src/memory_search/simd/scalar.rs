@@ -2,6 +2,7 @@
 
 /// Compute `(dot_product, norm_a_sq, norm_b_sq)` using a plain scalar loop.
 pub fn accumulate(a: &[f64], b: &[f64]) -> (f64, f64, f64) {
+    debug_assert_eq!(a.len(), b.len(), "accumulate: slices must have equal length");
     let mut dot = 0.0;
     let mut norm_a = 0.0;
     let mut norm_b = 0.0;

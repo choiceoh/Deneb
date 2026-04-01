@@ -51,7 +51,7 @@ read_when:
 | `security/`           | 332    | 10    | Constant-time eq, SSRF, HTML sanitize            |
 | `media/`              | 477    | --    | MIME detection (21 formats, zero-alloc)          |
 | `markdown/`           | 2,849  | 54    | Markdown parsing/rendering with SIMD             |
-| `memory_search/`      | 2,800+ | 91    | Cosine (AVX2), BM25, FTS, MMR, temporal decay    |
+| `memory_search/`      | 2,800+ | 91    | Cosine (NEON), BM25, FTS, MMR, temporal decay    |
 | `compaction/`         | 2,444  | 45    | Aurora hierarchical summarization state machine  |
 | `context_engine/`     | 2,335  | 35    | Assembly + retrieval (grep/describe/expand)      |
 | `parsing/`            | 1,490  | 35    | URL extraction, HTML-to-MD, base64, media tokens |
@@ -182,7 +182,7 @@ The Go gateway has **19 fully Go-native** RPC methods and **~46 bridge-forwarded
 
 ## 5. Strengths
 
-1. **CPU-intensive paths fully in Rust** -- frame validation, MIME detection, HTML sanitization, secret comparison, cosine similarity (AVX2), markdown parsing (SIMD)
+1. **CPU-intensive paths fully in Rust** -- frame validation, MIME detection, HTML sanitization, secret comparison, cosine similarity (NEON), markdown parsing (SIMD)
 2. **419 Rust tests + 54 Go test files (49% test-to-code ratio)** -- high confidence in ported code
 3. **Command/response state machine pattern** in compaction/context engine safely crosses FFI boundaries without callbacks
 4. **Protobuf as cross-language source of truth** with CI-enforced consistency
