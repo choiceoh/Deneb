@@ -44,6 +44,11 @@ func VibeCoderCommands() []SlashCommand {
 			Aliases:     nil,
 		},
 		{
+			Command:     "chart",
+			Description: "실험 차트 보기",
+			Aliases:     nil,
+		},
+		{
 			Command:     "help",
 			Description: "도움말",
 			Aliases:     nil,
