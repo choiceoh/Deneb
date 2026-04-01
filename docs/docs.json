@@ -508,10 +508,6 @@
       "destination": "/start/setup"
     },
     {
-      "source": "/showcase",
-      "destination": "/start/showcase"
-    },
-    {
       "source": "/skills",
       "destination": "/tools/skills"
     },
@@ -755,10 +751,6 @@
               {
                 "group": "Home",
                 "pages": ["index"]
-              },
-              {
-                "group": "Overview",
-                "pages": ["start/showcase"]
               },
               {
                 "group": "Core concepts",
