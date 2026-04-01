@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -243,6 +244,32 @@ func (h *Handler) handleSlashCommand(
 			_ = h.sessions.Set(sess)
 		}
 		h.deliverSlashResponse(delivery, "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.")
+
+	case "chart":
+		workdir := resolveWorkspaceDirForPrompt()
+		cfg, err := autoresearch.LoadConfig(workdir)
+		if err != nil {
+			h.deliverSlashResponse(delivery, "실험이 없습니다. autoresearch를 먼저 실행하세요.")
+			break
+		}
+		rows, err := autoresearch.ParseResults(workdir)
+		if err != nil || len(rows) == 0 {
+			h.deliverSlashResponse(delivery, "실험 결과가 없습니다.")
+			break
+		}
+		chartPath, err := autoresearch.SaveChart(workdir, rows, cfg)
+		if err != nil {
+			h.deliverSlashResponse(delivery, fmt.Sprintf("차트 생성 실패: %s", err.Error()))
+			break
+		}
+		if h.mediaSendFn != nil && delivery != nil {
+			sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			caption := fmt.Sprintf("📊 %s (%s)", cfg.MetricName, cfg.MetricDirection)
+			if sendErr := h.mediaSendFn(sendCtx, delivery, chartPath, "photo", caption, false); sendErr != nil {
+				h.deliverSlashResponse(delivery, fmt.Sprintf("차트 전송 실패: %s", sendErr.Error()))
+			}
+			cancel()
+		}
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{
