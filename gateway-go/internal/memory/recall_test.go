@@ -24,7 +24,7 @@ func TestExpandViaEntities(t *testing.T) {
 		{Fact: Fact{ID: id1, Content: "SGLang 포트 30000 설정", Category: CategoryDecision, Importance: 0.8, Active: true}, Score: 0.9},
 	}
 
-	expanded := expandViaEntities(ctx, s, "SGLang", candidates, 20)
+	expanded := expandViaEntities(ctx, s, candidates, 20)
 
 	// Should have found id2 via entity expansion, but not id3 (no entity link).
 	if len(expanded) != 1 {

@@ -229,9 +229,13 @@ func executeAgentRun(
 	go func() {
 		defer prepWg.Done()
 		if params.Message != "" {
+			// When recall engine is active (parallel goroutine), skip
+			// memory SearchFacts here to avoid duplicate DB queries.
+			recallActive := deps.registry != nil && deps.memoryStore != nil
 			kDeps := KnowledgeDeps{
-				VegaBackend:  deps.vegaBackend,
-				WorkspaceDir: workspaceDir,
+				VegaBackend:      deps.vegaBackend,
+				WorkspaceDir:     workspaceDir,
+				SkipMemorySearch: recallActive,
 			}
 			{
 				kDeps.MemoryStore = deps.memoryStore

@@ -275,6 +275,7 @@ func (s *Store) trigramSearch(ctx context.Context, query string, minImportance f
 
 // entitySearch returns fact IDs linked to a named entity, with a baseline score.
 func (s *Store) entitySearch(ctx context.Context, entityName string) map[int64]float64 {
+	entityName = normalizeEntityName(entityName)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
