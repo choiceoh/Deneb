@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
 )
@@ -80,11 +79,12 @@ func (s *Server) propagateConfigReload(snap *config.ConfigSnapshot, deferralTime
 			s.logger.Info("config reload: telegram restarted")
 		})
 	}
-	// Restart cron scheduler.
+	// Restart cron scheduler. Reset() keeps the same instance (handlers hold
+	// pointers captured at registration time) but cancels all running tasks
+	// and clears the task map.
 	if s.cron != nil {
 		s.safeGo("config:restart-cron", func() {
-			s.cron.Close()
-			s.cron = cron.NewScheduler(s.logger)
+			s.cron.Reset()
 			s.logger.Info("config reload: cron scheduler restarted")
 		})
 	}

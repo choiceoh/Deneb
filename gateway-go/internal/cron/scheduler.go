@@ -187,6 +187,22 @@ func (s *Scheduler) Close() {
 	s.wg.Wait()
 }
 
+// Reset cancels all tasks, waits for them to finish, and clears the task map.
+// Unlike Close(), the scheduler remains usable for new Register() calls.
+// This is safe for config reload: handlers holding a pointer to this scheduler
+// will see a clean state rather than a stale closed instance.
+func (s *Scheduler) Reset() {
+	s.mu.Lock()
+	for _, t := range s.tasks {
+		t.cancel()
+	}
+	s.mu.Unlock()
+	s.wg.Wait()
+	s.mu.Lock()
+	s.tasks = make(map[string]*task)
+	s.mu.Unlock()
+}
+
 func (s *Scheduler) runTask(ctx context.Context, t *task) {
 	defer s.wg.Done()
 
