@@ -19,9 +19,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// BroadcastFunc matches the event broadcast signature used by the gateway.
-type BroadcastFunc func(event string, payload any) (int, []error)
-
 // ExtendedDeps holds the dependencies for extended RPC methods:
 // agent.status, sessions.create, sessions.lifecycle, plus
 // process, cron, and hooks management.
@@ -38,7 +35,7 @@ type ExtendedDeps struct {
 // AgentsDeps holds the dependencies for agents CRUD RPC methods.
 type AgentsDeps struct {
 	Agents      *agentpkg.Store
-	Broadcaster BroadcastFunc
+	Broadcaster rpcutil.BroadcastFunc
 }
 
 // ExtendedMethods returns the extended agent/session/process/cron/hooks handlers.
