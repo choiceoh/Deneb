@@ -128,10 +128,13 @@ func executeAgentRun(
 		}
 		// Raw model ID → no role mapping, no fallback chain (direct override).
 	}
-	if model == "" {
-		// Sub-agents use their own default model when configured.
-		if deps.subagentDefaultModel != "" && deps.sessions != nil {
-			if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.SpawnedBy != "" {
+	if model == "" && deps.sessions != nil {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.SpawnedBy != "" {
+			// Sub-agent: use explicit session model if set at spawn time,
+			// otherwise fall back to the configured subagent default model.
+			if sess.Model != "" {
+				model = sess.Model
+			} else if deps.subagentDefaultModel != "" {
 				model = deps.subagentDefaultModel
 			}
 		}
