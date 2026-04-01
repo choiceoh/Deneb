@@ -16,10 +16,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
-	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
-	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
-	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
-	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
@@ -145,35 +141,16 @@ func (s *Server) registerSessionRPCMethods() {
 	}
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
-	s.dispatcher.RegisterDomain(handlerchat.Methods(handlerchat.Deps{Chat: s.chatHandler}))
 
-	// Wire agent runner to cron service so scheduled jobs can execute agent turns.
-	if s.cronService != nil {
-		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler})
-	}
-
-	// Side-question (/btw) method — routes through chat handler natively.
-	s.dispatcher.RegisterDomain(handlerchat.BtwMethods(handlerchat.BtwDeps{
-		Chat:        s.chatHandler,
-		Broadcaster: broadcastFn,
-	}))
-
-	// Native session execution / agent methods (Phase 4).
-	s.dispatcher.RegisterDomain(handlersession.ExecMethods(handlersession.ExecDeps{
-		Chat:       s.chatHandler,
-		Agents:     s.agents,
-		JobTracker: s.jobTracker,
-	}))
+	// Chat, BTW, Exec, Aurora, cron wiring, and Telegram pipeline are
+	// registered in registerLateMethods() after this function returns.
 }
 
-// registerApprovalAgentMethods registers exec approval, agent lifecycle, talk, wizard,
-// and autonomous dreaming methods.
-func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int, []error)) {
-	s.dispatcher.RegisterDomain(handlerprocess.ApprovalMethods(handlerprocess.ApprovalDeps{
-		Store:       s.approvals,
-		Broadcaster: broadcastFn,
-	}))
-
+// registerWorkflowSideEffects wires non-RPC business logic: process approval
+// callbacks, autonomous/dreaming service, Telegram notifiers, and memory flush.
+// All RPC domain registrations (approval, agent CRUD, wizard, talk) are now
+// handled by registerEarlyMethods via hub adapters.
+func (s *Server) registerWorkflowSideEffects(hub *GatewayHub) {
 	// Wire process approval callback using the Go approval store directly.
 	// When a tool execution requires approval, create an approval request,
 	// broadcast it to WS clients, and wait for a decision.
@@ -184,7 +161,7 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 				CommandArgv: req.Args,
 				Cwd:         req.WorkingDir,
 			})
-			broadcastFn("exec.approval.requested", map[string]any{
+			hub.Broadcast("exec.approval.requested", map[string]any{
 				"id":      ar.ID,
 				"command": req.Command,
 				"args":    req.Args,
@@ -206,19 +183,6 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 		})
 	}
 
-	s.dispatcher.RegisterDomain(handleragent.CRUDMethods(handleragent.AgentsDeps{
-		Agents:      s.agents,
-		Broadcaster: broadcastFn,
-	}))
-
-	s.dispatcher.RegisterDomain(handlerplatform.WizardMethods(handlerplatform.WizardDeps{
-		Engine: s.wizardEng,
-	}))
-
-	s.dispatcher.RegisterDomain(handlerplatform.TalkMethods(handlerplatform.TalkDeps{
-		Talk: s.talkState,
-	}))
-
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
 	s.autonomousSvc = autonomous.NewService(s.logger)
 
@@ -229,7 +193,7 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 
 	// Broadcast dreaming events to WebSocket clients.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
-		broadcastFn("dreaming.cycle", event)
+		hub.Broadcast("dreaming.cycle", event)
 	})
 
 	// Wire Telegram notifier for dreaming and autoresearch events.
@@ -275,4 +239,7 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 		})
 		s.logger.Info("diary heartbeat task registered with autonomous service (2h interval)")
 	}
+
+	// Gmail polling service: periodic new-email analysis via LLM.
+	s.initGmailPoll()
 }

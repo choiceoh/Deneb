@@ -9,24 +9,13 @@
 //   6. Workflow subsystems (approvals, nodes, devices, agents, skills, wizard, secrets)
 //   7. ACP subsystem (registry, bindings, lifecycle sync)
 //   8. RPC Dispatcher + middleware:
-//      a. registerBuiltinMethods() — gateway.status, gateway.ping
-//      b. rpc.RegisterBuiltinMethods() — session.list, session.get, etc.
-//      c. registerExtendedMethods():
-//         - registerAgentMethods() — ACP, agent extended
-//         - registerProviderMethods() — provider CRUD
-//         - registerToolMethods() — tool execution
-//         - registerAuroraMethods() — desktop channel
-//         - registerAuthRPCMethods() — auth tokens
-//         - registerSessionRPCMethods():
-//           * Session state RPC (patch/reset/compact)
-//           * initMemorySubsystem() — unified/aurora/memory stores
-//           * initToolsAndDeps() — core tools, plugin tools, autoresearch
-//           * Chat handler creation (all deps via HandlerConfig)
-//           * SendFn circular-dep wiring + Cron service
-//           * BTW + session exec RPC
-//      d. registerPhase2Methods() — events, config, monitoring, presence
-//      e. registerAdvancedWorkflowMethods() — approvals, agents, autonomous, Gmail poll
-//      f. registerNativeSystemMethods() — system + Telegram plugin
+//      a. hub = buildHub()              — GatewayHub (Chat=nil at this point)
+//      b. registerBuiltinMethods()      — gateway.status, gateway.ping
+//      c. rpc.RegisterBuiltinMethods()  — session.list, session.get, etc.
+//      d. registerEarlyMethods(hub)     — ~30 domains via hub adapters (method_registry.go)
+//      e. registerSessionRPCMethods()   — chat pipeline init + handler creation
+//      f. registerLateMethods(hub)      — Chat-dependent domains (method_registry.go)
+//      g. registerWorkflowSideEffects() — non-RPC: autonomous, dreaming, notifier
 //   9. Plugin system init
 //
 // initAndListen():
@@ -38,106 +27,16 @@
 //
 // GatewayHub (gateway_hub.go):
 //  Central service registry built from Server fields via buildHub().
-//  Replaces per-handler point-to-point Deps wiring with a single hub reference.
+//  Hub-to-Deps adapters in hub_adapters.go preserve handler testability.
 
 package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
-	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
-	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
-	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
-	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
-
-func (s *Server) registerExtendedMethods() {
-	s.registerAgentMethods()
-	s.registerProviderMethods()
-	s.registerToolMethods()
-	s.registerAuroraMethods()
-	s.registerAuthRPCMethods()
-	s.registerSessionRPCMethods()
-}
-
-func (s *Server) registerAgentMethods() {
-	// ACP RPC methods.
-	s.dispatcher.RegisterDomain(handlerprocess.ACPMethods(s.acpDeps))
-
-	s.dispatcher.RegisterDomain(handleragent.ExtendedMethods(handleragent.ExtendedDeps{
-		Sessions:       s.sessions,
-		TelegramPlugin: s.telegramPlug,
-		GatewaySubs:    s.gatewaySubs,
-		Processes:      s.processes,
-		Cron:           s.cron,
-		Hooks:          s.hooks,
-		Broadcaster:    s.broadcaster,
-	}))
-}
-
-func (s *Server) registerProviderMethods() {
-	s.dispatcher.RegisterDomain(handlerprovider.Methods(handlerprovider.Deps{
-		Providers:   s.providers,
-		AuthManager: s.authManager,
-	}))
-}
-
-func (s *Server) registerToolMethods() {
-	s.dispatcher.RegisterDomain(handlerskill.ToolMethods(handlerskill.ToolDeps{
-		Processes: s.processes,
-	}))
-}
-
-func (s *Server) registerAuroraMethods() {
-	// Aurora channel methods (desktop app communication).
-	s.dispatcher.RegisterDomain(handleraurorachannel.Methods(handleraurorachannel.Deps{
-		Chat: s.chatHandler,
-	}))
-}
-
-func (s *Server) registerPhase2Methods() {
-	broadcastFn := func(event string, payload any) (int, []error) {
-		return s.broadcaster.Broadcast(event, payload)
-	}
-	s.registerPhase2ChannelMethods(broadcastFn)
-	s.registerPhase2SystemMethods(broadcastFn)
-}
-
-func (s *Server) registerPhase2ChannelMethods(broadcastFn func(string, any) (int, []error)) {
-	s.registerEventsBroadcastMethods()
-	s.registerConfigLifecycleMethods()
-	s.registerSubscriptionMethods()
-	s.registerHeartbeatMethods(broadcastFn)
-}
-
-func (s *Server) registerPhase2SystemMethods(broadcastFn func(string, any) (int, []error)) {
-	s.registerMonitoringMethods()
-	s.registerIdentityMethods()
-	s.registerPresenceMethods(broadcastFn)
-	s.registerModelsMethods()
-}
-
-// registerAdvancedWorkflowMethods registers Phase 3 RPC methods for exec approvals,
-// nodes, devices, agents, cron advanced, config advanced, skills, wizard, secrets, and talk.
-func (s *Server) registerAdvancedWorkflowMethods() {
-	broadcastFn := func(event string, payload any) (int, []error) {
-		return s.broadcaster.Broadcast(event, payload)
-	}
-	// Exec approval, agents, talk, wizard, and autonomous methods.
-	s.registerApprovalAgentMethods(broadcastFn)
-	// Node, device, cron-advanced, skill, and config-advanced methods.
-	s.registerAdvancedChannelMethods(broadcastFn)
-	// Gmail polling service: periodic new-email analysis via LLM.
-	s.initGmailPoll()
-}
-
-func (s *Server) registerNativeSystemMethods(denebDir string) {
-	// Usage, logs, doctor, maintenance, update, and Telegram methods.
-	s.registerSystemServiceMethods(denebDir)
-}
 
 func (s *Server) registerBuiltinMethods() {
 	s.dispatcher.RegisterDomain(handlergateway.RuntimeMethods(handlergateway.Deps{
