@@ -49,12 +49,23 @@ func (s *Service) SetAgentRunner(agent AgentRunner) {
 	s.agent = agent
 }
 
+// SetTranscriptCloner sets the transcript cloner for shadow session support.
+// Called after the chat handler's transcript store is available.
+func (s *Service) SetTranscriptCloner(cloner TranscriptCloner, mainSessionKey string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cfg.TranscriptCloner = cloner
+	s.cfg.MainSessionKey = mainSessionKey
+}
+
 // NewService creates a new cron service.
 func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Service {
+	rl := NewPersistentRunLog(cfg.StorePath)
+	rl.SetLogger(logger)
 	return &Service{
 		scheduler:     NewScheduler(logger),
 		store:         NewStore(cfg.StorePath),
-		runLog:        NewPersistentRunLog(cfg.StorePath),
+		runLog:        rl,
 		agent:         agent,
 		logger:        logger,
 		cfg:           cfg,

@@ -876,6 +876,21 @@ func (p *InboundProcessor) dispatchSubagentCommand(
 		if p.server.acpDeps.Bindings != nil {
 			cfg.SessionBindings = p.server.acpDeps.Bindings
 		}
+		// Wire TranscriptLoader so /subagents log can display session history.
+		if p.server.acpDeps.TranscriptLoader != nil {
+			loader := p.server.acpDeps.TranscriptLoader
+			cfg.TranscriptLoader = func(sessionKey string, limit int) ([]subagentpkg.ChatLogMessage, error) {
+				roles, contents, err := loader(sessionKey, limit)
+				if err != nil {
+					return nil, err
+				}
+				msgs := make([]subagentpkg.ChatLogMessage, len(roles))
+				for i := range roles {
+					msgs[i] = subagentpkg.ChatLogMessage{Role: roles[i], Content: contents[i]}
+				}
+				return msgs, nil
+			}
+		}
 		deps = subagentpkg.NewSubagentCommandDepsFromACP(
 			p.server.acpDeps.Registry, cfg,
 		)

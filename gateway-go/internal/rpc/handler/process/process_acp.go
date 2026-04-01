@@ -30,6 +30,10 @@ type ACPDeps struct {
 	// SessionSendFn sends a message to a session, triggering an agent run.
 	SessionSendFn func(sessionKey, message string) error
 
+	// TranscriptLoader loads transcript history for a subagent session.
+	// Returns (role, content) pairs. Wired from chat.TranscriptStore.
+	TranscriptLoader func(sessionKey string, limit int) (roles []string, contents []string, err error)
+
 	// enabled tracks whether ACP write operations are active.
 	enabled atomic.Bool
 }

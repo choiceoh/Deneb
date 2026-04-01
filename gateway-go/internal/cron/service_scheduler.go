@@ -13,7 +13,11 @@ func (s *Service) armTimerLocked(ctx context.Context) {
 	s.disarmTimerLocked()
 
 	// Compute next wake time across all jobs.
-	storeData, _ := s.store.Load()
+	storeData, err := s.store.Load()
+	if err != nil {
+		s.logger.Warn("failed to load cron store for timer arm", "error", err)
+		return
+	}
 	if storeData == nil {
 		return
 	}
@@ -80,7 +84,11 @@ func (s *Service) fireTimerLocked(ctx context.Context) {
 	s.lastFireAtMs = now
 
 	// Find and run due jobs.
-	storeData, _ := s.store.Load()
+	storeData, err := s.store.Load()
+	if err != nil {
+		s.logger.Warn("failed to load cron store for timer fire", "error", err)
+		return
+	}
 	if storeData == nil {
 		return
 	}

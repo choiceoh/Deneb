@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,11 +50,19 @@ const (
 type PersistentRunLog struct {
 	mu        sync.Mutex
 	storePath string // base cron store path (e.g., ~/.deneb/cron/jobs.json)
+	logger    *slog.Logger
 }
 
 // NewPersistentRunLog creates a new persistent run log manager.
 func NewPersistentRunLog(storePath string) *PersistentRunLog {
-	return &PersistentRunLog{storePath: storePath}
+	return &PersistentRunLog{storePath: storePath, logger: slog.Default()}
+}
+
+// SetLogger sets a custom logger for the run log.
+func (rl *PersistentRunLog) SetLogger(l *slog.Logger) {
+	if l != nil {
+		rl.logger = l
+	}
 }
 
 // runsDir returns the runs directory path.
@@ -251,7 +260,11 @@ func (rl *PersistentRunLog) pruneIfNeeded(logPath string) {
 
 	var buf strings.Builder
 	for _, e := range kept {
-		data, _ := json.Marshal(e)
+		data, err := json.Marshal(e)
+		if err != nil {
+			rl.logger.Warn("failed to marshal run log entry during prune", "jobId", e.JobID, "error", err)
+			continue
+		}
 		buf.Write(data)
 		buf.WriteByte('\n')
 	}
@@ -259,7 +272,10 @@ func (rl *PersistentRunLog) pruneIfNeeded(logPath string) {
 	// Atomic write.
 	tmp := logPath + ".tmp"
 	if err := os.WriteFile(tmp, []byte(buf.String()), 0o600); err != nil {
+		rl.logger.Warn("failed to write pruned run log", "path", tmp, "error", err)
 		return
 	}
-	os.Rename(tmp, logPath)
+	if err := os.Rename(tmp, logPath); err != nil {
+		rl.logger.Warn("failed to rename pruned run log", "from", tmp, "to", logPath, "error", err)
+	}
 }

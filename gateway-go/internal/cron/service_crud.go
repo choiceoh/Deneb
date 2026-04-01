@@ -29,7 +29,11 @@ func (s *Service) List(opts *ListOptions) ([]StoreJob, error) {
 // ListPage returns a paginated list of jobs with filtering and sorting.
 // Mirrors ops.ts listPage() with query search, enabled filter, sort options.
 func (s *Service) ListPage(opts ListPageOptions) ListPageResult {
-	storeData, _ := s.store.Load()
+	storeData, err := s.store.Load()
+	if err != nil {
+		s.logger.Warn("failed to load cron store for list page", "error", err)
+		return ListPageResult{Jobs: []StoreJob{}, Total: 0}
+	}
 	if storeData == nil {
 		return ListPageResult{Jobs: []StoreJob{}, Total: 0}
 	}

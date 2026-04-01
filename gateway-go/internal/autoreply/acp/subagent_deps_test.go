@@ -128,6 +128,70 @@ func TestSubagentCommandDeps_ListSubagents(t *testing.T) {
 	}
 }
 
+func TestSubagentCommandDeps_SpawnSubagent_MaxBreadth(t *testing.T) {
+	acpRegistry := NewACPRegistry()
+	deps := &SubagentInfraDeps{
+		ACPRegistry: acpRegistry,
+	}
+
+	// Register a parent.
+	acpRegistry.Register(ACPAgent{ID: "parent", Depth: 0})
+
+	// Spawn 10 children (max allowed).
+	for i := 0; i < 10; i++ {
+		result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
+			ParentSessionKey: "session",
+			ParentAgentID:    "parent",
+			Role:             "worker",
+		})
+		if result.Error != nil {
+			t.Fatalf("spawn %d: unexpected error: %v", i, result.Error)
+		}
+	}
+
+	// 11th should fail due to breadth limit.
+	result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
+		ParentSessionKey: "session",
+		ParentAgentID:    "parent",
+		Role:             "worker",
+	})
+	if result.Error == nil {
+		t.Error("expected error for max breadth exceeded")
+	}
+}
+
+func TestSubagentCommandDeps_ResetSubagent_RunningGuard(t *testing.T) {
+	acpRegistry := NewACPRegistry()
+	deps := &SubagentInfraDeps{
+		ACPRegistry: acpRegistry,
+	}
+
+	acpRegistry.Register(ACPAgent{
+		ID:     "running-agent",
+		Status: "running",
+	})
+
+	err := deps.ResetSubagent("running-agent", "test reset")
+	if err == nil {
+		t.Error("expected error when resetting a running agent")
+	}
+
+	// Done agent should be resettable.
+	acpRegistry.Register(ACPAgent{
+		ID:     "done-agent",
+		Status: "done",
+	})
+	err = deps.ResetSubagent("done-agent", "test reset")
+	if err != nil {
+		t.Fatalf("ResetSubagent(done) error = %v", err)
+	}
+
+	agent := acpRegistry.Get("done-agent")
+	if agent.Status != "idle" {
+		t.Errorf("status after reset = %q, want 'idle'", agent.Status)
+	}
+}
+
 func TestSubagentCommandDeps_NilRegistry(t *testing.T) {
 	deps := &SubagentInfraDeps{}
 

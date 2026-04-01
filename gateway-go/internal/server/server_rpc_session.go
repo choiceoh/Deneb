@@ -144,6 +144,32 @@ func (s *Server) registerSessionRPCMethods() {
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
 
+	// Wire transcript cloner for cron shadow session support.
+	// Shadow sessions clone recent transcript from the main session for context.
+	if s.cronService != nil && transcriptDir != "" {
+		s.cronService.SetTranscriptCloner(
+			&cronTranscriptCloner{store: chat.NewFileTranscriptStore(transcriptDir)},
+			"", // main session key resolved dynamically per-job
+		)
+	}
+
+	// Wire transcript loader for subagent /log command.
+	if s.acpDeps != nil && transcriptStore != nil {
+		s.acpDeps.TranscriptLoader = func(sessionKey string, limit int) ([]string, []string, error) {
+			msgs, _, err := transcriptStore.Load(sessionKey, limit)
+			if err != nil {
+				return nil, nil, err
+			}
+			roles := make([]string, len(msgs))
+			contents := make([]string, len(msgs))
+			for i, m := range msgs {
+				roles[i] = m.Role
+				contents[i] = m.Content
+			}
+			return roles, contents, nil
+		}
+	}
+
 	// Chat, BTW, Exec, Aurora, cron wiring, and Telegram pipeline are
 	// registered in registerLateMethods() after this function returns.
 }
