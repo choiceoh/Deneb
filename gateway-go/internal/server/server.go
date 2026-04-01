@@ -416,6 +416,11 @@ func New(addr string, opts ...Option) *Server {
 	// Use the FullRegistry's hook runner so plugin-registered hooks and
 	// chat-fired hooks share the same TypedHookRunner instance.
 	s.pluginTypedHookRunner = s.pluginFullRegistry.HookRunner()
+	// Late-bind: pluginTypedHookRunner was nil when chatHandler was constructed
+	// (registerSessionRPCMethods runs before plugin init). Wire it now.
+	if s.chatHandler != nil {
+		s.chatHandler.SetPluginHookRunner(s.pluginTypedHookRunner)
+	}
 	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
 		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
 	}))

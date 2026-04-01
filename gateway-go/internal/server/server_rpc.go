@@ -21,7 +21,7 @@
 // initAndListen():
 //  10. HTTP server + TLS
 //  11. Background subsystems (tick broadcaster, monitoring, process pruner, session GC)
-//  12. Telegram plugin start + wireTelegramChatHandler() (channel callbacks)
+//  12. Telegram plugin start (channel callbacks wired in registerLateMethods)
 //  13. Cron service start + session restore
 //  14. Run state machine + autonomous service
 //

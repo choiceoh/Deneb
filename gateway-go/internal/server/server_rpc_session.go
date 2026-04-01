@@ -94,9 +94,9 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.ProviderConfigs = loadProviderConfigs(s.logger)
 
 	// Wire deps that were previously Set*() after construction.
-	// All are available now, so pass via HandlerConfig for cleaner init.
+	// Most are available now; PluginHookRunner is late-bound in server.go
+	// after plugin init (see SetPluginHookRunner call).
 	chatCfg.ProviderRuntime = s.providerRuntime
-	chatCfg.PluginHookRunner = s.pluginTypedHookRunner
 	chatCfg.HookRegistry = s.hooks
 	chatCfg.BroadcastRaw = streaming.BroadcastRawFunc(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)
