@@ -184,24 +184,18 @@ func (c *StatusReactionController) enqueue(fn func()) {
 	}
 }
 
-// applyEmoji sets a new reaction, optionally removing the old one.
+// applyEmoji sets a new reaction.
+// Telegram's setMessageReaction replaces the entire reaction list, so setting
+// a new emoji inherently removes the previous one — no separate remove call needed.
 func (c *StatusReactionController) applyEmoji(newEmoji string) {
 	if !c.enabled {
 		return
 	}
-	previousEmoji := c.currentEmoji
 	if err := c.setReaction(newEmoji); err != nil {
 		if c.onError != nil {
 			c.onError(err)
 		}
 		return
-	}
-	if c.removeReaction != nil && previousEmoji != "" && previousEmoji != newEmoji {
-		if err := c.removeReaction(previousEmoji); err != nil {
-			if c.onError != nil {
-				c.onError(err)
-			}
-		}
 	}
 	c.currentEmoji = newEmoji
 }
