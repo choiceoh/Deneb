@@ -287,6 +287,103 @@ func TestDoStream_429Code1302_NoRetry(t *testing.T) {
 	}
 }
 
+func TestDoStream_ExpiredContext_MinRequestTimeout(t *testing.T) {
+	// The parent context is already past its deadline, but minRequestTimeout
+	// should give the HTTP request a fresh timeout so it can still succeed.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "data: ok\n\n")
+	}))
+	defer server.Close()
+
+	// Create a context with a deadline that has already passed.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	time.Sleep(5 * time.Millisecond) // ensure deadline passes
+
+	c := NewClient(server.URL, "test-key",
+		WithMinRequestTimeout(5*time.Second),
+		WithRetry(0, 0, 0))
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
+	body, err := c.DoStream(ctx, req)
+	if err != nil {
+		t.Fatalf("expected success with minRequestTimeout, got: %v", err)
+	}
+	defer body.Close()
+}
+
+func TestDoStream_MinRequestTimeout_ParentCancelPropagates(t *testing.T) {
+	// When the parent context is explicitly cancelled (agent abort) while
+	// the request is in flight, the derived request context should also
+	// be cancelled — even though minRequestTimeout gave it a fresh deadline.
+	reqReceived := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(reqReceived)
+		// Block until the request context is cancelled.
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	// Parent has a short deadline (triggers minRequestTimeout) but is NOT
+	// yet expired — so AfterFunc can propagate the explicit cancel.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	c := NewClient(server.URL, "test-key",
+		WithMinRequestTimeout(30*time.Second),
+		WithRetry(0, 0, 0))
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.DoStream(ctx, req)
+		done <- err
+	}()
+
+	// Wait for the server to receive the request, then cancel parent.
+	<-reqReceived
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error after parent cancel")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("DoStream did not return after parent cancel")
+	}
+}
+
+func TestDoStream_ExpiredContext_NoRetry(t *testing.T) {
+	// When the parent context is expired, retries should be skipped.
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, "unavailable")
+	}))
+	defer server.Close()
+
+	// Use a context that expires after the first request completes.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	c := NewClient(server.URL, "test-key",
+		// Disable minRequestTimeout so the expired context is not rescued.
+		WithMinRequestTimeout(0),
+		WithRetry(3, 500*time.Millisecond, 1*time.Second))
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
+	_, err := c.DoStream(ctx, req)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	// Should have made 1 call (the initial), then context expires during/before retry delay.
+	if calls > 2 {
+		t.Errorf("expected at most 2 calls (context should expire before retries), got %d", calls)
+	}
+}
+
 func TestDoStream_429OtherCode_Retries(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
