@@ -129,6 +129,15 @@ type HandlerConfig struct {
 	DefaultModel    string
 	DefaultSystem   string
 	MaxTokens       int
+
+	// Fields below were previously Set*() after construction. They are all
+	// available at handler creation time and passed here to reduce late-binding.
+	ProviderRuntime *provider.ProviderRuntimeResolver // optional; runtime auth
+	PluginHookRunner *plugin.TypedHookRunner           // optional; typed plugin hooks
+	HookRegistry    *hooks.Registry                   // optional; user-defined shell hooks
+	BroadcastRaw    streaming.BroadcastRawFunc         // optional; raw event relay
+	EmitAgentFn     func(kind, sessionKey, runID string, payload map[string]any)
+	EmitTranscriptFn func(sessionKey string, message any, messageID string)
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -175,13 +184,19 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		defaultModel:    cfg.DefaultModel,
 		defaultSystem:   cfg.DefaultSystem,
 		maxTokens:       cfg.MaxTokens,
-		abortMap:        make(map[string]*AbortEntry),
-		pendingMsgs:     make(map[string]*pendingRunQueue),
-		uploadLimits:    make(map[string]int64),
-		done:            make(chan struct{}),
-		maxHistoryBytes: cfg.MaxHistoryBytes,
-		maxHistoryCount: cfg.MaxHistoryCount,
-		maxMessageBytes: cfg.MaxMessageBytes,
+		providerRuntime:  cfg.ProviderRuntime,
+		pluginHookRunner: cfg.PluginHookRunner,
+		hookRegistry:     cfg.HookRegistry,
+		broadcastRaw:     cfg.BroadcastRaw,
+		emitAgentFn:      cfg.EmitAgentFn,
+		emitTranscriptFn: cfg.EmitTranscriptFn,
+		abortMap:         make(map[string]*AbortEntry),
+		pendingMsgs:      make(map[string]*pendingRunQueue),
+		uploadLimits:     make(map[string]int64),
+		done:             make(chan struct{}),
+		maxHistoryBytes:  cfg.MaxHistoryBytes,
+		maxHistoryCount:  cfg.MaxHistoryCount,
+		maxMessageBytes:  cfg.MaxMessageBytes,
 	}
 	// Set the package-level model role registry for sglang hooks and pilot tools.
 	if h.registry != nil {

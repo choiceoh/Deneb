@@ -11,13 +11,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
@@ -27,8 +25,6 @@ import (
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
-	"github.com/choiceoh/deneb/gateway-go/internal/unified"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -90,214 +86,43 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.JobTracker = s.jobTracker
 	chatCfg.AgentLog = agentLogWriter
 
-	// Initialize unified memory store (single DB for all tiers).
-	unifiedStore, err := unified.New(unified.DefaultConfig(), s.logger)
-	if err != nil {
-		s.logger.Warn("unified store unavailable", "error", err)
-	} else {
-		chatCfg.UnifiedStore = unifiedStore
-		s.logger.Info("unified memory store initialized")
+	// Phase 1: Memory subsystem (unified store, Aurora, memory, embedder, reranker).
+	var reg modelrole.Registry
+	s.initMemorySubsystem(&chatCfg, &reg)
 
-		// Prefer unified-backed Aurora store to keep compaction + facts in one DB.
-		if auroraStore, aErr := unifiedStore.NewAuroraStoreWithLogger(s.logger); aErr != nil {
-			s.logger.Warn("aurora store unavailable from unified db, compaction will use legacy fallback", "error", aErr)
-		} else {
-			chatCfg.AuroraStore = auroraStore
-			s.logger.Info("aurora compaction store initialized (unified)")
-		}
-	}
-
-	// Legacy fallback: initialize Aurora compaction store only when unified
-	// adapters were not available.
-	if chatCfg.AuroraStore == nil {
-		auroraStore, aErr := aurora.NewStore(aurora.DefaultStoreConfig(), s.logger)
-		if aErr != nil {
-			s.logger.Warn("aurora store unavailable, compaction will use legacy fallback", "error", aErr)
-		} else {
-			chatCfg.AuroraStore = auroraStore
-			s.logger.Info("aurora compaction store initialized")
-		}
-	}
-
-	// Resolve default model from config and create the model role registry.
-	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
-	reg := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
-	chatCfg.Registry = reg
-	s.modelRegistry = reg
-
-	// Initialize structured memory store (Honcho-style).
-	if home, err := os.UserHomeDir(); err == nil {
-		dbPath := filepath.Join(home, ".deneb", "memory.db")
-		memStore := chatCfg.MemoryStore
-		if memStore == nil && unifiedStore != nil {
-			unifiedMemStore, uErr := unifiedStore.NewMemoryStore()
-			if uErr != nil {
-				s.logger.Warn("memory store unavailable from unified db", "error", uErr)
-			} else {
-				memStore = unifiedMemStore
-				chatCfg.MemoryStore = memStore
-				s.logger.Info("aurora-memory: structured store initialized (unified)")
-			}
-		}
-		if memStore == nil {
-			legacyStore, mErr := memory.NewStore(dbPath)
-			if mErr != nil {
-				s.logger.Warn("memory store unavailable", "error", mErr)
-			} else {
-				memStore = legacyStore
-				chatCfg.MemoryStore = memStore
-				s.logger.Info("aurora-memory: structured store initialized", "db", dbPath)
-			}
-		}
-		if memStore != nil {
-			// Use the Gemini embedder set during gateway init.
-			if s.geminiEmbedder != nil {
-				embedder := memory.NewEmbedder(s.geminiEmbedder, memStore, s.logger)
-				chatCfg.MemoryEmbedder = embedder
-
-				lwClient := reg.Client(modelrole.RoleLightweight)
-				lwModel := reg.Model(modelrole.RoleLightweight)
-				if lwClient == nil || lwModel == "" {
-					s.logger.Warn("aurora-memory: dreaming disabled (lightweight model not configured)")
-				} else {
-					s.dreamingAdapter = memory.NewDreamingAdapter(memStore, embedder, lwClient, lwModel, s.logger)
-				}
-				// DreamTurnFn is wired after autonomous service is created (phase 3).
-				// Use a closure that captures s so the autonomous svc reference resolves at call time.
-				chatCfg.DreamTurnFn = func(ctx context.Context) {
-					if svc := s.autonomousSvc; svc != nil {
-						svc.IncrementDreamTurn(ctx)
-					}
-				}
-			} else {
-				s.logger.Info("aurora-memory: embedding disabled (GEMINI_API_KEY not set)")
-			}
-
-			// Wire cross-encoder reranker if Jina API key is configured.
-			if s.jinaAPIKey != "" {
-				reranker := vega.NewReranker(vega.RerankConfig{
-					APIKey: s.jinaAPIKey,
-					Logger: s.logger,
-				})
-				if reranker != nil {
-					memStore.SetReranker(func(ctx context.Context, query string, docs []string, topN int) ([]memory.RerankResult, error) {
-						vegaResults, err := reranker.Rerank(ctx, query, docs, topN)
-						if err != nil {
-							return nil, err
-						}
-						results := make([]memory.RerankResult, len(vegaResults))
-						for i, r := range vegaResults {
-							results[i] = memory.RerankResult{Index: r.Index, RelevanceScore: r.RelevanceScore}
-						}
-						return results, nil
-					})
-					s.logger.Info("aurora-memory: cross-encoder reranking enabled (Jina)")
-				}
-			}
-
-			// Wire Tier-1 cache invalidation so new high-importance facts
-			// appear in the system prompt immediately (not after 5-min TTL).
-			memStore.SetFactMutateCallback(unified.InvalidateTier1Cache)
-
-			// Store reference for autonomous memory flush task (registered in phase 3).
-			s.memoryStore = memStore
-
-			// Auto-migrate existing MEMORY.md on first run.
-			count, _ := memStore.ActiveFactCount(context.Background())
-			if count == 0 {
-				memoryMdPath := filepath.Join(home, ".deneb", "MEMORY.md")
-				if imported, err := memStore.ImportFromMarkdown(context.Background(), memoryMdPath); err == nil && imported > 0 {
-					s.logger.Info("aurora-memory: imported legacy MEMORY.md", "facts", imported)
-				}
-			}
-		}
-	}
-	// Initialize session memory store (structured working state per session).
-	if home, err := os.UserHomeDir(); err == nil {
-		sessMemDir := filepath.Join(home, ".deneb", "sessions")
-		sessMemStore := chat.NewSessionMemoryStore(sessMemDir)
-		loaded := sessMemStore.LoadFromDisk()
-		chatCfg.SessionMemory = sessMemStore
-		if loaded > 0 {
-			s.logger.Info("session memory restored", "count", loaded)
-		}
-	}
-
-	// Resolve workspace directory for file tool operations.
-	workspaceDir := resolveWorkspaceDir()
-	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
-
-	// Build core tool dependencies. Stored on the server so later init phases
-	// can late-bind fields (Vega.Backend, Sessions.SendFn, Chrono.SendFn).
-	s.toolDeps = &chat.CoreToolDeps{
-		WorkspaceDir: workspaceDir,
-		Process: chat.ProcessDeps{
-			Mgr:          s.processes,
-			WorkspaceDir: workspaceDir,
-		},
-		Sessions: chat.SessionDeps{
-			Manager:    s.sessions,
-			Transcript: transcriptStore,
-		},
-		Chrono: chat.ChronoDeps{
-			Scheduler: s.cron,
-		},
-		Vega: chat.VegaDeps{
-			MemoryStore:    chatCfg.MemoryStore,
-			MemoryEmbedder: chatCfg.MemoryEmbedder,
-		},
-		LLMClient:    reg.Client(modelrole.RoleFallback),
-		DefaultModel: reg.Model(modelrole.RoleFallback),
-		ImageClient:  reg.Client(modelrole.RoleLightweight),
-		ImageModel:   reg.Model(modelrole.RoleLightweight),
-		AgentLog:     agentLogWriter,
-	}
-
-	// Spillover store: saves large tool results to disk, replaces with preview.
-	// Cleanup goroutine runs for the process lifetime (context.Background).
-	if home, err := os.UserHomeDir(); err == nil {
-		spillDir := filepath.Join(home, ".deneb", "spillover")
-		spillStore := agent.NewSpilloverStore(spillDir)
-		spillStore.StartCleanup(context.Background())
-		s.toolDeps.SpilloverStore = spillStore
-	}
-
-	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
-	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
-
-	// Register plugin-provided tools.
-	if s.pluginFullRegistry != nil {
-		for _, t := range s.pluginFullRegistry.ListTools() {
-			pluginTool := t // capture loop variable
-			chatCfg.Tools.RegisterTool(chat.ToolDef{
-				Name:        pluginTool.Definition.Name,
-				Description: pluginTool.Definition.Description,
-				InputSchema: pluginTool.Definition.InputSchema,
-				Fn: func(ctx context.Context, input json.RawMessage) (string, error) {
-					var m map[string]any
-					if err := json.Unmarshal(input, &m); err != nil {
-						return "", err
-					}
-					return pluginTool.Handler(ctx, m)
-				},
-			})
-		}
-		if count := len(s.pluginFullRegistry.ListTools()); count > 0 {
-			s.logger.Info("plugin tools registered", "count", count)
-		}
-	}
-
-	// Initialize autoresearch runner and register tool.
-	s.autoresearchRunner = autoresearch.NewRunner(s.logger)
-	if mainClient := reg.Client(modelrole.RoleMain); mainClient != nil {
-		s.autoresearchRunner.SetLLMClient(mainClient)
-	}
-	toolreg.RegisterAutoresearchTool(chatCfg.Tools, s.autoresearchRunner)
+	// Phase 2: Tool deps + registration (core, plugin, autoresearch).
+	s.initToolsAndDeps(&chatCfg, &reg, transcriptStore, agentLogWriter)
 
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
 	chatCfg.ProviderConfigs = loadProviderConfigs(s.logger)
+
+	// Wire deps that were previously Set*() after construction.
+	// All are available now, so pass via HandlerConfig for cleaner init.
+	chatCfg.ProviderRuntime = s.providerRuntime
+	chatCfg.PluginHookRunner = s.pluginTypedHookRunner
+	chatCfg.HookRegistry = s.hooks
+	chatCfg.BroadcastRaw = streaming.BroadcastRawFunc(func(event string, data []byte) int {
+		return s.broadcaster.BroadcastRaw(event, data)
+	})
+	if s.gatewaySubs != nil {
+		chatCfg.EmitAgentFn = func(kind, sessionKey, runID string, payload map[string]any) {
+			s.gatewaySubs.EmitAgent(events.AgentEvent{
+				Kind:       kind,
+				SessionKey: sessionKey,
+				RunID:      runID,
+				Payload:    payload,
+			})
+		}
+		chatCfg.EmitTranscriptFn = func(sessionKey string, message any, messageID string) {
+			s.gatewaySubs.EmitTranscript(events.TranscriptUpdate{
+				SessionKey: sessionKey,
+				Message:    message,
+				MessageID:  messageID,
+			})
+		}
+	}
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
@@ -323,46 +148,6 @@ func (s *Server) registerSessionRPCMethods() {
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
 	s.dispatcher.RegisterDomain(handlerchat.Methods(handlerchat.Deps{Chat: s.chatHandler}))
-
-	// Wire provider runtime resolver for runtime auth and missing-auth messages.
-	if s.providerRuntime != nil {
-		s.chatHandler.SetProviderRuntime(s.providerRuntime)
-	}
-
-	// Wire typed plugin hook runner into the chat pipeline.
-	if s.pluginTypedHookRunner != nil {
-		s.chatHandler.SetPluginHookRunner(s.pluginTypedHookRunner)
-	}
-
-	// Wire user-defined hook registry into the chat pipeline for message.send / tool.use events.
-	if s.hooks != nil {
-		s.chatHandler.SetHookRegistry(s.hooks)
-	}
-
-	// Wire raw broadcast directly to chat handler for streaming event relay.
-	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
-		return s.broadcaster.BroadcastRaw(event, data)
-	})
-
-	// Wire gateway event subscriptions (agent lifecycle + transcript updates)
-	// into the chat execution pipeline via function callbacks.
-	if s.gatewaySubs != nil {
-		s.chatHandler.SetEmitAgentFunc(func(kind, sessionKey, runID string, payload map[string]any) {
-			s.gatewaySubs.EmitAgent(events.AgentEvent{
-				Kind:       kind,
-				SessionKey: sessionKey,
-				RunID:      runID,
-				Payload:    payload,
-			})
-		})
-		s.chatHandler.SetEmitTranscriptFunc(func(sessionKey string, message any, messageID string) {
-			s.gatewaySubs.EmitTranscript(events.TranscriptUpdate{
-				SessionKey: sessionKey,
-				Message:    message,
-				MessageID:  messageID,
-			})
-		})
-	}
 
 	// Wire agent runner to cron service so scheduled jobs can execute agent turns.
 	if s.cronService != nil {
