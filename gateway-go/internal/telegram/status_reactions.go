@@ -89,27 +89,25 @@ func ResolveToolEmoji(toolName string, emojis StatusReactionEmojis) string {
 
 // StatusReactionControllerParams configures a new StatusReactionController.
 type StatusReactionControllerParams struct {
-	Enabled        bool
-	SetReaction    func(emoji string) error // sets/replaces the current reaction emoji
-	RemoveReaction func(emoji string) error // removes a reaction emoji (optional)
-	InitialEmoji   string
-	Emojis         *StatusReactionEmojis
-	Timing         *StatusReactionTiming
-	OnError        func(err error)
+	Enabled      bool
+	SetReaction  func(emoji string) error // sets/replaces the current reaction emoji
+	InitialEmoji string
+	Emojis       *StatusReactionEmojis
+	Timing       *StatusReactionTiming
+	OnError      func(err error)
 }
 
 // StatusReactionController manages agent status display via message reactions.
 type StatusReactionController struct {
-	mu             sync.Mutex
-	enabled        bool
-	setReaction    func(emoji string) error
-	removeReaction func(emoji string) error
-	emojis         StatusReactionEmojis
-	timing         StatusReactionTiming
-	onError        func(err error)
-	currentEmoji   string
-	pendingEmoji   string
-	finished       bool
+	mu           sync.Mutex
+	enabled      bool
+	setReaction  func(emoji string) error
+	emojis       StatusReactionEmojis
+	timing       StatusReactionTiming
+	onError      func(err error)
+	currentEmoji string
+	pendingEmoji string
+	finished     bool
 	debounceTimer  *time.Timer
 	stallSoftTimer *time.Timer
 	stallHardTimer *time.Timer
@@ -148,10 +146,9 @@ func NewStatusReactionController(params StatusReactionControllerParams) *StatusR
 	}
 
 	c := &StatusReactionController{
-		enabled:        params.Enabled,
-		setReaction:    params.SetReaction,
-		removeReaction: params.RemoveReaction,
-		emojis:         emojis,
+		enabled:     params.Enabled,
+		setReaction: params.SetReaction,
+		emojis:      emojis,
 		timing:      timing,
 		onError:     params.OnError,
 		knownEmojis: known,
@@ -184,24 +181,19 @@ func (c *StatusReactionController) enqueue(fn func()) {
 	}
 }
 
-// applyEmoji sets a new reaction, optionally removing the old one.
+// applyEmoji sets a new reaction, atomically replacing the previous one.
+// Telegram's setMessageReaction replaces the entire reaction list in a single
+// API call, so [old] → [new] happens with no visible gap. No separate remove
+// call is needed.
 func (c *StatusReactionController) applyEmoji(newEmoji string) {
 	if !c.enabled {
 		return
 	}
-	previousEmoji := c.currentEmoji
 	if err := c.setReaction(newEmoji); err != nil {
 		if c.onError != nil {
 			c.onError(err)
 		}
 		return
-	}
-	if c.removeReaction != nil && previousEmoji != "" && previousEmoji != newEmoji {
-		if err := c.removeReaction(previousEmoji); err != nil {
-			if c.onError != nil {
-				c.onError(err)
-			}
-		}
 	}
 	c.currentEmoji = newEmoji
 }

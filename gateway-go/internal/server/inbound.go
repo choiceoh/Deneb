@@ -378,8 +378,11 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		pipeline.Stop()
 	}
 
-	// Remove ack reaction after the reply is sent.
-	if didAck {
+	// Remove ack reaction after the reply is sent — but only when the agent
+	// was NOT invoked. When the agent runs, StatusReactionController manages
+	// the full emoji lifecycle (👀 → 🤔 → 🔥 → 👍/😱) and clearing here
+	// would wipe the terminal emoji, causing visible flicker.
+	if didAck && !executor.didSend {
 		if client := p.server.telegramPlug.Client(); client != nil {
 			chatIDInt, _ := telegram.ParseChatID(chatID)
 			if err := client.SetMessageReaction(context.Background(), chatIDInt, msg.MessageID, ""); err != nil {
