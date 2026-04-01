@@ -59,8 +59,29 @@ func (s *Server) wireTelegramChatHandler() {
 
 		// Parse optional button directive from agent reply.
 		cleanText, keyboard := parseReplyButtons(text)
-		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
 		html := telegram.MarkdownToTelegramHTML(cleanText)
+
+		// If a draft streaming message exists, edit it in-place with the final
+		// formatted text instead of deleting and sending a new message. This
+		// prevents the "disappear then reappear" flicker on completion.
+		if delivery.DraftMsgID != "" {
+			draftID := delivery.DraftMsgID
+			delivery.DraftMsgID = "" // consumed
+			editMsgID, parseErr := strconv.ParseInt(draftID, 10, 64)
+			if parseErr == nil {
+				_, editErr := telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML", keyboard)
+				if editErr == nil {
+					return nil
+				}
+				// Edit failed (e.g. message too long for single edit, or API error).
+				// Delete the draft and fall through to send as new message.
+				s.logger.Warn("draft edit failed, falling back to new message",
+					"msgId", draftID, "error", editErr)
+				_ = client.DeleteMessage(ctx, chatID, editMsgID)
+			}
+		}
+
+		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
 		_, err = telegram.SendText(ctx, client, chatID, html, opts)
 		return err
 	})
@@ -293,7 +314,7 @@ func (s *Server) wireTelegramChatHandler() {
 		if err != nil {
 			return "", fmt.Errorf("invalid message ID %q: %w", msgID, err)
 		}
-		_, err = telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML")
+		_, err = telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML", nil)
 		if err != nil {
 			return msgID, err
 		}

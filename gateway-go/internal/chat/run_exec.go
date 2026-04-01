@@ -548,24 +548,26 @@ func executeAgentRun(
 		var accum strings.Builder
 
 		// Defer cleanup so the draft is stopped on all exit paths (success, error, fallback).
-		// After stopping the loop, delete the draft message from Telegram so the
-		// user doesn't see both the partial draft and the final reply.
+		// Finalize flushes any pending text (so the user sees the complete streamed output),
+		// then stores the draft message ID on the delivery context. The reply pipeline
+		// will edit this message in-place instead of deleting it and sending a new one,
+		// preventing the "disappear then reappear" flicker on completion.
 		defer func() {
 			if draftCtrl != nil {
-				draftCtrl.StopForClear()
-			}
-			// Delete the draft message if one was sent.
-			if deps.draftDeleteFn != nil {
-				draftMu.Lock()
-				msgID := draftMsgID
-				draftMu.Unlock()
-				if msgID != "" {
-					delCtx, delCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-					defer delCancel()
-					if err := deps.draftDeleteFn(delCtx, delivery, msgID); err != nil {
-						logger.Warn("draft stream delete failed", "msgId", msgID, "error", err)
-					}
+				// Queue the final accumulated text before flushing, in case the
+				// last section didn't reach the update threshold.
+				if accum.Len() > 0 {
+					draftCtrl.Update(accum.String())
 				}
+				draftCtrl.Finalize()
+			}
+			// Store the draft message ID on the delivery context so the reply
+			// pipeline can edit the existing message instead of sending a new one.
+			draftMu.Lock()
+			msgID := draftMsgID
+			draftMu.Unlock()
+			if msgID != "" && delivery != nil {
+				delivery.DraftMsgID = msgID
 			}
 		}()
 
@@ -588,13 +590,29 @@ func executeAgentRun(
 			return true, nil
 		})
 
+		// Section-based streaming display: instead of updating on every small
+		// delta (which causes constant flickering), accumulate text and only
+		// push an update when a meaningful section boundary is reached
+		// (paragraph break) or enough text has accumulated (500+ chars).
+		// This gives the user a calmer reading experience where completed
+		// sections appear at once rather than character-by-character.
+		var lastUpdateLen int
 		prevOnDelta := hooks.OnTextDelta
 		hooks.OnTextDelta = func(text string) {
 			if prevOnDelta != nil {
 				prevOnDelta(text)
 			}
 			accum.WriteString(text)
-			draftCtrl.Update(accum.String())
+			current := accum.String()
+			delta := len(current) - lastUpdateLen
+			if delta < 100 {
+				return // too small to bother updating
+			}
+			newContent := current[lastUpdateLen:]
+			if strings.Contains(newContent, "\n\n") || delta >= 500 {
+				draftCtrl.Update(current)
+				lastUpdateLen = len(current)
+			}
 		}
 
 		// On tool start, stop the draft loop so partial text is flushed before

@@ -29,6 +29,22 @@ import (
 // Telegram message bursts). At most 2 extractions run concurrently.
 var memoryExtractSem = make(chan struct{}, 2)
 
+// cleanupDraftMessage deletes the draft streaming message from Telegram when
+// the reply is suppressed (silent), empty, or on error. This prevents orphaned
+// draft messages from lingering in the chat.
+func cleanupDraftMessage(ctx context.Context, delivery *DeliveryContext, deps runDeps, logger *slog.Logger) {
+	if delivery == nil || delivery.DraftMsgID == "" || deps.draftDeleteFn == nil {
+		return
+	}
+	msgID := delivery.DraftMsgID
+	delivery.DraftMsgID = "" // consumed
+	delCtx, delCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer delCancel()
+	if err := deps.draftDeleteFn(delCtx, delivery, msgID); err != nil {
+		logger.Warn("draft stream cleanup failed", "msgId", msgID, "error", err)
+	}
+}
+
 // handleRunSuccess processes a successful agent run completion.
 func handleRunSuccess(
 	ctx context.Context,
@@ -81,6 +97,8 @@ func handleRunSuccess(
 		directives := reply.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
 		if directives.IsSilent {
 			logger.Info("suppressing silent reply (NO_REPLY)")
+			// Clean up draft streaming message when reply is suppressed.
+			cleanupDraftMessage(ctx, params.Delivery, deps, logger)
 		} else {
 			replyText := jsonutil.StripThinkingTags(directives.Text)
 			replyText = strings.TrimSpace(replyText)
@@ -285,6 +303,9 @@ func handleRunError(
 	now int64,
 	runLog *agentlog.RunLogger,
 ) {
+	// Clean up draft streaming message on error so it doesn't linger.
+	cleanupDraftMessage(ctx, params.Delivery, deps, logger)
+
 	aborted := ctx.Err() != nil
 
 	// Log run error to agent detail log.
