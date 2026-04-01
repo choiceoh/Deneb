@@ -26,18 +26,17 @@ type CronStoreFile struct {
 
 // StoreJob is the on-disk representation of a cron job with full state.
 type StoreJob struct {
-	ID            string             `json:"id"`
-	Name          string             `json:"name,omitempty"`
-	AgentID       string             `json:"agentId,omitempty"`
-	Enabled       bool               `json:"enabled"`
-	SessionTarget CronSessionTarget  `json:"sessionTarget,omitempty"` // "main","isolated","subagent"; empty defaults to isolated
-	Schedule      StoreSchedule      `json:"schedule"`
-	Payload       StorePayload       `json:"payload"`
-	Delivery      *JobDeliveryConfig `json:"delivery,omitempty"`
-	FailureAlert  *CronFailureAlert  `json:"failureAlert,omitempty"`
-	State         JobState           `json:"state"`
-	CreatedAtMs   int64              `json:"createdAtMs,omitempty"`
-	UpdatedAtMs   int64              `json:"updatedAtMs,omitempty"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name,omitempty"`
+	AgentID     string             `json:"agentId,omitempty"`
+	Enabled     bool               `json:"enabled"`
+	Schedule    StoreSchedule      `json:"schedule"`
+	Payload     StorePayload       `json:"payload"`
+	Delivery     *JobDeliveryConfig `json:"delivery,omitempty"`
+	FailureAlert *CronFailureAlert  `json:"failureAlert,omitempty"`
+	State        JobState           `json:"state"`
+	CreatedAtMs int64              `json:"createdAtMs,omitempty"`
+	UpdatedAtMs int64              `json:"updatedAtMs,omitempty"`
 }
 
 // StoreSchedule represents the schedule configuration on disk.
@@ -61,15 +60,14 @@ type StorePayload struct {
 	Thinking       string `json:"thinking,omitempty"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
 	LightContext   bool   `json:"lightContext,omitempty"`
-	CloneLimit     int    `json:"cloneLimit,omitempty"` // max messages to clone for shadow sessions (0 = default 80)
 }
 
 // JobState tracks runtime state for a cron job.
-// Session lifecycle (status, duration, error) is delegated to session.Manager;
-// JobState only retains scheduler-specific and delivery-specific fields.
+// Run-level details (status, error, duration, timing) are delegated to session.Manager
+// via LastSessionKey; only cron-specific bookkeeping remains here.
 type JobState struct {
 	NextRunAtMs          int64  `json:"nextRunAtMs,omitempty"`
-	LastSessionKey       string `json:"lastSessionKey,omitempty"` // session key of the last run (lookup via session.Manager)
+	LastSessionKey       string `json:"lastSessionKey,omitempty"` // session key for last run (lookup via session.Manager)
 	ConsecutiveErrors    int    `json:"consecutiveErrors,omitempty"`
 	LastDeliveryStatus   string `json:"lastDeliveryStatus,omitempty"`
 	LastDeliveryError    string `json:"lastDeliveryError,omitempty"`

@@ -380,6 +380,7 @@ func New(addr string, opts ...Option) *Server {
 
 	// ACP subsystem: registry, bindings, persistence, lifecycle sync.
 	acpRegistry := acp.NewACPRegistry()
+	acpRegistry.SetSessionManager(s.sessions)
 	acpBindings := acp.NewSessionBindingService()
 	acpBindingStore := acp.NewBindingStore(acp.DefaultBindingStorePath(denebDir))
 	if err := acpBindingStore.RestoreToService(acpBindings); err != nil {
@@ -397,7 +398,7 @@ func New(addr string, opts ...Option) *Server {
 	s.acpDeps = &handlerprocess.ACPDeps{
 		Registry:     acpRegistry,
 		Bindings:     acpBindings,
-		Infra:        &acp.SubagentInfraDeps{ACPRegistry: acpRegistry},
+		Infra:        &acp.SubagentInfraDeps{ACPRegistry: acpRegistry, Sessions: s.sessions},
 		Sessions:     s.sessions,
 		GatewaySubs:  s.gatewaySubs,
 		BindingStore: acpBindingStore,

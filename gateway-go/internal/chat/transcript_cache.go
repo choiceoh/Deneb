@@ -126,6 +126,17 @@ func (c *CachedTranscriptStore) Search(query string, maxResults int) ([]SearchRe
 	return c.inner.Search(query, maxResults)
 }
 
+// CloneRecent delegates to the inner store and invalidates the destination cache entry.
+func (c *CachedTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) error {
+	if err := c.inner.CloneRecent(srcKey, dstKey, limit); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	delete(c.cache, dstKey) // invalidate so next Load reads fresh data
+	c.mu.Unlock()
+	return nil
+}
+
 // applyLimit returns a copy of the last `limit` messages (or all if limit <= 0).
 // Returns a defensive copy so callers cannot corrupt the cached data.
 func applyLimit(msgs []ChatMessage, limit int) []ChatMessage {

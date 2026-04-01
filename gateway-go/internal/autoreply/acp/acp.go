@@ -15,30 +15,37 @@ import (
 )
 
 // ACPAgent represents a spawned sub-agent.
+// Status and EndedAt are derived from session.Manager (via ACPRegistry.sessions);
+// they are populated on read by ACPRegistry.Get/List.
 type ACPAgent struct {
 	ID           string `json:"id"`
 	ParentID     string `json:"parentId,omitempty"`
 	Role         string `json:"role,omitempty"`
-	Status       string `json:"status"` // "idle", "running", "done", "failed", "killed"
+	Status       string `json:"status"`                // derived from session: "idle", "running", "done", "failed", "killed"
 	SessionKey   string `json:"sessionKey"`
 	SpawnedAt    int64  `json:"spawnedAt"`
-	EndedAt      int64  `json:"endedAt,omitempty"`
+	EndedAt      int64  `json:"endedAt,omitempty"`      // derived from session
 	WorkspaceDir string `json:"workspaceDir,omitempty"`
 	Depth        int    `json:"depth"`
 }
 
 // ACPRegistry tracks spawned sub-agents.
 //
+// When a session.Manager is attached, Status and EndedAt are derived from
+// session state on every Get/List call, so the registry is always in sync
+// without a separate lifecycle-sync goroutine.
+//
 // Snapshot cache: every mutating operation bumps ver. List() rebuilds the
 // cached snapshot only when ver has advanced, so repeated List("") calls
 // between mutations return the same immutable slice at zero copy cost.
 // Callers MUST NOT modify the returned slice.
 type ACPRegistry struct {
-	mu      sync.RWMutex
-	agents  map[string]*ACPAgent
-	ver     uint64     // bumped on every mutation
-	snapVer uint64     // ver at which snapAll was built
-	snapAll []ACPAgent // immutable snapshot; rebuilt lazily on List
+	mu       sync.RWMutex
+	agents   map[string]*ACPAgent
+	sessions *session.Manager // optional; when set, Status/EndedAt derived from session
+	ver      uint64           // bumped on every mutation
+	snapVer  uint64           // ver at which snapAll was built
+	snapAll  []ACPAgent       // immutable snapshot; rebuilt lazily on List
 }
 
 // NewACPRegistry creates a new ACP agent registry.
@@ -48,9 +55,35 @@ func NewACPRegistry() *ACPRegistry {
 	}
 }
 
+// SetSessionManager attaches a session.Manager for deriving agent status.
+// Must be called before any agents are registered.
+func (r *ACPRegistry) SetSessionManager(mgr *session.Manager) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sessions = mgr
+}
+
 // bumpVer increments the version counter. Must be called under write lock.
 func (r *ACPRegistry) bumpVer() {
 	r.ver++
+}
+
+// enrichFromSession populates Status and EndedAt from session.Manager if available.
+// Caller need not hold a lock — this reads the session store directly.
+func (r *ACPRegistry) enrichFromSession(a *ACPAgent) {
+	if r.sessions == nil || a.SessionKey == "" {
+		return
+	}
+	sess := r.sessions.Get(a.SessionKey)
+	if sess == nil {
+		return
+	}
+	if mapped := mapSessionStatusToACP(sess.Status); mapped != "" {
+		a.Status = mapped
+	}
+	if sess.EndedAt != nil {
+		a.EndedAt = *sess.EndedAt
+	}
 }
 
 // Register adds a sub-agent to the registry.
@@ -61,7 +94,8 @@ func (r *ACPRegistry) Register(agent ACPAgent) {
 	r.bumpVer()
 }
 
-// Get returns an agent by ID.
+// Get returns an agent by ID. Status and EndedAt are derived from
+// session.Manager when available.
 func (r *ACPRegistry) Get(id string) *ACPAgent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -70,20 +104,23 @@ func (r *ACPRegistry) Get(id string) *ACPAgent {
 		return nil
 	}
 	cp := *a
+	r.enrichFromSession(&cp)
 	return &cp
 }
 
 // List returns all agents, optionally filtered by parent.
+// Status and EndedAt are derived from session.Manager when available.
 //
-// When parentID is empty the call is O(1) if the registry hasn't changed
-// since the last call — it returns the cached immutable snapshot directly.
-// When parentID is non-empty the snapshot is still used to avoid re-iterating
-// the internal map, but a filtered slice is allocated and returned.
+// When a session.Manager is attached, snapshots are always freshly enriched
+// because session state may change between calls. Without a session.Manager,
+// the original O(1) snapshot cache applies.
 // Callers MUST NOT modify the returned slice.
 func (r *ACPRegistry) List(parentID string) []ACPAgent {
-	// Fast path: try to serve from snapshot under read lock.
 	r.mu.RLock()
-	if r.snapVer == r.ver && r.snapAll != nil {
+	hasSessionMgr := r.sessions != nil
+
+	// Fast path (no session manager): serve from cached snapshot.
+	if !hasSessionMgr && r.snapVer == r.ver && r.snapAll != nil {
 		snap := r.snapAll
 		r.mu.RUnlock()
 		if parentID == "" {
@@ -95,11 +132,12 @@ func (r *ACPRegistry) List(parentID string) []ACPAgent {
 
 	// Slow path: rebuild snapshot under write lock.
 	r.mu.Lock()
-	// Re-check after acquiring write lock — another goroutine may have rebuilt already.
-	if r.snapVer != r.ver || r.snapAll == nil {
+	if r.snapVer != r.ver || r.snapAll == nil || hasSessionMgr {
 		snap := make([]ACPAgent, 0, len(r.agents))
 		for _, a := range r.agents {
-			snap = append(snap, *a)
+			cp := *a
+			r.enrichFromSession(&cp)
+			snap = append(snap, cp)
 		}
 		r.snapAll = snap
 		r.snapVer = r.ver
@@ -196,6 +234,10 @@ func mapSessionStatusToACP(status session.RunStatus) string {
 
 // StartACPLifecycleSync subscribes to session lifecycle events and keeps
 // the ACPRegistry agent statuses in sync. Returns an unsubscribe function.
+//
+// When a session.Manager is attached to the registry (via SetSessionManager),
+// Status/EndedAt are derived on read, making this sync redundant. The function
+// still works for backward compatibility when no session.Manager is set.
 func StartACPLifecycleSync(registry *ACPRegistry, eventBus *session.EventBus) func() {
 	return eventBus.Subscribe(func(event session.Event) {
 		if event.Kind != session.EventStatusChanged {

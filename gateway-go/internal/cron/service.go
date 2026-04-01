@@ -13,12 +13,13 @@ import (
 )
 
 // Service manages the full cron job lifecycle: CRUD, scheduling, execution, delivery.
+// Session GC for cron runs is handled by session.Manager's Kind-based retention
+// (KindCron → 24h), so no separate reaper is needed.
 type Service struct {
 	mu        sync.Mutex
 	scheduler *Scheduler
 	store     *Store
 	runLog    *PersistentRunLog
-	reaper    *SessionReaper
 	agent     AgentRunner
 	logger    *slog.Logger
 	cfg       ServiceConfig
@@ -50,12 +51,10 @@ func (s *Service) SetAgentRunner(agent AgentRunner) {
 
 // NewService creates a new cron service.
 func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Service {
-	retentionMs := ResolveRetentionMs(cfg.RetentionMs)
 	return &Service{
 		scheduler:     NewScheduler(logger),
 		store:         NewStore(cfg.StorePath),
 		runLog:        NewPersistentRunLog(cfg.StorePath),
-		reaper:        NewSessionReaper(retentionMs, logger),
 		agent:         agent,
 		logger:        logger,
 		cfg:           cfg,
