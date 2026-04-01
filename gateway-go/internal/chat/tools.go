@@ -33,6 +33,7 @@ type ToolRegistry struct {
 	tools                    map[string]ToolDef
 	order                    []string // preserves registration order
 	postProcess              *PostProcessRegistry
+	spillStore               *agent.SpilloverStore  // optional; spills large tool results to disk
 	cachedLLMTools           []llm.Tool            // cached tool list; invalidated on RegisterTool
 	cachedLLMToolsAnthropic  []llm.Tool            // same list with CacheControl on last tool for Anthropic prompt caching
 }
@@ -107,9 +108,24 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		return output, err
 	}
 
-	// Invalidate run cache when mutation tools modify the file system.
-	if rc != nil && IsMutationTool(name) {
-		rc.Invalidate()
+	// Spill large results to disk before post-processing truncates them.
+	// The preview (~2K) replaces the full output in the context window.
+	if r.spillStore != nil && len(output) > agent.MaxResultChars {
+		sessionKey := toolctx.SessionKeyFromContext(ctx)
+		output = r.spillStore.SpillAndPreview(sessionKey, name, output)
+	}
+
+	// Invalidate caches when mutation tools modify the file system.
+	if IsMutationTool(name) {
+		if rc != nil {
+			rc.Invalidate()
+		}
+		// Invalidate the specific file in the file-read dedup cache.
+		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
+			if filePath := extractFilePath(input); filePath != "" {
+				fc.Invalidate(filePath)
+			}
+		}
 	}
 
 	// Apply post-processors.
@@ -136,6 +152,35 @@ func (r *ToolRegistry) SetPostProcess(pp *PostProcessRegistry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.postProcess = pp
+}
+
+// SetSpilloverStore attaches a SpilloverStore for spilling large tool results.
+func (r *ToolRegistry) SetSpilloverStore(ss *agent.SpilloverStore) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.spillStore = ss
+}
+
+// SpilloverStore returns the attached SpilloverStore, or nil.
+func (r *ToolRegistry) SpilloverStore() *agent.SpilloverStore {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.spillStore
+}
+
+// extractFilePath extracts a "file_path" string from tool input JSON.
+// Used to invalidate specific file-read cache entries on mutations.
+func extractFilePath(input json.RawMessage) string {
+	if !bytes.Contains(input, []byte(`"file_path"`)) {
+		return ""
+	}
+	var meta struct {
+		FilePath string `json:"file_path"`
+	}
+	if json.Unmarshal(input, &meta) == nil {
+		return meta.FilePath
+	}
+	return ""
 }
 
 // extractCompressFlag checks if input JSON contains "compress": true.

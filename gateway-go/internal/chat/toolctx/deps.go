@@ -1,6 +1,7 @@
 package toolctx
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -13,16 +14,17 @@ import (
 // CoreToolDeps holds all dependencies for core agent tools.
 // It composes focused dep structs for each tool group.
 type CoreToolDeps struct {
-	WorkspaceDir string
-	Process      ProcessDeps
-	Sessions     SessionDeps
-	Chrono       ChronoDeps
-	Vega         VegaDeps
-	LLMClient    *llm.Client
-	DefaultModel string
-	ImageClient  *llm.Client // lightweight model client for image analysis
-	ImageModel   string      // lightweight model name for image analysis
-	AgentLog     *agentlog.Writer
+	WorkspaceDir   string
+	Process        ProcessDeps
+	Sessions       SessionDeps
+	Chrono         ChronoDeps
+	Vega           VegaDeps
+	LLMClient      *llm.Client
+	DefaultModel   string
+	ImageClient    *llm.Client            // lightweight model client for image analysis
+	ImageModel     string                 // lightweight model name for image analysis
+	AgentLog       *agentlog.Writer
+	SpilloverStore *agent.SpilloverStore  // optional; spills large tool results to disk
 }
 
 // ProcessDeps holds dependencies for exec and process management tools.

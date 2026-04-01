@@ -24,4 +24,9 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	})
 
 	RegisterDefaultPostProcessors(registry)
+
+	// Wire spillover store for large tool result management.
+	if deps.SpilloverStore != nil {
+		registry.SetSpilloverStore(deps.SpilloverStore)
+	}
 }

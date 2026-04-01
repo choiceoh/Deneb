@@ -451,6 +451,11 @@ func executeAgentRun(
 	// idempotent tool results (find, tree). Invalidated on mutation tools.
 	runCache := NewRunCache()
 
+	// FileCache lives for the entire agent run and deduplicates repeated file reads.
+	// When the same file is read again (unchanged mtime/size), a compact "already read"
+	// message is returned instead of the full content, saving context tokens.
+	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
+
 	// Resolve thinking config from the session's ThinkingLevel setting.
 	var thinkingCfg *llm.ThinkingConfig
 	if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.ThinkingLevel != "" {
@@ -490,6 +495,7 @@ func executeAgentRun(
 		OnTurnInit: func(ctx context.Context) context.Context {
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
+			ctx = WithFileCache(ctx, fileCache)
 			return ctx
 		},
 	}

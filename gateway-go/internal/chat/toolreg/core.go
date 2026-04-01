@@ -159,6 +159,16 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Fn:          tools.ToolGateway(workspaceDir),
 	})
 
+	// Spillover: read full content of a previously spilled large tool result.
+	if deps.SpilloverStore != nil {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:        "read_spillover",
+			Description: "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
+			InputSchema: readSpilloverToolSchema(),
+			Fn:          tools.ToolSpilloverRead(deps.SpilloverStore),
+		})
+	}
+
 }
 
 // RegisterProcessTools registers exec and process management tools.

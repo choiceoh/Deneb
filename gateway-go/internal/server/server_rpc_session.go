@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
@@ -250,6 +251,15 @@ func (s *Server) registerSessionRPCMethods() {
 		ImageClient:  reg.Client(modelrole.RoleLightweight),
 		ImageModel:   reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
+	}
+
+	// Spillover store: saves large tool results to disk, replaces with preview.
+	// Cleanup goroutine runs for the process lifetime (context.Background).
+	if home, err := os.UserHomeDir(); err == nil {
+		spillDir := filepath.Join(home, ".deneb", "spillover")
+		spillStore := agent.NewSpilloverStore(spillDir)
+		spillStore.StartCleanup(context.Background())
+		s.toolDeps.SpilloverStore = spillStore
 	}
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
