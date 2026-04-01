@@ -3,7 +3,6 @@ package agent
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -172,21 +171,15 @@ func TestFormatCachedRead(t *testing.T) {
 	entry := &FileCacheEntry{
 		MTime:     time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC),
 		ReadCount: 3,
+		Content:   "[File: executor.go | 42 lines]\n1\tpackage main\n",
 	}
 
 	result := FormatCachedRead("executor.go", entry)
 
-	if !strings.Contains(result, "FileCache: HIT") {
-		t.Error("should contain HIT marker")
-	}
-	if !strings.Contains(result, "executor.go") {
-		t.Error("should contain filename")
-	}
-	if !strings.Contains(result, "read 3 times") {
-		t.Error("should contain read count")
-	}
-	if !strings.Contains(result, "force=true") {
-		t.Error("should contain force=true hint")
+	// FormatCachedRead now returns the cached content directly
+	// so the agent always has file content even after context compression.
+	if result != entry.Content {
+		t.Errorf("expected cached content, got: %s", result)
 	}
 }
 

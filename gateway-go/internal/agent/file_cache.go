@@ -1,12 +1,11 @@
 // Package agent — FileCache provides a session-scoped LRU cache for file reads.
 //
 // When the same file is read multiple times within a session and its mtime/size
-// are unchanged, the cache returns a compact "already read" message instead of
-// the full content, saving context tokens.
+// are unchanged, the cache returns the cached content from memory, avoiding
+// redundant disk I/O.
 package agent
 
 import (
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -126,17 +125,12 @@ func FileChanged(path string, cached *FileCacheEntry) bool {
 	return !info.ModTime().Equal(cached.MTime) || info.Size() != cached.Size
 }
 
-// FormatCachedRead builds the compact message returned on cache hit.
+// FormatCachedRead returns the cached file content on cache hit.
+// We always return the full content because the LLM's context window may have
+// been compressed since the first read, making the original content invisible
+// to the agent. Returning from memory cache still avoids disk I/O.
 func FormatCachedRead(displayPath string, entry *FileCacheEntry) string {
-	return fmt.Sprintf(
-		"[FileCache: HIT | read | %s | mtime=%s | read %d times]\n"+
-			"(Content unchanged since first read. Already in context.)\n"+
-			"To re-read full content: read(\"%s\", force=true)",
-		displayPath,
-		entry.MTime.Format(time.RFC3339),
-		entry.ReadCount,
-		displayPath,
-	)
+	return entry.Content
 }
 
 // --- internal helpers ---
