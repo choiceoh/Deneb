@@ -1,16 +1,35 @@
 package reply
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
+// toolCallTagRe matches <tool_call>...</tool_call> blocks (some models emit
+// this variant without the <function=...> wrapper).
+var toolCallTagRe = regexp.MustCompile(`(?s)<tool_call>.*?</tool_call>`)
+
+// jsonToolCallRe matches JSON-style tool call blocks that some models emit as
+// text: {"name": "tool_name", "arguments": {...}} or {"type": "function", ...}.
+var jsonToolCallRe = regexp.MustCompile(`(?s)\{"(?:name|type)":\s*"(?:function|tool_use|[a-z_]+)"[^}]*"(?:arguments|input|parameters)":\s*\{[^}]*\}\s*\}`)
+
+// pipeFunctionRe matches model-specific function call tokens like
+// <|python_tag|>..., <|function|>..., or similar special tokens.
+var pipeFunctionRe = regexp.MustCompile(`<\|(?:python_tag|function|tool_call)\|>[^\n]*(?:\n|$)`)
+
 // StripLeakedToolCallMarkup removes leaked tool-call envelope text that should
-// stay internal (e.g. "<function=read> ... </tool_call>").
+// stay internal. Handles multiple model-specific formats:
+//   - Llama-style: <function=name>...<arg_key>...<arg_value>...</tool_call>
+//   - XML-style: <tool_call>...</tool_call>
+//   - JSON-style: {"name": "tool_name", "arguments": {...}}
+//   - Special tokens: <|python_tag|>, <|function|>, <|tool_call|>
 func StripLeakedToolCallMarkup(text string) string {
 	trimmed := text
+
+	// Strip Llama-style <function=name>...</tool_call> blocks.
 	for {
 		start := strings.Index(trimmed, "<function=")
 		if start < 0 {
@@ -23,6 +42,16 @@ func StripLeakedToolCallMarkup(text string) string {
 		end += start + len("</tool_call>")
 		trimmed = strings.TrimSpace(trimmed[:start] + "\n" + trimmed[end:])
 	}
+
+	// Strip <tool_call>...</tool_call> blocks.
+	trimmed = toolCallTagRe.ReplaceAllString(trimmed, "")
+
+	// Strip JSON-style tool call blocks.
+	trimmed = jsonToolCallRe.ReplaceAllString(trimmed, "")
+
+	// Strip model-specific special tokens.
+	trimmed = pipeFunctionRe.ReplaceAllString(trimmed, "")
+
 	return strings.TrimSpace(trimmed)
 }
 

@@ -180,7 +180,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("- `pilot`: 여러 소스 종합/요약에 사용. 단일 작업(읽기/검색/실행)은 read/grep/exec 직접 호출.\n")
 			s.WriteString("- Tool chaining: `\"$ref\": \"<tool_use_id>\"`로 도구 간 출력 전달 (`_ref_content`, 30s timeout).\n")
 		}
-		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n\n")
+		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
+		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 		built := s.String()
 		staticPromptMu.Lock()
 		staticPromptKey = cacheKey
@@ -508,6 +509,7 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	s.WriteString("- **Sequential only when dependent**: `edit` → `test(action:'build')` → `test(action:'run')` must be separate turns.\n")
 	s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
 	s.WriteString("- Do not narrate routine tool calls. Act immediately.\n")
+	s.WriteString("- **Never output tool call syntax as text.** Always use structured tool calls. If a tool call fails, report the result — do not paste the command you tried to run.\n")
 	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail).\n")
 	s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n\n")
 

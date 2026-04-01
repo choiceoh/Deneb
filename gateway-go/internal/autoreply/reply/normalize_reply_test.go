@@ -134,6 +134,21 @@ Done`,
 			in:   "<function=read>\nmissing close tag",
 			want: "<function=read>\nmissing close tag",
 		},
+		{
+			name: "removes <tool_call>...</tool_call> block",
+			in:   "작업 중입니다.\n<tool_call>\n{\"name\": \"read\", \"arguments\": {\"file_path\": \"/tmp/x\"}}\n</tool_call>\n완료!",
+			want: "작업 중입니다.\n\n완료!",
+		},
+		{
+			name: "removes JSON-style tool call block",
+			in:   "먼저 확인합니다.\n{\"name\": \"exec\", \"arguments\": {\"command\": \"git status\"}}\n결과입니다.",
+			want: "먼저 확인합니다.\n\n결과입니다.",
+		},
+		{
+			name: "removes special token lines",
+			in:   "<|python_tag|>exec(command='ls')\n파일 목록입니다.",
+			want: "파일 목록입니다.",
+		},
 	}
 
 	for _, tt := range tests {
