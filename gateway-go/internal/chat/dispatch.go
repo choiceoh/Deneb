@@ -178,6 +178,11 @@ func (h *Handler) handleSlashCommand(
 				h.logger.Warn("failed to delete transcript on reset", "error", err)
 			}
 		}
+		// Clear tool preset so session exits coordinator/worker mode.
+		if sess := h.sessions.Get(sessionKey); sess != nil && sess.ToolPreset != "" {
+			sess.ToolPreset = ""
+			_ = h.sessions.Set(sess)
+		}
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),

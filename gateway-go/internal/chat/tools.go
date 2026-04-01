@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -82,6 +83,17 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	r.mu.RUnlock()
 	if !ok {
 		return "", fmt.Errorf("unknown tool: %q", name)
+	}
+
+	// Enforce tool preset: reject tools not in the allowed set.
+	// This is a defense-in-depth check — the LLM only sees filtered tools,
+	// but if it hallucinates a tool call, this blocks execution.
+	if preset := toolctx.ToolPresetFromContext(ctx); preset != "" {
+		if allowed := toolpreset.AllowedTools(toolpreset.Preset(preset)); allowed != nil {
+			if !allowed[name] {
+				return "", fmt.Errorf("tool %q is not allowed for preset %q", name, preset)
+			}
+		}
 	}
 
 	// Check for compress flag before executing (avoids re-parsing in every tool).

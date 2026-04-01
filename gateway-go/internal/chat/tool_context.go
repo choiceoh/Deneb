@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 )
 
@@ -78,4 +79,14 @@ func WithRunCache(ctx context.Context, rc *RunCache) context.Context {
 // RunCacheFromContext extracts the RunCache from ctx. Returns nil if not set.
 func RunCacheFromContext(ctx context.Context) *RunCache {
 	return toolctx.RunCacheFromContext(ctx)
+}
+
+// WithFileCache attaches a FileCache to ctx for cross-turn file read dedup.
+func WithFileCache(ctx context.Context, fc *agent.FileCache) context.Context {
+	return toolctx.WithFileCache(ctx, fc)
+}
+
+// WithToolPreset attaches a tool preset to ctx for execution-time enforcement.
+func WithToolPreset(ctx context.Context, preset string) context.Context {
+	return toolctx.WithToolPreset(ctx, preset)
 }

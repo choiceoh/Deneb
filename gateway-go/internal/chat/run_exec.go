@@ -53,6 +53,16 @@ func loadCachedSkillsPrompt(workspaceDir string) string {
 	return cachedSkillsPrompt
 }
 
+// appendWorkerBlock adds a worker role instructions block to an Anthropic system
+// prompt block list. The new block gets an ephemeral cache marker.
+func appendWorkerBlock(blocks []llm.ContentBlock, addition string) []llm.ContentBlock {
+	return append(blocks, llm.ContentBlock{
+		Type:         "text",
+		Text:         addition,
+		CacheControl: &llm.CacheControl{Type: "ephemeral"},
+	})
+}
+
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
 // run agent loop, persist result.
 func executeAgentRun(
@@ -357,20 +367,40 @@ func executeAgentRun(
 			return
 		}
 
-		// Telegram is the coding-specialized channel: use the coding
-		// system prompt which strips non-coding sections and emphasizes
-		// the vibe-coder workflow (no raw code, Korean explanations).
+		// Worker sessions with a tool preset: append role-specific instructions.
+		workerAddition := ""
+		if sessionToolPreset != "" {
+			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
+			workerAddition = prompt.WorkerPromptAddition(sessionToolPreset, scratchpadDir)
+		}
+
 		if ch == "telegram" {
 			if apiType == "anthropic" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(spp))
+				blocks := prompt.BuildCodingSystemPromptBlocks(spp)
+				if workerAddition != "" {
+					blocks = appendWorkerBlock(blocks, workerAddition)
+				}
+				systemPrompt = llm.SystemBlocks(blocks)
 			} else {
-				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
+				sp := prompt.BuildCodingSystemPrompt(spp)
+				if workerAddition != "" {
+					sp += "\n" + workerAddition
+				}
+				systemPrompt = llm.SystemString(sp)
 			}
 		} else {
 			if apiType == "anthropic" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+				blocks := prompt.BuildSystemPromptBlocks(spp)
+				if workerAddition != "" {
+					blocks = appendWorkerBlock(blocks, workerAddition)
+				}
+				systemPrompt = llm.SystemBlocks(blocks)
 			} else {
-				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+				sp := prompt.BuildSystemPrompt(spp)
+				if workerAddition != "" {
+					sp += "\n" + workerAddition
+				}
+				systemPrompt = llm.SystemString(sp)
 			}
 		}
 	}()
@@ -550,6 +580,7 @@ func executeAgentRun(
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
 			ctx = WithFileCache(ctx, fileCache)
+			ctx = WithToolPreset(ctx, sessionToolPreset)
 			return ctx
 		},
 	}
