@@ -31,7 +31,7 @@ type LifecycleDeps struct {
 }
 
 // EventsDeps holds the dependencies for event subscription RPC methods
-// (subscribe.session, sessions.subscribe, node.event, etc.).
+// (subscribe.session, sessions.subscribe, etc.).
 type EventsDeps struct {
 	Broadcaster *events.Broadcaster
 	Logger      *slog.Logger
@@ -60,31 +60,17 @@ func LifecycleMethods(deps LifecycleDeps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
-// EventsMethods returns event subscription, streaming, and node event RPC
-// handlers. Also includes TS-compatible aliases (sessions.subscribe, etc.)
+// EventsMethods returns event subscription and streaming RPC handlers.
+// Also includes TS-compatible aliases (sessions.subscribe, etc.)
 // that map to the same handlers as subscribe.session, etc.
 // Returns nil if Broadcaster is not configured.
+//
+// Note: "node.event" is registered by handlernode.Methods (not here) to
+// avoid duplicate registration — the node package's implementation is the
+// authoritative handler for node event broadcasting.
 func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Broadcaster == nil {
 		return nil
-	}
-
-	// Node event relay: processes events from connected nodes.
-	nodeEvent := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			NodeID string           `json:"nodeId"`
-			Event  events.NodeEvent `json:"event"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.NodeID == "" {
-			return rpcerr.MissingParam("nodeId and event").Response(req.ID)
-		}
-		nodeCtx := &events.NodeEventContext{
-			Broadcaster: deps.Broadcaster,
-			Logger:      deps.Logger,
-		}
-		events.HandleNodeEvent(nodeCtx, p.NodeID, p.Event)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
-		return resp
 	}
 
 	// Define handlers once, register under both legacy and TS-compatible names.
@@ -166,9 +152,6 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	}
 
 	return map[string]rpcutil.HandlerFunc{
-		// Node event relay.
-		"node.event": nodeEvent,
-
 		// Legacy Go names.
 		"subscribe.session":            subscribeSession,
 		"unsubscribe.session":          unsubscribeSession,

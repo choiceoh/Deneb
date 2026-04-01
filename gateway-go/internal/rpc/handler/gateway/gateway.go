@@ -30,6 +30,11 @@ type Deps struct {
 }
 
 // RuntimeMethods returns the health/status/runtime handler map.
+//
+// Note: Several methods here are intentionally overwritten by dedicated handler
+// packages registered later in registerEarlyMethods (presence, system, provider).
+// Only health, status, and daemon.status are unique to this handler; the rest
+// serve as safe fallbacks that fire before the dedicated handlers register.
 func RuntimeMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"health":               health(deps),
