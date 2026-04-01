@@ -20,6 +20,16 @@
 DENEB_VERSION := $(shell git tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
 GO_LDFLAGS := -ldflags '-X main.Version=$(DENEB_VERSION)'
 
+# Fix NO_PROXY for Claude Code web containers: Go module proxy uses googleapis.com,
+# but NO_PROXY includes *.googleapis.com which makes Go bypass the egress proxy and
+# attempt direct UDP DNS (blocked). Strip those entries so Go traffic routes through proxy.
+ifneq ($(CLAUDE_CODE_PROXY_RESOLVES_HOSTS),)
+_CLEAN_NO_PROXY := $(shell echo "$(NO_PROXY)" | sed 's/\*\.googleapis\.com//g; s/\*\.google\.com//g' | sed 's/,,*/,/g; s/^,//; s/,$$//')
+GO_ENV := NO_PROXY="$(_CLEAN_NO_PROXY)" no_proxy="$(_CLEAN_NO_PROXY)"
+else
+GO_ENV :=
+endif
+
 # Default: build Rust first (produces .a), then Go (links it via CGo), then CLI.
 all: rust go cli
 
@@ -63,21 +73,21 @@ rust-clean:
 go: go-ffi
 
 go-ffi:
-	cd gateway-go && go build $(GO_LDFLAGS) ./...
+	cd gateway-go && $(GO_ENV) go build $(GO_LDFLAGS) ./...
 
 # Pure-Go build with fallback implementations (no Rust required).
 go-pure:
-	cd gateway-go && CGO_ENABLED=0 go build $(GO_LDFLAGS) -tags no_ffi ./...
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build $(GO_LDFLAGS) -tags no_ffi ./...
 
 go-run: go
-	cd gateway-go && go run ./cmd/gateway/
+	cd gateway-go && $(GO_ENV) go run ./cmd/gateway/
 
 # Dev mode: build and run gateway with auto-restart on SIGUSR1 (exit code 75).
 # Uses go build instead of go run to avoid signal forwarding issues.
 go-dev:
 	@echo "Starting Go gateway in dev mode (auto-restart on SIGUSR1)..."
 	@while true; do \
-		if ! go build -C gateway-go $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/; then \
+		if ! $(GO_ENV) go build -C gateway-go $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/; then \
 			echo "[go-dev] Build failed, aborting."; \
 			exit 1; \
 		fi; \
@@ -93,16 +103,16 @@ go-dev:
 	done
 
 go-test:
-	cd gateway-go && go test -race -count=1 ./...
+	cd gateway-go && $(GO_ENV) go test -race -count=1 ./...
 
 go-test-pure:
-	cd gateway-go && CGO_ENABLED=0 go test -tags no_ffi -count=1 ./...
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -tags no_ffi -count=1 ./...
 
 go-test-fuzz:
-	cd gateway-go && go test ./internal/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
+	cd gateway-go && $(GO_ENV) go test ./internal/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
 
 go-vet:
-	cd gateway-go && go vet ./...
+	cd gateway-go && $(GO_ENV) go vet ./...
 
 go-fmt:
 	@cd gateway-go && test -z "$$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
@@ -116,7 +126,7 @@ go-lint-all:
 	cd gateway-go && golangci-lint run ./...
 
 go-binary: rust go
-	cd gateway-go && go build $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
+	cd gateway-go && $(GO_ENV) go build $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
 
 # Build production gateway: Go binary + CLI, copies both to dist/.
 gateway-prod: go-binary cli
@@ -168,7 +178,7 @@ machete:
 
 # Run Go benchmarks with memory allocation stats.
 go-bench:
-	cd gateway-go && go test -bench=. -benchmem -run='^$$' ./...
+	cd gateway-go && $(GO_ENV) go test -bench=. -benchmem -run='^$$' ./...
 
 # --- Combined operations ---
 
