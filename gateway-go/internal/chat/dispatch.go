@@ -25,10 +25,9 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	}
 
 	// Inherit model from session state when RunParams doesn't specify one.
-	// This ensures sub-agents (whose Model is set at spawn time on the session
-	// object) actually use the configured model instead of falling through to
-	// the default.
-	if params.Model == "" && sess.Model != "" {
+	// Skip for sub-agents — their default model is resolved separately in
+	// executeAgentRun (subagentDefaultModel takes priority over session.Model).
+	if params.Model == "" && sess.Model != "" && sess.SpawnedBy == "" {
 		params.Model = sess.Model
 	}
 
