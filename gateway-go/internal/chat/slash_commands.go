@@ -75,6 +75,12 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "model",
 			Args:     args,
 		}
+	case "models":
+		return &SlashResult{
+			Handled:  true,
+			Response: "모델 퀵체인지는 텔레그램에서만 지원됩니다.",
+			Command:  "models",
+		}
 	case "think":
 		return &SlashResult{
 			Handled:  true,

@@ -27,6 +27,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -240,6 +241,12 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 			}
 			return
 		}
+	}
+
+	// Quick command: /models — model quick-change with inline keyboard.
+	if cmd := strings.ToLower(strings.TrimSpace(msgCtx.BodyForCommands)); cmd == "/models" || strings.HasPrefix(cmd, "/models@") {
+		p.handleModelsCommand(chatID)
+		return
 	}
 
 	// --- Enrich the agent message before dispatch ---
@@ -809,6 +816,12 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 		}
 	}
 
+	// Intercept model quick-change callbacks — handle immediately without agent.
+	if action, payload := telegram.ParseCallbackData(cb.Data); action == telegram.ActionModelSwitch {
+		p.handleModelSwitchCallback(cb, chatID, payload)
+		return
+	}
+
 	// Acknowledge to Telegram (stops the loading spinner on the button).
 	client := p.server.telegramPlug.Client()
 	if client != nil {
@@ -922,5 +935,175 @@ func buildZeroCallsReport(disp *rpc.Dispatcher) *handlers.RPCZeroCallsReport {
 	return &handlers.RPCZeroCallsReport{
 		ZeroCalls:    zeroCalls,
 		TotalMethods: len(methods),
+	}
+}
+
+// handleModelsCommand sends a model quick-change message with an inline keyboard.
+func (p *InboundProcessor) handleModelsCommand(chatID string) {
+	reg := p.server.modelRegistry
+	if reg == nil {
+		p.sendCommandReply(chatID, &handlers.CommandResult{Reply: "모델 레지스트리를 사용할 수 없습니다.", SkipAgent: true})
+		return
+	}
+
+	client := p.server.telegramPlug.Client()
+	if client == nil {
+		return
+	}
+
+	currentModel := p.chatHandler.DefaultModel()
+
+	// Determine which role is currently active.
+	currentRole, _ := reg.RoleForModel(currentModel)
+
+	// Build message text.
+	text := "🤖 <b>모델 퀵체인지</b>\n\n"
+	if currentModel != "" {
+		roleLabel := ""
+		if currentRole != "" {
+			roleLabel = " (" + string(currentRole) + ")"
+		}
+		text += "현재: <code>" + currentModel + "</code>" + roleLabel
+	} else {
+		cfg := reg.Config(modelrole.RoleMain)
+		text += "현재: <code>" + cfg.ProviderID + "/" + cfg.Model + "</code> (main)"
+	}
+
+	// Build inline keyboard: 2x2 grid with role buttons.
+	roles := []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RolePilot, modelrole.RoleFallback}
+	var rows [][]telegram.InlineKeyboardButton
+	var row []telegram.InlineKeyboardButton
+	for i, role := range roles {
+		cfg := reg.Config(role)
+		if cfg.Model == "" {
+			continue
+		}
+
+		// Short display name: strip provider prefix from model name.
+		displayModel := cfg.Model
+		if idx := strings.LastIndex(displayModel, "/"); idx >= 0 && idx < len(displayModel)-1 {
+			displayModel = displayModel[idx+1:]
+		}
+
+		label := string(role) + ": " + displayModel
+		activeRole := currentRole
+		if activeRole == "" {
+			activeRole = modelrole.RoleMain
+		}
+		if role == activeRole {
+			label = "✓ " + label
+		}
+
+		row = append(row, telegram.InlineKeyboardButton{
+			Text:         label,
+			CallbackData: telegram.ActionModelSwitch + ":" + string(role),
+		})
+
+		// 2 buttons per row.
+		if len(row) == 2 || i == len(roles)-1 {
+			rows = append(rows, row)
+			row = nil
+		}
+	}
+
+	keyboard := telegram.BuildInlineKeyboard(rows)
+
+	id, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if _, err := telegram.SendText(ctx, client, id, text, telegram.SendOptions{
+		ParseMode: "HTML",
+		Keyboard:  keyboard,
+	}); err != nil {
+		p.logger.Warn("failed to send models command reply", "error", err)
+	}
+}
+
+// handleModelSwitchCallback processes a model quick-change button press.
+func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery, chatID string, roleName string) {
+	reg := p.server.modelRegistry
+	if reg == nil {
+		return
+	}
+
+	client := p.server.telegramPlug.Client()
+	if client == nil {
+		return
+	}
+
+	role := modelrole.Role(roleName)
+	fullModelID := reg.FullModelID(role)
+	if fullModelID == "" {
+		return
+	}
+
+	// Apply model change.
+	p.chatHandler.SetDefaultModel(fullModelID)
+
+	// Acknowledge with toast.
+	cfg := reg.Config(role)
+	displayModel := cfg.Model
+	if idx := strings.LastIndex(displayModel, "/"); idx >= 0 && idx < len(displayModel)-1 {
+		displayModel = displayModel[idx+1:]
+	}
+
+	ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer ackCancel()
+	if err := telegram.AnswerCallbackQuery(ackCtx, client, cb.ID, "✓ "+displayModel); err != nil {
+		p.logger.Warn("failed to answer model switch callback", "error", err)
+	}
+
+	// Edit original message to update the checkmark.
+	id, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return
+	}
+
+	// Rebuild message text with updated current model.
+	text := "🤖 <b>모델 퀵체인지</b>\n\n"
+	text += "현재: <code>" + fullModelID + "</code> (" + roleName + ")"
+
+	// Rebuild keyboard with updated checkmark.
+	roles := []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RolePilot, modelrole.RoleFallback}
+	var rows [][]telegram.InlineKeyboardButton
+	var row []telegram.InlineKeyboardButton
+	for i, r := range roles {
+		c := reg.Config(r)
+		if c.Model == "" {
+			continue
+		}
+
+		dm := c.Model
+		if idx := strings.LastIndex(dm, "/"); idx >= 0 && idx < len(dm)-1 {
+			dm = dm[idx+1:]
+		}
+
+		label := string(r) + ": " + dm
+		if r == role {
+			label = "✓ " + label
+		}
+
+		row = append(row, telegram.InlineKeyboardButton{
+			Text:         label,
+			CallbackData: telegram.ActionModelSwitch + ":" + string(r),
+		})
+
+		if len(row) == 2 || i == len(roles)-1 {
+			rows = append(rows, row)
+			row = nil
+		}
+	}
+
+	keyboard := telegram.BuildInlineKeyboard(rows)
+
+	editCtx, editCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer editCancel()
+	if _, err := telegram.EditMessageText(editCtx, client, id, cb.Message.MessageID, text, "HTML", keyboard); err != nil {
+		p.logger.Warn("failed to edit model switch message", "error", err)
 	}
 }

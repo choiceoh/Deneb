@@ -47,12 +47,12 @@ type Handler struct {
 	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
-	contextCfg    ContextConfig
-	compactionCfg CompactionConfig
+	contextCfg           ContextConfig
+	compactionCfg        CompactionConfig
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string
-	maxTokens     int
+	maxTokens            int
 
 	// callbackMu guards all late-bind callback fields below. These are set
 	// during server initialization (before HTTP serving starts) and read
@@ -122,37 +122,37 @@ type HandlerConfig struct {
 	MaxMessageBytes int
 
 	// Native agent execution config.
-	LLMClient       *llm.Client
-	Transcript      TranscriptStore
-	Tools           *ToolRegistry
-	AuthManager     *provider.AuthManager
-	JobTracker      *agent.JobTracker
-	ProviderConfigs map[string]ProviderConfig // provider ID → config
-	AuroraStore     *aurora.Store             // Aurora hierarchical compaction store
-	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
-	MemoryStore     *memory.Store             // optional; structured memory (Honcho-style)
-	SessionMemory   *SessionMemoryStore       // optional; structured session working state
-	MemoryEmbedder  *memory.Embedder          // optional; fact embedding via SGLang
-	UnifiedStore    *unified.Store            // optional; unified memory (search + tier-1)
-	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
-	AgentLog        *agentlog.Writer          // optional; agent detail logging
-	Registry        *modelrole.Registry       // centralized model role registry
-	ContextCfg      ContextConfig
-	CompactionCfg   CompactionConfig
+	LLMClient            *llm.Client
+	Transcript           TranscriptStore
+	Tools                *ToolRegistry
+	AuthManager          *provider.AuthManager
+	JobTracker           *agent.JobTracker
+	ProviderConfigs      map[string]ProviderConfig // provider ID → config
+	AuroraStore          *aurora.Store             // Aurora hierarchical compaction store
+	VegaBackend          vega.Backend              // optional; enables knowledge prefetch in chat
+	MemoryStore          *memory.Store             // optional; structured memory (Honcho-style)
+	SessionMemory        *SessionMemoryStore       // optional; structured session working state
+	MemoryEmbedder       *memory.Embedder          // optional; fact embedding via SGLang
+	UnifiedStore         *unified.Store            // optional; unified memory (search + tier-1)
+	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
+	AgentLog             *agentlog.Writer          // optional; agent detail logging
+	Registry             *modelrole.Registry       // centralized model role registry
+	ContextCfg           ContextConfig
+	CompactionCfg        CompactionConfig
 	DefaultModel         string
 	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
 	DefaultSystem        string
-	MaxTokens       int
+	MaxTokens            int
 
 	// Fields below were previously Set*() after construction. They are all
 	// available at handler creation time and passed here to reduce late-binding.
-	ProviderRuntime *provider.ProviderRuntimeResolver // optional; runtime auth
+	ProviderRuntime      *provider.ProviderRuntimeResolver // optional; runtime auth
 	PluginHookRunner     *plugin.TypedHookRunner           // optional; typed plugin hooks
 	HookRegistry         *hooks.Registry                   // optional; user-defined shell hooks
-	InternalHookRegistry *hooks.InternalRegistry            // optional; programmatic internal hooks
-	BroadcastRaw    streaming.BroadcastRawFunc         // optional; raw event relay
-	EmitAgentFn     func(kind, sessionKey, runID string, payload map[string]any)
-	EmitTranscriptFn func(sessionKey string, message any, messageID string)
+	InternalHookRegistry *hooks.InternalRegistry           // optional; programmatic internal hooks
+	BroadcastRaw         streaming.BroadcastRawFunc        // optional; raw event relay
+	EmitAgentFn          func(kind, sessionKey, runID string, payload map[string]any)
+	EmitTranscriptFn     func(sessionKey string, message any, messageID string)
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -179,44 +179,44 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		cfg.MaxMessageBytes = defaults.MaxMessageBytes
 	}
 	h := &Handler{
-		sessions:        sessions,
-		broadcast:       broadcast,
-		logger:          logger,
-		llmClient:       cfg.LLMClient,
-		transcript:      cfg.Transcript,
-		tools:           cfg.Tools,
-		authManager:     cfg.AuthManager,
-		jobTracker:      cfg.JobTracker,
-		providerConfigs: cfg.ProviderConfigs,
-		auroraStore:     cfg.AuroraStore,
-		vegaBackend:     cfg.VegaBackend,
-		memoryStore:     cfg.MemoryStore,
-		sessionMemory:   cfg.SessionMemory,
-		memoryEmbedder:  cfg.MemoryEmbedder,
-		unifiedStore:    cfg.UnifiedStore,
-		dreamTurnFn:     cfg.DreamTurnFn,
-		agentLog:        cfg.AgentLog,
-		registry:        cfg.Registry,
-		contextCfg:      cfg.ContextCfg,
-		compactionCfg:   cfg.CompactionCfg,
+		sessions:             sessions,
+		broadcast:            broadcast,
+		logger:               logger,
+		llmClient:            cfg.LLMClient,
+		transcript:           cfg.Transcript,
+		tools:                cfg.Tools,
+		authManager:          cfg.AuthManager,
+		jobTracker:           cfg.JobTracker,
+		providerConfigs:      cfg.ProviderConfigs,
+		auroraStore:          cfg.AuroraStore,
+		vegaBackend:          cfg.VegaBackend,
+		memoryStore:          cfg.MemoryStore,
+		sessionMemory:        cfg.SessionMemory,
+		memoryEmbedder:       cfg.MemoryEmbedder,
+		unifiedStore:         cfg.UnifiedStore,
+		dreamTurnFn:          cfg.DreamTurnFn,
+		agentLog:             cfg.AgentLog,
+		registry:             cfg.Registry,
+		contextCfg:           cfg.ContextCfg,
+		compactionCfg:        cfg.CompactionCfg,
 		defaultModel:         cfg.DefaultModel,
 		subagentDefaultModel: cfg.SubagentDefaultModel,
 		defaultSystem:        cfg.DefaultSystem,
-		maxTokens:       cfg.MaxTokens,
-		providerRuntime:  cfg.ProviderRuntime,
-		pluginHookRunner: cfg.PluginHookRunner,
+		maxTokens:            cfg.MaxTokens,
+		providerRuntime:      cfg.ProviderRuntime,
+		pluginHookRunner:     cfg.PluginHookRunner,
 		hookRegistry:         cfg.HookRegistry,
 		internalHookRegistry: cfg.InternalHookRegistry,
-		broadcastRaw:     cfg.BroadcastRaw,
-		emitAgentFn:      cfg.EmitAgentFn,
-		emitTranscriptFn: cfg.EmitTranscriptFn,
-		abortMap:         make(map[string]*AbortEntry),
-		pendingMsgs:      make(map[string]*pendingRunQueue),
-		uploadLimits:     make(map[string]int64),
-		done:             make(chan struct{}),
-		maxHistoryBytes:  cfg.MaxHistoryBytes,
-		maxHistoryCount:  cfg.MaxHistoryCount,
-		maxMessageBytes:  cfg.MaxMessageBytes,
+		broadcastRaw:         cfg.BroadcastRaw,
+		emitAgentFn:          cfg.EmitAgentFn,
+		emitTranscriptFn:     cfg.EmitTranscriptFn,
+		abortMap:             make(map[string]*AbortEntry),
+		pendingMsgs:          make(map[string]*pendingRunQueue),
+		uploadLimits:         make(map[string]int64),
+		done:                 make(chan struct{}),
+		maxHistoryBytes:      cfg.MaxHistoryBytes,
+		maxHistoryCount:      cfg.MaxHistoryCount,
+		maxMessageBytes:      cfg.MaxMessageBytes,
 	}
 	// Set the package-level model role registry for sglang hooks and pilot tools.
 	if h.registry != nil {
@@ -225,7 +225,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	go h.abortGCLoop()
 	return h
 }
-
 
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {
@@ -376,6 +375,11 @@ func (h *Handler) ReactionFunc() ReactionFunc {
 	fn := h.reactionFn
 	h.callbackMu.RUnlock()
 	return fn
+}
+
+// SetDefaultModel sets the default model ID for subsequent agent runs.
+func (h *Handler) SetDefaultModel(model string) {
+	h.defaultModel = model
 }
 
 // SetProviderRuntime sets the provider runtime resolver for runtime auth
