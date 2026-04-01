@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 )
 
 func TestToolMultiEdit(t *testing.T) {
 	dir := t.TempDir()
-	fn := toolMultiEdit(dir)
+	fn := chattools.ToolMultiEdit(dir)
 
 	t.Run("single file single edit", func(t *testing.T) {
 		path := filepath.Join(dir, "multi1.txt")
@@ -151,7 +153,7 @@ func TestToolMultiEdit(t *testing.T) {
 
 func TestToolTree(t *testing.T) {
 	dir := t.TempDir()
-	fn := toolTree(dir)
+	fn := chattools.ToolTree(dir)
 
 	// Create test structure.
 	os.MkdirAll(filepath.Join(dir, "src", "pkg"), 0o755)
@@ -248,7 +250,7 @@ func TestToolDiff(t *testing.T) {
 		os.WriteFile(path1, []byte("same content"), 0o644)
 		os.WriteFile(path2, []byte("same content"), 0o644)
 
-		fn := toolDiff(dir)
+		fn := chattools.ToolDiff(dir)
 		input, _ := json.Marshal(map[string]any{
 			"mode": "files",
 			"path": path1,
@@ -269,7 +271,7 @@ func TestToolDiff(t *testing.T) {
 		os.WriteFile(path1, []byte("line1\nline2\n"), 0o644)
 		os.WriteFile(path2, []byte("line1\nline3\n"), 0o644)
 
-		fn := toolDiff(dir)
+		fn := chattools.ToolDiff(dir)
 		input, _ := json.Marshal(map[string]any{
 			"mode": "files",
 			"path": path1,
@@ -285,7 +287,7 @@ func TestToolDiff(t *testing.T) {
 	})
 
 	t.Run("files mode missing path", func(t *testing.T) {
-		fn := toolDiff(dir)
+		fn := chattools.ToolDiff(dir)
 		input, _ := json.Marshal(map[string]any{
 			"mode": "files",
 			"path": "",
@@ -298,7 +300,7 @@ func TestToolDiff(t *testing.T) {
 	})
 
 	t.Run("unknown mode", func(t *testing.T) {
-		fn := toolDiff(dir)
+		fn := chattools.ToolDiff(dir)
 		input, _ := json.Marshal(map[string]any{"mode": "bogus"})
 		_, err := fn(context.Background(), input)
 		if err == nil {

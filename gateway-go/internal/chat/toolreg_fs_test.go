@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 )
 
 func TestResolvePath(t *testing.T) {
@@ -71,12 +73,12 @@ func TestResolvePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolvePath(tt.path, tt.defaultDir)
+			got := chattools.ResolvePath(tt.path, tt.defaultDir)
 			// Normalize both for comparison.
 			gotAbs, _ := filepath.Abs(got)
 			wantAbs, _ := filepath.Abs(tt.want)
 			if gotAbs != wantAbs {
-				t.Errorf("resolvePath(%q, %q) = %q, want %q", tt.path, tt.defaultDir, gotAbs, wantAbs)
+				t.Errorf("ResolvePath(%q, %q) = %q, want %q", tt.path, tt.defaultDir, gotAbs, wantAbs)
 			}
 		})
 	}
@@ -89,7 +91,7 @@ func TestToolRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fn := toolRead(dir)
+	fn := chattools.ToolRead(dir)
 
 	t.Run("basic read with line numbers", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"file_path": filepath.Join(dir, "test.txt")})
@@ -146,7 +148,7 @@ func TestToolRead(t *testing.T) {
 
 func TestToolWrite(t *testing.T) {
 	dir := t.TempDir()
-	fn := toolWrite(dir)
+	fn := chattools.ToolWrite(dir)
 
 	t.Run("write creates file", func(t *testing.T) {
 		path := filepath.Join(dir, "out.txt")
@@ -188,7 +190,7 @@ func TestToolWrite(t *testing.T) {
 
 func TestToolEdit(t *testing.T) {
 	dir := t.TempDir()
-	fn := toolEdit(dir)
+	fn := chattools.ToolEdit(dir)
 
 	t.Run("successful unique replacement", func(t *testing.T) {
 		path := filepath.Join(dir, "edit.txt")
@@ -267,7 +269,7 @@ func TestToolFind(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, ".hidden"), 0o755)
 	os.WriteFile(filepath.Join(dir, ".hidden", "secret.txt"), []byte("s"), 0o644)
 
-	fn := toolFind(dir)
+	fn := chattools.ToolFind(dir)
 
 	t.Run("pattern matches files", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"pattern": "*.txt"})
