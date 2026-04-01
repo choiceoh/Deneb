@@ -415,6 +415,12 @@ func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, rea
 			"status":     status,
 		})
 	}
+	// Clean up spillover files for completed/failed sessions.
+	if deps.tools != nil {
+		if ss := deps.tools.SpilloverStore(); ss != nil {
+			ss.CleanSession(params.SessionKey)
+		}
+	}
 }
 
 // classifyRunFailureReason returns a Korean-language description of a run error

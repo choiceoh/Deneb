@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"go/ast"
 	"go/parser"
@@ -14,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -21,12 +24,13 @@ import (
 // --- Read tool ---
 
 func ToolRead(defaultDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath string `json:"file_path"`
 			Offset   int    `json:"offset"`
 			Limit    int    `json:"limit"`
 			Function string `json:"function"`
+			Force    bool   `json:"force"`
 		}
 		if err := jsonutil.UnmarshalInto("read params", input, &p); err != nil {
 			return "", err
@@ -36,6 +40,18 @@ func ToolRead(defaultDir string) ToolFunc {
 		}
 
 		path := ResolvePath(p.FilePath, defaultDir)
+
+		// File-read dedup: for default full-file reads (no offset/limit/function),
+		// check cache before hitting disk.  Skip if force=true.
+		fc := toolctx.FileCacheFromContext(ctx)
+		useCache := fc != nil && !p.Force && p.Function == "" && p.Offset <= 0 && p.Limit <= 0
+		if useCache {
+			if entry := fc.Get(path); entry != nil && !agent.FileChanged(path, entry) {
+				entry.ReadCount++
+				return agent.FormatCachedRead(p.FilePath, entry), nil
+			}
+		}
+
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", fmt.Errorf("failed to read file: %w", err)
@@ -87,7 +103,23 @@ func ToolRead(defaultDir string) ToolFunc {
 		if end < totalLines {
 			fmt.Fprintf(&sb, "[... %d more lines. Use offset=%d to continue reading.]\n", totalLines-end, end+1)
 		}
-		return sb.String(), nil
+		output := sb.String()
+
+		// Cache the result for future dedup (only for default full-file reads, ≤1MB).
+		if useCache {
+			if info, statErr := os.Stat(path); statErr == nil && info.Size() <= fc.MaxEntrySize() {
+				fc.Set(path, &agent.FileCacheEntry{
+					Path:      path,
+					MTime:     info.ModTime(),
+					Size:      info.Size(),
+					Content:   output,
+					ReadAt:    time.Now(),
+					ReadCount: 1,
+				})
+			}
+		}
+
+		return output, nil
 	}
 }
 

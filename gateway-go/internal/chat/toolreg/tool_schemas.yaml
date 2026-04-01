@@ -31,8 +31,20 @@
     function:
       type: string
       description: "Read only this function/method/type. For .go files uses AST; for others uses regex. Overrides offset/limit"
+    force:
+      type: boolean
+      description: "Force re-read even if cached (default: false)"
+      default: false
   required:
     - file_path
+
+- name: read_spillover
+  properties:
+    spill_id:
+      type: string
+      description: "The spillover reference ID (e.g., sp_abc123) from a previous large tool result"
+  required:
+    - spill_id
 
 - name: write
   properties:
