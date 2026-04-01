@@ -35,7 +35,7 @@ type ChatRequest struct {
 
 	// ExtraBody holds additional top-level fields merged into the OpenAI-format
 	// request body. Used for provider-specific parameters like sglang's
-	// "chat_completion_extra_params": {"enable_thinking": false}.
+	// "chat_template_kwargs": {"enable_thinking": false}.
 	ExtraBody map[string]any `json:"-"`
 }
 

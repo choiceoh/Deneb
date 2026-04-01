@@ -11,7 +11,7 @@ import (
 func TestMergeJSONFields(t *testing.T) {
 	base := []byte(`{"model":"test","stream":true}`)
 	extra := map[string]any{
-		"chat_completion_extra_params": map[string]any{"enable_thinking": false},
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
 	}
 	got, err := mergeJSONFields(base, extra)
 	if err != nil {
