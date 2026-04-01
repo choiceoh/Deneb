@@ -11,32 +11,23 @@ title: "Polls"
 ## Supported channels
 
 - Telegram
-- Telegram
 
 ## CLI
 
 ```bash
-# Telegram
 deneb message poll --channel telegram --target 123456789 \
   --poll-question "Ship it?" --poll-option "Yes" --poll-option "No"
 deneb message poll --channel telegram --target -1001234567890:topic:42 \
   --poll-question "Pick a time" --poll-option "10am" --poll-option "2pm" \
   --poll-duration-seconds 300
-
-# Telegram
-deneb message poll --channel telegram --target channel:123456789 \
-  --poll-question "Snack?" --poll-option "Pizza" --poll-option "Sushi"
-deneb message poll --channel telegram --target channel:123456789 \
-  --poll-question "Plan?" --poll-option "A" --poll-option "B" --poll-duration-hours 48
 ```
 
 Options:
 
-- `--channel`: `telegram` (default) or `telegram`
+- `--channel`: `telegram` (default)
 - `--poll-multi`: allow selecting multiple options
-- `--poll-duration-hours`: Telegram-only (defaults to 24 when omitted)
-- `--poll-duration-seconds`: Telegram-only (5-600 seconds)
-- `--poll-anonymous` / `--poll-public`: Telegram-only poll visibility
+- `--poll-duration-seconds`: 5-600 seconds
+- `--poll-anonymous` / `--poll-public`: poll visibility
 
 ## Gateway RPC
 
@@ -56,8 +47,7 @@ Params:
 
 ## Channel differences
 
-- Telegram: 2-10 options. Supports forum topics via `threadId` or `:topic:` targets. Uses `durationSeconds` instead of `durationHours`, limited to 5-600 seconds. Supports anonymous and public polls.
-- Telegram: 2-10 options, `durationHours` clamped to 1-768 hours (default 24). `maxSelections > 1` enables multi-select; Telegram does not support a strict selection count.
+- Telegram: 2-10 options. Supports forum topics via `threadId` or `:topic:` targets. Uses `durationSeconds`, limited to 5-600 seconds. Supports anonymous and public polls.
 
 ## Agent tool (Message)
 

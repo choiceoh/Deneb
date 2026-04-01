@@ -80,6 +80,18 @@ func (c *Counter) Add(delta int64, labelValues ...string) {
 	c.mu.Unlock()
 }
 
+// Snapshot returns a copy of all label-key → value pairs.
+// The key is the \x00-joined label values string.
+func (c *Counter) Snapshot() map[string]int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]int64, len(c.values))
+	for k, v := range c.values {
+		out[k] = v.Load()
+	}
+	return out
+}
+
 // writeTo writes the counter in Prometheus text format.
 func (c *Counter) writeTo(w io.Writer) {
 	c.mu.RLock()

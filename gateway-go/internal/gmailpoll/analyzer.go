@@ -86,7 +86,7 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt string,
 		Stream:    true,
 	}
 
-	events, err := client.StreamChatOpenAI(ctx, req)
+	events, err := client.StreamChat(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("LLM 호출 실패: %w", err)
 	}

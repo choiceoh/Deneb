@@ -17,8 +17,7 @@ type AgentConfig struct {
 	Model     string
 	System    json.RawMessage // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
-	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
-	APIType   string // "openai" (default) or "anthropic"
+	MaxTokens int // Max output tokens per LLM call. Default: 8192.
 
 	// Sampling parameters (passed through to the LLM request).
 	Temperature      *float64
@@ -45,7 +44,7 @@ type AgentConfig struct {
 	// the first turn.
 	DeferredSystemText func() string
 
-	// Thinking configures Anthropic extended thinking for this run.
+	// Thinking configures extended thinking for this run (mapped to reasoning_effort).
 	// nil = disabled (default). Set via session ThinkingLevel or /think command.
 	Thinking *llm.ThinkingConfig
 

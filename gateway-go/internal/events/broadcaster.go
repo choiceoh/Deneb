@@ -237,6 +237,7 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 			sent++
 		}
 	}
+
 	return sent, errs
 }
 
@@ -275,6 +276,7 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 			sent++
 		}
 	}
+
 	return sent
 }
 

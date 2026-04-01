@@ -145,6 +145,13 @@ func abbreviateSession(key string) string {
 	return key
 }
 
+// isSystemSession reports whether key is a system-internal session (e.g. "system:diary-heartbeat").
+// System sessions must not write to the shared Aurora store because their messages
+// (diary prompts, heartbeat responses) would contaminate the user's conversation context.
+func isSystemSession(key string) bool {
+	return strings.HasPrefix(key, "system:")
+}
+
 // isMainSession reports whether key is a top-level direct session (e.g. "telegram:123").
 // Sub-sessions ("telegram:123:task:ts"), cron, and hook sessions return false.
 func isMainSession(key string) bool {

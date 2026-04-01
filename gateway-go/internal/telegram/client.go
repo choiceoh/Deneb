@@ -481,6 +481,12 @@ func (e *APIError) IsParseError() bool {
 		strings.Contains(e.Description, "find end of the entity"))
 }
 
+// IsMessageNotModified returns true if the error indicates the message content
+// is identical to the existing message (Telegram rejects no-op edits).
+func (e *APIError) IsMessageNotModified() bool {
+	return e.Code == 400 && strings.Contains(e.Description, "message is not modified")
+}
+
 // IsThreadNotFound returns true if the error is about a missing message thread.
 func (e *APIError) IsThreadNotFound() bool {
 	return e.Code == 400 && strings.Contains(e.Description, "message thread not found")

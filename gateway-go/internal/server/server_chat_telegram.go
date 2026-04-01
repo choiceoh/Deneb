@@ -73,6 +73,12 @@ func (s *Server) wireTelegramChatHandler() {
 				if editErr == nil {
 					return nil
 				}
+				// "Message is not modified" means the draft already shows the
+				// correct content — treat as success to avoid the visible
+				// delete-then-resend flicker.
+				if telegram.IsMessageNotModifiedError(editErr) {
+					return nil
+				}
 				// Edit failed (e.g. message too long for single edit, or API error).
 				// Delete the draft and fall through to send as new message.
 				s.logger.Warn("draft edit failed, falling back to new message",

@@ -151,6 +151,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{
 			ChannelHealth: s.channelHealth,
 			Activity:      s.activity,
+			Dispatcher:    s.dispatcher,
 		}),
 		handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{
 			Broadcaster: hub.Broadcast,

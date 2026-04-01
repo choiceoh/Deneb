@@ -53,16 +53,6 @@ func loadCachedSkillsPrompt(workspaceDir string) string {
 	return cachedSkillsPrompt
 }
 
-// appendWorkerBlock adds a worker role instructions block to an Anthropic system
-// prompt block list. The new block gets an ephemeral cache marker.
-func appendWorkerBlock(blocks []llm.ContentBlock, addition string) []llm.ContentBlock {
-	return append(blocks, llm.ContentBlock{
-		Type:         "text",
-		Text:         addition,
-		CacheControl: &llm.CacheControl{Type: "ephemeral"},
-	})
-}
-
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
 // run agent loop, persist result.
 func executeAgentRun(
@@ -101,7 +91,9 @@ func executeAgentRun(
 	}
 	// Sync to Aurora store for compaction tracking.
 	// Queue Aurora observer compaction for non-empty user messages.
-	if deps.auroraStore != nil && params.Message != "" {
+	// Skip for system sessions (e.g. diary-heartbeat) — their messages must not
+	// enter the shared Aurora context or they contaminate the user's conversation.
+	if deps.auroraStore != nil && params.Message != "" && !isSystemSession(params.SessionKey) {
 		tokenCount := uint64(estimateTokens(params.Message))
 		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync user message", "error", err)
@@ -114,9 +106,6 @@ func executeAgentRun(
 	}
 
 	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
-	// Must happen before the parallel section so apiType is known when building
-	// the system prompt in the parallel goroutine below.
-	//
 	// Agent tools pass role names ("main", "lightweight", "pilot", "fallback").
 	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
 	// are treated as direct overrides (no fallback chain).
@@ -175,9 +164,7 @@ func executeAgentRun(
 	})
 
 	// 3. Resolve LLM client (no IO — reads in-memory config/auth store).
-	// apiType must be known before the parallel section to build the system prompt
-	// in the correct format (Anthropic ContentBlock array vs plain string).
-	client, apiType := resolveClient(deps, providerID, logger)
+	client := resolveClient(deps, providerID, logger)
 	if client == nil {
 		// Use provider-specific missing-auth message when available.
 		if deps.providerRuntime != nil && providerID != "" {
@@ -213,8 +200,6 @@ func executeAgentRun(
 
 	prepStart := time.Now()
 	// 5. Run knowledge prefetch, context assembly, and system prompt build in parallel.
-	// All three are now independent: apiType is known (step 3) so the system prompt
-	// can be built in the correct format without waiting for sequential resolution.
 	var knowledgeAddition string
 	var auroraSystemAddition string
 	var messages []llm.Message
@@ -285,8 +270,7 @@ func executeAgentRun(
 		}
 	}
 
-	// System prompt build (parallel — apiType resolved early so this no longer
-	// needs to be deferred until after the sequential model/client resolution).
+	// System prompt build (parallel).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
@@ -329,11 +313,7 @@ func executeAgentRun(
 		// Coordinator mode: use the coordinator-specific system prompt.
 		if sessionToolPreset == string(toolpreset.PresetCoordinator) {
 			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
-			if apiType == "anthropic" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildCoordinatorSystemPromptBlocks(spp, scratchpadDir))
-			} else {
-				systemPrompt = llm.SystemString(prompt.BuildCoordinatorSystemPrompt(spp, scratchpadDir))
-			}
+			systemPrompt = llm.SystemString(prompt.BuildCoordinatorSystemPrompt(spp, scratchpadDir))
 			return
 		}
 
@@ -344,35 +324,16 @@ func executeAgentRun(
 			workerAddition = prompt.WorkerPromptAddition(sessionToolPreset, scratchpadDir)
 		}
 
+		var sp string
 		if ch == "telegram" {
-			if apiType == "anthropic" {
-				blocks := prompt.BuildCodingSystemPromptBlocks(spp)
-				if workerAddition != "" {
-					blocks = appendWorkerBlock(blocks, workerAddition)
-				}
-				systemPrompt = llm.SystemBlocks(blocks)
-			} else {
-				sp := prompt.BuildCodingSystemPrompt(spp)
-				if workerAddition != "" {
-					sp += "\n" + workerAddition
-				}
-				systemPrompt = llm.SystemString(sp)
-			}
+			sp = prompt.BuildCodingSystemPrompt(spp)
 		} else {
-			if apiType == "anthropic" {
-				blocks := prompt.BuildSystemPromptBlocks(spp)
-				if workerAddition != "" {
-					blocks = appendWorkerBlock(blocks, workerAddition)
-				}
-				systemPrompt = llm.SystemBlocks(blocks)
-			} else {
-				sp := prompt.BuildSystemPrompt(spp)
-				if workerAddition != "" {
-					sp += "\n" + workerAddition
-				}
-				systemPrompt = llm.SystemString(sp)
-			}
+			sp = prompt.BuildSystemPrompt(spp)
 		}
+		if workerAddition != "" {
+			sp += "\n" + workerAddition
+		}
+		systemPrompt = llm.SystemString(sp)
 	}()
 
 	prepWg.Wait()
@@ -489,11 +450,6 @@ func executeAgentRun(
 		tools = deps.tools.FilteredLLMTools(allowed)
 	}
 
-	// For Anthropic: mark the last tool for prompt caching.
-	if apiType == "anthropic" && len(tools) > 0 {
-		tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
-	}
-
 	// 9. Build agent config.
 	maxTokens := deps.maxTokens
 	if maxTokens <= 0 {
@@ -527,7 +483,6 @@ func executeAgentRun(
 		System:           systemPrompt,
 		Tools:            tools,
 		MaxTokens:        maxTokens,
-		APIType:          apiType,
 		Thinking:         thinkingCfg,
 		Temperature:      params.Temperature,
 		TopP:             params.TopP,
@@ -748,15 +703,13 @@ func executeAgentRun(
 		// preventing the "disappear then reappear" flicker on completion.
 		defer func() {
 			if draftCtrl != nil {
-				// Queue the final accumulated text before flushing, in case the
-				// last section didn't reach the update threshold. Sanitize to
-				// strip any leaked commands or code blocks.
-				if accum.Len() > 0 {
-					if sanitized := reply.SanitizeDraftText(accum.String()); sanitized != "" {
-						draftCtrl.Update(sanitized)
-					}
-				}
-				draftCtrl.Finalize()
+				// Stop the draft loop without flushing. The reply pipeline will
+				// edit the draft message in-place with the final processed text.
+				// Flushing here would cause a double-edit: first with SanitizeDraftText
+				// (code blocks stripped), then immediately after with the final reply
+				// text (differently processed), producing a visible content flash
+				// or "clear and resend" flicker on Telegram.
+				draftCtrl.StopForClear()
 			}
 			// Store the draft message ID on the delivery context so the reply
 			// pipeline can edit the existing message instead of sending a new one.
@@ -970,7 +923,6 @@ func executeAgentRun(
 						"error", runErr)
 					agentCfg := cfg
 					agentCfg.Model = fbCfg.Model
-					agentCfg.APIType = fbCfg.APIType
 					agentResult, runErr = agent.RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
 					if runErr == nil {
 						fallbackSucceeded = true

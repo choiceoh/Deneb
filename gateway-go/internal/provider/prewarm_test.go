@@ -45,7 +45,7 @@ func TestDoPrewarmRequest_OpenAI(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := doPrewarmRequest(ctx, client, "test-model", "openai")
+	err := doPrewarmRequest(ctx, client, "test-model")
 	if err != nil {
 		t.Fatalf("doPrewarmRequest failed: %v", err)
 	}
@@ -93,14 +93,3 @@ func TestExtractModelFromDefaults(t *testing.T) {
 	}
 }
 
-func TestInferPrewarmAPIType(t *testing.T) {
-	if got := inferPrewarmAPIType("zai", ""); got != "openai" {
-		t.Errorf("zai: got %q, want openai", got)
-	}
-	if got := inferPrewarmAPIType("anthropic", ""); got != "anthropic" {
-		t.Errorf("anthropic: got %q, want anthropic", got)
-	}
-	if got := inferPrewarmAPIType("zai", "anthropic"); got != "anthropic" {
-		t.Errorf("explicit: got %q, want anthropic", got)
-	}
-}

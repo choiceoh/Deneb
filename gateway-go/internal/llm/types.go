@@ -1,8 +1,5 @@
-// Package llm provides an HTTP client for LLM provider APIs with SSE streaming.
-//
-// This package is provider-agnostic at the type level. Provider-specific
-// adapters (e.g., Anthropic) build requests and map streaming events
-// using the shared types defined here.
+// Package llm provides an HTTP client for OpenAI-compatible LLM provider APIs
+// with SSE streaming.
 package llm
 
 import (
@@ -11,8 +8,6 @@ import (
 )
 
 // ChatRequest represents a streaming chat completion request.
-// The System field accepts both a plain string and an array of ContentBlocks
-// (for Anthropic cache_control annotations and extended thinking).
 type ChatRequest struct {
 	Model            string          `json:"model"`
 	Messages         []Message       `json:"messages"`
@@ -24,18 +19,18 @@ type ChatRequest struct {
 	TopP             *float64        `json:"top_p,omitempty"`
 	TopK             *int            `json:"top_k,omitempty"`
 	StopSequences    []string        `json:"stop_sequences,omitempty"`
-	FrequencyPenalty *float64        `json:"-"` // OpenAI only; excluded from Anthropic JSON
-	PresencePenalty  *float64        `json:"-"` // OpenAI only; excluded from Anthropic JSON
+	FrequencyPenalty *float64 `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64 `json:"presence_penalty,omitempty"`
 
-	// ResponseFormat requests structured output (OpenAI-compatible).
+	// ResponseFormat requests structured output.
 	// Use &ResponseFormat{Type: "json_object"} for JSON mode.
-	ResponseFormat *ResponseFormat `json:"-"` // OpenAI only; excluded from Anthropic JSON
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
 
-	// ToolChoice controls tool selection behavior (OpenAI-compatible).
+	// ToolChoice controls tool selection behavior.
 	// Values: "auto", "none", "required", or {"type":"function","function":{"name":"..."}}.
-	ToolChoice any `json:"-"` // OpenAI only; excluded from Anthropic JSON
+	ToolChoice any `json:"tool_choice,omitempty"`
 
-	// Anthropic extended thinking support.
+	// Thinking configures extended thinking (mapped to reasoning_effort for OpenAI).
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
 }
 
@@ -94,8 +89,7 @@ func SystemString(s string) json.RawMessage {
 	return raw
 }
 
-// SystemBlocks is a convenience for setting an array-of-blocks system prompt
-// (used for Anthropic cache_control annotations).
+// SystemBlocks is a convenience for setting an array-of-blocks system prompt.
 func SystemBlocks(blocks []ContentBlock) json.RawMessage {
 	if len(blocks) == 0 {
 		return nil
@@ -198,7 +192,7 @@ func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMess
 	return system
 }
 
-// ThinkingConfig controls Anthropic's extended thinking feature.
+// ThinkingConfig controls extended thinking (mapped to reasoning_effort for OpenAI-compatible APIs).
 type ThinkingConfig struct {
 	Type         string `json:"type"`          // "enabled" or "disabled"
 	BudgetTokens int    `json:"budget_tokens"` // max tokens for thinking
@@ -240,33 +234,33 @@ type ContentBlock struct {
 	Content   string `json:"content,omitempty"`
 	IsError   bool   `json:"is_error,omitempty"`
 
-	// image block (Anthropic: type="image", source.type/media_type/data)
+	// image block (base64 inline)
 	Source *ImageSource `json:"source,omitempty"`
 
-	// image_url block (OpenAI: type="image_url", image_url.url)
+	// image_url block (URL reference)
 	ImageURL *ImageURL `json:"image_url,omitempty"`
 
-	// thinking block (Anthropic extended thinking)
+	// thinking block (extended thinking / reasoning content)
 	Thinking string `json:"thinking,omitempty"`
 
-	// Cache control (Anthropic prompt caching + OpenAI-compatible).
+	// Cache control for prompt caching.
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
-// ImageSource is an Anthropic-style inline image (base64).
+// ImageSource is an inline image (base64).
 type ImageSource struct {
 	Type      string `json:"type"`       // "base64"
 	MediaType string `json:"media_type"` // "image/png", "image/jpeg", etc.
 	Data      string `json:"data"`       // base64-encoded image data
 }
 
-// ImageURL is an OpenAI-style image reference (URL or data URI).
+// ImageURL is an image reference (URL or data URI).
 type ImageURL struct {
 	URL    string `json:"url"`
 	Detail string `json:"detail,omitempty"` // "auto", "low", "high"
 }
 
-// CacheControl marks a content block for prompt caching.
+// CacheControl marks a content block or tool for prompt caching.
 type CacheControl struct {
 	Type string `json:"type"` // "ephemeral"
 }
@@ -283,7 +277,7 @@ type Tool struct {
 	Description    string          `json:"description"`
 	InputSchema    map[string]any  `json:"-"`                       // programmatic access; excluded from JSON
 	RawInputSchema json.RawMessage `json:"input_schema"`            // pre-serialized; used in API requests
-	CacheControl   *CacheControl   `json:"cache_control,omitempty"` // Anthropic prompt caching
+	CacheControl   *CacheControl   `json:"cache_control,omitempty"` // prompt caching
 }
 
 // PreSerialize computes RawInputSchema from InputSchema if not already set.
@@ -301,7 +295,7 @@ type StreamEvent struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-// --- Anthropic streaming event payload types ---
+// --- Streaming event payload types ---
 
 // MessageStart is the payload for "message_start" events.
 type MessageStart struct {

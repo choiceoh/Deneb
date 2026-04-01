@@ -43,18 +43,11 @@ See [Security](/gateway/security) and [Remote access](/gateway/remote).
 
 ## Choosing an agent
 
-No custom headers required: encode the agent id in the OpenAI `model` field:
-
-- `model: "deneb:<agentId>"` (example: `"deneb:main"`, `"deneb:beta"`)
-- `model: "agent:<agentId>"` (alias)
-
-Or target a specific Deneb agent by header:
-
-- `x-deneb-agent-id: <agentId>` (default: `main`)
+The `model` field is passed directly as the LLM model ID.
 
 Advanced:
 
-- `x-deneb-session-key: <sessionKey>` to fully control session routing.
+- `X-Deneb-Session: <sessionKey>` to control session routing.
 
 ## Enabling the endpoint
 
@@ -110,9 +103,8 @@ Non-streaming:
 curl -sS http://127.0.0.1:18789/v1/chat/completions \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -H 'Content-Type: application/json' \
-  -H 'x-deneb-agent-id: main' \
   -d '{
-    "model": "deneb",
+    "model": "claude-sonnet-4-20250514",
     "messages": [{"role":"user","content":"hi"}]
   }'
 ```
@@ -123,7 +115,6 @@ Streaming:
 curl -N http://127.0.0.1:18789/v1/chat/completions \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -H 'Content-Type: application/json' \
-  -H 'x-deneb-agent-id: main' \
   -d '{
     "model": "deneb",
     "stream": true,

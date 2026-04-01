@@ -47,9 +47,9 @@ func (t *thinkingStreamer) StreamChat(ctx context.Context, req llm.ChatRequest) 
 	return t.inner.StreamChat(ctx, req)
 }
 
-func (t *thinkingStreamer) StreamChatOpenAI(ctx context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+func (t *thinkingStreamer) Complete(ctx context.Context, req llm.ChatRequest) (string, error) {
 	req.Thinking = t.thinking
-	return t.inner.StreamChatOpenAI(ctx, req)
+	return t.inner.Complete(ctx, req)
 }
 
 // agentMessagesToLLM converts AgentRunnerMemory history to llm.Message slice.

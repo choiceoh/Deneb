@@ -27,6 +27,5 @@ func (s *Server) buildHub() *rpcutil.GatewayHub {
 		Talk:        s.talkState,
 		Logger:      s.logger,
 		Version:     s.version,
-		Config:      s.runtimeCfg,
 	}
 }

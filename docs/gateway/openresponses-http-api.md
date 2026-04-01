@@ -24,8 +24,7 @@ Operational behavior matches [OpenAI Chat Completions](/gateway/openai-http-api)
 
 - use `Authorization: Bearer <token>` with the normal Gateway auth config
 - treat the endpoint as full operator access for the gateway instance
-- select agents with `model: "deneb:<agentId>"`, `model: "agent:<agentId>"`, or `x-deneb-agent-id`
-- use `x-deneb-session-key` for explicit session routing
+- the `model` field is passed directly as the LLM model ID
 
 Enable or disable this endpoint with `gateway.http.endpoints.responses.enabled`.
 
