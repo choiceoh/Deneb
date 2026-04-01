@@ -125,7 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_relations_to ON fact_relations(to_fact_id);
 CREATE TABLE IF NOT EXISTS entities (
 	id            INTEGER PRIMARY KEY AUTOINCREMENT,
 	name          TEXT NOT NULL UNIQUE,
-	entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization')),
+	entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization','unknown')),
 	first_seen    TEXT NOT NULL,
 	last_seen     TEXT NOT NULL,
 	mention_count INTEGER NOT NULL DEFAULT 1
@@ -162,7 +162,7 @@ func GraphMigrateDDL() []string {
 		`CREATE TABLE IF NOT EXISTS entities (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
 			name          TEXT NOT NULL UNIQUE,
-			entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization')),
+			entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization','unknown')),
 			first_seen    TEXT NOT NULL,
 			last_seen     TEXT NOT NULL,
 			mention_count INTEGER NOT NULL DEFAULT 1
@@ -305,6 +305,23 @@ func migrateSchema(db *sql.DB) {
 	for _, ddl := range GraphMigrateDDL() {
 		_, _ = db.Exec(ddl)
 	}
+
+	// v5 → v6: fix entities CHECK constraint to include 'unknown'.
+	// SQLite cannot ALTER a CHECK constraint, so we recreate the table.
+	// The migration is idempotent — a no-op if the constraint is already correct.
+	_, _ = db.Exec(`
+		CREATE TABLE IF NOT EXISTS entities_v6 (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			name          TEXT NOT NULL UNIQUE,
+			entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization','unknown')),
+			first_seen    TEXT NOT NULL,
+			last_seen     TEXT NOT NULL,
+			mention_count INTEGER NOT NULL DEFAULT 1
+		)`)
+	_, _ = db.Exec(`INSERT OR IGNORE INTO entities_v6 SELECT * FROM entities`)
+	_, _ = db.Exec(`DROP TABLE IF EXISTS entities`)
+	_, _ = db.Exec(`ALTER TABLE entities_v6 RENAME TO entities`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)`)
 }
 
 // NewStoreFromDB creates a memory store using a pre-opened database connection.
