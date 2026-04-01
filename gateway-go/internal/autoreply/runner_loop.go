@@ -125,6 +125,10 @@ type DefaultAgentRunner struct {
 	maxTurns int
 	// Error recovery callback: called on context overflow or role ordering errors.
 	onSessionReset func(sessionKey, reason string)
+	// OnMemoryFlush is called when pre-compaction memory flush is triggered.
+	// The caller should persist the flush data (e.g., extract facts, write to store).
+	// nil = flush is logged but not persisted.
+	OnMemoryFlush func(flush MemoryFlush)
 }
 
 // AgentRunnerConfig configures the default agent runner.
@@ -195,6 +199,9 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 			"sessionKey", flush.SessionKey,
 			"messages", len(flush.Messages),
 			"ts", flush.Timestamp)
+		if r.OnMemoryFlush != nil {
+			r.OnMemoryFlush(flush)
+		}
 	}
 
 	// Auto-compact if we're already over budget before the run starts.

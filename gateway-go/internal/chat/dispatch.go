@@ -260,7 +260,6 @@ func (h *Handler) buildRunDeps() runDeps {
 		broadcast:            h.broadcast,
 		broadcastRaw:         h.broadcastRaw,
 		jobTracker:           h.jobTracker,
-		channels:             h.channels,
 		replyFunc:            h.replyFunc,
 		mediaSendFn:          h.mediaSendFn,
 		typingFn:             h.typingFn,

@@ -65,7 +65,6 @@ type runDeps struct {
 	broadcast        BroadcastFunc                     // optional
 	broadcastRaw     streaming.BroadcastRawFunc        // optional
 	jobTracker       *agent.JobTracker                 // optional
-	channels         *telegram.Plugin                  // optional; multi-target delivery via streaming.Dispatch
 	replyFunc        ReplyFunc                         // optional; delivers response to originating channel
 	mediaSendFn      MediaSendFunc                     // optional; delivers files to originating channel
 	typingFn         TypingFunc                        // optional; sends typing indicator during run

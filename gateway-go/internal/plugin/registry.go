@@ -30,7 +30,7 @@ type ChannelRegistration struct {
 	PluginID  string
 	ChannelID string
 	Label     string
-	Plugin    interface{} // the actual channel.Plugin
+	Plugin    interface{} // the concrete plugin instance (e.g., *telegram.Plugin)
 }
 
 // ProviderRegistration describes a registered LLM provider.

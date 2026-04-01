@@ -575,7 +575,7 @@ func executeAgentRun(
 			if prevOnToolResult != nil {
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
-			go deps.pluginHookRunner.RunVoidHook(context.Background(), plugin.HookAfterToolCall, map[string]any{
+			go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAfterToolCall, map[string]any{
 				"toolName":   name,
 				"toolCallId": toolUseID,
 				"sessionKey": params.SessionKey,
@@ -592,7 +592,7 @@ func executeAgentRun(
 			if prevOnToolResult != nil {
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
-			go deps.hookRegistry.Fire(context.Background(), hookspkg.EventToolUse, map[string]string{
+			go deps.hookRegistry.Fire(deps.shutdownCtx, hookspkg.EventToolUse, map[string]string{
 				"DENEB_TOOL":        name,
 				"DENEB_TOOL_USE_ID": toolUseID,
 				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
@@ -792,7 +792,7 @@ func executeAgentRun(
 
 	// Fire agent_end plugin hook (void, non-blocking).
 	if deps.pluginHookRunner != nil {
-		go deps.pluginHookRunner.RunVoidHook(context.Background(), plugin.HookAgentEnd, map[string]any{
+		go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAgentEnd, map[string]any{
 			"sessionKey": params.SessionKey,
 			"runId":      params.ClientRunID,
 			"model":      model,
