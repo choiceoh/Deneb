@@ -53,6 +53,12 @@ type Handler struct {
 	defaultSystem string
 	maxTokens     int
 
+	// callbackMu guards all late-bind callback fields below. These are set
+	// during server initialization (before HTTP serving starts) and read
+	// during request handling. The mutex ensures safe access even if the
+	// init/serve boundary is refactored in the future.
+	callbackMu sync.RWMutex
+
 	replyFunc        ReplyFunc        // optional: delivers response to originating channel
 	mediaSendFn      MediaSendFunc    // optional: delivers files to originating channel
 	typingFn         TypingFunc       // optional: sends typing indicator during agent run
@@ -74,6 +80,7 @@ type Handler struct {
 
 	// shutdownCtx is the server lifecycle context. Set via SetShutdownCtx so
 	// background goroutines (auto-memory extraction) stop on server shutdown.
+	// Protected by callbackMu.
 	shutdownCtx context.Context
 
 	abortMu  sync.Mutex
@@ -85,13 +92,16 @@ type Handler struct {
 	pendingMsgs map[string]*pendingRunQueue // sessionKey -> queued messages
 
 	// runStateMachine tracks active agent runs for status broadcasting.
+	// Protected by callbackMu.
 	runStateMachine *telegram.RunStateMachine
 
 	// pluginHookRunner runs typed plugin hooks (before_model_resolve,
 	// before_prompt_build, message_sending, etc.) during chat execution.
+	// Protected by callbackMu.
 	pluginHookRunner *plugin.TypedHookRunner
 
 	// hookRegistry fires user-defined shell hooks on message/tool events.
+	// Protected by callbackMu.
 	hookRegistry *hooks.Registry
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
@@ -216,66 +226,89 @@ func (h *Handler) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {
 // originating channel (e.g., Telegram). Called after each successful agent run
 // when a DeliveryContext is present.
 func (h *Handler) SetReplyFunc(fn ReplyFunc) {
+	h.callbackMu.Lock()
 	h.replyFunc = fn
+	h.callbackMu.Unlock()
 }
 
 // SetMediaSendFunc sets the function that delivers files back to the
 // originating channel (e.g., Telegram). Used by the send_file tool.
 func (h *Handler) SetMediaSendFunc(fn MediaSendFunc) {
+	h.callbackMu.Lock()
 	h.mediaSendFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetTypingFunc sets the function that sends typing indicators to the
 // originating channel (e.g., Telegram "typing..." status) during agent runs.
 func (h *Handler) SetTypingFunc(fn TypingFunc) {
+	h.callbackMu.Lock()
 	h.typingFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetReactionFunc sets the function that manages emoji reactions on the
 // triggering message to indicate agent status phases (thinking, tool use, done).
 func (h *Handler) SetReactionFunc(fn ReactionFunc) {
+	h.callbackMu.Lock()
 	h.reactionFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetRemoveReactionFunc sets the function that removes an emoji reaction
 // from the triggering message when channel adapters require explicit cleanup.
 func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
+	h.callbackMu.Lock()
 	h.removeReactionFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetToolProgressFunc sets the function that reports tool execution events
 // (start/complete) to the originating channel for real-time progress display.
 func (h *Handler) SetToolProgressFunc(fn ToolProgressFunc) {
+	h.callbackMu.Lock()
 	h.toolProgressFn = fn
+	h.callbackMu.Unlock()
 }
 
 // ToolProgressFunc returns the current tool progress function (for chaining).
 func (h *Handler) ToolProgressFunc() ToolProgressFunc {
-	return h.toolProgressFn
+	h.callbackMu.RLock()
+	fn := h.toolProgressFn
+	h.callbackMu.RUnlock()
+	return fn
 }
 
 // SetDraftEditFunc sets the function that sends/edits streaming draft messages
 // on the originating channel for real-time LLM output display.
 func (h *Handler) SetDraftEditFunc(fn DraftEditFunc) {
+	h.callbackMu.Lock()
 	h.draftEditFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetDraftDeleteFunc sets the function that deletes streaming draft messages
 // on the originating channel, used to clean up partial drafts before the final reply.
 func (h *Handler) SetDraftDeleteFunc(fn DraftDeleteFunc) {
+	h.callbackMu.Lock()
 	h.draftDeleteFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetEmitAgentFunc sets the callback that sends agent lifecycle events
 // (run.start, tool.start, tool.end) to the gateway event subscription pipeline.
 func (h *Handler) SetEmitAgentFunc(fn func(kind, sessionKey, runID string, payload map[string]any)) {
+	h.callbackMu.Lock()
 	h.emitAgentFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetEmitTranscriptFunc sets the callback that sends transcript updates
 // (user/assistant message appends) to the gateway event subscription pipeline.
 func (h *Handler) SetEmitTranscriptFunc(fn func(sessionKey string, message any, messageID string)) {
+	h.callbackMu.Lock()
 	h.emitTranscriptFn = fn
+	h.callbackMu.Unlock()
 }
 
 // SetChannelUploadLimit registers the maximum file upload size for a channel.
@@ -297,27 +330,42 @@ func (h *Handler) ChannelUploadLimit(channelID string) int64 {
 
 // RemoveReactionFunc returns the current remove reaction function (for chaining).
 func (h *Handler) RemoveReactionFunc() ReactionFunc {
-	return h.removeReactionFn
+	h.callbackMu.RLock()
+	fn := h.removeReactionFn
+	h.callbackMu.RUnlock()
+	return fn
 }
 
 // ReplyFunc returns the current reply function (for chaining).
 func (h *Handler) ReplyFunc() ReplyFunc {
-	return h.replyFunc
+	h.callbackMu.RLock()
+	fn := h.replyFunc
+	h.callbackMu.RUnlock()
+	return fn
 }
 
 // MediaSendFunc returns the current media send function (for chaining).
 func (h *Handler) MediaSendFunc() MediaSendFunc {
-	return h.mediaSendFn
+	h.callbackMu.RLock()
+	fn := h.mediaSendFn
+	h.callbackMu.RUnlock()
+	return fn
 }
 
 // TypingFunc returns the current typing function (for chaining).
 func (h *Handler) TypingFunc() TypingFunc {
-	return h.typingFn
+	h.callbackMu.RLock()
+	fn := h.typingFn
+	h.callbackMu.RUnlock()
+	return fn
 }
 
 // ReactionFunc returns the current reaction function (for chaining).
 func (h *Handler) ReactionFunc() ReactionFunc {
-	return h.reactionFn
+	h.callbackMu.RLock()
+	fn := h.reactionFn
+	h.callbackMu.RUnlock()
+	return fn
 }
 
 // SetProviderRuntime sets the provider runtime resolver for runtime auth
@@ -329,27 +377,38 @@ func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {
 // SetShutdownCtx sets the server lifecycle context so background goroutines
 // (e.g., auto-memory extraction) are cancelled when the server shuts down.
 func (h *Handler) SetShutdownCtx(ctx context.Context) {
+	h.callbackMu.Lock()
 	h.shutdownCtx = ctx
+	h.callbackMu.Unlock()
 }
 
 // SetRunStateMachine sets the state machine that tracks active agent runs.
 func (h *Handler) SetRunStateMachine(sm *telegram.RunStateMachine) {
+	h.callbackMu.Lock()
 	h.runStateMachine = sm
+	h.callbackMu.Unlock()
 }
 
 // SetPluginHookRunner sets the typed hook runner for plugin lifecycle events.
 func (h *Handler) SetPluginHookRunner(r *plugin.TypedHookRunner) {
+	h.callbackMu.Lock()
 	h.pluginHookRunner = r
+	h.callbackMu.Unlock()
 }
 
 // PluginHookRunner returns the typed hook runner (may be nil).
 func (h *Handler) PluginHookRunner() *plugin.TypedHookRunner {
-	return h.pluginHookRunner
+	h.callbackMu.RLock()
+	r := h.pluginHookRunner
+	h.callbackMu.RUnlock()
+	return r
 }
 
 // SetHookRegistry sets the user-defined hook registry for message/tool events.
 func (h *Handler) SetHookRegistry(r *hooks.Registry) {
+	h.callbackMu.Lock()
 	h.hookRegistry = r
+	h.callbackMu.Unlock()
 }
 
 // DefaultModel returns the configured default LLM model name.

@@ -59,10 +59,13 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 
 	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
+	h.callbackMu.RLock()
+	rsm := h.runStateMachine
+	h.callbackMu.RUnlock()
 	go func() {
-		if h.runStateMachine != nil {
-			h.runStateMachine.StartRun()
-			defer h.runStateMachine.EndRun()
+		if rsm != nil {
+			rsm.StartRun()
+			defer rsm.EndRun()
 		}
 		defer runCancel()
 		defer h.cleanupAbort(params.ClientRunID)
@@ -243,12 +246,15 @@ func (h *Handler) handleSlashCommand(
 
 // deliverSlashResponse sends a slash command response back to the originating channel.
 func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
-	if h.replyFunc == nil || delivery == nil || text == "" {
+	h.callbackMu.RLock()
+	fn := h.replyFunc
+	h.callbackMu.RUnlock()
+	if fn == nil || delivery == nil || text == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := h.replyFunc(ctx, delivery, text); err != nil {
+	if err := fn(ctx, delivery, text); err != nil {
 		h.logger.Warn("slash command reply failed", "error", err)
 	}
 }
@@ -268,8 +274,11 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 }
 
 // buildRunDeps assembles the dependency struct for runAgentAsync.
+// Snapshots all callback fields under callbackMu so the run goroutine
+// holds stable references even if Set*() is called concurrently.
 func (h *Handler) buildRunDeps() runDeps {
-	return runDeps{
+	h.callbackMu.RLock()
+	deps := runDeps{
 		sessions:             h.sessions,
 		llmClient:            h.llmClient,
 		transcript:           h.transcript,
@@ -316,6 +325,8 @@ func (h *Handler) buildRunDeps() runDeps {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
 	}
+	h.callbackMu.RUnlock()
+	return deps
 }
 
 // cleanupAbort removes a run's abort entry after the run completes.
