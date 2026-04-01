@@ -238,20 +238,3 @@ func safeStr(target *DeliveryTarget, fn func(*DeliveryTarget) string) string {
 	}
 	return fn(target)
 }
-
-// createShadowSession creates a KindShadow session that inherits recent
-// conversation context from the main session. Returns the shadow session key,
-// or empty string if shadow sessions are not configured.
-const shadowContextLimit = 20 // number of recent messages to clone
-
-func (s *Service) createShadowSession(cronSessionKey string) string {
-	if s.cfg.Sessions == nil || s.cfg.TranscriptCloner == nil || s.cfg.MainSessionKey == "" {
-		return ""
-	}
-	shadowKey := "shadow:" + cronSessionKey
-	s.cfg.Sessions.Create(shadowKey, session.KindShadow)
-	if err := s.cfg.TranscriptCloner.CloneRecent(s.cfg.MainSessionKey, shadowKey, shadowContextLimit); err != nil {
-		s.logger.Warn("shadow session clone failed", "key", shadowKey, "error", err)
-	}
-	return shadowKey
-}

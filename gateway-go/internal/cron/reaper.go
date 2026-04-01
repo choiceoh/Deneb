@@ -9,8 +9,9 @@ const (
 )
 
 // IsCronRunSessionKey returns true if the key looks like a cron run session.
+// Cron run keys follow the format "cron:{jobID}:{timestamp}".
 func IsCronRunSessionKey(key string) bool {
-	return strings.HasPrefix(key, "cron:")
+	return strings.HasPrefix(key, "cron:") && strings.Count(key, ":") >= 2
 }
 
 // ResolveRetentionMs returns the configured retention or the default.

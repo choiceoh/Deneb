@@ -35,6 +35,17 @@ const (
 	KindShadow   Kind = "shadow"
 )
 
+// IsInternal returns true for session kinds that are system-internal
+// (cron, subagent, shadow) and should be excluded from user-facing listings.
+func (k Kind) IsInternal() bool {
+	switch k {
+	case KindCron, KindSubagent, KindShadow:
+		return true
+	default:
+		return false
+	}
+}
+
 // ModelConfig holds inference and model-selection settings for a session.
 // Fields are embedded into Session and serialize as flat JSON keys.
 type ModelConfig struct {

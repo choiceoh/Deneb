@@ -51,6 +51,34 @@ func LinkTaskToFlow(reg *Registry, taskID, flowID string) error {
 	return reg.RefreshFlowCounts(flowID)
 }
 
+// CancelFlow cancels a flow and all its active tasks, recording audit events.
+func CancelFlow(reg *Registry, flowID string) (int, error) {
+	f := reg.GetFlow(flowID)
+	if f == nil {
+		return 0, fmt.Errorf("flow not found: %s", flowID)
+	}
+
+	tasks := reg.ListByFlowID(flowID)
+	cancelled := 0
+	for _, t := range tasks {
+		if t.Status.IsActive() {
+			if err := CancelTask(reg, t.TaskID); err == nil {
+				cancelled++
+			}
+		}
+	}
+
+	f.Status = FlowCancelled
+	now := NowMs()
+	f.UpdatedAt = now
+	f.CompletedAt = now
+	if err := reg.PutFlow(f); err != nil {
+		return cancelled, fmt.Errorf("cancel flow: update: %w", err)
+	}
+
+	return cancelled, nil
+}
+
 // ResumeBlockedFlow unblocks a flow by resuming all blocked tasks in it.
 func ResumeBlockedFlow(reg *Registry, flowID string) (int, error) {
 	f := reg.GetFlow(flowID)

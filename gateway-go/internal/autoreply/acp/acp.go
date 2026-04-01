@@ -21,10 +21,10 @@ type ACPAgent struct {
 	ID           string `json:"id"`
 	ParentID     string `json:"parentId,omitempty"`
 	Role         string `json:"role,omitempty"`
-	Status       string `json:"status"`                // derived from session: "idle", "running", "done", "failed", "killed"
+	Status       string `json:"status"` // derived from session: "idle", "running", "done", "failed", "killed"
 	SessionKey   string `json:"sessionKey"`
 	SpawnedAt    int64  `json:"spawnedAt"`
-	EndedAt      int64  `json:"endedAt,omitempty"`      // derived from session
+	EndedAt      int64  `json:"endedAt,omitempty"` // derived from session
 	WorkspaceDir string `json:"workspaceDir,omitempty"`
 	Depth        int    `json:"depth"`
 }
@@ -69,7 +69,8 @@ func (r *ACPRegistry) bumpVer() {
 }
 
 // enrichFromSession populates Status and EndedAt from session.Manager if available.
-// Caller need not hold a lock — this reads the session store directly.
+// Caller need not hold a lock — r.sessions is set once via SetSessionManager
+// before any agents are registered, so the field is effectively immutable after init.
 func (r *ACPRegistry) enrichFromSession(a *ACPAgent) {
 	if r.sessions == nil || a.SessionKey == "" {
 		return
@@ -258,8 +259,8 @@ func StartACPLifecycleSync(registry *ACPRegistry, eventBus *session.EventBus) fu
 // ACPTurnResult is a minimal result type used by ACPProjector to render
 // sub-agent output. The autoreply root package maps AgentTurnResult onto this.
 type ACPTurnResult struct {
-	OutputText  string
-	TokensUsed  ACPTokenUsage
+	OutputText string
+	TokensUsed ACPTokenUsage
 }
 
 // ACPTokenUsage tracks token consumption summary for ACP display purposes.

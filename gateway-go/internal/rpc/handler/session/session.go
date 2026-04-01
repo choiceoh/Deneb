@@ -39,11 +39,11 @@ type ExecDeps struct {
 func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"sessions.patch":          sessionsPatch(deps),
-		"sessions.reset":         sessionsReset(deps),
-		"sessions.preview":       sessionsPreview(deps),
-		"sessions.resolve":       sessionsResolve(deps),
-		"sessions.compact":       sessionsCompact(deps),
-		"sessions.repair":        sessionsRepair(deps),
+		"sessions.reset":          sessionsReset(deps),
+		"sessions.preview":        sessionsPreview(deps),
+		"sessions.resolve":        sessionsResolve(deps),
+		"sessions.compact":        sessionsCompact(deps),
+		"sessions.repair":         sessionsRepair(deps),
 		"sessions.overflow_check": sessionsOverflowCheck(deps),
 	}
 }
@@ -524,9 +524,9 @@ func filterSessions(sessions []*session.Session, agentID, spawnedBy string, incl
 		if s.Kind == session.KindUnknown && !isTrue(includeUnknown) {
 			continue
 		}
-		// Cron, subagent, and shadow sessions are internal — exclude from
-		// user-facing session listings by default.
-		if s.Kind == session.KindCron || s.Kind == session.KindSubagent || s.Kind == session.KindShadow {
+		// Internal session kinds (cron, subagent, shadow) are excluded
+		// from user-facing session listings by default.
+		if s.Kind.IsInternal() {
 			continue
 		}
 		if spawnedBy != "" && s.SpawnedBy != spawnedBy {
