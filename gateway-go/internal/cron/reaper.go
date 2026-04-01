@@ -37,8 +37,12 @@ type ReaperResult struct {
 	Pruned int  `json:"pruned"`
 }
 
-// IsCronRunSessionKey returns true if the key looks like a cron run session.
+// IsCronRunSessionKey returns true if the key looks like a cron run session
+// (including shadow sessions created for subagent cron jobs).
 func IsCronRunSessionKey(key string) bool {
+	if strings.HasPrefix(key, "cron:shadow:") {
+		return true
+	}
 	return strings.Contains(key, ":cron:") && strings.Contains(key, ":run:")
 }
 

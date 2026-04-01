@@ -484,7 +484,7 @@ func normalizeSessionTarget(raw map[string]any, payloadKind string) bool {
 	mutated := false
 
 	switch {
-	case lowered == "main" || lowered == "isolated":
+	case lowered == "main" || lowered == "isolated" || lowered == "subagent":
 		if raw["sessionTarget"] != lowered {
 			raw["sessionTarget"] = lowered
 			mutated = true

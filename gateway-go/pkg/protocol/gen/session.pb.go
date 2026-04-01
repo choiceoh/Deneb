@@ -95,6 +95,9 @@ const (
 	SessionKind_SESSION_KIND_GROUP       SessionKind = 2
 	SessionKind_SESSION_KIND_GLOBAL      SessionKind = 3
 	SessionKind_SESSION_KIND_UNKNOWN     SessionKind = 4
+	SessionKind_SESSION_KIND_CRON        SessionKind = 5 // Scheduled cron job session
+	SessionKind_SESSION_KIND_SUBAGENT    SessionKind = 6 // Spawned sub-agent session
+	SessionKind_SESSION_KIND_SHADOW      SessionKind = 7 // Temporary clone of another session
 )
 
 // Enum value maps for SessionKind.
@@ -105,6 +108,9 @@ var (
 		2: "SESSION_KIND_GROUP",
 		3: "SESSION_KIND_GLOBAL",
 		4: "SESSION_KIND_UNKNOWN",
+		5: "SESSION_KIND_CRON",
+		6: "SESSION_KIND_SUBAGENT",
+		7: "SESSION_KIND_SHADOW",
 	}
 	SessionKind_value = map[string]int32{
 		"SESSION_KIND_UNSPECIFIED": 0,
@@ -112,6 +118,9 @@ var (
 		"SESSION_KIND_GROUP":       2,
 		"SESSION_KIND_GLOBAL":      3,
 		"SESSION_KIND_UNKNOWN":     4,
+		"SESSION_KIND_CRON":        5,
+		"SESSION_KIND_SUBAGENT":    6,
+		"SESSION_KIND_SHADOW":      7,
 	}
 )
 
@@ -987,13 +996,16 @@ const file_session_proto_rawDesc = "" +
 	"\x17SESSION_RUN_STATUS_DONE\x10\x02\x12\x1d\n" +
 	"\x19SESSION_RUN_STATUS_FAILED\x10\x03\x12\x1d\n" +
 	"\x19SESSION_RUN_STATUS_KILLED\x10\x04\x12\x1e\n" +
-	"\x1aSESSION_RUN_STATUS_TIMEOUT\x10\x05*\x8f\x01\n" +
+	"\x1aSESSION_RUN_STATUS_TIMEOUT\x10\x05*\xda\x01\n" +
 	"\vSessionKind\x12\x1c\n" +
 	"\x18SESSION_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13SESSION_KIND_DIRECT\x10\x01\x12\x16\n" +
 	"\x12SESSION_KIND_GROUP\x10\x02\x12\x17\n" +
 	"\x13SESSION_KIND_GLOBAL\x10\x03\x12\x18\n" +
-	"\x14SESSION_KIND_UNKNOWN\x10\x04*\xa7\x01\n" +
+	"\x14SESSION_KIND_UNKNOWN\x10\x04\x12\x15\n" +
+	"\x11SESSION_KIND_CRON\x10\x05\x12\x19\n" +
+	"\x15SESSION_KIND_SUBAGENT\x10\x06\x12\x17\n" +
+	"\x13SESSION_KIND_SHADOW\x10\a*\xa7\x01\n" +
 	"\x15SessionLifecyclePhase\x12'\n" +
 	"#SESSION_LIFECYCLE_PHASE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dSESSION_LIFECYCLE_PHASE_START\x10\x01\x12\x1f\n" +

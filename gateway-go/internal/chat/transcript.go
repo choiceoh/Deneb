@@ -113,6 +113,55 @@ func (s *FileTranscriptStore) Delete(sessionKey string) error {
 	return nil
 }
 
+// CloneRecent copies the most recent `limit` messages from srcKey to dstKey.
+// Returns the number of messages copied.
+func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) (int, error) {
+	msgs, _, err := s.Load(srcKey, limit)
+	if err != nil {
+		return 0, fmt.Errorf("clone: load source %q: %w", srcKey, err)
+	}
+	if len(msgs) == 0 {
+		return 0, nil
+	}
+
+	// Write all messages to destination in one batch (more efficient than per-message Append).
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dstPath := s.sessionPath(dstKey)
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		return 0, fmt.Errorf("clone: create dir: %w", err)
+	}
+
+	f, err := os.Create(dstPath)
+	if err != nil {
+		return 0, fmt.Errorf("clone: create dst: %w", err)
+	}
+	defer f.Close()
+
+	w := bufio.NewWriter(f)
+	for _, msg := range msgs {
+		data, merr := json.Marshal(msg)
+		if merr != nil {
+			continue
+		}
+		_, _ = w.Write(data)
+		_ = w.WriteByte('\n')
+	}
+	if err := w.Flush(); err != nil {
+		return 0, fmt.Errorf("clone: flush: %w", err)
+	}
+	return len(msgs), nil
+}
+
+// AppendSystemNote appends a system-role message with the given text.
+func (s *FileTranscriptStore) AppendSystemNote(sessionKey, text string) error {
+	return s.Append(sessionKey, ChatMessage{
+		Role:    "system",
+		Content: text,
+	})
+}
+
 // ListKeys returns all session keys by scanning JSONL files in baseDir.
 func (s *FileTranscriptStore) ListKeys() ([]string, error) {
 	entries, err := os.ReadDir(s.baseDir)

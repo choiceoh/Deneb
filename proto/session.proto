@@ -27,6 +27,9 @@ enum SessionKind {
   SESSION_KIND_GROUP = 2;
   SESSION_KIND_GLOBAL = 3;
   SESSION_KIND_UNKNOWN = 4;
+  SESSION_KIND_CRON = 5;       // Scheduled cron job session
+  SESSION_KIND_SUBAGENT = 6;   // Spawned sub-agent session
+  SESSION_KIND_SHADOW = 7;     // Temporary clone of another session
 }
 
 // GatewaySessionRow — full session state.

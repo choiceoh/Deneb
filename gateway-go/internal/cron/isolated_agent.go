@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
@@ -90,12 +91,13 @@ func RunIsolatedAgentTurn(
 
 	// 3. Run the agent turn.
 	output, runErr := agent.RunAgentTurn(runCtx, AgentTurnParams{
-		SessionKey: cfg.SessionKey,
-		AgentID:    cfg.AgentID,
-		Command:    command,
-		Channel:    safeTargetField(cfg.DeliveryTarget, "channel"),
-		To:         safeTargetField(cfg.DeliveryTarget, "to"),
-		AccountID:  safeTargetField(cfg.DeliveryTarget, "accountId"),
+		SessionKey:  cfg.SessionKey,
+		SessionKind: session.KindCron,
+		AgentID:     cfg.AgentID,
+		Command:     command,
+		Channel:     safeTargetField(cfg.DeliveryTarget, "channel"),
+		To:          safeTargetField(cfg.DeliveryTarget, "to"),
+		AccountID:   safeTargetField(cfg.DeliveryTarget, "accountId"),
 	})
 
 	endedAt := time.Now().UnixMilli()

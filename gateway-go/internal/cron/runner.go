@@ -43,15 +43,27 @@ type AgentRunner interface {
 	RunAgentTurn(ctx context.Context, params AgentTurnParams) (output string, err error)
 }
 
+// TranscriptCloner provides transcript cloning for shadow sessions.
+// Implemented by the server package wrapping chat.FileTranscriptStore.
+type TranscriptCloner interface {
+	// CloneRecent copies the most recent `limit` messages from src to dst transcript.
+	CloneRecent(srcKey, dstKey string, limit int) (int, error)
+	// DeleteTranscript removes a transcript.
+	DeleteTranscript(key string) error
+	// AppendSystemNote appends a system message to a transcript.
+	AppendSystemNote(sessionKey, text string) error
+}
+
 // AgentTurnParams holds parameters for a single cron agent turn.
 type AgentTurnParams struct {
-	SessionKey string
-	AgentID    string
-	Command    string
-	Channel    string
-	To         string
-	AccountID  string
-	ThreadID   string
+	SessionKey  string
+	SessionKind session.Kind // Session kind (cron, shadow, etc.); empty defaults to KindCron.
+	AgentID     string
+	Command     string
+	Channel     string
+	To          string
+	AccountID   string
+	ThreadID    string
 }
 
 // RunnerDeps holds the dependencies for the cron job runner.
@@ -97,21 +109,21 @@ func RunJob(ctx context.Context, job Job, deps RunnerDeps) RunOutcome {
 		agentID = "main"
 	}
 
-	// Create or get session.
-	sess := deps.Sessions.Get(sessionKey)
-	if sess == nil {
-		deps.Sessions.Create(sessionKey, session.KindDirect)
-	}
+	// Create session via session.Manager with proper Kind.
+	sess := deps.Sessions.Create(sessionKey, session.KindCron)
+	sess.Channel = deps.DefaultChannel
+	_ = deps.Sessions.Set(sess)
 
 	// Run the agent turn.
 	output, runErr := deps.Agent.RunAgentTurn(runCtx, AgentTurnParams{
-		SessionKey: sessionKey,
-		AgentID:    agentID,
-		Command:    job.Command,
-		Channel:    target.Channel,
-		To:         target.To,
-		AccountID:  target.AccountID,
-		ThreadID:   target.ThreadID,
+		SessionKey:  sessionKey,
+		SessionKind: session.KindCron,
+		AgentID:     agentID,
+		Command:     job.Command,
+		Channel:     target.Channel,
+		To:          target.To,
+		AccountID:   target.AccountID,
+		ThreadID:    target.ThreadID,
 	})
 
 	if runErr != nil {
@@ -159,4 +171,12 @@ func RunJob(ctx context.Context, job Job, deps RunnerDeps) RunOutcome {
 		EndedAt:    finalEndedAt,
 		DurationMs: finalEndedAt - startedAt,
 	}
+}
+
+// strPtrIfNonEmpty returns a pointer to s if non-empty, nil otherwise.
+func strPtrIfNonEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

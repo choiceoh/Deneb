@@ -1,6 +1,9 @@
 package cron
 
-import "github.com/choiceoh/deneb/gateway-go/internal/telegram"
+import (
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
+)
 
 // CronEvent describes a cron system event for listeners.
 type CronEvent struct {
@@ -22,6 +25,19 @@ type ServiceConfig struct {
 	Enabled        bool
 	RetentionMs    int64 // session retention (0 = default 24h)
 	TelegramPlugin *telegram.Plugin
+
+	// Sessions is the central session manager. When set, cron creates
+	// sessions with KindCron instead of ad-hoc key-only tracking.
+	Sessions *session.Manager
+
+	// MainSessionKey is the primary user session (e.g. "telegram:<chatId>")
+	// used as the clone source for shadow sessions.
+	MainSessionKey string
+
+	// TranscriptCloner provides transcript cloning for shadow sessions.
+	// When set (along with MainSessionKey), cron jobs with sessionTarget=subagent
+	// clone the main session transcript before execution.
+	TranscriptCloner TranscriptCloner
 }
 
 // ServiceStatus is a snapshot of the cron service health and pending jobs.

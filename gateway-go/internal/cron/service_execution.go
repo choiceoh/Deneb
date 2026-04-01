@@ -8,7 +8,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
+
+// defaultCloneMessageLimit is the number of recent messages cloned from the
+// main session transcript when creating a shadow session.
+const defaultCloneMessageLimit = 80
 
 // --- Job execution (mirrors execute-job.ts, job-result.ts) ---
 
@@ -29,6 +34,34 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	command := resolveJobCommand(job)
 
 	var outcome RunOutcome
+	sessionKey := fmt.Sprintf("cron:%s:%d", job.ID, startedAt)
+	sessionKind := session.KindCron
+	var shadowCleanup func() // deferred cleanup for shadow sessions
+
+	// Shadow session: clone main session transcript if sessionTarget=subagent.
+	if job.SessionTarget == SessionTargetSubagent &&
+		s.cfg.TranscriptCloner != nil && s.cfg.MainSessionKey != "" {
+		shadowKey := fmt.Sprintf("cron:shadow:%s:%d", job.ID, startedAt)
+		cloneLimit := job.Payload.CloneLimit
+		if cloneLimit <= 0 {
+			cloneLimit = defaultCloneMessageLimit
+		}
+		if n, cloneErr := s.cfg.TranscriptCloner.CloneRecent(s.cfg.MainSessionKey, shadowKey, cloneLimit); cloneErr == nil && n > 0 {
+			sessionKey = shadowKey
+			sessionKind = session.KindShadow
+			shadowCleanup = func() {
+				_ = s.cfg.TranscriptCloner.DeleteTranscript(shadowKey)
+				if s.cfg.Sessions != nil {
+					s.cfg.Sessions.Delete(shadowKey)
+				}
+			}
+			s.logger.Info("shadow session cloned",
+				"jobID", job.ID, "messages", n, "shadowKey", shadowKey)
+		} else if cloneErr != nil {
+			s.logger.Warn("shadow clone failed, falling back to isolated",
+				"jobID", job.ID, "error", cloneErr)
+		}
+	}
 
 	if targetErr != nil && !isBestEffort(deliveryCfg) {
 		outcome = RunOutcome{
@@ -39,13 +72,26 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 			DurationMs: time.Now().UnixMilli() - startedAt,
 		}
 	} else if s.agent != nil {
+
+		// Create session in session.Manager if available.
+		if s.cfg.Sessions != nil {
+			sess := s.cfg.Sessions.Create(sessionKey, sessionKind)
+			sess.Channel = s.cfg.DefaultChannel
+			sess.Label = job.Name
+			if sessionKind == session.KindShadow {
+				sess.SpawnedBy = s.cfg.MainSessionKey
+			}
+			_ = s.cfg.Sessions.Set(sess)
+		}
+
 		output, runErr := s.agent.RunAgentTurn(runCtx, AgentTurnParams{
-			SessionKey: fmt.Sprintf("cron:%s:%d", job.ID, startedAt),
-			AgentID:    job.AgentID,
-			Command:    command,
-			Channel:    safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
-			To:         safeStr(target, func(t *DeliveryTarget) string { return t.To }),
-			AccountID:  safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
+			SessionKey:  sessionKey,
+			SessionKind: sessionKind,
+			AgentID:     job.AgentID,
+			Command:     command,
+			Channel:     safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
+			To:          safeStr(target, func(t *DeliveryTarget) string { return t.To }),
+			AccountID:   safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
 		})
 
 		if runErr != nil {
@@ -101,8 +147,21 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 		}
 	}
 
-	// Apply result to job state (mirrors job-result.ts applyJobResult).
-	s.applyJobResult(job, outcome)
+	// Apply result to job state.
+	s.applyJobResult(job, sessionKey, outcome)
+
+	// Shadow session post-processing: append summary to main session, then cleanup.
+	if shadowCleanup != nil {
+		if outcome.Output != "" && s.cfg.TranscriptCloner != nil && s.cfg.MainSessionKey != "" {
+			summary := PickSummaryFromOutput(outcome.Output)
+			if summary == "" {
+				summary = outcome.Output
+			}
+			note := fmt.Sprintf("[cron:%s] %s", job.Name, summary)
+			_ = s.cfg.TranscriptCloner.AppendSystemNote(s.cfg.MainSessionKey, note)
+		}
+		shadowCleanup()
+	}
 
 	// Send failure alert if configured and conditions are met.
 	if s.cfg.TelegramPlugin != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
@@ -125,20 +184,17 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	return outcome
 }
 
-// applyJobResult updates the job state after execution (mirrors job-result.ts).
-func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome) {
+// applyJobResult updates the job state after execution.
+// Session lifecycle (status, duration, error) is tracked by session.Manager;
+// JobState only stores scheduler-specific and delivery fields.
+func (s *Service) applyJobResult(job StoreJob, sessionKey string, outcome RunOutcome) {
 	state := job.State
-	state.LastRunAtMs = outcome.StartedAt
-	state.LastDurationMs = outcome.DurationMs
-	state.LastRunStatus = outcome.Status
-	state.RunningAtMs = 0
+	state.LastSessionKey = sessionKey
 
 	if outcome.Status == "ok" {
 		state.ConsecutiveErrors = 0
-		state.LastError = ""
 	} else {
 		state.ConsecutiveErrors++
-		state.LastError = outcome.Error
 		// Auto-disable after 10 consecutive schedule errors.
 		if state.ConsecutiveErrors >= 10 {
 			state.ScheduleErrorCount++

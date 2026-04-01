@@ -15,6 +15,9 @@ func TestParseSessionKind(t *testing.T) {
 		{"group", protocol.SessionKindGroup},
 		{"global", protocol.SessionKindGlobal},
 		{"unknown", protocol.SessionKindUnknown},
+		{"cron", protocol.SessionKindCron},
+		{"subagent", protocol.SessionKindSubagent},
+		{"shadow", protocol.SessionKindShadow},
 		{"", protocol.SessionKindDirect},
 		{"bogus", protocol.SessionKindDirect},
 	}

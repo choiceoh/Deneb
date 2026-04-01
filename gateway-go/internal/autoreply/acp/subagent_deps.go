@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
@@ -23,6 +24,10 @@ type SubagentInfraDeps struct {
 	SaveSession   func(session *types.SessionState) error
 	AbortSession  func(sessionKey string) error
 	Logger        *slog.Logger
+
+	// Sessions is the central session manager. When set, SpawnSubagent creates
+	// sessions with KindSubagent instead of relying solely on types.SessionState.
+	Sessions *session.Manager
 }
 
 // SpawnSubagentParams holds the parameters for spawning a sub-agent.
@@ -88,9 +93,22 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 	}
 	d.ACPRegistry.Register(agent)
 
-	// Create session state if SaveSession is available.
+	// Create session in central session.Manager with KindSubagent.
+	if d.Sessions != nil {
+		sess := d.Sessions.Create(sessionKey, session.KindSubagent)
+		sess.Channel = "acp"
+		sess.Model = params.Model
+		sess.SpawnedBy = params.ParentSessionKey
+		sess.SubagentRole = params.Role
+		sess.ToolPreset = params.ToolPreset
+		spawnDepth := depth
+		sess.SpawnDepth = &spawnDepth
+		_ = d.Sessions.Set(sess)
+	}
+
+	// Legacy: save session state for backwards compat with existing callers.
 	if d.SaveSession != nil {
-		session := &types.SessionState{
+		ss := &types.SessionState{
 			SessionKey:      sessionKey,
 			AgentID:         agentID,
 			Channel:         "acp",
@@ -100,7 +118,7 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 			ToolPreset:      params.ToolPreset,
 			GroupActivation: types.ActivationAlways,
 		}
-		if err := d.SaveSession(session); err != nil {
+		if err := d.SaveSession(ss); err != nil {
 			d.logger().Warn("failed to save subagent session",
 				"agentId", agentID,
 				"error", err,

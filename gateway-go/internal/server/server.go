@@ -297,6 +297,7 @@ func New(addr string, opts ...Option) *Server {
 			StorePath:      storePath,
 			DefaultChannel: "telegram",
 			Enabled:        true,
+			Sessions:       s.sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
 	}
 	s.hooks = hooks.NewRegistry(s.logger)
