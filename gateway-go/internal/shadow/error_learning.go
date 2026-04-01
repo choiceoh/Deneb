@@ -104,6 +104,14 @@ func (el *ErrorLearner) recordError(pattern, message, sessionKey string) {
 	el.svc.mu.Unlock()
 }
 
+// OnCIFailure records a CI failure from a GitHub workflow_run webhook.
+// Uses the same recurring-error escalation as conversation errors.
+func (el *ErrorLearner) OnCIFailure(workflow, branch, url string) {
+	pattern := fmt.Sprintf("CI:%s:%s", workflow, normalizeVariableParts(branch))
+	message := fmt.Sprintf("CI 워크플로 '%s' 실패 (브랜치: %s)\n%s", workflow, branch, url)
+	el.recordError(pattern, message, "github:ci")
+}
+
 // RecordResolution marks that an error was resolved (e.g., session went from failed to done).
 func (el *ErrorLearner) RecordResolution(sessionKey, resolution string) {
 	el.svc.mu.Lock()
