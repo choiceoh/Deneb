@@ -62,12 +62,5 @@ echo ""
 echo "Build order: make rust -> make go -> make test"
 echo "Fast iteration: make rust-debug -> make go-dev"
 
-# Show main branch CI status if gh is available.
-if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-    echo ""
-    echo "Main branch CI:"
-    "$REPO_ROOT/scripts/build-status" main 2>/dev/null | head -1 || echo "  [skip] Could not fetch CI status"
-fi
-
 # Always exit 0 so the session can start regardless.
 exit 0

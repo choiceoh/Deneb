@@ -39,11 +39,10 @@
 > Run these when starting a new coding session.
 
 1. **Check environment:** `./scripts/check-dev-env.sh`
-2. **Check CI status:** `scripts/build-status main` (ensure main is green)
-3. **Build Rust core:** `make rust` (required before Go gateway)
-4. **Build Go gateway:** `make go`
-5. **Run tests:** `make test` (Rust + Go + CLI)
-6. **Fast iteration:** `make rust-debug` (debug mode, faster) + `make go-dev` (auto-restart)
+2. **Build Rust core:** `make rust` (required before Go gateway)
+3. **Build Go gateway:** `make go`
+4. **Run tests:** `make test` (Rust + Go + CLI)
+5. **Fast iteration:** `make rust-debug` (debug mode, faster) + `make go-dev` (auto-restart)
 
 **Build order:** Proto schemas → Rust core (static lib) → Go gateway (links Rust via CGo)
 
