@@ -292,9 +292,10 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 		t.Errorf("last msg = {%s, %q}, want {assistant, Hello Peter!}", last.Role, last.Content)
 	}
 
-	// LLM should have been called twice (tool call + final response).
-	if callCount != 2 {
-		t.Errorf("LLM call count = %d, want 2", callCount)
+	// LLM should have been called at least twice (tool call + final response).
+	// Nudge continuations may add extra calls.
+	if callCount < 2 {
+		t.Errorf("LLM call count = %d, want >= 2", callCount)
 	}
 }
 
@@ -540,13 +541,12 @@ func TestIntegration_InterruptPreviousRun(t *testing.T) {
 	// Wait for it to start.
 	waitForSessionStatus(sm, sessionKey, session.StatusRunning, 2*time.Second)
 
-	// Send a second message (should interrupt the first).
-	req2 := makeReq("2", "chat.send", map[string]any{
-		"sessionKey":  sessionKey,
-		"message":     "second",
-		"clientRunId": "run-i-2",
+	// Send a second message via sessions.send (interrupts the first run).
+	req2 := makeReq("2", "sessions.send", map[string]any{
+		"key":     sessionKey,
+		"message": "second",
 	})
-	h.Send(context.Background(), req2)
+	h.SessionsSend(context.Background(), req2)
 
 	// Wait for the second run to complete.
 	status := waitForSessionStatus(sm, sessionKey, session.StatusDone, 5*time.Second)

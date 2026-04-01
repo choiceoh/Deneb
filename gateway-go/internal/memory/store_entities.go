@@ -105,16 +105,16 @@ func (s *Store) UpsertEntity(ctx context.Context, name, entityType string) (int6
 		return 0, fmt.Errorf("upsert entity: %w", err)
 	}
 
-	// Return the entity ID (either new or existing).
-	id, err := result.LastInsertId()
-	if err != nil || id == 0 {
-		// ON CONFLICT path: look up the existing ID.
-		err = s.db.QueryRowContext(ctx,
-			`SELECT id FROM entities WHERE name = ?`, name,
-		).Scan(&id)
-		if err != nil {
-			return 0, fmt.Errorf("upsert entity lookup: %w", err)
-		}
+	// Return the entity ID. LastInsertId is unreliable after ON CONFLICT
+	// DO UPDATE (SQLite returns stale last_insert_rowid from a prior INSERT
+	// on the same connection), so always look up by name.
+	_ = result
+	var id int64
+	err = s.db.QueryRowContext(ctx,
+		`SELECT id FROM entities WHERE name = ?`, name,
+	).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("upsert entity lookup: %w", err)
 	}
 	return id, nil
 }

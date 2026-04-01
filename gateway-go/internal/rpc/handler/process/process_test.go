@@ -32,8 +32,6 @@ func TestApprovalMethods_returnsHandlers(t *testing.T) {
 		"exec.approval.resolve",
 		"exec.approvals.get",
 		"exec.approvals.set",
-		"exec.approvals.node.get",
-		"exec.approvals.node.set",
 	} {
 		if _, ok := m[name]; !ok {
 			t.Errorf("missing handler %q", name)

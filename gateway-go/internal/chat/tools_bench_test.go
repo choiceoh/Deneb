@@ -63,20 +63,6 @@ func BenchmarkLLMTools_Marshal(b *testing.B) {
 	}
 }
 
-func BenchmarkLLMToolsAnthropic_Marshal(b *testing.B) {
-	reg := NewToolRegistry()
-	registerSampleTools(reg, 40)
-	tools := reg.LLMToolsAnthropic()
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		if _, err := json.Marshal(tools); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func BenchmarkExtractCompressFlag(b *testing.B) {
 	input := json.RawMessage(`{"file_path":"/tmp/test.go","pattern":"func.*","max_results":100}`)
 	b.ResetTimer()
