@@ -13,7 +13,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
@@ -61,7 +60,6 @@ type GatewayHub struct {
 	// Metadata.
 	Logger  *slog.Logger
 	Version string
-	Config  *config.GatewayRuntimeConfig
 }
 
 // Broadcast sends an event to all connected WebSocket clients.
