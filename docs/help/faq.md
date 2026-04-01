@@ -931,8 +931,6 @@ Advantages:
 - **Always-on Gateway** (run on a VPS, interact from anywhere)
 - **Nodes** for local browser/screen/camera/exec
 
-Showcase: [https://deneb.ai/showcase](https://deneb.ai/showcase)
-
 ## Skills and automation
 
 ### How do I customize skills without keeping the repo dirty
