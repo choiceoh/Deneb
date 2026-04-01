@@ -1,3 +1,14 @@
+# Deneb
+
+**Personal AI gateway for NVIDIA DGX Spark.** Telegram bot interface → Go gateway server → Rust core engine. Single-user, single-machine deployment. Korean-first.
+
+- **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 130+ tool integrations, Telegram bot plugin.
+- **Rust core** (`core-rs/`): Protocol validation, security, media processing, memory search (SIMD cosine + BM25 + FTS5), context engine, compaction, Vega semantic search, GGUF inference.
+- **Protobuf schemas** (`proto/`): Cross-language type definitions (Go + Rust codegen).
+- **CLI** (`cli-rs/`): Rust CLI entry point, connects to gateway via WebSocket.
+
+---
+
 # Repository Guidelines
 
 - Repo: https://github.com/deneb/deneb
