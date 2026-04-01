@@ -227,14 +227,12 @@ func handleRunSuccess(
 	// correction/addition based on the recalled memory. Only delivers if the
 	// LLM determines the recall materially changes or supplements the response.
 	if result.RecallFollowUp != "" && params.Delivery != nil && deps.replyFunc != nil && deps.registry != nil {
-		go func() {
-			followUp := generateRecallFollowUp(
-				deps, params.Message, result.Text, result.RecallFollowUp, logger,
-			)
-			if followUp == "" {
-				logger.Info("recall: follow-up LLM decided no correction needed")
-				return
-			}
+		followUp := generateRecallFollowUp(
+			deps, params.Message, result.Text, result.RecallFollowUp, logger,
+		)
+		if followUp == "" {
+			logger.Info("recall: follow-up LLM decided no correction needed")
+		} else {
 			followUpCtx, followUpCancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer followUpCancel()
 			if err := deps.replyFunc(followUpCtx, params.Delivery, followUp); err != nil {
@@ -242,7 +240,7 @@ func handleRunSuccess(
 			} else {
 				logger.Info("recall: follow-up delivered", "chars", len(followUp))
 			}
-		}()
+		}
 	} else if result.RecallFollowUp != "" {
 		logger.Info("recall: post-run follow-up available (no delivery path)", "chars", len(result.RecallFollowUp))
 	}
