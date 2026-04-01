@@ -68,11 +68,12 @@ func validateWorkdir(dir string) error {
 func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Command    string  `json:"command"`
-			Workdir    string  `json:"workdir"`
-			Timeout    float64 `json:"timeout"`
-			Background bool    `json:"background"`
-			Structured bool    `json:"structured"`
+			Command    string            `json:"command"`
+			Workdir    string            `json:"workdir"`
+			Timeout    float64           `json:"timeout"`
+			Background bool              `json:"background"`
+			Structured bool              `json:"structured"`
+			Env        map[string]string `json:"env"`
 		}
 		if err := jsonutil.UnmarshalInto("exec params", input, &p); err != nil {
 			return "", err
@@ -94,7 +95,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 		if p.Timeout > 0 {
 			timeoutMs = int64(p.Timeout * 1000)
 		}
-		const maxTimeoutMs = 5 * 60 * 1000
+		const maxTimeoutMs = 10 * 60 * 1000
 		if timeoutMs > maxTimeoutMs {
 			timeoutMs = maxTimeoutMs
 		}
@@ -105,6 +106,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 				Args:       []string{"-c", p.Command},
 				WorkingDir: workDir,
 				TimeoutMs:  timeoutMs,
+				Env:        p.Env,
 			}
 
 			// Background mode: launch asynchronously and return the process ID
@@ -207,6 +209,7 @@ func ToolProcess(procMgr *process.Manager) ToolFunc {
 		var p struct {
 			Action    string `json:"action"`
 			SessionID string `json:"sessionId"`
+			Input     string `json:"input"`
 		}
 		if err := jsonutil.UnmarshalInto("process params", input, &p); err != nil {
 			return "", err
@@ -233,6 +236,17 @@ func ToolProcess(procMgr *process.Manager) ToolFunc {
 			}
 			data, _ := json.MarshalIndent(t, "", "  ")
 			return string(data), nil
+		case "write":
+			if p.SessionID == "" {
+				return "", fmt.Errorf("sessionId is required for write")
+			}
+			if p.Input == "" {
+				return "", fmt.Errorf("input is required for write")
+			}
+			if err := procMgr.WriteStdin(p.SessionID, p.Input); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Wrote %d bytes to process %q stdin.", len(p.Input), p.SessionID), nil
 		case "kill":
 			if p.SessionID == "" {
 				return "", fmt.Errorf("sessionId is required for kill")

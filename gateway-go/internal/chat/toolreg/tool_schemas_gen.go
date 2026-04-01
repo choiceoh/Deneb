@@ -554,10 +554,10 @@ func execToolSchema() map[string]any {
 			},
 			"timeout": map[string]any{
 				"type":        "number",
-				"description": "Timeout in seconds (default: 30, max: 300)",
+				"description": "Timeout in seconds (default: 30, max: 600)",
 				"default":     30,
 				"minimum":     1,
-				"maximum":     300,
+				"maximum":     600,
 			},
 			"background": map[string]any{
 				"type":        "boolean",
@@ -568,6 +568,11 @@ func execToolSchema() map[string]any {
 				"type":        "boolean",
 				"description": "Return JSON with stdout, stderr, exit_code, runtime_ms instead of plain text",
 				"default":     false,
+			},
+			"env": map[string]any{
+				"type":                 "object",
+				"description":          "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
+				"additionalProperties": "{'type': 'string'}",
 			},
 		},
 		"required": []string{"command"},
@@ -586,6 +591,10 @@ func processToolSchema() map[string]any {
 			"sessionId": map[string]any{
 				"type":        "string",
 				"description": "Session ID for actions other than list",
+			},
+			"input": map[string]any{
+				"type":        "string",
+				"description": "Data to write to process stdin (required for write action)",
 			},
 			"timeout": map[string]any{
 				"type":        "number",
