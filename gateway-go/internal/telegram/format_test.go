@@ -352,6 +352,41 @@ func TestTruncateUTF8(t *testing.T) {
 	}
 }
 
+func TestTruncateDraftHTML_Short(t *testing.T) {
+	// Text within limit should be returned as-is.
+	got := TruncateDraftHTML("hello", 100)
+	if got != "hello" {
+		t.Errorf("expected unchanged text, got %q", got)
+	}
+}
+
+func TestTruncateDraftHTML_Long(t *testing.T) {
+	// Build HTML that exceeds MaxTextLength.
+	html := strings.Repeat("line\n", 1000) // 5000 bytes
+	got := TruncateDraftHTML(html, MaxTextLength)
+	if len(got) > MaxTextLength {
+		t.Errorf("result exceeds limit: %d > %d", len(got), MaxTextLength)
+	}
+	if !strings.HasPrefix(got, "…\n") {
+		t.Errorf("expected '…\\n' prefix, got %q", got[:10])
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("result is invalid UTF-8")
+	}
+}
+
+func TestTruncateDraftHTML_Korean(t *testing.T) {
+	// Korean multi-byte text should not be split mid-character.
+	html := strings.Repeat("가나다라\n", 500) // well over 4096 bytes
+	got := TruncateDraftHTML(html, MaxTextLength)
+	if len(got) > MaxTextLength {
+		t.Errorf("result exceeds limit: %d", len(got))
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("result is invalid UTF-8")
+	}
+}
+
 func TestChunkText_Korean_NoSpaces(t *testing.T) {
 	// Long Korean text with no spaces or newlines — exercises the fallback path.
 	text := strings.Repeat("가", 2000) // 6000 bytes, no spaces
