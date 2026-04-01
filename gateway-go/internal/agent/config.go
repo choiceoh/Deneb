@@ -60,4 +60,10 @@ type AgentResult struct {
 	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns"
 	Usage      llm.TokenUsage
 	Turns      int
+
+	// InterruptedToolNames lists the tool names that were in-flight when the
+	// run was aborted (context cancelled). Empty when the run completes normally.
+	// Used to persist interrupted context to the transcript so the next run
+	// knows what was being done when the user interrupted.
+	InterruptedToolNames []string
 }

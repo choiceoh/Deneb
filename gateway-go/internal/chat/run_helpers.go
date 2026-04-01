@@ -29,6 +29,59 @@ import (
 // Telegram message bursts). At most 2 extractions run concurrently.
 var memoryExtractSem = make(chan struct{}, 2)
 
+// persistInterruptedContext saves a context note to the transcript when a run
+// is aborted while tools were executing. This ensures the next run has context
+// about what was being done, preventing the "amnesia" bug where the assistant
+// forgets its in-progress work when the user sends a message mid-execution.
+func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.AgentResult, logger *slog.Logger) {
+	if deps.transcript == nil || len(result.InterruptedToolNames) == 0 {
+		return
+	}
+
+	// Build a concise note listing the tools that were running and any
+	// partial text the assistant had produced before interruption.
+	var sb strings.Builder
+	sb.WriteString("[System: the previous assistant turn was interrupted by the user while executing tools: ")
+	for i, name := range result.InterruptedToolNames {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(name)
+	}
+	sb.WriteString(".")
+	if result.Text != "" {
+		sb.WriteString(" Partial response before interruption: ")
+		// Truncate to avoid bloating the transcript.
+		partial := result.Text
+		if len(partial) > 500 {
+			partial = partial[:500] + "..."
+		}
+		sb.WriteString(partial)
+	}
+	sb.WriteString(" Continue or adjust based on the user's new message.]")
+
+	msg := ChatMessage{
+		Role:      "user",
+		Content:   sb.String(),
+		Timestamp: time.Now().UnixMilli(),
+	}
+	if err := deps.transcript.Append(sessionKey, msg); err != nil {
+		logger.Warn("failed to persist interrupted context", "error", err)
+	} else {
+		logger.Info("persisted interrupted context",
+			"tools", result.InterruptedToolNames,
+			"turns", result.Turns)
+	}
+
+	// Sync to Aurora store for compaction awareness.
+	if deps.auroraStore != nil {
+		tokenCount := uint64(estimateTokens(sb.String()))
+		if _, err := deps.auroraStore.SyncMessage(1, "user", sb.String(), tokenCount); err != nil {
+			logger.Warn("aurora: failed to sync interrupted context", "error", err)
+		}
+	}
+}
+
 // cleanupDraftMessage deletes the draft streaming message from Telegram when
 // the reply is suppressed (silent), empty, or on error. This prevents orphaned
 // draft messages from lingering in the chat.

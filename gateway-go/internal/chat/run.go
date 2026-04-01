@@ -244,6 +244,14 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		typingSignaler.Stop()
 	}
 
+	// Persist interrupted context: when the run was aborted while tools were
+	// executing, save a context note to the transcript so the next run knows
+	// what the assistant was doing. Without this, the next run has no memory
+	// of the interrupted work and starts from scratch.
+	if result != nil && len(result.InterruptedToolNames) > 0 && deps.transcript != nil {
+		persistInterruptedContext(deps, params.SessionKey, result, logger)
+	}
+
 	// Handle completion.
 	now := time.Now().UnixMilli()
 	if err != nil {
