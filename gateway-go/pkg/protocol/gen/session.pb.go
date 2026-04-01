@@ -95,9 +95,9 @@ const (
 	SessionKind_SESSION_KIND_GROUP       SessionKind = 2
 	SessionKind_SESSION_KIND_GLOBAL      SessionKind = 3
 	SessionKind_SESSION_KIND_UNKNOWN     SessionKind = 4
-	SessionKind_SESSION_KIND_CRON        SessionKind = 5 // Scheduled cron job session
-	SessionKind_SESSION_KIND_SUBAGENT    SessionKind = 6 // Spawned sub-agent session
-	SessionKind_SESSION_KIND_SHADOW      SessionKind = 7 // Temporary clone of another session
+	SessionKind_SESSION_KIND_CRON        SessionKind = 5
+	SessionKind_SESSION_KIND_SUBAGENT    SessionKind = 6
+	SessionKind_SESSION_KIND_SHADOW      SessionKind = 7
 )
 
 // Enum value maps for SessionKind.
