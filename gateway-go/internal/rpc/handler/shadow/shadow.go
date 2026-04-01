@@ -21,9 +21,26 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
+		// Core.
 		"shadow.status":       handleStatus(deps),
+		"shadow.status.full":  handleExtendedStatus(deps),
 		"shadow.tasks":        handleTasks(deps),
 		"shadow.task.dismiss": handleDismiss(deps),
+		// Analytics.
+		"shadow.analytics":    handleAnalytics(deps),
+		// Memory.
+		"shadow.facts":        handleFacts(deps),
+		// Errors.
+		"shadow.errors":         handleErrors(deps),
+		"shadow.errors.insight": handleErrorInsight(deps),
+		// Code review.
+		"shadow.reviews":       handleReviews(deps),
+		// Cron suggestions.
+		"shadow.cron.suggestions":       handleCronSuggestions(deps),
+		"shadow.cron.suggestion.dismiss": handleCronDismiss(deps),
+		// Session continuity.
+		"shadow.continuity":       handleContinuity(deps),
+		"shadow.continuity.resume": handleResumeSummary(deps),
 	}
 }
 
@@ -32,6 +49,14 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 func handleStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		return protocol.MustResponseOK(req.ID, deps.Shadow.Status())
+	}
+}
+
+// --- shadow.status.full ---
+
+func handleExtendedStatus(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return protocol.MustResponseOK(req.ID, deps.Shadow.ExtendedStatus())
 	}
 }
 
@@ -66,16 +91,159 @@ func handleDismiss(deps Deps) rpcutil.HandlerFunc {
 			return protocol.NewResponseError(req.ID,
 				protocol.NewError(protocol.ErrMissingParam, "id required"))
 		}
-
 		ok := deps.Shadow.DismissTask(p.ID)
 		if !ok {
 			return protocol.NewResponseError(req.ID,
 				protocol.NewError(protocol.ErrNotFound, "task not found or already dismissed"))
 		}
+		return protocol.MustResponseOK(req.ID, map[string]any{"dismissed": true, "id": p.ID})
+	}
+}
 
+// --- shadow.analytics ---
+
+func handleAnalytics(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return protocol.MustResponseOK(req.ID, deps.Shadow.UsageAnalytics().GetReport())
+	}
+}
+
+// --- shadow.facts ---
+
+type factsParams struct {
+	Category string `json:"category,omitempty"`
+}
+
+func handleFacts(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p factsParams
+		if req.Params != nil {
+			_ = json.Unmarshal(req.Params, &p)
+		}
+		facts := deps.Shadow.MemoryConsolidator().GetExtractedFacts(p.Category)
+		if facts == nil {
+			facts = []shadowsvc.ExtractedFact{}
+		}
 		return protocol.MustResponseOK(req.ID, map[string]any{
-			"dismissed": true,
-			"id":        p.ID,
+			"facts": facts,
+			"count": len(facts),
+		})
+	}
+}
+
+// --- shadow.errors ---
+
+func handleErrors(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		recurring := deps.Shadow.ErrorLearner().GetRecurringErrors()
+		if recurring == nil {
+			recurring = []shadowsvc.ErrorRecord{}
+		}
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"recurringErrors": recurring,
+			"count":           len(recurring),
+		})
+	}
+}
+
+// --- shadow.errors.insight ---
+
+type insightParams struct {
+	Content string `json:"content"`
+}
+
+func handleErrorInsight(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p insightParams
+		if req.Params != nil {
+			_ = json.Unmarshal(req.Params, &p)
+		}
+		if p.Content == "" {
+			return protocol.NewResponseError(req.ID,
+				protocol.NewError(protocol.ErrMissingParam, "content required"))
+		}
+		insight := deps.Shadow.ErrorLearner().GetInsight(p.Content)
+		if insight == nil {
+			return protocol.MustResponseOK(req.ID, map[string]any{"found": false})
+		}
+		return protocol.MustResponseOK(req.ID, map[string]any{"found": true, "insight": insight})
+	}
+}
+
+// --- shadow.reviews ---
+
+func handleReviews(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		reviews := deps.Shadow.CodeReviewer().GetRecentReviews()
+		if reviews == nil {
+			reviews = []shadowsvc.CodeReviewResult{}
+		}
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"reviews": reviews,
+			"count":   len(reviews),
+		})
+	}
+}
+
+// --- shadow.cron.suggestions ---
+
+func handleCronSuggestions(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		suggestions := deps.Shadow.CronSuggester().GetSuggestions()
+		if suggestions == nil {
+			suggestions = []shadowsvc.CronSuggestion{}
+		}
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"suggestions": suggestions,
+			"count":       len(suggestions),
+		})
+	}
+}
+
+// --- shadow.cron.suggestion.dismiss ---
+
+func handleCronDismiss(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p dismissParams
+		if req.Params != nil {
+			_ = json.Unmarshal(req.Params, &p)
+		}
+		if p.ID == "" {
+			return protocol.NewResponseError(req.ID,
+				protocol.NewError(protocol.ErrMissingParam, "id required"))
+		}
+		ok := deps.Shadow.CronSuggester().DismissSuggestion(p.ID)
+		if !ok {
+			return protocol.NewResponseError(req.ID,
+				protocol.NewError(protocol.ErrNotFound, "suggestion not found"))
+		}
+		return protocol.MustResponseOK(req.ID, map[string]any{"dismissed": true, "id": p.ID})
+	}
+}
+
+// --- shadow.continuity ---
+
+func handleContinuity(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		snapshot := deps.Shadow.SessionContinuity().LoadSnapshot()
+		if snapshot == nil {
+			return protocol.MustResponseOK(req.ID, map[string]any{"available": false})
+		}
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"available": true,
+			"snapshot":  snapshot,
+		})
+	}
+}
+
+// --- shadow.continuity.resume ---
+
+func handleResumeSummary(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		summary := deps.Shadow.SessionContinuity().GetResumeSummary()
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"available": summary != "",
+			"summary":   summary,
 		})
 	}
 }

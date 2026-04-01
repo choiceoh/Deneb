@@ -53,6 +53,16 @@ type Service struct {
 	// Failure tracking for escalation.
 	recentFailures []int64 // timestamps of recent failures
 
+	// Extended modules (initialized in NewService).
+	buildWatcher       *BuildWatcher
+	contextPrefetcher  *ContextPrefetcher
+	memoryConsolidator *MemoryConsolidator
+	sessionContinuity  *SessionContinuity
+	usageAnalytics     *UsageAnalytics
+	errorLearner       *ErrorLearner
+	codeReviewer       *CodeReviewer
+	cronSuggester      *CronSuggester
+
 	listeners []EventListener
 }
 
@@ -62,12 +72,22 @@ func NewService(cfg Config) *Service {
 		cfg.Logger = slog.Default()
 	}
 	svcCtx, svcCancel := context.WithCancel(context.Background())
-	return &Service{
+	svc := &Service{
 		cfg:        cfg,
 		svcCtx:     svcCtx,
 		svcCancel:  svcCancel,
 		sessionKey: "shadow:" + cfg.MainSessionKey,
 	}
+	// Initialize all sub-modules.
+	svc.buildWatcher = newBuildWatcher(svc)
+	svc.contextPrefetcher = newContextPrefetcher(svc)
+	svc.memoryConsolidator = newMemoryConsolidator(svc)
+	svc.sessionContinuity = newSessionContinuity(svc)
+	svc.usageAnalytics = newUsageAnalytics(svc)
+	svc.errorLearner = newErrorLearner(svc)
+	svc.codeReviewer = newCodeReviewer(svc)
+	svc.cronSuggester = newCronSuggester(svc)
+	return svc
 }
 
 // Start creates the shadow session and begins monitoring.
@@ -176,7 +196,8 @@ func (s *Service) DismissTask(id string) bool {
 }
 
 // onTranscriptAppend is the callback for transcript.Writer.OnAppend.
-// Filters to only monitor the main session's messages.
+// Filters to only monitor the main session's messages, then dispatches
+// to all analysis modules.
 func (s *Service) onTranscriptAppend(sessionKey string, msg json.RawMessage) {
 	if sessionKey != s.cfg.MainSessionKey {
 		return
@@ -185,12 +206,63 @@ func (s *Service) onTranscriptAppend(sessionKey string, msg json.RawMessage) {
 	s.lastActivity = time.Now().UnixMilli()
 	s.mu.Unlock()
 
+	// Core task detection.
 	s.analyzeMessage(sessionKey, msg)
+
+	// Parse once for all modules.
+	var parsed struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(msg, &parsed); err != nil || parsed.Content == "" {
+		return
+	}
+
+	// Dispatch to extended modules.
+	s.usageAnalytics.RecordActivity()
+	s.memoryConsolidator.OnMessageForMemory(sessionKey, msg)
+	s.sessionContinuity.OnMessage(msg)
+	s.contextPrefetcher.OnMessageForTopic(parsed.Content)
+	s.errorLearner.OnMessageForErrors(sessionKey, parsed.Content)
+	s.cronSuggester.OnMessageForCron(parsed.Content)
+
+	// Detect code changes for background review.
+	if DetectCodeChange(parsed.Content) {
+		s.codeReviewer.OnCodeChangeDetected(truncate(parsed.Content, 100))
+	}
+
+	// Detect git push for build watching.
+	if branch, detected := detectPush(parsed.Content); detected {
+		s.buildWatcher.OnPushDetected(branch)
+	}
+
+	// Record topic for analytics.
+	if topic := detectTopic(parsed.Content); topic != "" {
+		s.usageAnalytics.RecordTopic(topic)
+	}
 }
 
 // onSessionEvent handles session lifecycle events.
 func (s *Service) onSessionEvent(event session.Event) {
-	// Only monitor main session events.
+	// Track all session transitions for analytics (not just main session).
+	if event.NewStatus != "" && event.OldStatus == session.StatusRunning {
+		sess := s.cfg.Sessions.Get(event.Key)
+		if sess != nil && !sess.Kind.IsInternal() {
+			var startedAt, endedAt int64
+			if sess.StartedAt != nil {
+				startedAt = *sess.StartedAt
+			}
+			endedAt = time.Now().UnixMilli()
+			s.usageAnalytics.RecordSessionRun(event.Key, string(event.NewStatus), startedAt, endedAt)
+		}
+	}
+
+	// Track error resolution (failed → running → done).
+	if event.NewStatus == session.StatusDone && event.OldStatus == session.StatusRunning {
+		s.errorLearner.RecordResolution(event.Key, "세션 정상 완료")
+	}
+
+	// Health monitoring only for main session.
 	if event.Key != s.cfg.MainSessionKey {
 		return
 	}
@@ -246,6 +318,21 @@ func (s *Service) sendDigest() {
 		msg += fmt.Sprintf("\n  %d. %s", i+1, truncate(t.Content, 60))
 	}
 
+	// Append analytics summary.
+	analyticsDigest := s.usageAnalytics.FormatDailyDigest()
+	if analyticsDigest != "" {
+		msg += "\n\n" + analyticsDigest
+	}
+
+	// Append cron suggestions count.
+	cronSuggestions := s.cronSuggester.GetSuggestions()
+	if len(cronSuggestions) > 0 {
+		msg += fmt.Sprintf("\n\n⏰ 크론 작업 제안: %d건", len(cronSuggestions))
+	}
+
+	// Save continuity snapshot before digest.
+	s.sessionContinuity.SaveSnapshot()
+
 	ctx, cancel := context.WithTimeout(s.svcCtx, 15*time.Second)
 	defer cancel()
 	if err := notifier.Notify(ctx, msg); err != nil {
@@ -268,6 +355,52 @@ func (s *Service) emit(event ShadowEvent) {
 	for _, l := range listeners {
 		l(event)
 	}
+}
+
+// ExtendedStatus returns the full shadow status including all module states.
+func (s *Service) ExtendedStatus() ExtendedStatus {
+	base := s.Status()
+	ext := ExtendedStatus{ServiceStatus: base}
+
+	report := s.usageAnalytics.GetReport()
+	ext.Analytics = &report
+	ext.CronSuggestions = s.cronSuggester.GetSuggestions()
+	ext.RecentReviews = s.codeReviewer.GetRecentReviews()
+	ext.ExtractedFacts = len(s.memoryConsolidator.GetExtractedFacts(""))
+	ext.RecurringErrors = len(s.errorLearner.GetRecurringErrors())
+	ext.Continuity = s.sessionContinuity.LoadSnapshot()
+	ext.PrefetchedCtx = s.contextPrefetcher.GetPrefetchedContexts()
+
+	return ext
+}
+
+// BuildWatcher returns the build watcher module.
+func (s *Service) BuildWatcher() *BuildWatcher { return s.buildWatcher }
+
+// ContextPrefetcher returns the context prefetcher module.
+func (s *Service) ContextPrefetcher() *ContextPrefetcher { return s.contextPrefetcher }
+
+// MemoryConsolidator returns the memory consolidator module.
+func (s *Service) MemoryConsolidator() *MemoryConsolidator { return s.memoryConsolidator }
+
+// SessionContinuity returns the session continuity module.
+func (s *Service) SessionContinuity() *SessionContinuity { return s.sessionContinuity }
+
+// UsageAnalytics returns the usage analytics module.
+func (s *Service) UsageAnalytics() *UsageAnalytics { return s.usageAnalytics }
+
+// ErrorLearner returns the error learner module.
+func (s *Service) ErrorLearner() *ErrorLearner { return s.errorLearner }
+
+// CodeReviewer returns the code reviewer module.
+func (s *Service) CodeReviewer() *CodeReviewer { return s.codeReviewer }
+
+// CronSuggester returns the cron suggester module.
+func (s *Service) CronSuggester() *CronSuggester { return s.cronSuggester }
+
+// notifyCtx returns a context with a 15-second timeout for notifications.
+func (s *Service) notifyCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(s.svcCtx, 15*time.Second)
 }
 
 func countPending(tasks []TrackedTask) int {

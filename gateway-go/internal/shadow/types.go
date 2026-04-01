@@ -56,6 +56,18 @@ type Notifier interface {
 	Notify(ctx context.Context, message string) error
 }
 
+// ExtendedStatus is the full shadow status including all modules.
+type ExtendedStatus struct {
+	ServiceStatus
+	Analytics       *UsageReport        `json:"analytics,omitempty"`
+	CronSuggestions []CronSuggestion    `json:"cronSuggestions,omitempty"`
+	RecentReviews   []CodeReviewResult  `json:"recentReviews,omitempty"`
+	ExtractedFacts  int                 `json:"extractedFacts"`
+	RecurringErrors int                 `json:"recurringErrors"`
+	Continuity      *ContinuitySnapshot `json:"continuity,omitempty"`
+	PrefetchedCtx   []PrefetchedContext `json:"prefetchedContexts,omitempty"`
+}
+
 // digestInterval is how often the shadow service sends a periodic summary.
 const digestInterval = 4 * time.Hour
 
