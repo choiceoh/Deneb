@@ -155,18 +155,20 @@ func (s *Service) checkHealthIndicators(event session.Event) {
 // addAlert appends a health alert, capping at maxHealthAlerts.
 func (s *Service) addAlert(alert HealthAlert) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if len(s.healthAlerts) >= maxHealthAlerts {
 		s.healthAlerts = s.healthAlerts[1:]
 	}
 	s.healthAlerts = append(s.healthAlerts, alert)
+	s.mu.Unlock()
+	// emit() acquires s.mu internally, so must be called after unlock.
 	s.emit(ShadowEvent{Type: "health_alert", Payload: alert})
 }
 
 // trackFailure records a failure timestamp for repeated-failure detection.
 func (s *Service) trackFailure(ts int64) {
+	var escalationAlert *HealthAlert
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	oneHourAgo := ts - int64(time.Hour/time.Millisecond)
 
 	// Prune old failures.
@@ -190,10 +192,16 @@ func (s *Service) trackFailure(ts int64) {
 			s.healthAlerts = s.healthAlerts[1:]
 		}
 		s.healthAlerts = append(s.healthAlerts, alert)
-		s.notifyHealth(alert)
+		escalationAlert = &alert
 
 		// Reset to avoid repeated escalation.
 		s.recentFailures = nil
+	}
+	s.mu.Unlock()
+
+	// notifyHealth() acquires s.mu internally, so must be called after unlock.
+	if escalationAlert != nil {
+		s.notifyHealth(*escalationAlert)
 	}
 }
 

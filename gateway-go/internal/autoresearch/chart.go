@@ -374,7 +374,12 @@ func niceTicksFloat(min, max float64, maxTicks int) []float64 {
 
 	start := math.Ceil(min/niceStep) * niceStep
 	var ticks []float64
-	for v := start; v <= max; v += niceStep {
+	// Use index-based iteration to avoid floating-point accumulation errors.
+	for i := 0; i <= 1000; i++ {
+		v := start + float64(i)*niceStep
+		if v > max+niceStep*1e-9 {
+			break
+		}
 		ticks = append(ticks, v)
 	}
 	return ticks
