@@ -50,18 +50,18 @@ Deneb is a **self-hosted gateway** that connects Telegram to AI coding agents li
 **What makes it different?**
 
 - **Self-hosted**: runs on your hardware, your rules
-- **Multi-channel**: one Gateway serves Telegram simultaneously
+- **Telegram-native**: one Gateway serves Telegram as the primary channel
 - **Agent-native**: built for coding agents with tool use, sessions, memory, and multi-agent routing
 - **Open source**: MIT licensed, community-driven
 
-**What do you need?** Node 24 (recommended), or Node 22 LTS (`22.16+`) for compatibility, an API key from your chosen provider, and 5 minutes. For best quality and security, use the strongest latest-generation model available.
+**What do you need?** Go 1.24+ and Rust (stable), an API key from your chosen provider, and 5 minutes. For best quality and security, use the strongest latest-generation model available.
 
 ## How it works
 
 ```mermaid
 flowchart LR
   A["Chat apps + plugins"] --> B["Gateway"]
-  B --> C["Pi agent"]
+  B --> C["Agent runtime"]
   B --> D["CLI"]
   B --> E["Web Control UI"]
   B --> F["Android nodes"]

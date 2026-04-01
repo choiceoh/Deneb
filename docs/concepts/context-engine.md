@@ -1,9 +1,8 @@
 ---
-summary: "Context engine: pluggable context assembly, compaction, and subagent lifecycle"
+summary: "Context engine: Aurora context assembly, compaction, and subagent lifecycle"
 read_when:
   - You want to understand how Deneb assembles model context
-  - You are switching between the legacy engine and a plugin engine
-  - You are building a context engine plugin
+  - You are working on context assembly or compaction behavior
 title: "Context Engine"
 ---
 
@@ -13,55 +12,8 @@ A **context engine** controls how Deneb builds model context for each run.
 It decides which messages to include, how to summarize older history, and how
 to manage context across subagent boundaries.
 
-Deneb ships with a built-in `legacy` engine. Plugins can register
-alternative engines that replace the active context-engine lifecycle.
-
-## Quick start
-
-Check which engine is active:
-
-```bash
-deneb doctor
-# or inspect config directly:
-cat ~/.deneb/deneb.json | jq '.plugins.slots.contextEngine'
-```
-
-### Installing a context engine plugin
-
-Context engine plugins are installed like any other Deneb plugin. Install
-first, then select the engine in the slot:
-
-```bash
-# Install from npm
-deneb plugins install @martian-engineering/lossless-claw
-
-# Or install from a local path (for development)
-deneb plugins install -l ./my-context-engine
-```
-
-Then enable the plugin and select it as the active engine in your config:
-
-```json5
-// deneb.json
-{
-  plugins: {
-    slots: {
-      contextEngine: "lossless-claw", // must match the plugin's registered engine id
-    },
-    entries: {
-      "lossless-claw": {
-        enabled: true,
-        // Plugin-specific config goes here (see the plugin's docs)
-      },
-    },
-  },
-}
-```
-
-Restart the gateway after installing and configuring.
-
-To switch back to the built-in engine, set `contextEngine` to `"legacy"` (or
-remove the key entirely — `"legacy"` is the default).
+Deneb uses the **Aurora** context engine, implemented natively in Rust
+(`core-rs/core/src/context_engine/`) and called from Go via CGo FFI.
 
 ## How it works
 
@@ -94,151 +46,16 @@ prepends this to the system prompt for the run. This lets engines inject
 dynamic recall guidance, retrieval instructions, or context-aware hints
 without requiring static workspace files.
 
-## The legacy engine
+## Aurora engine
 
-The built-in `legacy` engine preserves Deneb's original behavior:
+The Aurora context engine is the built-in engine:
 
-- **Ingest**: no-op (the session manager handles message persistence directly).
-- **Assemble**: pass-through (the existing sanitize → validate → limit pipeline
-  in the runtime handles context assembly).
-- **Compact**: delegates to the built-in summarization compaction, which creates
-  a single summary of older messages and keeps recent messages intact.
+- **Ingest**: the session manager handles message persistence directly.
+- **Assemble**: the Aurora store + Rust FFI performs DAG-aware context assembly
+  with token budgeting (`core-rs/core/src/context_engine/`).
+- **Compact**: delegates to the built-in summarization compaction via Rust FFI,
+  which creates a summary of older messages and keeps recent messages intact.
 - **After turn**: no-op.
-
-The legacy engine does not register tools or provide a `systemPromptAddition`.
-
-When no `plugins.slots.contextEngine` is set (or it's set to `"legacy"`), this
-engine is used automatically.
-
-## Plugin engines
-
-A plugin can register a context engine using the plugin API:
-
-```ts
-export default function register(api) {
-  api.registerContextEngine("my-engine", () => ({
-    info: {
-      id: "my-engine",
-      name: "My Context Engine",
-      ownsCompaction: true,
-    },
-
-    async ingest({ sessionId, message, isHeartbeat }) {
-      // Store the message in your data store
-      return { ingested: true };
-    },
-
-    async assemble({ sessionId, messages, tokenBudget }) {
-      // Return messages that fit the budget
-      return {
-        messages: buildContext(messages, tokenBudget),
-        estimatedTokens: countTokens(messages),
-        systemPromptAddition: "Use aurora_grep to search history...",
-      };
-    },
-
-    async compact({ sessionId, force }) {
-      // Summarize older context
-      return { ok: true, compacted: true };
-    },
-  }));
-}
-```
-
-Then enable it in config:
-
-```json5
-{
-  plugins: {
-    slots: {
-      contextEngine: "my-engine",
-    },
-    entries: {
-      "my-engine": {
-        enabled: true,
-      },
-    },
-  },
-}
-```
-
-### The ContextEngine interface
-
-Required members:
-
-| Member             | Kind     | Purpose                                                  |
-| ------------------ | -------- | -------------------------------------------------------- |
-| `info`             | Property | Engine id, name, version, and whether it owns compaction |
-| `ingest(params)`   | Method   | Store a single message                                   |
-| `assemble(params)` | Method   | Build context for a model run (returns `AssembleResult`) |
-| `compact(params)`  | Method   | Summarize/reduce context                                 |
-
-`assemble` returns an `AssembleResult` with:
-
-- `messages` — the ordered messages to send to the model.
-- `estimatedTokens` (required, `number`) — the engine's estimate of total
-  tokens in the assembled context. Deneb uses this for compaction threshold
-  decisions and diagnostic reporting.
-- `systemPromptAddition` (optional, `string`) — prepended to the system prompt.
-
-Optional members:
-
-| Member                         | Kind   | Purpose                                                                                                         |
-| ------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
-| `bootstrap(params)`            | Method | Initialize engine state for a session. Called once when the engine first sees a session (e.g., import history). |
-| `ingestBatch(params)`          | Method | Ingest a completed turn as a batch. Called after a run completes, with all messages from that turn at once.     |
-| `afterTurn(params)`            | Method | Post-run lifecycle work (persist state, trigger background compaction).                                         |
-| `prepareSubagentSpawn(params)` | Method | Set up shared state for a child session.                                                                        |
-| `onSubagentEnded(params)`      | Method | Clean up after a subagent ends.                                                                                 |
-| `dispose()`                    | Method | Release resources. Called during gateway shutdown or plugin reload — not per-session.                           |
-
-### ownsCompaction
-
-`ownsCompaction` controls whether Pi's built-in in-attempt auto-compaction stays
-enabled for the run:
-
-- `true` — the engine owns compaction behavior. Deneb disables Pi's built-in
-  auto-compaction for that run, and the engine's `compact()` implementation is
-  responsible for `/compact`, overflow recovery compaction, and any proactive
-  compaction it wants to do in `afterTurn()`.
-- `false` or unset — Pi's built-in auto-compaction may still run during prompt
-  execution, but the active engine's `compact()` method is still called for
-  `/compact` and overflow recovery.
-
-`ownsCompaction: false` does **not** mean Deneb automatically falls back to
-the legacy engine's compaction path.
-
-That means there are two valid plugin patterns:
-
-- **Owning mode** — implement your own compaction algorithm and set
-  `ownsCompaction: true`.
-- **Delegating mode** — set `ownsCompaction: false` and have `compact()` call
-  `delegateCompactionToRuntime(...)` from `deneb/plugin-sdk/core` to use
-  Deneb's built-in compaction behavior.
-
-A no-op `compact()` is unsafe for an active non-owning engine because it
-disables the normal `/compact` and overflow-recovery compaction path for that
-engine slot.
-
-## Configuration reference
-
-```json5
-{
-  plugins: {
-    slots: {
-      // Select the active context engine. Default: "legacy".
-      // Set to a plugin id to use a plugin engine.
-      contextEngine: "legacy",
-    },
-  },
-}
-```
-
-The slot is exclusive at run time — only one registered context engine is
-resolved for a given run or compaction operation. Other enabled
-`kind: "context-engine"` plugins can still load and run their registration
-code; `plugins.slots.contextEngine` only selects which registered engine id
-Deneb resolves when it needs a context engine.
 
 ## Relationship to compaction and memory
 

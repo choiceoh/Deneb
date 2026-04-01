@@ -121,11 +121,9 @@ Modes:
 | Channel  | `off` | `partial` | `block` | `progress`        |
 | -------- | ----- | --------- | ------- | ----------------- |
 | Telegram | ✅    | ✅        | ✅      | maps to `partial` |
-| Telegram  | ✅    | ✅        | ✅      | maps to `partial` |
 
 Legacy key migration:
 
-- Telegram: `streamMode` + boolean `streaming` auto-migrate to `streaming` enum.
 - Telegram: `streamMode` + boolean `streaming` auto-migrate to `streaming` enum.
 
 ### Runtime behavior
@@ -135,10 +133,4 @@ Telegram:
 - Uses `sendMessage` + `editMessageText` preview updates across DMs and group/topics.
 - Preview streaming is skipped when Telegram block streaming is explicitly enabled (to avoid double-streaming).
 - `/reasoning stream` can write reasoning to preview.
-
-Telegram:
-
-- Uses send + edit preview messages.
-- `block` mode uses draft chunking (`draftChunk`).
-- Preview streaming is skipped when Telegram block streaming is explicitly enabled.
 
