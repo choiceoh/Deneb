@@ -236,14 +236,14 @@ func (s *Server) wireTelegramChatHandler() {
 		trackerMu.Lock()
 		pt := trackers[trackerKey]
 		if pt == nil {
-			pt = telegram.NewProgressTracker(client, chatID)
+			pt = telegram.NewProgressTracker(client, chatID, chat.SummarizeToolActivity)
 			trackers[trackerKey] = pt
 		}
 		trackerMu.Unlock()
 
 		switch event.Type {
 		case "start":
-			pt.OnToolStart(ctx, event.Name)
+			pt.OnToolStart(ctx, event.Name, event.Reason)
 		case "complete":
 			pt.OnToolComplete(ctx, event.Name, event.IsError)
 		case "finalize":
