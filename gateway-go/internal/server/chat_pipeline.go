@@ -173,8 +173,9 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			WorkspaceDir: workspaceDir,
 		},
 		Sessions: chat.SessionDeps{
-			Manager:    s.sessions,
-			Transcript: transcriptStore,
+			Manager:              s.sessions,
+			Transcript:           transcriptStore,
+			SubagentDefaultModel: chatCfg.SubagentDefaultModel,
 		},
 		Chrono: chat.ChronoDeps{
 			Scheduler: s.cron,
