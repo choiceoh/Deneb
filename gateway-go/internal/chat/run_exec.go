@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
@@ -202,6 +203,12 @@ func executeAgentRun(
 				kDeps.MemoryStore = deps.memoryStore
 				kDeps.MemoryEmbedder = deps.memoryEmbedder
 				kDeps.UnifiedStore = deps.unifiedStore
+			}
+			// Wire recall pilot if model registry is available.
+			if deps.registry != nil {
+				kDeps.RecallClient = deps.registry.Client(modelrole.RolePilot)
+				kDeps.RecallModel = deps.registry.FullModelID(modelrole.RolePilot)
+				kDeps.RecallConfig = memory.DefaultRecallConfig()
 			}
 			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
 		}
