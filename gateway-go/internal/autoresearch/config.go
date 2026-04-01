@@ -9,11 +9,36 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 // configDir is the hidden directory inside the workspace that stores
 // autoresearch state (config + results).
 const configDir = ".autoresearch"
+
+// ConstantDef describes a named constant the agent may tune in override mode.
+// Instead of rewriting entire files, the agent proposes new values for these
+// constants. The original source files are never permanently modified.
+type ConstantDef struct {
+	// Name is a human-readable identifier (e.g. "LEARNING_RATE").
+	Name string `json:"name"`
+	// File is the target file containing this constant (relative to workdir).
+	File string `json:"file"`
+	// Pattern is a regex with exactly one capture group for the constant's value.
+	// Example: `lr\s*=\s*([\d.]+)` captures "0.001" from "lr = 0.001".
+	Pattern string `json:"pattern"`
+	// Type is the value type: "float", "int", or "string".
+	Type string `json:"type"`
+	// Min is an optional lower bound (float/int types only).
+	Min *float64 `json:"min,omitempty"`
+	// Max is an optional upper bound (float/int types only).
+	Max *float64 `json:"max,omitempty"`
+}
+
+// OverrideSet is the persisted set of best-found override values.
+type OverrideSet struct {
+	Values map[string]string `json:"values"`
+}
 
 // Params holds tunable experiment parameters. Zero values fall back to
 // DefaultParams(). Users can override individual fields in config.json
@@ -180,6 +205,15 @@ type Config struct {
 	// Params holds tunable experiment parameters (phase boundaries, thresholds, etc.).
 	// Zero-valued fields automatically fall back to DefaultParams().
 	Params Params `json:"params,omitempty"`
+
+	// Constants lists named constants for override mode. When non-empty,
+	// the agent proposes override values instead of rewriting entire files.
+	Constants []ConstantDef `json:"constants,omitempty"`
+}
+
+// IsConstantsMode returns true when override mode is active.
+func (c *Config) IsConstantsMode() bool {
+	return len(c.Constants) > 0
 }
 
 // Validate checks that required fields are set and applies param defaults.
@@ -205,6 +239,37 @@ func (c *Config) Validate() error {
 	if c.TimeBudgetSec <= 0 {
 		c.TimeBudgetSec = c.Params.DefaultTimeBudgetSec
 	}
+
+	// Validate constants definitions when override mode is active.
+	if c.IsConstantsMode() {
+		targetSet := make(map[string]bool, len(c.TargetFiles))
+		for _, tf := range c.TargetFiles {
+			targetSet[tf] = true
+		}
+		for i, cd := range c.Constants {
+			if cd.Name == "" {
+				return fmt.Errorf("constants[%d]: name is required", i)
+			}
+			if cd.File == "" {
+				return fmt.Errorf("constants[%d] (%s): file is required", i, cd.Name)
+			}
+			if !targetSet[cd.File] {
+				return fmt.Errorf("constants[%d] (%s): file %q not in target_files", i, cd.Name, cd.File)
+			}
+			if cd.Pattern == "" {
+				return fmt.Errorf("constants[%d] (%s): pattern is required", i, cd.Name)
+			}
+			if _, err := regexp.Compile(cd.Pattern); err != nil {
+				return fmt.Errorf("constants[%d] (%s): invalid pattern: %w", i, cd.Name, err)
+			}
+			switch cd.Type {
+			case "float", "int", "string":
+			default:
+				return fmt.Errorf("constants[%d] (%s): type must be float, int, or string, got %q", i, cd.Name, cd.Type)
+			}
+		}
+	}
+
 	return nil
 }
 

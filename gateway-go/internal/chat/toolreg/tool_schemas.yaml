@@ -1362,7 +1362,8 @@
         - stop
         - status
         - results
-      description: "init: configure experiment, start: begin autonomous loop, stop: halt loop, status: check progress, results: get log"
+        - apply_overrides
+      description: "init: configure experiment, start: begin autonomous loop, stop: halt loop, status: check progress, results: get log, apply_overrides: bake best-found constant overrides into source files"
     workdir:
       type: string
       description: "Experiment workspace directory (absolute path)"
@@ -1405,6 +1406,39 @@
         - chart
       description: "Output format for results action. chart generates a PNG graph of metric progression (default: summary)"
       default: summary
+    constants:
+      type: array
+      description: "Constants to optimize in override mode (init only). When set, the agent proposes override values instead of rewriting files."
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+            description: "Constant identifier (e.g. LEARNING_RATE)"
+          file:
+            type: string
+            description: "File containing the constant (relative to workdir)"
+          pattern:
+            type: string
+            description: "Regex with one capture group for the value (e.g. 'lr\\s*=\\s*([\\d.]+)')"
+          type:
+            type: string
+            enum:
+              - float
+              - int
+              - string
+            description: "Value type"
+          min:
+            type: number
+            description: "Optional lower bound (float/int only)"
+          max:
+            type: number
+            description: "Optional upper bound (float/int only)"
+        required:
+          - name
+          - file
+          - pattern
+          - type
   required:
     - action
     - workdir

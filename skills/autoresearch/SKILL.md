@@ -138,12 +138,59 @@ The prompt automatically adapts to the experiment phase:
 - **Exploration (11-30)**: Balance new ideas with refining winners
 - **Exploitation (30+)**: Focus on fine-tuning the best-performing approaches
 
+## Constants Override Mode
+
+Instead of rewriting entire files, you can define **named constants** that the agent tunes.
+The original source files are never permanently modified — only override values are proposed and tested.
+
+### Setup
+
+Add `constants` to the init call:
+
+```
+autoresearch action=init workdir=/path/to/project target_files=["train.py"] \
+  metric_cmd="python train.py" metric_name="val_bpb" \
+  metric_direction="minimize" time_budget_sec=300 branch_tag="constants-exp" \
+  constants=[
+    {"name": "LEARNING_RATE", "file": "train.py", "pattern": "lr\\s*=\\s*([\\d.]+)", "type": "float", "min": 0.0001, "max": 0.1},
+    {"name": "BATCH_SIZE", "file": "train.py", "pattern": "batch_size\\s*=\\s*(\\d+)", "type": "int", "min": 8, "max": 256},
+    {"name": "HIDDEN_DIM", "file": "train.py", "pattern": "hidden_dim\\s*=\\s*(\\d+)", "type": "int"}
+  ]
+```
+
+Each constant requires:
+- `name` — identifier shown to the LLM
+- `file` — which target file contains it (must be in `target_files`)
+- `pattern` — regex with one capture group for the value
+- `type` — `float`, `int`, or `string`
+- `min`/`max` — optional bounds (float/int only)
+
+### How It Works
+
+1. Constants are extracted from original files using the regex pattern
+2. LLM proposes new values (not file rewrites)
+3. Overrides are applied temporarily for the experiment
+4. Original files are always restored after the experiment
+5. Best overrides are saved to `.autoresearch/overrides.json`
+
+### Applying Best Overrides
+
+After the experiment loop finds optimal values:
+
+```
+autoresearch action=apply_overrides workdir=/path/to/project
+```
+
+This permanently bakes the best-found values into the source files using the same regex patterns.
+Commit when ready.
+
 ## Data Tracking
 
 ```
 <workdir>/.autoresearch/
   config.json      — experiment config + mutable state (best, baseline, consecutive failures)
   results.tsv      — iteration log with delta_from_best, best_so_far tracking
+  overrides.json   — best-found constant override values (constants mode only)
   runs/
     0000.log       — baseline stdout/stderr
     0001.log       — iteration 1 stdout/stderr
