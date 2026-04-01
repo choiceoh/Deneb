@@ -1402,7 +1402,8 @@
       enum:
         - tsv
         - summary
-      description: "Output format for results action (default: summary)"
+        - chart
+      description: "Output format for results action. chart generates a PNG graph of metric progression (default: summary)"
       default: summary
   required:
     - action
