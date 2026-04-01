@@ -178,6 +178,11 @@ func (h *Handler) handleSlashCommand(
 				h.logger.Warn("failed to delete transcript on reset", "error", err)
 			}
 		}
+		// Clear tool preset so session exits coordinator/worker mode.
+		if sess := h.sessions.Get(sessionKey); sess != nil && sess.ToolPreset != "" {
+			sess.ToolPreset = ""
+			_ = h.sessions.Set(sess)
+		}
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
@@ -214,6 +219,20 @@ func (h *Handler) handleSlashCommand(
 
 	case "think":
 		h.deliverSlashResponse(delivery, "사고 모드가 토글되었습니다.")
+
+	case "coordinator":
+		// Activate coordinator mode: set ToolPreset on the session, reset transcript.
+		h.InterruptActiveRun(sessionKey)
+		h.clearPending(sessionKey)
+		if h.transcript != nil {
+			_ = h.transcript.Delete(sessionKey)
+		}
+		sess := h.sessions.Get(sessionKey)
+		if sess != nil {
+			sess.ToolPreset = "coordinator"
+			_ = h.sessions.Set(sess)
+		}
+		h.deliverSlashResponse(delivery, "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.")
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{

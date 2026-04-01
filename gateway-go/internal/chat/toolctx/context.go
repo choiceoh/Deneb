@@ -18,6 +18,7 @@ const (
 	ctxKeyMaxUploadBytes
 	ctxKeyRunCache
 	ctxKeyFileCache
+	ctxKeyToolPreset
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -107,4 +108,19 @@ func WithFileCache(ctx context.Context, fc *agent.FileCache) context.Context {
 func FileCacheFromContext(ctx context.Context) *agent.FileCache {
 	fc, _ := ctx.Value(ctxKeyFileCache).(*agent.FileCache)
 	return fc
+}
+
+// WithToolPreset attaches a tool preset string to the context.
+// Used by Execute() to enforce tool restrictions at execution time.
+func WithToolPreset(ctx context.Context, preset string) context.Context {
+	if preset == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxKeyToolPreset, preset)
+}
+
+// ToolPresetFromContext extracts the tool preset from a context.
+func ToolPresetFromContext(ctx context.Context) string {
+	s, _ := ctx.Value(ctxKeyToolPreset).(string)
+	return s
 }

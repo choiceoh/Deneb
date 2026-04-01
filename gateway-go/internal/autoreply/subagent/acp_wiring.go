@@ -93,6 +93,7 @@ func NewSubagentCommandDepsFromACP(registry *acp.ACPRegistry, cfg ...ACPCommandD
 					Role:             params.Task,
 					Model:            params.Model,
 					InitialMessage:   params.Task,
+					ToolPreset:       params.ToolPreset,
 				})
 				if result.Error != nil {
 					return &SubagentSpawnResult{Status: "error", Error: result.Error.Error()}, nil
