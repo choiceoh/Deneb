@@ -391,6 +391,8 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		childSession := d.Manager.Create(childKey, session.KindDirect)
 		if p.Model != "" {
 			childSession.Model = p.Model
+		} else if d.SubagentDefaultModel != "" {
+			childSession.Model = d.SubagentDefaultModel
 		}
 		childSession.SpawnedBy = parentKey
 		childSession.ToolPreset = p.ToolPreset

@@ -145,6 +145,14 @@ func executeAgentRun(
 	if model == "" && deps.registry != nil {
 		model = deps.registry.FullModelID(modelrole.RoleMain)
 	}
+	// Second-pass role resolution: fallback values (defaultModel, subagentDefaultModel,
+	// sess.Model) may contain role names like "main" that need registry resolution.
+	if deps.registry != nil && model != "" {
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		}
+	}
 	// If the request has image attachments, prefer the lightweight model.
 	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
 		lwCfg := deps.registry.Config(modelrole.RoleLightweight)

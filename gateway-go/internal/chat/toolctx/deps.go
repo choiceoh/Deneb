@@ -39,6 +39,9 @@ type SessionDeps struct {
 	Transcript TranscriptStore
 	// SendFn sends a message to a target session, triggering an agent run.
 	SendFn func(sessionKey, message string) error
+	// SubagentDefaultModel is the default model for sub-agent sessions
+	// (from agents.defaults.subagents.model in deneb.json).
+	SubagentDefaultModel string
 }
 
 // ChronoDeps holds dependencies for the cron scheduling tool.
