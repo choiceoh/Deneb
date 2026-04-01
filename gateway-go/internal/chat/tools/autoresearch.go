@@ -147,14 +147,32 @@ func autoresearchStatus(runner *autoresearch.Runner, workdir string) (string, er
 }
 
 func autoresearchResults(workdir, format string) (string, error) {
-	if format == "tsv" {
+	switch format {
+	case "tsv":
 		return autoresearch.ReadResults(workdir)
+
+	case "chart":
+		cfg, err := autoresearch.LoadConfig(workdir)
+		if err != nil {
+			return "", fmt.Errorf("no experiment found: %w", err)
+		}
+		rows, err := autoresearch.ParseResults(workdir)
+		if err != nil {
+			return "", fmt.Errorf("parse results: %w", err)
+		}
+		path, err := autoresearch.SaveChart(workdir, rows, cfg)
+		if err != nil {
+			return "", fmt.Errorf("generate chart: %w", err)
+		}
+		return fmt.Sprintf("Chart saved to %s\nSend this file to view the experiment progress graph.", path), nil
+
+	default:
+		// Default: summary.
+		cfg, err := autoresearch.LoadConfig(workdir)
+		if err != nil {
+			return "", fmt.Errorf("no experiment found: %w", err)
+		}
+		results, _ := autoresearch.ReadResults(workdir)
+		return autoresearch.Summary(workdir, cfg) + "\n" + results, nil
 	}
-	// Default: summary.
-	cfg, err := autoresearch.LoadConfig(workdir)
-	if err != nil {
-		return "", fmt.Errorf("no experiment found: %w", err)
-	}
-	results, _ := autoresearch.ReadResults(workdir)
-	return autoresearch.Summary(workdir, cfg) + "\n" + results, nil
 }

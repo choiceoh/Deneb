@@ -1604,8 +1604,8 @@ func autoresearchToolSchema() map[string]any {
 			},
 			"format": map[string]any{
 				"type":        "string",
-				"enum":        []string{"tsv", "summary"},
-				"description": "Output format for results action (default: summary)",
+				"enum":        []string{"tsv", "summary", "chart"},
+				"description": "Output format for results action. chart generates a PNG graph of metric progression (default: summary)",
 				"default":     "summary",
 			},
 		},
