@@ -223,10 +223,28 @@ func handleRunSuccess(
 	}
 
 	// Recall follow-up: if the recall engine produced context that arrived
-	// after the agent finished, log it but do NOT deliver to the user.
-	// Raw recall data (importance scores, categories) is internal-only context.
-	if result.RecallFollowUp != "" {
-		logger.Info("recall: post-run follow-up available (not delivered)", "chars", len(result.RecallFollowUp))
+	// after the agent finished, ask the fallback LLM to generate a natural
+	// correction/addition based on the recalled memory. Only delivers if the
+	// LLM determines the recall materially changes or supplements the response.
+	if result.RecallFollowUp != "" && params.Delivery != nil && deps.replyFunc != nil && deps.registry != nil {
+		go func() {
+			followUp := generateRecallFollowUp(
+				deps, params.Message, result.Text, result.RecallFollowUp, logger,
+			)
+			if followUp == "" {
+				logger.Info("recall: follow-up LLM decided no correction needed")
+				return
+			}
+			followUpCtx, followUpCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer followUpCancel()
+			if err := deps.replyFunc(followUpCtx, params.Delivery, followUp); err != nil {
+				logger.Warn("recall follow-up delivery failed", "error", err)
+			} else {
+				logger.Info("recall: follow-up delivered", "chars", len(followUp))
+			}
+		}()
+	} else if result.RecallFollowUp != "" {
+		logger.Info("recall: post-run follow-up available (no delivery path)", "chars", len(result.RecallFollowUp))
 	}
 
 	// Store last output on the session so cron and other consumers can read it.
@@ -812,4 +830,74 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 		out[i] = prompt.ToolDef{Name: d.Name}
 	}
 	return out
+}
+
+// recallFollowUpSystemPrompt instructs the fallback LLM to generate a natural
+// Korean follow-up correction based on recalled memory facts.
+const recallFollowUpSystemPrompt = `You are Deneb (네브), an AI assistant. You just responded to the user, but memory recall has surfaced additional context that may correct or supplement your response.
+
+Your task: compare your original response against the recalled memory. If the memory contains information that materially changes, corrects, or importantly supplements your response, write a brief, natural Korean follow-up message. If the memory doesn't add anything meaningful, respond with exactly "NO_CORRECTION".
+
+Rules:
+- Write in natural Korean, as if you just remembered something ("아 맞다, ..." or "그리고 ..." style)
+- Keep it concise — 1-3 sentences max
+- Only correct/supplement when the memory is genuinely relevant and changes the substance
+- Do NOT repeat what you already said
+- Do NOT include raw memory data (scores, categories, timestamps)
+- Do NOT prefix with emojis or special formatting
+- If unsure whether the memory is relevant, lean toward NO_CORRECTION`
+
+// generateRecallFollowUp calls the fallback LLM to produce a natural follow-up
+// correction based on recalled memory. Returns empty string if no correction
+// is needed or on any error.
+func generateRecallFollowUp(deps runDeps, userMessage, agentResponse, recallData string, logger *slog.Logger) string {
+	fbClient := deps.registry.Client(modelrole.RoleFallback)
+	fbModel := deps.registry.Model(modelrole.RoleFallback)
+	if fbClient == nil {
+		logger.Warn("recall follow-up: no fallback client available")
+		return ""
+	}
+
+	// Truncate inputs to avoid blowing up the context for this lightweight call.
+	const maxUserMsg = 2000
+	const maxAgentResp = 3000
+	const maxRecall = 4000
+	if len(userMessage) > maxUserMsg {
+		userMessage = userMessage[:maxUserMsg] + "..."
+	}
+	if len(agentResponse) > maxAgentResp {
+		agentResponse = agentResponse[:maxAgentResp] + "..."
+	}
+	if len(recallData) > maxRecall {
+		recallData = recallData[:maxRecall] + "..."
+	}
+
+	userPrompt := fmt.Sprintf("## 사용자 메시지\n%s\n\n## 내 응답\n%s\n\n## 회상된 메모리\n%s",
+		userMessage, agentResponse, recallData)
+
+	base := deps.shutdownCtx
+	if base == nil {
+		base = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(base, 10*time.Second)
+	defer cancel()
+
+	resp, err := fbClient.CompleteOpenAI(ctx, llm.ChatRequest{
+		Model: fbModel,
+		Messages: []llm.Message{
+			llm.NewTextMessage("system", recallFollowUpSystemPrompt),
+			llm.NewTextMessage("user", userPrompt),
+		},
+		MaxTokens: 512,
+	})
+	if err != nil {
+		logger.Warn("recall follow-up LLM call failed", "error", err)
+		return ""
+	}
+
+	resp = strings.TrimSpace(resp)
+	if resp == "" || resp == "NO_CORRECTION" || strings.HasPrefix(resp, "NO_CORRECTION") {
+		return ""
+	}
+	return resp
 }
