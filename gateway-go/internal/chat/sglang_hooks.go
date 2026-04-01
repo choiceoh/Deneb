@@ -385,3 +385,41 @@ func appendToMemoryFile(workspaceDir, content string, logger *slog.Logger) {
 		logger.Info("auto-memory saved", "chars", len(content))
 	}
 }
+
+// --- 4. Tool Activity Summary ---
+// Called by ProgressTracker every N tool completions to generate a short Korean
+// status line from accumulated thinking text.
+
+const activitySummarySystemPrompt = `에이전트의 최근 생각 과정을 보고 지금 무엇을 하고 있는지 한국어 한 줄(15자 이내)로 요약하세요.
+
+규칙:
+- "~하는 중" 형태로 끝내기 (예: "코드 구조 파악하는 중", "버그 원인 분석하는 중")
+- 따옴표, 이모지, 부가 설명 없이 요약만 출력
+- 구체적으로 작성 (무엇을/왜 하는지)`
+
+// SummarizeToolActivity uses the local sglang model to summarize recent agent
+// thinking into a short Korean phrase for the progress tracker status line.
+// Returns empty string on failure (caller should treat as a no-op).
+func SummarizeToolActivity(ctx context.Context, reasons []string) (string, error) {
+	if !checkSglangHealth() {
+		return "", fmt.Errorf("sglang unavailable")
+	}
+
+	// Build user message from recent thinking snippets.
+	var b strings.Builder
+	b.WriteString("최근 에이전트 생각 과정:\n\n")
+	limit := len(reasons)
+	if limit > 5 {
+		reasons = reasons[limit-5:]
+	}
+	for i, r := range reasons {
+		snippet := truncateInput(r, 300)
+		fmt.Fprintf(&b, "%d. %s\n", i+1, snippet)
+	}
+
+	result, err := callLocalLLM(ctx, activitySummarySystemPrompt, b.String(), 64)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result), nil
+}
