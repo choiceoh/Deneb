@@ -108,20 +108,17 @@ func TestSupersedeFact_CreatesRelation(t *testing.T) {
 		t.Fatalf("SupersedeFact: %v", err)
 	}
 
-	// Verify the evolves relation was created.
-	related, err := s.GetRelatedFacts(ctx, newID)
+	// SupersedeFact deactivates the old fact (active=0), so GetRelatedFacts
+	// won't return it (it filters active=1). Verify the relation row directly.
+	var count int
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM fact_relations WHERE from_fact_id = ? AND to_fact_id = ? AND relation_type = ?`,
+		oldID, newID, RelationEvolves,
+	).Scan(&count)
 	if err != nil {
-		t.Fatalf("GetRelatedFacts: %v", err)
+		t.Fatalf("query relation: %v", err)
 	}
-
-	found := false
-	for _, rf := range related {
-		if rf.RelationType == RelationEvolves && rf.Direction == "incoming" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected evolves relation from SupersedeFact")
+	if count != 1 {
+		t.Errorf("expected 1 evolves relation, got %d", count)
 	}
 }

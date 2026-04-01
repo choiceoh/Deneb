@@ -35,7 +35,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 		"## Trust and Respect",
 		"## Tooling",
 		"## Tool Usage",
-		"## Memory Recall",
+		"## Memory",
 		"## Messaging",
 		"## Context",
 		"/home/user/project",

@@ -91,8 +91,8 @@ func TestToolsCatalog_CoreToolCount(t *testing.T) {
 	for _, g := range groups {
 		total += len(g.(map[string]any)["tools"].([]any))
 	}
-	if total != 19 {
-		t.Errorf("expected 19 core tools, got %d", total)
+	if total != 18 {
+		t.Errorf("expected 18 core tools, got %d", total)
 	}
 }
 

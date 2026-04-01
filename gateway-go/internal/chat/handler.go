@@ -167,6 +167,9 @@ func DefaultHandlerConfig() HandlerConfig {
 
 // NewHandler creates a new chat handler.
 func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog.Logger, cfg HandlerConfig) *Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if cfg.MaxHistoryBytes == 0 {
 		defaults := DefaultHandlerConfig()
 		cfg.MaxHistoryBytes = defaults.MaxHistoryBytes

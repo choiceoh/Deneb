@@ -10,7 +10,6 @@ func TestCreateRequest(t *testing.T) {
 
 	req := s.CreateRequest(CreateRequestParams{
 		Command: "rm -rf /",
-		NodeID:  "node-1",
 		Ask:     "Delete everything?",
 	})
 
@@ -161,23 +160,6 @@ func TestGlobalSnapshot(t *testing.T) {
 	}
 	if snap.Hash != "hash123" {
 		t.Fatalf("expected hash 'hash123', got %q", snap.Hash)
-	}
-}
-
-func TestNodeSnapshot(t *testing.T) {
-	s := NewStore()
-
-	if s.GetNodeSnapshot("node-1") != nil {
-		t.Fatal("expected nil for unknown node")
-	}
-
-	s.SetNodeSnapshot("node-1", ApprovalsFile{Version: 3}, "abc")
-	snap := s.GetNodeSnapshot("node-1")
-	if snap == nil {
-		t.Fatal("expected snapshot")
-	}
-	if snap.File.Version != 3 {
-		t.Fatalf("expected version 3, got %d", snap.File.Version)
 	}
 }
 

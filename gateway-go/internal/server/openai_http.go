@@ -190,14 +190,20 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert messages to validate user content before checking handler availability,
+	// so 400 errors surface before 503.
+	systemPrompt, llmMessages, lastUserText := convertOpenAIMessages(req.Messages)
+
+	if lastUserText == "" {
+		writeOpenAIError(w, s, http.StatusBadRequest, "at least one user message is required", "invalid_request_error")
+		return
+	}
+
 	// Check chat handler availability (after validation to surface 400 errors first).
 	if s.chatHandler == nil {
 		writeOpenAIError(w, s, http.StatusServiceUnavailable, "chat handler not available", "server_error")
 		return
 	}
-
-	// Convert messages to internal format, extracting system prompt and last user text.
-	systemPrompt, llmMessages, lastUserText := convertOpenAIMessages(req.Messages)
 
 	// Build sync options from request parameters.
 	opts := buildSyncOptions(req, systemPrompt, llmMessages)

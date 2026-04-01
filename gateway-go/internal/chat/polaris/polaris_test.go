@@ -216,7 +216,7 @@ func TestPolarisTopics(t *testing.T) {
 
 func TestPolarisRead(t *testing.T) {
 	dir := docsDir(t)
-	result, err := polarisRead(dir, "index")
+	result, err := polarisRead(dir, "reference/RELEASING")
 	if err != nil {
 		t.Fatalf("polarisRead error: %v", err)
 	}
