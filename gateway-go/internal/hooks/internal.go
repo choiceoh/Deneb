@@ -284,7 +284,6 @@ func EvaluateEligibility(meta *DenebHookMetadata, ectx EligibilityContext) bool 
 	return true
 }
 
-
 // hasBinary checks if a binary is available in PATH.
 func hasBinary(name string) bool {
 	_, err := exec.LookPath(name)

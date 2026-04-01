@@ -1,5 +1,5 @@
 // eligibility.go evaluates whether a skill should be included based on
-// OS, binary requirements, environment variables, and configuration.
+// binary requirements, environment variables, and configuration.
 //
 // This ports src/agents/skills/config.ts:shouldIncludeSkill() and
 // src/shared/config-eval.ts:evaluateRuntimeEligibility() to Go.
