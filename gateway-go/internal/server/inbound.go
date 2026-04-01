@@ -938,10 +938,80 @@ func buildZeroCallsReport(disp *rpc.Dispatcher) *handlers.RPCZeroCallsReport {
 	}
 }
 
+// modelEntry describes a model shown in the /models quick-change keyboard.
+type modelEntry struct {
+	label   string // button label (e.g., "main: glm-5-turbo")
+	fullID  string // full model ID sent to LLM (e.g., "zai/glm-5-turbo")
+	display string // short display name (e.g., "glm-5-turbo")
+}
+
+// quickChangeModels returns the ordered list of models for the /models keyboard.
+// Includes role-based models from the registry + extra frequently-used models.
+func (p *InboundProcessor) quickChangeModels() []modelEntry {
+	var entries []modelEntry
+
+	// 1. Role-based models from registry.
+	if reg := p.server.modelRegistry; reg != nil {
+		roles := []struct {
+			role  modelrole.Role
+			label string
+		}{
+			{modelrole.RoleMain, "main"},
+			{modelrole.RoleLightweight, "lightweight"},
+			{modelrole.RolePilot, "pilot"},
+			{modelrole.RoleFallback, "fallback"},
+		}
+		seen := make(map[string]bool)
+		for _, r := range roles {
+			cfg := reg.Config(r.role)
+			if cfg.Model == "" {
+				continue
+			}
+			fullID := reg.FullModelID(r.role)
+			seen[fullID] = true
+			entries = append(entries, modelEntry{
+				label:   r.label + ": " + shortModelName(cfg.Model),
+				fullID:  fullID,
+				display: shortModelName(cfg.Model),
+			})
+		}
+
+		// 2. Extra models not already covered by roles.
+		extras := []struct {
+			provider string
+			model    string
+		}{
+			{"zai", "glm-5v-turbo"},
+			{"zai", "glm-5.1"},
+		}
+		for _, e := range extras {
+			fullID := e.provider + "/" + e.model
+			if seen[fullID] {
+				continue
+			}
+			entries = append(entries, modelEntry{
+				label:   e.model,
+				fullID:  fullID,
+				display: e.model,
+			})
+		}
+	}
+
+	return entries
+}
+
+// shortModelName strips the provider prefix from a model name.
+func shortModelName(model string) string {
+	if idx := strings.LastIndex(model, "/"); idx >= 0 && idx < len(model)-1 {
+		return model[idx+1:]
+	}
+	return model
+}
+
 // handleModelsCommand sends a model quick-change message with an inline keyboard.
 func (p *InboundProcessor) handleModelsCommand(chatID string) {
-	reg := p.server.modelRegistry
-	if reg == nil {
+	entries := p.quickChangeModels()
+	if len(entries) == 0 {
 		p.sendCommandReply(chatID, &handlers.CommandResult{Reply: "모델 레지스트리를 사용할 수 없습니다.", SkipAgent: true})
 		return
 	}
@@ -952,61 +1022,14 @@ func (p *InboundProcessor) handleModelsCommand(chatID string) {
 	}
 
 	currentModel := p.chatHandler.DefaultModel()
+	if currentModel == "" && p.server.modelRegistry != nil {
+		currentModel = p.server.modelRegistry.FullModelID(modelrole.RoleMain)
+	}
 
-	// Determine which role is currently active.
-	currentRole, _ := reg.RoleForModel(currentModel)
-
-	// Build message text.
 	text := "🤖 <b>모델 퀵체인지</b>\n\n"
-	if currentModel != "" {
-		roleLabel := ""
-		if currentRole != "" {
-			roleLabel = " (" + string(currentRole) + ")"
-		}
-		text += "현재: <code>" + currentModel + "</code>" + roleLabel
-	} else {
-		cfg := reg.Config(modelrole.RoleMain)
-		text += "현재: <code>" + cfg.ProviderID + "/" + cfg.Model + "</code> (main)"
-	}
+	text += "현재: <code>" + currentModel + "</code>"
 
-	// Build inline keyboard: 2x2 grid with role buttons.
-	roles := []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RolePilot, modelrole.RoleFallback}
-	var rows [][]telegram.InlineKeyboardButton
-	var row []telegram.InlineKeyboardButton
-	for i, role := range roles {
-		cfg := reg.Config(role)
-		if cfg.Model == "" {
-			continue
-		}
-
-		// Short display name: strip provider prefix from model name.
-		displayModel := cfg.Model
-		if idx := strings.LastIndex(displayModel, "/"); idx >= 0 && idx < len(displayModel)-1 {
-			displayModel = displayModel[idx+1:]
-		}
-
-		label := string(role) + ": " + displayModel
-		activeRole := currentRole
-		if activeRole == "" {
-			activeRole = modelrole.RoleMain
-		}
-		if role == activeRole {
-			label = "✓ " + label
-		}
-
-		row = append(row, telegram.InlineKeyboardButton{
-			Text:         label,
-			CallbackData: telegram.ActionModelSwitch + ":" + string(role),
-		})
-
-		// 2 buttons per row.
-		if len(row) == 2 || i == len(roles)-1 {
-			rows = append(rows, row)
-			row = nil
-		}
-	}
-
-	keyboard := telegram.BuildInlineKeyboard(rows)
+	keyboard := p.buildModelKeyboard(entries, currentModel)
 
 	id, err := strconv.ParseInt(chatID, 10, 64)
 	if err != nil {
@@ -1024,34 +1047,42 @@ func (p *InboundProcessor) handleModelsCommand(chatID string) {
 	}
 }
 
-// handleModelSwitchCallback processes a model quick-change button press.
-func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery, chatID string, roleName string) {
-	reg := p.server.modelRegistry
-	if reg == nil {
-		return
-	}
+// buildModelKeyboard builds a 2-column inline keyboard from model entries.
+func (p *InboundProcessor) buildModelKeyboard(entries []modelEntry, currentModel string) *telegram.InlineKeyboardMarkup {
+	var rows [][]telegram.InlineKeyboardButton
+	var row []telegram.InlineKeyboardButton
+	for i, e := range entries {
+		label := e.label
+		if e.fullID == currentModel {
+			label = "✓ " + label
+		}
 
+		row = append(row, telegram.InlineKeyboardButton{
+			Text:         label,
+			CallbackData: telegram.ActionModelSwitch + ":" + e.fullID,
+		})
+
+		if len(row) == 2 || i == len(entries)-1 {
+			rows = append(rows, row)
+			row = nil
+		}
+	}
+	return telegram.BuildInlineKeyboard(rows)
+}
+
+// handleModelSwitchCallback processes a model quick-change button press.
+func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery, chatID string, fullModelID string) {
 	client := p.server.telegramPlug.Client()
 	if client == nil {
-		return
-	}
-
-	role := modelrole.Role(roleName)
-	fullModelID := reg.FullModelID(role)
-	if fullModelID == "" {
 		return
 	}
 
 	// Apply model change.
 	p.chatHandler.SetDefaultModel(fullModelID)
 
-	// Acknowledge with toast.
-	cfg := reg.Config(role)
-	displayModel := cfg.Model
-	if idx := strings.LastIndex(displayModel, "/"); idx >= 0 && idx < len(displayModel)-1 {
-		displayModel = displayModel[idx+1:]
-	}
+	displayModel := shortModelName(fullModelID)
 
+	// Acknowledge with toast.
 	ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer ackCancel()
 	if err := telegram.AnswerCallbackQuery(ackCtx, client, cb.ID, "✓ "+displayModel); err != nil {
@@ -1064,42 +1095,11 @@ func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery,
 		return
 	}
 
-	// Rebuild message text with updated current model.
 	text := "🤖 <b>모델 퀵체인지</b>\n\n"
-	text += "현재: <code>" + fullModelID + "</code> (" + roleName + ")"
+	text += "현재: <code>" + fullModelID + "</code>"
 
-	// Rebuild keyboard with updated checkmark.
-	roles := []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RolePilot, modelrole.RoleFallback}
-	var rows [][]telegram.InlineKeyboardButton
-	var row []telegram.InlineKeyboardButton
-	for i, r := range roles {
-		c := reg.Config(r)
-		if c.Model == "" {
-			continue
-		}
-
-		dm := c.Model
-		if idx := strings.LastIndex(dm, "/"); idx >= 0 && idx < len(dm)-1 {
-			dm = dm[idx+1:]
-		}
-
-		label := string(r) + ": " + dm
-		if r == role {
-			label = "✓ " + label
-		}
-
-		row = append(row, telegram.InlineKeyboardButton{
-			Text:         label,
-			CallbackData: telegram.ActionModelSwitch + ":" + string(r),
-		})
-
-		if len(row) == 2 || i == len(roles)-1 {
-			rows = append(rows, row)
-			row = nil
-		}
-	}
-
-	keyboard := telegram.BuildInlineKeyboard(rows)
+	entries := p.quickChangeModels()
+	keyboard := p.buildModelKeyboard(entries, fullModelID)
 
 	editCtx, editCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer editCancel()
