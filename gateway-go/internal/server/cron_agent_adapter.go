@@ -31,7 +31,7 @@ type cronTranscriptCloner struct {
 
 var _ cron.TranscriptCloner = (*cronTranscriptCloner)(nil)
 
-func (c *cronTranscriptCloner) CloneRecent(srcKey, dstKey string, limit int) (int, error) {
+func (c *cronTranscriptCloner) CloneRecent(srcKey, dstKey string, limit int) error {
 	return c.store.CloneRecent(srcKey, dstKey, limit)
 }
 
