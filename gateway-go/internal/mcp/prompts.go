@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // allPrompts returns the available MCP prompts.
@@ -11,7 +12,7 @@ func allPrompts() []Prompt {
 	return []Prompt{
 		{
 			Name:        "deneb_system_check",
-			Description: "Deneb 시스템 전체 상태 점검 (게이트웨이, 모델, 스킬, 활동 메트릭)",
+			Description: "Deneb 시스템 전체 상태 점검 (게이트웨이, 런타임, 프로바이더, 모델, 스킬, 활동 메트릭)",
 		},
 		{
 			Name:        "deneb_memory_recall",
@@ -92,18 +93,46 @@ func (pm *PromptManager) Get(ctx context.Context, name string, args map[string]s
 
 func (pm *PromptManager) systemCheck(ctx context.Context) (*PromptGetResult, error) {
 	// Gather system data from multiple RPC calls.
-	identity, _ := pm.bridge.Call(ctx, "gateway.identity.get", nil)
-	activity, _ := pm.bridge.Call(ctx, "monitoring.activity", nil)
-	skills, _ := pm.bridge.Call(ctx, "skills.status", nil)
-	models, _ := pm.bridge.Call(ctx, "models.list", nil)
+	type rpcResult struct {
+		name   string
+		method string
+		data   json.RawMessage
+		err    error
+	}
 
-	data := fmt.Sprintf("## Deneb System Status\n\n### Gateway Identity\n```json\n%s\n```\n\n### Activity\n```json\n%s\n```\n\n### Skills\n```json\n%s\n```\n\n### Models\n```json\n%s\n```",
-		prettyJSON(identity), prettyJSON(activity), prettyJSON(skills), prettyJSON(models))
+	calls := []struct {
+		name   string
+		method string
+	}{
+		{"Gateway Identity", "gateway.identity.get"},
+		{"Runtime Status", "status"},
+		{"Activity", "monitoring.activity"},
+		{"Providers", "providers.list"},
+		{"Models", "models.list"},
+		{"Skills (installed)", "skills.status"},
+	}
+
+	results := make([]rpcResult, len(calls))
+	for i, c := range calls {
+		data, err := pm.bridge.Call(ctx, c.method, nil)
+		results[i] = rpcResult{name: c.name, method: c.method, data: data, err: err}
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Deneb System Status\n")
+	for _, r := range results {
+		sb.WriteString(fmt.Sprintf("\n### %s\n", r.name))
+		if r.err != nil {
+			sb.WriteString(fmt.Sprintf("⚠️ RPC `%s` failed: %v\n", r.method, r.err))
+		} else {
+			sb.WriteString(fmt.Sprintf("```json\n%s\n```\n", prettyJSON(r.data)))
+		}
+	}
 
 	return &PromptGetResult{
 		Description: "Deneb 시스템 전체 상태 점검",
 		Messages: []PromptMessage{
-			{Role: "user", Content: TextContent(data + "\n\n위 Deneb 시스템 상태를 분석하고 문제점이나 주의사항이 있으면 알려줘.")},
+			{Role: "user", Content: TextContent(sb.String() + "\n위 Deneb 시스템 상태를 분석하고 문제점이나 주의사항이 있으면 알려줘.")},
 		},
 	}, nil
 }
