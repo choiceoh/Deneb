@@ -27,8 +27,26 @@ func readToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Read only this function/method/type. For .go files uses AST; for others uses regex. Overrides offset/limit",
 			},
+			"force": map[string]any{
+				"type":        "boolean",
+				"description": "Force re-read even if cached (default: false)",
+				"default":     false,
+			},
 		},
 		"required": []string{"file_path"},
+	}
+}
+
+func readSpilloverToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"spill_id": map[string]any{
+				"type":        "string",
+				"description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result",
+			},
+		},
+		"required": []string{"spill_id"},
 	}
 }
 

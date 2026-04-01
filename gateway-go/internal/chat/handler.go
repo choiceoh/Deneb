@@ -84,10 +84,6 @@ type Handler struct {
 	pendingMu   sync.Mutex
 	pendingMsgs map[string]*pendingRunQueue // sessionKey -> queued messages
 
-	// channels is the channel plugin registry, used for multi-target delivery
-	// via streaming.Dispatch when replyFunc is not set.
-	channels *telegram.Plugin
-
 	// runStateMachine tracks active agent runs for status broadcasting.
 	runStateMachine *telegram.RunStateMachine
 
@@ -195,10 +191,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	return h
 }
 
-// SetChannels sets the channel plugin registry for multi-target delivery.
-func (h *Handler) SetChannels(reg *telegram.Plugin) {
-	h.channels = reg
-}
 
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {

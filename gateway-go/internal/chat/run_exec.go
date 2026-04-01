@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
@@ -135,6 +136,24 @@ func executeAgentRun(
 	// Parse provider prefix (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
 	providerID, modelName := parseModelID(model)
 	model = modelName
+
+	// Plugin hook: allow plugins to override model/provider selection.
+	if deps.pluginHookRunner != nil {
+		if mrResult := deps.pluginHookRunner.RunBeforeModelResolve(ctx, map[string]any{
+			"currentModel": model,
+			"provider":     providerID,
+			"sessionKey":   params.SessionKey,
+			"runId":        params.ClientRunID,
+		}); mrResult != nil {
+			if mrResult.ModelOverride != "" {
+				model = mrResult.ModelOverride
+			}
+			if mrResult.ProviderOverride != "" {
+				providerID = mrResult.ProviderOverride
+			}
+			logger.Info("plugin: model override applied", "model", model, "provider", providerID)
+		}
+	}
 
 	runLog.LogStart(agentlog.RunStartData{
 		Model:    model,
@@ -333,6 +352,22 @@ func executeAgentRun(
 	prepWg.Wait()
 	logger.Info("pipeline: parallel prep done (knowledge+context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
 
+	// Plugin hook: allow plugins to modify/extend the system prompt.
+	if deps.pluginHookRunner != nil {
+		if pbResult := deps.pluginHookRunner.RunBeforePromptBuild(ctx, map[string]any{
+			"sessionKey": params.SessionKey,
+			"channel":    deliveryChannel(params.Delivery),
+		}); pbResult != nil {
+			if pbResult.SystemPrompt != "" {
+				systemPrompt = llm.SystemString(pbResult.SystemPrompt)
+			}
+			additions := pbResult.PrependSystemContext + pbResult.AppendSystemContext
+			if additions != "" {
+				systemPrompt = llm.AppendSystemText(systemPrompt, additions)
+			}
+		}
+	}
+
 	if contextErr != nil {
 		logger.Warn("context assembly failed, using message only", "error", contextErr)
 	}
@@ -342,6 +377,12 @@ func executeAgentRun(
 	// request's normal assembly will include them. The current request proceeds
 	// with its already-assembled context (no blocking, no stale cache).
 	triggerProactiveCompaction(deps.shutdownCtx, deps, params, client, logger)
+
+	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
+	// with full conversation history), use those instead of transcript context.
+	if len(params.PrebuiltMessages) > 0 {
+		messages = params.PrebuiltMessages
+	}
 
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
@@ -444,21 +485,38 @@ func executeAgentRun(
 	// idempotent tool results (find, tree). Invalidated on mutation tools.
 	runCache := NewRunCache()
 
+	// FileCache lives for the entire agent run and deduplicates repeated file reads.
+	// When the same file is read again (unchanged mtime/size), a compact "already read"
+	// message is returned instead of the full content, saving context tokens.
+	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
+
 	// Resolve thinking config from the session's ThinkingLevel setting.
 	var thinkingCfg *llm.ThinkingConfig
 	if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.ThinkingLevel != "" {
 		thinkingCfg = resolveThinkingConfig(sess.ThinkingLevel)
 	}
 
+	// Override max tokens if the caller (e.g., OpenAI HTTP endpoint) specified one.
+	if params.MaxTokens != nil && *params.MaxTokens > 0 {
+		maxTokens = *params.MaxTokens
+	}
+
 	cfg := agent.AgentConfig{
-		MaxTurns:  defaultMaxTurns,
-		Timeout:   defaultAgentTimeout,
-		Model:     model,
-		System:    systemPrompt,
-		Tools:     tools,
-		MaxTokens: maxTokens,
-		APIType:   apiType,
-		Thinking:  thinkingCfg,
+		MaxTurns:         defaultMaxTurns,
+		Timeout:          defaultAgentTimeout,
+		Model:            model,
+		System:           systemPrompt,
+		Tools:            tools,
+		MaxTokens:        maxTokens,
+		APIType:          apiType,
+		Thinking:         thinkingCfg,
+		Temperature:      params.Temperature,
+		TopP:             params.TopP,
+		FrequencyPenalty: params.FrequencyPenalty,
+		PresencePenalty:  params.PresencePenalty,
+		StopSequences:    params.Stop,
+		ResponseFormat:   params.ResponseFormat,
+		ToolChoice:       params.ToolChoice,
 		// Drop base64 image bytes from the message history after turn 0 so that
 		// subsequent tool-call turns don't retransmit the full image payload.
 		// Each inline image is ~1600 tokens; stripping saves that cost per turn
@@ -483,6 +541,7 @@ func executeAgentRun(
 		OnTurnInit: func(ctx context.Context) context.Context {
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
+			ctx = WithFileCache(ctx, fileCache)
 			return ctx
 		},
 	}
@@ -596,6 +655,22 @@ func executeAgentRun(
 		}
 	}
 
+	// Plugin typed hook: allow blocking tool calls before execution.
+	if deps.pluginHookRunner != nil {
+		hooks.OnBeforeToolCall = func(name, toolCallID string, input []byte) (bool, string) {
+			result := deps.pluginHookRunner.RunBeforeToolCall(ctx, map[string]any{
+				"toolName":   name,
+				"toolCallId": toolCallID,
+				"sessionKey": params.SessionKey,
+				"runId":      params.ClientRunID,
+			})
+			if result != nil && result.Cancel {
+				return true, result.CancelReason
+			}
+			return false, ""
+		}
+	}
+
 	// Plugin typed hook: fire after_tool_call event after each tool completes.
 	if deps.pluginHookRunner != nil {
 		prevOnToolResult := hooks.OnToolResult
@@ -603,12 +678,13 @@ func executeAgentRun(
 			if prevOnToolResult != nil {
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
-			go deps.pluginHookRunner.RunVoidHook(context.Background(), plugin.HookAfterToolCall, map[string]any{
+			go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAfterToolCall, map[string]any{
 				"toolName":   name,
 				"toolCallId": toolUseID,
 				"sessionKey": params.SessionKey,
 				"runId":      params.ClientRunID,
 				"isError":    isErr,
+				"result":     result,
 			})
 		}
 	}
@@ -620,7 +696,7 @@ func executeAgentRun(
 			if prevOnToolResult != nil {
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
-			go deps.hookRegistry.Fire(context.Background(), hookspkg.EventToolUse, map[string]string{
+			go deps.hookRegistry.Fire(deps.shutdownCtx, hookspkg.EventToolUse, map[string]string{
 				"DENEB_TOOL":        name,
 				"DENEB_TOOL_USE_ID": toolUseID,
 				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
@@ -741,6 +817,65 @@ func executeAgentRun(
 			// don't maintain Aurora state, so compaction would be a no-op.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
+
+				// Pre-compaction fact extraction: extract learnings from the
+				// conversation before compaction trims older messages.
+				if deps.memoryStore != nil && deps.registry != nil {
+					lwClient := deps.registry.Client(modelrole.RoleLightweight)
+					lwModel := deps.registry.Model(modelrole.RoleLightweight)
+					if lwClient != nil && lwModel != "" {
+						snapshot := messages // capture before compaction
+						go func() {
+							extractCtx, extractCancel := context.WithTimeout(deps.shutdownCtx, 30*time.Second)
+							defer extractCancel()
+							var userParts, assistantParts []string
+							for _, m := range snapshot {
+								// Extract text content from the message (may be
+								// a JSON string or a []ContentBlock array).
+								var text string
+								if len(m.Content) > 0 && m.Content[0] == '"' {
+									_ = json.Unmarshal(m.Content, &text)
+								} else {
+									var blocks []llm.ContentBlock
+									if json.Unmarshal(m.Content, &blocks) == nil {
+										for _, b := range blocks {
+											if b.Type == "text" && b.Text != "" {
+												text += b.Text + "\n"
+											}
+										}
+									}
+								}
+								if text == "" {
+									continue
+								}
+								switch m.Role {
+								case "user":
+									userParts = append(userParts, text)
+								case "assistant":
+									assistantParts = append(assistantParts, text)
+								}
+							}
+							if len(userParts) == 0 && len(assistantParts) == 0 {
+								return
+							}
+							facts, err := memory.ExtractFacts(
+								extractCtx, lwClient, lwModel,
+								strings.Join(userParts, "\n"),
+								strings.Join(assistantParts, "\n"),
+								logger,
+							)
+							if err != nil {
+								logger.Warn("pre-compaction fact extraction failed", "error", err)
+								return
+							}
+							if len(facts) > 0 {
+								memory.InsertExtractedFacts(extractCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
+								logger.Info("pre-compaction facts extracted", "count", len(facts))
+							}
+						}()
+					}
+				}
+
 				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
 					ctx, deps, params, client, logger,
 				)
@@ -752,6 +887,21 @@ func executeAgentRun(
 					cfg.System = llm.AppendSystemText(origSystem, sysAddition)
 				}
 				continue
+			}
+
+			// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
+			if autoreply.IsTransientHTTPError(runErr.Error()) && ctx.Err() == nil {
+				logger.Warn("transient HTTP error, retrying once", "error", runErr)
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(2500 * time.Millisecond):
+				}
+				agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+				if runErr == nil {
+					break
+				}
+				logger.Warn("transient retry also failed", "error", runErr)
 			}
 
 			// Model fallback chain: try each subsequent role in the chain.
@@ -820,13 +970,18 @@ func executeAgentRun(
 
 	// Fire agent_end plugin hook (void, non-blocking).
 	if deps.pluginHookRunner != nil {
-		go deps.pluginHookRunner.RunVoidHook(context.Background(), plugin.HookAgentEnd, map[string]any{
+		errMsg := ""
+		if agentResult.StopReason != "end_turn" && agentResult.StopReason != "" {
+			errMsg = "stop_reason: " + agentResult.StopReason
+		}
+		go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAgentEnd, map[string]any{
 			"sessionKey": params.SessionKey,
 			"runId":      params.ClientRunID,
 			"model":      model,
 			"turns":      agentResult.Turns,
 			"durationMs": totalMs,
 			"success":    agentResult.StopReason == "end_turn",
+			"error":      errMsg,
 		})
 	}
 

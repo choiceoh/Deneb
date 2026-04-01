@@ -1,6 +1,10 @@
 package toolctx
 
-import "context"
+import (
+	"context"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+)
 
 // contextKey is an unexported type for context value keys in this package.
 type contextKey int
@@ -13,6 +17,7 @@ const (
 	ctxKeyTurnContext
 	ctxKeyMaxUploadBytes
 	ctxKeyRunCache
+	ctxKeyFileCache
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -91,4 +96,15 @@ func WithRunCache(ctx context.Context, rc *RunCache) context.Context {
 func RunCacheFromContext(ctx context.Context) *RunCache {
 	rc, _ := ctx.Value(ctxKeyRunCache).(*RunCache)
 	return rc
+}
+
+// WithFileCache attaches a FileCache to the context for cross-turn file read dedup.
+func WithFileCache(ctx context.Context, fc *agent.FileCache) context.Context {
+	return context.WithValue(ctx, ctxKeyFileCache, fc)
+}
+
+// FileCacheFromContext extracts the FileCache from a context.
+func FileCacheFromContext(ctx context.Context) *agent.FileCache {
+	fc, _ := ctx.Value(ctxKeyFileCache).(*agent.FileCache)
+	return fc
 }

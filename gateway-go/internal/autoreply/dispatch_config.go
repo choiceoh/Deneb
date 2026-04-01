@@ -47,12 +47,9 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 		if deps.AbortMemory != nil {
 			deps.AbortMemory.Record(cfg.SessionKey, time.Now().UnixMilli())
 		}
-		session.EmitSessionHook(session.SessionHookEvent{
-			Type:       "abort",
-			SessionKey: cfg.SessionKey,
-			Reason:     "user abort trigger",
-			Timestamp:  time.Now().UnixMilli(),
-		})
+		if deps.OnSessionEvent != nil {
+			deps.OnSessionEvent("abort", cfg.SessionKey, "user abort trigger")
+		}
 		return DispatchResult{Handled: true}
 	}
 

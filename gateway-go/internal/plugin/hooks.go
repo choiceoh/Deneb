@@ -8,28 +8,37 @@ import (
 	"time"
 )
 
-// Full set of hook names matching the TS plugin system (24 hooks).
+// Active hooks: fired from production code paths.
+const (
+	HookAfterToolCall  HookName = "after_tool_call"
+	HookAgentEnd       HookName = "agent_end"
+	HookMessageSending HookName = "message_sending"
+)
+
+// Infrastructure-ready hooks: have typed Run methods but no firing call site yet.
+const (
+	HookBeforeModelResolve HookName = "before_model_resolve"
+	HookBeforePromptBuild  HookName = "before_prompt_build"
+	HookBeforeToolCall     HookName = "before_tool_call"
+	HookInboundClaim       HookName = "inbound_claim"
+	HookSubagentSpawning   HookName = "subagent_spawning"
+)
+
+// Reserved hooks: constants only, no Run methods or firing code.
+// Retained for ValidateHookName compatibility and future use.
 const (
 	HookGatewayStart           HookName = "gateway_start"
 	HookGatewayStop            HookName = "gateway_stop"
-	HookBeforeModelResolve     HookName = "before_model_resolve"
-	HookBeforePromptBuild      HookName = "before_prompt_build"
 	HookLLMInput               HookName = "llm_input"
 	HookLLMOutput              HookName = "llm_output"
-	HookAgentEnd               HookName = "agent_end"
 	HookBeforeCompaction       HookName = "before_compaction"
 	HookAfterCompaction        HookName = "after_compaction"
 	HookBeforeReset            HookName = "before_reset"
-	HookInboundClaim           HookName = "inbound_claim"
-	HookMessageSending         HookName = "message_sending"
 	HookMessageSent            HookName = "message_sent"
-	HookBeforeToolCall         HookName = "before_tool_call"
-	HookAfterToolCall          HookName = "after_tool_call"
 	HookToolResultPersist      HookName = "tool_result_persist"
 	HookBeforeMessageWrite     HookName = "before_message_write"
 	HookSessionStart           HookName = "session_start"
 	HookSessionEnd             HookName = "session_end"
-	HookSubagentSpawning       HookName = "subagent_spawning"
 	HookSubagentDeliveryTarget HookName = "subagent_delivery_target"
 	HookSubagentSpawned        HookName = "subagent_spawned"
 	HookSubagentEnded          HookName = "subagent_ended"

@@ -82,7 +82,9 @@ func (da *DreamingAdapter) ShouldDream(ctx context.Context) bool {
 	} else {
 		// No previous run recorded — set initial timestamp so the first
 		// dreaming cycle fires after the full interval, not immediately.
-		_ = da.store.SetMeta(ctx, metaLastDreaming, time.Now().UTC().Format(time.RFC3339))
+		if err := da.store.SetMeta(ctx, metaLastDreaming, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			da.logger.Warn("aurora-dream: failed to set initial timestamp", "error", err)
+		}
 		da.logger.Info("aurora-dream: initialized last-run timestamp")
 	}
 
@@ -97,8 +99,12 @@ func (da *DreamingAdapter) RunDream(ctx context.Context) (*autonomous.DreamRepor
 	}
 
 	// Reset turn counter and update last run time on success.
-	_ = da.store.SetMeta(ctx, metaTurnCount, "0")
-	_ = da.store.SetMeta(ctx, metaLastDreaming, time.Now().UTC().Format(time.RFC3339))
+	if err := da.store.SetMeta(ctx, metaTurnCount, "0"); err != nil {
+		da.logger.Warn("aurora-dream: failed to reset turn counter", "error", err)
+	}
+	if err := da.store.SetMeta(ctx, metaLastDreaming, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		da.logger.Warn("aurora-dream: failed to update last-run time", "error", err)
+	}
 
 	return &autonomous.DreamReport{
 		FactsVerified:     report.FactsVerified,

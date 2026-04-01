@@ -30,6 +30,7 @@ const (
 	EventGatewayStart      Event = "gateway.start"
 	EventGatewayStop       Event = "gateway.stop"
 	EventToolUse           Event = "tool.use"
+	EventGitHubWebhook     Event = "github.webhook"
 )
 
 // Hook defines a user-configured hook.

@@ -193,29 +193,11 @@ func handleRunSuccess(
 						logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
 					} else if deps.hookRegistry != nil {
 						// Fire message.send hook after successful delivery.
-						go deps.hookRegistry.Fire(context.Background(), hooks.EventMessageSend, map[string]string{
+						go deps.hookRegistry.Fire(deps.shutdownCtx, hooks.EventMessageSend, map[string]string{
 							"DENEB_CHANNEL":     params.Delivery.Channel,
 							"DENEB_TO":          params.Delivery.To,
 							"DENEB_SESSION_KEY": params.SessionKey,
 						})
-					}
-				} else if deps.channels != nil {
-					// Fallback: deliver via channel registry when no reply function
-					// is wired. Uses streaming.Dispatch for concurrent multi-target
-					// delivery through the MessagingAdapter interface.
-					targets := []streaming.DeliveryTarget{{
-						Channel:   params.Delivery.Channel,
-						To:        params.Delivery.To,
-						AccountID: params.Delivery.AccountID,
-						ThreadID:  params.Delivery.ThreadID,
-						ReplyTo:   replyToID,
-					}}
-					results := streaming.Dispatch(replyCtx, deps.channels, targets, replyText, nil)
-					for _, dr := range results {
-						if dr.Error != nil {
-							logger.Error("dispatch delivery failed",
-								"channel", dr.Channel, "error", dr.Error)
-						}
 					}
 				}
 			}
@@ -421,6 +403,12 @@ func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, rea
 			"reason":     reason,
 			"status":     status,
 		})
+	}
+	// Clean up spillover files for completed/failed sessions.
+	if deps.tools != nil {
+		if ss := deps.tools.SpilloverStore(); ss != nil {
+			ss.CleanSession(params.SessionKey)
+		}
 	}
 }
 

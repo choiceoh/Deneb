@@ -20,6 +20,15 @@ type AgentConfig struct {
 	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
 	APIType   string // "openai" (default) or "anthropic"
 
+	// Sampling parameters (passed through to the LLM request).
+	Temperature      *float64
+	TopP             *float64
+	FrequencyPenalty *float64
+	PresencePenalty  *float64
+	StopSequences    []string
+	ResponseFormat   *llm.ResponseFormat
+	ToolChoice       any // "auto", "none", "required", or structured object
+
 	// OnTurn is called after each agent turn with accumulated token count.
 	// Used for mid-conversation hooks (e.g., memory extraction).
 	OnTurn TurnCallback

@@ -31,6 +31,7 @@ func (s *Server) buildMux() *http.ServeMux {
 
 	// OpenAI-compatible HTTP API endpoints.
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+	mux.HandleFunc("GET /v1/models", s.handleModels)
 	mux.HandleFunc("POST /v1/responses", s.handleResponses)
 
 	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
@@ -47,6 +48,18 @@ func (s *Server) buildMux() *http.ServeMux {
 			}
 		})
 	}
+
+	// GitHub webhook endpoint — receives push/PR/issue events from GitHub.
+	// Auth: HMAC-SHA256 signature (X-Hub-Signature-256). No bearer token needed.
+	mux.HandleFunc("POST /webhook/github", s.handleGitHubWebhook)
+	mux.HandleFunc("/webhook/github", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			writeText(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+		} else {
+			s.handleGitHubWebhook(w, r)
+		}
+	})
 
 	// Catch-all handler: plugin HTTP routes → root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

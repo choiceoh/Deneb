@@ -288,6 +288,7 @@ func (s *Store) entitySearch(ctx context.Context, entityName string) map[int64]f
 		entityName,
 	)
 	if err != nil {
+		s.logger.Warn("entity search query failed", "entity", entityName, "error", err)
 		return nil
 	}
 	defer rows.Close()
