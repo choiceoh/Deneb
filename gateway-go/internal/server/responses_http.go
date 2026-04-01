@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
