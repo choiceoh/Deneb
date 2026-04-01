@@ -269,7 +269,7 @@ func (rl *PersistentRunLog) pruneIfNeeded(logPath string) {
 		buf.WriteByte('\n')
 	}
 
-	// Atomic write.
+	// Atomic write via temp file.
 	tmp := logPath + ".tmp"
 	if err := os.WriteFile(tmp, []byte(buf.String()), 0o600); err != nil {
 		rl.logger.Warn("failed to write pruned run log", "path", tmp, "error", err)
@@ -277,5 +277,7 @@ func (rl *PersistentRunLog) pruneIfNeeded(logPath string) {
 	}
 	if err := os.Rename(tmp, logPath); err != nil {
 		rl.logger.Warn("failed to rename pruned run log", "from", tmp, "to", logPath, "error", err)
+		// Clean up orphaned temp file.
+		_ = os.Remove(tmp)
 	}
 }

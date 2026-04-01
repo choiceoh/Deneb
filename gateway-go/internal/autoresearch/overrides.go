@@ -3,6 +3,7 @@ package autoresearch
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -156,6 +157,9 @@ func validateOverrideValue(cd ConstantDef, value string) error {
 		v, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return fmt.Errorf("constant %s: value %q is not a valid float", cd.Name, value)
+		}
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return fmt.Errorf("constant %s: value %q is not a finite float", cd.Name, value)
 		}
 		if cd.Min != nil && v < *cd.Min {
 			return fmt.Errorf("constant %s: value %s below min %v", cd.Name, value, *cd.Min)
