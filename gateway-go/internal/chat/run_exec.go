@@ -101,7 +101,9 @@ func executeAgentRun(
 	}
 	// Sync to Aurora store for compaction tracking.
 	// Queue Aurora observer compaction for non-empty user messages.
-	if deps.auroraStore != nil && params.Message != "" {
+	// Skip for system sessions (e.g. diary-heartbeat) — their messages must not
+	// enter the shared Aurora context or they contaminate the user's conversation.
+	if deps.auroraStore != nil && params.Message != "" && !isSystemSession(params.SessionKey) {
 		tokenCount := uint64(estimateTokens(params.Message))
 		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync user message", "error", err)
