@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# build-status — Query GitHub CI build status for agents and developers.
-# Usage:
-#   scripts/build-status main        — Latest CI status on the main branch
-#   scripts/build-status current     — CI status of the current branch (via PR or direct)
-#   scripts/build-status pr <N>      — CI status of a specific pull request
+# build-status — Show release version, commit delta, and branch comparison.
+# Designed for AI agents to quickly orient themselves.
 #
-# Exit codes: 0=pass, 1=fail, 2=pending, 3=usage/no-data
+# Usage:
+#   scripts/build-status              — Full report (main + current branch)
+#   scripts/build-status main         — Main branch: release version + commits since release
+#   scripts/build-status current      — Current branch vs main comparison
+#
+# Exit codes: 0=ok, 1=error
 
 set -euo pipefail
 
-# ── Worktree-aware canonical re-exec (same pattern as scripts/pr) ──────────
+# ── Worktree-aware canonical re-exec ───────────────────────────────────────
 script_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 script_parent_dir="$(dirname "$script_self")"
 if common_git_dir=$(git -C "$script_parent_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
@@ -23,222 +25,142 @@ fi
 usage() {
   cat <<USAGE
 Usage:
-  scripts/build-status main          Show CI status of latest main commit
-  scripts/build-status current       Show CI status of current branch/PR
-  scripts/build-status pr <number>   Show CI status of a specific PR
-
-Exit codes: 0=pass  1=fail  2=pending  3=usage/no-data
+  scripts/build-status              Full report (main + current branch)
+  scripts/build-status main         Main: release version + commits since release
+  scripts/build-status current      Current branch vs main delta
 USAGE
-}
-
-require_cmds() {
-  local missing=()
-  for cmd in git gh jq; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-      missing+=("$cmd")
-    fi
-  done
-  if [ "${#missing[@]}" -gt 0 ]; then
-    echo "Missing required command(s): ${missing[*]}" >&2
-    exit 3
-  fi
 }
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-# Human-readable relative time from epoch seconds.
-relative_time() {
-  local epoch="$1"
-  local now
-  now=$(date +%s)
-  local diff=$(( now - epoch ))
-  if [ "$diff" -lt 60 ]; then
-    echo "${diff}s ago"
-  elif [ "$diff" -lt 3600 ]; then
-    echo "$(( diff / 60 ))m ago"
-  elif [ "$diff" -lt 86400 ]; then
-    echo "$(( diff / 3600 ))h ago"
-  else
-    echo "$(( diff / 86400 ))d ago"
+repo_root() {
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if common_git_dir=$(git -C "$script_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+    dirname "$common_git_dir"
+    return
   fi
+  (cd "$script_dir/.." && pwd)
 }
 
-# Convert ISO 8601 timestamp to epoch seconds (portable).
-iso_to_epoch() {
-  local ts="$1"
-  date -d "$ts" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null || echo "0"
+# Latest deneb-v* tag by version sort.
+latest_release_tag() {
+  git tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1
 }
 
-# Print per-job breakdown from a JSON array of {name, status, conclusion}.
-print_jobs() {
-  local jobs_json="$1"
-  printf '%s\n' "$jobs_json" | jq -r '.[] | "  \(.name): \(.conclusion // .status)"' | sort
+# Extract version number from tag (deneb-v4.7.0 → 4.7.0).
+tag_to_version() {
+  echo "$1" | sed 's/^deneb-v//'
 }
 
-# Determine overall status word from job JSON array. Sets $overall and exit_code.
-compute_overall() {
-  local jobs_json="$1"
-  local failed pending
-  failed=$(printf '%s\n' "$jobs_json" | jq '[.[] | select(.conclusion == "failure")] | length')
-  pending=$(printf '%s\n' "$jobs_json" | jq '[.[] | select(.status == "in_progress" or .status == "queued" or .status == "waiting" or .conclusion == null or .conclusion == "")] | length')
-
-  if [ "$failed" -gt 0 ]; then
-    overall="FAIL"
-    exit_code=1
-  elif [ "$pending" -gt 0 ]; then
-    overall="PENDING"
-    exit_code=2
-  else
-    overall="PASS"
-    exit_code=0
-  fi
+# Count commits between two refs.
+commit_count() {
+  git rev-list --count "$1".."$2" 2>/dev/null || echo "?"
 }
 
-# ── Subcommands ────────────────────────────────────────────────────────────
+# ── Main branch report ─────────────────────────────────────────────────────
 
 status_main() {
-  local runs_json
-  runs_json=$(gh run list --branch main --workflow ci.yml --limit 1 \
-    --json databaseId,status,conclusion,headSha,createdAt 2>/dev/null || echo '[]')
+  # Ensure we have latest remote state.
+  git fetch origin main --tags --quiet 2>/dev/null || true
 
-  local count
-  count=$(printf '%s\n' "$runs_json" | jq 'length')
-  if [ "$count" -eq 0 ]; then
-    echo "NO_DATA main (no CI runs found)"
-    exit 3
+  local tag
+  tag=$(latest_release_tag)
+  if [ -z "$tag" ]; then
+    echo "main: no deneb-v* tags found"
+    return
   fi
 
-  local run_id sha created_at
-  run_id=$(printf '%s\n' "$runs_json" | jq -r '.[0].databaseId')
-  sha=$(printf '%s\n' "$runs_json" | jq -r '.[0].headSha' | head -c 7)
-  created_at=$(printf '%s\n' "$runs_json" | jq -r '.[0].createdAt')
+  local version
+  version=$(tag_to_version "$tag")
+  local main_sha
+  main_sha=$(git rev-parse --short origin/main 2>/dev/null || echo "unknown")
+  local tag_sha
+  tag_sha=$(git rev-parse --short "$tag" 2>/dev/null || echo "unknown")
 
-  local age_str
-  age_str=$(relative_time "$(iso_to_epoch "$created_at")")
+  local commits_since
+  commits_since=$(commit_count "$tag" "origin/main")
 
-  # Get per-job details for this run.
-  local jobs_json
-  jobs_json=$(gh run view "$run_id" --json jobs \
-    --jq '[.jobs[] | {name, status, conclusion}]' 2>/dev/null || echo '[]')
+  echo "=== main ==="
+  echo "  release:  v$version ($tag)"
+  echo "  tag SHA:  $tag_sha"
+  echo "  HEAD SHA: $main_sha"
+  echo "  commits since release: $commits_since"
 
-  local overall exit_code
-  compute_overall "$jobs_json"
-
-  echo "$overall main $sha ($age_str)"
-  print_jobs "$jobs_json"
-  exit "$exit_code"
+  if [ "$commits_since" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "  commits since v$version:"
+    git log --oneline --no-merges "$tag"..origin/main | sed 's/^/    /'
+  fi
 }
+
+# ── Current branch report ──────────────────────────────────────────────────
 
 status_current() {
   local branch
   branch=$(git branch --show-current 2>/dev/null || true)
 
   if [ -z "$branch" ]; then
-    echo "Not on a branch (detached HEAD). Use 'scripts/build-status main' or 'scripts/build-status pr <N>'." >&2
-    exit 3
+    echo "current: detached HEAD ($(git rev-parse --short HEAD))"
+    return
   fi
 
   if [ "$branch" = "main" ]; then
-    status_main
+    echo "(on main branch — use 'scripts/build-status main')"
     return
   fi
 
-  # Try to find an open PR for this branch.
-  local pr_json pr_number
-  pr_json=$(gh pr list --head "$branch" --state open --json number --limit 1 2>/dev/null || echo '[]')
-  pr_number=$(printf '%s\n' "$pr_json" | jq -r '.[0].number // empty')
+  # Ensure fresh remote data.
+  git fetch origin main --quiet 2>/dev/null || true
 
-  if [ -n "$pr_number" ]; then
-    echo "Branch '$branch' -> PR #$pr_number"
-    status_pr "$pr_number"
-    return
+  local head_sha
+  head_sha=$(git rev-parse --short HEAD)
+
+  local ahead behind
+  ahead=$(commit_count "origin/main" "HEAD")
+  behind=$(commit_count "HEAD" "origin/main")
+
+  local tag
+  tag=$(latest_release_tag)
+  local version="unknown"
+  if [ -n "$tag" ]; then
+    version=$(tag_to_version "$tag")
   fi
 
-  # No PR — check workflow runs for the branch directly.
-  local runs_json
-  runs_json=$(gh run list --branch "$branch" --workflow ci.yml --limit 1 \
-    --json databaseId,status,conclusion,headSha,createdAt 2>/dev/null || echo '[]')
+  echo "=== $branch ==="
+  echo "  HEAD SHA:   $head_sha"
+  echo "  base:       v$version (main)"
+  echo "  vs main:    +$ahead ahead, -$behind behind"
 
-  local count
-  count=$(printf '%s\n' "$runs_json" | jq 'length')
-  if [ "$count" -eq 0 ]; then
-    echo "NO_DATA $branch (no CI runs and no open PR found)"
-    exit 3
+  if [ "$ahead" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "  your commits (not in main):"
+    git log --oneline --no-merges "origin/main..HEAD" | sed 's/^/    /'
   fi
 
-  local run_id sha created_at
-  run_id=$(printf '%s\n' "$runs_json" | jq -r '.[0].databaseId')
-  sha=$(printf '%s\n' "$runs_json" | jq -r '.[0].headSha' | head -c 7)
-  created_at=$(printf '%s\n' "$runs_json" | jq -r '.[0].createdAt')
-
-  local age_str
-  age_str=$(relative_time "$(iso_to_epoch "$created_at")")
-
-  local jobs_json
-  jobs_json=$(gh run view "$run_id" --json jobs \
-    --jq '[.jobs[] | {name, status, conclusion}]' 2>/dev/null || echo '[]')
-
-  local overall exit_code
-  compute_overall "$jobs_json"
-
-  echo "$overall $branch $sha ($age_str)"
-  print_jobs "$jobs_json"
-  exit "$exit_code"
-}
-
-status_pr() {
-  local pr="$1"
-
-  if [ -z "$pr" ]; then
-    echo "Usage: scripts/build-status pr <number>" >&2
-    exit 3
+  if [ "$behind" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "  missing from main ($behind commits):"
+    git log --oneline --no-merges "HEAD..origin/main" | head -10 | sed 's/^/    /'
+    if [ "$behind" -gt 10 ] 2>/dev/null; then
+      echo "    ... and $(( behind - 10 )) more"
+    fi
   fi
-
-  local checks_json
-  checks_json=$(gh pr checks "$pr" --json name,bucket,state 2>/dev/null || echo '[]')
-
-  local total failed pending
-  total=$(printf '%s\n' "$checks_json" | jq 'length')
-
-  if [ "$total" -eq 0 ]; then
-    echo "NO_DATA PR #$pr (no checks found)"
-    exit 3
-  fi
-
-  failed=$(printf '%s\n' "$checks_json" | jq '[.[] | select(.bucket=="fail")] | length')
-  pending=$(printf '%s\n' "$checks_json" | jq '[.[] | select(.bucket=="pending")] | length')
-  local passed=$(( total - failed - pending ))
-
-  local overall exit_code
-  if [ "$failed" -gt 0 ]; then
-    overall="FAIL"
-    exit_code=1
-  elif [ "$pending" -gt 0 ]; then
-    overall="PENDING"
-    exit_code=2
-  else
-    overall="PASS"
-    exit_code=0
-  fi
-
-  echo "$overall PR #$pr ($total checks: $passed passed, $failed failed, $pending pending)"
-  printf '%s\n' "$checks_json" | jq -r '.[] | "  \(.name): \(.bucket)"' | sort
-  exit "$exit_code"
 }
 
 # ── Dispatch ───────────────────────────────────────────────────────────────
 
-require_cmds
-
-case "${1:-}" in
+case "${1:-all}" in
   main)
     status_main
     ;;
   current)
     status_current
     ;;
-  pr)
-    status_pr "${2:-}"
+  all)
+    status_main
+    echo ""
+    status_current
     ;;
   -h|--help|help)
     usage
@@ -246,6 +168,6 @@ case "${1:-}" in
     ;;
   *)
     usage >&2
-    exit 3
+    exit 1
     ;;
 esac
