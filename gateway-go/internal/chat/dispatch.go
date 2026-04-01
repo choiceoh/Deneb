@@ -262,10 +262,13 @@ func (h *Handler) handleSlashCommand(
 			h.deliverSlashResponse(delivery, fmt.Sprintf("차트 생성 실패: %s", err.Error()))
 			break
 		}
-		if h.mediaSendFn != nil && delivery != nil {
+		h.callbackMu.RLock()
+		sendFn := h.mediaSendFn
+		h.callbackMu.RUnlock()
+		if sendFn != nil && delivery != nil {
 			sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			caption := fmt.Sprintf("📊 %s (%s)", cfg.MetricName, cfg.MetricDirection)
-			if sendErr := h.mediaSendFn(sendCtx, delivery, chartPath, "photo", caption, false); sendErr != nil {
+			if sendErr := sendFn(sendCtx, delivery, chartPath, "photo", caption, false); sendErr != nil {
 				h.deliverSlashResponse(delivery, fmt.Sprintf("차트 전송 실패: %s", sendErr.Error()))
 			}
 			cancel()
