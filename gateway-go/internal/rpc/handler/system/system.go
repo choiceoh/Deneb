@@ -5,5 +5,7 @@
 // on the rpc.Dispatcher.
 package system
 
-// BroadcastFunc is the signature for broadcasting events to connected clients.
-type BroadcastFunc func(event string, payload any) (int, []error)
+import "github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+
+// BroadcastFunc is the canonical broadcast type defined in rpcutil.
+type BroadcastFunc = rpcutil.BroadcastFunc

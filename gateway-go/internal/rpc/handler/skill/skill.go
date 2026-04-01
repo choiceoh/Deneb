@@ -21,8 +21,8 @@ func broadcast(fn BroadcastFunc, event string, payload any) {
 	}
 }
 
-// BroadcastFunc broadcasts an event to subscribers.
-type BroadcastFunc func(event string, payload any) (int, []error)
+// BroadcastFunc is the canonical broadcast type defined in rpcutil.
+type BroadcastFunc = rpcutil.BroadcastFunc
 
 // ---------------------------------------------------------------------------
 // Deps — skills.* handlers
