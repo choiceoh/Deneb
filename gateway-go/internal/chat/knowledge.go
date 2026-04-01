@@ -33,7 +33,7 @@ const (
 	knowledgeMaxTokens       = 5000 // ~20KB of text budget
 	knowledgeMaxVega         = 5    // top Vega results
 	knowledgeMaxMemory       = 10   // top memory matches (token budget is the real ceiling)
-	knowledgeTimeout         = 5 * time.Second
+	knowledgeTimeout         = 15 * time.Second
 	knowledgeMaxContentRunes = 500 // truncate individual result content (in runes, not bytes)
 )
 
