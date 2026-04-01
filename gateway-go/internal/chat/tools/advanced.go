@@ -145,7 +145,7 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 			}
 		}
 		if p.FileType != "" {
-			args = append(args, "--type", p.FileType)
+			args = append(args, "--type", normalizeFileType(p.FileType))
 		}
 		args = append(args, "--", searchPath)
 
@@ -159,8 +159,9 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 			if exitCode == 1 {
 				return "No matches found.", nil
 			}
-			// Exit code 2 often means invalid regex. Retry as fixed string.
+			// Exit code 2 often means invalid regex or unrecognized type.
 			if exitCode == 2 {
+				// Retry 1: treat pattern as literal string (-F).
 				fixedArgs := make([]string, len(args))
 				copy(fixedArgs, args)
 				fixedArgs = append([]string{"-F"}, fixedArgs...)
@@ -170,11 +171,43 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 					out = retryOut
 				} else if retryCmd.ProcessState != nil && retryCmd.ProcessState.ExitCode() == 1 {
 					return "No matches found.", nil
+				} else if p.FileType != "" {
+					// Retry 2: strip --type (commonly unrecognized), keep -F.
+					bareArgs := stripRgFlag(fixedArgs, "--type")
+					bareCmd := exec.CommandContext(ctx, "rg", bareArgs...)
+					bareOut, bareErr := bareCmd.CombinedOutput()
+					if bareErr == nil {
+						out = bareOut
+					} else if bareCmd.ProcessState != nil && bareCmd.ProcessState.ExitCode() == 1 {
+						return "No matches found.", nil
+					} else {
+						return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
+					}
 				} else {
-					return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
+					// Last resort: bare search, no type/glob/regex.
+					bareMinArgs := []string{"-F", "-n", "--max-count=20", "--no-heading", "-e", p.Pattern, "--", searchPath}
+					bareMinCmd := exec.CommandContext(ctx, "rg", bareMinArgs...)
+					bareMinOut, bareMinErr := bareMinCmd.CombinedOutput()
+					if bareMinErr == nil {
+						out = bareMinOut
+					} else if bareMinCmd.ProcessState != nil && bareMinCmd.ProcessState.ExitCode() == 1 {
+						return "No matches found.", nil
+					} else {
+						return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+					}
 				}
 			} else {
-				return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
+				// Non-regex error. Try bare minimum search.
+				bareMinArgs := []string{"-F", "-n", "--max-count=20", "--no-heading", "-e", p.Pattern, "--", searchPath}
+				bareMinCmd := exec.CommandContext(ctx, "rg", bareMinArgs...)
+				bareMinOut, bareMinErr := bareMinCmd.CombinedOutput()
+				if bareMinErr == nil {
+					out = bareMinOut
+				} else if bareMinCmd.ProcessState != nil && bareMinCmd.ProcessState.ExitCode() == 1 {
+					return "No matches found.", nil
+				} else {
+					return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+				}
 			}
 		}
 

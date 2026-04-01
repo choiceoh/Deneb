@@ -94,7 +94,7 @@ func ToolGrep(defaultDir string) ToolFunc {
 			}
 		}
 		if p.FileType != "" {
-			args = append(args, "--type", p.FileType)
+			args = append(args, "--type", normalizeFileType(p.FileType))
 		}
 		// Use -e to avoid flag confusion when pattern starts with '-'.
 		args = append(args, "-e", p.Pattern, "--", searchPath)
@@ -110,8 +110,9 @@ func ToolGrep(defaultDir string) ToolFunc {
 			if exitCode == 1 {
 				return "No matches found.", nil
 			}
-			// Exit code 2 often means invalid regex. Retry as fixed string.
+			// Exit code 2 often means invalid regex or unrecognized type.
 			if exitCode == 2 {
+				// Retry 1: treat pattern as literal string (-F).
 				fixedArgs := make([]string, len(args))
 				copy(fixedArgs, args)
 				fixedArgs = append([]string{"-F"}, fixedArgs...)
@@ -126,8 +127,45 @@ func ToolGrep(defaultDir string) ToolFunc {
 				if retryCmd.ProcessState != nil && retryCmd.ProcessState.ExitCode() == 1 {
 					return "No matches found.", nil
 				}
+				// Retry 2: strip --type (commonly unrecognized), keep -F.
+				if p.FileType != "" {
+					bareArgs := stripRgFlag(fixedArgs, "--type")
+					bareCmd := exec.CommandContext(ctx, "rg", bareArgs...)
+					bareOut, bareErr := bareCmd.CombinedOutput()
+					if bareErr == nil {
+						if p.Mode == "" || p.Mode == "content" {
+							return groupGrepOutput(string(bareOut)), nil
+						}
+						return string(bareOut), nil
+					}
+					if bareCmd.ProcessState != nil && bareCmd.ProcessState.ExitCode() == 1 {
+						return "No matches found.", nil
+					}
+				}
 			}
-			return "", fmt.Errorf("ripgrep failed: %s", strings.TrimSpace(string(out)))
+			// Last resort: bare search with minimal flags (no type, no glob, fixed string).
+			bareMinArgs := []string{"-F", "-n", fmt.Sprintf("--max-count=%d", maxResults)}
+			if p.Mode == "files_only" {
+				bareMinArgs = append(bareMinArgs, "-l")
+			} else if p.Mode == "count" {
+				bareMinArgs = append(bareMinArgs, "-c")
+			}
+			bareMinArgs = append(bareMinArgs, "-e", p.Pattern, "--", searchPath)
+			bareMinCmd := exec.CommandContext(ctx, "rg", bareMinArgs...)
+			bareMinOut, bareMinErr := bareMinCmd.CombinedOutput()
+			if bareMinErr == nil {
+				if p.Mode == "" || p.Mode == "content" {
+					return groupGrepOutput(string(bareMinOut)), nil
+				}
+				return string(bareMinOut), nil
+			}
+			if bareMinCmd.ProcessState != nil && bareMinCmd.ProcessState.ExitCode() == 1 {
+				return "No matches found.", nil
+			}
+
+			errMsg := strings.TrimSpace(string(out))
+			// Include the failed command for diagnostics.
+			return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), errMsg)
 		}
 		// Group content-mode output by file to reduce path repetition.
 		if p.Mode == "" || p.Mode == "content" {
@@ -374,6 +412,55 @@ func findWithRipgrep(ctx context.Context, dir, pattern string, showHidden bool, 
 }
 
 // --- Helpers ---
+
+// normalizeFileType maps common LLM aliases to ripgrep --type values.
+// LLMs frequently emit full language names ("golang", "python") instead of
+// the short names ripgrep expects ("go", "py").
+func normalizeFileType(ft string) string {
+	aliases := map[string]string{
+		"golang":      "go",
+		"python":      "py",
+		"javascript":  "js",
+		"typescript":  "ts",
+		"csharp":      "cs",
+		"c#":          "cs",
+		"c++":         "cpp",
+		"cplusplus":   "cpp",
+		"objective-c": "objc",
+		"proto":       "protobuf",
+		"shellscript": "sh",
+		"shell":       "sh",
+		"bash":        "sh",
+		"yml":         "yaml",
+		"dockerfile":  "docker",
+		"makefile":    "make",
+	}
+	lower := strings.ToLower(strings.TrimSpace(ft))
+	if mapped, ok := aliases[lower]; ok {
+		return mapped
+	}
+	return lower
+}
+
+// stripRgFlag removes a flag and its value from a ripgrep argument list.
+// For example, stripRgFlag(args, "--type") removes both "--type" and the
+// following value argument.
+func stripRgFlag(args []string, flag string) []string {
+	var result []string
+	skip := false
+	for _, a := range args {
+		if skip {
+			skip = false
+			continue
+		}
+		if a == flag {
+			skip = true // skip this flag and the next arg (its value)
+			continue
+		}
+		result = append(result, a)
+	}
+	return result
+}
 
 // splitGlobs splits a comma-separated glob string into individual patterns.
 // LLMs often pass "*.go,*.rs" instead of separate --glob args, so we split

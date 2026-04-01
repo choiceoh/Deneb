@@ -278,6 +278,83 @@ func TestToolGrep_commaSeparatedInclude(t *testing.T) {
 	}
 }
 
+// ─── normalizeFileType ─────────────────────────────────────────────────────
+
+func TestNormalizeFileType(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"go", "go"},
+		{"golang", "go"},
+		{"Golang", "go"},
+		{"python", "py"},
+		{"Python", "py"},
+		{"javascript", "js"},
+		{"typescript", "ts"},
+		{"rust", "rust"},
+		{"c++", "cpp"},
+		{"shell", "sh"},
+		{"bash", "sh"},
+		{"yml", "yaml"},
+		{"proto", "protobuf"},
+		{"dockerfile", "docker"},
+		{"makefile", "make"},
+		{"", ""},
+		{" go ", "go"},
+	}
+	for _, tt := range tests {
+		got := normalizeFileType(tt.input)
+		if got != tt.want {
+			t.Errorf("normalizeFileType(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+// ─── stripRgFlag ──────────────────────────────────────────────────────────
+
+func TestStripRgFlag(t *testing.T) {
+	args := []string{"-n", "--type", "go", "-e", "pattern", "--", "/path"}
+	got := stripRgFlag(args, "--type")
+	want := []string{"-n", "-e", "pattern", "--", "/path"}
+	if len(got) != len(want) {
+		t.Fatalf("stripRgFlag: got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("stripRgFlag[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestStripRgFlag_absent(t *testing.T) {
+	args := []string{"-n", "-e", "pattern"}
+	got := stripRgFlag(args, "--type")
+	if len(got) != len(args) {
+		t.Errorf("expected no change: got %v", got)
+	}
+}
+
+// ─── ToolGrep: fileType normalization ──────────────────────────────────────
+
+func TestToolGrep_fileTypeNormalization(t *testing.T) {
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, "lib.py"), []byte("import os\n"), 0o644)
+
+	// "golang" should be normalized to "go" and work correctly.
+	out, err := callGrep(t, tmp, map[string]any{
+		"pattern":  "package",
+		"fileType": "golang",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error with fileType=golang: %v", err)
+	}
+	if !strings.Contains(out, "main.go") {
+		t.Errorf("expected main.go in output: %q", out)
+	}
+}
+
 func TestToolGrep_noMatch(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\n"), 0o644)
