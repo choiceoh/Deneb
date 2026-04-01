@@ -183,6 +183,18 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		}
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
+
+		// Sub-agent delegation guidance.
+		if toolSet["sessions_spawn"] {
+			s.WriteString("## Sub-Agents\n")
+			s.WriteString("Use `sessions_spawn` to delegate work in parallel. Don't do everything yourself.\n")
+			s.WriteString("- **Investigation**: spawn a researcher to explore while you continue thinking.\n")
+			s.WriteString("- **Independent subtasks**: if a task decomposes into 2+ independent parts, spawn workers.\n")
+			s.WriteString("- **Verification**: after changes, spawn a verifier to test while you prepare the summary.\n")
+			s.WriteString("Always set `tool_preset` (researcher/implementer/verifier). Monitor with `subagents(action:'list')`.\n")
+			s.WriteString("Depth limit: 5, breadth limit: 10. Prefer fewer focused agents over many trivial ones.\n\n")
+		}
+
 		built := s.String()
 		staticPromptMu.Lock()
 		staticPromptKey = cacheKey
@@ -419,6 +431,7 @@ var codingToolCategories = []struct {
 	{"Exec", []string{"exec", "process"}},
 	{"Git", []string{"git"}},
 	{"Code", []string{"analyze", "inspect", "test"}},
+	{"Sessions", []string{"sessions_spawn", "subagents"}},
 }
 
 // BuildCodingSystemPrompt builds a system prompt optimized for coding tasks
@@ -594,6 +607,22 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	s.WriteString("- 복잡한 요청은 단계별로 나누어 각 단계마다 빌드/테스트 확인 후 다음으로.\n")
 	s.WriteString("- 각 단계 완료 시 중간 진행 상황을 한 줄로 보고하세요.\n")
 	s.WriteString("- 한 번에 10개 이상의 파일을 수정하는 경우, 2-3개씩 나누어 수정하고 각 묶음마다 빌드 확인.\n\n")
+
+	// Sub-agent delegation guidance for coding tasks.
+	if toolSet["sessions_spawn"] {
+		s.WriteString("### 서브 에이전트 활용\n")
+		s.WriteString("복잡한 작업은 서브 에이전트에게 위임하세요. 혼자 순차적으로 하지 마세요.\n\n")
+		s.WriteString("**언제 위임하는가:**\n")
+		s.WriteString("- 버그 조사: researcher를 spawn하여 원인을 탐색시키고, 본인은 다른 가설을 병렬로 검토.\n")
+		s.WriteString("- 2개 이상 모듈 수정: 각 모듈별 implementer를 spawn. 단, 같은 파일을 동시에 수정하지 않도록 파일 세트를 분리.\n")
+		s.WriteString("- 수정 후 검증: verifier를 spawn하여 빌드/테스트를 돌리는 동안 사용자에게 요약 보고.\n")
+		s.WriteString("- 탐색이 오래 걸릴 때: researcher를 spawn하고 결과를 기다리는 동안 관련 파일을 미리 읽기.\n\n")
+		s.WriteString("**규칙:**\n")
+		s.WriteString("- 항상 `tool_preset` 지정 (researcher/implementer/verifier).\n")
+		s.WriteString("- 단순 작업 (파일 1개 수정, grep 1회)에는 사용하지 마세요.\n")
+		s.WriteString("- `subagents(action:'list')`로 진행 상황 확인. 완료 후 결과를 통합하여 보고.\n\n")
+	}
+
 	s.WriteString("### 분석 vs 수정\n")
 	s.WriteString("- 사용자가 '왜', '어떻게', '설명해줘', '알려줘' 등을 요청하면 코드를 수정하지 말고 분석만 하세요.\n")
 	s.WriteString("- '고쳐줘', '만들어줘', '추가해줘', '바꿔줘' 등은 수정 요청입니다.\n")

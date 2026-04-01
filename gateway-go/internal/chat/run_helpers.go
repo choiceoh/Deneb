@@ -584,7 +584,7 @@ func executeAgentRunWithDelta(
 // when no explicit base URL is configured.
 func resolveDefaultBaseURL(providerID string) string {
 	switch providerID {
-	case "zai":
+	case "zai", "zai-subagent":
 		return defaultZaiBaseURL
 	case "google":
 		return "https://generativelanguage.googleapis.com/v1beta/openai"

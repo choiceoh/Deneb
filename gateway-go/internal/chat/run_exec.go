@@ -129,6 +129,14 @@ func executeAgentRun(
 		// Raw model ID → no role mapping, no fallback chain (direct override).
 	}
 	if model == "" {
+		// Sub-agents use their own default model when configured.
+		if deps.subagentDefaultModel != "" && deps.sessions != nil {
+			if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.SpawnedBy != "" {
+				model = deps.subagentDefaultModel
+			}
+		}
+	}
+	if model == "" {
 		model = deps.defaultModel
 	}
 	if model == "" && deps.registry != nil {
@@ -161,6 +169,22 @@ func executeAgentRun(
 				providerID = mrResult.ProviderOverride
 			}
 			logger.Info("plugin: model override applied", "model", model, "provider", providerID)
+		}
+	}
+
+	// Sub-agent provider remapping: if this session was spawned by another
+	// agent and a "<provider>-subagent" config exists, use the alternate
+	// API key. This allows main and sub-agents to use different accounts
+	// on the same provider (separate rate limits).
+	if deps.sessions != nil && providerID != "" {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.SpawnedBy != "" {
+			alt := providerID + "-subagent"
+			if deps.providerConfigs != nil {
+				if _, ok := deps.providerConfigs[alt]; ok {
+					logger.Info("subagent provider remap", "from", providerID, "to", alt)
+					providerID = alt
+				}
+			}
 		}
 	}
 
