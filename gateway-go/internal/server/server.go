@@ -43,6 +43,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
@@ -420,8 +421,9 @@ func New(addr string, opts ...Option) *Server {
 		GatewaySubs:   s.gatewaySubs,
 		Version:       s.version,
 	})
-	s.registerEarlyMethods(hub, denebDir)  // ~30 domains via hub adapters
+	s.registerEarlyMethods(hub, denebDir)  // ~30 domains via hub accessors
 	s.registerSessionRPCMethods()          // chat pipeline init + handler creation
+	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.registerLateMethods(hub)             // Chat-dependent domains
 	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
 

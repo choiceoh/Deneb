@@ -30,7 +30,7 @@ type ExtendedDeps struct {
 	Cron             *cron.Scheduler
 	Hooks            *hooks.Registry
 	InternalHooks    *hooks.InternalRegistry
-	Broadcaster      *events.Broadcaster
+	Broadcaster      rpcutil.BroadcastFunc
 }
 
 // AgentsDeps holds the dependencies for agents CRUD RPC methods.
@@ -106,7 +106,7 @@ func processExec(deps ExtendedDeps) rpcutil.HandlerFunc {
 
 		// Broadcast process completion event to subscribers.
 		if deps.Broadcaster != nil && result != nil {
-			deps.Broadcaster.Broadcast("process.completed", map[string]any{
+			deps.Broadcaster("process.completed", map[string]any{
 				"id":       result.ID,
 				"status":   result.Status,
 				"exitCode": result.ExitCode,
