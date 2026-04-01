@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
@@ -135,6 +136,24 @@ func executeAgentRun(
 	// Parse provider prefix (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
 	providerID, modelName := parseModelID(model)
 	model = modelName
+
+	// Plugin hook: allow plugins to override model/provider selection.
+	if deps.pluginHookRunner != nil {
+		if mrResult := deps.pluginHookRunner.RunBeforeModelResolve(ctx, map[string]any{
+			"currentModel": model,
+			"provider":     providerID,
+			"sessionKey":   params.SessionKey,
+			"runId":        params.ClientRunID,
+		}); mrResult != nil {
+			if mrResult.ModelOverride != "" {
+				model = mrResult.ModelOverride
+			}
+			if mrResult.ProviderOverride != "" {
+				providerID = mrResult.ProviderOverride
+			}
+			logger.Info("plugin: model override applied", "model", model, "provider", providerID)
+		}
+	}
 
 	runLog.LogStart(agentlog.RunStartData{
 		Model:    model,
@@ -332,6 +351,22 @@ func executeAgentRun(
 
 	prepWg.Wait()
 	logger.Info("pipeline: parallel prep done (knowledge+context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
+
+	// Plugin hook: allow plugins to modify/extend the system prompt.
+	if deps.pluginHookRunner != nil {
+		if pbResult := deps.pluginHookRunner.RunBeforePromptBuild(ctx, map[string]any{
+			"sessionKey": params.SessionKey,
+			"channel":    deliveryChannel(params.Delivery),
+		}); pbResult != nil {
+			if pbResult.SystemPrompt != "" {
+				systemPrompt = llm.SystemString(pbResult.SystemPrompt)
+			}
+			additions := pbResult.PrependSystemContext + pbResult.AppendSystemContext
+			if additions != "" {
+				systemPrompt = llm.AppendSystemText(systemPrompt, additions)
+			}
+		}
+	}
 
 	if contextErr != nil {
 		logger.Warn("context assembly failed, using message only", "error", contextErr)
@@ -568,6 +603,22 @@ func executeAgentRun(
 		}
 	}
 
+	// Plugin typed hook: allow blocking tool calls before execution.
+	if deps.pluginHookRunner != nil {
+		hooks.OnBeforeToolCall = func(name, toolCallID string, input []byte) (bool, string) {
+			result := deps.pluginHookRunner.RunBeforeToolCall(ctx, map[string]any{
+				"toolName":   name,
+				"toolCallId": toolCallID,
+				"sessionKey": params.SessionKey,
+				"runId":      params.ClientRunID,
+			})
+			if result != nil && result.Cancel {
+				return true, result.CancelReason
+			}
+			return false, ""
+		}
+	}
+
 	// Plugin typed hook: fire after_tool_call event after each tool completes.
 	if deps.pluginHookRunner != nil {
 		prevOnToolResult := hooks.OnToolResult
@@ -784,6 +835,21 @@ func executeAgentRun(
 					cfg.System = llm.AppendSystemText(origSystem, sysAddition)
 				}
 				continue
+			}
+
+			// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
+			if autoreply.IsTransientHTTPError(runErr.Error()) && ctx.Err() == nil {
+				logger.Warn("transient HTTP error, retrying once", "error", runErr)
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(2500 * time.Millisecond):
+				}
+				agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+				if runErr == nil {
+					break
+				}
+				logger.Warn("transient retry also failed", "error", runErr)
 			}
 
 			// Model fallback chain: try each subsequent role in the chain.

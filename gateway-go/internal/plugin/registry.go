@@ -21,7 +21,7 @@ type FullRegistry struct {
 	services     map[string]ServiceRegistration
 	httpRoutes   map[string]HTTPRouteRegistration
 	interactives map[string]InteractiveRegistration
-	hookRunner   *HookRunner
+	hookRunner   *TypedHookRunner
 	logger       *slog.Logger
 }
 
@@ -89,7 +89,7 @@ func NewFullRegistry(logger *slog.Logger) *FullRegistry {
 		services:     make(map[string]ServiceRegistration),
 		httpRoutes:   make(map[string]HTTPRouteRegistration),
 		interactives: make(map[string]InteractiveRegistration),
-		hookRunner:   NewHookRunner(logger),
+		hookRunner:   NewTypedHookRunner(logger),
 		logger:       logger,
 	}
 }
@@ -304,14 +304,22 @@ func (r *FullRegistry) RegisterInteractive(reg InteractiveRegistration) error {
 	return nil
 }
 
-// --- Hook registration (delegates to HookRunner) ---
+// --- Hook registration (delegates to TypedHookRunner) ---
 
 func (r *FullRegistry) RegisterHook(name HookName, pluginID string, handler HookFunc, opts HookOptions) {
-	r.hookRunner.Register(name, pluginID, handler, opts)
+	r.hookRunner.Register(TypedHookRegistration{
+		HookName: name,
+		PluginID: pluginID,
+		Handler:  handler,
+		Priority: int(opts.Priority),
+		Options:  opts,
+	})
 }
 
-func (r *FullRegistry) RunHooks(ctx context.Context, name HookName, payload map[string]any) []HookResult {
-	return r.hookRunner.Run(ctx, name, payload)
+// HookRunner returns the underlying TypedHookRunner so the server can wire
+// it to the chat handler as pluginHookRunner.
+func (r *FullRegistry) HookRunner() *TypedHookRunner {
+	return r.hookRunner
 }
 
 // --- Summary ---
