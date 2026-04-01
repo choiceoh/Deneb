@@ -48,6 +48,23 @@ func (s *Store) ExportToMarkdown(ctx context.Context) (string, error) {
 		for _, f := range catFacts {
 			date := f.CreatedAt.Format("2006-01-02")
 			sb.WriteString(fmt.Sprintf("- [%.1f] %s (%s)\n", f.Importance, f.Content, date))
+
+			// Append relation info if available.
+			related, _ := s.GetRelatedFacts(ctx, f.ID)
+			for _, rf := range related {
+				arrow := "→"
+				if rf.Direction == "incoming" {
+					arrow = "←"
+				}
+				sb.WriteString(fmt.Sprintf("  %s [%s] id:%d \"%s\"\n",
+					arrow, rf.RelationType, rf.Fact.ID, truncateExport(rf.Fact.Content, 60)))
+			}
+
+			// Append entity names if linked.
+			entityNames := s.getFactEntityNames(ctx, f.ID)
+			if len(entityNames) > 0 {
+				sb.WriteString(fmt.Sprintf("  **엔티티:** %s\n", strings.Join(entityNames, ", ")))
+			}
 		}
 		sb.WriteString("\n")
 	}
@@ -168,6 +185,39 @@ func normalizeFlushPrefix(s string) string {
 		runes = runes[:60]
 	}
 	return strings.Join(strings.Fields(string(runes)), " ")
+}
+
+// getFactEntityNames returns entity names linked to a fact.
+func (s *Store) getFactEntityNames(ctx context.Context, factID int64) []string {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT e.name FROM entities e
+		 JOIN fact_entities fe ON fe.entity_id = e.id
+		 WHERE fe.fact_id = ?
+		 ORDER BY e.name`,
+		factID,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err == nil {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// truncateExport truncates s to at most maxRunes runes for export display.
+func truncateExport(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "..."
 }
 
 // ImportFromMarkdown parses a legacy MEMORY.md file and imports its entries as facts.

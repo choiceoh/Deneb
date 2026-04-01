@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
@@ -175,6 +176,30 @@ func executeAgentRun(
 		proactiveCh <- "" // no-op: skip for short messages
 	}
 
+	// 4b. Kick off memory recall as a parallel goroutine (fallback model).
+	// Runs alongside the main LLM: if it finishes before turn 0, the result
+	// is injected into the system prompt. If it arrives during or after the
+	// agent run, a follow-up reply is sent with the recalled context.
+	recallCh := make(chan string, 1)
+	if params.Message != "" && deps.registry != nil && deps.memoryStore != nil {
+		go func() {
+			recallClient := deps.registry.Client(modelrole.RoleFallback)
+			recallModel := deps.registry.FullModelID(modelrole.RoleFallback)
+			if recallClient == nil {
+				recallCh <- ""
+				return
+			}
+			base := deps.shutdownCtx
+			if base == nil {
+				base = context.Background()
+			}
+			recallCh <- memory.Recall(base, deps.memoryStore, deps.memoryEmbedder,
+				recallClient, recallModel, params.Message, memory.DefaultRecallConfig(), logger)
+		}()
+	} else {
+		recallCh <- ""
+	}
+
 	prepStart := time.Now()
 	// 5. Run knowledge prefetch, context assembly, and system prompt build in parallel.
 	// All three are now independent: apiType is known (step 3) so the system prompt
@@ -319,6 +344,24 @@ func executeAgentRun(
 
 	// 7. Append knowledge and Aurora systemAddition to the built system prompt.
 	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, auroraSystemAddition)
+
+	// 7b. Try to inject recall early (non-blocking). If the fallback model
+	// finished recall before the main agent starts, we inject it now so the
+	// first response already benefits from recalled memory.
+	var recallConsumed bool
+	select {
+	case recallText := <-recallCh:
+		if recallText != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt, recallText)
+			recallConsumed = true
+			logger.Info("recall: early injection (before turn 0)", "chars", len(recallText))
+		} else {
+			recallConsumed = true // empty result, nothing to follow up
+		}
+	default:
+		// Recall still running — will be checked via DeferredSystemText or post-run.
+	}
+
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt),
 		"knowledgeChars", len(knowledgeAddition))
@@ -371,10 +414,9 @@ func executeAgentRun(
 		// Each inline image is ~1600 tokens; stripping saves that cost per turn
 		// from turn 1 onward for multi-turn runs that start with an image.
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
-		// Deferred proactive context: injected on turn 1+ without blocking turn 0.
-		// By the time turn 0 completes (LLM stream + tool exec), the goroutine
-		// launched at step 4 has had several seconds to finish.
-		DeferredSystemText: deferredProactiveHint(proactiveCh, proactiveStart, logger),
+		// Deferred context injection on turn 1+: proactive hints and/or recall.
+		// Non-blocking: returns whatever is ready, skips what isn't.
+		DeferredSystemText: deferredMultiHint(proactiveCh, recallCh, &recallConsumed, proactiveStart, logger),
 		// Emit heartbeat at each turn so WS clients know the agent is alive.
 		OnTurn: func(turn int, accumulatedTokens int) {
 			if deps.emitAgentFn != nil {
@@ -708,6 +750,23 @@ func executeAgentRun(
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens)
+
+	// Post-run recall follow-up: if recall wasn't consumed during the agent
+	// run (e.g., single-turn Q&A where DeferredSystemText never fires), check
+	// now. If it has meaningful content, append it to the agent result so the
+	// reply pipeline can deliver it as a follow-up or edit.
+	if !recallConsumed {
+		select {
+		case recallText := <-recallCh:
+			recallConsumed = true
+			if recallText != "" && agentResult != nil && agentResult.Text != "" {
+				logger.Info("recall: post-run follow-up available", "chars", len(recallText))
+				agentResult.RecallFollowUp = recallText
+			}
+		default:
+			// Recall still not ready — skip (5s timeout will clean it up).
+		}
+	}
 
 	// Fire agent_end plugin hook (void, non-blocking).
 	if deps.pluginHookRunner != nil {

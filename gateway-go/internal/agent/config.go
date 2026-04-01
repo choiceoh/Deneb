@@ -60,4 +60,10 @@ type AgentResult struct {
 	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns"
 	Usage      llm.TokenUsage
 	Turns      int
+
+	// RecallFollowUp contains memory recall context that arrived after the
+	// agent completed. Set by the run executor when the recall goroutine
+	// finishes after the agent loop. The reply pipeline can use this to send
+	// a follow-up message or edit the original response.
+	RecallFollowUp string
 }
