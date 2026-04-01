@@ -46,6 +46,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
+	"github.com/choiceoh/deneb/gateway-go/internal/shadow"
 	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
@@ -120,6 +121,7 @@ type ServerIntegrations struct {
 	gmailPollSvc          *gmailpoll.Service
 	autoresearchRunner    *autoresearch.Runner
 	thinkingRuntime       *thinking.ThinkingRuntime
+	shadowSvc             *shadow.Service
 }
 
 // Server is the main gateway server.
