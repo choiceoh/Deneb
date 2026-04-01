@@ -584,12 +584,14 @@
     headers:
       type: object
       description: Request headers as key-value pairs
+      additionalProperties: true
     body:
       type: string
       description: Request body as string
     json:
       type: object
       description: "JSON body (auto-sets Content-Type: application/json)"
+      additionalProperties: true
     timeout:
       type: number
       description: Timeout in seconds
@@ -713,6 +715,7 @@
     job:
       type: object
       description: Job definition for add/update
+      additionalProperties: true
     text:
       type: string
       description: System event text for wake action
@@ -1215,6 +1218,7 @@
           input:
             type: object
             description: "Tool input parameters (same schema as calling the tool directly)"
+            additionalProperties: true
           label:
             type: string
             description: Label for this source in the analysis (auto-generated if omitted)
