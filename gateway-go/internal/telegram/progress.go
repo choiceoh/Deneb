@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 const (
@@ -181,6 +183,13 @@ func (pt *ProgressTracker) runSummary(insertIdx int, reasons []string) {
 
 // sanitizeSummary cleans up LLM output to a short, single-line Korean phrase.
 func sanitizeSummary(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// Strip reasoning model artifacts (<think>...</think>, "Thinking Process:", etc.).
+	raw = jsonutil.StripThinkingTags(raw)
+	raw = jsonutil.StripThinkingPreamble(raw)
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
