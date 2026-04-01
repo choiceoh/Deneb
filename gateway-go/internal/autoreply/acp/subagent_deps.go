@@ -36,6 +36,7 @@ type SpawnSubagentParams struct {
 	ThinkLevel       types.ThinkLevel
 	InitialMessage   string
 	MaxDepth         int
+	ToolPreset       string // tool preset restricting available tools (researcher, implementer, verifier)
 }
 
 // SpawnSubagentResult holds the result of spawning a sub-agent.
@@ -96,6 +97,7 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 			Model:           params.Model,
 			Provider:        params.Provider,
 			ThinkLevel:      params.ThinkLevel,
+			ToolPreset:      params.ToolPreset,
 			GroupActivation: types.ActivationAlways,
 		}
 		if err := d.SaveSession(session); err != nil {

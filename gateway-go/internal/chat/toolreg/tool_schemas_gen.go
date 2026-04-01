@@ -958,6 +958,11 @@ func sessionsSpawnToolSchema() map[string]any {
 				"enum":        []string{"main", "lightweight", "pilot", "fallback"},
 				"description": "Model role to use (default: main)",
 			},
+			"tool_preset": map[string]any{
+				"type":        "string",
+				"enum":        []string{"researcher", "implementer", "verifier"},
+				"description": "Tool preset restricting which tools the sub-agent can use. researcher=read-only, implementer=read+write+build, verifier=read+test+exec",
+			},
 		},
 		"required": []string{"task"},
 	}

@@ -29,13 +29,13 @@ type ToolDef = toolctx.ToolDef
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {
-	mu                       sync.RWMutex
-	tools                    map[string]ToolDef
-	order                    []string // preserves registration order
-	postProcess              *PostProcessRegistry
-	spillStore               *agent.SpilloverStore  // optional; spills large tool results to disk
-	cachedLLMTools           []llm.Tool            // cached tool list; invalidated on RegisterTool
-	cachedLLMToolsAnthropic  []llm.Tool            // same list with CacheControl on last tool for Anthropic prompt caching
+	mu                      sync.RWMutex
+	tools                   map[string]ToolDef
+	order                   []string // preserves registration order
+	postProcess             *PostProcessRegistry
+	spillStore              *agent.SpilloverStore // optional; spills large tool results to disk
+	cachedLLMTools          []llm.Tool            // cached tool list; invalidated on RegisterTool
+	cachedLLMToolsAnthropic []llm.Tool            // same list with CacheControl on last tool for Anthropic prompt caching
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -354,6 +354,56 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 		tools = append(tools, t)
 	}
 	return tools
+}
+
+// FilteredLLMTools returns tool definitions filtered to only include tools in
+// the allowed set. If allowed is nil or empty, returns all tools (no filtering).
+// Unlike LLMTools(), the result is not cached since the filter varies per call.
+func (r *ToolRegistry) FilteredLLMTools(allowed map[string]bool) []llm.Tool {
+	if len(allowed) == 0 {
+		return r.LLMTools()
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	tools := make([]llm.Tool, 0, len(allowed))
+	for _, name := range r.order {
+		if !allowed[name] {
+			continue
+		}
+		def := r.tools[name]
+		if def.Hidden {
+			continue
+		}
+		schema := def.InputSchema
+		if schema == nil {
+			schema = map[string]any{"type": "object"}
+		}
+		t := llm.Tool{
+			Name:        def.Name,
+			Description: def.Description,
+			InputSchema: schema,
+		}
+		t.PreSerialize()
+		tools = append(tools, t)
+	}
+	return tools
+}
+
+// FilteredDefinitions returns tool definitions filtered to only include tools
+// in the allowed set. If allowed is nil or empty, returns all definitions.
+func (r *ToolRegistry) FilteredDefinitions(allowed map[string]bool) []ToolDef {
+	if len(allowed) == 0 {
+		return r.Definitions()
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	defs := make([]ToolDef, 0, len(allowed))
+	for _, name := range r.order {
+		if allowed[name] {
+			defs = append(defs, r.tools[name])
+		}
+	}
+	return defs
 }
 
 // Summaries returns a map of tool name → description for system prompt assembly.

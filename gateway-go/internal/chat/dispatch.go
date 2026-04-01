@@ -214,6 +214,20 @@ func (h *Handler) handleSlashCommand(
 
 	case "think":
 		h.deliverSlashResponse(delivery, "사고 모드가 토글되었습니다.")
+
+	case "coordinator":
+		// Activate coordinator mode: set ToolPreset on the session, reset transcript.
+		h.InterruptActiveRun(sessionKey)
+		h.clearPending(sessionKey)
+		if h.transcript != nil {
+			_ = h.transcript.Delete(sessionKey)
+		}
+		sess := h.sessions.Get(sessionKey)
+		if sess != nil {
+			sess.ToolPreset = "coordinator"
+			_ = h.sessions.Set(sess)
+		}
+		h.deliverSlashResponse(delivery, "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.")
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{
