@@ -35,10 +35,17 @@ type CommandContext struct {
 	Deps *CommandDeps
 }
 
+// RPCZeroCallsReport holds the result of a zero-calls analysis.
+type RPCZeroCallsReport struct {
+	ZeroCalls    []string
+	TotalMethods int
+}
+
 // CommandDeps holds dependencies available to command handlers.
 type CommandDeps struct {
 	SubagentRuns    func() []subagentpkg.SubagentRunRecord // for /agents
 	Status          *StatusDeps                            // Server-level data for /status command.
+	ZeroCallsFn     func() *RPCZeroCallsReport             // for /zerocalls
 }
 
 // StatusDeps holds server-level data for the /status command.
@@ -125,6 +132,9 @@ func (r *CommandRouter) registerBuiltinHandlers() {
 	// Model
 	r.Handle("model", handleModelCommand)
 	r.Handle("verbose", handleVerboseCommand)
+
+	// Monitoring
+	r.Handle("zerocalls", handleZeroCallsCommand)
 }
 
 func (r *CommandRouter) handleHelpCommand(ctx CommandContext) (*CommandResult, error) {

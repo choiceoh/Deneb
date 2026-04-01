@@ -7,17 +7,25 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// MethodLister returns all registered RPC method names.
+type MethodLister interface {
+	Methods() []string
+}
+
 // MonitoringDeps holds the dependencies for monitoring RPC methods.
 type MonitoringDeps struct {
 	ChannelHealth *monitoring.ChannelHealthMonitor
 	Activity      *monitoring.ActivityTracker
+	Dispatcher    MethodLister // for rpc_zero_calls
 }
 
 // MonitoringMethods returns the monitoring.channel_health and
@@ -41,6 +49,50 @@ func MonitoringMethods(deps MonitoringDeps) map[string]rpcutil.HandlerFunc {
 			}
 			resp := protocol.MustResponseOK(req.ID, map[string]any{
 				"lastActivityMs": deps.Activity.LastActivityAt(),
+			})
+			return resp
+		},
+
+		"monitoring.rpc_zero_calls": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+			if deps.Dispatcher == nil {
+				return protocol.MustResponseOK(req.ID, map[string]any{
+					"zeroCalls": []any{},
+					"total":     0,
+				})
+			}
+
+			// Get all registered methods and their call counts.
+			methods := deps.Dispatcher.Methods()
+			sort.Strings(methods)
+
+			counts := metrics.RPCRequestsTotal.Snapshot()
+
+			// Find methods with zero calls.
+			var zeroCalls []string
+			called := make([]map[string]any, 0)
+			for _, m := range methods {
+				okKey := m + "\x00" + "ok"
+				errKey := m + "\x00" + "error"
+				ok := counts[okKey]
+				errs := counts[errKey]
+				total := ok + errs
+				if total == 0 {
+					zeroCalls = append(zeroCalls, m)
+				} else {
+					called = append(called, map[string]any{
+						"method": m,
+						"ok":     ok,
+						"error":  errs,
+					})
+				}
+			}
+
+			resp := protocol.MustResponseOK(req.ID, map[string]any{
+				"zeroCalls":    zeroCalls,
+				"zeroCount":    len(zeroCalls),
+				"calledCount":  len(called),
+				"called":       called,
+				"totalMethods": len(methods),
 			})
 			return resp
 		},
