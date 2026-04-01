@@ -32,6 +32,11 @@ import (
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
 func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) {
+	// Fail fast if core hub fields are missing.
+	if err := hub.Validate(); err != nil {
+		panic("server init: " + err.Error())
+	}
+
 	// Lazy-init presence/heartbeat state.
 	if s.presenceStore == nil {
 		s.presenceStore = handlerpresence.NewStore()
@@ -118,10 +123,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// Scheduling.
 		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
 			Cron:        hub.Cron,
-			RunLog:      hub.CronRunLog,
+			RunLog:      hub.CronPersistLog,
 			Broadcaster: hub.Broadcast,
 		}),
-		handlerprocess.CronServiceMethods(handlerprocess.CronServiceDeps{Service: hub.CronSvc}),
+		handlerprocess.CronServiceMethods(handlerprocess.CronServiceDeps{Service: hub.CronService}),
 
 		// Approvals.
 		handlerprocess.ApprovalMethods(handlerprocess.ApprovalDeps{
