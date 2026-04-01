@@ -3,11 +3,7 @@
 //! Ports the tokenizer + nested-repetition analyzer from
 //! `src/security/safe-regex.ts` to Rust for CPU-bound safety checks.
 //!
-//! Only the safety analysis (`has_nested_repetition`) is in Rust.
-//! `compileSafeRegex` stays in TypeScript because it creates V8 `RegExp` objects.
-
-#[cfg(feature = "napi_binding")]
-use napi::bindgen_prelude::*;
+//! Provides the safety analysis (`has_nested_repetition`) in Rust.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -380,7 +376,6 @@ pub fn has_nested_repetition_impl(source: &str) -> bool {
 /// Check whether a regex source pattern contains nested repetition (`ReDoS` risk).
 ///
 /// This is the Rust equivalent of `hasNestedRepetition` from `src/security/safe-regex.ts`.
-#[cfg_attr(feature = "napi_binding", napi)]
 pub fn has_nested_repetition(source: String) -> bool {
     has_nested_repetition_impl(&source)
 }

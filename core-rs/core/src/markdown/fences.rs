@@ -175,63 +175,6 @@ pub fn is_safe_fence_break(spans: &[FenceSpan], index: usize) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// napi exports
-// ---------------------------------------------------------------------------
-
-#[cfg(feature = "napi_binding")]
-pub mod napi_exports {
-    use super::*;
-    use napi_derive::napi;
-
-    #[napi(object)]
-    pub struct JsFenceSpan {
-        pub start: u32,
-        pub end: u32,
-        #[napi(js_name = "openLine")]
-        pub open_line: String,
-        pub marker: String,
-        pub indent: String,
-    }
-
-    fn to_js(spans: Vec<FenceSpan>) -> Vec<JsFenceSpan> {
-        spans
-            .into_iter()
-            .map(|s| JsFenceSpan {
-                start: s.start as u32,
-                end: s.end as u32,
-                open_line: s.open_line,
-                marker: s.marker,
-                indent: s.indent,
-            })
-            .collect()
-    }
-
-    fn from_js(spans: &[JsFenceSpan]) -> Vec<FenceSpan> {
-        spans
-            .iter()
-            .map(|s| FenceSpan {
-                start: s.start as usize,
-                end: s.end as usize,
-                open_line: s.open_line.clone(),
-                marker: s.marker.clone(),
-                indent: s.indent.clone(),
-            })
-            .collect()
-    }
-
-    #[napi]
-    pub fn markdown_parse_fence_spans(buffer: String) -> Vec<JsFenceSpan> {
-        to_js(parse_fence_spans(&buffer))
-    }
-
-    #[napi]
-    pub fn markdown_is_safe_fence_break(spans: Vec<JsFenceSpan>, index: u32) -> bool {
-        let internal = from_js(&spans);
-        is_safe_fence_break(&internal, index as usize)
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

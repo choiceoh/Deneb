@@ -1,7 +1,7 @@
 ## Deneb Vision
 
 Deneb is a self-hosted AI agent that actually does things.
-It runs on your devices, in your channels, with your rules.
+It runs on your DGX Spark, via Telegram, with your rules.
 
 This document explains the current state and direction of the project.
 We are still early, so iteration is fast.
@@ -11,7 +11,7 @@ Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 Deneb is a self-hosted AI agent framework built from the ground up around **lossless memory**.
 The core idea: AI agents should never lose context, no matter how long the conversation runs.
 
-The goal: a personal AI assistant that remembers everything, runs locally, supports extensible messaging channels, and respects privacy and security.
+The goal: a personal AI assistant that remembers everything, runs locally on DGX Spark, communicates via Telegram, and respects privacy and security.
 
 Deneb follows deliberate design constraints documented in
 [design philosophy](/concepts/design-philosophy): single-user premise,
@@ -34,7 +34,7 @@ Next priorities:
 - Performance and test infrastructure
 - Multi-agent orchestration improvements
 - Better computer-use and agent harness capabilities
-- Ergonomics across CLI and web frontend
+- Ergonomics across CLI and Telegram
 
 Contribution rules:
 

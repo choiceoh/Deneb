@@ -7,31 +7,13 @@ import (
 	"unicode"
 )
 
-// Multilingual abort trigger words. Matches the TS ABORT_TRIGGERS set.
+// Abort trigger words (English + Korean).
 var abortTriggers = map[string]bool{
 	// English
 	"stop": true, "esc": true, "abort": true, "cancel": true, "halt": true,
 	"quit": true, "exit": true, "end": true, "kill": true, "break": true,
 	// Korean
 	"중지": true, "취소": true, "멈춰": true, "그만": true, "정지": true, "끝": true,
-	// Chinese
-	"停止": true, "取消": true, "停": true,
-	// Japanese
-	"やめて": true, "中止": true, "止めて": true, "ストップ": true,
-	// Hindi
-	"रुको": true, "बंद": true, "रोको": true,
-	// Arabic
-	"توقف": true, "إلغاء": true,
-	// Russian
-	"стоп": true, "отмена": true,
-	// German
-	"stopp": true, "abbrechen": true,
-	// French
-	"arrêt": true, "arrête": true, "annuler": true,
-	// Spanish
-	"para": true, "parar": true, "detener": true,
-	// Portuguese
-	"cancelar": true,
 }
 
 // IsAbortTrigger returns true if the text is a recognized abort trigger word.

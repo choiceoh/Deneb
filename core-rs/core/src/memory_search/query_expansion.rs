@@ -16,28 +16,12 @@ fn make_set(words: &[&'static str]) -> std::collections::HashSet<&'static str> {
 
 static STOP_WORDS_EN: LazyLock<std::collections::HashSet<&'static str>> =
     LazyLock::new(|| make_set(stop_words::EN));
-static STOP_WORDS_ES: LazyLock<std::collections::HashSet<&'static str>> =
-    LazyLock::new(|| make_set(stop_words::ES));
-static STOP_WORDS_PT: LazyLock<std::collections::HashSet<&'static str>> =
-    LazyLock::new(|| make_set(stop_words::PT));
-static STOP_WORDS_AR: LazyLock<std::collections::HashSet<&'static str>> =
-    LazyLock::new(|| make_set(stop_words::AR));
 static STOP_WORDS_KO: LazyLock<std::collections::HashSet<&'static str>> =
     LazyLock::new(|| make_set(stop_words::KO));
-static STOP_WORDS_JA: LazyLock<std::collections::HashSet<&'static str>> =
-    LazyLock::new(|| make_set(stop_words::JA));
-static STOP_WORDS_ZH: LazyLock<std::collections::HashSet<&'static str>> =
-    LazyLock::new(|| make_set(stop_words::ZH));
 
-/// Check if a token is a stop word in any supported language.
+/// Check if a token is a stop word in English or Korean.
 pub fn is_query_stop_word_token(token: &str) -> bool {
-    STOP_WORDS_EN.contains(token)
-        || STOP_WORDS_ES.contains(token)
-        || STOP_WORDS_PT.contains(token)
-        || STOP_WORDS_AR.contains(token)
-        || STOP_WORDS_ZH.contains(token)
-        || STOP_WORDS_KO.contains(token)
-        || STOP_WORDS_JA.contains(token)
+    STOP_WORDS_EN.contains(token) || STOP_WORDS_KO.contains(token)
 }
 
 // ---------------------------------------------------------------------------
@@ -251,22 +235,9 @@ mod tests {
     }
 
     #[test]
-    fn test_chinese_stop_words() {
-        assert!(is_query_stop_word_token("的"));
-        assert!(is_query_stop_word_token("我们"));
-        assert!(is_query_stop_word_token("什么"));
-    }
-
-    #[test]
     fn test_korean_stop_words() {
         assert!(is_query_stop_word_token("그리고"));
         assert!(is_query_stop_word_token("어제"));
-    }
-
-    #[test]
-    fn test_japanese_stop_words() {
-        assert!(is_query_stop_word_token("これ"));
-        assert!(is_query_stop_word_token("する"));
     }
 
     #[test]
@@ -276,14 +247,6 @@ mod tests {
         assert!(kw.contains(&"api".to_string()));
         assert!(!kw.contains(&"the".to_string()));
         assert!(!kw.contains(&"thing".to_string()));
-    }
-
-    #[test]
-    fn test_extract_chinese() {
-        let kw = extract_keywords("之前讨论的那个方案");
-        // Should extract character n-grams, filtering stop words
-        assert!(kw.iter().any(|k| k.contains('讨') || k.contains("讨论")));
-        assert!(kw.iter().any(|k| k.contains('方') || k.contains("方案")));
     }
 
     #[test]
@@ -339,21 +302,4 @@ mod tests {
         assert!(is_valid_keyword("my_var"));
     }
 
-    #[test]
-    fn test_spanish_stop_words() {
-        assert!(is_query_stop_word_token("porque"));
-        assert!(is_query_stop_word_token("ayer"));
-    }
-
-    #[test]
-    fn test_arabic_stop_words() {
-        assert!(is_query_stop_word_token("لماذا"));
-        assert!(is_query_stop_word_token("هذا"));
-    }
-
-    #[test]
-    fn test_portuguese_stop_words() {
-        assert!(is_query_stop_word_token("ontem"));
-        assert!(is_query_stop_word_token("você"));
-    }
 }

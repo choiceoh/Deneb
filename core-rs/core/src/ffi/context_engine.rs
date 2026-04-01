@@ -12,7 +12,7 @@ pub extern "C" fn deneb_context_assembly_new(
     token_budget: u64,
     fresh_tail_count: u32,
 ) -> u32 {
-    crate::context_engine::napi::context_assembly_new(
+    crate::context_engine::handle::context_assembly_new(
         conversation_id as u32,
         token_budget as u32,
         fresh_tail_count,
@@ -36,7 +36,7 @@ pub unsafe extern "C" fn deneb_context_assembly_start(
     // SAFETY: out_ptr is null-checked above. The Go caller guarantees the buffer is valid.
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let json = crate::context_engine::napi::context_assembly_start(handle);
+        let json = crate::context_engine::handle::context_assembly_start(handle);
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
@@ -69,7 +69,7 @@ pub unsafe extern "C" fn deneb_context_assembly_step(
             Ok(s) => s,
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
-        let json = crate::context_engine::napi::context_assembly_step(handle, resp_str.to_string());
+        let json = crate::context_engine::handle::context_assembly_step(handle, resp_str.to_string());
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
@@ -96,7 +96,7 @@ pub unsafe extern "C" fn deneb_context_expand_new(
         Ok(s) => s.to_string(),
         Err(_) => return 0,
     };
-    crate::context_engine::napi::context_expand_new(
+    crate::context_engine::handle::context_expand_new(
         summary_id,
         max_depth,
         include_messages != 0,
@@ -120,7 +120,7 @@ pub unsafe extern "C" fn deneb_context_expand_start(
     // SAFETY: out_ptr is null-checked above. The Go caller guarantees the buffer is valid.
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let json = crate::context_engine::napi::context_expand_start(handle);
+        let json = crate::context_engine::handle::context_expand_start(handle);
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
@@ -152,7 +152,7 @@ pub unsafe extern "C" fn deneb_context_expand_step(
             Ok(s) => s,
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
-        let json = crate::context_engine::napi::context_expand_step(handle, resp_str.to_string());
+        let json = crate::context_engine::handle::context_expand_step(handle, resp_str.to_string());
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
@@ -160,5 +160,5 @@ pub unsafe extern "C" fn deneb_context_expand_step(
 /// C FFI: Drop any context engine, freeing its resources.
 #[no_mangle]
 pub extern "C" fn deneb_context_engine_drop(handle: u32) {
-    crate::context_engine::napi::context_engine_drop(handle);
+    crate::context_engine::handle::context_engine_drop(handle);
 }
