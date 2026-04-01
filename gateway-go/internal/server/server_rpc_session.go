@@ -11,11 +11,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
+	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -211,6 +211,17 @@ func (s *Server) registerSessionRPCMethods() {
 			}
 		}
 	}
+	// Initialize session memory store (structured working state per session).
+	if home, err := os.UserHomeDir(); err == nil {
+		sessMemDir := filepath.Join(home, ".deneb", "sessions")
+		sessMemStore := chat.NewSessionMemoryStore(sessMemDir)
+		loaded := sessMemStore.LoadFromDisk()
+		chatCfg.SessionMemory = sessMemStore
+		if loaded > 0 {
+			s.logger.Info("session memory restored", "count", loaded)
+		}
+	}
+
 	// Resolve workspace directory for file tool operations.
 	workspaceDir := resolveWorkspaceDir()
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)

@@ -335,6 +335,13 @@ func handleRunSuccess(
 					appendToMemoryFile(workspaceDir, notes, logger)
 				}
 			}
+
+			// Session memory: update structured session state.
+			// Runs alongside fact extraction, sharing the same semaphore.
+			if deps.sessionMemory != nil {
+				UpdateSessionMemory(memCtx, deps.sessionMemory, params.SessionKey,
+					params.Message, result.Text, result.Turns, result.StopReason, logger)
+			}
 		}()
 	}
 
@@ -804,7 +811,6 @@ func deliveryChannel(d *DeliveryContext) string {
 	}
 	return d.Channel
 }
-
 
 // Definitions returns all registered tool definitions (for system prompt assembly).
 func (r *ToolRegistry) Definitions() []ToolDef {

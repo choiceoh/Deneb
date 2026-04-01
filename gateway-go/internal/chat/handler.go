@@ -8,15 +8,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
@@ -35,14 +35,15 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
-	auroraStore     *aurora.Store             // Aurora hierarchical compaction store
-	vegaBackend     vega.Backend              // optional; knowledge prefetch
-	memoryStore     *memory.Store             // optional; structured memory (Honcho-style)
-	memoryEmbedder  *memory.Embedder          // optional; fact embedding
-	unifiedStore    *unified.Store            // optional; unified memory (search + tier-1)
-	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
-	agentLog        *agentlog.Writer          // optional; agent detail logging
-	registry        *modelrole.Registry       // centralized model role registry
+	auroraStore     *aurora.Store                     // Aurora hierarchical compaction store
+	vegaBackend     vega.Backend                      // optional; knowledge prefetch
+	memoryStore     *memory.Store                     // optional; structured memory (Honcho-style)
+	sessionMemory   *SessionMemoryStore               // optional; structured session working state
+	memoryEmbedder  *memory.Embedder                  // optional; fact embedding
+	unifiedStore    *unified.Store                    // optional; unified memory (search + tier-1)
+	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
+	agentLog        *agentlog.Writer                  // optional; agent detail logging
+	registry        *modelrole.Registry               // centralized model role registry
 	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
@@ -121,6 +122,7 @@ type HandlerConfig struct {
 	AuroraStore     *aurora.Store             // Aurora hierarchical compaction store
 	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
 	MemoryStore     *memory.Store             // optional; structured memory (Honcho-style)
+	SessionMemory   *SessionMemoryStore       // optional; structured session working state
 	MemoryEmbedder  *memory.Embedder          // optional; fact embedding via SGLang
 	UnifiedStore    *unified.Store            // optional; unified memory (search + tier-1)
 	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
@@ -166,6 +168,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		auroraStore:     cfg.AuroraStore,
 		vegaBackend:     cfg.VegaBackend,
 		memoryStore:     cfg.MemoryStore,
+		sessionMemory:   cfg.SessionMemory,
 		memoryEmbedder:  cfg.MemoryEmbedder,
 		unifiedStore:    cfg.UnifiedStore,
 		dreamTurnFn:     cfg.DreamTurnFn,
