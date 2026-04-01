@@ -218,6 +218,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- `memory(action=set, query=..., category=...)`: 새 팩트 생성\n")
 		d.WriteString("- `memory(action=forget, fact_id=N)`: 팩트 삭제\n")
 		d.WriteString("- `memory(action=status)`: 메모리 상태 요약\n\n")
+		d.WriteString("### Diary (일지)\n")
+		d.WriteString("매우 상세한 서술형 일지. SQL 팩트와 달리 맥락, 과정, 이유, 결과를 풍부하게 기록.\n")
+		d.WriteString("- `memory(action=log, query=..., title=...)`: 다이어리에 상세 기록 추가 (memory/diary/diary-YYYY-MM-DD.md)\n")
+		d.WriteString("- `memory(action=daily, days=N)`: 최근 N일 다이어리 읽기 (기본: 오늘+어제)\n")
+		d.WriteString("다이어리 작성 시 포함할 내용: 대화 내용, 사용한 도구, 내린 결정, 발생한 이벤트, 오류와 해결 과정, 사용자 반응.\n")
+		d.WriteString("2시간마다 하트비트에서 자동으로 새로 발생한 일을 상세히 기록합니다.\n\n")
 	}
 
 	// Polaris (System Manual).

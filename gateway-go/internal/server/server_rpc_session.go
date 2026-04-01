@@ -265,4 +265,14 @@ func (s *Server) registerApprovalAgentMethods(broadcastFn func(string, any) (int
 			s.logger.Info("memory flush task registered with autonomous service")
 		}
 	}
+
+	// Register diary heartbeat task: every 2 hours, the main LLM writes
+	// a detailed narrative diary entry (memory/diary/diary-YYYY-MM-DD.md).
+	if s.chatHandler != nil {
+		s.autonomousSvc.RegisterTask(&diaryHeartbeatTask{
+			chatHandler: s.chatHandler,
+			logger:      s.logger,
+		})
+		s.logger.Info("diary heartbeat task registered with autonomous service (2h interval)")
+	}
 }
