@@ -558,7 +558,7 @@ func getPilotModel() string {
 	return getRoleModel(modelrole.RolePilot, modelrole.DefaultPilotModel)
 }
 
-func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
+func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
@@ -571,6 +571,9 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
+	}
+	if len(extraBody) > 0 && extraBody[0] != nil {
+		req.ExtraBody = extraBody[0]
 	}
 
 	events, err := client.StreamChat(ctx, req)
