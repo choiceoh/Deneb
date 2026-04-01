@@ -93,8 +93,11 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
 			delay := c.backoffDelay(attempt, lastErr)
-			c.logger.Info("retrying LLM request",
-				"attempt", attempt, "delay", delay, "error", lastErr)
+			attrs := []any{"attempt", attempt, "delay", delay, "error", lastErr, "url", req.URL.String()}
+			if dl, ok := ctx.Deadline(); ok {
+				attrs = append(attrs, "ctxRemaining", time.Until(dl).Truncate(time.Millisecond))
+			}
+			c.logger.Info("retrying LLM request", attrs...)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()

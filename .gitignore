@@ -1,4 +1,5 @@
 # Build output
+bin/
 dist/
 build/
 .artifacts/
