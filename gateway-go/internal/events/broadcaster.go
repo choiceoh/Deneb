@@ -83,6 +83,7 @@ var eventScopeGuards = map[string][]string{
 	"process.completed":       {ScopeWrite, ScopeAdmin},
 	"heartbeat":               {ScopeRead},
 	"dreaming.cycle":           {ScopeRead},
+	"shadow.event":             {ScopeRead},
 }
 
 // maxBufferedBytes is the threshold for slow consumer detection.

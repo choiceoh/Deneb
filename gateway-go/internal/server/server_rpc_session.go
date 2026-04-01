@@ -257,4 +257,8 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 
 	// Gmail polling service: periodic new-email analysis via LLM.
 	s.initGmailPoll()
+
+	// Shadow session monitoring: observes main session conversations in the
+	// background and performs task detection, health monitoring, periodic digests.
+	s.initShadowMonitoring(hub)
 }
