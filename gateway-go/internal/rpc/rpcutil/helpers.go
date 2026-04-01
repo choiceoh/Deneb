@@ -21,6 +21,11 @@ import (
 // This eliminates type conversions on the hot dispatch path.
 type HandlerFunc = middleware.HandlerFunc
 
+// BroadcastFunc is the canonical signature for broadcasting events to connected
+// WebSocket clients. Previously duplicated across 7+ handler packages; now
+// defined once here and referenced everywhere via rpcutil.BroadcastFunc.
+type BroadcastFunc func(event string, payload any) (int, []error)
+
 // MaxKeyInErrorMsg is the maximum key length included in error messages.
 // Prevents log inflation from pathologically large keys.
 const MaxKeyInErrorMsg = 128

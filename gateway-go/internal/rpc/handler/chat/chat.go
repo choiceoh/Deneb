@@ -13,8 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// BroadcastFunc is the signature for broadcasting events to connected clients.
-type BroadcastFunc func(event string, payload any) (int, []error)
+// BroadcastFunc is the canonical broadcast type defined in rpcutil.
+type BroadcastFunc = rpcutil.BroadcastFunc
 
 // Deps holds the dependencies for standard chat RPC methods (send, history,
 // abort, inject).

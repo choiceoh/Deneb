@@ -17,9 +17,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// BroadcastFunc broadcasts an event to all connected clients.
-// Returns the number of clients notified and any errors encountered.
-type BroadcastFunc func(event string, payload any) (int, []error)
+// BroadcastFunc is the canonical broadcast type defined in rpcutil.
+type BroadcastFunc = rpcutil.BroadcastFunc
 
 // Deps holds the dependencies for node.* RPC methods.
 type Deps struct {
