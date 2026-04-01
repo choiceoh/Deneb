@@ -18,6 +18,8 @@ pub mod scalar;
 #[inline]
 #[allow(unsafe_code)]
 pub fn accumulate(a: &[f64], b: &[f64]) -> (f64, f64, f64) {
+    debug_assert_eq!(a.len(), b.len(), "accumulate: slices must have equal length");
+
     #[cfg(target_arch = "aarch64")]
     {
         use std::arch::aarch64::*;

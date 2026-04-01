@@ -359,7 +359,7 @@ Embedded analytical database optimized for OLAP queries.
 <Step title="Install DuckDB CLI">
 
 ```bash
-# DGX Spark (aarch64/x86_64 Linux)
+# DGX Spark (aarch64 Linux)
 curl -LO https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip
 unzip duckdb_cli-linux-amd64.zip -d /usr/local/bin/
 ```
