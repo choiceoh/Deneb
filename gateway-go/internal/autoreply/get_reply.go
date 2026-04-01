@@ -204,6 +204,9 @@ type ReplyDeps struct {
 	PreprocessHooks []MessagePreprocessHook                 // hooks to run before directive parsing
 	ModelCandidates []model.ModelCandidate                  // available models for directive resolution
 	CommandDeps     *handlers.CommandDeps                   // server-level deps for command handlers (status, subagents, etc.)
+	// OnSessionEvent fires session lifecycle hooks (abort, reset, etc.)
+	// via the plugin hook system. nil = events silently dropped.
+	OnSessionEvent func(eventType, sessionKey, reason string)
 }
 
 // InitSessionForReply initializes or retrieves session state for a reply.
