@@ -17,7 +17,7 @@ import (
 
 // callSglang sends a streaming chat request to the local SGLang model and collects the full response.
 func callSglang(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
-	events, err := client.StreamChatOpenAI(ctx, llm.ChatRequest{
+	events, err := client.StreamChat(ctx, llm.ChatRequest{
 		Model:     model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
 		System:    llm.SystemString(system),
@@ -36,7 +36,7 @@ func callSglang(ctx context.Context, client *llm.Client, model, system, user str
 // callSglangJSON is like callSglang but requests JSON-formatted output
 // via response_format. Use for endpoints that must return valid JSON.
 func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
-	events, err := client.StreamChatOpenAI(ctx, llm.ChatRequest{
+	events, err := client.StreamChat(ctx, llm.ChatRequest{
 		Model:          model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", user)},
 		System:         llm.SystemString(system),

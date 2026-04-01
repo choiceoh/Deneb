@@ -451,8 +451,7 @@ func parseModelID(model string) (providerID, modelName string) {
 
 // resolveClient creates an LLM client from provider configs, auth manager,
 // provider runtime resolver, or falls back to the pre-configured client.
-// Returns the client and API type ("anthropic" or "openai").
-func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.Client, string) {
+func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
 	// 1. Try provider config from deneb.json.
 	if deps.providerConfigs != nil && providerID != "" {
 		if cfg, ok := deps.providerConfigs[providerID]; ok {
@@ -486,13 +485,9 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 			if baseURL == "" {
 				logger.Warn("provider config missing base URL", "provider", providerID)
 			} else {
-				apiType := cfg.API
-				if apiType == "" {
-					apiType = inferAPIType(providerID)
-				}
 				client := llm.NewClient(baseURL, apiKey, llm.WithLogger(logger))
-				logger.Info("using provider from config", "provider", providerID, "apiType", apiType)
-				return client, apiType
+				logger.Info("using provider from config", "provider", providerID)
+				return client
 			}
 		}
 	}
@@ -507,7 +502,6 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
 			base := cred.BaseURL
 			apiKey := cred.APIKey
-			apiType := inferAPIType(target)
 			if base == "" {
 				base = resolveDefaultBaseURL(target)
 			}
@@ -533,16 +527,12 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 				}
 			}
 
-			return llm.NewClient(base, apiKey, llm.WithLogger(logger)), apiType
+			return llm.NewClient(base, apiKey, llm.WithLogger(logger))
 		}
 	}
 
-	// 3. Fall back to pre-configured client (OpenAI-compatible by default).
-	if deps.llmClient != nil {
-		return deps.llmClient, "openai"
-	}
-
-	return nil, ""
+	// 3. Fall back to pre-configured client.
+	return deps.llmClient
 }
 
 // Default base URLs for known providers (used when config doesn't specify one).
@@ -552,17 +542,6 @@ const (
 	defaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 )
 
-// inferAPIType guesses the API type from the provider ID.
-// OpenAI-compatible is the default; Anthropic is special-cased.
-func inferAPIType(providerID string) string {
-	switch providerID {
-	case "anthropic":
-		return "anthropic"
-	default:
-		// Default: OpenAI-compatible API (openai, zai, sglang, deepseek, etc.)
-		return "openai"
-	}
-}
 
 // executeAgentRunWithDelta is a variant of executeAgentRun that accepts a direct
 // onDelta callback for streaming text to HTTP clients.
@@ -596,8 +575,6 @@ func executeAgentRunWithDelta(
 // when no explicit base URL is configured.
 func resolveDefaultBaseURL(providerID string) string {
 	switch providerID {
-	case "anthropic":
-		return llm.DefaultAnthropicBaseURL
 	case "zai":
 		return defaultZaiBaseURL
 	case "google":
@@ -622,7 +599,7 @@ func hasImageAttachment(attachments []ChatAttachment) bool {
 }
 
 // buildAttachmentBlocks creates a multimodal content block array from text and
-// attachments. Images with base64 Data get Anthropic-native ImageSource blocks;
+// attachments. Images with base64 Data get inline ImageSource blocks;
 // images with URL get URL-referenced blocks.
 func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.ContentBlock {
 	blocks := make([]llm.ContentBlock, 0, len(attachments)+1)

@@ -91,14 +91,7 @@ func RunAgent(
 			ToolChoice:       cfg.ToolChoice,
 		}
 
-		var events <-chan llm.StreamEvent
-		var err error
-		if cfg.APIType == "anthropic" {
-			events, err = client.StreamChat(ctx, req)
-		} else {
-			// Default: OpenAI-compatible API (covers openai, zai, sglang, etc.)
-			events, err = client.StreamChatOpenAI(ctx, req)
-		}
+		events, err := client.StreamChat(ctx, req)
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)

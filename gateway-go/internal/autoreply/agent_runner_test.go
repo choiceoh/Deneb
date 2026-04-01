@@ -249,8 +249,8 @@ type alwaysErrorStreamer struct{ err error }
 func (a *alwaysErrorStreamer) StreamChat(_ context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
 	return nil, a.err
 }
-func (a *alwaysErrorStreamer) StreamChatOpenAI(_ context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
-	return nil, a.err
+func (a *alwaysErrorStreamer) Complete(_ context.Context, _ llm.ChatRequest) (string, error) {
+	return "", a.err
 }
 
 // Ensure *llm.Client satisfies agent.LLMStreamer (compile-time check).

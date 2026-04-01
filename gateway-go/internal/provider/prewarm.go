@@ -54,8 +54,6 @@ func PrewarmModel(ctx context.Context, logger *slog.Logger) {
 		llm.WithLogger(logger),
 		llm.WithRetry(0, 0, 0), // No retries inside client; we handle retries here.
 	)
-	apiType := inferPrewarmAPIType(providerID, cfg.API)
-
 	for attempt := 0; attempt <= prewarmMaxRetries; attempt++ {
 		if attempt > 0 {
 			select {
@@ -66,7 +64,7 @@ func PrewarmModel(ctx context.Context, logger *slog.Logger) {
 		}
 
 		prewarmCtx, cancel := context.WithTimeout(ctx, prewarmTimeout)
-		err := doPrewarmRequest(prewarmCtx, client, modelName, apiType)
+		err := doPrewarmRequest(prewarmCtx, client, modelName)
 		cancel()
 
 		if err == nil {
@@ -85,7 +83,7 @@ func PrewarmModel(ctx context.Context, logger *slog.Logger) {
 
 // doPrewarmRequest sends a minimal 1-token inference request and drains the
 // streaming response.
-func doPrewarmRequest(ctx context.Context, client *llm.Client, model, apiType string) error {
+func doPrewarmRequest(ctx context.Context, client *llm.Client, model string) error {
 	req := llm.ChatRequest{
 		Model:     model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", "warmup")},
@@ -93,13 +91,7 @@ func doPrewarmRequest(ctx context.Context, client *llm.Client, model, apiType st
 		Stream:    true,
 	}
 
-	var events <-chan llm.StreamEvent
-	var err error
-	if apiType == "anthropic" {
-		events, err = client.StreamChat(ctx, req)
-	} else {
-		events, err = client.StreamChatOpenAI(ctx, req)
-	}
+	events, err := client.StreamChat(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -190,17 +182,6 @@ func extractModelFromDefaults(raw json.RawMessage) string {
 		return obj.Primary
 	}
 	return ""
-}
-
-// inferPrewarmAPIType determines the API type from explicit config or provider ID.
-func inferPrewarmAPIType(providerID, configAPI string) string {
-	if configAPI != "" {
-		return configAPI
-	}
-	if providerID == "anthropic" {
-		return "anthropic"
-	}
-	return "openai"
 }
 
 // resolvePrewarmBaseURL returns the default base URL for known providers.

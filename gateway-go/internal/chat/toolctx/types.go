@@ -72,7 +72,7 @@ type ToolProgressEvent struct {
 type ProviderConfig struct {
 	APIKey  string `json:"apiKey"`
 	BaseURL string `json:"baseUrl"`
-	API     string `json:"api"` // "openai" (default) or "anthropic"
+	API     string `json:"api"` // "openai" (default)
 }
 
 // DeliveryContext carries channel routing information for a chat message.
