@@ -191,13 +191,19 @@ func handleRunSuccess(
 					// formatting, chunking, etc.).
 					if err := deps.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
 						logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
-					} else if deps.hookRegistry != nil {
-						// Fire message.send hook after successful delivery.
-						go deps.hookRegistry.Fire(deps.shutdownCtx, hooks.EventMessageSend, map[string]string{
+					} else {
+						// Fire message.send hooks after successful delivery (shell + internal).
+						env := map[string]string{
 							"DENEB_CHANNEL":     params.Delivery.Channel,
 							"DENEB_TO":          params.Delivery.To,
 							"DENEB_SESSION_KEY": params.SessionKey,
-						})
+						}
+						if deps.hookRegistry != nil {
+							go deps.hookRegistry.Fire(deps.shutdownCtx, hooks.EventMessageSend, env)
+						}
+						if deps.internalHookRegistry != nil {
+							go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hooks.EventMessageSend, params.SessionKey, env)
+						}
 					}
 				}
 			}

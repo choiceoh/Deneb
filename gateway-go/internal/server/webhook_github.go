@@ -141,16 +141,19 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 			s.logger.Debug("github webhook: GITHUB_WEBHOOK_CHAT_ID not set, skipping telegram delivery")
 		}
 
-		// Fire github.webhook hook so user-defined shell hooks can react.
+		// Fire github.webhook hooks (shell + internal).
+		env := map[string]string{
+			"GITHUB_EVENT":       eventType,
+			"GITHUB_DELIVERY":    deliveryID,
+			"GITHUB_REPO":        extractGitHubRepo(payload),
+			"GITHUB_ACTOR":       extractGitHubActor(payload),
+			"DENEB_HOOK_CHANNEL": "github",
+		}
 		if s.hooks != nil {
-			env := map[string]string{
-				"GITHUB_EVENT":       eventType,
-				"GITHUB_DELIVERY":    deliveryID,
-				"GITHUB_REPO":        extractGitHubRepo(payload),
-				"GITHUB_ACTOR":       extractGitHubActor(payload),
-				"DENEB_HOOK_CHANNEL": "github",
-			}
 			s.hooks.Fire(ctx, hooks.EventGitHubWebhook, env)
+		}
+		if s.internalHooks != nil {
+			s.internalHooks.TriggerFromEvent(ctx, hooks.EventGitHubWebhook, "", env)
 		}
 	})
 }

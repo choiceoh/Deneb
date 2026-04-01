@@ -175,16 +175,24 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
 	inbound.FinalizeInboundContext(msgCtx)
 
-	// Fire message.receive hook after parsing, before dispatch.
-	if p.server.hooks != nil {
-		p.server.safeGo("hooks:message.receive", func() {
-			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
-				"DENEB_CHANNEL":    "telegram",
-				"DENEB_CHAT_ID":    chatID,
-				"DENEB_MESSAGE":    msgText,
-				"DENEB_SESSION_KEY": sessionKey,
+	// Fire message.receive hook after parsing, before dispatch (shell + internal).
+	{
+		env := map[string]string{
+			"DENEB_CHANNEL":     "telegram",
+			"DENEB_CHAT_ID":     chatID,
+			"DENEB_MESSAGE":     msgText,
+			"DENEB_SESSION_KEY": sessionKey,
+		}
+		if p.server.hooks != nil {
+			p.server.safeGo("hooks:message.receive", func() {
+				p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, env)
 			})
-		})
+		}
+		if p.server.internalHooks != nil {
+			p.server.safeGo("internal-hooks:message.receive", func() {
+				p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
+			})
+		}
 	}
 
 	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
@@ -357,6 +365,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 					})
 			}
 		},
+		ThinkingRuntime: p.server.thinkingRuntime,
 	}
 
 	dispatchResult := autoreply.DispatchFromConfig(
@@ -442,17 +451,25 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 	chatID := fmt.Sprintf("%d", first.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
-	// Fire message.receive hook for the media group.
-	if p.server.hooks != nil {
+	// Fire message.receive hook for the media group (shell + internal).
+	{
 		caption := media.MessageText(first)
-		p.server.safeGo("hooks:message.receive", func() {
-			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
-				"DENEB_CHANNEL":    "telegram",
-				"DENEB_CHAT_ID":    chatID,
-				"DENEB_MESSAGE":    caption,
-				"DENEB_SESSION_KEY": sessionKey,
+		env := map[string]string{
+			"DENEB_CHANNEL":     "telegram",
+			"DENEB_CHAT_ID":     chatID,
+			"DENEB_MESSAGE":     caption,
+			"DENEB_SESSION_KEY": sessionKey,
+		}
+		if p.server.hooks != nil {
+			p.server.safeGo("hooks:message.receive", func() {
+				p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, env)
 			})
-		})
+		}
+		if p.server.internalHooks != nil {
+			p.server.safeGo("internal-hooks:message.receive", func() {
+				p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
+			})
+		}
 	}
 
 	// Collect caption from whichever message has one (Telegram puts the caption
@@ -760,16 +777,24 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 	chatID := fmt.Sprintf("%d", cb.Message.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
-	// Fire message.receive hook for callback query.
-	if p.server.hooks != nil {
-		p.server.safeGo("hooks:message.receive", func() {
-			p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, map[string]string{
-				"DENEB_CHANNEL":    "telegram",
-				"DENEB_CHAT_ID":    chatID,
-				"DENEB_MESSAGE":    cb.Data,
-				"DENEB_SESSION_KEY": sessionKey,
+	// Fire message.receive hook for callback query (shell + internal).
+	{
+		env := map[string]string{
+			"DENEB_CHANNEL":     "telegram",
+			"DENEB_CHAT_ID":     chatID,
+			"DENEB_MESSAGE":     cb.Data,
+			"DENEB_SESSION_KEY": sessionKey,
+		}
+		if p.server.hooks != nil {
+			p.server.safeGo("hooks:message.receive", func() {
+				p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, env)
 			})
-		})
+		}
+		if p.server.internalHooks != nil {
+			p.server.safeGo("internal-hooks:message.receive", func() {
+				p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
+			})
+		}
 	}
 
 	// Acknowledge to Telegram (stops the loading spinner on the button).

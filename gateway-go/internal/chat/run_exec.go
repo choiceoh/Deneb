@@ -709,19 +709,25 @@ func executeAgentRun(
 		}
 	}
 
-	// User-defined hook registry: fire tool.use event after each tool completes.
-	if deps.hookRegistry != nil {
+	// User-defined hook registry: fire tool.use event after each tool completes (shell + internal).
+	if deps.hookRegistry != nil || deps.internalHookRegistry != nil {
 		prevOnToolResult := hooks.OnToolResult
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
 			if prevOnToolResult != nil {
 				prevOnToolResult(name, toolUseID, result, isErr)
 			}
-			go deps.hookRegistry.Fire(deps.shutdownCtx, hookspkg.EventToolUse, map[string]string{
+			env := map[string]string{
 				"DENEB_TOOL":        name,
 				"DENEB_TOOL_USE_ID": toolUseID,
 				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
 				"DENEB_SESSION_KEY": params.SessionKey,
-			})
+			}
+			if deps.hookRegistry != nil {
+				go deps.hookRegistry.Fire(deps.shutdownCtx, hookspkg.EventToolUse, env)
+			}
+			if deps.internalHookRegistry != nil {
+				go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
+			}
 		}
 	}
 
