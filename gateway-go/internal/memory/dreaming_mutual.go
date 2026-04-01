@@ -75,6 +75,7 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 	if err != nil {
 		return err
 	}
+	logger.Info("aurora-dream: mutual phase input", "active_facts", len(facts))
 
 	if len(facts) < 5 {
 		return nil // not enough data to synthesize

@@ -47,6 +47,7 @@ type DreamingReport struct {
 	FactsExpired      int           `json:"facts_expired"`
 	FactsPruned       int           `json:"facts_pruned"`
 	PatternsExtracted int           `json:"patterns_extracted"`
+	PhaseErrors       []string      `json:"phase_errors,omitempty"`
 	Duration          time.Duration `json:"duration"`
 }
 
@@ -77,6 +78,7 @@ func runPhase(ctx context.Context, budget time.Duration, phase dreamPhase, state
 	defer pCancel()
 	if err := phase.Run(pCtx, state); err != nil {
 		state.logger.Warn("aurora-dream: phase failed", "phase", phase.Name(), "error", err)
+		state.report.PhaseErrors = append(state.report.PhaseErrors, phase.Name()+": "+err.Error())
 	}
 }
 
@@ -95,7 +97,8 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		report:   &DreamingReport{},
 	}
 
-	logger.Info("aurora-dream: starting cycle")
+	activeCount, _ := store.CountActiveFacts(ctx)
+	logger.Info("aurora-dream: starting cycle", "active_facts", activeCount)
 
 	// Phase 0: Clean up expired facts (by expires_at date).
 	if expiredCount, err := store.CleanupExpired(ctx); err == nil && expiredCount > 0 {
@@ -231,6 +234,7 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 	if err != nil {
 		return 0, 0, 0, err
 	}
+	logger.Info("aurora-dream: verify phase input", "facts_to_verify", len(facts))
 
 	removed := map[int64]bool{} // track removed IDs across batches
 
@@ -365,6 +369,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	if err != nil {
 		return 0, err
 	}
+	logger.Info("aurora-dream: merge phase input", "embeddings_loaded", len(embeddings))
 
 	// Group IDs by category so we only compare within the same category.
 	// This reduces O(n²) across all facts to O(n²/k) where k is the number
@@ -514,6 +519,7 @@ func mergeDuplicatesTextOnly(ctx context.Context, store *Store, logger *slog.Log
 	if err != nil {
 		return 0, err
 	}
+	logger.Info("aurora-dream: text-merge phase input", "active_facts", len(facts))
 
 	// Group by category + depth (same constraints as embedding-based merge).
 	type catDepthKey struct {
@@ -630,6 +636,7 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 	if err != nil {
 		return 0, err
 	}
+	logger.Info("aurora-dream: pattern phase input", "active_facts", len(facts))
 
 	if len(facts) < 10 {
 		// Not enough facts to extract meaningful patterns.
@@ -785,6 +792,7 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 	if err != nil {
 		return err
 	}
+	logger.Info("aurora-dream: user_model phase input", "active_facts", len(facts))
 
 	if len(facts) < 5 {
 		return nil // not enough data

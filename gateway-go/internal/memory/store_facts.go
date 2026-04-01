@@ -179,6 +179,15 @@ func (s *Store) GetActiveFacts(ctx context.Context) ([]Fact, error) {
 		`SELECT * FROM facts WHERE active = 1 ORDER BY importance DESC, created_at DESC`)
 }
 
+// CountActiveFacts returns the number of active facts without loading them.
+func (s *Store) CountActiveFacts(ctx context.Context) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM facts WHERE active = 1`).Scan(&count)
+	return count, err
+}
+
 // GetActiveFactsAboveImportance returns active facts at or above a minimum importance score.
 func (s *Store) GetActiveFactsAboveImportance(ctx context.Context, minImportance float64) ([]Fact, error) {
 	s.mu.RLock()
