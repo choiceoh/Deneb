@@ -42,6 +42,21 @@ type RunParams struct {
 	ClientRunID  string
 	Delivery     *DeliveryContext
 	WorkspaceDir string // per-channel workspace override (empty = use global default)
+
+	// Sampling parameters (from OpenAI-compatible API pass-through).
+	Temperature      *float64
+	TopP             *float64
+	MaxTokens        *int // overrides default max output tokens
+	FrequencyPenalty *float64
+	PresencePenalty  *float64
+	Stop             []string
+	ResponseFormat   *llm.ResponseFormat
+	ToolChoice       any // "auto", "none", "required", or structured object
+
+	// PrebuiltMessages, when set, replaces the normal transcript-based context
+	// assembly. Used by the OpenAI-compatible HTTP API to pass through the full
+	// conversation history from the client.
+	PrebuiltMessages []llm.Message
 }
 
 // Agent run defaults.

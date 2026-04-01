@@ -28,7 +28,7 @@ func newSyncTestHandler(server *httptest.Server, transcript TranscriptStore) *Ha
 }
 func TestSendSync_UninitializedHandler(t *testing.T) {
 	h := &Handler{}
-	_, err := h.SendSync(context.Background(), "sess-1", "hello", "")
+	_, err := h.SendSync(context.Background(), "sess-1", "hello", "", nil)
 	if err == nil || err.Error() != "chat handler not initialized" {
 		t.Fatalf("expected initialization error, got: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	h := newSyncTestHandler(server, transcript)
 	defer h.Close()
 
-	result, err := h.SendSync(context.Background(), "sync-default-model", "  hello sync  ", "")
+	result, err := h.SendSync(context.Background(), "sync-default-model", "  hello sync  ", "", nil)
 	if err != nil {
 		t.Fatalf("SendSync error: %v", err)
 	}
@@ -86,6 +86,7 @@ func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 		"sync-stream",
 		"hello",
 		"explicit-model",
+		nil,
 		func(delta string) { deltas = append(deltas, delta) },
 	)
 	if err != nil {

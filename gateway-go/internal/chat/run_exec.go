@@ -378,6 +378,12 @@ func executeAgentRun(
 	// with its already-assembled context (no blocking, no stale cache).
 	triggerProactiveCompaction(deps.shutdownCtx, deps, params, client, logger)
 
+	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
+	// with full conversation history), use those instead of transcript context.
+	if len(params.PrebuiltMessages) > 0 {
+		messages = params.PrebuiltMessages
+	}
+
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
 		// No history — build the user message from scratch.
@@ -457,15 +463,27 @@ func executeAgentRun(
 		thinkingCfg = resolveThinkingConfig(sess.ThinkingLevel)
 	}
 
+	// Override max tokens if the caller (e.g., OpenAI HTTP endpoint) specified one.
+	if params.MaxTokens != nil && *params.MaxTokens > 0 {
+		maxTokens = *params.MaxTokens
+	}
+
 	cfg := agent.AgentConfig{
-		MaxTurns:  defaultMaxTurns,
-		Timeout:   defaultAgentTimeout,
-		Model:     model,
-		System:    systemPrompt,
-		Tools:     tools,
-		MaxTokens: maxTokens,
-		APIType:   apiType,
-		Thinking:  thinkingCfg,
+		MaxTurns:         defaultMaxTurns,
+		Timeout:          defaultAgentTimeout,
+		Model:            model,
+		System:           systemPrompt,
+		Tools:            tools,
+		MaxTokens:        maxTokens,
+		APIType:          apiType,
+		Thinking:         thinkingCfg,
+		Temperature:      params.Temperature,
+		TopP:             params.TopP,
+		FrequencyPenalty: params.FrequencyPenalty,
+		PresencePenalty:  params.PresencePenalty,
+		StopSequences:    params.Stop,
+		ResponseFormat:   params.ResponseFormat,
+		ToolChoice:       params.ToolChoice,
 		// Drop base64 image bytes from the message history after turn 0 so that
 		// subsequent tool-call turns don't retransmit the full image payload.
 		// Each inline image is ~1600 tokens; stripping saves that cost per turn

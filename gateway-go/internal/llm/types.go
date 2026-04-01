@@ -31,13 +31,18 @@ type ChatRequest struct {
 	// Use &ResponseFormat{Type: "json_object"} for JSON mode.
 	ResponseFormat *ResponseFormat `json:"-"` // OpenAI only; excluded from Anthropic JSON
 
+	// ToolChoice controls tool selection behavior (OpenAI-compatible).
+	// Values: "auto", "none", "required", or {"type":"function","function":{"name":"..."}}.
+	ToolChoice any `json:"-"` // OpenAI only; excluded from Anthropic JSON
+
 	// Anthropic extended thinking support.
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
 }
 
 // ResponseFormat controls the output format for OpenAI-compatible endpoints.
 type ResponseFormat struct {
-	Type string `json:"type"` // "json_object" or "text"
+	Type       string          `json:"type"`                  // "json_object", "json_schema", or "text"
+	JsonSchema json.RawMessage `json:"json_schema,omitempty"` // schema definition when Type="json_schema"
 }
 
 // hexChars is used by appendJSONString to encode control characters as \uXXXX.
@@ -274,11 +279,11 @@ type CacheControl struct {
 // map[string]any via reflection on every LLM call (~40 tools × multiple
 // turns). Call PreSerialize() or set RawInputSchema directly.
 type Tool struct {
-	Name            string          `json:"name"`
-	Description     string          `json:"description"`
-	InputSchema     map[string]any  `json:"-"`                              // programmatic access; excluded from JSON
-	RawInputSchema  json.RawMessage `json:"input_schema"`                   // pre-serialized; used in API requests
-	CacheControl    *CacheControl   `json:"cache_control,omitempty"`        // Anthropic prompt caching
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	InputSchema    map[string]any  `json:"-"`                       // programmatic access; excluded from JSON
+	RawInputSchema json.RawMessage `json:"input_schema"`            // pre-serialized; used in API requests
+	CacheControl   *CacheControl   `json:"cache_control,omitempty"` // Anthropic prompt caching
 }
 
 // PreSerialize computes RawInputSchema from InputSchema if not already set.
