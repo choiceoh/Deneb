@@ -261,6 +261,11 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 	// Step 2: Read results history.
 	resultsHistory, _ := ReadResults(workdir)
 
+	// Constants override mode: delegate to separate iteration path.
+	if cfg.IsConstantsMode() {
+		return r.runConstantsIteration(ctx, workdir, cfg, fileContents, resultsHistory, iteration)
+	}
+
 	// Step 3: Ask LLM for a hypothesis and code modification.
 	prompt := r.buildPrompt(cfg, fileContents, resultsHistory, iteration)
 
@@ -599,6 +604,194 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	return promptParts{system: sys.String(), user: usr.String()}
 }
 
+// buildConstantsPrompt constructs the LLM prompt for constants override mode.
+// The agent can only propose new values for named constants — not rewrite files.
+func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
+	currentValues map[string]string, results string, iteration int) promptParts {
+
+	budget := strconv.Itoa(cfg.TimeBudgetSec)
+	direction := cfg.MetricDirection
+	better := "lower"
+	worse := "higher"
+	if direction == "maximize" {
+		better = "higher"
+		worse = "lower"
+	}
+
+	var sys strings.Builder
+
+	// --- Identity and mission ---
+	sys.WriteString("You are an autonomous research agent running an iterative experiment loop.\n")
+	sys.WriteString("Your sole objective: " + direction + " the metric `" + cfg.MetricName + "` as much as possible.\n")
+	sys.WriteString("You operate in CONSTANTS OVERRIDE mode: each iteration you propose new values for a set of named constants, ")
+	sys.WriteString("the values are applied, the experiment runs for " + budget + " seconds, ")
+	sys.WriteString("and the result is kept if " + better + " or reverted if " + worse + " than the current best.\n")
+	sys.WriteString("You CANNOT modify any source code — only the listed constants.\n\n")
+
+	// --- Hard constraints ---
+	sys.WriteString("=== HARD CONSTRAINTS (NEVER VIOLATE) ===\n\n")
+	sys.WriteString("1. You may ONLY change the listed constants below. You cannot modify any other code.\n")
+	sys.WriteString("2. Each constant has a type (float/int/string) and optional min/max bounds. Respect them.\n")
+	sys.WriteString("3. Do NOT propose values that would break the experiment or produce invalid metrics.\n")
+	sys.WriteString("4. Each experiment has a FIXED time budget of " + budget + " seconds.\n")
+	sys.WriteString("5. You do NOT need to output file contents — only constant values.\n\n")
+
+	// --- Strategy guidance ---
+	sys.WriteString("=== STRATEGY GUIDANCE ===\n\n")
+	sys.WriteString("EXPLORATION vs EXPLOITATION:\n")
+	sys.WriteString("- Early iterations (1-10): explore the constant space broadly. Try different scales and combinations.\n")
+	sys.WriteString("- Mid iterations (11-30): exploit what works. Refine the best-performing value ranges.\n")
+	sys.WriteString("- Late iterations (30+): fine-tune. Make small, precise adjustments.\n\n")
+
+	sys.WriteString("SEARCH STRATEGY:\n")
+	sys.WriteString("- Change ONE or TWO constants per iteration. Isolated changes are easier to evaluate.\n")
+	sys.WriteString("- If increasing X improved the metric, try increasing X further (watch for diminishing returns).\n")
+	sys.WriteString("- If a direction consistently fails, STOP trying that direction.\n")
+	sys.WriteString("- Consider interactions: constants may have nonlinear effects on each other.\n\n")
+
+	sys.WriteString("TIME BUDGET AWARENESS:\n")
+	sys.WriteString("- The experiment runs for exactly " + budget + " seconds. Constants that increase computation time may reduce steps.\n")
+	sys.WriteString("- A smaller/faster configuration may beat a larger one by doing more optimization steps.\n\n")
+
+	// --- Stuck recovery (same as buildPrompt) ---
+	if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdCritical {
+		sys.WriteString(fmt.Sprintf("=== CRITICAL: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdCritical))
+		sys.WriteString("You are deeply stuck. Drastic measures required:\n")
+		sys.WriteString("- Revert ALL constants to their original values.\n")
+		sys.WriteString("- Try a single, small change from the baseline.\n")
+		sys.WriteString("- Try the OPPOSITE direction of your recent failed attempts.\n\n")
+	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdModerate {
+		sys.WriteString(fmt.Sprintf("=== WARNING: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdModerate))
+		sys.WriteString("Your current strategy is not working. Required changes:\n")
+		sys.WriteString("- Abandon the current search direction entirely.\n")
+		sys.WriteString("- Review the KEPT experiments — what value ranges worked? Return to those.\n")
+		sys.WriteString("- Consider changing a DIFFERENT constant than the one you've been tuning.\n\n")
+	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdMild {
+		sys.WriteString(fmt.Sprintf("=== NOTE: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdMild))
+		sys.WriteString("Recent changes are not yielding improvements. Consider:\n")
+		sys.WriteString("- Changing a different constant.\n")
+		sys.WriteString("- Making a smaller, more conservative change.\n")
+		sys.WriteString("- Re-reading the experiment history to identify unexplored ranges.\n\n")
+	}
+
+	// --- Response format ---
+	sys.WriteString("=== RESPONSE FORMAT (STRICT) ===\n\n")
+	sys.WriteString("You MUST follow this exact format:\n\n")
+	sys.WriteString("HYPOTHESIS: <one-line description of what you're changing and why>\n\n")
+	sys.WriteString("<CONSTANT_NAME> = <new_value>\n")
+	sys.WriteString("<CONSTANT_NAME> = <new_value>\n\n")
+	sys.WriteString("IMPORTANT:\n")
+	sys.WriteString("- The HYPOTHESIS line must come FIRST.\n")
+	sys.WriteString("- Only list constants you want to CHANGE. Omitted constants keep their current values.\n")
+	sys.WriteString("- The hypothesis should explain your REASONING, not just describe the change.\n")
+	sys.WriteString("  Bad:  'HYPOTHESIS: change learning rate to 0.002'\n")
+	sys.WriteString("  Good: 'HYPOTHESIS: double learning rate because the loss curve shows slow convergence'\n")
+	sys.WriteString("- Do not output any other text, code, or file contents.\n")
+
+	// --- User prompt ---
+	var usr strings.Builder
+
+	usr.WriteString("=== TUNABLE CONSTANTS ===\n\n")
+	for _, cd := range cfg.Constants {
+		val := currentValues[cd.Name]
+		usr.WriteString(fmt.Sprintf("%s = %s  (type: %s", cd.Name, val, cd.Type))
+		if cd.Min != nil {
+			usr.WriteString(fmt.Sprintf(", min: %v", *cd.Min))
+		}
+		if cd.Max != nil {
+			usr.WriteString(fmt.Sprintf(", max: %v", *cd.Max))
+		}
+		usr.WriteString(fmt.Sprintf(", file: %s)\n", cd.File))
+	}
+	usr.WriteString("\n")
+
+	// Source files as read-only context.
+	usr.WriteString("=== SOURCE FILES (read-only context — do NOT modify) ===\n\n")
+	for name, content := range files {
+		lineCount := strings.Count(content, "\n") + 1
+		usr.WriteString(fmt.Sprintf("--- %s (%d lines) ---\n", name, lineCount))
+		usr.WriteString(content)
+		usr.WriteString("\n--- end " + name + " ---\n\n")
+	}
+
+	if results != "" {
+		usr.WriteString("=== EXPERIMENT HISTORY ===\n")
+		usr.WriteString("Format: iteration | timestamp | hypothesis | metric_value | kept | commit | duration | best_so_far | delta\n\n")
+		usr.WriteString(results)
+		usr.WriteString("\n")
+	}
+
+	// Trend analysis and history (same as buildPrompt).
+	rows, _ := ParseResults(r.workdir)
+	if len(rows) > 0 {
+		usr.WriteString("=== TREND ANALYSIS ===\n")
+		usr.WriteString(TrendAnalysis(rows, cfg))
+		usr.WriteString("\n")
+
+		var keptSummary strings.Builder
+		for _, row := range rows {
+			if row.Kept && row.Iteration > 0 {
+				keptSummary.WriteString(fmt.Sprintf("  #%d: %s=%.6f — %s\n",
+					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis))
+			}
+		}
+		if keptSummary.Len() > 0 {
+			usr.WriteString("=== SUCCESSFUL CHANGES (kept only) ===\n")
+			usr.WriteString(keptSummary.String())
+			usr.WriteString("\n")
+		}
+
+		var failedRecent strings.Builder
+		start := len(rows) - cfg.Params.RecentFailedWindow
+		if start < 0 {
+			start = 0
+		}
+		for _, row := range rows[start:] {
+			if !row.Kept && row.Iteration > 0 {
+				failedRecent.WriteString(fmt.Sprintf("  #%d: %s=%.6f — %s\n",
+					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis))
+			}
+		}
+		if failedRecent.Len() > 0 {
+			usr.WriteString("=== RECENT FAILURES (do NOT repeat these) ===\n")
+			usr.WriteString(failedRecent.String())
+			usr.WriteString("\n")
+		}
+	}
+
+	// Task section.
+	usr.WriteString(fmt.Sprintf("=== YOUR TASK: ITERATION %d ===\n\n", iteration))
+	if cfg.BaselineMetric != nil {
+		usr.WriteString(fmt.Sprintf("Baseline %s: %.6f\n", cfg.MetricName, *cfg.BaselineMetric))
+	}
+	if cfg.BestMetric != nil {
+		usr.WriteString(fmt.Sprintf("Current best %s: %.6f", cfg.MetricName, *cfg.BestMetric))
+		if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
+			improvement := (*cfg.BaselineMetric - *cfg.BestMetric) / *cfg.BaselineMetric * 100
+			if cfg.MetricDirection == "maximize" {
+				improvement = (*cfg.BestMetric - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+			}
+			usr.WriteString(fmt.Sprintf(" (%.2f%% improvement from baseline)", improvement))
+		}
+		usr.WriteString("\n")
+	}
+	usr.WriteString(fmt.Sprintf("Consecutive failures: %d\n\n", cfg.ConsecutiveFailures))
+
+	if iteration <= cfg.Params.PhaseEarlyEnd {
+		usr.WriteString("You are in the EARLY phase. Explore the constant space broadly.\n")
+	} else if iteration <= cfg.Params.PhaseExplorationEnd {
+		usr.WriteString("You are in the EXPLORATION phase. Balance between trying new ranges and refining what works.\n")
+	} else if iteration <= cfg.Params.PhaseExploitationEnd {
+		usr.WriteString("You are in the EXPLOITATION phase. Focus on refining the value ranges that produced the best results.\n")
+	} else {
+		usr.WriteString("You are in the FINE-TUNING phase. Make small, precise adjustments to constants.\n")
+	}
+
+	usr.WriteString("\nPropose new values for one or more constants. Explain your reasoning in the HYPOTHESIS line.")
+
+	return promptParts{system: sys.String(), user: usr.String()}
+}
+
 // parseLLMResponse extracts hypothesis and file changes from the LLM output.
 func parseLLMResponse(resp string, targetFiles []string) (string, map[string]string) {
 	var hypothesis string
@@ -759,6 +952,161 @@ func (r *Runner) notify(ctx context.Context, msg string) {
 			r.logger.Error("notification failed", "error", err)
 		}
 	}
+}
+
+// runConstantsIteration performs a single constants-override iteration:
+// extract → LLM proposes values → apply overrides → experiment → restore → evaluate.
+func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg *Config,
+	fileContents map[string]string, resultsHistory string, iteration int) error {
+
+	// Step 1: Extract current constant values from original files.
+	currentValues, err := ExtractConstants(workdir, cfg.Constants)
+	if err != nil {
+		return fmt.Errorf("extract constants: %w", err)
+	}
+
+	// Step 2: Build constants-specific prompt.
+	prompt := r.buildConstantsPrompt(cfg, fileContents, currentValues, resultsHistory, iteration)
+
+	r.mu.Lock()
+	client := r.client
+	model := r.model
+	r.mu.Unlock()
+
+	if model == "" {
+		model = cfg.Params.DefaultModel
+	}
+
+	llmResp, err := client.Complete(ctx, llm.ChatRequest{
+		Model:     model,
+		System:    llm.SystemString(prompt.system),
+		Messages:  []llm.Message{llm.NewTextMessage("user", prompt.user)},
+		MaxTokens: cfg.Params.MaxTokens,
+	})
+	if err != nil {
+		return fmt.Errorf("LLM call failed: %w", err)
+	}
+
+	// Step 3: Parse override values from LLM response.
+	hypothesis, overrides := parseConstantsLLMResponse(llmResp, cfg.Constants)
+	if hypothesis == "" {
+		hypothesis = fmt.Sprintf("iteration %d", iteration)
+	}
+	if len(overrides) == 0 {
+		r.logger.Warn("LLM produced no constant overrides, skipping iteration")
+		cfg.ConsecutiveFailures++
+		if err := SaveConfig(workdir, cfg); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Step 4: Apply overrides temporarily. defer restore() ensures originals
+	// are always restored, even on panic.
+	restore, err := ApplyOverrides(workdir, cfg.Constants, overrides)
+	if err != nil {
+		return fmt.Errorf("apply overrides: %w", err)
+	}
+	defer restore()
+
+	// Step 5: Run experiment with overridden files.
+	startTime := time.Now()
+	expResult, runErr := r.runExperiment(ctx, workdir, cfg)
+	duration := int(time.Since(startTime).Seconds())
+
+	if expResult != nil {
+		if saveErr := SaveExperimentOutput(workdir, iteration, expResult.stdout, expResult.stderr); saveErr != nil {
+			r.logger.Error("failed to save experiment output", "error", saveErr)
+		}
+	}
+
+	// Step 6: Restore originals BEFORE evaluating (files must be clean for git).
+	restore()
+
+	// Step 7: Evaluate and decide.
+	row := ResultRow{
+		Iteration:   iteration,
+		Timestamp:   time.Now(),
+		Hypothesis:  hypothesis,
+		DurationSec: duration,
+	}
+
+	currentBest := float64(0)
+	if cfg.BestMetric != nil {
+		currentBest = *cfg.BestMetric
+	}
+
+	if runErr != nil {
+		r.logger.Warn("experiment crashed", "error", runErr, "iteration", iteration)
+		row.MetricValue = 0
+		row.Kept = false
+		row.BestSoFar = currentBest
+		row.DeltaFromBest = 0
+		cfg.ConsecutiveFailures++
+		r.notify(ctx, fmt.Sprintf("Iteration #%d CRASHED: %s\nHypothesis: %s", iteration, runErr, hypothesis))
+	} else {
+		metricValue := expResult.metric
+		row.MetricValue = metricValue
+		bestMetric := cfg.BestMetric
+		if bestMetric == nil {
+			row.Kept = true
+			row.DeltaFromBest = 0
+		} else {
+			row.Kept = cfg.IsBetter(metricValue, *bestMetric)
+			row.DeltaFromBest = metricValue - *bestMetric
+		}
+
+		if row.Kept {
+			row.BestSoFar = metricValue
+			cfg.BestMetric = &metricValue
+			cfg.KeptIterations++
+			cfg.ConsecutiveFailures = 0
+
+			// Save best overrides to overrides.json.
+			ov := &OverrideSet{Values: overrides}
+			if saveErr := SaveOverrides(workdir, ov); saveErr != nil {
+				r.logger.Error("failed to save overrides", "error", saveErr)
+			}
+
+			// Commit overrides.json (not modified source files).
+			commitMsg := fmt.Sprintf("autoresearch #%d: %s", iteration, hypothesis)
+			if commitErr := gitCommit(ctx, workdir, commitMsg); commitErr != nil {
+				r.logger.Error("failed to commit overrides", "error", commitErr)
+			} else {
+				commitHash, _ := gitRevParse(ctx, workdir, "HEAD")
+				row.CommitHash = commitHash
+				cfg.BestCommit = commitHash
+				cfg.KeptCommit = commitHash
+			}
+
+			improvementInfo := ""
+			if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
+				improvement := (*cfg.BaselineMetric - metricValue) / *cfg.BaselineMetric * 100
+				if cfg.MetricDirection == "maximize" {
+					improvement = (metricValue - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+				}
+				improvementInfo = fmt.Sprintf(" (%.2f%% from baseline)", improvement)
+			}
+			r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s\nOverrides: %v",
+				iteration, cfg.MetricName, metricValue, improvementInfo, hypothesis, overrides))
+		} else {
+			row.BestSoFar = currentBest
+			cfg.ConsecutiveFailures++
+			r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARDED: %s=%.6f (best=%.6f)\nHypothesis: %s",
+				iteration, cfg.MetricName, metricValue, *bestMetric, hypothesis))
+		}
+	}
+
+	cfg.TotalIterations = iteration
+
+	if err := AppendResult(workdir, row); err != nil {
+		r.logger.Error("failed to append result", "error", err)
+	}
+	if err := SaveConfig(workdir, cfg); err != nil {
+		r.logger.Error("failed to save config", "error", err)
+	}
+
+	return nil
 }
 
 // --- Git helpers ---

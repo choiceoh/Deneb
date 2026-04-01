@@ -1557,8 +1557,8 @@ func autoresearchToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"enum":        []string{"init", "start", "stop", "status", "results"},
-				"description": "init: configure experiment, start: begin autonomous loop, stop: halt loop, status: check progress, results: get log",
+				"enum":        []string{"init", "start", "stop", "status", "results", "apply_overrides"},
+				"description": "init: configure experiment, start: begin autonomous loop, stop: halt loop, status: check progress, results: get log, apply_overrides: bake best-found constant overrides into source files",
 			},
 			"workdir": map[string]any{
 				"type":        "string",
@@ -1607,6 +1607,41 @@ func autoresearchToolSchema() map[string]any {
 				"enum":        []string{"tsv", "summary"},
 				"description": "Output format for results action (default: summary)",
 				"default":     "summary",
+			},
+			"constants": map[string]any{
+				"type":        "array",
+				"description": "Constants to optimize in override mode (init only). When set, the agent proposes override values instead of rewriting files.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{
+							"type":        "string",
+							"description": "Constant identifier (e.g. LEARNING_RATE)",
+						},
+						"file": map[string]any{
+							"type":        "string",
+							"description": "File containing the constant (relative to workdir)",
+						},
+						"pattern": map[string]any{
+							"type":        "string",
+							"description": "Regex with one capture group for the value (e.g. 'lr\\s*=\\s*([\\d.]+)')",
+						},
+						"type": map[string]any{
+							"type":        "string",
+							"enum":        []string{"float", "int", "string"},
+							"description": "Value type",
+						},
+						"min": map[string]any{
+							"type":        "number",
+							"description": "Optional lower bound (float/int only)",
+						},
+						"max": map[string]any{
+							"type":        "number",
+							"description": "Optional upper bound (float/int only)",
+						},
+					},
+					"required": []string{"name", "file", "pattern", "type"},
+				},
 			},
 		},
 		"required": []string{"action", "workdir"},
