@@ -141,10 +141,10 @@ func TrendAnalysis(rows []ResultRow, cfg *Config) string {
 
 	var sb strings.Builder
 
-	// Recent window: last 10 iterations.
+	// Recent window: last N iterations (configurable via Params.TrendWindowSize).
 	window := rows
-	if len(window) > 10 {
-		window = window[len(window)-10:]
+	if len(window) > cfg.Params.TrendWindowSize {
+		window = window[len(window)-cfg.Params.TrendWindowSize:]
 	}
 
 	// Count kept/discarded in recent window.
@@ -171,7 +171,7 @@ func TrendAnalysis(rows []ResultRow, cfg *Config) string {
 		}
 	}
 
-	// Plateau detection: if last 5+ iterations all discarded, flag it.
+	// Plateau detection: if last N+ iterations all discarded, flag it.
 	consecutiveDiscarded := 0
 	for i := len(rows) - 1; i >= 0; i-- {
 		if !rows[i].Kept {
@@ -180,7 +180,7 @@ func TrendAnalysis(rows []ResultRow, cfg *Config) string {
 			break
 		}
 	}
-	if consecutiveDiscarded >= 5 {
+	if consecutiveDiscarded >= cfg.Params.PlateauThreshold {
 		sb.WriteString(fmt.Sprintf("⚠ PLATEAU: %d consecutive iterations discarded. Strategy change recommended.\n",
 			consecutiveDiscarded))
 	}

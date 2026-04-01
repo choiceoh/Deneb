@@ -25,8 +25,10 @@ type Notifier interface {
 // RunBaseline executes the metric command once to establish a baseline value.
 // Called during init before any modifications are made.
 func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, error) {
+	cfg.Params.applyDefaults()
 	timeout := time.Duration(cfg.TimeBudgetSec) * time.Second
-	expCtx, cancel := context.WithTimeout(ctx, timeout+30*time.Second)
+	grace := time.Duration(cfg.Params.GracePeriodSec) * time.Second
+	expCtx, cancel := context.WithTimeout(ctx, timeout+grace)
 	defer cancel()
 
 	cmd := exec.CommandContext(expCtx, "bash", "-c", cfg.MetricCmd)
@@ -72,6 +74,7 @@ type Runner struct {
 	workdir  string
 	client   *llm.Client
 	model    string
+	params   Params // snapshot of tunable params from config at Start() time
 	notifier Notifier
 	logger   *slog.Logger
 }
@@ -179,6 +182,7 @@ func (r *Runner) Start(workdir string) error {
 	r.running = true
 	r.workdir = workdir
 	r.model = cfg.Model
+	r.params = cfg.Params
 
 	go r.loop(ctx, workdir)
 	r.logger.Info("autoresearch started", "workdir", workdir, "metric", cfg.MetricName,
@@ -228,7 +232,7 @@ func (r *Runner) loop(ctx context.Context, workdir string) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(5 * time.Second):
+			case <-time.After(time.Duration(r.params.RetryPauseSec) * time.Second):
 			}
 		}
 	}
@@ -266,14 +270,14 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 	r.mu.Unlock()
 
 	if model == "" {
-		model = "claude-sonnet-4-20250514"
+		model = cfg.Params.DefaultModel
 	}
 
 	llmResp, err := client.Complete(ctx, llm.ChatRequest{
 		Model:     model,
 		System:    llm.SystemString(prompt.system),
 		Messages:  []llm.Message{llm.NewTextMessage("user", prompt.user)},
-		MaxTokens: 8192,
+		MaxTokens: cfg.Params.MaxTokens,
 	})
 	if err != nil {
 		return fmt.Errorf("LLM call failed: %w", err)
@@ -466,22 +470,22 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	sys.WriteString("- Consider the computational cost: a 2x model size means ~2x time per step, halving the number of steps.\n\n")
 
 	// --- Stuck recovery (progressive) ---
-	if cfg.ConsecutiveFailures >= 8 {
-		sys.WriteString("=== CRITICAL: 8+ CONSECUTIVE FAILURES ===\n")
+	if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdCritical {
+		sys.WriteString(fmt.Sprintf("=== CRITICAL: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdCritical))
 		sys.WriteString("You are deeply stuck. Drastic measures required:\n")
 		sys.WriteString("- Revert to the SIMPLEST possible configuration that is known to work.\n")
 		sys.WriteString("- Discard all complex hypotheses. Start from first principles.\n")
 		sys.WriteString("- Consider whether the metric command or evaluation setup has issues.\n")
 		sys.WriteString("- Try a change that is the OPPOSITE of your recent failed attempts.\n\n")
-	} else if cfg.ConsecutiveFailures >= 5 {
-		sys.WriteString("=== WARNING: 5+ CONSECUTIVE FAILURES ===\n")
+	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdModerate {
+		sys.WriteString(fmt.Sprintf("=== WARNING: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdModerate))
 		sys.WriteString("Your current strategy is not working. Required changes:\n")
 		sys.WriteString("- Abandon the current approach entirely and try a fundamentally different direction.\n")
 		sys.WriteString("- Review the KEPT experiments in history — what made them succeed? Return to those principles.\n")
 		sys.WriteString("- Consider reverting to a well-known, simpler architecture or configuration.\n")
 		sys.WriteString("- The definition of insanity is trying the same thing and expecting different results.\n\n")
-	} else if cfg.ConsecutiveFailures >= 3 {
-		sys.WriteString("=== NOTE: 3+ CONSECUTIVE FAILURES ===\n")
+	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdMild {
+		sys.WriteString(fmt.Sprintf("=== NOTE: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdMild))
 		sys.WriteString("Recent changes are not yielding improvements. Consider:\n")
 		sys.WriteString("- Changing strategy (e.g., if you've been tuning hyperparameters, try architectural changes instead).\n")
 		sys.WriteString("- Making a smaller, more conservative change.\n")
@@ -545,7 +549,7 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 
 		// Add recent failed hypotheses to avoid repetition.
 		var failedRecent strings.Builder
-		start := len(rows) - 5
+		start := len(rows) - cfg.Params.RecentFailedWindow
 		if start < 0 {
 			start = 0
 		}
@@ -580,11 +584,11 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	}
 	usr.WriteString(fmt.Sprintf("Consecutive failures: %d\n\n", cfg.ConsecutiveFailures))
 
-	if iteration <= 3 {
+	if iteration <= cfg.Params.PhaseEarlyEnd {
 		usr.WriteString("You are in the EARLY phase. Explore broadly — try different approaches to understand the landscape.\n")
-	} else if iteration <= 15 {
+	} else if iteration <= cfg.Params.PhaseExplorationEnd {
 		usr.WriteString("You are in the EXPLORATION phase. Balance between trying new ideas and refining what works.\n")
-	} else if iteration <= 30 {
+	} else if iteration <= cfg.Params.PhaseExploitationEnd {
 		usr.WriteString("You are in the EXPLOITATION phase. Focus on refining the approaches that have produced the best results.\n")
 	} else {
 		usr.WriteString("You are in the FINE-TUNING phase. Make small, precise adjustments. The easy gains are likely behind you.\n")
@@ -634,7 +638,8 @@ type experimentResult struct {
 // runExperiment executes the metric command with a time budget.
 func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config) (*experimentResult, error) {
 	timeout := time.Duration(cfg.TimeBudgetSec) * time.Second
-	expCtx, cancel := context.WithTimeout(ctx, timeout+30*time.Second) // grace period
+	grace := time.Duration(cfg.Params.GracePeriodSec) * time.Second
+	expCtx, cancel := context.WithTimeout(ctx, timeout+grace)
 	defer cancel()
 
 	cmd := exec.CommandContext(expCtx, "bash", "-c", cfg.MetricCmd)
