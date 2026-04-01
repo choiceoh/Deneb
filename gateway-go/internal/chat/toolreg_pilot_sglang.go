@@ -573,7 +573,7 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 		Stream:    true,
 	}
 
-	events, err := client.StreamChatOpenAI(ctx, req)
+	events, err := client.StreamChat(ctx, req)
 	if err != nil {
 		// Lightweight model failed — try fallback model if registry is available.
 		if pkgRegistry != nil {
@@ -585,7 +585,7 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 					continue
 				}
 				req.Model = fbCfg.Model
-				events, err = fbClient.StreamChatOpenAI(ctx, req)
+				events, err = fbClient.StreamChat(ctx, req)
 				if err == nil {
 					break
 				}
@@ -624,7 +624,7 @@ func callPilotLLM(ctx context.Context, system, userMessage string, maxTokens int
 		Stream:    true,
 	}
 
-	events, err := client.StreamChatOpenAI(ctx, req)
+	events, err := client.StreamChat(ctx, req)
 	if err != nil {
 		if pkgRegistry != nil {
 			fbChain := pkgRegistry.FallbackChain(modelrole.RolePilot)
@@ -635,7 +635,7 @@ func callPilotLLM(ctx context.Context, system, userMessage string, maxTokens int
 					continue
 				}
 				req.Model = fbCfg.Model
-				events, err = fbClient.StreamChatOpenAI(ctx, req)
+				events, err = fbClient.StreamChat(ctx, req)
 				if err == nil {
 					break
 				}

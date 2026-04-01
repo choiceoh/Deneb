@@ -35,8 +35,7 @@ type ToolRegistry struct {
 	order                   []string // preserves registration order
 	postProcess             *PostProcessRegistry
 	spillStore              *agent.SpilloverStore // optional; spills large tool results to disk
-	cachedLLMTools          []llm.Tool            // cached tool list; invalidated on RegisterTool
-	cachedLLMToolsAnthropic []llm.Tool            // same list with CacheControl on last tool for Anthropic prompt caching
+	cachedLLMTools []llm.Tool // cached tool list; invalidated on RegisterTool
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -65,8 +64,7 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 		r.order = append(r.order, def.Name)
 	}
 	r.tools[def.Name] = def
-	r.cachedLLMTools = nil          // invalidate full-set cache
-	r.cachedLLMToolsAnthropic = nil // invalidate Anthropic variant
+	r.cachedLLMTools = nil // invalidate cache
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
@@ -306,41 +304,6 @@ func (r *ToolRegistry) LLMTools() []llm.Tool {
 	}
 	r.cachedLLMTools = r.buildLLMToolsLocked()
 	return r.cachedLLMTools
-}
-
-// LLMToolsAnthropic returns tool definitions with CacheControl set on the last
-// tool for Anthropic prompt caching. Results are cached alongside the base list
-// and only rebuilt when tools change. The returned slice is shared — callers
-// must not mutate it.
-func (r *ToolRegistry) LLMToolsAnthropic() []llm.Tool {
-	r.mu.RLock()
-	if r.cachedLLMToolsAnthropic != nil {
-		out := r.cachedLLMToolsAnthropic
-		r.mu.RUnlock()
-		return out
-	}
-	r.mu.RUnlock()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.cachedLLMToolsAnthropic != nil {
-		return r.cachedLLMToolsAnthropic
-	}
-	// Ensure the base list is built first.
-	if r.cachedLLMTools == nil {
-		r.cachedLLMTools = r.buildLLMToolsLocked()
-	}
-	base := r.cachedLLMTools
-	if len(base) == 0 {
-		r.cachedLLMToolsAnthropic = base
-		return base
-	}
-	// Copy once at build time, then cache. Subsequent calls return the shared slice.
-	anthropic := make([]llm.Tool, len(base))
-	copy(anthropic, base)
-	anthropic[len(anthropic)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
-	r.cachedLLMToolsAnthropic = anthropic
-	return anthropic
 }
 
 // buildLLMToolsLocked builds the base tool slice with pre-serialized schemas.

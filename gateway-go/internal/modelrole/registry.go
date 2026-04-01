@@ -37,7 +37,6 @@ type ModelConfig struct {
 	Model      string // model name sent to the API
 	BaseURL    string // API endpoint URL
 	APIKey     string // empty for keyless providers (e.g., local sglang)
-	APIType    string // "openai" or "anthropic"
 }
 
 // clientEntry caches a lazily-initialized LLM client per role.
@@ -86,7 +85,6 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 	// Parse main model provider/name.
 	mainProvider, mainModelName := parseModelID(mainModel)
 	mainBaseURL := resolveBaseURL(mainProvider)
-	mainAPIType := inferAPIType(mainProvider)
 	mainAPIKey := resolveAPIKey(mainProvider)
 
 	// Resolve Google API key for fallback/pilot models.
@@ -97,28 +95,24 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 			ProviderID: mainProvider,
 			Model:      mainModelName,
 			BaseURL:    mainBaseURL,
-			APIType:    mainAPIType,
 			APIKey:     mainAPIKey,
 		},
 		RoleLightweight: {
 			ProviderID: "sglang",
 			Model:      DefaultSglangModel,
 			BaseURL:    DefaultSglangBaseURL,
-			APIType:    "openai",
 			APIKey:     "", // local, no auth
 		},
 		RolePilot: {
 			ProviderID: "google",
 			Model:      DefaultPilotModel,
 			BaseURL:    DefaultGoogleBaseURL,
-			APIType:    "openai",
 			APIKey:     googleAPIKey,
 		},
 		RoleFallback: {
 			ProviderID: "google",
 			Model:      DefaultFallbackModel,
 			BaseURL:    DefaultGoogleBaseURL,
-			APIType:    "openai",
 			APIKey:     googleAPIKey,
 		},
 	}
@@ -168,11 +162,6 @@ func (r *Registry) FullModelID(role Role) string {
 // BaseURL returns the base URL for the given role.
 func (r *Registry) BaseURL(role Role) string {
 	return r.Config(role).BaseURL
-}
-
-// APIType returns the API type for the given role.
-func (r *Registry) APIType(role Role) string {
-	return r.Config(role).APIType
 }
 
 // Client returns a cached LLM client for the given role.
@@ -290,20 +279,11 @@ func resolveBaseURL(providerID string) string {
 		return DefaultVllmBaseURL
 	case "google":
 		return DefaultGoogleBaseURL
-	case "anthropic":
-		return "https://api.anthropic.com"
 	default:
 		return DefaultZaiBaseURL // assume zai for unknown
 	}
 }
 
-// inferAPIType guesses the API type from the provider ID.
-func inferAPIType(providerID string) string {
-	if providerID == "anthropic" {
-		return "anthropic"
-	}
-	return "openai"
-}
 
 // resolveAPIKey attempts to resolve an API key for a provider from environment.
 func resolveAPIKey(providerID string) string {
@@ -312,8 +292,6 @@ func resolveAPIKey(providerID string) string {
 		return "" // local, no auth
 	case "google":
 		return os.Getenv("GEMINI_API_KEY")
-	case "anthropic":
-		return os.Getenv("ANTHROPIC_API_KEY")
 	default:
 		// For zai and others, keys are resolved through AuthManager at call time.
 		return ""
