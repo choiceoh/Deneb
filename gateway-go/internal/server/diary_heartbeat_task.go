@@ -11,14 +11,22 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 )
+
+// minIdleDuration is the minimum user idle time required before a diary
+// heartbeat is allowed to run. If the user sent input less than this
+// duration ago, the heartbeat is skipped to avoid interrupting active work.
+const minIdleDuration = 5 * time.Minute
 
 // diaryHeartbeatTask implements autonomous.PeriodicTask.
 // Every 2 hours it sends a system prompt to the main LLM asking it to
 // review recent activity and write a detailed diary entry using the
-// memory log action.
+// memory log action. The task only runs when the user has been idle for
+// at least 5 minutes, so it never interrupts active sessions.
 type diaryHeartbeatTask struct {
 	chatHandler *chat.Handler
+	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
 }
 
@@ -46,6 +54,17 @@ SQL 팩트처럼 짧게 쓰지 말고, 서술형으로 풍부하게 작성하세
 func (t *diaryHeartbeatTask) Run(ctx context.Context) error {
 	if t.chatHandler == nil {
 		return fmt.Errorf("diary-heartbeat: chat handler not available")
+	}
+
+	// Skip if user is actively using the system (idle < 5 min).
+	if t.activity != nil {
+		idleMs := time.Now().UnixMilli() - t.activity.LastActivityAt()
+		idle := time.Duration(idleMs) * time.Millisecond
+		if idle < minIdleDuration {
+			t.logger.Info("diary-heartbeat: skipped, user active",
+				"idle", idle.Round(time.Second))
+			return nil
+		}
 	}
 
 	sessionKey := "system:diary-heartbeat"
