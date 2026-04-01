@@ -313,10 +313,13 @@ func handleRunSuccess(
 			}
 
 			// Session memory: update structured session state.
-			// Runs alongside fact extraction, sharing the same semaphore.
+			// Use an independent context so prior SGLang calls in this
+			// goroutine don't eat into the session-memory deadline.
 			if deps.sessionMemory != nil {
-				UpdateSessionMemory(memCtx, deps.sessionMemory, params.SessionKey,
+				smCtx, smCancel := context.WithTimeout(base, sessionMemoryUpdateTimeout)
+				UpdateSessionMemory(smCtx, deps.sessionMemory, params.SessionKey,
 					params.Message, result.Text, result.Turns, result.StopReason, logger)
+				smCancel()
 			}
 		}()
 	}

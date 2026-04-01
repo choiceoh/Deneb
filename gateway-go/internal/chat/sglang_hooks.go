@@ -263,7 +263,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 // Called asynchronously after handleRunSuccess.
 
 const (
-	autoMemoryTimeout   = 45 * time.Second
+	autoMemoryTimeout   = 90 * time.Second
 	autoMemoryMaxTokens = 512
 	autoMemoryMinInput  = 100 // skip for very short conversations
 	autoMemoryMinOutput = 50
