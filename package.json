@@ -1,28 +1,10 @@
 {
   "name": "deneb",
   "version": "4.8.0",
-  "description": "Multi-channel AI gateway with extensible messaging integrations",
-  "keywords": [],
-  "homepage": "https://github.com/deneb/deneb#readme",
-  "bugs": {
-    "url": "https://github.com/deneb/deneb/issues"
-  },
+  "description": "Deneb — AI gateway for DGX Spark (version tracking only)",
   "license": "MIT",
-  "author": "",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deneb/deneb.git"
-  },
-  "scripts": {
-    "gateway-go:build": "cd gateway-go && go build -tags no_rust ./...",
-    "gateway-go:build:cgo": "cd gateway-go && CGO_ENABLED=1 go build ./...",
-    "gateway-go:run": "cd gateway-go && go run -tags no_rust ./cmd/gateway/",
-    "gateway-go:test": "cd gateway-go && go test -tags no_rust ./...",
-    "gateway-go:test:cgo": "cd gateway-go && CGO_ENABLED=1 go test ./...",
-    "docs:dev": "cd docs && mint dev",
-    "docs:spellcheck": "bash scripts/docs-spellcheck.sh",
-    "docs:spellcheck:fix": "bash scripts/docs-spellcheck.sh --write",
-    "core-rs:test": "cd core-rs && cargo test",
-    "rust:test": "cargo test --workspace"
   }
 }
