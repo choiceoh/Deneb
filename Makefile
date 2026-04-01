@@ -3,7 +3,7 @@
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
 .PHONY: all rust rust-vega rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
+       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-arm64 \
        deny machete \
@@ -127,6 +127,10 @@ go-lint-all:
 
 go-binary: rust go
 	cd gateway-go && $(GO_ENV) go build -trimpath $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
+
+# Build MCP server binary (pure Go, no FFI — thin bridge to gateway HTTP RPC).
+mcp-server:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -tags no_ffi -o ../bin/deneb-mcp ./cmd/mcp-server/
 
 # Build production gateway: Go binary + CLI, copies both to dist/.
 gateway-prod: go-binary cli
