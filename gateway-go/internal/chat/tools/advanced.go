@@ -137,22 +137,43 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		}
 
 		// Step 1: Run ripgrep to find matches with file:line format.
-		args := []string{"-n", "--max-count=20", "--no-heading", p.Pattern}
+		// Use -e to avoid flag confusion when pattern starts with '-'.
+		args := []string{"-n", "--max-count=20", "--no-heading", "-e", p.Pattern}
 		if p.Include != "" {
 			args = append(args, "--glob", p.Include)
 		}
 		if p.FileType != "" {
 			args = append(args, "--type", p.FileType)
 		}
-		args = append(args, searchPath)
+		args = append(args, "--", searchPath)
 
 		cmd := exec.CommandContext(ctx, "rg", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
+			exitCode := -1
+			if cmd.ProcessState != nil {
+				exitCode = cmd.ProcessState.ExitCode()
+			}
+			if exitCode == 1 {
 				return "No matches found.", nil
 			}
-			return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
+			// Exit code 2 often means invalid regex. Retry as fixed string.
+			if exitCode == 2 {
+				fixedArgs := make([]string, len(args))
+				copy(fixedArgs, args)
+				fixedArgs = append([]string{"-F"}, fixedArgs...)
+				retryCmd := exec.CommandContext(ctx, "rg", fixedArgs...)
+				retryOut, retryErr := retryCmd.CombinedOutput()
+				if retryErr == nil {
+					out = retryOut
+				} else if retryCmd.ProcessState != nil && retryCmd.ProcessState.ExitCode() == 1 {
+					return "No matches found.", nil
+				} else {
+					return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
+				}
+			} else {
+				return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
+			}
 		}
 
 		// Step 2: Parse results into file → line numbers map.
