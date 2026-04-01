@@ -32,9 +32,8 @@ title: "Features"
 
 ## Full list
 
-- Telegram bot support (grammY)
-- Telegram bot support (channels.telegram.js)
-- Agent bridge for Pi in RPC mode with tool streaming
+- Telegram bot support (custom Go implementation)
+- Agent runtime with tool streaming
 - Streaming and chunking for long responses
 - Multi-agent routing for isolated sessions per workspace or sender
 - Subscription auth for Anthropic and OpenAI via OAuth

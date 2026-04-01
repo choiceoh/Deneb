@@ -12,7 +12,7 @@ Deneb connects to Telegram via the Gateway.
 
 ## Supported channels
 
-- [Telegram](/channels/telegram) — Bot API via grammY; supports groups, topics, and inline buttons.
+- [Telegram](/channels/telegram) — Bot API via custom Go implementation; supports groups, topics, and inline buttons.
 
 ## Notes
 

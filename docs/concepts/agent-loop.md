@@ -17,27 +17,20 @@ wired end-to-end.
 
 ## Entry points
 
-- Gateway RPC: `agent` and `agent.wait` (dispatched by the Go gateway, forwarded to the Node.js plugin host for execution).
+- Gateway RPC: `agent` and `agent.wait` (dispatched and executed by the Go gateway).
 - CLI: `agent` command (connects to gateway via WebSocket).
 
 ## How it works (high-level)
 
 1. `agent` RPC validates params, resolves session (sessionKey/sessionId), persists session metadata, returns `{ runId, acceptedAt }` immediately.
-2. `agentCommand` runs the agent:
+2. `runAgentAsync` runs the agent:
    - resolves model + thinking/verbose defaults
    - loads skills snapshot
-   - calls `runEmbeddedPiAgent` (pi-agent-core runtime)
-   - emits **lifecycle end/error** if the embedded loop does not emit one
-3. `runEmbeddedPiAgent`:
-   - serializes runs via per-session + global queues
-   - resolves model + auth profile and builds the pi session
-   - subscribes to pi events and streams assistant/tool deltas
+   - assembles system prompt and context
+   - calls the LLM client directly (Go native)
+   - streams assistant/tool deltas as agent events
    - enforces timeout -> aborts run if exceeded
-   - returns payloads + usage metadata
-4. `subscribeEmbeddedPiSession` bridges pi-agent-core events to Deneb `agent` stream:
-   - tool events => `stream: "tool"`
-   - assistant deltas => `stream: "assistant"`
-   - lifecycle events => `stream: "lifecycle"` (`phase: "start" | "end" | "error"`)
+   - emits **lifecycle end/error** on completion
 5. `agent.wait` uses `waitForAgentJob`:
    - waits for **lifecycle end/error** for `runId`
    - returns `{ status: ok|error|timeout, startedAt, endedAt, error? }`

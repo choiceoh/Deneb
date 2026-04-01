@@ -57,13 +57,15 @@ Tool availability is filtered through the same policy chain used by Gateway agen
 - group policies (if the session key maps to a group or channel)
 - subagent policy (when invoking with a subagent session key)
 
-If a tool is not allowed by policy, the endpoint returns **404**.
+If a tool is not allowed by policy, the endpoint returns **403**.
 
 Gateway HTTP also applies a hard deny list by default (even if session policy allows the tool):
 
-- `sessions_spawn`
-- `sessions_send`
-- `gateway`
+- `browser`
+- `computer`
+- `file_editor`
+- `text_editor`
+- `str_replace_editor`
 
 You can customize this deny list via `gateway.tools`:
 
@@ -79,11 +81,6 @@ You can customize this deny list via `gateway.tools`:
   },
 }
 ```
-
-To help group policies resolve context, you can optionally set:
-
-- `x-deneb-message-channel: <channel>` (example: `telegram`, `telegram`)
-- `x-deneb-account-id: <accountId>` (when multiple accounts exist)
 
 ## Responses
 

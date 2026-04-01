@@ -8,45 +8,44 @@ title: "Hooks"
 
 # Hooks
 
-Hooks provide an extensible event-driven system for automating actions in response to agent commands and events. Hooks are automatically discovered from directories and can be managed via CLI commands, similar to how skills work in Deneb.
+Hooks provide an event-driven system for automating actions in response to gateway events and agent lifecycle. Hooks are configured as shell commands in the gateway config.
 
 ## Getting Oriented
 
-Hooks are small scripts that run when something happens. There are two kinds:
+Hooks are shell commands that run when something happens. There are two kinds:
 
-- **Hooks** (this page): run inside the Gateway when agent events fire, like `/new`, `/reset`, `/stop`, or lifecycle events.
-- **Webhooks**: external HTTP webhooks that let other systems trigger work in Deneb. See [Webhook Hooks](/automation/webhook) or use `deneb webhooks` for Gmail helper commands.
-
-Hooks can also be bundled inside plugins; see [Plugin hooks](/plugins/architecture#provider-runtime-hooks).
+- **Hooks** (this page): shell commands triggered by gateway events like session start/end, message send/receive, and channel connect/disconnect.
+- **Webhooks**: external HTTP webhooks that let other systems trigger work in Deneb. See [Webhook Hooks](/automation/webhook).
 
 Common uses:
 
-- Save a memory snapshot when you reset a session
-- Keep an audit trail of commands for troubleshooting or compliance
+- Log events for auditing
 - Trigger follow-up automation when a session starts or ends
-- Write files into the agent workspace or call external APIs when events fire
-
-If you can write a small TypeScript function, you can write a hook. Hooks are discovered automatically, and you enable or disable them via the CLI.
+- Call external APIs when events fire
 
 ## Overview
 
 The hooks system allows you to:
 
-- Save session context to memory when `/new` is issued
-- Log all commands for auditing
-- Trigger custom automations on agent lifecycle events
+- React to session lifecycle events
+- Log messages for auditing
+- Trigger custom automations on gateway events
 - Extend Deneb's behavior without modifying core code
 
-## Getting Started
+## Events
 
-### Bundled Hooks
+The Go gateway fires the following hook events:
 
-Deneb ships with four bundled hooks that are automatically discovered:
-
-- **💾 session-memory**: Saves session context to your agent workspace (default `~/.deneb/workspace/memory/`) when you issue `/new`
-- **📎 bootstrap-extra-files**: Injects additional workspace bootstrap files from configured glob/path patterns during `agent:bootstrap`
-- **📝 command-logger**: Logs all command events to `~/.deneb/logs/commands.log`
-- **🚀 boot-md**: Runs `BOOT.md` when the gateway starts (requires internal hooks enabled)
+- `session.start` — a session starts
+- `session.end` — a session ends
+- `message.receive` — an inbound message is received
+- `message.send` — an outbound message is sent
+- `channel.connect` — a channel connects
+- `channel.disconnect` — a channel disconnects
+- `gateway.start` — the gateway starts
+- `gateway.stop` — the gateway stops
+- `tool.use` — a tool is invoked
+- `github.webhook` — a GitHub webhook event is received
 
 List available hooks:
 

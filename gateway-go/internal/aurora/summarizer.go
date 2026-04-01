@@ -62,9 +62,7 @@ IMPORTANT: Aggressive compression pass. Respect the XML structure but be much mo
 
 // NewLLMSummarizer creates a Summarizer backed by the given LLM client.
 // The model parameter specifies which model to use for summarization.
-// The apiType parameter selects the streaming method: "anthropic" for the
-// Anthropic Messages API, anything else for OpenAI-compatible /chat/completions.
-func NewLLMSummarizer(client *llm.Client, model string, apiType string) Summarizer {
+func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 	return func(text string, aggressive bool, opts *SummarizeOptions) (string, error) {
 		if client == nil {
 			return deterministicFallback(text), nil
@@ -109,13 +107,7 @@ func NewLLMSummarizer(client *llm.Client, model string, apiType string) Summariz
 			Stream:    true,
 		}
 
-		var ch <-chan llm.StreamEvent
-		var streamErr error
-		if apiType == "anthropic" {
-			ch, streamErr = client.StreamChat(ctx, req)
-		} else {
-			ch, streamErr = client.StreamChatOpenAI(ctx, req)
-		}
+		ch, streamErr := client.StreamChat(ctx, req)
 		if streamErr != nil {
 			return "", fmt.Errorf("summarize LLM call: %w", streamErr)
 		}

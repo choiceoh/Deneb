@@ -94,8 +94,12 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 			protocol.ErrMissingParam, "key is required"))
 	}
 
-	// Interrupt any active run for this session.
+	// Interrupt any active run and clear the pending queue for this session.
+	// Without clearPending, queued user messages survive the interrupt and
+	// replay after the new run completes — causing the "diary navigation" bug
+	// where the user's reply is discarded and a scheduled task takes over.
 	h.InterruptActiveRun(p.Key)
+	h.clearPending(p.Key)
 
 	runID := p.IdempotencyKey
 	if runID == "" {
@@ -128,8 +132,9 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 			protocol.ErrMissingParam, "key is required"))
 	}
 
-	// Interrupt any active run for this session.
+	// Interrupt any active run and clear the pending queue for this session.
 	h.InterruptActiveRun(p.Key)
+	h.clearPending(p.Key)
 
 	runID := shortid.New("steer")
 
