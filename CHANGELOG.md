@@ -1,5 +1,84 @@
 # Changelog
 
+## [4.8.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.7.0...deneb-v4.8.0) (2026-04-01)
+
+
+### ✨ Features
+
+* **autoreply:** wire BuildMemoryFlush pre-compaction + BlockReplyPipelineFull delivery ([219be05](https://github.com/choiceoh/Deneb/commit/219be0573e932b84a732310bf0cdb2b02be36d20))
+* **chat:** add coordinator mode with tool presets for multi-agent orchestration ([09e2d7d](https://github.com/choiceoh/Deneb/commit/09e2d7d42a301e89bd7e3390f34ea2e9e6d84e2c))
+* **chat:** add structured session memory for agent state tracking ([4c9c04f](https://github.com/choiceoh/Deneb/commit/4c9c04f66debb804367c5c3a7fec1c77718a7db3))
+* **chat:** add token budget system for prompt fragments ([c649a63](https://github.com/choiceoh/Deneb/commit/c649a6386d1de6b3a2b9fefe0c967186808a18b8))
+* **chat:** add tool result spillover and file-read dedup ([27a7ace](https://github.com/choiceoh/Deneb/commit/27a7acec300b76f0682cde8dcd45c73af94b1301))
+* **chat:** queue messages during active run instead of interrupting ([5367419](https://github.com/choiceoh/Deneb/commit/5367419ea6a4bf27b48419624dca24cbdc555190))
+* **chat:** wire BeforeModelResolve, BeforePromptBuild, BeforeToolCall hooks; unify plugin hook registration; add transient HTTP retry ([97bfea5](https://github.com/choiceoh/Deneb/commit/97bfea5d6aca5b0031633502d531592d14f827bf))
+* **chat:** wire missing subsystems — skills prompt, thinking config, plugin hooks, cleanup dead code ([f96789f](https://github.com/choiceoh/Deneb/commit/f96789fd3e74b1185196b0d8ae270eb1dbd8d268))
+* **exec:** enhance exec and process tools with env params, stdin write, incremental output, and extended timeout ([bc8af17](https://github.com/choiceoh/Deneb/commit/bc8af17cb7c12e3257c807c0a80c5ffd85be13ae))
+* **gateway:** wire hooks config loading, session LastOutput, agent heartbeat ([4cbe72a](https://github.com/choiceoh/Deneb/commit/4cbe72ad39818482d27dce58f91f502fc6e73981))
+* **kairos:** add GitHub webhook inbound endpoint ([e4c110e](https://github.com/choiceoh/Deneb/commit/e4c110e381cca75f7e315c1d5ba00abb39714aa8))
+* **kairos:** add github_webhook agent tool ([035d1ed](https://github.com/choiceoh/Deneb/commit/035d1eda925023db7ff0216ece4843d16c6dc4a5))
+* **kairos:** GitHub webhook inbound endpoint + agent tool ([90bef2a](https://github.com/choiceoh/Deneb/commit/90bef2a3c21cb6e1fbb2872fe73b15ea6795d30a))
+* **memory:** add knowledge graph tables and entity/relation CRUD ([6f16bef](https://github.com/choiceoh/Deneb/commit/6f16bef7f563061df28b8fb925336f6c59752e01))
+* **memory:** add pilot LLM recall engine with lazy backfill ([41ced54](https://github.com/choiceoh/Deneb/commit/41ced540f8b8c600a895a84dcafe9c98047c62c5))
+* **scripts:** add remote delta to build-status ([0ece670](https://github.com/choiceoh/Deneb/commit/0ece670087b4e50d1362a1a9ee942adcbc5fe56d))
+* **server:** improve OpenAI-compatible API completeness ([17645d8](https://github.com/choiceoh/Deneb/commit/17645d89839c4698911a9b63019d93227a3667ec))
+* **telegram:** section-based streaming display instead of per-delta updates ([5c71f37](https://github.com/choiceoh/Deneb/commit/5c71f37cc58cad5db9edd3142d13b98bdbeef49c))
+
+
+### 🐛 Bug Fixes
+
+* **autoreply:** replace undefined cfg with opts in BuildReplyPayloadsParams ([46ed65e](https://github.com/choiceoh/Deneb/commit/46ed65ee9b00d82bb150279726bfabf7dee1b011))
+* **autoreply:** restore session abort hook via TypedHookRunner instead of deleting ([74b0b0e](https://github.com/choiceoh/Deneb/commit/74b0b0e3da6b658bd60b3f1eb2a2a89269dbcd90))
+* **chat:** add pre-compaction fact extraction, complete hook payloads, fix error swallowing, wire monitoring metric, prune unused hooks ([f8974b7](https://github.com/choiceoh/Deneb/commit/f8974b7e77594c8062946c0a52aaa0470f9ddd72))
+* **chat:** cast TokenBudget uint64 to int for ContextWindowTokens; drop unused toolctx import ([c4f527d](https://github.com/choiceoh/Deneb/commit/c4f527dc901c52a399553f31f62c17e0d1127959))
+* **chat:** close coordinator mode wiring gaps — enforce presets, reset state, worker prompts ([b9c0d06](https://github.com/choiceoh/Deneb/commit/b9c0d063805eb09e18a2b5ee5991f38b60d1b12a))
+* **chat:** harden grep tool against invalid regex patterns ([40f42b4](https://github.com/choiceoh/Deneb/commit/40f42b4e738fe68b97c923773e58439cd0330a71))
+* **chat:** persist interrupted tool context to transcript on mid-run abort ([10b0320](https://github.com/choiceoh/Deneb/commit/10b03200f5b9433edd1fd02a58fc57b8ce36f159))
+* **chat:** prevent tool call text leaking to Telegram — expand stripping patterns and add system prompt guardrails ([c91de86](https://github.com/choiceoh/Deneb/commit/c91de864f00b2056414ec345aa68d0265a5fe67f))
+* **chat:** strip leaked tool-call markup in ParseReplyDirectives before Telegram delivery ([d968419](https://github.com/choiceoh/Deneb/commit/d9684197e49cefbc40460d8523f55a5d1e65c382))
+* **chat:** wire memory flush callback, use shutdownCtx for hook goroutines, remove dead channel fallback ([470817b](https://github.com/choiceoh/Deneb/commit/470817b44b822485f9cb6dcf8f5736fca7508256))
+* **cron:** replace remaining Channels references with TelegramPlugin ([912afd2](https://github.com/choiceoh/Deneb/commit/912afd26b0ccb64fcc4ab7618fdb6f816619c1c2))
+* **gateway:** guard dreamingAdapter against nil lightweight model ([0270627](https://github.com/choiceoh/Deneb/commit/027062789a31aa3c3ef5f0db667fce8d631dc566))
+* **gateway:** remove dead inbound_telegram.go, wire ModelCandidates for directive resolution ([c512c4b](https://github.com/choiceoh/Deneb/commit/c512c4b607eeb70a35360334ebb0c94137298a7e))
+* **gateway:** restart autonomous/autoresearch on config reload ([2c7f67e](https://github.com/choiceoh/Deneb/commit/2c7f67e9820169473be89d8bf65553dd201d6b19))
+* **memory:** add 'unknown' to entity_type CHECK constraint ([314bf71](https://github.com/choiceoh/Deneb/commit/314bf716fc2563b68be140efe5e7904b93ee5bd1))
+* **memory:** add debug_assert for SIMD accumulate length contract, fix outdated AVX2/x86_64 doc references ([ef2b21b](https://github.com/choiceoh/Deneb/commit/ef2b21b9705a0e5091b0695772a7138ca325f0d5))
+* **memory:** additional PR [#919](https://github.com/choiceoh/Deneb/issues/919) review fixes — perf, safety, correctness ([bcdb002](https://github.com/choiceoh/Deneb/commit/bcdb0022653086d38994e1f7e5b7b82f00f56fd6))
+* **memory:** address PR [#919](https://github.com/choiceoh/Deneb/issues/919) review — data race, lock discipline, test cleanup ([2c69c5e](https://github.com/choiceoh/Deneb/commit/2c69c5e3266a46ccf7f3f1d4b49c1ce511ab705f))
+* **memory:** handle stream errors and empty responses in batch JSON parsing ([1065aba](https://github.com/choiceoh/Deneb/commit/1065aba5431cf7659b4af41375cc3d2649fd6c71))
+* **memory:** PR [#919](https://github.com/choiceoh/Deneb/issues/919) knowledge graph review fixes ([3ef1b35](https://github.com/choiceoh/Deneb/commit/3ef1b3501eaed5e3d0fef6566f5d57a749b81339))
+* **memory:** supplement PR [#917](https://github.com/choiceoh/Deneb/issues/917) — length contract + outdated docs ([f1efec8](https://github.com/choiceoh/Deneb/commit/f1efec8fadd5f6bfc95bf37e4423881f36ec5b0f))
+* **memory:** use fallback model for recall to avoid throughput contention ([7103c72](https://github.com/choiceoh/Deneb/commit/7103c72d44d74b8f85972217beaa7657c05a8fe5))
+* **plugin:** resolve ListHookNames and autoresearch undefined-r errors ([c4fcf66](https://github.com/choiceoh/Deneb/commit/c4fcf660d602deb9cd1ee395c05faaed71283d00))
+* **server:** duplicate telegram import and broken hooks config access ([8ff6e91](https://github.com/choiceoh/Deneb/commit/8ff6e9118664fcfe8e4677036dd2cfbe1f5be908))
+* **server:** remove duplicate telegram import in inbound.go ([61f6e76](https://github.com/choiceoh/Deneb/commit/61f6e76902bad525458f9d36ae28b73700fdd9d2))
+* **server:** remove unused llm import in responses_http.go ([71069e6](https://github.com/choiceoh/Deneb/commit/71069e658b56e73a33fc7eec07d4eabf363334ee))
+* **server:** suppress run state heartbeat log spam ([69481d7](https://github.com/choiceoh/Deneb/commit/69481d76189569bf0381fd63fd73b925f356197e))
+* **server:** suppress run state heartbeat log spam ([e9f5718](https://github.com/choiceoh/Deneb/commit/e9f5718583e430bcded8a2280b8ccdfa40899094))
+* **telegram:** delete draft streaming message before final reply delivery ([dbd8058](https://github.com/choiceoh/Deneb/commit/dbd8058e4ffa0b89f9df46f6890b636c6fbd2406))
+* **telegram:** edit draft message in-place on completion instead of delete+resend ([32e82ae](https://github.com/choiceoh/Deneb/commit/32e82ae935958d9d780bc649b5e7eb8997354016))
+* **telegram:** eliminate emoji reaction gap during status transitions ([7f95f03](https://github.com/choiceoh/Deneb/commit/7f95f03f00af08390c9db87cf6434b01ab97d0a1))
+* **telegram:** prevent emoji reaction flicker on status transitions ([aae1dc0](https://github.com/choiceoh/Deneb/commit/aae1dc071bd5bb698f6f2a491376f4b50691ccea))
+* **telegram:** remove duplicate ParseChatID declaration ([c279a56](https://github.com/choiceoh/Deneb/commit/c279a56caa42b604607881d6d4ce8433e9f21f34))
+* **telegram:** send empty array instead of null when clearing reactions ([cc5098f](https://github.com/choiceoh/Deneb/commit/cc5098f2b5dd7f73cc95473c6536f951a28810b4))
+* **telegram:** truncate draft stream messages exceeding 4096-char limit ([02c536b](https://github.com/choiceoh/Deneb/commit/02c536bf7eaf15b7fef47647594bbf1150ae1f88))
+
+
+### 🔧 Internal
+
+* **chat:** redesign session memory for quality and robustness ([36628a3](https://github.com/choiceoh/Deneb/commit/36628a3dbf55964d9b48092ce7c9a08d2fa38ebc))
+* **core:** inline arm64 NEON SIMD, remove x86_64 abstraction ([5883405](https://github.com/choiceoh/Deneb/commit/588340567d1dbb07e00646e538c8794af788f506))
+* **gateway:** inline Linux OS, remove cross-platform abstractions ([eaeb485](https://github.com/choiceoh/Deneb/commit/eaeb485cba9e0e86ec3290ac797af848c0067524))
+* **memory:** deduplicate knowledge graph DDL into single source of truth ([f22e6a4](https://github.com/choiceoh/Deneb/commit/f22e6a4bca76059e1214686988813e5943c7097f))
+* **memory:** parallel recall with dual-path delivery ([0db78be](https://github.com/choiceoh/Deneb/commit/0db78be317de3bbaf2129f95d8481b737352caa4))
+* **scripts:** rewrite build-status as release/commit comparison tool ([a850228](https://github.com/choiceoh/Deneb/commit/a850228658f4cb01ebcccc3f1bfe8daf08a7cef3))
+* **telegram:** delete dead code and inline trivial abstractions ([bf2e350](https://github.com/choiceoh/Deneb/commit/bf2e350f472a67c3a6b57fe3dc84ca099c62e83b))
+* **telegram:** inline abstractions and simplify for single-channel ([cf1919d](https://github.com/choiceoh/Deneb/commit/cf1919d38e89097a9be526a5139ed0b9301708bb))
+* **telegram:** remove channel abstraction layer ([000b208](https://github.com/choiceoh/Deneb/commit/000b208698ec02050794de564e5ba5a0d2e516c2))
+* **telegram:** remove channel abstraction layer ([e48f96a](https://github.com/choiceoh/Deneb/commit/e48f96acc91701cd907ce20053b9856b95a9b6fb))
+* **telegram:** remove channel abstraction layer ([3e8286a](https://github.com/choiceoh/Deneb/commit/3e8286a56f7f6b7a1a0c75dc6710996f9bc8885b))
+* **telegram:** remove channel abstraction layer, use telegram.Plugin directly ([5b80cdd](https://github.com/choiceoh/Deneb/commit/5b80cddf88da80ba0ebdf983659fcdc769200369))
+
 ## [4.7.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.6.0...deneb-v4.7.0) (2026-03-31)
 
 
