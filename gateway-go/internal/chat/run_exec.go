@@ -204,10 +204,11 @@ func executeAgentRun(
 				kDeps.MemoryEmbedder = deps.memoryEmbedder
 				kDeps.UnifiedStore = deps.unifiedStore
 			}
-			// Wire recall pilot if model registry is available.
+			// Wire recall LLM via fallback model to avoid rate-limit /
+			// throughput contention with main (Anthropic) and sglang (local).
 			if deps.registry != nil {
-				kDeps.RecallClient = deps.registry.Client(modelrole.RolePilot)
-				kDeps.RecallModel = deps.registry.FullModelID(modelrole.RolePilot)
+				kDeps.RecallClient = deps.registry.Client(modelrole.RoleFallback)
+				kDeps.RecallModel = deps.registry.FullModelID(modelrole.RoleFallback)
 				kDeps.RecallConfig = memory.DefaultRecallConfig()
 			}
 			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
