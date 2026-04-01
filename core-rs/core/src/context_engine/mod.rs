@@ -11,7 +11,7 @@
 //! to the host (TypeScript/Go).
 
 pub mod assembler;
-pub mod napi;
+pub mod handle;
 pub mod retrieval;
 
 use serde::{Deserialize, Serialize};

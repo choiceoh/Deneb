@@ -5,16 +5,11 @@ edition = "2021"
 description = "Deneb core library — protocol validation, security, and media processing"
 
 [lib]
-# cdylib: Node.js native addon (via napi-rs, requires "napi_binding" feature).
-# staticlib: Go gateway CGo linking (built with --no-default-features).
+# staticlib: Go gateway CGo linking.
 # rlib: workspace crate consumers (vega).
-crate-type = ["cdylib", "staticlib", "rlib"]
+crate-type = ["staticlib", "rlib"]
 
 [features]
-default = ["napi_binding"]
-# Enable napi-rs bindings for Node.js native addon builds.
-# Disable for CGo static linking: cargo build --release --no-default-features
-napi_binding = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
 # Enable Vega project search engine (Rust port of Python vega/).
 vega = ["dep:deneb-vega"]
 
@@ -30,10 +25,6 @@ prost-types.workspace = true
 
 # Error handling
 thiserror.workspace = true
-
-# Node.js FFI via napi-rs (optional, behind "napi_binding" feature)
-napi = { version = "2", features = ["napi9", "serde-json"], optional = true }
-napi-derive = { version = "2", optional = true }
 
 # Data parallelism (20-core DGX Spark utilization)
 rayon.workspace = true
@@ -68,4 +59,3 @@ workspace = true
 
 [build-dependencies]
 prost-build = "0.13"
-napi-build = { version = "2", optional = true }

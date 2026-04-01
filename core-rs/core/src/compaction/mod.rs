@@ -6,11 +6,11 @@
 //! - Pure algorithmic functions (chunk selection, fresh-tail, token estimation)
 //! - A step-based sweep state machine for cross-language I/O orchestration
 //!
-//! The sweep engine yields I/O commands (`SweepCommand`) to the host (Node.js
-//! or Go), which executes DB/LLM operations and feeds results back via
+//! The sweep engine yields I/O commands (`SweepCommand`) to the host (Go),
+//! which executes DB/LLM operations and feeds results back via
 //! `SweepResponse`. This avoids callbacks across FFI boundaries.
 
-pub mod napi;
+pub mod handle;
 pub mod sweep;
 pub mod timestamp;
 

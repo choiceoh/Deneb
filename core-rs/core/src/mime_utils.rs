@@ -4,9 +4,6 @@
 //! - `normalizeMimeType` — split on `;`, trim, lowercase
 //! - `isGenericMime` — check for generic container types
 
-#[cfg(feature = "napi_binding")]
-use napi::bindgen_prelude::*;
-
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -33,19 +30,13 @@ pub fn is_generic_mime_impl(mime: &str) -> bool {
     m == "application/octet-stream" || m == "application/zip"
 }
 
-// ---------------------------------------------------------------------------
-// napi exports
-// ---------------------------------------------------------------------------
-
 /// Normalize a MIME type: extract base type, trim, lowercase.
 /// Returns null for empty input.
-#[cfg_attr(feature = "napi_binding", napi)]
 pub fn normalize_mime_type(mime: String) -> Option<String> {
     normalize_mime_type_impl(&mime)
 }
 
 /// Check if a MIME type is a generic container (octet-stream or zip).
-#[cfg_attr(feature = "napi_binding", napi)]
 pub fn is_generic_mime(mime: String) -> bool {
     is_generic_mime_impl(&mime)
 }

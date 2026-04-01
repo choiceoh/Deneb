@@ -1,10 +1,8 @@
-//! External content detection and sanitization (napi-rs).
+//! External content detection and sanitization.
 //!
 //! Detects suspicious patterns in externally fetched content to prevent
 //! prompt injection and other attacks.
 
-#[cfg(feature = "napi_binding")]
-use napi::bindgen_prelude::*;
 /// Prompt injection detection and marker sanitization.
 ///
 /// Ports the CPU-intensive parts of `src/security/external-content.ts`:
@@ -209,25 +207,18 @@ pub fn replace_markers_impl(content: &str) -> String {
     output
 }
 
-// ---------------------------------------------------------------------------
-// napi exports
-// ---------------------------------------------------------------------------
-
 /// Detect suspicious patterns in content that may indicate prompt injection.
 /// Returns array of matched pattern source strings.
-#[cfg_attr(feature = "napi_binding", napi)]
 pub fn detect_suspicious_patterns(content: String) -> Vec<String> {
     detect_suspicious_patterns_impl(&content)
 }
 
 /// Fold marker text: normalize Unicode homoglyphs to ASCII equivalents.
-#[cfg_attr(feature = "napi_binding", napi)]
 pub fn fold_marker_text(input: String) -> String {
     fold_marker_text_impl(&input)
 }
 
 /// Replace spoofed security boundary markers in content.
-#[cfg_attr(feature = "napi_binding", napi)]
 pub fn replace_markers(content: String) -> String {
     replace_markers_impl(&content)
 }

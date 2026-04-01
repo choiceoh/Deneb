@@ -6,15 +6,11 @@
 //! - Media MIME detection, EXIF parsing, PNG encoding
 //!
 //! It exposes both a Rust API and a C FFI surface for integration
-//! with Go (via `CGo`) and Node.js (via napi-rs).
+//! with Go (via `CGo`).
 
 // This crate uses unsafe for C FFI exports (#[no_mangle] extern "C" functions)
 // required by the Go gateway CGo integration.
 #![allow(unsafe_code)]
-
-#[cfg(feature = "napi_binding")]
-#[macro_use]
-extern crate napi_derive;
 
 // FFI utilities: error codes, FFI_MAX_INPUT_LEN, ffi_catch
 mod ffi_utils;
@@ -30,7 +26,7 @@ pub mod parsing;
 pub mod protocol;
 pub mod security;
 
-// napi-rs modules (Node.js native addon)
+// Utility modules
 pub mod exif;
 pub mod external_content;
 pub mod mime_utils;

@@ -91,13 +91,9 @@ deneb_agent_resolve_model_fallback(config_json, agent_id, out_ptr, out_len) -> i
 deneb_agent_resolve_scope(config_json, agent_id, out_ptr, out_len) -> i32
 deneb_agent_normalize_usage(usage_json, out_ptr, out_len) -> i32
 
-// napi-rs
-#[napi] fn parse_model_ref(input: String) -> ModelRef
-#[napi] fn resolve_model_fallback(config: JsObject, agent_id: String) -> ModelFallbackResult
 ```
 
-**Validation:** TypeScript callers produce identical results. Add cross-language
-roundtrip tests (Rust unit tests + TypeScript integration tests comparing outputs).
+**Validation:** Add cross-language roundtrip tests (Rust unit tests comparing outputs).
 
 ### Phase 2: Subagent Registry & Lifecycle (Week 3-4)
 

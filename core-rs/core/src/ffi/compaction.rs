@@ -76,7 +76,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
         if conversation_id > u32::MAX as u64 || token_budget > u32::MAX as u64 {
             return FFI_ERR_INPUT_TOO_LARGE;
         }
-        let handle = crate::compaction::napi::compaction_sweep_new(
+        let handle = crate::compaction::handle::compaction_sweep_new(
             config_str.to_string(),
             conversation_id as u32,
             token_budget as u32,
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_start(
     // SAFETY: out_ptr is null-checked above. The Go caller guarantees the buffer is valid.
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let json = crate::compaction::napi::compaction_sweep_start(handle);
+        let json = crate::compaction::handle::compaction_sweep_start(handle);
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
@@ -142,7 +142,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
             Ok(s) => s,
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
-        let json = crate::compaction::napi::compaction_sweep_step(handle, resp_str.to_string());
+        let json = crate::compaction::handle::compaction_sweep_step(handle, resp_str.to_string());
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
@@ -150,5 +150,5 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
 /// C FFI: Drop a sweep engine, freeing its resources.
 #[no_mangle]
 pub extern "C" fn deneb_compaction_sweep_drop(handle: u32) {
-    crate::compaction::napi::compaction_sweep_drop(handle);
+    crate::compaction::handle::compaction_sweep_drop(handle);
 }

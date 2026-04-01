@@ -7,9 +7,6 @@
 ///
 /// Ports `crc32`, `pngChunk`, `fillPixel`, and `encodePngRgba` from
 /// `src/media/png-encode.ts`.
-#[cfg(feature = "napi_binding")]
-use napi::bindgen_prelude::Buffer;
-
 // ---------------------------------------------------------------------------
 // CRC32 table (precomputed at compile time)
 // ---------------------------------------------------------------------------
@@ -138,24 +135,6 @@ pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
     out.extend_from_slice(&png_chunk(b"IDAT", &compressed));
     out.extend_from_slice(&png_chunk(b"IEND", &[]));
     out
-}
-
-// ---------------------------------------------------------------------------
-// napi exports
-// ---------------------------------------------------------------------------
-
-/// Compute CRC32 checksum for a buffer (napi entrypoint).
-#[cfg(feature = "napi_binding")]
-#[cfg_attr(feature = "napi_binding", napi)]
-pub fn crc32(buf: Buffer) -> u32 {
-    crc32_impl(&buf)
-}
-
-/// Encode an RGBA buffer as a PNG image (napi entrypoint).
-#[cfg(feature = "napi_binding")]
-#[cfg_attr(feature = "napi_binding", napi)]
-pub fn encode_png_rgba(buffer: Buffer, width: u32, height: u32) -> Buffer {
-    encode_png_rgba_impl(&buffer, width, height).into()
 }
 
 // ---------------------------------------------------------------------------

@@ -130,52 +130,6 @@ fn is_inside_inline_span(index: usize, spans: &[(usize, usize)]) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// napi exports
-// ---------------------------------------------------------------------------
-
-#[cfg(feature = "napi_binding")]
-pub mod napi_exports {
-    use super::*;
-    use napi_derive::napi;
-
-    #[napi(object)]
-    pub struct JsInlineCodeState {
-        pub open: bool,
-        pub ticks: u32,
-    }
-
-    /// Build a code span index and return the resulting inline state.
-    /// The actual index checking is done via `markdown_is_inside_code`.
-    #[napi]
-    pub fn markdown_build_code_span_state(
-        text: String,
-        initial_open: Option<bool>,
-        initial_ticks: Option<u32>,
-    ) -> JsInlineCodeState {
-        let state = if initial_open.unwrap_or(false) {
-            Some(InlineCodeState {
-                open: true,
-                ticks: initial_ticks.unwrap_or(0) as usize,
-            })
-        } else {
-            None
-        };
-        let idx = build_code_span_index(&text, state);
-        JsInlineCodeState {
-            open: idx.inline_state.open,
-            ticks: idx.inline_state.ticks as u32,
-        }
-    }
-
-    /// Check if a position is inside a code span (fenced or inline).
-    #[napi]
-    pub fn markdown_is_inside_code(text: String, position: u32) -> bool {
-        let idx = build_code_span_index(&text, None);
-        idx.is_inside(position as usize)
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

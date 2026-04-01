@@ -14,7 +14,6 @@ pub mod cosine;
 pub mod fts;
 pub mod merge;
 pub mod mmr;
-pub mod napi;
 pub mod query_expansion;
 pub mod simd;
 pub mod stop_words;
