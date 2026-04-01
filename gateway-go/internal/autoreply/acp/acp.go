@@ -95,6 +95,35 @@ func (r *ACPRegistry) Register(agent ACPAgent) {
 	r.bumpVer()
 }
 
+// RegisterIfUnderLimit atomically checks the active child count for parentID
+// and registers the agent only if the count is below limit. Returns false
+// if the limit would be exceeded.
+func (r *ACPRegistry) RegisterIfUnderLimit(agent ACPAgent, parentID string, limit int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Count active children under this parent while holding the lock.
+	count := 0
+	for _, a := range r.agents {
+		if a.ParentID == parentID {
+			st := a.Status
+			if r.sessions != nil {
+				if sess := r.sessions.Get(a.SessionKey); sess != nil {
+					st = string(sess.Status)
+				}
+			}
+			if st == "idle" || st == "running" {
+				count++
+			}
+		}
+	}
+	if count >= limit {
+		return false
+	}
+	r.agents[agent.ID] = &agent
+	r.bumpVer()
+	return true
+}
+
 // Get returns an agent by ID. Status and EndedAt are derived from
 // session.Manager when available.
 func (r *ACPRegistry) Get(id string) *ACPAgent {

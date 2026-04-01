@@ -73,22 +73,12 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 		}
 	}
 
-	// Enforce max children per parent (breadth limit).
-	const maxChildrenPerParent = 10
-	if params.ParentAgentID != "" {
-		activeChildren := d.ActiveSubagentCount(params.ParentAgentID)
-		if activeChildren >= maxChildrenPerParent {
-			return SpawnSubagentResult{
-				Error: fmt.Errorf("max concurrent children (%d) reached for parent %s", maxChildrenPerParent, params.ParentAgentID),
-			}
-		}
-	}
-
 	// Generate agent ID and session key.
 	agentID := shortid.New("sub_" + sanitizeAgentID(params.Role))
 	sessionKey := fmt.Sprintf("acp:%s:%s", params.ParentSessionKey, agentID)
 
-	// Register in ACP registry.
+	// Register in ACP registry with atomic breadth limit check.
+	const maxChildrenPerParent = 10
 	agent := ACPAgent{
 		ID:           agentID,
 		ParentID:     params.ParentAgentID,
@@ -99,7 +89,15 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 		WorkspaceDir: params.WorkspaceDir,
 		Depth:        depth,
 	}
-	d.ACPRegistry.Register(agent)
+	if params.ParentAgentID != "" {
+		if !d.ACPRegistry.RegisterIfUnderLimit(agent, params.ParentAgentID, maxChildrenPerParent) {
+			return SpawnSubagentResult{
+				Error: fmt.Errorf("max concurrent children (%d) reached for parent %s", maxChildrenPerParent, params.ParentAgentID),
+			}
+		}
+	} else {
+		d.ACPRegistry.Register(agent)
+	}
 
 	// Create KindSubagent session in session.Manager for lifecycle tracking and GC.
 	// Set a 30-minute timeout to prevent indefinitely hung subagents.

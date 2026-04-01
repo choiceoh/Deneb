@@ -82,10 +82,10 @@ func (cs *CronSuggester) OnMessageForCron(content string) {
 		if len(recent) >= 2 {
 			// Check if we already suggested this.
 			alreadySuggested := false
-			for _, s := range cs.suggestions {
-				if normalizeTask(s.Task) == normalized {
+			for i := range cs.suggestions {
+				if normalizeTask(cs.suggestions[i].Task) == normalized {
 					alreadySuggested = true
-					s.MentionCount = len(recent)
+					cs.suggestions[i].MentionCount = len(recent)
 					break
 				}
 			}

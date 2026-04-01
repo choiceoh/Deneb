@@ -58,10 +58,11 @@ func (bw *BuildWatcher) pollBuildStatus() {
 		if status != "" {
 			bw.svc.mu.Lock()
 			bw.watchingBuild = false
+			branch := bw.lastBranch
 			bw.svc.mu.Unlock()
 
 			bw.svc.emit(ShadowEvent{Type: "build_status", Payload: map[string]any{
-				"branch": bw.lastBranch,
+				"branch": branch,
 				"status": status,
 			}})
 
