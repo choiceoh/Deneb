@@ -23,17 +23,17 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	}
 	return map[string]rpcutil.HandlerFunc{
 		// Task queries.
-		"task.status":  taskStatus(deps),
-		"task.list":    taskList(deps),
-		"task.get":     taskGet(deps),
-		"task.events":  taskEvents(deps),
-		"task.cancel":  taskCancel(deps),
-		"task.audit":   taskAudit(deps),
+		"task.status": taskStatus(deps),
+		"task.list":   taskList(deps),
+		"task.get":    taskGet(deps),
+		"task.events": taskEvents(deps),
+		"task.cancel": taskCancel(deps),
+		"task.audit":  taskAudit(deps),
 
 		// Flow management.
-		"flow.list":    flowList(deps),
-		"flow.show":    flowShow(deps),
-		"flow.cancel":  flowCancel(deps),
+		"flow.list":   flowList(deps),
+		"flow.show":   flowShow(deps),
+		"flow.cancel": flowCancel(deps),
 	}
 }
 
@@ -275,28 +275,11 @@ func flowCancel(deps Deps) rpcutil.HandlerFunc {
 				protocol.NewError(protocol.ErrMissingParam, "flowId required"))
 		}
 
-		flow := deps.Registry.GetFlow(p.FlowID)
-		if flow == nil {
+		cancelled, err := tasks.CancelFlow(deps.Registry, p.FlowID)
+		if err != nil {
 			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrNotFound, "flow not found"))
+				protocol.NewError(protocol.ErrNotFound, err.Error()))
 		}
-
-		// Cancel all active tasks in this flow.
-		flowTasks := deps.Registry.ListByFlowID(p.FlowID)
-		cancelled := 0
-		for _, t := range flowTasks {
-			if t.Status.IsActive() {
-				if err := tasks.CancelTask(deps.Registry, t.TaskID); err == nil {
-					cancelled++
-				}
-			}
-		}
-
-		// Mark the flow as cancelled.
-		flow.Status = tasks.FlowCancelled
-		flow.UpdatedAt = tasks.NowMs()
-		flow.CompletedAt = tasks.NowMs()
-		_ = deps.Registry.PutFlow(flow)
 
 		return protocol.NewResponseResult(req.ID, map[string]any{
 			"cancelled":      true,

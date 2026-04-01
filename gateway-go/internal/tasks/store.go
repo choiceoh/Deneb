@@ -85,7 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_flows_owner_key ON flows(owner_key);
 
 // Store provides SQLite-backed persistence for the task ledger.
 type Store struct {
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	db     *sql.DB
 	dbPath string
 	logger *slog.Logger
@@ -196,8 +196,8 @@ func (s *Store) UpsertTask(t *TaskRecord) error {
 
 // GetTask retrieves a single task by ID.
 func (s *Store) GetTask(taskID string) (*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	row := s.db.QueryRow(`SELECT `+taskColumns+` FROM task_runs WHERE task_id = ?`, taskID)
 	return scanTaskRecord(row)
@@ -205,8 +205,8 @@ func (s *Store) GetTask(taskID string) (*TaskRecord, error) {
 
 // GetTaskByRunID retrieves a task by its run ID.
 func (s *Store) GetTaskByRunID(runID string) (*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	row := s.db.QueryRow(`SELECT `+taskColumns+` FROM task_runs WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`, runID)
 	return scanTaskRecord(row)
@@ -214,48 +214,48 @@ func (s *Store) GetTaskByRunID(runID string) (*TaskRecord, error) {
 
 // ListAll returns all tasks ordered by creation time.
 func (s *Store) ListAll() ([]*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs ORDER BY created_at ASC`)
+	return s.queryTasks(`SELECT ` + taskColumns + ` FROM task_runs ORDER BY created_at ASC`)
 }
 
 // ListByStatus returns tasks matching the given status.
 func (s *Store) ListByStatus(status TaskStatus) ([]*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE status = ? ORDER BY created_at ASC`, status)
 }
 
 // ListActive returns all queued, running, or blocked tasks.
 func (s *Store) ListActive() ([]*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE status IN ('queued','running','blocked') ORDER BY created_at ASC`)
+	return s.queryTasks(`SELECT ` + taskColumns + ` FROM task_runs WHERE status IN ('queued','running','blocked') ORDER BY created_at ASC`)
 }
 
 // ListByOwner returns tasks for a specific owner key.
 func (s *Store) ListByOwner(ownerKey string) ([]*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE owner_key = ? ORDER BY created_at ASC`, ownerKey)
 }
 
 // ListByFlowID returns all tasks belonging to a flow.
 func (s *Store) ListByFlowID(flowID string) ([]*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE flow_id = ? ORDER BY created_at ASC`, flowID)
 }
 
 // ListByRuntime returns tasks for a specific runtime.
 func (s *Store) ListByRuntime(runtime TaskRuntime) ([]*TaskRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE runtime = ? ORDER BY created_at ASC`, runtime)
 }
@@ -342,8 +342,8 @@ func (s *Store) AppendEvent(evt *TaskEventRecord) error {
 
 // ListEvents returns all events for a task, ordered chronologically.
 func (s *Store) ListEvents(taskID string) ([]*TaskEventRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`SELECT task_id, at, kind, summary FROM task_events WHERE task_id = ? ORDER BY at ASC`, taskID)
 	if err != nil {
@@ -393,8 +393,8 @@ func (s *Store) UpsertFlow(f *FlowRecord) error {
 
 // GetFlow retrieves a flow by ID.
 func (s *Store) GetFlow(flowID string) (*FlowRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	row := s.db.QueryRow(`SELECT `+flowColumns+` FROM flows WHERE flow_id = ?`, flowID)
 	return scanFlowRecord(row)
@@ -402,8 +402,8 @@ func (s *Store) GetFlow(flowID string) (*FlowRecord, error) {
 
 // ListFlows returns all flows ordered by creation time.
 func (s *Store) ListFlows() ([]*FlowRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`SELECT ` + flowColumns + ` FROM flows ORDER BY created_at DESC`)
 	if err != nil {
@@ -424,10 +424,10 @@ func (s *Store) ListFlows() ([]*FlowRecord, error) {
 
 // ListActiveFlows returns flows that are not in a terminal state.
 func (s *Store) ListActiveFlows() ([]*FlowRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT `+flowColumns+` FROM flows WHERE status IN ('active','blocked') ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT ` + flowColumns + ` FROM flows WHERE status IN ('active','blocked') ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -457,8 +457,8 @@ func (s *Store) DeleteFlow(flowID string) error {
 
 // Summary returns aggregate statistics for the task ledger.
 func (s *Store) Summary() (*RegistrySummary, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	sum := &RegistrySummary{
 		ByStatus:  make(map[TaskStatus]int),

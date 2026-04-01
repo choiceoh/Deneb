@@ -114,14 +114,13 @@ func (s *FileTranscriptStore) Delete(sessionKey string) error {
 }
 
 // CloneRecent copies the most recent `limit` messages from srcKey to dstKey.
-// Returns the number of messages copied.
-func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) (int, error) {
+func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) error {
 	msgs, _, err := s.Load(srcKey, limit)
 	if err != nil {
-		return 0, fmt.Errorf("clone: load source %q: %w", srcKey, err)
+		return fmt.Errorf("clone: load source %q: %w", srcKey, err)
 	}
 	if len(msgs) == 0 {
-		return 0, nil
+		return nil
 	}
 
 	// Write all messages to destination in one batch (more efficient than per-message Append).
@@ -130,12 +129,12 @@ func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) (int
 
 	dstPath := s.sessionPath(dstKey)
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-		return 0, fmt.Errorf("clone: create dir: %w", err)
+		return fmt.Errorf("clone: create dir: %w", err)
 	}
 
 	f, err := os.Create(dstPath)
 	if err != nil {
-		return 0, fmt.Errorf("clone: create dst: %w", err)
+		return fmt.Errorf("clone: create dst: %w", err)
 	}
 	defer f.Close()
 
@@ -149,9 +148,9 @@ func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) (int
 		_ = w.WriteByte('\n')
 	}
 	if err := w.Flush(); err != nil {
-		return 0, fmt.Errorf("clone: flush: %w", err)
+		return fmt.Errorf("clone: flush: %w", err)
 	}
-	return len(msgs), nil
+	return nil
 }
 
 // AppendSystemNote appends a system-role message with the given text.
@@ -230,20 +229,6 @@ func (s *FileTranscriptStore) Search(query string, maxResults int) ([]SearchResu
 		}
 	}
 	return results, nil
-}
-
-// CloneRecent copies the most recent `limit` messages from srcKey to dstKey.
-func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) error {
-	msgs, _, err := s.Load(srcKey, limit)
-	if err != nil {
-		return fmt.Errorf("clone transcript: load src: %w", err)
-	}
-	for _, msg := range msgs {
-		if err := s.Append(dstKey, msg); err != nil {
-			return fmt.Errorf("clone transcript: append dst: %w", err)
-		}
-	}
-	return nil
 }
 
 // MemoryTranscriptStore is an in-memory transcript store for testing.
