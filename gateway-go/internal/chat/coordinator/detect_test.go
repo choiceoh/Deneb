@@ -39,8 +39,33 @@ func TestShouldSuggestCoordinator(t *testing.T) {
 			want:    false,
 		},
 		{
-			name:    "two file paths (below threshold)",
+			name:    "two file paths (lowered threshold)",
 			message: "Update main.go and config.go",
+			want:    true,
+		},
+		{
+			name:    "korean architecture keyword",
+			message: "전체 구조를 바꿔주세요",
+			want:    true,
+		},
+		{
+			name:    "english restructure keyword",
+			message: "Restructure the API layer",
+			want:    true,
+		},
+		{
+			name:    "compound action with conjunctions",
+			message: "이거 고치고 그리고 저거도 바꾸고 추가로 테스트 만들어줘",
+			want:    true,
+		},
+		{
+			name:    "single conjunction not enough",
+			message: "이거 고치고 그리고 테스트도 돌려줘",
+			want:    false,
+		},
+		{
+			name:    "simple single task stays false",
+			message: "간단한 버그 하나 고쳐줘",
 			want:    false,
 		},
 	}
