@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/thinking"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
@@ -80,6 +81,21 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	// 8. Resolve token limits from model runtime info.
 	contextTokens := model.ResolveContextTokens(opts.ContextTokens, 0)
 	maxTokens := model.ResolveMaxTokens(opts.MaxTokens, 0)
+
+	// 8b. Resolve model-aware default thinking level if not set via directive.
+	// The thinking package checks adaptive patterns (e.g., claude-4.6 → adaptive)
+	// and catalog reasoning flags to pick an appropriate default.
+	if sess.ThinkLevel == "" || sess.ThinkLevel == types.ThinkOff {
+		if deps.ThinkingRuntime != nil {
+			catalog := buildThinkingCatalog(deps.ModelCandidates)
+			defaultThink := deps.ThinkingRuntime.ResolveThinkingDefaultForModel(
+				selection.Provider, selection.Model, catalog,
+			)
+			if defaultThink != types.ThinkOff {
+				sess.ThinkLevel = defaultThink
+			}
+		}
+	}
 
 	// 9. Build typing controller.
 	var typingCtrl *typing.TypingController
@@ -207,6 +223,9 @@ type ReplyDeps struct {
 	// OnSessionEvent fires session lifecycle hooks (abort, reset, etc.)
 	// via the plugin hook system. nil = events silently dropped.
 	OnSessionEvent func(eventType, sessionKey, reason string)
+	// ThinkingRuntime resolves model-aware thinking defaults (adaptive, xhigh, etc.).
+	// Optional; nil = no model-aware thinking defaults (ThinkOff unless /think directive).
+	ThinkingRuntime *thinking.ThinkingRuntime
 }
 
 // InitSessionForReply initializes or retrieves session state for a reply.
@@ -261,6 +280,21 @@ func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.Sess
 	}
 
 	return nil
+}
+
+// buildThinkingCatalog converts model candidates to thinking catalog entries.
+// ModelCandidate doesn't carry a Reasoning flag, so entries default to
+// reasoning=false. The thinking package primarily uses regex patterns
+// (from model_caps.yaml) rather than catalog reasoning flags for default resolution.
+func buildThinkingCatalog(candidates []model.ModelCandidate) []thinking.ThinkingCatalogEntry {
+	entries := make([]thinking.ThinkingCatalogEntry, len(candidates))
+	for i, c := range candidates {
+		entries[i] = thinking.ThinkingCatalogEntry{
+			Provider: c.Provider,
+			ID:       c.Model,
+		}
+	}
+	return entries
 }
 
 // ResolveModelForReply determines the model to use for a reply via the full
