@@ -140,6 +140,11 @@ func TestSanitizeSummary(t *testing.T) {
 		{"", ""},
 		{"  ", ""},
 		{strings.Repeat("가", 50), strings.Repeat("가", 30)},
+		// Reasoning model preamble stripping.
+		{"Thinking Process:\n코드 분석하는 중", "코드 분석하는 중"},
+		{"Analysis:\n버그 원인 분석하는 중", "버그 원인 분석하는 중"},
+		{"<think>reasoning here</think>\n코드 검색하는 중", "코드 검색하는 중"},
+		{"<think>hmm</think>\nThinking Process:\n의존성 확인하는 중", "의존성 확인하는 중"},
 	}
 	for _, tt := range tests {
 		got := sanitizeSummary(tt.input)

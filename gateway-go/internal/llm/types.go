@@ -32,6 +32,11 @@ type ChatRequest struct {
 
 	// Thinking configures extended thinking (mapped to reasoning_effort for OpenAI).
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+
+	// ExtraBody holds additional top-level fields merged into the OpenAI-format
+	// request body. Used for provider-specific parameters like sglang's
+	// "chat_completion_extra_params": {"enable_thinking": false}.
+	ExtraBody map[string]any `json:"-"`
 }
 
 // ResponseFormat controls the output format for OpenAI-compatible endpoints.
