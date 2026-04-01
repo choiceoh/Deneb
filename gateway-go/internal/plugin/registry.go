@@ -340,7 +340,7 @@ type RegistrySummary struct {
 func (r *FullRegistry) Summary() RegistrySummary {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	hookNames := r.hookRunner.ListHookNames()
+	hookNames := r.hookRunner.ListRegisteredHooks()
 	return RegistrySummary{
 		Plugins:      len(r.plugins),
 		Channels:     len(r.channels),
