@@ -44,6 +44,14 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
 	RegisterHiddenTools(registry, deps.AgentLog)
 
+	// Autonomous continuation: LLM calls this to request a new run after current completes.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "continue_run",
+		Description: "Signal that you have more work to do and want to start a new autonomous run. Use when the current run's tool-call budget is nearly exhausted but the task is not yet complete.",
+		InputSchema: continueRunToolSchema(),
+		Fn:          tools.ToolContinueRun(),
+	})
+
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on sglang hooks that live in the chat package.
 }

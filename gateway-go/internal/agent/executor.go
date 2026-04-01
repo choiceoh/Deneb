@@ -54,6 +54,17 @@ func RunAgent(
 
 	result := &AgentResult{}
 
+	// Max-output-tokens recovery: tracks how many times we've auto-resumed
+	// after the LLM response was truncated by max_tokens.
+	var maxTokensRecoveryCount int
+
+	// Nudge budget continuation: tracks how many times we've injected a nudge
+	// message after end_turn to prompt the LLM for remaining work.
+	var nudgeContinuationCount int
+	// recentNudgeDeltas tracks output tokens produced on the last 2 nudge turns
+	// for diminishing-returns detection.
+	var recentNudgeDeltas [2]int
+
 	for turn := 0; turn < cfg.MaxTurns; turn++ {
 		result.Turns = turn + 1
 
@@ -136,12 +147,75 @@ func RunAgent(
 			result.Text = turnRes.text
 		}
 
-		// Check stop reason.
+		// --- Max-output-tokens recovery ---
+		// When the LLM response is truncated by max_tokens (not a clean end_turn),
+		// inject a "resume" message and retry. This prevents losing partially
+		// generated code or explanations.
+		if turnRes.stopReason == "max_tokens" && len(turnRes.toolCalls) == 0 &&
+			cfg.MaxOutputTokensRecovery > 0 && maxTokensRecoveryCount < cfg.MaxOutputTokensRecovery {
+			maxTokensRecoveryCount++
+			logger.Info("max_tokens recovery: injecting resume message",
+				"attempt", maxTokensRecoveryCount,
+				"maxAttempts", cfg.MaxOutputTokensRecovery)
+			// Append the truncated assistant output so the LLM sees what it already wrote.
+			messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+			// Inject a user-role resume prompt.
+			messages = append(messages, llm.NewTextMessage("user",
+				"[Output was truncated due to token limit. Resume directly from where you left off without repeating what was already said.]"))
+			continue
+		}
+
+		// --- Check stop reason ---
 		if turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0 {
+			// --- Nudge budget continuation ---
+			// If the agent finished normally but the token budget is not exhausted,
+			// inject a nudge message to prompt for remaining work.
+			if cfg.NudgeBudget != nil && turnRes.stopReason == "end_turn" && turn > 0 {
+				nb := cfg.NudgeBudget
+				maxConts := nb.MaxContinuations
+				if maxConts <= 0 {
+					maxConts = 3
+				}
+				threshold := nb.BudgetThreshold
+				if threshold <= 0 {
+					threshold = 0.9
+				}
+				minDelta := nb.MinDeltaTokens
+				if minDelta <= 0 {
+					minDelta = 500
+				}
+
+				totalTokens := result.Usage.InputTokens + result.Usage.OutputTokens
+				// Budget is estimated from MaxTurns * MaxTokens as a rough ceiling.
+				estimatedBudget := cfg.MaxTurns * cfg.MaxTokens
+				budgetUsed := float64(totalTokens) / float64(estimatedBudget)
+
+				// Check diminishing returns: if last 2 nudge deltas were both < minDelta, stop.
+				diminishing := nudgeContinuationCount >= 2 &&
+					recentNudgeDeltas[0] < minDelta && recentNudgeDeltas[1] < minDelta
+
+				if nudgeContinuationCount < maxConts && budgetUsed < threshold && !diminishing {
+					nudgeContinuationCount++
+					// Track output tokens for this nudge turn.
+					recentNudgeDeltas[nudgeContinuationCount%2] = turnRes.usage.OutputTokens
+
+					logger.Info("nudge continuation: prompting for remaining work",
+						"continuation", nudgeContinuationCount,
+						"maxContinuations", maxConts,
+						"budgetUsed", fmt.Sprintf("%.1f%%", budgetUsed*100))
+					messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+					messages = append(messages, llm.NewTextMessage("user",
+						"[Continue: check if there's anything else to do for this task. If the task is fully complete, respond with a brief summary.]"))
+					continue
+				}
+			}
+
 			result.StopReason = turnRes.stopReason
 			if result.StopReason == "" {
 				result.StopReason = "end_turn"
 			}
+			result.NudgeContinuations = nudgeContinuationCount
+			result.MaxTokensRecoveries = maxTokensRecoveryCount
 			return result, nil
 		}
 
@@ -267,6 +341,8 @@ func RunAgent(
 	}
 
 	result.StopReason = "max_turns"
+	result.NudgeContinuations = nudgeContinuationCount
+	result.MaxTokensRecoveries = maxTokensRecoveryCount
 	return result, nil
 }
 

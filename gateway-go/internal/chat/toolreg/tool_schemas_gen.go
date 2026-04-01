@@ -1612,3 +1612,16 @@ func autoresearchToolSchema() map[string]any {
 		"required": []string{"action", "workdir"},
 	}
 }
+
+func continueRunToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "Brief description of remaining work for the next continuation run",
+			},
+		},
+		"required": []string{"reason"},
+	}
+}

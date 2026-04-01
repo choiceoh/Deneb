@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -57,6 +58,10 @@ type RunParams struct {
 	// assembly. Used by the OpenAI-compatible HTTP API to pass through the full
 	// conversation history from the client.
 	PrebuiltMessages []llm.Message
+
+	// ContinuationIndex tracks the current autonomous continuation number.
+	// 0 = original run, 1+ = continuation runs. Not set by external callers.
+	ContinuationIndex int
 }
 
 // Agent run defaults.
@@ -129,6 +134,9 @@ type runDeps struct {
 	// startRunFn starts a new async run (for processing queued messages).
 	// Set by the Handler; nil disables pending queue processing.
 	startRunFn func(params RunParams)
+	// maxContinuations is the maximum number of autonomous continuation runs
+	// triggered by the continue_run tool. 0 means use default (5).
+	maxContinuations int
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
@@ -267,7 +275,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 
 	// Run the agent and capture result.
-	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
+	chatResult, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
 
 	// Stop typing indicator before delivering the reply.
 	if typingSignaler != nil {
@@ -278,8 +286,8 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// executing, save a context note to the transcript so the next run knows
 	// what the assistant was doing. Without this, the next run has no memory
 	// of the interrupted work and starts from scratch.
-	if result != nil && len(result.InterruptedToolNames) > 0 && deps.transcript != nil {
-		persistInterruptedContext(deps, params.SessionKey, result, logger)
+	if chatResult != nil && len(chatResult.InterruptedToolNames) > 0 && deps.transcript != nil {
+		persistInterruptedContext(deps, params.SessionKey, chatResult.AgentResult, logger)
 	}
 
 	// Handle completion.
@@ -297,15 +305,43 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		statusCtrl.SetDone()
 		statusCtrl.CloseAfterDrain()
 	}
-	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now, runLog)
+	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, now, runLog)
 
 	// Process pending message: if the user sent a message while this run was
 	// active, it was queued. Now that the run is complete, drain and process it.
+	// User messages take priority over autonomous continuation.
 	if deps.drainPendingFn != nil && deps.startRunFn != nil {
 		if pending := deps.drainPendingFn(params.SessionKey); pending != nil {
 			logger.Info("processing queued message after run completion",
 				"sessionKey", params.SessionKey)
 			deps.startRunFn(*pending)
+			return
 		}
+	}
+
+	// Autonomous continuation: if the LLM called continue_run and we haven't
+	// exceeded the max continuation limit, start a new run automatically.
+	maxConts := deps.maxContinuations
+	if maxConts <= 0 {
+		maxConts = 5
+	}
+	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() &&
+		params.ContinuationIndex < maxConts && deps.startRunFn != nil {
+		reason := chatResult.ContSignal.Reason()
+		nextIndex := params.ContinuationIndex + 1
+		logger.Info("autonomous continuation triggered",
+			"reason", reason,
+			"continuation", nextIndex,
+			"maxContinuations", maxConts)
+
+		contParams := RunParams{
+			SessionKey:        params.SessionKey,
+			Message:           fmt.Sprintf("[System: Autonomous continuation %d/%d. Reason: %s. Continue your work.]", nextIndex, maxConts, reason),
+			Delivery:          params.Delivery,
+			Model:             params.Model,
+			WorkspaceDir:      params.WorkspaceDir,
+			ContinuationIndex: nextIndex,
+		}
+		deps.startRunFn(contParams)
 	}
 }

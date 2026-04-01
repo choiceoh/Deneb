@@ -2,6 +2,7 @@ package toolctx
 
 import (
 	"context"
+	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 )
@@ -19,6 +20,7 @@ const (
 	ctxKeyRunCache
 	ctxKeyFileCache
 	ctxKeyToolPreset
+	ctxKeyContinuationSignal
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -122,5 +124,53 @@ func WithToolPreset(ctx context.Context, preset string) context.Context {
 // ToolPresetFromContext extracts the tool preset from a context.
 func ToolPresetFromContext(ctx context.Context) string {
 	s, _ := ctx.Value(ctxKeyToolPreset).(string)
+	return s
+}
+
+// --- ContinuationSignal ---
+
+// ContinuationSignal is a shared flag set by the continue_run tool to signal
+// that the LLM wants a new agent run to start after the current one completes.
+// Thread-safe; the tool sets it from a tool goroutine, the run orchestrator
+// reads it after the agent loop returns.
+type ContinuationSignal struct {
+	mu        sync.Mutex
+	requested bool
+	reason    string
+}
+
+// NewContinuationSignal creates a new (unset) ContinuationSignal.
+func NewContinuationSignal() *ContinuationSignal { return &ContinuationSignal{} }
+
+// Request marks the signal as requested with the given reason.
+func (s *ContinuationSignal) Request(reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.requested = true
+	s.reason = reason
+}
+
+// Requested reports whether continue_run was called.
+func (s *ContinuationSignal) Requested() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.requested
+}
+
+// Reason returns the continuation reason (empty if not requested).
+func (s *ContinuationSignal) Reason() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reason
+}
+
+// WithContinuationSignal attaches a ContinuationSignal to the context.
+func WithContinuationSignal(ctx context.Context, sig *ContinuationSignal) context.Context {
+	return context.WithValue(ctx, ctxKeyContinuationSignal, sig)
+}
+
+// ContinuationSignalFromContext extracts the ContinuationSignal from a context.
+func ContinuationSignalFromContext(ctx context.Context) *ContinuationSignal {
+	s, _ := ctx.Value(ctxKeyContinuationSignal).(*ContinuationSignal)
 	return s
 }

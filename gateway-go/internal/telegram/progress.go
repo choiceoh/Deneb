@@ -50,6 +50,7 @@ var toolNameKorean = map[string]string{
 	"image":           "이미지 분석",
 	"gmail":           "이메일",
 	"message":         "메시지 전송",
+	"continue_run":    "자동 연속 실행",
 }
 
 // NewProgressTracker creates a tracker bound to a specific Telegram chat.

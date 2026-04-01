@@ -53,6 +53,14 @@ func loadCachedSkillsPrompt(workspaceDir string) string {
 	return cachedSkillsPrompt
 }
 
+// chatRunResult wraps the agent result with chat-layer continuation info.
+type chatRunResult struct {
+	*agent.AgentResult
+	// ContSignal is non-nil when the continue_run tool was available.
+	// Check ContSignal.Requested() to see if the LLM requested a continuation.
+	ContSignal *ContinuationSignal
+}
+
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
 // run agent loop, persist result.
 func executeAgentRun(
@@ -64,7 +72,7 @@ func executeAgentRun(
 	statusCtrl *telegram.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
-) (*agent.AgentResult, error) {
+) (*chatRunResult, error) {
 	runStart := time.Now()
 
 	// Emit agent run.start event to gateway subscriptions.
@@ -465,6 +473,10 @@ func executeAgentRun(
 	// message is returned instead of the full content, saving context tokens.
 	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
 
+	// ContinuationSignal: shared across turns so continue_run tool can set it.
+	// Read by runAgentAsync after the agent loop returns.
+	contSignal := NewContinuationSignal()
+
 	// Resolve thinking config from the session's ThinkingLevel setting.
 	var thinkingCfg *llm.ThinkingConfig
 	if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.ThinkingLevel != "" {
@@ -517,8 +529,16 @@ func executeAgentRun(
 			ctx = WithRunCache(ctx, runCache)
 			ctx = WithFileCache(ctx, fileCache)
 			ctx = WithToolPreset(ctx, sessionToolPreset)
+			ctx = WithContinuationSignal(ctx, contSignal)
 			return ctx
 		},
+		// Enable nudge budget continuation and max-tokens recovery.
+		NudgeBudget: &agent.NudgeBudgetConfig{
+			MaxContinuations: 3,
+			BudgetThreshold:  0.9,
+			MinDeltaTokens:   500,
+		},
+		MaxOutputTokensRecovery: 3,
 	}
 
 	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
@@ -979,7 +999,7 @@ func executeAgentRun(
 		})
 	}
 
-	return agentResult, nil
+	return &chatRunResult{AgentResult: agentResult, ContSignal: contSignal}, nil
 }
 
 // resolveThinkingConfig maps a session ThinkingLevel string to an llm.ThinkingConfig.

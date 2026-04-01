@@ -1407,3 +1407,15 @@
   required:
     - action
     - workdir
+
+# ---------------------------------------------------------------------------
+# Autonomous continuation
+# ---------------------------------------------------------------------------
+
+- name: continue_run
+  properties:
+    reason:
+      type: string
+      description: "Brief description of remaining work for the next continuation run"
+  required:
+    - reason

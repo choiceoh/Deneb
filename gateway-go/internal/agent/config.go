@@ -57,6 +57,33 @@ type AgentConfig struct {
 	// run is expected to take multiple turns (e.g. tool-heavy coding or analysis).
 	// Savings: ~1600 tokens × image count per turn after turn 0.
 	StripImagesAfterFirstTurn bool
+
+	// NudgeBudget enables token-budget-based continuation: when the agent finishes
+	// with end_turn but the token budget is not yet exhausted, a nudge message is
+	// injected to prompt the LLM to check for remaining work. Nil = disabled.
+	NudgeBudget *NudgeBudgetConfig
+
+	// MaxOutputTokensRecovery is the maximum number of times to auto-recover when
+	// the LLM response is truncated by max_tokens. Each recovery injects a
+	// "resume where you left off" message. Default: 0 (disabled). Recommended: 3.
+	MaxOutputTokensRecovery int
+}
+
+// NudgeBudgetConfig configures token-budget continuation (Claude Code pattern).
+// When the agent returns end_turn with budget remaining, a nudge message is
+// injected to encourage the LLM to check for remaining work.
+type NudgeBudgetConfig struct {
+	// MaxContinuations is the maximum number of nudge continuations. Default: 3.
+	MaxContinuations int
+	// BudgetThreshold is the fraction (0.0–1.0) of the total token budget at
+	// which nudging stops. E.g., 0.9 means stop nudging when 90% of the budget
+	// is consumed. Default: 0.9.
+	BudgetThreshold float64
+	// MinDeltaTokens is the minimum output tokens the LLM must produce on a
+	// nudge turn to be considered productive. If the last two nudge turns both
+	// produce fewer than this many tokens, nudging stops (diminishing returns).
+	// Default: 500.
+	MinDeltaTokens int
 }
 
 // TurnCallback is called after each agent turn with accumulated token count.
@@ -74,4 +101,11 @@ type AgentResult struct {
 	// Used to persist interrupted context to the transcript so the next run
 	// knows what was being done when the user interrupted.
 	InterruptedToolNames []string
+
+	// NudgeContinuations is the number of token-budget nudge continuations
+	// that were triggered during this run. 0 when nudge is disabled.
+	NudgeContinuations int
+	// MaxTokensRecoveries is the number of max-output-tokens recovery retries
+	// that were triggered during this run. 0 when recovery is disabled.
+	MaxTokensRecoveries int
 }

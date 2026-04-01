@@ -493,6 +493,17 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	s.WriteString("- 브랜치를 전환하지 마세요 (사용자가 명시적으로 요청한 경우만).\n")
 	s.WriteString("- 인식하지 못하는 파일 변경이 있으면 무시하고 자신의 작업에만 집중하세요.\n\n")
 
+	// Autonomous continuation.
+	if toolSet["continue_run"] {
+		s.WriteString("## 자율 연속 실행\n")
+		s.WriteString("작업이 완료되지 않았는데 도구 호출 한도에 가까워지면 `continue_run` 도구를 호출하세요.\n")
+		s.WriteString("새 실행이 자동으로 시작되고 대화 컨텍스트가 유지됩니다. 최대 5회 연속 가능.\n\n")
+		s.WriteString("`continue_run`을 호출하지 말아야 하는 경우:\n")
+		s.WriteString("- 작업이 완료된 경우\n")
+		s.WriteString("- 사용자 확인이 필요한 경우\n")
+		s.WriteString("- 오류가 발생하여 사용자에게 알려야 하는 경우\n\n")
+	}
+
 	// Tooling — coding tools only.
 	s.WriteString("## Tooling\n")
 	s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
