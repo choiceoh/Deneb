@@ -268,6 +268,11 @@ func (s *Server) wireTelegramChatHandler() {
 
 		if msgID == "" {
 			// First call: send a new message.
+			// SendText handles chunking automatically, but for draft streaming
+			// we only want a single message to edit later, so truncate to fit.
+			if len(html) > telegram.MaxTextLength {
+				html = telegram.TruncateDraftHTML(html, telegram.MaxTextLength)
+			}
 			results, err := telegram.SendText(ctx, client, chatID, html, telegram.SendOptions{
 				ParseMode:          "HTML",
 				DisableLinkPreview: true,
@@ -279,6 +284,11 @@ func (s *Server) wireTelegramChatHandler() {
 		}
 
 		// Subsequent calls: edit the existing message.
+		// Telegram editMessageText has a 4096-char hard limit; truncate to
+		// show the tail (most recent streaming output) when text is too long.
+		if len(html) > telegram.MaxTextLength {
+			html = telegram.TruncateDraftHTML(html, telegram.MaxTextLength)
+		}
 		editMsgID, err := strconv.ParseInt(msgID, 10, 64)
 		if err != nil {
 			return "", fmt.Errorf("invalid message ID %q: %w", msgID, err)

@@ -512,6 +512,38 @@ func truncateUTF8(s string, maxBytes int) string {
 	return s[:maxBytes]
 }
 
+// TruncateDraftHTML truncates HTML text for draft streaming edits by keeping
+// the tail (most recent content). It finds a safe split point that avoids
+// breaking HTML tags or multi-byte UTF-8 characters, and prepends "…\n".
+func TruncateDraftHTML(html string, maxLen int) string {
+	if len(html) <= maxLen {
+		return html
+	}
+	const prefix = "…\n"
+	target := maxLen - len(prefix)
+	if target <= 0 {
+		return prefix
+	}
+	// Start from the end, skip back to find start offset.
+	start := len(html) - target
+	// Skip past any UTF-8 continuation bytes.
+	for start < len(html) && html[start]&0xC0 == 0x80 {
+		start++
+	}
+	// Try to find a newline or space nearby to avoid mid-word/tag splits.
+	searchEnd := start + 200
+	if searchEnd > len(html) {
+		searchEnd = len(html)
+	}
+	for i := start; i < searchEnd; i++ {
+		if html[i] == '\n' {
+			start = i + 1
+			break
+		}
+	}
+	return prefix + html[start:]
+}
+
 // UTF16Len returns the UTF-16 code unit length of a string.
 // Telegram uses UTF-16 offsets for entities.
 func UTF16Len(s string) int {
