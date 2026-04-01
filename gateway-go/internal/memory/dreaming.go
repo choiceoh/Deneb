@@ -276,13 +276,19 @@ func verifyAndResolveBatch(ctx context.Context, store *Store, client *llm.Client
 	verified, expired := 0, 0
 	for _, r := range wrapper.Results {
 		if r.Valid {
-			_ = store.MarkVerified(ctx, r.ID)
+			if err := store.MarkVerified(ctx, r.ID); err != nil {
+				logger.Warn("aurora-dream: failed to mark fact verified", "id", r.ID, "error", err)
+			}
 			if r.NewImportance > 0 && r.NewImportance <= 1.0 {
-				_ = store.UpdateImportance(ctx, r.ID, r.NewImportance)
+				if err := store.UpdateImportance(ctx, r.ID, r.NewImportance); err != nil {
+					logger.Warn("aurora-dream: failed to update importance", "id", r.ID, "error", err)
+				}
 			}
 			verified++
 		} else {
-			_ = store.DeactivateFact(ctx, r.ID)
+			if err := store.DeactivateFact(ctx, r.ID); err != nil {
+				logger.Warn("aurora-dream: failed to deactivate fact", "id", r.ID, "error", err)
+			}
 			removed[r.ID] = true
 			expired++
 			logger.Info("aurora-dream: expired fact", "id", r.ID, "reason", r.Reason)
@@ -298,7 +304,9 @@ func verifyAndResolveBatch(ctx context.Context, store *Store, client *llm.Client
 		if removed[c.RemoveID] || removed[c.KeepID] {
 			continue
 		}
-		_ = store.SupersedeFact(ctx, c.RemoveID, c.KeepID)
+		if err := store.SupersedeFact(ctx, c.RemoveID, c.KeepID); err != nil {
+			logger.Warn("aurora-dream: failed to supersede fact", "remove", c.RemoveID, "keep", c.KeepID, "error", err)
+		}
 		removed[c.RemoveID] = true
 		resolved++
 		logger.Info("aurora-dream: resolved conflict", "keep", c.KeepID, "remove", c.RemoveID, "reason", c.Reason)

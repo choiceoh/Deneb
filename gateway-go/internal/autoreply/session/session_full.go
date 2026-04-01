@@ -159,20 +159,6 @@ func (u *SessionUsage) FormatUsage() string {
 		u.TotalTokens, u.InputTokens, u.OutputTokens, u.RunCount)
 }
 
-// SessionHookEvent represents a session lifecycle hook event.
-type SessionHookEvent struct {
-	Type       string
-	SessionKey string
-	AgentID    string
-	Reason     string
-	Timestamp  int64
-}
-
-// EmitSessionHook is a placeholder for hook emission.
-func EmitSessionHook(event SessionHookEvent) {
-	// Hook emission is handled by the plugin system's HookRunner.
-	// This is called by session lifecycle code to notify plugins.
-}
 
 // SessionDelivery handles reply delivery to the originating channel.
 type SessionDelivery struct {

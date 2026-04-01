@@ -181,7 +181,9 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 	// Always clear consumed mu_signals_raw after successful LLM call,
 	// even if no keys were updated — prevents unbounded accumulation
 	// when the LLM produces empty/unrecognized output.
-	_ = store.SetUserModel(ctx, "mu_signals_raw", "", 0)
+	if err := store.SetUserModel(ctx, "mu_signals_raw", "", 0); err != nil {
+		logger.Warn("aurora-dream: failed to clear mu_signals_raw", "error", err)
+	}
 
 	if updated > 0 {
 		// Append a history snapshot: concise summary of what changed this cycle.

@@ -78,7 +78,10 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			}
 			return 0
 		},
-		GetChannelStartedAt: func(_ string) int64 {
+		GetChannelStartedAt: func(id string) int64 {
+			if id == "telegram" && s.telegramPlug != nil {
+				return s.telegramPlug.StartedAt()
+			}
 			return 0
 		},
 		RestartChannel: func(id string) error {

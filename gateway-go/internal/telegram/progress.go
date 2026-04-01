@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 )
@@ -112,7 +113,9 @@ func (pt *ProgressTracker) updateMessage(ctx context.Context) {
 	}
 
 	// Subsequent updates: edit the existing message.
-	_, _ = EditMessageText(ctx, pt.client, pt.chatID, msgID, text, "", nil)
+	if _, err := EditMessageText(ctx, pt.client, pt.chatID, msgID, text, "", nil); err != nil {
+		slog.Warn("failed to edit progress message", "msgId", msgID, "error", err)
+	}
 }
 
 // renderText builds the plain-text progress display from current steps.

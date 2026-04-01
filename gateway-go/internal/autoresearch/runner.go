@@ -44,10 +44,12 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 	}
 
 	// Save baseline output.
-	_ = SaveExperimentOutput(workdir, 0, string(output), "")
+	if err := SaveExperimentOutput(workdir, 0, string(output), ""); err != nil {
+		r.logger.Warn("failed to save baseline output", "error", err)
+	}
 
 	// Record baseline as iteration 0 in results.
-	_ = AppendResult(workdir, ResultRow{
+	if err := AppendResult(workdir, ResultRow{
 		Iteration:   0,
 		Timestamp:   time.Now(),
 		Hypothesis:  "baseline",
@@ -55,7 +57,9 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 		Kept:        true,
 		DurationSec: int(timeout.Seconds()),
 		BestSoFar:   metric,
-	})
+	}); err != nil {
+		r.logger.Warn("failed to append baseline result", "error", err)
+	}
 
 	return metric, nil
 }
@@ -165,7 +169,9 @@ func (r *Runner) Start(workdir string) error {
 	if cfg.KeptCommit == "" {
 		headSHA, _ := gitRevParse(context.Background(), workdir, "HEAD")
 		cfg.KeptCommit = headSHA
-		_ = SaveConfig(workdir, cfg)
+		if err := SaveConfig(workdir, cfg); err != nil {
+			r.logger.Warn("failed to save experiment config", "error", err)
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

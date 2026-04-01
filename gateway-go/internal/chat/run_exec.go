@@ -581,6 +581,7 @@ func executeAgentRun(
 				"sessionKey": params.SessionKey,
 				"runId":      params.ClientRunID,
 				"isError":    isErr,
+				"result":     result,
 			})
 		}
 	}
@@ -713,6 +714,65 @@ func executeAgentRun(
 			// don't maintain Aurora state, so compaction would be a no-op.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
+
+				// Pre-compaction fact extraction: extract learnings from the
+				// conversation before compaction trims older messages.
+				if deps.memoryStore != nil && deps.registry != nil {
+					lwClient := deps.registry.Client(modelrole.RoleLightweight)
+					lwModel := deps.registry.Model(modelrole.RoleLightweight)
+					if lwClient != nil && lwModel != "" {
+						snapshot := messages // capture before compaction
+						go func() {
+							extractCtx, extractCancel := context.WithTimeout(deps.shutdownCtx, 30*time.Second)
+							defer extractCancel()
+							var userParts, assistantParts []string
+							for _, m := range snapshot {
+								// Extract text content from the message (may be
+								// a JSON string or a []ContentBlock array).
+								var text string
+								if len(m.Content) > 0 && m.Content[0] == '"' {
+									_ = json.Unmarshal(m.Content, &text)
+								} else {
+									var blocks []llm.ContentBlock
+									if json.Unmarshal(m.Content, &blocks) == nil {
+										for _, b := range blocks {
+											if b.Type == "text" && b.Text != "" {
+												text += b.Text + "\n"
+											}
+										}
+									}
+								}
+								if text == "" {
+									continue
+								}
+								switch m.Role {
+								case "user":
+									userParts = append(userParts, text)
+								case "assistant":
+									assistantParts = append(assistantParts, text)
+								}
+							}
+							if len(userParts) == 0 && len(assistantParts) == 0 {
+								return
+							}
+							facts, err := memory.ExtractFacts(
+								extractCtx, lwClient, lwModel,
+								strings.Join(userParts, "\n"),
+								strings.Join(assistantParts, "\n"),
+								logger,
+							)
+							if err != nil {
+								logger.Warn("pre-compaction fact extraction failed", "error", err)
+								return
+							}
+							if len(facts) > 0 {
+								memory.InsertExtractedFacts(extractCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
+								logger.Info("pre-compaction facts extracted", "count", len(facts))
+							}
+						}()
+					}
+				}
+
 				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
 					ctx, deps, params, client, logger,
 				)
@@ -792,6 +852,10 @@ func executeAgentRun(
 
 	// Fire agent_end plugin hook (void, non-blocking).
 	if deps.pluginHookRunner != nil {
+		errMsg := ""
+		if agentResult.StopReason != "end_turn" && agentResult.StopReason != "" {
+			errMsg = "stop_reason: " + agentResult.StopReason
+		}
 		go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAgentEnd, map[string]any{
 			"sessionKey": params.SessionKey,
 			"runId":      params.ClientRunID,
@@ -799,6 +863,7 @@ func executeAgentRun(
 			"turns":      agentResult.Turns,
 			"durationMs": totalMs,
 			"success":    agentResult.StopReason == "end_turn",
+			"error":      errMsg,
 		})
 	}
 

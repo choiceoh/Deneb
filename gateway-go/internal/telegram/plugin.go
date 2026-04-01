@@ -22,15 +22,16 @@ type OutboundMessage struct {
 
 // Plugin implements the Telegram Bot API channel.
 type Plugin struct {
-	statusMu sync.Mutex // protects status
-	status   Status
-	mu       sync.Mutex // protects client, bot, botUser, handler
-	client  *Client
-	bot     *Bot
-	config  *Config
-	logger  *slog.Logger
-	botUser *User
-	handler UpdateHandler // stored until bot is created in Start()
+	statusMu  sync.Mutex // protects status
+	status    Status
+	mu        sync.Mutex // protects client, bot, botUser, handler
+	client    *Client
+	bot       *Bot
+	config    *Config
+	logger    *slog.Logger
+	botUser   *User
+	handler   UpdateHandler // stored until bot is created in Start()
+	startedAt int64         // unix ms when Start() succeeded; 0 if not started
 }
 
 // NewPlugin creates a new Telegram channel plugin.
@@ -146,6 +147,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 		}
 	}()
 
+	p.startedAt = time.Now().UnixMilli()
 	p.SetStatus(Status{Connected: true})
 	return nil
 }
@@ -160,6 +162,14 @@ func (p *Plugin) Stop(_ context.Context) error {
 	}
 	p.SetStatus(Status{Connected: false})
 	return nil
+}
+
+// StartedAt returns the unix ms timestamp when Start() last succeeded.
+// Returns 0 if the plugin has never successfully started.
+func (p *Plugin) StartedAt() int64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.startedAt
 }
 
 // Client returns the underlying Telegram API client (for RPC methods).
