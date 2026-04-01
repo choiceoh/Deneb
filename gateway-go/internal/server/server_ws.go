@@ -15,7 +15,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )
@@ -94,14 +93,7 @@ func (c *WsClient) SendEvent(data []byte) error {
 	defer c.writeMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := c.conn.Write(ctx, websocket.MessageText, data)
-	if err != nil {
-		metrics.WireCallsTotal.Inc("ws_send", "error")
-	} else {
-		metrics.WireCallsTotal.Inc("ws_send", "ok")
-		metrics.WireBytesTotal.Add(n, "ws_send", "out")
-	}
-	return err
+	return c.conn.Write(ctx, websocket.MessageText, data)
 }
 
 // BufferedAmount returns bytes currently in-flight (being written).

@@ -80,6 +80,18 @@ func (c *Counter) Add(delta int64, labelValues ...string) {
 	c.mu.Unlock()
 }
 
+// Snapshot returns a copy of all label-key → value pairs.
+// The key is the \x00-joined label values string.
+func (c *Counter) Snapshot() map[string]int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]int64, len(c.values))
+	for k, v := range c.values {
+		out[k] = v.Load()
+	}
+	return out
+}
+
 // writeTo writes the counter in Prometheus text format.
 func (c *Counter) writeTo(w io.Writer) {
 	c.mu.RLock()
@@ -280,14 +292,6 @@ var (
 	WebSocketClients = NewGauge("deneb_websocket_clients", "Number of connected WebSocket clients.")
 )
 
-// Wire I/O counters: track calls and bytes across all inter-subsystem wires.
-var (
-	WireCallsTotal = NewCounter("deneb_wire_calls_total",
-		"Total wire callback invocations by wire name and status.", "wire", "status")
-	WireBytesTotal = NewCounter("deneb_wire_bytes_total",
-		"Total bytes transferred through wires by wire name and direction.", "wire", "direction")
-)
-
 // allMetrics is the ordered list of all metric writers for the /metrics handler.
 var allMetrics = []interface{ writeTo(io.Writer) }{
 	RPCRequestsTotal,
@@ -296,8 +300,6 @@ var allMetrics = []interface{ writeTo(io.Writer) }{
 	LLMTokensTotal,
 	ActiveSessions,
 	WebSocketClients,
-	WireCallsTotal,
-	WireBytesTotal,
 }
 
 // WriteMetrics writes all metrics in Prometheus text exposition format.
