@@ -281,8 +281,8 @@ func insertExtractedFactsWithSource(ctx context.Context, store *Store, embedder 
 		}
 
 		// Process entities and relations (best-effort).
-		store.processEntities(ctx, id, ef, *logger)
-		store.resolveRelations(ctx, id, ef, *logger)
+		store.processEntities(ctx, id, ef, logger)
+		store.resolveRelations(ctx, id, ef, logger)
 
 		// If this is a user_model or mutual fact, also update the user model table.
 		if ef.Category == CategoryUserModel || ef.Category == CategoryMutual {

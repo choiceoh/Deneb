@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
@@ -183,6 +184,15 @@ func executeAgentRun(
 	recallCh := make(chan string, 1)
 	if params.Message != "" && deps.registry != nil && deps.memoryStore != nil {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Error("recall: goroutine panicked", "panic", r)
+					select {
+					case recallCh <- "":
+					default:
+					}
+				}
+			}()
 			recallClient := deps.registry.Client(modelrole.RoleFallback)
 			recallModel := deps.registry.FullModelID(modelrole.RoleFallback)
 			if recallClient == nil {
@@ -219,9 +229,13 @@ func executeAgentRun(
 	go func() {
 		defer prepWg.Done()
 		if params.Message != "" {
+			// When recall engine is active (parallel goroutine), skip
+			// memory SearchFacts here to avoid duplicate DB queries.
+			recallActive := deps.registry != nil && deps.memoryStore != nil
 			kDeps := KnowledgeDeps{
-				VegaBackend:  deps.vegaBackend,
-				WorkspaceDir: workspaceDir,
+				VegaBackend:      deps.vegaBackend,
+				WorkspaceDir:     workspaceDir,
+				SkipMemorySearch: recallActive,
 			}
 			{
 				kDeps.MemoryStore = deps.memoryStore
@@ -348,15 +362,15 @@ func executeAgentRun(
 	// 7b. Try to inject recall early (non-blocking). If the fallback model
 	// finished recall before the main agent starts, we inject it now so the
 	// first response already benefits from recalled memory.
-	var recallConsumed bool
+	var recallConsumed atomic.Bool
 	select {
 	case recallText := <-recallCh:
 		if recallText != "" {
 			systemPrompt = llm.AppendSystemText(systemPrompt, recallText)
-			recallConsumed = true
+			recallConsumed.Store(true)
 			logger.Info("recall: early injection (before turn 0)", "chars", len(recallText))
 		} else {
-			recallConsumed = true // empty result, nothing to follow up
+			recallConsumed.Store(true) // empty result, nothing to follow up
 		}
 	default:
 		// Recall still running — will be checked via DeferredSystemText or post-run.
@@ -755,10 +769,10 @@ func executeAgentRun(
 	// run (e.g., single-turn Q&A where DeferredSystemText never fires), check
 	// now. If it has meaningful content, append it to the agent result so the
 	// reply pipeline can deliver it as a follow-up or edit.
-	if !recallConsumed {
+	if !recallConsumed.Load() {
 		select {
 		case recallText := <-recallCh:
-			recallConsumed = true
+			recallConsumed.Store(true)
 			if recallText != "" && agentResult != nil && agentResult.Text != "" {
 				logger.Info("recall: post-run follow-up available", "chars", len(recallText))
 				agentResult.RecallFollowUp = recallText

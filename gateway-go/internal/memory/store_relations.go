@@ -167,7 +167,7 @@ func (s *Store) GetRelationChain(ctx context.Context, factID int64, relationType
 // resolveRelations finds the best matching existing fact for a new fact's relation_type
 // and creates the relation. Uses same-category + same-entity overlap as signals.
 // Called from post-processing after fact insertion. Best-effort: errors are logged, not fatal.
-func (s *Store) resolveRelations(ctx context.Context, newFactID int64, ef ExtractedFact, logger slog.Logger) {
+func (s *Store) resolveRelations(ctx context.Context, newFactID int64, ef ExtractedFact, logger *slog.Logger) {
 	if ef.RelationType == "" {
 		return
 	}
@@ -175,7 +175,7 @@ func (s *Store) resolveRelations(ctx context.Context, newFactID int64, ef Extrac
 	// Find candidate facts with overlapping entities in the same category.
 	var candidateID int64
 	if len(ef.Entities) > 0 {
-		// Look for facts linked to the same entities in the same category.
+		s.mu.RLock()
 		for _, entityName := range ef.Entities {
 			err := s.db.QueryRowContext(ctx,
 				`SELECT f.id FROM facts f
@@ -190,12 +190,14 @@ func (s *Store) resolveRelations(ctx context.Context, newFactID int64, ef Extrac
 				break
 			}
 		}
+		s.mu.RUnlock()
 	}
 
 	// Fallback: FTS to find a similar fact in the same category.
 	if candidateID == 0 {
 		ftsQuery := escapeFTS(ef.Content)
 		if ftsQuery != "" {
+			s.mu.RLock()
 			_ = s.db.QueryRowContext(ctx,
 				`SELECT f.id FROM facts_fts fts
 				 JOIN facts f ON f.id = fts.rowid
@@ -204,6 +206,7 @@ func (s *Store) resolveRelations(ctx context.Context, newFactID int64, ef Extrac
 				 LIMIT 1`,
 				ftsQuery, ef.Category, newFactID,
 			).Scan(&candidateID)
+			s.mu.RUnlock()
 		}
 	}
 
@@ -211,15 +214,8 @@ func (s *Store) resolveRelations(ctx context.Context, newFactID int64, ef Extrac
 		return
 	}
 
-	// Insert the relation (best-effort).
-	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO fact_relations (from_fact_id, to_fact_id, relation_type, confidence, created_at)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(from_fact_id, to_fact_id, relation_type) DO NOTHING`,
-		candidateID, newFactID, ef.RelationType, 0.7, now,
-	)
-	if err != nil {
+	// Insert the relation via the locked InsertRelation method.
+	if err := s.InsertRelation(ctx, candidateID, newFactID, ef.RelationType, 0.7); err != nil {
 		logger.Debug("resolve relation: insert failed", "error", err)
 	}
 }

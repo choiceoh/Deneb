@@ -143,7 +143,7 @@ func Recall(ctx context.Context, store *Store, embedder *Embedder, client *llm.C
 	}
 
 	// Phase 2: Expand via entity matching.
-	entityFacts := expandViaEntities(ctx, store, message, candidates, maxFacts)
+	entityFacts := expandViaEntities(ctx, store, candidates, maxFacts)
 	candidates = mergeSearchResults(candidates, entityFacts)
 
 	// Phase 3: Expand via relation chains.
@@ -176,12 +176,12 @@ func Recall(ctx context.Context, store *Store, embedder *Embedder, client *llm.C
 	}
 
 	// Phase 7: Format recall result as knowledge text.
-	return formatRecallResult(ctx, store, &result, candidates)
+	return formatRecallResult(&result, candidates)
 }
 
-// expandViaEntities finds entities mentioned in the query and adds
-// their linked facts to the candidate pool.
-func expandViaEntities(ctx context.Context, store *Store, query string, existing []SearchResult, maxFacts int) []SearchResult {
+// expandViaEntities finds entities linked to existing candidates and adds
+// their related facts to the candidate pool.
+func expandViaEntities(ctx context.Context, store *Store, existing []SearchResult, maxFacts int) []SearchResult {
 	// Extract entity names from existing candidates.
 	entityNames := make(map[string]bool)
 	for _, sr := range existing {
@@ -220,6 +220,9 @@ func expandViaEntities(ctx context.Context, store *Store, query string, existing
 }
 
 // expandViaRelations follows relation chains from candidate facts.
+// Caps total expansion to avoid N+1 query explosion under tight timeout.
+const maxRelationExpansion = 20
+
 func expandViaRelations(ctx context.Context, store *Store, candidates []SearchResult, maxDepth int) []SearchResult {
 	existingIDs := make(map[int64]bool, len(candidates))
 	for _, sr := range candidates {
@@ -228,6 +231,10 @@ func expandViaRelations(ctx context.Context, store *Store, candidates []SearchRe
 
 	var expanded []SearchResult
 	for _, sr := range candidates {
+		if len(expanded) >= maxRelationExpansion {
+			break
+		}
+
 		related, err := store.GetRelatedFacts(ctx, sr.Fact.ID)
 		if err != nil {
 			continue
@@ -241,10 +248,16 @@ func expandViaRelations(ctx context.Context, store *Store, candidates []SearchRe
 				Fact:  rf.Fact,
 				Score: 0.4, // baseline for relation expansion
 			})
+			if len(expanded) >= maxRelationExpansion {
+				return expanded
+			}
 		}
 
 		// Follow evolves/supports chains deeper.
 		for _, relType := range []string{RelationEvolves, RelationSupports} {
+			if len(expanded) >= maxRelationExpansion {
+				return expanded
+			}
 			chain, err := store.GetRelationChain(ctx, sr.Fact.ID, relType, maxDepth)
 			if err != nil {
 				continue
@@ -258,6 +271,9 @@ func expandViaRelations(ctx context.Context, store *Store, candidates []SearchRe
 					Fact:  f,
 					Score: 0.35,
 				})
+				if len(expanded) >= maxRelationExpansion {
+					return expanded
+				}
 			}
 		}
 	}
@@ -326,6 +342,12 @@ func buildRecallPrompt(message string, candidates []SearchResult, backfillIDs []
 // processBackfill saves backfill entity/relation data asynchronously.
 // Best-effort: errors are logged but never propagated.
 func processBackfill(store *Store, data *BackfillData, logger *slog.Logger) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("backfill: goroutine panicked", "panic", r)
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -370,7 +392,7 @@ func processBackfill(store *Store, data *BackfillData, logger *slog.Logger) {
 }
 
 // formatRecallResult converts a RecallResult into knowledge text for system prompt injection.
-func formatRecallResult(ctx context.Context, store *Store, result *RecallResult, candidates []SearchResult) string {
+func formatRecallResult(result *RecallResult, candidates []SearchResult) string {
 	if len(result.Facts) == 0 {
 		return formatCandidatesAsKnowledge(candidates)
 	}
@@ -387,12 +409,9 @@ func formatRecallResult(ctx context.Context, store *Store, result *RecallResult,
 	for _, rf := range result.Facts {
 		sr, ok := factByID[rf.ID]
 		if !ok {
-			// Fact not in candidates — try to load from store.
-			f, err := store.GetFactReadOnly(ctx, rf.ID)
-			if err != nil || f == nil {
-				continue
-			}
-			sr = SearchResult{Fact: *f, Score: 0.5}
+			// Fact not in candidate pool — skip to avoid LLM-hallucinated IDs
+			// pulling in unrelated facts.
+			continue
 		}
 		date := sr.Fact.CreatedAt.Format("2006-01-02")
 		fmt.Fprintf(&sb, "- [%.1f] {%s} (%s) %s", sr.Fact.Importance, sr.Fact.Category, date, sr.Fact.Content)

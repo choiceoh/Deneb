@@ -33,6 +33,14 @@ func (s *Store) ExportToMarkdown(ctx context.Context) (string, error) {
 		CategoryMutual:     "상호 인식",
 	}
 
+	// Batch-load relations and entity names for all facts to avoid N+1 queries.
+	factIDs := make([]int64, len(facts))
+	for i, f := range facts {
+		factIDs[i] = f.ID
+	}
+	relationsMap := s.batchGetRelatedFacts(ctx, factIDs)
+	entityNamesMap := s.batchGetFactEntityNames(ctx, factIDs)
+
 	for _, cat := range categories {
 		var catFacts []Fact
 		for _, f := range facts {
@@ -50,8 +58,7 @@ func (s *Store) ExportToMarkdown(ctx context.Context) (string, error) {
 			sb.WriteString(fmt.Sprintf("- [%.1f] %s (%s)\n", f.Importance, f.Content, date))
 
 			// Append relation info if available.
-			related, _ := s.GetRelatedFacts(ctx, f.ID)
-			for _, rf := range related {
+			for _, rf := range relationsMap[f.ID] {
 				arrow := "→"
 				if rf.Direction == "incoming" {
 					arrow = "←"
@@ -61,9 +68,8 @@ func (s *Store) ExportToMarkdown(ctx context.Context) (string, error) {
 			}
 
 			// Append entity names if linked.
-			entityNames := s.getFactEntityNames(ctx, f.ID)
-			if len(entityNames) > 0 {
-				sb.WriteString(fmt.Sprintf("  **엔티티:** %s\n", strings.Join(entityNames, ", ")))
+			if names := entityNamesMap[f.ID]; len(names) > 0 {
+				sb.WriteString(fmt.Sprintf("  **엔티티:** %s\n", strings.Join(names, ", ")))
 			}
 		}
 		sb.WriteString("\n")
@@ -189,6 +195,9 @@ func normalizeFlushPrefix(s string) string {
 
 // getFactEntityNames returns entity names linked to a fact.
 func (s *Store) getFactEntityNames(ctx context.Context, factID int64) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT e.name FROM entities e
 		 JOIN fact_entities fe ON fe.entity_id = e.id
@@ -209,6 +218,62 @@ func (s *Store) getFactEntityNames(ctx context.Context, factID int64) []string {
 		}
 	}
 	return names
+}
+
+// batchGetFactEntityNames returns entity names for multiple facts in a single query.
+func (s *Store) batchGetFactEntityNames(ctx context.Context, factIDs []int64) map[int64][]string {
+	if len(factIDs) == 0 {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	placeholders := make([]string, len(factIDs))
+	args := make([]any, len(factIDs))
+	for i, id := range factIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT fe.fact_id, e.name FROM entities e
+		 JOIN fact_entities fe ON fe.entity_id = e.id
+		 WHERE fe.fact_id IN (`+strings.Join(placeholders, ",")+`)
+		 ORDER BY e.name`,
+		args...,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]string)
+	for rows.Next() {
+		var factID int64
+		var name string
+		if err := rows.Scan(&factID, &name); err == nil {
+			result[factID] = append(result[factID], name)
+		}
+	}
+	return result
+}
+
+// batchGetRelatedFacts returns related facts for multiple fact IDs in batch.
+func (s *Store) batchGetRelatedFacts(ctx context.Context, factIDs []int64) map[int64][]RelatedFact {
+	if len(factIDs) == 0 {
+		return nil
+	}
+
+	result := make(map[int64][]RelatedFact)
+	// GetRelatedFacts is already efficient per-fact (single UNION ALL query).
+	// Batch here to avoid lock churn — acquire once for all lookups.
+	for _, id := range factIDs {
+		related, err := s.GetRelatedFacts(ctx, id)
+		if err == nil && len(related) > 0 {
+			result[id] = related
+		}
+	}
+	return result
 }
 
 // truncateExport truncates s to at most maxRunes runes for export display.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -36,10 +37,38 @@ type EntityRelation struct {
 	CoOccurrences int    `json:"co_occurrences"`
 }
 
+// normalizeEntityName trims whitespace and applies canonical casing so that
+// "SQLite", "sqlite", and " SQLite " all resolve to the same entity.
+func normalizeEntityName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	// Preserve well-known casing for common tools/systems.
+	lower := strings.ToLower(name)
+	canonical := map[string]string{
+		"sqlite": "SQLite", "postgresql": "PostgreSQL", "postgres": "PostgreSQL",
+		"docker": "Docker", "kubernetes": "Kubernetes", "redis": "Redis",
+		"terraform": "Terraform", "go": "Go", "rust": "Rust", "python": "Python",
+		"sglang": "SGLang", "github": "GitHub", "npm": "npm", "cargo": "cargo",
+		"buf": "buf", "protoc": "protoc", "git": "git",
+	}
+	if c, ok := canonical[lower]; ok {
+		return c
+	}
+	return name
+}
+
 // UpsertEntity creates or updates an entity.
 // On conflict (same name), updates last_seen, increments mention_count,
 // and upgrades entity_type from "unknown" if a more specific type is provided.
+// Entity names are normalized (trimmed + canonical casing) before storage.
 func (s *Store) UpsertEntity(ctx context.Context, name, entityType string) (int64, error) {
+	name = normalizeEntityName(name)
+	if name == "" {
+		return 0, fmt.Errorf("upsert entity: empty name")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -103,6 +132,7 @@ func (s *Store) LinkFactEntity(ctx context.Context, factID, entityID int64, role
 
 // GetFactsByEntity returns all active facts mentioning a specific entity name.
 func (s *Store) GetFactsByEntity(ctx context.Context, entityName string) ([]Fact, error) {
+	entityName = normalizeEntityName(entityName)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -118,6 +148,7 @@ func (s *Store) GetFactsByEntity(ctx context.Context, entityName string) ([]Fact
 
 // GetEntity retrieves an entity by name.
 func (s *Store) GetEntity(ctx context.Context, name string) (*Entity, error) {
+	name = normalizeEntityName(name)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -183,10 +214,8 @@ func inferEntityType(name string) string {
 	}
 
 	// Names with slashes tend to be projects (e.g., "Fred/JOCA Cable").
-	for _, ch := range name {
-		if ch == '/' {
-			return EntityProject
-		}
+	if strings.Contains(name, "/") {
+		return EntityProject
 	}
 
 	return EntityUnknown
@@ -194,7 +223,7 @@ func inferEntityType(name string) string {
 
 // processEntities extracts entity names from an extracted fact, upserts them,
 // and links them to the stored fact. Best-effort: errors are logged, not fatal.
-func (s *Store) processEntities(ctx context.Context, factID int64, ef ExtractedFact, logger slog.Logger) {
+func (s *Store) processEntities(ctx context.Context, factID int64, ef ExtractedFact, logger *slog.Logger) {
 	if len(ef.Entities) == 0 {
 		return
 	}

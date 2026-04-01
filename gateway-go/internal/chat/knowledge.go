@@ -20,11 +20,12 @@ import (
 
 // KnowledgeDeps holds optional dependencies for knowledge prefetch.
 type KnowledgeDeps struct {
-	VegaBackend    vega.Backend     // nil → skip Vega search
-	WorkspaceDir   string           // empty → skip file-based Memory search
-	MemoryStore    *memory.Store    // nil → skip structured memory search
-	MemoryEmbedder *memory.Embedder // nil → FTS-only structured search
-	UnifiedStore   *unified.Store   // nil → skip unified search + tier-1 injection
+	VegaBackend      vega.Backend     // nil → skip Vega search
+	WorkspaceDir     string           // empty → skip file-based Memory search
+	MemoryStore      *memory.Store    // nil → skip structured memory search
+	MemoryEmbedder   *memory.Embedder // nil → FTS-only structured search
+	UnifiedStore     *unified.Store   // nil → skip unified search + tier-1 injection
+	SkipMemorySearch bool             // true → skip memory SearchFacts (recall handles it)
 }
 
 // Knowledge prefetch limits.
@@ -79,7 +80,9 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	}
 
 	// Structured memory search (Honcho-style SQLite store).
-	if deps.MemoryStore != nil {
+	// Skipped when recall engine is active — recall does its own SearchFacts
+	// with entity/relation expansion, so running it twice wastes DB queries.
+	if deps.MemoryStore != nil && !deps.SkipMemorySearch {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
