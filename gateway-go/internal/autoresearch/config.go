@@ -15,6 +15,126 @@ import (
 // autoresearch state (config + results).
 const configDir = ".autoresearch"
 
+// Params holds tunable experiment parameters. Zero values fall back to
+// DefaultParams(). Users can override individual fields in config.json
+// without touching Go source — the rest auto-fill with safe defaults.
+type Params struct {
+	// DefaultModel is the LLM model used when Config.Model is empty.
+	DefaultModel string `json:"default_model,omitempty"`
+	// MaxTokens is the max tokens for LLM hypothesis generation.
+	MaxTokens int `json:"max_tokens,omitempty"`
+	// GracePeriodSec is extra seconds beyond TimeBudgetSec before killing the process.
+	GracePeriodSec int `json:"grace_period_sec,omitempty"`
+	// RetryPauseSec is how long to wait after an iteration error before retrying.
+	RetryPauseSec int `json:"retry_pause_sec,omitempty"`
+	// StuckThresholdMild is consecutive failures before mild recovery prompt.
+	StuckThresholdMild int `json:"stuck_threshold_mild,omitempty"`
+	// StuckThresholdModerate is consecutive failures before moderate recovery prompt.
+	StuckThresholdModerate int `json:"stuck_threshold_moderate,omitempty"`
+	// StuckThresholdCritical is consecutive failures before critical recovery prompt.
+	StuckThresholdCritical int `json:"stuck_threshold_critical,omitempty"`
+	// PhaseEarlyEnd is the last iteration of the "early" phase (inclusive).
+	PhaseEarlyEnd int `json:"phase_early_end,omitempty"`
+	// PhaseExplorationEnd is the last iteration of the "exploration" phase (inclusive).
+	PhaseExplorationEnd int `json:"phase_exploration_end,omitempty"`
+	// PhaseExploitationEnd is the last iteration of the "exploitation" phase (inclusive).
+	PhaseExploitationEnd int `json:"phase_exploitation_end,omitempty"`
+	// RecentFailedWindow is how many recent iterations to scan for failed hypotheses.
+	RecentFailedWindow int `json:"recent_failed_window,omitempty"`
+	// TrendWindowSize is the number of recent iterations used for trend analysis.
+	TrendWindowSize int `json:"trend_window_size,omitempty"`
+	// PlateauThreshold is consecutive discards before flagging a plateau.
+	PlateauThreshold int `json:"plateau_threshold,omitempty"`
+	// DefaultTimeBudgetSec is the fallback time budget when Config.TimeBudgetSec is 0.
+	DefaultTimeBudgetSec int `json:"default_time_budget_sec,omitempty"`
+}
+
+// DefaultParams returns the canonical default values for all tunable parameters.
+// These match the original hard-coded constants exactly.
+func DefaultParams() Params {
+	return Params{
+		DefaultModel:           "claude-sonnet-4-20250514",
+		MaxTokens:              8192,
+		GracePeriodSec:         30,
+		RetryPauseSec:          5,
+		StuckThresholdMild:     3,
+		StuckThresholdModerate: 5,
+		StuckThresholdCritical: 8,
+		PhaseEarlyEnd:          3,
+		PhaseExplorationEnd:    15,
+		PhaseExploitationEnd:   30,
+		RecentFailedWindow:     5,
+		TrendWindowSize:        10,
+		PlateauThreshold:       5,
+		DefaultTimeBudgetSec:   300,
+	}
+}
+
+// applyDefaults fills zero-valued fields with DefaultParams values, then
+// validates sanity (e.g. phase ordering). Invalid combos are silently
+// replaced with defaults so a bad config.json never breaks the runner.
+func (p *Params) applyDefaults() {
+	d := DefaultParams()
+	if p.DefaultModel == "" {
+		p.DefaultModel = d.DefaultModel
+	}
+	if p.MaxTokens <= 0 {
+		p.MaxTokens = d.MaxTokens
+	}
+	if p.GracePeriodSec <= 0 {
+		p.GracePeriodSec = d.GracePeriodSec
+	}
+	if p.RetryPauseSec <= 0 {
+		p.RetryPauseSec = d.RetryPauseSec
+	}
+	if p.StuckThresholdMild <= 0 {
+		p.StuckThresholdMild = d.StuckThresholdMild
+	}
+	if p.StuckThresholdModerate <= 0 {
+		p.StuckThresholdModerate = d.StuckThresholdModerate
+	}
+	if p.StuckThresholdCritical <= 0 {
+		p.StuckThresholdCritical = d.StuckThresholdCritical
+	}
+	if p.PhaseEarlyEnd <= 0 {
+		p.PhaseEarlyEnd = d.PhaseEarlyEnd
+	}
+	if p.PhaseExplorationEnd <= 0 {
+		p.PhaseExplorationEnd = d.PhaseExplorationEnd
+	}
+	if p.PhaseExploitationEnd <= 0 {
+		p.PhaseExploitationEnd = d.PhaseExploitationEnd
+	}
+	if p.RecentFailedWindow <= 0 {
+		p.RecentFailedWindow = d.RecentFailedWindow
+	}
+	if p.TrendWindowSize <= 0 {
+		p.TrendWindowSize = d.TrendWindowSize
+	}
+	if p.PlateauThreshold <= 0 {
+		p.PlateauThreshold = d.PlateauThreshold
+	}
+	if p.DefaultTimeBudgetSec <= 0 {
+		p.DefaultTimeBudgetSec = d.DefaultTimeBudgetSec
+	}
+
+	// Sanity: stuck thresholds must be in ascending order.
+	if p.StuckThresholdMild >= p.StuckThresholdModerate ||
+		p.StuckThresholdModerate >= p.StuckThresholdCritical {
+		p.StuckThresholdMild = d.StuckThresholdMild
+		p.StuckThresholdModerate = d.StuckThresholdModerate
+		p.StuckThresholdCritical = d.StuckThresholdCritical
+	}
+
+	// Sanity: phase boundaries must be in ascending order.
+	if p.PhaseEarlyEnd >= p.PhaseExplorationEnd ||
+		p.PhaseExplorationEnd >= p.PhaseExploitationEnd {
+		p.PhaseEarlyEnd = d.PhaseEarlyEnd
+		p.PhaseExplorationEnd = d.PhaseExplorationEnd
+		p.PhaseExploitationEnd = d.PhaseExploitationEnd
+	}
+}
+
 // Config describes an autoresearch experiment session.
 type Config struct {
 	// TargetFiles lists the files the agent may edit (relative to workdir).
@@ -56,10 +176,17 @@ type Config struct {
 	KeptIterations int `json:"kept_iterations"`
 	// ConsecutiveFailures tracks failures in a row for stuck recovery.
 	ConsecutiveFailures int `json:"consecutive_failures"`
+
+	// Params holds tunable experiment parameters (phase boundaries, thresholds, etc.).
+	// Zero-valued fields automatically fall back to DefaultParams().
+	Params Params `json:"params,omitempty"`
 }
 
-// Validate checks that required fields are set.
+// Validate checks that required fields are set and applies param defaults.
 func (c *Config) Validate() error {
+	// Apply param defaults first so TimeBudgetSec fallback uses the configured value.
+	c.Params.applyDefaults()
+
 	if len(c.TargetFiles) == 0 {
 		return fmt.Errorf("target_files is required")
 	}
@@ -76,7 +203,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("branch_tag is required")
 	}
 	if c.TimeBudgetSec <= 0 {
-		c.TimeBudgetSec = 300 // default 5 minutes
+		c.TimeBudgetSec = c.Params.DefaultTimeBudgetSec
 	}
 	return nil
 }
