@@ -454,6 +454,9 @@ var seoulLoc = func() *time.Location {
 	return loc
 }()
 
+// SeoulLoc returns the pre-loaded Asia/Seoul timezone.
+func SeoulLoc() *time.Location { return seoulLoc }
+
 // DiaryDir is the subdirectory under memory/ where diary files are stored.
 const DiaryDir = "diary"
 

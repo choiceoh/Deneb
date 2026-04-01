@@ -240,6 +240,18 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			logger:      s.logger,
 		})
 		s.logger.Info("diary heartbeat task registered with autonomous service (2h interval)")
+
+		// Register diary SQL migration task: every 12 hours, matured diary
+		// entries (≥2 days old) are distilled into structured SQL facts.
+		workspaceDir := resolveWorkspaceDir()
+		if workspaceDir != "" {
+			s.autonomousSvc.RegisterTask(&diarySQLMigrationTask{
+				chatHandler:  s.chatHandler,
+				workspaceDir: workspaceDir,
+				logger:       s.logger,
+			})
+			s.logger.Info("diary-sql-migration task registered with autonomous service (12h interval)")
+		}
 	}
 
 	// Gmail polling service: periodic new-email analysis via LLM.
