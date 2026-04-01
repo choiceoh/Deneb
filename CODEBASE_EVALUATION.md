@@ -211,7 +211,7 @@ proto-check → error-code-sync → rust-fmt → rust-clippy → rust-test
 
 - **CLAUDE.md 65KB**: 모든 AI 에이전트를 위한 포괄적 개발 가이드 (아키텍처, 빌드, 테스트, 코딩 스타일, 보안, 릴리스)
 - **Pure-Go 폴백**: Rust 빌드 환경 없이도 `go build -tags no_ffi`로 개발/테스트 가능
-- **크로스 컴파일**: CLI 5개 타깃 (linux x64/arm64, darwin x64/arm64, windows x64)
+- **크로스 컴파일**: CLI Linux ARM64 (DGX Spark 전용)
 - **dev 모드**: `make go-dev` — SIGUSR1으로 자동 재시작 (exit code 75)
 - **Makefile 오케스트레이션**: 30+ 타깃으로 Rust + Go + CLI + Proto 빌드 통합
 - **DGX Spark 전용 빌드**: `make gateway-dgx` (Vega FTS + ML + CUDA)
