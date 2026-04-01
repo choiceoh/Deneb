@@ -342,9 +342,9 @@ func hasDocsContent(dir string) bool {
 
 // Deps holds injected dependencies for the polaris handler.
 type Deps struct {
-	LLM     LLMSynthesizer // local LLM for answer synthesis (nil = fallback mode)
-	Health  HealthChecker   // LLM health check (nil = fallback mode)
-	Tools   ToolExecutor    // tool executor for codebase-wide read access (nil = docs-only)
+	LLM    LLMSynthesizer // local LLM for answer synthesis (nil = fallback mode)
+	Health HealthChecker  // LLM health check (nil = fallback mode)
+	Tools  ToolExecutor   // tool executor for codebase-wide read access (nil = docs-only)
 }
 
 // NewHandler returns the polaris tool handler function for use with ToolRegistry.
@@ -484,22 +484,19 @@ func gatherCodeContext(ctx context.Context, tools ToolExecutor, workspaceDir, ke
 		grepInput, _ := json.Marshal(map[string]any{
 			"pattern": kw,
 			"path":    workspaceDir,
-			"include": "*.go,*.rs,*.proto",
+			"include": "*.{go,rs,proto}",
+			"mode":    "files_only",
 		})
 		result, err := tools.Execute(grepCtx, "grep", grepInput)
 		if err != nil {
 			continue
 		}
-		// Parse grep output: each line is "path:line:content".
+		// files_only mode: each line is a file path.
 		for _, line := range strings.Split(result, "\n") {
-			if line == "" {
+			path := strings.TrimSpace(line)
+			if path == "" || path == "No matches found." {
 				continue
 			}
-			parts := strings.SplitN(line, ":", 3)
-			if len(parts) < 2 {
-				continue
-			}
-			path := parts[0]
 			// Skip test files and generated files for relevance.
 			if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "_gen.") || strings.Contains(path, "/gen/") {
 				continue

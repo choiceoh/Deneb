@@ -221,6 +221,63 @@ func TestGroupGrepOutput_skipsSeparators(t *testing.T) {
 	}
 }
 
+// ─── splitGlobs ─────────────────────────────────────────────────────────────
+
+func TestSplitGlobs_single(t *testing.T) {
+	got := splitGlobs("*.go")
+	if len(got) != 1 || got[0] != "*.go" {
+		t.Errorf("expected [*.go], got %v", got)
+	}
+}
+
+func TestSplitGlobs_commaSeparated(t *testing.T) {
+	got := splitGlobs("*.go,*.rs,*.proto")
+	if len(got) != 3 || got[0] != "*.go" || got[1] != "*.rs" || got[2] != "*.proto" {
+		t.Errorf("expected [*.go *.rs *.proto], got %v", got)
+	}
+}
+
+func TestSplitGlobs_braceExpansion(t *testing.T) {
+	got := splitGlobs("*.{go,rs,proto}")
+	if len(got) != 1 || got[0] != "*.{go,rs,proto}" {
+		t.Errorf("brace expansion should pass through: got %v", got)
+	}
+}
+
+func TestSplitGlobs_spacesAroundComma(t *testing.T) {
+	got := splitGlobs("*.go, *.rs")
+	if len(got) != 2 || got[0] != "*.go" || got[1] != "*.rs" {
+		t.Errorf("expected trimmed [*.go *.rs], got %v", got)
+	}
+}
+
+// ─── ToolGrep: include filter with comma-separated globs ────────────────────
+
+func TestToolGrep_commaSeparatedInclude(t *testing.T) {
+	tmp := t.TempDir()
+	os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, "lib.rs"), []byte("fn hello() {}\n"), 0o644)
+	os.WriteFile(filepath.Join(tmp, "notes.txt"), []byte("hello world\n"), 0o644)
+
+	// Comma-separated include should match both Go and Rust files.
+	out, err := callGrep(t, tmp, map[string]any{
+		"pattern": ".",
+		"include": "*.go,*.rs",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "main.go") {
+		t.Errorf("expected main.go in output: %q", out)
+	}
+	if !strings.Contains(out, "lib.rs") {
+		t.Errorf("expected lib.rs in output: %q", out)
+	}
+	if strings.Contains(out, "notes.txt") {
+		t.Errorf("notes.txt should be excluded: %q", out)
+	}
+}
+
 func TestToolGrep_noMatch(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\n"), 0o644)

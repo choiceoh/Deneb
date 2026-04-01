@@ -89,7 +89,9 @@ func ToolGrep(defaultDir string) ToolFunc {
 		}
 
 		if p.Include != "" {
-			args = append(args, "--glob", p.Include)
+			for _, glob := range splitGlobs(p.Include) {
+				args = append(args, "--glob", glob)
+			}
 		}
 		if p.FileType != "" {
 			args = append(args, "--type", p.FileType)
@@ -372,6 +374,28 @@ func findWithRipgrep(ctx context.Context, dir, pattern string, showHidden bool, 
 }
 
 // --- Helpers ---
+
+// splitGlobs splits a comma-separated glob string into individual patterns.
+// LLMs often pass "*.go,*.rs" instead of separate --glob args, so we split
+// on commas unless the value already uses brace expansion (e.g., "*.{go,rs}").
+func splitGlobs(include string) []string {
+	// Already using brace expansion — pass through as-is.
+	if strings.Contains(include, "{") {
+		return []string{include}
+	}
+	parts := strings.Split(include, ",")
+	var globs []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			globs = append(globs, p)
+		}
+	}
+	if len(globs) == 0 {
+		return []string{include}
+	}
+	return globs
+}
 
 // resolvePath resolves a potentially relative path against the default directory.
 // It validates that the resolved path does not escape the workspace boundary.

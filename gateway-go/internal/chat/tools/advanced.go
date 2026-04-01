@@ -140,7 +140,9 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		// Use -e to avoid flag confusion when pattern starts with '-'.
 		args := []string{"-n", "--max-count=20", "--no-heading", "-e", p.Pattern}
 		if p.Include != "" {
-			args = append(args, "--glob", p.Include)
+			for _, glob := range splitGlobs(p.Include) {
+				args = append(args, "--glob", glob)
+			}
 		}
 		if p.FileType != "" {
 			args = append(args, "--type", p.FileType)
