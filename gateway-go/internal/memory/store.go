@@ -308,7 +308,9 @@ func migrateSchema(db *sql.DB) {
 
 	// v5 → v6: fix entities CHECK constraint to include 'unknown'.
 	// SQLite cannot ALTER a CHECK constraint, so we recreate the table.
+	// Must disable foreign keys to allow DROP while fact_entities references entities.
 	// The migration is idempotent — a no-op if the constraint is already correct.
+	_, _ = db.Exec(`PRAGMA foreign_keys = OFF`)
 	_, _ = db.Exec(`
 		CREATE TABLE IF NOT EXISTS entities_v6 (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -322,6 +324,7 @@ func migrateSchema(db *sql.DB) {
 	_, _ = db.Exec(`DROP TABLE IF EXISTS entities`)
 	_, _ = db.Exec(`ALTER TABLE entities_v6 RENAME TO entities`)
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)`)
+	_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
 }
 
 // NewStoreFromDB creates a memory store using a pre-opened database connection.
