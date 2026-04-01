@@ -185,12 +185,12 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 // Aligned with categoryHalfLifeDays in search.go: shelfLife ≈ halfLife × 1.5,
 // so the staleness warning appears when the decay score drops to ~33%.
 var categoryVolatileDays = map[string]int{
-	"context":    21,  // half-life 14d × 1.5 — project context changes frequently
+	"context":    45,  // half-life 30d × 1.5 — project state persists across sessions
 	"decision":   135, // half-life 90d × 1.5 — decisions are long-lived
-	"solution":   68,  // half-life 45d × 1.5 — solutions stay relevant moderately
+	"solution":   90,  // half-life 60d × 1.5 — solutions stay relevant longer
 	"preference": 90,  // half-life 60d × 1.5 — preferences are relatively stable
-	"user_model": 180, // half-life 120d × 1.5 — user traits rarely change
-	"mutual":     90,  // half-life 60d × 1.5 — relationship dynamics evolve slowly
+	"user_model": 135, // half-life 90d × 1.5 — user traits re-observed by dreaming
+	"mutual":     68,  // half-life 45d × 1.5 — relationship dynamics evolve
 }
 
 // volatileHint returns a staleness hint based on how far past the category shelf life:

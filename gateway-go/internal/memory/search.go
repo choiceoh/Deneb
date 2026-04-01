@@ -38,35 +38,39 @@ type SearchResult struct {
 }
 
 // Scoring weights.
+// Recency is weighted more heavily to prioritize recent session context —
+// the steep initial decay curve ensures only truly fresh facts get the boost.
 const (
-	weightHybrid       = 0.50
+	weightHybrid       = 0.40
 	weightImportance   = 0.25
-	weightRecency      = 0.15
+	weightRecency      = 0.25
 	weightVerification = 0.10
 )
 
 // categoryImportanceMultiplier adjusts the importance weight by fact category.
-// Decisions and preferences constrain future behavior → boost.
-// Context is time-sensitive → attenuate.
+// Decisions, context, and solutions are factual records of what happened → boost.
+// User model and mutual are relational/personality data → keep but don't over-boost.
 var categoryImportanceMultiplier = map[string]float64{
 	CategoryDecision:   1.20,
-	CategoryPreference: 1.10,
-	CategorySolution:   1.00,
-	CategoryContext:    0.80,
-	CategoryUserModel:  1.15,
-	CategoryMutual:     0.90,
+	CategoryPreference: 1.05,
+	CategorySolution:   1.10,
+	CategoryContext:    0.95,
+	CategoryUserModel:  1.00,
+	CategoryMutual:     0.85,
 }
 
 // categoryHalfLifeDays controls recency decay speed per category.
-// Long-lived categories (user_model, decision) decay slowly;
-// ephemeral categories (context) decay fast.
+// Factual records (decision, context, solution) need longer half-lives so
+// recent project history persists across sessions.
+// Relational data (user_model, mutual) can decay faster — personality
+// traits are re-observed frequently and consolidated by dreaming.
 var categoryHalfLifeDays = map[string]float64{
 	CategoryDecision:   90.0,
 	CategoryPreference: 60.0,
-	CategorySolution:   45.0,
-	CategoryContext:    14.0,
-	CategoryUserModel:  120.0,
-	CategoryMutual:     60.0,
+	CategorySolution:   60.0,
+	CategoryContext:    30.0,
+	CategoryUserModel:  90.0,
+	CategoryMutual:     45.0,
 }
 
 const defaultHalfLifeDays = 30.0
@@ -379,11 +383,6 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 			adjustedImportance = math.Min(1.0, adjustedImportance*mult)
 		}
 
-		// Category-adaptive recency: different half-lives per category.
-		halfLife := defaultHalfLifeDays
-		if hl, ok := categoryHalfLifeDays[fact.Category]; ok {
-			halfLife = hl
-		}
 		// Content freshness: use UpdatedAt (last verified/corrected) rather than
 		// LastAccessedAt. Access time ≠ content staleness — a stale decision
 		// accessed yesterday is still stale.
@@ -392,7 +391,21 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 			refTime = fact.CreatedAt
 		}
 		daysSince := now.Sub(refTime).Hours() / 24
-		recencyScore := math.Exp(-math.Ln2 * daysSince / halfLife)
+
+		// Recency scoring: steep initial drop → gradual long tail.
+		// Uses inverse-square decay: score = 1 / (1 + (days/steepness)^2)
+		// where steepness is derived from halfLife: steepness = halfLife / 5
+		// This gives:
+		//   - Days 0-2:  ~1.0 (very high — recent events dominate)
+		//   - Days 3-7:  ~0.6-0.3 (rapid drop-off)
+		//   - Days 7-30: ~0.3-0.05 (gradual decay)
+		//   - Days 30+:  slow convergence toward 0
+		halfLife := defaultHalfLifeDays
+		if hl, ok := categoryHalfLifeDays[fact.Category]; ok {
+			halfLife = hl
+		}
+		steepness := halfLife / 5.0
+		recencyScore := 1.0 / (1.0 + (daysSince/steepness)*(daysSince/steepness))
 
 		// Verification score: dreaming-verified facts are more trustworthy.
 		// Replaces the old frequency score which amplified noise by boosting
