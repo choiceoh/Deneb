@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const schemaSQL = `
@@ -115,7 +115,7 @@ func OpenStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("tasks store: mkdir %s: %w", dir, err)
 	}
 
-	db, err := sql.Open("sqlite", cfg.DatabasePath)
+	db, err := sql.Open("sqlite3", cfg.DatabasePath)
 	if err != nil {
 		return nil, fmt.Errorf("tasks store: open db: %w", err)
 	}

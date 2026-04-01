@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // Fact categories matching Honcho's structured memory model.
@@ -366,7 +366,7 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("memory store: create dir: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("memory store: open db: %w", err)
 	}
