@@ -209,9 +209,10 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 	// Memory Recall.
 	if toolSet["memory"] {
-		d.WriteString("## Memory Recall\n")
-		d.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
-		d.WriteString("추가 정보가 필요하면 `memory` 도구로 팩트 스토어와 파일 메모리를 검색하세요.\n")
+		d.WriteString("## Memory\n")
+		d.WriteString("과거 대화, 사용자 선호, 이전 결정 등에 대한 정보가 불확실하거나 부족할 때 `memory` 도구를 사용하세요.\n")
+		d.WriteString("특히 사용자가 과거 맥락을 언급하거나, 이전에 논의한 내용을 참조할 때는 반드시 recall을 먼저 호출하세요.\n\n")
+		d.WriteString("- `memory(action=recall, query=...)`: 깊은 기억 회상 (엔티티 확장 + 관계 체인 + LLM 정리). 과거 맥락이 필요할 때 우선 사용\n")
 		d.WriteString("- `memory(action=search, query=...)`: 통합 검색 (팩트 + 파일)\n")
 		d.WriteString("- `memory(action=get, fact_id=N)`: 특정 팩트 상세 조회\n")
 		d.WriteString("- `memory(action=set, query=..., category=...)`: 새 팩트 생성\n")

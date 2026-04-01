@@ -222,21 +222,6 @@ func handleRunSuccess(
 		}
 	}
 
-	// Recall follow-up: if the recall engine produced context that arrived
-	// after the agent finished (wasn't injected via system prompt or
-	// DeferredSystemText), deliver it as a separate follow-up message.
-	// This creates the natural "아 맞다, 그리고~" flow.
-	if result.RecallFollowUp != "" && params.Delivery != nil && deps.replyFunc != nil {
-		followUpCtx, followUpCancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer followUpCancel()
-		followUp := "💭 _기억 보정_\n\n" + result.RecallFollowUp
-		if err := deps.replyFunc(followUpCtx, params.Delivery, followUp); err != nil {
-			logger.Warn("recall follow-up delivery failed", "error", err)
-		} else {
-			logger.Info("recall: follow-up delivered", "chars", len(result.RecallFollowUp))
-		}
-	}
-
 	// Store last output on the session so cron and other consumers can read it.
 	if result.Text != "" {
 		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
@@ -821,3 +806,4 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 	}
 	return out
 }
+

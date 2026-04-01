@@ -178,6 +178,8 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		Vega: chat.VegaDeps{
 			MemoryStore:    chatCfg.MemoryStore,
 			MemoryEmbedder: chatCfg.MemoryEmbedder,
+			RecallClient:   reg.Client(modelrole.RoleFallback),
+			RecallModel:    reg.Model(modelrole.RoleFallback),
 		},
 		LLMClient:    reg.Client(modelrole.RoleFallback),
 		DefaultModel: reg.Model(modelrole.RoleFallback),

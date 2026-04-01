@@ -700,8 +700,8 @@ func memoryToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"enum":        []string{"search", "get", "set", "forget", "status", "browse"},
-				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), status (memory stats + top fact previews), browse (list/explore facts by category with pagination and sorting)",
+				"enum":        []string{"search", "get", "set", "forget", "recall", "status", "browse"},
+				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), recall (deep recall with entity expansion and relation chains — use when past context is needed), status (memory stats + top fact previews), browse (list/explore facts by category with pagination and sorting)",
 			},
 			"query": map[string]any{
 				"type":        "string",
