@@ -101,7 +101,7 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 			ProviderID: "sglang",
 			Model:      DefaultSglangModel,
 			BaseURL:    DefaultSglangBaseURL,
-			APIKey:     "", // local, no auth
+			APIKey:     resolveSglangAPIKey(),
 		},
 		RolePilot: {
 			ProviderID: "google",
@@ -285,11 +285,20 @@ func resolveBaseURL(providerID string) string {
 }
 
 
+// resolveSglangAPIKey reads SGLANG_API_KEY from environment, defaulting to "local"
+// for local sglang servers that require a bearer token.
+func resolveSglangAPIKey() string {
+	if key := os.Getenv("SGLANG_API_KEY"); key != "" {
+		return key
+	}
+	return "local"
+}
+
 // resolveAPIKey attempts to resolve an API key for a provider from environment.
 func resolveAPIKey(providerID string) string {
 	switch providerID {
 	case "sglang":
-		return "" // local, no auth
+		return resolveSglangAPIKey()
 	case "google":
 		return os.Getenv("GEMINI_API_KEY")
 	default:

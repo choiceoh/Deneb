@@ -112,6 +112,20 @@ func TestFallbackChain(t *testing.T) {
 	}
 }
 
+func TestResolveSglangAPIKey(t *testing.T) {
+	// Default: returns "local" when env var is not set.
+	t.Setenv("SGLANG_API_KEY", "")
+	if got := resolveSglangAPIKey(); got != "local" {
+		t.Errorf("resolveSglangAPIKey() = %q, want %q", got, "local")
+	}
+
+	// Custom key from environment.
+	t.Setenv("SGLANG_API_KEY", "my-secret-key")
+	if got := resolveSglangAPIKey(); got != "my-secret-key" {
+		t.Errorf("resolveSglangAPIKey() = %q, want %q", got, "my-secret-key")
+	}
+}
+
 func TestLogModelAlias(t *testing.T) {
 	tests := []struct {
 		name string

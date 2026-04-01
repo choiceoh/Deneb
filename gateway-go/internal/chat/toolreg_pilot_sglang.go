@@ -542,7 +542,7 @@ func getRoleModel(role modelrole.Role, defaultModel string) string {
 
 // getLightweightClient returns the cached LLM client for the lightweight model role.
 func getLightweightClient() *llm.Client {
-	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultSglangBaseURL, "")
+	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultSglangBaseURL, "local")
 }
 
 // getLightweightModel returns the model name for the lightweight role.
