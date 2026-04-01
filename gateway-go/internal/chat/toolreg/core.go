@@ -134,7 +134,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "memory",
-		Description: "Unified memory: search facts + files, get/set/forget individual facts, view status. Actions: search (default), get, set, forget, status",
+		Description: "Unified memory: search facts + files, get/set/forget individual facts, deep recall, daily activity log. Actions: search (default), get, set, forget, recall (deep), status, browse, log (append to daily file), daily (read today/yesterday logs)",
 		InputSchema: memoryToolSchema(),
 		Fn:          tools.ToolMemory(&deps.Vega, workspaceDir, slog.Default()),
 	})

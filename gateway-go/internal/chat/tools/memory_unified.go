@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -24,6 +26,8 @@ type memoryParams struct {
 	Limit      int     `json:"limit"`
 	Sort       string  `json:"sort"`
 	Offset     int     `json:"offset"`
+	Title      string  `json:"title"`      // log action: entry heading
+	Days       int     `json:"days"`       // recall action: how many days back (default 1 = today only)
 }
 
 // ToolMemory creates the unified memory tool that combines structured fact store
@@ -51,8 +55,12 @@ func ToolMemory(d *toolctx.VegaDeps, workspaceDir string, logger *slog.Logger) T
 			return memoryRecall(ctx, d, p, logger)
 		case "status":
 			return memoryStatus(ctx, d, workspaceDir)
+		case "log":
+			return memoryLog(workspaceDir, p)
+		case "daily":
+			return memoryDaily(workspaceDir, p)
 		default:
-			return "", fmt.Errorf("unknown action: %s (use: search, get, set, forget, recall, status, browse)", p.Action)
+			return "", fmt.Errorf("unknown action: %s (use: search, get, set, forget, recall, status, browse, log, daily)", p.Action)
 		}
 	}
 }
@@ -429,4 +437,110 @@ func memoryRecall(ctx context.Context, d *toolctx.VegaDeps, p memoryParams, logg
 		return fmt.Sprintf("No recalled memories for %q.", p.Query), nil
 	}
 	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// Daily activity log — real-time, high-resolution narrative entries in
+// memory/YYYY-MM-DD.md. Complements the SQL fact store which is too
+// granular for "what happened today" retrieval.
+// ---------------------------------------------------------------------------
+
+// seoulLoc is pre-loaded Asia/Seoul timezone for daily log timestamps.
+var seoulLoc = func() *time.Location {
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}()
+
+// memoryLog appends a timestamped narrative entry to today's daily file.
+func memoryLog(workspaceDir string, p memoryParams) (string, error) {
+	if p.Query == "" {
+		return "", fmt.Errorf("query (log content) is required for log action")
+	}
+
+	now := time.Now().In(seoulLoc)
+	dateStr := now.Format("2006-01-02")
+	timeStr := now.Format("15:04")
+
+	memDir := filepath.Join(workspaceDir, "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		return "", fmt.Errorf("log: create memory dir: %w", err)
+	}
+	datePath := filepath.Join(memDir, dateStr+".md")
+
+	f, err := os.OpenFile(datePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return "", fmt.Errorf("log: open file: %w", err)
+	}
+	defer f.Close()
+
+	// Write date header if file is new/empty.
+	if info, err := f.Stat(); err == nil && info.Size() == 0 {
+		fmt.Fprintf(f, "# %s\n\n", dateStr)
+	}
+
+	// Build entry: ### HH:MM — title (optional)\ncontent\n
+	title := p.Title
+	if title != "" {
+		fmt.Fprintf(f, "### %s — %s\n\n%s\n\n", timeStr, title, p.Query)
+	} else {
+		fmt.Fprintf(f, "### %s\n\n%s\n\n", timeStr, p.Query)
+	}
+
+	rel := filepath.Join("memory", dateStr+".md")
+	return fmt.Sprintf("Logged to %s at %s.", rel, timeStr), nil
+}
+
+// memoryDaily reads today's (and optionally previous days') daily log files.
+// days=1 returns today only; days=2 (default) returns today + yesterday, etc.
+func memoryDaily(workspaceDir string, p memoryParams) (string, error) {
+	days := p.Days
+	if days <= 0 {
+		days = 2 // default: today + yesterday
+	}
+	if days > 7 {
+		days = 7
+	}
+
+	now := time.Now().In(seoulLoc)
+	memDir := filepath.Join(workspaceDir, "memory")
+
+	var sb strings.Builder
+	found := 0
+
+	// Read from oldest to newest so the output is chronological.
+	for i := days - 1; i >= 0; i-- {
+		date := now.AddDate(0, 0, -i)
+		dateStr := date.Format("2006-01-02")
+		datePath := filepath.Join(memDir, dateStr+".md")
+
+		data, err := os.ReadFile(datePath)
+		if err != nil {
+			continue
+		}
+		content := strings.TrimSpace(string(data))
+		if content == "" {
+			continue
+		}
+
+		if found > 0 {
+			sb.WriteString("\n---\n\n")
+		}
+		sb.WriteString(content)
+		sb.WriteString("\n")
+		found++
+	}
+
+	if found == 0 {
+		dateRange := now.Format("2006-01-02")
+		if days > 1 {
+			oldest := now.AddDate(0, 0, -(days - 1))
+			dateRange = oldest.Format("2006-01-02") + " ~ " + dateRange
+		}
+		return fmt.Sprintf("No daily logs found for %s.", dateRange), nil
+	}
+
+	return sb.String(), nil
 }
