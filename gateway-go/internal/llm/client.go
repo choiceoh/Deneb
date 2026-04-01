@@ -43,6 +43,13 @@ type Client struct {
 	maxRetries int
 	baseDelay  time.Duration
 	maxDelay   time.Duration
+
+	// minRequestTimeout is the minimum time each individual LLM HTTP request
+	// gets, regardless of how much of the agent-level deadline remains. When
+	// the parent context's remaining deadline is shorter than this value, a
+	// derived context with a fresh timeout is created (still cancellable via
+	// the parent for agent abort).
+	minRequestTimeout time.Duration
 }
 
 // ClientOption configures a Client.
@@ -67,16 +74,24 @@ func WithRetry(maxRetries int, baseDelay, maxDelay time.Duration) ClientOption {
 	}
 }
 
+// WithMinRequestTimeout sets the minimum per-request timeout. Each HTTP
+// request will get at least this much time, even if the parent context's
+// deadline has less remaining.
+func WithMinRequestTimeout(d time.Duration) ClientOption {
+	return func(cl *Client) { cl.minRequestTimeout = d }
+}
+
 // NewClient creates a new LLM API client.
 func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 	c := &Client{
-		httpClient: &http.Client{Timeout: 10 * time.Minute, Transport: sharedTransport},
-		baseURL:    baseURL,
-		apiKey:     apiKey,
-		logger:     slog.Default(),
-		maxRetries: 6,
-		baseDelay:  1 * time.Second,
-		maxDelay:   60 * time.Second,
+		httpClient:        &http.Client{Timeout: 10 * time.Minute, Transport: sharedTransport},
+		baseURL:           baseURL,
+		apiKey:            apiKey,
+		logger:            slog.Default(),
+		maxRetries:        6,
+		baseDelay:         1 * time.Second,
+		maxDelay:          60 * time.Second,
+		minRequestTimeout: 5 * time.Minute,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -92,6 +107,12 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
+			// Agent-level context expired — retrying won't help since
+			// the deadline won't extend.
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("agent context expired: %w", lastErr)
+			}
+
 			delay := c.backoffDelay(attempt, lastErr)
 			attrs := []any{"attempt", attempt, "delay", delay, "error", lastErr, "url", req.URL.String()}
 			if dl, ok := ctx.Deadline(); ok {
@@ -120,15 +141,21 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 			}
 		}
 
-		resp, err := c.httpClient.Do(req.WithContext(ctx))
+		reqCtx, reqCancel := c.requestContext(ctx)
+		resp, err := c.httpClient.Do(req.WithContext(reqCtx))
 		if err != nil {
+			reqCancel()
 			lastErr = fmt.Errorf("http request failed: %w", err)
 			continue
 		}
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return resp.Body, nil
+			// Keep reqCancel alive — caller owns the response body.
+			// Wrap body so cancelling happens on Close.
+			return &cancelOnClose{ReadCloser: resp.Body, cancel: reqCancel}, nil
 		}
+
+		reqCancel()
 
 		// Read error body for diagnostics.
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -148,6 +175,46 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 		}
 	}
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+}
+
+// requestContext returns a context for a single HTTP request. If the parent
+// context's remaining deadline is less than minRequestTimeout, it creates a
+// new context with a fresh timeout while still propagating parent cancellation
+// (e.g., agent abort). Otherwise it returns the parent context as-is.
+func (c *Client) requestContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if c.minRequestTimeout <= 0 {
+		return parent, func() {}
+	}
+	dl, hasDL := parent.Deadline()
+	if !hasDL || time.Until(dl) >= c.minRequestTimeout {
+		return parent, func() {}
+	}
+
+	// Parent deadline is too tight. Create a derived context with the
+	// minimum timeout.
+	child, cancel := context.WithTimeout(context.Background(), c.minRequestTimeout)
+
+	// If the parent is not yet done, propagate explicit cancellation
+	// (agent abort) via AfterFunc. If the parent is already done (deadline
+	// expired), skip AfterFunc — it would fire immediately and cancel the
+	// fresh context we just created.
+	if parent.Err() == nil {
+		stop := context.AfterFunc(parent, func() { cancel() })
+		return child, func() { stop(); cancel() }
+	}
+	return child, cancel
+}
+
+// cancelOnClose wraps an io.ReadCloser to call a cancel function on Close.
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (c *cancelOnClose) Close() error {
+	err := c.ReadCloser.Close()
+	c.cancel()
+	return err
 }
 
 // backoffDelay computes exponential backoff with jitter, respecting
