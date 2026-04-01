@@ -60,7 +60,6 @@ The `metadata` field contains a JSON object under the `deneb` key:
 | `requires.bins` | string[] | All binaries must be available |
 | `requires.anyBins` | string[] | At least one binary must be available |
 | `requires.env` | string[] | All env vars must be set |
-| `os` | string[] | OS restriction (e.g. `["darwin", "linux"]`) |
 | `tags` | string[] | Searchable tags for skill discovery |
 | `install` | object[] | Installation specs (brew/node/go/uv/download) |
 

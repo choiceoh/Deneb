@@ -4,7 +4,7 @@ version: "1.0.0"
 category: devops
 description: Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.
 metadata:
-  { "deneb": { "emoji": "🧵", "os": ["darwin", "linux"], "requires": { "bins": ["tmux"] } } }
+  { "deneb": { "emoji": "🧵", "requires": { "bins": ["tmux"] } } }
 ---
 
 # tmux Session Control
