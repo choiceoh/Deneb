@@ -12,9 +12,10 @@ import (
 
 // Context assembly defaults.
 const (
-	defaultTokenBudget    = 100_000
-	defaultFreshTailCount = 48
-	defaultMaxMessages    = 100
+	defaultTokenBudget             = 100_000
+	defaultSystemPromptBudget      = 65_536
+	defaultFreshTailCount          = 48
+	defaultMaxMessages             = 100
 	// runesPerToken is the rune-based token estimate used by estimateTokens.
 	// Korean BPE averages ~2 runes/token; English averages ~4 runes/token.
 	// Divisor 2 is calibrated for Korean (the primary language of this app)
@@ -38,17 +39,19 @@ type AssemblyResult struct {
 
 // ContextConfig configures context assembly behavior.
 type ContextConfig struct {
-	TokenBudget    uint64 // max tokens for context window
-	FreshTailCount uint32 // messages protected from eviction
-	MaxMessages    int    // fallback limit when FFI unavailable
+	TokenBudget        uint64 // max tokens for context window
+	SystemPromptBudget uint64 // max tokens for system prompt fragments
+	FreshTailCount     uint32 // messages protected from eviction
+	MaxMessages        int    // fallback limit when FFI unavailable
 }
 
 // DefaultContextConfig returns sensible defaults.
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
-		TokenBudget:    defaultTokenBudget,
-		FreshTailCount: defaultFreshTailCount,
-		MaxMessages:    defaultMaxMessages,
+		TokenBudget:        defaultTokenBudget,
+		SystemPromptBudget: defaultSystemPromptBudget,
+		FreshTailCount:     defaultFreshTailCount,
+		MaxMessages:        defaultMaxMessages,
 	}
 }
 

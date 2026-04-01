@@ -364,8 +364,24 @@ func executeAgentRun(
 	// duration of turn 0 (LLM response + tool execution) to complete — typically
 	// several seconds — giving effectively 100% hit rate with zero user wait.
 
-	// 7. Append knowledge and Aurora systemAddition to the built system prompt.
-	systemPrompt = llm.AppendSystemTexts(systemPrompt, knowledgeAddition, auroraSystemAddition)
+	// 7. Budget-optimize variable prompt additions before appending.
+	// The base system prompt (identity, tools, skills, context files) is fixed;
+	// variable additions (knowledge, aurora, recall) are optimized by priority.
+	promptBudget := prompt.PromptBudget{Total: deps.contextCfg.SystemPromptBudget}
+	baseTokens := prompt.EstimateTokens(string(systemPrompt))
+	var remainingBudget uint64
+	if promptBudget.Total > baseTokens {
+		remainingBudget = promptBudget.Total - baseTokens
+	}
+	additionBudget := prompt.PromptBudget{Total: remainingBudget}
+
+	var additionFragments []prompt.PromptFragment
+	if knowledgeAddition != "" {
+		additionFragments = append(additionFragments, prompt.NewFragment("memory", knowledgeAddition))
+	}
+	if auroraSystemAddition != "" {
+		additionFragments = append(additionFragments, prompt.NewFragment("aurora_summary", auroraSystemAddition))
+	}
 
 	// 7b. Try to inject recall early (non-blocking). If the fallback model
 	// finished recall before the main agent starts, we inject it now so the
@@ -374,7 +390,7 @@ func executeAgentRun(
 	select {
 	case recallText := <-recallCh:
 		if recallText != "" {
-			systemPrompt = llm.AppendSystemText(systemPrompt, recallText)
+			additionFragments = append(additionFragments, prompt.NewFragment("memory", recallText))
 			recallConsumed.Store(true)
 			logger.Info("recall: early injection (before turn 0)", "chars", len(recallText))
 		} else {
@@ -382,6 +398,18 @@ func executeAgentRun(
 		}
 	default:
 		// Recall still running — will be checked via DeferredSystemText or post-run.
+	}
+
+	// Optimize and append surviving fragments.
+	optimized := additionBudget.Optimize(additionFragments)
+	for _, f := range optimized {
+		systemPrompt = llm.AppendSystemText(systemPrompt, f.Content)
+	}
+	if len(additionFragments) > len(optimized) {
+		logger.Info("prompt budget: trimmed additions",
+			"original", len(additionFragments),
+			"surviving", len(optimized),
+			"budgetTokens", remainingBudget)
 	}
 
 	logger.Info("pipeline: system prompt finalized",
