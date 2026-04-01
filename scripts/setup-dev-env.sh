@@ -61,10 +61,16 @@ install_buf() {
 }
 
 install_protoc_gen_go() {
+    # Ensure GOPATH/bin is on PATH so `go install` binaries are discoverable
+    local gobin
+    gobin="$(go env GOPATH)/bin"
+    if [[ ":$PATH:" != *":$gobin:"* ]]; then
+        export PATH="$gobin:$PATH"
+    fi
     if command -v protoc-gen-go &>/dev/null; then return 0; fi
     echo "  [setup] Installing protoc-gen-go..."
     fix_no_proxy
-    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest 2>/dev/null
+    GOFLAGS="-modcacherw" go install google.golang.org/protobuf/cmd/protoc-gen-go@latest 2>/dev/null
     if command -v protoc-gen-go &>/dev/null; then
         echo "  [ok] protoc-gen-go installed"
         INSTALLED=$((INSTALLED + 1))
