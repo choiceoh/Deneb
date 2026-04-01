@@ -110,11 +110,11 @@ deneb cron add \
   --message "Generate today's briefing: weather, calendar, top emails, news summary." \
   --model opus \
   --announce \
-  --channel whatsapp \
-  --to "+15551234567"
+  --channel telegram \
+  --to "123456789"
 ```
 
-This runs at exactly 7:00 AM New York time, uses Opus for quality, and announces a summary directly to WhatsApp.
+This runs at exactly 7:00 AM New York time, uses Opus for quality, and announces a summary directly to Telegram.
 
 ### Cron example: One-shot reminder
 

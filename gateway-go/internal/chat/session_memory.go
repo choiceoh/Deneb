@@ -287,7 +287,7 @@ func UpdateSessionMemory(
 		stopReason,
 	)
 
-	resp, err := lwClient.CompleteOpenAI(memCtx, llm.ChatRequest{
+	resp, err := lwClient.Complete(memCtx, llm.ChatRequest{
 		Model: getLightweightModel(),
 		Messages: []llm.Message{
 			llm.NewTextMessage("system", sessionMemorySystemPrompt),

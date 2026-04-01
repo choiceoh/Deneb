@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// StreamChatOpenAI sends a streaming chat request to an OpenAI-compatible
+// StreamChat sends a streaming chat request to an OpenAI-compatible
 // /chat/completions endpoint and translates the response into the same
 // StreamEvent types that consumeStream expects (message_start,
 // content_block_start, content_block_delta, content_block_stop,
@@ -21,7 +21,7 @@ import (
 //
 // This enables RunAgent to work with any OpenAI-compatible provider
 // (z.ai, sglang, vLLM, etc.) without changes to the agent loop.
-func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
+func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
 	req.Stream = true
 
 	// Build OpenAI-format request body.
@@ -588,10 +588,10 @@ func setOpenAIBearerAuth(req *http.Request, apiKey string) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 }
 
-// CompleteOpenAI sends a non-streaming request to an OpenAI-compatible
+// Complete sends a non-streaming request to an OpenAI-compatible
 // /chat/completions endpoint and returns the full response text.
 // Intended for lightweight single-turn tasks (e.g. thread title generation).
-func (c *Client) CompleteOpenAI(ctx context.Context, req ChatRequest) (string, error) {
+func (c *Client) Complete(ctx context.Context, req ChatRequest) (string, error) {
 	oaiReq := openAIRequest{
 		Model:     req.Model,
 		Stream:    false,

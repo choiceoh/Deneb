@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCompleteOpenAI_OmitsAuthorizationHeaderWhenAPIKeyEmpty(t *testing.T) {
+func TestComplete_OmitsAuthorizationHeaderWhenAPIKeyEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "" {
 			t.Fatalf("Authorization header = %q, want empty", got)
@@ -18,13 +18,13 @@ func TestCompleteOpenAI_OmitsAuthorizationHeaderWhenAPIKeyEmpty(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "")
-	got, err := client.CompleteOpenAI(context.Background(), ChatRequest{
+	got, err := client.Complete(context.Background(), ChatRequest{
 		Model:     "local-model",
 		Messages:  []Message{NewTextMessage("user", "hello")},
 		MaxTokens: 16,
 	})
 	if err != nil {
-		t.Fatalf("CompleteOpenAI error: %v", err)
+		t.Fatalf("Complete error: %v", err)
 	}
 	if got != "ok" {
 		t.Fatalf("CompleteOpenAI = %q, want %q", got, "ok")

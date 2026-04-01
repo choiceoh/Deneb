@@ -9,11 +9,11 @@ import (
 	"testing"
 )
 
-// TestStreamChatOpenAI_UsageOnFinishChunk verifies that input tokens are
+// TestStreamChat_UsageOnFinishChunk verifies that input tokens are
 // captured when the provider bundles usage data on the finish_reason chunk
 // (instead of a separate usage-only chunk). This is the pattern used by
 // some OpenAI-compatible providers (Z.AI, sglang, vLLM).
-func TestStreamChatOpenAI_UsageOnFinishChunk(t *testing.T) {
+func TestStreamChat_UsageOnFinishChunk(t *testing.T) {
 	// Serve a minimal streaming response where usage is on the finish chunk.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -50,13 +50,13 @@ func TestStreamChatOpenAI_UsageOnFinishChunk(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key")
-	events, err := client.StreamChatOpenAI(context.Background(), ChatRequest{
+	events, err := client.StreamChat(context.Background(), ChatRequest{
 		Model:     "test-model",
 		Messages:  []Message{NewTextMessage("user", "hi")},
 		MaxTokens: 100,
 	})
 	if err != nil {
-		t.Fatalf("StreamChatOpenAI error: %v", err)
+		t.Fatalf("StreamChat error: %v", err)
 	}
 
 	var inputTokens, outputTokens int
@@ -84,9 +84,9 @@ func TestStreamChatOpenAI_UsageOnFinishChunk(t *testing.T) {
 	}
 }
 
-// TestStreamChatOpenAI_UsageOnSeparateChunk verifies the standard path where
+// TestStreamChat_UsageOnSeparateChunk verifies the standard path where
 // usage arrives in a separate chunk after the finish_reason chunk.
-func TestStreamChatOpenAI_UsageOnSeparateChunk(t *testing.T) {
+func TestStreamChat_UsageOnSeparateChunk(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher := w.(http.Flusher)
@@ -130,13 +130,13 @@ func TestStreamChatOpenAI_UsageOnSeparateChunk(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key")
-	events, err := client.StreamChatOpenAI(context.Background(), ChatRequest{
+	events, err := client.StreamChat(context.Background(), ChatRequest{
 		Model:     "test-model",
 		Messages:  []Message{NewTextMessage("user", "hi")},
 		MaxTokens: 100,
 	})
 	if err != nil {
-		t.Fatalf("StreamChatOpenAI error: %v", err)
+		t.Fatalf("StreamChat error: %v", err)
 	}
 
 	var inputTokens, outputTokens int

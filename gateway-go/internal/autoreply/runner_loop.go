@@ -119,7 +119,6 @@ const (
 // DefaultAgentRunner implements AgentExecutor using the unified agent.RunAgent loop.
 type DefaultAgentRunner struct {
 	llm      agent.LLMStreamer
-	apiType  string // "anthropic" or "openai" (default)
 	tools    ToolExecutor
 	logger   *slog.Logger
 	maxTurns int
@@ -130,7 +129,6 @@ type DefaultAgentRunner struct {
 // AgentRunnerConfig configures the default agent runner.
 type AgentRunnerConfig struct {
 	LLM      agent.LLMStreamer
-	APIType  string // "anthropic" or "openai" (default)
 	Tools    ToolExecutor
 	Logger   *slog.Logger
 	MaxTurns int // max LLM round-trips (default 25)
@@ -144,7 +142,6 @@ func NewDefaultAgentRunner(cfg AgentRunnerConfig) *DefaultAgentRunner {
 	}
 	return &DefaultAgentRunner{
 		llm:      cfg.LLM,
-		apiType:  cfg.APIType,
 		tools:    cfg.Tools,
 		logger:   cfg.Logger,
 		maxTurns: maxTurns,
@@ -233,7 +230,6 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 		Model:     cfg.Model,
 		System:    llm.SystemString(cfg.SystemPrompt),
 		MaxTokens: maxTokens,
-		APIType:   r.apiType,
 	}
 
 	// Wrap the LLM streamer to inject ThinkingConfig if needed.

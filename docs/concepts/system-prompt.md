@@ -16,49 +16,40 @@ The prompt is assembled by Deneb and injected into each agent run.
 
 The prompt is intentionally compact and uses fixed sections:
 
+- **Identity**: agent name and persona ("You are Nev").
+- **Communication**: communication style and language guidelines.
+- **Attitude**: behavioral guidelines.
+- **How to Act**: action-oriented behavior rules.
+- **Trust and Respect**: trust relationship with the operator.
 - **Tooling**: current tool list + short descriptions.
-- **Safety**: short guardrail reminder to avoid power-seeking behavior or bypassing oversight.
+- **Tool Usage**: tool usage guidelines.
 - **Skills** (when available): tells the model how to load skill instructions on demand.
-- **Deneb Self-Update**: how to run `config.apply` and `update.run`.
-- **Workspace**: working directory (`agents.defaults.workspace`).
-- **Documentation**: local path to Deneb docs (repo or npm package) and when to read them.
-- **Workspace Files (injected)**: indicates bootstrap files are included below.
-- **Sandbox** (when enabled): indicates sandboxed runtime, sandbox paths, and whether elevated exec is available.
-- **Current Date & Time**: user-local time, timezone, and time format.
-- **Reply Tags**: optional reply tag syntax for supported providers.
-- **Heartbeats**: heartbeat prompt and ack behavior.
-- **Runtime**: host, OS, node, model, repo root (when detected), thinking level (one line).
-- **Reasoning**: current visibility level + /reasoning toggle hint.
+- **Memory Recall** (when `memory` tool present): memory search guidance.
+- **Polaris** (when `polaris` tool present): Polaris integration instructions.
+- **Messaging**: message delivery behavior.
+- **Session State**: current session context.
+- **Context** (merged): workspace, date/time, context files, and runtime info.
 
 Safety guardrails in the system prompt are advisory. They guide model behavior but do not enforce policy. Use tool policy, exec approvals, sandboxing, and channel allowlists for hard enforcement; operators can disable these by design.
 
-## Prompt modes
+## Prompt variants
 
-Deneb can render smaller system prompts for sub-agents. The runtime sets a
-`promptMode` for each run (not a user-facing config):
+Deneb has two prompt builder functions:
 
-- `full` (default): includes all sections above.
-- `minimal`: used for sub-agents; omits **Skills**, **Memory Recall**, **Deneb
-  Self-Update**, **Model Aliases**, **User Identity**, **Reply Tags**,
-  **Messaging**, **Silent Replies**, and **Heartbeats**. Tooling, **Safety**,
-  Workspace, Sandbox, Current Date & Time (when known), Runtime, and injected
-  context stay available.
-- `none`: returns only the base identity line.
+- `BuildSystemPrompt`: the standard prompt with all sections above.
+- `BuildCodingSystemPrompt`: a variant for coding-focused sessions.
 
-When `promptMode=minimal`, extra injected prompts are labeled **Subagent
-Context** instead of **Group Chat Context**.
+Both are defined in `gateway-go/internal/chat/prompt/system_prompt.go`.
 
 ## Workspace bootstrap injection
 
 Bootstrap files are trimmed and appended under **Project Context** so the model sees identity and profile context without needing explicit reads:
 
-- `AGENTS.md`
+- `CLAUDE.md`
 - `SOUL.md`
 - `TOOLS.md`
 - `IDENTITY.md`
 - `USER.md`
-- `HEARTBEAT.md`
-- `BOOTSTRAP.md` (only on brand-new workspaces)
 - `MEMORY.md` when present, otherwise `memory.md` as a lowercase fallback
 
 All of these files are **injected into the context window** on every turn, which
@@ -88,9 +79,8 @@ To inspect how much each injected file contributes (raw vs injected, truncation,
 
 ## Time handling
 
-The system prompt includes a dedicated **Current Date & Time** section when the
-user timezone is known. To keep the prompt cache-stable, it now only includes
-the **time zone** (no dynamic clock or time format).
+The system prompt includes the current date, time, and timezone in the merged
+**Context** section (e.g., "Monday, January 2, 2006 — 15:04 (timezone: Asia/Seoul)").
 
 Use `session_status` when the agent needs the current time; the status card
 includes a timestamp line.

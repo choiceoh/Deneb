@@ -60,7 +60,7 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 		Stream:    true,
 	}
 
-	events, err := e.client.StreamChatOpenAI(ctx, req)
+	events, err := e.client.StreamChat(ctx, req)
 	if err != nil {
 		e.logger.Debug("query expansion failed", "error", err)
 		return nil

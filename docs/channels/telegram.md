@@ -7,7 +7,7 @@ title: "Telegram"
 
 # Telegram (Bot API)
 
-Status: production-ready for bot DMs + groups via grammY. Long polling is the default mode; webhook mode is optional.
+Status: production-ready for bot DMs + groups via custom Go implementation. Long polling is the default mode; webhook mode is optional.
 
 <CardGroup cols={3}>
   <Card title="Pairing" icon="link" href="/channels/pairing">
@@ -252,7 +252,7 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
 - Inbound messages normalize into the shared channel envelope with reply metadata and media placeholders.
 - Group sessions are isolated by group ID. Forum topics append `:topic:<threadId>` to keep topics isolated.
 - DM messages can carry `message_thread_id`; Deneb routes them with thread-aware session keys and preserves thread ID for replies.
-- Long polling uses grammY runner with per-chat/per-thread sequencing. Overall runner sink concurrency uses `agents.defaults.maxConcurrent`.
+- Long polling uses the custom Go poller with per-chat/per-thread sequencing. Overall concurrency uses `agents.defaults.maxConcurrent`.
 - Telegram Bot API has no read-receipt support (`sendReadReceipts` does not apply).
 
 ## Feature reference
@@ -740,8 +740,8 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
   <Accordion title="Limits, retry, and CLI targets">
     - `channels.telegram.textChunkLimit` default is 4000.
     - `channels.telegram.chunkMode="newline"` prefers paragraph boundaries (blank lines) before length splitting.
-    - `channels.telegram.mediaMaxMb` (default 100) caps inbound and outbound Telegram media size.
-    - `channels.telegram.timeoutSeconds` overrides Telegram API client timeout (if unset, grammY default applies).
+    - Telegram media upload size is capped at 50 MB (Telegram Bot API limit).
+    - `channels.telegram.timeoutSeconds` overrides Telegram API client timeout.
     - group context history uses `channels.telegram.historyLimit` or `messages.groupChat.historyLimit` (default 50); `0` disables.
     - DM history controls:
       - `channels.telegram.dmHistoryLimit`
@@ -894,7 +894,7 @@ Primary reference:
 - `channels.telegram.allowFrom`: DM allowlist (numeric Telegram user IDs). `allowlist` requires at least one sender ID. `open` requires `"*"`. `deneb doctor --fix` can resolve legacy `@username` entries to IDs and can recover allowlist entries from pairing-store files in allowlist migration flows.
 - `channels.telegram.actions.poll`: enable or disable Telegram poll creation (default: enabled; still requires `sendMessage`).
 - `channels.telegram.defaultTo`: default Telegram target used by CLI `--deliver` when no explicit `--reply-to` is provided.
-- `channels.telegram.groupPolicy`: `open | allowlist | disabled` (default: allowlist).
+- `channels.telegram.groupPolicy`: `open | allowlist | disabled` (default: open).
 - `channels.telegram.groupAllowFrom`: group sender allowlist (numeric Telegram user IDs). `deneb doctor --fix` can resolve legacy `@username` entries to IDs. Non-numeric entries are ignored at auth time. Group auth does not use DM pairing-store fallback (`2026.2.25+`).
 - Multi-account precedence:
   - When two or more account IDs are configured, set `channels.telegram.defaultAccount` (or include `channels.telegram.accounts.default`) to make default routing explicit.

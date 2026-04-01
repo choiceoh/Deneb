@@ -74,7 +74,8 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 	}
 
 	// Sync to Aurora store for compaction awareness.
-	if deps.auroraStore != nil {
+	// Skip for system sessions to avoid contaminating the user's conversation context.
+	if deps.auroraStore != nil && !isSystemSession(sessionKey) {
 		tokenCount := uint64(estimateTokens(sb.String()))
 		if _, err := deps.auroraStore.SyncMessage(1, "user", sb.String(), tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync interrupted context", "error", err)
@@ -132,7 +133,9 @@ func handleRunSuccess(
 		}
 	}
 	// Sync Aurora summaries for channel replies when available.
-	if deps.auroraStore != nil && result.Text != "" {
+	// Skip for system sessions — diary heartbeat and similar background tasks
+	// must not pollute the shared Aurora conversation context.
+	if deps.auroraStore != nil && result.Text != "" && !isSystemSession(params.SessionKey) {
 		tokenCount := uint64(estimateTokens(result.Text))
 		if _, err := deps.auroraStore.SyncMessage(1, "assistant", result.Text, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync assistant message", "error", err)
@@ -451,8 +454,7 @@ func parseModelID(model string) (providerID, modelName string) {
 
 // resolveClient creates an LLM client from provider configs, auth manager,
 // provider runtime resolver, or falls back to the pre-configured client.
-// Returns the client and API type ("anthropic" or "openai").
-func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.Client, string) {
+func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
 	// 1. Try provider config from deneb.json.
 	if deps.providerConfigs != nil && providerID != "" {
 		if cfg, ok := deps.providerConfigs[providerID]; ok {
@@ -486,13 +488,9 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 			if baseURL == "" {
 				logger.Warn("provider config missing base URL", "provider", providerID)
 			} else {
-				apiType := cfg.API
-				if apiType == "" {
-					apiType = inferAPIType(providerID)
-				}
 				client := llm.NewClient(baseURL, apiKey, llm.WithLogger(logger))
-				logger.Info("using provider from config", "provider", providerID, "apiType", apiType)
-				return client, apiType
+				logger.Info("using provider from config", "provider", providerID)
+				return client
 			}
 		}
 	}
@@ -507,7 +505,6 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
 			base := cred.BaseURL
 			apiKey := cred.APIKey
-			apiType := inferAPIType(target)
 			if base == "" {
 				base = resolveDefaultBaseURL(target)
 			}
@@ -533,16 +530,12 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 				}
 			}
 
-			return llm.NewClient(base, apiKey, llm.WithLogger(logger)), apiType
+			return llm.NewClient(base, apiKey, llm.WithLogger(logger))
 		}
 	}
 
-	// 3. Fall back to pre-configured client (OpenAI-compatible by default).
-	if deps.llmClient != nil {
-		return deps.llmClient, "openai"
-	}
-
-	return nil, ""
+	// 3. Fall back to pre-configured client.
+	return deps.llmClient
 }
 
 // Default base URLs for known providers (used when config doesn't specify one).
@@ -552,17 +545,6 @@ const (
 	defaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 )
 
-// inferAPIType guesses the API type from the provider ID.
-// OpenAI-compatible is the default; Anthropic is special-cased.
-func inferAPIType(providerID string) string {
-	switch providerID {
-	case "anthropic":
-		return "anthropic"
-	default:
-		// Default: OpenAI-compatible API (openai, zai, sglang, deepseek, etc.)
-		return "openai"
-	}
-}
 
 // executeAgentRunWithDelta is a variant of executeAgentRun that accepts a direct
 // onDelta callback for streaming text to HTTP clients.
@@ -596,8 +578,6 @@ func executeAgentRunWithDelta(
 // when no explicit base URL is configured.
 func resolveDefaultBaseURL(providerID string) string {
 	switch providerID {
-	case "anthropic":
-		return llm.DefaultAnthropicBaseURL
 	case "zai":
 		return defaultZaiBaseURL
 	case "google":
@@ -622,7 +602,7 @@ func hasImageAttachment(attachments []ChatAttachment) bool {
 }
 
 // buildAttachmentBlocks creates a multimodal content block array from text and
-// attachments. Images with base64 Data get Anthropic-native ImageSource blocks;
+// attachments. Images with base64 Data get inline ImageSource blocks;
 // images with URL get URL-referenced blocks.
 func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.ContentBlock {
 	blocks := make([]llm.ContentBlock, 0, len(attachments)+1)

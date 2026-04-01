@@ -42,29 +42,6 @@ func TestParseModelID(t *testing.T) {
 	}
 }
 
-func TestInferAPIType(t *testing.T) {
-	tests := []struct {
-		provider string
-		want     string
-	}{
-		{"anthropic", "anthropic"},
-		{"openai", "openai"},
-		{"zai", "openai"},
-		{"deepseek", "openai"},
-		{"sglang", "openai"},
-		{"vllm", "openai"},
-		{"", "openai"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.provider, func(t *testing.T) {
-			got := inferAPIType(tt.provider)
-			if got != tt.want {
-				t.Errorf("inferAPIType(%q) = %q, want %q", tt.provider, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsContextOverflow(t *testing.T) {
 	tests := []struct {
 		name string
@@ -131,7 +108,6 @@ func TestResolveDefaultBaseURL(t *testing.T) {
 		provider string
 		wantURL  string
 	}{
-		{"anthropic", llm.DefaultAnthropicBaseURL},
 		{"google", "https://generativelanguage.googleapis.com/v1beta/openai"},
 		{"zai", defaultZaiBaseURL},
 		{"sglang", modelrole.DefaultSglangBaseURL},
@@ -167,15 +143,12 @@ func TestResolveClient_UsesProviderConfigWithoutAPIKey(t *testing.T) {
 		},
 	}
 
-	client, apiType := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	client := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if client == nil {
 		t.Fatal("expected client from provider config")
 	}
-	if apiType != "openai" {
-		t.Fatalf("apiType = %q, want %q", apiType, "openai")
-	}
 
-	got, err := client.CompleteOpenAI(context.Background(), llm.ChatRequest{
+	got, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:     "local-model",
 		Messages:  []llm.Message{llm.NewTextMessage("user", "hello")},
 		MaxTokens: 32,
@@ -209,12 +182,12 @@ func TestResolveClient_ExpandsProviderConfigEnvVars(t *testing.T) {
 		},
 	}
 
-	client, _ := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	client := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if client == nil {
 		t.Fatal("expected client from provider config")
 	}
 
-	got, err := client.CompleteOpenAI(context.Background(), llm.ChatRequest{
+	got, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:     "local-model",
 		Messages:  []llm.Message{llm.NewTextMessage("user", "hello")},
 		MaxTokens: 32,
