@@ -26,14 +26,30 @@ type ProgressStep struct {
 
 // toolNameKorean maps tool names to Korean labels for vibe coder display.
 var toolNameKorean = map[string]string{
-	"exec":      "명령어 실행",
-	"write":     "파일 작성",
-	"edit":      "파일 수정",
-	"read":      "파일 읽기",
-	"grep":      "코드 검색",
-	"glob":      "파일 검색",
-	"ls":        "디렉토리 확인",
-	"send_file": "파일 전송",
+	"exec":            "명령어 실행",
+	"write":           "파일 작성",
+	"edit":            "파일 수정",
+	"multi_edit":      "일괄 수정",
+	"read":            "파일 읽기",
+	"batch_read":      "일괄 읽기",
+	"grep":            "코드 검색",
+	"find":            "파일 검색",
+	"search_and_read": "코드 검색+읽기",
+	"tree":            "디렉토리 구조",
+	"analyze":         "코드 분석",
+	"inspect":         "코드 상세 분석",
+	"diff":            "변경사항 비교",
+	"test":            "테스트 실행",
+	"git":             "Git 작업",
+	"ls":              "디렉토리 확인",
+	"send_file":       "파일 전송",
+	"web":             "웹 검색",
+	"memory":          "메모리 검색",
+	"pilot":           "AI 분석",
+	"polaris":         "시스템 지식",
+	"image":           "이미지 분석",
+	"gmail":           "이메일",
+	"message":         "메시지 전송",
 }
 
 // NewProgressTracker creates a tracker bound to a specific Telegram chat.
@@ -100,7 +116,7 @@ func (pt *ProgressTracker) updateMessage(ctx context.Context) {
 	if msgID == 0 {
 		// First message: send a new one.
 		results, err := SendText(ctx, pt.client, pt.chatID, text, SendOptions{
-			DisableLinkPreview: true,
+			DisableLinkPreview:  true,
 			DisableNotification: true,
 		})
 		if err != nil || len(results) == 0 {

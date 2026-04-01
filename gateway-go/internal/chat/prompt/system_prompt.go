@@ -91,8 +91,8 @@ var toolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "grep", "find"}},
-	{"Code", []string{"multi_edit", "tree", "diff", "analyze", "test"}},
+	{"File", []string{"read", "write", "edit", "grep", "find", "search_and_read", "batch_read"}},
+	{"Code", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test"}},
 	{"Git", []string{"git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"AI", []string{"pilot", "polaris"}},
@@ -415,10 +415,10 @@ var codingToolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "multi_edit", "grep", "find", "tree", "diff"}},
+	{"File", []string{"read", "write", "edit", "multi_edit", "grep", "find", "search_and_read", "batch_read", "tree", "diff"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Git", []string{"git"}},
-	{"Code", []string{"analyze", "test"}},
+	{"Code", []string{"analyze", "inspect", "test"}},
 }
 
 // BuildCodingSystemPrompt builds a system prompt optimized for coding tasks
