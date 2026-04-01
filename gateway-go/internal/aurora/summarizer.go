@@ -147,6 +147,9 @@ func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 		// The scratchpad improves summary quality (the model "thinks" first)
 		// without wasting tokens in the surviving context.
 		summary = stripAnalysisScratchpad(summary)
+		if summary == "" {
+			return deterministicFallback(text), nil
+		}
 		return summary, nil
 	}
 }

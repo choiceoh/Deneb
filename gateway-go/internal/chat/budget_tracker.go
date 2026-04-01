@@ -107,22 +107,27 @@ func (bt *BudgetTracker) CheckBudget(agentID string, budget int, globalTurnToken
 		}
 	}
 
-	// Stop: either diminishing returns or budget threshold reached.
-	if isDiminishing || bt.continuationCount > 0 {
-		return BudgetDecision{
-			Action:             "stop",
-			Reason:             "budget_threshold_or_diminishing",
-			ContinuationCount:  bt.continuationCount,
-			Pct:                pct,
-			TurnTokens:         globalTurnTokens,
-			Budget:             budget,
-			DiminishingReturns: isDiminishing,
-			DurationMs:         time.Since(bt.startedAt).Milliseconds(),
-		}
-	}
+	// Update tracking state even on stop so subsequent calls (if any)
+	// have correct delta calculations.
+	bt.continuationCount++
+	bt.lastDeltaTokens = deltaSinceLastCheck
+	bt.lastGlobalTokens = globalTurnTokens
 
-	// First check and already over budget.
-	return BudgetDecision{Action: "stop"}
+	// Stop: either diminishing returns or budget threshold reached.
+	reason := "budget_threshold"
+	if isDiminishing {
+		reason = "diminishing_returns"
+	}
+	return BudgetDecision{
+		Action:             "stop",
+		Reason:             reason,
+		ContinuationCount:  bt.continuationCount,
+		Pct:                pct,
+		TurnTokens:         globalTurnTokens,
+		Budget:             budget,
+		DiminishingReturns: isDiminishing,
+		DurationMs:         time.Since(bt.startedAt).Milliseconds(),
+	}
 }
 
 // Reset clears the tracker state for a new turn.

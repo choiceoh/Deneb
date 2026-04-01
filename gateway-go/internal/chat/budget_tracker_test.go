@@ -42,6 +42,12 @@ func TestBudgetTracker_Basic(t *testing.T) {
 		if d.Action != "stop" {
 			t.Errorf("action = %q, want stop at 91%%", d.Action)
 		}
+		if d.Reason != "budget_threshold" {
+			t.Errorf("reason = %q, want budget_threshold", d.Reason)
+		}
+		if d.ContinuationCount != 2 {
+			t.Errorf("count = %d, want 2", d.ContinuationCount)
+		}
 	})
 }
 
@@ -61,6 +67,9 @@ func TestBudgetTracker_DiminishingReturns(t *testing.T) {
 	}
 	if !d.DiminishingReturns {
 		t.Error("expected DiminishingReturns=true")
+	}
+	if d.Reason != "diminishing_returns" {
+		t.Errorf("reason = %q, want diminishing_returns", d.Reason)
 	}
 }
 
