@@ -170,6 +170,9 @@ func (h *Handler) handleSlashCommand(
 		h.InterruptActiveRun(sessionKey)
 		h.clearPending(sessionKey)
 		prompt.ClearSessionSnapshot(sessionKey)
+		if h.sessionMemory != nil {
+			h.sessionMemory.Delete(sessionKey)
+		}
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
 				h.logger.Warn("failed to delete transcript on reset", "error", err)

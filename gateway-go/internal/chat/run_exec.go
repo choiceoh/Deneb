@@ -790,21 +790,6 @@ func executeAgentRun(
 		}
 	}
 
-	// Post-run session memory update (non-blocking).
-	// Uses lightweight LLM to update structured session state based on this run.
-	if deps.sessionMemory != nil && params.Message != "" && agentResult != nil {
-		go UpdateSessionMemory(
-			deps.shutdownCtx,
-			deps.sessionMemory,
-			params.SessionKey,
-			params.Message,
-			agentResult.Text,
-			agentResult.Turns,
-			agentResult.StopReason,
-			logger,
-		)
-	}
-
 	// Fire agent_end plugin hook (void, non-blocking).
 	if deps.pluginHookRunner != nil {
 		go deps.pluginHookRunner.RunVoidHook(context.Background(), plugin.HookAgentEnd, map[string]any{
