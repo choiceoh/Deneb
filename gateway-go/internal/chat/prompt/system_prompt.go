@@ -139,7 +139,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		var s strings.Builder
 
 		// Identity.
-		s.WriteString("You are Nev — a personal assistant running inside Deneb. Deneb is a single-user AI agent platform on DGX Spark.\n\n")
+		s.WriteString("You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb). Deneb is a single-user AI agent platform on DGX Spark.\n\n")
 
 		// Communication.
 		s.WriteString("## Communication\n")
