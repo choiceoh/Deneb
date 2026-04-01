@@ -19,6 +19,7 @@ import (
 	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
+	handlertask "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertask"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
@@ -110,6 +111,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Broadcaster: hub.Broadcast,
 		}),
 		handlerprocess.CronServiceMethods(handlerprocess.CronServiceDeps{Service: hub.CronService}),
+
+		// Background task control plane.
+		handlertask.Methods(handlertask.Deps{Registry: hub.Tasks}),
 
 		// Approvals.
 		handlerprocess.ApprovalMethods(handlerprocess.ApprovalDeps{

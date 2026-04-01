@@ -49,6 +49,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
@@ -96,6 +97,8 @@ type ServerIntegrations struct {
 	vegaBackend           vega.Backend
 	geminiEmbedder        *embedding.GeminiEmbedder
 	jinaAPIKey            string
+	taskRegistry          *tasks.Registry
+	taskStore             *tasks.Store
 	approvals             *approval.Store
 	agents                *agent.Store
 	skills                *skill.Manager
@@ -345,6 +348,20 @@ func New(addr string, opts ...Option) *Server {
 	if s.providers != nil {
 		s.authManager = provider.NewAuthManager(s.providers, s.logger)
 		s.providerRuntime = provider.NewProviderRuntimeResolver(s.providers, s.logger)
+	}
+
+	// Background task control plane (SQLite ledger).
+	taskStore, err := tasks.OpenStore(tasks.DefaultStoreConfig(), s.logger)
+	if err != nil {
+		s.logger.Warn("task store open failed, task tracking disabled", "error", err)
+	} else {
+		s.taskStore = taskStore
+		reg, regErr := tasks.NewRegistry(taskStore, s.logger)
+		if regErr != nil {
+			s.logger.Warn("task registry init failed", "error", regErr)
+		} else {
+			s.taskRegistry = reg
+		}
 	}
 
 	// Phase 3: Advanced workflow subsystems.

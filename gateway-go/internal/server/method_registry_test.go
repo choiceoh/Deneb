@@ -65,6 +65,36 @@ var requiredMethods = []string{
 	"unsubscribe.session",
 	"unsubscribe.session.messages",
 
+	// Node and device.
+	"device.pair.approve",
+	"device.pair.list",
+	"device.pair.reject",
+	"device.pair.remove",
+	"device.token.revoke",
+	"device.token.rotate",
+	"node.describe",
+	"node.event",
+	"node.invoke",
+	"node.invoke.result",
+	"node.list",
+	"node.pair.approve",
+	"node.pair.list",
+	"node.pair.reject",
+	"node.pair.request",
+	"node.pair.verify",
+	"node.rename",
+
+	// Background task control plane.
+	"flow.cancel",
+	"flow.list",
+	"flow.show",
+	"task.audit",
+	"task.cancel",
+	"task.events",
+	"task.get",
+	"task.list",
+	"task.status",
+
 	// Process and cron.
 	"cron.add",
 	"cron.get",

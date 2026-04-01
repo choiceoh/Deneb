@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -146,6 +147,14 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		s.autonomousSvc.Start()
 	}
 
+	// Start background task maintenance loop (orphan recovery, cleanup).
+	if s.taskRegistry != nil {
+		sessionChecker := func(key string) bool {
+			return s.sessions.Get(key) != nil
+		}
+		tasks.StartMaintenanceLoop(ctx, s.taskRegistry, sessionChecker, s.logger)
+	}
+
 	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
 
 	// Fire gateway.start hooks (shell + internal).
@@ -279,7 +288,12 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6c. Stop autoresearch runner.
+	// 6c. Close task store.
+	if s.taskStore != nil {
+		s.taskStore.Close()
+	}
+
+	// 6d. Stop autoresearch runner.
 	if s.autoresearchRunner != nil {
 		s.autoresearchRunner.Stop()
 	}
