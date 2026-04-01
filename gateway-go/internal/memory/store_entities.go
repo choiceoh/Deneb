@@ -59,6 +59,17 @@ func normalizeEntityName(name string) string {
 	return name
 }
 
+// validEntityTypes is the set of entity types allowed by the DB CHECK constraint.
+var validEntityTypes = map[string]bool{
+	EntityPerson:       true,
+	EntityProject:      true,
+	EntityTool:         true,
+	EntitySystem:       true,
+	EntityConcept:      true,
+	EntityOrganization: true,
+	EntityUnknown:      true,
+}
+
 // UpsertEntity creates or updates an entity.
 // On conflict (same name), updates last_seen, increments mention_count,
 // and upgrades entity_type from "unknown" if a more specific type is provided.
@@ -73,7 +84,7 @@ func (s *Store) UpsertEntity(ctx context.Context, name, entityType string) (int6
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	if entityType == "" {
+	if entityType == "" || !validEntityTypes[entityType] {
 		entityType = EntityUnknown
 	}
 
