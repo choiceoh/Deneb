@@ -13,6 +13,7 @@ type ExecHost string
 const (
 	ExecHostSandbox ExecHost = "sandbox"
 	ExecHostGateway ExecHost = "gateway"
+	ExecHostNode    ExecHost = "node"
 )
 
 // ExecSecurity represents the execution security level.
@@ -41,15 +42,18 @@ type ExecDirectiveParse struct {
 	ExecHost     ExecHost
 	ExecSecurity ExecSecurity
 	ExecAsk      ExecAsk
+	ExecNode     string
 
 	RawExecHost     string
 	RawExecSecurity string
 	RawExecAsk      string
+	RawExecNode     string
 
 	HasExecOptions  bool
 	InvalidHost     bool
 	InvalidSecurity bool
 	InvalidAsk      bool
+	InvalidNode     bool
 }
 
 var execDirectiveRe = regexp.MustCompile(`(?i)(?:^|\s)/exec(?:$|\s|:)`)
@@ -61,6 +65,8 @@ func NormalizeExecHost(value string) (ExecHost, bool) {
 		return ExecHostSandbox, true
 	case "gateway":
 		return ExecHostGateway, true
+	case "node":
+		return ExecHostNode, true
 	}
 	return "", false
 }
@@ -174,6 +180,18 @@ func parseExecDirectiveArgs(raw string) (result ExecDirectiveParse, consumed int
 			i = nextI
 			consumed = i
 
+		case "node":
+			result.RawExecNode = value
+			node := strings.TrimSpace(value)
+			if node == "" {
+				result.InvalidNode = true
+			} else {
+				result.ExecNode = node
+			}
+			result.HasExecOptions = true
+			i = nextI
+			consumed = i
+
 		default:
 			// Unknown key — stop consuming.
 			goto done
@@ -213,12 +231,15 @@ func ExtractExecDirective(body string) ExecDirectiveParse {
 		ExecHost:        parsed.ExecHost,
 		ExecSecurity:    parsed.ExecSecurity,
 		ExecAsk:         parsed.ExecAsk,
+		ExecNode:        parsed.ExecNode,
 		RawExecHost:     parsed.RawExecHost,
 		RawExecSecurity: parsed.RawExecSecurity,
 		RawExecAsk:      parsed.RawExecAsk,
+		RawExecNode:     parsed.RawExecNode,
 		HasExecOptions:  parsed.HasExecOptions,
 		InvalidHost:     parsed.InvalidHost,
 		InvalidSecurity: parsed.InvalidSecurity,
 		InvalidAsk:      parsed.InvalidAsk,
+		InvalidNode:     parsed.InvalidNode,
 	}
 }
