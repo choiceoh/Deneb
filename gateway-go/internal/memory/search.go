@@ -120,7 +120,7 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 
 	// Phase 3.5: Content deduplication — remove near-duplicate facts so the
 	// LLM context isn't wasted on 3-5 copies of the same information.
-	results = dedupResults(results, dedupJaccardThreshold)
+	results = dedupResults(results, s.searchParams().DedupJaccardThreshold)
 
 	// Phase 4: Cross-encoder reranking (optional).
 	if s.reranker != nil && len(results) > 1 {
@@ -149,13 +149,14 @@ func (s *Store) ftsSearch(ctx context.Context, query string, opts SearchOpts) (m
 	results := s.runFTSQuery(ctx, andQuery, opts)
 
 	// Stage 2: OR fallback when AND yields too few results.
-	if len(results) < ftsAndMinResults && len(tokens) > 1 {
+	p := s.searchParams()
+	if len(results) < p.FTSAndMinResults && len(tokens) > 1 {
 		orQuery := buildFTSQuery(tokens, "OR")
 		orResults := s.runFTSQuery(ctx, orQuery, opts)
 		for id, score := range orResults {
 			if _, exists := results[id]; !exists {
 				// Slightly penalize OR-only results vs AND matches.
-				results[id] = score * 0.85
+				results[id] = score * p.ORPenalty
 			}
 		}
 	}
@@ -275,7 +276,7 @@ func (s *Store) trigramSearch(ctx context.Context, query string, minImportance f
 			continue
 		}
 		// Slightly penalize trigram results vs unicode61.
-		results[id] = rankToScore(rank) * 0.8
+		results[id] = rankToScore(rank) * s.searchParams().TrigramPenalty
 	}
 	return results
 }
@@ -306,7 +307,7 @@ func (s *Store) entitySearch(ctx context.Context, entityName string) map[int64]f
 		if err := rows.Scan(&id); err != nil {
 			continue
 		}
-		results[id] = 0.6 // baseline score for entity match
+		results[id] = s.searchParams().EntityMatchBaseline
 	}
 	return results
 }
@@ -321,7 +322,7 @@ func (s *Store) vectorSearch(ctx context.Context, queryVec []float32) (map[int64
 	results := make(map[int64]float64, len(embeddings))
 	for factID, vec := range embeddings {
 		sim := cosineSimilarity(queryVec, vec)
-		if sim > 0.35 { // min threshold — filters out thematically unrelated facts
+		if sim > s.searchParams().VectorMinThreshold {
 			results[factID] = sim
 		}
 	}
@@ -358,6 +359,7 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 	s.mu.RUnlock()
 
 	now := time.Now()
+	p := s.searchParams()
 	var results []SearchResult
 
 	for _, id := range ids {
@@ -375,14 +377,14 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 		// Hybrid score: max of FTS and vector (or weighted combination if both present).
 		var hybridScore float64
 		if vecScore > 0 && ftsScore > 0 {
-			hybridScore = 0.4*ftsScore + 0.6*vecScore
+			hybridScore = p.HybridFTSWeight*ftsScore + p.HybridVecWeight*vecScore
 		} else {
 			hybridScore = math.Max(ftsScore, vecScore)
 		}
 
 		// Category-adjusted importance: boost decisions/preferences, attenuate context.
 		adjustedImportance := fact.Importance
-		if mult, ok := categoryImportanceMultiplier[fact.Category]; ok {
+		if mult, ok := p.CategoryImportanceMultiplier[fact.Category]; ok {
 			adjustedImportance = math.Min(1.0, adjustedImportance*mult)
 		}
 
@@ -398,25 +400,23 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 		// Recency scoring: steep initial drop → gradual long tail.
 		// Uses inverse-square decay: score = 1 / (1 + (days/steepness)²)
 		// For context (steepness=5): day 0→1.0, day 2→0.86, day 5→0.5, day 10→0.2
-		steepness := defaultSteepnessDays
-		if s, ok := categorySteepnessDays[fact.Category]; ok {
-			steepness = s
+		steepness := p.DefaultSteepnessDays
+		if st, ok := p.CategorySteepnessDays[fact.Category]; ok {
+			steepness = st
 		}
 		ratio := daysSince / steepness
 		recencyScore := 1.0 / (1.0 + ratio*ratio)
 
 		// Verification score: dreaming-verified facts are more trustworthy.
-		// Replaces the old frequency score which amplified noise by boosting
-		// frequently accessed (but not necessarily accurate) facts.
-		verificationScore := 0.3 // base score for unverified facts
+		verificationScore := p.VerificationUnverified
 		if fact.VerifiedAt != nil && !fact.VerifiedAt.IsZero() {
-			verificationScore = 1.0
+			verificationScore = p.VerificationVerified
 		}
 
-		finalScore := weightHybrid*hybridScore +
-			weightImportance*adjustedImportance +
-			weightRecency*recencyScore +
-			weightVerification*verificationScore
+		finalScore := p.WeightHybrid*hybridScore +
+			p.WeightImportance*adjustedImportance +
+			p.WeightRecency*recencyScore +
+			p.WeightVerification*verificationScore
 
 		if opts.MinScore > 0 && finalScore < opts.MinScore {
 			continue
@@ -524,12 +524,13 @@ func (s *Store) rerankFacts(ctx context.Context, query string, results []SearchR
 		return results
 	}
 
+	p := s.searchParams()
 	reranked := make([]SearchResult, 0, len(ranked))
 	for _, r := range ranked {
 		if r.Index >= 0 && r.Index < len(results) {
 			res := results[r.Index]
 			// Blend reranker score with existing score to preserve importance/recency signal.
-			res.Score = 0.7*r.RelevanceScore + 0.3*res.Score
+			res.Score = p.RerankBlendReranker*r.RelevanceScore + p.RerankBlendHybrid*res.Score
 			reranked = append(reranked, res)
 		}
 	}
