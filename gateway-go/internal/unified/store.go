@@ -72,6 +72,11 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("unified store: init schema: %w", err)
 	}
 
+	// Run entity constraint migration for existing databases that predate
+	// the 'unknown' entity_type. SQLite cannot ALTER CHECK constraints, so
+	// we recreate the table. Idempotent — no-op if constraint is correct.
+	migrateEntityConstraint(db)
+
 	s := &Store{
 		db:     db,
 		dbPath: cfg.DatabasePath,

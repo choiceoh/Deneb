@@ -6,6 +6,51 @@ import (
 	"log/slog"
 )
 
+// migrateEntityConstraint fixes the entities CHECK constraint for databases
+// created before 'unknown' was added to the allowed entity_type set.
+// SQLite cannot ALTER a CHECK constraint, so we recreate the table.
+// Idempotent — skipped if the constraint already includes 'unknown'.
+func migrateEntityConstraint(db *sql.DB) {
+	// Probe: if inserting 'unknown' works, the constraint is already correct.
+	var hasUnknown bool
+	row := db.QueryRow(`SELECT COUNT(*) > 0 FROM pragma_table_info('entities') WHERE name = 'entity_type'`)
+	if err := row.Scan(&hasUnknown); err != nil || !hasUnknown {
+		return // entities table doesn't exist or has no entity_type column
+	}
+
+	// Try a no-op insert with entity_type='unknown' to test the constraint.
+	// Use a savepoint so a constraint failure doesn't abort any outer transaction.
+	_, err := db.Exec(`SAVEPOINT entity_check_probe`)
+	if err != nil {
+		return
+	}
+	_, probeErr := db.Exec(`INSERT INTO entities (name, entity_type, first_seen, last_seen) VALUES ('__probe__', 'unknown', '', '')`)
+	if probeErr == nil {
+		// Constraint allows 'unknown' — clean up probe row and return.
+		_, _ = db.Exec(`DELETE FROM entities WHERE name = '__probe__'`)
+		_, _ = db.Exec(`RELEASE entity_check_probe`)
+		return
+	}
+	_, _ = db.Exec(`ROLLBACK TO entity_check_probe`)
+	_, _ = db.Exec(`RELEASE entity_check_probe`)
+
+	// Constraint rejects 'unknown' — recreate the table with the fixed constraint.
+	_, _ = db.Exec(`PRAGMA foreign_keys = OFF`)
+	_, _ = db.Exec(`CREATE TABLE IF NOT EXISTS entities_v6 (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		name          TEXT NOT NULL UNIQUE,
+		entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization','unknown')),
+		first_seen    TEXT NOT NULL,
+		last_seen     TEXT NOT NULL,
+		mention_count INTEGER NOT NULL DEFAULT 1
+	)`)
+	_, _ = db.Exec(`INSERT OR IGNORE INTO entities_v6 SELECT * FROM entities`)
+	_, _ = db.Exec(`DROP TABLE IF EXISTS entities`)
+	_, _ = db.Exec(`ALTER TABLE entities_v6 RENAME TO entities`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)`)
+	_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
+}
+
 func (s *Store) repairMemoryIndex() error {
 	tx, err := s.db.Begin()
 	if err != nil {
