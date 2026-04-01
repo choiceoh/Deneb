@@ -59,21 +59,24 @@ var categoryImportanceMultiplier = map[string]float64{
 	CategoryMutual:     0.85,
 }
 
-// categoryHalfLifeDays controls recency decay speed per category.
-// Factual records (decision, context, solution) need longer half-lives so
-// recent project history persists across sessions.
-// Relational data (user_model, mutual) can decay faster — personality
-// traits are re-observed frequently and consolidated by dreaming.
-var categoryHalfLifeDays = map[string]float64{
-	CategoryDecision:   90.0,
-	CategoryPreference: 60.0,
-	CategorySolution:   60.0,
-	CategoryContext:    30.0,
-	CategoryUserModel:  90.0,
-	CategoryMutual:     45.0,
+// categorySteepnessDays controls the inverse-square recency decay per category.
+// The steepness value is the number of days at which score drops to 0.5.
+// Curve: score = 1 / (1 + (days/steepness)²)
+//   - At steepness days:  0.5
+//   - At 2×steepness:     0.2
+//   - At 3×steepness:     0.1
+// Lower values = faster decay. Factual records (decision, context, solution)
+// get higher steepness so recent project history persists across sessions.
+var categorySteepnessDays = map[string]float64{
+	CategoryDecision:   14.0, // important decisions persist ~2 weeks at high score
+	CategoryPreference: 10.0,
+	CategorySolution:   10.0,
+	CategoryContext:    5.0,  // project state: very fresh-biased (1-2 days dominant)
+	CategoryUserModel:  14.0, // user traits: moderate persistence
+	CategoryMutual:     7.0,  // relationship signals: 1-week window
 }
 
-const defaultHalfLifeDays = 30.0
+const defaultSteepnessDays = 7.0
 
 // SearchFacts performs a hybrid FTS + semantic search over active facts,
 // then applies importance and recency weighting.
@@ -393,19 +396,14 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 		daysSince := now.Sub(refTime).Hours() / 24
 
 		// Recency scoring: steep initial drop → gradual long tail.
-		// Uses inverse-square decay: score = 1 / (1 + (days/steepness)^2)
-		// where steepness is derived from halfLife: steepness = halfLife / 5
-		// This gives:
-		//   - Days 0-2:  ~1.0 (very high — recent events dominate)
-		//   - Days 3-7:  ~0.6-0.3 (rapid drop-off)
-		//   - Days 7-30: ~0.3-0.05 (gradual decay)
-		//   - Days 30+:  slow convergence toward 0
-		halfLife := defaultHalfLifeDays
-		if hl, ok := categoryHalfLifeDays[fact.Category]; ok {
-			halfLife = hl
+		// Uses inverse-square decay: score = 1 / (1 + (days/steepness)²)
+		// For context (steepness=5): day 0→1.0, day 2→0.86, day 5→0.5, day 10→0.2
+		steepness := defaultSteepnessDays
+		if s, ok := categorySteepnessDays[fact.Category]; ok {
+			steepness = s
 		}
-		steepness := halfLife / 5.0
-		recencyScore := 1.0 / (1.0 + (daysSince/steepness)*(daysSince/steepness))
+		ratio := daysSince / steepness
+		recencyScore := 1.0 / (1.0 + ratio*ratio)
 
 		// Verification score: dreaming-verified facts are more trustworthy.
 		// Replaces the old frequency score which amplified noise by boosting

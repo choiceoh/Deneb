@@ -16,12 +16,12 @@ func TestCategoryImportanceMultiplier(t *testing.T) {
 		t.Errorf("decision adjusted importance (%.3f) should exceed context (%.3f)", decisionImp, contextImp)
 	}
 
-	// user_model should outweigh solution at equal raw importance.
-	userModelImp := math.Min(1.0, 0.7*categoryImportanceMultiplier[CategoryUserModel])
+	// solution should outweigh user_model at equal raw importance (factual bias).
 	solutionImp := math.Min(1.0, 0.7*categoryImportanceMultiplier[CategorySolution])
+	userModelImp := math.Min(1.0, 0.7*categoryImportanceMultiplier[CategoryUserModel])
 
-	if userModelImp <= solutionImp {
-		t.Errorf("user_model adjusted importance (%.3f) should exceed solution (%.3f)", userModelImp, solutionImp)
+	if solutionImp <= userModelImp {
+		t.Errorf("solution adjusted importance (%.3f) should exceed user_model (%.3f)", solutionImp, userModelImp)
 	}
 }
 
@@ -33,28 +33,34 @@ func TestCategoryImportanceClamp(t *testing.T) {
 	}
 }
 
-func TestCategoryHalfLife(t *testing.T) {
-	// Context should decay much faster than user_model.
-	contextHL := categoryHalfLifeDays[CategoryContext]
-	userModelHL := categoryHalfLifeDays[CategoryUserModel]
+func TestCategorySteepness(t *testing.T) {
+	// Context should decay much faster than user_model (lower steepness).
+	contextS := categorySteepnessDays[CategoryContext]
+	userModelS := categorySteepnessDays[CategoryUserModel]
 
-	if contextHL >= userModelHL {
-		t.Errorf("context half-life (%.0f) should be shorter than user_model (%.0f)", contextHL, userModelHL)
+	if contextS >= userModelS {
+		t.Errorf("context steepness (%.0f) should be shorter than user_model (%.0f)", contextS, userModelS)
+	}
+
+	// Inverse-square recency: score = 1 / (1 + (days/steepness)^2)
+	inverseSquare := func(days, steepness float64) float64 {
+		r := days / steepness
+		return 1.0 / (1.0 + r*r)
 	}
 
 	// After 30 days, context recency score should be much lower than decision.
 	days := 30.0
-	contextRecency := math.Exp(-math.Ln2 * days / contextHL)
-	decisionRecency := math.Exp(-math.Ln2 * days / categoryHalfLifeDays[CategoryDecision])
+	contextRecency := inverseSquare(days, contextS)
+	decisionRecency := inverseSquare(days, categorySteepnessDays[CategoryDecision])
 
 	if contextRecency >= decisionRecency {
 		t.Errorf("at 30 days, context recency (%.3f) should be lower than decision (%.3f)", contextRecency, decisionRecency)
 	}
 
-	// Context at 14 days should be ~0.5 (its half-life).
-	contextAt14 := math.Exp(-math.Ln2 * 14.0 / contextHL)
-	if math.Abs(contextAt14-0.5) > 0.01 {
-		t.Errorf("context recency at 14 days should be ~0.5, got %.3f", contextAt14)
+	// Context at steepness days should be exactly 0.5.
+	contextAtSteepness := inverseSquare(contextS, contextS)
+	if math.Abs(contextAtSteepness-0.5) > 0.01 {
+		t.Errorf("context recency at steepness days should be 0.5, got %.3f", contextAtSteepness)
 	}
 }
 

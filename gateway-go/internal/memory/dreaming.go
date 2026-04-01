@@ -103,8 +103,10 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		state.report.FactsExpired += int(expiredCount)
 	}
 
-	// Phase 0.5: Prune low-importance noise (context/auto_extract, unaccessed, unverified, >7 days).
-	if pruned, err := store.PruneNoiseFacts(ctx, 0.6, 7*24*time.Hour); err == nil && pruned > 0 {
+	// Phase 0.5: Prune low-importance noise (context/auto_extract, unaccessed, unverified, >14 days).
+	// Threshold lowered to 0.45 and age raised to 14d to preserve factual context
+	// records that may have moderate importance but carry project state.
+	if pruned, err := store.PruneNoiseFacts(ctx, 0.45, 14*24*time.Hour); err == nil && pruned > 0 {
 		logger.Info("aurora-dream: pruned noise facts", "count", pruned)
 		state.report.FactsPruned = int(pruned)
 	}

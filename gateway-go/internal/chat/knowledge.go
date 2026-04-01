@@ -182,8 +182,8 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 
 // categoryVolatileDays defines "shelf life" per fact category.
 // Facts older than this threshold (relative to UpdatedAt) get a staleness hint.
-// Aligned with categoryHalfLifeDays in search.go: shelfLife ≈ halfLife × 1.5,
-// so the staleness warning appears when the decay score drops to ~33%.
+// Aligned with categorySteepnessDays in search.go: shelfLife ≈ steepness × 3,
+// so the staleness warning appears when the inverse-square score drops to ~10%.
 var categoryVolatileDays = map[string]int{
 	"context":    45,  // half-life 30d × 1.5 — project state persists across sessions
 	"decision":   135, // half-life 90d × 1.5 — decisions are long-lived
