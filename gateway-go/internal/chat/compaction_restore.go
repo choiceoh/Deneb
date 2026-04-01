@@ -107,7 +107,15 @@ func BuildRestorationMessages(records []FileReadRecord) []llm.Message {
 		if count >= postCompactMaxFiles {
 			break
 		}
-		if usedTokens+r.TokenCount > postCompactTokenBudget {
+
+		// Use the effective token count (after potential truncation) for budget
+		// admission so large files aren't skipped when their truncated form fits.
+		effectiveTokens := r.TokenCount
+		if effectiveTokens > postCompactMaxTokensPerFile {
+			effectiveTokens = postCompactMaxTokensPerFile
+		}
+
+		if usedTokens+effectiveTokens > postCompactTokenBudget {
 			continue // skip this file, try smaller ones
 		}
 
@@ -122,9 +130,9 @@ func BuildRestorationMessages(records []FileReadRecord) []llm.Message {
 		}
 
 		msg := llm.NewTextMessage("user", fmt.Sprintf(
-			"[Context restored after compaction — recently accessed content]\n%s", content))
+			"[Context restored after compaction \u2014 recently accessed content]\n%s", content))
 		messages = append(messages, msg)
-		usedTokens += r.TokenCount
+		usedTokens += effectiveTokens
 		count++
 	}
 
