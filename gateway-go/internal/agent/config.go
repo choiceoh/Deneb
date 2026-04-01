@@ -13,7 +13,7 @@ import (
 // AgentConfig configures the agent execution loop.
 type AgentConfig struct {
 	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
-	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 10m.
+	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 30m.
 	Model     string
 	System    json.RawMessage // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool

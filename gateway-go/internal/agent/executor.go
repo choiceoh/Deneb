@@ -40,7 +40,7 @@ func RunAgent(
 		cfg.MaxTurns = 25
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 10 * time.Minute
+		cfg.Timeout = 30 * time.Minute
 	}
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 8192
