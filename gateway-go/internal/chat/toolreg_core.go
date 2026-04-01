@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"context"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 )
 
@@ -11,9 +9,6 @@ import (
 // then adds tools that depend on chat-internal state (pilot, post-processors).
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	sglang := &toolreg.SglangDeps{
-		CallLocalLLM: func(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
-			return callLocalLLM(ctx, system, userMessage, maxTokens)
-		},
 		CheckSglangHealth: checkSglangHealth,
 		BaseURL:           lightweightBaseURL,
 	}

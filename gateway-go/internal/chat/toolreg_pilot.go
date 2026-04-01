@@ -50,7 +50,6 @@ var pilotSimpleSourceTools = map[string]bool{
 	"http":          true,
 	"kv":            true,
 	"memory":  true,
-	"polaris": true,
 	"read":          true,
 	"tree":          true,
 	"web_fetch":     true,
@@ -287,7 +286,6 @@ type pilotParams struct {
 	Memory      string   `json:"memory"`
 	Gmail       string   `json:"gmail"`
 	YouTube     string   `json:"youtube"`
-	Polaris     string   `json:"polaris"`
 	Image       string   `json:"image"`
 	Ls          string   `json:"ls"`
 	AgentLogs   string   `json:"agent_logs"`

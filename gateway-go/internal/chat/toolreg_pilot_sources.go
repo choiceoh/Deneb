@@ -175,14 +175,6 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		})
 	}
 
-	if p.Polaris != "" {
-		specs = append(specs, sourceSpec{
-			Tool:  "polaris",
-			Input: mustJSON(map[string]any{"action": "search", "query": p.Polaris}),
-			Label: "polaris: " + p.Polaris,
-		})
-	}
-
 	if p.Image != "" {
 		specs = append(specs, sourceSpec{
 			Tool:  "image",
@@ -253,7 +245,7 @@ func sourceTypeFromTool(tool string) string {
 		return "file"
 	case "agent_logs", "gateway_logs", "test", "http":
 		return "exec"
-	case "gmail", "youtube_transcript", "polaris", "image":
+	case "gmail", "youtube_transcript", "image":
 		return "content"
 	default:
 		return "content"

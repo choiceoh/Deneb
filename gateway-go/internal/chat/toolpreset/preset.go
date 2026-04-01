@@ -18,7 +18,7 @@ const (
 var researcherTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
 	"batch_read", "search_and_read", "inspect",
-	"web", "http", "memory", "polaris",
+	"web", "http", "memory",
 )
 
 // implementerTools include read + write + build tools for code changes.
