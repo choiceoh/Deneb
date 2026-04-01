@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -47,37 +46,12 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult)
 	}
 
-	// Resolve queue action when a run is already active for this session.
-	// Decides whether to run now (interrupting), enqueue as followup, or drop.
-	isActive := h.hasActiveRunForSession(p.SessionKey)
-	action := queue.ResolveActiveRunQueueAction(
-		isActive,
-		false, // isHeartbeat: inbound user messages are never heartbeats
-		false, // shouldFollowup: no followup queue wired yet
-		queue.QueueModeOff,
-	)
-	switch action {
-	case queue.QueueActionDrop:
-		h.logger.Info("queue policy: dropping message (active run)",
-			"sessionKey", p.SessionKey)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"status": "dropped",
-			"reason": "active-run",
-		})
-		return resp
-	case queue.QueueActionEnqueueFollowup:
-		h.logger.Info("queue policy: enqueue-followup (active run)",
-			"sessionKey", p.SessionKey)
-		// Fall through to interrupt + run for now; a full followup queue
-		// can be wired later without changing this call site.
-	case queue.QueueActionRunNow:
-		// Default path: interrupt and run immediately.
-	}
-
-	// Interrupt any active run on this session to prevent concurrent runs.
-	h.InterruptActiveRun(p.SessionKey)
-
-	return h.startAsyncRun(req.ID, RunParams{
+	// When a run is already active for this session, queue the message
+	// instead of interrupting. The active run completes normally (preserving
+	// its full context), then the queued message is processed automatically.
+	// This prevents the "amnesia" bug where the assistant forgets in-progress
+	// work when the user sends a message mid-execution.
+	runParams := RunParams{
 		SessionKey:   p.SessionKey,
 		Message:      sanitizeInput(p.Message),
 		Attachments:  p.Attachments,
@@ -85,7 +59,20 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		ClientRunID:  p.ClientRunID,
 		Model:        p.Model,
 		WorkspaceDir: p.WorkspaceDir,
-	}, false)
+	}
+
+	if h.hasActiveRunForSession(p.SessionKey) {
+		h.enqueuePending(p.SessionKey, runParams)
+		h.logger.Info("queued message for active run",
+			"sessionKey", p.SessionKey)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"status": "queued",
+			"reason": "active-run",
+		})
+		return resp
+	}
+
+	return h.startAsyncRun(req.ID, runParams, false)
 }
 
 // SessionsSend handles "sessions.send" — interrupts any active run, then starts a new one.
@@ -200,8 +187,9 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 		return resp
 	}
 
-	// Transition session out of running state.
+	// Clear pending queue and transition session out of running state.
 	if sessionKey != "" {
+		h.clearPending(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
@@ -342,12 +330,13 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 			protocol.ErrNotFound, "no active run found"))
 	}
 
-	// Transition session to killed.
+	// Clear pending queue and transition session to killed.
 	key := resolvedKey
 	if key == "" {
 		key = p.SessionKey
 	}
 	if key != "" {
+		h.clearPending(key)
 		h.sessions.ApplyLifecycleEvent(key, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),

@@ -110,6 +110,36 @@ func (h *Handler) hasActiveRunForSession(sessionKey string) bool {
 	return false
 }
 
+// enqueuePending queues a message for processing after the active run completes.
+func (h *Handler) enqueuePending(sessionKey string, params RunParams) {
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+	q, ok := h.pendingMsgs[sessionKey]
+	if !ok {
+		q = &pendingRunQueue{}
+		h.pendingMsgs[sessionKey] = q
+	}
+	q.enqueue(params)
+}
+
+// drainPending removes and returns the next pending message for a session.
+func (h *Handler) drainPending(sessionKey string) *RunParams {
+	h.pendingMu.Lock()
+	q, ok := h.pendingMsgs[sessionKey]
+	h.pendingMu.Unlock()
+	if !ok {
+		return nil
+	}
+	return q.drain()
+}
+
+// clearPending removes all pending messages for a session (used on /reset).
+func (h *Handler) clearPending(sessionKey string) {
+	h.pendingMu.Lock()
+	delete(h.pendingMsgs, sessionKey)
+	h.pendingMu.Unlock()
+}
+
 // InterruptActiveRun cancels all active runs for a session key.
 func (h *Handler) InterruptActiveRun(sessionKey string) {
 	h.abortMu.Lock()
@@ -138,6 +168,7 @@ func (h *Handler) handleSlashCommand(
 	case "reset":
 		// Abort any active run, clear transcript, and discard frozen context snapshot.
 		h.InterruptActiveRun(sessionKey)
+		h.clearPending(sessionKey)
 		prompt.ClearSessionSnapshot(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
@@ -152,6 +183,7 @@ func (h *Handler) handleSlashCommand(
 
 	case "kill":
 		h.InterruptActiveRun(sessionKey)
+		h.clearPending(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
@@ -255,6 +287,12 @@ func (h *Handler) buildRunDeps() runDeps {
 		shutdownCtx:          h.shutdownCtx,
 		hookRegistry:         h.hookRegistry,
 		pluginHookRunner:     h.pluginHookRunner,
+		drainPendingFn: h.drainPending,
+		startRunFn: func(params RunParams) {
+			// Re-use startAsyncRun for full lifecycle management (abort map,
+			// panic recovery, runStateMachine, session state transitions).
+			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
+		},
 	}
 }
 
