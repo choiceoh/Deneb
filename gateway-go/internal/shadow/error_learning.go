@@ -62,9 +62,9 @@ func (el *ErrorLearner) OnMessageForErrors(sessionKey, content string) {
 
 // recordError tracks an error occurrence.
 func (el *ErrorLearner) recordError(pattern, message, sessionKey string) {
-	el.svc.mu.Lock()
-	defer el.svc.mu.Unlock()
+	var recurringEvent *ShadowEvent
 
+	el.svc.mu.Lock()
 	// Check for existing pattern.
 	for i := range el.errorHistory {
 		if el.errorHistory[i].Pattern == pattern {
@@ -72,12 +72,16 @@ func (el *ErrorLearner) recordError(pattern, message, sessionKey string) {
 			el.errorHistory[i].OccurredAt = time.Now().UnixMilli()
 			el.errorHistory[i].SessionKey = sessionKey
 
-			// If this is a recurring error (3+), emit an event.
+			// If this is a recurring error (3+), prepare event for after unlock.
 			if el.errorHistory[i].Occurrences >= 3 {
-				el.svc.emit(ShadowEvent{Type: "recurring_error", Payload: map[string]any{
+				recurringEvent = &ShadowEvent{Type: "recurring_error", Payload: map[string]any{
 					"pattern":     pattern,
 					"occurrences": el.errorHistory[i].Occurrences,
-				}})
+				}}
+			}
+			el.svc.mu.Unlock()
+			if recurringEvent != nil {
+				el.svc.emit(*recurringEvent)
 			}
 			return
 		}
@@ -97,6 +101,7 @@ func (el *ErrorLearner) recordError(pattern, message, sessionKey string) {
 	if len(el.errorHistory) > 300 {
 		el.errorHistory = el.errorHistory[len(el.errorHistory)-300:]
 	}
+	el.svc.mu.Unlock()
 }
 
 // RecordResolution marks that an error was resolved (e.g., session went from failed to done).

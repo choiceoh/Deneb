@@ -109,9 +109,14 @@ func (ua *UsageAnalytics) GetReport() UsageReport {
 	ua.svc.mu.Lock()
 	defer ua.svc.mu.Unlock()
 
+	// Copy the map to avoid data race after lock release.
+	dailyTokensCopy := make(map[string]int64, len(ua.dailyTokens))
+	for k, v := range ua.dailyTokens {
+		dailyTokensCopy[k] = v
+	}
 	report := UsageReport{
 		TotalSessions: len(ua.sessionRuns),
-		DailyTokens:   ua.dailyTokens,
+		DailyTokens:   dailyTokensCopy,
 	}
 
 	if len(ua.sessionRuns) == 0 {

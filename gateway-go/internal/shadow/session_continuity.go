@@ -79,7 +79,8 @@ func (sc *SessionContinuity) SaveSnapshot() {
 	sc.svc.mu.Lock()
 	msgs := make([]continuityMessage, len(sc.recentMessages))
 	copy(msgs, sc.recentMessages)
-	tasks := sc.svc.pendingTasks
+	tasks := make([]TrackedTask, len(sc.svc.pendingTasks))
+	copy(tasks, sc.svc.pendingTasks)
 	topic := ""
 	if sc.svc.contextPrefetcher != nil {
 		topic = sc.svc.contextPrefetcher.currentTopic
