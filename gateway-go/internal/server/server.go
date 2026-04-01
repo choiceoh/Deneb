@@ -18,10 +18,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -47,11 +47,11 @@ import (
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -83,11 +83,11 @@ type ServerRPC struct {
 
 // ServerRuntime owns long-running runtime health/activity trackers.
 type ServerRuntime struct {
-	ready         atomic.Bool
-	shutdownOnce  sync.Once
-	gatewaySubs   *events.GatewayEventSubscriptions
-	channelHealth *monitoring.ChannelHealthMonitor
-	activity      *monitoring.ActivityTracker
+	ready           atomic.Bool
+	shutdownOnce    sync.Once
+	gatewaySubs     *events.GatewayEventSubscriptions
+	channelHealth   *monitoring.ChannelHealthMonitor
+	activity        *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
 	snapshotStore   *telegram.SnapshotStore
 	runStateMachine *telegram.RunStateMachine
@@ -95,30 +95,30 @@ type ServerRuntime struct {
 
 // ServerIntegrations owns optional domain/integration subsystems.
 type ServerIntegrations struct {
-	vegaBackend        vega.Backend
-	geminiEmbedder     *embedding.GeminiEmbedder
-	jinaAPIKey         string
-	approvals          *approval.Store
-	nodes              *node.Manager
-	devices            *device.Manager
-	agents             *agent.Store
-	skills             *skill.Manager
-	wizardEng          *wizard.Engine
-	secrets            *secret.Resolver
-	talkState          *talk.State
-	usageTracker       *usage.Tracker
-	maintRunner        *maintenance.Runner
-	jobTracker         *agent.JobTracker
-	pluginFullRegistry      *plugin.FullRegistry
-	pluginDiscoverer        *plugin.PluginDiscoverer
-	pluginTypedHookRunner   *plugin.TypedHookRunner
-	pluginRouter            *pluginrouter.Router
-	conversationBindings    *plugin.ConversationBindingStore
-	autonomousSvc      *autonomous.Service
-	dreamingAdapter    *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
-	memoryStore        *memory.Store           // structured memory store; used by flush task
-	gmailPollSvc       *gmailpoll.Service
-	autoresearchRunner *autoresearch.Runner
+	vegaBackend           vega.Backend
+	geminiEmbedder        *embedding.GeminiEmbedder
+	jinaAPIKey            string
+	approvals             *approval.Store
+	nodes                 *node.Manager
+	devices               *device.Manager
+	agents                *agent.Store
+	skills                *skill.Manager
+	wizardEng             *wizard.Engine
+	secrets               *secret.Resolver
+	talkState             *talk.State
+	usageTracker          *usage.Tracker
+	maintRunner           *maintenance.Runner
+	jobTracker            *agent.JobTracker
+	pluginFullRegistry    *plugin.FullRegistry
+	pluginDiscoverer      *plugin.PluginDiscoverer
+	pluginTypedHookRunner *plugin.TypedHookRunner
+	pluginRouter          *pluginrouter.Router
+	conversationBindings  *plugin.ConversationBindingStore
+	autonomousSvc         *autonomous.Service
+	dreamingAdapter       *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
+	memoryStore           *memory.Store           // structured memory store; used by flush task
+	gmailPollSvc          *gmailpoll.Service
+	autoresearchRunner    *autoresearch.Runner
 }
 
 // Server is the main gateway server.
@@ -128,21 +128,25 @@ type Server struct {
 	*ServerRuntime
 	*ServerIntegrations
 
-	dedupe           *dedupe.Tracker
-	broadcaster      *events.Broadcaster
-	publisher        *events.Publisher
-	processes        *process.Manager
-	daemon           *daemon.Daemon
-	runtimeCfg       *config.GatewayRuntimeConfig
-	version          string
-	rustFFI          bool // true when Rust FFI is available
-	logColor         bool // true when ANSI color output is enabled
-	logger           *slog.Logger
+	dedupe      *dedupe.Tracker
+	broadcaster *events.Broadcaster
+	publisher   *events.Publisher
+	processes   *process.Manager
+	daemon      *daemon.Daemon
+	runtimeCfg  *config.GatewayRuntimeConfig
+	version     string
+	rustFFI     bool // true when Rust FFI is available
+	logColor    bool // true when ANSI color output is enabled
+	logger      *slog.Logger
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
 	*ChatManager    // chatHandler, toolDeps, telegramPlug
 	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
+
+	// githubWebhookCfg is non-nil when GITHUB_WEBHOOK_SECRET is set.
+	// Resolved once at startup from environment variables; never mutated.
+	githubWebhookCfg *GitHubWebhookConfig
 
 	// OnListening is called after the TCP listener is bound successfully.
 	// Use this to print the startup banner or signal readiness to external callers.
@@ -259,16 +263,16 @@ func New(addr string, opts ...Option) *Server {
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
 			protocol.DedupeMax,
 		),
-		version:        "0.1.0-go",
-		logger:         slog.New(slog.NewJSONHandler(os.Stderr, nil)),
+		version: "0.1.0-go",
+		logger:  slog.New(slog.NewJSONHandler(os.Stderr, nil)),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),
 			abortMemory:    arSession.NewAbortMemory(2000),
 			historyTracker: arSession.NewHistoryTracker(),
 			sessionUsage:   &arSession.SessionUsage{},
 		},
-		ChatManager:    &ChatManager{},
-		HookManager:    &HookManager{},
+		ChatManager: &ChatManager{},
+		HookManager: &HookManager{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -326,6 +330,13 @@ func New(addr string, opts ...Option) *Server {
 		}
 	}
 	s.internalHooks = hooks.NewInternalRegistry(s.logger)
+
+	// GitHub webhook: resolved from env vars; nil when GITHUB_WEBHOOK_SECRET is unset.
+	s.githubWebhookCfg = GitHubWebhookConfigFromEnv()
+	if s.githubWebhookCfg != nil {
+		s.logger.Info("github webhook enabled", "chatID", s.githubWebhookCfg.ChatID != "")
+	}
+
 	s.snapshotStore = telegram.NewSnapshotStore()
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
