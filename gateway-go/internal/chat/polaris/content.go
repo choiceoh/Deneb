@@ -338,7 +338,7 @@ var builtinGuideOrder = []string{
 	// Runtime
 	"sessions", "sessions-tools", "memory", "channels", "telegram", "message", "skills", "cron",
 	// Infrastructure
-	"provider", "metrics", "transcript", "nodes",
+	"provider", "metrics", "transcript",
 }
 
 // guideCategory groups related guides for structured browsing.
@@ -353,7 +353,7 @@ var guideCategories = []guideCategory{
 	{"core", "Core Engine", []string{"aurora", "vega", "agent-loop", "compaction", "system-prompt", "architecture"}},
 	{"tools", "Tools", []string{"tools", "web", "exec", "gateway-tool", "media", "gmail", "data-tools", "pilot", "liteparse"}},
 	{"runtime", "Runtime", []string{"sessions", "sessions-tools", "memory", "channels", "telegram", "message", "skills", "cron"}},
-	{"infra", "Infrastructure", []string{"provider", "metrics", "transcript", "nodes"}},
+	{"infra", "Infrastructure", []string{"provider", "metrics", "transcript"}},
 }
 
 // guideRelated maps a guide key to its most related guides.
@@ -384,7 +384,6 @@ var guideRelated = map[string][]string{
 	"provider":       {"agent-loop", "architecture"},
 	"metrics":        {"architecture"},
 	"transcript":     {"sessions", "compaction"},
-	"nodes":          {"exec", "media"},
 }
 
 // builtinGuides contains AI-curated system knowledge.
@@ -545,12 +544,6 @@ var builtinGuides = map[string]guideEntry{
 		Title:   "Transcript Storage",
 		Summary: "JSONL session history, append-only persistence, compaction integration",
 		Content: transcriptGuide,
-	},
-	"nodes": {
-		Key:     "nodes",
-		Title:   "Nodes (Edge Devices)",
-		Summary: "Companion devices: canvas, camera, location, system commands, Android data",
-		Content: nodesGuide,
 	},
 }
 

@@ -132,7 +132,6 @@ var methodScopes = map[string]auth.Scope{
 	"monitoring.activity":       auth.ScopeRead,
 
 	// --- Event subscriptions (read) ---
-	"node.event":                   auth.ScopeWrite,
 	"subscribe.session":            auth.ScopeRead,
 	"unsubscribe.session":          auth.ScopeRead,
 	"subscribe.session.messages":   auth.ScopeRead,
@@ -154,36 +153,9 @@ var methodScopes = map[string]auth.Scope{
 	// --- Exec Approvals ---
 	"exec.approvals.get":         auth.ScopeRead,
 	"exec.approvals.set":         auth.ScopeAdmin,
-	"exec.approvals.node.get":    auth.ScopeRead,
-	"exec.approvals.node.set":    auth.ScopeAdmin,
 	"exec.approval.request":      auth.ScopeApprovals,
 	"exec.approval.waitDecision": auth.ScopeApprovals,
 	"exec.approval.resolve":      auth.ScopeApprovals,
-
-	// --- Nodes ---
-	"node.pair.request":              auth.ScopeWrite,
-	"node.pair.list":                 auth.ScopeRead,
-	"node.pair.approve":              auth.ScopeAdmin,
-	"node.pair.reject":               auth.ScopeAdmin,
-	"node.pair.verify":               auth.ScopeRead,
-	"node.list":                      auth.ScopeRead,
-	"node.describe":                  auth.ScopeRead,
-	"node.rename":                    auth.ScopeWrite,
-	"node.invoke":                    auth.ScopeWrite,
-	"node.invoke.result":             auth.ScopeWrite,
-	"node.canvas.capability.refresh": auth.ScopeWrite,
-	"node.pending.pull":              auth.ScopeRead,
-	"node.pending.ack":               auth.ScopeWrite,
-	"node.pending.drain":             auth.ScopeAdmin,
-	"node.pending.enqueue":           auth.ScopeWrite,
-
-	// --- Device ---
-	"device.pair.list":    auth.ScopeRead,
-	"device.pair.approve": auth.ScopeAdmin,
-	"device.pair.reject":  auth.ScopeAdmin,
-	"device.pair.remove":  auth.ScopeAdmin,
-	"device.token.rotate": auth.ScopeAdmin,
-	"device.token.revoke": auth.ScopeAdmin,
 
 	// --- Secrets ---
 	"secrets.reload":  auth.ScopeAdmin,

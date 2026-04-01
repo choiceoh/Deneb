@@ -28,7 +28,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
-	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
@@ -39,7 +38,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
-	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
@@ -99,8 +97,6 @@ type ServerIntegrations struct {
 	geminiEmbedder        *embedding.GeminiEmbedder
 	jinaAPIKey            string
 	approvals             *approval.Store
-	nodes                 *node.Manager
-	devices               *device.Manager
 	agents                *agent.Store
 	skills                *skill.Manager
 	wizardEng             *wizard.Engine
@@ -353,8 +349,6 @@ func New(addr string, opts ...Option) *Server {
 
 	// Phase 3: Advanced workflow subsystems.
 	s.approvals = approval.NewStore()
-	s.nodes = node.NewManager()
-	s.devices = device.NewManager()
 	s.agents = agent.NewStore()
 	s.skills = skill.NewManager()
 	s.wizardEng = wizard.NewEngine()

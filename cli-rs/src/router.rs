@@ -32,9 +32,6 @@ pub async fn dispatch(command: &Commands) -> Result<(), CliError> {
         Commands::Gateway(_)
         | Commands::GatewayRun(_)
         | Commands::Logs(_)
-        | Commands::Nodes(_)
-        | Commands::Devices(_)
-        | Commands::Pairing(_)
         | Commands::Qr(_)
         | Commands::Cron(_)
         | Commands::Daemon(_)
@@ -128,9 +125,6 @@ mod platform {
                 crate::subcli::domains::runtime::gateway_run::run(args).await
             }
             Commands::Logs(args) => crate::subcli::domains::runtime::logs::run(args).await,
-            Commands::Nodes(args) => crate::subcli::domains::platform::nodes::run(args).await,
-            Commands::Devices(args) => crate::subcli::domains::platform::devices::run(args).await,
-            Commands::Pairing(args) => crate::subcli::domains::platform::pairing::run(args).await,
             Commands::Qr(args) => crate::subcli::domains::platform::qr::run(args).await,
             Commands::Cron(args) => crate::subcli::domains::platform::cron::run(args).await,
             Commands::Daemon(args) => crate::subcli::domains::runtime::daemon::run(args).await,

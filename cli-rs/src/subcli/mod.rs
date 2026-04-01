@@ -6,7 +6,6 @@ pub mod channels;
 pub mod completion;
 pub mod cron;
 pub mod daemon;
-pub mod devices;
 pub mod directory;
 pub mod docs;
 pub mod gateway_cmd;
@@ -14,8 +13,6 @@ pub mod gateway_run;
 pub mod hooks;
 pub mod logs;
 pub mod models;
-pub mod nodes;
-pub mod pairing;
 pub mod plugins;
 pub mod qr;
 pub mod reset;
@@ -60,9 +57,6 @@ pub mod domains {
         pub use super::super::acp;
         pub use super::super::browser;
         pub use super::super::cron;
-        pub use super::super::devices;
-        pub use super::super::nodes;
-        pub use super::super::pairing;
         pub use super::super::qr;
     }
 

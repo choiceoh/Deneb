@@ -10,10 +10,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
-	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -43,8 +41,6 @@ var tsBaseMethods = []string{
 	"config.schema.lookup",
 	"exec.approvals.get",
 	"exec.approvals.set",
-	"exec.approvals.node.get",
-	"exec.approvals.node.set",
 	"exec.approval.request",
 	"exec.approval.waitDecision",
 	"exec.approval.resolve",
@@ -89,28 +85,6 @@ var tsBaseMethods = []string{
 	"last-heartbeat",
 	"set-heartbeats",
 	"wake",
-	"node.pair.request",
-	"node.pair.list",
-	"node.pair.approve",
-	"node.pair.reject",
-	"node.pair.verify",
-	"device.pair.list",
-	"device.pair.approve",
-	"device.pair.reject",
-	"device.pair.remove",
-	"device.token.rotate",
-	"device.token.revoke",
-	"node.rename",
-	"node.list",
-	"node.describe",
-	"node.pending.drain",
-	"node.pending.enqueue",
-	"node.invoke",
-	"node.pending.pull",
-	"node.pending.ack",
-	"node.invoke.result",
-	"node.event",
-	"node.canvas.capability.refresh",
 	"cron.list",
 	"cron.listPage",
 	"cron.getJob",
@@ -150,8 +124,6 @@ func fullDispatcher() *Dispatcher {
 	// Phase 3: Native workflow methods.
 	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
 	RegisterApprovalMethods(d, ApprovalDeps{Store: approval.NewStore(), Broadcaster: broadcastFn})
-	RegisterNodeMethods(d, NodeDeps{Nodes: node.NewManager(), Broadcaster: broadcastFn})
-	RegisterDeviceMethods(d, DeviceDeps{Devices: device.NewManager(), Broadcaster: broadcastFn})
 	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Cron: cron.NewScheduler(testLogger()), Broadcaster: broadcastFn})
 	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
 	RegisterAgentsMethods(d, AgentsDeps{Agents: agent.NewStore(), Broadcaster: broadcastFn})

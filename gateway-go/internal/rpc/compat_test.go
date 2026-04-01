@@ -11,7 +11,6 @@ import (
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
-	handlernode "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/node"
 	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
@@ -30,8 +29,6 @@ type SessionExecDeps = handlersession.ExecDeps
 type ChannelLifecycleDeps = handlerchannel.LifecycleDeps
 type EventsDeps = handlerchannel.EventsDeps
 type MessagingDeps = handlerchannel.MessagingDeps
-type NodeDeps = handlernode.Deps
-type DeviceDeps = handlernode.DeviceDeps
 type ApprovalDeps = handlerprocess.ApprovalDeps
 type ACPDeps = handlerprocess.ACPDeps
 type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
@@ -91,10 +88,6 @@ func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps) {
 }
 func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps) {
 	d.RegisterDomain(handlerchannel.MessagingMethods(deps))
-}
-func RegisterNodeMethods(d *Dispatcher, deps NodeDeps) { d.RegisterDomain(handlernode.Methods(deps)) }
-func RegisterDeviceMethods(d *Dispatcher, deps DeviceDeps) {
-	d.RegisterDomain(handlernode.DeviceMethods(deps))
 }
 func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps) {
 	d.RegisterDomain(handlerprocess.ApprovalMethods(deps))

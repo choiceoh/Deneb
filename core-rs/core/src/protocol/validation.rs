@@ -522,14 +522,6 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "sessions.compact" => Some(schemas::sessions::validate_sessions_compact_params),
         "sessions.usage" => Some(schemas::sessions::validate_sessions_usage_params),
 
-        // Device methods
-        "device.pair.list" => Some(schemas::devices::validate_device_pair_list_params),
-        "device.pair.approve" => Some(schemas::devices::validate_device_pair_approve_params),
-        "device.pair.reject" => Some(schemas::devices::validate_device_pair_reject_params),
-        "device.pair.remove" => Some(schemas::devices::validate_device_pair_remove_params),
-        "device.token.rotate" => Some(schemas::devices::validate_device_token_rotate_params),
-        "device.token.revoke" => Some(schemas::devices::validate_device_token_revoke_params),
-
         // Secrets methods
         "secrets.resolve" => Some(schemas::secrets::validate_secrets_resolve_params),
         "secrets.resolve.result" => Some(validate_object_params),
@@ -592,22 +584,6 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "skills.install" => Some(schemas::agents_models_skills::validate_skills_install_params),
         "skills.update" => Some(schemas::agents_models_skills::validate_skills_update_params),
         "tools.catalog" => Some(schemas::agents_models_skills::validate_tools_catalog_params),
-
-        // Node methods
-        "node.pair.request" => Some(schemas::nodes::validate_node_pair_request_params),
-        "node.pair.list" => Some(schemas::nodes::validate_node_pair_list_params),
-        "node.pair.approve" => Some(schemas::nodes::validate_node_pair_approve_params),
-        "node.pair.reject" => Some(schemas::nodes::validate_node_pair_reject_params),
-        "node.pair.verify" => Some(schemas::nodes::validate_node_pair_verify_params),
-        "node.rename" => Some(schemas::nodes::validate_node_rename_params),
-        "node.list" => Some(schemas::nodes::validate_node_list_params),
-        "node.pending.ack" => Some(schemas::nodes::validate_node_pending_ack_params),
-        "node.describe" => Some(schemas::nodes::validate_node_describe_params),
-        "node.invoke" => Some(schemas::nodes::validate_node_invoke_params),
-        "node.invoke.result" => Some(schemas::nodes::validate_node_invoke_result_params),
-        "node.event" => Some(schemas::nodes::validate_node_event_params),
-        "node.pending.drain" => Some(schemas::nodes::validate_node_pending_drain_params),
-        "node.pending.enqueue" => Some(schemas::nodes::validate_node_pending_enqueue_params),
 
         // Cron methods
         "cron.list" => Some(schemas::cron::validate_cron_list_params),
