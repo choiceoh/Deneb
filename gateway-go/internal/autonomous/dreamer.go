@@ -16,9 +16,10 @@ type Dreamer interface {
 
 // DreamReport summarizes the results of a dreaming cycle.
 type DreamReport struct {
-	FactsVerified     int   `json:"factsVerified"`
-	FactsMerged       int   `json:"factsMerged"`
-	FactsExpired      int   `json:"factsExpired"`
-	PatternsExtracted int   `json:"patternsExtracted"`
-	DurationMs        int64 `json:"durationMs"`
+	FactsVerified     int      `json:"factsVerified"`
+	FactsMerged       int      `json:"factsMerged"`
+	FactsExpired      int      `json:"factsExpired"`
+	PatternsExtracted int      `json:"patternsExtracted"`
+	DurationMs        int64    `json:"durationMs"`
+	PhaseErrors       []string `json:"phaseErrors,omitempty"`
 }

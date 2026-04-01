@@ -102,10 +102,11 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) logStats() {
-	var msgCount, sumCount, factCount, indexCount int
+	var msgCount, sumCount, factCount, activeFactCount, indexCount int
 	s.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&msgCount)
 	s.db.QueryRow(`SELECT COUNT(*) FROM summaries`).Scan(&sumCount)
 	s.db.QueryRow(`SELECT COUNT(*) FROM facts`).Scan(&factCount)
+	s.db.QueryRow(`SELECT COUNT(*) FROM facts WHERE active = 1`).Scan(&activeFactCount)
 	s.db.QueryRow(`SELECT COUNT(*) FROM memory_index`).Scan(&indexCount)
 
 	s.logger.Info("unified store opened",
@@ -113,6 +114,7 @@ func (s *Store) logStats() {
 		"messages", msgCount,
 		"summaries", sumCount,
 		"facts", factCount,
+		"active_facts", activeFactCount,
 		"indexed", indexCount,
 	)
 }

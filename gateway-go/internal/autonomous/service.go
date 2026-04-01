@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -267,6 +268,9 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 		msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 패턴 %d (%.1fs)",
 			report.FactsVerified, report.FactsMerged, report.FactsExpired,
 			report.PatternsExtracted, float64(report.DurationMs)/1000)
+		if len(report.PhaseErrors) > 0 {
+			msg += fmt.Sprintf("\n⚠️ 실패: %s", strings.Join(report.PhaseErrors, "; "))
+		}
 	}
 	if msg != "" {
 		if notifyErr := notifier.Notify(ctx, msg); notifyErr != nil {

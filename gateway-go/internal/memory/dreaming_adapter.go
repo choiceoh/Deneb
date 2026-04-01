@@ -112,5 +112,6 @@ func (da *DreamingAdapter) RunDream(ctx context.Context) (*autonomous.DreamRepor
 		FactsExpired:      report.FactsExpired,
 		PatternsExtracted: report.PatternsExtracted,
 		DurationMs:        report.Duration.Milliseconds(),
+		PhaseErrors:       report.PhaseErrors,
 	}, nil
 }
