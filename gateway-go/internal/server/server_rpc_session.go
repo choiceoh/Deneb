@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -150,7 +151,7 @@ func (s *Server) registerSessionRPCMethods() {
 // callbacks, autonomous/dreaming service, Telegram notifiers, and memory flush.
 // All RPC domain registrations (approval, agent CRUD, wizard, talk) are now
 // handled by registerEarlyMethods via hub adapters.
-func (s *Server) registerWorkflowSideEffects(hub *GatewayHub) {
+func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Wire process approval callback using the Go approval store directly.
 	// When a tool execution requires approval, create an approval request,
 	// broadcast it to WS clients, and wait for a decision.

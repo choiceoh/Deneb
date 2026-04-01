@@ -4,8 +4,9 @@
 //   - registerEarlyMethods: ~30 domains that don't need chatHandler
 //   - registerLateMethods:  ~4 domains that depend on chatHandler
 //
-// Special-case helpers (registerConfigLifecycleMethods, registerAuthRPCMethods)
-// are called inline because they contain business logic beyond simple registration.
+// Deps structs are assembled inline from hub fields — no adapter layer.
+// Handlers still accept their own Deps structs (testability preserved);
+// only this file knows about the hub→Deps mapping.
 package server
 
 import (
@@ -30,7 +31,7 @@ import (
 
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
-func (s *Server) registerEarlyMethods(hub *GatewayHub, denebDir string) {
+func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) {
 	// Lazy-init presence/heartbeat state.
 	if s.presenceStore == nil {
 		s.presenceStore = handlerpresence.NewStore()
@@ -60,32 +61,73 @@ func (s *Server) registerEarlyMethods(hub *GatewayHub, denebDir string) {
 	}
 
 	// Table-driven domain registration: one slice, one loop.
+	// Deps assembled inline from hub fields — no adapter layer.
 	domains := []map[string]rpcutil.HandlerFunc{
 		// Agent orchestration.
-		handleragent.ExtendedMethods(agentExtendedDepsFromHub(hub)),
+		handleragent.ExtendedMethods(handleragent.ExtendedDeps{
+			Sessions:       hub.Sessions,
+			TelegramPlugin: hub.Telegram,
+			GatewaySubs:    hub.GatewaySubs,
+			Processes:      hub.Processes,
+			Cron:           hub.Cron,
+			Hooks:          hub.Hooks,
+			Broadcaster:    hub.Broadcaster,
+		}),
 		handlerprocess.ACPMethods(s.acpDeps),
-		handleragent.CRUDMethods(agentCRUDDepsFromHub(hub)),
+		handleragent.CRUDMethods(handleragent.AgentsDeps{
+			Agents:      hub.Agents,
+			Broadcaster: hub.Broadcast,
+		}),
 
 		// Tools and skills.
-		handlerskill.ToolMethods(toolDepsFromHub(hub)),
-		handlerskill.Methods(skillDepsFromHub(hub)),
+		handlerskill.ToolMethods(handlerskill.ToolDeps{Processes: hub.Processes}),
+		handlerskill.Methods(handlerskill.Deps{
+			Skills:      hub.Skills,
+			Broadcaster: hub.Broadcast,
+		}),
 
 		// Channel events and lifecycle.
-		handlerchannel.BroadcastMethods(channelEventsDepsFromHub(hub)),
-		handlerchannel.EventsMethods(channelEventsDepsFromHub(hub)),
-		handlerchannel.LifecycleMethods(channelLifecycleDepsFromHub(hub)),
-		handlerchannel.MessagingMethods(messagingDepsFromHub(hub)),
+		handlerchannel.BroadcastMethods(handlerchannel.EventsDeps{
+			Broadcaster: hub.Broadcaster,
+			Logger:      hub.Logger,
+		}),
+		handlerchannel.EventsMethods(handlerchannel.EventsDeps{
+			Broadcaster: hub.Broadcaster,
+			Logger:      hub.Logger,
+		}),
+		handlerchannel.LifecycleMethods(handlerchannel.LifecycleDeps{
+			TelegramPlugin: hub.Telegram,
+			Hooks:          hub.Hooks,
+			Broadcaster:    hub.Broadcaster,
+		}),
+		handlerchannel.MessagingMethods(handlerchannel.MessagingDeps{
+			TelegramPlugin: hub.Telegram,
+		}),
 
 		// Node and device management.
-		handlernode.Methods(nodeDepsFromHub(hub, canvasHost)),
-		handlernode.DeviceMethods(deviceDepsFromHub(hub)),
+		handlernode.Methods(handlernode.Deps{
+			Nodes:       hub.Nodes,
+			Broadcaster: hub.Broadcast,
+			CanvasHost:  canvasHost,
+		}),
+		handlernode.DeviceMethods(handlernode.DeviceDeps{
+			Devices:     hub.Devices,
+			Broadcaster: hub.Broadcast,
+		}),
 
 		// Scheduling.
-		handlerprocess.CronAdvancedMethods(cronAdvancedDepsFromHub(hub)),
+		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
+			Cron:        hub.Cron,
+			RunLog:      hub.CronRunLog,
+			Broadcaster: hub.Broadcast,
+		}),
 		handlerprocess.CronServiceMethods(handlerprocess.CronServiceDeps{Service: hub.CronSvc}),
 
 		// Approvals.
-		handlerprocess.ApprovalMethods(approvalDepsFromHub(hub)),
+		handlerprocess.ApprovalMethods(handlerprocess.ApprovalDeps{
+			Store:       hub.Approvals,
+			Broadcaster: hub.Broadcast,
+		}),
 
 		// Presence and heartbeat.
 		handlerpresence.Methods(handlerpresence.Deps{
@@ -97,13 +139,15 @@ func (s *Server) registerEarlyMethods(hub *GatewayHub, denebDir string) {
 			Broadcaster: hub.Broadcast,
 		}),
 
-		// System: identity, monitoring, config, usage, logs, doctor, maintenance, update.
+		// System.
 		handlersystem.IdentityMethods(hub.Version),
 		handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{
 			ChannelHealth: s.channelHealth,
 			Activity:      s.activity,
 		}),
-		handlersystem.ConfigAdvancedMethods(configAdvancedDepsFromHub(hub)),
+		handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{
+			Broadcaster: hub.Broadcast,
+		}),
 		handlersystem.UsageMethods(handlersystem.UsageDeps{Tracker: s.usageTracker}),
 		handlersystem.LogsMethods(handlersystem.LogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
 		handlersystem.DoctorMethods(handlersystem.DoctorDeps{}),
@@ -115,7 +159,7 @@ func (s *Server) registerEarlyMethods(hub *GatewayHub, denebDir string) {
 		handlerplatform.TalkMethods(handlerplatform.TalkDeps{Talk: hub.Talk}),
 	}
 
-	// Conditional: provider methods (only when a provider registry is configured).
+	// Conditional: provider methods.
 	if s.providers != nil {
 		domains = append(domains,
 			handlerprovider.Methods(handlerprovider.Deps{
@@ -141,20 +185,22 @@ func (s *Server) registerEarlyMethods(hub *GatewayHub, denebDir string) {
 
 // registerLateMethods registers RPC domains that depend on chatHandler.
 // Called after registerSessionRPCMethods() which creates the chat handler.
-func (s *Server) registerLateMethods(hub *GatewayHub) {
-	// Late-bind chatHandler into hub.
+func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.Chat = s.chatHandler
 
 	domains := []map[string]rpcutil.HandlerFunc{
 		handlerchat.Methods(handlerchat.Deps{Chat: hub.Chat}),
-		handlerchat.BtwMethods(btwDepsFromHub(hub)),
-		handlersession.ExecMethods(execDepsFromHub(hub)),
+		handlerchat.BtwMethods(handlerchat.BtwDeps{
+			Chat:        hub.Chat,
+			Broadcaster: hub.Broadcast,
+		}),
+		handlersession.ExecMethods(handlersession.ExecDeps{
+			Chat:       hub.Chat,
+			Agents:     hub.Agents,
+			JobTracker: hub.JobTracker,
+		}),
+		handleraurorachannel.Methods(handleraurorachannel.Deps{Chat: hub.Chat}),
 	}
-
-	// Aurora channel (desktop app) — requires chatHandler.
-	domains = append(domains, handleraurorachannel.Methods(handleraurorachannel.Deps{
-		Chat: hub.Chat,
-	}))
 
 	for _, d := range domains {
 		if d != nil {
@@ -167,7 +213,7 @@ func (s *Server) registerLateMethods(hub *GatewayHub) {
 		s.wireTelegramChatHandler()
 	}
 
-	// Wire agent runner to cron service so scheduled jobs can execute agent turns.
+	// Wire agent runner to cron service.
 	if s.cronService != nil {
 		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler})
 	}
