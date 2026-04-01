@@ -322,6 +322,13 @@ func (s *Server) wireTelegramChatHandler() {
 		}
 		_, err = telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML", nil)
 		if err != nil {
+			// Telegram rejects edits where the content is identical to the
+			// current message. This is harmless during draft streaming (the
+			// sanitized text may not change between ticks), so treat it as
+			// success to avoid noisy warnings in the log.
+			if telegram.IsMessageNotModifiedError(err) {
+				return msgID, nil
+			}
 			return msgID, err
 		}
 		return msgID, nil
