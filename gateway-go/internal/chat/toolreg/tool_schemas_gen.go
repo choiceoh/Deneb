@@ -757,19 +757,6 @@ func memoryToolSchema() map[string]any {
 	}
 }
 
-func polarisToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"question": map[string]any{
-				"type":        "string",
-				"description": "Natural language question about the Deneb system. Polaris autonomously searches docs, guides, and source code to synthesize an answer",
-			},
-		},
-		"required": []string{"question"},
-	}
-}
-
 func healthCheckToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1496,10 +1483,6 @@ func pilotToolSchema() map[string]any {
 			"youtube": map[string]any{
 				"type":        "string",
 				"description": "Shortcut: get YouTube transcript (expands to sources:[{tool:'youtube_transcript', input:{url:...}}])",
-			},
-			"polaris": map[string]any{
-				"type":        "string",
-				"description": "Shortcut: search Deneb system manual (expands to sources:[{tool:'polaris', input:{action:'search', query:...}}])",
 			},
 			"image": map[string]any{
 				"type":        "string",

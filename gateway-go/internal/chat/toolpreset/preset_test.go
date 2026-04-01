@@ -8,7 +8,7 @@ func TestAllowedTools_Researcher(t *testing.T) {
 		t.Fatal("researcher preset should return non-nil allowed set")
 	}
 	// Researcher should have read-only tools.
-	for _, name := range []string{"read", "grep", "find", "tree", "diff", "analyze", "web", "polaris"} {
+	for _, name := range []string{"read", "grep", "find", "tree", "diff", "analyze", "web"} {
 		if !allowed[name] {
 			t.Errorf("researcher preset should include %q", name)
 		}

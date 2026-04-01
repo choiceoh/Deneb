@@ -95,7 +95,7 @@ var toolCategories = []struct {
 	{"Code", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test"}},
 	{"Git", []string{"git"}},
 	{"Exec", []string{"exec", "process"}},
-	{"AI", []string{"pilot", "polaris"}},
+	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory"}},
 	{"System", []string{"message", "gateway"}},
@@ -238,11 +238,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("2시간마다 하트비트에서 자동으로 새로 발생한 일을 상세히 기록합니다.\n\n")
 	}
 
-	// Polaris (System Manual).
-	if toolSet["polaris"] {
-		writePolarisSection(&d)
-	}
-
 	// Messaging (merged: Reply Tags + Messaging + Silent Replies).
 	d.WriteString("## Messaging\n")
 	d.WriteString("- Telegram 4096 char limit. Split with message tool if needed.\n")
@@ -325,16 +320,6 @@ func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock
 		{Type: "text", Text: staticText, CacheControl: ephemeral},
 		{Type: "text", Text: dynamicText, CacheControl: ephemeral},
 	}
-}
-
-// writePolarisSection writes the Polaris system knowledge agent guide.
-func writePolarisSection(sb *strings.Builder) {
-	sb.WriteString("## Polaris (AI 시스템 지식 에이전트)\n")
-	sb.WriteString("데네브 시스템에 대해 질문이 있으면 polaris를 사용하세요.\n")
-	sb.WriteString("문서, 가이드, 소스코드를 자동으로 검색하고 종합 답변을 생성합니다.\n")
-	sb.WriteString("- polaris(question:'세션 라이프사이클은 어떻게 동작하나요?')\n")
-	sb.WriteString("- polaris(question:'aurora context engine은 어떻게 작동하나요?')\n")
-	sb.WriteString("- polaris(question:'How does the tool registry work?')\n\n")
 }
 
 // writeCompactToolList writes a categorized tool name list (no descriptions).

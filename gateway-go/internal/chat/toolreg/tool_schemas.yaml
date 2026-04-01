@@ -672,14 +672,6 @@
   required:
     - action
 
-- name: polaris
-  properties:
-    question:
-      type: string
-      description: "Natural language question about the Deneb system. Polaris autonomously searches docs, guides, and source code to synthesize an answer"
-  required:
-    - question
-
 # ---------------------------------------------------------------------------
 # System tools
 # ---------------------------------------------------------------------------
@@ -1293,9 +1285,6 @@
     youtube:
       type: string
       description: "Shortcut: get YouTube transcript (expands to sources:[{tool:'youtube_transcript', input:{url:...}}])"
-    polaris:
-      type: string
-      description: "Shortcut: search Deneb system manual (expands to sources:[{tool:'polaris', input:{action:'search', query:...}}])"
     image:
       type: string
       description: "Shortcut: analyze image file or URL (expands to sources:[{tool:'image', input:{paths:[...]}}])"

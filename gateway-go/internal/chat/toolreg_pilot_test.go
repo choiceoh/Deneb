@@ -527,14 +527,6 @@ func TestExpandShortcuts_YouTube(t *testing.T) {
 	}
 }
 
-func TestExpandShortcuts_Polaris(t *testing.T) {
-	p := pilotParams{Task: "explain", Polaris: "aurora context engine"}
-	specs := expandShortcuts(p)
-	if len(specs) != 1 || specs[0].Tool != "polaris" {
-		t.Errorf("expected 1 polaris spec, got %d", len(specs))
-	}
-}
-
 func TestExpandShortcuts_Image(t *testing.T) {
 	p := pilotParams{Task: "describe", Image: "/tmp/screenshot.png"}
 	specs := expandShortcuts(p)
@@ -548,18 +540,17 @@ func TestExpandShortcuts_AllNew(t *testing.T) {
 		Task:    "analyze everything",
 		Gmail:   "invoice",
 		YouTube: "https://youtube.com/watch?v=x",
-		Polaris: "tools",
 		Image:   "/tmp/img.png",
 	}
 	specs := expandShortcuts(p)
-	if len(specs) != 4 {
-		t.Fatalf("expected 4 specs, got %d", len(specs))
+	if len(specs) != 3 {
+		t.Fatalf("expected 3 specs, got %d", len(specs))
 	}
 	tools := make([]string, len(specs))
 	for i, s := range specs {
 		tools[i] = s.Tool
 	}
-	expected := []string{"gmail", "youtube_transcript", "polaris", "image"}
+	expected := []string{"gmail", "youtube_transcript", "image"}
 	for i, want := range expected {
 		if tools[i] != want {
 			t.Errorf("spec[%d].Tool = %q, want %q", i, tools[i], want)
@@ -571,7 +562,6 @@ func TestSourceTypeFromTool_NewTools(t *testing.T) {
 	tests := map[string]string{
 		"gmail":              "content",
 		"youtube_transcript": "content",
-		"polaris":            "content",
 		"image":              "content",
 		"diff":               "file",
 		"test":               "exec",
