@@ -45,7 +45,7 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 
 	// Save baseline output.
 	if err := SaveExperimentOutput(workdir, 0, string(output), ""); err != nil {
-		r.logger.Warn("failed to save baseline output", "error", err)
+		slog.Warn("failed to save baseline output", "error", err)
 	}
 
 	// Record baseline as iteration 0 in results.
@@ -58,7 +58,7 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 		DurationSec: int(timeout.Seconds()),
 		BestSoFar:   metric,
 	}); err != nil {
-		r.logger.Warn("failed to append baseline result", "error", err)
+		slog.Warn("failed to append baseline result", "error", err)
 	}
 
 	return metric, nil
