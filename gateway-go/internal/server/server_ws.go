@@ -154,7 +154,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	handshakeCtx, handshakeCancel := context.WithTimeout(r.Context(), time.Duration(protocol.HandshakeTimeoutMs)*time.Millisecond)
 	if err := s.handleHandshake(handshakeCtx, client, r.RemoteAddr); err != nil {
 		handshakeCancel()
-		s.logger.Warn("handshake failed", "connId", client.connID, "error", err)
+		s.logger.Debug("handshake failed", "connId", client.connID, "error", err)
 		conn.Close(websocket.StatusPolicyViolation, "handshake failed")
 		return
 	}
