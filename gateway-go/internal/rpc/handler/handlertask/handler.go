@@ -42,7 +42,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 func taskStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		sum := deps.Registry.Summary()
-		return protocol.NewResponseResult(req.ID, sum)
+		return protocol.MustResponseOK(req.ID, sum)
 	}
 }
 
@@ -90,7 +90,7 @@ func taskList(deps Deps) rpcutil.HandlerFunc {
 			list = filtered
 		}
 
-		return protocol.NewResponseResult(req.ID, map[string]any{
+		return protocol.MustResponseOK(req.ID, map[string]any{
 			"tasks": list,
 			"count": len(list),
 		})
@@ -127,7 +127,7 @@ func taskGet(deps Deps) rpcutil.HandlerFunc {
 				protocol.NewError(protocol.ErrNotFound, "task not found"))
 		}
 
-		return protocol.NewResponseResult(req.ID, t)
+		return protocol.MustResponseOK(req.ID, t)
 	}
 }
 
@@ -154,7 +154,7 @@ func taskEvents(deps Deps) rpcutil.HandlerFunc {
 				protocol.NewError(protocol.ErrUnavailable, err.Error()))
 		}
 
-		return protocol.NewResponseResult(req.ID, map[string]any{
+		return protocol.MustResponseOK(req.ID, map[string]any{
 			"taskId": p.TaskID,
 			"events": events,
 		})
@@ -183,7 +183,7 @@ func taskCancel(deps Deps) rpcutil.HandlerFunc {
 				protocol.NewError(protocol.ErrUnavailable, err.Error()))
 		}
 
-		return protocol.NewResponseResult(req.ID, map[string]any{
+		return protocol.MustResponseOK(req.ID, map[string]any{
 			"cancelled": true,
 			"taskId":    p.TaskID,
 		})
@@ -195,7 +195,7 @@ func taskCancel(deps Deps) rpcutil.HandlerFunc {
 func taskAudit(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		summary := tasks.RunAudit(deps.Registry, tasks.AuditOptions{})
-		return protocol.NewResponseResult(req.ID, summary)
+		return protocol.MustResponseOK(req.ID, summary)
 	}
 }
 
@@ -219,7 +219,7 @@ func flowList(deps Deps) rpcutil.HandlerFunc {
 			list = deps.Registry.ListFlows()
 		}
 
-		return protocol.NewResponseResult(req.ID, map[string]any{
+		return protocol.MustResponseOK(req.ID, map[string]any{
 			"flows": list,
 			"count": len(list),
 		})
@@ -251,7 +251,7 @@ func flowShow(deps Deps) rpcutil.HandlerFunc {
 
 		flowTasks := deps.Registry.ListByFlowID(p.FlowID)
 
-		return protocol.NewResponseResult(req.ID, map[string]any{
+		return protocol.MustResponseOK(req.ID, map[string]any{
 			"flow":  flow,
 			"tasks": flowTasks,
 		})
@@ -281,7 +281,7 @@ func flowCancel(deps Deps) rpcutil.HandlerFunc {
 				protocol.NewError(protocol.ErrNotFound, err.Error()))
 		}
 
-		return protocol.NewResponseResult(req.ID, map[string]any{
+		return protocol.MustResponseOK(req.ID, map[string]any{
 			"cancelled":      true,
 			"flowId":         p.FlowID,
 			"tasksCancelled": cancelled,
