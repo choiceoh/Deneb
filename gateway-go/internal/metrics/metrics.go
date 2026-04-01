@@ -280,6 +280,14 @@ var (
 	WebSocketClients = NewGauge("deneb_websocket_clients", "Number of connected WebSocket clients.")
 )
 
+// Wire I/O counters: track calls and bytes across all inter-subsystem wires.
+var (
+	WireCallsTotal = NewCounter("deneb_wire_calls_total",
+		"Total wire callback invocations by wire name and status.", "wire", "status")
+	WireBytesTotal = NewCounter("deneb_wire_bytes_total",
+		"Total bytes transferred through wires by wire name and direction.", "wire", "direction")
+)
+
 // allMetrics is the ordered list of all metric writers for the /metrics handler.
 var allMetrics = []interface{ writeTo(io.Writer) }{
 	RPCRequestsTotal,
@@ -288,6 +296,8 @@ var allMetrics = []interface{ writeTo(io.Writer) }{
 	LLMTokensTotal,
 	ActiveSessions,
 	WebSocketClients,
+	WireCallsTotal,
+	WireBytesTotal,
 }
 
 // WriteMetrics writes all metrics in Prometheus text exposition format.

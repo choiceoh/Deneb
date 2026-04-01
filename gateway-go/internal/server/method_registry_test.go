@@ -139,6 +139,7 @@ var requiredMethods = []string{
 	"maintenance.summary",
 	"monitoring.activity",
 	"monitoring.channel_health",
+	"monitoring.wire_stats",
 	"update.run",
 	"usage.cost",
 	"usage.status",

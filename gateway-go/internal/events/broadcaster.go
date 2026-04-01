@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -237,6 +238,11 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 			sent++
 		}
 	}
+
+	// Wire I/O counters for broadcast.
+	metrics.WireCallsTotal.Inc("broadcast", "ok")
+	metrics.WireBytesTotal.Add(int64(len(data))*int64(sent), "broadcast", "out")
+
 	return sent, errs
 }
 
@@ -275,6 +281,11 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 			sent++
 		}
 	}
+
+	// Wire I/O counters for raw broadcast.
+	metrics.WireCallsTotal.Inc("broadcast_raw", "ok")
+	metrics.WireBytesTotal.Add(int64(len(data))*int64(sent), "broadcast_raw", "out")
+
 	return sent
 }
 

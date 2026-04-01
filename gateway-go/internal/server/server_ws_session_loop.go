@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -25,6 +26,10 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 			s.logger.Error("websocket read error", "connId", client.connID, "error", err)
 			return
 		}
+
+		// Wire I/O: count inbound WebSocket frames.
+		metrics.WireCallsTotal.Inc("ws_recv", "ok")
+		metrics.WireBytesTotal.Add(int64(len(data)), "ws_recv", "in")
 
 		// Track activity on every inbound WS message.
 		client.touchActivity()

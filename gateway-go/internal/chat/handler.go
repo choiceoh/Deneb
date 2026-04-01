@@ -320,6 +320,16 @@ func (h *Handler) ReactionFunc() ReactionFunc {
 	return h.reactionFn
 }
 
+// DraftEditFunc returns the current draft edit function (for chaining).
+func (h *Handler) DraftEditFunc() DraftEditFunc {
+	return h.draftEditFn
+}
+
+// DraftDeleteFunc returns the current draft delete function (for chaining).
+func (h *Handler) DraftDeleteFunc() DraftDeleteFunc {
+	return h.draftDeleteFn
+}
+
 // SetProviderRuntime sets the provider runtime resolver for runtime auth
 // and missing-auth message generation during LLM client resolution.
 func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {

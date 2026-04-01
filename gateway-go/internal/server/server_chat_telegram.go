@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
@@ -327,11 +328,15 @@ func (s *Server) wireTelegramChatHandler() {
 
 	// Set update handler: routes through autoreply preprocessing → chat.send.
 	s.telegramPlug.SetHandler(func(_ context.Context, update *telegram.Update) {
+		metrics.WireCallsTotal.Inc("inbound", "ok")
 		inbound.HandleTelegramUpdate(update)
 	})
 
 	// Register Telegram's per-channel upload limit for the send_file tool.
 	s.chatHandler.SetChannelUploadLimit("telegram", s.telegramPlug.MaxUploadBytes())
+
+	// Wrap wire callbacks with I/O counters for analysis.
+	wrapWireCounters(s.chatHandler)
 
 	s.logger.Info("telegram chat handler wired (with autoreply preprocessing)")
 }

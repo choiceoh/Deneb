@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -42,6 +44,19 @@ func MonitoringMethods(deps MonitoringDeps) map[string]rpcutil.HandlerFunc {
 			resp := protocol.MustResponseOK(req.ID, map[string]any{
 				"lastActivityMs": deps.Activity.LastActivityAt(),
 			})
+			return resp
+		},
+
+		"monitoring.wire_stats": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+			snapshot := metrics.WireStatsSnapshot()
+			// Build a sorted slice for stable output.
+			wires := make([]*metrics.WireStat, 0, len(snapshot))
+			for _, ws := range snapshot {
+				wires = append(wires, ws)
+			}
+			sort.Slice(wires, func(i, j int) bool { return wires[i].Wire < wires[j].Wire })
+
+			resp := protocol.MustResponseOK(req.ID, map[string]any{"wires": wires})
 			return resp
 		},
 	}
