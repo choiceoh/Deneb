@@ -29,6 +29,7 @@
 | `testing.md` | 테스트 가이드라인 | `**/*_test.go`, `**/*_test.rs` |
 | `release-and-deploy.md` | 릴리스/배포 워크플로우 | `scripts/release*`, `.github/workflows/release*` |
 | `git-pr.md` | Git/PR 상세 가이드 | `.github/**` |
+| `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
 
 ---
@@ -38,10 +39,11 @@
 > Run these when starting a new coding session.
 
 1. **Check environment:** `./scripts/check-dev-env.sh`
-2. **Build Rust core:** `make rust` (required before Go gateway)
-3. **Build Go gateway:** `make go`
-4. **Run tests:** `make test` (Rust + Go + CLI)
-5. **Fast iteration:** `make rust-debug` (debug mode, faster) + `make go-dev` (auto-restart)
+2. **Check CI status:** `scripts/build-status main` (ensure main is green)
+3. **Build Rust core:** `make rust` (required before Go gateway)
+4. **Build Go gateway:** `make go`
+5. **Run tests:** `make test` (Rust + Go + CLI)
+6. **Fast iteration:** `make rust-debug` (debug mode, faster) + `make go-dev` (auto-restart)
 
 **Build order:** Proto schemas → Rust core (static lib) → Go gateway (links Rust via CGo)
 

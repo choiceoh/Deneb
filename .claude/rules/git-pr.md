@@ -13,6 +13,7 @@ globs: [".github/**", "scripts/committer"]
 - Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
 - Follow concise, action-oriented commit messages.
 - Group related changes; avoid bundling unrelated refactors.
+- Before landing or merging a PR, verify CI status: `scripts/build-status pr <N>` or use MCP `pull_request_read(method="get_check_runs")`.
 - PR submission template (canonical): `.github/pull_request_template.md`
 - Issue submission templates (canonical): `.github/ISSUE_TEMPLATE/`
 
