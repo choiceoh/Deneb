@@ -177,6 +177,23 @@ func RunAgent(
 				}
 				logger.Info("exec", "name", tc.Name, "turn", turn)
 
+				// Plugin hook: allow blocking tool execution before it starts.
+				if hooks.OnBeforeToolCall != nil {
+					if block, reason := hooks.OnBeforeToolCall(tc.Name, tc.ID, tc.Input); block {
+						logger.Info("tool blocked by hook", "name", tc.Name, "reason", reason)
+						toolResults[idx] = llm.ContentBlock{
+							Type:      "tool_result",
+							ToolUseID: tc.ID,
+							Content:   fmt.Sprintf("Tool blocked: %s", reason),
+							IsError:   true,
+						}
+						if hooks.OnToolResult != nil {
+							hooks.OnToolResult(tc.Name, tc.ID, reason, true)
+						}
+						return
+					}
+				}
+
 				start := time.Now()
 				var toolOutput string
 				var toolErr error

@@ -25,6 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -342,6 +343,18 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 				SessionKey: key,
 				Channel:    "telegram",
 				IsGroup:    msgCtx.IsGroup,
+			}
+		},
+		OnSessionEvent: func(eventType, sessKey, reason string) {
+			if p.server.pluginTypedHookRunner != nil {
+				go p.server.pluginTypedHookRunner.RunVoidHook(
+					context.Background(), plugin.HookBeforeReset, map[string]any{
+						"type":       eventType,
+						"sessionKey": sessKey,
+						"reason":     reason,
+						"channel":    "telegram",
+						"ts":         time.Now().UnixMilli(),
+					})
 			}
 		},
 	}

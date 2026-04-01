@@ -405,7 +405,9 @@ func New(addr string, opts ...Option) *Server {
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
 	s.pluginDiscoverer = plugin.NewPluginDiscoverer(s.logger)
 	s.conversationBindings = plugin.NewConversationBindingStore()
-	s.pluginTypedHookRunner = plugin.NewTypedHookRunner(s.logger)
+	// Use the FullRegistry's hook runner so plugin-registered hooks and
+	// chat-fired hooks share the same TypedHookRunner instance.
+	s.pluginTypedHookRunner = s.pluginFullRegistry.HookRunner()
 	s.dispatcher.RegisterDomain(handlerskill.PluginMethods(handlerskill.PluginDeps{
 		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
 	}))

@@ -329,9 +329,6 @@ func (s *Server) registerSessionRPCMethods() {
 		s.chatHandler.SetHookRegistry(s.hooks)
 	}
 
-	// Wire channel registry for fallback delivery via streaming.Dispatch.
-	s.chatHandler.SetChannels(s.telegramPlug)
-
 	// Wire raw broadcast directly to chat handler for streaming event relay.
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)
