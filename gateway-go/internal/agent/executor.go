@@ -230,11 +230,19 @@ func RunAgent(
 		case <-wgDone:
 		case <-ctx.Done():
 			result.StopReason = stopReasonFromCtx(ctx)
+			// Capture in-flight tool names so the caller can persist
+			// interrupted context to the transcript for the next run.
+			for _, tc := range turnRes.toolCalls {
+				result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
+			}
 			return result, nil
 		}
 
 		if ctx.Err() != nil {
 			result.StopReason = stopReasonFromCtx(ctx)
+			for _, tc := range turnRes.toolCalls {
+				result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
+			}
 			return result, nil
 		}
 

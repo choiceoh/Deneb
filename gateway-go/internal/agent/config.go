@@ -61,6 +61,12 @@ type AgentResult struct {
 	Usage      llm.TokenUsage
 	Turns      int
 
+	// InterruptedToolNames lists the tool names that were in-flight when the
+	// run was aborted (context cancelled). Empty when the run completes normally.
+	// Used to persist interrupted context to the transcript so the next run
+	// knows what was being done when the user interrupted.
+	InterruptedToolNames []string
+
 	// RecallFollowUp contains memory recall context that arrived after the
 	// agent completed. Set by the run executor when the recall goroutine
 	// finishes after the agent loop. The reply pipeline can use this to send

@@ -106,6 +106,12 @@ type runDeps struct {
 	hookRegistry *hooks.Registry
 	// pluginHookRunner runs typed plugin hooks at lifecycle points.
 	pluginHookRunner *plugin.TypedHookRunner
+	// drainPendingFn drains the next queued message for a session after the
+	// current run completes. Set by the Handler; nil disables pending queue.
+	drainPendingFn func(sessionKey string) *RunParams
+	// startRunFn starts a new async run (for processing queued messages).
+	// Set by the Handler; nil disables pending queue processing.
+	startRunFn func(params RunParams)
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
@@ -244,6 +250,14 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		typingSignaler.Stop()
 	}
 
+	// Persist interrupted context: when the run was aborted while tools were
+	// executing, save a context note to the transcript so the next run knows
+	// what the assistant was doing. Without this, the next run has no memory
+	// of the interrupted work and starts from scratch.
+	if result != nil && len(result.InterruptedToolNames) > 0 && deps.transcript != nil {
+		persistInterruptedContext(deps, params.SessionKey, result, logger)
+	}
+
 	// Handle completion.
 	now := time.Now().UnixMilli()
 	if err != nil {
@@ -260,4 +274,14 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		statusCtrl.CloseAfterDrain()
 	}
 	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now, runLog)
+
+	// Process pending message: if the user sent a message while this run was
+	// active, it was queued. Now that the run is complete, drain and process it.
+	if deps.drainPendingFn != nil && deps.startRunFn != nil {
+		if pending := deps.drainPendingFn(params.SessionKey); pending != nil {
+			logger.Info("processing queued message after run completion",
+				"sessionKey", params.SessionKey)
+			deps.startRunFn(*pending)
+		}
+	}
 }

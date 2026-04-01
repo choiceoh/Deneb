@@ -79,6 +79,10 @@ type Handler struct {
 	abortMap map[string]*AbortEntry // clientRunId -> entry
 	done     chan struct{}          // signals abortGCLoop to stop
 
+	// pendingMu guards pendingMsgs.
+	pendingMu   sync.Mutex
+	pendingMsgs map[string]*pendingRunQueue // sessionKey -> queued messages
+
 	// channels is the channel plugin registry, used for multi-target delivery
 	// via streaming.Dispatch when replyFunc is not set.
 	channels *telegram.Plugin
@@ -173,6 +177,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		defaultSystem:   cfg.DefaultSystem,
 		maxTokens:       cfg.MaxTokens,
 		abortMap:        make(map[string]*AbortEntry),
+		pendingMsgs:     make(map[string]*pendingRunQueue),
 		uploadLimits:    make(map[string]int64),
 		done:            make(chan struct{}),
 		maxHistoryBytes: cfg.MaxHistoryBytes,
@@ -357,9 +362,13 @@ func (h *Handler) Close() {
 	}
 
 	h.abortMu.Lock()
-	defer h.abortMu.Unlock()
 	for _, entry := range h.abortMap {
 		entry.CancelFn()
 	}
 	h.abortMap = make(map[string]*AbortEntry)
+	h.abortMu.Unlock()
+
+	h.pendingMu.Lock()
+	h.pendingMsgs = make(map[string]*pendingRunQueue)
+	h.pendingMu.Unlock()
 }
