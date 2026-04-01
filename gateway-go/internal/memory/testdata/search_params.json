@@ -1,0 +1,35 @@
+{
+  "weight_hybrid": 0.40,
+  "weight_importance": 0.25,
+  "weight_recency": 0.25,
+  "weight_verification": 0.10,
+  "category_importance_multiplier": {
+    "decision": 1.20,
+    "preference": 1.05,
+    "solution": 1.10,
+    "context": 0.95,
+    "user_model": 1.00,
+    "mutual": 0.85
+  },
+  "category_steepness_days": {
+    "decision": 14.0,
+    "preference": 10.0,
+    "solution": 10.0,
+    "context": 5.0,
+    "user_model": 14.0,
+    "mutual": 7.0
+  },
+  "default_steepness_days": 7.0,
+  "fts_and_min_results": 3,
+  "or_penalty": 0.85,
+  "trigram_penalty": 0.80,
+  "vector_min_threshold": 0.35,
+  "hybrid_fts_weight": 0.40,
+  "hybrid_vec_weight": 0.60,
+  "entity_match_baseline": 0.60,
+  "rerank_blend_reranker": 0.70,
+  "rerank_blend_hybrid": 0.30,
+  "dedup_jaccard_threshold": 0.60,
+  "verification_unverified": 0.30,
+  "verification_verified": 1.00
+}

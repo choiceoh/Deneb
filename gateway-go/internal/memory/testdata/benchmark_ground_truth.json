@@ -1,0 +1,446 @@
+{
+  "facts": [
+    {
+      "tag": "sglang-port",
+      "content": "SGLang 서버를 포트 30000으로 설정하기로 결정",
+      "category": "decision",
+      "importance": 0.9,
+      "days_ago": 2,
+      "verified": true,
+      "entities": [{"name": "SGLang", "type": "tool"}]
+    },
+    {
+      "tag": "sglang-model-path",
+      "content": "SGLang 모델 경로를 /data/models/qwen-72b로 변경",
+      "category": "solution",
+      "importance": 0.8,
+      "days_ago": 1,
+      "verified": false,
+      "entities": [{"name": "SGLang", "type": "tool"}]
+    },
+    {
+      "tag": "docker-podman",
+      "content": "Podman을 Docker 대신 사용하기로 결정했음. rootless 환경이 보안에 유리",
+      "category": "decision",
+      "importance": 0.85,
+      "days_ago": 5,
+      "verified": true,
+      "entities": [{"name": "Podman", "type": "tool"}, {"name": "Docker", "type": "tool"}]
+    },
+    {
+      "tag": "sqlite-wal",
+      "content": "SQLite WAL 모드를 활성화하여 동시 읽기 성능 개선",
+      "category": "solution",
+      "importance": 0.8,
+      "days_ago": 7,
+      "verified": true,
+      "entities": [{"name": "SQLite", "type": "tool"}]
+    },
+    {
+      "tag": "sqlite-decision",
+      "content": "메모리 저장소로 SQLite를 선택한 이유: 단일 사용자 환경에 적합하고 별도 서버 불필요",
+      "category": "decision",
+      "importance": 0.9,
+      "days_ago": 14,
+      "verified": true,
+      "entities": [{"name": "SQLite", "type": "tool"}]
+    },
+    {
+      "tag": "telegram-bot-token",
+      "content": "텔레그램 봇 토큰은 환경변수 TELEGRAM_BOT_TOKEN으로 관리",
+      "category": "solution",
+      "importance": 0.7,
+      "days_ago": 10,
+      "verified": true,
+      "entities": [{"name": "Telegram", "type": "system"}]
+    },
+    {
+      "tag": "user-prefers-korean",
+      "content": "사용자는 모든 응답을 한국어로 받기를 원함",
+      "category": "preference",
+      "importance": 0.95,
+      "days_ago": 30,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "user-prefers-concise",
+      "content": "사용자는 간결한 답변을 선호하며 불필요한 설명을 싫어함",
+      "category": "preference",
+      "importance": 0.9,
+      "days_ago": 25,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "dgx-spark-gpu",
+      "content": "DGX Spark에 NVIDIA Grace Blackwell GPU 탑재, CUDA 12.8 환경",
+      "category": "context",
+      "importance": 0.75,
+      "days_ago": 20,
+      "verified": true,
+      "entities": [{"name": "DGX Spark", "type": "system"}]
+    },
+    {
+      "tag": "dgx-spark-memory",
+      "content": "DGX Spark 통합 메모리 128GB, GPU와 CPU가 공유",
+      "category": "context",
+      "importance": 0.7,
+      "days_ago": 20,
+      "verified": true,
+      "entities": [{"name": "DGX Spark", "type": "system"}]
+    },
+    {
+      "tag": "vega-fts5",
+      "content": "Vega 검색 엔진은 SQLite FTS5 기반으로 구현, 한국어는 trigram 인덱스 사용",
+      "category": "solution",
+      "importance": 0.85,
+      "days_ago": 12,
+      "verified": true,
+      "entities": [{"name": "Vega", "type": "system"}, {"name": "SQLite", "type": "tool"}]
+    },
+    {
+      "tag": "rust-go-ffi",
+      "content": "Rust 코어를 Go에서 CGo FFI로 호출하는 구조. staticlib으로 빌드",
+      "category": "decision",
+      "importance": 0.8,
+      "days_ago": 30,
+      "verified": true,
+      "entities": [{"name": "Rust", "type": "tool"}, {"name": "Go", "type": "tool"}]
+    },
+    {
+      "tag": "recent-config-gateway-port",
+      "content": "게이트웨이 포트를 18789로 변경 완료",
+      "category": "context",
+      "importance": 0.6,
+      "days_ago": 0,
+      "verified": false,
+      "entities": []
+    },
+    {
+      "tag": "recent-config-bind",
+      "content": "게이트웨이 바인드 주소를 loopback으로 설정하여 외부 접근 차단",
+      "category": "solution",
+      "importance": 0.7,
+      "days_ago": 0,
+      "verified": false,
+      "entities": []
+    },
+    {
+      "tag": "gemini-embedding",
+      "content": "Gemini text-embedding-004 모델로 메모리 임베딩 생성 중",
+      "category": "context",
+      "importance": 0.75,
+      "days_ago": 8,
+      "verified": true,
+      "entities": [{"name": "Gemini", "type": "tool"}]
+    },
+    {
+      "tag": "dreaming-cycle",
+      "content": "매일 새벽 4시에 dreaming 사이클 실행하여 메모리 정리 및 검증",
+      "category": "decision",
+      "importance": 0.8,
+      "days_ago": 15,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "user-morning-routine",
+      "content": "사용자는 보통 오전 9시에 작업을 시작하고 오후 11시에 마무리",
+      "category": "user_model",
+      "importance": 0.7,
+      "days_ago": 10,
+      "verified": false,
+      "entities": []
+    },
+    {
+      "tag": "user-coding-style",
+      "content": "사용자는 코드를 직접 작성하지 않고 자연어로 지시하는 바이브 코딩 방식 사용",
+      "category": "user_model",
+      "importance": 0.95,
+      "days_ago": 20,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "ai-relationship-trust",
+      "content": "사용자와 AI 사이에 높은 신뢰 관계가 형성되어 있음. 자율적 판단을 선호",
+      "category": "mutual",
+      "importance": 0.8,
+      "days_ago": 15,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "ai-relationship-humor",
+      "content": "가벼운 유머와 이모지를 사용하는 대화 스타일을 즐김",
+      "category": "mutual",
+      "importance": 0.6,
+      "days_ago": 18,
+      "verified": false,
+      "entities": []
+    },
+    {
+      "tag": "proto-buf-gen",
+      "content": "Protobuf 코드 생성은 buf CLI로 실행, Go와 Rust 동시 생성",
+      "category": "solution",
+      "importance": 0.7,
+      "days_ago": 25,
+      "verified": true,
+      "entities": [{"name": "Protobuf", "type": "tool"}, {"name": "buf", "type": "tool"}]
+    },
+    {
+      "tag": "memory-importance-threshold",
+      "content": "중요도 0.7 미만 팩트는 MEMORY.md 내보내기에서 제외",
+      "category": "decision",
+      "importance": 0.75,
+      "days_ago": 12,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "aurora-context-engine",
+      "content": "Aurora 컨텍스트 엔진은 상태 머신 기반으로 동작, handle-based FFI 패턴 사용",
+      "category": "solution",
+      "importance": 0.8,
+      "days_ago": 9,
+      "verified": true,
+      "entities": [{"name": "Aurora", "type": "system"}]
+    },
+    {
+      "tag": "compaction-sweep",
+      "content": "컴팩션 스윕은 오래된 컨텍스트 세션을 요약하여 메모리 절약",
+      "category": "solution",
+      "importance": 0.7,
+      "days_ago": 11,
+      "verified": true,
+      "entities": [{"name": "Aurora", "type": "system"}]
+    },
+    {
+      "tag": "session-timeout",
+      "content": "세션 타임아웃을 30분으로 설정. 비활성 세션은 자동 종료",
+      "category": "decision",
+      "importance": 0.7,
+      "days_ago": 8,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "sglang-restart-fix",
+      "content": "SGLang 서버가 메모리 부족으로 크래시될 때 자동 재시작 스크립트 추가",
+      "category": "solution",
+      "importance": 0.85,
+      "days_ago": 3,
+      "verified": true,
+      "entities": [{"name": "SGLang", "type": "tool"}]
+    },
+    {
+      "tag": "git-deploy-flow",
+      "content": "배포는 git pull 후 서비스 재시작으로 진행. CI/CD 파이프라인 없음",
+      "category": "decision",
+      "importance": 0.7,
+      "days_ago": 30,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "cosine-simd",
+      "content": "코사인 유사도 계산에 SIMD 가속 적용하여 검색 성능 2배 향상",
+      "category": "solution",
+      "importance": 0.8,
+      "days_ago": 15,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "user-prefers-apple-style",
+      "content": "사용자는 Apple 스타일의 opinionated 디자인을 선호. 설정 옵션을 최소화할 것",
+      "category": "preference",
+      "importance": 0.85,
+      "days_ago": 20,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "bm25-ranking",
+      "content": "BM25 랭킹 점수를 0-1 범위로 정규화하여 하이브리드 검색에 사용",
+      "category": "solution",
+      "importance": 0.75,
+      "days_ago": 14,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "recent-sglang-model-swap",
+      "content": "SGLang 모델을 Qwen-72B에서 Llama-4-Scout로 교체 테스트 중",
+      "category": "context",
+      "importance": 0.8,
+      "days_ago": 0,
+      "verified": false,
+      "entities": [{"name": "SGLang", "type": "tool"}]
+    },
+    {
+      "tag": "webhook-github",
+      "content": "GitHub 웹훅으로 push, PR, issue 이벤트를 텔레그램에 실시간 알림",
+      "category": "solution",
+      "importance": 0.7,
+      "days_ago": 6,
+      "verified": true,
+      "entities": [{"name": "GitHub", "type": "system"}, {"name": "Telegram", "type": "system"}]
+    },
+    {
+      "tag": "mmr-diversity",
+      "content": "MMR 다양성 파라미터 lambda=0.7로 설정하여 검색 결과 다양성 확보",
+      "category": "decision",
+      "importance": 0.7,
+      "days_ago": 14,
+      "verified": true,
+      "entities": []
+    },
+    {
+      "tag": "telegram-4096-limit",
+      "content": "텔레그램 메시지 길이 제한 4096자. 긴 응답은 자동 분할 전송",
+      "category": "context",
+      "importance": 0.65,
+      "days_ago": 25,
+      "verified": true,
+      "entities": [{"name": "Telegram", "type": "system"}]
+    },
+    {
+      "tag": "fact-relation-evolves",
+      "content": "팩트 간 evolves 관계로 결정 변경 이력을 추적. SQLite에서 Podman으로 변경 같은 경우",
+      "category": "solution",
+      "importance": 0.7,
+      "days_ago": 12,
+      "verified": true,
+      "entities": []
+    }
+  ],
+  "queries": [
+    {
+      "query": "SGLang 포트 설정",
+      "expected_tags": ["sglang-port", "sglang-model-path"],
+      "description": "Korean keyword exact match - tool configuration"
+    },
+    {
+      "query": "Podman Docker 결정",
+      "expected_tags": ["docker-podman"],
+      "description": "Korean keyword exact match - tool decision"
+    },
+    {
+      "query": "SQLite 사용 이유",
+      "expected_tags": ["sqlite-decision", "sqlite-wal", "vega-fts5"],
+      "description": "Korean keyword match - rationale query"
+    },
+    {
+      "query": "텔레그램 봇 설정",
+      "expected_tags": ["telegram-bot-token", "webhook-github", "telegram-4096-limit"],
+      "description": "Korean keyword match - Telegram configuration"
+    },
+    {
+      "query": "메모리 검색 엔진",
+      "expected_tags": ["vega-fts5", "bm25-ranking", "cosine-simd"],
+      "description": "Korean keyword match - search engine components"
+    },
+    {
+      "query": "GPU 하드웨어 스펙",
+      "expected_tags": ["dgx-spark-gpu", "dgx-spark-memory"],
+      "description": "Korean conceptual - hardware specification"
+    },
+    {
+      "query": "코드 작성 방식",
+      "expected_tags": ["user-coding-style"],
+      "description": "Korean conceptual - user work style"
+    },
+    {
+      "query": "답변 스타일 선호",
+      "expected_tags": ["user-prefers-concise", "user-prefers-korean", "user-prefers-apple-style"],
+      "description": "Korean conceptual - user preferences"
+    },
+    {
+      "query": "배포 프로세스",
+      "expected_tags": ["git-deploy-flow"],
+      "description": "Korean conceptual - deployment process"
+    },
+    {
+      "query": "Rust Go 연동",
+      "expected_tags": ["rust-go-ffi"],
+      "description": "Korean keyword match - cross-language integration"
+    },
+    {
+      "query": "SGLang",
+      "expected_tags": ["recent-sglang-model-swap", "sglang-restart-fix", "sglang-port", "sglang-model-path"],
+      "description": "Entity-based lookup - SGLang related facts"
+    },
+    {
+      "query": "Aurora 컨텍스트",
+      "expected_tags": ["aurora-context-engine", "compaction-sweep"],
+      "description": "Entity-based lookup - Aurora system"
+    },
+    {
+      "query": "SQLite",
+      "expected_tags": ["sqlite-decision", "sqlite-wal", "vega-fts5"],
+      "description": "Entity-based lookup - SQLite related"
+    },
+    {
+      "query": "최근 변경 사항",
+      "expected_tags": ["recent-config-gateway-port", "recent-config-bind", "recent-sglang-model-swap"],
+      "description": "Recency-sensitive - recent changes should rank first"
+    },
+    {
+      "query": "오늘 작업 내용",
+      "expected_tags": ["recent-config-gateway-port", "recent-config-bind", "recent-sglang-model-swap"],
+      "description": "Recency-sensitive - today's work"
+    },
+    {
+      "query": "SGLang 서버 문제",
+      "expected_tags": ["sglang-restart-fix", "recent-sglang-model-swap", "sglang-port"],
+      "description": "Recency + entity - recent SGLang issues"
+    },
+    {
+      "query": "중요한 결정들",
+      "expected_tags": ["sqlite-decision", "docker-podman", "sglang-port", "rust-go-ffi", "dreaming-cycle"],
+      "description": "Category-specific - high-importance decisions"
+    },
+    {
+      "query": "사용자 성격 특성",
+      "expected_tags": ["user-coding-style", "user-morning-routine", "user-prefers-concise"],
+      "description": "Category-specific - user model facts"
+    },
+    {
+      "query": "AI 관계",
+      "expected_tags": ["ai-relationship-trust", "ai-relationship-humor"],
+      "description": "Category-specific - mutual relationship"
+    },
+    {
+      "query": "검색 성능 최적화",
+      "expected_tags": ["cosine-simd", "bm25-ranking", "vega-fts5", "mmr-diversity"],
+      "description": "Multi-signal - search performance (relevance + importance)"
+    },
+    {
+      "query": "게이트웨이 서버 설정",
+      "expected_tags": ["recent-config-gateway-port", "recent-config-bind", "session-timeout"],
+      "description": "Multi-signal - gateway config (recency + relevance)"
+    },
+    {
+      "query": "메모리 관리 전략",
+      "expected_tags": ["dreaming-cycle", "memory-importance-threshold", "compaction-sweep"],
+      "description": "Multi-signal - memory management (importance + relevance)"
+    },
+    {
+      "query": "Protobuf 코드 생성",
+      "expected_tags": ["proto-buf-gen"],
+      "description": "Korean keyword exact match - specific tool usage"
+    },
+    {
+      "query": "세션 타임아웃",
+      "expected_tags": ["session-timeout"],
+      "description": "Korean keyword exact match - specific setting"
+    },
+    {
+      "query": "웹훅 알림",
+      "expected_tags": ["webhook-github"],
+      "description": "Korean keyword match - webhook notifications"
+    }
+  ]
+}

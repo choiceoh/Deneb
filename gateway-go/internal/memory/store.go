@@ -101,6 +101,27 @@ type Store struct {
 	// Used to invalidate the Tier-1 cache so new facts appear in the system prompt
 	// immediately rather than waiting for the 5-minute cache TTL.
 	onFactMutate func()
+
+	// params overrides hardcoded search scoring constants when set.
+	// Used by benchmark tests for autoresearch parameter optimization.
+	// nil = use hardcoded defaults (zero production impact).
+	params *SearchParams
+}
+
+// SetSearchParams sets optional scoring parameter overrides.
+// Must be called before any concurrent search operations.
+// Pass nil to revert to hardcoded defaults.
+func (s *Store) SetSearchParams(p *SearchParams) {
+	s.params = p
+}
+
+// searchParams returns the active search params, falling back to defaults.
+// Safe to call under RLock since params is set once at init time.
+func (s *Store) searchParams() SearchParams {
+	if s.params != nil {
+		return *s.params
+	}
+	return DefaultSearchParams()
 }
 
 // GraphSchemaSQL is the knowledge graph DDL shared by memory and unified stores.
