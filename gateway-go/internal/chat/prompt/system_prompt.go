@@ -63,14 +63,15 @@ func loadCachedTimezone() (string, *time.Location) {
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
 type SystemPromptParams struct {
-	WorkspaceDir string
-	ToolDefs     []ToolDef
-	SkillsPrompt string // pre-built skills XML from skills/prompt.go
-	UserTimezone string
-	ContextFiles []ContextFile
-	RuntimeInfo  *RuntimeInfo
-	Channel      string
-	DocsPath     string
+	WorkspaceDir  string
+	ToolDefs      []ToolDef
+	SkillsPrompt  string // pre-built skills XML from skills/prompt.go
+	UserTimezone  string
+	ContextFiles  []ContextFile
+	RuntimeInfo   *RuntimeInfo
+	Channel       string
+	DocsPath      string
+	SessionMemory string // pre-formatted session state block (empty = omit)
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -231,6 +232,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString(fmt.Sprintf("- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken))
 	}
 	d.WriteString("\n")
+
+	// Session State (structured session memory from previous runs).
+	if params.SessionMemory != "" {
+		d.WriteString(params.SessionMemory)
+		d.WriteString("\n")
+	}
 
 	// Context (merged: Workspace + Date/Time + Context Files + Runtime).
 	d.WriteString("## Context\n")
@@ -654,6 +661,12 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 
 	// --- Dynamic block ---
 	var d strings.Builder
+
+	// Session State (structured session memory from previous runs).
+	if params.SessionMemory != "" {
+		d.WriteString(params.SessionMemory)
+		d.WriteString("\n")
+	}
 
 	// Workspace.
 	d.WriteString("## Workspace\n")

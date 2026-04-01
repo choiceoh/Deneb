@@ -11,15 +11,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
@@ -65,7 +65,7 @@ type runDeps struct {
 	broadcast        BroadcastFunc                     // optional
 	broadcastRaw     streaming.BroadcastRawFunc        // optional
 	jobTracker       *agent.JobTracker                 // optional
-	channels         *telegram.Plugin                 // optional; multi-target delivery via streaming.Dispatch
+	channels         *telegram.Plugin                  // optional; multi-target delivery via streaming.Dispatch
 	replyFunc        ReplyFunc                         // optional; delivers response to originating channel
 	mediaSendFn      MediaSendFunc                     // optional; delivers files to originating channel
 	typingFn         TypingFunc                        // optional; sends typing indicator during run
@@ -94,6 +94,7 @@ type runDeps struct {
 	// emitTranscriptFn sends transcript updates (user/assistant message appends)
 	// to the gateway event subscription pipeline. Optional; nil if not wired.
 	emitTranscriptFn func(sessionKey string, message any, messageID string)
+	sessionMemory    *SessionMemoryStore // optional; structured session state
 	contextCfg       ContextConfig
 	compactionCfg    CompactionConfig
 	defaultModel     string

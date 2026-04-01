@@ -272,6 +272,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		auroraStore:          h.auroraStore,
 		vegaBackend:          h.vegaBackend,
 		memoryStore:          h.memoryStore,
+		sessionMemory:        h.sessionMemory,
 		memoryEmbedder:       h.memoryEmbedder,
 		unifiedStore:         h.unifiedStore,
 		dreamTurnFn:          h.dreamTurnFn,
@@ -287,7 +288,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		shutdownCtx:          h.shutdownCtx,
 		hookRegistry:         h.hookRegistry,
 		pluginHookRunner:     h.pluginHookRunner,
-		drainPendingFn: h.drainPending,
+		drainPendingFn:       h.drainPending,
 		startRunFn: func(params RunParams) {
 			// Re-use startAsyncRun for full lifecycle management (abort map,
 			// panic recovery, runStateMachine, session state transitions).

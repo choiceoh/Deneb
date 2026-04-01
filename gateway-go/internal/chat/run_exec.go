@@ -16,7 +16,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -25,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
 // cachedSkillsPrompt caches the workspace skills prompt at startup to avoid
@@ -294,15 +294,23 @@ func executeAgentRun(
 		}
 		tz, _ := prompt.LoadCachedTimezone()
 		ch := deliveryChannel(params.Delivery)
+		// Session memory: pre-format for prompt injection.
+		var sessionMemoryText string
+		if deps.sessionMemory != nil {
+			if mem := deps.sessionMemory.Get(params.SessionKey); mem != nil {
+				sessionMemoryText = mem.FormatForPrompt()
+			}
+		}
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
 			UserTimezone: tz,
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
-			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:      ch,
-			SkillsPrompt: loadCachedSkillsPrompt(workspaceDir),
+			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:       ch,
+			SessionMemory: sessionMemoryText,
+			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir),
 		}
 		// Telegram is the coding-specialized channel: use the coding
 		// system prompt which strips non-coding sections and emphasizes
@@ -780,6 +788,21 @@ func executeAgentRun(
 		default:
 			// Recall still not ready — skip (5s timeout will clean it up).
 		}
+	}
+
+	// Post-run session memory update (non-blocking).
+	// Uses lightweight LLM to update structured session state based on this run.
+	if deps.sessionMemory != nil && params.Message != "" && agentResult != nil {
+		go UpdateSessionMemory(
+			deps.shutdownCtx,
+			deps.sessionMemory,
+			params.SessionKey,
+			params.Message,
+			agentResult.Text,
+			agentResult.Turns,
+			agentResult.StopReason,
+			logger,
+		)
 	}
 
 	// Fire agent_end plugin hook (void, non-blocking).
