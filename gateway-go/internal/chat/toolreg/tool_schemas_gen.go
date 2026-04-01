@@ -700,12 +700,12 @@ func memoryToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"enum":        []string{"search", "get", "set", "forget", "recall", "status", "browse"},
-				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), recall (deep recall with entity expansion and relation chains — use when past context is needed), status (memory stats + top fact previews), browse (list/explore facts by category with pagination and sorting)",
+				"enum":        []string{"search", "get", "set", "forget", "recall", "status", "browse", "log", "daily"},
+				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), recall (deep recall with entity expansion and relation chains), status (memory stats + top fact previews), browse (list/explore facts by category with pagination and sorting), log (append timestamped narrative entry to daily file), daily (read today/yesterday daily logs)",
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query (for search action) or fact content (for set action)",
+				"description": "Search query (for search), fact content (for set), or log entry body (for log)",
 			},
 			"fact_id": map[string]any{
 				"type":        "integer",
@@ -737,6 +737,16 @@ func memoryToolSchema() map[string]any {
 				"type":        "integer",
 				"description": "Pagination offset for browse action (default: 0)",
 				"minimum":     0,
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "Short heading for a log entry (log action). Optional — omit for untitled entries",
+			},
+			"days": map[string]any{
+				"type":        "integer",
+				"description": "How many days to read (daily action, default: 2 = today + yesterday, max: 7)",
+				"minimum":     1,
+				"maximum":     7,
 			},
 		},
 		"required": []string{"action"},
