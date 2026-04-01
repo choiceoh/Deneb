@@ -7,7 +7,7 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | Command | Description |
 |---------|-------------|
 | `make go` | Build (CGo, requires `make rust` first) |
-| `make go-pure` | Build without Rust (`CGO_ENABLED=0 -tags no_ffi`) |
+| `make go-pure` | Build without Rust (`-tags no_ffi`, CGo on for SQLite) |
 | `make go-dev` | Dev mode with auto-restart on SIGUSR1 |
 | `make go-test` | Run tests with `-race` |
 | `make go-test-pure` | Run tests without FFI |

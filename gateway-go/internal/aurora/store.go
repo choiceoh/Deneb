@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // maxCompactionEvents is the maximum number of compaction events retained.
@@ -289,7 +289,7 @@ func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("aurora store: mkdir %s: %w", dir, err)
 	}
 
-	db, err := sql.Open("sqlite", cfg.DatabasePath)
+	db, err := sql.Open("sqlite3", cfg.DatabasePath)
 	if err != nil {
 		return nil, fmt.Errorf("aurora store: open db: %w", err)
 	}

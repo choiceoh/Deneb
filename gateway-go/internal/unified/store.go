@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // Store is the unified memory store backed by a single SQLite database.
@@ -61,7 +61,7 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("unified store: mkdir %s: %w", dir, err)
 	}
 
-	db, err := sql.Open("sqlite", cfg.DatabasePath)
+	db, err := sql.Open("sqlite3", cfg.DatabasePath)
 	if err != nil {
 		return nil, fmt.Errorf("unified store: open db: %w", err)
 	}
