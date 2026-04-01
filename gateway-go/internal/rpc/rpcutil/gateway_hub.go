@@ -77,6 +77,9 @@ func (h *GatewayHub) Validate() error {
 	if h.Broadcaster == nil {
 		missing = append(missing, "Broadcaster")
 	}
+	if h.GatewaySubs == nil {
+		missing = append(missing, "GatewaySubs")
+	}
 	if h.Sessions == nil {
 		missing = append(missing, "Sessions")
 	}
@@ -91,6 +94,18 @@ func (h *GatewayHub) Validate() error {
 	}
 	if h.Cron == nil {
 		missing = append(missing, "Cron")
+	}
+	if h.Approvals == nil {
+		missing = append(missing, "Approvals")
+	}
+	if h.Nodes == nil {
+		missing = append(missing, "Nodes")
+	}
+	if h.Devices == nil {
+		missing = append(missing, "Devices")
+	}
+	if h.Skills == nil {
+		missing = append(missing, "Skills")
 	}
 	if h.Logger == nil {
 		missing = append(missing, "Logger")
