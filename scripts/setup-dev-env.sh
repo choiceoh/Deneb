@@ -65,6 +65,30 @@ download_go_modules() {
         && touch "$SETUP_TMPDIR/installed_go_modules"
 }
 
+# ---------- MCP server build ----------
+
+build_mcp_server() {
+    local mcp_bin="$REPO_ROOT/bin/deneb-mcp"
+    if [ -f "$mcp_bin" ]; then return 0; fi
+    (cd "$REPO_ROOT/gateway-go" && CGO_ENABLED=0 go build -trimpath -tags no_ffi -o "$mcp_bin" ./cmd/mcp-server/) 2>/dev/null \
+        && touch "$SETUP_TMPDIR/installed_mcp"
+}
+
+setup_mcp_json() {
+    local mcp_json="$REPO_ROOT/.mcp.json"
+    if [ -f "$mcp_json" ]; then return 0; fi
+    cat > "$mcp_json" <<'MCPEOF'
+{
+  "mcpServers": {
+    "deneb": {
+      "command": "/home/user/Deneb/bin/deneb-mcp",
+      "args": ["--gateway-url", "http://127.0.0.1:18789", "--verbose"]
+    }
+  }
+}
+MCPEOF
+}
+
 # ---------- Rust core build ----------
 
 build_rust_core() {
@@ -100,6 +124,11 @@ install_protoc_gen_go &
 download_go_modules &
 wait
 
+# Build MCP server + write .mcp.json (needs go modules ready)
+build_mcp_server &
+setup_mcp_json
+wait
+
 # Build Rust core (may start background build)
 build_rust_core
 
@@ -130,7 +159,18 @@ elif [ ! -f "$REPO_ROOT/core-rs/target/release/libdeneb_core.a" ]; then
 fi
 
 echo "  [env] rust=$rust_ver $go_ver protoc=$protoc_ver buf=$buf_ver protoc-gen-go=$pgg_status"
+# MCP server status
+mcp_status="ready"
+if [ ! -f "$REPO_ROOT/bin/deneb-mcp" ]; then
+    mcp_status="missing"
+fi
+mcp_json_status="ready"
+if [ ! -f "$REPO_ROOT/.mcp.json" ]; then
+    mcp_json_status="missing"
+fi
+
 echo "  [env] go-modules=$go_mod_status libdeneb_core.a=$rust_lib_status"
+echo "  [env] deneb-mcp=$mcp_status .mcp.json=$mcp_json_status"
 
 # Go version compatibility warning
 go_minor=$(echo "$go_ver" | grep -oP '(?<=go)\d+\.\d+' || echo "0.0")
