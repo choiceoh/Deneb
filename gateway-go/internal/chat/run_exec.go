@@ -697,15 +697,13 @@ func executeAgentRun(
 		// preventing the "disappear then reappear" flicker on completion.
 		defer func() {
 			if draftCtrl != nil {
-				// Queue the final accumulated text before flushing, in case the
-				// last section didn't reach the update threshold. Sanitize to
-				// strip any leaked commands or code blocks.
-				if accum.Len() > 0 {
-					if sanitized := reply.SanitizeDraftText(accum.String()); sanitized != "" {
-						draftCtrl.Update(sanitized)
-					}
-				}
-				draftCtrl.Finalize()
+				// Stop the draft loop without flushing. The reply pipeline will
+				// edit the draft message in-place with the final processed text.
+				// Flushing here would cause a double-edit: first with SanitizeDraftText
+				// (code blocks stripped), then immediately after with the final reply
+				// text (differently processed), producing a visible content flash
+				// or "clear and resend" flicker on Telegram.
+				draftCtrl.StopForClear()
 			}
 			// Store the draft message ID on the delivery context so the reply
 			// pipeline can edit the existing message instead of sending a new one.

@@ -328,6 +328,17 @@ func isHTMLParseError(err error) bool {
 	return false
 }
 
+// IsMessageNotModifiedError returns true if err indicates Telegram rejected an
+// edit because the message content is unchanged. This is not a real failure —
+// the message already shows the desired content.
+func IsMessageNotModifiedError(err error) bool {
+	var apiErr *APIError
+	if isAPIError(err, &apiErr) {
+		return apiErr.IsMessageNotModified()
+	}
+	return false
+}
+
 // --- Helpers ---
 
 func applyMediaOpts(params map[string]any, caption string, opts SendOptions) {
