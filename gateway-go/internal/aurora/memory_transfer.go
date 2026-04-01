@@ -252,7 +252,7 @@ func extractFactsFromSummary(
 
 // callTransferLLM sends the summary to the LLM with JSON mode for fact extraction.
 func callTransferLLM(ctx context.Context, client *llm.Client, model, summaryContent string) (string, error) {
-	events, err := client.StreamChatOpenAI(ctx, llm.ChatRequest{
+	events, err := client.StreamChat(ctx, llm.ChatRequest{
 		Model:          model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", summaryContent)},
 		System:         llm.SystemString(transferSystemPrompt),

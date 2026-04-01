@@ -84,8 +84,8 @@ Payload:
 - `sessionKey` optional (string): The key used to identify the agent's session. By default this field is rejected unless `hooks.allowRequestSessionKey=true`.
 - `wakeMode` optional (`now` | `next-heartbeat`): Whether to trigger an immediate heartbeat (default `now`) or wait for the next periodic check.
 - `deliver` optional (boolean): If `true`, the agent's response will be sent to the messaging channel. Defaults to `true`. Responses that are only heartbeat acknowledgments are automatically skipped.
-- `channel` optional (string): The messaging channel for delivery. One of: `last`, `telegram`, `telegram`. Defaults to `last`.
-- `to` optional (string): The recipient identifier for the channel (e.g., chat ID for Telegram, channel ID for Telegram). Defaults to the last recipient in the main session.
+- `channel` optional (string): The messaging channel for delivery. One of: `last`, `telegram`. Defaults to `last`.
+- `to` optional (string): The recipient identifier for the channel (e.g., chat ID for Telegram). Defaults to the last recipient in the main session.
 - `model` optional (string): Model override (e.g., `anthropic/claude-3-5-sonnet` or an alias). Must be in the allowed model list if restricted.
 - `thinking` optional (string): Thinking level override (e.g., `low`, `medium`, `high`).
 - `timeoutSeconds` optional (number): Maximum duration for the agent run in seconds.

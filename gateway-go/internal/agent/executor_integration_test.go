@@ -37,8 +37,8 @@ func (f *fakeLLMStreamer) StreamChat(_ context.Context, _ llm.ChatRequest) (<-ch
 	return f.stream(), nil
 }
 
-func (f *fakeLLMStreamer) StreamChatOpenAI(_ context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
-	return f.stream(), nil
+func (f *fakeLLMStreamer) Complete(_ context.Context, _ llm.ChatRequest) (string, error) {
+	return "", nil
 }
 
 func (f *fakeLLMStreamer) stream() <-chan llm.StreamEvent {
@@ -267,7 +267,6 @@ func TestRunAgent_HappyPath_TextOnly(t *testing.T) {
 		MaxTurns:  5,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 		System:    llm.SystemString("You are a test assistant."),
 	}
 
@@ -313,7 +312,6 @@ func TestRunAgent_SingleToolCall(t *testing.T) {
 		MaxTurns:  10,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "Read test.go")}
@@ -356,7 +354,6 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 		MaxTurns:  maxTurns,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "loop")}
@@ -389,7 +386,6 @@ func TestRunAgent_Timeout(t *testing.T) {
 		MaxTurns:  5,
 		Timeout:   100 * time.Millisecond,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "slow")}
@@ -416,7 +412,6 @@ func TestRunAgent_ContextCancellation(t *testing.T) {
 		MaxTurns:  5,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -456,7 +451,6 @@ func TestRunAgent_ToolError(t *testing.T) {
 		MaxTurns:  10,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 	}
 
 	// Capture the tool_result to verify is_error.
@@ -508,7 +502,6 @@ func TestRunAgent_ParallelToolCalls(t *testing.T) {
 		MaxTurns:  10,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "search")}
@@ -555,7 +548,6 @@ func TestRunAgent_OnTurnInit_Hook(t *testing.T) {
 		MaxTurns:  10,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 		OnTurnInit: func(ctx context.Context) context.Context {
 			turnCounter++
 			return context.WithValue(ctx, ctxKey{}, turnCounter)
@@ -609,7 +601,6 @@ func TestRunAgent_OnTurn_Callback(t *testing.T) {
 		MaxTurns:  10,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 		OnTurn: func(turn int, accumulatedTokens int) {
 			turnCalls = append(turnCalls, struct{ turn, tokens int }{turn, accumulatedTokens})
 		},
@@ -679,7 +670,6 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 		MaxTurns:  10,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		APIType:   "anthropic",
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "test")}
@@ -702,67 +692,3 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 	}
 }
 
-func TestRunAgent_OpenAI_APIType(t *testing.T) {
-	// Verify that APIType "openai" (default) uses StreamChatOpenAI.
-	var openAICalled, anthropicCalled bool
-	streamer := &selectiveStreamer{
-		onAnthropic: func() { anthropicCalled = true },
-		onOpenAI:    func() { openAICalled = true },
-		events:      buildTextTurnEvents("hello", 50, 20),
-	}
-
-	cfg := AgentConfig{
-		MaxTurns:  5,
-		Timeout:   10 * time.Second,
-		MaxTokens: 4096,
-		APIType:   "", // default = openai
-	}
-
-	messages := []llm.Message{llm.NewTextMessage("user", "test")}
-	_, err := RunAgent(context.Background(), cfg, messages, streamer, nil, StreamHooks{}, nil, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !openAICalled {
-		t.Error("expected StreamChatOpenAI to be called for default APIType")
-	}
-	if anthropicCalled {
-		t.Error("StreamChat should not be called for default APIType")
-	}
-}
-
-// selectiveStreamer tracks which streaming method was called.
-type selectiveStreamer struct {
-	onAnthropic func()
-	onOpenAI    func()
-	events      []llm.StreamEvent
-}
-
-func (s *selectiveStreamer) StreamChat(_ context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
-	if s.onAnthropic != nil {
-		s.onAnthropic()
-	}
-	ch := make(chan llm.StreamEvent, 64)
-	go func() {
-		defer close(ch)
-		for _, ev := range s.events {
-			ch <- ev
-		}
-	}()
-	return ch, nil
-}
-
-func (s *selectiveStreamer) StreamChatOpenAI(_ context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
-	if s.onOpenAI != nil {
-		s.onOpenAI()
-	}
-	ch := make(chan llm.StreamEvent, 64)
-	go func() {
-		defer close(ch)
-		for _, ev := range s.events {
-			ch <- ev
-		}
-	}()
-	return ch, nil
-}

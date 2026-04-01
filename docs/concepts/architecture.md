@@ -1,24 +1,23 @@
 ---
-summary: "Multi-language gateway architecture: Go server, Rust core, Node.js plugin host"
+summary: "Multi-language gateway architecture: Go server, Rust core (CGo FFI)"
 read_when:
   - Working on gateway protocol, clients, or transports
-  - Understanding the Go/Rust/TypeScript runtime split
+  - Understanding the Go/Rust runtime split
 title: "Gateway Architecture"
 ---
 
 # Gateway architecture
 
-Last updated: 2026-03-26
+Last updated: 2026-04-01
 
 ## Overview
 
-Deneb runs as a multi-language gateway with three cooperating runtimes:
+Deneb runs as a multi-language gateway with two cooperating runtimes:
 
 - **Go gateway** — the primary server process. Handles HTTP/WS, RPC dispatch, session state, auth, cron, and daemon management.
 - **Rust core** (`core-rs`) — high-performance library linked into Go via CGo FFI. Handles protocol validation, security (constant-time compare, HTML sanitization, SSRF checks), media detection, markdown parsing, memory search (cosine similarity, BM25, hybrid merge), and context engine (assembly, compaction, sweep).
-- **Node.js plugin host** — subprocess managed by the Go gateway over a Unix domain socket. Runs channel extensions, skill plugins, and provider integrations that use the TypeScript plugin SDK.
 
-A single long-lived Gateway owns all messaging surfaces (Telegram via grammY, Telegram, and extension channels).
+A single long-lived Gateway owns all messaging surfaces (Telegram is the primary channel).
 
 <Tip>
 Telegram is the primary production channel. Other channels exist in the
@@ -54,20 +53,12 @@ graph TB
         Context["Context Engine<br>assembly, compaction"]
     end
 
-    subgraph "Node.js Plugin Host (subprocess)"
-        Plugins["Channel Extensions"]
-        Skills["Skill Plugins"]
-        Providers["Provider Integrations"]
-        SDK["Plugin SDK"]
-    end
-
     RPC --> Proto
     RPC --> Security
     RPC --> Media
     RPC --> Markdown
     RPC --> Memory
     RPC --> Context
-    RPC -->|"Unix socket<br>frame protocol"| Plugins
 ```
 
 ### IPC boundaries
@@ -75,23 +66,8 @@ graph TB
 | Path             | Transport                           | Use case                                                               |
 | ---------------- | ----------------------------------- | ---------------------------------------------------------------------- |
 | Go to Rust       | CGo FFI (in-process)                | Protocol validation, security, media, markdown, memory, context engine |
-| Go to Node.js    | Unix domain socket + frame protocol | Channel extensions, skills, provider integrations                      |
 | CLI to Gateway   | WebSocket                           | Commands, agent runs, status                                           |
 | Protobuf schemas | Shared source of truth              | Cross-language type definitions (`proto/*.proto`)                      |
-
-### Hardware-aware runtime
-
-The gateway detects available hardware at startup and selects a **hardware profile** that tunes concurrency, memory, and acceleration:
-
-| Profile              | Detection                       | Agent concurrency | Embedding batch | FFmpeg accel      |
-| -------------------- | ------------------------------- | ----------------- | --------------- | ----------------- |
-| **DGX Spark (GB10)** | NVIDIA Grace Blackwell GPU      | 10                | 8               | CUDA (h264_nvenc) |
-| **Desktop GPU**      | Consumer NVIDIA (RTX 3090/4090) | 8                 | 6               | CUDA (h264_nvenc) |
-| **CPU-only**         | No NVIDIA GPU detected          | 4                 | 2               | Software          |
-
-GPU detection runs `nvidia-smi` at startup; override with `DENEB_GPU_ACCEL` env var (`dgx-spark`, `cuda`, `none`).
-
-Each profile also tunes: V8 heap size, SQLite cache/mmap, UV threadpool, compute pool size (for worker threads), FFmpeg buffer/timeout, and image worker count.
 
 ## Full system overview
 
@@ -101,7 +77,6 @@ End-to-end view of every major component and how data flows from messaging chann
 graph TB
     subgraph "Messaging Channels"
         TG["📱 Telegram<br>(primary channel)"]
-        DC["Telegram"]
     end
 
     subgraph "Control Plane Clients"
@@ -139,22 +114,9 @@ graph TB
 
         subgraph VEGA["Vega Search Engine"]
             FTS["SQLite FTS5"]
-            SEM["Semantic Search<br>(optional ML)"]
         end
 
-        subgraph ML["ML Inference (deneb-ml)"]
-            EMB["Embedder<br>GGUF models"]
-            RR["Reranker"]
-            CUDA["CUDA Acceleration"]
-        end
-
-        subgraph NH["Node.js Plugin Host"]
-            CHANEXT["Channel Extensions"]
-            SKILLRT["Skill Runtime"]
-            PROVINT["Provider Integrations"]
-        end
-
-        SKILLS["Skills (17)<br>github, weather,<br>coding-agent, tmux,<br>himalaya, summarize..."]
+        SKILLS["Skills (15)<br>github, weather,<br>coding-agent, tmux,<br>summarize..."]
         PROTO_SCHEMA["Proto Schemas<br>gateway.proto<br>channel.proto<br>session.proto"]
     end
 
@@ -167,7 +129,6 @@ graph TB
 
     %% Channel → Gateway
     TG -->|"Bot API"| CHAN
-    DC -->|"Bot API"| CHAN
 
     %% Control plane
     CLI -->|"WebSocket"| WSS
@@ -196,17 +157,8 @@ graph TB
     CHAT --> CMP
     CHAT --> PARSE
 
-    %% Vega + ML
+    %% Vega
     MEM --> FTS
-    FTS --> SEM
-    SEM --> EMB
-    SEM --> RR
-    EMB --> CUDA
-
-    %% Plugin host
-    RPC -->|"Unix socket"| CHANEXT
-    SKILLRT --> SKILLS
-    CHANEXT --> SKILLRT
 
     %% Proto schema codegen
     PROTO_SCHEMA -.->|"codegen"| PROTO
@@ -217,7 +169,6 @@ graph TB
     CHAT -->|"API calls"| OAI
     CHAT -->|"API calls"| GGL
     CHAT -->|"local inference"| LOCAL
-    LOCAL --> CUDA
 ```
 
 ## Gateway internal architecture
@@ -229,7 +180,7 @@ graph LR
     subgraph "Inbound"
         REQ_HTTP["HTTP Request<br>/api/v1/rpc"]
         REQ_WS["WebSocket Frame<br>type: req"]
-        REQ_CHAN["Channel Message<br>Telegram, Telegram"]
+        REQ_CHAN["Channel Message<br>Telegram"]
     end
 
     subgraph "gateway-go/internal"
@@ -265,7 +216,7 @@ graph LR
         subgraph chat["chat/"]
             SYSPROMPT["System Prompt<br>Assembly"]
             TOOLS["Tool Registry<br>exec, read, write,<br>edit, grep, find, ls, web"]
-            CTXFILES["Context Files<br>AGENTS.md, CLAUDE.md,<br>SOUL.md, TOOLS.md"]
+            CTXFILES["Context Files<br>CLAUDE.md, SOUL.md,<br>TOOLS.md, IDENTITY.md,<br>USER.md, MEMORY.md"]
             SLASH["Slash Commands<br>/reset /status /kill<br>/model /think"]
             SILENT["Silent Reply<br>NO_REPLY detection"]
         end
@@ -276,7 +227,7 @@ graph LR
         end
 
         subgraph ffi["ffi/"]
-            CGO["CGo Bindings<br>8 *_cgo.go files"]
+            CGO["CGo Bindings<br>7 *_cgo.go files"]
             NOFFI["No-FFI Fallbacks<br>*_noffi.go"]
         end
 
@@ -288,7 +239,7 @@ graph LR
     end
 
     subgraph "Rust Core (libdeneb_core.a)"
-        RUSTFNS["deneb_validate_frame<br>deneb_constant_time_eq<br>deneb_detect_mime<br>deneb_sanitize_html<br>deneb_is_safe_url<br>deneb_vega_execute<br>deneb_vega_search<br>deneb_embed<br>deneb_rerank"]
+        RUSTFNS["deneb_validate_frame<br>deneb_constant_time_eq<br>deneb_detect_mime<br>deneb_sanitize_html<br>deneb_is_safe_url<br>deneb_vega_execute<br>deneb_vega_search<br>deneb_memory_cosine_similarity<br>deneb_memory_bm25_rank_to_score"]
     end
 
     subgraph "External"
@@ -337,7 +288,7 @@ graph LR
 
 ## Rust core crate architecture
 
-The `core-rs/` workspace contains 4 crates with a layered feature-flag dependency chain.
+The `core-rs/` workspace contains 3 crates.
 
 ```mermaid
 graph TB
@@ -373,13 +324,6 @@ graph TB
         VEGA_SEARCH["Search Pipeline<br>query analysis → FTS5 →<br>semantic → fusion/rerank"]
     end
 
-    subgraph "deneb-ml"
-        ML_EMB["Embedder<br>LocalEmbedder<br>GGUF text embeddings"]
-        ML_RR["Reranker<br>LocalReranker<br>RankedDocument"]
-        ML_MGR["Model Manager<br>TTL-based eviction<br>model pooling"]
-        ML_CUDA["CUDA Backend<br>llama-cpp-2 bindings"]
-    end
-
     subgraph "deneb-agent-runtime"
         ART_MODEL["Model Selection<br>provider normalization<br>catalog, thinking levels"]
         ART_SCOPE["Scope Resolution<br>agent registry<br>session key parsing"]
@@ -388,38 +332,23 @@ graph TB
     end
 
     subgraph "Feature Flags"
-        F_DEFAULT["default"]
+        F_DEFAULT["default<br>(napi_binding)"]
         F_VEGA["vega"]
-        F_ML["ml"]
-        F_CUDA["cuda"]
-        F_VEGA_ML["vega-ml"]
-        F_DGX["dgx (production)"]
     end
 
     %% Crate dependencies
     LIBRS -->|"optional"| VEGA_CORE
-    VEGA_SEARCH -->|"optional (ml feature)"| ML_EMB
-    VEGA_SEARCH -->|"optional (ml feature)"| ML_RR
-    ML_EMB --> ML_MGR
-    ML_RR --> ML_MGR
-    ML_MGR -->|"cuda feature"| ML_CUDA
 
     %% Feature flag chain
     F_DEFAULT -.-> F_VEGA
-    F_VEGA -.-> F_ML
-    F_ML -.-> F_CUDA
-    F_VEGA -.-> F_VEGA_ML
-    F_VEGA_ML -.-> F_DGX
 
     subgraph "Build Targets"
         B_RUST["make rust<br>(minimal, no vega)"]
-        B_VEGA["make rust-vega<br>(FTS only)"]
-        B_DGX["make rust-dgx<br>(full: vega+ml+cuda)"]
+        B_VEGA["make rust-vega<br>(FTS)"]
     end
 
     F_DEFAULT -.-> B_RUST
     F_VEGA -.-> B_VEGA
-    F_DGX -.-> B_DGX
 
     subgraph "Proto Schemas (proto/)"
         PGW["gateway.proto<br>ErrorCode, RequestFrame,<br>ResponseFrame, EventFrame"]
@@ -434,12 +363,10 @@ graph TB
 
     subgraph "Output Artifacts"
         STATIC["libdeneb_core.a<br>(staticlib → Go CGo)"]
-        CDYLIB["libdeneb_core.so<br>(cdylib → Node.js napi)"]
         RLIB["rlib<br>(workspace internal)"]
     end
 
     LIBRS --> STATIC
-    LIBRS --> CDYLIB
     LIBRS --> RLIB
 ```
 
@@ -448,18 +375,10 @@ graph TB
 ### Gateway (Go process)
 
 - Primary server process; starts HTTP and WebSocket listeners.
-- Dispatches RPC methods through a thread-safe registry (100+ built-in methods).
-- Manages session lifecycle (state machine: IDLE, RUNNING, DONE, FAILED, KILLED, TIMEOUT).
+- Dispatches RPC methods through a thread-safe registry (130+ built-in methods).
+- Manages session lifecycle (state machine: RUNNING, DONE, FAILED, KILLED, TIMEOUT).
 - Runs auth middleware with scope-based authorization.
-- Spawns and supervises the Node.js plugin host subprocess.
 - Calls Rust core functions via CGo FFI for CPU-intensive operations.
-
-### Plugin host (Node.js subprocess)
-
-- Communicates with Go gateway over Unix domain socket using a frame-based protocol (RequestFrame/ResponseFrame).
-- Runs channel extensions (Telegram, Telegram, etc.).
-- Executes skill plugins and provider integrations via the TypeScript plugin SDK.
-- Auto-reconnects with exponential backoff (1s to 30s max) if the connection drops.
 
 ### Clients (CLI / web admin)
 

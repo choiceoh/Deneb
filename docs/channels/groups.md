@@ -136,12 +136,6 @@ Control how group/room messages are handled per channel:
       groupPolicy: "disabled", // "open" | "disabled" | "allowlist"
       groupAllowFrom: ["123456789"], // numeric Telegram user id (wizard can resolve @username)
     },
-    telegram: {
-      groupPolicy: "allowlist",
-      guilds: {
-        GUILD_ID: { channels: { help: { allow: true } } },
-      },
-    },
   },
 }
 ```
@@ -157,10 +151,9 @@ Notes:
 - `groupPolicy` is separate from mention-gating (which requires @mentions).
 - Telegram: use `groupAllowFrom` (fallback: explicit `allowFrom`).
 - DM pairing approvals (`*-allowFrom` store entries) apply to DM access only; group sender authorization stays explicit to group allowlists.
-- Telegram: allowlist uses `channels.telegram.guilds.<id>.channels`.
 - Group DMs are controlled separately (`channels.telegram.dm.*`).
 - Telegram allowlist can match user IDs (`"123456789"`, `"telegram:123456789"`, `"tg:123456789"`) or usernames (`"@alice"` or `"alice"`); prefixes are case-insensitive.
-- Default is `groupPolicy: "allowlist"`; if your group allowlist is empty, group messages are blocked.
+- Default is `groupPolicy: "open"`.
 - Runtime safety: when a provider block is completely missing (`channels.<provider>` absent), group policy falls back to a fail-closed mode (typically `allowlist`) instead of inheriting `channels.defaults.groupPolicy`.
 
 Quick mental model (evaluation order for group messages):

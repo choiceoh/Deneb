@@ -156,7 +156,7 @@ func handleContextOverflowAurora(
 		// Use lightweight model for cost-efficient compaction summaries.
 		lwClient := getLightweightClient()
 		lwModel := getLightweightModel()
-		summarizer := aurora.NewLLMSummarizer(lwClient, lwModel, "openai")
+		summarizer := aurora.NewLLMSummarizer(lwClient, lwModel)
 
 		// Build inline fact extractor: replaces the async flushMemory/transferSummary
 		// bridge with synchronous extraction during the sweep persist step.

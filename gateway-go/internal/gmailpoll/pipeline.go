@@ -404,7 +404,7 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, emails []emai
 		Stream:    true,
 	}
 
-	events, err := deps.LLMClient.StreamChatOpenAI(ctx, req)
+	events, err := deps.LLMClient.StreamChat(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("batch analysis LLM call failed: %w", err)
 	}
@@ -653,7 +653,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 		Stream:    true,
 	}
 
-	events, err := deps.LLMClient.StreamChatOpenAI(ctx, req)
+	events, err := deps.LLMClient.StreamChat(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("final analysis LLM call failed: %w", err)
 	}
@@ -734,7 +734,7 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 	var zero T
 
 	for attempt := range 2 {
-		events, err := client.StreamChatOpenAI(ctx, llm.ChatRequest{
+		events, err := client.StreamChat(ctx, llm.ChatRequest{
 			Model:          model,
 			Messages:       []llm.Message{llm.NewTextMessage("user", user)},
 			System:         llm.SystemString(system),

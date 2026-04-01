@@ -11,8 +11,8 @@ read_when:
 Deneb memory is **plain Markdown in the agent workspace**. The files are the
 source of truth; the model only "remembers" what gets written to disk.
 
-Memory search tools are provided by the active memory plugin (default:
-`memory-core`). Disable memory plugins with `plugins.slots.memory = "none"`.
+Memory search tools are provided by the native Go memory module
+(`gateway-go/internal/memory/`).
 
 ## Memory files (Markdown)
 

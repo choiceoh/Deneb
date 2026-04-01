@@ -69,14 +69,10 @@ Presence entries are stored in a single in‑memory map:
 If a client reconnects without a stable `instanceId`, it may show up as a
 **duplicate** row.
 
-## TTL and bounded size
+## Storage
 
-Presence is intentionally ephemeral:
-
-- **TTL:** entries older than 5 minutes are pruned
-- **Max entries:** 200 (oldest dropped first)
-
-This keeps the list fresh and avoids unbounded memory growth.
+Presence entries are stored in a simple in-memory map keyed by presence key.
+Entries persist for the lifetime of the gateway process.
 
 ## Remote/tunnel caveat (loopback IPs)
 

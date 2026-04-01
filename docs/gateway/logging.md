@@ -45,10 +45,10 @@ deneb logs --follow
 The CLI captures `console.log/info/warn/error/debug/trace` and writes them to file logs,
 while still printing to stdout/stderr.
 
-You can tune console verbosity independently via:
+You can tune log output via:
 
-- `logging.consoleLevel` (default `info`)
-- `logging.consoleStyle` (`pretty` | `compact` | `json`)
+- `logging.level` (default `info`)
+- `logging.format` (`text` | `json`, default `text`)
 
 ## Tool summary redaction
 
@@ -56,10 +56,7 @@ Verbose tool summaries (e.g. `🛠️ Exec: ...`) can mask sensitive tokens befo
 console stream. This is **tools-only** and does not alter file logs.
 
 - `logging.redactSensitive`: `off` | `tools` (default: `tools`)
-- `logging.redactPatterns`: array of regex strings (overrides defaults)
-  - Use raw regex strings (auto `gi`), or `/pattern/flags` if you need custom flags.
-  - Matches are masked by keeping the first 6 + last 4 chars (length >= 18), otherwise `***`.
-  - Defaults cover common key assignments, CLI flags, JSON fields, bearer headers, PEM blocks, and popular token prefixes.
+- Matches are masked by keeping the first 6 + last 4 chars (length >= 18), otherwise `***`.
 
 ## Gateway WebSocket logs
 
