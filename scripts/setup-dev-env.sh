@@ -79,6 +79,19 @@ install_protoc_gen_go() {
     fi
 }
 
+download_go_modules() {
+    # go mod download is fast when modules are already cached, so always run it
+    # to ensure zip files (not just metadata) are present for offline builds.
+    echo "  [setup] Caching Go modules..."
+    fix_no_proxy
+    if (cd "$REPO_ROOT/gateway-go" && GOFLAGS="-modcacherw" go mod download) 2>/dev/null; then
+        echo "  [ok] Go modules cached"
+        INSTALLED=$((INSTALLED + 1))
+    else
+        echo "  [warn] Go module download failed (build may fail offline)"
+    fi
+}
+
 build_rust_core() {
     local rust_lib="$REPO_ROOT/core-rs/target/release/libdeneb_core.a"
     if [ -f "$rust_lib" ]; then
@@ -110,6 +123,9 @@ fix_no_proxy
 install_protoc
 install_buf
 install_protoc_gen_go
+
+# Pre-cache Go modules while network is available
+download_go_modules
 
 # Build Rust core if missing
 build_rust_core

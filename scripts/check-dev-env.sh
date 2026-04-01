@@ -34,6 +34,15 @@ check_tool "buf" "buf" "Install from https://buf.build/docs/installation"
 check_tool "protoc-gen-go" "protoc-gen-go" "go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
 
 echo ""
+echo "Go modules:"
+if (cd "$REPO_ROOT/gateway-go" && go mod verify) &>/dev/null 2>&1; then
+    echo "  [ok] Go module cache verified"
+else
+    echo "  [missing] Go modules not cached — run 'cd gateway-go && go mod download'"
+    MISSING=$((MISSING + 1))
+fi
+
+echo ""
 echo "Build artifacts:"
 
 RUST_LIB="$REPO_ROOT/core-rs/target/release/libdeneb_core.a"
