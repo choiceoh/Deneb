@@ -198,12 +198,13 @@ type SubagentSpawnDeps struct {
 
 // SubagentSpawnParams holds params for spawning a subagent.
 type SubagentSpawnParams struct {
-	Task     string
-	AgentID  string
-	Model    string
-	Thinking string
-	Mode     string // "run" or "session"
-	Cleanup  string // "delete" or "keep"
+	Task       string
+	AgentID    string
+	Model      string
+	Thinking   string
+	Mode       string // "run" or "session"
+	Cleanup    string // "delete" or "keep"
+	ToolPreset string // tool preset: "researcher", "implementer", "verifier"
 }
 
 // SubagentSpawnContext holds routing context for the spawned subagent.
@@ -228,12 +229,12 @@ type SubagentSpawnResult struct {
 func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpawnDeps) *SubagentCommandResult {
 	restTokens := ctx.RestTokens
 	if len(restTokens) == 0 {
-		return StopWithText("Usage: /subagents spawn <agentId> <task> [--model <model>] [--thinking <level>]")
+		return StopWithText("Usage: /subagents spawn <agentId> <task> [--model <model>] [--thinking <level>] [--tool-preset <preset>]")
 	}
 
 	agentID := restTokens[0]
 	var taskParts []string
-	var model, thinking string
+	var model, thinking, toolPreset string
 
 	for i := 1; i < len(restTokens); i++ {
 		if restTokens[i] == "--model" && i+1 < len(restTokens) {
@@ -242,13 +243,16 @@ func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpaw
 		} else if restTokens[i] == "--thinking" && i+1 < len(restTokens) {
 			i++
 			thinking = restTokens[i]
+		} else if restTokens[i] == "--tool-preset" && i+1 < len(restTokens) {
+			i++
+			toolPreset = restTokens[i]
 		} else {
 			taskParts = append(taskParts, restTokens[i])
 		}
 	}
 	task := strings.TrimSpace(strings.Join(taskParts, " "))
 	if agentID == "" || task == "" {
-		return StopWithText("Usage: /subagents spawn <agentId> <task> [--model <model>] [--thinking <level>]")
+		return StopWithText("Usage: /subagents spawn <agentId> <task> [--model <model>] [--thinking <level>] [--tool-preset <preset>]")
 	}
 
 	if deps == nil || deps.SpawnDirect == nil {
@@ -257,12 +261,13 @@ func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpaw
 
 	result, err := deps.SpawnDirect(
 		SubagentSpawnParams{
-			Task:     task,
-			AgentID:  agentID,
-			Model:    model,
-			Thinking: thinking,
-			Mode:     "run",
-			Cleanup:  "keep",
+			Task:       task,
+			AgentID:    agentID,
+			Model:      model,
+			Thinking:   thinking,
+			Mode:       "run",
+			Cleanup:    "keep",
+			ToolPreset: toolPreset,
 		},
 		SubagentSpawnContext{
 			AgentSessionKey: ctx.RequesterKey,

@@ -68,6 +68,9 @@ type AgentConfig struct {
 	SubagentRole         string `json:"subagentRole,omitempty"`
 	SubagentControlScope string `json:"subagentControlScope,omitempty"`
 
+	// Tool restriction.
+	ToolPreset string `json:"toolPreset,omitempty"` // researcher, implementer, verifier, coordinator
+
 	// Channel / messaging policy.
 	SendPolicy      string `json:"sendPolicy,omitempty"`
 	GroupActivation string `json:"groupActivation,omitempty"`

@@ -81,6 +81,12 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "사고 모드가 토글되었습니다.",
 			Command:  "think",
 		}
+	case "coordinator", "코디네이터":
+		return &SlashResult{
+			Handled:  true,
+			Response: "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.",
+			Command:  "coordinator",
+		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil

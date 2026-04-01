@@ -17,8 +17,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -49,6 +51,16 @@ func loadCachedSkillsPrompt(workspaceDir string) string {
 		}
 	})
 	return cachedSkillsPrompt
+}
+
+// appendWorkerBlock adds a worker role instructions block to an Anthropic system
+// prompt block list. The new block gets an ephemeral cache marker.
+func appendWorkerBlock(blocks []llm.ContentBlock, addition string) []llm.ContentBlock {
+	return append(blocks, llm.ContentBlock{
+		Type:         "text",
+		Text:         addition,
+		CacheControl: &llm.CacheControl{Type: "ephemeral"},
+	})
 }
 
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
@@ -295,6 +307,14 @@ func executeAgentRun(
 		}
 	}()
 
+	// Resolve session tool preset early (needed for both system prompt and tool list).
+	var sessionToolPreset string
+	if deps.sessions != nil {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+			sessionToolPreset = sess.ToolPreset
+		}
+	}
+
 	// System prompt build (parallel — apiType resolved early so this no longer
 	// needs to be deferred until after the sequential model/client resolution).
 	prepWg.Add(1)
@@ -320,9 +340,13 @@ func executeAgentRun(
 				sessionMemoryText = mem.FormatForPrompt()
 			}
 		}
+
+		// Build tool defs — filtered if a preset is active.
+		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir: workspaceDir,
-			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
+			ToolDefs:     toolDefs,
 			UserTimezone: tz,
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
@@ -331,20 +355,52 @@ func executeAgentRun(
 			SessionMemory: sessionMemoryText,
 			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir),
 		}
-		// Telegram is the coding-specialized channel: use the coding
-		// system prompt which strips non-coding sections and emphasizes
-		// the vibe-coder workflow (no raw code, Korean explanations).
+
+		// Coordinator mode: use the coordinator-specific system prompt.
+		if sessionToolPreset == string(toolpreset.PresetCoordinator) {
+			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
+			if apiType == "anthropic" {
+				systemPrompt = llm.SystemBlocks(prompt.BuildCoordinatorSystemPromptBlocks(spp, scratchpadDir))
+			} else {
+				systemPrompt = llm.SystemString(prompt.BuildCoordinatorSystemPrompt(spp, scratchpadDir))
+			}
+			return
+		}
+
+		// Worker sessions with a tool preset: append role-specific instructions.
+		workerAddition := ""
+		if sessionToolPreset != "" {
+			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
+			workerAddition = prompt.WorkerPromptAddition(sessionToolPreset, scratchpadDir)
+		}
+
 		if ch == "telegram" {
 			if apiType == "anthropic" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(spp))
+				blocks := prompt.BuildCodingSystemPromptBlocks(spp)
+				if workerAddition != "" {
+					blocks = appendWorkerBlock(blocks, workerAddition)
+				}
+				systemPrompt = llm.SystemBlocks(blocks)
 			} else {
-				systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
+				sp := prompt.BuildCodingSystemPrompt(spp)
+				if workerAddition != "" {
+					sp += "\n" + workerAddition
+				}
+				systemPrompt = llm.SystemString(sp)
 			}
 		} else {
 			if apiType == "anthropic" {
-				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+				blocks := prompt.BuildSystemPromptBlocks(spp)
+				if workerAddition != "" {
+					blocks = appendWorkerBlock(blocks, workerAddition)
+				}
+				systemPrompt = llm.SystemBlocks(blocks)
 			} else {
-				systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
+				sp := prompt.BuildSystemPrompt(spp)
+				if workerAddition != "" {
+					sp += "\n" + workerAddition
+				}
+				systemPrompt = llm.SystemString(sp)
 			}
 		}
 	}()
@@ -425,6 +481,14 @@ func executeAgentRun(
 		// Recall still running — will be checked via DeferredSystemText or post-run.
 	}
 
+	// 7c. Auto-suggest coordinator mode if the message looks like a multi-file task
+	// and the session is not already in coordinator mode.
+	if sessionToolPreset == "" && params.Message != "" && coordinator.ShouldSuggestCoordinator(params.Message) {
+		hint := "\n\n[System hint: this request appears to involve multiple files. " +
+			"Consider suggesting coordinator mode (/coordinator) for structured multi-agent orchestration.]\n"
+		systemPrompt = llm.AppendSystemText(systemPrompt, hint)
+	}
+
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt),
 		"knowledgeChars", len(knowledgeAddition))
@@ -437,9 +501,11 @@ func executeAgentRun(
 	})
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
+	// If a tool preset is active, filter the tool list to only include allowed tools.
 	var tools []llm.Tool
 	if deps.tools != nil {
-		tools = deps.tools.LLMTools()
+		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+		tools = deps.tools.FilteredLLMTools(allowed)
 	}
 
 	// For Anthropic: mark the last tool for prompt caching.
@@ -514,6 +580,7 @@ func executeAgentRun(
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
 			ctx = WithFileCache(ctx, fileCache)
+			ctx = WithToolPreset(ctx, sessionToolPreset)
 			return ctx
 		},
 	}

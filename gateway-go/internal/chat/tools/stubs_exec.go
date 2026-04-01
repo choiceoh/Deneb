@@ -363,9 +363,10 @@ func ToolSessionsSend(d *toolctx.SessionDeps) ToolFunc {
 func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Task  string `json:"task"`
-			Label string `json:"label"`
-			Model string `json:"model"` // role name: "main","lightweight","pilot","fallback"
+			Task       string `json:"task"`
+			Label      string `json:"label"`
+			Model      string `json:"model"`       // role name: "main","lightweight","pilot","fallback"
+			ToolPreset string `json:"tool_preset"` // tool preset: "researcher","implementer","verifier"
 		}
 		if err := jsonutil.UnmarshalInto("sessions_spawn params", input, &p); err != nil {
 			return "", err
@@ -392,6 +393,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 			childSession.Model = p.Model
 		}
 		childSession.SpawnedBy = parentKey
+		childSession.ToolPreset = p.ToolPreset
 		d.Manager.Set(childSession)
 
 		// Send the task message to the child session.
@@ -399,7 +401,11 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 			return fmt.Sprintf("Sub-agent session %q created but failed to send task: %s", childKey, err.Error()), nil
 		}
 
-		return fmt.Sprintf("Sub-agent spawned.\nSession: %s\nTask: %s", childKey, p.Task), nil
+		result := fmt.Sprintf("Sub-agent spawned.\nSession: %s\nTask: %s", childKey, p.Task)
+		if p.ToolPreset != "" {
+			result += fmt.Sprintf("\nTool preset: %s", p.ToolPreset)
+		}
+		return result, nil
 	}
 }
 

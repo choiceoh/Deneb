@@ -25,6 +25,7 @@ type SessionState struct {
 	ElevatedLevel   ElevatedLevel
 	GroupActivation GroupActivationMode
 	SendPolicy      string
+	ToolPreset      string // tool preset restricting available tools (researcher, implementer, verifier, coordinator)
 	CreatedAt       int64
 	UpdatedAt       int64
 }
