@@ -72,7 +72,7 @@ Gateway → Client:
   "type": "res",
   "id": "…",
   "ok": true,
-  "payload": { "type": "hello-ok", "protocol": 3, "policy": { "tickIntervalMs": 15000 } }
+  "payload": { "type": "hello-ok", "protocol": 3, "policy": { "tickIntervalMs": 30000 } }
 }
 ```
 
@@ -136,6 +136,9 @@ Side-effecting methods require **idempotency keys** (see schema).
 ### Roles
 
 - `operator` = control plane client (CLI/UI/automation).
+- `viewer` = read-only access.
+- `agent` = agent-scoped access.
+- `probe` = health/monitoring probe.
 - `node` = capability host (camera/screen/canvas/system.run).
 
 ### Scopes (operator)
@@ -189,12 +192,9 @@ The Gateway treats these as **claims** and enforces server-side allowlists.
 
 ## Versioning
 
-- `PROTOCOL_VERSION` lives in `src/gateway/protocol/schema.ts`.
+- `ProtocolVersion` lives in `gateway-go/pkg/protocol/frames.go`.
 - Clients send `minProtocol` + `maxProtocol`; the server rejects mismatches.
-- Schemas + models are generated from TypeBox definitions:
-  - `pnpm protocol:gen`
-  - `pnpm protocol:gen:swift`
-  - `pnpm protocol:check`
+- Schemas are defined in `proto/*.proto` and generated via `make proto`.
 
 ## Auth
 

@@ -28,18 +28,6 @@ Healthy baseline:
 - `RPC probe: ok`
 - Channel probe shows connected/ready
 
-## WhatsApp
-
-### WhatsApp failure signatures
-
-| Symptom                         | Fastest check                                       | Fix                                                     |
-| ------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
-| Connected but no DM replies     | `deneb pairing list whatsapp`                       | Approve sender or switch DM policy/allowlist.           |
-| Group messages ignored          | Check `requireMention` + mention patterns in config | Mention the bot or relax mention policy for that group. |
-| Random disconnect/relogin loops | `deneb channels status --probe` + logs              | Re-login and verify credentials directory is healthy.   |
-
-See also: `deneb channels status --probe` and `deneb logs --channel whatsapp`.
-
 ## Telegram
 
 ### Telegram failure signatures

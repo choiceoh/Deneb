@@ -128,7 +128,7 @@ Cron supports three schedule kinds:
 - `every`: fixed interval (ms).
 - `cron`: 5-field cron expression (or 6-field with seconds) with optional IANA timezone.
 
-Cron expressions use `croner`. If a timezone is omitted, the Gateway host’s
+Cron expressions use the built-in Go scheduler. If a timezone is omitted, the Gateway host’s
 local timezone is used.
 
 To reduce top-of-hour load spikes across many gateways, Deneb applies a
