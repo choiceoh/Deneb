@@ -164,6 +164,22 @@ func executeAgentRun(
 		}
 	}
 
+	// Sub-agent provider remapping: if this session was spawned by another
+	// agent and a "<provider>-subagent" config exists, use the alternate
+	// API key. This allows main and sub-agents to use different accounts
+	// on the same provider (separate rate limits).
+	if deps.sessions != nil && providerID != "" {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.SpawnedBy != "" {
+			alt := providerID + "-subagent"
+			if deps.providerConfigs != nil {
+				if _, ok := deps.providerConfigs[alt]; ok {
+					logger.Info("subagent provider remap", "from", providerID, "to", alt)
+					providerID = alt
+				}
+			}
+		}
+	}
+
 	// Snapshot immutable query config once. All subsequent code uses qCfg
 	// for consistent values (model, budget, limits) rather than re-reading.
 	qCfg := BuildQueryConfig(params, model, providerID, workspaceDir)
