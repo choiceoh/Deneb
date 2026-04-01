@@ -161,7 +161,7 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		structFacts = deduplicateFactsAgainstTier1(structFacts, tier1Section)
 	}
 
-	// Knowledge section (Vega + memory facts).
+	// Knowledge section (Vega + memory facts). Skipped when recall already produced results.
 	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 || len(unifiedResults) > 0 {
 		parts = append(parts, formatKnowledgeWithFacts(vegaResults, memMatches, structFacts, unifiedResults))
 	}

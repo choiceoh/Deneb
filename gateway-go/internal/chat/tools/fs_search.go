@@ -94,14 +94,36 @@ func ToolGrep(defaultDir string) ToolFunc {
 		if p.FileType != "" {
 			args = append(args, "--type", p.FileType)
 		}
-		args = append(args, p.Pattern, searchPath)
+		// Use -e to avoid flag confusion when pattern starts with '-'.
+		args = append(args, "-e", p.Pattern, "--", searchPath)
 
 		cmd := exec.CommandContext(ctx, "rg", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
+			exitCode := -1
+			if cmd.ProcessState != nil {
+				exitCode = cmd.ProcessState.ExitCode()
+			}
 			// rg exit code 1 means no matches (not an error).
-			if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
+			if exitCode == 1 {
 				return "No matches found.", nil
+			}
+			// Exit code 2 often means invalid regex. Retry as fixed string.
+			if exitCode == 2 {
+				fixedArgs := make([]string, len(args))
+				copy(fixedArgs, args)
+				fixedArgs = append([]string{"-F"}, fixedArgs...)
+				retryCmd := exec.CommandContext(ctx, "rg", fixedArgs...)
+				retryOut, retryErr := retryCmd.CombinedOutput()
+				if retryErr == nil {
+					if p.Mode == "" || p.Mode == "content" {
+						return groupGrepOutput(string(retryOut)), nil
+					}
+					return string(retryOut), nil
+				}
+				if retryCmd.ProcessState != nil && retryCmd.ProcessState.ExitCode() == 1 {
+					return "No matches found.", nil
+				}
 			}
 			return "", fmt.Errorf("ripgrep failed: %s", strings.TrimSpace(string(out)))
 		}

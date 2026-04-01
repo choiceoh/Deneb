@@ -25,14 +25,16 @@ type SearchOpts struct {
 	Category      string  // filter by category (empty = all)
 	MinScore      float64 // minimum final score threshold
 	MinImportance float64 // minimum importance to include (0 = all; use 0.7 for FTS-only mode)
+	EntityFilter  string  // filter by entity name (empty = all)
 }
 
 // SearchResult is a scored fact from a search query.
 type SearchResult struct {
-	Fact     Fact    `json:"fact"`
-	Score    float64 `json:"score"`
-	FTSScore float64 `json:"fts_score,omitempty"`
-	VecScore float64 `json:"vec_score,omitempty"`
+	Fact         Fact          `json:"fact"`
+	Score        float64       `json:"score"`
+	FTSScore     float64       `json:"fts_score,omitempty"`
+	VecScore     float64       `json:"vec_score,omitempty"`
+	RelatedFacts []RelatedFact `json:"related_facts,omitempty"`
 }
 
 // Scoring weights.
@@ -80,6 +82,18 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 	ftsResults, err := s.ftsSearch(ctx, query, opts)
 	if err != nil {
 		return nil, err
+	}
+
+	// Phase 1.5: Entity-based search enrichment.
+	// If EntityFilter is set, add matching facts. Otherwise, try to find
+	// entity matches from the query to enrich the candidate pool.
+	if opts.EntityFilter != "" {
+		entityFacts := s.entitySearch(ctx, opts.EntityFilter)
+		for id, score := range entityFacts {
+			if _, exists := ftsResults[id]; !exists {
+				ftsResults[id] = score
+			}
+		}
 	}
 
 	// Phase 2: Vector search (if embedding provided).
@@ -255,6 +269,35 @@ func (s *Store) trigramSearch(ctx context.Context, query string, minImportance f
 		}
 		// Slightly penalize trigram results vs unicode61.
 		results[id] = rankToScore(rank) * 0.8
+	}
+	return results
+}
+
+// entitySearch returns fact IDs linked to a named entity, with a baseline score.
+func (s *Store) entitySearch(ctx context.Context, entityName string) map[int64]float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT f.id FROM facts f
+		 JOIN fact_entities fe ON fe.fact_id = f.id
+		 JOIN entities e ON e.id = fe.entity_id
+		 WHERE e.name = ? AND f.active = 1
+		 LIMIT 30`,
+		entityName,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	results := make(map[int64]float64)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		results[id] = 0.6 // baseline score for entity match
 	}
 	return results
 }

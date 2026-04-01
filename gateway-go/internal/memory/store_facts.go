@@ -352,14 +352,23 @@ func (s *Store) PruneNoiseFacts(ctx context.Context, maxImportance float64, maxA
 }
 
 // SupersedeFact marks oldID as superseded by newID and deactivates it.
+// Also records an "evolves" relation in the knowledge graph.
 func (s *Store) SupersedeFact(ctx context.Context, oldID, newID int64) error {
 	s.mu.Lock()
+	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE facts SET active = 0, superseded_by = ?, updated_at = ? WHERE id = ?`,
-		newID, time.Now().UTC().Format(time.RFC3339), oldID,
+		newID, now, oldID,
 	)
 	if err == nil {
 		s.embCacheReady = false
+		// Record the supersede as an "evolves" relation (best-effort).
+		_, _ = s.db.ExecContext(ctx,
+			`INSERT INTO fact_relations (from_fact_id, to_fact_id, relation_type, confidence, created_at)
+			 VALUES (?, ?, ?, 1.0, ?)
+			 ON CONFLICT(from_fact_id, to_fact_id, relation_type) DO NOTHING`,
+			oldID, newID, RelationEvolves, now,
+		)
 	}
 	s.mu.Unlock()
 	if err == nil {
