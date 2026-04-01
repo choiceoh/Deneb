@@ -527,6 +527,32 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 				outputTokens := 0
 				if chunk.Usage != nil {
 					outputTokens = chunk.Usage.CompletionTokens
+
+					// Some providers bundle usage on the finish_reason chunk
+					// instead of (or in addition to) a separate usage-only chunk.
+					// Re-emit corrected message_start so consumeStream captures InputTokens.
+					if chunk.Usage.PromptTokens > 0 {
+						correctedStart, _ := json.Marshal(MessageStart{
+							Message: struct {
+								ID    string `json:"id"`
+								Model string `json:"model"`
+								Usage struct {
+									InputTokens  int `json:"input_tokens"`
+									OutputTokens int `json:"output_tokens"`
+								} `json:"usage"`
+							}{
+								ID:    chunk.ID,
+								Model: chunk.Model,
+								Usage: struct {
+									InputTokens  int `json:"input_tokens"`
+									OutputTokens int `json:"output_tokens"`
+								}{
+									InputTokens: chunk.Usage.PromptTokens,
+								},
+							},
+						})
+						emit(ctx, out, StreamEvent{Type: "message_start", Payload: correctedStart})
+					}
 				}
 
 				mdPayload, _ := json.Marshal(MessageDelta{
