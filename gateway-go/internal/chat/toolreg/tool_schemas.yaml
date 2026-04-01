@@ -489,10 +489,10 @@
       description: Working directory (defaults to workspace root)
     timeout:
       type: number
-      description: "Timeout in seconds (default: 30, max: 300)"
+      description: "Timeout in seconds (default: 30, max: 600)"
       default: 30
       minimum: 1
-      maximum: 300
+      maximum: 600
     background:
       type: boolean
       description: "Run in background immediately, then use process tool to check output"
@@ -501,6 +501,11 @@
       type: boolean
       description: "Return JSON with stdout, stderr, exit_code, runtime_ms instead of plain text"
       default: false
+    env:
+      type: object
+      description: "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered."
+      additionalProperties:
+        type: string
   required:
     - command
 
@@ -518,6 +523,9 @@
     sessionId:
       type: string
       description: Session ID for actions other than list
+    input:
+      type: string
+      description: "Data to write to process stdin (required for write action)"
     timeout:
       type: number
       description: Poll timeout in milliseconds

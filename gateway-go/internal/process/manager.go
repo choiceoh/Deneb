@@ -71,6 +71,13 @@ type TrackedProcess struct {
 	Result *ExecResult `json:"result,omitempty"` // guarded by mu
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
+	stdin  io.WriteCloser // nil unless stdin pipe was created
+
+	// Stream buffers for incremental output during execution.
+	// Non-nil only while the process is running; after completion the
+	// final output is stored in Result.Stdout/Stderr.
+	stdoutBuf *StreamBuffer
+	stderrBuf *StreamBuffer
 }
 
 // ApprovalCallback is called when a command requires approval.
@@ -257,8 +264,16 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		return m.failProcess(tracked, req.ID, time.Now().UnixMilli(), "stderr pipe: "+err.Error())
 	}
 
+	// Create stdin pipe so background processes can receive input via WriteStdin.
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		cancel()
+		return m.failProcess(tracked, req.ID, time.Now().UnixMilli(), "stdin pipe: "+err.Error())
+	}
+
 	tracked.mu.Lock()
 	tracked.cmd = cmd
+	tracked.stdin = stdinPipe
 	tracked.Status = StatusRunning
 	tracked.mu.Unlock()
 	startedAt := time.Now().UnixMilli()
@@ -270,18 +285,24 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
-	// Drain both pipes concurrently. Sequential draining can deadlock when
-	// one pipe fills its OS buffer while we're blocked reading the other.
-	var stdoutBytes, stderrBytes []byte
+	// Drain both pipes concurrently into StreamBuffers. This allows
+	// polling partial output while the process is still running.
+	stdoutSB := NewStreamBuffer(m.maxStdout)
+	stderrSB := NewStreamBuffer(m.maxStdout)
+	tracked.mu.Lock()
+	tracked.stdoutBuf = stdoutSB
+	tracked.stderrBuf = stderrSB
+	tracked.mu.Unlock()
+
 	var drainWg sync.WaitGroup
 	drainWg.Add(2)
 	go func() {
 		defer drainWg.Done()
-		stdoutBytes = drainBounded(stdout, m.maxStdout)
+		drainToBuffer(stdout, stdoutSB)
 	}()
 	go func() {
 		defer drainWg.Done()
-		stderrBytes = drainBounded(stderr, m.maxStdout)
+		drainToBuffer(stderr, stderrSB)
 	}()
 	drainWg.Wait()
 
@@ -293,8 +314,8 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 
 	result := &ExecResult{
 		ID:        req.ID,
-		Stdout:    string(stdoutBytes),
-		Stderr:    string(stderrBytes),
+		Stdout:    stdoutSB.Snapshot(),
+		Stderr:    stderrSB.Snapshot(),
 		StartedAt: startedAt,
 		EndedAt:   endedAt,
 		RuntimeMs: endedAt - startedAt,
@@ -326,6 +347,8 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	tracked.mu.Lock()
 	tracked.Status = result.Status
 	tracked.Result = result
+	tracked.stdoutBuf = nil // release stream buffers after completion
+	tracked.stderrBuf = nil
 	tracked.mu.Unlock()
 	m.logger.Info("process completed", "id", req.ID, "status", result.Status, "exitCode", result.ExitCode, "ms", result.RuntimeMs)
 	return result
@@ -342,6 +365,30 @@ func (m *Manager) ExecuteBackground(ctx context.Context, req ExecRequest) string
 	bgCtx := context.WithoutCancel(ctx)
 	go m.Execute(bgCtx, req)
 	return req.ID
+}
+
+// WriteStdin writes data to a running process's stdin. Returns an error if
+// the process is not found, not running, or stdin is unavailable.
+func (m *Manager) WriteStdin(id string, data string) error {
+	m.mu.RLock()
+	tracked, ok := m.processes[id]
+	m.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("process not found: %s", id)
+	}
+
+	tracked.mu.Lock()
+	defer tracked.mu.Unlock()
+
+	if tracked.Status != StatusRunning {
+		return fmt.Errorf("process not running: %s (status=%s)", id, tracked.Status)
+	}
+	if tracked.stdin == nil {
+		return fmt.Errorf("stdin not available for process: %s", id)
+	}
+	_, err := io.WriteString(tracked.stdin, data)
+	return err
 }
 
 // Kill terminates a running process.
@@ -370,19 +417,31 @@ func (m *Manager) Kill(id string) error {
 // ProcessSnapshot is a point-in-time copy of a TrackedProcess, safe to
 // read/marshal without holding locks.
 type ProcessSnapshot struct {
-	Request ExecRequest `json:"request"`
-	Result  *ExecResult `json:"result,omitempty"`
-	Status  RunStatus   `json:"status"`
+	Request       ExecRequest `json:"request"`
+	Result        *ExecResult `json:"result,omitempty"`
+	Status        RunStatus   `json:"status"`
+	PartialStdout string      `json:"partialStdout,omitempty"`
+	PartialStderr string      `json:"partialStderr,omitempty"`
 }
 
 func (tp *TrackedProcess) snapshot() ProcessSnapshot {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
-	return ProcessSnapshot{
+	snap := ProcessSnapshot{
 		Request: tp.Request,
 		Result:  tp.Result,
 		Status:  tp.Status,
 	}
+	// Include partial output for running processes so poll can show progress.
+	if tp.Status == StatusRunning {
+		if tp.stdoutBuf != nil {
+			snap.PartialStdout = tp.stdoutBuf.Snapshot()
+		}
+		if tp.stderrBuf != nil {
+			snap.PartialStderr = tp.stderrBuf.Snapshot()
+		}
+	}
+	return snap
 }
 
 // Get returns a snapshot of a tracked process by ID, or nil if not found.
