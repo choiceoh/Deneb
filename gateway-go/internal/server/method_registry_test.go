@@ -213,9 +213,69 @@ func TestWiringRules_HandlersDoNotImportHub(t *testing.T) {
 
 // TestWiringRules_ValidateHub verifies that Validate() catches missing required fields.
 func TestWiringRules_ValidateHub(t *testing.T) {
-	// Empty hub should fail validation.
-	hub := &rpcutil.GatewayHub{}
+	// Empty hub (via zero-value config) should fail validation.
+	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
 	if err := hub.Validate(); err == nil {
 		t.Fatal("expected validation error for empty hub, got nil")
 	}
+}
+
+// TestWiringRules_PhaseOrdering verifies that AdvancePhase panics on out-of-order calls.
+func TestWiringRules_PhaseOrdering(t *testing.T) {
+	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
+
+	// Skipping PhaseEarly and jumping to PhaseSession should panic.
+	assertPanics(t, "skip PhaseEarly", func() {
+		hub.AdvancePhase(rpcutil.PhaseSession)
+	})
+
+	// Normal progression should not panic.
+	hub.AdvancePhase(rpcutil.PhaseEarly)
+	if hub.Phase() != rpcutil.PhaseEarly {
+		t.Fatalf("expected PhaseEarly, got %d", hub.Phase())
+	}
+
+	hub.AdvancePhase(rpcutil.PhaseSession)
+	if hub.Phase() != rpcutil.PhaseSession {
+		t.Fatalf("expected PhaseSession, got %d", hub.Phase())
+	}
+
+	hub.AdvancePhase(rpcutil.PhaseLate)
+	if hub.Phase() != rpcutil.PhaseLate {
+		t.Fatalf("expected PhaseLate, got %d", hub.Phase())
+	}
+
+	// Going backwards should panic.
+	assertPanics(t, "backwards to PhaseEarly", func() {
+		hub.AdvancePhase(rpcutil.PhaseEarly)
+	})
+}
+
+// TestWiringRules_SetChatBeforeSessionPhase verifies that SetChat panics before PhaseSession.
+func TestWiringRules_SetChatBeforeSessionPhase(t *testing.T) {
+	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
+
+	// SetChat before PhaseSession should panic.
+	assertPanics(t, "SetChat at PhaseInit", func() {
+		hub.SetChat(nil)
+	})
+
+	hub.AdvancePhase(rpcutil.PhaseEarly)
+	assertPanics(t, "SetChat at PhaseEarly", func() {
+		hub.SetChat(nil)
+	})
+
+	// After PhaseSession, SetChat should succeed.
+	hub.AdvancePhase(rpcutil.PhaseSession)
+	hub.SetChat(nil) // should not panic
+}
+
+func assertPanics(t *testing.T, name string, fn func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("%s: expected panic, got none", name)
+		}
+	}()
+	fn()
 }
