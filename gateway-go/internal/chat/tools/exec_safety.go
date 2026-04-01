@@ -23,12 +23,12 @@ type DestructiveCheck struct {
 // destructivePatterns detects commands that could cause data loss.
 var destructivePatterns = []DestructiveCheck{
 	{
-		Pattern:     regexp.MustCompile(`\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|(-[a-zA-Z]*f[a-zA-Z]*r))\b`),
+		Pattern:     regexp.MustCompile(`\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|(-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)|-[a-zA-Z]*r\s+-[a-zA-Z]*f|-[a-zA-Z]*f\s+-[a-zA-Z]*r)\b`),
 		Description: "recursive force delete (rm -rf)",
 		Severity:    "danger",
 	},
 	{
-		Pattern:     regexp.MustCompile(`\bgit\s+(reset\s+--hard|clean\s+-[a-zA-Z]*f|checkout\s+--\s+\.)`),
+		Pattern:     regexp.MustCompile(`\bgit\s+(reset\s+--hard|clean\s+(-[a-zA-Z]*f|-[a-zA-Z]+\s+-[a-zA-Z]*f)|checkout\s+--\s+\.)`),
 		Description: "destructive git operation",
 		Severity:    "danger",
 	},
@@ -70,6 +70,10 @@ func CheckDestructiveCommand(command string) []DestructiveCheck {
 	var matches []DestructiveCheck
 	for _, check := range destructivePatterns {
 		if check.Pattern.MatchString(command) {
+			// --force-with-lease is a safer alternative to --force; exclude it.
+			if check.Description == "force push" && strings.Contains(command, "--force-with-lease") {
+				continue
+			}
 			matches = append(matches, check)
 		}
 	}
@@ -121,6 +125,6 @@ func DetectFileModification(command string) string {
 }
 
 var (
-	redirectPattern = regexp.MustCompile(`[^|]>\s*[^/&]`) // > file (not >> and not > /dev/null)
+	redirectPattern = regexp.MustCompile(`[^|>]>\s*[^/&>]`) // > file (not >> and not > /dev/null)
 	teePattern      = regexp.MustCompile(`\btee\s+[^|]`)
 )
