@@ -1,3 +1,45 @@
+// Gateway Initialization Sequence
+//
+// server.New():
+//   1. Core structs (ServerTransport, ServerRPC, ServerRuntime, ServerIntegrations)
+//   2. Event infra (Broadcaster, Publisher, KeyCache, GatewaySubs)
+//   3. Process manager, Cron scheduler/service, Hooks registry
+//   4. Monitoring (activity tracker, channel events, auth rate limiter)
+//   5. Provider auth (AuthManager, ProviderRuntime) — conditional
+//   6. Workflow subsystems (approvals, nodes, devices, agents, skills, wizard, secrets)
+//   7. ACP subsystem (registry, bindings, lifecycle sync)
+//   8. RPC Dispatcher + middleware:
+//      a. registerBuiltinMethods() — gateway.status, gateway.ping
+//      b. rpc.RegisterBuiltinMethods() — session.list, session.get, etc.
+//      c. registerExtendedMethods():
+//         - registerAgentMethods() — ACP, agent extended
+//         - registerProviderMethods() — provider CRUD
+//         - registerToolMethods() — tool execution
+//         - registerAuroraMethods() — desktop channel
+//         - registerAuthRPCMethods() — auth tokens
+//         - registerSessionRPCMethods():
+//           * Session state RPC (patch/reset/compact)
+//           * initMemorySubsystem() — unified/aurora/memory stores
+//           * initToolsAndDeps() — core tools, plugin tools, autoresearch
+//           * Chat handler creation (all deps via HandlerConfig)
+//           * SendFn circular-dep wiring + Cron service
+//           * BTW + session exec RPC
+//      d. registerPhase2Methods() — events, config, monitoring, presence
+//      e. registerAdvancedWorkflowMethods() — approvals, agents, autonomous, Gmail poll
+//      f. registerNativeSystemMethods() — system + Telegram plugin
+//   9. Plugin system init
+//
+// initAndListen():
+//  10. HTTP server + TLS
+//  11. Background subsystems (tick broadcaster, monitoring, process pruner, session GC)
+//  12. Telegram plugin start + wireTelegramChatHandler() (channel callbacks)
+//  13. Cron service start + session restore
+//  14. Run state machine + autonomous service
+//
+// GatewayHub (gateway_hub.go):
+//  Central service registry built from Server fields via buildHub().
+//  Replaces per-handler point-to-point Deps wiring with a single hub reference.
+
 package server
 
 import (
