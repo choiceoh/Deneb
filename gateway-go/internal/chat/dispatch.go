@@ -24,6 +24,14 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		sess = h.sessions.Create(params.SessionKey, session.KindDirect)
 	}
 
+	// Inherit model from session state when RunParams doesn't specify one.
+	// This ensures sub-agents (whose Model is set at spawn time on the session
+	// object) actually use the configured model instead of falling through to
+	// the default.
+	if params.Model == "" && sess.Model != "" {
+		params.Model = sess.Model
+	}
+
 	// Transition session to running.
 	h.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
 		Phase: session.PhaseStart,
