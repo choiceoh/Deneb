@@ -38,38 +38,45 @@ type SearchResult struct {
 }
 
 // Scoring weights.
+// Recency is weighted more heavily to prioritize recent session context —
+// the steep initial decay curve ensures only truly fresh facts get the boost.
 const (
-	weightHybrid       = 0.50
+	weightHybrid       = 0.40
 	weightImportance   = 0.25
-	weightRecency      = 0.15
+	weightRecency      = 0.25
 	weightVerification = 0.10
 )
 
 // categoryImportanceMultiplier adjusts the importance weight by fact category.
-// Decisions and preferences constrain future behavior → boost.
-// Context is time-sensitive → attenuate.
+// Decisions, context, and solutions are factual records of what happened → boost.
+// User model and mutual are relational/personality data → keep but don't over-boost.
 var categoryImportanceMultiplier = map[string]float64{
 	CategoryDecision:   1.20,
-	CategoryPreference: 1.10,
-	CategorySolution:   1.00,
-	CategoryContext:    0.80,
-	CategoryUserModel:  1.15,
-	CategoryMutual:     0.90,
+	CategoryPreference: 1.05,
+	CategorySolution:   1.10,
+	CategoryContext:    0.95,
+	CategoryUserModel:  1.00,
+	CategoryMutual:     0.85,
 }
 
-// categoryHalfLifeDays controls recency decay speed per category.
-// Long-lived categories (user_model, decision) decay slowly;
-// ephemeral categories (context) decay fast.
-var categoryHalfLifeDays = map[string]float64{
-	CategoryDecision:   90.0,
-	CategoryPreference: 60.0,
-	CategorySolution:   45.0,
-	CategoryContext:    14.0,
-	CategoryUserModel:  120.0,
-	CategoryMutual:     60.0,
+// categorySteepnessDays controls the inverse-square recency decay per category.
+// The steepness value is the number of days at which score drops to 0.5.
+// Curve: score = 1 / (1 + (days/steepness)²)
+//   - At steepness days:  0.5
+//   - At 2×steepness:     0.2
+//   - At 3×steepness:     0.1
+// Lower values = faster decay. Factual records (decision, context, solution)
+// get higher steepness so recent project history persists across sessions.
+var categorySteepnessDays = map[string]float64{
+	CategoryDecision:   14.0, // important decisions persist ~2 weeks at high score
+	CategoryPreference: 10.0,
+	CategorySolution:   10.0,
+	CategoryContext:    5.0,  // project state: very fresh-biased (1-2 days dominant)
+	CategoryUserModel:  14.0, // user traits: moderate persistence
+	CategoryMutual:     7.0,  // relationship signals: 1-week window
 }
 
-const defaultHalfLifeDays = 30.0
+const defaultSteepnessDays = 7.0
 
 // SearchFacts performs a hybrid FTS + semantic search over active facts,
 // then applies importance and recency weighting.
@@ -379,11 +386,6 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 			adjustedImportance = math.Min(1.0, adjustedImportance*mult)
 		}
 
-		// Category-adaptive recency: different half-lives per category.
-		halfLife := defaultHalfLifeDays
-		if hl, ok := categoryHalfLifeDays[fact.Category]; ok {
-			halfLife = hl
-		}
 		// Content freshness: use UpdatedAt (last verified/corrected) rather than
 		// LastAccessedAt. Access time ≠ content staleness — a stale decision
 		// accessed yesterday is still stale.
@@ -392,7 +394,16 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 			refTime = fact.CreatedAt
 		}
 		daysSince := now.Sub(refTime).Hours() / 24
-		recencyScore := math.Exp(-math.Ln2 * daysSince / halfLife)
+
+		// Recency scoring: steep initial drop → gradual long tail.
+		// Uses inverse-square decay: score = 1 / (1 + (days/steepness)²)
+		// For context (steepness=5): day 0→1.0, day 2→0.86, day 5→0.5, day 10→0.2
+		steepness := defaultSteepnessDays
+		if s, ok := categorySteepnessDays[fact.Category]; ok {
+			steepness = s
+		}
+		ratio := daysSince / steepness
+		recencyScore := 1.0 / (1.0 + ratio*ratio)
 
 		// Verification score: dreaming-verified facts are more trustworthy.
 		// Replaces the old frequency score which amplified noise by boosting

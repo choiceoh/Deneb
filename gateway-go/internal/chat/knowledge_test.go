@@ -351,9 +351,9 @@ func TestVolatileHint(t *testing.T) {
 		age      time.Duration
 		want     string
 	}{
-		{"context fresh", "context", 10 * 24 * time.Hour, ""},
-		{"context needs verification (50%)", "context", 20 * 24 * time.Hour, "확인 필요"},
-		{"context past shelf life", "context", 45 * 24 * time.Hour, "⚠변경 가능"},
+		{"context fresh", "context", 15 * 24 * time.Hour, ""},
+		{"context needs verification (50%)", "context", 25 * 24 * time.Hour, "확인 필요"},
+		{"context past shelf life", "context", 50 * 24 * time.Hour, "⚠변경 가능"},
 		{"preference fresh", "preference", 30 * 24 * time.Hour, ""},
 		{"preference needs verification", "preference", 60 * 24 * time.Hour, "확인 필요"},
 		{"preference past shelf life", "preference", 100 * 24 * time.Hour, "⚠변경 가능"},
@@ -422,8 +422,8 @@ func TestFactTemporalAnnotation(t *testing.T) {
 	t.Run("stale context shows volatility", func(t *testing.T) {
 		f := memory.Fact{
 			Category:  "context",
-			CreatedAt: now.Add(-60 * 24 * time.Hour),
-			UpdatedAt: now.Add(-45 * 24 * time.Hour), // past 30-day shelf life
+			CreatedAt: now.Add(-90 * 24 * time.Hour),
+			UpdatedAt: now.Add(-50 * 24 * time.Hour), // past 45-day shelf life
 		}
 		got := factTemporalAnnotation(f, now)
 		if !strings.Contains(got, "⚠변경 가능") {
