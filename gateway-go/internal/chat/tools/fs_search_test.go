@@ -297,7 +297,9 @@ func TestNormalizeFileType(t *testing.T) {
 		{"shell", "sh"},
 		{"bash", "sh"},
 		{"yml", "yaml"},
-		{"protobuf", "proto"},
+		{"proto", "protobuf"},
+		{"dockerfile", "docker"},
+		{"makefile", "make"},
 		{"", ""},
 		{" go ", "go"},
 	}
