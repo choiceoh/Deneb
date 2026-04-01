@@ -18,7 +18,7 @@
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
 # Uses the latest deneb-v* tag by version sort, regardless of current branch ancestry.
 DENEB_VERSION := $(shell git tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
-GO_LDFLAGS := -ldflags '-X main.Version=$(DENEB_VERSION)'
+GO_LDFLAGS := -ldflags '-s -w -X main.Version=$(DENEB_VERSION)'
 
 # Fix NO_PROXY for Claude Code web containers: Go module proxy uses googleapis.com,
 # but NO_PROXY includes *.googleapis.com which makes Go bypass the egress proxy and
@@ -126,7 +126,7 @@ go-lint-all:
 	cd gateway-go && golangci-lint run ./...
 
 go-binary: rust go
-	cd gateway-go && $(GO_ENV) go build $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
+	cd gateway-go && $(GO_ENV) go build -trimpath $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
 
 # Build production gateway: Go binary + CLI, copies both to dist/.
 gateway-prod: go-binary cli

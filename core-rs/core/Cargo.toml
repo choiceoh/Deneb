@@ -41,7 +41,6 @@ sha2.workspace = true
 
 # Timezone-aware timestamps (compaction)
 chrono.workspace = true
-chrono-tz.workspace = true
 
 # Markdown parsing
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
