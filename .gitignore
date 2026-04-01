@@ -50,3 +50,4 @@ gateway-go/deneb-gateway
 # Generated docs
 docs/.generated/config-baseline.json
 docs/.generated/config-baseline.jsonl
+.autoresearch/
