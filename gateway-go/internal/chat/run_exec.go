@@ -191,7 +191,6 @@ func executeAgentRun(
 	// Snapshot immutable query config once. All subsequent code uses qCfg
 	// for consistent values (model, budget, limits) rather than re-reading.
 	qCfg := BuildQueryConfig(params, model, providerID, workspaceDir)
-	_ = qCfg // used by budget tracker and transition recording below
 
 	runLog.LogStart(agentlog.RunStartData{
 		Model:    model,
@@ -1075,6 +1074,7 @@ func executeAgentRun(
 			logger.Info("budget tracker: diminishing returns detected, stopping",
 				"continuations", decision.ContinuationCount,
 				"pct", decision.Pct)
+			break
 		}
 		lastTransition = NewTerminal(TerminalCompleted, nil)
 		break
