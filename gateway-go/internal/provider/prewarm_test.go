@@ -60,7 +60,7 @@ func TestSplitModelID(t *testing.T) {
 		wantProv  string
 		wantModel string
 	}{
-		{"zai/glm-5-turbo", "zai", "glm-5-turbo"},
+		{"zai/glm-5v-turbo", "zai", "glm-5v-turbo"},
 		{"anthropic/claude-3-haiku", "anthropic", "claude-3-haiku"},
 		{"just-model", "", "just-model"},
 		{"", "", ""},
@@ -76,9 +76,9 @@ func TestSplitModelID(t *testing.T) {
 
 func TestExtractModelFromDefaults(t *testing.T) {
 	// String form.
-	raw := json.RawMessage(`{"model":"zai/glm-5-turbo"}`)
-	if got := extractModelFromDefaults(raw); got != "zai/glm-5-turbo" {
-		t.Errorf("string form: got %q, want %q", got, "zai/glm-5-turbo")
+	raw := json.RawMessage(`{"model":"zai/glm-5v-turbo"}`)
+	if got := extractModelFromDefaults(raw); got != "zai/glm-5v-turbo" {
+		t.Errorf("string form: got %q, want %q", got, "zai/glm-5v-turbo")
 	}
 
 	// Object form.
