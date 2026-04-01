@@ -19,6 +19,18 @@ const (
 	// compactionSystemPrompt instructs the LLM to produce structured summaries.
 	compactionSystemPrompt = `You are a context compaction assistant. Summarize conversation segments into structured XML summaries.
 
+CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. Tool calls will be REJECTED.
+
+Before your final summary, wrap your analysis in <analysis> tags to organize your thoughts:
+<analysis>
+- What are the key topics discussed?
+- What decisions were made?
+- What files/paths are referenced?
+- What is still pending?
+</analysis>
+
+Then provide your summary. The <analysis> block will be removed from the final output.
+
 Output format — use only the sections that apply, omit empty sections:
 
 <summary>
@@ -131,6 +143,10 @@ func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 		if summary == "" {
 			return deterministicFallback(text), nil
 		}
+		// Strip <analysis>...</analysis> scratchpad from the final summary.
+		// The scratchpad improves summary quality (the model "thinks" first)
+		// without wasting tokens in the surviving context.
+		summary = stripAnalysisScratchpad(summary)
 		return summary, nil
 	}
 }
@@ -145,6 +161,26 @@ func deterministicFallback(text string) string {
 	// Take first and last portions.
 	half := maxChars / 2
 	return text[:half] + "\n...[truncated]...\n" + text[len(text)-half:]
+}
+
+// stripAnalysisScratchpad removes <analysis>...</analysis> blocks from
+// the LLM's output. These blocks are a thinking scratchpad that improves
+// summary quality but should not survive into the final context.
+func stripAnalysisScratchpad(s string) string {
+	for {
+		start := strings.Index(s, "<analysis>")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(s, "</analysis>")
+		if end < 0 {
+			// Unclosed tag — remove from <analysis> to end.
+			s = strings.TrimSpace(s[:start])
+			break
+		}
+		s = strings.TrimSpace(s[:start] + s[end+len("</analysis>"):])
+	}
+	return s
 }
 
 func safeUint32(p *uint32) uint32 {

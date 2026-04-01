@@ -47,6 +47,29 @@ func TestDeterministicFallback_Empty(t *testing.T) {
 	}
 }
 
+func TestStripAnalysisScratchpad(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no analysis", "<summary>hello</summary>", "<summary>hello</summary>"},
+		{"with analysis", "<analysis>thinking...</analysis>\n<summary>result</summary>", "<summary>result</summary>"},
+		{"unclosed tag", "<analysis>thinking...\n<summary>result</summary>", ""},
+		{"empty", "", ""},
+		{"analysis only", "<analysis>just thinking</analysis>", ""},
+		{"multiple", "<analysis>a</analysis>before<analysis>b</analysis>after", "beforeafter"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripAnalysisScratchpad(tt.input)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSafeUint32_Nil(t *testing.T) {
 	if safeUint32(nil) != 0 {
 		t.Error("expected 0 for nil pointer")

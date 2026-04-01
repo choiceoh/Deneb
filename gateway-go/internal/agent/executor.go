@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
@@ -298,38 +299,93 @@ func RunAgent(
 			}
 		} else {
 			// Legacy path: execute all tools after stream ends.
+			// Smart batching: consecutive read-only tools run concurrently (max 10),
+			// write tools run serially. Sibling error cancellation stops remaining
+			// tools in a batch on failure.
 			if !streamingDispatch {
 				turnReason = extractThinkingText(turnRes.contentBlocks)
 			}
 			toolResults = make([]llm.ContentBlock, len(turnRes.toolCalls))
-			var wg sync.WaitGroup
-			for i, tc := range turnRes.toolCalls {
-				wg.Add(1)
-				go func(idx int, tc llm.ContentBlock) {
-					defer wg.Done()
-					toolResults[idx] = executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog)
-				}(i, tc)
+
+			// Partition tool calls into concurrent/serial batches.
+			type toolBatch struct {
+				indices    []int
+				concurrent bool
+			}
+			var batches []toolBatch
+			{
+				var curBatch toolBatch
+				flush := func() {
+					if len(curBatch.indices) > 0 {
+						batches = append(batches, curBatch)
+						curBatch = toolBatch{}
+					}
+				}
+				for i, tc := range turnRes.toolCalls {
+					if isReadOnlyTool(tc.Name) {
+						if !curBatch.concurrent && len(curBatch.indices) > 0 {
+							flush()
+						}
+						curBatch.concurrent = true
+						curBatch.indices = append(curBatch.indices, i)
+					} else {
+						flush()
+						batches = append(batches, toolBatch{indices: []int{i}, concurrent: false})
+					}
+				}
+				flush()
 			}
 
-			wgDone := make(chan struct{})
-			go func() { wg.Wait(); close(wgDone) }()
-			select {
-			case <-wgDone:
-			case <-ctx.Done():
+			// Execute batches: concurrent batches run in parallel with sibling
+			// error cancellation; serial batches run one at a time.
+			for _, batch := range batches {
+				if ctx.Err() != nil {
+					break
+				}
+				if !batch.concurrent || len(batch.indices) == 1 {
+					for _, idx := range batch.indices {
+						if ctx.Err() != nil {
+							break
+						}
+						toolResults[idx] = executeOneTool(ctx, turnRes.toolCalls[idx], tools, hooks, turnReason, turn, logger, runLog)
+					}
+				} else {
+					var batchWg sync.WaitGroup
+					sem := make(chan struct{}, maxToolConcurrency)
+					var firstErr int32
+					for _, idx := range batch.indices {
+						batchWg.Add(1)
+						sem <- struct{}{}
+						go func(i int) {
+							defer batchWg.Done()
+							defer func() { <-sem }()
+							if atomic.LoadInt32(&firstErr) != 0 {
+								toolResults[i] = llm.ContentBlock{
+									Type:      "tool_result",
+									ToolUseID: turnRes.toolCalls[i].ID,
+									Content:   "skipped: sibling tool error",
+									IsError:   true,
+								}
+								return
+							}
+							toolResults[i] = executeOneTool(ctx, turnRes.toolCalls[i], tools, hooks, turnReason, turn, logger, runLog)
+							if toolResults[i].IsError {
+								atomic.StoreInt32(&firstErr, 1)
+							}
+						}(idx)
+					}
+					batchWg.Wait()
+				}
+			}
+
+			// Check context cancellation after tool execution.
+			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
 				for _, tc := range turnRes.toolCalls {
 					result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
 				}
 				return result, nil
 			}
-		}
-
-		if ctx.Err() != nil {
-			result.StopReason = stopReasonFromCtx(ctx)
-			for _, tc := range turnRes.toolCalls {
-				result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
-			}
-			return result, nil
 		}
 
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
@@ -340,6 +396,20 @@ func RunAgent(
 	result.MaxTokensRecoveries = maxTokensRecoveryCount
 	return result, nil
 }
+
+// maxToolConcurrency is the maximum number of read-only tools that can
+// execute concurrently in a single batch.
+const maxToolConcurrency = 10
+
+// readOnlyToolSet lists tools safe for concurrent execution.
+var readOnlyToolSet = map[string]bool{
+	"read": true, "grep": true, "glob": true, "find": true,
+	"tree": true, "process": true, "kv": true, "knowledge": true,
+	"memory": true,
+}
+
+// isReadOnlyTool returns true if the tool name is safe for concurrent execution.
+func isReadOnlyTool(name string) bool { return readOnlyToolSet[name] }
 
 // turnResult holds the parsed output of a single LLM turn.
 type turnResult struct {
