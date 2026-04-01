@@ -66,7 +66,7 @@ const (
 
 	DefaultGoogleBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 	DefaultPilotModel    = "gemini-3-flash-preview"
-	DefaultFallbackModel = "gemini-3.1-pro"
+	DefaultFallbackModel = "gemini-3.1-pro-preview"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
