@@ -560,7 +560,7 @@ func executeAgentRunWithDelta(
 	deps runDeps,
 	onDelta func(string),
 	logger *slog.Logger,
-) (*agent.AgentResult, error) {
+) (*chatRunResult, error) {
 	deltaRaw := streaming.BroadcastRawFunc(func(event string, data []byte) int {
 		if onDelta == nil || event != "chat.delta" {
 			return 0

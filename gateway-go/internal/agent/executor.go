@@ -54,6 +54,17 @@ func RunAgent(
 
 	result := &AgentResult{}
 
+	// Max-output-tokens recovery: tracks how many times we've auto-resumed
+	// after the LLM response was truncated by max_tokens.
+	var maxTokensRecoveryCount int
+
+	// Nudge budget continuation: tracks how many times we've injected a nudge
+	// message after end_turn to prompt the LLM for remaining work.
+	var nudgeContinuationCount int
+	// recentNudgeDeltas tracks output tokens produced on the last 2 nudge turns
+	// for diminishing-returns detection.
+	var recentNudgeDeltas [2]int
+
 	for turn := 0; turn < cfg.MaxTurns; turn++ {
 		result.Turns = turn + 1
 
@@ -100,8 +111,50 @@ func RunAgent(
 			return nil, fmt.Errorf("stream chat (turn %d): %w", turn, err)
 		}
 
+		// Allocate turnResult outside consumeStream so streaming tool dispatch
+		// callbacks can safely read contentBlocks (thinking blocks precede tool_use
+		// in stream order, so they are populated by the time OnToolBlockReady fires).
+		turnRes := &turnResult{}
+
+		// --- Streaming tool dispatch setup ---
+		// When enabled, tool execution starts as soon as each tool_use block
+		// finishes streaming, rather than waiting for the entire response.
+		var (
+			streamingDispatch bool
+			streamResultsCh   []chan llm.ContentBlock
+			streamMu          sync.Mutex
+			streamWg          sync.WaitGroup
+			turnReasonOnce    sync.Once
+			turnReason        string
+		)
+
+		dispatchHooks := hooks
+		if cfg.StreamingToolExecution && tools != nil {
+			streamingDispatch = true
+			dispatchHooks.OnToolBlockReady = func(tc llm.ContentBlock, idx int) {
+				// Compute turnReason once (thinking blocks precede tool_use in stream order).
+				turnReasonOnce.Do(func() {
+					turnReason = extractThinkingText(turnRes.contentBlocks)
+				})
+
+				ch := make(chan llm.ContentBlock, 1)
+				streamMu.Lock()
+				for len(streamResultsCh) <= idx {
+					streamResultsCh = append(streamResultsCh, nil)
+				}
+				streamResultsCh[idx] = ch
+				streamMu.Unlock()
+
+				streamWg.Add(1)
+				go func() {
+					defer streamWg.Done()
+					ch <- executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog)
+				}()
+			}
+		}
+
 		// Consume the stream for this turn.
-		turnRes, err := consumeStream(ctx, events, hooks)
+		err = consumeStreamInto(ctx, events, dispatchHooks, turnRes)
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
@@ -136,12 +189,75 @@ func RunAgent(
 			result.Text = turnRes.text
 		}
 
-		// Check stop reason.
+		// --- Max-output-tokens recovery ---
+		// When the LLM response is truncated by max_tokens (not a clean end_turn),
+		// inject a "resume" message and retry. This prevents losing partially
+		// generated code or explanations.
+		if turnRes.stopReason == "max_tokens" && len(turnRes.toolCalls) == 0 &&
+			cfg.MaxOutputTokensRecovery > 0 && maxTokensRecoveryCount < cfg.MaxOutputTokensRecovery {
+			maxTokensRecoveryCount++
+			logger.Info("max_tokens recovery: injecting resume message",
+				"attempt", maxTokensRecoveryCount,
+				"maxAttempts", cfg.MaxOutputTokensRecovery)
+			// Append the truncated assistant output so the LLM sees what it already wrote.
+			messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+			// Inject a user-role resume prompt.
+			messages = append(messages, llm.NewTextMessage("user",
+				"[Output was truncated due to token limit. Resume directly from where you left off without repeating what was already said.]"))
+			continue
+		}
+
+		// --- Check stop reason ---
 		if turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0 {
+			// --- Nudge budget continuation ---
+			// If the agent finished normally but the token budget is not exhausted,
+			// inject a nudge message to prompt for remaining work.
+			if cfg.NudgeBudget != nil && turnRes.stopReason == "end_turn" && turn > 0 {
+				nb := cfg.NudgeBudget
+				maxConts := nb.MaxContinuations
+				if maxConts <= 0 {
+					maxConts = 3
+				}
+				threshold := nb.BudgetThreshold
+				if threshold <= 0 {
+					threshold = 0.9
+				}
+				minDelta := nb.MinDeltaTokens
+				if minDelta <= 0 {
+					minDelta = 500
+				}
+
+				totalTokens := result.Usage.InputTokens + result.Usage.OutputTokens
+				// Budget is estimated from MaxTurns * MaxTokens as a rough ceiling.
+				estimatedBudget := cfg.MaxTurns * cfg.MaxTokens
+				budgetUsed := float64(totalTokens) / float64(estimatedBudget)
+
+				// Check diminishing returns: if last 2 nudge deltas were both < minDelta, stop.
+				diminishing := nudgeContinuationCount >= 2 &&
+					recentNudgeDeltas[0] < minDelta && recentNudgeDeltas[1] < minDelta
+
+				if nudgeContinuationCount < maxConts && budgetUsed < threshold && !diminishing {
+					nudgeContinuationCount++
+					// Track output tokens for this nudge turn.
+					recentNudgeDeltas[nudgeContinuationCount%2] = turnRes.usage.OutputTokens
+
+					logger.Info("nudge continuation: prompting for remaining work",
+						"continuation", nudgeContinuationCount,
+						"maxContinuations", maxConts,
+						"budgetUsed", fmt.Sprintf("%.1f%%", budgetUsed*100))
+					messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+					messages = append(messages, llm.NewTextMessage("user",
+						"[Continue: check if there's anything else to do for this task. If the task is fully complete, respond with a brief summary.]"))
+					continue
+				}
+			}
+
 			result.StopReason = turnRes.stopReason
 			if result.StopReason == "" {
 				result.StopReason = "end_turn"
 			}
+			result.NudgeContinuations = nudgeContinuationCount
+			result.MaxTokensRecoveries = maxTokensRecoveryCount
 			return result, nil
 		}
 
@@ -157,102 +273,55 @@ func RunAgent(
 		// Build assistant message with all content blocks from this turn.
 		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 
-		// Extract raw thinking text from this turn's thinking blocks.
-		// Passed to OnToolStart so channel integrations can summarize it via lightweight LLM.
-		turnReason := extractThinkingText(turnRes.contentBlocks)
+		// Execute tools and collect results.
+		var toolResults []llm.ContentBlock
 
-		// Execute tools in parallel and build tool_result blocks.
-		// Each goroutine writes to its own index — no mutex needed for the slice.
-		toolResults := make([]llm.ContentBlock, len(turnRes.toolCalls))
-		var wg sync.WaitGroup
-		for i, tc := range turnRes.toolCalls {
-			wg.Add(1)
-			go func(idx int, tc llm.ContentBlock) {
-				defer wg.Done()
-				if hooks.OnToolStart != nil {
-					hooks.OnToolStart(tc.Name, turnReason)
+		if streamingDispatch && len(turnRes.toolCalls) > 0 {
+			// Streaming path: tools were dispatched during stream consumption.
+			// Wait for all dispatched goroutines to finish.
+			streamDone := make(chan struct{})
+			go func() { streamWg.Wait(); close(streamDone) }()
+			select {
+			case <-streamDone:
+			case <-ctx.Done():
+				result.StopReason = stopReasonFromCtx(ctx)
+				for _, tc := range turnRes.toolCalls {
+					result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
 				}
-				if hooks.OnToolEmit != nil {
-					hooks.OnToolEmit(tc.Name, tc.ID)
-				}
-				logger.Info("exec", "name", tc.Name, "turn", turn)
-
-				// Plugin hook: allow blocking tool execution before it starts.
-				if hooks.OnBeforeToolCall != nil {
-					if block, reason := hooks.OnBeforeToolCall(tc.Name, tc.ID, tc.Input); block {
-						logger.Info("tool blocked by hook", "name", tc.Name, "reason", reason)
-						toolResults[idx] = llm.ContentBlock{
-							Type:      "tool_result",
-							ToolUseID: tc.ID,
-							Content:   fmt.Sprintf("Tool blocked: %s", reason),
-							IsError:   true,
-						}
-						if hooks.OnToolResult != nil {
-							hooks.OnToolResult(tc.Name, tc.ID, reason, true)
-						}
-						return
-					}
-				}
-
-				start := time.Now()
-				var toolOutput string
-				var toolErr error
-				if tools != nil {
-					toolOutput, toolErr = tools.Execute(ctx, tc.Name, tc.Input)
-				} else {
-					toolErr = fmt.Errorf("no tool executor configured")
-				}
-				elapsed := time.Since(start)
-
-				block := llm.ContentBlock{
-					Type:      "tool_result",
-					ToolUseID: tc.ID,
-				}
-				if toolErr != nil {
-					block.Content = fmt.Sprintf("Error: %s", toolErr.Error())
-					block.IsError = true
-				} else {
-					block.Content = toolOutput
-				}
-				toolResults[idx] = block
-
-				// Broadcast tool result to streaming clients.
-				if hooks.OnToolResult != nil {
-					hooks.OnToolResult(tc.Name, tc.ID, block.Content, block.IsError)
-				}
-
-				// Log tool execution to agent detail log.
-				if runLog != nil {
-					td := agentlog.TurnToolData{
-						Turn:       turn + 1,
-						Name:       tc.Name,
-						DurationMs: elapsed.Milliseconds(),
-						OutputLen:  len(block.Content),
-						IsError:    block.IsError,
-					}
-					if block.IsError {
-						td.Error = block.Content
-					}
-					runLog.LogTurnTool(td)
-				}
-			}(i, tc)
-		}
-
-		// Wait for all tool goroutines, but bail immediately if ctx is cancelled
-		// (agent abort/kill). The goroutines still run to completion in the
-		// background — they hold their own index and don't share state.
-		wgDone := make(chan struct{})
-		go func() { wg.Wait(); close(wgDone) }()
-		select {
-		case <-wgDone:
-		case <-ctx.Done():
-			result.StopReason = stopReasonFromCtx(ctx)
-			// Capture in-flight tool names so the caller can persist
-			// interrupted context to the transcript for the next run.
-			for _, tc := range turnRes.toolCalls {
-				result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
+				return result, nil
 			}
-			return result, nil
+
+			// Collect results in order from per-tool channels.
+			toolResults = make([]llm.ContentBlock, len(streamResultsCh))
+			for i, ch := range streamResultsCh {
+				toolResults[i] = <-ch
+			}
+		} else {
+			// Legacy path: execute all tools after stream ends.
+			if !streamingDispatch {
+				turnReason = extractThinkingText(turnRes.contentBlocks)
+			}
+			toolResults = make([]llm.ContentBlock, len(turnRes.toolCalls))
+			var wg sync.WaitGroup
+			for i, tc := range turnRes.toolCalls {
+				wg.Add(1)
+				go func(idx int, tc llm.ContentBlock) {
+					defer wg.Done()
+					toolResults[idx] = executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog)
+				}(i, tc)
+			}
+
+			wgDone := make(chan struct{})
+			go func() { wg.Wait(); close(wgDone) }()
+			select {
+			case <-wgDone:
+			case <-ctx.Done():
+				result.StopReason = stopReasonFromCtx(ctx)
+				for _, tc := range turnRes.toolCalls {
+					result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
+				}
+				return result, nil
+			}
 		}
 
 		if ctx.Err() != nil {
@@ -267,6 +336,8 @@ func RunAgent(
 	}
 
 	result.StopReason = "max_turns"
+	result.NudgeContinuations = nudgeContinuationCount
+	result.MaxTokensRecoveries = maxTokensRecoveryCount
 	return result, nil
 }
 
@@ -279,11 +350,14 @@ type turnResult struct {
 	usage         llm.TokenUsage
 }
 
-// consumeStream reads all events from a streaming LLM response and assembles
-// the turn result. Handles both Anthropic and OpenAI SSE formats.
-func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks) (*turnResult, error) {
-	result := &turnResult{}
-
+// consumeStreamInto reads all events from a streaming LLM response and
+// populates the provided turnResult. The caller allocates result so that
+// streaming tool dispatch callbacks can safely read contentBlocks during
+// consumption (thinking blocks precede tool_use in Anthropic stream order).
+//
+// When hooks.OnToolBlockReady is set, it is called synchronously on each
+// content_block_stop for tool_use blocks, enabling streaming tool dispatch.
+func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks, result *turnResult) error {
 	// Track current content block being built.
 	type blockBuilder struct {
 		block   llm.ContentBlock
@@ -295,10 +369,10 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 	for {
 		select {
 		case <-ctx.Done():
-			return result, ctx.Err()
+			return ctx.Err()
 		case ev, ok := <-events:
 			if !ok {
-				return result, nil
+				return nil
 			}
 
 			switch ev.Type {
@@ -345,6 +419,10 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 					switch currentBlock.block.Type {
 					case "tool_use":
 						result.toolCalls = append(result.toolCalls, currentBlock.block)
+						// Streaming tool dispatch: notify caller this tool_use block is ready.
+						if hooks.OnToolBlockReady != nil {
+							hooks.OnToolBlockReady(currentBlock.block, len(result.toolCalls)-1)
+						}
 					case "text":
 						result.text += currentBlock.block.Text
 					case "thinking":
@@ -365,13 +443,93 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 
 			case "message_stop":
 				// Stream complete for this turn.
-				return result, nil
+				return nil
 
 			case "error":
-				return result, fmt.Errorf("stream error: %s", string(ev.Payload))
+				return fmt.Errorf("stream error: %s", string(ev.Payload))
 			}
 		}
 	}
+}
+
+// executeOneTool runs a single tool call and returns the tool_result content block.
+// Used by both the legacy (post-stream) and streaming (during-stream) dispatch paths.
+func executeOneTool(
+	ctx context.Context,
+	tc llm.ContentBlock,
+	tools ToolExecutor,
+	hooks StreamHooks,
+	turnReason string,
+	turn int,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+) llm.ContentBlock {
+	if hooks.OnToolStart != nil {
+		hooks.OnToolStart(tc.Name, turnReason)
+	}
+	if hooks.OnToolEmit != nil {
+		hooks.OnToolEmit(tc.Name, tc.ID)
+	}
+	logger.Info("exec", "name", tc.Name, "turn", turn)
+
+	// Plugin hook: allow blocking tool execution before it starts.
+	if hooks.OnBeforeToolCall != nil {
+		if block, reason := hooks.OnBeforeToolCall(tc.Name, tc.ID, tc.Input); block {
+			logger.Info("tool blocked by hook", "name", tc.Name, "reason", reason)
+			result := llm.ContentBlock{
+				Type:      "tool_result",
+				ToolUseID: tc.ID,
+				Content:   fmt.Sprintf("Tool blocked: %s", reason),
+				IsError:   true,
+			}
+			if hooks.OnToolResult != nil {
+				hooks.OnToolResult(tc.Name, tc.ID, reason, true)
+			}
+			return result
+		}
+	}
+
+	start := time.Now()
+	var toolOutput string
+	var toolErr error
+	if tools != nil {
+		toolOutput, toolErr = tools.Execute(ctx, tc.Name, tc.Input)
+	} else {
+		toolErr = fmt.Errorf("no tool executor configured")
+	}
+	elapsed := time.Since(start)
+
+	block := llm.ContentBlock{
+		Type:      "tool_result",
+		ToolUseID: tc.ID,
+	}
+	if toolErr != nil {
+		block.Content = fmt.Sprintf("Error: %s", toolErr.Error())
+		block.IsError = true
+	} else {
+		block.Content = toolOutput
+	}
+
+	// Broadcast tool result to streaming clients.
+	if hooks.OnToolResult != nil {
+		hooks.OnToolResult(tc.Name, tc.ID, block.Content, block.IsError)
+	}
+
+	// Log tool execution to agent detail log.
+	if runLog != nil {
+		td := agentlog.TurnToolData{
+			Turn:       turn + 1,
+			Name:       tc.Name,
+			DurationMs: elapsed.Milliseconds(),
+			OutputLen:  len(block.Content),
+			IsError:    block.IsError,
+		}
+		if block.IsError {
+			td.Error = block.Content
+		}
+		runLog.LogTurnTool(td)
+	}
+	return block
 }
 
 // extractThinkingText returns the raw reasoning text from a turn's content
