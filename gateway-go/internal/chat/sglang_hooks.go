@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -172,51 +171,6 @@ func deferredProactiveHint(ch <-chan string, start time.Time, logger *slog.Logge
 		default:
 		}
 		return ""
-	}
-}
-
-// deferredMultiHint chains proactive hints and recall results into a single
-// DeferredSystemText function. On each turn 1+ call, non-blocking checks both
-// channels and returns combined text. Once both are consumed, returns "".
-func deferredMultiHint(proactiveCh <-chan string, recallCh <-chan string, recallConsumed *atomic.Bool, start time.Time, logger *slog.Logger) func() string {
-	var proactiveDone bool
-	return func() string {
-		var parts []string
-
-		// Check proactive hint.
-		if !proactiveDone {
-			select {
-			case hint := <-proactiveCh:
-				proactiveDone = true
-				if hint != "" {
-					logger.Info("proactive context hit (deferred injection)",
-						"chars", len(hint),
-						"elapsedMs", time.Since(start).Milliseconds())
-					parts = append(parts, "\n## Context Hint (from local analysis)\n"+hint)
-				}
-			default:
-			}
-		}
-
-		// Check recall result.
-		if !recallConsumed.Load() {
-			select {
-			case recallText := <-recallCh:
-				recallConsumed.Store(true)
-				if recallText != "" {
-					logger.Info("recall: deferred injection (turn 1+)",
-						"chars", len(recallText),
-						"elapsedMs", time.Since(start).Milliseconds())
-					parts = append(parts, recallText)
-				}
-			default:
-			}
-		}
-
-		if len(parts) == 0 {
-			return ""
-		}
-		return strings.Join(parts, "\n")
 	}
 }
 

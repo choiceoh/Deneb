@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ type memoryParams struct {
 // ToolMemory creates the unified memory tool that combines structured fact store
 // with file-based memory search. Degrades gracefully when memory store is nil
 // (falls back to file-based search only).
-func ToolMemory(d *toolctx.VegaDeps, workspaceDir string) ToolFunc {
+func ToolMemory(d *toolctx.VegaDeps, workspaceDir string, logger *slog.Logger) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p memoryParams
 		if err := jsonutil.UnmarshalInto("memory params", input, &p); err != nil {
@@ -46,10 +47,12 @@ func ToolMemory(d *toolctx.VegaDeps, workspaceDir string) ToolFunc {
 			return memoryForget(ctx, d, p)
 		case "browse":
 			return memoryBrowse(ctx, d, p)
+		case "recall":
+			return memoryRecall(ctx, d, p, logger)
 		case "status":
 			return memoryStatus(ctx, d, workspaceDir)
 		default:
-			return "", fmt.Errorf("unknown action: %s (use: search, get, set, forget, status, browse)", p.Action)
+			return "", fmt.Errorf("unknown action: %s (use: search, get, set, forget, recall, status, browse)", p.Action)
 		}
 	}
 }
@@ -403,4 +406,27 @@ func boolLabel(b bool) string {
 		return "enabled"
 	}
 	return "disabled"
+}
+
+// memoryRecall performs deep memory recall with entity expansion, relation chain
+// traversal, and pilot LLM organization. Use when the agent needs rich context
+// about past conversations, decisions, or user preferences.
+func memoryRecall(ctx context.Context, d *toolctx.VegaDeps, p memoryParams, logger *slog.Logger) (string, error) {
+	if p.Query == "" {
+		return "", fmt.Errorf("query is required for recall")
+	}
+	if d.MemoryStore == nil {
+		return "[memory store not configured]", nil
+	}
+	if d.RecallClient == nil {
+		// Fallback to basic search when recall LLM is unavailable.
+		return memorySearch(ctx, d, "", p)
+	}
+
+	result := memory.Recall(ctx, d.MemoryStore, d.MemoryEmbedder,
+		d.RecallClient, d.RecallModel, p.Query, memory.DefaultRecallConfig(), logger)
+	if result == "" {
+		return fmt.Sprintf("No recalled memories for %q.", p.Query), nil
+	}
+	return result, nil
 }

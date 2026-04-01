@@ -7,6 +7,8 @@
 package toolreg
 
 import (
+	"log/slog"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/polaris"
@@ -134,7 +136,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Name:        "memory",
 		Description: "Unified memory: search facts + files, get/set/forget individual facts, view status. Actions: search (default), get, set, forget, status",
 		InputSchema: memoryToolSchema(),
-		Fn:          tools.ToolMemory(&deps.Vega, workspaceDir),
+		Fn:          tools.ToolMemory(&deps.Vega, workspaceDir, slog.Default()),
 	})
 	// Polaris: requires sglang deps for local LLM and uses a read-only executor.
 	var polarisDeps polaris.Deps
