@@ -159,3 +159,77 @@ Done`,
 		})
 	}
 }
+
+func TestStripFencedCodeBlocks(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "removes fenced code block",
+			in:   "확인해볼게\n```bash\ncd /tmp && gh pr view 919\n```\n완료",
+			want: "확인해볼게\n\n완료",
+		},
+		{
+			name: "removes code block without language tag",
+			in:   "작업 시작\n```\ngit status\n```",
+			want: "작업 시작",
+		},
+		{
+			name: "removes multiple code blocks",
+			in:   "먼저\n```go\nfmt.Println()\n```\n그리고\n```bash\nmake test\n```\n끝",
+			want: "먼저\n\n그리고\n\n끝",
+		},
+		{
+			name: "keeps text without code blocks",
+			in:   "안녕하세요, 확인했습니다.",
+			want: "안녕하세요, 확인했습니다.",
+		},
+		{
+			name: "returns empty for code-only content",
+			in:   "```bash\ngh pr view 919 --json title\n```",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StripFencedCodeBlocks(tt.in); got != tt.want {
+				t.Fatalf("StripFencedCodeBlocks() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeDraftText(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "strips code block and tool call markup",
+			in:   "확인해볼게 🐾\n```bash\ncd ~/.deneb && gh pr view 919\n```\n<tool_call>\n{}\n</tool_call>",
+			want: "확인해볼게 🐾",
+		},
+		{
+			name: "returns empty for command-only content",
+			in:   "```bash\ngit status\n```",
+			want: "",
+		},
+		{
+			name: "preserves normal text",
+			in:   "PR을 확인하겠습니다.",
+			want: "PR을 확인하겠습니다.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SanitizeDraftText(tt.in); got != tt.want {
+				t.Fatalf("SanitizeDraftText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
