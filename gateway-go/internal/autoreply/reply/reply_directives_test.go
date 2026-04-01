@@ -75,6 +75,17 @@ func TestParseReplyDirectives_MediaToken(t *testing.T) {
 	}
 }
 
+func TestParseReplyDirectives_StripsLeakedToolCall(t *testing.T) {
+	raw := "<function=read>\n<arg_key>file_path</arg_key>\n<arg_value>/tmp/test.go</arg_value>\n</tool_call>\n작업을 완료했습니다."
+	result := ParseReplyDirectives(raw, "", "")
+	if strings.Contains(result.Text, "<function=") {
+		t.Fatalf("leaked tool-call markup should be stripped, got %q", result.Text)
+	}
+	if result.Text != "작업을 완료했습니다." {
+		t.Fatalf("expected cleaned text, got %q", result.Text)
+	}
+}
+
 // --- splitMediaFromOutput tests ---
 
 func TestSplitMediaFromOutput_MediaToken(t *testing.T) {

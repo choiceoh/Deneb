@@ -266,6 +266,10 @@ func splitMediaFromOutput(raw string) (text string, mediaURLs []string, mediaURL
 func ParseReplyDirectives(raw string, currentMessageID string, silentToken string) ReplyDirectiveParseResult {
 	text, mediaURLs, mediaURL, audioAsVoice := splitMediaFromOutput(raw)
 
+	// Strip leaked tool-call markup (e.g. "<function=read>...</tool_call>")
+	// that some models emit as text before or instead of structured tool_use blocks.
+	text = StripLeakedToolCallMarkup(text)
+
 	// Extract reply threading tags.
 	replyToID, replyToCurrent := tokens.ApplyReplyThreading(text, "")
 	hasReplyTag := replyToCurrent || replyToID != ""
