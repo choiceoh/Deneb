@@ -325,7 +325,8 @@ func (h *Handler) buildRunDeps() runDeps {
 			// panic recovery, runStateMachine, session state transitions).
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
-		maxContinuations: 5,
+		maxContinuations:    5,
+		continuationEnabled: true,
 	}
 	h.callbackMu.RUnlock()
 	return deps

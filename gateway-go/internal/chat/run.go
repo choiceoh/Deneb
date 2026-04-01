@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -137,6 +138,10 @@ type runDeps struct {
 	// maxContinuations is the maximum number of autonomous continuation runs
 	// triggered by the continue_run tool. 0 means use default (5).
 	maxContinuations int
+	// continuationEnabled controls whether the continue_run tool is functional.
+	// When false (sync paths), the ContinuationSignal is not injected into tool
+	// context, so the tool returns "not available" instead of silently no-oping.
+	continuationEnabled bool
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
@@ -336,6 +341,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 		contParams := RunParams{
 			SessionKey:        params.SessionKey,
+			ClientRunID:       shortid.New("cont"),
 			Message:           fmt.Sprintf("[System: Autonomous continuation %d/%d. Reason: %s. Continue your work.]", nextIndex, maxConts, reason),
 			Delivery:          params.Delivery,
 			Model:             params.Model,
