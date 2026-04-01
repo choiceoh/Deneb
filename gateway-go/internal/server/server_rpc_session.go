@@ -237,6 +237,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	if s.chatHandler != nil {
 		s.autonomousSvc.RegisterTask(&diaryHeartbeatTask{
 			chatHandler: s.chatHandler,
+			activity:    s.activity,
 			logger:      s.logger,
 		})
 		s.logger.Info("diary heartbeat task registered with autonomous service (2h interval)")
