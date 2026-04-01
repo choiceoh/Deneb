@@ -27,8 +27,13 @@ const (
 // subsequent requests benefit automatically via normal assembly — no message
 // caching needed.
 var proactiveCompaction struct {
-	lastRun atomic.Int64 // epoch millis of last completed sweep
-	running atomic.Bool  // prevents concurrent sweeps
+	lastRun        atomic.Int64 // epoch millis of last completed sweep
+	running        atomic.Bool  // prevents concurrent sweeps
+	circuitBreaker *CompactionCircuitBreaker
+}
+
+func init() {
+	proactiveCompaction.circuitBreaker = NewCompactionCircuitBreaker()
 }
 
 // CompactionConfig configures compaction behavior.
@@ -65,6 +70,12 @@ func triggerProactiveCompaction(
 	logger *slog.Logger,
 ) {
 	if deps.auroraStore == nil {
+		return
+	}
+
+	// Circuit breaker: skip if compaction has failed too many times consecutively.
+	if proactiveCompaction.circuitBreaker.IsTripped() {
+		logger.Debug("proactive compaction: circuit breaker tripped, skipping")
 		return
 	}
 
@@ -107,9 +118,14 @@ func triggerProactiveCompaction(
 			shutdownCtx, deps, params, client, logger,
 		)
 		if compErr != nil {
-			logger.Warn("proactive compaction: sweep failed", "error", compErr)
+			tripped := proactiveCompaction.circuitBreaker.RecordFailure()
+			logger.Warn("proactive compaction: sweep failed",
+				"error", compErr,
+				"consecutiveFailures", proactiveCompaction.circuitBreaker.ConsecutiveFailures(),
+				"circuitTripped", tripped)
 			return
 		}
+		proactiveCompaction.circuitBreaker.RecordSuccess()
 		proactiveCompaction.lastRun.Store(time.Now().UnixMilli())
 		logger.Info("proactive compaction: background sweep completed, next assembly will include summaries")
 	}()

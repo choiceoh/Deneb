@@ -164,6 +164,11 @@ func executeAgentRun(
 		}
 	}
 
+	// Snapshot immutable query config once. All subsequent code uses qCfg
+	// for consistent values (model, budget, limits) rather than re-reading.
+	qCfg := BuildQueryConfig(params, model, providerID, workspaceDir)
+	_ = qCfg // used by budget tracker and transition recording below
+
 	runLog.LogStart(agentlog.RunStartData{
 		Model:    model,
 		Provider: providerID,
@@ -347,6 +352,19 @@ func executeAgentRun(
 	prepWg.Wait()
 	logger.Info("pipeline: parallel prep done (knowledge+context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
 
+	// Microcompact: prune old tool results to save tokens before the LLM call.
+	// Runs after context assembly but before prompt finalization.
+	// Low-cost (no LLM call) — replaces old tool_result blocks with compact stubs.
+	if len(messages) > 0 {
+		mcMessages, mcResult := MicrocompactMessages(messages, time.Now())
+		if mcResult.PrunedCount > 0 {
+			messages = mcMessages
+			logger.Info("microcompact: pruned old tool results",
+				"pruned", mcResult.PrunedCount,
+				"estimatedTokensSaved", mcResult.EstimatedSaved)
+		}
+	}
+
 	// Plugin hook: allow plugins to modify/extend the system prompt.
 	if deps.pluginHookRunner != nil {
 		if pbResult := deps.pluginHookRunner.RunBeforePromptBuild(ctx, map[string]any{
@@ -452,10 +470,25 @@ func executeAgentRun(
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
 	// If a tool preset is active, filter the tool list to only include allowed tools.
+	// Then partition into builtin prefix + dynamic suffix for prompt cache stability.
 	var tools []llm.Tool
 	if deps.tools != nil {
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
-		tools = deps.tools.FilteredLLMTools(allowed)
+		rawTools := deps.tools.FilteredLLMTools(allowed)
+
+		// Apply deny-rule filtering: remove tools the model should never see.
+		// This prevents wasted generation on tools the user has forbidden.
+		rawTools = FilterDeniedTools(rawTools, deps.toolDenySet)
+
+		// Cache-stable ordering: built-in tools form a sorted prefix,
+		// dynamic tools (plugins, MCP) are sorted separately and appended.
+		// Changes to dynamic tools only invalidate cache from the boundary onward.
+		builtinNames := make(map[string]bool, len(deps.tools.Names()))
+		for _, name := range deps.tools.Names() {
+			builtinNames[name] = true
+		}
+		partition := PartitionTools(rawTools, builtinNames)
+		tools = partition.MergedTools()
 	}
 
 	// 9. Build agent config.
@@ -693,7 +726,9 @@ func executeAgentRun(
 		}
 	}
 
-	// User-defined hook registry: fire tool.use event after each tool completes (shell + internal).
+	// User-defined hook registry: fire tool.use event after each tool completes.
+	// Uses FireProgressive for real-time progress tracking (per-hook duration,
+	// started/completed/failed phases) instead of the blocking Fire().
 	if deps.hookRegistry != nil || deps.internalHookRegistry != nil {
 		prevOnToolResult := hooks.OnToolResult
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
@@ -707,7 +742,20 @@ func executeAgentRun(
 				"DENEB_SESSION_KEY": params.SessionKey,
 			}
 			if deps.hookRegistry != nil {
-				go deps.hookRegistry.Fire(deps.shutdownCtx, hookspkg.EventToolUse, env)
+				// Use progressive emission: hook progress events are logged
+				// for observability. The channel is drained in a goroutine
+				// so tool execution is not blocked.
+				go func() {
+					ch := deps.hookRegistry.FireProgressive(deps.shutdownCtx, hookspkg.EventToolUse, env)
+					for p := range ch {
+						if p.Phase == "failed" {
+							logger.Warn("tool.use hook failed",
+								"hookId", p.HookID,
+								"error", p.Error,
+								"durationMs", p.DurationMs)
+						}
+					}
+				}()
 			}
 			if deps.internalHookRegistry != nil {
 				go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
@@ -833,6 +881,12 @@ func executeAgentRun(
 	var agentResult *agent.AgentResult
 	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
 
+	// Budget tracker: detect diminishing returns across compaction retries.
+	budgetTracker := NewBudgetTracker()
+
+	// Track the final transition reason for telemetry/debugging.
+	var lastTransition QueryTransition
+
 	for attempt := 0; attempt <= maxCompactionRetries; attempt++ {
 		if attempt > 0 {
 			logger.Info("retrying agent run after compaction", "attempt", attempt)
@@ -905,16 +959,37 @@ func executeAgentRun(
 					}
 				}
 
+				// Strip images before compaction — they waste tokens in the
+				// summarization call and can cause prompt-too-long errors.
+				preCompactMsgs := StripImageBlocks(messages)
+
+				// Extract recent file reads before compaction destroys them.
+				recentFiles := ExtractRecentFileReads(preCompactMsgs)
+
 				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
 					ctx, deps, params, client, logger,
 				)
 				if compErr != nil {
+					// Record compaction failure for circuit breaker.
+					proactiveCompaction.circuitBreaker.RecordFailure()
 					return nil, fmt.Errorf("compaction failed: %w (original: %w)", compErr, runErr)
 				}
+				proactiveCompaction.circuitBreaker.RecordSuccess()
 				messages = compactedMsgs
+
+				// Post-compaction file restoration: re-inject recently accessed
+				// file contents so the agent retains working memory of files
+				// it was actively editing. Stays within token budget.
+				if restored := BuildRestorationMessages(recentFiles); len(restored) > 0 {
+					messages = append(messages, restored...)
+					logger.Info("compaction: restored recent file reads",
+						"count", len(restored))
+				}
+
 				if sysAddition != "" {
 					cfg.System = llm.AppendSystemText(origSystem, sysAddition)
 				}
+				lastTransition = NewContinue(ContinueCompactRetry)
 				continue
 			}
 
@@ -965,8 +1040,19 @@ func executeAgentRun(
 				}
 			}
 
+			lastTransition = NewTerminal(TerminalModelError, runErr)
 			return nil, runErr
 		}
+		// Check budget tracker for diminishing returns across turns.
+		totalTokens := agentResult.Usage.InputTokens + agentResult.Usage.OutputTokens
+		decision := budgetTracker.CheckBudget("", int(qCfg.TokenBudget), totalTokens)
+		if decision.Action == "stop" && decision.DiminishingReturns {
+			lastTransition = NewTerminal(TerminalDiminishingReturn, nil)
+			logger.Info("budget tracker: diminishing returns detected, stopping",
+				"continuations", decision.ContinuationCount,
+				"pct", decision.Pct)
+		}
+		lastTransition = NewTerminal(TerminalCompleted, nil)
 		break
 	}
 
@@ -977,7 +1063,8 @@ func executeAgentRun(
 		"totalMs", totalMs,
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
-		"outputTokens", agentResult.Usage.OutputTokens)
+		"outputTokens", agentResult.Usage.OutputTokens,
+		"transition", lastTransition.Reason())
 
 	// Fire agent_end plugin hook (void, non-blocking).
 	if deps.pluginHookRunner != nil {

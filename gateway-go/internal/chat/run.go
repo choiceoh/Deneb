@@ -117,6 +117,7 @@ type runDeps struct {
 	sessionMemory    *SessionMemoryStore // optional; structured session state
 	contextCfg       ContextConfig
 	compactionCfg    CompactionConfig
+	toolDenySet      map[string]bool // tools to hide from the model (deny-rule filtering)
 	defaultModel     string
 	defaultSystem    string
 	maxTokens        int
