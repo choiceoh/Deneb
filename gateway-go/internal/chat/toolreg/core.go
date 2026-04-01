@@ -21,8 +21,8 @@ import (
 // sglang code from toolreg/.
 type SglangDeps struct {
 	CallLocalLLM      polaris.LLMSynthesizer // may be nil
-	CheckSglangHealth polaris.HealthChecker   // may be nil
-	BaseURL           func() string           // returns sglang base URL; may be nil
+	CheckSglangHealth polaris.HealthChecker  // may be nil
+	BaseURL           func() string          // returns sglang base URL; may be nil
 }
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
@@ -168,6 +168,13 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 			Fn:          tools.ToolSpilloverRead(deps.SpilloverStore),
 		})
 	}
+
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "github_webhook",
+		Description: "Manage GitHub webhooks for KAIROS: register Deneb's /webhook/github endpoint on a repo, list existing webhooks, delete, or check Deneb-side config status",
+		InputSchema: githubWebhookToolSchema(),
+		Fn:          tools.ToolGitHubWebhook(),
+	})
 
 }
 
