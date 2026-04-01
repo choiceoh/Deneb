@@ -554,6 +554,11 @@ func executeAgentRun(
 		// preventing the "disappear then reappear" flicker on completion.
 		defer func() {
 			if draftCtrl != nil {
+				// Queue the final accumulated text before flushing, in case the
+				// last section didn't reach the update threshold.
+				if accum.Len() > 0 {
+					draftCtrl.Update(accum.String())
+				}
 				draftCtrl.Finalize()
 			}
 			// Store the draft message ID on the delivery context so the reply
@@ -585,13 +590,29 @@ func executeAgentRun(
 			return true, nil
 		})
 
+		// Section-based streaming display: instead of updating on every small
+		// delta (which causes constant flickering), accumulate text and only
+		// push an update when a meaningful section boundary is reached
+		// (paragraph break) or enough text has accumulated (500+ chars).
+		// This gives the user a calmer reading experience where completed
+		// sections appear at once rather than character-by-character.
+		var lastUpdateLen int
 		prevOnDelta := hooks.OnTextDelta
 		hooks.OnTextDelta = func(text string) {
 			if prevOnDelta != nil {
 				prevOnDelta(text)
 			}
 			accum.WriteString(text)
-			draftCtrl.Update(accum.String())
+			current := accum.String()
+			delta := len(current) - lastUpdateLen
+			if delta < 100 {
+				return // too small to bother updating
+			}
+			newContent := current[lastUpdateLen:]
+			if strings.Contains(newContent, "\n\n") || delta >= 500 {
+				draftCtrl.Update(current)
+				lastUpdateLen = len(current)
+			}
 		}
 
 		// On tool start, stop the draft loop so partial text is flushed before
