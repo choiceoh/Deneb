@@ -58,6 +58,7 @@ type ExecConfig struct {
 	ExecHost     string `json:"execHost,omitempty"`
 	ExecSecurity string `json:"execSecurity,omitempty"`
 	ExecAsk      string `json:"execAsk,omitempty"`
+	ExecNode     string `json:"execNode,omitempty"`
 }
 
 // AgentConfig holds spawn lineage and messaging policy for a session.
@@ -120,13 +121,22 @@ type Session struct {
 const (
 	// gcInterval is how often the GC scans for stale sessions.
 	gcInterval = 10 * time.Minute
-	// gcMaxAge is how long a terminal session is kept before eviction.
+	// gcMaxAge is the default retention for terminal sessions.
 	gcMaxAge = 1 * time.Hour
-	// gcMaxAgeCron is retention for cron and shadow sessions (24 hours).
-	gcMaxAgeCron = 24 * time.Hour
-	// gcMaxAgeSubagent is retention for subagent sessions (2 hours).
-	gcMaxAgeSubagent = 2 * time.Hour
 )
+
+// gcMaxAgeForKind returns the retention period for terminal sessions of a given kind.
+// Cron and shadow sessions are retained longer since they serve as audit trail.
+func gcMaxAgeForKind(k Kind) time.Duration {
+	switch k {
+	case KindCron, KindShadow:
+		return 24 * time.Hour
+	case KindSubagent:
+		return 2 * time.Hour
+	default:
+		return gcMaxAge
+	}
+}
 
 // Manager tracks active sessions in memory.
 type Manager struct {
@@ -165,20 +175,8 @@ func (m *Manager) StartGC(ctx context.Context) {
 	})
 }
 
-// gcMaxAgeForKind returns the retention duration for a session kind.
-func gcMaxAgeForKind(k Kind) time.Duration {
-	switch k {
-	case KindCron, KindShadow:
-		return gcMaxAgeCron
-	case KindSubagent:
-		return gcMaxAgeSubagent
-	default:
-		return gcMaxAge
-	}
-}
-
 // evictStale removes terminal sessions whose UpdatedAt is older than the
-// kind-specific retention period.
+// Kind-specific retention period.
 func (m *Manager) evictStale() {
 	now := time.Now()
 	var evicted []string
@@ -186,8 +184,8 @@ func (m *Manager) evictStale() {
 	m.mu.Lock()
 	for key, s := range m.sessions {
 		if isTerminal(s.Status) {
-			cutoff := now.Add(-gcMaxAgeForKind(s.Kind)).UnixMilli()
-			if s.UpdatedAt < cutoff {
+			maxAge := gcMaxAgeForKind(s.Kind)
+			if s.UpdatedAt < now.Add(-maxAge).UnixMilli() {
 				delete(m.sessions, key)
 				evicted = append(evicted, key)
 			}

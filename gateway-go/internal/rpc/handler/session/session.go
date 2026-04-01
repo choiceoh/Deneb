@@ -513,8 +513,8 @@ func boolCount(vals ...bool) int {
 }
 
 // filterSessions applies optional filters to a session list.
-// Globals and unknowns are excluded unless explicitly opted in (matching TS
-// behavior where includeGlobal/includeUnknown default to false).
+// Non-user session kinds (global, unknown, cron, subagent, shadow) are excluded
+// from default listings unless explicitly opted in.
 func filterSessions(sessions []*session.Session, agentID, spawnedBy string, includeGlobal, includeUnknown *bool) []*session.Session {
 	result := make([]*session.Session, 0, len(sessions))
 	for _, s := range sessions {
@@ -522,6 +522,11 @@ func filterSessions(sessions []*session.Session, agentID, spawnedBy string, incl
 			continue
 		}
 		if s.Kind == session.KindUnknown && !isTrue(includeUnknown) {
+			continue
+		}
+		// Cron, subagent, and shadow sessions are internal — exclude from
+		// user-facing session listings by default.
+		if s.Kind == session.KindCron || s.Kind == session.KindSubagent || s.Kind == session.KindShadow {
 			continue
 		}
 		if spawnedBy != "" && s.SpawnedBy != spawnedBy {

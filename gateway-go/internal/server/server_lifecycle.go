@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -98,27 +98,8 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
-	// Start cron session reaper to prune expired cron run sessions.
-	if s.cronService != nil {
-		reaper := cron.NewSessionReaper(0, s.logger)
-		s.safeGo("cron-session-reaper", func() {
-			reaper.SweepPeriodically(
-				ctx.Done(),
-				0,
-				func() []string {
-					sessions := s.sessions.List()
-					keys := make([]string, len(sessions))
-					for i, sess := range sessions {
-						keys[i] = sess.Key
-					}
-					return keys
-				},
-				func(key string) {
-					s.sessions.Delete(key)
-				},
-			)
-		})
-	}
+	// Cron session GC is handled by session.Manager's Kind-based retention
+	// (KindCron → 24h) via evictStale(); no separate reaper needed.
 
 	// Create the run state machine to track active agent runs.
 	s.runStateMachine = telegram.NewRunStateMachine(ctx, func(patch telegram.StatusPatch) {
@@ -144,6 +125,14 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// Start autonomous service (dreaming lifecycle).
 	if s.autonomousSvc != nil {
 		s.autonomousSvc.Start()
+	}
+
+	// Start background task maintenance loop (orphan recovery, cleanup).
+	if s.taskRegistry != nil {
+		sessionChecker := func(key string) bool {
+			return s.sessions.Get(key) != nil
+		}
+		tasks.StartMaintenanceLoop(ctx, s.taskRegistry, sessionChecker, s.logger)
 	}
 
 	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
@@ -279,7 +268,12 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6c. Stop autoresearch runner.
+	// 6c. Close task store.
+	if s.taskStore != nil {
+		s.taskStore.Close()
+	}
+
+	// 6d. Stop autoresearch runner.
 	if s.autoresearchRunner != nil {
 		s.autoresearchRunner.Stop()
 	}

@@ -232,6 +232,20 @@ func (s *FileTranscriptStore) Search(query string, maxResults int) ([]SearchResu
 	return results, nil
 }
 
+// CloneRecent copies the most recent `limit` messages from srcKey to dstKey.
+func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) error {
+	msgs, _, err := s.Load(srcKey, limit)
+	if err != nil {
+		return fmt.Errorf("clone transcript: load src: %w", err)
+	}
+	for _, msg := range msgs {
+		if err := s.Append(dstKey, msg); err != nil {
+			return fmt.Errorf("clone transcript: append dst: %w", err)
+		}
+	}
+	return nil
+}
+
 // MemoryTranscriptStore is an in-memory transcript store for testing.
 type MemoryTranscriptStore struct {
 	mu       sync.Mutex
@@ -285,6 +299,20 @@ func (s *MemoryTranscriptStore) ListKeys() ([]string, error) {
 		keys = append(keys, k)
 	}
 	return keys, nil
+}
+
+// CloneRecent copies the most recent `limit` messages from srcKey to dstKey.
+func (s *MemoryTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	msgs := s.sessions[srcKey]
+	if limit > 0 && len(msgs) > limit {
+		msgs = msgs[len(msgs)-limit:]
+	}
+	dst := make([]ChatMessage, len(msgs))
+	copy(dst, msgs)
+	s.sessions[dstKey] = dst
+	return nil
 }
 
 // Search scans all in-memory transcripts for messages containing the query.

@@ -20,14 +20,11 @@ type SubagentInfraDeps struct {
 	ACPRegistry   *ACPRegistry
 	ACPProjector  *ACPProjector
 	FollowupQueue *queue.FollowupQueueRegistry
+	Sessions      *session.Manager // session lifecycle for subagent sessions
 	SessionStore  func(key string) *types.SessionState
 	SaveSession   func(session *types.SessionState) error
 	AbortSession  func(sessionKey string) error
 	Logger        *slog.Logger
-
-	// Sessions is the central session manager. When set, SpawnSubagent creates
-	// sessions with KindSubagent instead of relying solely on types.SessionState.
-	Sessions *session.Manager
 }
 
 // SpawnSubagentParams holds the parameters for spawning a sub-agent.
@@ -93,22 +90,14 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 	}
 	d.ACPRegistry.Register(agent)
 
-	// Create session in central session.Manager with KindSubagent.
+	// Create KindSubagent session in session.Manager for lifecycle tracking and GC.
 	if d.Sessions != nil {
-		sess := d.Sessions.Create(sessionKey, session.KindSubagent)
-		sess.Channel = "acp"
-		sess.Model = params.Model
-		sess.SpawnedBy = params.ParentSessionKey
-		sess.SubagentRole = params.Role
-		sess.ToolPreset = params.ToolPreset
-		spawnDepth := depth
-		sess.SpawnDepth = &spawnDepth
-		_ = d.Sessions.Set(sess)
+		d.Sessions.Create(sessionKey, session.KindSubagent)
 	}
 
-	// Legacy: save session state for backwards compat with existing callers.
+	// Create session state if SaveSession is available.
 	if d.SaveSession != nil {
-		ss := &types.SessionState{
+		session := &types.SessionState{
 			SessionKey:      sessionKey,
 			AgentID:         agentID,
 			Channel:         "acp",
@@ -118,7 +107,7 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 			ToolPreset:      params.ToolPreset,
 			GroupActivation: types.ActivationAlways,
 		}
-		if err := d.SaveSession(ss); err != nil {
+		if err := d.SaveSession(session); err != nil {
 			d.logger().Warn("failed to save subagent session",
 				"agentId", agentID,
 				"error", err,

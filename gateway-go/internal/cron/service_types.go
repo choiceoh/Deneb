@@ -17,6 +17,12 @@ type CronEvent struct {
 // CronEventListener receives cron events.
 type CronEventListener func(event CronEvent)
 
+// TranscriptCloner copies recent messages from one session to another.
+// Typically satisfied by chat.TranscriptStore.CloneRecent.
+type TranscriptCloner interface {
+	CloneRecent(srcKey, dstKey string, limit int) error
+}
+
 // ServiceConfig configures the cron service.
 type ServiceConfig struct {
 	StorePath      string
@@ -25,19 +31,12 @@ type ServiceConfig struct {
 	Enabled        bool
 	RetentionMs    int64 // session retention (0 = default 24h)
 	TelegramPlugin *telegram.Plugin
+	Sessions       *session.Manager // session manager for cron run sessions
 
-	// Sessions is the central session manager. When set, cron creates
-	// sessions with KindCron instead of ad-hoc key-only tracking.
-	Sessions *session.Manager
-
-	// MainSessionKey is the primary user session (e.g. "telegram:<chatId>")
-	// used as the clone source for shadow sessions.
-	MainSessionKey string
-
-	// TranscriptCloner provides transcript cloning for shadow sessions.
-	// When set (along with MainSessionKey), cron jobs with sessionTarget=subagent
-	// clone the main session transcript before execution.
-	TranscriptCloner TranscriptCloner
+	// Shadow session support: when MainSessionKey and TranscriptCloner are set,
+	// cron runs can inherit recent conversation context via KindShadow sessions.
+	MainSessionKey   string            // primary user session key for cloning context
+	TranscriptCloner TranscriptCloner  // clones transcript messages between sessions
 }
 
 // ServiceStatus is a snapshot of the cron service health and pending jobs.

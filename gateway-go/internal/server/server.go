@@ -49,6 +49,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
@@ -96,6 +97,8 @@ type ServerIntegrations struct {
 	vegaBackend           vega.Backend
 	geminiEmbedder        *embedding.GeminiEmbedder
 	jinaAPIKey            string
+	taskRegistry          *tasks.Registry
+	taskStore             *tasks.Store
 	approvals             *approval.Store
 	agents                *agent.Store
 	skills                *skill.Manager
@@ -347,6 +350,20 @@ func New(addr string, opts ...Option) *Server {
 		s.providerRuntime = provider.NewProviderRuntimeResolver(s.providers, s.logger)
 	}
 
+	// Background task control plane (SQLite ledger).
+	taskStore, err := tasks.OpenStore(tasks.DefaultStoreConfig(), s.logger)
+	if err != nil {
+		s.logger.Warn("task store open failed, task tracking disabled", "error", err)
+	} else {
+		s.taskStore = taskStore
+		reg, regErr := tasks.NewRegistry(taskStore, s.logger)
+		if regErr != nil {
+			s.logger.Warn("task registry init failed", "error", regErr)
+		} else {
+			s.taskRegistry = reg
+		}
+	}
+
 	// Phase 3: Advanced workflow subsystems.
 	s.approvals = approval.NewStore()
 	s.agents = agent.NewStore()
@@ -363,6 +380,7 @@ func New(addr string, opts ...Option) *Server {
 
 	// ACP subsystem: registry, bindings, persistence, lifecycle sync.
 	acpRegistry := acp.NewACPRegistry()
+	acpRegistry.SetSessionManager(s.sessions)
 	acpBindings := acp.NewSessionBindingService()
 	acpBindingStore := acp.NewBindingStore(acp.DefaultBindingStorePath(denebDir))
 	if err := acpBindingStore.RestoreToService(acpBindings); err != nil {
@@ -380,7 +398,7 @@ func New(addr string, opts ...Option) *Server {
 	s.acpDeps = &handlerprocess.ACPDeps{
 		Registry:     acpRegistry,
 		Bindings:     acpBindings,
-		Infra:        &acp.SubagentInfraDeps{ACPRegistry: acpRegistry},
+		Infra:        &acp.SubagentInfraDeps{ACPRegistry: acpRegistry, Sessions: s.sessions},
 		Sessions:     s.sessions,
 		GatewaySubs:  s.gatewaySubs,
 		BindingStore: acpBindingStore,

@@ -65,6 +65,17 @@ var requiredMethods = []string{
 	"unsubscribe.session",
 	"unsubscribe.session.messages",
 
+	// Background task control plane.
+	"flow.cancel",
+	"flow.list",
+	"flow.show",
+	"task.audit",
+	"task.cancel",
+	"task.events",
+	"task.get",
+	"task.list",
+	"task.status",
+
 	// Process and cron.
 	"cron.add",
 	"cron.get",

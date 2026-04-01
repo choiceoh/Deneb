@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 )
@@ -47,6 +48,9 @@ type GatewayHub struct {
 	Cron          *cron.Scheduler
 	CronService   *cron.Service
 	CronPersistLog *cron.PersistentRunLog
+
+	// Background task control plane.
+	Tasks *tasks.Registry
 
 	// Workflow subsystems.
 	Approvals *approval.Store

@@ -19,6 +19,7 @@ func (s *Server) buildHub() *rpcutil.GatewayHub {
 		Cron:        s.cron,
 		CronService:    s.cronService,
 		CronPersistLog: s.cronRunLog,
+		Tasks:       s.taskRegistry,
 		Approvals:   s.approvals,
 		Skills:      s.skills,
 		Wizard:      s.wizardEng,
