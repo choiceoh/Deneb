@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
@@ -790,9 +791,12 @@ func executeAgentRun(
 		defer func() {
 			if draftCtrl != nil {
 				// Queue the final accumulated text before flushing, in case the
-				// last section didn't reach the update threshold.
+				// last section didn't reach the update threshold. Sanitize to
+				// strip any leaked commands or code blocks.
 				if accum.Len() > 0 {
-					draftCtrl.Update(accum.String())
+					if sanitized := reply.SanitizeDraftText(accum.String()); sanitized != "" {
+						draftCtrl.Update(sanitized)
+					}
 				}
 				draftCtrl.Finalize()
 			}
@@ -845,16 +849,34 @@ func executeAgentRun(
 			}
 			newContent := current[lastUpdateLen:]
 			if strings.Contains(newContent, "\n\n") || delta >= 500 {
-				draftCtrl.Update(current)
+				// Sanitize draft text: strip leaked tool call markup and
+				// fenced code blocks so commands/code are never shown in
+				// the Telegram streaming draft (vibe coder constraint).
+				sanitized := reply.SanitizeDraftText(current)
+				if sanitized == "" {
+					return
+				}
+				draftCtrl.Update(sanitized)
 				lastUpdateLen = len(current)
 			}
 		}
 
-		// On tool start, stop the draft loop so partial text is flushed before
-		// the tool runs. The final reply will be delivered by the normal pipeline.
+		// On tool start, stop the draft loop and delete the draft message
+		// so any partially-streamed command text is removed immediately.
+		// The final reply will be delivered by the normal pipeline.
 		prevOnToolStart := hooks.OnToolStart
 		hooks.OnToolStart = func(name, reason string) {
 			draftCtrl.StopForClear()
+			// Delete the draft message to remove any leaked command text.
+			draftMu.Lock()
+			msgID := draftMsgID
+			draftMsgID = ""
+			draftMu.Unlock()
+			if msgID != "" && deps.draftDeleteFn != nil {
+				delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				_ = deps.draftDeleteFn(delCtx, delivery, msgID)
+			}
 			if prevOnToolStart != nil {
 				prevOnToolStart(name, reason)
 			}

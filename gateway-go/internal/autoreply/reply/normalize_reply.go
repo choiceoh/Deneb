@@ -55,6 +55,27 @@ func StripLeakedToolCallMarkup(text string) string {
 	return strings.TrimSpace(trimmed)
 }
 
+// fencedCodeBlockRe matches fenced code blocks (```...```) including the
+// optional language tag. Used by StripFencedCodeBlocks to remove code from
+// draft streaming messages in channels where code should not be shown.
+var fencedCodeBlockRe = regexp.MustCompile("(?s)```[a-zA-Z]*\\n?.*?```")
+
+// StripFencedCodeBlocks removes fenced code blocks from text. Designed for
+// draft streaming in the Telegram coding channel where raw code must never
+// be displayed to the user (vibe coder constraint).
+func StripFencedCodeBlocks(text string) string {
+	return strings.TrimSpace(fencedCodeBlockRe.ReplaceAllString(text, ""))
+}
+
+// SanitizeDraftText applies all draft-time filters: leaked tool call markup,
+// fenced code blocks, and trailing whitespace. Returns the cleaned text
+// suitable for streaming display in channels that suppress raw code.
+func SanitizeDraftText(text string) string {
+	text = StripLeakedToolCallMarkup(text)
+	text = StripFencedCodeBlocks(text)
+	return strings.TrimSpace(text)
+}
+
 // NormalizeReplyPayload cleans up a reply payload before delivery:
 // - Filters empty/silent/heartbeat replies
 // - Strips silent tokens
