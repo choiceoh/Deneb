@@ -12,6 +12,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
 // maxResponsesBodyBytes is the default body size limit for /v1/responses.
@@ -21,12 +25,16 @@ const maxResponsesBodyBytes = 20 * 1024 * 1024 // 20 MB
 
 // ResponsesRequest is the inbound request body for /v1/responses.
 type ResponsesRequest struct {
-	Model           string `json:"model"`
-	Input           any    `json:"input"` // string or []ItemParam
-	Instructions    string `json:"instructions,omitempty"`
-	Stream          *bool  `json:"stream,omitempty"`
-	User            string `json:"user,omitempty"`
-	MaxOutputTokens *int   `json:"max_output_tokens,omitempty"`
+	Model           string          `json:"model"`
+	Input           any             `json:"input"` // string or []ItemParam
+	Instructions    string          `json:"instructions,omitempty"`
+	Stream          *bool           `json:"stream,omitempty"`
+	User            string          `json:"user,omitempty"`
+	MaxOutputTokens *int            `json:"max_output_tokens,omitempty"`
+	Temperature     *float64        `json:"temperature,omitempty"`
+	TopP            *float64        `json:"top_p,omitempty"`
+	Tools           json.RawMessage `json:"tools,omitempty"`
+	ToolChoice      json.RawMessage `json:"tool_choice,omitempty"`
 }
 
 // --- Response types ---
@@ -72,9 +80,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 
 	// Check if endpoint is enabled via config.
 	if !s.isResponsesEnabled() {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": "responses endpoint is not enabled",
-		})
+		writeOpenAIError(w, s, http.StatusNotFound, "responses endpoint is not enabled", "not_found")
 		return
 	}
 
@@ -93,52 +99,35 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 
 	var req ResponsesRequest
 	if err := json.NewDecoder(limited).Decode(&req); err != nil {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": map[string]string{
-				"message": "invalid request body: " + err.Error(),
-				"type":    "invalid_request_error",
-			},
-		})
+		writeOpenAIError(w, s, http.StatusBadRequest, "invalid request body: "+err.Error(), "invalid_request_error")
 		return
 	}
 
 	// Validate model is non-empty.
 	if req.Model == "" {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": map[string]string{
-				"message": "model is required",
-				"type":    "invalid_request_error",
-			},
-		})
+		writeOpenAIError(w, s, http.StatusBadRequest, "model is required", "invalid_request_error")
 		return
 	}
 
 	// Extract prompt text from input.
 	prompt := extractResponsesInput(req.Input)
 	if prompt == "" {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": map[string]string{
-				"message": "input is required and must contain text",
-				"type":    "invalid_request_error",
-			},
-		})
+		writeOpenAIError(w, s, http.StatusBadRequest, "input is required and must contain text", "invalid_request_error")
 		return
 	}
 
 	// Check chat handler availability (after validation to surface 400 errors first).
 	if s.chatHandler == nil {
-		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error": map[string]string{
-				"message": "chat handler not available",
-				"type":    "server_error",
-			},
-		})
+		writeOpenAIError(w, s, http.StatusServiceUnavailable, "chat handler not available", "server_error")
 		return
 	}
 
+	// Build sync options from request parameters.
+	opts := buildResponsesSyncOptions(req)
+
 	// Prepend instructions to prompt if provided.
 	if req.Instructions != "" {
-		prompt = req.Instructions + "\n\n" + prompt
+		opts.SystemPrompt = req.Instructions
 	}
 
 	// Session key derived from user field or default.
@@ -150,37 +139,31 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	isStream := req.Stream != nil && *req.Stream
 
 	if isStream {
-		s.handleResponsesStream(w, r, req, sessionKey, prompt)
+		s.handleResponsesStream(w, r, req, sessionKey, prompt, opts)
 	} else {
-		s.handleResponsesSync(w, r, req, sessionKey, prompt)
+		s.handleResponsesSync(w, r, req, sessionKey, prompt, opts)
 	}
 }
 
 // handleResponsesSync handles non-streaming responses.
-func (s *Server) handleResponsesSync(w http.ResponseWriter, r *http.Request, req ResponsesRequest, sessionKey, prompt string) {
+func (s *Server) handleResponsesSync(w http.ResponseWriter, r *http.Request, req ResponsesRequest, sessionKey, prompt string, opts *chat.SyncOptions) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 
-	result, err := s.chatHandler.SendSync(ctx, sessionKey, prompt, req.Model)
+	result, err := s.chatHandler.SendSync(ctx, sessionKey, prompt, req.Model, opts)
 	if err != nil {
 		s.logger.Error("responses request failed", "error", err)
-		s.writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": map[string]string{
-				"message": "internal error: " + err.Error(),
-				"type":    "server_error",
-			},
-		})
+		writeOpenAIError(w, s, http.StatusInternalServerError, "internal error: "+err.Error(), "server_error")
 		return
 	}
 
-	now := time.Now().Unix()
-	respID := fmt.Sprintf("resp_%d", now)
-	msgID := fmt.Sprintf("msg_%d", now)
+	respID := "resp_" + shortid.New("rs")
+	msgID := "msg_" + shortid.New("ms")
 
 	resp := responsesResponse{
 		ID:        respID,
 		Object:    "response",
-		CreatedAt: now,
+		CreatedAt: time.Now().Unix(),
 		Status:    "completed",
 		Model:     result.Model,
 		Output: []responsesOutputItem{
@@ -205,15 +188,10 @@ func (s *Server) handleResponsesSync(w http.ResponseWriter, r *http.Request, req
 }
 
 // handleResponsesStream handles streaming responses via SSE with typed events.
-func (s *Server) handleResponsesStream(w http.ResponseWriter, r *http.Request, req ResponsesRequest, sessionKey, prompt string) {
+func (s *Server) handleResponsesStream(w http.ResponseWriter, r *http.Request, req ResponsesRequest, sessionKey, prompt string, opts *chat.SyncOptions) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		s.writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": map[string]string{
-				"message": "streaming not supported",
-				"type":    "server_error",
-			},
-		})
+		writeOpenAIError(w, s, http.StatusInternalServerError, "streaming not supported", "server_error")
 		return
 	}
 
@@ -227,8 +205,8 @@ func (s *Server) handleResponsesStream(w http.ResponseWriter, r *http.Request, r
 	defer cancel()
 
 	now := time.Now().Unix()
-	respID := fmt.Sprintf("resp_%d", now)
-	msgID := fmt.Sprintf("msg_%d", now)
+	respID := "resp_" + shortid.New("rs")
+	msgID := "msg_" + shortid.New("ms")
 
 	// Build initial response object for response.created event.
 	initialResp := responsesResponse{
@@ -286,7 +264,7 @@ func (s *Server) handleResponsesStream(w http.ResponseWriter, r *http.Request, r
 	}()
 
 	// Stream content via SendSyncStream.
-	result, err := s.chatHandler.SendSyncStream(ctx, sessionKey, prompt, req.Model, func(delta string) {
+	result, err := s.chatHandler.SendSyncStream(ctx, sessionKey, prompt, req.Model, opts, func(delta string) {
 		writeSSEEvent(w, flusher, "response.output_text.delta", map[string]any{
 			"output_index":  0,
 			"content_index": 0,
@@ -363,6 +341,25 @@ func (s *Server) handleResponsesStream(w http.ResponseWriter, r *http.Request, r
 }
 
 // --- Helpers ---
+
+// buildResponsesSyncOptions creates SyncOptions from a Responses API request.
+func buildResponsesSyncOptions(req ResponsesRequest) *chat.SyncOptions {
+	opts := &chat.SyncOptions{
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		MaxTokens:   req.MaxOutputTokens,
+	}
+
+	// Tool choice (pass through as-is).
+	if len(req.ToolChoice) > 0 {
+		var tc any
+		if json.Unmarshal(req.ToolChoice, &tc) == nil {
+			opts.ToolChoice = tc
+		}
+	}
+
+	return opts
+}
 
 // isResponsesEnabled checks whether the responses endpoint is enabled.
 func (s *Server) isResponsesEnabled() bool {

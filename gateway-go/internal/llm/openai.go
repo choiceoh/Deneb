@@ -190,6 +190,24 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	if req.ResponseFormat != nil {
 		oaiReq.ResponseFormat = req.ResponseFormat
 	}
+	if req.ToolChoice != nil {
+		oaiReq.ToolChoice = req.ToolChoice
+	}
+
+	// Map extended thinking config to OpenAI reasoning_effort.
+	if req.Thinking != nil && req.Thinking.Type == "enabled" && req.Thinking.BudgetTokens > 0 {
+		switch {
+		case req.Thinking.BudgetTokens <= 4096:
+			oaiReq.ReasoningEffort = "low"
+		case req.Thinking.BudgetTokens <= 10240:
+			oaiReq.ReasoningEffort = "medium"
+		default:
+			oaiReq.ReasoningEffort = "high"
+		}
+		// Reasoning models require max_completion_tokens instead of max_tokens.
+		oaiReq.MaxCompletionTokens = &oaiReq.MaxTokens
+		oaiReq.MaxTokens = 0
+	}
 
 	body, err := json.Marshal(oaiReq)
 	if err != nil {
@@ -234,9 +252,11 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 
 		firstChunk := true
 		// nextBlockIndex tracks the Anthropic-style content block index.
-		// Block 0 is always text; tool_use blocks start at 1.
+		// Block 0 is reserved for thinking (if present), then text, then tools.
 		nextBlockIndex := 0
 		textBlockOpen := false
+		textBlockIndex := -1 // assigned when text block is opened
+		thinkingBlockOpen := false
 
 		// toolBuilders accumulates streamed tool call fragments by OpenAI tool index.
 		type toolBuilder struct {
@@ -343,20 +363,54 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 
 			choice := chunk.Choices[0]
 
+			// Emit reasoning content as thinking block (OpenAI reasoning models).
+			if choice.Delta.ReasoningContent != "" {
+				thinkingBlockIdx := 0 // thinking is always block 0
+				if !thinkingBlockOpen {
+					thinkingBlockOpen = true
+					cbsPayload, _ := json.Marshal(ContentBlockStart{
+						Index:        thinkingBlockIdx,
+						ContentBlock: ContentBlock{Type: "thinking"},
+					})
+					emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: cbsPayload})
+					if nextBlockIndex == 0 {
+						nextBlockIndex = 1 // reserve 0 for thinking
+					}
+				}
+				cbdPayload, _ := json.Marshal(ContentBlockDelta{
+					Index: thinkingBlockIdx,
+					Delta: struct {
+						Type        string `json:"type"`
+						Text        string `json:"text,omitempty"`
+						PartialJSON string `json:"partial_json,omitempty"`
+					}{
+						Type: "thinking_delta",
+						Text: choice.Delta.ReasoningContent,
+					},
+				})
+				emit(ctx, out, StreamEvent{Type: "content_block_delta", Payload: cbdPayload})
+			}
+
 			// Emit text delta — open text block lazily on first text content.
 			if choice.Delta.Content != "" {
+				// Close thinking block if transitioning to text.
+				if thinkingBlockOpen && !textBlockOpen {
+					thinkingBlockOpen = false
+					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: 0})
+					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
+				}
 				if !textBlockOpen {
 					textBlockOpen = true
-					nextBlockIndex = 0
+					textBlockIndex = nextBlockIndex
 					cbsPayload, _ := json.Marshal(ContentBlockStart{
-						Index:        nextBlockIndex,
+						Index:        textBlockIndex,
 						ContentBlock: ContentBlock{Type: "text"},
 					})
 					emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: cbsPayload})
 					nextBlockIndex++
 				}
 				cbdPayload, _ := json.Marshal(ContentBlockDelta{
-					Index: 0,
+					Index: textBlockIndex,
 					Delta: struct {
 						Type        string `json:"type"`
 						Text        string `json:"text,omitempty"`
@@ -370,23 +424,26 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 			}
 
 			// Handle streamed tool calls.
+			// toolBlockBase maps OpenAI tool call indices to our block indices.
 			for _, tc := range choice.Delta.ToolCalls {
 				tb, exists := toolBuilders[tc.Index]
 				if !exists {
+					// Close thinking block before tool calls if open.
+					if thinkingBlockOpen {
+						thinkingBlockOpen = false
+						cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: 0})
+						emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
+					}
 					// Close text block before first tool call if open.
 					if textBlockOpen {
 						textBlockOpen = false
-						cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: 0})
+						cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: textBlockIndex})
 						emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
 					}
 
 					// New tool call — emit content_block_start for tool_use.
 					tb = &toolBuilder{id: tc.ID, name: tc.Function.Name}
 					toolBuilders[tc.Index] = tb
-
-					if nextBlockIndex == 0 {
-						nextBlockIndex = 1 // reserve 0 for text
-					}
 
 					cbsPayload, _ := json.Marshal(ContentBlockStart{
 						Index: nextBlockIndex,
@@ -412,9 +469,11 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 				// Accumulate argument fragments and emit as input_json_delta.
 				if tc.Function.Arguments != "" {
 					tb.args = append(tb.args, tc.Function.Arguments...)
-					blockIdx := tc.Index + 1 // text=0, first tool=1, second tool=2, ...
+					// Block index: find the assigned index for this tool call.
+					// Tools are assigned consecutive indices after text/thinking blocks.
+					toolBlockIdx := nextBlockIndex - len(toolBuilders) + tc.Index
 					cbdPayload, _ := json.Marshal(ContentBlockDelta{
-						Index: blockIdx,
+						Index: toolBlockIdx,
 						Delta: struct {
 							Type        string `json:"type"`
 							Text        string `json:"text,omitempty"`
@@ -430,16 +489,24 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 
 			// Check finish reason (nil = not yet finished, non-nil = terminal).
 			if choice.FinishReason != nil {
-				// Close text block if still open.
-				if textBlockOpen {
-					textBlockOpen = false
+				// Close thinking block if still open.
+				if thinkingBlockOpen {
+					thinkingBlockOpen = false
 					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: 0})
 					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
 				}
 
+				// Close text block if still open.
+				if textBlockOpen {
+					textBlockOpen = false
+					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: textBlockIndex})
+					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
+				}
+
 				// Close all open tool_use blocks.
+				toolBaseIdx := nextBlockIndex - len(toolBuilders)
 				for idx := range toolBuilders {
-					blockIdx := idx + 1
+					blockIdx := toolBaseIdx + idx
 					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: blockIdx})
 					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
 				}
@@ -572,18 +639,21 @@ func (c *Client) CompleteOpenAI(ctx context.Context, req ChatRequest) (string, e
 // --- OpenAI request/response types ---
 
 type openAIRequest struct {
-	Model            string            `json:"model"`
-	Messages         []openAIMessage   `json:"messages"`
-	Stream           bool              `json:"stream"`
-	StreamOptions    *openAIStreamOpts `json:"stream_options,omitempty"`
-	MaxTokens        int               `json:"max_tokens,omitempty"`
-	Temperature      *float64          `json:"temperature,omitempty"`
-	TopP             *float64          `json:"top_p,omitempty"`
-	FrequencyPenalty *float64          `json:"frequency_penalty,omitempty"`
-	PresencePenalty  *float64          `json:"presence_penalty,omitempty"`
-	Stop             []string          `json:"stop,omitempty"`
-	Tools            []openAITool      `json:"tools,omitempty"`
-	ResponseFormat   *ResponseFormat   `json:"response_format,omitempty"`
+	Model               string            `json:"model"`
+	Messages            []openAIMessage   `json:"messages"`
+	Stream              bool              `json:"stream"`
+	StreamOptions       *openAIStreamOpts `json:"stream_options,omitempty"`
+	MaxTokens           int               `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int              `json:"max_completion_tokens,omitempty"` // for reasoning models
+	Temperature         *float64          `json:"temperature,omitempty"`
+	TopP                *float64          `json:"top_p,omitempty"`
+	FrequencyPenalty    *float64          `json:"frequency_penalty,omitempty"`
+	PresencePenalty     *float64          `json:"presence_penalty,omitempty"`
+	Stop                []string          `json:"stop,omitempty"`
+	Tools               []openAITool      `json:"tools,omitempty"`
+	ToolChoice          any               `json:"tool_choice,omitempty"`
+	ResponseFormat      *ResponseFormat   `json:"response_format,omitempty"`
+	ReasoningEffort     string            `json:"reasoning_effort,omitempty"` // "low", "medium", "high"
 }
 
 // openAIStreamOpts controls streaming behavior.
@@ -649,9 +719,11 @@ type openAIChunk struct {
 }
 
 type openAIDelta struct {
-	Role      string                `json:"role,omitempty"`
-	Content   string                `json:"content,omitempty"`
-	ToolCalls []openAIDeltaToolCall `json:"tool_calls,omitempty"`
+	Role             string                `json:"role,omitempty"`
+	Content          string                `json:"content,omitempty"`
+	ReasoningContent string                `json:"reasoning_content,omitempty"` // reasoning model thinking
+	Refusal          string                `json:"refusal,omitempty"`           // model refusal
+	ToolCalls        []openAIDeltaToolCall `json:"tool_calls,omitempty"`
 }
 
 // openAIDeltaToolCall is a streamed fragment of a tool call.
@@ -666,7 +738,12 @@ type openAIDeltaToolCall struct {
 }
 
 type openAIUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	CompletionTokensDetails *completionTokensDetails `json:"completion_tokens_details,omitempty"`
+}
+
+type completionTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
 }

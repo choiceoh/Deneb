@@ -16,7 +16,7 @@ type cronChatAdapter struct {
 var _ cron.AgentRunner = (*cronChatAdapter)(nil)
 
 func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTurnParams) (string, error) {
-	result, err := a.chat.SendSync(ctx, params.SessionKey, params.Command, "")
+	result, err := a.chat.SendSync(ctx, params.SessionKey, params.Command, "", nil)
 	if err != nil {
 		return "", err
 	}

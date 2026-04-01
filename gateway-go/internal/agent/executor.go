@@ -75,13 +75,20 @@ func RunAgent(
 		}
 
 		req := llm.ChatRequest{
-			Model:     cfg.Model,
-			Messages:  messages,
-			System:    cfg.System,
-			MaxTokens: cfg.MaxTokens,
-			Tools:     cfg.Tools,
-			Stream:    true,
-			Thinking:  cfg.Thinking,
+			Model:            cfg.Model,
+			Messages:         messages,
+			System:           cfg.System,
+			MaxTokens:        cfg.MaxTokens,
+			Tools:            cfg.Tools,
+			Stream:           true,
+			Thinking:         cfg.Thinking,
+			Temperature:      cfg.Temperature,
+			TopP:             cfg.TopP,
+			FrequencyPenalty: cfg.FrequencyPenalty,
+			PresencePenalty:  cfg.PresencePenalty,
+			StopSequences:    cfg.StopSequences,
+			ResponseFormat:   cfg.ResponseFormat,
+			ToolChoice:       cfg.ToolChoice,
 		}
 
 		var events <-chan llm.StreamEvent

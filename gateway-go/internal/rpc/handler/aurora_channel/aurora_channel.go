@@ -70,7 +70,7 @@ func handleChat(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("chat handler not available").Response(req.ID)
 		}
 
-		result, err := deps.Chat.SendSync(ctx, p.SessionKey, p.Message, p.Model)
+		result, err := deps.Chat.SendSync(ctx, p.SessionKey, p.Message, p.Model, nil)
 		if err != nil {
 			return rpcerr.New(protocol.ErrDependencyFailed, "aurora.chat failed: "+err.Error()).Response(req.ID)
 		}
@@ -119,7 +119,7 @@ func handleMemory(deps Deps) rpcutil.HandlerFunc {
 
 		// Frame the query as a memory search request
 		prompt := "다음 내용을 메모리에서 검색하여 관련 정보를 찾아줘: " + p.Query
-		result, err := deps.Chat.SendSync(ctx, p.SessionKey, prompt, "")
+		result, err := deps.Chat.SendSync(ctx, p.SessionKey, prompt, "", nil)
 		if err != nil {
 			return rpcerr.New(protocol.ErrDependencyFailed, "aurora.memory failed: "+err.Error()).Response(req.ID)
 		}
