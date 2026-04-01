@@ -87,33 +87,6 @@ curl http://localhost:18789/metrics
 - "Prometheus 연동" → scrape_configs에 localhost:18789 추가
 - "특정 메트릭 찾기" → curl ... | grep deneb_`
 
-const nodesGuide = `노드는 DGX Spark 게이트웨이에 연결되는 보조 디바이스(Android/headless).
-
-## 노드란?
-- 게이트웨이가 아님. 게이트웨이에 웹소켓으로 연결되는 주변기기
-- 디바이스 페어링으로 인증
-- 카메라, 스크린, 위치, 시스템 명령 등 제공
-
-## 명령 모음
-- **Canvas**: 스냅샷, 프레젠트, JS 실행
-- **Camera**: 촬영 (snap), 클립 녹화 (최대 60초)
-- **Screen**: 화면 녹화 (최대 60초)
-- **Location**: GPS 위치 (기본 꺼짐)
-- **System**: 셸 명령 실행 (승인 필요)
-- **Android**: 알림, 사진, 연락처, 캘린더, SMS, 모션 센서
-
-## 페어링
-노드가 연결하면 게이트웨이에 페어링 요청 생성.
-deneb devices approve <requestId>로 승인.
-
-## 원격 실행
-tools.exec.host=node, tools.exec.node=<id> 설정으로 원격 노드에서 명령 실행.
-
-## 문제 해결
-- "카메라 에러 NODE_BACKGROUND_UNAVAILABLE" → 포그라운드 앱 필요. 타임아웃 아님
-- "녹화가 60초에서 끊김" → 최대 60초 제한. 초과 시 자동 잘림
-- "위험한 환경변수" → system.run은 DYLD_*, LD_* 등 자동 제거`
-
 const transcriptGuide = `트랜스크립트는 세션 대화 기록을 JSONL 파일로 영구 저장한다.
 
 ## 저장 형식

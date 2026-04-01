@@ -10,14 +10,12 @@
 package server
 
 import (
-	"fmt"
 	"path/filepath"
 
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
-	handlernode "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/node"
 	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
@@ -43,12 +41,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	}
 	if s.heartbeatState == nil {
 		s.heartbeatState = handlerpresence.NewHeartbeatState()
-	}
-
-	// Compute canvasHost from runtime config.
-	canvasHost := ""
-	if s.runtimeCfg != nil {
-		canvasHost = fmt.Sprintf("http://%s:%d", s.runtimeCfg.BindHost, s.runtimeCfg.Port)
 	}
 
 	// Create Telegram plugin from config if available.
@@ -109,17 +101,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		handlerchannel.MessagingMethods(handlerchannel.MessagingDeps{
 			TelegramPlugin: hub.Telegram,
-		}),
-
-		// Node and device management.
-		handlernode.Methods(handlernode.Deps{
-			Nodes:       hub.Nodes,
-			Broadcaster: hub.Broadcast,
-			CanvasHost:  canvasHost,
-		}),
-		handlernode.DeviceMethods(handlernode.DeviceDeps{
-			Devices:     hub.Devices,
-			Broadcaster: hub.Broadcast,
 		}),
 
 		// Scheduling.

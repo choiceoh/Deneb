@@ -29,7 +29,6 @@ type Request struct {
 	Env            map[string]string `json:"env,omitempty"`
 	Cwd            string            `json:"cwd,omitempty"`
 	SystemRunPlan  any               `json:"systemRunPlan,omitempty"`
-	NodeID         string            `json:"nodeId,omitempty"`
 	Host           string            `json:"host,omitempty"`
 	Security       string            `json:"security,omitempty"`
 	Ask            string            `json:"ask,omitempty"`
@@ -64,7 +63,6 @@ type ApprovalsFile struct {
 type ApprovalRule struct {
 	Pattern  string `json:"pattern"`
 	Decision string `json:"decision"`
-	NodeID   string `json:"nodeId,omitempty"`
 	AddedAt  string `json:"addedAt,omitempty"`
 }
 
@@ -81,9 +79,7 @@ type Store struct {
 	requests map[string]*Request
 	waiters  map[string][]chan struct{}
 
-	// Per-node approval file snapshots.
 	globalSnapshot *Snapshot
-	nodeSnapshots  map[string]*Snapshot
 
 	defaultTTL time.Duration
 }
@@ -93,7 +89,6 @@ func NewStore() *Store {
 	return &Store{
 		requests:       make(map[string]*Request),
 		waiters:        make(map[string][]chan struct{}),
-		nodeSnapshots:  make(map[string]*Snapshot),
 		globalSnapshot: &Snapshot{File: ApprovalsFile{Version: 1}, LoadedAt: time.Now().UnixMilli()},
 		defaultTTL:     5 * time.Minute,
 	}
@@ -119,7 +114,6 @@ func (s *Store) CreateRequest(params CreateRequestParams) *Request {
 		Env:           params.Env,
 		Cwd:           params.Cwd,
 		SystemRunPlan: params.SystemRunPlan,
-		NodeID:        params.NodeID,
 		Host:          params.Host,
 		Security:      params.Security,
 		Ask:           params.Ask,
@@ -149,7 +143,6 @@ type CreateRequestParams struct {
 	Env           map[string]string
 	Cwd           string
 	SystemRunPlan any
-	NodeID        string
 	Host          string
 	Security      string
 	Ask           string
@@ -234,29 +227,6 @@ func (s *Store) SetGlobalSnapshot(file ApprovalsFile, hash string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.globalSnapshot = &Snapshot{
-		File:     file,
-		Hash:     hash,
-		LoadedAt: time.Now().UnixMilli(),
-	}
-}
-
-// GetNodeSnapshot returns the exec approvals snapshot for a specific node.
-func (s *Store) GetNodeSnapshot(nodeID string) *Snapshot {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	snap := s.nodeSnapshots[nodeID]
-	if snap == nil {
-		return nil
-	}
-	cp := *snap
-	return &cp
-}
-
-// SetNodeSnapshot sets the exec approvals configuration for a specific node.
-func (s *Store) SetNodeSnapshot(nodeID string, file ApprovalsFile, hash string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.nodeSnapshots[nodeID] = &Snapshot{
 		File:     file,
 		Hash:     hash,
 		LoadedAt: time.Now().UnixMilli(),

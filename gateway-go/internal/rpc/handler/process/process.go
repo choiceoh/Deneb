@@ -36,8 +36,6 @@ func ApprovalMethods(deps ApprovalDeps) map[string]rpcutil.HandlerFunc {
 		"exec.approval.resolve":      execApprovalResolve(deps),
 		"exec.approvals.get":         execApprovalsGet(deps),
 		"exec.approvals.set":         execApprovalsSet(deps),
-		"exec.approvals.node.get":    execApprovalsNodeGet(deps),
-		"exec.approvals.node.set":    execApprovalsNodeSet(deps),
 	}
 }
 
@@ -50,7 +48,6 @@ func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
 			Env                 map[string]string `json:"env,omitempty"`
 			Cwd                 string            `json:"cwd,omitempty"`
 			SystemRunPlan       any               `json:"systemRunPlan,omitempty"`
-			NodeID              string            `json:"nodeId,omitempty"`
 			Host                string            `json:"host,omitempty"`
 			Security            string            `json:"security,omitempty"`
 			Ask                 string            `json:"ask,omitempty"`
@@ -90,7 +87,6 @@ func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
 			Env:           p.Env,
 			Cwd:           p.Cwd,
 			SystemRunPlan: p.SystemRunPlan,
-			NodeID:        p.NodeID,
 			Host:          p.Host,
 			Security:      p.Security,
 			Ask:           p.Ask,
@@ -106,7 +102,6 @@ func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
 			deps.Broadcaster("exec.approval.requested", map[string]any{
 				"id":      created.ID,
 				"command": created.Command,
-				"nodeId":  created.NodeID,
 			})
 		}
 
@@ -234,51 +229,6 @@ func execApprovalsSet(deps ApprovalDeps) rpcutil.HandlerFunc {
 		}
 
 		deps.Store.SetGlobalSnapshot(p.File, p.BaseHash)
-
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
-		return resp
-	}
-}
-
-func execApprovalsNodeGet(deps ApprovalDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			NodeID string `json:"nodeId"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.NodeID == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "nodeId is required"))
-		}
-
-		snapshot := deps.Store.GetNodeSnapshot(p.NodeID)
-		if snapshot == nil {
-			snapshot = &approval.Snapshot{
-				File:     approval.ApprovalsFile{Version: 1},
-				LoadedAt: 0,
-			}
-		}
-		resp := protocol.MustResponseOK(req.ID, snapshot)
-		return resp
-	}
-}
-
-func execApprovalsNodeSet(deps ApprovalDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			NodeID   string                 `json:"nodeId"`
-			File     approval.ApprovalsFile `json:"file"`
-			BaseHash string                 `json:"baseHash,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
-		}
-		if p.NodeID == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "nodeId is required"))
-		}
-
-		deps.Store.SetNodeSnapshot(p.NodeID, p.File, p.BaseHash)
 
 		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp

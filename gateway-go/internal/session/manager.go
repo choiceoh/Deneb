@@ -55,7 +55,6 @@ type ExecConfig struct {
 	ExecHost     string `json:"execHost,omitempty"`
 	ExecSecurity string `json:"execSecurity,omitempty"`
 	ExecAsk      string `json:"execAsk,omitempty"`
-	ExecNode     string `json:"execNode,omitempty"`
 }
 
 // AgentConfig holds spawn lineage and messaging policy for a session.

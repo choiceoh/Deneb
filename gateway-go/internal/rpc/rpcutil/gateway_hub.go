@@ -14,10 +14,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
-	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
@@ -52,8 +50,6 @@ type GatewayHub struct {
 
 	// Workflow subsystems.
 	Approvals *approval.Store
-	Nodes     *node.Manager
-	Devices   *device.Manager
 	Skills    *skill.Manager
 	Wizard    *wizard.Engine
 	Talk      *talk.State
@@ -96,12 +92,6 @@ func (h *GatewayHub) Validate() error {
 	}
 	if h.Approvals == nil {
 		missing = append(missing, "Approvals")
-	}
-	if h.Nodes == nil {
-		missing = append(missing, "Nodes")
-	}
-	if h.Devices == nil {
-		missing = append(missing, "Devices")
 	}
 	if h.Skills == nil {
 		missing = append(missing, "Skills")

@@ -107,15 +107,6 @@ pub enum Commands {
     /// Manage sandbox containers.
     Sandbox(subcli::sandbox::SandboxArgs),
 
-    /// Manage compute nodes.
-    Nodes(subcli::nodes::NodesArgs),
-
-    /// Manage paired devices.
-    Devices(subcli::devices::DevicesArgs),
-
-    /// Device pairing.
-    Pairing(subcli::pairing::PairingArgs),
-
     /// QR code operations.
     Qr(subcli::qr::QrArgs),
 

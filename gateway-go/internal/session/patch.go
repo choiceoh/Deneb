@@ -15,7 +15,6 @@ type PatchFields struct {
 	ExecHost             *string `json:"execHost,omitempty"`
 	ExecSecurity         *string `json:"execSecurity,omitempty"`
 	ExecAsk              *string `json:"execAsk,omitempty"`
-	ExecNode             *string `json:"execNode,omitempty"`
 	ResponseUsage        *string `json:"responseUsage,omitempty"`
 	SpawnedBy            *string `json:"spawnedBy,omitempty"`
 	SpawnedWorkspaceDir  *string `json:"spawnedWorkspaceDir,omitempty"`
@@ -75,7 +74,6 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 	changed = patchStr(&s.ExecHost, p.ExecHost) || changed
 	changed = patchStr(&s.ExecSecurity, p.ExecSecurity) || changed
 	changed = patchStr(&s.ExecAsk, p.ExecAsk) || changed
-	changed = patchStr(&s.ExecNode, p.ExecNode) || changed
 	changed = patchStr(&s.ResponseUsage, p.ResponseUsage) || changed
 	changed = patchStr(&s.SpawnedBy, p.SpawnedBy) || changed
 	changed = patchStr(&s.SpawnedWorkspaceDir, p.SpawnedWorkspaceDir) || changed
