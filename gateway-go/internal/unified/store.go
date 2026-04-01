@@ -1,9 +1,8 @@
-// Unified memory store — single SQLite DB combining Aurora context
+// Unified memory store — single SQLite DB (deneb.db) combining Aurora context
 // (messages, summaries, compaction DAG) with structured long-term memory
 // (facts, embeddings, user model, dreaming).
 //
-// Replaces the previous two-DB architecture (aurora.db + memory.db) with
-// a single deneb.db that holds all memory tiers:
+// Memory tiers:
 //   - short: raw messages (protected fresh tail)
 //   - medium: leaf/condensed summaries with structured sections
 //   - long: extracted facts with importance, category, expiry
@@ -52,7 +51,6 @@ func DefaultConfig() Config {
 }
 
 // New opens or creates a unified memory store.
-// If legacy aurora.db and/or memory.db exist, they are migrated automatically.
 func New(cfg Config, logger *slog.Logger) (*Store, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -80,15 +78,6 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 		logger: logger,
 	}
 
-	// Apply incremental migrations for existing databases.
-	if err := s.migrateSchema(); err != nil {
-		logger.Warn("unified store: schema migration failed", "error", err)
-	}
-
-	// Auto-migrate from legacy separate DBs if they exist.
-	if err := s.migrateFromLegacy(dir); err != nil {
-		logger.Warn("unified store: legacy migration failed", "error", err)
-	}
 	if err := s.repairMemoryIndex(); err != nil {
 		logger.Warn("unified store: memory index repair failed", "error", err)
 	}
