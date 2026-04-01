@@ -120,7 +120,15 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			if p.Structured {
 				return TruncateForLLM(formatExecResultJSON(result)), nil
 			}
-			return TruncateForLLM(formatExecResult(result)), nil
+			out := formatExecResult(result)
+			// Annotate non-error exit codes with command-specific context.
+			// e.g. grep exit 1 = "no matches found", not an error.
+			if result.ExitCode != 0 {
+				if isErr, hint := InterpretExitCode(p.Command, result.ExitCode); !isErr && hint != "" {
+					out += " " + hint
+				}
+			}
+			return TruncateForLLM(out), nil
 		}
 
 		// Fallback: direct exec without process manager.
