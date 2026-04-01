@@ -21,10 +21,13 @@ const (
 type SessionKind string
 
 const (
-	SessionKindDirect  SessionKind = "direct"
-	SessionKindGroup   SessionKind = "group"
-	SessionKindGlobal  SessionKind = "global"
-	SessionKindUnknown SessionKind = "unknown"
+	SessionKindDirect   SessionKind = "direct"
+	SessionKindGroup    SessionKind = "group"
+	SessionKindGlobal   SessionKind = "global"
+	SessionKindUnknown  SessionKind = "unknown"
+	SessionKindCron     SessionKind = "cron"
+	SessionKindSubagent SessionKind = "subagent"
+	SessionKindShadow   SessionKind = "shadow"
 )
 
 // ParseSessionKind converts a string to SessionKind, defaulting to direct.
@@ -36,6 +39,12 @@ func ParseSessionKind(s string) SessionKind {
 		return SessionKindGlobal
 	case "unknown":
 		return SessionKindUnknown
+	case "cron":
+		return SessionKindCron
+	case "subagent":
+		return SessionKindSubagent
+	case "shadow":
+		return SessionKindShadow
 	default:
 		return SessionKindDirect
 	}

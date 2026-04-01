@@ -22,3 +22,23 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	}
 	return result.Text, nil
 }
+
+// cronTranscriptCloner adapts chat.FileTranscriptStore to the cron.TranscriptCloner
+// interface for shadow session transcript operations.
+type cronTranscriptCloner struct {
+	store *chat.FileTranscriptStore
+}
+
+var _ cron.TranscriptCloner = (*cronTranscriptCloner)(nil)
+
+func (c *cronTranscriptCloner) CloneRecent(srcKey, dstKey string, limit int) (int, error) {
+	return c.store.CloneRecent(srcKey, dstKey, limit)
+}
+
+func (c *cronTranscriptCloner) DeleteTranscript(key string) error {
+	return c.store.Delete(key)
+}
+
+func (c *cronTranscriptCloner) AppendSystemNote(sessionKey, text string) error {
+	return c.store.AppendSystemNote(sessionKey, text)
+}

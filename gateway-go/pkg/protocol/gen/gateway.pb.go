@@ -40,9 +40,9 @@ const (
 	// Legacy codes (backward compatible)
 	ErrorCode_ERROR_CODE_NOT_LINKED      ErrorCode = 1
 	ErrorCode_ERROR_CODE_NOT_PAIRED      ErrorCode = 2
-	ErrorCode_ERROR_CODE_AGENT_TIMEOUT   ErrorCode = 3
+	ErrorCode_ERROR_CODE_AGENT_TIMEOUT   ErrorCode = 3 // retryable
 	ErrorCode_ERROR_CODE_INVALID_REQUEST ErrorCode = 4
-	ErrorCode_ERROR_CODE_UNAVAILABLE     ErrorCode = 5
+	ErrorCode_ERROR_CODE_UNAVAILABLE     ErrorCode = 5 // retryable
 	// INVALID_REQUEST refinements
 	ErrorCode_ERROR_CODE_MISSING_PARAM     ErrorCode = 10
 	ErrorCode_ERROR_CODE_NOT_FOUND         ErrorCode = 11
@@ -51,8 +51,8 @@ const (
 	ErrorCode_ERROR_CODE_CONFLICT          ErrorCode = 14
 	ErrorCode_ERROR_CODE_FORBIDDEN         ErrorCode = 15
 	// UNAVAILABLE refinements
-	ErrorCode_ERROR_CODE_NODE_DISCONNECTED ErrorCode = 20
-	ErrorCode_ERROR_CODE_DEPENDENCY_FAILED ErrorCode = 21
+	ErrorCode_ERROR_CODE_NODE_DISCONNECTED ErrorCode = 20 // retryable
+	ErrorCode_ERROR_CODE_DEPENDENCY_FAILED ErrorCode = 21 // retryable
 	ErrorCode_ERROR_CODE_FEATURE_DISABLED  ErrorCode = 22
 )
 
@@ -123,13 +123,17 @@ func (ErrorCode) EnumDescriptor() ([]byte, []int) {
 
 // ErrorShape is the structured error payload embedded in ResponseFrame.error.
 type ErrorShape struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`                                              // ErrorCode string (e.g., "NOT_FOUND").
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`                                        // Human-readable error description.
-	Details       *structpb.Value        `protobuf:"bytes,3,opt,name=details,proto3" json:"details,omitempty"`                                        // Optional structured details (varies by error code).
-	Retryable     *bool                  `protobuf:"varint,4,opt,name=retryable,proto3,oneof" json:"retryable,omitempty"`                             // Hint: client may retry the request.
-	RetryAfterMs  *uint64                `protobuf:"varint,5,opt,name=retry_after_ms,json=retryAfterMs,proto3,oneof" json:"retry_after_ms,omitempty"` // Suggested retry delay in milliseconds.
-	Cause         *string                `protobuf:"bytes,6,opt,name=cause,proto3,oneof" json:"cause,omitempty"`                                      // Underlying cause for debugging.
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Code    string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`       // ErrorCode string (e.g., "NOT_FOUND").
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"` // Human-readable error description.
+	// Optional structured details (schema varies by error code).
+	// This field is absent when no details are provided. Clients MUST treat it
+	// as nullable — never assume it is a non-null object or a specific type
+	// without checking the enclosing error code first.
+	Details       *structpb.Value `protobuf:"bytes,3,opt,name=details,proto3" json:"details,omitempty"`
+	Retryable     *bool           `protobuf:"varint,4,opt,name=retryable,proto3,oneof" json:"retryable,omitempty"`                             // Hint: client may retry the request.
+	RetryAfterMs  *uint64         `protobuf:"varint,5,opt,name=retry_after_ms,json=retryAfterMs,proto3,oneof" json:"retry_after_ms,omitempty"` // Suggested retry delay in milliseconds.
+	Cause         *string         `protobuf:"bytes,6,opt,name=cause,proto3,oneof" json:"cause,omitempty"`                                      // Underlying cause for debugging.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

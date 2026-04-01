@@ -26,10 +26,13 @@ const (
 type Kind string
 
 const (
-	KindDirect  Kind = "direct"
-	KindGroup   Kind = "group"
-	KindGlobal  Kind = "global"
-	KindUnknown Kind = "unknown"
+	KindDirect   Kind = "direct"
+	KindGroup    Kind = "group"
+	KindGlobal   Kind = "global"
+	KindUnknown  Kind = "unknown"
+	KindCron     Kind = "cron"
+	KindSubagent Kind = "subagent"
+	KindShadow   Kind = "shadow"
 )
 
 // ModelConfig holds inference and model-selection settings for a session.
@@ -120,6 +123,10 @@ const (
 	gcInterval = 10 * time.Minute
 	// gcMaxAge is how long a terminal session is kept before eviction.
 	gcMaxAge = 1 * time.Hour
+	// gcMaxAgeCron is retention for cron and shadow sessions (24 hours).
+	gcMaxAgeCron = 24 * time.Hour
+	// gcMaxAgeSubagent is retention for subagent sessions (2 hours).
+	gcMaxAgeSubagent = 2 * time.Hour
 )
 
 // Manager tracks active sessions in memory.
@@ -159,16 +166,32 @@ func (m *Manager) StartGC(ctx context.Context) {
 	})
 }
 
-// evictStale removes terminal sessions whose UpdatedAt is older than gcMaxAge.
+// gcMaxAgeForKind returns the retention duration for a session kind.
+func gcMaxAgeForKind(k Kind) time.Duration {
+	switch k {
+	case KindCron, KindShadow:
+		return gcMaxAgeCron
+	case KindSubagent:
+		return gcMaxAgeSubagent
+	default:
+		return gcMaxAge
+	}
+}
+
+// evictStale removes terminal sessions whose UpdatedAt is older than the
+// kind-specific retention period.
 func (m *Manager) evictStale() {
-	cutoff := time.Now().Add(-gcMaxAge).UnixMilli()
+	now := time.Now()
 	var evicted []string
 
 	m.mu.Lock()
 	for key, s := range m.sessions {
-		if isTerminal(s.Status) && s.UpdatedAt < cutoff {
-			delete(m.sessions, key)
-			evicted = append(evicted, key)
+		if isTerminal(s.Status) {
+			cutoff := now.Add(-gcMaxAgeForKind(s.Kind)).UnixMilli()
+			if s.UpdatedAt < cutoff {
+				delete(m.sessions, key)
+				evicted = append(evicted, key)
+			}
 		}
 	}
 	m.mu.Unlock()

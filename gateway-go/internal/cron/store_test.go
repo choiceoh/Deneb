@@ -82,8 +82,7 @@ func TestStoreUpdateState(t *testing.T) {
 	s.AddJob(StoreJob{ID: "x", Enabled: true, Payload: StorePayload{Kind: "agentTurn"}})
 
 	err := s.UpdateJobState("x", JobState{
-		LastRunStatus:     "ok",
-		LastRunAtMs:       1000,
+		LastSessionKey:    "cron:x:1000",
 		ConsecutiveErrors: 0,
 	})
 	if err != nil {
@@ -91,8 +90,8 @@ func TestStoreUpdateState(t *testing.T) {
 	}
 
 	got := s.GetJob("x")
-	if got.State.LastRunStatus != "ok" {
-		t.Errorf("state.lastRunStatus = %q, want 'ok'", got.State.LastRunStatus)
+	if got.State.LastSessionKey != "cron:x:1000" {
+		t.Errorf("state.lastSessionKey = %q, want 'cron:x:1000'", got.State.LastSessionKey)
 	}
 }
 
