@@ -29,6 +29,7 @@
 | `testing.md` | 테스트 가이드라인 | `**/*_test.go`, `**/*_test.rs` |
 | `release-and-deploy.md` | 릴리스/배포 워크플로우 | `scripts/release*`, `.github/workflows/release*` |
 | `git-pr.md` | Git/PR 상세 가이드 | `.github/**` |
+| `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
 
 ---

@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+# build-status — Show release version, commit delta, and branch comparison.
+# Designed for AI agents to quickly orient themselves.
+#
+# Usage:
+#   scripts/build-status              — Full report (main + current branch + remote delta)
+#   scripts/build-status main         — Main branch: release version + commits since release
+#   scripts/build-status current      — Current branch vs main comparison
+#   scripts/build-status remote       — New commits on origin since last fetch
+#
+# Exit codes: 0=ok, 1=error
+
+set -euo pipefail
+
+# ── Worktree-aware canonical re-exec ───────────────────────────────────────
+script_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+script_parent_dir="$(dirname "$script_self")"
+if common_git_dir=$(git -C "$script_parent_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+  canonical_repo_root="$(dirname "$common_git_dir")"
+  canonical_self="$canonical_repo_root/scripts/$(basename "${BASH_SOURCE[0]}")"
+  if [ "$script_self" != "$canonical_self" ] && [ -x "$canonical_self" ]; then
+    exec "$canonical_self" "$@"
+  fi
+fi
+
+usage() {
+  cat <<USAGE
+Usage:
+  scripts/build-status              Full report (main + current + remote delta)
+  scripts/build-status main         Main: release version + commits since release
+  scripts/build-status current      Current branch vs main delta
+  scripts/build-status remote       New commits on origin since last fetch
+USAGE
+}
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+repo_root() {
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if common_git_dir=$(git -C "$script_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+    dirname "$common_git_dir"
+    return
+  fi
+  (cd "$script_dir/.." && pwd)
+}
+
+# Latest deneb-v* tag by version sort.
+latest_release_tag() {
+  git tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1
+}
+
+# Extract version number from tag (deneb-v4.7.0 → 4.7.0).
+tag_to_version() {
+  echo "$1" | sed 's/^deneb-v//'
+}
+
+# Count commits between two refs.
+commit_count() {
+  git rev-list --count "$1".."$2" 2>/dev/null || echo "?"
+}
+
+# Snapshot origin/main SHA before fetch. Stores in PRE_FETCH_SHA.
+snapshot_before_fetch() {
+  PRE_FETCH_SHA=$(git rev-parse origin/main 2>/dev/null || echo "")
+}
+
+# Fetch and snapshot after. Stores in POST_FETCH_SHA.
+do_fetch() {
+  git fetch origin main --tags --quiet 2>/dev/null || true
+  POST_FETCH_SHA=$(git rev-parse origin/main 2>/dev/null || echo "")
+}
+
+# ── Main branch report ─────────────────────────────────────────────────────
+
+status_main() {
+  local tag
+  tag=$(latest_release_tag)
+  if [ -z "$tag" ]; then
+    echo "main: no deneb-v* tags found"
+    return
+  fi
+
+  local version
+  version=$(tag_to_version "$tag")
+  local main_sha
+  main_sha=$(git rev-parse --short origin/main 2>/dev/null || echo "unknown")
+  local tag_sha
+  tag_sha=$(git rev-parse --short "$tag" 2>/dev/null || echo "unknown")
+
+  local commits_since
+  commits_since=$(commit_count "$tag" "origin/main")
+
+  echo "=== main ==="
+  echo "  release:  v$version ($tag)"
+  echo "  tag SHA:  $tag_sha"
+  echo "  HEAD SHA: $main_sha"
+  echo "  commits since release: $commits_since"
+
+  if [ "$commits_since" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "  commits since v$version:"
+    git log --oneline --no-merges "$tag"..origin/main | sed 's/^/    /'
+  fi
+}
+
+# ── Current branch report ──────────────────────────────────────────────────
+
+status_current() {
+  local branch
+  branch=$(git branch --show-current 2>/dev/null || true)
+
+  if [ -z "$branch" ]; then
+    echo "current: detached HEAD ($(git rev-parse --short HEAD))"
+    return
+  fi
+
+  if [ "$branch" = "main" ]; then
+    echo "(on main branch — use 'scripts/build-status main')"
+    return
+  fi
+
+  local head_sha
+  head_sha=$(git rev-parse --short HEAD)
+
+  local ahead behind
+  ahead=$(commit_count "origin/main" "HEAD")
+  behind=$(commit_count "HEAD" "origin/main")
+
+  local tag
+  tag=$(latest_release_tag)
+  local version="unknown"
+  if [ -n "$tag" ]; then
+    version=$(tag_to_version "$tag")
+  fi
+
+  echo "=== $branch ==="
+  echo "  HEAD SHA:   $head_sha"
+  echo "  base:       v$version (main)"
+  echo "  vs main:    +$ahead ahead, -$behind behind"
+
+  if [ "$ahead" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "  your commits (not in main):"
+    git log --oneline --no-merges "origin/main..HEAD" | sed 's/^/    /'
+  fi
+
+  if [ "$behind" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "  missing from main ($behind commits):"
+    git log --oneline --no-merges "HEAD..origin/main" | head -10 | sed 's/^/    /'
+    if [ "$behind" -gt 10 ] 2>/dev/null; then
+      echo "    ... and $(( behind - 10 )) more"
+    fi
+  fi
+}
+
+# ── Remote delta report (new commits since last fetch) ─────────────────────
+
+status_remote() {
+  if [ -z "${PRE_FETCH_SHA:-}" ] || [ -z "${POST_FETCH_SHA:-}" ]; then
+    # Called standalone — do our own before/after fetch.
+    snapshot_before_fetch
+    do_fetch
+  fi
+
+  echo "=== remote delta ==="
+
+  if [ -z "$PRE_FETCH_SHA" ]; then
+    echo "  (no previous origin/main ref — first fetch)"
+    return
+  fi
+
+  if [ "$PRE_FETCH_SHA" = "$POST_FETCH_SHA" ]; then
+    echo "  origin/main unchanged ($(git rev-parse --short "$POST_FETCH_SHA"))"
+    echo "  no new commits since last fetch"
+    return
+  fi
+
+  local new_commits
+  new_commits=$(commit_count "$PRE_FETCH_SHA" "$POST_FETCH_SHA")
+
+  local pre_short post_short
+  pre_short=$(git rev-parse --short "$PRE_FETCH_SHA")
+  post_short=$(git rev-parse --short "$POST_FETCH_SHA")
+
+  # Check if a new release tag appeared.
+  local pre_tag post_tag
+  pre_tag=$(git tag --sort=-v:refname --list 'deneb-v*' --contains "$PRE_FETCH_SHA" 2>/dev/null | tail -1 || true)
+  post_tag=$(latest_release_tag)
+
+  echo "  before:  $pre_short"
+  echo "  after:   $post_short"
+  echo "  new commits: $new_commits"
+
+  if [ -n "$pre_tag" ] && [ -n "$post_tag" ] && [ "$pre_tag" != "$post_tag" ]; then
+    echo "  release changed: $(tag_to_version "$pre_tag") → $(tag_to_version "$post_tag")"
+  fi
+
+  if [ "$new_commits" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "  new commits on origin/main:"
+    git log --oneline --no-merges "$PRE_FETCH_SHA".."$POST_FETCH_SHA" | head -20 | sed 's/^/    /'
+    if [ "$new_commits" -gt 20 ] 2>/dev/null; then
+      echo "    ... and $(( new_commits - 20 )) more"
+    fi
+  fi
+}
+
+# ── Dispatch ───────────────────────────────────────────────────────────────
+
+case "${1:-all}" in
+  main)
+    snapshot_before_fetch
+    do_fetch
+    status_main
+    ;;
+  current)
+    snapshot_before_fetch
+    do_fetch
+    status_current
+    ;;
+  remote)
+    snapshot_before_fetch
+    do_fetch
+    status_remote
+    ;;
+  all)
+    snapshot_before_fetch
+    do_fetch
+    status_main
+    echo ""
+    status_current
+    echo ""
+    status_remote
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
