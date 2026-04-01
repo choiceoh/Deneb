@@ -409,8 +409,8 @@ func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logge
 		for _, id := range summarizeCmd.MessageIDs {
 			if id >= 0 && id < len(msgs) {
 				text := msgs[id].Content
-				if len(text) > 200 {
-					text = text[:200] + "..."
+				if runeText := []rune(text); len(runeText) > 200 {
+					text = string(runeText[:200]) + "..."
 				}
 				parts = append(parts, fmt.Sprintf("[%s] %s", msgs[id].Role, text))
 			}
