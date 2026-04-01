@@ -193,6 +193,52 @@ func (r *InternalRegistry) Trigger(ctx context.Context, event *InternalHookEvent
 	}
 }
 
+// TriggerFromEvent bridges the shell hook Event type to internal hook events.
+// Converts a shell event + environment map into a structured InternalHookEvent
+// and triggers matching internal handlers.
+func (r *InternalRegistry) TriggerFromEvent(ctx context.Context, event Event, sessionKey string, env map[string]string) {
+	eventType, action := eventToInternal(event)
+	eventCtx := make(map[string]any, len(env))
+	for k, v := range env {
+		eventCtx[k] = v
+	}
+	r.Trigger(ctx, &InternalHookEvent{
+		Type:       eventType,
+		Action:     action,
+		SessionKey: sessionKey,
+		Context:    eventCtx,
+		Timestamp:  time.Now(),
+	})
+}
+
+// eventToInternal maps a shell hook Event to an InternalHookEventType + action.
+func eventToInternal(event Event) (InternalHookEventType, string) {
+	switch event {
+	case EventGatewayStart:
+		return EventTypeGateway, "start"
+	case EventGatewayStop:
+		return EventTypeGateway, "stop"
+	case EventSessionStart:
+		return EventTypeSession, "start"
+	case EventSessionEnd:
+		return EventTypeSession, "end"
+	case EventMessageReceive:
+		return EventTypeMessage, "receive"
+	case EventMessageSend:
+		return EventTypeMessage, "send"
+	case EventChannelConnect:
+		return EventTypeGateway, "channel-connect"
+	case EventChannelDisconnect:
+		return EventTypeGateway, "channel-disconnect"
+	case EventToolUse:
+		return EventTypeCommand, "tool-use"
+	case EventGitHubWebhook:
+		return EventTypeGateway, "github-webhook"
+	default:
+		return InternalHookEventType(event), string(event)
+	}
+}
+
 // ListHandlers returns the names of all registered handlers per event key.
 func (r *InternalRegistry) ListHandlers() map[string][]string {
 	r.mu.RLock()

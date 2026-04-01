@@ -21,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/thinking"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -118,6 +119,7 @@ type ServerIntegrations struct {
 	memoryStore           *memory.Store           // structured memory store; used by flush task
 	gmailPollSvc          *gmailpoll.Service
 	autoresearchRunner    *autoresearch.Runner
+	thinkingRuntime       *thinking.ThinkingRuntime
 }
 
 // Server is the main gateway server.
@@ -329,6 +331,7 @@ func New(addr string, opts ...Option) *Server {
 		}
 	}
 	s.internalHooks = hooks.NewInternalRegistry(s.logger)
+	s.thinkingRuntime = thinking.NewThinkingRuntime()
 
 	// GitHub webhook: resolved from env vars; nil when GITHUB_WEBHOOK_SECRET is unset.
 	s.githubWebhookCfg = GitHubWebhookConfigFromEnv()

@@ -103,6 +103,8 @@ type Handler struct {
 	// hookRegistry fires user-defined shell hooks on message/tool events.
 	// Protected by callbackMu.
 	hookRegistry *hooks.Registry
+	// internalHookRegistry fires programmatic internal hooks on the same events.
+	internalHookRegistry *hooks.InternalRegistry
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -143,8 +145,9 @@ type HandlerConfig struct {
 	// Fields below were previously Set*() after construction. They are all
 	// available at handler creation time and passed here to reduce late-binding.
 	ProviderRuntime *provider.ProviderRuntimeResolver // optional; runtime auth
-	PluginHookRunner *plugin.TypedHookRunner           // optional; typed plugin hooks
-	HookRegistry    *hooks.Registry                   // optional; user-defined shell hooks
+	PluginHookRunner     *plugin.TypedHookRunner           // optional; typed plugin hooks
+	HookRegistry         *hooks.Registry                   // optional; user-defined shell hooks
+	InternalHookRegistry *hooks.InternalRegistry            // optional; programmatic internal hooks
 	BroadcastRaw    streaming.BroadcastRawFunc         // optional; raw event relay
 	EmitAgentFn     func(kind, sessionKey, runID string, payload map[string]any)
 	EmitTranscriptFn func(sessionKey string, message any, messageID string)
@@ -196,7 +199,8 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		maxTokens:       cfg.MaxTokens,
 		providerRuntime:  cfg.ProviderRuntime,
 		pluginHookRunner: cfg.PluginHookRunner,
-		hookRegistry:     cfg.HookRegistry,
+		hookRegistry:         cfg.HookRegistry,
+		internalHookRegistry: cfg.InternalHookRegistry,
 		broadcastRaw:     cfg.BroadcastRaw,
 		emitAgentFn:      cfg.EmitAgentFn,
 		emitTranscriptFn: cfg.EmitTranscriptFn,

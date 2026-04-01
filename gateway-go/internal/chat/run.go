@@ -119,6 +119,8 @@ type runDeps struct {
 	shutdownCtx context.Context
 	// hookRegistry fires user-defined shell hooks on message/tool events.
 	hookRegistry *hooks.Registry
+	// internalHookRegistry fires programmatic internal hooks.
+	internalHookRegistry *hooks.InternalRegistry
 	// pluginHookRunner runs typed plugin hooks at lifecycle points.
 	pluginHookRunner *plugin.TypedHookRunner
 	// drainPendingFn drains the next queued message for a session after the

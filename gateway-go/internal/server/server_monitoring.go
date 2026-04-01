@@ -106,11 +106,15 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 
 // emitChannelEvent fires the appropriate hook and broadcasts a channels.changed event.
 func (s *Server) emitChannelEvent(channelID string, hookEvent hooks.Event, action string) {
+	env := map[string]string{"DENEB_CHANNEL_ID": channelID}
 	if s.hooks != nil {
 		s.safeGo("hooks:"+string(hookEvent), func() {
-			s.hooks.Fire(context.Background(), hookEvent, map[string]string{
-				"DENEB_CHANNEL_ID": channelID,
-			})
+			s.hooks.Fire(context.Background(), hookEvent, env)
+		})
+	}
+	if s.internalHooks != nil {
+		s.safeGo("internal-hooks:"+string(hookEvent), func() {
+			s.internalHooks.TriggerFromEvent(context.Background(), hookEvent, "", env)
 		})
 	}
 	s.broadcaster.Broadcast("channels.changed", map[string]any{

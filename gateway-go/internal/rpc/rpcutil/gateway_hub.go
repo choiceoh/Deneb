@@ -36,8 +36,9 @@ type GatewayHub struct {
 	Processes *process.Manager
 
 	// Channel plugins.
-	Telegram *telegram.Plugin // nil until registerEarlyMethods creates it from config.
-	Hooks    *hooks.Registry
+	Telegram      *telegram.Plugin        // nil until registerEarlyMethods creates it from config.
+	Hooks         *hooks.Registry
+	InternalHooks *hooks.InternalRegistry // programmatic hook handlers (nil-safe)
 
 	// Agent pipeline.
 	Chat       *chat.Handler    // nil until registerSessionRPCMethods (late-phase only).

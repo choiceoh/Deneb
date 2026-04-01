@@ -148,14 +148,20 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
 
-	// Fire gateway.start hooks.
-	if s.hooks != nil {
+	// Fire gateway.start hooks (shell + internal).
+	{
 		addr := ln.Addr().String()
-		s.safeGo("hooks:gateway.start", func() {
-			s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
-				"DENEB_GATEWAY_ADDR": addr,
+		env := map[string]string{"DENEB_GATEWAY_ADDR": addr}
+		if s.hooks != nil {
+			s.safeGo("hooks:gateway.start", func() {
+				s.hooks.Fire(context.Background(), hooks.EventGatewayStart, env)
 			})
-		})
+		}
+		if s.internalHooks != nil {
+			s.safeGo("internal-hooks:gateway.start", func() {
+				s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStart, "", env)
+			})
+		}
 	}
 
 	return ln, nil
@@ -280,9 +286,12 @@ func (s *Server) doShutdown() error {
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
-	// 7. Fire gateway.stop hooks.
+	// 7. Fire gateway.stop hooks (shell + internal).
 	if s.hooks != nil {
 		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
+	}
+	if s.internalHooks != nil {
+		s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStop, "", nil)
 	}
 
 	// 8. Stop Telegram plugin.

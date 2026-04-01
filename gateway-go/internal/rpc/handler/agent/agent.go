@@ -29,6 +29,7 @@ type ExtendedDeps struct {
 	Processes        *process.Manager
 	Cron             *cron.Scheduler
 	Hooks            *hooks.Registry
+	InternalHooks    *hooks.InternalRegistry
 	Broadcaster      *events.Broadcaster
 }
 
@@ -351,25 +352,32 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		// Fire session lifecycle hooks with panic recovery.
-		if deps.Hooks != nil {
-			var hookEvent hooks.Event
-			switch session.LifecyclePhase(p.Phase) {
-			case session.PhaseStart:
-				hookEvent = hooks.EventSessionStart
-			case session.PhaseEnd, session.PhaseError:
-				hookEvent = hooks.EventSessionEnd
+		// Fire session lifecycle hooks with panic recovery (shell + internal).
+		var hookEvent hooks.Event
+		switch session.LifecyclePhase(p.Phase) {
+		case session.PhaseStart:
+			hookEvent = hooks.EventSessionStart
+		case session.PhaseEnd, session.PhaseError:
+			hookEvent = hooks.EventSessionEnd
+		}
+		if hookEvent != "" {
+			evt := hookEvent
+			key := p.Key
+			phase := p.Phase
+			env := map[string]string{
+				"DENEB_SESSION_KEY": key,
+				"DENEB_PHASE":       phase,
 			}
-			if hookEvent != "" {
-				evt := hookEvent
-				key := p.Key
-				phase := p.Phase
+			if deps.Hooks != nil {
 				go func() {
 					defer func() { recover() }()
-					deps.Hooks.Fire(context.Background(), evt, map[string]string{
-						"DENEB_SESSION_KEY": key,
-						"DENEB_PHASE":       phase,
-					})
+					deps.Hooks.Fire(context.Background(), evt, env)
+				}()
+			}
+			if deps.InternalHooks != nil {
+				go func() {
+					defer func() { recover() }()
+					deps.InternalHooks.TriggerFromEvent(context.Background(), evt, key, env)
 				}()
 			}
 		}
