@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	expandTimeout   = 5 * time.Second
+	expandTimeout   = 15 * time.Second
 	expandMaxTokens = 128
 )
 

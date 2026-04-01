@@ -21,7 +21,7 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout       = 25 * time.Second // local sglang: inference can take 10-20s
+	proactiveTimeout       = 35 * time.Second // local sglang: inference can take 10-30s on busy GPU
 	proactiveRemoteTimeout = 20 * time.Second // remote fallback (Gemini Flash) needs more time
 	proactiveMaxTokens     = 1024
 	proactiveMinMsgLen     = 20 // skip for very short messages
@@ -180,7 +180,7 @@ func deferredProactiveHint(ch <-chan string, start time.Time, logger *slog.Logge
 const (
 	compressThreshold = 16000 // chars — only compress very large outputs (saves sglang calls)
 	compressMaxTokens = 1024
-	compressTimeout   = 10 * time.Second
+	compressTimeout   = 20 * time.Second
 	// Tools whose output should never be compressed (they're already structured/small).
 	toolCompressSkipPrefix = "pilot" // pilot already uses sglang, don't double-process
 )

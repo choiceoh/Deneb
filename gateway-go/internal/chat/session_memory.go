@@ -216,7 +216,7 @@ func unsanitizeKey(key string) string {
 // LLM-based update
 // ---------------------------------------------------------------------------
 
-const sessionMemoryUpdateTimeout = 10 * time.Second
+const sessionMemoryUpdateTimeout = 20 * time.Second
 
 // sessionMemorySystemPrompt instructs the lightweight LLM on how to update
 // session memory. Korean because the primary interaction language is Korean.
