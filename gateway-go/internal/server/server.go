@@ -44,7 +44,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
-	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
@@ -393,6 +392,11 @@ func New(addr string, opts ...Option) *Server {
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.dispatcher.UseMiddleware(metrics.RPCInstrumentation(), middleware.Logging(s.logger))
+
+	// Build GatewayHub — central service registry. Chat is nil until
+	// registerSessionRPCMethods() creates the chat handler.
+	hub := s.buildHub()
+
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
 		Sessions:      s.sessions,
@@ -400,17 +404,10 @@ func New(addr string, opts ...Option) *Server {
 		GatewaySubs:   s.gatewaySubs,
 		Version:       s.version,
 	})
-	s.registerExtendedMethods()
-	s.registerPhase2Methods()
-	s.registerAdvancedWorkflowMethods()
-	s.registerNativeSystemMethods(denebDir)
-
-	// Wire provider RPC methods if a provider registry is configured.
-	if s.providers != nil {
-		s.dispatcher.RegisterDomain(handlerprovider.Methods(handlerprovider.Deps{
-			Providers: s.providers,
-		}))
-	}
+	s.registerEarlyMethods(hub, denebDir)  // ~30 domains via hub adapters
+	s.registerSessionRPCMethods()          // chat pipeline init + handler creation
+	s.registerLateMethods(hub)             // Chat-dependent domains
+	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
 
 	// Initialize plugin full registry, discoverer, typed hook runner, conversation bindings, and register RPC methods.
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)

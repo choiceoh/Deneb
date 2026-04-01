@@ -31,6 +31,7 @@
 | `git-pr.md` | Git/PR 상세 가이드 | `.github/**` |
 | `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
+| `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/server/method_registry.go`, `gateway-go/internal/rpc/rpcutil/gateway_hub.go` |
 
 ---
 

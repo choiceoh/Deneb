@@ -54,6 +54,16 @@ GITHUB_WEBHOOK_CHAT_ID  — Telegram chat ID to deliver Korean-language notifica
 - `internal/server/server_http_routing.go` — route registration
 - `internal/server/server.go` — `githubWebhookCfg` field, `GitHubWebhookConfigFromEnv()`
 
+## GatewayHub Wiring Rules
+
+- `GatewayHub` is a service container — no business logic, only `Broadcast()` and `Validate()`.
+- Hub is built only in `buildHub()`. No other file may create or populate `GatewayHub{}`.
+- Handler Deps assembly happens only in `method_registry.go` (inline literals, no adapter layer).
+- Handler packages (`internal/rpc/handler/*`) must NOT import `rpcutil.GatewayHub`.
+- Adding a new RPC domain: Hub field → handler Deps → `method_registry.go` wiring → `validateHub()` update → snapshot test update.
+- Do not add adapter/helper files for Deps wiring. Do not add methods to Hub beyond Broadcast/Validate.
+- Registration phases: Early (no Chat) → Session (creates Chat) → Late (Chat-dependent) → WorkflowSideEffects (non-RPC). Add new phases only if absolutely necessary.
+
 ## Build & Test
 
 - `cd gateway-go && go build ./...` or `make go`.
