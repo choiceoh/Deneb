@@ -588,9 +588,11 @@ func execToolSchema() map[string]any {
 				"default":     false,
 			},
 			"env": map[string]any{
-				"type":                 "object",
-				"description":          "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
-				"additionalProperties": "{'type': 'string'}",
+				"type":        "object",
+				"description": "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
+				"additionalProperties": map[string]any{
+					"type": "string",
+				},
 			},
 		},
 		"required": []string{"command"},

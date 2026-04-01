@@ -91,6 +91,11 @@ def emit_field_value(key: str, val, depth: int) -> str:
     if key == "items":
         # items is always a property-def style dict
         return emit_prop_def(val, depth)
+    if key == "additionalProperties":
+        if isinstance(val, bool):
+            return "true" if val else "false"
+        # additionalProperties is a schema object (same shape as items)
+        return emit_prop_def(val, depth)
     # Unknown keys: safe string fallback
     return go_str(str(val))
 
