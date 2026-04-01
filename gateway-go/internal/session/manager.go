@@ -114,6 +114,11 @@ type Session struct {
 	OutputTokens *int64 `json:"outputTokens,omitempty"`
 	TotalTokens  *int64 `json:"totalTokens,omitempty"`
 
+	// TimeoutAt is the absolute timestamp (UnixMilli) when a running session
+	// should be forcibly transitioned to StatusTimeout. Used for subagent
+	// sessions to prevent indefinitely hung agents. Zero means no timeout.
+	TimeoutAt *int64 `json:"timeoutAt,omitempty"`
+
 	// LastOutput stores the last assistant output text for the session.
 	// Used by cron runner to retrieve the agent's response after completion.
 	LastOutput string `json:"lastOutput,omitempty"`
@@ -187,10 +192,12 @@ func (m *Manager) StartGC(ctx context.Context) {
 }
 
 // evictStale removes terminal sessions whose UpdatedAt is older than the
-// Kind-specific retention period.
+// Kind-specific retention period, and enforces TimeoutAt on running sessions.
 func (m *Manager) evictStale() {
 	now := time.Now()
+	nowMs := now.UnixMilli()
 	var evicted []string
+	var timedOut []string
 
 	m.mu.Lock()
 	for key, s := range m.sessions {
@@ -200,12 +207,22 @@ func (m *Manager) evictStale() {
 				delete(m.sessions, key)
 				evicted = append(evicted, key)
 			}
+		} else if s.Status == StatusRunning && s.TimeoutAt != nil && nowMs > *s.TimeoutAt {
+			// Force-timeout running sessions past their deadline.
+			s.Status = StatusTimeout
+			endedAt := nowMs
+			s.EndedAt = &endedAt
+			s.UpdatedAt = nowMs
+			timedOut = append(timedOut, key)
 		}
 	}
 	m.mu.Unlock()
 
 	for _, key := range evicted {
 		m.eventBus.Emit(Event{Kind: EventDeleted, Key: key})
+	}
+	for _, key := range timedOut {
+		m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: key, OldStatus: StatusRunning, NewStatus: StatusTimeout})
 	}
 }
 

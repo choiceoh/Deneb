@@ -73,6 +73,17 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 		}
 	}
 
+	// Enforce max children per parent (breadth limit).
+	const maxChildrenPerParent = 10
+	if params.ParentAgentID != "" {
+		activeChildren := d.ActiveSubagentCount(params.ParentAgentID)
+		if activeChildren >= maxChildrenPerParent {
+			return SpawnSubagentResult{
+				Error: fmt.Errorf("max concurrent children (%d) reached for parent %s", maxChildrenPerParent, params.ParentAgentID),
+			}
+		}
+	}
+
 	// Generate agent ID and session key.
 	agentID := shortid.New("sub_" + sanitizeAgentID(params.Role))
 	sessionKey := fmt.Sprintf("acp:%s:%s", params.ParentSessionKey, agentID)
@@ -91,8 +102,14 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 	d.ACPRegistry.Register(agent)
 
 	// Create KindSubagent session in session.Manager for lifecycle tracking and GC.
+	// Set a 30-minute timeout to prevent indefinitely hung subagents.
 	if d.Sessions != nil {
-		d.Sessions.Create(sessionKey, session.KindSubagent)
+		sess := d.Sessions.Create(sessionKey, session.KindSubagent)
+		if sess != nil {
+			timeoutAt := time.Now().Add(30 * time.Minute).UnixMilli()
+			sess.TimeoutAt = &timeoutAt
+			_ = d.Sessions.Set(sess)
+		}
 	}
 
 	// Create session state if SaveSession is available.
@@ -177,14 +194,22 @@ func (d *SubagentInfraDeps) ResetSubagent(agentID, reason string) error {
 		return fmt.Errorf("agent %q not found", agentID)
 	}
 
+	// Cannot reset a running agent — kill it first.
+	if agent.Status == "running" {
+		return fmt.Errorf("cannot reset running agent %q; kill it first", agentID)
+	}
+
+	d.logger().Info("resetting subagent", "agentId", agentID, "previousStatus", agent.Status, "reason", reason)
+
 	// Abort any running session.
 	if d.AbortSession != nil && agent.SessionKey != "" {
 		_ = d.AbortSession(agent.SessionKey)
 	}
 
-	// Re-register as idle.
+	// Re-register as idle with fresh timestamp.
 	agent.Status = "idle"
 	agent.EndedAt = 0
+	agent.SpawnedAt = time.Now().UnixMilli()
 	d.ACPRegistry.Register(*agent)
 
 	return nil

@@ -1,6 +1,9 @@
 package session
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestCreateAndGet(t *testing.T) {
 	m := NewManager()
@@ -220,5 +223,50 @@ func TestApplyLifecycleRuntimeMsFallback(t *testing.T) {
 	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseEnd, Ts: 0})
 	if s.RuntimeMs == nil || *s.RuntimeMs != 777 {
 		t.Errorf("RuntimeMs = %v, want 777 (fallback to existing)", s.RuntimeMs)
+	}
+}
+
+func TestEvictStale_TimeoutEnforcement(t *testing.T) {
+	m := NewManager()
+
+	// Create a running session with an already-expired timeout.
+	pastMs := time.Now().Add(-1 * time.Minute).UnixMilli()
+	m.Set(&Session{
+		Key:       "timeout-session",
+		Kind:      KindSubagent,
+		Status:    StatusRunning,
+		UpdatedAt: time.Now().UnixMilli(),
+		TimeoutAt: &pastMs,
+	})
+
+	// Create a running session with a far-future timeout (should NOT be timed out).
+	futureMs := time.Now().Add(1 * time.Hour).UnixMilli()
+	m.Set(&Session{
+		Key:       "active-session",
+		Kind:      KindSubagent,
+		Status:    StatusRunning,
+		UpdatedAt: time.Now().UnixMilli(),
+		TimeoutAt: &futureMs,
+	})
+
+	// Run eviction.
+	m.evictStale()
+
+	// Expired session should be transitioned to StatusTimeout.
+	expired := m.Get("timeout-session")
+	if expired == nil {
+		t.Fatal("timeout-session should still exist (not evicted, just timed out)")
+	}
+	if expired.Status != StatusTimeout {
+		t.Errorf("status = %q, want %q", expired.Status, StatusTimeout)
+	}
+
+	// Active session should remain running.
+	active := m.Get("active-session")
+	if active == nil {
+		t.Fatal("active-session should still exist")
+	}
+	if active.Status != StatusRunning {
+		t.Errorf("status = %q, want %q", active.Status, StatusRunning)
 	}
 }

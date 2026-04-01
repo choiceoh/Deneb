@@ -20,6 +20,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
+// SubagentPoller checks for active descendant subagents in a cron session.
+// When a cron job's agent output looks like an interim acknowledgment
+// (e.g., "working on it"), the poller waits for descendants to finish.
+type SubagentPoller interface {
+	// HasActiveDescendants returns true if the session has running child subagents.
+	HasActiveDescendants(sessionKey string) bool
+	// CollectDescendantOutputs gathers completed descendant outputs into a summary.
+	CollectDescendantOutputs(sessionKey string) string
+}
+
 // IsolatedAgentConfig configures an isolated cron agent turn.
 type IsolatedAgentConfig struct {
 	Job            StoreJob
@@ -38,6 +48,8 @@ type IsolatedAgentConfig struct {
 	DeliveryTarget        *DeliveryTarget
 	DeliveryBestEffort    bool
 	SkipHeartbeatDelivery bool
+	// SubagentPoller polls for descendant subagent completion. Nil disables polling.
+	SubagentPoller SubagentPoller
 }
 
 // IsolatedAgentResult holds the full outcome of an isolated agent run.
@@ -136,11 +148,32 @@ func RunIsolatedAgentTurn(
 		}
 	}
 
-	// 5. Check for subagent followup.
-	if isLikelyInterimMessage(output) {
-		logger.Debug("likely interim message, waiting for subagent", "session", cfg.SessionKey)
-		// In the full TS implementation, this waits for descendant subagents.
-		// For the Go gateway, we proceed with what we have.
+	// 5. Check for subagent followup — wait for descendant subagents to complete.
+	if isLikelyInterimMessage(output) && cfg.SubagentPoller != nil {
+		logger.Debug("interim message detected, polling for descendant completion", "session", cfg.SessionKey)
+
+		const pollTimeout = 60 * time.Second
+		const pollInterval = 5 * time.Second
+		deadline := time.Now().Add(pollTimeout)
+
+		for time.Now().Before(deadline) && cfg.SubagentPoller.HasActiveDescendants(cfg.SessionKey) {
+			select {
+			case <-runCtx.Done():
+				logger.Warn("context canceled while waiting for subagent descendants", "session", cfg.SessionKey)
+				break
+			case <-time.After(pollInterval):
+				// Continue polling.
+			}
+			if runCtx.Err() != nil {
+				break
+			}
+		}
+
+		if extra := cfg.SubagentPoller.CollectDescendantOutputs(cfg.SessionKey); extra != "" {
+			output = output + "\n\n" + extra
+			result.OutputText = output
+			result.Summary = PickSummaryFromOutput(output)
+		}
 	}
 
 	// 6. Build delivery payloads.
