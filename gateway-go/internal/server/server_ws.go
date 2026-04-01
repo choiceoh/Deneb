@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"sync"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +31,20 @@ var jsonBufPool = sync.Pool{
 	New: func() any {
 		return bytes.NewBuffer(make([]byte, 0, 4096))
 	},
+}
+
+// isRoutineConnError returns true for errors expected from clients that connect
+// but never complete the handshake (health probes, port scans, CLI retries).
+func isRoutineConnError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	// net/internal poll wraps "use of closed network connection" without a
+	// sentinel — fall back to string match.
+	msg := err.Error()
+	return strings.Contains(msg, "use of closed network connection")
 }
 
 // Connection health constants.
@@ -154,7 +170,10 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	handshakeCtx, handshakeCancel := context.WithTimeout(r.Context(), time.Duration(protocol.HandshakeTimeoutMs)*time.Millisecond)
 	if err := s.handleHandshake(handshakeCtx, client, r.RemoteAddr); err != nil {
 		handshakeCancel()
-		s.logger.Debug("handshake failed", "connId", client.connID, "error", err)
+		// Timeout / closed-conn are routine (health checks, port scans, CLI retries) — silent drop.
+		if !isRoutineConnError(err) {
+			s.logger.Warn("handshake failed", "connId", client.connID, "error", err)
+		}
 		conn.Close(websocket.StatusPolicyViolation, "handshake failed")
 		return
 	}
