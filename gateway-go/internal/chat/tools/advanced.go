@@ -149,36 +149,30 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		}
 		args = append(args, "--", searchPath)
 
-		cmd := exec.CommandContext(ctx, "rg", args...)
-		out, err := cmd.CombinedOutput()
+		out, _, err := runRg(ctx, args)
 		if err != nil {
-			exitCode := -1
-			if cmd.ProcessState != nil {
-				exitCode = cmd.ProcessState.ExitCode()
-			}
+			exitCode := rgExitCode(err)
 			if exitCode == 1 {
 				return "No matches found.", nil
 			}
-			// Exit code 2 often means invalid regex or unrecognized type.
-			if exitCode == 2 {
+			// If stdout has valid match lines despite the error, use them.
+			if len(out) > 0 && hasGrepMatches(out) {
+				// Continue to step 2 with partial results.
+			} else if exitCode == 2 {
 				// Retry 1: treat pattern as literal string (-F).
 				fixedArgs := make([]string, len(args))
 				copy(fixedArgs, args)
 				fixedArgs = append([]string{"-F"}, fixedArgs...)
-				retryCmd := exec.CommandContext(ctx, "rg", fixedArgs...)
-				retryOut, retryErr := retryCmd.CombinedOutput()
-				if retryErr == nil {
+				if retryOut, _, retryErr := runRg(ctx, fixedArgs); retryErr == nil {
 					out = retryOut
-				} else if retryCmd.ProcessState != nil && retryCmd.ProcessState.ExitCode() == 1 {
+				} else if rgExitCode(retryErr) == 1 {
 					return "No matches found.", nil
 				} else if p.FileType != "" {
 					// Retry 2: strip --type (commonly unrecognized), keep -F.
 					bareArgs := stripRgFlag(fixedArgs, "--type")
-					bareCmd := exec.CommandContext(ctx, "rg", bareArgs...)
-					bareOut, bareErr := bareCmd.CombinedOutput()
-					if bareErr == nil {
+					if bareOut, _, bareErr := runRg(ctx, bareArgs); bareErr == nil {
 						out = bareOut
-					} else if bareCmd.ProcessState != nil && bareCmd.ProcessState.ExitCode() == 1 {
+					} else if rgExitCode(bareErr) == 1 {
 						return "No matches found.", nil
 					} else {
 						return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
@@ -186,11 +180,9 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 				} else {
 					// Last resort: bare search, no type/glob/regex.
 					bareMinArgs := []string{"-F", "-n", "--max-count=20", "--no-heading", "-e", p.Pattern, "--", searchPath}
-					bareMinCmd := exec.CommandContext(ctx, "rg", bareMinArgs...)
-					bareMinOut, bareMinErr := bareMinCmd.CombinedOutput()
-					if bareMinErr == nil {
+					if bareMinOut, _, bareMinErr := runRg(ctx, bareMinArgs); bareMinErr == nil {
 						out = bareMinOut
-					} else if bareMinCmd.ProcessState != nil && bareMinCmd.ProcessState.ExitCode() == 1 {
+					} else if rgExitCode(bareMinErr) == 1 {
 						return "No matches found.", nil
 					} else {
 						return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
@@ -199,11 +191,9 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 			} else {
 				// Non-regex error. Try bare minimum search.
 				bareMinArgs := []string{"-F", "-n", "--max-count=20", "--no-heading", "-e", p.Pattern, "--", searchPath}
-				bareMinCmd := exec.CommandContext(ctx, "rg", bareMinArgs...)
-				bareMinOut, bareMinErr := bareMinCmd.CombinedOutput()
-				if bareMinErr == nil {
+				if bareMinOut, _, bareMinErr := runRg(ctx, bareMinArgs); bareMinErr == nil {
 					out = bareMinOut
-				} else if bareMinCmd.ProcessState != nil && bareMinCmd.ProcessState.ExitCode() == 1 {
+				} else if rgExitCode(bareMinErr) == 1 {
 					return "No matches found.", nil
 				} else {
 					return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(out)))

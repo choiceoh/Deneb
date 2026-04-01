@@ -1,8 +1,10 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -99,16 +101,20 @@ func ToolGrep(defaultDir string) ToolFunc {
 		// Use -e to avoid flag confusion when pattern starts with '-'.
 		args = append(args, "-e", p.Pattern, "--", searchPath)
 
-		cmd := exec.CommandContext(ctx, "rg", args...)
-		out, err := cmd.CombinedOutput()
+		stdout, _, err := runRg(ctx, args)
 		if err != nil {
-			exitCode := -1
-			if cmd.ProcessState != nil {
-				exitCode = cmd.ProcessState.ExitCode()
-			}
+			exitCode := rgExitCode(err)
 			// rg exit code 1 means no matches (not an error).
 			if exitCode == 1 {
 				return "No matches found.", nil
+			}
+			// If stdout has valid match lines despite the error (e.g. rg hit
+			// partial file-access errors but still found matches), use them.
+			if len(stdout) > 0 && hasGrepMatches(stdout) {
+				if p.Mode == "" || p.Mode == "content" {
+					return groupGrepOutput(string(stdout)), nil
+				}
+				return string(stdout), nil
 			}
 			// Exit code 2 often means invalid regex or unrecognized type.
 			if exitCode == 2 {
@@ -116,29 +122,22 @@ func ToolGrep(defaultDir string) ToolFunc {
 				fixedArgs := make([]string, len(args))
 				copy(fixedArgs, args)
 				fixedArgs = append([]string{"-F"}, fixedArgs...)
-				retryCmd := exec.CommandContext(ctx, "rg", fixedArgs...)
-				retryOut, retryErr := retryCmd.CombinedOutput()
-				if retryErr == nil {
+				if retryOut, _, retryErr := runRg(ctx, fixedArgs); retryErr == nil {
 					if p.Mode == "" || p.Mode == "content" {
 						return groupGrepOutput(string(retryOut)), nil
 					}
 					return string(retryOut), nil
-				}
-				if retryCmd.ProcessState != nil && retryCmd.ProcessState.ExitCode() == 1 {
+				} else if rgExitCode(retryErr) == 1 {
 					return "No matches found.", nil
-				}
-				// Retry 2: strip --type (commonly unrecognized), keep -F.
-				if p.FileType != "" {
+				} else if p.FileType != "" {
+					// Retry 2: strip --type (commonly unrecognized), keep -F.
 					bareArgs := stripRgFlag(fixedArgs, "--type")
-					bareCmd := exec.CommandContext(ctx, "rg", bareArgs...)
-					bareOut, bareErr := bareCmd.CombinedOutput()
-					if bareErr == nil {
+					if bareOut, _, bareErr := runRg(ctx, bareArgs); bareErr == nil {
 						if p.Mode == "" || p.Mode == "content" {
 							return groupGrepOutput(string(bareOut)), nil
 						}
 						return string(bareOut), nil
-					}
-					if bareCmd.ProcessState != nil && bareCmd.ProcessState.ExitCode() == 1 {
+					} else if rgExitCode(bareErr) == 1 {
 						return "No matches found.", nil
 					}
 				}
@@ -151,27 +150,23 @@ func ToolGrep(defaultDir string) ToolFunc {
 				bareMinArgs = append(bareMinArgs, "-c")
 			}
 			bareMinArgs = append(bareMinArgs, "-e", p.Pattern, "--", searchPath)
-			bareMinCmd := exec.CommandContext(ctx, "rg", bareMinArgs...)
-			bareMinOut, bareMinErr := bareMinCmd.CombinedOutput()
-			if bareMinErr == nil {
+			if bareMinOut, _, bareMinErr := runRg(ctx, bareMinArgs); bareMinErr == nil {
 				if p.Mode == "" || p.Mode == "content" {
 					return groupGrepOutput(string(bareMinOut)), nil
 				}
 				return string(bareMinOut), nil
-			}
-			if bareMinCmd.ProcessState != nil && bareMinCmd.ProcessState.ExitCode() == 1 {
+			} else if rgExitCode(bareMinErr) == 1 {
 				return "No matches found.", nil
 			}
 
-			errMsg := strings.TrimSpace(string(out))
 			// Include the failed command for diagnostics.
-			return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), errMsg)
+			return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(stdout)))
 		}
 		// Group content-mode output by file to reduce path repetition.
 		if p.Mode == "" || p.Mode == "content" {
-			return groupGrepOutput(string(out)), nil
+			return groupGrepOutput(string(stdout)), nil
 		}
-		return string(out), nil
+		return string(stdout), nil
 	}
 }
 
@@ -382,17 +377,19 @@ func findWithRipgrep(ctx context.Context, dir, pattern string, showHidden bool, 
 	}
 	args = append(args, dir)
 
-	cmd := exec.CommandContext(ctx, "rg", args...)
-	out, err := cmd.CombinedOutput()
+	stdout, _, err := runRg(ctx, args)
 	if err != nil {
 		// rg exit code 1 means no matches.
-		if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
+		if rgExitCode(err) == 1 {
 			return nil, nil
 		}
-		return nil, err
+		// If stdout has file paths despite the error, use them.
+		if len(stdout) == 0 {
+			return nil, err
+		}
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := strings.Split(strings.TrimSpace(string(stdout)), "\n")
 	var matches []string
 	for _, line := range lines {
 		if line == "" {
@@ -510,4 +507,49 @@ func ResolvePath(path, defaultDir string) string {
 	}
 
 	return resolved
+}
+
+// runRg executes ripgrep with separate stdout/stderr capture.
+// Returns (stdout, stderr, error). Using separate pipes prevents stderr
+// warnings (permission denied, binary file skipped) from contaminating
+// valid match output on stdout.
+func runRg(ctx context.Context, args []string) (stdout, stderr []byte, err error) {
+	cmd := exec.CommandContext(ctx, "rg", args...)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err = cmd.Run()
+	return outBuf.Bytes(), errBuf.Bytes(), err
+}
+
+// rgExitCode extracts the exit code from a command error.
+// Returns -1 if the process state is unavailable (e.g. binary not found).
+func rgExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if ok := errors.As(err, &exitErr); ok {
+		return exitErr.ExitCode()
+	}
+	return -1
+}
+
+// hasGrepMatches returns true if the rg stdout output contains at least one
+// line that looks like a match (file:linenum:content or file:linenum-content).
+// This is used to salvage partial results when rg exits with a non-zero code
+// due to file-access errors but still found matches in accessible files.
+func hasGrepMatches(out []byte) bool {
+	// Quick check: a valid match line must have at least "a:1:x" (5 chars).
+	if len(out) < 5 {
+		return false
+	}
+	// Check the first few lines for the file:linenum:content pattern.
+	lines := bytes.SplitN(out, []byte("\n"), 5)
+	for _, line := range lines {
+		if _, _, _, ok := parseGrepLine(string(line)); ok {
+			return true
+		}
+	}
+	return false
 }
