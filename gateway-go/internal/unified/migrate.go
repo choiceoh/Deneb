@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 )
 
 // migrateSchema applies incremental schema changes for existing unified
@@ -27,36 +29,8 @@ func (s *Store) migrateSchema() error {
 	}
 
 	// Knowledge graph tables (fact_relations, entities, fact_entities).
-	graphDDL := []string{
-		`CREATE TABLE IF NOT EXISTS fact_relations (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			from_fact_id  INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-			to_fact_id    INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-			relation_type TEXT NOT NULL CHECK(relation_type IN ('evolves','contradicts','supports','causes','related')),
-			confidence    REAL NOT NULL DEFAULT 1.0,
-			created_at    TEXT NOT NULL,
-			UNIQUE(from_fact_id, to_fact_id, relation_type)
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_relations_from ON fact_relations(from_fact_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_relations_to ON fact_relations(to_fact_id)`,
-		`CREATE TABLE IF NOT EXISTS entities (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			name          TEXT NOT NULL UNIQUE,
-			entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization')),
-			first_seen    TEXT NOT NULL,
-			last_seen     TEXT NOT NULL,
-			mention_count INTEGER NOT NULL DEFAULT 1
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)`,
-		`CREATE TABLE IF NOT EXISTS fact_entities (
-			fact_id   INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-			entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-			role      TEXT NOT NULL DEFAULT 'mentioned',
-			PRIMARY KEY (fact_id, entity_id)
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_fact_entities_entity ON fact_entities(entity_id)`,
-	}
-	for _, ddl := range graphDDL {
+	// DDL sourced from memory.GraphMigrateDDL() — single source of truth.
+	for _, ddl := range memory.GraphMigrateDDL() {
 		if _, err := s.db.Exec(ddl); err != nil {
 			return fmt.Errorf("schema migration failed (%s): %w", ddl, err)
 		}
