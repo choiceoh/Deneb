@@ -19,10 +19,6 @@ import (
 
 // Microcompact defaults.
 const (
-	// microcompactStaleThreshold is the minimum age (from last assistant
-	// message) before tool results are eligible for pruning.
-	microcompactStaleThreshold = 2 * time.Minute
-
 	// microcompactKeepRecent is the number of most recent tool results
 	// to always preserve (even if stale).
 	microcompactKeepRecent = 8
@@ -89,13 +85,36 @@ func MicrocompactMessages(messages []llm.Message, now time.Time) ([]llm.Message,
 		return messages, MicrocompactResult{Reason: "no_tool_results"}
 	}
 
-	_ = now // reserved for future time-based staleness
+	// Staleness gate: only prune tool results from completed turns.
+	// Tool results that appear after the last assistant message are from the
+	// current active turn and must be preserved for context fidelity.
+	lastAssistantIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "assistant" {
+			lastAssistantIdx = i
+			break
+		}
+	}
 
-	// Determine how many to prune: all except the most recent N.
-	pruneCount := len(positions) - microcompactKeepRecent
+	// Filter to only stale positions (before the last assistant message).
+	var stalePositions []toolResultPos
+	for _, pos := range positions {
+		if pos.msgIdx < lastAssistantIdx {
+			stalePositions = append(stalePositions, pos)
+		}
+	}
+	if len(stalePositions) == 0 {
+		return messages, MicrocompactResult{Reason: "active_turn"}
+	}
+
+	// Determine how many stale results to prune: all except the most recent N.
+	pruneCount := len(stalePositions) - microcompactKeepRecent
 	if pruneCount <= 0 {
 		return messages, MicrocompactResult{Reason: "below_keep_threshold"}
 	}
+
+	// Use stale positions (oldest first) for pruning.
+	positions = stalePositions
 
 	// Build a set of (msgIdx, blockIdx) pairs to prune.
 	type key struct{ msg, block int }

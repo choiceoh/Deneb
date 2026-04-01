@@ -142,6 +142,18 @@ func ExecuteBatch(
 			defer wg.Done()
 			defer func() { <-sem }()
 
+			// Re-check sibling error after acquiring semaphore slot.
+			mu.Lock()
+			hasErr := firstError != ""
+			mu.Unlock()
+			if hasErr {
+				results[idx] = ToolResult{
+					ID: c.ID, Name: c.Name,
+					Output: "skipped: sibling tool error", IsError: true,
+				}
+				return
+			}
+
 			result := executor(ctx, c)
 			results[idx] = result
 

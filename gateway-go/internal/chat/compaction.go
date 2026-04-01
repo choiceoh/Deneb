@@ -181,8 +181,9 @@ func handleContextOverflowAurora(
 		var factExtractor aurora.FactExtractor
 		if deps.memoryStore != nil {
 			factExtractor = func(summaryContent string, depth uint32) error {
-				// Estimate token count from content length (~4 chars/token).
-				estimatedTokens := uint64(len([]rune(summaryContent)) / 4)
+				// Estimate token count using rune-based divisor consistent with
+				// estimateTokens() (runesPerToken=2, calibrated for Korean).
+				estimatedTokens := uint64(len([]rune(summaryContent)) / runesPerToken)
 				summary := aurora.SummaryRecord{
 					Content:    summaryContent,
 					Depth:      depth,
@@ -409,8 +410,8 @@ func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logge
 		for _, id := range summarizeCmd.MessageIDs {
 			if id >= 0 && id < len(msgs) {
 				text := msgs[id].Content
-				if len(text) > 200 {
-					text = text[:200] + "..."
+				if runeText := []rune(text); len(runeText) > 200 {
+					text = string(runeText[:200]) + "..."
 				}
 				parts = append(parts, fmt.Sprintf("[%s] %s", msgs[id].Role, text))
 			}

@@ -23,8 +23,6 @@ func makeTextMessage(role, text string) llm.Message {
 
 func TestMicrocompactMessages(t *testing.T) {
 	now := time.Now()
-	staleTime := now.Add(-5 * time.Minute) // well past threshold
-	_ = staleTime
 
 	t.Run("empty messages", func(t *testing.T) {
 		msgs, result := MicrocompactMessages(nil, now)
@@ -47,9 +45,23 @@ func TestMicrocompactMessages(t *testing.T) {
 		}
 	})
 
-	t.Run("too few to prune", func(t *testing.T) {
-		// Use a "stale" time far in the future so staleness check passes.
-		stale := now.Add(10 * time.Minute)
+	t.Run("active turn skips pruning", func(t *testing.T) {
+		// Tool results after the last assistant message are from the active
+		// turn and must NOT be pruned.
+		msgs := []llm.Message{
+			makeTextMessage("assistant", "let me check"),
+		}
+		for i := 0; i < microcompactKeepRecent+5; i++ {
+			msgs = append(msgs, makeToolResultMessage("id-"+string(rune('a'+i)), strings.Repeat("x", 1000)))
+		}
+		// No trailing assistant message — active turn.
+		_, result := MicrocompactMessages(msgs, now)
+		if result.Reason != "active_turn" {
+			t.Errorf("reason = %q, want active_turn", result.Reason)
+		}
+	})
+
+	t.Run("too few stale to prune", func(t *testing.T) {
 		msgs := []llm.Message{
 			makeTextMessage("assistant", "let me check"),
 		}
@@ -57,15 +69,15 @@ func TestMicrocompactMessages(t *testing.T) {
 		for i := 0; i < microcompactKeepRecent; i++ {
 			msgs = append(msgs, makeToolResultMessage("id-"+string(rune('a'+i)), "result content"))
 		}
-		_, result := MicrocompactMessages(msgs, stale)
+		// Trailing assistant message marks tool results as stale.
+		msgs = append(msgs, makeTextMessage("assistant", "done"))
+		_, result := MicrocompactMessages(msgs, now)
 		if result.Reason != "below_keep_threshold" {
 			t.Errorf("reason = %q, want below_keep_threshold", result.Reason)
 		}
 	})
 
 	t.Run("prunes old tool results", func(t *testing.T) {
-		// Use a "stale" time far in the future so the staleness check passes.
-		stale := now.Add(10 * time.Minute)
 		msgs := []llm.Message{
 			makeTextMessage("assistant", "initial response"),
 		}
@@ -75,10 +87,10 @@ func TestMicrocompactMessages(t *testing.T) {
 			content := strings.Repeat("x", 1000) // substantial content
 			msgs = append(msgs, makeToolResultMessage("id-"+string(rune('a'+i)), content))
 		}
-		// Add another assistant message at the end (stale scenario).
+		// Trailing assistant message makes all tool results stale.
 		msgs = append(msgs, makeTextMessage("assistant", "done"))
 
-		pruned, result := MicrocompactMessages(msgs, stale)
+		pruned, result := MicrocompactMessages(msgs, now)
 		if result.Reason != "pruned" {
 			t.Errorf("reason = %q, want pruned", result.Reason)
 		}
