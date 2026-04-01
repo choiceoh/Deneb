@@ -25,8 +25,6 @@ This page explains hardening **within that model**. It does not claim hostile mu
 
 ## Quick check: `deneb security audit`
 
-See also: [Formal Verification (Security Models)](/security/formal-verification/)
-
 Run this regularly (especially after changing config or exposing network surfaces):
 
 ```bash
@@ -895,7 +893,6 @@ Dedicated doc: [Sandboxing](/gateway/sandboxing)
 
 Two complementary approaches:
 
-- **Run the full Gateway in Docker** (container boundary): [Docker](/install/docker)
 - **Tool sandbox** (`agents.defaults.sandbox`, host gateway + Docker-isolated tools): [Sandboxing](/gateway/sandboxing)
 
 Note: to prevent cross-agent access, keep `agents.defaults.sandbox.scope` at `"agent"` (default)

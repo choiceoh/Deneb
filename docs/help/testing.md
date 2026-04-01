@@ -92,23 +92,6 @@ Think of the suites as “increasing realism” (and increasing flakiness/cost):
   - No real keys required
   - More moving parts than unit tests (can be slower)
 
-### E2E: OpenShell backend smoke
-
-- Command: `pnpm test:e2e:openshell`
-- File: `test/openshell-sandbox.e2e.test.ts`
-- Scope:
-  - Starts an isolated OpenShell gateway on the host via Docker
-  - Creates a sandbox from a temporary local Dockerfile
-  - Exercises Deneb's OpenShell backend over real `sandbox ssh-config` + SSH exec
-  - Verifies remote-canonical filesystem behavior through the sandbox fs bridge
-- Expectations:
-  - Opt-in only; not part of the default `pnpm test:e2e` run
-  - Requires a local `openshell` CLI plus a working Docker daemon
-  - Uses isolated `HOME` / `XDG_CONFIG_HOME`, then destroys the test gateway and sandbox
-- Useful overrides:
-  - `DENEB_E2E_OPENSHELL=1` to enable the test when running the broader e2e suite manually
-  - `DENEB_E2E_OPENSHELL_COMMAND=/path/to/openshell` to point at a non-default CLI binary or wrapper script
-
 ### Live (real providers + real models)
 
 - Command: `pnpm test:live`

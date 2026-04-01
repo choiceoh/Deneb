@@ -31,16 +31,13 @@ Use these hubs to discover every page, including deep dives and reference docs t
 
 ## Installation + updates
 
-- [Docker](/install/docker)
-- [Nix](/install/nix)
 - [Updating / rollback](/install/updating)
-- [Bun workflow (experimental)](/install/bun)
 
 ## Core concepts
 
 - [Architecture](/concepts/architecture)
 - [Features](/concepts/features)
-- [Network hub](/gateway/network-overview)
+- [Network model](/gateway/network-model)
 - [Agent runtime](/concepts/agent)
 - [Agent workspace](/concepts/agent-workspace)
 - [Memory](/concepts/memory)
@@ -54,7 +51,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Queue](/concepts/queue)
 - [Slash commands](/tools/slash-commands)
 - [RPC adapters](/reference/rpc)
-- [TypeBox schemas](/concepts/typebox)
 - [Timezone handling](/concepts/timezone)
 - [Presence](/concepts/presence)
 - [Discovery + transports](/gateway/discovery)
@@ -96,7 +92,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 ## Tools + automation
 
 - [Tools surface](/tools)
-- [OpenProse](/plugins/prose)
 - [CLI reference](/cli)
 - [Exec tool](/tools/exec)
 - [PDF tool](/tools/pdf)

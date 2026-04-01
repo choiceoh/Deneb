@@ -164,10 +164,6 @@
       "destination": "/concepts/agent-workspace"
     },
     {
-      "source": "/android",
-      "destination": "/platforms/android"
-    },
-    {
       "source": "/architecture",
       "destination": "/concepts/architecture"
     },
@@ -182,14 +178,6 @@
     {
       "source": "/tools/bash",
       "destination": "/tools/exec"
-    },
-    {
-      "source": "/browser",
-      "destination": "/tools/browser"
-    },
-    {
-      "source": "/browser-linux-troubleshooting",
-      "destination": "/tools/browser-linux-troubleshooting"
     },
     {
       "source": "/auth-monitoring",
@@ -228,12 +216,20 @@
       "destination": "/gateway/configuration"
     },
     {
+      "source": "/control-ui",
+      "destination": "/web/control-ui"
+    },
+    {
       "source": "/cron-jobs",
       "destination": "/automation/cron-jobs"
     },
     {
       "source": "/cron-vs-heartbeat",
       "destination": "/automation/cron-vs-heartbeat"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/web/dashboard"
     },
     {
       "source": "/telegram",
@@ -303,19 +299,11 @@
       "source": "/hubs",
       "destination": "/start/hubs"
     },
-{
-      "source": "/ios",
-      "destination": "/platforms/ios"
-    },
     {
       "source": "/linux",
       "destination": "/platforms/linux"
     },
     {
-      "source": "/location",
-      "destination": "/channels/location"
-    },
-{
       "source": "/lore",
       "destination": "/start/lore"
     },
@@ -338,6 +326,10 @@
     {
       "source": "/multi-agent",
       "destination": "/concepts/multi-agent"
+    },
+    {
+      "source": "/onboarding",
+      "destination": "/start/onboarding"
     },
     {
       "source": "/pairing",
@@ -374,6 +366,10 @@
     {
       "source": "/remote",
       "destination": "/gateway/remote"
+    },
+    {
+      "source": "/remote-gateway-readme",
+      "destination": "/gateway/remote-gateway-readme"
     },
     {
       "source": "/rpc",
@@ -472,8 +468,8 @@
       "destination": "/help/troubleshooting"
     },
     {
-      "source": "/typebox",
-      "destination": "/concepts/typebox"
+      "source": "/tui",
+      "destination": "/web/tui"
     },
     {
       "source": "/updating",
@@ -516,10 +512,6 @@
       "destination": "/tools/plugin"
     },
     {
-      "source": "/platforms/macos-vm",
-      "destination": "/install/macos-vm"
-    },
-    {
       "source": "/gateway/trusted-proxy",
       "destination": "/gateway/authentication"
     },
@@ -532,10 +524,6 @@
       "destination": "/tools/perplexity"
     },
     {
-      "source": "/prose",
-      "destination": "/plugins/prose"
-    },
-    {
       "source": "/ci",
       "destination": "/help/ci"
     },
@@ -544,44 +532,20 @@
       "destination": "/reference/date-time"
     },
     {
-      "source": "/pi",
-      "destination": "/concepts/pi"
-    },
-    {
-      "source": "/pi-dev",
-      "destination": "/help/pi-dev"
-    },
-    {
-      "source": "/vps",
-      "destination": "/install/vps"
-    },
-    {
       "source": "/auth-credential-semantics",
       "destination": "/gateway/auth-credential-semantics"
     },
     {
       "source": "/logging",
-      "destination": "/gateway/logging-overview"
+      "destination": "/gateway/logging"
     },
     {
       "source": "/network",
-      "destination": "/gateway/network-overview"
+      "destination": "/gateway/network-model"
     },
     {
       "source": "/diagnostics/flags",
       "destination": "/help/diagnostics-flags"
-    },
-    {
-      "source": "/docs.acp",
-      "destination": "/reference/acp-bridge"
-    },
-    {
-      "source": "/architecture/modular-architecture-plan",
-      "destination": "/reference/modular-architecture-plan"
-    },
-    {
-      "source": "/internal/rust-go-porting-assessment",
-      "destination": "/reference/rust-go-porting-assessment"
     }
   ],
   "navigation": {
@@ -605,7 +569,8 @@
                 "pages": [
                   "start/getting-started",
                   "start/onboarding-overview",
-                  "start/wizard"
+                  "start/wizard",
+                  "start/onboarding"
                 ]
               },
               {
@@ -623,18 +588,11 @@
             "groups": [
               {
                 "group": "Install overview",
-                "pages": ["install/index"]
+                "pages": ["install/index", "install/installer"]
               },
               {
                 "group": "Maintenance",
                 "pages": ["install/updating", "install/migrating", "install/uninstall"]
-              },
-              {
-                "group": "Hosting and deployment",
-                "pages": [
-                  "install/vps",
-                  "install/macos-vm"
-                ]
               },
               {
                 "group": "Advanced",
@@ -672,7 +630,6 @@
                 "group": "Fundamentals",
                 "pages": [
                   "concepts/design-philosophy",
-                  "concepts/pi",
                   "concepts/architecture",
                   "concepts/agent",
                   "concepts/agent-loop",
@@ -740,14 +697,6 @@
                 ]
               },
               {
-                "group": "Browser",
-                "pages": [
-                  "tools/browser",
-                  "tools/browser-login",
-                  "tools/browser-linux-troubleshooting"
-                ]
-              },
-              {
                 "group": "Agent coordination",
                 "pages": [
                   "tools/agent-send",
@@ -770,10 +719,13 @@
               {
                 "group": "Extensions",
                 "pages": [
+                  "plugins/building-extensions",
+                  "plugins/architecture",
+                  "plugins/community",
                   "plugins/bundles",
+                  "plugins/manifest",
                   "plugins/agent-tools",
-                  "tools/capability-cookbook",
-                  "plugins/prose"
+                  "tools/capability-cookbook"
                 ]
               },
               {
@@ -854,8 +806,7 @@
                 "group": "Platforms overview",
                 "pages": [
                   "platforms/index",
-                  "platforms/linux",
-                  "platforms/android"
+                  "platforms/linux"
                 ]
               }
             ]
@@ -893,7 +844,6 @@
                     "pages": [
                       "gateway/security/index",
                       "gateway/sandboxing",
-                      "gateway/openshell",
                       "gateway/sandbox-vs-tool-policy-vs-elevated"
                     ]
                   },
@@ -917,15 +867,11 @@
               },
               {
                 "group": "Remote access",
-                "pages": ["gateway/remote", "gateway/tailscale"]
+                "pages": ["gateway/remote", "gateway/remote-gateway-readme", "gateway/tailscale"]
               },
               {
-                "group": "Security",
-                "pages": [
-                  "security/formal-verification",
-                  "security/THREAT-MODEL-ATLAS",
-                  "security/CONTRIBUTING-THREAT-MODEL"
-                ]
+                "group": "Web interfaces",
+                "pages": ["web/index", "web/control-ui", "web/dashboard", "web/tui"]
               }
             ]
           },
@@ -966,7 +912,6 @@
               {
                 "group": "Concept internals",
                 "pages": [
-                  "concepts/typebox",
                   "concepts/markdown-formatting",
                   "concepts/typing-indicators",
                   "concepts/timezone"
@@ -1009,7 +954,7 @@
               },
               {
                 "group": "Developer setup",
-                "pages": ["start/setup", "help/pi-dev"]
+                "pages": ["start/setup"]
               },
               {
                 "group": "Contributing",
@@ -1018,24 +963,6 @@
               {
                 "group": "Docs meta",
                 "pages": ["start/hubs", "start/docs-directory"]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "language": "ja",
-        "tabs": [
-          {
-            "tab": "はじめに",
-            "groups": [
-              {
-                "group": "概要",
-                "pages": ["ja-JP/index"]
-              },
-              {
-                "group": "初回セットアップ",
-                "pages": ["ja-JP/start/getting-started", "ja-JP/start/wizard"]
               }
             ]
           }
