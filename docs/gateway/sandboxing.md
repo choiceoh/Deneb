@@ -396,13 +396,9 @@ Security defaults:
 - `network: "container:<id>"` is blocked by default (namespace join bypass risk).
 - Break-glass override: `agents.defaults.sandbox.docker.dangerouslyAllowContainerNamespaceJoin: true`.
 
-Docker installs and the containerized gateway live here:
-[Docker](/install/docker)
-
 For Docker gateway deployments, `docker-setup.sh` can bootstrap sandbox config.
 Set `DENEB_SANDBOX=1` (or `true`/`yes`/`on`) to enable that path. You can
-override socket location with `DENEB_DOCKER_SOCKET`. Full setup and env
-reference: [Docker](/install/docker#enable-agent-sandbox-for-docker-gateway-opt-in).
+override socket location with `DENEB_DOCKER_SOCKET`.
 
 ## setupCommand (one-time container setup)
 

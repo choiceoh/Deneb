@@ -88,4 +88,4 @@ For remote gateways, you can also use `deneb logs --follow`.
 
 - If `logging.level` is set higher than `warn`, these logs may be suppressed. Default `info` is fine.
 - Flags are safe to leave enabled; they only affect log volume for the specific subsystem.
-- Use [Logging](/gateway/logging-overview) to change log destinations, levels, and redaction.
+- Use [Logging](/gateway/logging) to change log destinations, levels, and redaction.

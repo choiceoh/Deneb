@@ -150,25 +150,6 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
   </Accordion>
 </AccordionGroup>
 
-## Other install methods
-
-<CardGroup cols={2}>
-  <Card title="Docker" href="/install/docker" icon="container">
-    Containerized or headless deployments.
-  </Card>
-  <Card title="Podman" href="/install/podman" icon="container">
-    Rootless container: run `setup-podman.sh` once, then the launch script.
-  </Card>
-  <Card title="Nix" href="/install/nix" icon="snowflake">
-    Declarative install via Nix.
-  </Card>
-  <Card title="Ansible" href="/install/ansible" icon="server">
-    Automated fleet provisioning.
-  </Card>
-  <Card title="Bun" href="/install/bun" icon="zap">
-    CLI-only usage via the Bun runtime.
-  </Card>
-</CardGroup>
 
 ## After install
 

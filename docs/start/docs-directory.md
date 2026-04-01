@@ -22,7 +22,6 @@ For a complete map of the docs, see [Docs hubs](/start/hubs).
 - [Multi-agent routing](/concepts/multi-agent)
 - [Updating and rollback](/install/updating)
 - [Pairing (DM and nodes)](/channels/pairing)
-- [Nix mode](/install/nix)
 - [Deneb assistant setup](/start/deneb)
 - [Skills](/tools/skills)
 - [Skills config](/tools/skills-config)

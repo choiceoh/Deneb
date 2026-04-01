@@ -28,7 +28,6 @@ Last updated: 2026-03-25
 - Go `>=1.24` (for the Go gateway server)
 - Rust stable (for the Rust core library; install via [rustup](https://rustup.rs))
 - `buf` and `protoc` (for protobuf codegen; see `make proto`)
-- Docker (optional; only for containerized setup/e2e — see [Docker](/install/docker))
 
 ## Tailoring strategy (so updates do not hurt)
 

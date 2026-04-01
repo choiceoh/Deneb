@@ -17,9 +17,6 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [Recommended way to install and set up Deneb](#recommended-way-to-install-and-set-up-deneb)
   - [How do I open the dashboard after onboarding?](#how-do-i-open-the-dashboard-after-onboarding)
   - [How do I authenticate the dashboard (token) on localhost vs remote?](#how-do-i-authenticate-the-dashboard-token-on-localhost-vs-remote)
-  - [What runtime do I need?](#what-runtime-do-i-need)
-  - [Does it run on Raspberry Pi?](#does-it-run-on-raspberry-pi)
-  - [Any tips for Raspberry Pi installs?](#any-tips-for-raspberry-pi-installs)
   - [It is stuck on "wake up my friend" / onboarding will not hatch. What now?](#it-is-stuck-on-wake-up-my-friend-onboarding-will-not-hatch-what-now)
   - [Can I migrate my setup to a new machine without redoing onboarding?](#can-i-migrate-my-setup-to-a-new-machine-without-redoing-onboarding)
   - [Where do I see what is new in the latest version?](#where-do-i-see-what-is-new-in-the-latest-version)
@@ -233,7 +230,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
    tail -f "$(ls -t /tmp/deneb/deneb-*.log | head -1)"
    ```
 
-   File logs are separate from service logs; see [Logging](/gateway/logging-overview) and [Troubleshooting](/gateway/troubleshooting).
+   File logs are separate from service logs; see [Logging](/gateway/logging) and [Troubleshooting](/gateway/troubleshooting).
 
 6. **Run the doctor (repairs)**
 
@@ -345,32 +342,6 @@ The wizard opens your browser with a clean (non-tokenized) dashboard URL right a
 - **SSH tunnel**: `ssh -N -L 18789:127.0.0.1:18789 user@host` then open `http://127.0.0.1:18789/` and paste the token in Control UI settings.
 
 See [Dashboard](/web/dashboard) and [Web surfaces](/web) for bind modes and auth details.
-
-### What runtime do I need
-
-Node **>= 22** is required. `pnpm` is recommended. Bun is **not recommended** for the Gateway.
-
-### Does it run on Raspberry Pi
-
-Yes. The Gateway is lightweight - docs list **512MB-1GB RAM**, **1 core**, and about **500MB**
-disk as enough for personal use, and note that a **Raspberry Pi 4 can run it**.
-
-If you want extra headroom (logs, media, other services), **2GB is recommended**, but it's
-not a hard minimum.
-
-Tip: a small Pi/VPS can host the Gateway, and you can pair **nodes** on your laptop/phone for
-local screen/camera/canvas or command execution. See [Nodes](/nodes).
-
-### Any tips for Raspberry Pi installs
-
-Short version: it works, but expect rough edges.
-
-- Use a **64-bit** OS and keep Node >= 22.
-- Prefer the **hackable (git) install** so you can see logs and update fast.
-- Start without channels/skills, then add them one by one.
-- If you hit weird binary issues, it is usually an **ARM compatibility** problem.
-
-Docs: [Install](/install).
 
 ### It is stuck on wake up my friend onboarding will not hatch What now
 
@@ -555,25 +526,10 @@ Short answer: follow the installer guide, then run onboarding.
 - Full walkthrough: [Getting Started](/start/getting-started).
 - Installer + updates: [Install & updates](/install/updating).
 
-### How do I install Deneb on a VPS
+### How do I install Deneb on a server
 
-Any Linux VPS works. Install on the server, then use SSH/Tailscale to reach the Gateway.
-
-Guides: [exe.dev](/install/exe-dev), [Hetzner](/install/hetzner), [Fly.io](/install/fly).
+Install on the server, then use SSH/Tailscale to reach the Gateway.
 Remote access: [Gateway remote](/gateway/remote).
-
-### Where are the cloudVPS install guides
-
-We keep a **hosting hub** with the common providers. Pick one and follow the guide:
-
-- [VPS hosting](/vps) (all providers in one place)
-- [Fly.io](/install/fly)
-- [Hetzner](/install/hetzner)
-- [exe.dev](/install/exe-dev)
-
-How it works in the cloud: the **Gateway runs on the server**, and you access it
-from your laptop/phone via the Control UI (or Tailscale/SSH). Your state + workspace
-live on the server, so treat the host as the source of truth and back it up.
 
 You can pair **nodes** (headless) to that cloud Gateway to access
 local screen/camera/canvas or run commands on your laptop while keeping the
@@ -1078,20 +1034,7 @@ This path is host-local. If the Gateway runs elsewhere, either run a node host o
 
 ### Is there a dedicated sandboxing doc
 
-Yes. See [Sandboxing](/gateway/sandboxing). For Docker-specific setup (full gateway in Docker or sandbox images), see [Docker](/install/docker).
-
-### Docker feels limited How do I enable full features
-
-The default image is security-first and runs as the `node` user, so it does not
-include system packages, Homebrew, or bundled browsers. For a fuller setup:
-
-- Persist `/home/node` with `DENEB_HOME_VOLUME` so caches survive.
-- Bake system deps into the image with `DENEB_DOCKER_APT_PACKAGES`.
-- Install Playwright browsers via the bundled CLI:
-  `node /app/node_modules/playwright-core/cli.js install chromium`
-- Set `PLAYWRIGHT_BROWSERS_PATH` and ensure the path is persisted.
-
-Docs: [Docker](/install/docker), [Browser](/tools/browser).
+Yes. See [Sandboxing](/gateway/sandboxing).
 
 **Can I keep DMs personal but make groups public sandboxed with one agent**
 

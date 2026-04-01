@@ -263,10 +263,6 @@ If `requiresApproval` is present, inspect the prompt and decide:
 
 Use `approve --preview-from-stdin --limit N` to attach a JSON preview to approval requests without custom jq/heredoc glue. Resume tokens are now compact: Lobster stores workflow resume state under its state dir and hands back a small token key.
 
-## OpenProse
-
-OpenProse pairs well with Lobster: use `/prose` to orchestrate multi-agent prep, then run a Lobster pipeline for deterministic approvals. If a Prose program needs Lobster, allow the `lobster` tool for sub-agents via `tools.subagents.tools`. See [OpenProse](/plugins/prose).
-
 ## Safety
 
 - **Local subprocess only** — no network calls from the plugin itself.
