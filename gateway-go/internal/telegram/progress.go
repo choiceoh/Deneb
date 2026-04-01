@@ -112,7 +112,7 @@ func (pt *ProgressTracker) updateMessage(ctx context.Context) {
 	}
 
 	// Subsequent updates: edit the existing message.
-	_, _ = EditMessageText(ctx, pt.client, pt.chatID, msgID, text, "")
+	_, _ = EditMessageText(ctx, pt.client, pt.chatID, msgID, text, "", nil)
 }
 
 // renderText builds the plain-text progress display from current steps.

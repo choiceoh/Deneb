@@ -244,8 +244,9 @@ func UploadPhoto(ctx context.Context, c *Client, chatID int64, fileName string, 
 }
 
 // EditMessageText edits the text of an existing message.
+// An optional keyboard can be attached (pass nil to omit).
 // Returns the edited message result.
-func EditMessageText(ctx context.Context, c *Client, chatID int64, messageID int64, text string, parseMode string) (*SendResult, error) {
+func EditMessageText(ctx context.Context, c *Client, chatID int64, messageID int64, text string, parseMode string, keyboard *InlineKeyboardMarkup) (*SendResult, error) {
 	params := map[string]any{
 		"chat_id":    chatID,
 		"message_id": messageID,
@@ -253,6 +254,9 @@ func EditMessageText(ctx context.Context, c *Client, chatID int64, messageID int
 	}
 	if parseMode != "" {
 		params["parse_mode"] = parseMode
+	}
+	if keyboard != nil {
+		params["reply_markup"] = keyboard
 	}
 	params["link_preview_options"] = LinkPreviewOptions{IsDisabled: true}
 

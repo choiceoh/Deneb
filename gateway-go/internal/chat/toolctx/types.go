@@ -81,7 +81,8 @@ type DeliveryContext struct {
 	To        string `json:"to,omitempty"`
 	AccountID string `json:"accountId,omitempty"`
 	ThreadID  string `json:"threadId,omitempty"`
-	MessageID string `json:"messageId,omitempty"` // triggering message ID for reply threading
+	MessageID  string `json:"messageId,omitempty"`  // triggering message ID for reply threading
+	DraftMsgID string `json:"draftMsgId,omitempty"` // draft streaming message ID for edit-in-place on completion
 }
 
 // ChatMessage represents a message in a session transcript.
