@@ -475,7 +475,13 @@ func executeAgentRun(
 
 	// ContinuationSignal: shared across turns so continue_run tool can set it.
 	// Read by runAgentAsync after the agent loop returns.
-	contSignal := NewContinuationSignal()
+	// Only created for async paths where continuation is actually supported;
+	// sync paths (OpenAI HTTP) leave it nil so the continue_run tool returns
+	// "not available" instead of silently accepting and never following up.
+	var contSignal *ContinuationSignal
+	if deps.continuationEnabled {
+		contSignal = NewContinuationSignal()
+	}
 
 	// Resolve thinking config from the session's ThinkingLevel setting.
 	var thinkingCfg *llm.ThinkingConfig
@@ -529,7 +535,9 @@ func executeAgentRun(
 			ctx = WithRunCache(ctx, runCache)
 			ctx = WithFileCache(ctx, fileCache)
 			ctx = WithToolPreset(ctx, sessionToolPreset)
-			ctx = WithContinuationSignal(ctx, contSignal)
+			if contSignal != nil {
+				ctx = WithContinuationSignal(ctx, contSignal)
+			}
 			return ctx
 		},
 		// Enable nudge budget continuation and max-tokens recovery.
