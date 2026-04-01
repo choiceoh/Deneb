@@ -539,6 +539,7 @@ func executeAgentRun(
 			MinDeltaTokens:   500,
 		},
 		MaxOutputTokensRecovery: 3,
+		StreamingToolExecution:  true,
 	}
 
 	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
