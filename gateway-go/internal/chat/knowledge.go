@@ -8,13 +8,11 @@ package chat
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -27,12 +25,6 @@ type KnowledgeDeps struct {
 	MemoryStore    *memory.Store    // nil → skip structured memory search
 	MemoryEmbedder *memory.Embedder // nil → FTS-only structured search
 	UnifiedStore   *unified.Store   // nil → skip unified search + tier-1 injection
-
-	// Recall pilot dependencies. When all three are set, a dedicated pilot LLM
-	// performs exhaustive memory recall in parallel with the standard search.
-	RecallClient *llm.Client       // nil → skip pilot recall
-	RecallModel  string            // model ID for recall pilot (e.g., "google/gemini-2.5-flash")
-	RecallConfig memory.RecallConfig // recall engine configuration
 }
 
 // Knowledge prefetch limits.
@@ -131,18 +123,6 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		}()
 	}
 
-	// Pilot recall (parallel, dedicated LLM for exhaustive memory retrieval).
-	var recallResult string
-	if deps.RecallClient != nil && deps.RecallModel != "" && deps.MemoryStore != nil && deps.RecallConfig.Enabled {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			logger := slog.Default()
-			recallResult = memory.Recall(ctx, deps.MemoryStore, deps.MemoryEmbedder,
-				deps.RecallClient, deps.RecallModel, message, deps.RecallConfig, logger)
-		}()
-	}
-
 	// Tier 1: always-inject high-importance facts (unified store).
 	if deps.UnifiedStore != nil {
 		wg.Add(1)
@@ -169,13 +149,6 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	// Tier 1: high-importance facts always at the top.
 	if tier1Section != "" {
 		parts = append(parts, tier1Section)
-	}
-
-	// Pilot recall result (replaces standard structured search when available).
-	if recallResult != "" {
-		parts = append(parts, recallResult)
-		// When recall produced results, skip standard structured search to avoid duplication.
-		structFacts = nil
 	}
 
 	// Cross-source dedup: remove unified results that overlap with structured facts.
