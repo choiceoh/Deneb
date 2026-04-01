@@ -588,9 +588,11 @@ func execToolSchema() map[string]any {
 				"default":     false,
 			},
 			"env": map[string]any{
-				"type":                 "object",
-				"description":          "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
-				"additionalProperties": "{'type': 'string'}",
+				"type":        "object",
+				"description": "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
+				"additionalProperties": map[string]any{
+					"type": "string",
+				},
 			},
 		},
 		"required": []string{"command"},
@@ -666,16 +668,18 @@ func httpToolSchema() map[string]any {
 				"default":     "GET",
 			},
 			"headers": map[string]any{
-				"type":        "object",
-				"description": "Request headers as key-value pairs",
+				"type":                 "object",
+				"description":          "Request headers as key-value pairs",
+				"additionalProperties": true,
 			},
 			"body": map[string]any{
 				"type":        "string",
 				"description": "Request body as string",
 			},
 			"json": map[string]any{
-				"type":        "object",
-				"description": "JSON body (auto-sets Content-Type: application/json)",
+				"type":                 "object",
+				"description":          "JSON body (auto-sets Content-Type: application/json)",
+				"additionalProperties": true,
 			},
 			"timeout": map[string]any{
 				"type":        "number",
@@ -793,8 +797,9 @@ func cronToolSchema() map[string]any {
 				"description": "Job ID for update/remove/run actions",
 			},
 			"job": map[string]any{
-				"type":        "object",
-				"description": "Job definition for add/update",
+				"type":                 "object",
+				"description":          "Job definition for add/update",
+				"additionalProperties": true,
 			},
 			"text": map[string]any{
 				"type":        "string",
@@ -1389,8 +1394,9 @@ func pilotToolSchema() map[string]any {
 							"description": "Tool name from the registry (read, exec, grep, find, web_fetch, ls, http, etc.)",
 						},
 						"input": map[string]any{
-							"type":        "object",
-							"description": "Tool input parameters (same schema as calling the tool directly)",
+							"type":                 "object",
+							"description":          "Tool input parameters (same schema as calling the tool directly)",
+							"additionalProperties": true,
 						},
 						"label": map[string]any{
 							"type":        "string",
