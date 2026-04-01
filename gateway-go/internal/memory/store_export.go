@@ -189,6 +189,9 @@ func normalizeFlushPrefix(s string) string {
 
 // getFactEntityNames returns entity names linked to a fact.
 func (s *Store) getFactEntityNames(ctx context.Context, factID int64) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT e.name FROM entities e
 		 JOIN fact_entities fe ON fe.entity_id = e.id

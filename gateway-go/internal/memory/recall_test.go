@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -109,13 +110,13 @@ func TestBuildRecallPrompt(t *testing.T) {
 	if prompt == "" {
 		t.Fatal("expected non-empty prompt")
 	}
-	if !contains(prompt, "SQLite 관련 결정") {
+	if !strings.Contains(prompt, "SQLite 관련 결정") {
 		t.Error("prompt should contain user message")
 	}
-	if !contains(prompt, "id:42") {
+	if !strings.Contains(prompt, "id:42") {
 		t.Error("prompt should contain fact ID")
 	}
-	if !contains(prompt, "빈 팩트 ID: [42]") {
+	if !strings.Contains(prompt, "빈 팩트 ID: [42]") {
 		t.Error("prompt should contain backfill IDs")
 	}
 }
@@ -129,10 +130,10 @@ func TestFormatCandidatesAsKnowledge(t *testing.T) {
 	if result == "" {
 		t.Fatal("expected non-empty result")
 	}
-	if !contains(result, "### 메모리") {
+	if !strings.Contains(result, "### 메모리") {
 		t.Error("result should contain header")
 	}
-	if !contains(result, "테스트 팩트") {
+	if !strings.Contains(result, "테스트 팩트") {
 		t.Error("result should contain fact content")
 	}
 }
@@ -144,15 +145,3 @@ func TestFormatCandidatesAsKnowledge_Empty(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchStr(s, substr)
-}
-
-func searchStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}

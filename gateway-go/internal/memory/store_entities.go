@@ -194,7 +194,7 @@ func inferEntityType(name string) string {
 
 // processEntities extracts entity names from an extracted fact, upserts them,
 // and links them to the stored fact. Best-effort: errors are logged, not fatal.
-func (s *Store) processEntities(ctx context.Context, factID int64, ef ExtractedFact, logger slog.Logger) {
+func (s *Store) processEntities(ctx context.Context, factID int64, ef ExtractedFact, logger *slog.Logger) {
 	if len(ef.Entities) == 0 {
 		return
 	}
