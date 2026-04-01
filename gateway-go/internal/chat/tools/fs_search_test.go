@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -365,5 +366,42 @@ func TestToolGrep_noMatch(t *testing.T) {
 	}
 	if !strings.Contains(out, "No matches") {
 		t.Errorf("expected no-match message: %q", out)
+	}
+}
+
+// ─── hasGrepMatches ─────────────────────────────────────────────────────────
+
+func TestHasGrepMatches(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect bool
+	}{
+		{"empty", "", false},
+		{"too short", "ab", false},
+		{"valid match", "src/main.go:42:func main() {}", true},
+		{"context line", "src/main.go-40-package main", true},
+		{"multiple lines with match", "warning: something\nsrc/main.go:42:func main() {}\n", true},
+		{"no match lines", "error: cannot open file\npermission denied\n", false},
+		{"files only mode", "/path/to/file.go\n/another.go\n", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := hasGrepMatches([]byte(tc.input))
+			if got != tc.expect {
+				t.Errorf("hasGrepMatches(%q) = %v, want %v", tc.input, got, tc.expect)
+			}
+		})
+	}
+}
+
+// ─── rgExitCode ─────────────────────────────────────────────────────────────
+
+func TestRgExitCode(t *testing.T) {
+	if got := rgExitCode(nil); got != 0 {
+		t.Errorf("rgExitCode(nil) = %d, want 0", got)
+	}
+	if got := rgExitCode(fmt.Errorf("not an ExitError")); got != -1 {
+		t.Errorf("rgExitCode(generic error) = %d, want -1", got)
 	}
 }
