@@ -153,14 +153,6 @@ func executeAgentRun(
 			initialRole = role
 		}
 	}
-	// If the request has image attachments, prefer the lightweight model.
-	if deps.registry != nil && len(params.Attachments) > 0 && hasImageAttachment(params.Attachments) {
-		lwCfg := deps.registry.Config(modelrole.RoleLightweight)
-		if lwCfg.Model != "" {
-			model = deps.registry.FullModelID(modelrole.RoleLightweight)
-			initialRole = modelrole.RoleLightweight
-		}
-	}
 	// Parse provider prefix (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
 	providerID, modelName := parseModelID(model)
 	model = modelName
