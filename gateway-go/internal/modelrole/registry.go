@@ -62,7 +62,7 @@ const (
 	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
-	DefaultZaiModel   = "glm-5.1"
+	DefaultZaiModel   = "glm-5-turbo"
 
 	DefaultGoogleBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 	DefaultPilotModel    = "gemini-3-flash-preview"
