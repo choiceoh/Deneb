@@ -8,7 +8,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
-	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
 )
 
@@ -43,11 +42,6 @@ func (s *Server) registerConfigLifecycleMethods() {
 			})
 			debounceMu.Unlock()
 		},
-	}))
-	s.dispatcher.RegisterDomain(handlerchannel.LifecycleMethods(handlerchannel.LifecycleDeps{
-		TelegramPlugin: s.telegramPlug,
-		Hooks:          s.hooks,
-		Broadcaster:    s.broadcaster,
 	}))
 }
 
