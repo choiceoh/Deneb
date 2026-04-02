@@ -14,10 +14,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
+	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
@@ -71,7 +69,7 @@ func executeAgentRun(
 	params RunParams,
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
-	typingSignaler *typing.FullTypingSignaler,
+	typingSignaler chatport.TypingSignaler,
 	statusCtrl *telegram.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
@@ -919,7 +917,10 @@ func executeAgentRun(
 				// Sanitize draft text: strip leaked tool call markup and
 				// fenced code blocks so commands/code are never shown in
 				// the Telegram streaming draft (vibe coder constraint).
-				sanitized := reply.SanitizeDraftText(current)
+				sanitized := current
+				if deps.sanitizeDraft != nil {
+					sanitized = deps.sanitizeDraft(current)
+				}
 				if sanitized == "" {
 					return
 				}
@@ -1065,7 +1066,7 @@ func executeAgentRun(
 			}
 
 			// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
-			if autoreply.IsTransientHTTPError(runErr.Error()) && ctx.Err() == nil {
+			if deps.isTransientError != nil && deps.isTransientError(runErr.Error()) && ctx.Err() == nil {
 				logger.Warn("transient HTTP error, retrying once", "error", runErr)
 				select {
 				case <-ctx.Done():
