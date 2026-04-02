@@ -6,12 +6,13 @@ package autoreply
 
 import (
 	"context"
+	"log/slog"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/directives"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/thinking"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
@@ -33,7 +34,7 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	}
 
 	// 3. Parse inline directives from message body.
-	inline := rules.ParseInlineDirectives(msg.BodyForAgent, nil)
+	inline := directives.ParseInlineDirectives(msg.BodyForAgent, nil)
 
 	// 4. Run full directive handling (model resolution, queue changes, ack text,
 	//    session modifications) as a secondary processor after basic parsing.
@@ -43,11 +44,15 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 			if deps.Router == nil {
 				return ""
 			}
-			r, _ := deps.Router.Dispatch(handlers.CommandContext{
+			r, err := deps.Router.Dispatch(handlers.CommandContext{
 				Command: "status",
 				Session: session,
 				Deps:    deps.CommandDeps,
 			})
+			if err != nil {
+				slog.Warn("status directive dispatch failed", "error", err)
+				return ""
+			}
 			if r != nil {
 				return r.Reply
 			}
@@ -241,7 +246,7 @@ func InitSessionForReply(msg *types.MsgContext, deps ReplyDeps) *types.SessionSt
 
 // ApplyDirectivesToSession applies parsed directives to the session state.
 // Returns reply payloads if the directive was handled inline (e.g., status query).
-func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
+func ApplyDirectivesToSession(inline directives.InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
 	if inline.HasThinkDirective {
 		session.ThinkLevel = inline.ThinkLevel
 	}
@@ -266,11 +271,14 @@ func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.Sess
 
 	// Handle /status as inline directive.
 	if inline.HasStatusDirective && deps.Router != nil {
-		result, _ := deps.Router.Dispatch(handlers.CommandContext{
+		result, err := deps.Router.Dispatch(handlers.CommandContext{
 			Command: "status",
 			Session: session,
 			Deps:    deps.CommandDeps,
 		})
+		if err != nil {
+			slog.Warn("status directive dispatch failed", "error", err)
+		}
 		if result != nil && result.Reply != "" {
 			return []types.ReplyPayload{{Text: result.Reply}}
 		}
@@ -296,7 +304,7 @@ func buildThinkingCatalog(candidates []model.ModelCandidate) []thinking.Thinking
 
 // ResolveModelForReply determines the model to use for a reply via the full
 // model selection pipeline: directive > session > config > default.
-func ResolveModelForReply(sess *types.SessionState, inline rules.InlineDirectives, deps ReplyDeps) model.ModelSelection {
+func ResolveModelForReply(sess *types.SessionState, inline directives.InlineDirectives, deps ReplyDeps) model.ModelSelection {
 	// Parse directive provider/model if present.
 	var directiveProvider, directiveModel, directiveProfile string
 	if inline.HasModelDirective && inline.RawModelDirective != "" {

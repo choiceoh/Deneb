@@ -44,11 +44,11 @@ func (r *DefaultAgentRunner) runAgentWithRecovery(
 		return agentResult, false
 	}
 
-	errMsg := runErr.Error()
+	kind := ClassifyAgentError(runErr.Error())
 
 	// 1. Transient HTTP retry (502/503/521/429 → wait 2.5s, retry once).
-	if IsTransientHTTPError(errMsg) {
-		logger.Warn("transient HTTP error, retrying", "error", errMsg, "session", cfg.SessionKey)
+	if kind.IsTransient() {
+		logger.Warn("transient HTTP error, retrying", "error", runErr, "kind", kind, "session", cfg.SessionKey)
 		select {
 		case <-ctx.Done():
 			result.WasAborted = true
@@ -57,37 +57,25 @@ func (r *DefaultAgentRunner) runAgentWithRecovery(
 		case <-time.After(TransientRetryDelayMs * time.Millisecond):
 		}
 		agentResult, runErr = agent.RunAgent(ctx, agentCfg, messages, client, toolExec, agent.StreamHooks{}, logger, nil)
-	}
-
-	// 2. Context overflow → auto-recovery.
-	if runErr != nil && IsContextOverflowError(runErr.Error()) {
-		if r.onSessionReset != nil {
-			r.onSessionReset(cfg.SessionKey, "context_overflow")
+		if runErr == nil {
+			return agentResult, false
 		}
-		result.Payloads = append(result.Payloads, types.ReplyPayload{Text: ContextOverflowMessage, IsError: true})
-		result.DurationMs = time.Since(startedAt).Milliseconds()
-		return nil, true
+		// Re-classify after retry — the new error may be different.
+		kind = ClassifyAgentError(runErr.Error())
 	}
 
-	// 3. Billing error.
-	if runErr != nil && IsBillingError(runErr.Error()) {
-		result.Payloads = append(result.Payloads, types.ReplyPayload{Text: BillingErrorMessage, IsError: true})
-		result.DurationMs = time.Since(startedAt).Milliseconds()
-		return nil, true
-	}
-
-	// 4. Role ordering → session reset.
-	if runErr != nil && IsRoleOrderingError(runErr.Error()) {
-		if r.onSessionReset != nil {
-			r.onSessionReset(cfg.SessionKey, "role_ordering")
+	// 2-4. Terminal classified errors (context overflow, billing, role ordering, auth, compaction).
+	if msg := kind.UserMessage(); msg != "" {
+		if kind.NeedsSessionReset() && r.onSessionReset != nil {
+			r.onSessionReset(cfg.SessionKey, kind.resetReason())
 		}
-		result.Payloads = append(result.Payloads, types.ReplyPayload{Text: RoleOrderingMessage, IsError: true})
+		result.Payloads = append(result.Payloads, types.ReplyPayload{Text: msg, IsError: true})
 		result.DurationMs = time.Since(startedAt).Milliseconds()
 		return nil, true
 	}
 
 	// 5. Try fallback models if available.
-	if runErr != nil && len(cfg.FallbackModels) > 0 {
+	if len(cfg.FallbackModels) > 0 {
 		for i, fallback := range cfg.FallbackModels {
 			logger.Info("trying fallback model", "model", fallback, "attempt", i+1, "session", cfg.SessionKey)
 			parts := pipeline.SplitProviderModel(fallback)
@@ -112,28 +100,24 @@ func (r *DefaultAgentRunner) runAgentWithRecovery(
 	}
 
 	// 6. Final error — no recovery possible.
-	if runErr != nil {
-		errText := runErr.Error()
-		// Replace raw HTTP error strings with specific Korean messages for the user,
-		// but preserve the original error in result.Error for debugging/logging.
-		userText := errText
-		if specific := ClassifyErrorMessage(errText); specific != "" {
-			userText = specific
-		}
-		result.Error = runErr
-		result.Payloads = append(result.Payloads, types.ReplyPayload{
-			Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(userText, ".")),
-			IsError: true,
-		})
-		logger.Error("agent failed (unrecoverable)",
-			"error", errText,
-			"session", cfg.SessionKey,
-			"model", cfg.Model,
-			"provider", cfg.Provider,
-		)
-		result.DurationMs = time.Since(startedAt).Milliseconds()
-		return nil, true
+	errText := runErr.Error()
+	// Replace raw HTTP error strings with specific Korean messages for the user,
+	// but preserve the original error in result.Error for debugging/logging.
+	userText := errText
+	if specific := ClassifyAgentError(errText).UserMessage(); specific != "" {
+		userText = specific
 	}
-
-	return agentResult, false
+	result.Error = runErr
+	result.Payloads = append(result.Payloads, types.ReplyPayload{
+		Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(userText, ".")),
+		IsError: true,
+	})
+	logger.Error("agent failed (unrecoverable)",
+		"error", errText,
+		"session", cfg.SessionKey,
+		"model", cfg.Model,
+		"provider", cfg.Provider,
+	)
+	result.DurationMs = time.Since(startedAt).Milliseconds()
+	return nil, true
 }
