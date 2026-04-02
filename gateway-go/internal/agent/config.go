@@ -95,12 +95,23 @@ type NudgeBudgetConfig struct {
 // TurnCallback is called after each agent turn with accumulated token count.
 type TurnCallback func(turn int, accumulatedTokens int)
 
+// ToolActivity records a single tool invocation during an agent run.
+type ToolActivity struct {
+	Name    string `json:"name"`
+	IsError bool   `json:"isError,omitempty"`
+}
+
 // AgentResult is the outcome of an agent run.
 type AgentResult struct {
 	Text       string
 	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns"
 	Usage      llm.TokenUsage
 	Turns      int
+
+	// ToolActivities records every tool invocation in execution order.
+	// Used to persist a tool activity summary alongside the assistant response
+	// so subsequent runs know what the agent actually did (not just what it said).
+	ToolActivities []ToolActivity
 
 	// InterruptedToolNames lists the tool names that were in-flight when the
 	// run was aborted (context cancelled). Empty when the run completes normally.

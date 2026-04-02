@@ -12,7 +12,7 @@ import (
 
 // Context assembly defaults.
 const (
-	defaultTokenBudget             = 100_000
+	defaultTokenBudget             = 200_000
 	defaultSystemPromptBudget      = 65_536
 	defaultFreshTailCount          = 48
 	defaultMaxMessages             = 100
