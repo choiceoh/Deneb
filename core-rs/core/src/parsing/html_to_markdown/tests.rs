@@ -54,6 +54,22 @@ fn decodes_entities() {
 }
 
 #[test]
+fn decodes_extended_entities() {
+    let html = "<p>&mdash; &ndash; &hellip; &laquo; &raquo; &copy; &reg; &trade; &bull; &middot;</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains('—'), "mdash: {}", result.text);
+    assert!(result.text.contains('–'), "ndash: {}", result.text);
+    assert!(result.text.contains('…'), "hellip: {}", result.text);
+    assert!(result.text.contains('«'), "laquo: {}", result.text);
+    assert!(result.text.contains('»'), "raquo: {}", result.text);
+    assert!(result.text.contains('©'), "copy: {}", result.text);
+    assert!(result.text.contains('®'), "reg: {}", result.text);
+    assert!(result.text.contains('™'), "trade: {}", result.text);
+    assert!(result.text.contains('•'), "bull: {}", result.text);
+    assert!(result.text.contains('·'), "middot: {}", result.text);
+}
+
+#[test]
 fn normalizes_whitespace() {
     let html = "<p>  hello   world  </p>";
     let result = html_to_markdown(html);
@@ -553,4 +569,45 @@ fn s_tag_boundary() {
     let result = html_to_markdown(html);
     assert!(result.text.contains("~~struck~~"), "got: {}", result.text);
     assert!(result.text.contains("**bold**"), "got: {}", result.text);
+}
+
+// --- strip_noise option tests ---
+
+#[test]
+fn strip_noise_suppresses_nav() {
+    let opts = super::HtmlToMarkdownOptions { strip_noise: true };
+    let html = "<p>content</p><nav><a href='/'>Home</a><a href='/about'>About</a></nav><p>more</p>";
+    let result = super::html_to_markdown_with_opts(html, &opts);
+    assert!(result.text.contains("content"), "got: {}", result.text);
+    assert!(result.text.contains("more"), "got: {}", result.text);
+    assert!(!result.text.contains("Home"), "nav should be suppressed: {}", result.text);
+    assert!(!result.text.contains("About"), "nav should be suppressed: {}", result.text);
+}
+
+#[test]
+fn strip_noise_suppresses_aside_svg_iframe_form() {
+    let opts = super::HtmlToMarkdownOptions { strip_noise: true };
+    let html = "<p>keep</p><aside>sidebar</aside><svg><path/></svg><iframe src='x'>frame</iframe><form><input/></form><p>end</p>";
+    let result = super::html_to_markdown_with_opts(html, &opts);
+    assert!(result.text.contains("keep"), "got: {}", result.text);
+    assert!(result.text.contains("end"), "got: {}", result.text);
+    assert!(!result.text.contains("sidebar"), "aside suppressed: {}", result.text);
+    assert!(!result.text.contains("frame"), "iframe suppressed: {}", result.text);
+}
+
+#[test]
+fn strip_noise_off_preserves_nav() {
+    // Default (strip_noise=false) should preserve nav content.
+    let html = "<p>content</p><nav><a href='/'>Home</a></nav>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains("Home"), "nav should be preserved by default: {}", result.text);
+}
+
+#[test]
+fn strip_noise_nested_nav() {
+    let opts = super::HtmlToMarkdownOptions { strip_noise: true };
+    let html = "<nav><ul><li><a href='/'>Home</a></li><li><a href='/about'>About</a></li></ul></nav><p>article content</p>";
+    let result = super::html_to_markdown_with_opts(html, &opts);
+    assert!(result.text.contains("article content"), "got: {}", result.text);
+    assert!(!result.text.contains("Home"), "nested nav suppressed: {}", result.text);
 }

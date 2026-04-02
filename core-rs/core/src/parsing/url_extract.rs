@@ -43,11 +43,28 @@ fn strip_markdown_links(input: &str) -> String {
                 continue;
             }
         }
-        // Safe: we only branch on ASCII bytes; non-ASCII is passed through.
-        out.push(bytes[i] as char);
-        i += 1;
+        // Copy the original str slice for correct UTF-8 handling.
+        // Advance past the full character (1–4 bytes) to avoid splitting
+        // multi-byte sequences like Korean or emoji.
+        let ch_len = utf8_char_width(bytes[i]);
+        if let Some(s) = input.get(i..i + ch_len) {
+            out.push_str(s);
+        }
+        i += ch_len;
     }
     out
+}
+
+/// Return the byte length of the UTF-8 character starting with `b`.
+#[inline]
+fn utf8_char_width(b: u8) -> usize {
+    match b {
+        0..=0x7F => 1,
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xFF => 4,
+        _ => 1,
+    }
 }
 
 /// Try to match `[...](https?://...)` starting at `start`.
@@ -387,5 +404,30 @@ mod tests {
     fn trailing_quotes_stripped() {
         let urls = find_bare_urls(r#""https://example.com""#);
         assert_eq!(urls[0], "https://example.com");
+    }
+
+    #[test]
+    fn multibyte_text_with_markdown_links() {
+        let cfg = ExtractLinksConfig::default();
+        // Korean text with markdown link — must not corrupt multibyte chars.
+        let text = "한국어 [링크](https://docs.example.com) 텍스트 https://bare.example.com 끝";
+        let urls = extract_links(text, &cfg);
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://bare.example.com");
+
+        // Verify strip_markdown_links preserves Korean correctly.
+        let stripped = strip_markdown_links(text);
+        assert!(stripped.contains("한국어"));
+        assert!(stripped.contains("텍스트"));
+        assert!(stripped.contains("끝"));
+    }
+
+    #[test]
+    fn emoji_with_markdown_links() {
+        let cfg = ExtractLinksConfig::default();
+        let text = "🌍 [link](https://skip.com) 🚀 https://keep.com 🎉";
+        let urls = extract_links(text, &cfg);
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://keep.com");
     }
 }

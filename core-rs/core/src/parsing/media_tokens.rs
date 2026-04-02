@@ -268,7 +268,9 @@ fn strip_inline_directives(text: &str) -> (String, Vec<InlineDirective>) {
 /// Strip directives and detect `audio_as_voice`.
 fn strip_audio_tag(text: &str) -> (String, bool) {
     let (cleaned, directives) = strip_inline_directives(text);
-    let audio_as_voice = directives.iter().any(|d| d.key == "audio_as_voice");
+    let audio_as_voice = directives
+        .iter()
+        .any(|d| d.key == "audio_as_voice" || d.key == "voice");
     (cleaned, audio_as_voice)
 }
 
@@ -602,5 +604,12 @@ mod tests {
         let result = split_media_from_output("Hello [[ not closed");
         assert_eq!(result.text, "Hello [[ not closed");
         assert!(!result.audio_as_voice);
+    }
+
+    #[test]
+    fn voice_tag_alias() {
+        let result = split_media_from_output("Hello [[voice]]\nMEDIA: /tmp/voice.wav");
+        assert!(result.audio_as_voice);
+        assert!(!result.text.contains("[[voice]]"));
     }
 }

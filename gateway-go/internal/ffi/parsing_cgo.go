@@ -19,6 +19,10 @@ extern int deneb_base64_canonicalize(
 extern int deneb_parse_media_tokens(
 	const unsigned char *text_ptr, unsigned long text_len,
 	unsigned char *out_ptr, unsigned long out_len);
+extern int deneb_html_to_markdown_with_opts(
+	const unsigned char *html_ptr, unsigned long html_len,
+	const unsigned char *opts_ptr, unsigned long opts_len,
+	unsigned char *out_ptr, unsigned long out_len);
 */
 import "C"
 import (
@@ -175,6 +179,47 @@ func ParseMediaTokens(text string) (cleanText string, mediaURLs []string, audioA
 		return text, nil, false, fmt.Errorf("ffi: parse_media_tokens: invalid JSON output: %w", err)
 	}
 	return result.Text, result.MediaURLs, result.AudioAsVoice, nil
+}
+
+// HtmlToMarkdownStripNoise converts HTML to Markdown with noise stripping.
+// Suppresses nav, aside, svg, iframe, form elements in addition to
+// the always-suppressed script/style/noscript.
+func HtmlToMarkdownStripNoise(html string) (text string, title string, err error) {
+	if len(html) == 0 {
+		return "", "", nil
+	}
+
+	opts := `{"strip_noise":true}`
+	initialSize := len(html) * 2
+	if initialSize < 4096 {
+		initialSize = 4096
+	}
+
+	htmlPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(html)))
+	optsPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(opts)))
+	data, err2 := ffiCallWithGrow("html_to_markdown_with_opts", initialSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_html_to_markdown_with_opts(
+				htmlPtr, C.ulong(len(html)),
+				optsPtr, C.ulong(len(opts)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err2 != nil {
+		return "", "", err2
+	}
+
+	var result struct {
+		Text  string  `json:"text"`
+		Title *string `json:"title,omitempty"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return "", "", fmt.Errorf("ffi: html_to_markdown_with_opts: invalid JSON output: %w", err)
+	}
+	if result.Title != nil {
+		return result.Text, *result.Title, nil
+	}
+	return result.Text, "", nil
 }
 
 // ffiError is defined in errors.go (shared across all CGo files).

@@ -215,6 +215,13 @@ func Base64Canonicalize(input string) (string, error) {
 	return cleaned, nil
 }
 
+// HtmlToMarkdownStripNoise is a pure-Go fallback.
+// In no-FFI mode, noise stripping is not applied (the Go caller should
+// pre-strip noise elements via StripNoiseElements before calling).
+func HtmlToMarkdownStripNoise(html string) (text string, title string, err error) {
+	return HtmlToMarkdown(html)
+}
+
 // ParseMediaTokens is a pure-Go fallback for MEDIA: token extraction.
 func ParseMediaTokens(text string) (cleanText string, mediaURLs []string, audioAsVoice bool, err error) {
 	if len(text) == 0 {
