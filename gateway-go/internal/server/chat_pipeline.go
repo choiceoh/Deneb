@@ -236,5 +236,13 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	} else if mainClient := reg.Client(modelrole.RoleMain); mainClient != nil {
 		s.autoresearchRunner.SetLLMClient(mainClient)
 	}
+	// Inject autoresearch completion reports into the triggering session's
+	// transcript so the LLM sees results on its next turn.
+	if transcriptStore != nil {
+		s.autoresearchRunner.SetTranscriptAppendFn(func(sessionKey, text string) error {
+			msg := chat.NewTextChatMessage("system", text, 0)
+			return transcriptStore.Append(sessionKey, msg)
+		})
+	}
 	toolreg.RegisterAutoresearchTool(chatCfg.Tools, s.autoresearchRunner)
 }

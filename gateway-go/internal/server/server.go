@@ -79,6 +79,7 @@ type ServerRPC struct {
 	authRateLimiter        *auth.AuthRateLimiter
 	acpDeps                *handlerprocess.ACPDeps
 	acpLifecycleUnsub      func()
+	acpResultInjectionUnsub func()
 	snapshotLifecycleUnsub func()
 }
 

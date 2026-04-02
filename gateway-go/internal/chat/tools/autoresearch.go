@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -43,7 +44,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 			return autoresearchInit(ctx, runner, p.Workdir, p.TargetFiles, p.MetricCmd,
 				p.MetricName, p.MetricDirection, p.TimeBudgetSec, p.BranchTag, p.Model, p.MetricPattern, p.MaxIterations, p.CacheEnabled, p.Constants)
 		case "start":
-			return autoresearchStart(runner, p.Workdir)
+			return autoresearchStart(ctx, runner, p.Workdir)
 		case "stop":
 			return autoresearchStop(runner)
 		case "status":
@@ -143,7 +144,12 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		workdir, modeStr, metricName, metricDirection, targetFiles, cfg.TimeBudgetSec, iterInfo, cacheInfo, branchTag, baselineMsg), nil
 }
 
-func autoresearchStart(runner *autoresearch.Runner, workdir string) (string, error) {
+func autoresearchStart(ctx context.Context, runner *autoresearch.Runner, workdir string) (string, error) {
+	// Record the triggering session so completion results are injected
+	// into its transcript for the LLM's next turn.
+	if key := toolctx.SessionKeyFromContext(ctx); key != "" {
+		runner.SetSessionKey(key)
+	}
 	if err := runner.Start(workdir); err != nil {
 		return "", err
 	}

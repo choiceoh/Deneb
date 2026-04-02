@@ -85,6 +85,10 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 	return metric, nil
 }
 
+// TranscriptAppendFn appends a system note to a session transcript.
+// Used to inject completion reports into the triggering session's context.
+type TranscriptAppendFn func(sessionKey, text string) error
+
 // Runner manages the autoresearch experiment loop.
 type Runner struct {
 	mu           sync.Mutex
@@ -99,6 +103,10 @@ type Runner struct {
 	notifier     Notifier
 	server       *ServerManager
 	logger       *slog.Logger
+	// transcriptAppendFn injects results into the triggering session's transcript.
+	transcriptAppendFn TranscriptAppendFn
+	// sessionKey is the session that started this autoresearch run.
+	sessionKey string
 }
 
 // NewRunner creates an autoresearch runner.
@@ -147,6 +155,15 @@ func (r *Runner) SetNotifier(n Notifier) {
 	r.notifier = n
 }
 
+// SetTranscriptAppendFn sets the callback for injecting results into the
+// session transcript. When set, completion reports are appended as system
+// notes to the triggering session so the LLM sees them on the next turn.
+func (r *Runner) SetTranscriptAppendFn(fn TranscriptAppendFn) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.transcriptAppendFn = fn
+}
+
 // IsRunning returns whether the loop is currently active.
 func (r *Runner) IsRunning() bool {
 	r.mu.Lock()
@@ -167,6 +184,15 @@ func (r *Runner) SetWorkdir(dir string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.workdir = dir
+}
+
+// SetSessionKey records which chat session triggered this autoresearch run.
+// When a TranscriptAppendFn is set, completion reports are injected into
+// this session's transcript.
+func (r *Runner) SetSessionKey(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sessionKey = key
 }
 
 // worktreeSubdir is the directory name for the isolated experiment worktree.
@@ -466,6 +492,42 @@ func (r *Runner) sendCompletionReport(workdir string, reason string) {
 		}
 	}
 	r.notifyPhoto(ctx, png, caption)
+
+	// Inject completion summary into the triggering session's transcript
+	// so the LLM has context about the results on its next turn.
+	r.injectResultToTranscript(reason, summary)
+}
+
+// injectResultToTranscript appends the autoresearch completion summary to the
+// triggering session's transcript as a system note.
+func (r *Runner) injectResultToTranscript(reason, summary string) {
+	r.mu.Lock()
+	fn := r.transcriptAppendFn
+	key := r.sessionKey
+	r.mu.Unlock()
+
+	if fn == nil || key == "" {
+		return
+	}
+
+	note := fmt.Sprintf("[Autoresearch %s]\n\n%s", reason, summary)
+	// Truncate to avoid bloating the transcript.
+	const maxLen = 4000
+	if len(note) > maxLen {
+		note = note[:maxLen] + "\n... (truncated)"
+	}
+
+	if err := fn(key, note); err != nil {
+		r.logger.Warn("failed to inject autoresearch result into transcript",
+			"sessionKey", key,
+			"error", err,
+		)
+	} else {
+		r.logger.Info("injected autoresearch result into session transcript",
+			"sessionKey", key,
+			"summaryLen", len(note),
+		)
+	}
 }
 
 // runOneIteration performs a single modify-verify-decide cycle.
