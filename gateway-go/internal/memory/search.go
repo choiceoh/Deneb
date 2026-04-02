@@ -37,16 +37,6 @@ type SearchResult struct {
 	RelatedFacts []RelatedFact `json:"related_facts,omitempty"`
 }
 
-// Scoring weights.
-// Recency is weighted more heavily to prioritize recent session context —
-// the steep initial decay curve ensures only truly fresh facts get the boost.
-const (
-	weightHybrid       = 0.40
-	weightImportance   = 0.25
-	weightRecency      = 0.25
-	weightVerification = 0.10
-)
-
 // categoryImportanceMultiplier adjusts the importance weight by fact category.
 // Decisions, context, and solutions are factual records of what happened → boost.
 // User model and mutual are relational/personality data → keep but don't over-boost.
@@ -75,8 +65,6 @@ var categorySteepnessDays = map[string]float64{
 	CategoryUserModel:  14.0, // user traits: moderate persistence
 	CategoryMutual:     7.0,  // relationship signals: 1-week window
 }
-
-const defaultSteepnessDays = 7.0
 
 // SearchFacts performs a hybrid FTS + semantic search over active facts,
 // then applies importance and recency weighting.
@@ -171,10 +159,6 @@ func (s *Store) ftsSearch(ctx context.Context, query string, opts SearchOpts) (m
 
 	return results, nil
 }
-
-// ftsAndMinResults is the minimum number of AND-query results before falling
-// back to OR. Below this threshold, AND was too restrictive.
-const ftsAndMinResults = 3
 
 // runFTSQuery executes an FTS5 MATCH query with the given opts and returns scored IDs.
 func (s *Store) runFTSQuery(ctx context.Context, ftsQuery string, opts SearchOpts) map[int64]float64 {
