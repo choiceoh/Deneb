@@ -1,4 +1,4 @@
-package chat
+package pilot
 
 import (
 	"context"
@@ -25,9 +25,9 @@ func TestShouldUseThinking(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := shouldUseThinking(tt.task, tt.sourceCount)
+		got := ShouldUseThinking(tt.task, tt.sourceCount)
 		if got != tt.want {
-			t.Errorf("shouldUseThinking(%q, %d) = %v, want %v", tt.task, tt.sourceCount, got, tt.want)
+			t.Errorf("ShouldUseThinking(%q, %d) = %v, want %v", tt.task, tt.sourceCount, got, tt.want)
 		}
 	}
 }
@@ -35,72 +35,72 @@ func TestShouldUseThinking(t *testing.T) {
 func TestShouldBypassPilotLLM(t *testing.T) {
 	tests := []struct {
 		name    string
-		p       pilotParams
-		sources []sourceSpec
-		gather  []sourceResult
+		p       PilotParams
+		sources []SourceSpec
+		gather  []SourceResult
 		want    bool
 	}{
 		{
 			name:    "single short read",
-			p:       pilotParams{Task: "explain"},
-			sources: []sourceSpec{{Tool: "read"}},
-			gather:  []sourceResult{{label: "main.go", content: "package main", sourceType: "file"}},
+			p:       PilotParams{Task: "explain"},
+			sources: []SourceSpec{{Tool: "read"}},
+			gather:  []SourceResult{{Label: "main.go", Content: "package main", SourceType: "file"}},
 			want:    true,
 		},
 		{
 			name:    "two short simple sources",
-			p:       pilotParams{Task: "compare"},
-			sources: []sourceSpec{{Tool: "read"}, {Tool: "grep"}},
-			gather: []sourceResult{
-				{label: "a.go", content: "func a() {}", sourceType: "file"},
-				{label: "grep: TODO", content: "a.go:1: TODO", sourceType: "grep"},
+			p:       PilotParams{Task: "compare"},
+			sources: []SourceSpec{{Tool: "read"}, {Tool: "grep"}},
+			gather: []SourceResult{
+				{Label: "a.go", Content: "func a() {}", SourceType: "file"},
+				{Label: "grep: TODO", Content: "a.go:1: TODO", SourceType: "grep"},
 			},
 			want: true,
 		},
 		{
 			name:    "single long read",
-			p:       pilotParams{Task: "explain"},
-			sources: []sourceSpec{{Tool: "read"}},
-			gather:  []sourceResult{{label: "main.go", content: strings.Repeat("a", 1001), sourceType: "file"}},
+			p:       PilotParams{Task: "explain"},
+			sources: []SourceSpec{{Tool: "read"}},
+			gather:  []SourceResult{{Label: "main.go", Content: strings.Repeat("a", 1001), SourceType: "file"}},
 			want:    false,
 		},
 		{
 			name:    "noisy exec stays on pilot",
-			p:       pilotParams{Task: "summarize"},
-			sources: []sourceSpec{{Tool: "exec"}},
-			gather:  []sourceResult{{label: "$ go test", content: "FAIL", sourceType: "exec"}},
+			p:       PilotParams{Task: "summarize"},
+			sources: []SourceSpec{{Tool: "exec"}},
+			gather:  []SourceResult{{Label: "$ go test", Content: "FAIL", SourceType: "exec"}},
 			want:    false,
 		},
 		{
 			name:    "chain disables bypass",
-			p:       pilotParams{Task: "summarize", Chain: true},
-			sources: []sourceSpec{{Tool: "read"}},
-			gather:  []sourceResult{{label: "main.go", content: "package main", sourceType: "file"}},
+			p:       PilotParams{Task: "summarize", Chain: true},
+			sources: []SourceSpec{{Tool: "read"}},
+			gather:  []SourceResult{{Label: "main.go", Content: "package main", SourceType: "file"}},
 			want:    false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldBypassPilotLLM(tt.p, tt.sources, tt.gather)
+			got := ShouldBypassPilotLLM(tt.p, tt.sources, tt.gather)
 			if got != tt.want {
-				t.Fatalf("shouldBypassPilotLLM() = %v, want %v", got, tt.want)
+				t.Fatalf("ShouldBypassPilotLLM() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestBuildPilotPassthroughResult(t *testing.T) {
-	single := buildPilotPassthroughResult([]sourceResult{{label: "main.go", content: "package main", sourceType: "file"}})
+	single := BuildPilotPassthroughResult([]SourceResult{{Label: "main.go", Content: "package main", SourceType: "file"}})
 	if single != "package main" {
 		t.Fatalf("unexpected single passthrough result: %q", single)
 	}
 
-	multi := buildPilotPassthroughResult([]sourceResult{
-		{label: "a.go", content: "package a", sourceType: "file"},
-		{label: "b.go", content: "package b", sourceType: "file"},
+	multi := BuildPilotPassthroughResult([]SourceResult{
+		{Label: "a.go", Content: "package a", SourceType: "file"},
+		{Label: "b.go", Content: "package b", SourceType: "file"},
 	})
-	if !contains(multi, "--- a.go ---") || !contains(multi, "package b") {
+	if !strings.Contains(multi, "--- a.go ---") || !strings.Contains(multi, "package b") {
 		t.Fatalf("unexpected multi passthrough result: %q", multi)
 	}
 }
@@ -116,14 +116,14 @@ func (s *stubPilotExecutor) Execute(_ context.Context, _ string, _ json.RawMessa
 
 func TestToolPilotBypassesLocalLLMForShortRead(t *testing.T) {
 	exec := &stubPilotExecutor{}
-	fn := toolPilot(exec, "")
+	fn := ToolPilot(exec, "")
 
-	out, err := fn(context.Background(), mustJSON(map[string]any{
+	out, err := fn(context.Background(), MustJSON(map[string]any{
 		"task": "explain this file",
 		"file": "README.md",
 	}))
 	if err != nil {
-		t.Fatalf("toolPilot() error = %v", err)
+		t.Fatalf("ToolPilot() error = %v", err)
 	}
 	if exec.calls != 1 {
 		t.Fatalf("expected 1 tool execution, got %d", exec.calls)
@@ -152,9 +152,9 @@ func TestCleanJSONResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := cleanJSONResponse(tt.input)
+			got := CleanJSONResponse(tt.input)
 			if got != tt.want {
-				t.Errorf("cleanJSONResponse() = %q, want %q", got, tt.want)
+				t.Errorf("CleanJSONResponse() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -169,35 +169,35 @@ func TestSmartTruncate(t *testing.T) {
 
 	// Short content — no truncation.
 	short := "hello world"
-	if got := smartTruncate(short, 100, "file"); got != short {
+	if got := SmartTruncate(short, 100, "file"); got != short {
 		t.Errorf("short content should not be truncated")
 	}
 
 	// File truncation: preserves head + tail.
-	result := smartTruncate(long, 2000, "file")
+	result := SmartTruncate(long, 2000, "file")
 	if len(result) > 2200 { // some overhead from marker
 		t.Errorf("file truncation too long: %d", len(result))
 	}
 	// Should contain marker.
-	if !contains(result, "truncated") {
+	if !strings.Contains(result, "truncated") {
 		t.Errorf("file truncation should contain truncation marker")
 	}
 
 	// Exec truncation: preserves tail.
-	result = smartTruncate(long, 2000, "exec")
-	if !contains(result, "truncated") {
+	result = SmartTruncate(long, 2000, "exec")
+	if !strings.Contains(result, "truncated") {
 		t.Errorf("exec truncation should contain truncation marker")
 	}
 
 	// Default truncation: head only.
-	result = smartTruncate(long, 2000, "content")
-	if !contains(result, "truncated at") {
+	result = SmartTruncate(long, 2000, "content")
+	if !strings.Contains(result, "truncated at") {
 		t.Errorf("default truncation should contain 'truncated at' marker")
 	}
 }
 
 func TestExpandShortcuts(t *testing.T) {
-	p := pilotParams{
+	p := PilotParams{
 		Task: "test",
 		File: "main.go",
 		Exec: "ls -la",
@@ -207,7 +207,7 @@ func TestExpandShortcuts(t *testing.T) {
 		URL:  "https://example.com",
 	}
 
-	specs := expandShortcuts(p)
+	specs := ExpandShortcuts(p)
 
 	// Should have 5 sources: file, exec, grep, find, url.
 	if len(specs) != 5 {
@@ -229,12 +229,12 @@ func TestExpandShortcuts(t *testing.T) {
 }
 
 func TestExpandShortcutsMultipleFiles(t *testing.T) {
-	p := pilotParams{
+	p := PilotParams{
 		Task:  "test",
 		Files: []string{"a.go", "b.go", "c.go"},
 	}
 
-	specs := expandShortcuts(p)
+	specs := ExpandShortcuts(p)
 	if len(specs) != 3 {
 		t.Fatalf("expected 3 specs, got %d", len(specs))
 	}
@@ -246,65 +246,65 @@ func TestExpandShortcutsMultipleFiles(t *testing.T) {
 }
 
 func TestBuildPilotPrompt(t *testing.T) {
-	blocks := []sourceResult{
+	blocks := []SourceResult{
 		{"main.go", "package main\nfunc main() {}", "file"},
 		{"$ ls", "file1.go\nfile2.go", "exec"},
 	}
 
-	result := buildPilotPrompt("리뷰해줘", "json", "brief", blocks)
+	result := BuildPilotPrompt("리뷰해줘", "json", "brief", blocks)
 
-	if !contains(result, "Task: 리뷰해줘") {
+	if !strings.Contains(result, "Task: 리뷰해줘") {
 		t.Error("prompt should contain task")
 	}
-	if !contains(result, "Output format: json") {
+	if !strings.Contains(result, "Output format: json") {
 		t.Error("prompt should contain output format")
 	}
-	if !contains(result, "under 500 characters") {
+	if !strings.Contains(result, "under 500 characters") {
 		t.Error("prompt should contain brief length hint")
 	}
-	if !contains(result, "--- main.go ---") {
+	if !strings.Contains(result, "--- main.go ---") {
 		t.Error("prompt should contain source labels")
 	}
 }
 
 func TestBuildPilotPromptNoBlocks(t *testing.T) {
-	result := buildPilotPrompt("just a question", "", "", nil)
+	result := BuildPilotPrompt("just a question", "", "", nil)
 	if result != "Task: just a question" {
 		t.Errorf("unexpected result: %q", result)
 	}
 }
 
 func TestBuildFallbackResult(t *testing.T) {
-	gathered := []sourceResult{
+	gathered := []SourceResult{
 		{"main.go", "package main", "file"},
 	}
 
-	result := buildFallbackResult("리뷰해줘", gathered)
-	if !contains(result, "pilot model unavailable") {
+	result := BuildFallbackResult("리뷰해줘", gathered)
+	if !strings.Contains(result, "pilot model unavailable") {
 		t.Error("fallback should mention pilot model unavailable")
 	}
-	if !contains(result, "Task: 리뷰해줘") {
+	if !strings.Contains(result, "Task: 리뷰해줘") {
 		t.Error("fallback should contain task")
 	}
-	if !contains(result, "package main") {
+	if !strings.Contains(result, "package main") {
 		t.Error("fallback should contain source content")
 	}
 }
 
 func TestBuildPilotSystemPrompt(t *testing.T) {
-	prompt := buildPilotSystemPrompt("/workspace", true)
-	if !contains(prompt, "Workspace directory: /workspace") {
+	prompt := BuildPilotSystemPrompt("/workspace", true)
+	if !strings.Contains(prompt, "Workspace directory: /workspace") {
 		t.Error("should contain workspace dir")
 	}
-	if !contains(prompt, "<think>") {
+	if !strings.Contains(prompt, "<think>") {
 		t.Error("should contain thinking instruction when thinking=true")
 	}
 
-	prompt = buildPilotSystemPrompt("", false)
-	if contains(prompt, "Workspace") {
+	prompt = BuildPilotSystemPrompt("", false)
+	if strings.Contains(prompt, "Workspace") {
 		t.Error("should not contain workspace when empty")
 	}
-	if contains(prompt, "<think>") {
+	if strings.Contains(prompt, "<think>") {
 		t.Error("should not contain thinking instruction when thinking=false")
 	}
 }
@@ -320,20 +320,20 @@ func TestSourceTypeFromTool(t *testing.T) {
 	}
 
 	for tool, want := range tests {
-		if got := sourceTypeFromTool(tool); got != want {
-			t.Errorf("sourceTypeFromTool(%q) = %q, want %q", tool, got, want)
+		if got := SourceTypeFromTool(tool); got != want {
+			t.Errorf("SourceTypeFromTool(%q) = %q, want %q", tool, got, want)
 		}
 	}
 }
 
 func TestTruncateHead(t *testing.T) {
 	short := "hello"
-	if got := truncateHead(short, 100); got != short {
+	if got := TruncateHead(short, 100); got != short {
 		t.Errorf("short string should not be truncated")
 	}
 
 	long := string(make([]byte, 500))
-	result := truncateHead(long, 100)
+	result := TruncateHead(long, 100)
 	if len(result) > 200 {
 		t.Errorf("truncated result too long: %d", len(result))
 	}
@@ -417,24 +417,24 @@ func TestCleanListResponse(t *testing.T) {
 
 func TestEnforceMaxLength(t *testing.T) {
 	short := "hello world"
-	if got := enforceMaxLength(short, 100); got != short {
+	if got := EnforceMaxLength(short, 100); got != short {
 		t.Error("short string should not be truncated")
 	}
 
 	// Line boundary cut.
 	multiline := "Line one.\nLine two.\nLine three.\nLine four.\nLine five."
-	result := enforceMaxLength(multiline, 30)
+	result := EnforceMaxLength(multiline, 30)
 	if len(result) > 35 { // some overhead for ellipsis
-		t.Errorf("enforceMaxLength too long: %d chars", len(result))
+		t.Errorf("EnforceMaxLength too long: %d chars", len(result))
 	}
-	if !contains(result, "…") {
+	if !strings.Contains(result, "…") {
 		t.Error("should contain ellipsis")
 	}
 
 	// Sentence boundary cut.
 	prose := "This is the first sentence. This is the second sentence. This is very long text that keeps going."
-	result = enforceMaxLength(prose, 60)
-	if !contains(result, "…") {
+	result = EnforceMaxLength(prose, 60)
+	if !strings.Contains(result, "…") {
 		t.Error("should contain ellipsis")
 	}
 }
@@ -442,22 +442,22 @@ func TestEnforceMaxLength(t *testing.T) {
 func TestPostProcessOutput(t *testing.T) {
 	// Brief mode enforces length.
 	long := strings.Repeat("가나다라 ", 200) // ~1000 chars Korean
-	result := postProcessOutput(long, "text", "brief")
-	if len(result) > briefMaxChars+10 {
+	result := PostProcessOutput(long, "text", "brief")
+	if len(result) > BriefMaxChars+10 {
 		t.Errorf("brief mode should enforce length, got %d chars", len(result))
 	}
 
 	// JSON mode cleans fences.
 	jsonWithFence := "```json\n{\"key\": \"value\"}\n```"
-	result = postProcessOutput(jsonWithFence, "json", "")
+	result = PostProcessOutput(jsonWithFence, "json", "")
 	if result != `{"key": "value"}` {
 		t.Errorf("json mode should strip fences, got %q", result)
 	}
 
 	// List mode normalizes.
 	bullets := "- Alpha\n- Beta\n- Gamma"
-	result = postProcessOutput(bullets, "list", "")
-	if !contains(result, "1. Alpha") {
+	result = PostProcessOutput(bullets, "list", "")
+	if !strings.Contains(result, "1. Alpha") {
 		t.Errorf("list mode should normalize bullets, got %q", result)
 	}
 }
@@ -478,39 +478,35 @@ func TestIsListItem(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
-}
-
 // --- Tests for new integration features ---
 
 func TestExpandShortcuts_HTTP(t *testing.T) {
-	p := pilotParams{Task: "analyze", HTTP: "https://api.example.com/data"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "analyze", HTTP: "https://api.example.com/data"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "http" {
 		t.Errorf("expected 1 http spec, got %d", len(specs))
 	}
 }
 
 func TestExpandShortcuts_KVKey(t *testing.T) {
-	p := pilotParams{Task: "check", KVKey: "config.theme"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "check", KVKey: "config.theme"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "kv" {
 		t.Errorf("expected 1 kv spec, got %d", len(specs))
 	}
 }
 
 func TestExpandShortcuts_Memory(t *testing.T) {
-	p := pilotParams{Task: "summarize", Memory: "배포 결정"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "summarize", Memory: "배포 결정"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "memory" {
 		t.Errorf("expected 1 memory spec, got %d", len(specs))
 	}
 }
 
 func TestExpandShortcuts_Gmail(t *testing.T) {
-	p := pilotParams{Task: "summarize", Gmail: "from:alice subject:회의"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "summarize", Gmail: "from:alice subject:회의"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "gmail" {
 		t.Errorf("expected 1 gmail spec, got %d", len(specs))
 	}
@@ -520,37 +516,46 @@ func TestExpandShortcuts_Gmail(t *testing.T) {
 }
 
 func TestExpandShortcuts_YouTube(t *testing.T) {
-	p := pilotParams{Task: "summarize", YouTube: "https://youtube.com/watch?v=abc123"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "summarize", YouTube: "https://youtube.com/watch?v=abc123"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "youtube_transcript" {
 		t.Errorf("expected 1 youtube_transcript spec, got %d", len(specs))
 	}
 }
 
+func TestExpandShortcuts_Polaris(t *testing.T) {
+	p := PilotParams{Task: "explain", Polaris: "aurora context engine"}
+	specs := ExpandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "polaris" {
+		t.Errorf("expected 1 polaris spec, got %d", len(specs))
+	}
+}
+
 func TestExpandShortcuts_Image(t *testing.T) {
-	p := pilotParams{Task: "describe", Image: "/tmp/screenshot.png"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "describe", Image: "/tmp/screenshot.png"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "image" {
 		t.Errorf("expected 1 image spec, got %d", len(specs))
 	}
 }
 
 func TestExpandShortcuts_AllNew(t *testing.T) {
-	p := pilotParams{
+	p := PilotParams{
 		Task:    "analyze everything",
 		Gmail:   "invoice",
 		YouTube: "https://youtube.com/watch?v=x",
+		Polaris: "tools",
 		Image:   "/tmp/img.png",
 	}
-	specs := expandShortcuts(p)
-	if len(specs) != 3 {
-		t.Fatalf("expected 3 specs, got %d", len(specs))
+	specs := ExpandShortcuts(p)
+	if len(specs) != 4 {
+		t.Fatalf("expected 4 specs, got %d", len(specs))
 	}
 	tools := make([]string, len(specs))
 	for i, s := range specs {
 		tools[i] = s.Tool
 	}
-	expected := []string{"gmail", "youtube_transcript", "image"}
+	expected := []string{"gmail", "youtube_transcript", "polaris", "image"}
 	for i, want := range expected {
 		if tools[i] != want {
 			t.Errorf("spec[%d].Tool = %q, want %q", i, tools[i], want)
@@ -562,6 +567,7 @@ func TestSourceTypeFromTool_NewTools(t *testing.T) {
 	tests := map[string]string{
 		"gmail":              "content",
 		"youtube_transcript": "content",
+		"polaris":            "content",
 		"image":              "content",
 		"diff":               "file",
 		"test":               "exec",
@@ -569,18 +575,18 @@ func TestSourceTypeFromTool_NewTools(t *testing.T) {
 		"http":               "exec",
 	}
 	for tool, want := range tests {
-		if got := sourceTypeFromTool(tool); got != want {
-			t.Errorf("sourceTypeFromTool(%q) = %q, want %q", tool, got, want)
+		if got := SourceTypeFromTool(tool); got != want {
+			t.Errorf("SourceTypeFromTool(%q) = %q, want %q", tool, got, want)
 		}
 	}
 }
 
 func TestSourceSucceeded(t *testing.T) {
-	results := []sourceResult{
-		{label: "mem", content: "some results", sourceType: "content"},
-		{label: "err", content: "[tool error: failed]", sourceType: "content"},
-		{label: "skip", content: "[skipped: mem did not succeed]", sourceType: "content"},
-		{label: "empty", content: "", sourceType: "content"},
+	results := []SourceResult{
+		{Label: "mem", Content: "some results", SourceType: "content"},
+		{Label: "err", Content: "[tool error: failed]", SourceType: "content"},
+		{Label: "skip", Content: "[skipped: mem did not succeed]", SourceType: "content"},
+		{Label: "empty", Content: "", SourceType: "content"},
 	}
 	if !sourceSucceeded(results, "mem") {
 		t.Error("expected 'mem' to be successful")
@@ -597,36 +603,36 @@ func TestSourceSucceeded(t *testing.T) {
 }
 
 func TestApplyPostProcessSteps_FilterLines(t *testing.T) {
-	gathered := []sourceResult{{label: "data", content: "foo bar\nbaz qux\nfoo baz", sourceType: "content"}}
-	steps := []postProcessStep{{Action: "filter_lines", Param: "foo"}}
-	result := applyPostProcessSteps(gathered, steps)
-	if result[0].content != "foo bar\nfoo baz" {
-		t.Errorf("unexpected filter result: %q", result[0].content)
+	gathered := []SourceResult{{Label: "data", Content: "foo bar\nbaz qux\nfoo baz", SourceType: "content"}}
+	steps := []PostProcessStep{{Action: "filter_lines", Param: "foo"}}
+	result := ApplyPostProcessSteps(gathered, steps)
+	if result[0].Content != "foo bar\nfoo baz" {
+		t.Errorf("unexpected filter result: %q", result[0].Content)
 	}
 }
 
 func TestApplyPostProcessSteps_Unique(t *testing.T) {
-	gathered := []sourceResult{{label: "data", content: "a\nb\na\nc\nb", sourceType: "content"}}
-	steps := []postProcessStep{{Action: "unique"}}
-	result := applyPostProcessSteps(gathered, steps)
-	if result[0].content != "a\nb\nc" {
-		t.Errorf("unexpected unique result: %q", result[0].content)
+	gathered := []SourceResult{{Label: "data", Content: "a\nb\na\nc\nb", SourceType: "content"}}
+	steps := []PostProcessStep{{Action: "unique"}}
+	result := ApplyPostProcessSteps(gathered, steps)
+	if result[0].Content != "a\nb\nc" {
+		t.Errorf("unexpected unique result: %q", result[0].Content)
 	}
 }
 
 func TestApplyPostProcessSteps_Sort(t *testing.T) {
-	gathered := []sourceResult{{label: "data", content: "cherry\napple\nbanana", sourceType: "content"}}
-	steps := []postProcessStep{{Action: "sort"}}
-	result := applyPostProcessSteps(gathered, steps)
-	if result[0].content != "apple\nbanana\ncherry" {
-		t.Errorf("unexpected sort result: %q", result[0].content)
+	gathered := []SourceResult{{Label: "data", Content: "cherry\napple\nbanana", SourceType: "content"}}
+	steps := []PostProcessStep{{Action: "sort"}}
+	result := ApplyPostProcessSteps(gathered, steps)
+	if result[0].Content != "apple\nbanana\ncherry" {
+		t.Errorf("unexpected sort result: %q", result[0].Content)
 	}
 }
 
 func TestExpandShortcuts_Diff(t *testing.T) {
 	// "all" mode.
-	p := pilotParams{Task: "review", Diff: "all"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "review", Diff: "all"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "diff" {
 		t.Fatalf("expected 1 diff spec, got %d", len(specs))
 	}
@@ -635,8 +641,8 @@ func TestExpandShortcuts_Diff(t *testing.T) {
 	}
 
 	// Commit hash mode.
-	p2 := pilotParams{Task: "review", Diff: "abc123"}
-	specs2 := expandShortcuts(p2)
+	p2 := PilotParams{Task: "review", Diff: "abc123"}
+	specs2 := ExpandShortcuts(p2)
 	if len(specs2) != 1 || specs2[0].Tool != "diff" {
 		t.Fatalf("expected 1 diff spec, got %d", len(specs2))
 	}
@@ -644,8 +650,8 @@ func TestExpandShortcuts_Diff(t *testing.T) {
 
 func TestExpandShortcuts_Test(t *testing.T) {
 	// Specific path.
-	p := pilotParams{Task: "analyze", Test: "gateway-go/..."}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "analyze", Test: "gateway-go/..."}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "test" {
 		t.Fatalf("expected 1 test spec, got %d", len(specs))
 	}
@@ -654,16 +660,16 @@ func TestExpandShortcuts_Test(t *testing.T) {
 	}
 
 	// "all" mode.
-	p2 := pilotParams{Task: "analyze", Test: "all"}
-	specs2 := expandShortcuts(p2)
+	p2 := PilotParams{Task: "analyze", Test: "all"}
+	specs2 := ExpandShortcuts(p2)
 	if len(specs2) != 1 || specs2[0].Tool != "test" {
 		t.Fatalf("expected 1 test spec, got %d", len(specs2))
 	}
 }
 
 func TestExpandShortcuts_Tree(t *testing.T) {
-	p := pilotParams{Task: "overview", Tree: "/home/user/project"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "overview", Tree: "/home/user/project"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "tree" {
 		t.Fatalf("expected 1 tree spec, got %d", len(specs))
 	}
@@ -674,8 +680,8 @@ func TestExpandShortcuts_Tree(t *testing.T) {
 
 func TestExpandShortcuts_GitLog(t *testing.T) {
 	// "recent" mode.
-	p := pilotParams{Task: "summarize", GitLog: "recent"}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "summarize", GitLog: "recent"}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "git" {
 		t.Fatalf("expected 1 git spec, got %d", len(specs))
 	}
@@ -684,16 +690,16 @@ func TestExpandShortcuts_GitLog(t *testing.T) {
 	}
 
 	// "oneline" mode.
-	p2 := pilotParams{Task: "summarize", GitLog: "oneline"}
-	specs2 := expandShortcuts(p2)
+	p2 := PilotParams{Task: "summarize", GitLog: "oneline"}
+	specs2 := ExpandShortcuts(p2)
 	if len(specs2) != 1 || specs2[0].Tool != "git" {
 		t.Fatalf("expected 1 git spec, got %d", len(specs2))
 	}
 }
 
 func TestExpandShortcuts_Health(t *testing.T) {
-	p := pilotParams{Task: "diagnose", Health: true}
-	specs := expandShortcuts(p)
+	p := PilotParams{Task: "diagnose", Health: true}
+	specs := ExpandShortcuts(p)
 	if len(specs) != 1 || specs[0].Tool != "health_check" {
 		t.Fatalf("expected 1 health_check spec, got %d", len(specs))
 	}
@@ -702,8 +708,8 @@ func TestExpandShortcuts_Health(t *testing.T) {
 	}
 
 	// Health=false should not add a spec.
-	p2 := pilotParams{Task: "diagnose", Health: false}
-	specs2 := expandShortcuts(p2)
+	p2 := PilotParams{Task: "diagnose", Health: false}
+	specs2 := ExpandShortcuts(p2)
 	if len(specs2) != 0 {
 		t.Errorf("expected 0 specs for health=false, got %d", len(specs2))
 	}
@@ -720,9 +726,9 @@ func TestParseLineCount(t *testing.T) {
 		{"abc", 20, 20},
 	}
 	for _, tc := range cases {
-		got := parseLineCount(tc.input, tc.defN)
+		got := ParseLineCount(tc.input, tc.defN)
 		if got != tc.expected {
-			t.Errorf("parseLineCount(%q, %d) = %d, want %d", tc.input, tc.defN, got, tc.expected)
+			t.Errorf("ParseLineCount(%q, %d) = %d, want %d", tc.input, tc.defN, got, tc.expected)
 		}
 	}
 }

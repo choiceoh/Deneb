@@ -1,4 +1,4 @@
-package chat
+package pilot
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 
 // --- Package-level model role registry ---
 // Set once during handler initialization via SetModelRoleRegistry.
-// Used by role-based LLM helpers, checkSglangHealth, and other lightweight-model code.
+// Used by role-based LLM helpers, CheckSglangHealth, and other lightweight-model code.
 
 var (
 	pkgRegistry     *modelrole.Registry
@@ -36,8 +36,8 @@ func SetModelRoleRegistry(reg *modelrole.Registry) {
 	})
 }
 
-// lightweightBaseURL returns the base URL for the lightweight model.
-func lightweightBaseURL() string {
+// LightweightBaseURL returns the base URL for the lightweight model.
+func LightweightBaseURL() string {
 	if pkgRegistry != nil {
 		return pkgRegistry.BaseURL(modelrole.RoleLightweight)
 	}
@@ -52,9 +52,20 @@ var (
 	sglangStartedAt = time.Now()
 )
 
-// checkSglangHealth returns true if the local sglang server is reachable.
+// SglangRecentlyDown returns true if the last health check was done and returned unhealthy.
+// Used by callers to skip sglang-dependent operations without re-probing.
+func SglangRecentlyDown() bool {
+	return !sglangHealthy.Load() && sglangLastCheck.Load() > 0
+}
+
+// HasRegistry returns true if the model role registry has been set.
+func HasRegistry() bool {
+	return pkgRegistry != nil
+}
+
+// CheckSglangHealth returns true if the local sglang server is reachable.
 // Result is cached for sglangHealthTTL to avoid per-call overhead.
-func checkSglangHealth() bool {
+func CheckSglangHealth() bool {
 	now := time.Now().Unix()
 	last := sglangLastCheck.Load()
 	ttl := sglangHealthTTL
@@ -69,7 +80,7 @@ func checkSglangHealth() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), sglangHealthPing)
 	defer cancel()
 
-	baseURL := lightweightBaseURL()
+	baseURL := LightweightBaseURL()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
 	if err != nil {
 		sglangHealthy.Store(false)
@@ -93,9 +104,7 @@ func checkSglangHealth() bool {
 
 // --- Thinking mode for pilot analysis ---
 
-// thinkingKeywords triggers thinking mode when the task contains complex analysis keywords.
-
-func cleanJSONResponse(s string) string {
+func CleanJSONResponse(s string) string {
 	s = strings.TrimSpace(s)
 
 	// Strip markdown code fences.
@@ -128,12 +137,12 @@ func cleanJSONResponse(s string) string {
 
 // Hard limits for output length enforcement.
 const (
-	briefMaxChars    = 500
-	detailedMaxChars = 8000
+	BriefMaxChars    = 500
+	DetailedMaxChars = 8000
 )
 
-// postProcessOutput applies format-specific cleaning and length enforcement.
-func postProcessOutput(result, outputFormat, maxLength string) string {
+// PostProcessOutput applies format-specific cleaning and length enforcement.
+func PostProcessOutput(result, outputFormat, maxLength string) string {
 	result = strings.TrimSpace(result)
 	if result == "" {
 		return result
@@ -142,7 +151,7 @@ func postProcessOutput(result, outputFormat, maxLength string) string {
 	// Format-specific cleaning.
 	switch outputFormat {
 	case "json":
-		result = cleanJSONResponse(result)
+		result = CleanJSONResponse(result)
 	case "list":
 		result = cleanListResponse(result)
 	default:
@@ -152,10 +161,10 @@ func postProcessOutput(result, outputFormat, maxLength string) string {
 	// Hard length enforcement — LLM hints are unreliable.
 	switch maxLength {
 	case "brief":
-		result = enforceMaxLength(result, briefMaxChars)
+		result = EnforceMaxLength(result, BriefMaxChars)
 	case "detailed":
 		// Allow longer output but still cap at reasonable limit.
-		result = enforceMaxLength(result, detailedMaxChars)
+		result = EnforceMaxLength(result, DetailedMaxChars)
 	}
 
 	return result
@@ -300,9 +309,9 @@ func normalizeMarkdown(s string) string {
 	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
-// enforceMaxLength hard-truncates output to maxChars, cutting at the last
+// EnforceMaxLength hard-truncates output to maxChars, cutting at the last
 // complete line or sentence boundary.
-func enforceMaxLength(s string, maxChars int) string {
+func EnforceMaxLength(s string, maxChars int) string {
 	if len(s) <= maxChars {
 		return s
 	}
@@ -336,9 +345,9 @@ No other text.`
 func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLength string, tools ToolExecutor, workspaceDir string, logger *slog.Logger) string {
 	// Ask LLM if follow-up tools are needed.
 	prompt := fmt.Sprintf("Task: %s\n\nInitial analysis:\n%s\n\nDo you need to call any follow-up tools to improve this answer?",
-		task, truncateHead(initialResult, 4000))
+		task, TruncateHead(initialResult, 4000))
 
-	decision, err := callPilotLLM(ctx, chainSystemPrompt, prompt, 1024)
+	decision, err := CallPilotLLM(ctx, chainSystemPrompt, prompt, 1024)
 	if err != nil {
 		logger.Debug("pilot chain: planning failed", "error", err)
 		return ""
@@ -350,7 +359,7 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	}
 
 	// Parse follow-up tool calls.
-	var followUp []sourceSpec
+	var followUp []SourceSpec
 	if err := json.Unmarshal([]byte(decision), &followUp); err != nil {
 		logger.Debug("pilot chain: invalid tool calls JSON", "error", err, "raw", decision)
 		return ""
@@ -373,20 +382,20 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	}
 
 	// Execute follow-up tools.
-	chainGathered := executeSources(ctx, followUp, tools)
+	chainGathered := ExecuteSources(ctx, followUp, tools)
 
 	// Final synthesis with all data.
 	var sb strings.Builder
 	sb.WriteString("Task: ")
 	sb.WriteString(task)
 	sb.WriteString("\n\nInitial analysis:\n")
-	sb.WriteString(truncateHead(initialResult, 4000))
+	sb.WriteString(TruncateHead(initialResult, 4000))
 	sb.WriteString("\n\nFollow-up data:\n")
 	for _, g := range chainGathered {
 		sb.WriteString("\n--- ")
-		sb.WriteString(g.label)
+		sb.WriteString(g.Label)
 		sb.WriteString(" ---\n")
-		sb.WriteString(smartTruncate(g.content, 4000, g.sourceType))
+		sb.WriteString(SmartTruncate(g.Content, 4000, g.SourceType))
 	}
 	sb.WriteString("\n\nNow provide the final comprehensive answer incorporating all data.")
 
@@ -399,8 +408,8 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 		sb.WriteString("\nKeep response under 500 characters.")
 	}
 
-	systemPrompt := buildPilotSystemPrompt(workspaceDir, false)
-	final, err := callPilotLLM(ctx, systemPrompt, sb.String(), pilotMaxTokens)
+	systemPrompt := BuildPilotSystemPrompt(workspaceDir, false)
+	final, err := CallPilotLLM(ctx, systemPrompt, sb.String(), pilotMaxTokens)
 	if err != nil {
 		logger.Debug("pilot chain: final synthesis failed", "error", err)
 		return ""
@@ -416,8 +425,8 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 
 // --- Fallback (pilot model unavailable) ---
 
-// buildFallbackResult formats raw tool results when the pilot model is not available.
-func buildFallbackResult(task string, gathered []sourceResult) string {
+// BuildFallbackResult formats raw tool results when the pilot model is not available.
+func BuildFallbackResult(task string, gathered []SourceResult) string {
 	var sb strings.Builder
 	sb.WriteString("[pilot: pilot model unavailable, returning gathered results]\n\n")
 	sb.WriteString("Task: ")
@@ -429,9 +438,9 @@ func buildFallbackResult(task string, gathered []sourceResult) string {
 
 	for _, g := range gathered {
 		sb.WriteString("\n\n--- ")
-		sb.WriteString(g.label)
+		sb.WriteString(g.Label)
 		sb.WriteString(" ---\n")
-		sb.WriteString(truncateHead(g.content, 3000))
+		sb.WriteString(TruncateHead(g.Content, 3000))
 	}
 
 	return sb.String()
@@ -439,18 +448,18 @@ func buildFallbackResult(task string, gathered []sourceResult) string {
 
 // --- Post-process steps ---
 
-// applyPostProcessSteps applies programmatic transformations to gathered data
+// ApplyPostProcessSteps applies programmatic transformations to gathered data
 // before feeding it to the LLM. This reduces noise without burning LLM tokens.
-func applyPostProcessSteps(gathered []sourceResult, steps []postProcessStep) []sourceResult {
+func ApplyPostProcessSteps(gathered []SourceResult, steps []PostProcessStep) []SourceResult {
 	for _, step := range steps {
 		for i := range gathered {
-			gathered[i].content = applyStep(gathered[i].content, step)
+			gathered[i].Content = applyStep(gathered[i].Content, step)
 		}
 	}
 	return gathered
 }
 
-func applyStep(content string, step postProcessStep) string {
+func applyStep(content string, step PostProcessStep) string {
 	lines := strings.Split(content, "\n")
 
 	switch step.Action {
@@ -471,14 +480,14 @@ func applyStep(content string, step postProcessStep) string {
 		return strings.Join(filtered, "\n")
 
 	case "head":
-		n := parseLineCount(step.Param, 20)
+		n := ParseLineCount(step.Param, 20)
 		if n >= len(lines) {
 			return content
 		}
 		return strings.Join(lines[:n], "\n") + fmt.Sprintf("\n[... %d more lines]", len(lines)-n)
 
 	case "tail":
-		n := parseLineCount(step.Param, 20)
+		n := ParseLineCount(step.Param, 20)
 		if n >= len(lines) {
 			return content
 		}
@@ -506,7 +515,8 @@ func applyStep(content string, step postProcessStep) string {
 	}
 }
 
-func parseLineCount(s string, defaultN int) int {
+// ParseLineCount parses a string as a line count, returning defaultN if empty or invalid.
+func ParseLineCount(s string, defaultN int) int {
 	if s == "" {
 		return defaultN
 	}
@@ -524,8 +534,6 @@ func parseLineCount(s string, defaultN int) int {
 
 // --- Helpers ---
 
-// truncateInput is a simple head-only truncation. Used by sglang_hooks.go and pilot fallback.
-
 func getRoleClient(role modelrole.Role, defaultBaseURL, defaultAPIKey string) *llm.Client {
 	if pkgRegistry != nil {
 		return pkgRegistry.Client(role)
@@ -540,30 +548,34 @@ func getRoleModel(role modelrole.Role, defaultModel string) string {
 	return defaultModel
 }
 
-// getLightweightClient returns the cached LLM client for the lightweight model role.
-func getLightweightClient() *llm.Client {
+// GetLightweightClient returns the cached LLM client for the lightweight model role.
+func GetLightweightClient() *llm.Client {
 	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultSglangBaseURL, "local")
 }
 
-// getLightweightModel returns the model name for the lightweight role.
-func getLightweightModel() string {
+// GetLightweightModel returns the model name for the lightweight role.
+func GetLightweightModel() string {
 	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultSglangModel)
 }
 
-func getPilotClient() *llm.Client {
+// GetPilotClient returns the LLM client for the pilot model role.
+func GetPilotClient() *llm.Client {
 	return getRoleClient(modelrole.RolePilot, modelrole.DefaultGoogleBaseURL, os.Getenv("GEMINI_API_KEY"))
 }
 
-func getPilotModel() string {
+// GetPilotModel returns the model name for the pilot role.
+func GetPilotModel() string {
 	return getRoleModel(modelrole.RolePilot, modelrole.DefaultPilotModel)
 }
 
-func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+// CallLocalLLM invokes the lightweight (local sglang) model with fallback chain.
+// Optional extraBody maps are merged into the request body (e.g. for chat_template_kwargs).
+func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
-	client := getLightweightClient()
-	model := getLightweightModel()
+	client := GetLightweightClient()
+	model := GetLightweightModel()
 
 	req := llm.ChatRequest{
 		Model:     model,
@@ -601,7 +613,7 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 		}
 	}
 
-	text, err := collectStream(ctx, events)
+	text, err := CollectStream(ctx, events)
 	if err != nil {
 		return "", err
 	}
@@ -612,12 +624,13 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	return text, nil
 }
 
-func callPilotLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
+// CallPilotLLM invokes the pilot model (e.g. Gemini) with fallback chain.
+func CallPilotLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
-	client := getPilotClient()
-	model := getPilotModel()
+	client := GetPilotClient()
+	model := GetPilotModel()
 
 	req := llm.ChatRequest{
 		Model:     model,
@@ -651,7 +664,7 @@ func callPilotLLM(ctx context.Context, system, userMessage string, maxTokens int
 		}
 	}
 
-	text, err := collectStream(ctx, events)
+	text, err := CollectStream(ctx, events)
 	if err != nil {
 		return "", err
 	}
@@ -662,7 +675,8 @@ func callPilotLLM(ctx context.Context, system, userMessage string, maxTokens int
 	return text, nil
 }
 
-func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
+// CollectStream reads all events from a streaming LLM response and returns the text.
+func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	var sb strings.Builder
 	for {
 		select {
@@ -677,7 +691,7 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 			}
 			switch ev.Type {
 			case "content_block_delta":
-				if text := extractDeltaText(ev.Payload); text != "" {
+				if text := ExtractDeltaText(ev.Payload); text != "" {
 					sb.WriteString(text)
 				}
 			case "error":
@@ -694,11 +708,11 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 	}
 }
 
-// extractDeltaText extracts the "text" field from {"delta":{"text":"..."}} payloads
+// ExtractDeltaText extracts the "text" field from {"delta":{"text":"..."}} payloads
 // by scanning the raw bytes directly, avoiding the string(payload) allocation on
 // every streaming delta event. Falls back to json.Unmarshal only when backslash
 // escapes are detected (rare).
-func extractDeltaText(payload []byte) string {
+func ExtractDeltaText(payload []byte) string {
 	marker := []byte(`"text":"`)
 	idx := bytes.Index(payload, marker)
 	if idx < 0 {

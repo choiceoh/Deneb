@@ -3,7 +3,7 @@
 //
 // Runs Vega (project DB) and Memory (markdown files) searches in parallel,
 // then formats results as a "## 관련 지식" section appended to the system prompt.
-package chat
+package knowledge
 
 import (
 	"context"
@@ -16,10 +16,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 )
 
-// KnowledgeDeps holds optional dependencies for knowledge prefetch.
-type KnowledgeDeps struct {
+// Deps holds optional dependencies for knowledge prefetch.
+type Deps struct {
 	VegaBackend      vega.Backend     // nil → skip Vega search
 	WorkspaceDir     string           // empty → skip file-based Memory search
 	MemoryStore      *memory.Store    // nil → skip structured memory search
@@ -34,17 +35,18 @@ const (
 	knowledgeMaxVega         = 5    // top Vega results
 	knowledgeMaxMemory       = 10   // top memory matches (token budget is the real ceiling)
 	knowledgeTimeout         = 15 * time.Second
-	knowledgeMaxContentRunes = 500 // truncate individual result content (in runes, not bytes)
+	knowledgeMaxContentRunes = 500
+	charsPerToken            = 4 // truncate individual result content (in runes, not bytes)
 )
 
-// PrefetchKnowledge searches Vega and Memory in parallel for content relevant
+// Prefetch searches Vega and Memory in parallel for content relevant
 // to the user message. Returns a formatted section to append to the system
 // prompt, or "" if nothing relevant was found.
 // minPrefetchRunes is the minimum message length to trigger knowledge prefetch.
 // Skips very short messages (greetings, reactions) that are unlikely to benefit.
 const minPrefetchRunes = 2
 
-func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) string {
+func Prefetch(ctx context.Context, message string, deps Deps) string {
 	if utf8.RuneCountInString(message) < minPrefetchRunes {
 		return ""
 	}
@@ -60,7 +62,7 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	var (
 		wg               sync.WaitGroup
 		vegaResults      []vega.SearchResult
-		memMatches       []MemoryMatch
+		memMatches       []chattools.MemoryMatch
 		structFacts      []memory.SearchResult
 		unifiedResults   []unified.SearchResult
 		userModelEntries []memory.UserModelEntry
@@ -122,7 +124,7 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			memMatches = searchMemoryFiles(deps.WorkspaceDir, message, knowledgeMaxMemory)
+			memMatches = chattools.SearchMemoryFiles(deps.WorkspaceDir, message, knowledgeMaxMemory)
 		}()
 	}
 
@@ -312,7 +314,7 @@ func truncateRunes(s string, maxRunes int) string {
 }
 
 // formatKnowledge builds the "## 관련 지식" section from search results (legacy).
-func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) string {
+func formatKnowledge(vegaResults []vega.SearchResult, memMatches []chattools.MemoryMatch) string {
 	return formatKnowledgeWithFacts(vegaResults, memMatches, nil, nil)
 }
 
@@ -320,7 +322,7 @@ func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) 
 // respecting the token budget. Supports both legacy MemoryMatch and structured facts.
 func formatKnowledgeWithFacts(
 	vegaResults []vega.SearchResult,
-	memMatches []MemoryMatch,
+	memMatches []chattools.MemoryMatch,
 	structFacts []memory.SearchResult,
 	unifiedResults []unified.SearchResult,
 ) string {

@@ -1,4 +1,4 @@
-package chat
+package pilot
 
 import (
 	"context"
@@ -33,6 +33,11 @@ const (
 	sglangHealthPing = 3 * time.Second // HTTP timeout for health check
 )
 
+// ToolExecutor executes a named tool with JSON input and returns the result.
+type ToolExecutor interface {
+	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
+}
+
 // --- Thinking mode for pilot analysis ---
 
 // thinkingKeywords triggers thinking mode when the task contains complex analysis keywords.
@@ -42,22 +47,23 @@ var thinkingKeywords = []string{
 }
 
 var pilotSimpleSourceTools = map[string]bool{
-	"find":          true,
-	"git":           true,
-	"gmail":         true,
-	"grep":          true,
-	"health_check":  true,
-	"http":          true,
-	"kv":            true,
-	"memory":  true,
-	"read":          true,
-	"tree":          true,
-	"web_fetch":     true,
+	"find":         true,
+	"git":          true,
+	"gmail":        true,
+	"grep":         true,
+	"health_check": true,
+	"http":         true,
+	"kv":           true,
+	"memory":       true,
+	"polaris":      true,
+	"read":         true,
+	"tree":         true,
+	"web_fetch":    true,
 }
 
-// shouldUseThinking decides whether to enable Qwen3.5 thinking mode based on
+// ShouldUseThinking decides whether to enable Qwen3.5 thinking mode based on
 // task complexity (keywords) and number of sources.
-func shouldUseThinking(task string, sourceCount int) bool {
+func ShouldUseThinking(task string, sourceCount int) bool {
 	if sourceCount >= 3 {
 		return true
 	}
@@ -70,7 +76,8 @@ func shouldUseThinking(task string, sourceCount int) bool {
 	return false
 }
 
-func shouldBypassPilotLLM(p pilotParams, sources []sourceSpec, gathered []sourceResult) bool {
+// ShouldBypassPilotLLM returns true when sources are simple enough to skip LLM.
+func ShouldBypassPilotLLM(p PilotParams, sources []SourceSpec, gathered []SourceResult) bool {
 	if len(sources) == 0 || len(sources) > 2 || len(gathered) < len(sources) {
 		return false
 	}
@@ -86,18 +93,19 @@ func shouldBypassPilotLLM(p pilotParams, sources []sourceSpec, gathered []source
 		if !pilotSimpleSourceTools[src.Tool] {
 			return false
 		}
-		totalChars += len(gathered[i].content)
+		totalChars += len(gathered[i].Content)
 	}
 
 	return totalChars > 0 && totalChars <= 1000
 }
 
-func buildPilotPassthroughResult(gathered []sourceResult) string {
+// BuildPilotPassthroughResult formats gathered results for direct passthrough.
+func BuildPilotPassthroughResult(gathered []SourceResult) string {
 	if len(gathered) == 0 {
 		return ""
 	}
 	if len(gathered) == 1 {
-		return gathered[0].content
+		return gathered[0].Content
 	}
 
 	var sb strings.Builder
@@ -106,16 +114,17 @@ func buildPilotPassthroughResult(gathered []sourceResult) string {
 			sb.WriteString("\n\n")
 		}
 		sb.WriteString("--- ")
-		sb.WriteString(g.label)
+		sb.WriteString(g.Label)
 		sb.WriteString(" ---\n")
-		sb.WriteString(g.content)
+		sb.WriteString(g.Content)
 	}
 	return sb.String()
 }
 
 // --- System prompt ---
 
-func buildPilotSystemPrompt(workspaceDir string, thinking bool) string {
+// BuildPilotSystemPrompt builds the system prompt for pilot LLM calls.
+func BuildPilotSystemPrompt(workspaceDir string, thinking bool) string {
 	var sb strings.Builder
 	sb.WriteString(`You are Pilot, a fast AI assistant. Your output goes to Telegram (4096 char limit).
 Rules:
@@ -144,14 +153,14 @@ Rules:
 
 // --- Main pilot function ---
 
-// toolPilot creates the pilot ToolFunc. It uses the ToolExecutor to run
+// ToolPilot creates the pilot ToolFunc. It uses the ToolExecutor to run
 // source tools from the registry before feeding results to the pilot LLM.
-func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
+func ToolPilot(tools ToolExecutor, workspaceDir string) func(ctx context.Context, input json.RawMessage) (string, error) {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		start := time.Now()
 		logger := slog.Default()
 
-		var p pilotParams
+		var p PilotParams
 		if err := jsonutil.UnmarshalInto("pilot params", input, &p); err != nil {
 			return "", err
 		}
@@ -160,7 +169,7 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 		}
 
 		// Expand shortcuts into source specs.
-		sources := expandShortcuts(p)
+		sources := ExpandShortcuts(p)
 
 		// Merge with explicit sources.
 		sources = append(sources, p.Sources...)
@@ -171,23 +180,23 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 		}
 
 		// Phase 1: Execute sources (unconditional in parallel, then conditional).
-		gathered := executeSources(ctx, sources, tools)
+		gathered := ExecuteSources(ctx, sources, tools)
 
 		// Phase 1.5: Apply post-processing steps to gathered data.
 		if len(p.PostProcess) > 0 {
-			gathered = applyPostProcessSteps(gathered, p.PostProcess)
+			gathered = ApplyPostProcessSteps(gathered, p.PostProcess)
 		}
 
 		// Add direct content/items.
 		if p.Content != "" {
-			gathered = append(gathered, sourceResult{"content", p.Content, "content"})
+			gathered = append(gathered, SourceResult{"content", p.Content, "content"})
 		}
 		for i, item := range p.Items {
-			gathered = append(gathered, sourceResult{fmt.Sprintf("item[%d]", i+1), item, "content"})
+			gathered = append(gathered, SourceResult{fmt.Sprintf("item[%d]", i+1), item, "content"})
 		}
 
-		if shouldBypassPilotLLM(p, sources, gathered) {
-			result := buildPilotPassthroughResult(gathered)
+		if ShouldBypassPilotLLM(p, sources, gathered) {
+			result := BuildPilotPassthroughResult(gathered)
 			logger.Info("pilot: bypassed local llm for simple source set",
 				"task", p.Task,
 				"sources", len(sources),
@@ -198,7 +207,7 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 
 		// Determine thinking mode and max tokens.
 		// Brief mode disables thinking — not enough token budget for both.
-		thinking := p.MaxLength != "brief" && shouldUseThinking(p.Task, len(sources))
+		thinking := p.MaxLength != "brief" && ShouldUseThinking(p.Task, len(sources))
 		maxTokens := pilotMaxTokens
 		if thinking {
 			maxTokens = 6144 // extra budget for thinking + answer
@@ -207,17 +216,17 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 		}
 
 		// Phase 2: Build prompt and call the pilot LLM.
-		systemPrompt := buildPilotSystemPrompt(workspaceDir, thinking)
-		userMsg := buildPilotPrompt(p.Task, p.OutputFormat, p.MaxLength, gathered)
+		systemPrompt := BuildPilotSystemPrompt(workspaceDir, thinking)
+		userMsg := BuildPilotPrompt(p.Task, p.OutputFormat, p.MaxLength, gathered)
 
-		result, err := callPilotLLM(ctx, systemPrompt, userMsg, maxTokens)
+		result, err := CallPilotLLM(ctx, systemPrompt, userMsg, maxTokens)
 		if err != nil {
 			// Graceful degradation: return raw tool results if LLM fails.
 			logger.Warn("pilot: LLM call failed, falling back to raw results",
 				"error", err,
 				"task", p.Task,
 			)
-			return buildFallbackResult(p.Task, gathered), nil
+			return BuildFallbackResult(p.Task, gathered), nil
 		}
 
 		// Strip thinking tags from response.
@@ -234,12 +243,12 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 		}
 
 		// Post-process output based on format.
-		result = postProcessOutput(result, p.OutputFormat, p.MaxLength)
+		result = PostProcessOutput(result, p.OutputFormat, p.MaxLength)
 
 		// Metrics logging.
 		totalInput := 0
 		for _, g := range gathered {
-			totalInput += len(g.content)
+			totalInput += len(g.Content)
 		}
 		logger.Info("pilot: completed",
 			"task_len", len(p.Task),
@@ -257,16 +266,16 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 
 // --- Types ---
 
-// pilotParams is the parsed tool input.
-type pilotParams struct {
-	Task         string            `json:"task"`
-	Sources      []sourceSpec      `json:"sources"`
-	Content      string            `json:"content"`
-	Items        []string          `json:"items"`
-	OutputFormat string            `json:"output_format"`
-	MaxLength    string            `json:"max_length"`
-	Chain        bool              `json:"chain"`
-	PostProcess  []postProcessStep `json:"post_process"`
+// PilotParams is the parsed tool input.
+type PilotParams struct {
+	Task         string          `json:"task"`
+	Sources      []SourceSpec    `json:"sources"`
+	Content      string          `json:"content"`
+	Items        []string        `json:"items"`
+	OutputFormat string          `json:"output_format"`
+	MaxLength    string          `json:"max_length"`
+	Chain        bool            `json:"chain"`
+	PostProcess  []PostProcessStep `json:"post_process"`
 
 	// Shortcuts.
 	File        string   `json:"file"`
@@ -286,20 +295,21 @@ type pilotParams struct {
 	Memory      string   `json:"memory"`
 	Gmail       string   `json:"gmail"`
 	YouTube     string   `json:"youtube"`
+	Polaris     string   `json:"polaris"`
 	Image       string   `json:"image"`
 	Ls          string   `json:"ls"`
 	AgentLogs   string   `json:"agent_logs"`
 	GatewayLogs string   `json:"gateway_logs"`
 }
 
-// postProcessStep is a programmatic transformation applied to gathered data.
-type postProcessStep struct {
+// PostProcessStep is a programmatic transformation applied to gathered data.
+type PostProcessStep struct {
 	Action string `json:"action"` // filter_lines, head, tail, unique, sort
 	Param  string `json:"param"`  // action-specific parameter
 }
 
-// sourceSpec is a tool call specification from the agent.
-type sourceSpec struct {
+// SourceSpec is a tool call specification from the agent.
+type SourceSpec struct {
 	Tool   string          `json:"tool"`
 	Input  json.RawMessage `json:"input"`
 	Label  string          `json:"label"`
@@ -307,13 +317,9 @@ type sourceSpec struct {
 	SkipIf string          `json:"skip_if"` // skip if named source succeeded
 }
 
-// sourceResult is a labeled chunk of gathered data.
-type sourceResult struct {
-	label      string
-	content    string
-	sourceType string // "file", "exec", "grep", "find", "url", "content"
+// SourceResult is a labeled chunk of gathered data.
+type SourceResult struct {
+	Label      string
+	Content    string
+	SourceType string // "file", "exec", "grep", "find", "url", "content"
 }
-
-// --- Shortcut expansion ---
-
-// expandShortcuts converts convenience params (file, exec, grep, find, url) into sourceSpecs.

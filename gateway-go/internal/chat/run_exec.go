@@ -18,6 +18,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
@@ -257,7 +259,7 @@ func executeAgentRun(
 			// When recall engine is active (parallel goroutine), skip
 			// memory SearchFacts here to avoid duplicate DB queries.
 			recallActive := deps.registry != nil && deps.memoryStore != nil
-			kDeps := KnowledgeDeps{
+			kDeps := knowledge.Deps{
 				VegaBackend:      deps.vegaBackend,
 				WorkspaceDir:     workspaceDir,
 				SkipMemorySearch: recallActive,
@@ -267,7 +269,7 @@ func executeAgentRun(
 				kDeps.MemoryEmbedder = deps.memoryEmbedder
 				kDeps.UnifiedStore = deps.unifiedStore
 			}
-			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
+			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
 		}
 	}()
 
@@ -382,7 +384,7 @@ func executeAgentRun(
 	// Runs after context assembly but before prompt finalization.
 	// Low-cost (no LLM call) — replaces old tool_result blocks with compact stubs.
 	if len(messages) > 0 {
-		mcMessages, mcResult := MicrocompactMessages(messages, time.Now())
+		mcMessages, mcResult := compact.MicrocompactMessages(messages, time.Now())
 		if mcResult.PrunedCount > 0 {
 			messages = mcMessages
 			logger.Info("microcompact: pruned old tool results",
@@ -987,10 +989,10 @@ func executeAgentRun(
 
 				// Strip images before compaction — they waste tokens in the
 				// summarization call and can cause prompt-too-long errors.
-				preCompactMsgs := StripImageBlocks(messages)
+				preCompactMsgs := compact.StripImageBlocks(messages)
 
 				// Extract recent file reads before compaction destroys them.
-				recentFiles := ExtractRecentFileReads(preCompactMsgs)
+				recentFiles := compact.ExtractRecentFileReads(preCompactMsgs)
 
 				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
 					ctx, deps, params, client, logger,
@@ -1006,7 +1008,7 @@ func executeAgentRun(
 				// Post-compaction file restoration: re-inject recently accessed
 				// file contents so the agent retains working memory of files
 				// it was actively editing. Stays within token budget.
-				if restored := BuildRestorationMessages(recentFiles); len(restored) > 0 {
+				if restored := compact.BuildRestorationMessages(recentFiles); len(restored) > 0 {
 					messages = append(messages, restored...)
 					logger.Info("compaction: restored recent file reads",
 						"count", len(restored))

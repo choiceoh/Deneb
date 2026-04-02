@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
+	compaction2 "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
@@ -29,11 +31,11 @@ const (
 var proactiveCompaction struct {
 	lastRun        atomic.Int64 // epoch millis of last completed sweep
 	running        atomic.Bool  // prevents concurrent sweeps
-	circuitBreaker *CompactionCircuitBreaker
+	circuitBreaker *compaction2.CompactionCircuitBreaker
 }
 
 func init() {
-	proactiveCompaction.circuitBreaker = NewCompactionCircuitBreaker()
+	proactiveCompaction.circuitBreaker = compaction2.NewCompactionCircuitBreaker()
 }
 
 // CompactionConfig configures compaction behavior.
@@ -170,8 +172,8 @@ func handleContextOverflowAurora(
 		sweepCfg.FreshTailCount = uint32(deps.compactionCfg.FreshTailCount)
 
 		// Use lightweight model for cost-efficient compaction summaries.
-		lwClient := getLightweightClient()
-		lwModel := getLightweightModel()
+		lwClient := pilot.GetLightweightClient()
+		lwModel := pilot.GetLightweightModel()
 		summarizer := aurora.NewLLMSummarizer(lwClient, lwModel)
 
 		// Build inline fact extractor: replaces the async flushMemory/transferSummary

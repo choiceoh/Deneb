@@ -1,4 +1,4 @@
-package chat
+package compaction
 
 import (
 	"strings"

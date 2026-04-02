@@ -1,4 +1,4 @@
-package chat
+package knowledge
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -28,28 +30,28 @@ func (m *mockVegaBackend) Search(_ context.Context, _ string, _ vega.SearchOpts)
 }
 func (m *mockVegaBackend) Close() error { return nil }
 
-func TestPrefetchKnowledge_EmptyMessage(t *testing.T) {
-	result := PrefetchKnowledge(context.Background(), "", KnowledgeDeps{})
+func TestPrefetch_EmptyMessage(t *testing.T) {
+	result := Prefetch(context.Background(), "", Deps{})
 	if result != "" {
 		t.Errorf("expected empty for empty message, got: %q", result)
 	}
 }
 
-func TestPrefetchKnowledge_NoDeps(t *testing.T) {
-	result := PrefetchKnowledge(context.Background(), "비금도 진행상황", KnowledgeDeps{})
+func TestPrefetch_NoDeps(t *testing.T) {
+	result := Prefetch(context.Background(), "비금도 진행상황", Deps{})
 	if result != "" {
 		t.Errorf("expected empty with no deps, got: %q", result)
 	}
 }
 
-func TestPrefetchKnowledge_VegaOnly(t *testing.T) {
+func TestPrefetch_VegaOnly(t *testing.T) {
 	backend := &mockVegaBackend{
 		results: []vega.SearchResult{
 			{ProjectName: "비금도 해상태양광", Section: "현재 상황", Content: "해저케이블 154kV 설치 진행중", Score: 0.85},
 		},
 	}
-	deps := KnowledgeDeps{VegaBackend: backend}
-	result := PrefetchKnowledge(context.Background(), "비금도", deps)
+	deps := Deps{VegaBackend: backend}
+	result := Prefetch(context.Background(), "비금도", deps)
 
 	if !strings.Contains(result, "관련 지식") {
 		t.Errorf("expected '관련 지식' header, got: %q", result)
@@ -62,12 +64,12 @@ func TestPrefetchKnowledge_VegaOnly(t *testing.T) {
 	}
 }
 
-func TestPrefetchKnowledge_MemoryOnly(t *testing.T) {
+func TestPrefetch_MemoryOnly(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("# 프로젝트 메모\n비금도 3차 계통연계 승인 완료\n"), 0o644)
 
-	deps := KnowledgeDeps{WorkspaceDir: dir}
-	result := PrefetchKnowledge(context.Background(), "비금도", deps)
+	deps := Deps{WorkspaceDir: dir}
+	result := Prefetch(context.Background(), "비금도", deps)
 
 	if !strings.Contains(result, "메모리") {
 		t.Errorf("expected memory section, got: %q", result)
@@ -77,7 +79,7 @@ func TestPrefetchKnowledge_MemoryOnly(t *testing.T) {
 	}
 }
 
-func TestPrefetchKnowledge_BothSources(t *testing.T) {
+func TestPrefetch_BothSources(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("김대희 담당자 연락처 확인\n"), 0o644)
 
@@ -86,8 +88,8 @@ func TestPrefetchKnowledge_BothSources(t *testing.T) {
 			{ProjectName: "비금도", Section: "담당자", Content: "김대희 부장", Score: 0.9},
 		},
 	}
-	deps := KnowledgeDeps{VegaBackend: backend, WorkspaceDir: dir}
-	result := PrefetchKnowledge(context.Background(), "김대희", deps)
+	deps := Deps{VegaBackend: backend, WorkspaceDir: dir}
+	result := Prefetch(context.Background(), "김대희", deps)
 
 	if !strings.Contains(result, "프로젝트: 비금도") {
 		t.Errorf("expected vega result, got: %q", result)
@@ -97,20 +99,20 @@ func TestPrefetchKnowledge_BothSources(t *testing.T) {
 	}
 }
 
-func TestPrefetchKnowledge_NoResults(t *testing.T) {
+func TestPrefetch_NoResults(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("unrelated content\n"), 0o644)
 
 	backend := &mockVegaBackend{results: nil}
-	deps := KnowledgeDeps{VegaBackend: backend, WorkspaceDir: dir}
-	result := PrefetchKnowledge(context.Background(), "xyznonexistent", deps)
+	deps := Deps{VegaBackend: backend, WorkspaceDir: dir}
+	result := Prefetch(context.Background(), "xyznonexistent", deps)
 
 	if result != "" {
 		t.Errorf("expected empty for no results, got: %q", result)
 	}
 }
 
-func TestPrefetchKnowledge_UnifiedRecallOnly(t *testing.T) {
+func TestPrefetch_UnifiedRecallOnly(t *testing.T) {
 	dir := t.TempDir()
 	store, err := unified.New(unified.Config{
 		DatabasePath: filepath.Join(dir, "deneb.db"),
@@ -129,7 +131,7 @@ func TestPrefetchKnowledge_UnifiedRecallOnly(t *testing.T) {
 		t.Fatalf("insert message: %v", err)
 	}
 
-	result := PrefetchKnowledge(context.Background(), "search index repair", KnowledgeDeps{
+	result := Prefetch(context.Background(), "search index repair", Deps{
 		UnifiedStore: store,
 	})
 
@@ -141,7 +143,7 @@ func TestPrefetchKnowledge_UnifiedRecallOnly(t *testing.T) {
 	}
 }
 
-func TestPrefetchKnowledge_StructuredFactsDoNotDuplicateUnifiedFacts(t *testing.T) {
+func TestPrefetch_StructuredFactsDoNotDuplicateUnifiedFacts(t *testing.T) {
 	dir := t.TempDir()
 	store, err := unified.New(unified.Config{
 		DatabasePath: filepath.Join(dir, "deneb.db"),
@@ -166,7 +168,7 @@ func TestPrefetchKnowledge_StructuredFactsDoNotDuplicateUnifiedFacts(t *testing.
 		t.Fatalf("insert fact: %v", err)
 	}
 
-	result := PrefetchKnowledge(context.Background(), "concise code review summaries", KnowledgeDeps{
+	result := Prefetch(context.Background(), "concise code review summaries", Deps{
 		MemoryStore:  memStore,
 		UnifiedStore: store,
 	})
@@ -190,7 +192,7 @@ func TestFormatKnowledge_TokenBudget(t *testing.T) {
 	}
 
 	formatted := formatKnowledge(results, nil)
-	tokens := estimateTokens(formatted)
+	tokens := len(formatted) / charsPerToken
 	if tokens > knowledgeMaxTokens+500 { // allow small overshoot from last item
 		t.Errorf("exceeded token budget: %d tokens (max %d)", tokens, knowledgeMaxTokens)
 	}
@@ -202,7 +204,7 @@ func TestSearchMemoryFiles_Shared(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(content), 0o644)
 
 	t.Run("finds matches", func(t *testing.T) {
-		matches := searchMemoryFiles(dir, "golang", 10)
+		matches := chattools.SearchMemoryFiles(dir, "golang", 10)
 		if len(matches) == 0 {
 			t.Fatal("expected matches")
 		}
@@ -212,14 +214,14 @@ func TestSearchMemoryFiles_Shared(t *testing.T) {
 	})
 
 	t.Run("respects limit", func(t *testing.T) {
-		matches := searchMemoryFiles(dir, "is", 1)
+		matches := chattools.SearchMemoryFiles(dir, "is", 1)
 		if len(matches) != 1 {
 			t.Fatalf("expected 1 match (limit), got %d", len(matches))
 		}
 	})
 
 	t.Run("empty query", func(t *testing.T) {
-		matches := searchMemoryFiles(dir, "", 10)
+		matches := chattools.SearchMemoryFiles(dir, "", 10)
 		if len(matches) != 0 {
 			t.Fatalf("expected 0 matches for empty query, got %d", len(matches))
 		}
