@@ -238,7 +238,9 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {
+	h.callbackMu.Lock()
 	h.broadcastRaw = fn
+	h.callbackMu.Unlock()
 }
 
 // SetReplyFunc sets the function that delivers assistant responses back to the
@@ -389,13 +391,17 @@ func (h *Handler) ReactionFunc() ReactionFunc {
 
 // SetDefaultModel sets the default model ID for subsequent agent runs.
 func (h *Handler) SetDefaultModel(model string) {
+	h.callbackMu.Lock()
 	h.defaultModel = model
+	h.callbackMu.Unlock()
 }
 
 // SetProviderRuntime sets the provider runtime resolver for runtime auth
 // and missing-auth message generation during LLM client resolution.
 func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {
+	h.callbackMu.Lock()
 	h.providerRuntime = pr
+	h.callbackMu.Unlock()
 }
 
 // SetShutdownCtx sets the server lifecycle context so background goroutines
@@ -460,12 +466,17 @@ type StatusDeps struct {
 
 // SetStatusDepsFunc sets the callback that provides server-level status data.
 func (h *Handler) SetStatusDepsFunc(fn StatusDepsFunc) {
+	h.callbackMu.Lock()
 	h.statusDepsFunc = fn
+	h.callbackMu.Unlock()
 }
 
 // DefaultModel returns the configured default LLM model name.
 func (h *Handler) DefaultModel() string {
-	return h.defaultModel
+	h.callbackMu.RLock()
+	m := h.defaultModel
+	h.callbackMu.RUnlock()
+	return m
 }
 
 // ModelRegistry returns the centralized model role registry.

@@ -224,7 +224,9 @@ func (h *Handler) handleSlashCommand(
 					displayName = fmt.Sprintf("%s (%s)", modelArg, string(role))
 				}
 			}
+			h.callbackMu.Lock()
 			h.defaultModel = modelArg
+			h.callbackMu.Unlock()
 			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %s(으)로 변경되었습니다.", displayName))
 		}
 
@@ -312,7 +314,9 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	if sess == nil {
 		return fmt.Sprintf("세션 %q: 정보 없음", sessionKey)
 	}
+	h.callbackMu.RLock()
 	model := h.defaultModel
+	h.callbackMu.RUnlock()
 	if model == "" && h.registry != nil {
 		model = h.registry.FullModelID(modelrole.RoleMain)
 	}
@@ -395,8 +399,11 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	}
 
 	// Server-level info from StatusDepsFunc.
-	if h.statusDepsFunc != nil {
-		sd := h.statusDepsFunc(sessionKey)
+	h.callbackMu.RLock()
+	statusFn := h.statusDepsFunc
+	h.callbackMu.RUnlock()
+	if statusFn != nil {
+		sd := statusFn(sessionKey)
 		if sd.Version != "" {
 			uptime := ""
 			if !sd.StartedAt.IsZero() {
@@ -416,7 +423,7 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	}
 
 	// Session failure reason (from session itself).
-	if sess.FailureReason != "" && (h.statusDepsFunc == nil) {
+	if sess.FailureReason != "" && statusFn == nil {
 		sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sess.FailureReason))
 	}
 
@@ -483,7 +490,6 @@ func (h *Handler) buildRunDeps() runDeps {
 		mediaSendFn:          h.mediaSendFn,
 		typingFn:             h.typingFn,
 		reactionFn:           h.reactionFn,
-		removeReactionFn:     h.removeReactionFn,
 		toolProgressFn:       h.toolProgressFn,
 		draftEditFn:          h.draftEditFn,
 		draftDeleteFn:        h.draftDeleteFn,

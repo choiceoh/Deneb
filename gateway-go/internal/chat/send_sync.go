@@ -54,9 +54,8 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		return nil, fmt.Errorf("chat handler not initialized")
 	}
 
-	sess := h.sessions.Get(sessionKey)
-	if sess == nil {
-		sess = h.sessions.Create(sessionKey, "direct")
+	if h.sessions.Get(sessionKey) == nil {
+		h.sessions.Create(sessionKey, "direct")
 	}
 
 	params := RunParams{
@@ -84,6 +83,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	}
 
 	deps := h.buildRunDeps()
+	deps.continuationEnabled = false // sync paths do not support autonomous continuation
 
 	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, nil)
 	if err != nil {
@@ -92,7 +92,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 
 	resolvedModel := model
 	if resolvedModel == "" {
-		resolvedModel = h.defaultModel
+		resolvedModel = h.DefaultModel()
 	}
 	if resolvedModel == "" && h.registry != nil {
 		resolvedModel = h.registry.FullModelID(modelrole.RoleMain)
@@ -119,9 +119,8 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		return nil, fmt.Errorf("chat handler not initialized")
 	}
 
-	sess := h.sessions.Get(sessionKey)
-	if sess == nil {
-		sess = h.sessions.Create(sessionKey, "direct")
+	if h.sessions.Get(sessionKey) == nil {
+		h.sessions.Create(sessionKey, "direct")
 	}
 
 	params := RunParams{
@@ -149,6 +148,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 	}
 
 	deps := h.buildRunDeps()
+	deps.continuationEnabled = false // sync paths do not support autonomous continuation
 
 	result, err := executeAgentRunWithDelta(ctx, params, deps, onDelta, h.logger)
 	if err != nil {
@@ -157,7 +157,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 
 	resolvedModel := model
 	if resolvedModel == "" {
-		resolvedModel = h.defaultModel
+		resolvedModel = h.DefaultModel()
 	}
 	if resolvedModel == "" && h.registry != nil {
 		resolvedModel = h.registry.FullModelID(modelrole.RoleMain)

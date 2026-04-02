@@ -500,10 +500,6 @@ func executeAgentRun(
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
 		rawTools := deps.tools.FilteredLLMTools(allowed)
 
-		// Apply deny-rule filtering: remove tools the model should never see.
-		// This prevents wasted generation on tools the user has forbidden.
-		rawTools = FilterDeniedTools(rawTools, deps.toolDenySet)
-
 		// Cache-stable ordering: built-in tools form a sorted prefix,
 		// dynamic tools (plugins, MCP) are sorted separately and appended.
 		// Changes to dynamic tools only invalidate cache from the boundary onward.
