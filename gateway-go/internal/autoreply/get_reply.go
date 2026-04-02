@@ -237,11 +237,7 @@ func InitSessionForReply(msg *types.MsgContext, deps ReplyDeps) *types.SessionSt
 		}
 	}
 	return &types.SessionState{
-		SessionKey: msg.SessionKey,
-		Channel:    msg.Channel,
-		AccountID:  msg.AccountID,
-		ThreadID:   msg.ThreadID,
-		IsGroup:    msg.IsGroup,
+		SessionOrigin: msg.SessionOrigin,
 	}
 }
 

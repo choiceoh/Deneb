@@ -166,18 +166,24 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	msgCtx := &types.MsgContext{
-		Body:              msgText,
-		RawBody:           msgText,
-		From:              chatID,
-		To:                chatID,
-		SessionKey:        sessionKey,
-		MessageSid:        fmt.Sprintf("tg-%s-%d", chatID, msg.MessageID),
-		Channel:           "telegram",
-		SenderID:          senderID,
-		SenderName:        senderName,
-		IsGroup:           isGroupChat(msg.Chat),
-		ChatType:          msg.Chat.Type,
-		CommandAuthorized: true, // single-user deployment
+		Body:       msgText,
+		RawBody:    msgText,
+		From:       chatID,
+		To:         chatID,
+		MessageSid: fmt.Sprintf("tg-%s-%d", chatID, msg.MessageID),
+		SessionOrigin: types.SessionOrigin{
+			SessionKey: sessionKey,
+			Channel:    "telegram",
+			IsGroup:    isGroupChat(msg.Chat),
+		},
+		SenderInfo: types.SenderInfo{
+			SenderID:   senderID,
+			SenderName: senderName,
+			ChatType:   msg.Chat.Type,
+		},
+		CommandControl: types.CommandControl{
+			CommandAuthorized: true, // single-user deployment
+		},
 	}
 
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
@@ -373,9 +379,11 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		ModelCandidates: p.buildModelCandidates(),
 		SessionFunc: func(key string) *types.SessionState {
 			return &types.SessionState{
-				SessionKey: key,
-				Channel:    "telegram",
-				IsGroup:    msgCtx.IsGroup,
+				SessionOrigin: types.SessionOrigin{
+					SessionKey: key,
+					Channel:    "telegram",
+					IsGroup:    msgCtx.IsGroup,
+				},
 			}
 		},
 		OnSessionEvent: func(eventType, sessKey, reason string) {
