@@ -4,11 +4,13 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -69,6 +71,16 @@ func PrewarmModel(ctx context.Context, logger *slog.Logger) {
 
 		if err == nil {
 			logger.Info("primary model prewarmed successfully")
+			return
+		}
+
+		// Don't retry permanent errors (401, 403, etc.).
+		var apiErr *llm.APIError
+		if errors.As(err, &apiErr) && !httpretry.IsRetryable(apiErr.StatusCode) {
+			logger.Warn("model prewarm failed with permanent error, skipping retries",
+				"status", apiErr.StatusCode,
+				"error", err,
+			)
 			return
 		}
 
