@@ -9,11 +9,6 @@ import (
 	"unicode/utf8"
 )
 
-// dedupJaccardThreshold is the Jaccard similarity above which two facts are
-// considered near-duplicates. At 0.60, two facts share 60%+ of their unique
-// tokens — clearly the same concept with minor wording differences.
-const dedupJaccardThreshold = 0.60
-
 // jaccardTokenRe matches Unicode letters, numbers, and underscores.
 // Unlike the Rust MMR tokenizer ([a-z0-9_]+), this handles Korean/CJK.
 var jaccardTokenRe = regexp.MustCompile(`[\p{L}\p{N}_]+`)

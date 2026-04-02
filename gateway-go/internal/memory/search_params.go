@@ -10,6 +10,20 @@ import (
 	"os"
 )
 
+// Default scoring weights and thresholds.
+// Autoresearch reads these constants directly from this file — keep the
+// simple `name = value` format so the regex extractor can parse them.
+const (
+	weightHybrid       = 0.40
+	weightImportance   = 0.25
+	weightRecency      = 0.25
+	weightVerification = 0.10
+
+	defaultSteepnessDays  = 7.0
+	ftsAndMinResults      = 3
+	dedupJaccardThreshold = 0.60
+)
+
 // SearchParams holds all tunable search scoring parameters.
 // When set on Store via SetSearchParams, these override the hardcoded constants.
 type SearchParams struct {
