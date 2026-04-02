@@ -3,7 +3,13 @@
     "allow": [
       "Bash(make *)",
       "Bash(cargo *)",
-      "Bash(go *)"
+      "Bash(go *)",
+      "Bash(git check-ignore:*)",
+      "Bash(echo \"exit: $?\")",
+      "Read(//home/user/**)",
+      "Read(//home/**)",
+      "Bash(git checkout:*)",
+      "Bash(scripts/committer \"fix\\(devenv\\): remove hardcoded /home/user/Deneb paths for portability\" .claude/settings.local.json scripts/setup-dev-env.sh)"
     ]
   },
   "hooks": {
@@ -13,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /home/user/Deneb && ./scripts/setup-dev-env.sh"
+            "command": "./scripts/setup-dev-env.sh"
           }
         ]
       }
