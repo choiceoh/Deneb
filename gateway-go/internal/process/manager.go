@@ -304,12 +304,35 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		defer drainWg.Done()
 		drainToBuffer(stderr, stderrSB)
 	}()
-	drainWg.Wait()
 
+	// Wait for process exit BEFORE waiting for pipe drain. cmd.Wait()
+	// triggers WaitDelay (SIGKILL after graceful timeout) and closes the
+	// write end of pipes, unblocking drain goroutines. If we waited for
+	// drain first, a grandchild process holding inherited pipe FDs would
+	// block Read() indefinitely — preventing cmd.Wait() from ever running
+	// and disabling the SIGKILL safety net.
 	err = cmd.Wait()
 	// Capture context error before cancel() overwrites it.
 	ctxErr := execCtx.Err()
 	cancel()
+
+	// Bounded wait for pipe drain. Usually instant since Wait() confirmed
+	// the process exited and closed the pipe write ends. But if grandchild
+	// processes inherited pipe FDs and escaped the process group kill,
+	// drain goroutines may still be blocked on Read(). Cap the wait to
+	// avoid hanging the entire agent loop.
+	drainDone := make(chan struct{})
+	go func() { drainWg.Wait(); close(drainDone) }()
+	select {
+	case <-drainDone:
+	case <-time.After(3 * time.Second):
+		m.logger.Warn("process pipe drain timeout, proceeding with partial output", "id", req.ID)
+		// Close the read ends to unblock stuck drain goroutines so they
+		// don't leak. Safe to call — cmd.Wait() already finished.
+		stdout.Close()
+		stderr.Close()
+	}
+
 	endedAt := time.Now().UnixMilli()
 
 	result := &ExecResult{
