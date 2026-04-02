@@ -327,8 +327,8 @@ func executeAgentRun(
 		// Session memory: pre-format for prompt injection.
 		var sessionMemoryText string
 		if deps.sessionMemory != nil {
-			if mem := deps.sessionMemory.Get(params.SessionKey); mem != nil {
-				sessionMemoryText = mem.FormatForPrompt()
+			if content := deps.sessionMemory.Get(params.SessionKey); content != "" {
+				sessionMemoryText = FormatForPrompt(content)
 			}
 		}
 
@@ -1173,8 +1173,10 @@ func buildMessagePersister(
 			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
 		}
 		// Sync to Aurora for compaction awareness.
+		// Use formatRichContent to preserve tool_use/tool_result structure
+		// so the compaction summarizer can build accurate <timeline> sections.
 		if deps.auroraStore != nil && !isSystemSession(params.SessionKey) {
-			text := chatMsg.TextContent()
+			text := formatRichContent(chatMsg.Content)
 			if text != "" {
 				tokenCount := uint64(estimateTokens(text))
 				if _, err := deps.auroraStore.SyncMessage(1, msg.Role, text, tokenCount); err != nil {

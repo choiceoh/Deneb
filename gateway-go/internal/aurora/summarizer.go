@@ -27,6 +27,7 @@ Before your final summary, wrap your analysis in <analysis> tags to organize you
 - What decisions were made?
 - What files/paths are referenced?
 - What is still pending?
+- What was the causal flow? (action → outcome → next action)
 </analysis>
 
 Then provide your summary. The <analysis> block will be removed from the final output.
@@ -36,6 +37,15 @@ Output format — use only the sections that apply, omit empty sections:
 <summary>
 Concise chronological narrative of what happened. Always include this section.
 </summary>
+
+<timeline>
+Causal chain of actions and outcomes, preserving the episodic flow:
+- [HH:mm] user requested X
+- [HH:mm] agent tried A → failed (reason)
+- [HH:mm] agent tried B → succeeded
+- [HH:mm] user confirmed / requested next step
+Keep only significant steps (skip routine reads/writes). Focus on causality: what led to what.
+</timeline>
 
 <decisions>
 - What was decided and why. Include rejected alternatives if discussed.
@@ -56,13 +66,15 @@ Rules:
 - Preserve speaker attribution: "사용자가 요청함" vs "AI가 제안함".
 - Write in the same language as the source material.
 - Target the specified token count.
-- CRITICAL: Always include <summary>. Omit other sections if they have no content.`
+- CRITICAL: Always include <summary>. Omit other sections if they have no content.
+- The input includes [timestamp | role] headers — use them to reconstruct the conversation flow for <timeline>.`
 
 	// aggressiveAddendum is appended for aggressive compression passes.
 	aggressiveAddendum = `
 
 IMPORTANT: Aggressive compression pass. Respect the XML structure but be much more concise:
 - <summary>: 2-3 sentences maximum.
+- <timeline>: Keep only pivotal cause-effect pairs (drop routine steps). 3-5 entries max.
 - <decisions>: Keep only critical decisions (drop obvious/minor ones).
 - <pending>: Merge related items.
 - <references>: Keep only files that were actually modified.
@@ -92,6 +104,7 @@ func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 				fmt.Fprintf(&userMsg, "[Condensed summary pass, depth=%d]\n", safeUint32(opts.Depth))
 				userMsg.WriteString(`The input contains previously structured XML summaries. Merge them:
 - Combine <summary> sections into a higher-level narrative.
+- Merge <timeline> sections: keep only significant causal chains (attempts that failed → what succeeded). Drop routine steps but preserve pivots and key breakthroughs.
 - Deduplicate <decisions> (keep the final decision if a topic was revisited).
 - Remove <pending> items that were resolved in later summaries.
 - Merge <references>, keeping only still-relevant file paths.

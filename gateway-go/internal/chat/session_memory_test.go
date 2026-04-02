@@ -9,151 +9,70 @@ import (
 	"time"
 )
 
-func TestSessionMemory_IsEmpty(t *testing.T) {
-	m := &SessionMemory{}
-	if !m.IsEmpty() {
-		t.Error("zero-value should be empty")
-	}
-	m.Summary = "test"
-	if m.IsEmpty() {
-		t.Error("non-zero Summary should make it non-empty")
+func TestFormatForPrompt_Empty(t *testing.T) {
+	if got := FormatForPrompt(""); got != "" {
+		t.Errorf("empty content should format as empty, got %q", got)
 	}
 }
 
-func TestSessionMemory_Trim(t *testing.T) {
-	long := strings.Repeat("가", smLimitSummary+100)
-	m := &SessionMemory{
-		Summary:     long,
-		State:       strings.Repeat("나", smLimitState+50),
-		TaskContext: strings.Repeat("다", smLimitTaskContext+50),
-		Progress:    strings.Repeat("라", smLimitProgress+50),
-		Decisions:   strings.Repeat("마", smLimitDecisions+50),
-		Errors:      strings.Repeat("바", smLimitErrors+50),
-		Worklog:     strings.Repeat("사", smLimitWorklog+50),
-	}
-	m.Trim()
-
-	// Check each section is within limit + 1 rune for "…".
-	checks := []struct {
-		name  string
-		value string
-		limit int
-	}{
-		{"Summary", m.Summary, smLimitSummary},
-		{"State", m.State, smLimitState},
-		{"TaskContext", m.TaskContext, smLimitTaskContext},
-		{"Progress", m.Progress, smLimitProgress},
-		{"Decisions", m.Decisions, smLimitDecisions},
-		{"Errors", m.Errors, smLimitErrors},
-		{"Worklog", m.Worklog, smLimitWorklog},
-	}
-	for _, c := range checks {
-		runes := []rune(c.value)
-		// limit + 1 for the "…" character
-		if len(runes) > c.limit+1 {
-			t.Errorf("%s: %d runes, want <= %d", c.name, len(runes), c.limit+1)
-		}
+func TestFormatForPrompt_Template(t *testing.T) {
+	// Template-only content should be treated as empty.
+	if got := FormatForPrompt(sessionMemoryTemplate); got != "" {
+		t.Errorf("template-only content should format as empty, got len=%d", len(got))
 	}
 }
 
-func TestSessionMemory_TrimNoOp(t *testing.T) {
-	m := &SessionMemory{Summary: "short"}
-	m.Trim()
-	if m.Summary != "short" {
-		t.Errorf("Trim modified short string: %q", m.Summary)
-	}
-}
+func TestFormatForPrompt_WithContent(t *testing.T) {
+	content := `# Session Title
+메모리 시스템 리팩토링 세션
 
-func TestSessionMemory_FormatForPrompt_Empty(t *testing.T) {
-	m := &SessionMemory{}
-	if got := m.FormatForPrompt(); got != "" {
-		t.Errorf("empty memory should format as empty, got %q", got)
-	}
-}
+# Current State
+4/7 파일 수정 완료
 
-func TestSessionMemory_FormatForPrompt(t *testing.T) {
-	m := &SessionMemory{
-		Summary:  "메모리 시스템 리팩토링 세션",
-		State:    "4/7 파일 수정 완료",
-		Progress: "- [✓] 구조체 정의\n- [→] spillover 구현\n- [ ] 테스트",
-		Errors:   "빌드 실패 (import 누락) → 수정 완료",
-		Worklog:  "[14:30] 시작\n[14:35] 구조체 완료",
-	}
-	got := m.FormatForPrompt()
+# Worklog
+[14:30] 시작
+[14:35] 구조체 완료`
+
+	got := FormatForPrompt(content)
 
 	mustContain := []string{
 		"## Session State",
-		"### 요약\n메모리 시스템 리팩토링 세션",
-		"### 현재 상태\n4/7 파일 수정 완료",
-		"### 진행 상황",
-		"### 오류/문제",
-		"### 작업 이력",
+		"# Session Title",
+		"메모리 시스템 리팩토링 세션",
+		"# Current State",
+		"4/7 파일 수정 완료",
+		"# Worklog",
+		"[14:30] 시작",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(got, want) {
 			t.Errorf("FormatForPrompt missing %q in:\n%s", want, got)
 		}
 	}
-
-	// Empty sections should not appear.
-	mustNotContain := []string{"### 작업 컨텍스트", "### 결정 사항"}
-	for _, unwant := range mustNotContain {
-		if strings.Contains(got, unwant) {
-			t.Errorf("FormatForPrompt should omit empty section %q", unwant)
-		}
-	}
-}
-
-func TestSessionMemory_JSONRoundTrip(t *testing.T) {
-	m := &SessionMemory{
-		Summary:     "테스트 세션",
-		State:       "진행 중",
-		TaskContext: "기능 구현",
-		Progress:    "50% 완료",
-		Decisions:   "접근법 A 선택",
-		Errors:      "없음",
-		Worklog:     "[10:00] 시작",
-	}
-	data, err := json.Marshal(m)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var got SessionMemory
-	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got.Summary != m.Summary || got.Decisions != m.Decisions || got.Worklog != m.Worklog {
-		t.Errorf("roundtrip mismatch: got %+v", got)
-	}
 }
 
 func TestSessionMemoryStore_GetSetDelete(t *testing.T) {
 	store := NewSessionMemoryStore("")
-	mem := &SessionMemory{Summary: "test"}
-	store.Set("s1", mem)
+	store.Set("s1", "# Session Title\ntest session")
 
 	got := store.Get("s1")
-	if got == nil || got.Summary != "test" {
-		t.Errorf("Get after Set: %+v", got)
+	if !strings.Contains(got, "test session") {
+		t.Errorf("Get after Set: %q", got)
 	}
 
 	store.Delete("s1")
-	if store.Get("s1") != nil {
-		t.Error("Get after Delete should be nil")
+	if store.Get("s1") != "" {
+		t.Error("Get after Delete should be empty")
 	}
 }
 
 func TestSessionMemoryStore_DiskPersistence(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSessionMemoryStore(dir)
-	mem := &SessionMemory{
-		Summary: "persistent",
-		State:   "testing disk",
-	}
-	store.Set("telegram:123", mem)
+	store.Set("telegram:123", "# Session Title\npersistent session\n\n# Current State\ntesting disk")
 
-	// Wait for async disk write (short busy-wait acceptable in tests).
-	path := filepath.Join(dir, "telegram_123.memory.json")
+	// Wait for async disk write.
+	path := filepath.Join(dir, "telegram_123.memory.md")
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(path); err == nil {
@@ -172,8 +91,71 @@ func TestSessionMemoryStore_DiskPersistence(t *testing.T) {
 		t.Fatalf("LoadFromDisk: loaded %d, want 1", loaded)
 	}
 	got := store2.Get("telegram:123")
-	if got == nil || got.Summary != "persistent" || got.State != "testing disk" {
-		t.Errorf("loaded memory: %+v", got)
+	if !strings.Contains(got, "persistent session") || !strings.Contains(got, "testing disk") {
+		t.Errorf("loaded memory: %q", got)
+	}
+}
+
+func TestEnforceTokenBudget_Short(t *testing.T) {
+	content := "# Session Title\nshort"
+	got := enforceTokenBudget(content, 12000)
+	if got != content {
+		t.Errorf("short content should not be modified")
+	}
+}
+
+func TestEnforceTokenBudget_Long(t *testing.T) {
+	// Build a section that exceeds maxSectionTokens (2000 tokens = 8000 chars).
+	// Use a body that's clearly over the per-section char limit.
+	longBody := strings.Repeat("abcdefgh\n", maxSectionTokens) // ~18000 chars > 8000
+	content := "# Session Title\ntest\n\n# Worklog\n" + longBody
+	// Use a small total budget to trigger enforcement.
+	got := enforceTokenBudget(content, 3000)
+	if strings.Contains(got, longBody) {
+		t.Error("long section should have been truncated")
+	}
+	if !strings.Contains(got, "[... 섹션이 길어서 잘림 ...]") {
+		t.Error("truncated section should have marker")
+	}
+}
+
+func TestExtractTitle(t *testing.T) {
+	content := `# Session Title
+_세션 제목_
+메모리 시스템 리팩토링
+
+# Current State
+진행 중`
+	got := extractTitle(content)
+	if got != "메모리 시스템 리팩토링" {
+		t.Errorf("extractTitle = %q, want %q", got, "메모리 시스템 리팩토링")
+	}
+}
+
+func TestExtractTitle_Empty(t *testing.T) {
+	content := "# Session Title\n_설명_\n\n# Current State\nfoo"
+	got := extractTitle(content)
+	if got != "" {
+		t.Errorf("extractTitle should be empty for template-only title, got %q", got)
+	}
+}
+
+func TestParseSections(t *testing.T) {
+	content := `# Title
+body1
+
+# State
+body2
+line2`
+	sections := parseSections(content)
+	if len(sections) != 2 {
+		t.Fatalf("parseSections: got %d sections, want 2", len(sections))
+	}
+	if sections[0].header != "# Title" {
+		t.Errorf("section 0 header: %q", sections[0].header)
+	}
+	if !strings.Contains(sections[1].body, "body2") {
+		t.Errorf("section 1 body missing 'body2': %q", sections[1].body)
 	}
 }
 
@@ -183,10 +165,10 @@ func TestTruncRunes(t *testing.T) {
 		max     int
 		wantLen int
 	}{
-		{"hello", 10, 5},       // no truncation
-		{"hello world", 5, 6},  // 5 + "…"
+		{"hello", 10, 5},
+		{"hello world", 5, 6},             // 5 + "…"
 		{"한글 테스트 문장입니다", 4, 5}, // 4 Korean runes + "…"
-		{"", 10, 0},            // empty
+		{"", 10, 0},
 	}
 	for _, tt := range tests {
 		got := truncRunes(tt.input, tt.max)
@@ -204,6 +186,7 @@ func TestStripCodeFence(t *testing.T) {
 	}{
 		{`{"a":"b"}`, `{"a":"b"}`},
 		{"```json\n{\"a\":\"b\"}\n```", `{"a":"b"}`},
+		{"```markdown\n# Title\ncontent\n```", "# Title\ncontent"},
 		{"Here:\n```\n{\"a\":\"b\"}\n```\n", `{"a":"b"}`},
 		{"null", "null"},
 	}
@@ -222,5 +205,42 @@ func TestSanitizeKey(t *testing.T) {
 	}
 	if unsanitizeKey(safe) != key {
 		t.Errorf("round-trip failed: %q", unsanitizeKey(safe))
+	}
+}
+
+func TestFormatTranscriptForMemory(t *testing.T) {
+	msgs := []ChatMessage{
+		NewTextChatMessage("user", "Fix the bug", 1711324800000),
+		NewTextChatMessage("assistant", "[Tools used: edit x1]\n\nFixed.", 1711324860000),
+	}
+	got := formatTranscriptForMemory(msgs)
+	if !strings.Contains(got, "user]") || !strings.Contains(got, "assistant]") {
+		t.Errorf("should contain role labels: %q", got)
+	}
+	if !strings.Contains(got, "Fix the bug") || !strings.Contains(got, "Fixed.") {
+		t.Errorf("should contain message content: %q", got)
+	}
+}
+
+func TestFormatRichContent(t *testing.T) {
+	// Rich content with tool_use and tool_result blocks.
+	rich := `[{"type":"text","text":"Let me read that file."},{"type":"tool_use","name":"read_file","input":{"path":"config.yaml"}},{"type":"tool_result","tool_use_id":"1","content":"port: 8080\nhost: localhost"}]`
+	got := formatRichContent([]byte(rich))
+	if !strings.Contains(got, "Let me read that file.") {
+		t.Error("should contain text block")
+	}
+	if !strings.Contains(got, "[tool:read_file(") {
+		t.Error("should contain tool_use annotation")
+	}
+	if !strings.Contains(got, "[result →") {
+		t.Error("should contain tool_result annotation")
+	}
+}
+
+func TestFormatRichContent_TextOnly(t *testing.T) {
+	textJSON, _ := json.Marshal("plain text")
+	got := formatRichContent(textJSON)
+	if got != "plain text" {
+		t.Errorf("text-only content: got %q, want %q", got, "plain text")
 	}
 }
