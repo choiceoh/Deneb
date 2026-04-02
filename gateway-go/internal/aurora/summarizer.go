@@ -110,13 +110,15 @@ func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 		ctx, cancel := context.WithTimeout(context.Background(), summarizeTimeout)
 		defer cancel()
 
-		// Use non-streaming chat for summarization.
 		req := llm.ChatRequest{
 			Model:     model,
 			System:    llm.SystemString(system),
 			Messages:  []llm.Message{llm.NewTextMessage("user", userMsg.String())},
 			MaxTokens: 4096,
 			Stream:    true,
+			ExtraBody: map[string]any{
+				"chat_template_kwargs": map[string]any{"enable_thinking": false},
+			},
 		}
 
 		ch, streamErr := client.StreamChat(ctx, req)

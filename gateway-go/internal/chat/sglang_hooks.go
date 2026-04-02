@@ -419,12 +419,7 @@ func SummarizeToolActivity(ctx context.Context, reasons []string) (string, error
 		fmt.Fprintf(&b, "%d. %s\n", i+1, snippet)
 	}
 
-	// Disable reasoning mode — accuracy is not critical for status summaries,
-	// and reasoning models emit "Thinking Process:" preambles that leak into display.
-	noThinking := map[string]any{
-		"chat_template_kwargs": map[string]any{"enable_thinking": false},
-	}
-	result, err := pilot.CallLocalLLM(ctx, activitySummarySystemPrompt, b.String(), 64, noThinking)
+	result, err := pilot.CallLocalLLM(ctx, activitySummarySystemPrompt, b.String(), 64)
 	if err != nil {
 		return "", err
 	}

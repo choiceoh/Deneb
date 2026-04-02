@@ -568,8 +568,16 @@ func GetPilotModel() string {
 	return getRoleModel(modelrole.RolePilot, modelrole.DefaultPilotModel)
 }
 
+// sglangNoThinking is the default ExtraBody that disables reasoning mode for
+// all local sglang calls. Qwen3.5 reasoning adds latency and "Thinking Process:"
+// preambles that leak into output; none of our sglang hooks need it.
+var sglangNoThinking = map[string]any{
+	"chat_template_kwargs": map[string]any{"enable_thinking": false},
+}
+
 // CallLocalLLM invokes the lightweight (local sglang) model with fallback chain.
 // Optional extraBody maps are merged into the request body (e.g. for chat_template_kwargs).
+// Reasoning mode is disabled by default for all calls.
 func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
@@ -577,15 +585,24 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	client := GetLightweightClient()
 	model := GetLightweightModel()
 
+	// Always disable reasoning by default; caller-supplied extraBody merges on top.
+	merged := make(map[string]any, len(sglangNoThinking))
+	for k, v := range sglangNoThinking {
+		merged[k] = v
+	}
+	if len(extraBody) > 0 && extraBody[0] != nil {
+		for k, v := range extraBody[0] {
+			merged[k] = v
+		}
+	}
+
 	req := llm.ChatRequest{
 		Model:     model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userMessage)},
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
-	}
-	if len(extraBody) > 0 && extraBody[0] != nil {
-		req.ExtraBody = extraBody[0]
+		ExtraBody: merged,
 	}
 
 	events, err := client.StreamChat(ctx, req)
