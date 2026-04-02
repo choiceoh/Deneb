@@ -338,10 +338,7 @@ func handlePersistLeafSummary(store *Store, cmdJSON json.RawMessage, extractFact
 		if logger != nil {
 			logger.Error("aurora sweep: persist leaf failed", "error", err)
 		}
-		return map[string]any{
-			"type":  "persistError",
-			"error": err.Error(),
-		}, nil
+		return nil, fmt.Errorf("persist leaf summary: %w", err)
 	}
 
 	if logger != nil {
@@ -366,10 +363,7 @@ func handlePersistCondensedSummary(store *Store, cmdJSON json.RawMessage, extrac
 		if logger != nil {
 			logger.Error("aurora sweep: persist condensed failed", "error", err)
 		}
-		return map[string]any{
-			"type":  "persistError",
-			"error": err.Error(),
-		}, nil
+		return nil, fmt.Errorf("persist condensed summary: %w", err)
 	}
 
 	if logger != nil {

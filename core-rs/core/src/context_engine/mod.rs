@@ -121,7 +121,7 @@ pub struct AuroraConfig {
     #[serde(default = "default_database_path")]
     pub database_path: String,
 
-    /// Context threshold as fraction of budget (default: 0.75, clamped [0.1, 1.0]).
+    /// Context threshold as fraction of budget (default: 0.80, clamped [0.1, 1.0]).
     #[serde(default = "default_context_threshold")]
     pub context_threshold: f64,
 
@@ -185,7 +185,7 @@ fn default_database_path() -> String {
     "~/.deneb/aurora.db".to_string()
 }
 fn default_context_threshold() -> f64 {
-    0.75
+    0.80
 }
 fn default_fresh_tail_count() -> u32 {
     32
@@ -223,7 +223,7 @@ impl Default for AuroraConfig {
         Self {
             enabled: true,
             database_path: default_database_path(),
-            context_threshold: 0.75,
+            context_threshold: 0.80,
             fresh_tail_count: 32,
             leaf_min_fanout: 8,
             condensed_min_fanout: 4,
@@ -287,10 +287,14 @@ pub struct SummaryStats {
 
 // ── Pure utility functions ───────────────────────────────────────────────────
 
-/// Estimate token count from text length (ceil(len / 4)).
+/// Estimate token count from Unicode char count.
+/// Korean BPE averages ~2 chars/token; English ~4 chars/token.
+/// Divisor 2 is calibrated for Korean (the primary language) and accepts
+/// a 2x overestimate for ASCII-only content. Matches Go `estimateTokens`.
 #[inline]
 pub fn estimate_tokens(text: &str) -> u64 {
-    (text.len() as u64).div_ceil(4)
+    let chars = text.chars().count() as u64;
+    (chars / 2).max(1)
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -303,7 +307,7 @@ mod tests {
     fn test_aurora_config_defaults() {
         let config = AuroraConfig::default();
         assert!(config.enabled);
-        assert_eq!(config.context_threshold, 0.75);
+        assert_eq!(config.context_threshold, 0.80);
         assert_eq!(config.fresh_tail_count, 32);
         assert_eq!(config.leaf_chunk_tokens, 30_000);
         assert_eq!(config.leaf_target_tokens, 1_500);
@@ -317,7 +321,7 @@ mod tests {
         let config = AuroraConfig::default();
         let json = serde_json::to_string(&config)?;
         let parsed: AuroraConfig = serde_json::from_str(&json)?;
-        assert_eq!(parsed.context_threshold, 0.75);
+        assert_eq!(parsed.context_threshold, 0.80);
         assert_eq!(parsed.fresh_tail_count, 32);
         Ok(())
     }
@@ -351,9 +355,10 @@ mod tests {
 
     #[test]
     fn test_estimate_tokens() {
-        assert_eq!(estimate_tokens(""), 0);
-        assert_eq!(estimate_tokens("abcd"), 1);
+        assert_eq!(estimate_tokens(""), 1); // min clamp
+        assert_eq!(estimate_tokens("abcd"), 2);
         assert_eq!(estimate_tokens("abcde"), 2);
+        assert_eq!(estimate_tokens("안녕하세요"), 2); // Korean: 5 chars / 2
     }
 
     #[test]
