@@ -25,14 +25,18 @@ func makeSessionTranscript(t *testing.T, dir, sessionKey string) {
 // newTestServerForRestore builds the minimal server stub needed by restoreAndWakeSessions.
 func newTestServerForRestore(mgr *session.Manager) *Server {
 	return &Server{
-		ServerTransport:    &ServerTransport{},
-		ServerRPC:          &ServerRPC{},
-		ServerRuntime:      &ServerRuntime{},
-		ServerIntegrations: &ServerIntegrations{},
-		SessionManager:     &SessionManager{sessions: mgr},
-		ChatManager:        &ChatManager{},
-		HookManager:        &HookManager{},
-		logger:             slog.Default(),
+		ServerTransport:      &ServerTransport{},
+		ServerRPC:            &ServerRPC{},
+		ServerRuntime:        &ServerRuntime{},
+		WorkflowSubsystem:   &WorkflowSubsystem{},
+		PluginSubsystem:     &PluginSubsystem{},
+		MemorySubsystem:     &MemorySubsystem{},
+		AutonomousSubsystem: &AutonomousSubsystem{},
+		InfraSubsystem:      &InfraSubsystem{},
+		SessionManager:      &SessionManager{sessions: mgr},
+		ChatManager:         &ChatManager{},
+		HookManager:         &HookManager{},
+		logger:              slog.Default(),
 	}
 }
 
