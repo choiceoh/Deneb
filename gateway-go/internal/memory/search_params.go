@@ -22,6 +22,7 @@ const (
 	defaultSteepnessDays  = 7.0
 	ftsAndMinResults      = 3
 	dedupJaccardThreshold = 0.60
+	decayPower          = 2.0
 )
 
 // SearchParams holds all tunable search scoring parameters.
@@ -59,6 +60,9 @@ type SearchParams struct {
 
 	// Dedup.
 	DedupJaccardThreshold float64 `json:"dedup_jaccard_threshold"`
+
+	// Recency decay curve shape.
+	DecayPower float64 `json:"decay_power"`
 
 	// Verification scoring.
 	VerificationUnverified float64 `json:"verification_unverified"`
@@ -107,6 +111,8 @@ func DefaultSearchParams() SearchParams {
 		RerankBlendHybrid:   0.30,
 
 		DedupJaccardThreshold: dedupJaccardThreshold,
+
+		DecayPower: decayPower,
 
 		VerificationUnverified: 0.30,
 		VerificationVerified:   1.00,

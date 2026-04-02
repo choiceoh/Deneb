@@ -389,7 +389,7 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 			steepness = st
 		}
 		ratio := daysSince / steepness
-		recencyScore := 1.0 / (1.0 + ratio*ratio)
+		recencyScore := 1.0 / (1.0 + math.Pow(ratio, p.DecayPower))
 
 		// Verification score: dreaming-verified facts are more trustworthy.
 		verificationScore := p.VerificationUnverified
