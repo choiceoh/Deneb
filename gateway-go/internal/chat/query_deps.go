@@ -16,6 +16,7 @@ import (
 	"context"
 	"time"
 
+	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -29,7 +30,7 @@ type QueryDeps struct {
 	StreamModel func(ctx context.Context, client *llm.Client, req llm.ChatRequest) (<-chan llm.StreamEvent, error)
 
 	// Microcompact prunes old tool results to save tokens.
-	Microcompact func(messages []llm.Message, now time.Time) ([]llm.Message, MicrocompactResult)
+	Microcompact func(messages []llm.Message, now time.Time) ([]llm.Message, compact.MicrocompactResult)
 
 	// EvaluateCompaction checks if full compaction is needed.
 	EvaluateCompaction func(cfg CompactionConfig, storedTokens, liveTokens, tokenBudget uint64) (*CompactionDecision, error)
@@ -43,7 +44,7 @@ func ProductionQueryDeps() QueryDeps {
 	return QueryDeps{
 		CompleteModel:      productionComplete,
 		StreamModel:        productionStream,
-		Microcompact:       MicrocompactMessages,
+		Microcompact:       compact.MicrocompactMessages,
 		EvaluateCompaction: evaluateCompaction,
 		GenerateUUID:       generateUUID,
 	}

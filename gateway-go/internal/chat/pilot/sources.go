@@ -1,4 +1,4 @@
-package chat
+package pilot
 
 import (
 	"context"
@@ -8,29 +8,30 @@ import (
 	"sync"
 )
 
-func expandShortcuts(p pilotParams) []sourceSpec {
-	var specs []sourceSpec
+// ExpandShortcuts converts convenience params (file, exec, grep, find, url) into SourceSpecs.
+func ExpandShortcuts(p PilotParams) []SourceSpec {
+	var specs []SourceSpec
 
 	if p.File != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "read",
-			Input: mustJSON(map[string]any{"file_path": p.File}),
+			Input: MustJSON(map[string]any{"file_path": p.File}),
 			Label: p.File,
 		})
 	}
 
 	for _, f := range p.Files {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "read",
-			Input: mustJSON(map[string]any{"file_path": f}),
+			Input: MustJSON(map[string]any{"file_path": f}),
 			Label: f,
 		})
 	}
 
 	if p.Exec != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "exec",
-			Input: mustJSON(map[string]any{"command": p.Exec, "timeout": 15}),
+			Input: MustJSON(map[string]any{"command": p.Exec, "timeout": 15}),
 			Label: "$ " + p.Exec,
 		})
 	}
@@ -40,9 +41,9 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		if p.Path != "" {
 			grepInput["path"] = p.Path
 		}
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "grep",
-			Input: mustJSON(grepInput),
+			Input: MustJSON(grepInput),
 			Label: "grep: " + p.Grep,
 		})
 	}
@@ -52,25 +53,25 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		if p.Path != "" {
 			findInput["path"] = p.Path
 		}
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "find",
-			Input: mustJSON(findInput),
+			Input: MustJSON(findInput),
 			Label: "find: " + p.Find,
 		})
 	}
 
 	if p.URL != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "web_fetch",
-			Input: mustJSON(map[string]any{"url": p.URL}),
+			Input: MustJSON(map[string]any{"url": p.URL}),
 			Label: p.URL,
 		})
 	}
 
 	if p.HTTP != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "http",
-			Input: mustJSON(map[string]any{"url": p.HTTP, "method": "GET"}),
+			Input: MustJSON(map[string]any{"url": p.HTTP, "method": "GET"}),
 			Label: "http: " + p.HTTP,
 		})
 	}
@@ -89,9 +90,9 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 			diffInput["action"] = "commit"
 			diffInput["commit"] = p.Diff
 		}
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "diff",
-			Input: mustJSON(diffInput),
+			Input: MustJSON(diffInput),
 			Label: "diff: " + p.Diff,
 		})
 	}
@@ -101,17 +102,17 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		if p.Test != "all" {
 			testInput["path"] = p.Test
 		}
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "test",
-			Input: mustJSON(testInput),
+			Input: MustJSON(testInput),
 			Label: "test: " + p.Test,
 		})
 	}
 
 	if p.Tree != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "tree",
-			Input: mustJSON(map[string]any{"path": p.Tree, "depth": 3}),
+			Input: MustJSON(map[string]any{"path": p.Tree, "depth": 3}),
 			Label: "tree: " + p.Tree,
 		})
 	}
@@ -128,57 +129,65 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 			// Treat as a count if numeric, otherwise default.
 			gitInput["count"] = 20
 		}
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "git",
-			Input: mustJSON(gitInput),
+			Input: MustJSON(gitInput),
 			Label: "git_log: " + p.GitLog,
 		})
 	}
 
 	if p.Health {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "health_check",
-			Input: mustJSON(map[string]any{}),
+			Input: MustJSON(map[string]any{}),
 			Label: "health_check",
 		})
 	}
 
 	if p.KVKey != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "kv",
-			Input: mustJSON(map[string]any{"action": "get", "key": p.KVKey}),
+			Input: MustJSON(map[string]any{"action": "get", "key": p.KVKey}),
 			Label: "kv: " + p.KVKey,
 		})
 	}
 
 	if p.Memory != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "memory",
-			Input: mustJSON(map[string]any{"action": "search", "query": p.Memory}),
+			Input: MustJSON(map[string]any{"action": "search", "query": p.Memory}),
 			Label: "memory: " + p.Memory,
 		})
 	}
 
 	if p.Gmail != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "gmail",
-			Input: mustJSON(map[string]any{"action": "search", "query": p.Gmail}),
+			Input: MustJSON(map[string]any{"action": "search", "query": p.Gmail}),
 			Label: "gmail: " + p.Gmail,
 		})
 	}
 
 	if p.YouTube != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "youtube_transcript",
-			Input: mustJSON(map[string]any{"url": p.YouTube}),
+			Input: MustJSON(map[string]any{"url": p.YouTube}),
 			Label: "youtube: " + p.YouTube,
 		})
 	}
 
+	if p.Polaris != "" {
+		specs = append(specs, SourceSpec{
+			Tool:  "polaris",
+			Input: MustJSON(map[string]any{"action": "search", "query": p.Polaris}),
+			Label: "polaris: " + p.Polaris,
+		})
+	}
+
 	if p.Image != "" {
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "image",
-			Input: mustJSON(map[string]any{"paths": []string{p.Image}}),
+			Input: MustJSON(map[string]any{"paths": []string{p.Image}}),
 			Label: "image: " + p.Image,
 		})
 	}
@@ -196,9 +205,9 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 			// Treat as a specific run_id.
 			input["run_id"] = p.AgentLogs
 		}
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "agent_logs",
-			Input: mustJSON(input),
+			Input: MustJSON(input),
 			Label: "agent_logs: " + p.AgentLogs,
 		})
 	}
@@ -216,9 +225,9 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 			// Treat as a package name filter.
 			input["pkg"] = p.GatewayLogs
 		}
-		specs = append(specs, sourceSpec{
+		specs = append(specs, SourceSpec{
 			Tool:  "gateway_logs",
-			Input: mustJSON(input),
+			Input: MustJSON(input),
 			Label: "gateway_logs: " + p.GatewayLogs,
 		})
 	}
@@ -228,8 +237,8 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 
 // --- Source execution ---
 
-// sourceTypeFromTool maps tool name to source type for smart truncation.
-func sourceTypeFromTool(tool string) string {
+// SourceTypeFromTool maps tool name to source type for smart truncation.
+func SourceTypeFromTool(tool string) string {
 	switch tool {
 	case "read":
 		return "file"
@@ -245,27 +254,27 @@ func sourceTypeFromTool(tool string) string {
 		return "file"
 	case "agent_logs", "gateway_logs", "test", "http":
 		return "exec"
-	case "gmail", "youtube_transcript", "image":
+	case "gmail", "youtube_transcript", "polaris", "image":
 		return "content"
 	default:
 		return "content"
 	}
 }
 
-// executeSources runs source tool calls via the ToolRegistry.
+// ExecuteSources runs source tool calls via the ToolExecutor.
 // Unconditional sources (no only_if/skip_if) run in parallel with per-source timeout.
 // Conditional sources run sequentially after, evaluating their conditions.
-func executeSources(ctx context.Context, sources []sourceSpec, tools ToolExecutor) []sourceResult {
+func ExecuteSources(ctx context.Context, sources []SourceSpec, tools ToolExecutor) []SourceResult {
 	if len(sources) == 0 {
 		return nil
 	}
 
-	results := make([]sourceResult, len(sources))
+	results := make([]SourceResult, len(sources))
 
 	// Split into unconditional and conditional.
 	type indexedSource struct {
 		idx int
-		src sourceSpec
+		src SourceSpec
 	}
 	var unconditional, conditional []indexedSource
 	for i, src := range sources {
@@ -285,24 +294,24 @@ func executeSources(ctx context.Context, sources []sourceSpec, tools ToolExecuto
 	var wg sync.WaitGroup
 	for _, is := range unconditional {
 		if is.src.Tool == "pilot" {
-			results[is.idx] = sourceResult{
-				label:      is.src.Label,
-				content:    "[error: pilot cannot call itself]",
-				sourceType: "content",
+			results[is.idx] = SourceResult{
+				Label:      is.src.Label,
+				Content:    "[error: pilot cannot call itself]",
+				SourceType: "content",
 			}
 			continue
 		}
 		wg.Add(1)
-		go func(idx int, s sourceSpec) {
+		go func(idx int, s SourceSpec) {
 			defer wg.Done()
 			srcCtx, srcCancel := context.WithTimeout(ctx, sourceTimeout)
 			defer srcCancel()
 			output, err := tools.Execute(srcCtx, s.Tool, s.Input)
 			if err != nil {
-				results[idx] = sourceResult{s.Label, fmt.Sprintf("[tool error: %s]", err), sourceTypeFromTool(s.Tool)}
+				results[idx] = SourceResult{s.Label, fmt.Sprintf("[tool error: %s]", err), SourceTypeFromTool(s.Tool)}
 				return
 			}
-			results[idx] = sourceResult{s.Label, output, sourceTypeFromTool(s.Tool)}
+			results[idx] = SourceResult{s.Label, output, SourceTypeFromTool(s.Tool)}
 		}(is.idx, is.src)
 	}
 	wg.Wait()
@@ -311,35 +320,35 @@ func executeSources(ctx context.Context, sources []sourceSpec, tools ToolExecuto
 	for _, is := range conditional {
 		src := is.src
 		if src.Tool == "pilot" {
-			results[is.idx] = sourceResult{src.Label, "[error: pilot cannot call itself]", "content"}
+			results[is.idx] = SourceResult{src.Label, "[error: pilot cannot call itself]", "content"}
 			continue
 		}
 		if src.OnlyIf != "" && !sourceSucceeded(results, src.OnlyIf) {
-			results[is.idx] = sourceResult{src.Label, fmt.Sprintf("[skipped: %q did not succeed]", src.OnlyIf), "content"}
+			results[is.idx] = SourceResult{src.Label, fmt.Sprintf("[skipped: %q did not succeed]", src.OnlyIf), "content"}
 			continue
 		}
 		if src.SkipIf != "" && sourceSucceeded(results, src.SkipIf) {
-			results[is.idx] = sourceResult{src.Label, fmt.Sprintf("[skipped: %q succeeded]", src.SkipIf), "content"}
+			results[is.idx] = SourceResult{src.Label, fmt.Sprintf("[skipped: %q succeeded]", src.SkipIf), "content"}
 			continue
 		}
 		srcCtx, srcCancel := context.WithTimeout(ctx, sourceTimeout)
 		output, err := tools.Execute(srcCtx, src.Tool, src.Input)
 		srcCancel()
 		if err != nil {
-			results[is.idx] = sourceResult{src.Label, fmt.Sprintf("[tool error: %s]", err), sourceTypeFromTool(src.Tool)}
+			results[is.idx] = SourceResult{src.Label, fmt.Sprintf("[tool error: %s]", err), SourceTypeFromTool(src.Tool)}
 			continue
 		}
-		results[is.idx] = sourceResult{src.Label, output, sourceTypeFromTool(src.Tool)}
+		results[is.idx] = SourceResult{src.Label, output, SourceTypeFromTool(src.Tool)}
 	}
 
 	return results
 }
 
 // sourceSucceeded checks if a source with the given label has a non-empty, non-error result.
-func sourceSucceeded(results []sourceResult, label string) bool {
+func sourceSucceeded(results []SourceResult, label string) bool {
 	for _, r := range results {
-		if r.label == label {
-			return r.content != "" && !strings.HasPrefix(r.content, "[tool error:") && !strings.HasPrefix(r.content, "[skipped:")
+		if r.Label == label {
+			return r.Content != "" && !strings.HasPrefix(r.Content, "[tool error:") && !strings.HasPrefix(r.Content, "[skipped:")
 		}
 	}
 	return false
@@ -347,8 +356,8 @@ func sourceSucceeded(results []sourceResult, label string) bool {
 
 // --- Prompt building ---
 
-// buildPilotPrompt assembles the user message from task + gathered data.
-func buildPilotPrompt(task, outputFormat, maxLength string, blocks []sourceResult) string {
+// BuildPilotPrompt assembles the user message from task + gathered data.
+func BuildPilotPrompt(task, outputFormat, maxLength string, blocks []SourceResult) string {
 	var sb strings.Builder
 
 	sb.WriteString("Task: ")
@@ -384,9 +393,9 @@ func buildPilotPrompt(task, outputFormat, maxLength string, blocks []sourceResul
 
 	for _, b := range blocks {
 		sb.WriteString("\n\n--- ")
-		sb.WriteString(b.label)
+		sb.WriteString(b.Label)
 		sb.WriteString(" ---\n")
-		sb.WriteString(smartTruncate(b.content, perBlock, b.sourceType))
+		sb.WriteString(SmartTruncate(b.Content, perBlock, b.SourceType))
 	}
 
 	return sb.String()
@@ -394,11 +403,11 @@ func buildPilotPrompt(task, outputFormat, maxLength string, blocks []sourceResul
 
 // --- Smart truncation ---
 
-// smartTruncate truncates content based on source type:
+// SmartTruncate truncates content based on source type:
 //   - file: preserves beginning (60%) + end (40%) for code context
 //   - exec: preserves end (80%) — errors/results at the bottom
 //   - default: simple head truncation
-func smartTruncate(s string, maxChars int, sourceType string) string {
+func SmartTruncate(s string, maxChars int, sourceType string) string {
 	if len(s) <= maxChars {
 		return s
 	}
@@ -439,28 +448,21 @@ func smartTruncate(s string, maxChars int, sourceType string) string {
 	}
 }
 
-// --- JSON output cleaning ---
-
-// cleanJSONResponse strips markdown fences and validates JSON output.
-// If the output is not valid JSON, tries to extract the first JSON object/array.
-
-func truncateInput(s string, maxChars int) string {
-	return truncateHead(s, maxChars)
+// TruncateInput is a simple head-only truncation.
+func TruncateInput(s string, maxChars int) string {
+	return TruncateHead(s, maxChars)
 }
 
-// truncateHead is a simple head-only truncation (used for chain prompts, fallback).
-func truncateHead(s string, maxChars int) string {
+// TruncateHead is a simple head-only truncation (used for chain prompts, fallback).
+func TruncateHead(s string, maxChars int) string {
 	if len(s) <= maxChars {
 		return s
 	}
 	return s[:maxChars] + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
 }
 
-func mustJSON(v any) json.RawMessage {
+// MustJSON marshals v to JSON, panicking on error.
+func MustJSON(v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
-
-// --- Local LLM call ---
-
-// sglangClient is a singleton LLM client for the local sglang server.

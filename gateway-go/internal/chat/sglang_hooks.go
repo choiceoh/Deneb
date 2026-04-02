@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 )
 
 // sglang_hooks.go — local sglang model hooks into the agent pipeline:
@@ -92,8 +94,8 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 		return ""
 	}
 	// Check sglang health (cached probe, no per-call overhead).
-	sglangUp := checkSglangHealth()
-	if !sglangUp && pkgRegistry == nil {
+	sglangUp := pilot.CheckSglangHealth()
+	if !sglangUp && !pilot.HasRegistry() {
 		return ""
 	}
 
@@ -131,10 +133,10 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	var result string
 	var err error
 	if sglangUp {
-		result, err = callLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+		result, err = pilot.CallLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
 	} else {
 		// sglang down — use pilot model (Gemini Flash) for proactive context.
-		result, err = callPilotLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+		result, err = pilot.CallPilotLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
 	}
 	if err != nil {
 		logger.Debug("proactive context failed", "error", err, "remote", !sglangUp)
@@ -227,7 +229,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 		return output
 	}
 	// Skip if sglang was recently confirmed down (cached result only, no probe).
-	if !sglangHealthy.Load() && sglangLastCheck.Load() > 0 {
+	if pilot.SglangRecentlyDown() {
 		return output
 	}
 
@@ -239,7 +241,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 		prompt = prompt[:32000] + "\n[... truncated]"
 	}
 
-	compressed, err := callLocalLLM(ctx, compressSystemPrompt, prompt, compressMaxTokens)
+	compressed, err := pilot.CallLocalLLM(ctx, compressSystemPrompt, prompt, compressMaxTokens)
 	if err != nil {
 		logger.Debug("tool output compression failed, using original", "tool", toolName, "error", err)
 		return output
@@ -329,7 +331,7 @@ func extractAutoMemory(ctx context.Context, userMessage, agentResponse string, l
 		return ""
 	}
 	// Skip if sglang was recently confirmed down (cached result only, no probe).
-	if !sglangHealthy.Load() && sglangLastCheck.Load() > 0 {
+	if pilot.SglangRecentlyDown() {
 		return ""
 	}
 
@@ -337,10 +339,10 @@ func extractAutoMemory(ctx context.Context, userMessage, agentResponse string, l
 	defer cancel()
 
 	prompt := fmt.Sprintf("User:\n%s\n\nAssistant:\n%s",
-		truncateInput(userMessage, 4000),
-		truncateInput(agentResponse, 8000))
+		pilot.TruncateInput(userMessage, 4000),
+		pilot.TruncateInput(agentResponse, 8000))
 
-	result, err := callLocalLLM(ctx, autoMemorySystemPrompt, prompt, autoMemoryMaxTokens)
+	result, err := pilot.CallLocalLLM(ctx, autoMemorySystemPrompt, prompt, autoMemoryMaxTokens)
 	if err != nil {
 		logger.Debug("auto memory extraction failed", "error", err)
 		return ""
@@ -401,7 +403,7 @@ const activitySummarySystemPrompt = `에이전트의 최근 생각 과정을 보
 // thinking into a short Korean phrase for the progress tracker status line.
 // Returns empty string on failure (caller should treat as a no-op).
 func SummarizeToolActivity(ctx context.Context, reasons []string) (string, error) {
-	if !checkSglangHealth() {
+	if !pilot.CheckSglangHealth() {
 		return "", fmt.Errorf("sglang unavailable")
 	}
 
@@ -413,7 +415,7 @@ func SummarizeToolActivity(ctx context.Context, reasons []string) (string, error
 		reasons = reasons[limit-5:]
 	}
 	for i, r := range reasons {
-		snippet := truncateInput(r, 300)
+		snippet := pilot.TruncateInput(r, 300)
 		fmt.Fprintf(&b, "%d. %s\n", i+1, snippet)
 	}
 
@@ -422,7 +424,7 @@ func SummarizeToolActivity(ctx context.Context, reasons []string) (string, error
 	noThinking := map[string]any{
 		"chat_template_kwargs": map[string]any{"enable_thinking": false},
 	}
-	result, err := callLocalLLM(ctx, activitySummarySystemPrompt, b.String(), 64, noThinking)
+	result, err := pilot.CallLocalLLM(ctx, activitySummarySystemPrompt, b.String(), 64, noThinking)
 	if err != nil {
 		return "", err
 	}

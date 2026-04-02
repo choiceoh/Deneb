@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -220,7 +221,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	}
 	// Set the package-level model role registry for sglang hooks and pilot tools.
 	if h.registry != nil {
-		SetModelRoleRegistry(h.registry)
+		pilot.SetModelRoleRegistry(h.registry)
 	}
 	go h.abortGCLoop()
 	return h

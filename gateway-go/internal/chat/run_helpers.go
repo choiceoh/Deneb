@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -276,11 +277,11 @@ func handleRunSuccess(
 				// Skip tool-only responses (file contents relay, command output)
 				// that rarely contain user-model-worthy information.
 				if result.Text != "" && !isToolOnlyResponse(result.Text) {
-					if !checkSglangHealth() {
+					if !pilot.CheckSglangHealth() {
 						logger.Debug("structured memory extraction skipped: sglang unhealthy")
 					} else {
-						lwClient := getLightweightClient()
-						facts, err := memory.ExtractFacts(memCtx, lwClient, getLightweightModel(), params.Message, result.Text, logger)
+						lwClient := pilot.GetLightweightClient()
+						facts, err := memory.ExtractFacts(memCtx, lwClient, pilot.GetLightweightModel(), params.Message, result.Text, logger)
 						if err != nil {
 							if shouldLogStructuredMemoryExtractionError(err) {
 								logger.Debug("structured memory extraction failed, falling back", "error", err)

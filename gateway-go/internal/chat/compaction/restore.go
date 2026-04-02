@@ -7,7 +7,7 @@
 // of files it was actively editing.
 //
 // Inspired by Claude Code's compact.ts file restoration pattern.
-package chat
+package compaction
 
 import (
 	"encoding/json"
@@ -123,7 +123,7 @@ func BuildRestorationMessages(records []FileReadRecord) []llm.Message {
 		if r.TokenCount > postCompactMaxTokensPerFile {
 			// Truncate to per-file budget.
 			runeContent := []rune(content)
-			maxRunes := postCompactMaxTokensPerFile * runesPerToken
+			maxRunes := postCompactMaxTokensPerFile * 2
 			if len(runeContent) > maxRunes {
 				content = string(runeContent[:maxRunes]) + "\n... (truncated for context budget)"
 			}
