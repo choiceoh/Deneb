@@ -57,8 +57,13 @@ func ExtractConstants(workdir string, constants []ConstantDef) (map[string]strin
 			return nil, fmt.Errorf("read %s for constant %s: %w", cd.File, cd.Name, err)
 		}
 		pattern := cd.EffectivePattern()
-		m, err := findWithFallback(string(data), pattern)
+		content := string(data)
+		m, err := findWithFallback(content, pattern)
 		if err != nil {
+			hint := findActualLineHint(content, pattern)
+			if hint != "" {
+				return nil, fmt.Errorf("constant %s in %s: %w; actual line: %s", cd.Name, cd.File, err, hint)
+			}
 			return nil, fmt.Errorf("constant %s in %s: %w", cd.Name, cd.File, err)
 		}
 		values[cd.Name] = m
@@ -143,6 +148,32 @@ func replaceCapture(content, pattern, newValue string) (string, error) {
 	sb.WriteString(newValue)
 	sb.WriteString(content[loc[3]:])
 	return sb.String(), nil
+}
+
+// findActualLineHint searches content for a line containing the identifier
+// extracted from the pattern (strips regex anchors/quantifiers). Helps
+// debugging when a pattern fails to match due to indentation or formatting.
+func findActualLineHint(content, pattern string) string {
+	// Extract the leading identifier from the pattern (e.g. "^myConst\s*=" -> "myConst").
+	ident := pattern
+	ident = strings.TrimPrefix(ident, "^")
+	// Cut at first non-word character (backslash, paren, bracket, etc.).
+	for i, ch := range ident {
+		if ch == '\\' || ch == '(' || ch == '[' || ch == '{' || ch == '.' || ch == '*' || ch == '+' || ch == '?' || ch == '|' || ch == '$' || ch == ' ' {
+			ident = ident[:i]
+			break
+		}
+	}
+	ident = strings.TrimSpace(ident)
+	if ident == "" {
+		return ""
+	}
+	for _, line := range strings.Split(content, "\n") {
+		if strings.Contains(line, ident) {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
 }
 
 // findWithFallback tries the pattern, then relaxed variants. Returns the

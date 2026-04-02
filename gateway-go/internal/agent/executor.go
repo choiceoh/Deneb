@@ -10,6 +10,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -54,6 +55,10 @@ func RunAgent(
 	defer cancel()
 
 	result := &AgentResult{}
+
+	// Build concurrency checker: uses ConcurrencyChecker interface if available,
+	// otherwise falls back to the hardcoded read-only tool set.
+	isConcurrencySafe := buildConcurrencyCheck(tools)
 
 	// Max-output-tokens recovery: tracks how many times we've auto-resumed
 	// after the LLM response was truncated by max_tokens.
@@ -155,8 +160,19 @@ func RunAgent(
 			}
 		}
 
-		// Consume the stream for this turn.
-		err = consumeStreamInto(ctx, events, dispatchHooks, turnRes)
+		// Consume the stream for this turn. On idle stall, retry once —
+		// the LLM API sometimes stalls transiently but recovers on reconnect.
+		err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout)
+		if errors.Is(err, ErrStreamIdle) && ctx.Err() == nil {
+			logger.Warn("stream idle stall detected, retrying turn",
+				"turn", turn,
+				"idleTimeout", cfg.StreamIdleTimeout)
+			turnRes = &turnResult{}
+			events, err = client.StreamChat(ctx, req)
+			if err == nil {
+				err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout)
+			}
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
@@ -354,7 +370,7 @@ func RunAgent(
 					}
 				}
 				for i, tc := range turnRes.toolCalls {
-					if isReadOnlyTool(tc.Name) {
+					if isConcurrencySafe(tc.Name) {
 						if !curBatch.concurrent && len(curBatch.indices) > 0 {
 							flush()
 						}
@@ -501,15 +517,23 @@ func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
 // execute concurrently in a single batch.
 const maxToolConcurrency = 10
 
-// readOnlyToolSet lists tools safe for concurrent execution.
-var readOnlyToolSet = map[string]bool{
+// readOnlyToolFallback is used when ToolExecutor does not implement
+// ConcurrencyChecker. Prefer declaring ConcurrencySafe on ToolDef instead.
+var readOnlyToolFallback = map[string]bool{
 	"read": true, "grep": true, "glob": true, "find": true,
 	"tree": true, "process": true, "kv": true, "knowledge": true,
 	"memory": true,
 }
 
-// isReadOnlyTool returns true if the tool name is safe for concurrent execution.
-func isReadOnlyTool(name string) bool { return readOnlyToolSet[name] }
+// buildConcurrencyCheck returns a function that checks whether a tool is safe
+// for concurrent execution. If the ToolExecutor implements ConcurrencyChecker,
+// its IsConcurrencySafe method is used; otherwise falls back to the hardcoded set.
+func buildConcurrencyCheck(tools ToolExecutor) func(string) bool {
+	if cc, ok := tools.(ConcurrencyChecker); ok {
+		return cc.IsConcurrencySafe
+	}
+	return func(name string) bool { return readOnlyToolFallback[name] }
+}
 
 // turnResult holds the parsed output of a single LLM turn.
 type turnResult struct {
@@ -520,6 +544,14 @@ type turnResult struct {
 	usage         llm.TokenUsage
 }
 
+// defaultStreamIdleTimeout is the default maximum wait for the next SSE event
+// during LLM streaming. Matches Claude Code's CLAUDE_STREAM_IDLE_TIMEOUT_MS.
+const defaultStreamIdleTimeout = 90 * time.Second
+
+// ErrStreamIdle is returned when the LLM stream stalls (no event within the
+// idle timeout). The error is considered retryable by callers.
+var ErrStreamIdle = fmt.Errorf("stream stalled: no event within idle timeout")
+
 // consumeStreamInto reads all events from a streaming LLM response and
 // populates the provided turnResult. The caller allocates result so that
 // streaming tool dispatch callbacks can safely read contentBlocks during
@@ -527,7 +559,15 @@ type turnResult struct {
 //
 // When hooks.OnToolBlockReady is set, it is called synchronously on each
 // content_block_stop for tool_use blocks, enabling streaming tool dispatch.
-func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks, result *turnResult) error {
+//
+// idleTimeout controls how long to wait for the next event before declaring
+// the stream stalled. Zero uses defaultStreamIdleTimeout; negative disables.
+func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks, result *turnResult, idleTimeout time.Duration) error {
+	// Resolve idle timeout.
+	if idleTimeout == 0 {
+		idleTimeout = defaultStreamIdleTimeout
+	}
+
 	// Track current content block being built.
 	type blockBuilder struct {
 		block   llm.ContentBlock
@@ -536,13 +576,37 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 	var currentBlock *blockBuilder
 	var blockIndex int = -1
 
+	// Idle watchdog: detects LLM stream stalls where the TCP connection stays
+	// alive but no SSE events arrive. Without this, stalled streams hang
+	// indefinitely (HTTP-level timeouts are too coarse at 5+ minutes).
+	var idleTimer *time.Timer
+	var idleCh <-chan time.Time
+	if idleTimeout > 0 {
+		idleTimer = time.NewTimer(idleTimeout)
+		defer idleTimer.Stop()
+		idleCh = idleTimer.C
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-idleCh:
+			return ErrStreamIdle
 		case ev, ok := <-events:
 			if !ok {
 				return nil
+			}
+			// Reset idle watchdog on every received event.
+			if idleTimer != nil {
+				if !idleTimer.Stop() {
+					// Drain channel if timer already fired (race window).
+					select {
+					case <-idleTimer.C:
+					default:
+					}
+				}
+				idleTimer.Reset(idleTimeout)
 			}
 
 			switch ev.Type {

@@ -1136,7 +1136,7 @@ mod tests {
         let cmd = engine.start();
         assert!(matches!(cmd, SweepCommand::FetchTokenCount { .. }));
 
-        // Report tokens below threshold (750)
+        // Report tokens below threshold (800)
         let cmd = engine.step(SweepResponse::TokenCount { count: 500 });
         match cmd {
             SweepCommand::Done { result } => {
@@ -1152,7 +1152,7 @@ mod tests {
     fn test_sweep_empty_items_returns_done() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = SweepEngine::new(default_config(), 1, 1000, false, false, 1000);
         let _ = engine.start();
-        let cmd = engine.step(SweepResponse::TokenCount { count: 800 });
+        let cmd = engine.step(SweepResponse::TokenCount { count: 810 }); // above 0.80 threshold
         assert!(matches!(cmd, SweepCommand::FetchContextItems { .. }));
 
         let cmd = engine.step(SweepResponse::ContextItems { items: vec![] });

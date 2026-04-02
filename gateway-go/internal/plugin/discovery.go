@@ -158,9 +158,17 @@ type DiscoverPluginsParams struct {
 	Roots        PluginSourceRoots
 	WorkspaceDir string
 	ExtraPaths   []string
+	// OwnershipUID is the expected file owner UID for non-bundled plugins.
+	// Set to -1 (default) to skip ownership checks. A value >= 0 enables
+	// the check: files not owned by OwnershipUID or root are blocked.
 	OwnershipUID int
 	NoCache      bool
 	Env          map[string]string
+}
+
+// NewDiscoverPluginsParams returns params with safe defaults (ownership check disabled).
+func NewDiscoverPluginsParams() DiscoverPluginsParams {
+	return DiscoverPluginsParams{OwnershipUID: -1}
 }
 
 type discoveryContext struct {

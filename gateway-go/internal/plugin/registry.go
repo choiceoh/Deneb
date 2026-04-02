@@ -10,11 +10,10 @@ import (
 )
 
 // FullRegistry extends the basic Registry with full registration capabilities
-// for channels, providers, tools, commands, services, and HTTP routes.
+// for providers, tools, commands, services, and HTTP routes.
 type FullRegistry struct {
 	mu           sync.RWMutex
 	plugins      map[string]*PluginMeta
-	channels     map[string]ChannelRegistration
 	providers    map[string]ProviderRegistration
 	tools        map[string]ToolRegistration
 	commands     map[string]CommandRegistration
@@ -23,14 +22,6 @@ type FullRegistry struct {
 	interactives map[string]InteractiveRegistration
 	hookRunner   *TypedHookRunner
 	logger       *slog.Logger
-}
-
-// ChannelRegistration describes a registered channel plugin.
-type ChannelRegistration struct {
-	PluginID  string
-	ChannelID string
-	Label     string
-	Plugin    interface{} // the concrete plugin instance (e.g., *telegram.Plugin)
 }
 
 // ProviderRegistration describes a registered LLM provider.
@@ -82,7 +73,6 @@ type InteractiveRegistration struct {
 func NewFullRegistry(logger *slog.Logger) *FullRegistry {
 	return &FullRegistry{
 		plugins:      make(map[string]*PluginMeta),
-		channels:     make(map[string]ChannelRegistration),
 		providers:    make(map[string]ProviderRegistration),
 		tools:        make(map[string]ToolRegistration),
 		commands:     make(map[string]CommandRegistration),
@@ -119,39 +109,6 @@ func (r *FullRegistry) ListPlugins() []PluginMeta {
 	result := make([]PluginMeta, 0, len(r.plugins))
 	for _, p := range r.plugins {
 		result = append(result, *p)
-	}
-	return result
-}
-
-// --- Channel registration ---
-
-func (r *FullRegistry) RegisterChannel(reg ChannelRegistration) error {
-	if reg.ChannelID == "" {
-		return fmt.Errorf("channel ID is required")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.channels[reg.ChannelID] = reg
-	r.logger.Info("channel registered", "channel", reg.ChannelID, "plugin", reg.PluginID)
-	return nil
-}
-
-func (r *FullRegistry) GetChannel(id string) *ChannelRegistration {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	ch, ok := r.channels[id]
-	if !ok {
-		return nil
-	}
-	return &ch
-}
-
-func (r *FullRegistry) ListChannels() []ChannelRegistration {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	result := make([]ChannelRegistration, 0, len(r.channels))
-	for _, ch := range r.channels {
-		result = append(result, ch)
 	}
 	return result
 }
@@ -327,7 +284,6 @@ func (r *FullRegistry) HookRunner() *TypedHookRunner {
 // RegistrySummary provides a snapshot of all registrations.
 type RegistrySummary struct {
 	Plugins      int `json:"plugins"`
-	Channels     int `json:"channels"`
 	Providers    int `json:"providers"`
 	Tools        int `json:"tools"`
 	Commands     int `json:"commands"`
@@ -343,7 +299,6 @@ func (r *FullRegistry) Summary() RegistrySummary {
 	hookNames := r.hookRunner.ListRegisteredHooks()
 	return RegistrySummary{
 		Plugins:      len(r.plugins),
-		Channels:     len(r.channels),
 		Providers:    len(r.providers),
 		Tools:        len(r.tools),
 		Commands:     len(r.commands),

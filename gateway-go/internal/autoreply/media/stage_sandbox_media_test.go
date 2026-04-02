@@ -107,7 +107,7 @@ func TestStageSandboxMedia_Integration(t *testing.T) {
 	}
 
 	ctx := &types.MsgContext{
-		MediaPath: testFile,
+		MediaContext: types.MediaContext{MediaPath: testFile},
 	}
 
 	err := StageSandboxMedia(StageSandboxMediaParams{
@@ -151,7 +151,7 @@ func TestStageSandboxMedia_FileTooLarge(t *testing.T) {
 	}
 
 	ctx := &types.MsgContext{
-		MediaPath: testFile,
+		MediaContext: types.MediaContext{MediaPath: testFile},
 	}
 
 	err := StageSandboxMedia(StageSandboxMediaParams{
@@ -179,7 +179,7 @@ func TestStageSandboxMedia_NoMedia(t *testing.T) {
 
 func TestStageSandboxMedia_BlockedPath(t *testing.T) {
 	ctx := &types.MsgContext{
-		MediaPath: "/etc/passwd",
+		MediaContext: types.MediaContext{MediaPath: "/etc/passwd"},
 	}
 	err := StageSandboxMedia(StageSandboxMediaParams{
 		Ctx:          ctx,

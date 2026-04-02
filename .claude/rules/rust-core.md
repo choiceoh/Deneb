@@ -5,7 +5,7 @@ globs: ["core-rs/**", "cli-rs/**"]
 
 # Rust Core (`core-rs/`)
 
-Rust workspace with 4 crates, exposed to Go via C FFI (CGo static linking).
+Rust workspace with 3 crates, exposed to Go via C FFI (CGo static linking).
 
 ## Crates
 
@@ -26,7 +26,6 @@ Rust workspace with 4 crates, exposed to Go via C FFI (CGo static linking).
 
 **deneb-ml** (`ml/`): GGUF inference via llama-cpp-2. Optional `cuda` feature for GPU acceleration.
 
-**deneb-agent-runtime** (`agent-runtime/`): Agent lifecycle, model selection.
 
 ## Feature Flags
 

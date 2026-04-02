@@ -98,11 +98,11 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 	result := strings.TrimSpace(string(out))
 	if err != nil {
 		if result != "" {
-			return result, nil
+			return TruncateForLLM(result), nil
 		}
 		return "", fmt.Errorf("git %s failed: %w", args[0], err)
 	}
-	return result, nil
+	return TruncateForLLM(result), nil
 }
 
 func gitStatus(ctx context.Context, dir string, p gitParams) (string, error) {

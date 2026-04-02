@@ -124,6 +124,7 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		ContextTokens:  contextTokens,
 		MaxTokens:      maxTokens,
 		AuthProfile:    selection.AuthProfile,
+		DeepWork:       sess.DeepWork,
 	}
 
 	// Record inbound user message in history tracker.
@@ -156,9 +157,6 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 			TotalTokens:  result.TokensUsed.TotalTokens,
 		}, result.DurationMs)
 	}
-
-	// 10c. Build delivery info from session state for reply routing.
-	_ = session.BuildSessionDelivery(sess, msg)
 
 	// 11. Track model fallback transitions for user notification.
 	if result != nil && result.FallbackActive {
@@ -237,11 +235,7 @@ func InitSessionForReply(msg *types.MsgContext, deps ReplyDeps) *types.SessionSt
 		}
 	}
 	return &types.SessionState{
-		SessionKey: msg.SessionKey,
-		Channel:    msg.Channel,
-		AccountID:  msg.AccountID,
-		ThreadID:   msg.ThreadID,
-		IsGroup:    msg.IsGroup,
+		SessionOrigin: msg.SessionOrigin,
 	}
 }
 
@@ -265,6 +259,9 @@ func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.Sess
 	}
 	if inline.HasModelDirective && inline.RawModelDirective != "" {
 		session.Model = inline.RawModelDirective
+	}
+	if inline.HasDeepWorkDirective {
+		session.DeepWork = true
 	}
 
 	// Handle /status as inline directive.

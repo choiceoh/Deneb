@@ -11,7 +11,9 @@ crate-type = ["staticlib", "rlib"]
 
 [features]
 # Enable Vega project search engine (Rust port of Python vega/).
-vega = ["dep:deneb-vega"]
+vega = ["dep:deneb-vega", "parallel", "deneb-vega?/parallel"]
+# Enable rayon parallelism (20-core DGX Spark). Disable for leaner single-core builds.
+parallel = ["dep:rayon"]
 
 [dependencies]
 # Serialization
@@ -26,8 +28,8 @@ prost-types.workspace = true
 # Error handling
 thiserror.workspace = true
 
-# Data parallelism (20-core DGX Spark utilization)
-rayon.workspace = true
+# Data parallelism (20-core DGX Spark utilization, optional)
+rayon = { workspace = true, optional = true }
 rustc-hash.workspace = true
 
 # Regex (ReDoS-safe by design)
@@ -43,7 +45,7 @@ sha2.workspace = true
 chrono.workspace = true
 
 # Markdown parsing
-pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+pulldown-cmark = { version = "0.12", default-features = false }
 
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }

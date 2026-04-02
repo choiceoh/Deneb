@@ -28,8 +28,8 @@ var tsBaseMethods = []string{
 	"health",
 	"doctor.memory.status",
 	"logs.tail",
-	"channels.status",
-	"channels.logout",
+	"telegram.status",
+	"telegram.logout",
 	"status",
 	"usage.status",
 	"usage.cost",
@@ -161,7 +161,7 @@ func fullDispatcher() *Dispatcher {
 	d.Register("browser.request", stubUnavailable)
 	d.Register("web.login.start", stubUnavailable)
 	d.Register("web.login.wait", stubUnavailable)
-	d.Register("channels.logout", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	d.Register("telegram.logout", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp := protocol.MustResponseOK(req.ID, map[string]any{"ok": true})
 		return resp
 	})

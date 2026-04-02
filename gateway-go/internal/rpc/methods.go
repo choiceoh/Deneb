@@ -44,7 +44,7 @@ func registerCoreBuiltins(d *Dispatcher, deps Deps) error {
 	modules := []namedMethodModule{
 		{name: "core.health", module: healthModule{deps: deps}},
 		{name: "core.session", module: sessionModule{deps: deps}},
-		{name: "core.channel", module: channelModule{deps: deps}},
+		{name: "core.telegram", module: telegramModule{deps: deps}},
 		{name: "core.system", module: systemModule{deps: deps}},
 	}
 	d.beginRegistryValidation()
@@ -72,13 +72,13 @@ func (m sessionModule) Register(d *Dispatcher) {
 	d.Register("sessions.delete", sessionsDelete(m.deps))
 }
 
-type channelModule struct{ deps Deps }
+type telegramModule struct{ deps Deps }
 
-func (m channelModule) Register(d *Dispatcher) {
-	d.Register("channels.list", channelsList(m.deps))
-	d.Register("channels.get", channelsGet(m.deps))
-	d.Register("channels.status", channelsStatus(m.deps))
-	d.Register("channels.health", channelsHealth(m.deps))
+func (m telegramModule) Register(d *Dispatcher) {
+	d.Register("telegram.list", telegramList(m.deps))
+	d.Register("telegram.get", telegramGet(m.deps))
+	d.Register("telegram.status", telegramStatus(m.deps))
+	d.Register("telegram.health", telegramHealth(m.deps))
 }
 
 type systemModule struct{ deps Deps }
@@ -162,7 +162,7 @@ func sessionsDelete(deps Deps) HandlerFunc {
 	}
 }
 
-func channelsList(deps Deps) HandlerFunc {
+func telegramList(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var channels []string
 		if deps.TelegramPlugin != nil {
@@ -172,7 +172,7 @@ func channelsList(deps Deps) HandlerFunc {
 	}
 }
 
-func channelsGet(deps Deps) HandlerFunc {
+func telegramGet(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
@@ -197,7 +197,7 @@ func channelsGet(deps Deps) HandlerFunc {
 	}
 }
 
-func channelsStatus(deps Deps) HandlerFunc {
+func telegramStatus(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.SnapshotStore != nil {
 			return rpcutil.RespondOK(req.ID, deps.SnapshotStore.Snapshot())
@@ -232,7 +232,7 @@ func systemInfo(deps Deps) HandlerFunc {
 // FFI-backed methods (protocol, security, media, parsing, memory, markdown,
 // compaction, context engine, vega, ml) have been moved to handler/ffi/.
 
-func channelsHealth(deps Deps) HandlerFunc {
+func telegramHealth(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.TelegramPlugin == nil {
 			return rpcutil.RespondOK(req.ID, map[string]any{"channels": []any{}})
@@ -250,7 +250,7 @@ func channelsHealth(deps Deps) HandlerFunc {
 
 // RegisterBuiltinMethods registers the core Go-native RPC methods.
 // Delegates to the FFI and skill handler packages for the bulk of methods,
-// while keeping health/channels/system in the rpc package.
+// while keeping health/telegram/system in the rpc package.
 func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	// Health, sessions CRUD, channels, system — kept in rpc package (methods.go).
 	if err := registerCoreBuiltins(d, deps); err != nil {

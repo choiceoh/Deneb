@@ -551,9 +551,9 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "config.schema.lookup.result" => Some(validate_object_params),
         "update.run" => Some(schemas::config::validate_update_run_params),
 
-        // Channels methods
-        "channels.status" => Some(schemas::channels::validate_channels_status_params),
-        "channels.logout" => Some(schemas::channels::validate_channels_logout_params),
+        // Telegram methods
+        "telegram.status" => Some(schemas::channels::validate_channels_status_params),
+        "telegram.logout" => Some(schemas::channels::validate_channels_logout_params),
         "talk.mode" => Some(schemas::channels::validate_talk_mode_params),
         "talk.config" => Some(schemas::channels::validate_talk_config_params),
         "talk.config.result" => Some(validate_object_params),

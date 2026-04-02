@@ -63,6 +63,10 @@ type RunParams struct {
 	// ContinuationIndex tracks the current autonomous continuation number.
 	// 0 = original run, 1+ = continuation runs. Not set by external callers.
 	ContinuationIndex int
+
+	// DeepWork enables extended autonomous mode (2-3 hours): maxTurns=50,
+	// timeout=30min/run, up to 30 continuations. Activated via /deepwork directive.
+	DeepWork bool
 }
 
 // Agent run defaults.
@@ -333,6 +337,9 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if maxConts <= 0 {
 		maxConts = 5
 	}
+	if params.DeepWork {
+		maxConts = 30
+	}
 
 	var contReason string
 	var contMessage string
@@ -356,16 +363,26 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			"reason", contReason,
 			"continuation", nextIndex,
 			"maxContinuations", maxConts,
-			"stopReason", chatResult.StopReason)
+			"stopReason", chatResult.StopReason,
+			"deepWork", params.DeepWork)
+
+		// Build continuation message; inject session memory in deep work mode.
+		contMsg := fmt.Sprintf(contMessage, nextIndex, maxConts, contReason)
+		if params.DeepWork && deps.sessionMemory != nil {
+			if sm := deps.sessionMemory.Get(params.SessionKey); sm != "" {
+				contMsg += "\n\n[Session Memory — your task state:]\n" + sm
+			}
+		}
 
 		contParams := RunParams{
 			SessionKey:        params.SessionKey,
 			ClientRunID:       shortid.New("cont"),
-			Message:           fmt.Sprintf(contMessage, nextIndex, maxConts, contReason),
+			Message:           contMsg,
 			Delivery:          params.Delivery,
 			Model:             params.Model,
 			WorkspaceDir:      params.WorkspaceDir,
 			ContinuationIndex: nextIndex,
+			DeepWork:          params.DeepWork,
 		}
 		deps.startRunFn(contParams)
 	}

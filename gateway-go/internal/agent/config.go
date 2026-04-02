@@ -110,6 +110,13 @@ type AgentConfig struct {
 	// each turn's assistant and tool_result messages to transcript immediately,
 	// so intermediate findings survive across runs.
 	OnMessagePersist func(msg llm.Message)
+
+	// StreamIdleTimeout is the maximum duration to wait for the next SSE event
+	// during LLM streaming. If no event arrives within this period, the stream
+	// is considered stalled and aborted with a retryable error. This prevents
+	// indefinite hangs when the LLM API stops sending events but keeps the TCP
+	// connection alive. Default: 90s. Zero disables the watchdog.
+	StreamIdleTimeout time.Duration
 }
 
 // NudgeBudgetConfig configures token-budget continuation (Claude Code pattern).

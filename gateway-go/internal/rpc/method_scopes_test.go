@@ -16,7 +16,7 @@ func TestRequiredScope(t *testing.T) {
 		{"status", auth.ScopeRead},
 		{"sessions.list", auth.ScopeRead},
 		{"sessions.get", auth.ScopeRead},
-		{"channels.list", auth.ScopeRead},
+		{"telegram.list", auth.ScopeRead},
 		{"models.list", auth.ScopeRead},
 		{"usage.status", auth.ScopeRead},
 
@@ -29,8 +29,8 @@ func TestRequiredScope(t *testing.T) {
 		{"cron.add", auth.ScopeWrite},
 
 		// Admin scope methods.
-		{"channels.start", auth.ScopeAdmin},
-		{"channels.stop", auth.ScopeAdmin},
+		{"telegram.start", auth.ScopeAdmin},
+		{"telegram.stop", auth.ScopeAdmin},
 		{"config.get", auth.ScopeAdmin},
 		{"config.set", auth.ScopeAdmin},
 		{"secrets.reload", auth.ScopeAdmin},

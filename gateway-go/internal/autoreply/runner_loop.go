@@ -51,6 +51,8 @@ type AgentTurnConfig struct {
 	// Model fallback.
 	FallbackModels []string
 	AuthProfile    string
+	// Deep work mode: extended timeouts and continuations for long autonomous sessions.
+	DeepWork bool
 }
 
 // AgentTurnResult holds the outcome of an agent turn.
@@ -269,12 +271,8 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 			// Sanitize untrusted content in the output.
 			sanitized := SanitizeUntrustedContent(agentResult.Text, DefaultUntrustedContentPolicy())
 
-			// Detect and strip streaming directives from output text.
-			if sd := DetectStreamingDirective(sanitized); sd != nil {
-				// Streaming directive detected in output — log but don't
-				// act on it (directives in output are informational only).
-				_ = sd
-			}
+			// Detect streaming directives in output text (informational only).
+			DetectStreamingDirective(sanitized)
 
 			// Coalesce output into structured blocks (text vs code) for
 			// downstream formatters (e.g., Telegram code block extraction).
@@ -305,7 +303,16 @@ type autoreplyToolAdapter struct {
 
 func (a *autoreplyToolAdapter) Execute(ctx context.Context, name string, input json.RawMessage) (string, error) {
 	var inputMap map[string]any
-	_ = json.Unmarshal(input, &inputMap)
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &inputMap); err != nil {
+			// LLMs occasionally produce malformed tool input; log and continue
+			// with an empty map rather than failing the tool call entirely.
+			if a.runner.logger != nil {
+				a.runner.logger.Warn("malformed tool input JSON",
+					"tool", name, "error", err, "raw", string(input))
+			}
+		}
+	}
 
 	call := ToolCall{Name: name, Input: inputMap}
 

@@ -22,6 +22,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		ClientRunID  string           `json:"clientRunId,omitempty"`
 		Model        string           `json:"model,omitempty"` // role name: "main","lightweight","pilot","fallback"
 		WorkspaceDir string           `json:"workspaceDir,omitempty"`
+		DeepWork     bool             `json:"deepWork,omitempty"` // extended autonomous mode (2-3 hours)
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -59,6 +60,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		ClientRunID:  p.ClientRunID,
 		Model:        p.Model,
 		WorkspaceDir: p.WorkspaceDir,
+		DeepWork:     p.DeepWork,
 	}
 
 	if h.hasActiveRunForSession(p.SessionKey) {

@@ -44,6 +44,20 @@ var ffiOutPool1MB = sync.Pool{
 	New: func() any { return make([]byte, 1024*1024) },
 }
 
+// initialBufSize computes a starting buffer size for FFI output.
+// multiplier scales the input length, floor sets the minimum size.
+// The result is capped at maxGrowBufSize.
+func initialBufSize(inputLen, multiplier, floor int) int {
+	size := inputLen * multiplier
+	if size < floor {
+		size = floor
+	}
+	if size > maxGrowBufSize {
+		size = maxGrowBufSize
+	}
+	return size
+}
+
 // ffiCallWithPool is like ffiCallWithGrow but reuses buffers from a sync.Pool
 // for the initial attempt. The result is copied to a right-sized slice so the
 // pooled buffer can be returned safely. Falls back to ffiCallWithGrow if the

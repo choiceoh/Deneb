@@ -15,6 +15,53 @@ var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 var multiSpaceRe = regexp.MustCompile(`[ \t]{2,}`)
 var multiNewlineRe = regexp.MustCompile(`\n{3,}`)
 
+// htmlEntityReplacements mirrors the Rust core entity set for the Go fallback.
+// Order matters: &amp; must come last to avoid double-decoding.
+var htmlEntityReplacements = [][2]string{
+	{"&nbsp;", "\u00A0"},
+	{"&quot;", "\""},
+	{"&lt;", "<"},
+	{"&gt;", ">"},
+	{"&#39;", "'"},
+	{"&apos;", "'"},
+	// Typography
+	{"&mdash;", "\u2014"},
+	{"&ndash;", "\u2013"},
+	{"&hellip;", "\u2026"},
+	{"&laquo;", "\u00AB"},
+	{"&raquo;", "\u00BB"},
+	{"&lsquo;", "\u2018"},
+	{"&rsquo;", "\u2019"},
+	{"&ldquo;", "\u201C"},
+	{"&rdquo;", "\u201D"},
+	{"&bull;", "\u2022"},
+	{"&middot;", "\u00B7"},
+	// Symbols
+	{"&copy;", "\u00A9"},
+	{"&reg;", "\u00AE"},
+	{"&trade;", "\u2122"},
+	{"&deg;", "\u00B0"},
+	{"&plusmn;", "\u00B1"},
+	{"&times;", "\u00D7"},
+	{"&divide;", "\u00F7"},
+	{"&micro;", "\u00B5"},
+	// Currency
+	{"&euro;", "\u20AC"},
+	{"&pound;", "\u00A3"},
+	{"&yen;", "\u00A5"},
+	{"&cent;", "\u00A2"},
+	// Arrows
+	{"&larr;", "\u2190"},
+	{"&rarr;", "\u2192"},
+	{"&uarr;", "\u2191"},
+	{"&darr;", "\u2193"},
+	// Misc
+	{"&para;", "\u00B6"},
+	{"&sect;", "\u00A7"},
+	// &amp; must be last to avoid double-decoding
+	{"&amp;", "&"},
+}
+
 // Structural HTML conversion regexps (Go fallback only).
 var (
 	strongRe = regexp.MustCompile(`(?is)<(?:strong)(?:\s[^>]*)?>(.+?)</(?:strong)>`)
@@ -127,14 +174,10 @@ func HtmlToMarkdown(html string) (text string, title string, err error) {
 	// Strip remaining tags.
 	result = htmlTagRe.ReplaceAllString(result, " ")
 
-	// Decode basic entities.
-	result = strings.ReplaceAll(result, "&nbsp;", " ")
-	result = strings.ReplaceAll(result, "&amp;", "&")
-	result = strings.ReplaceAll(result, "&lt;", "<")
-	result = strings.ReplaceAll(result, "&gt;", ">")
-	result = strings.ReplaceAll(result, "&quot;", "\"")
-	result = strings.ReplaceAll(result, "&#39;", "'")
-	result = strings.ReplaceAll(result, "&apos;", "'")
+	// Decode HTML entities (matches the Rust core entity set).
+	for _, pair := range htmlEntityReplacements {
+		result = strings.ReplaceAll(result, pair[0], pair[1])
+	}
 
 	// Normalize whitespace.
 	result = multiSpaceRe.ReplaceAllString(result, " ")
@@ -215,7 +258,15 @@ func Base64Canonicalize(input string) (string, error) {
 	return cleaned, nil
 }
 
+// HtmlToMarkdownStripNoise is a pure-Go fallback.
+// In no-FFI mode, noise stripping is not applied (the Go caller should
+// pre-strip noise elements via StripNoiseElements before calling).
+func HtmlToMarkdownStripNoise(html string) (text string, title string, err error) {
+	return HtmlToMarkdown(html)
+}
+
 // ParseMediaTokens is a pure-Go fallback for MEDIA: token extraction.
+// Respects fenced code blocks (``` or ~~~) — MEDIA lines inside fences are kept as text.
 func ParseMediaTokens(text string) (cleanText string, mediaURLs []string, audioAsVoice bool, err error) {
 	if len(text) == 0 {
 		return "", nil, false, nil
@@ -230,8 +281,33 @@ func ParseMediaTokens(text string) (cleanText string, mediaURLs []string, audioA
 	var keptLines []string
 	var media []string
 
+	// Track fenced code blocks to avoid extracting MEDIA inside them.
+	inFence := false
+	var fenceChar byte
+	fenceLen := 0
+
 	for _, line := range lines {
 		trimmedLine := strings.TrimLeft(line, " \t")
+
+		// Fence tracking: detect opening/closing ``` or ~~~ markers.
+		if !inFence {
+			if ch, n := detectFenceOpen(trimmedLine); n >= 3 {
+				inFence = true
+				fenceChar = ch
+				fenceLen = n
+			}
+		} else if isFenceClose(trimmedLine, fenceChar, fenceLen) {
+			inFence = false
+			keptLines = append(keptLines, line)
+			continue
+		}
+
+		// Inside a fence — keep line as-is, skip MEDIA extraction.
+		if inFence {
+			keptLines = append(keptLines, line)
+			continue
+		}
+
 		if !strings.HasPrefix(trimmedLine, "MEDIA:") {
 			keptLines = append(keptLines, line)
 			continue
@@ -316,4 +392,46 @@ func isValidMediaPathGo(candidate string) bool {
 		return true
 	}
 	return false
+}
+
+// detectFenceOpen checks if a trimmed line opens a fenced code block.
+// Returns the fence character and count, or (0, 0) if not a fence.
+func detectFenceOpen(trimmed string) (byte, int) {
+	if len(trimmed) < 3 {
+		return 0, 0
+	}
+	ch := trimmed[0]
+	if ch != '`' && ch != '~' {
+		return 0, 0
+	}
+	count := 0
+	for i := 0; i < len(trimmed); i++ {
+		if trimmed[i] == ch {
+			count++
+		} else {
+			break
+		}
+	}
+	if count >= 3 {
+		return ch, count
+	}
+	return 0, 0
+}
+
+// isFenceClose checks if a trimmed line closes a fenced code block.
+func isFenceClose(trimmed string, fenceChar byte, fenceLen int) bool {
+	if len(trimmed) < fenceLen {
+		return false
+	}
+	count := 0
+	for i := 0; i < len(trimmed); i++ {
+		if trimmed[i] == fenceChar {
+			count++
+		} else if trimmed[i] == ' ' || trimmed[i] == '\t' {
+			break
+		} else {
+			return false
+		}
+	}
+	return count >= fenceLen
 }

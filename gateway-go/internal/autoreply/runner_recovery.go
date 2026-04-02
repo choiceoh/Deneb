@@ -114,15 +114,23 @@ func (r *DefaultAgentRunner) runAgentWithRecovery(
 	// 6. Final error — no recovery possible.
 	if runErr != nil {
 		errText := runErr.Error()
-		// Replace raw HTTP error strings with specific Korean messages.
+		// Replace raw HTTP error strings with specific Korean messages for the user,
+		// but preserve the original error in result.Error for debugging/logging.
+		userText := errText
 		if specific := ClassifyErrorMessage(errText); specific != "" {
-			errText = specific
+			userText = specific
 		}
 		result.Error = runErr
 		result.Payloads = append(result.Payloads, types.ReplyPayload{
-			Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(errText, ".")),
+			Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(userText, ".")),
 			IsError: true,
 		})
+		logger.Error("agent failed (unrecoverable)",
+			"error", errText,
+			"session", cfg.SessionKey,
+			"model", cfg.Model,
+			"provider", cfg.Provider,
+		)
 		result.DurationMs = time.Since(startedAt).Milliseconds()
 		return nil, true
 	}
