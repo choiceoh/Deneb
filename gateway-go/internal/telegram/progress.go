@@ -23,7 +23,7 @@ const (
 	maxReasonLen = 300
 
 	// maxSummaryLen caps the rendered summary line in runes.
-	maxSummaryLen = 30
+	maxSummaryLen = 40
 )
 
 // SummarizeFn calls a local LLM to summarize recent agent activity into a
