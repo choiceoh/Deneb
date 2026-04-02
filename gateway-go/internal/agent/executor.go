@@ -389,6 +389,25 @@ func RunAgent(
 		}
 
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
+
+		// Mid-loop compaction: check if context is growing too large and
+		// compact proactively before the LLM rejects with context_length_exceeded.
+		if cfg.OnMidLoopCompact != nil {
+			accTokens := result.Usage.InputTokens + result.Usage.OutputTokens
+			beforeCount := len(messages)
+			if compacted, sysAddition, err := cfg.OnMidLoopCompact(ctx, turn, messages, accTokens); err != nil {
+				logger.Warn("mid-loop compaction failed", "turn", turn, "error", err)
+			} else if compacted != nil {
+				messages = compacted
+				if sysAddition != "" {
+					cfg.System = llm.AppendSystemText(cfg.System, sysAddition)
+				}
+				logger.Info("mid-loop compaction applied",
+					"turn", turn,
+					"beforeMsgs", beforeCount,
+					"afterMsgs", len(compacted))
+			}
+		}
 	}
 
 	result.StopReason = "max_turns"

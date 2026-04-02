@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
@@ -107,6 +108,10 @@ type Handler struct {
 	hookRegistry *hooks.Registry
 	// internalHookRegistry fires programmatic internal hooks on the same events.
 	internalHookRegistry *hooks.InternalRegistry
+
+	// statusDepsFunc returns server-level status data for /status command.
+	// Injected by the server after handler creation.
+	statusDepsFunc StatusDepsFunc
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -424,6 +429,26 @@ func (h *Handler) SetHookRegistry(r *hooks.Registry) {
 	h.callbackMu.Lock()
 	h.hookRegistry = r
 	h.callbackMu.Unlock()
+}
+
+// StatusDepsFunc returns server-level status data for the /status command.
+// Called lazily so values are always fresh.
+type StatusDepsFunc func(sessionKey string) StatusDeps
+
+// StatusDeps holds server-level data for the /status command.
+type StatusDeps struct {
+	Version           string
+	StartedAt         time.Time
+	RustFFI           bool
+	SessionCount      int
+	WSConnections     int32
+	ActiveRuns        int
+	LastFailureReason string
+}
+
+// SetStatusDepsFunc sets the callback that provides server-level status data.
+func (h *Handler) SetStatusDepsFunc(fn StatusDepsFunc) {
+	h.statusDepsFunc = fn
 }
 
 // DefaultModel returns the configured default LLM model name.
