@@ -12,7 +12,10 @@ import (
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
@@ -35,7 +38,10 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestReadyEndpoint(t *testing.T) {
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -53,7 +59,10 @@ func TestReadyEndpoint(t *testing.T) {
 }
 
 func TestRPCEndpoint_ValidRequest(t *testing.T) {
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := `{"method":"health","id":"test-1"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -74,7 +83,10 @@ func TestRPCEndpoint_ValidRequest(t *testing.T) {
 }
 
 func TestRPCEndpoint_MissingMethod(t *testing.T) {
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := `{"id":"test-1"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -87,11 +99,14 @@ func TestRPCEndpoint_MissingMethod(t *testing.T) {
 }
 
 func TestServerStartStop(t *testing.T) {
-	srv := New("127.0.0.1:0")
+	srv, err := New("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	err := srv.Run(ctx)
+	err = srv.Run(ctx)
 	if err != nil {
 		t.Fatalf("server run error: %v", err)
 	}
@@ -101,7 +116,10 @@ func TestServerHealthEndpointLive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New("127.0.0.1:0")
+	srv, err := New("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)
@@ -132,7 +150,10 @@ func TestRPCEndpointLive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New("127.0.0.1:0")
+	srv, err := New("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)
@@ -195,7 +216,10 @@ func TestPhase1MethodsReachableViaRPC(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New("127.0.0.1:0")
+	srv, err := New("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)

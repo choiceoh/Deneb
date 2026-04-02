@@ -14,7 +14,10 @@ import (
 // newResponsesSrv creates a test server with responses endpoint enabled.
 func newResponsesSrv(t *testing.T) *Server {
 	t.Helper()
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	srv.runtimeCfg = &config.GatewayRuntimeConfig{
 		OpenResponsesEnabled: true,
 	}
@@ -135,7 +138,10 @@ func TestResponses_InvalidJSON_400(t *testing.T) {
 }
 
 func TestResponses_Disabled_404(t *testing.T) {
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := `{"model":"test","input":"hi"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
 	w := httptest.NewRecorder()

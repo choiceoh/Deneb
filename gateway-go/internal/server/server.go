@@ -6,6 +6,7 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -121,7 +122,7 @@ func (s *Server) safeGo(name string, fn func()) {
 }
 
 // New creates a new gateway server bound to the given address.
-func New(addr string, opts ...Option) *Server {
+func New(addr string, opts ...Option) (*Server, error) {
 	s := &Server{
 		ServerTransport:      &ServerTransport{addr: addr},
 		ServerRPC:            &ServerRPC{},
@@ -205,13 +206,17 @@ func New(addr string, opts ...Option) *Server {
 	hub := s.buildHub()
 
 	s.registerBuiltinMethods()
-	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
+	if err := rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
 		Sessions:      s.sessions,
 		SnapshotStore: s.snapshotStore,
 		GatewaySubs:   s.gatewaySubs,
 		Version:       s.version,
-	})
-	s.registerEarlyMethods(hub, denebDir)  // ~30 domains via hub accessors
+	}); err != nil {
+		return nil, fmt.Errorf("register builtin methods: %w", err)
+	}
+	if err := s.registerEarlyMethods(hub, denebDir); err != nil {
+		return nil, fmt.Errorf("register early methods: %w", err)
+	}
 	s.registerSessionRPCMethods()          // chat pipeline init + handler creation
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.registerLateMethods(hub)             // Chat-dependent domains
@@ -220,5 +225,5 @@ func New(addr string, opts ...Option) *Server {
 	// Plugin system (must run after RPC registration for late-binding).
 	s.initPluginSubsystem()
 
-	return s
+	return s, nil
 }

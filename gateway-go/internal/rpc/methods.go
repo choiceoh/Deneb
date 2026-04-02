@@ -251,10 +251,10 @@ func telegramHealth(deps Deps) HandlerFunc {
 // RegisterBuiltinMethods registers the core Go-native RPC methods.
 // Delegates to the FFI and skill handler packages for the bulk of methods,
 // while keeping health/telegram/system in the rpc package.
-func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
+func RegisterBuiltinMethods(d *Dispatcher, deps Deps) error {
 	// Health, sessions CRUD, channels, system — kept in rpc package (methods.go).
 	if err := registerCoreBuiltins(d, deps); err != nil {
-		panic(err)
+		return err
 	}
 
 	// FFI-backed methods: protocol, security, media, parsing, memory, markdown,
@@ -270,4 +270,5 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 
 	// Tools catalog (static core tool definitions).
 	d.RegisterDomain(handlerskill.CatalogMethods())
+	return nil
 }

@@ -15,7 +15,10 @@ import (
 // newChatCompletionsSrv creates a test server with chat completions enabled.
 func newChatCompletionsSrv(t *testing.T) *Server {
 	t.Helper()
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	srv.runtimeCfg = &config.GatewayRuntimeConfig{
 		OpenAIChatCompletionsEnabled: true,
 	}
@@ -147,7 +150,10 @@ func TestChatCompletions_NoUserMessage_400(t *testing.T) {
 }
 
 func TestChatCompletions_Disabled_404(t *testing.T) {
-	srv := New(":0")
+	srv, err := New(":0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	// runtimeCfg is nil, so endpoint should be disabled.
 
 	body := `{"model":"test","messages":[{"role":"user","content":"hi"}]}`
