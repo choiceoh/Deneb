@@ -6,16 +6,13 @@ import (
 )
 
 // SessionState holds the resolved state for a reply session.
+// Embeds SessionOrigin for routing fields shared with MsgContext.
 type SessionState struct {
-	SessionKey      string
+	SessionOrigin
 	AgentID         string
 	IsNew           bool
 	IsReset         bool
-	IsGroup         bool
 	IsThread        bool
-	Channel         string
-	AccountID       string
-	ThreadID        string
 	Model           string
 	Provider        string
 	ThinkLevel      ThinkLevel
