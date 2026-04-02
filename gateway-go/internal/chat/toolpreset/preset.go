@@ -18,7 +18,7 @@ const (
 var researcherTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
 	"batch_read", "search_and_read", "inspect",
-	"web", "http", "memory",
+	"web", "http", "memory", "fetch_tools",
 )
 
 // implementerTools include read + write + build tools for code changes.
@@ -27,6 +27,7 @@ var implementerTools = toSet(
 	"grep", "find", "tree", "diff", "analyze",
 	"test", "exec", "process", "git", "apply_patch",
 	"batch_read", "search_and_read", "inspect", "memory",
+	"fetch_tools",
 )
 
 // verifierTools include read + test + exec tools for verification.
@@ -34,6 +35,7 @@ var verifierTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
 	"test", "exec", "process",
 	"batch_read", "search_and_read", "inspect", "memory",
+	"fetch_tools",
 )
 
 // coordinatorTools are orchestration-only tools for the coordinator agent.
@@ -41,6 +43,7 @@ var coordinatorTools = toSet(
 	"sessions_spawn", "subagents",
 	"sessions_list", "sessions_history", "sessions_send",
 	"read", "grep", "find", "memory", "kv",
+	"fetch_tools",
 )
 
 // AllowedTools returns the set of tool names permitted for a given preset.

@@ -48,11 +48,17 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Description: "Signal that you have more work to do and want to start a new autonomous run. Use when the current run's tool-call budget is nearly exhausted but the task is not yet complete.",
 		InputSchema: continueRunToolSchema(),
 		Fn:          tools.ToolContinueRun(),
+		Deferred:    true,
 	})
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on sglang hooks that live in the chat package.
+	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
+	// needs a FetchToolsRegistry interface that chat.ToolRegistry implements.
 }
+
+// FetchToolsSchema returns the fetch_tools schema for external registration.
+func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 
 // RegisterAutoresearchTool registers the autoresearch tool with the given runner.
 // Called separately from RegisterCoreTools because the runner is created by the
@@ -66,6 +72,7 @@ func RegisterAutoresearchTool(registry toolctx.ToolRegistrar, runner *autoresear
 		Description: "Autonomous experiment loop (karpathy/autoresearch). Iteratively modifies code, runs experiments, evaluates a scalar metric, and keeps improvements or reverts failures — all without human intervention. Actions: init (configure), start (begin loop), stop (halt), status (check progress), results (get log)",
 		InputSchema: autoresearchToolSchema(),
 		Fn:          tools.ToolAutoresearch(runner),
+		Deferred:    true,
 	})
 }
 
@@ -130,6 +137,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Description:     "Code analysis: outline (file structure), symbols (find definitions), references (find usages), imports (dependency graph), signature (function signatures). Supports Go (AST) and Rust (regex)",
 		InputSchema:     analyzeToolSchema(),
 		Fn:              tools.ToolAnalyze(workspaceDir),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -137,6 +145,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Description: "Run tests/builds (go/cargo/make). Actions: run, build, check. Structured pass/fail/skip results",
 		InputSchema: testToolSchema(),
 		Fn:          tools.ToolTest(workspaceDir),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "git",
@@ -165,6 +174,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 			Description:     "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
 			InputSchema:     readSpilloverToolSchema(),
 			Fn:              tools.ToolSpilloverRead(deps.SpilloverStore),
+			Deferred:        true,
 			ConcurrencySafe: true,
 		})
 	}
@@ -174,6 +184,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Description: "Manage GitHub webhooks for KAIROS: register Deneb's /webhook/github endpoint on a repo, list existing webhooks, delete, or check Deneb-side config status",
 		InputSchema: githubWebhookToolSchema(),
 		Fn:          tools.ToolGitHubWebhook(),
+		Deferred:    true,
 	})
 
 }
@@ -222,6 +233,7 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 		Description:     "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
 		InputSchema:     sessionsListToolSchema(),
 		Fn:              tools.ToolSessionsList(d.Manager),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -229,6 +241,7 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 		Description:     "Fetch message history from another session (default: last 20 messages)",
 		InputSchema:     sessionsHistoryToolSchema(),
 		Fn:              tools.ToolSessionsHistory(d.Transcript),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -236,6 +249,7 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 		Description:     "Search all past session transcripts by keyword",
 		InputSchema:     sessionsSearchToolSchema(),
 		Fn:              tools.ToolSessionsSearch(d.Transcript),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -243,18 +257,21 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 		Description: "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
 		InputSchema: sessionsSendToolSchema(),
 		Fn:          tools.ToolSessionsSend(d),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions_spawn",
 		Description: "Create an isolated sub-agent session for parallel work. Use subagents to monitor",
 		InputSchema: sessionsSpawnToolSchema(),
 		Fn:          tools.ToolSessionsSpawn(d),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "subagents",
 		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: subagentsToolSchema(),
 		Fn:          tools.ToolSubagents(d),
+		Deferred:    true,
 	})
 }
 
@@ -277,6 +294,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          tools.ToolCron(chrono),
+		Deferred:    true,
 	})
 
 	// Build gmail pipeline deps from available subsystems.
@@ -293,6 +311,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Description: "Gmail (native OAuth2): inbox, search, read, send, reply, labels, analyze (LLM 이메일 분석, multi-stage pipeline). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
 		Fn:          tools.ToolGmail(gmailPipelineDeps),
+		Deferred:    true,
 	})
 	// Morning letter: needs executor for web search calls.
 	if exec, ok := registry.(toolctx.ToolExecutor); ok {
@@ -301,6 +320,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 			Description: "Collect daily morning briefing data (모닝레터). Fetches weather, exchange rates, copper price (MetalpriceAPI), calendar, and email in parallel. Returns structured JSON for you to compose the final letter",
 			InputSchema: morningLetterToolSchema(),
 			Fn:          tools.ToolMorningLetter(exec),
+			Deferred:    true,
 		})
 	}
 }
@@ -329,6 +349,7 @@ func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sgl
 		Description:     "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
 		InputSchema:     healthCheckToolSchema(),
 		Fn:              tools.ToolHealthCheck(d, buildSglangProbe(sglang)),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 }
@@ -340,6 +361,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, d
 		Description:     "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
 		InputSchema:     imageToolSchema(),
 		Fn:              tools.ToolImage(llmClient, defaultModel),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -347,6 +369,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, d
 		Description:     "Extract transcript/subtitles and metadata from a YouTube video",
 		InputSchema:     youtubeTranscriptToolSchema(),
 		Fn:              tools.ToolYouTubeTranscript(),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -354,6 +377,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, d
 		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
 		InputSchema: sendFileToolSchema(),
 		Fn:          tools.ToolSendFile(),
+		Deferred:    true,
 	})
 }
 
@@ -364,6 +388,7 @@ func RegisterDataTools(registry toolctx.ToolRegistrar) {
 		Description:     "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 		InputSchema:     kvToolSchema(),
 		Fn:              tools.ToolKV(),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 }
@@ -376,6 +401,7 @@ func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) 
 		Description:     "Read multiple files in one call (up to 20). Each file supports offset/limit/function extraction. Partial failures reported individually without aborting",
 		InputSchema:     batchReadToolSchema(),
 		Fn:              tools.ToolBatchRead(workspaceDir),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -383,6 +409,7 @@ func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) 
 		Description:     "Grep for a pattern then auto-read matching files with surrounding context. Combines grep+read into one step. Returns file content around each match",
 		InputSchema:     searchAndReadToolSchema(),
 		Fn:              tools.ToolSearchAndRead(workspaceDir),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -390,6 +417,7 @@ func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) 
 		Description:     "Deep code inspection: file outline + imports + git history in one call. depth=shallow (outline+imports), deep (+git log+stats), symbol (+definition+references+blame). Auto-promotes to symbol depth when symbol param is set",
 		InputSchema:     inspectToolSchema(),
 		Fn:              tools.ToolInspect(workspaceDir),
+		Deferred:        true,
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -397,6 +425,7 @@ func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) 
 		Description: "Apply a unified diff patch (git diff format). Handles multi-file, multi-hunk patches atomically via git apply. Use dry_run=true to verify before applying",
 		InputSchema: applyPatchToolSchema(),
 		Fn:          tools.ToolApplyPatch(workspaceDir),
+		Deferred:    true,
 	})
 }
 

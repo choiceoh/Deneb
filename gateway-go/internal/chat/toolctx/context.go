@@ -21,6 +21,7 @@ const (
 	ctxKeyFileCache
 	ctxKeyToolPreset
 	ctxKeyContinuationSignal
+	ctxKeyDeferredActivation
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -173,4 +174,51 @@ func WithContinuationSignal(ctx context.Context, sig *ContinuationSignal) contex
 func ContinuationSignalFromContext(ctx context.Context) *ContinuationSignal {
 	s, _ := ctx.Value(ctxKeyContinuationSignal).(*ContinuationSignal)
 	return s
+}
+
+// --- DeferredActivation ---
+
+// DeferredActivation tracks which deferred tools have been activated via
+// fetch_tools during a run. Thread-safe; the fetch_tools tool sets it from
+// a tool goroutine, the executor reads it before each turn to inject
+// activated tools into the ChatRequest.
+type DeferredActivation struct {
+	mu        sync.Mutex
+	activated map[string]bool
+}
+
+// NewDeferredActivation creates a new (empty) DeferredActivation tracker.
+func NewDeferredActivation() *DeferredActivation {
+	return &DeferredActivation{activated: make(map[string]bool)}
+}
+
+// Activate marks the given tool names as activated.
+func (d *DeferredActivation) Activate(names []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, n := range names {
+		d.activated[n] = true
+	}
+}
+
+// ActivatedNames returns the set of activated tool names.
+func (d *DeferredActivation) ActivatedNames() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]string, 0, len(d.activated))
+	for n := range d.activated {
+		out = append(out, n)
+	}
+	return out
+}
+
+// WithDeferredActivation attaches a DeferredActivation to the context.
+func WithDeferredActivation(ctx context.Context, da *DeferredActivation) context.Context {
+	return context.WithValue(ctx, ctxKeyDeferredActivation, da)
+}
+
+// DeferredActivationFromContext extracts the DeferredActivation from a context.
+func DeferredActivationFromContext(ctx context.Context) *DeferredActivation {
+	da, _ := ctx.Value(ctxKeyDeferredActivation).(*DeferredActivation)
+	return da
 }

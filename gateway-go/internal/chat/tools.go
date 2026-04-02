@@ -325,7 +325,7 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 	tools := make([]llm.Tool, 0, len(r.order))
 	for _, name := range r.order {
 		def := r.tools[name]
-		if def.Hidden {
+		if def.Hidden || def.Deferred {
 			continue
 		}
 		schema := def.InputSchema
@@ -358,7 +358,7 @@ func (r *ToolRegistry) FilteredLLMTools(allowed map[string]bool) []llm.Tool {
 			continue
 		}
 		def := r.tools[name]
-		if def.Hidden {
+		if def.Hidden || def.Deferred {
 			continue
 		}
 		schema := def.InputSchema
@@ -409,4 +409,58 @@ func (r *ToolRegistry) SortedNames() []string {
 	names := r.Names()
 	sort.Strings(names)
 	return names
+}
+
+// DeferredLLMTools returns pre-serialized LLM tool definitions for the named
+// deferred tools. Unknown or non-deferred names are silently skipped.
+func (r *ToolRegistry) DeferredLLMTools(names []string) []llm.Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	tools := make([]llm.Tool, 0, len(names))
+	for _, name := range names {
+		def, ok := r.tools[name]
+		if !ok || !def.Deferred {
+			continue
+		}
+		schema := def.InputSchema
+		if schema == nil {
+			schema = map[string]any{"type": "object"}
+		}
+		t := llm.Tool{
+			Name:        def.Name,
+			Description: def.Description,
+			InputSchema: schema,
+		}
+		t.PreSerialize()
+		tools = append(tools, t)
+	}
+	return tools
+}
+
+// DeferredSummaries returns name+description for all deferred (non-hidden) tools.
+func (r *ToolRegistry) DeferredSummaries() []toolctx.DeferredToolSummary {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var out []toolctx.DeferredToolSummary
+	for _, name := range r.order {
+		def := r.tools[name]
+		if def.Deferred && !def.Hidden {
+			out = append(out, toolctx.DeferredToolSummary{
+				Name:        def.Name,
+				Description: def.Description,
+			})
+		}
+	}
+	return out
+}
+
+// DeferredToolDef returns the ToolDef for a deferred tool, or false if not found/not deferred.
+func (r *ToolRegistry) DeferredToolDef(name string) (ToolDef, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	def, ok := r.tools[name]
+	if !ok || !def.Deferred {
+		return ToolDef{}, false
+	}
+	return def, true
 }

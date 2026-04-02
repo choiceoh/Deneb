@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
@@ -157,10 +156,10 @@ func handleRunSuccess(
 	}
 
 	// Deliver response back to the originating channel (e.g., Telegram).
-	// Use reply.ParseReplyDirectives for unified processing: silent token
+	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
-	if params.Delivery != nil && result.Text != "" {
-		directives := reply.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
+	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives != nil {
+		directives := deps.parseReplyDirectives(result.Text, params.Delivery.MessageID, "")
 		if directives.IsSilent {
 			logger.Info("suppressing silent reply (NO_REPLY)")
 			// Clean up draft streaming message when reply is suppressed.
@@ -848,12 +847,15 @@ func formatToolActivitySummary(activities []agent.ToolActivity) string {
 }
 
 // toPromptToolDefs converts chat.ToolDef slice to the minimal prompt.ToolDef
-// slice needed for system prompt assembly. Only the Name field is required
-// by the prompt package; the full ToolDef (with Fn, Schema, etc.) stays in chat/.
+// slice needed for system prompt assembly. Deferred tools are excluded — they
+// are listed separately via DeferredSummaries in SystemPromptParams.
 func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
-	out := make([]prompt.ToolDef, len(defs))
-	for i, d := range defs {
-		out[i] = prompt.ToolDef{Name: d.Name}
+	out := make([]prompt.ToolDef, 0, len(defs))
+	for _, d := range defs {
+		if d.Deferred {
+			continue
+		}
+		out = append(out, prompt.ToolDef{Name: d.Name})
 	}
 	return out
 }

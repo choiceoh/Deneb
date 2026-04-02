@@ -2,6 +2,7 @@ package chat
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 )
 
@@ -21,6 +22,15 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Local AI analysis for noisy outputs or multi-source orchestration. Prefer direct tools for simple read/grep/find/tree/git/web/http/memory-style lookups. Shortcuts: file, exec, grep, find, url, diff, test, tree, git_log, health, memory, vega, image + more",
 		InputSchema: toolreg.PilotToolSchema(),
 		Fn:          pilot.ToolPilot(registry, deps.WorkspaceDir),
+		Deferred:    true,
+	})
+
+	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.
+	registry.RegisterTool(ToolDef{
+		Name:        "fetch_tools",
+		Description: "Load full schemas for deferred tools so you can call them. Use names (exact) or query (keyword search). The activated tools become available on the next turn",
+		InputSchema: toolreg.FetchToolsSchema(),
+		Fn:          tools.ToolFetchTools(registry),
 	})
 
 	RegisterDefaultPostProcessors(registry)

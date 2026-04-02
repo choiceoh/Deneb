@@ -21,8 +21,15 @@ type ToolDef struct {
 	InputSchema     map[string]any
 	Fn              ToolFunc
 	Hidden          bool   // if true, excluded from LLMTools() but still callable via Execute
+	Deferred        bool   // if true, excluded from initial LLMTools() but activatable via fetch_tools
 	Profile         string // optional: "coding" = coding-only, "" = available in all profiles
 	ConcurrencySafe bool   // if true, safe for parallel execution (no shared-state mutations)
+}
+
+// DeferredToolSummary is a minimal view of a deferred tool for system prompt assembly.
+type DeferredToolSummary struct {
+	Name        string
+	Description string
 }
 
 // ToolRegistrar accepts tool registrations. Implemented by chat.ToolRegistry.
