@@ -92,6 +92,15 @@ func RunAgent(
 			}
 		}
 
+		// Dynamic tool injection: from turn 1 onward, check if new tools
+		// were activated (e.g., via fetch_tools). Append them to cfg.Tools
+		// so they appear in subsequent LLM requests.
+		if turn > 0 && cfg.DynamicToolsProvider != nil {
+			if extra := cfg.DynamicToolsProvider(); len(extra) > 0 {
+				cfg.Tools = appendUniqueTools(cfg.Tools, extra)
+			}
+		}
+
 		req := llm.ChatRequest{
 			Model:            cfg.Model,
 			Messages:         messages,
@@ -533,6 +542,22 @@ func buildConcurrencyCheck(tools ToolExecutor) func(string) bool {
 		return cc.IsConcurrencySafe
 	}
 	return func(name string) bool { return readOnlyToolFallback[name] }
+}
+
+// appendUniqueTools appends extra tools to base, skipping any whose name
+// already exists in base. Used for dynamic tool injection (deferred tools).
+func appendUniqueTools(base, extra []llm.Tool) []llm.Tool {
+	existing := make(map[string]bool, len(base))
+	for _, t := range base {
+		existing[t.Name] = true
+	}
+	for _, t := range extra {
+		if !existing[t.Name] {
+			base = append(base, t)
+			existing[t.Name] = true
+		}
+	}
+	return base
 }
 
 // turnResult holds the parsed output of a single LLM turn.

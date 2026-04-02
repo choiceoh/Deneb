@@ -11,8 +11,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -119,7 +119,7 @@ type runDeps struct {
 	emitTranscriptFn func(sessionKey string, message any, messageID string)
 	sessionMemory    *SessionMemoryStore // optional; structured session state
 	contextCfg       ContextConfig
-	compactionCfg    CompactionConfig
+	compactionCfg    aurora.SweepConfig
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string
@@ -146,6 +146,13 @@ type runDeps struct {
 	// When false (sync paths), the ContinuationSignal is not injected into tool
 	// context, so the tool returns "not available" instead of silently no-oping.
 	continuationEnabled bool
+
+	// chatport boundary: injected implementations that decouple chat from autoreply.
+	// When nil, the corresponding functionality is simply skipped.
+	newTypingSignaler    func(onStart func()) chatport.TypingSignaler // optional; creates phase-aware typing signaler
+	sanitizeDraft        chatport.DraftSanitizerFunc                  // optional; cleans streaming draft text
+	parseReplyDirectives chatport.ParseReplyDirectivesFunc            // optional; parses reply directives
+	isTransientError     chatport.IsTransientErrorFunc                // optional; checks transient HTTP errors
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
@@ -235,16 +242,12 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	ctx = WithSessionKey(ctx, params.SessionKey)
 
 	// Set up phase-aware typing indicator for channel delivery (e.g., Telegram).
-	// Uses TypingController (5s keepalive matching Telegram's sendChatAction TTL)
-	// with FullTypingSignaler for phase-aware signals (text, thinking, tool use).
-	var typingSignaler *typing.FullTypingSignaler
-	if deps.typingFn != nil && params.Delivery != nil {
+	// The factory (injected via chatport boundary) creates a TypingSignaler with
+	// a 5s keepalive matching Telegram's sendChatAction TTL.
+	var typingSignaler chatport.TypingSignaler
+	if deps.newTypingSignaler != nil && deps.typingFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
-		typingCtrl := typing.NewTypingController(typing.TypingControllerConfig{
-			OnStart:    func() { _ = deps.typingFn(ctx, delivery) },
-			IntervalMs: 5000, // Telegram typing expires after 5s
-		})
-		typingSignaler = typing.NewFullTypingSignaler(typingCtrl, typing.TypingModeInstant, false)
+		typingSignaler = deps.newTypingSignaler(func() { _ = deps.typingFn(ctx, delivery) })
 		typingSignaler.SignalRunStart()
 	}
 

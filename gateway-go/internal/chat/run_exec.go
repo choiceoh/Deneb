@@ -14,10 +14,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
+	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
@@ -71,7 +69,7 @@ func executeAgentRun(
 	params RunParams,
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
-	typingSignaler *typing.FullTypingSignaler,
+	typingSignaler chatport.TypingSignaler,
 	statusCtrl *telegram.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
@@ -341,10 +339,26 @@ func executeAgentRun(
 		// Build tool defs — filtered if a preset is active.
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
 		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
+
+		// Deferred tool summaries for system prompt listing.
+		deferredSummaries := deps.tools.DeferredSummaries()
+		var deferredToolInfos []prompt.DeferredToolInfo
+		for _, ds := range deferredSummaries {
+			// Skip deferred tools not in the allowed preset (if preset is active).
+			if len(allowed) > 0 && !allowed[ds.Name] {
+				continue
+			}
+			deferredToolInfos = append(deferredToolInfos, prompt.DeferredToolInfo{
+				Name:        ds.Name,
+				Description: ds.Description,
+			})
+		}
+
 		spp := prompt.SystemPromptParams{
-			WorkspaceDir: workspaceDir,
-			ToolDefs:     toolDefs,
-			UserTimezone: tz,
+			WorkspaceDir:  workspaceDir,
+			ToolDefs:      toolDefs,
+			DeferredTools: deferredToolInfos,
+			UserTimezone:  tz,
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
 			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
@@ -543,6 +557,11 @@ func executeAgentRun(
 		contSignal = NewContinuationSignal()
 	}
 
+	// DeferredActivation: tracks which deferred tools have been activated via
+	// fetch_tools during this run. The executor reads it each turn to inject
+	// newly activated tool schemas into the ChatRequest.
+	deferredActivation := NewDeferredActivation()
+
 	// Resolve thinking config from the session's ThinkingLevel setting.
 	var thinkingCfg *llm.ThinkingConfig
 	if cachedSession != nil && cachedSession.ThinkingLevel != "" {
@@ -605,10 +624,18 @@ func executeAgentRun(
 			ctx = WithRunCache(ctx, runCache)
 			ctx = WithFileCache(ctx, fileCache)
 			ctx = WithToolPreset(ctx, sessionToolPreset)
+			ctx = WithDeferredActivation(ctx, deferredActivation)
 			if contSignal != nil {
 				ctx = WithContinuationSignal(ctx, contSignal)
 			}
 			return ctx
+		},
+		DynamicToolsProvider: func() []llm.Tool {
+			names := deferredActivation.ActivatedNames()
+			if len(names) == 0 {
+				return nil
+			}
+			return deps.tools.DeferredLLMTools(names)
 		},
 		// Enable nudge budget continuation and max-tokens recovery.
 		NudgeBudget: &agent.NudgeBudgetConfig{
@@ -890,7 +917,10 @@ func executeAgentRun(
 				// Sanitize draft text: strip leaked tool call markup and
 				// fenced code blocks so commands/code are never shown in
 				// the Telegram streaming draft (vibe coder constraint).
-				sanitized := reply.SanitizeDraftText(current)
+				sanitized := current
+				if deps.sanitizeDraft != nil {
+					sanitized = deps.sanitizeDraft(current)
+				}
 				if sanitized == "" {
 					return
 				}
@@ -1036,7 +1066,7 @@ func executeAgentRun(
 			}
 
 			// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
-			if autoreply.IsTransientHTTPError(runErr.Error()) && ctx.Err() == nil {
+			if deps.isTransientError != nil && deps.isTransientError(runErr.Error()) && ctx.Err() == nil {
 				logger.Warn("transient HTTP error, retrying once", "error", runErr)
 				select {
 				case <-ctx.Done():

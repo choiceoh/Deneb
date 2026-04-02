@@ -20,6 +20,7 @@ func TestRegisterCoreTools(t *testing.T) {
 		"sessions_list", "sessions_history", "sessions_search",
 		"sessions_send", "sessions_spawn",
 		"subagents", "image", "youtube_transcript",
+		"fetch_tools",
 	}
 
 	registered := make(map[string]bool)
