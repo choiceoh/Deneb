@@ -12,7 +12,6 @@ option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 // PluginKind identifies the type of a plugin.
 enum PluginKind {
   PLUGIN_KIND_UNSPECIFIED = 0;
-  PLUGIN_KIND_CHANNEL = 1;
   PLUGIN_KIND_PROVIDER = 2;
   PLUGIN_KIND_FEATURE = 3;
 }

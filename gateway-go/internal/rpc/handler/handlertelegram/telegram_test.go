@@ -1,4 +1,4 @@
-package channel
+package handlertelegram
 
 import (
 	"context"
@@ -40,14 +40,7 @@ func Test_parseChatID(t *testing.T) {
 func TestLifecycleMethods_nilDeps(t *testing.T) {
 	m := LifecycleMethods(LifecycleDeps{})
 	if m != nil {
-		t.Fatal("expected nil for nil ChannelLifecycle")
-	}
-}
-
-func TestEventsMethods_nilDeps(t *testing.T) {
-	m := EventsMethods(EventsDeps{})
-	if m != nil {
-		t.Fatal("expected nil for nil Broadcaster")
+		t.Fatal("expected nil for nil TelegramPlugin")
 	}
 }
 

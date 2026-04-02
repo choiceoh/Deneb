@@ -5,7 +5,7 @@
 // Instead of the full plugin discovery/loading/manifest system (~36K LOC in TS),
 // this provides only what's needed:
 //
-//   - A minimal plugin registry for wiring channel and provider plugins
+//   - A minimal plugin registry for wiring provider plugins
 //   - A hook runner for pre/post-agent hooks
 //   - Provider resolution (model selection, auth)
 //
@@ -25,7 +25,6 @@ import (
 type PluginKind string
 
 const (
-	KindChannel  PluginKind = "channel"
 	KindProvider PluginKind = "provider"
 	KindHook     PluginKind = "hook"
 	KindTool     PluginKind = "tool"
@@ -41,7 +40,7 @@ type PluginMeta struct {
 }
 
 // Registry is a minimal plugin registry for the Telegram-only deployment.
-// It holds registered plugins (channels, providers, hooks) and provides
+// It holds registered plugins (providers, hooks, tools) and provides
 // lookup methods for the gateway runtime.
 type Registry struct {
 	mu      sync.RWMutex

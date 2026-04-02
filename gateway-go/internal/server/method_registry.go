@@ -14,7 +14,8 @@ import (
 
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
-	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
+	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
+	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertelegram"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
@@ -87,22 +88,24 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Broadcaster: hub.Broadcast,
 		}),
 
-		// --- Channel events and lifecycle ---
-		handlerchannel.BroadcastMethods(handlerchannel.EventsDeps{
+		// --- Events (transport-agnostic) ---
+		handlerevents.BroadcastMethods(handlerevents.EventsDeps{
 			Broadcaster: hub.Broadcaster(),
 			Logger:      hub.Logger(),
 		}),
-		handlerchannel.EventsMethods(handlerchannel.EventsDeps{
+		handlerevents.EventsMethods(handlerevents.EventsDeps{
 			Broadcaster: hub.Broadcaster(),
 			Logger:      hub.Logger(),
 		}),
-		handlerchannel.LifecycleMethods(handlerchannel.LifecycleDeps{
+
+		// --- Telegram lifecycle and messaging ---
+		handlertelegram.LifecycleMethods(handlertelegram.LifecycleDeps{
 			TelegramPlugin: hub.Telegram(),
 			Hooks:          hub.Hooks(),
 			InternalHooks:  hub.InternalHooks(),
 			Broadcaster:    hub.Broadcaster(),
 		}),
-		handlerchannel.MessagingMethods(handlerchannel.MessagingDeps{
+		handlertelegram.MessagingMethods(handlertelegram.MessagingDeps{
 			TelegramPlugin: hub.Telegram(),
 		}),
 

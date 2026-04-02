@@ -5,25 +5,6 @@ import (
 	"testing"
 )
 
-func TestFullRegistry_Channels(t *testing.T) {
-	r := NewFullRegistry(testLogger())
-	err := r.RegisterChannel(ChannelRegistration{
-		PluginID:  "telegram-ext",
-		ChannelID: "telegram",
-		Label:     "Telegram",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ch := r.GetChannel("telegram")
-	if ch == nil || ch.ChannelID != "telegram" {
-		t.Error("expected telegram channel")
-	}
-	if len(r.ListChannels()) != 1 {
-		t.Error("expected 1 channel")
-	}
-}
-
 func TestFullRegistry_Providers(t *testing.T) {
 	r := NewFullRegistry(testLogger())
 	r.RegisterProvider(ProviderRegistration{
@@ -63,8 +44,7 @@ func TestFullRegistry_HTTPRouteConflict(t *testing.T) {
 
 func TestFullRegistry_Summary(t *testing.T) {
 	r := NewFullRegistry(testLogger())
-	r.RegisterPlugin(PluginMeta{ID: "test", Kind: KindChannel, Enabled: true})
-	r.RegisterChannel(ChannelRegistration{PluginID: "test", ChannelID: "telegram"})
+	r.RegisterPlugin(PluginMeta{ID: "test", Kind: KindProvider, Enabled: true})
 	r.RegisterProvider(ProviderRegistration{PluginID: "test", ProviderID: "anthropic"})
 	r.RegisterTool(ToolRegistration{
 		PluginID:   "test",
@@ -76,9 +56,6 @@ func TestFullRegistry_Summary(t *testing.T) {
 	summary := r.Summary()
 	if summary.Plugins != 1 {
 		t.Errorf("plugins = %d", summary.Plugins)
-	}
-	if summary.Channels != 1 {
-		t.Errorf("channels = %d", summary.Channels)
 	}
 	if summary.Providers != 1 {
 		t.Errorf("providers = %d", summary.Providers)
