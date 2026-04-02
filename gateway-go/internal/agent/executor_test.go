@@ -1,7 +1,11 @@
 package agent
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
@@ -41,5 +45,61 @@ func TestExtractThinkingText_MultipleBlocks(t *testing.T) {
 	got := extractThinkingText(blocks)
 	if got != "second thinking block — closer to tools" {
 		t.Errorf("expected last thinking block, got: %q", got)
+	}
+}
+
+// --- Stream idle watchdog tests ---
+
+// makeStreamEvent creates a minimal SSE event for testing.
+func makeStreamEvent(typ string) llm.StreamEvent {
+	return llm.StreamEvent{Type: typ, Payload: json.RawMessage(`{}`)}
+}
+
+func TestConsumeStreamInto_IdleTimeout(t *testing.T) {
+	// Channel that never sends — should trigger idle timeout.
+	events := make(chan llm.StreamEvent)
+	ctx := context.Background()
+	result := &turnResult{}
+
+	err := consumeStreamInto(ctx, events, StreamHooks{}, result, 50*time.Millisecond)
+	if !errors.Is(err, ErrStreamIdle) {
+		t.Fatalf("expected ErrStreamIdle, got: %v", err)
+	}
+}
+
+func TestConsumeStreamInto_IdleResetOnEvent(t *testing.T) {
+	// Events arrive just before the idle timeout, then stream closes.
+	events := make(chan llm.StreamEvent, 3)
+	ctx := context.Background()
+	result := &turnResult{}
+
+	// Send message_start, then close after a short delay.
+	go func() {
+		events <- makeStreamEvent("message_start")
+		time.Sleep(30 * time.Millisecond)
+		events <- makeStreamEvent("message_stop")
+	}()
+
+	err := consumeStreamInto(ctx, events, StreamHooks{}, result, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("expected nil error (stream completed), got: %v", err)
+	}
+}
+
+func TestConsumeStreamInto_IdleDisabled(t *testing.T) {
+	// Negative timeout disables the watchdog. Stream closes normally.
+	events := make(chan llm.StreamEvent, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	result := &turnResult{}
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		close(events)
+	}()
+
+	err := consumeStreamInto(ctx, events, StreamHooks{}, result, -1)
+	if err != nil {
+		t.Fatalf("expected nil (channel closed), got: %v", err)
 	}
 }
