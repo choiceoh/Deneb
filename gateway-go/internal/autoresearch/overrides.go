@@ -158,7 +158,21 @@ func findWithFallback(content, pattern string) (string, error) {
 			return m[1], nil
 		}
 	}
-	return "", fmt.Errorf("pattern %q (and relaxed variants) matched nothing", pattern)
+	// Include the actual line from the file for debugging anchored-pattern mismatches.
+	hint := ""
+	for _, line := range strings.Split(content, "\n") {
+		// Strip the capture group to get the constant name from the pattern.
+		bare := regexp.MustCompile(`\(.*?\)`).ReplaceAllString(pattern, "")
+		bare = strings.TrimPrefix(bare, "^")
+		bare = strings.TrimSuffix(bare, "$")
+		// Use a simple identifier extracted from the bare pattern.
+		ids := regexp.MustCompile(`[A-Za-z_]\w*`).FindString(bare)
+		if ids != "" && strings.Contains(line, ids) {
+			hint = fmt.Sprintf("; actual line: %q", strings.TrimSpace(line))
+			break
+		}
+	}
+	return "", fmt.Errorf("pattern %q (and relaxed variants) matched nothing%s", pattern, hint)
 }
 
 // findSubmatchIndexWithFallback tries the pattern, then relaxed variants.
