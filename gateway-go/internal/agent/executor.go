@@ -63,6 +63,7 @@ func RunAgent(
 	// Max-output-tokens recovery: tracks how many times we've auto-resumed
 	// after the LLM response was truncated by max_tokens.
 	var maxTokensRecoveryCount int
+	baseMaxTokens := cfg.MaxTokens // Original value before any recovery scaling.
 
 	// Nudge budget continuation: tracks how many times we've injected a nudge
 	// message after end_turn to prompt the LLM for remaining work.
@@ -221,14 +222,24 @@ func RunAgent(
 		if turnRes.stopReason == "max_tokens" && len(turnRes.toolCalls) == 0 &&
 			cfg.MaxOutputTokensRecovery > 0 && maxTokensRecoveryCount < cfg.MaxOutputTokensRecovery {
 			maxTokensRecoveryCount++
-			logger.Info("max_tokens recovery: injecting resume message",
+
+			// Scale up MaxTokens for the next call so the model has more room.
+			scale := 2.0 // Default: double the original.
+			if idx := maxTokensRecoveryCount - 1; idx < len(cfg.MaxOutputTokensScaleFactors) {
+				scale = cfg.MaxOutputTokensScaleFactors[idx]
+			}
+			cfg.MaxTokens = int(float64(baseMaxTokens) * scale)
+
+			logger.Info("max_tokens recovery: scaling output tokens and injecting resume",
 				"attempt", maxTokensRecoveryCount,
-				"maxAttempts", cfg.MaxOutputTokensRecovery)
+				"maxAttempts", cfg.MaxOutputTokensRecovery,
+				"baseMaxTokens", baseMaxTokens,
+				"newMaxTokens", cfg.MaxTokens)
 			// Append the truncated assistant output so the LLM sees what it already wrote.
 			messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 			// Inject a user-role resume prompt.
 			messages = append(messages, llm.NewTextMessage("user",
-				"[Output was truncated due to token limit. Resume directly from where you left off without repeating what was already said.]"))
+				"[Output was truncated due to token limit. Resume directly from where you left off — no apology, no recap.]"))
 			continue
 		}
 

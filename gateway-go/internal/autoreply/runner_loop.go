@@ -272,7 +272,9 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 			sanitized := SanitizeUntrustedContent(agentResult.Text, DefaultUntrustedContentPolicy())
 
 			// Detect streaming directives in output text (informational only).
-			DetectStreamingDirective(sanitized)
+			if sd := DetectStreamingDirective(sanitized); sd != nil {
+				logger.Debug("streaming directive in output", "type", sd.Type, "value", sd.Value)
+			}
 
 			// Coalesce output into structured blocks (text vs code) for
 			// downstream formatters (e.g., Telegram code block extraction).
