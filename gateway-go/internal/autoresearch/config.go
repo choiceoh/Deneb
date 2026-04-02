@@ -102,6 +102,24 @@ type Params struct {
 	// When reached, the runner stops and sends a completion report with chart.
 	// 0 means unlimited (manual stop only). Default: 30.
 	MaxIterations int `json:"max_iterations,omitempty"`
+
+	// ServerCmd is a shell command to start a persistent server process.
+	// When set, the runner starts the server once and restarts it only when
+	// target files change between iterations (detected via content hash).
+	// The metric script receives AUTORESEARCH_SERVER_URL so it can skip
+	// starting its own server.
+	ServerCmd string `json:"server_cmd,omitempty"`
+	// ServerHealthURL is the HTTP endpoint to poll for server readiness.
+	// Example: "http://localhost:18790/health"
+	ServerHealthURL string `json:"server_health_url,omitempty"`
+	// ServerStartupSec is the max seconds to wait for the server health check.
+	// Default: 30.
+	ServerStartupSec int `json:"server_startup_sec,omitempty"`
+
+	// Parallelism controls how many hypotheses to evaluate in parallel per
+	// iteration. Each parallel slot gets its own git worktree. Default: 1
+	// (sequential, identical to current behavior). Max: 8.
+	Parallelism int `json:"parallelism,omitempty"`
 }
 
 // DefaultParams returns the canonical default values for all tunable parameters.
@@ -180,6 +198,18 @@ func (p *Params) applyDefaults() {
 	}
 	if p.MaxIterations < 0 {
 		p.MaxIterations = 0
+	}
+
+	if p.ServerStartupSec <= 0 {
+		p.ServerStartupSec = 30
+	}
+
+	// Parallelism: default 1 (sequential), cap at 8.
+	if p.Parallelism <= 0 {
+		p.Parallelism = 1
+	}
+	if p.Parallelism > 8 {
+		p.Parallelism = 8
 	}
 
 	// Sanity: stuck thresholds must be in ascending order.

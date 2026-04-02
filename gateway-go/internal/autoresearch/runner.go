@@ -2,6 +2,9 @@ package autoresearch
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -9,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,8 +47,12 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 	if cacheDir := cfg.ResolveCacheDir(workdir); cacheDir != "" {
 		if mkErr := os.MkdirAll(cacheDir, 0o755); mkErr == nil {
 			cmd.Env = append(cmd.Env, "AUTORESEARCH_CACHE_DIR="+cacheDir)
+			cmd.Env = append(cmd.Env,
+				"GOCACHE="+filepath.Join(cacheDir, "go-build"),
+			)
 		}
 	}
+	cmd.Env = append(cmd.Env, "AUTORESEARCH_ITERATION=0")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -79,17 +87,18 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 
 // Runner manages the autoresearch experiment loop.
 type Runner struct {
-	mu          sync.Mutex
-	cancel      context.CancelFunc
-	running     bool
-	workdir      string // original repo directory (state lives here)
-	worktreeDir  string // isolated worktree for experiments (empty when not running)
+	mu           sync.Mutex
+	cancel       context.CancelFunc
+	running      bool
+	workdir      string   // original repo directory (state lives here)
+	worktreeDirs []string // isolated worktrees for experiments (empty when not running)
 	client       *llm.Client
 	model        string
 	defaultModel string // server-injected default (e.g., lightweight model); overrides Params.DefaultModel
 	params       Params // snapshot of tunable params from config at Start() time
-	notifier    Notifier
-	logger      *slog.Logger
+	notifier     Notifier
+	server       *ServerManager
+	logger       *slog.Logger
 }
 
 // NewRunner creates an autoresearch runner.
@@ -198,45 +207,62 @@ func (r *Runner) Start(workdir string) error {
 		return fmt.Errorf("save config with original branch: %w", err)
 	}
 
-	// Create isolated worktree for the experiment.
-	branchName := "autoresearch/" + cfg.BranchTag
-	wtPath := filepath.Join(workdir, worktreeSubdir)
+	// Create isolated worktrees for experiments.
+	parallelism := cfg.Params.Parallelism
+	worktrees := make([]string, parallelism)
 
-	// Clean up stale worktree from a previous run if it exists.
-	if _, statErr := os.Stat(wtPath); statErr == nil {
-		r.logger.Info("cleaning up stale worktree", "path", wtPath)
-		_ = gitWorktreeRemove(context.Background(), workdir, wtPath)
-		// If worktree remove didn't fully clean up, remove the directory.
-		os.RemoveAll(wtPath)
-	}
-
-	// Create worktree with experiment branch.
-	createBranch := !gitBranchExists(context.Background(), workdir, branchName)
-	if err := gitWorktreeAdd(context.Background(), workdir, wtPath, branchName, createBranch); err != nil {
-		return fmt.Errorf("create experiment worktree: %w", err)
-	}
-	if createBranch {
-		r.logger.Info("created experiment branch in worktree", "branch", branchName, "worktree", wtPath)
-	} else {
-		r.logger.Info("using existing experiment branch in worktree", "branch", branchName, "worktree", wtPath)
-	}
-
-	// Symlink .autoresearch/ state from source dir into worktree so all
-	// config/results reads and writes go to the original location.
-	stateDir := filepath.Join(workdir, configDir)
-	wtStateLink := filepath.Join(wtPath, configDir)
-	if err := os.Symlink(stateDir, wtStateLink); err != nil {
-		// Non-fatal: fall back to copying config if symlink fails.
-		r.logger.Warn("symlink failed, copying config instead", "error", err)
-		os.MkdirAll(filepath.Join(wtPath, configDir), 0o755)
-		if data, readErr := os.ReadFile(configPath(workdir)); readErr == nil {
-			os.WriteFile(configPath(wtPath), data, 0o644)
+	for i := range parallelism {
+		var suffix string
+		var branchName string
+		if parallelism == 1 {
+			suffix = ""
+			branchName = "autoresearch/" + cfg.BranchTag
+		} else {
+			suffix = fmt.Sprintf("-%d", i)
+			branchName = fmt.Sprintf("autoresearch/%s-wt%d", cfg.BranchTag, i)
 		}
+		wtPath := filepath.Join(workdir, worktreeSubdir+suffix)
+
+		// Clean up stale worktree from a previous run if it exists.
+		if _, statErr := os.Stat(wtPath); statErr == nil {
+			r.logger.Info("cleaning up stale worktree", "path", wtPath)
+			_ = gitWorktreeRemove(context.Background(), workdir, wtPath)
+			os.RemoveAll(wtPath)
+		}
+
+		// Create worktree with experiment branch.
+		createBranch := !gitBranchExists(context.Background(), workdir, branchName)
+		if err := gitWorktreeAdd(context.Background(), workdir, wtPath, branchName, createBranch); err != nil {
+			// Clean up any worktrees we already created.
+			for j := range i {
+				_ = gitWorktreeRemove(context.Background(), workdir, worktrees[j])
+				os.RemoveAll(worktrees[j])
+			}
+			return fmt.Errorf("create experiment worktree %d: %w", i, err)
+		}
+		if createBranch {
+			r.logger.Info("created experiment branch in worktree", "branch", branchName, "worktree", wtPath)
+		} else {
+			r.logger.Info("using existing experiment branch in worktree", "branch", branchName, "worktree", wtPath)
+		}
+
+		// Symlink .autoresearch/ state from source dir into worktree.
+		stateDir := filepath.Join(workdir, configDir)
+		wtStateLink := filepath.Join(wtPath, configDir)
+		if err := os.Symlink(stateDir, wtStateLink); err != nil {
+			r.logger.Warn("symlink failed, copying config instead", "error", err)
+			os.MkdirAll(filepath.Join(wtPath, configDir), 0o755)
+			if data, readErr := os.ReadFile(configPath(workdir)); readErr == nil {
+				os.WriteFile(configPath(wtPath), data, 0o644)
+			}
+		}
+
+		worktrees[i] = wtPath
 	}
 
-	// Record the kept commit as the current HEAD on the experiment branch.
+	// Record the kept commit as the current HEAD on the primary experiment branch.
 	if cfg.KeptCommit == "" {
-		headSHA, _ := gitRevParse(context.Background(), wtPath, "HEAD")
+		headSHA, _ := gitRevParse(context.Background(), worktrees[0], "HEAD")
 		cfg.KeptCommit = headSHA
 		if err := SaveConfig(workdir, cfg); err != nil {
 			r.logger.Warn("failed to save experiment config", "error", err)
@@ -247,13 +273,30 @@ func (r *Runner) Start(workdir string) error {
 	r.cancel = cancel
 	r.running = true
 	r.workdir = workdir
-	r.worktreeDir = wtPath
+	r.worktreeDirs = worktrees
 	r.model = cfg.Model
 	r.params = cfg.Params
 
-	go r.loop(ctx, wtPath)
-	r.logger.Info("autoresearch started", "workdir", workdir, "worktree", wtPath,
-		"metric", cfg.MetricName, "branch", branchName)
+	// Start persistent server if configured.
+	if cfg.Params.ServerCmd != "" {
+		sm := NewServerManager(r.logger)
+		if err := sm.Start(worktrees[0], cfg.Params.ServerCmd, cfg.Params.ServerHealthURL, cfg.Params.ServerStartupSec); err != nil {
+			r.logger.Error("failed to start persistent server", "error", err)
+			// Non-fatal: continue without persistent server.
+		} else {
+			// Record initial content hash.
+			if hash, err := contentHash(worktrees[0], cfg.TargetFiles); err == nil {
+				sm.SetHash(hash)
+			}
+			r.server = sm
+		}
+	}
+
+	// Primary worktree is used for sequential mode loop.
+	go r.loop(ctx, worktrees[0])
+	r.logger.Info("autoresearch started", "workdir", workdir,
+		"worktrees", len(worktrees), "metric", cfg.MetricName,
+		"parallelism", parallelism)
 	return nil
 }
 
@@ -271,29 +314,40 @@ func (r *Runner) Stop() {
 	r.logger.Info("autoresearch stopped")
 }
 
-// cleanupWorktree removes the experiment worktree. Called from the loop's
+// cleanupWorktree removes all experiment worktrees. Called from the loop's
 // defer after the completion report has been sent.
 func (r *Runner) cleanupWorktree() {
 	r.mu.Lock()
-	wtDir := r.worktreeDir
+	wtDirs := r.worktreeDirs
 	srcDir := r.workdir
-	r.worktreeDir = ""
+	sm := r.server
+	r.worktreeDirs = nil
+	r.server = nil
 	r.mu.Unlock()
 
-	if wtDir == "" || srcDir == "" {
+	// Stop persistent server before removing worktrees.
+	if sm != nil {
+		sm.Stop()
+	}
+
+	if srcDir == "" {
 		return
 	}
 
-	// Remove the .autoresearch symlink first so git worktree remove
-	// doesn't follow it and delete the source state.
-	os.Remove(filepath.Join(wtDir, configDir))
+	for _, wtDir := range wtDirs {
+		if wtDir == "" {
+			continue
+		}
+		// Remove the .autoresearch symlink first so git worktree remove
+		// doesn't follow it and delete the source state.
+		os.Remove(filepath.Join(wtDir, configDir))
 
-	if err := gitWorktreeRemove(context.Background(), srcDir, wtDir); err != nil {
-		r.logger.Error("failed to remove worktree", "path", wtDir, "error", err)
-		// Last resort: remove the directory directly.
-		os.RemoveAll(wtDir)
+		if err := gitWorktreeRemove(context.Background(), srcDir, wtDir); err != nil {
+			r.logger.Error("failed to remove worktree", "path", wtDir, "error", err)
+			os.RemoveAll(wtDir)
+		}
+		r.logger.Info("cleaned up experiment worktree", "path", wtDir)
 	}
-	r.logger.Info("cleaned up experiment worktree", "path", wtDir)
 }
 
 // loop is the main experiment loop. It runs until ctx is cancelled or
@@ -338,7 +392,12 @@ func (r *Runner) loop(ctx context.Context, workdir string) {
 			}
 		}
 
-		err := r.runOneIteration(ctx, workdir)
+		var err error
+		if r.params.Parallelism > 1 {
+			err = r.runParallelIteration(ctx)
+		} else {
+			err = r.runOneIteration(ctx, workdir)
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				stopReason = "cancelled"
@@ -487,13 +546,47 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 
 	commitHash, _ := gitRevParse(ctx, workdir, "HEAD")
 
-	// Step 7: Run experiment with time budget.
-	startTime := time.Now()
-	expResult, runErr := r.runExperiment(ctx, workdir, cfg)
-	duration := int(time.Since(startTime).Seconds())
+	// Compute content hash once for server restart + caching.
+	fileHash, _ := contentHash(workdir, cfg.TargetFiles)
+
+	// Restart persistent server if target files changed.
+	if r.server != nil && fileHash != "" {
+		if _, restartErr := r.server.RestartIfNeeded(fileHash); restartErr != nil {
+			r.logger.Warn("server restart failed", "error", restartErr)
+		}
+	}
+
+	// Step 7: Run experiment with time budget (check cache first).
+	var expResult *experimentResult
+	var runErr error
+	var duration int
+	cacheHit := false
+
+	if cfg.CacheEnabled && fileHash != "" {
+		cacheDir := cfg.ResolveCacheDir(workdir)
+		if metric, ok := loadCachedMetric(cacheDir, fileHash, cfg.MetricCmd); ok {
+			r.logger.Info("cache hit, skipping experiment", "hash", fileHash, "metric", metric)
+			expResult = &experimentResult{metric: metric, stdout: fmt.Sprintf("cached: %.6f", metric)}
+			cacheHit = true
+		}
+	}
+
+	if !cacheHit {
+		startTime := time.Now()
+		expResult, runErr = r.runExperiment(ctx, workdir, cfg, iteration)
+		duration = int(time.Since(startTime).Seconds())
+
+		// Cache the result on success.
+		if runErr == nil && cfg.CacheEnabled && fileHash != "" {
+			cacheDir := cfg.ResolveCacheDir(workdir)
+			if saveErr := saveCachedMetric(cacheDir, fileHash, cfg.MetricCmd, expResult.metric); saveErr != nil {
+				r.logger.Warn("failed to cache metric", "error", saveErr)
+			}
+		}
+	}
 
 	// Save experiment output for debugging/analysis.
-	if expResult != nil {
+	if expResult != nil && !cacheHit {
 		if saveErr := SaveExperimentOutput(workdir, iteration, expResult.stdout, expResult.stderr); saveErr != nil {
 			r.logger.Error("failed to save experiment output", "error", saveErr)
 		}
@@ -996,7 +1089,7 @@ type experimentResult struct {
 }
 
 // runExperiment executes the metric command with a time budget.
-func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config) (*experimentResult, error) {
+func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config, iteration int) (*experimentResult, error) {
 	timeout := time.Duration(cfg.TimeBudgetSec) * time.Second
 	grace := time.Duration(cfg.Params.GracePeriodSec) * time.Second
 	expCtx, cancel := context.WithTimeout(ctx, timeout+grace)
@@ -1006,6 +1099,18 @@ func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config)
 	cmd.Dir = workdir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("TIME_BUDGET=%d", cfg.TimeBudgetSec))
 
+	// Warm-start env vars: metric scripts can use these for early termination
+	// or adaptive quality checks without any script changes required.
+	cmd.Env = append(cmd.Env, fmt.Sprintf("AUTORESEARCH_ITERATION=%d", iteration))
+	if cfg.BestMetric != nil {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("AUTORESEARCH_BEST_METRIC=%.6f", *cfg.BestMetric))
+	}
+
+	// Pass persistent server URL if a server is running.
+	if r.server != nil && r.server.IsRunning() {
+		cmd.Env = append(cmd.Env, "AUTORESEARCH_SERVER_URL="+r.server.URL())
+	}
+
 	// Provide a persistent cache directory for expensive operations
 	// (LLM inference, embeddings, etc.) that don't change across iterations.
 	if cacheDir := cfg.ResolveCacheDir(workdir); cacheDir != "" {
@@ -1013,6 +1118,12 @@ func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config)
 			r.logger.Warn("failed to create cache dir", "path", cacheDir, "error", err)
 		}
 		cmd.Env = append(cmd.Env, "AUTORESEARCH_CACHE_DIR="+cacheDir)
+
+		// Build cache: share Go build cache across iterations for incremental builds.
+		cmd.Env = append(cmd.Env,
+			"GOCACHE="+filepath.Join(cacheDir, "go-build"),
+			"GOMODCACHE="+filepath.Join(cacheDir, "go-mod"),
+		)
 	}
 
 	var stdoutBuf, stderrBuf strings.Builder
@@ -1118,6 +1229,93 @@ func extractMetricSmart(output, pattern string) (float64, error) {
 	return val, nil
 }
 
+// --- Metric caching ---
+
+// contentHash computes a deterministic SHA-256 hash of all target files.
+// Identical file contents produce the same hash regardless of iteration.
+func contentHash(workdir string, targetFiles []string) (string, error) {
+	sorted := make([]string, len(targetFiles))
+	copy(sorted, targetFiles)
+	sort.Strings(sorted)
+
+	h := sha256.New()
+	for _, f := range sorted {
+		data, err := os.ReadFile(filepath.Join(workdir, f))
+		if err != nil {
+			return "", fmt.Errorf("read %s for hash: %w", f, err)
+		}
+		h.Write([]byte(f))
+		h.Write([]byte{0})
+		h.Write(data)
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16], nil
+}
+
+// metricCacheEntry is the on-disk format for cached metric results.
+type metricCacheEntry struct {
+	Metric    float64 `json:"metric"`
+	MetricCmd string  `json:"metric_cmd"`
+	Timestamp string  `json:"timestamp"`
+}
+
+// loadCachedMetric checks if a metric result is cached for the given content hash.
+// Returns the cached metric and true if found and the metric_cmd matches.
+func loadCachedMetric(cacheDir, hash, metricCmd string) (float64, bool) {
+	path := filepath.Join(cacheDir, "results", hash+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	var entry metricCacheEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return 0, false
+	}
+	// Invalidate if the metric command changed.
+	if entry.MetricCmd != metricCmd {
+		return 0, false
+	}
+	return entry.Metric, true
+}
+
+// saveCachedMetric persists a metric result for the given content hash.
+func saveCachedMetric(cacheDir, hash, metricCmd string, metric float64) error {
+	dir := filepath.Join(cacheDir, "results")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	entry := metricCacheEntry{
+		Metric:    metric,
+		MetricCmd: metricCmd,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, hash+".json"), data, 0o644)
+}
+
+// overrideHash computes a deterministic hash for constants-mode overrides.
+func overrideHash(base string, overrides map[string]string) string {
+	h := sha256.New()
+	h.Write([]byte(base))
+	h.Write([]byte{0})
+
+	keys := make([]string, 0, len(overrides))
+	for k := range overrides {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		h.Write([]byte(k))
+		h.Write([]byte("="))
+		h.Write([]byte(overrides[k]))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
 // notify sends a message via the notifier if one is configured.
 func (r *Runner) notify(ctx context.Context, msg string) {
 	r.mu.Lock()
@@ -1192,12 +1390,40 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 	}
 	defer restore()
 
-	// Step 5: Run experiment with overridden files.
-	startTime := time.Now()
-	expResult, runErr := r.runExperiment(ctx, workdir, cfg)
-	duration := int(time.Since(startTime).Seconds())
+	// Step 5: Run experiment with overridden files (check cache first).
+	var expResult *experimentResult
+	var runErr error
+	var duration int
+	cacheHit := false
 
-	if expResult != nil {
+	if cfg.CacheEnabled {
+		baseHash, _ := contentHash(workdir, cfg.TargetFiles)
+		hash := overrideHash(baseHash, overrides)
+		cacheDir := cfg.ResolveCacheDir(workdir)
+		if metric, ok := loadCachedMetric(cacheDir, hash, cfg.MetricCmd); ok {
+			r.logger.Info("cache hit (constants), skipping experiment", "hash", hash, "metric", metric)
+			expResult = &experimentResult{metric: metric, stdout: fmt.Sprintf("cached: %.6f", metric)}
+			cacheHit = true
+		}
+	}
+
+	if !cacheHit {
+		startTime := time.Now()
+		expResult, runErr = r.runExperiment(ctx, workdir, cfg, iteration)
+		duration = int(time.Since(startTime).Seconds())
+
+		// Cache the result on success.
+		if runErr == nil && cfg.CacheEnabled {
+			baseHash, _ := contentHash(workdir, cfg.TargetFiles)
+			hash := overrideHash(baseHash, overrides)
+			cacheDir := cfg.ResolveCacheDir(workdir)
+			if saveErr := saveCachedMetric(cacheDir, hash, cfg.MetricCmd, expResult.metric); saveErr != nil {
+				r.logger.Warn("failed to cache metric", "error", saveErr)
+			}
+		}
+	}
+
+	if expResult != nil && !cacheHit {
 		if saveErr := SaveExperimentOutput(workdir, iteration, expResult.stdout, expResult.stderr); saveErr != nil {
 			r.logger.Error("failed to save experiment output", "error", saveErr)
 		}
@@ -1288,6 +1514,439 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 	if err := SaveConfig(workdir, cfg); err != nil {
 		r.logger.Error("failed to save config", "error", err)
 	}
+
+	return nil
+}
+
+// --- Parallel experiments ---
+
+// hypothesisResult holds a parsed hypothesis from a multi-hypothesis LLM response.
+type hypothesisResult struct {
+	hypothesis string
+	changes    map[string]string // filename -> content (file mode)
+	overrides  map[string]string // constant name -> value (constants mode)
+}
+
+// parseMultiHypothesisResponse parses N hypotheses from a single LLM response.
+// Expected format:
+//
+//	=== HYPOTHESIS 1 ===
+//	HYPOTHESIS: ...
+//	--- FILE: path ---
+//	...
+//	--- END FILE ---
+//	=== HYPOTHESIS 2 ===
+//	...
+//
+// Falls back to single-hypothesis parsing if no multi markers found.
+func parseMultiHypothesisResponse(resp string, n int, targetFiles []string) []hypothesisResult {
+	// Split on hypothesis markers.
+	marker := regexp.MustCompile(`(?m)^=== HYPOTHESIS \d+ ===\s*$`)
+	indices := marker.FindAllStringIndex(resp, -1)
+
+	if len(indices) == 0 {
+		// Fallback: parse as single hypothesis.
+		hyp, changes := parseLLMResponse(resp, targetFiles)
+		if hyp == "" && len(changes) == 0 {
+			return nil
+		}
+		return []hypothesisResult{{hypothesis: hyp, changes: changes}}
+	}
+
+	var results []hypothesisResult
+	for i, idx := range indices {
+		var section string
+		if i+1 < len(indices) {
+			section = resp[idx[1]:indices[i+1][0]]
+		} else {
+			section = resp[idx[1]:]
+		}
+		hyp, changes := parseLLMResponse(section, targetFiles)
+		if hyp == "" && len(changes) == 0 {
+			continue
+		}
+		results = append(results, hypothesisResult{hypothesis: hyp, changes: changes})
+	}
+
+	// Cap to requested count.
+	if len(results) > n {
+		results = results[:n]
+	}
+	return results
+}
+
+// parseMultiConstantsResponse parses N constant-override hypotheses from a single LLM response.
+func parseMultiConstantsResponse(resp string, n int, constants []ConstantDef) []hypothesisResult {
+	marker := regexp.MustCompile(`(?m)^=== HYPOTHESIS \d+ ===\s*$`)
+	indices := marker.FindAllStringIndex(resp, -1)
+
+	if len(indices) == 0 {
+		hyp, overrides := parseConstantsLLMResponse(resp, constants)
+		if hyp == "" && len(overrides) == 0 {
+			return nil
+		}
+		return []hypothesisResult{{hypothesis: hyp, overrides: overrides}}
+	}
+
+	var results []hypothesisResult
+	for i, idx := range indices {
+		var section string
+		if i+1 < len(indices) {
+			section = resp[idx[1]:indices[i+1][0]]
+		} else {
+			section = resp[idx[1]:]
+		}
+		hyp, overrides := parseConstantsLLMResponse(section, constants)
+		if hyp == "" && len(overrides) == 0 {
+			continue
+		}
+		results = append(results, hypothesisResult{hypothesis: hyp, overrides: overrides})
+	}
+
+	if len(results) > n {
+		results = results[:n]
+	}
+	return results
+}
+
+// parallelExpResult holds the outcome of one parallel experiment slot.
+type parallelExpResult struct {
+	variant    int
+	hypothesis string
+	metric     float64
+	commitHash string
+	expResult  *experimentResult
+	err        error
+	duration   int
+}
+
+// runParallelIteration runs N hypotheses in parallel across multiple worktrees.
+// This is the core parallel speedup: metric execution time stays constant
+// while evaluating N alternatives.
+func (r *Runner) runParallelIteration(ctx context.Context) error {
+	// Load config from any worktree (all symlink to same state dir).
+	primaryWt := r.worktreeDirs[0]
+	cfg, err := LoadConfig(primaryWt)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	iteration := cfg.TotalIterations + 1
+	n := len(r.worktreeDirs)
+
+	// Step 1: Read target files from the primary worktree.
+	fileContents := make(map[string]string)
+	for _, f := range cfg.TargetFiles {
+		data, err := os.ReadFile(filepath.Join(primaryWt, f))
+		if err != nil {
+			return fmt.Errorf("read target file %s: %w", f, err)
+		}
+		fileContents[f] = string(data)
+	}
+
+	resultsHistory, _ := ReadResults(primaryWt)
+
+	// Step 2: Generate N hypotheses via a single LLM call.
+	r.mu.Lock()
+	client := r.client
+	model := r.resolveModel(cfg)
+	r.mu.Unlock()
+
+	var hypotheses []hypothesisResult
+
+	if cfg.IsConstantsMode() {
+		currentValues, err := ExtractConstants(primaryWt, cfg.Constants)
+		if err != nil {
+			return fmt.Errorf("extract constants: %w", err)
+		}
+		prompt := r.buildConstantsPrompt(cfg, fileContents, currentValues, resultsHistory, iteration)
+		// Inject parallel instruction into the system prompt.
+		parallelSys := prompt.system + fmt.Sprintf("\n\n=== PARALLEL MODE ===\nGenerate exactly %d DIFFERENT hypotheses in this iteration.\nEach hypothesis MUST be clearly distinct from the others.\nUse this format:\n\n=== HYPOTHESIS 1 ===\nHYPOTHESIS: ...\nCONSTANT_NAME = value\n...\n=== HYPOTHESIS 2 ===\n...\n\nDiversity is critical: if all hypotheses are similar, they waste parallel slots.\n", n)
+
+		llmResp, err := client.Complete(ctx, llm.ChatRequest{
+			Model:     model,
+			System:    llm.SystemString(parallelSys),
+			Messages:  []llm.Message{llm.NewTextMessage("user", prompt.user)},
+			MaxTokens: cfg.Params.MaxTokens * n, // scale tokens for N hypotheses
+		})
+		if err != nil {
+			return fmt.Errorf("LLM call failed: %w", err)
+		}
+		hypotheses = parseMultiConstantsResponse(llmResp, n, cfg.Constants)
+	} else {
+		prompt := r.buildPrompt(cfg, fileContents, resultsHistory, iteration)
+		parallelSys := prompt.system + fmt.Sprintf("\n\n=== PARALLEL MODE ===\nGenerate exactly %d DIFFERENT hypotheses in this iteration.\nEach hypothesis MUST be clearly distinct from the others.\nUse this format:\n\n=== HYPOTHESIS 1 ===\nHYPOTHESIS: ...\n--- FILE: path ---\n...\n--- END FILE ---\n=== HYPOTHESIS 2 ===\n...\n\nDiversity is critical: if all hypotheses are similar, they waste parallel slots.\n", n)
+
+		llmResp, err := client.Complete(ctx, llm.ChatRequest{
+			Model:     model,
+			System:    llm.SystemString(parallelSys),
+			Messages:  []llm.Message{llm.NewTextMessage("user", prompt.user)},
+			MaxTokens: cfg.Params.MaxTokens * n,
+		})
+		if err != nil {
+			return fmt.Errorf("LLM call failed: %w", err)
+		}
+		hypotheses = parseMultiHypothesisResponse(llmResp, n, cfg.TargetFiles)
+	}
+
+	if len(hypotheses) == 0 {
+		r.logger.Warn("LLM produced no hypotheses for parallel iteration")
+		cfg.ConsecutiveFailures++
+		if err := SaveConfig(primaryWt, cfg); err != nil {
+			return err
+		}
+		return nil
+	}
+	r.logger.Info("generated parallel hypotheses", "requested", n, "received", len(hypotheses))
+
+	// Step 3: Apply each hypothesis to its own worktree + git commit.
+	// If we got fewer hypotheses than worktrees, only use that many slots.
+	activeSlots := len(hypotheses)
+	commitHashes := make([]string, activeSlots)
+	restoreFns := make([]func(), activeSlots) // constants mode restore functions
+	slotReady := make([]bool, activeSlots)
+
+	for i, hyp := range hypotheses {
+		wt := r.worktreeDirs[i]
+
+		if cfg.IsConstantsMode() {
+			restore, err := ApplyOverrides(wt, cfg.Constants, hyp.overrides)
+			if err != nil {
+				r.logger.Warn("failed to apply overrides", "variant", i, "error", err)
+				continue
+			}
+			restoreFns[i] = restore
+			slotReady[i] = true
+		} else {
+			for filename, content := range hyp.changes {
+				path := filepath.Join(wt, filename)
+				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+					r.logger.Warn("failed to write file", "variant", i, "file", filename, "error", err)
+				}
+			}
+			commitMsg := fmt.Sprintf("autoresearch #%d/%d: %s", iteration, i, hyp.hypothesis)
+			if err := gitCommit(ctx, wt, commitMsg); err != nil {
+				r.logger.Warn("failed to commit", "variant", i, "error", err)
+				gitResetHard(ctx, wt, cfg.KeptCommit)
+				continue
+			}
+			hash, _ := gitRevParse(ctx, wt, "HEAD")
+			commitHashes[i] = hash
+			slotReady[i] = true
+		}
+	}
+
+	// Step 4: Run N metrics in parallel — the core speedup.
+	// Check cache first for each slot to avoid redundant metric runs.
+	results := make([]parallelExpResult, activeSlots)
+	cacheDir := cfg.ResolveCacheDir(primaryWt)
+
+	var wg sync.WaitGroup
+	for i := range activeSlots {
+		if !slotReady[i] {
+			results[i].err = fmt.Errorf("slot not ready")
+			continue
+		}
+
+		// Cache check: skip metric run if we've seen this exact state before.
+		if cfg.CacheEnabled && cacheDir != "" {
+			wt := r.worktreeDirs[i]
+			var hash string
+			if cfg.IsConstantsMode() {
+				baseHash, _ := contentHash(wt, cfg.TargetFiles)
+				hash = overrideHash(baseHash, hypotheses[i].overrides)
+			} else {
+				hash, _ = contentHash(wt, cfg.TargetFiles)
+			}
+			if hash != "" {
+				if metric, ok := loadCachedMetric(cacheDir, hash, cfg.MetricCmd); ok {
+					r.logger.Info("parallel cache hit", "variant", i, "hash", hash, "metric", metric)
+					results[i] = parallelExpResult{
+						variant:    i,
+						hypothesis: hypotheses[i].hypothesis,
+						metric:     metric,
+						expResult:  &experimentResult{metric: metric, stdout: fmt.Sprintf("cached: %.6f", metric)},
+						commitHash: commitHashes[i],
+					}
+					continue
+				}
+			}
+		}
+
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			start := time.Now()
+			expResult, runErr := r.runExperiment(ctx, r.worktreeDirs[idx], cfg, iteration)
+			results[idx] = parallelExpResult{
+				variant:    idx,
+				hypothesis: hypotheses[idx].hypothesis,
+				expResult:  expResult,
+				err:        runErr,
+				duration:   int(time.Since(start).Seconds()),
+			}
+			if runErr == nil && expResult != nil {
+				results[idx].metric = expResult.metric
+			}
+			results[idx].commitHash = commitHashes[idx]
+
+			// Cache on success.
+			if runErr == nil && cfg.CacheEnabled && cacheDir != "" {
+				wt := r.worktreeDirs[idx]
+				var hash string
+				if cfg.IsConstantsMode() {
+					baseHash, _ := contentHash(wt, cfg.TargetFiles)
+					hash = overrideHash(baseHash, hypotheses[idx].overrides)
+				} else {
+					hash, _ = contentHash(wt, cfg.TargetFiles)
+				}
+				if hash != "" {
+					saveCachedMetric(cacheDir, hash, cfg.MetricCmd, expResult.metric)
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Constants mode: restore all worktrees to original state.
+	for i, restore := range restoreFns {
+		if restore != nil {
+			restore()
+			restoreFns[i] = nil
+		}
+	}
+
+	// Step 5: Evaluate all results, pick best.
+	currentBest := float64(0)
+	if cfg.BestMetric != nil {
+		currentBest = *cfg.BestMetric
+	}
+
+	bestIdx := -1
+	var bestMetric float64
+	for i, res := range results {
+		if res.err != nil {
+			continue
+		}
+		if bestIdx == -1 || cfg.IsBetter(res.metric, bestMetric) {
+			bestIdx = i
+			bestMetric = res.metric
+		}
+	}
+
+	// Step 6: Record all results + decide keep/discard.
+	keptAny := false
+	for i, res := range results {
+		row := ResultRow{
+			Iteration:   iteration,
+			Timestamp:   time.Now(),
+			Hypothesis:  hypotheses[i].hypothesis,
+			MetricValue: res.metric,
+			DurationSec: res.duration,
+			Variant:     i,
+		}
+
+		if res.err != nil {
+			row.Kept = false
+			row.BestSoFar = currentBest
+		} else if i == bestIdx && (cfg.BestMetric == nil || cfg.IsBetter(bestMetric, *cfg.BestMetric)) {
+			row.Kept = true
+			row.CommitHash = res.commitHash
+			row.BestSoFar = bestMetric
+			row.DeltaFromBest = bestMetric - currentBest
+			keptAny = true
+		} else {
+			row.Kept = false
+			row.BestSoFar = currentBest
+			if cfg.BestMetric != nil {
+				row.DeltaFromBest = res.metric - *cfg.BestMetric
+			}
+		}
+
+		if err := AppendResult(primaryWt, row); err != nil {
+			r.logger.Error("failed to append result", "variant", i, "error", err)
+		}
+
+		// Save experiment output.
+		if res.expResult != nil {
+			logFile := fmt.Sprintf("%04d_%d.log", iteration, i)
+			dir := filepath.Join(primaryWt, configDir, "runs")
+			os.MkdirAll(dir, 0o755)
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("=== ITERATION %d VARIANT %d ===\n", iteration, i))
+			sb.WriteString(fmt.Sprintf("Hypothesis: %s\n\n", hypotheses[i].hypothesis))
+			if res.expResult.stdout != "" {
+				sb.WriteString("=== STDOUT ===\n")
+				sb.WriteString(res.expResult.stdout)
+			}
+			if res.expResult.stderr != "" {
+				sb.WriteString("\n=== STDERR ===\n")
+				sb.WriteString(res.expResult.stderr)
+			}
+			os.WriteFile(filepath.Join(dir, logFile), []byte(sb.String()), 0o644)
+		}
+	}
+
+	// Step 7: Update config state.
+	if keptAny && bestIdx >= 0 {
+		cfg.BestMetric = &bestMetric
+		cfg.BestCommit = results[bestIdx].commitHash
+		cfg.KeptCommit = results[bestIdx].commitHash
+		cfg.KeptIterations++
+		cfg.ConsecutiveFailures = 0
+
+		// Constants mode: save best overrides.
+		if cfg.IsConstantsMode() {
+			ov := &OverrideSet{Values: hypotheses[bestIdx].overrides}
+			if saveErr := SaveOverrides(primaryWt, ov); saveErr != nil {
+				r.logger.Error("failed to save overrides", "error", saveErr)
+			}
+			commitMsg := fmt.Sprintf("autoresearch #%d: %s", iteration, hypotheses[bestIdx].hypothesis)
+			if commitErr := gitCommit(ctx, primaryWt, commitMsg); commitErr == nil {
+				hash, _ := gitRevParse(ctx, primaryWt, "HEAD")
+				cfg.BestCommit = hash
+				cfg.KeptCommit = hash
+			}
+		}
+	} else {
+		cfg.ConsecutiveFailures++
+	}
+
+	cfg.TotalIterations = iteration
+	if err := SaveConfig(primaryWt, cfg); err != nil {
+		r.logger.Error("failed to save config", "error", err)
+	}
+
+	// Step 8: Sync all worktrees to the kept commit.
+	syncRef := cfg.KeptCommit
+	if syncRef != "" {
+		for i, wt := range r.worktreeDirs {
+			if i < activeSlots {
+				gitResetHard(ctx, wt, syncRef)
+			}
+		}
+	}
+
+	// Step 9: Notify with batch summary.
+	var notifyMsg strings.Builder
+	notifyMsg.WriteString(fmt.Sprintf("Iteration #%d (%d parallel):", iteration, activeSlots))
+	if keptAny && bestIdx >= 0 {
+		notifyMsg.WriteString(fmt.Sprintf(" BEST=variant %d, %s=%.6f\n", bestIdx, cfg.MetricName, bestMetric))
+	} else {
+		notifyMsg.WriteString(" ALL DISCARDED\n")
+	}
+	for i, res := range results {
+		status := "discarded"
+		if i == bestIdx && keptAny {
+			status = "KEPT"
+		}
+		if res.err != nil {
+			status = "CRASHED"
+		}
+		notifyMsg.WriteString(fmt.Sprintf("  V%d: %s=%.6f (%s) — %s\n",
+			i, cfg.MetricName, res.metric, status, hypotheses[i].hypothesis))
+	}
+	r.notify(ctx, notifyMsg.String())
 
 	return nil
 }

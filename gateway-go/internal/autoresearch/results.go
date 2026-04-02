@@ -10,19 +10,22 @@ import (
 
 // ResultRow represents one experiment iteration.
 type ResultRow struct {
-	Iteration    int       `json:"iteration"`
-	Timestamp    time.Time `json:"timestamp"`
-	Hypothesis   string    `json:"hypothesis"`
-	MetricValue  float64   `json:"metric_value"`
-	Kept         bool      `json:"kept"`
-	CommitHash   string    `json:"commit_hash"`
-	DurationSec  int       `json:"duration_sec"`
-	BestSoFar    float64   `json:"best_so_far"`    // running best at this point
-	DeltaFromBest float64  `json:"delta_from_best"` // difference from best (positive = improved)
+	Iteration     int       `json:"iteration"`
+	Timestamp     time.Time `json:"timestamp"`
+	Hypothesis    string    `json:"hypothesis"`
+	MetricValue   float64   `json:"metric_value"`
+	Kept          bool      `json:"kept"`
+	CommitHash    string    `json:"commit_hash"`
+	DurationSec   int       `json:"duration_sec"`
+	BestSoFar     float64   `json:"best_so_far"`    // running best at this point
+	DeltaFromBest float64   `json:"delta_from_best"` // difference from best (positive = improved)
+	Variant       int       `json:"variant,omitempty"` // parallel variant index (0-based), omitted in sequential mode
 }
 
 // tsvHeader is the header line for the results TSV file.
-const tsvHeader = "iteration\ttimestamp\thypothesis\tmetric_value\tkept\tcommit_hash\tduration_sec\tbest_so_far\tdelta_from_best"
+// The variant column (10th) is always present in the header for forward
+// compatibility but may be empty in sequential mode rows.
+const tsvHeader = "iteration\ttimestamp\thypothesis\tmetric_value\tkept\tcommit_hash\tduration_sec\tbest_so_far\tdelta_from_best\tvariant"
 
 // resultsPath returns the path to results.tsv inside the workspace.
 func resultsPath(workdir string) string {
@@ -56,7 +59,12 @@ func AppendResult(workdir string, row ResultRow) error {
 	hypothesis := strings.ReplaceAll(row.Hypothesis, "\t", " ")
 	hypothesis = strings.ReplaceAll(hypothesis, "\n", " ")
 
-	line := fmt.Sprintf("%d\t%s\t%s\t%.6f\t%s\t%s\t%d\t%.6f\t%.6f\n",
+	variantStr := ""
+	if row.Variant > 0 {
+		variantStr = fmt.Sprintf("%d", row.Variant)
+	}
+
+	line := fmt.Sprintf("%d\t%s\t%s\t%.6f\t%s\t%s\t%d\t%.6f\t%.6f\t%s\n",
 		row.Iteration,
 		row.Timestamp.UTC().Format(time.RFC3339),
 		hypothesis,
@@ -66,6 +74,7 @@ func AppendResult(workdir string, row ResultRow) error {
 		row.DurationSec,
 		row.BestSoFar,
 		row.DeltaFromBest,
+		variantStr,
 	)
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
@@ -118,6 +127,11 @@ func ParseResults(workdir string) ([]ResultRow, error) {
 			fmt.Sscanf(fields[8], "%f", &delta)
 		}
 
+		var variant int
+		if len(fields) >= 10 && fields[9] != "" {
+			fmt.Sscanf(fields[9], "%d", &variant)
+		}
+
 		rows = append(rows, ResultRow{
 			Iteration:     iter,
 			Timestamp:     ts,
@@ -128,6 +142,7 @@ func ParseResults(workdir string) ([]ResultRow, error) {
 			DurationSec:   dur,
 			BestSoFar:     bestSoFar,
 			DeltaFromBest: delta,
+			Variant:       variant,
 		})
 	}
 	return rows, nil
