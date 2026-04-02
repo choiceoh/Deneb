@@ -17,7 +17,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -67,9 +69,25 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(schemaSQL); err != nil {
+	// Retry schema init with backoff — another process (e.g. production
+	// gateway) may hold a write lock on the shared deneb.db file.
+	var schemaErr error
+	for attempt := range 4 {
+		if _, schemaErr = db.Exec(schemaSQL); schemaErr == nil {
+			break
+		}
+		if !isSQLiteBusy(schemaErr) {
+			db.Close()
+			return nil, fmt.Errorf("unified store: init schema: %w", schemaErr)
+		}
+		backoff := time.Duration(1<<attempt) * time.Second // 1s, 2s, 4s
+		logger.Warn("unified store: schema init locked, retrying",
+			"attempt", attempt+1, "backoff", backoff, "error", schemaErr)
+		time.Sleep(backoff)
+	}
+	if schemaErr != nil {
 		db.Close()
-		return nil, fmt.Errorf("unified store: init schema: %w", err)
+		return nil, fmt.Errorf("unified store: init schema: %w", schemaErr)
 	}
 
 	// Run entity constraint migration for existing databases that predate
@@ -104,6 +122,16 @@ func (s *Store) Close() error {
 		s.closeErr = s.db.Close()
 	})
 	return s.closeErr
+}
+
+// isSQLiteBusy returns true if the error is SQLITE_BUSY / "database is locked".
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "database is locked") ||
+		strings.Contains(msg, "SQLITE_BUSY")
 }
 
 func (s *Store) logStats() {
