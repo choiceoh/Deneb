@@ -18,7 +18,7 @@ import (
 
 // Compaction defaults.
 const (
-	defaultContextThreshold = 0.75
+	defaultContextThreshold = 0.80
 	// proactiveCompactionCooldown is the minimum interval between proactive sweeps.
 	// Prevents repeated LLM summarization calls on consecutive messages.
 	proactiveCompactionCooldown = 5 * time.Minute
@@ -134,8 +134,8 @@ func triggerProactiveCompaction(
 }
 
 // midLoopCompactionThreshold is the fraction of the token budget at which
-// mid-loop compaction triggers. Higher than proactive (0.75) to avoid
-// unnecessary compaction, but low enough to prevent context_length_exceeded.
+// mid-loop compaction triggers. Matches the proactive threshold (0.80) so
+// that mid-loop checks are consistent with background compaction.
 const midLoopCompactionThreshold = 0.80
 
 // estimateMessagesTokens returns a rough token count for an entire message history.

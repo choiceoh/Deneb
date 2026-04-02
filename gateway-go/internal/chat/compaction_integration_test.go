@@ -193,15 +193,15 @@ func TestCompaction_EvaluateCompactionThresholds(t *testing.T) {
 		},
 		{
 			name:        "at threshold boundary",
-			stored:      75_000,
-			live:        75_000,
+			stored:      80_000,
+			live:        80_000,
 			budget:      100_000,
-			wantCompact: false, // threshold is 0.75, so 75_000 == threshold (not exceeded)
+			wantCompact: false, // threshold is 0.80, so 80_000 == threshold (not exceeded)
 		},
 		{
 			name:        "over threshold",
-			stored:      80_000,
-			live:        80_000,
+			stored:      81_000,
+			live:        81_000,
 			budget:      100_000,
 			wantCompact: true,
 		},
@@ -217,7 +217,7 @@ func TestCompaction_EvaluateCompactionThresholds(t *testing.T) {
 			stored:      100,
 			live:        100,
 			budget:      0,
-			wantCompact: true, // threshold = 0*0.75 = 0, 100 > 0
+			wantCompact: true, // threshold = 0*0.80 = 0, 100 > 0
 		},
 		{
 			name:        "stored high but live low",

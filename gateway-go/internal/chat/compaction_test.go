@@ -9,8 +9,8 @@ import (
 
 func TestDefaultCompactionConfig(t *testing.T) {
 	cfg := DefaultCompactionConfig()
-	if cfg.ContextThreshold != 0.75 {
-		t.Errorf("ContextThreshold = %f, want %f", cfg.ContextThreshold, 0.75)
+	if cfg.ContextThreshold != 0.80 {
+		t.Errorf("ContextThreshold = %f, want %f", cfg.ContextThreshold, 0.80)
 	}
 	if cfg.FreshTailCount != defaultFreshTailCount {
 		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, defaultFreshTailCount)
