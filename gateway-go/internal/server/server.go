@@ -15,14 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/thinking"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -31,10 +26,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
-	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
-	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
@@ -45,18 +37,10 @@ import (
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
-	"github.com/choiceoh/deneb/gateway-go/internal/secret"
-	"github.com/choiceoh/deneb/gateway-go/internal/shadow"
 	"github.com/choiceoh/deneb/gateway-go/internal/server/pluginrouter"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/skill"
-	"github.com/choiceoh/deneb/gateway-go/internal/talk"
-	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
-	"github.com/choiceoh/deneb/gateway-go/internal/usage"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
-	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -95,42 +79,18 @@ type ServerRuntime struct {
 	runStateMachine *telegram.RunStateMachine
 }
 
-// ServerIntegrations owns optional domain/integration subsystems.
-type ServerIntegrations struct {
-	vegaBackend           vega.Backend
-	geminiEmbedder        *embedding.GeminiEmbedder
-	jinaAPIKey            string
-	taskRegistry          *tasks.Registry
-	taskStore             *tasks.Store
-	approvals             *approval.Store
-	agents                *agent.Store
-	skills                *skill.Manager
-	wizardEng             *wizard.Engine
-	secrets               *secret.Resolver
-	talkState             *talk.State
-	usageTracker          *usage.Tracker
-	maintRunner           *maintenance.Runner
-	jobTracker            *agent.JobTracker
-	pluginFullRegistry    *plugin.FullRegistry
-	pluginDiscoverer      *plugin.PluginDiscoverer
-	pluginTypedHookRunner *plugin.TypedHookRunner
-	pluginRouter          *pluginrouter.Router
-	conversationBindings  *plugin.ConversationBindingStore
-	autonomousSvc         *autonomous.Service
-	dreamingAdapter       *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
-	memoryStore           *memory.Store           // structured memory store; used by flush task
-	gmailPollSvc          *gmailpoll.Service
-	autoresearchRunner    *autoresearch.Runner
-	thinkingRuntime       *thinking.ThinkingRuntime
-	shadowSvc             *shadow.Service
-}
-
 // Server is the main gateway server.
 type Server struct {
 	*ServerTransport
 	*ServerRPC
 	*ServerRuntime
-	*ServerIntegrations
+
+	// Decomposed from ServerIntegrations — each independently constructable/testable.
+	*WorkflowSubsystem
+	*PluginSubsystem
+	*MemorySubsystem
+	*AutonomousSubsystem
+	*InfraSubsystem
 
 	dedupe      *dedupe.Tracker
 	broadcaster *events.Broadcaster
@@ -258,10 +218,12 @@ func WithJinaAPIKey(key string) Option {
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) *Server {
 	s := &Server{
-		ServerTransport:    &ServerTransport{addr: addr},
-		ServerRPC:          &ServerRPC{},
-		ServerRuntime:      &ServerRuntime{},
-		ServerIntegrations: &ServerIntegrations{},
+		ServerTransport:      &ServerTransport{addr: addr},
+		ServerRPC:            &ServerRPC{},
+		ServerRuntime:        &ServerRuntime{},
+		PluginSubsystem:     &PluginSubsystem{},
+		MemorySubsystem:     &MemorySubsystem{},
+		AutonomousSubsystem: &AutonomousSubsystem{},
 		rustFFI:            ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
@@ -335,7 +297,6 @@ func New(addr string, opts ...Option) *Server {
 		}
 	}
 	s.internalHooks = hooks.NewInternalRegistry(s.logger)
-	s.thinkingRuntime = thinking.NewThinkingRuntime()
 
 	// GitHub webhook: resolved from env vars; nil when GITHUB_WEBHOOK_SECRET is unset.
 	s.githubWebhookCfg = GitHubWebhookConfigFromEnv()
@@ -354,33 +315,10 @@ func New(addr string, opts ...Option) *Server {
 		s.providerRuntime = provider.NewProviderRuntimeResolver(s.providers, s.logger)
 	}
 
-	// Background task control plane (SQLite ledger).
-	taskStore, err := tasks.OpenStore(tasks.DefaultStoreConfig(), s.logger)
-	if err != nil {
-		s.logger.Warn("task store open failed, task tracking disabled", "error", err)
-	} else {
-		s.taskStore = taskStore
-		reg, regErr := tasks.NewRegistry(taskStore, s.logger)
-		if regErr != nil {
-			s.logger.Warn("task registry init failed", "error", regErr)
-		} else {
-			s.taskRegistry = reg
-		}
-	}
-
-	// Phase 3: Advanced workflow subsystems.
-	s.approvals = approval.NewStore()
-	s.agents = agent.NewStore()
-	s.skills = skill.NewManager()
-	s.wizardEng = wizard.NewEngine()
-	s.secrets = secret.NewResolver()
-	s.talkState = talk.NewState()
-	s.jobTracker = agent.NewJobTracker(s.logger)
-
-	// Phase 4: Native system methods (migrated from bridge).
-	s.usageTracker = usage.New()
+	// Subsystem construction: each independently testable.
 	denebDir := resolveDenebDir()
-	s.maintRunner = maintenance.NewRunner(denebDir)
+	s.InfraSubsystem = NewInfraSubsystem(s.logger, denebDir)
+	s.WorkflowSubsystem = NewWorkflowSubsystem(s.logger)
 
 	// ACP subsystem: registry, bindings, persistence, lifecycle sync.
 	acpRegistry := acp.NewACPRegistry()
