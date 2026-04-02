@@ -169,9 +169,11 @@ func (s *Server) registerSessionRPCMethods() {
 
 	// Wire transcript cloner for cron shadow session support.
 	// Shadow sessions clone recent transcript from the main session for context.
-	if s.cronService != nil && transcriptDir != "" {
+	// The cached store satisfies cron.TranscriptCloner (CloneRecent), avoiding
+	// a second uncached FileTranscriptStore that would bypass the TTL cache.
+	if s.cronService != nil && transcriptStore != nil {
 		s.cronService.SetTranscriptCloner(
-			&cronTranscriptCloner{store: chat.NewFileTranscriptStore(transcriptDir)},
+			transcriptStore,
 			"", // main session key resolved dynamically per-job
 		)
 	}
