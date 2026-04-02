@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
@@ -531,9 +532,10 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 	}
 
 	sendParams := map[string]any{
-		"sessionKey": sessionKey,
-		"message":    agentMessage,
-		"delivery":   delivery,
+		"sessionKey":  sessionKey,
+		"message":     agentMessage,
+		"delivery":    delivery,
+		"clientRunId": shortid.New("run"),
 	}
 	if len(allAttachments) > 0 {
 		sendParams["attachments"] = allAttachments
@@ -727,9 +729,10 @@ func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnC
 	}
 
 	sendParams := map[string]any{
-		"sessionKey": cfg.SessionKey,
-		"message":    cfg.Message,
-		"delivery":   delivery,
+		"sessionKey":  cfg.SessionKey,
+		"message":     cfg.Message,
+		"delivery":    delivery,
+		"clientRunId": shortid.New("run"),
 	}
 	if cfg.Model != "" {
 		sendParams["model"] = cfg.Model
@@ -852,8 +855,9 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 		fmt.Sprintf("tg-%s-cb-%s", chatID, cb.ID),
 		"chat.send",
 		map[string]any{
-			"sessionKey": sessionKey,
-			"message":    agentMessage,
+			"sessionKey":  sessionKey,
+			"message":     agentMessage,
+			"clientRunId": shortid.New("run"),
 			"delivery": map[string]any{
 				"channel": "telegram",
 				"to":      chatID,
