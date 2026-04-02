@@ -214,6 +214,15 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 		return nil, fmt.Errorf("marshal openai request: %w", err)
 	}
 
+	// Merge ExtraBody fields into the serialized JSON (e.g., sglang's
+	// "chat_template_kwargs": {"enable_thinking": false}).
+	if len(req.ExtraBody) > 0 {
+		body, err = mergeJSONFields(body, req.ExtraBody)
+		if err != nil {
+			return nil, fmt.Errorf("merge extra body: %w", err)
+		}
+	}
+
 	url := c.baseURL + "/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -660,6 +669,22 @@ func (c *Client) Complete(ctx context.Context, req ChatRequest) (string, error) 
 	content = jsonutil.StripThinkingTags(content)
 	content = jsonutil.StripThinkingPreamble(content)
 	return strings.TrimSpace(content), nil
+}
+
+// mergeJSONFields merges extra key-value pairs into a JSON object.
+func mergeJSONFields(base []byte, extra map[string]any) ([]byte, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(base, &obj); err != nil {
+		return nil, err
+	}
+	for k, v := range extra {
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		obj[k] = raw
+	}
+	return json.Marshal(obj)
 }
 
 // --- OpenAI request/response types ---

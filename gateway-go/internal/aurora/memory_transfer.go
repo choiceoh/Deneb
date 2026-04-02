@@ -259,6 +259,9 @@ func callTransferLLM(ctx context.Context, client *llm.Client, model, summaryCont
 		MaxTokens:      transferMaxTokens,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+		ExtraBody: map[string]any{
+			"chat_template_kwargs": map[string]any{"enable_thinking": false},
+		},
 	})
 	if err != nil {
 		return "", fmt.Errorf("transfer LLM call: %w", err)

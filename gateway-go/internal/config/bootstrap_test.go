@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -216,6 +217,91 @@ func TestResolveMediaCleanupTTLMs(t *testing.T) {
 			t.Errorf("hours=%d: expected %d, got %d", tt.hours, tt.expected, ms)
 		}
 	}
+}
+
+func TestPersistDefaultModel(t *testing.T) {
+	logger := slog.Default()
+
+	t.Run("existing config", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		existing := map[string]any{
+			"gateway": map[string]any{
+				"auth": map[string]any{"token": "keep-me"},
+			},
+		}
+		data, _ := json.Marshal(existing)
+		os.WriteFile(cfgPath, data, 0644)
+
+		if err := PersistDefaultModel(cfgPath, "zai/glm-5.1", logger); err != nil {
+			t.Fatal(err)
+		}
+
+		raw, err := os.ReadFile(cfgPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var written map[string]any
+		if err := json.Unmarshal(raw, &written); err != nil {
+			t.Fatal(err)
+		}
+
+		// Model was persisted.
+		agents, ok := written["agents"].(map[string]any)
+		if !ok {
+			t.Fatal("expected agents in written config")
+		}
+		if agents["defaultModel"] != "zai/glm-5.1" {
+			t.Errorf("expected defaultModel=zai/glm-5.1, got %v", agents["defaultModel"])
+		}
+
+		// Existing fields preserved.
+		gw, ok := written["gateway"].(map[string]any)
+		if !ok {
+			t.Fatal("expected gateway preserved")
+		}
+		auth, ok := gw["auth"].(map[string]any)
+		if !ok {
+			t.Fatal("expected gateway.auth preserved")
+		}
+		if auth["token"] != "keep-me" {
+			t.Errorf("expected preserved token, got %v", auth["token"])
+		}
+
+		// Meta timestamp set.
+		meta, ok := written["meta"].(map[string]any)
+		if !ok {
+			t.Fatal("expected meta in written config")
+		}
+		if meta["lastTouchedAt"] == nil || meta["lastTouchedAt"] == "" {
+			t.Error("expected non-empty lastTouchedAt")
+		}
+	})
+
+	t.Run("no existing file", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+
+		if err := PersistDefaultModel(cfgPath, "google/gemini-3.1-pro", logger); err != nil {
+			t.Fatal(err)
+		}
+
+		raw, err := os.ReadFile(cfgPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var written map[string]any
+		if err := json.Unmarshal(raw, &written); err != nil {
+			t.Fatal(err)
+		}
+		agents, ok := written["agents"].(map[string]any)
+		if !ok {
+			t.Fatal("expected agents in config created from scratch")
+		}
+		if agents["defaultModel"] != "google/gemini-3.1-pro" {
+			t.Errorf("expected defaultModel=google/gemini-3.1-pro, got %v", agents["defaultModel"])
+		}
+	})
 }
 
 func TestGenerateRandomToken(t *testing.T) {

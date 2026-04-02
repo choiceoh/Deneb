@@ -127,6 +127,23 @@ func (s *Server) registerSessionRPCMethods() {
 		chatCfg,
 	)
 
+	// Wire server-level status data for /status command.
+	s.chatHandler.SetStatusDepsFunc(func(sessionKey string) chat.StatusDeps {
+		sd := chat.StatusDeps{
+			Version:       s.version,
+			StartedAt:     s.startedAt,
+			RustFFI:       s.rustFFI,
+			WSConnections: s.clientCnt.Load(),
+		}
+		if s.sessions != nil {
+			sd.SessionCount = s.sessions.Count()
+		}
+		if sess := s.sessions.Get(sessionKey); sess != nil && sess.FailureReason != "" {
+			sd.LastFailureReason = sess.FailureReason
+		}
+		return sd
+	})
+
 	// Wire SendFn after handler creation to avoid circular deps.
 	sendFn := func(sessionKey, message string) error {
 		fakeReq := &protocol.RequestFrame{
@@ -143,6 +160,11 @@ func (s *Server) registerSessionRPCMethods() {
 	}
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
+
+	// Wire autoresearch workdir resolver so /chart finds the experiment dir.
+	if s.autoresearchRunner != nil {
+		s.chatHandler.SetAutoresearchWorkdirFn(s.autoresearchRunner.Workdir)
+	}
 
 	// Wire transcript cloner for cron shadow session support.
 	// Shadow sessions clone recent transcript from the main session for context.

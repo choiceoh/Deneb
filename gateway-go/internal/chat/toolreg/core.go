@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/web"
@@ -19,18 +18,17 @@ import (
 )
 
 // SglangDeps holds optional sglang integration functions for tools that need
-// local LLM access (polaris, pilot). Injected by chat/ to avoid importing
-// sglang code from toolreg/.
+// local LLM access (pilot). Injected by chat/ to avoid importing sglang code
+// from toolreg/.
 type SglangDeps struct {
-	CallLocalLLM      polaris.LLMSynthesizer // may be nil
-	CheckSglangHealth polaris.HealthChecker  // may be nil
-	BaseURL           func() string          // returns sglang base URL; may be nil
+	CheckSglangHealth func() bool   // may be nil
+	BaseURL           func() string // returns sglang base URL; may be nil
 }
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 // It delegates to domain-specific Register*Tools functions.
 //
-// sglang may be nil; tools that require sglang (polaris, pilot) degrade gracefully.
+// sglang may be nil; tools that require sglang (pilot) degrade gracefully.
 func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, sglang *SglangDeps) {
 	RegisterFSTools(registry, deps, sglang)
 	RegisterProcessTools(registry, &deps.Process)
@@ -38,7 +36,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterInfraTools(registry, &deps.Vega, sglang)
-	RegisterMediaTools(registry, deps.ImageClient, deps.ImageModel)
+	RegisterMediaTools(registry, deps.LLMClient, deps.DefaultModel)
 	RegisterDataTools(registry)
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, &deps.Vega)
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
@@ -146,22 +144,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		InputSchema: memoryToolSchema(),
 		Fn:          tools.ToolMemory(&deps.Vega, workspaceDir, slog.Default()),
 	})
-	// Polaris: requires sglang deps for local LLM and uses a read-only executor.
-	var polarisDeps polaris.Deps
-	if sglang != nil {
-		polarisDeps.LLM = sglang.CallLocalLLM
-		polarisDeps.Health = sglang.CheckSglangHealth
-	}
-	if exec, ok := registry.(toolctx.ToolExecutor); ok {
-		polarisDeps.Tools = &polaris.ReadOnlyExecutor{Inner: exec}
-	}
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "polaris",
-		Description: "Deneb system knowledge agent. Ask any question about the Deneb system — Polaris autonomously searches docs, guides, and source code to synthesize a direct answer",
-		InputSchema: polarisToolSchema(),
-		Fn:          polaris.NewHandlerWithDeps(workspaceDir, polarisDeps),
-	})
-
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gateway",
 		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
@@ -337,13 +319,12 @@ func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sgl
 }
 
 // RegisterMediaTools registers image analysis and media delivery tools.
-// imageClient and imageModel specify the lightweight model used for image analysis.
-func RegisterMediaTools(registry toolctx.ToolRegistrar, imageClient *llm.Client, imageModel string) {
+func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "image",
 		Description: "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
 		InputSchema: imageToolSchema(),
-		Fn:          tools.ToolImage(imageClient, imageModel),
+		Fn:          tools.ToolImage(llmClient, defaultModel),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "youtube_transcript",

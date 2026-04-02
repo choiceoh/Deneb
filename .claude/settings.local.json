@@ -17,6 +17,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "ExitWorktree",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/worktree-auto-pr.sh"
+          }
+        ]
+      }
     ]
   }
 }

@@ -26,7 +26,7 @@ const (
 	DreamingTimeIntervalH    = 8
 	dreamingTimeout          = 15 * time.Minute
 	dreamingBatchSize        = 50
-	dreamingMaxTokens        = 1024
+	dreamingMaxTokens        = 4096
 	similarityMergeThreshold = 0.78
 	maxMergeDepth            = 2 // cascade prevention: facts at this depth are ineligible for merging
 
@@ -115,8 +115,9 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	}
 
 	// Phase 0.75: Retry pending embeddings (facts that failed async embedding).
+	// Uses batch embedding API to process all pending facts in a single call.
 	if embedder != nil {
-		if n, err := store.RetryPendingEmbeddings(ctx, embedder.EmbedAndStore); err == nil && n > 0 {
+		if n, err := store.RetryPendingEmbeddings(ctx, embedder.EmbedBatchAndStore); err == nil && n > 0 {
 			logger.Info("aurora-dream: retried pending embeddings", "count", n)
 		}
 	}
@@ -436,6 +437,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 
 	merged := 0
 	consecutiveRejects := 0
+	var pendingEmbeds []struct{ ID int64; Content string }
 	// Limit merges per cycle to avoid excessive LLM calls.
 	maxMerges := 25
 	for _, p := range pairs {
@@ -495,13 +497,20 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		_ = store.SupersedeFact(ctx, p.a, newID)
 		_ = store.SupersedeFact(ctx, p.b, newID)
 
-		// Embed the new fact.
-		if embedder != nil {
-			_ = embedder.EmbedAndStore(ctx, newID, result.MergedContent)
-		}
+		// Collect for batch embedding after the loop.
+		pendingEmbeds = append(pendingEmbeds, struct{ ID int64; Content string }{ID: newID, Content: result.MergedContent})
 
 		merged++
 		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID, "sim", fmt.Sprintf("%.3f", p.sim))
+	}
+
+	// Batch-embed all merged facts in a single API call.
+	if embedder != nil && len(pendingEmbeds) > 0 {
+		if n, err := embedder.EmbedBatchAndStore(ctx, pendingEmbeds); err != nil {
+			logger.Warn("aurora-dream: batch embed merged facts failed", "error", err)
+		} else {
+			logger.Info("aurora-dream: batch-embedded merged facts", "count", n)
+		}
 	}
 
 	return merged, nil
@@ -670,6 +679,7 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 	}
 
 	count := 0
+	var pendingEmbeds []struct{ ID int64; Content string }
 	for _, p := range wrapper.Patterns {
 		if p.Content == "" {
 			continue
@@ -690,10 +700,15 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 			continue
 		}
 		count++
+		pendingEmbeds = append(pendingEmbeds, struct{ ID int64; Content string }{ID: id, Content: p.Content})
+	}
 
-		// Embed the pattern so Phase 2 can detect duplicates in future cycles.
-		if embedder != nil {
-			_ = embedder.EmbedAndStore(ctx, id, p.Content)
+	// Batch-embed all patterns in a single API call.
+	if embedder != nil && len(pendingEmbeds) > 0 {
+		if n, err := embedder.EmbedBatchAndStore(ctx, pendingEmbeds); err != nil {
+			logger.Warn("aurora-dream: batch embed patterns failed", "error", err)
+		} else {
+			logger.Info("aurora-dream: batch-embedded patterns", "count", n)
 		}
 	}
 

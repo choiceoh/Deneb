@@ -7,7 +7,7 @@
 // need for a full compaction sweep.
 //
 // Inspired by Claude Code's microCompact.ts pattern.
-package chat
+package compaction
 
 import (
 	"encoding/json"
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"unicode/utf8"
 )
 
 // Microcompact defaults.
@@ -162,4 +163,14 @@ func MicrocompactMessages(messages []llm.Message, now time.Time) ([]llm.Message,
 		EstimatedSaved: estimatedSaved,
 		Reason:         "pruned",
 	}
+}
+
+// estimateTokens provides a rough token estimate using rune count.
+// Korean text uses ~2 runes per token with BPE tokenizers.
+func estimateTokens(s string) int {
+	n := utf8.RuneCountInString(s) / 2
+	if n < 1 {
+		return 1
+	}
+	return n
 }

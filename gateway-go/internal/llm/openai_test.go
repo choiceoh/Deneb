@@ -4,8 +4,27 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func TestMergeJSONFields(t *testing.T) {
+	base := []byte(`{"model":"test","stream":true}`)
+	extra := map[string]any{
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
+	}
+	got, err := mergeJSONFields(base, extra)
+	if err != nil {
+		t.Fatalf("mergeJSONFields error: %v", err)
+	}
+	s := string(got)
+	if !strings.Contains(s, `"enable_thinking":false`) {
+		t.Errorf("expected enable_thinking:false in result, got: %s", s)
+	}
+	if !strings.Contains(s, `"model":"test"`) {
+		t.Errorf("expected original fields preserved, got: %s", s)
+	}
+}
 
 func TestComplete_OmitsAuthorizationHeaderWhenAPIKeyEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

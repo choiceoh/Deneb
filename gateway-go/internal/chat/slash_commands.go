@@ -62,18 +62,17 @@ func ParseSlashCommand(text string) *SlashResult {
 				Command:  "model",
 			}
 		}
-		if args == "" {
-			return &SlashResult{
-				Handled:  true,
-				Response: "사용법: /model <model-name 또는 역할명(main|lightweight|fallback|image)>",
-				Command:  "model",
-			}
-		}
 		return &SlashResult{
 			Handled:  true,
 			Response: fmt.Sprintf("모델이 %q(으)로 변경되었습니다.", args),
 			Command:  "model",
 			Args:     args,
+		}
+	case "models":
+		return &SlashResult{
+			Handled:  true,
+			Response: "모델 퀵체인지는 텔레그램에서만 지원됩니다.",
+			Command:  "models",
 		}
 	case "think":
 		return &SlashResult{

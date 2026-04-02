@@ -30,6 +30,31 @@ func TestPrewarmModel_ContextCanceled(t *testing.T) {
 	PrewarmModel(ctx, logger)
 }
 
+func TestDoPrewarmRequest_PermanentError_NoRetry(t *testing.T) {
+	var called atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintln(w, `{"error":{"code":"401","message":"token expired"}}`)
+	}))
+	defer server.Close()
+
+	client := llm.NewClient(server.URL, "bad-key", llm.WithRetry(0, 0, 0))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// doPrewarmRequest should fail.
+	err := doPrewarmRequest(ctx, client, "test-model")
+	if err == nil {
+		t.Fatal("expected error for 401, got nil")
+	}
+
+	// Verify only 1 request was made (no retries for permanent errors).
+	if called.Load() != 1 {
+		t.Fatalf("expected 1 call for 401 (no retries), got %d", called.Load())
+	}
+}
+
 func TestDoPrewarmRequest_OpenAI(t *testing.T) {
 	var called atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +85,7 @@ func TestSplitModelID(t *testing.T) {
 		wantProv  string
 		wantModel string
 	}{
-		{"zai/glm-5-turbo", "zai", "glm-5-turbo"},
+		{"zai/glm-5v-turbo", "zai", "glm-5v-turbo"},
 		{"anthropic/claude-3-haiku", "anthropic", "claude-3-haiku"},
 		{"just-model", "", "just-model"},
 		{"", "", ""},
@@ -76,9 +101,9 @@ func TestSplitModelID(t *testing.T) {
 
 func TestExtractModelFromDefaults(t *testing.T) {
 	// String form.
-	raw := json.RawMessage(`{"model":"zai/glm-5-turbo"}`)
-	if got := extractModelFromDefaults(raw); got != "zai/glm-5-turbo" {
-		t.Errorf("string form: got %q, want %q", got, "zai/glm-5-turbo")
+	raw := json.RawMessage(`{"model":"zai/glm-5v-turbo"}`)
+	if got := extractModelFromDefaults(raw); got != "zai/glm-5v-turbo" {
+		t.Errorf("string form: got %q, want %q", got, "zai/glm-5v-turbo")
 	}
 
 	// Object form.

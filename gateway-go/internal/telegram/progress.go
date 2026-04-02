@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 const (
@@ -74,7 +76,6 @@ var toolNameKorean = map[string]string{
 	"web":             "웹 검색",
 	"memory":          "메모리 검색",
 	"pilot":           "AI 분석",
-	"polaris":         "시스템 지식",
 	"image":           "이미지 분석",
 	"gmail":           "이메일",
 	"message":         "메시지 전송",
@@ -181,6 +182,13 @@ func (pt *ProgressTracker) runSummary(insertIdx int, reasons []string) {
 
 // sanitizeSummary cleans up LLM output to a short, single-line Korean phrase.
 func sanitizeSummary(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// Strip reasoning model artifacts (<think>...</think>, "Thinking Process:", etc.).
+	raw = jsonutil.StripThinkingTags(raw)
+	raw = jsonutil.StripThinkingPreamble(raw)
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""

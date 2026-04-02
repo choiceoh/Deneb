@@ -73,6 +73,23 @@ type AgentConfig struct {
 	// the LLM response is truncated by max_tokens. Each recovery injects a
 	// "resume where you left off" message. Default: 0 (disabled). Recommended: 3.
 	MaxOutputTokensRecovery int
+
+	// OnMidLoopCompact is called after tool results are appended to the message
+	// history on each turn. If the callback returns a non-nil replacement slice,
+	// the executor swaps the message history with the compacted version. This
+	// allows the chat pipeline to run microcompact / Aurora compaction mid-loop
+	// instead of waiting for a context_length_exceeded error from the LLM.
+	//
+	// Parameters:
+	//   - turn: current turn number (0-based)
+	//   - messages: current message history (including latest tool results)
+	//   - accTokens: accumulated input+output tokens so far
+	//
+	// Returns:
+	//   - replacement messages (nil = no compaction needed)
+	//   - optional system prompt addition from compaction summaries
+	//   - error (non-fatal; logged and ignored)
+	OnMidLoopCompact func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error)
 }
 
 // NudgeBudgetConfig configures token-budget continuation (Claude Code pattern).

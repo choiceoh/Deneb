@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 )
 
@@ -9,9 +10,8 @@ import (
 // then adds tools that depend on chat-internal state (pilot, post-processors).
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	sglang := &toolreg.SglangDeps{
-		CallLocalLLM:      callLocalLLM,
-		CheckSglangHealth: checkSglangHealth,
-		BaseURL:           lightweightBaseURL,
+		CheckSglangHealth: pilot.CheckSglangHealth,
+		BaseURL:           pilot.LightweightBaseURL,
 	}
 	toolreg.RegisterCoreTools(registry, deps, sglang)
 
@@ -20,7 +20,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Name:        "pilot",
 		Description: "Local AI analysis for noisy outputs or multi-source orchestration. Prefer direct tools for simple read/grep/find/tree/git/web/http/memory-style lookups. Shortcuts: file, exec, grep, find, url, diff, test, tree, git_log, health, memory, vega, image + more",
 		InputSchema: toolreg.PilotToolSchema(),
-		Fn:          toolPilot(registry, deps.WorkspaceDir),
+		Fn:          pilot.ToolPilot(registry, deps.WorkspaceDir),
 	})
 
 	RegisterDefaultPostProcessors(registry)

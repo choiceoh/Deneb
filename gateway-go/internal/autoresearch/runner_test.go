@@ -688,6 +688,7 @@ func TestDefaultParams(t *testing.T) {
 		{"TrendWindowSize", p.TrendWindowSize, 10},
 		{"PlateauThreshold", p.PlateauThreshold, 5},
 		{"DefaultTimeBudgetSec", p.DefaultTimeBudgetSec, 300},
+		{"MaxIterations", p.MaxIterations, 30},
 	}
 	for _, c := range checks {
 		if c.got != c.want {

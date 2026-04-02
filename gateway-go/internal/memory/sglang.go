@@ -15,6 +15,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// sglangNoThinking disables reasoning mode for all local sglang calls.
+// Qwen3.5 reasoning adds latency and "Thinking Process:" preambles that
+// leak into output; none of our sglang tasks need it.
+var sglangNoThinking = map[string]any{
+	"chat_template_kwargs": map[string]any{"enable_thinking": false},
+}
+
 // callSglang sends a streaming chat request to the local SGLang model and collects the full response.
 func callSglang(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
 	events, err := client.StreamChat(ctx, llm.ChatRequest{
@@ -23,6 +30,7 @@ func callSglang(ctx context.Context, client *llm.Client, model, system, user str
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
+		ExtraBody: sglangNoThinking,
 	})
 	if err != nil {
 		return "", err
@@ -43,6 +51,7 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 		MaxTokens:      maxTokens,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+		ExtraBody:      sglangNoThinking,
 	})
 	if err != nil {
 		return "", err

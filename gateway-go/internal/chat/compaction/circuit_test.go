@@ -1,4 +1,4 @@
-package chat
+package compaction
 
 import "testing"
 
@@ -15,7 +15,7 @@ func TestCompactionCircuitBreaker(t *testing.T) {
 
 	t.Run("trips after max failures", func(t *testing.T) {
 		cb := NewCompactionCircuitBreaker()
-		for i := 0; i < maxConsecutiveCompactionFailures-1; i++ {
+		for i := 0; i < MaxConsecutiveCompactionFailures-1; i++ {
 			if tripped := cb.RecordFailure(); tripped {
 				t.Errorf("tripped too early at failure %d", i+1)
 			}
@@ -30,7 +30,7 @@ func TestCompactionCircuitBreaker(t *testing.T) {
 
 	t.Run("success resets", func(t *testing.T) {
 		cb := NewCompactionCircuitBreaker()
-		for i := 0; i < maxConsecutiveCompactionFailures; i++ {
+		for i := 0; i < MaxConsecutiveCompactionFailures; i++ {
 			cb.RecordFailure()
 		}
 		if !cb.IsTripped() {
@@ -53,8 +53,8 @@ func TestCompactionCircuitBreaker(t *testing.T) {
 		if cb.ConsecutiveFailures() != 0 {
 			t.Errorf("failures = %d after success", cb.ConsecutiveFailures())
 		}
-		// Need full maxConsecutiveCompactionFailures again to trip.
-		for i := 0; i < maxConsecutiveCompactionFailures-1; i++ {
+		// Need full MaxConsecutiveCompactionFailures again to trip.
+		for i := 0; i < MaxConsecutiveCompactionFailures-1; i++ {
 			cb.RecordFailure()
 		}
 		if cb.IsTripped() {
@@ -64,7 +64,7 @@ func TestCompactionCircuitBreaker(t *testing.T) {
 
 	t.Run("reset forces closed state", func(t *testing.T) {
 		cb := NewCompactionCircuitBreaker()
-		for i := 0; i < maxConsecutiveCompactionFailures; i++ {
+		for i := 0; i < MaxConsecutiveCompactionFailures; i++ {
 			cb.RecordFailure()
 		}
 		cb.Reset()

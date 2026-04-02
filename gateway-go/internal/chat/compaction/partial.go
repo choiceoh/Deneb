@@ -14,7 +14,7 @@
 // compressing the less-valuable recent tool results and intermediate steps.
 //
 // Inspired by Claude Code's partialCompactConversation pattern.
-package chat
+package compaction
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"

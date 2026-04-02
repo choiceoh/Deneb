@@ -584,12 +584,14 @@
     headers:
       type: object
       description: Request headers as key-value pairs
+      additionalProperties: true
     body:
       type: string
       description: Request body as string
     json:
       type: object
       description: "JSON body (auto-sets Content-Type: application/json)"
+      additionalProperties: true
     timeout:
       type: number
       description: Timeout in seconds
@@ -670,14 +672,6 @@
   required:
     - action
 
-- name: polaris
-  properties:
-    question:
-      type: string
-      description: "Natural language question about the Deneb system. Polaris autonomously searches docs, guides, and source code to synthesize an answer"
-  required:
-    - question
-
 # ---------------------------------------------------------------------------
 # System tools
 # ---------------------------------------------------------------------------
@@ -713,6 +707,7 @@
     job:
       type: object
       description: Job definition for add/update
+      additionalProperties: true
     text:
       type: string
       description: System event text for wake action
@@ -1215,6 +1210,7 @@
           input:
             type: object
             description: "Tool input parameters (same schema as calling the tool directly)"
+            additionalProperties: true
           label:
             type: string
             description: Label for this source in the analysis (auto-generated if omitted)
@@ -1289,9 +1285,6 @@
     youtube:
       type: string
       description: "Shortcut: get YouTube transcript (expands to sources:[{tool:'youtube_transcript', input:{url:...}}])"
-    polaris:
-      type: string
-      description: "Shortcut: search Deneb system manual (expands to sources:[{tool:'polaris', input:{action:'search', query:...}}])"
     image:
       type: string
       description: "Shortcut: analyze image file or URL (expands to sources:[{tool:'image', input:{paths:[...]}}])"
@@ -1398,6 +1391,11 @@
     metric_pattern:
       type: string
       description: "Regex with one capture group to extract the metric value from experiment output (init only). Example: 'val_bpb:\\s*([\\d.]+)' extracts 1.087 from 'val_bpb: 1.087'. If omitted, uses default heuristic (last number on last stdout line)."
+    max_iterations:
+      type: number
+      description: "Max iterations before auto-stop and sending completion report (init only, default: 30). Set -1 for unlimited."
+      default: 30
+      minimum: -1
     format:
       type: string
       enum:

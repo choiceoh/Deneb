@@ -588,9 +588,11 @@ func execToolSchema() map[string]any {
 				"default":     false,
 			},
 			"env": map[string]any{
-				"type":                 "object",
-				"description":          "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
-				"additionalProperties": "{'type': 'string'}",
+				"type":        "object",
+				"description": "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
+				"additionalProperties": map[string]any{
+					"type": "string",
+				},
 			},
 		},
 		"required": []string{"command"},
@@ -666,16 +668,18 @@ func httpToolSchema() map[string]any {
 				"default":     "GET",
 			},
 			"headers": map[string]any{
-				"type":        "object",
-				"description": "Request headers as key-value pairs",
+				"type":                 "object",
+				"description":          "Request headers as key-value pairs",
+				"additionalProperties": true,
 			},
 			"body": map[string]any{
 				"type":        "string",
 				"description": "Request body as string",
 			},
 			"json": map[string]any{
-				"type":        "object",
-				"description": "JSON body (auto-sets Content-Type: application/json)",
+				"type":                 "object",
+				"description":          "JSON body (auto-sets Content-Type: application/json)",
+				"additionalProperties": true,
 			},
 			"timeout": map[string]any{
 				"type":        "number",
@@ -753,19 +757,6 @@ func memoryToolSchema() map[string]any {
 	}
 }
 
-func polarisToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"question": map[string]any{
-				"type":        "string",
-				"description": "Natural language question about the Deneb system. Polaris autonomously searches docs, guides, and source code to synthesize an answer",
-			},
-		},
-		"required": []string{"question"},
-	}
-}
-
 func healthCheckToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -793,8 +784,9 @@ func cronToolSchema() map[string]any {
 				"description": "Job ID for update/remove/run actions",
 			},
 			"job": map[string]any{
-				"type":        "object",
-				"description": "Job definition for add/update",
+				"type":                 "object",
+				"description":          "Job definition for add/update",
+				"additionalProperties": true,
 			},
 			"text": map[string]any{
 				"type":        "string",
@@ -1389,8 +1381,9 @@ func pilotToolSchema() map[string]any {
 							"description": "Tool name from the registry (read, exec, grep, find, web_fetch, ls, http, etc.)",
 						},
 						"input": map[string]any{
-							"type":        "object",
-							"description": "Tool input parameters (same schema as calling the tool directly)",
+							"type":                 "object",
+							"description":          "Tool input parameters (same schema as calling the tool directly)",
+							"additionalProperties": true,
 						},
 						"label": map[string]any{
 							"type":        "string",
@@ -1490,10 +1483,6 @@ func pilotToolSchema() map[string]any {
 			"youtube": map[string]any{
 				"type":        "string",
 				"description": "Shortcut: get YouTube transcript (expands to sources:[{tool:'youtube_transcript', input:{url:...}}])",
-			},
-			"polaris": map[string]any{
-				"type":        "string",
-				"description": "Shortcut: search Deneb system manual (expands to sources:[{tool:'polaris', input:{action:'search', query:...}}])",
 			},
 			"image": map[string]any{
 				"type":        "string",
@@ -1601,6 +1590,12 @@ func autoresearchToolSchema() map[string]any {
 			"metric_pattern": map[string]any{
 				"type":        "string",
 				"description": "Regex with one capture group to extract the metric value from experiment output (init only). Example: 'val_bpb:\\s*([\\d.]+)' extracts 1.087 from 'val_bpb: 1.087'. If omitted, uses default heuristic (last number on last stdout line).",
+			},
+			"max_iterations": map[string]any{
+				"type":        "number",
+				"description": "Max iterations before auto-stop and sending completion report (init only, default: 30). Set -1 for unlimited.",
+				"default":     30,
+				"minimum":     -1,
 			},
 			"format": map[string]any{
 				"type":        "string",

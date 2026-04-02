@@ -7,15 +7,15 @@
 //
 // The circuit breaker disables auto-compaction after N consecutive failures,
 // resetting on any success.
-package chat
+package compaction
 
 import "sync"
 
 // compactionCircuitDefaults.
 const (
-	// maxConsecutiveCompactionFailures is the threshold after which
+	// MaxConsecutiveCompactionFailures is the threshold after which
 	// auto-compaction is disabled for the session.
-	maxConsecutiveCompactionFailures = 3
+	MaxConsecutiveCompactionFailures = 3
 )
 
 // CompactionCircuitBreaker tracks consecutive compaction failures and
@@ -45,7 +45,7 @@ func (cb *CompactionCircuitBreaker) RecordFailure() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.consecutiveFailures++
-	if cb.consecutiveFailures >= maxConsecutiveCompactionFailures {
+	if cb.consecutiveFailures >= MaxConsecutiveCompactionFailures {
 		cb.tripped = true
 	}
 	return cb.tripped

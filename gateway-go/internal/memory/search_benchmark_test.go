@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // Ground truth types for benchmark dataset.
@@ -45,20 +49,105 @@ func testdataDir() string {
 	return filepath.Join(filepath.Dir(thisFile), "testdata")
 }
 
+// embedAllFacts generates embeddings for all active facts in the store.
+func embedAllFacts(t *testing.T, store *Store, embedder *Embedder) {
+	t.Helper()
+	ctx := context.Background()
+	rows, err := store.db.QueryContext(ctx, "SELECT id, content FROM facts WHERE active = 1")
+	if err != nil {
+		t.Fatalf("query facts for embedding: %v", err)
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var id int64
+		var content string
+		if err := rows.Scan(&id, &content); err != nil {
+			t.Fatalf("scan fact: %v", err)
+		}
+		var cnt int
+		store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM fact_embeddings WHERE fact_id = ?", id).Scan(&cnt)
+		if cnt > 0 {
+			continue
+		}
+		if err := embedder.EmbedAndStore(ctx, id, content); err != nil {
+			t.Logf("embed fact %d: %v", id, err)
+		}
+		count++
+	}
+	t.Logf("embedded %d facts", count)
+}
+
+// setupVectorAndReranker creates embedder and reranker, embeds all facts.
+// Falls back to FTS-only if GEMINI_API_KEY is not set.
+func setupVectorAndReranker(t *testing.T, store *Store) func(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
+	t.Helper()
+
+	geminiKey := os.Getenv("GEMINI_API_KEY")
+	if geminiKey == "" {
+		t.Log("GEMINI_API_KEY not set, running FTS-only")
+		return func(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
+			return store.SearchFacts(ctx, query, nil, opts)
+		}
+	}
+
+	embedder := NewEmbedder(
+		embedding.NewGeminiEmbedder(geminiKey, slog.Default()),
+		store,
+		slog.Default(),
+	)
+
+	for attempt := 0; attempt < 3; attempt++ {
+		embedAllFacts(t, store, embedder)
+	}
+
+	jinaKey := os.Getenv("JINA_API_KEY")
+	if jinaKey != "" {
+		jinaReranker := vega.NewReranker(vega.RerankConfig{
+			APIKey: jinaKey,
+			Logger: slog.Default(),
+		})
+		if jinaReranker != nil {
+			store.SetReranker(func(ctx context.Context, query string, docs []string, topN int) ([]RerankResult, error) {
+				vr, err := jinaReranker.Rerank(ctx, query, docs, topN)
+				if err != nil {
+					return nil, err
+				}
+				result := make([]RerankResult, len(vr))
+				for i, r := range vr {
+					result[i] = RerankResult{Index: r.Index, RelevanceScore: r.RelevanceScore}
+				}
+				return result, nil
+			})
+			t.Log("reranker enabled (Jina)")
+		}
+	} else {
+		t.Log("JINA_API_KEY not set, reranker disabled")
+	}
+
+	return func(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
+		vec, err := embedder.EmbedQuery(ctx, query)
+		if err != nil {
+			t.Logf("embed query failed: %v, falling back to FTS-only", err)
+			return store.SearchFacts(ctx, query, nil, opts)
+		}
+		return store.SearchFacts(ctx, query, vec, opts)
+	}
+}
+
 // TestSearchBenchmarkMRR measures search quality using MRR@10 and Recall@10.
-// This test is designed to be driven by autoresearch: the agent edits
-// testdata/search_params.json, this test reads it, and outputs a scalar metric.
+// Designed for autoresearch: edits testdata/search_params.json, outputs METRIC.
+// With GEMINI_API_KEY + JINA_API_KEY: full hybrid search + reranking.
 func TestSearchBenchmarkMRR(t *testing.T) {
 	ctx := context.Background()
 	dir := testdataDir()
 
-	// 1. Load search params.
 	params, err := LoadSearchParams(filepath.Join(dir, "search_params.json"))
 	if err != nil {
 		t.Fatalf("load search params: %v", err)
 	}
 
-	// 2. Load ground truth.
 	gtData, err := os.ReadFile(filepath.Join(dir, "benchmark_ground_truth.json"))
 	if err != nil {
 		t.Fatalf("load ground truth: %v", err)
@@ -68,11 +157,9 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 		t.Fatalf("parse ground truth: %v", err)
 	}
 
-	// 3. Create store with params.
 	store := tempStore(t)
 	store.SetSearchParams(params)
 
-	// 4. Populate facts with controlled timestamps and entities.
 	now := time.Now()
 	tagToID := make(map[string]int64, len(gt.Facts))
 
@@ -87,7 +174,6 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 		}
 		tagToID[f.Tag] = id
 
-		// Set timestamps to control recency scoring.
 		createdAt := now.Add(-time.Duration(f.DaysAgo*24) * time.Hour)
 		ts := createdAt.Format(time.RFC3339)
 		if _, err := store.db.ExecContext(ctx,
@@ -96,7 +182,6 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 			t.Fatalf("set timestamp for %q: %v", f.Tag, err)
 		}
 
-		// Set verification status.
 		if f.Verified {
 			verifiedAt := now.Add(-time.Duration(f.DaysAgo*24) * time.Hour)
 			vts := verifiedAt.Format(time.RFC3339)
@@ -107,7 +192,6 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 			}
 		}
 
-		// Create entities and links.
 		for _, e := range f.Entities {
 			eid, err := store.UpsertEntity(ctx, e.Name, e.Type)
 			if err != nil {
@@ -119,20 +203,20 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 		}
 	}
 
-	// 5. Run queries and compute metrics.
+	searchFn := setupVectorAndReranker(t, store)
+
 	const k = 10
 	var reciprocalRankSum float64
 	var recallSum float64
 	queryCount := len(gt.Queries)
 
 	for _, q := range gt.Queries {
-		results, err := store.SearchFacts(ctx, q.Query, nil, SearchOpts{Limit: k})
+		results, err := searchFn(ctx, q.Query, SearchOpts{Limit: k})
 		if err != nil {
 			t.Errorf("query %q failed: %v", q.Query, err)
 			continue
 		}
 
-		// Build expected ID set.
 		expectedIDs := make(map[int64]bool, len(q.ExpectedTags))
 		for _, tag := range q.ExpectedTags {
 			if id, ok := tagToID[tag]; ok {
@@ -142,7 +226,6 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 			}
 		}
 
-		// MRR: reciprocal rank of first relevant result.
 		rr := 0.0
 		for rank, r := range results {
 			if expectedIDs[r.Fact.ID] {
@@ -152,7 +235,6 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 		}
 		reciprocalRankSum += rr
 
-		// Recall@K: fraction of expected results found in top K.
 		found := 0
 		for _, r := range results {
 			if expectedIDs[r.Fact.ID] {
@@ -163,7 +245,6 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 			recallSum += float64(found) / float64(len(expectedIDs))
 		}
 
-		// Per-query detail for debugging.
 		t.Logf("  query=%q  rr=%.4f  recall=%.2f/%d  hits=%d  desc=%s",
 			q.Query, rr, float64(found), len(expectedIDs), len(results), q.Description)
 	}
@@ -171,10 +252,8 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 	mrr := reciprocalRankSum / float64(queryCount)
 	recall := recallSum / float64(queryCount)
 
-	// Combined metric: weighted sum (MRR is primary signal).
 	combined := 0.7*mrr + 0.3*recall
 
-	// Print metrics in parseable format for autoresearch extraction.
 	fmt.Printf("mrr@%d: %.6f\n", k, mrr)
 	fmt.Printf("recall@%d: %.6f\n", k, recall)
 	fmt.Printf("METRIC: %.6f\n", combined)

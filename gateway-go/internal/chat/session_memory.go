@@ -27,6 +27,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -250,11 +252,11 @@ func UpdateSessionMemory(
 	if store == nil {
 		return
 	}
-	lwClient := getLightweightClient()
+	lwClient := pilot.GetLightweightClient()
 	if lwClient == nil {
 		return
 	}
-	if !checkSglangHealth() {
+	if !pilot.CheckSglangHealth() {
 		return
 	}
 
@@ -288,7 +290,7 @@ func UpdateSessionMemory(
 	)
 
 	resp, err := lwClient.Complete(memCtx, llm.ChatRequest{
-		Model: getLightweightModel(),
+		Model: pilot.GetLightweightModel(),
 		Messages: []llm.Message{
 			llm.NewTextMessage("system", sessionMemorySystemPrompt),
 			llm.NewTextMessage("user", userPrompt),
