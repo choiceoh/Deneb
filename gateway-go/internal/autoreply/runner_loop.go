@@ -51,6 +51,8 @@ type AgentTurnConfig struct {
 	// Model fallback.
 	FallbackModels []string
 	AuthProfile    string
+	// Deep work mode: extended timeouts and continuations for long autonomous sessions.
+	DeepWork bool
 }
 
 // AgentTurnResult holds the outcome of an agent turn.

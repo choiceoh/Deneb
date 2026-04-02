@@ -1656,7 +1656,11 @@ func continueRunToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Brief description of remaining work for the next continuation run",
 			},
+			"progress_summary": map[string]any{
+				"type":        "string",
+				"description": "Summary of what was accomplished in this run (sent to user as progress report)",
+			},
 		},
-		"required": []string{"reason"},
+		"required": []string{"reason", "progress_summary"},
 	}
 }
