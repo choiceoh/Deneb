@@ -56,15 +56,12 @@ func ExtractConstants(workdir string, constants []ConstantDef) (map[string]strin
 		if err != nil {
 			return nil, fmt.Errorf("read %s for constant %s: %w", cd.File, cd.Name, err)
 		}
-		re, err := regexp.Compile(cd.Pattern)
+		pattern := cd.EffectivePattern()
+		m, err := findWithFallback(string(data), pattern)
 		if err != nil {
-			return nil, fmt.Errorf("compile pattern for %s: %w", cd.Name, err)
+			return nil, fmt.Errorf("constant %s in %s: %w", cd.Name, cd.File, err)
 		}
-		m := re.FindStringSubmatch(string(data))
-		if len(m) < 2 {
-			return nil, fmt.Errorf("constant %s: pattern %q matched nothing in %s", cd.Name, cd.Pattern, cd.File)
-		}
-		values[cd.Name] = m[1]
+		values[cd.Name] = m
 	}
 	return values, nil
 }
@@ -132,14 +129,12 @@ func ApplyOverrides(workdir string, constants []ConstantDef, overrides map[strin
 
 // replaceCapture replaces the first capture group match of the pattern in
 // content with newValue. Everything outside the capture group is preserved.
+// If the exact pattern fails, it tries relaxed fallback patterns (flexible
+// leading whitespace) so that minor pattern mistakes don't break the run.
 func replaceCapture(content, pattern, newValue string) (string, error) {
-	re, err := regexp.Compile(pattern)
+	loc, err := findSubmatchIndexWithFallback(content, pattern)
 	if err != nil {
-		return "", fmt.Errorf("compile pattern: %w", err)
-	}
-	loc := re.FindStringSubmatchIndex(content)
-	if loc == nil || len(loc) < 4 {
-		return "", fmt.Errorf("pattern %q matched nothing", pattern)
+		return "", err
 	}
 	// loc[2] and loc[3] are the start/end of capture group 1.
 	var sb strings.Builder
@@ -147,6 +142,85 @@ func replaceCapture(content, pattern, newValue string) (string, error) {
 	sb.WriteString(newValue)
 	sb.WriteString(content[loc[3]:])
 	return sb.String(), nil
+}
+
+// findWithFallback tries the pattern, then relaxed variants. Returns the
+// first capture group match.
+func findWithFallback(content, pattern string) (string, error) {
+	for _, p := range patternVariants(pattern) {
+		re, err := regexp.Compile(p)
+		if err != nil {
+			continue
+		}
+		m := re.FindStringSubmatch(content)
+		if len(m) >= 2 {
+			return m[1], nil
+		}
+	}
+	return "", fmt.Errorf("pattern %q (and relaxed variants) matched nothing", pattern)
+}
+
+// findSubmatchIndexWithFallback tries the pattern, then relaxed variants.
+// Returns the full submatch index slice.
+func findSubmatchIndexWithFallback(content, pattern string) ([]int, error) {
+	for _, p := range patternVariants(pattern) {
+		re, err := regexp.Compile(p)
+		if err != nil {
+			continue
+		}
+		loc := re.FindStringSubmatchIndex(content)
+		if loc != nil && len(loc) >= 4 {
+			return loc, nil
+		}
+	}
+	return nil, fmt.Errorf("pattern %q (and relaxed variants) matched nothing", pattern)
+}
+
+// patternVariants returns the original pattern plus relaxed alternatives that
+// handle common AI-agent mistakes (wrong leading whitespace, literal \t vs
+// actual tab, missing word boundary, etc.).
+func patternVariants(pattern string) []string {
+	variants := []string{pattern}
+
+	// Variant: prepend \s* if the pattern starts with a word character or \b.
+	// This handles the case where the agent forgot leading whitespace (e.g.,
+	// "weightHybrid\s*=..." when the file has "\tweightHybrid = ...").
+	if len(pattern) > 0 {
+		first := pattern[0]
+		if first >= 'a' && first <= 'z' || first >= 'A' && first <= 'Z' || first == '_' {
+			variants = append(variants, `\s*`+pattern)
+		}
+	}
+
+	// Variant: strip explicit leading whitespace anchors (\t, [ \t]+, ^\s*, etc.)
+	// and replace with flexible \s*.
+	stripped := stripLeadingWSPattern(pattern)
+	if stripped != pattern {
+		variants = append(variants, `\s*`+stripped)
+	}
+
+	return variants
+}
+
+// stripLeadingWSPattern removes common leading-whitespace pattern prefixes.
+func stripLeadingWSPattern(pattern string) string {
+	prefixes := []string{
+		`^\s*`, `^\s+`, `^[ \t]*`, `^[ \t]+`, `^\t+`, `^\t`,
+		`\s*`, `\s+`, `[ \t]*`, `[ \t]+`, `\t+`, `\t`,
+	}
+	for _, pfx := range prefixes {
+		if strings.HasPrefix(pattern, pfx) {
+			rest := pattern[len(pfx):]
+			// Only strip if the remainder starts with something meaningful.
+			if len(rest) > 0 {
+				first := rest[0]
+				if first >= 'a' && first <= 'z' || first >= 'A' && first <= 'Z' || first == '_' || first == '(' || first == '[' {
+					return rest
+				}
+			}
+		}
+	}
+	return pattern
 }
 
 // validateOverrideValue checks that the value matches the constant's type
