@@ -40,10 +40,7 @@ func ExtractLinks(text string, maxLinks int) ([]string, error) {
 	config := fmt.Sprintf(`{"max_links":%d}`, maxLinks)
 
 	// Output buffer: URLs are shorter than input text.
-	outSize := len(text)
-	if outSize < 4096 {
-		outSize = 4096
-	}
+	outSize := initialBufSize(len(text), 1, 4096)
 	out := make([]byte, outSize)
 
 	textPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(text)))
@@ -75,10 +72,7 @@ func HtmlToMarkdown(html string) (text string, title string, err error) {
 	}
 
 	// Markdown output is typically shorter than HTML; allocate 2x with 4 KB floor.
-	initialSize := len(html) * 2
-	if initialSize < 4096 {
-		initialSize = 4096
-	}
+	initialSize := initialBufSize(len(html), 2, 4096)
 
 	htmlPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(html)))
 	data, err2 := ffiCallWithGrow("html_to_markdown", initialSize,

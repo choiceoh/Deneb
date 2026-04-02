@@ -53,9 +53,9 @@ impl EngineStore {
     }
 }
 
-/// Lock the engine store.
+/// Lock the engine store. Recovers from poison to avoid cascading panics.
 fn lock_engine_store() -> std::sync::MutexGuard<'static, EngineStore> {
-    ENGINES.lock().expect("engine store lock poisoned")
+    ENGINES.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // ── Pure function exports ───────────────────────────────────────────────────
@@ -145,14 +145,14 @@ pub fn compaction_deterministic_fallback(source: String, input_tokens: u32) -> S
 
 /// Create a new sweep engine. Returns a handle (u32).
 pub fn compaction_sweep_new(
-    config_json: String,
+    config_json: &str,
     conversation_id: u32,
     token_budget: u32,
     force: bool,
     hard_trigger: bool,
     now_ms: f64,
 ) -> u32 {
-    let config: CompactionConfig = serde_json::from_str(&config_json).unwrap_or_default();
+    let config: CompactionConfig = serde_json::from_str(config_json).unwrap_or_default();
     let engine = SweepEngine::new(
         config,
         conversation_id as u64,
@@ -178,8 +178,8 @@ pub fn compaction_sweep_start(handle: u32) -> String {
 }
 
 /// Step a sweep engine with a host response. Returns the next `SweepCommand` as JSON.
-pub fn compaction_sweep_step(handle: u32, response_json: String) -> String {
-    let response: SweepResponse = match serde_json::from_str(&response_json) {
+pub fn compaction_sweep_step(handle: u32, response_json: &str) -> String {
+    let response: SweepResponse = match serde_json::from_str(response_json) {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{e}"}}}}"#),
     };
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn test_sweep_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let config_json = serde_json::to_string(&CompactionConfig::default())?;
-        let handle = compaction_sweep_new(config_json, 1, 1000, false, false, 1000.0);
+        let handle = compaction_sweep_new(&config_json, 1, 1000, false, false, 1000.0);
         assert!(handle > 0);
 
         let cmd_json = compaction_sweep_start(handle);
@@ -233,7 +233,7 @@ mod tests {
 
         // Feed below-threshold tokens to get Done
         let resp = serde_json::to_string(&SweepResponse::TokenCount { count: 500 })?;
-        let cmd_json = compaction_sweep_step(handle, resp);
+        let cmd_json = compaction_sweep_step(handle, &resp);
         let cmd: SweepCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, SweepCommand::Done { .. }));
 

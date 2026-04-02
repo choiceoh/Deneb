@@ -29,6 +29,7 @@ extern int deneb_validate_params(
 import "C"
 import (
 	"errors"
+	"fmt"
 	"unsafe"
 )
 
@@ -184,6 +185,9 @@ func ValidateParams(method, json string) (valid bool, errorsJSON []byte, err err
 		return false, nil, errors.New("ffi: invalid JSON")
 	case rc > 0:
 		// rc is the number of bytes written to the output buffer (JSON error array).
+		if int(rc) > maxErrorsBufSize {
+			return false, nil, fmt.Errorf("ffi: validate_params: output (%d bytes) exceeds buffer (%d bytes)", rc, maxErrorsBufSize)
+		}
 		return false, out[:rc], nil
 	default:
 		return false, nil, errors.New("ffi: unknown error")
