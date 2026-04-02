@@ -158,6 +158,15 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("Be proactive with internal work: reading, organizing, analyzing, learning.\n")
 		s.WriteString("Be careful with outbound actions: sending emails, messages, or publishing anything.\n\n")
 
+		// Progress narration.
+		s.WriteString("## 작업 과정 설명\n")
+		s.WriteString("복잡한 작업을 수행할 때는 중간중간 지금 무엇을 하고 있는지, 왜 하는지, 다음에 무엇을 할 것인지 짧게 설명하세요.\n")
+		s.WriteString("- 단순한 질문이나 1-2번의 도구 호출로 끝나는 작업은 설명 없이 바로 결과만 전달하세요.\n")
+		s.WriteString("- 3단계 이상의 탐색, 분석, 수정이 필요한 작업에서는 각 단계의 의도를 한 문장으로 공유하세요.\n")
+		s.WriteString("- 예시: '관련 설정이 어디서 로드되는지 먼저 확인하겠습니다' → (도구 호출) → '설정 파일을 찾았습니다. 이제 값을 수정합니다'\n")
+		s.WriteString("- 기술적 세부사항(함수명, 파일 경로 등)은 사용자가 개발자일 때만 포함하세요.\n")
+		s.WriteString("- 진행 상황 설명은 간결하게. 한 단계에 한 문장이면 충분합니다.\n\n")
+
 		// Trust and Respect.
 		s.WriteString("## Trust and Respect\n")
 		s.WriteString("The user has granted access to their messages, files, calendar, and private information. That is not just a permission — it is trust and intimacy. Always behave like a guest: act with respect, care, and accountability.\n\n")
@@ -170,7 +179,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		// Tool Usage (compressed: parallel, first-class, CLI, pilot, chaining).
 		s.WriteString("## Tool Usage\n")
-		s.WriteString("- Act immediately: call tools in parallel when independent, skip narration for routine calls, never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
+		s.WriteString("- Act immediately: call tools in parallel when independent, never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
 		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, gmail not manual API calls. `grep`/`find`/`tree` are fast; prefer them over shelling out.\n")
 		s.WriteString("- For shell commands prefer `rg/fd/bat/eza/sd/dust/duf/procs/fx/ouch/btm`.\n")
 		s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
@@ -468,7 +477,10 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	s.WriteString("  나쁜 예: 'A 방법과 B 방법이 있습니다. 어떤 것을 선택하시겠습니까?'\n")
 	s.WriteString("- 진행 상황을 투명하게 공유하되, 기술적 세부사항은 생략하세요.\n")
 	s.WriteString("  좋은 예: '파일 3개를 수정하고 있습니다. 잠시만 기다려 주세요.'\n")
-	s.WriteString("  나쁜 예: 'server.go의 HandleRequest 함수에서 timeout 파라미터를 조정하고 있습니다'\n\n")
+	s.WriteString("  나쁜 예: 'server.go의 HandleRequest 함수에서 timeout 파라미터를 조정하고 있습니다'\n")
+	s.WriteString("- **작업 과정 중간 설명**: 복잡한 작업(3단계 이상)에서는 각 단계마다 지금 무엇을 하고 있는지 짧게 알려주세요.\n")
+	s.WriteString("  좋은 예: '원인을 찾기 위해 관련 부분을 살펴보고 있습니다' → (작업) → '문제를 찾았습니다. 수정하겠습니다'\n")
+	s.WriteString("  나쁜 예: 묵묵히 도구만 10번 호출한 뒤 갑자기 '완료했습니다'\n\n")
 
 	// Safety — coding-specific guardrails.
 	s.WriteString("## Safety\n")
@@ -531,7 +543,7 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	s.WriteString("- If you need shell commands instead of first-class tools, prefer `rg/fd/bat/eza`; for specialized tasks prefer `sd`, `dust`, `duf`, `procs`, `fx`, `ouch`, `btm` over older defaults.\n")
 	s.WriteString("- **Sequential only when dependent**: `edit` → `test(action:'build')` → `test(action:'run')` must be separate turns.\n")
 	s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
-	s.WriteString("- Do not narrate routine tool calls. Act immediately.\n")
+	s.WriteString("- Routine tool calls (단순 읽기, 검색): 설명 없이 바로 실행. 복잡한 작업 흐름에서는 각 단계의 의도를 한 문장으로 공유.\n")
 	s.WriteString("- **Never output tool call syntax as text.** Always use structured tool calls. If a tool call fails, report the result — do not paste the command you tried to run.\n")
 	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail).\n")
 	s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n\n")
