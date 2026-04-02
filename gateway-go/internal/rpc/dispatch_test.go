@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -244,9 +245,20 @@ func TestDispatchWithWorkerPool(t *testing.T) {
 		t.Errorf("expected max concurrency ≤2 with pool size 2, got %d", got)
 	}
 
-	stats := pool.Stats()
-	if stats.Done != 6 {
-		t.Errorf("expected 6 done, got %d", stats.Done)
+	// pool.done is incremented in the Submit defer AFTER the handler returns,
+	// so it may lag slightly behind wg.Done() which fires inside the handler.
+	// Poll briefly to let the last goroutine's defer complete.
+	deadline := time.After(2 * time.Second)
+	for {
+		if pool.Stats().Done == 6 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("expected 6 done, got %d", pool.Stats().Done)
+		default:
+			runtime.Gosched()
+		}
 	}
 }
 

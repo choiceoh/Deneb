@@ -51,7 +51,7 @@ func TestPrefetch_VegaOnly(t *testing.T) {
 		},
 	}
 	deps := Deps{VegaBackend: backend}
-	result := Prefetch(context.Background(), "비금도", deps)
+	result := Prefetch(context.Background(), "비금도 진행상황 알려줘", deps)
 
 	if !strings.Contains(result, "관련 지식") {
 		t.Errorf("expected '관련 지식' header, got: %q", result)
@@ -69,7 +69,7 @@ func TestPrefetch_MemoryOnly(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("# 프로젝트 메모\n비금도 3차 계통연계 승인 완료\n"), 0o644)
 
 	deps := Deps{WorkspaceDir: dir}
-	result := Prefetch(context.Background(), "비금도", deps)
+	result := Prefetch(context.Background(), "비금도 계통연계 현황 알려줘", deps)
 
 	if !strings.Contains(result, "메모리") {
 		t.Errorf("expected memory section, got: %q", result)
@@ -89,7 +89,7 @@ func TestPrefetch_BothSources(t *testing.T) {
 		},
 	}
 	deps := Deps{VegaBackend: backend, WorkspaceDir: dir}
-	result := Prefetch(context.Background(), "김대희", deps)
+	result := Prefetch(context.Background(), "김대희 담당자 연락처 알려줘", deps)
 
 	if !strings.Contains(result, "프로젝트: 비금도") {
 		t.Errorf("expected vega result, got: %q", result)
