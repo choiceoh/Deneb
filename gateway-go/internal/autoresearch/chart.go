@@ -13,15 +13,16 @@ import (
 )
 
 // Chart dimensions and layout constants.
+// Using 2x resolution for legibility on Telegram (mobile compression).
 const (
-	chartWidth  = 800
-	chartHeight = 500
+	chartWidth  = 1600
+	chartHeight = 1000
 
-	// Margins around the plot area.
-	marginTop    = 45
-	marginBottom = 65
-	marginLeft   = 80
-	marginRight  = 30
+	// Margins around the plot area (scaled for 2x font).
+	marginTop    = 90
+	marginBottom = 120
+	marginLeft   = 160
+	marginRight  = 60
 
 	// Derived plot area.
 	plotLeft   = marginLeft
@@ -29,7 +30,10 @@ const (
 	plotRight  = chartWidth - marginRight
 	plotBottom = chartHeight - marginBottom
 
-	pointRadius = 4
+	pointRadius = 8
+
+	// Font scale for all text rendering.
+	fontScale = 2
 )
 
 // Color palette.
@@ -128,18 +132,20 @@ func RenderChart(rows []ResultRow, cfg *Config) ([]byte, error) {
 	if cfg.MetricDirection != "" {
 		title += " (" + cfg.MetricDirection + ")"
 	}
-	titleX := (chartWidth - len(title)*6) / 2
-	drawString(img, titleX, 15, title, colText, 1)
+	charW := 6 * fontScale // glyph width * scale
+	titleX := (chartWidth - len(title)*charW) / 2
+	drawString(img, titleX, 20, title, colText, fontScale)
 
 	// Draw axis labels.
-	drawString(img, (plotLeft+plotRight)/2-30, chartHeight-12, "iteration", colAxis, 1)
+	axisLabel := "iteration"
+	drawString(img, (plotLeft+plotRight)/2-len(axisLabel)*charW/2, chartHeight-24, axisLabel, colAxis, fontScale)
 
 	// Draw x-axis tick labels.
 	xTicks := niceTicksInt(minIter, maxIter, 10)
 	for _, tick := range xTicks {
 		x := mapX(tick)
 		label := strconv.Itoa(tick)
-		drawString(img, x-len(label)*3, plotBottom+14, label, colAxis, 1)
+		drawString(img, x-len(label)*charW/2, plotBottom+20, label, colAxis, fontScale)
 	}
 
 	// Draw y-axis tick labels.
@@ -147,7 +153,7 @@ func RenderChart(rows []ResultRow, cfg *Config) ([]byte, error) {
 	for _, tick := range yTicks {
 		y := mapY(tick)
 		label := formatTickLabel(tick)
-		drawString(img, plotLeft-len(label)*6-6, y-3, label, colAxis, 1)
+		drawString(img, plotLeft-len(label)*charW-10, y-7, label, colAxis, fontScale)
 	}
 
 	// Draw legend.
@@ -325,28 +331,32 @@ func drawBestLine(img *image.RGBA, rows []ResultRow,
 		x1 := mapX(rows[i].Iteration)
 		y1 := mapY(rows[i].BestSoFar)
 		// Step line: horizontal then vertical.
-		drawThickLine(img, x0, y0, x1, y0, 2, colBestLine)
-		drawThickLine(img, x1, y0, x1, y1, 2, colBestLine)
+		drawThickLine(img, x0, y0, x1, y0, 3, colBestLine)
+		drawThickLine(img, x1, y0, x1, y1, 3, colBestLine)
 	}
 }
 
 func drawLegend(img *image.RGBA) {
+	charW := 6 * fontScale
+	charH := 7 * fontScale
 	// Legend box at bottom-right.
-	lx := plotRight - 220
-	ly := chartHeight - 22
-	fillRect(img, lx, ly-2, lx+215, ly+14, colLegendBg)
+	lx := plotRight - 440
+	ly := chartHeight - charH - 16
+	fillRect(img, lx, ly-4, lx+430, ly+charH+4, colLegendBg)
 
 	// Kept indicator.
-	fillCircle(img, lx+8, ly+6, 4, colKept)
-	drawString(img, lx+16, ly, "kept", colText, 1)
+	fillCircle(img, lx+12, ly+charH/2, 6, colKept)
+	drawString(img, lx+24, ly, "kept", colText, fontScale)
 
 	// Discarded indicator.
-	fillCircle(img, lx+60, ly+6, 4, colDiscarded)
-	drawString(img, lx+68, ly, "discarded", colText, 1)
+	dx := lx + 24 + 4*charW + 20
+	fillCircle(img, dx+12, ly+charH/2, 6, colDiscarded)
+	drawString(img, dx+24, ly, "discarded", colText, fontScale)
 
 	// Best line indicator.
-	drawThickLine(img, lx+140, ly+6, lx+155, ly+6, 2, colBestLine)
-	drawString(img, lx+160, ly, "best", colText, 1)
+	bx := dx + 24 + 9*charW + 20
+	drawThickLine(img, bx, ly+charH/2, bx+20, ly+charH/2, 3, colBestLine)
+	drawString(img, bx+28, ly, "best", colText, fontScale)
 }
 
 // --- Tick computation ---
