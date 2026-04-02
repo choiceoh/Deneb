@@ -47,9 +47,10 @@ func (rc *RunCache) Len() int {
 }
 
 var cacheableTools = map[string]bool{
-	"find": true,
-	"tree": true,
-	"grep": true,
+	"find":    true,
+	"tree":    true,
+	"grep":    true,
+	"analyze": true,
 }
 
 var mutationTools = map[string]bool{

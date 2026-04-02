@@ -7,7 +7,8 @@ import (
 	"encoding/json"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
-	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
+	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
+	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertelegram"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
@@ -26,9 +27,9 @@ import (
 type ChatDeps = handlerchat.Deps
 type ChatBtwDeps = handlerchat.BtwDeps
 type SessionExecDeps = handlersession.ExecDeps
-type ChannelLifecycleDeps = handlerchannel.LifecycleDeps
-type EventsDeps = handlerchannel.EventsDeps
-type MessagingDeps = handlerchannel.MessagingDeps
+type ChannelLifecycleDeps = handlertelegram.LifecycleDeps
+type EventsDeps = handlerevents.EventsDeps
+type MessagingDeps = handlertelegram.MessagingDeps
 type ApprovalDeps = handlerprocess.ApprovalDeps
 type ACPDeps = handlerprocess.ACPDeps
 type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
@@ -78,16 +79,16 @@ func RegisterAgentsMethods(d *Dispatcher, deps AgentsDeps) {
 	d.RegisterDomain(handleragent.CRUDMethods(deps))
 }
 func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
-	d.RegisterDomain(handlerchannel.LifecycleMethods(deps))
+	d.RegisterDomain(handlertelegram.LifecycleMethods(deps))
 }
 func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
-	d.RegisterDomain(handlerchannel.EventsMethods(deps))
+	d.RegisterDomain(handlerevents.EventsMethods(deps))
 }
 func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps) {
-	d.RegisterDomain(handlerchannel.BroadcastMethods(deps))
+	d.RegisterDomain(handlerevents.BroadcastMethods(deps))
 }
 func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps) {
-	d.RegisterDomain(handlerchannel.MessagingMethods(deps))
+	d.RegisterDomain(handlertelegram.MessagingMethods(deps))
 }
 func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps) {
 	d.RegisterDomain(handlerprocess.ApprovalMethods(deps))

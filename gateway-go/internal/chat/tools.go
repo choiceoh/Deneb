@@ -178,6 +178,18 @@ func (r *ToolRegistry) SpilloverStore() *agent.SpilloverStore {
 	return r.spillStore
 }
 
+// IsConcurrencySafe returns true if the named tool declared ConcurrencySafe
+// during registration, meaning it performs no shared-state mutations and is
+// safe for parallel execution.
+func (r *ToolRegistry) IsConcurrencySafe(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if def, ok := r.tools[name]; ok {
+		return def.ConcurrencySafe
+	}
+	return false
+}
+
 // extractFilePath extracts a "file_path" string from tool input JSON.
 // Used to invalidate specific file-read cache entries on mutations.
 func extractFilePath(input json.RawMessage) string {

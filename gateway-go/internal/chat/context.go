@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/tokenutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
@@ -16,11 +16,9 @@ const (
 	defaultSystemPromptBudget      = 65_536
 	defaultFreshTailCount          = 48
 	defaultMaxMessages             = 100
-	// runesPerToken is the rune-based token estimate used by estimateTokens.
-	// Korean BPE averages ~2 runes/token; English averages ~4 runes/token.
-	// Divisor 2 is calibrated for Korean (the primary language of this app)
-	// and accepts a 2x overestimate for ASCII-only content.
-	runesPerToken = 2
+	// runesPerToken re-exports the shared constant for local callers
+	// (compaction, sweep, etc.) that use it directly in math expressions.
+	runesPerToken = tokenutil.RunesPerToken
 	// charsPerToken is the byte-based divisor used by knowledge.go for
 	// incremental budget tracking on strings.Builder output (sb.Len() bytes).
 	// English: ~4 bytes/token (1 byte/char × 4 chars/token) — accurate.
@@ -56,14 +54,9 @@ func DefaultContextConfig() ContextConfig {
 }
 
 // estimateTokens returns a rough token count for a string.
-// Uses Unicode rune count so Korean text (3 bytes/rune in UTF-8) is not
-// triple-counted as it would be with a raw len(s) / 4 byte estimate.
+// Delegates to tokenutil.EstimateTokens (shared across chat subsystem).
 func estimateTokens(s string) int {
-	n := utf8.RuneCountInString(s) / runesPerToken
-	if n < 1 {
-		return 1
-	}
-	return n
+	return tokenutil.EstimateTokens(s)
 }
 
 // assembleContext selects transcript messages that fit within the token budget.

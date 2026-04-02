@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -476,40 +475,6 @@ func TestCompaction_AuroraAssemblyFallback(t *testing.T) {
 	}
 	if !hasSummary {
 		t.Error("expected summary text in assembled messages")
-	}
-}
-
-// TestCompaction_ContextOverflowLegacyReducesBudget tests that the legacy
-// overflow handler halves the context budget when compaction is unavailable.
-func TestCompaction_ContextOverflowLegacyReducesBudget(t *testing.T) {
-	transcript := NewMemoryTranscriptStore()
-	sessionKey := "legacy-overflow"
-
-	// Fill transcript with many messages.
-	for i := 0; i < 100; i++ {
-		transcript.Append(sessionKey, NewTextChatMessage("user",
-			fmt.Sprintf("Message %d", i), int64(i)))
-	}
-
-	// Call handleContextOverflowLegacy with a very small budget.
-	ctxCfg := ContextConfig{
-		TokenBudget:    500,
-		FreshTailCount: 4,
-		MaxMessages:    100,
-	}
-	compCfg := DefaultCompactionConfig()
-
-	msgs, err := handleContextOverflowLegacy(transcript, sessionKey, ctxCfg, compCfg, slog.Default())
-	if err != nil {
-		t.Fatalf("handleContextOverflowLegacy: %v", err)
-	}
-
-	// Should return fewer messages than the full transcript.
-	if len(msgs) >= 100 {
-		t.Errorf("expected reduced messages, got %d", len(msgs))
-	}
-	if len(msgs) == 0 {
-		t.Error("expected non-empty messages after legacy overflow handling")
 	}
 }
 

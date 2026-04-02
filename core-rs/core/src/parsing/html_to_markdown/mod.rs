@@ -17,7 +17,7 @@ mod tokenizer;
 #[cfg(test)]
 mod tests;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Result of HTML → Markdown conversion.
 #[derive(Debug, Serialize)]
@@ -27,11 +27,29 @@ pub struct HtmlToMarkdownResult {
     pub title: Option<String>,
 }
 
+/// Options for HTML → Markdown conversion.
+#[derive(Debug, Default, Deserialize)]
+pub struct HtmlToMarkdownOptions {
+    /// When true, suppress noise elements (nav, aside, svg, iframe, form)
+    /// in addition to the always-suppressed script/style/noscript.
+    /// Useful for web content extraction where these elements are noise.
+    #[serde(default)]
+    pub strip_noise: bool,
+}
+
 /// Convert HTML to a Markdown-like plain text representation.
 pub fn html_to_markdown(html: &str) -> HtmlToMarkdownResult {
+    html_to_markdown_with_opts(html, &HtmlToMarkdownOptions::default())
+}
+
+/// Convert HTML to Markdown with configurable options.
+pub fn html_to_markdown_with_opts(
+    html: &str,
+    opts: &HtmlToMarkdownOptions,
+) -> HtmlToMarkdownResult {
     // Wrap the entire pipeline in catch_unwind so a panic doesn't
     // abort the FFI layer. Returns empty result on panic.
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| convert(html))) {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| convert(html, opts))) {
         Ok(result) => result,
         Err(_) => HtmlToMarkdownResult {
             text: String::new(),
@@ -41,12 +59,12 @@ pub fn html_to_markdown(html: &str) -> HtmlToMarkdownResult {
 }
 
 /// Internal conversion pipeline.
-fn convert(html: &str) -> HtmlToMarkdownResult {
+fn convert(html: &str, opts: &HtmlToMarkdownOptions) -> HtmlToMarkdownResult {
     // Pass 1: tokenize.
     let tokens = tokenizer::tokenize(html);
 
     // Pass 2: emit Markdown.
-    let (raw_text, title) = emitter::emit(&tokens, html.len());
+    let (raw_text, title) = emitter::emit(&tokens, html.len(), opts.strip_noise);
 
     // Pass 3: normalize whitespace.
     let text = normalize_whitespace(&raw_text);

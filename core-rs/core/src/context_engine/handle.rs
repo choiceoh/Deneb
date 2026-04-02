@@ -56,9 +56,9 @@ impl ContextEngineStore {
     }
 }
 
-/// Lock the context engine store.
+/// Lock the context engine store. Recovers from poison to avoid cascading panics.
 fn lock_context_store() -> std::sync::MutexGuard<'static, ContextEngineStore> {
-    CONTEXT_ENGINES.lock().expect("context engine store lock poisoned")
+    CONTEXT_ENGINES.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // ── Assembly engine exports ──────────────────────────────────────────────────
@@ -87,8 +87,8 @@ pub fn context_assembly_start(handle: u32) -> String {
 }
 
 /// Step an assembly engine with a host response. Returns the next command as JSON.
-pub fn context_assembly_step(handle: u32, response_json: String) -> String {
-    let response: AssemblyResponse = match serde_json::from_str(&response_json) {
+pub fn context_assembly_step(handle: u32, response_json: &str) -> String {
+    let response: AssemblyResponse = match serde_json::from_str(response_json) {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{e}"}}}}"#),
     };
@@ -133,8 +133,8 @@ pub fn context_expand_start(handle: u32) -> String {
 }
 
 /// Step an expand engine with a host response. Returns the next command as JSON.
-pub fn context_expand_step(handle: u32, response_json: String) -> String {
-    let response: RetrievalResponse = match serde_json::from_str(&response_json) {
+pub fn context_expand_step(handle: u32, response_json: &str) -> String {
+    let response: RetrievalResponse = match serde_json::from_str(response_json) {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"expandDone","result":{{"error":"{e}"}}}}"#),
     };
@@ -199,8 +199,8 @@ pub fn context_grep_start(handle: u32) -> String {
 }
 
 /// Step a grep engine with a host response. Returns the result as JSON.
-pub fn context_grep_step(handle: u32, response_json: String) -> String {
-    let response: RetrievalResponse = match serde_json::from_str(&response_json) {
+pub fn context_grep_step(handle: u32, response_json: &str) -> String {
+    let response: RetrievalResponse = match serde_json::from_str(response_json) {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"grepDone","result":{{"error":"{e}"}}}}"#),
     };
@@ -240,8 +240,8 @@ pub fn context_describe_start(handle: u32) -> String {
 }
 
 /// Step a describe engine with a host response. Returns the result as JSON.
-pub fn context_describe_step(handle: u32, response_json: String) -> String {
-    let response: RetrievalResponse = match serde_json::from_str(&response_json) {
+pub fn context_describe_step(handle: u32, response_json: &str) -> String {
+    let response: RetrievalResponse = match serde_json::from_str(response_json) {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"describeDone","result":{{"error":"{e}"}}}}"#),
     };
@@ -307,7 +307,7 @@ mod tests {
 
         // Empty items → Done
         let resp = serde_json::to_string(&AssemblyResponse::ContextItems { items: vec![] })?;
-        let cmd_json = context_assembly_step(handle, resp);
+        let cmd_json = context_assembly_step(handle, &resp);
         let cmd: AssemblyCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, AssemblyCommand::Done { .. }));
 
@@ -332,7 +332,7 @@ mod tests {
             content: "content".to_string(),
             token_count: 100,
         })?;
-        let cmd_json = context_expand_step(handle, resp);
+        let cmd_json = context_expand_step(handle, &resp);
         let cmd: RetrievalCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, RetrievalCommand::FetchSourceMessages { .. }));
 
@@ -388,12 +388,12 @@ mod tests {
     fn test_resolve_config_invalid_returns_defaults() -> Result<(), Box<dyn std::error::Error>> {
         let result = context_resolve_config("not-json".to_string());
         let config: AuroraConfig = serde_json::from_str(&result)?;
-        assert_eq!(config.context_threshold, 0.75);
+        assert_eq!(config.context_threshold, 0.80);
         Ok(())
     }
 
     #[test]
     fn test_estimate_tokens_napi() {
-        assert_eq!(context_estimate_tokens("hello world".into()), 3);
+        assert_eq!(context_estimate_tokens("hello world".into()), 5); // 11 chars / 2
     }
 }

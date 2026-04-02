@@ -18,7 +18,8 @@ import (
 func ToolContinueRun() toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Reason string `json:"reason"`
+			Reason          string `json:"reason"`
+			ProgressSummary string `json:"progress_summary"`
 		}
 		if err := jsonutil.UnmarshalInto("continue_run params", input, &p); err != nil {
 			return "", err
@@ -30,6 +31,16 @@ func ToolContinueRun() toolctx.ToolFunc {
 		sig := toolctx.ContinuationSignalFromContext(ctx)
 		if sig == nil {
 			return "연속 실행을 사용할 수 없습니다 (signal not configured).", nil
+		}
+
+		// Send progress report to the user via Telegram.
+		if p.ProgressSummary != "" {
+			if replyFn := toolctx.ReplyFuncFromContext(ctx); replyFn != nil {
+				if delivery := toolctx.DeliveryFromContext(ctx); delivery != nil {
+					msg := fmt.Sprintf("📋 %s\n⏩ %s", p.ProgressSummary, p.Reason)
+					_ = replyFn(ctx, delivery, msg)
+				}
+			}
 		}
 
 		sig.Request(p.Reason)

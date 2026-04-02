@@ -6,6 +6,8 @@
 package agent
 
 import (
+	"fmt"
+	"hash/fnv"
 	"os"
 	"sync"
 	"time"
@@ -19,13 +21,21 @@ const (
 
 // FileCacheEntry tracks a cached file read result.
 type FileCacheEntry struct {
-	Path      string
-	MTime     time.Time
-	Size      int64
-	Content   string
-	ReadAt    time.Time
-	ReadCount int
-	SpillID   string // set when the first read was spillovered
+	Path        string
+	MTime       time.Time
+	Size        int64
+	Content     string
+	ContentHash uint64 // FNV-1a hash of raw file bytes (for staleness detection)
+	ReadAt      time.Time
+	ReadCount   int
+	SpillID     string // set when the first read was spillovered
+}
+
+// ContentHashOf computes an FNV-1a 64-bit hash for staleness comparison.
+func ContentHashOf(data []byte) uint64 {
+	h := fnv.New64a()
+	h.Write(data)
+	return h.Sum64()
 }
 
 // FileCache is a session-scoped LRU cache for file read results.
@@ -131,6 +141,72 @@ func FileChanged(path string, cached *FileCacheEntry) bool {
 // to the agent. Returning from memory cache still avoids disk I/O.
 func FormatCachedRead(displayPath string, entry *FileCacheEntry) string {
 	return entry.Content
+}
+
+// CheckStaleness verifies that the file has not been modified since the last
+// cached read. It mirrors the Edit-tool staleness pattern:
+//
+//  1. Compare mtime — if unchanged, file is fresh (fast path).
+//  2. If mtime differs, compare content hash (handles cloud-sync false positives
+//     where mtime changes but content is identical).
+//  3. If both differ, the file is stale.
+//
+// Returns nil when the file is fresh or was never cached (first write is always
+// allowed). Returns a descriptive error when the file is stale.
+func (c *FileCache) CheckStaleness(path string) error {
+	c.mu.RLock()
+	entry, ok := c.entries[path]
+	c.mu.RUnlock()
+	if !ok {
+		return nil // never read → no staleness to detect
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil // can't stat → allow the write (will fail later if path is bad)
+	}
+
+	// Fast path: mtime unchanged.
+	if info.ModTime().Equal(entry.MTime) && info.Size() == entry.Size {
+		return nil
+	}
+
+	// Mtime changed — compare content hash to rule out cloud-sync false positive.
+	if entry.ContentHash != 0 {
+		data, err := os.ReadFile(path)
+		if err == nil && ContentHashOf(data) == entry.ContentHash {
+			return nil // content identical despite mtime change
+		}
+	}
+
+	return fmt.Errorf(
+		"file has been modified since last read (cached mtime %s, current mtime %s). "+
+			"Re-read the file before editing",
+		entry.MTime.Format(time.RFC3339), info.ModTime().Format(time.RFC3339),
+	)
+}
+
+// UpdateAfterWrite refreshes the cache entry for path after a successful write,
+// so subsequent staleness checks use the new state.
+func (c *FileCache) UpdateAfterWrite(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		c.Invalidate(path)
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		c.Invalidate(path)
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if entry, ok := c.entries[path]; ok {
+		entry.MTime = info.ModTime()
+		entry.Size = info.Size()
+		entry.ContentHash = ContentHashOf(data)
+	}
 }
 
 // --- internal helpers ---

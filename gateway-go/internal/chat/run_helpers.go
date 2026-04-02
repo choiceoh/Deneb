@@ -262,21 +262,25 @@ func handleRunSuccess(
 	// Execute auto-memory extraction/dreaming for successful runs with user input.
 	if params.Message != "" {
 		go func() {
-			// Limit concurrent extractions to avoid overloading sglang.
-			select {
-			case memoryExtractSem <- struct{}{}:
-				defer func() { <-memoryExtractSem }()
-			default:
-				logger.Debug("memory extraction skipped: semaphore full")
-				return
-			}
-
 			// Bound by the server shutdown context (if set) so the goroutine
 			// exits when the process is shutting down rather than leaking until
 			// autoMemoryTimeout fires against a dead process.
 			base := deps.shutdownCtx
 			if base == nil {
 				base = context.Background()
+			}
+
+			// Limit concurrent extractions to avoid overloading sglang.
+			// Include base.Done to bail out early on server shutdown.
+			select {
+			case memoryExtractSem <- struct{}{}:
+				defer func() { <-memoryExtractSem }()
+			case <-base.Done():
+				logger.Debug("memory extraction skipped: context canceled")
+				return
+			default:
+				logger.Debug("memory extraction skipped: semaphore full")
+				return
 			}
 			memCtx, memCancel := context.WithTimeout(base, autoMemoryTimeout)
 			defer memCancel()

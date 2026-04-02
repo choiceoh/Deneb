@@ -262,7 +262,7 @@ async fn run_channels_check(
                 url: args.url.clone(),
                 token: args.token.clone(),
                 password: args.password.clone(),
-                method: "channels.status".to_string(),
+                method: "telegram.status".to_string(),
                 params: Some(serde_json::json!({"probe": true})),
                 timeout_ms: args.timeout,
                 expect_final: false,

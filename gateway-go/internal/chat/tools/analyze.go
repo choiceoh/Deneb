@@ -25,20 +25,26 @@ func ToolAnalyze(defaultDir string) ToolFunc {
 			return "", err
 		}
 
+		var out string
+		var err error
 		switch p.Action {
 		case "outline":
-			return analyzeOutline(p, defaultDir)
+			out, err = analyzeOutline(p, defaultDir)
 		case "symbols":
-			return analyzeSymbols(ctx, p, defaultDir)
+			out, err = analyzeSymbols(ctx, p, defaultDir)
 		case "references":
-			return analyzeReferences(ctx, p, defaultDir)
+			out, err = analyzeReferences(ctx, p, defaultDir)
 		case "imports":
-			return analyzeImports(p, defaultDir)
+			out, err = analyzeImports(p, defaultDir)
 		case "signature":
-			return analyzeSignature(p, defaultDir)
+			out, err = analyzeSignature(p, defaultDir)
 		default:
 			return "", fmt.Errorf("unknown analyze action: %q", p.Action)
 		}
+		if err != nil {
+			return "", err
+		}
+		return TruncateForLLM(out), nil
 	}
 }
 

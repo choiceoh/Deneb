@@ -10,7 +10,6 @@ type PluginKind string
 
 const (
 	PluginKindUnspecified PluginKind = ""
-	PluginKindChannel     PluginKind = "channel"
 	PluginKindProvider    PluginKind = "provider"
 	PluginKindFeature     PluginKind = "feature"
 )

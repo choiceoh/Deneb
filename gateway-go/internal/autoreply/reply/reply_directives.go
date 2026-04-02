@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
 // ReplyDirectiveParseResult holds the result of parsing reply directives.
@@ -128,9 +129,24 @@ func isInsideFence(spans []fenceSpan, offset int) bool {
 var audioAsVoiceTagRe = regexp.MustCompile(`(?i)\[\[\s*(?:audio_as_voice|voice)\s*\]\]`)
 
 // splitMediaFromOutput extracts MEDIA: tokens from output text.
-// Matches the full TS implementation: fence-aware, supports local paths,
-// strips MEDIA: lines, and detects audio tags.
+// Delegates to the Rust FFI implementation for single-source-of-truth parsing.
+// Falls back to the Go implementation if FFI is unavailable.
 func splitMediaFromOutput(raw string) (text string, mediaURLs []string, mediaURL string, audioAsVoice bool) {
+	cleanText, urls, voice, err := ffi.ParseMediaTokens(raw)
+	if err == nil {
+		var primary string
+		if len(urls) > 0 {
+			primary = urls[0]
+		}
+		return cleanText, urls, primary, voice
+	}
+	// FFI unavailable or failed — fall back to Go implementation.
+	return splitMediaFromOutputFallback(raw)
+}
+
+// splitMediaFromOutputFallback is the pure-Go fallback for MEDIA token extraction.
+// Used when the Rust FFI is unavailable (no_ffi build or FFI error).
+func splitMediaFromOutputFallback(raw string) (text string, mediaURLs []string, mediaURL string, audioAsVoice bool) {
 	trimmedRaw := strings.TrimRight(raw, " \t\r\n")
 	if strings.TrimSpace(trimmedRaw) == "" {
 		return "", nil, "", false

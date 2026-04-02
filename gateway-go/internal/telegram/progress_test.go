@@ -139,7 +139,7 @@ func TestSanitizeSummary(t *testing.T) {
 		{"💭 버그 찾는 중\n추가 설명", "버그 찾는 중"},
 		{"", ""},
 		{"  ", ""},
-		{strings.Repeat("가", 50), strings.Repeat("가", 30)},
+		{strings.Repeat("가", 50), strings.Repeat("가", 40)},
 		// Reasoning model preamble stripping.
 		{"Thinking Process:\n코드 분석하는 중", "코드 분석하는 중"},
 		{"Analysis:\n버그 원인 분석하는 중", "버그 원인 분석하는 중"},

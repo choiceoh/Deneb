@@ -36,12 +36,11 @@ func (s *Server) initGmailPoll() {
 		LocalModel:  s.modelRegistry.Model(modelrole.RoleLightweight),
 	}
 
-	// Wire memory store for pipeline context recall (read-only).
-	dbPath := filepath.Join(stateDir, "memory.db")
-	if memStore, err := memory.NewStore(dbPath); err == nil {
-		cfg.MemStore = memStore
+	// Wire memory store for pipeline context recall (reuse unified store).
+	if s.memoryStore != nil {
+		cfg.MemStore = s.memoryStore
 		if s.geminiEmbedder != nil {
-			cfg.MemEmbed = memory.NewEmbedder(s.geminiEmbedder, memStore, s.logger)
+			cfg.MemEmbed = memory.NewEmbedder(s.geminiEmbedder, s.memoryStore, s.logger)
 		}
 		s.logger.Info("gmailpoll: memory pipeline enabled")
 	}

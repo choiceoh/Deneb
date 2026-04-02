@@ -11,6 +11,9 @@ use std::collections::HashSet;
 /// Default maximum number of links to extract.
 const DEFAULT_MAX_LINKS: usize = 5;
 
+/// Schemes recognized for URL extraction beyond http/https.
+const EXTRA_SCHEMES: &[&str] = &["ftp://"];
+
 /// Configuration for link extraction.
 #[derive(serde::Deserialize)]
 pub struct ExtractLinksConfig {
@@ -43,11 +46,28 @@ fn strip_markdown_links(input: &str) -> String {
                 continue;
             }
         }
-        // Safe: we only branch on ASCII bytes; non-ASCII is passed through.
-        out.push(bytes[i] as char);
-        i += 1;
+        // Copy the original str slice for correct UTF-8 handling.
+        // Advance past the full character (1–4 bytes) to avoid splitting
+        // multi-byte sequences like Korean or emoji.
+        let ch_len = utf8_char_width(bytes[i]);
+        if let Some(s) = input.get(i..i + ch_len) {
+            out.push_str(s);
+        }
+        i += ch_len;
     }
     out
+}
+
+/// Return the byte length of the UTF-8 character starting with `b`.
+#[inline]
+fn utf8_char_width(b: u8) -> usize {
+    match b {
+        0..=0x7F => 1,
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xFF => 4,
+        _ => 1,
+    }
 }
 
 /// Try to match `[...](https?://...)` starting at `start`.
@@ -116,7 +136,7 @@ fn starts_with_http(bytes: &[u8]) -> bool {
     false
 }
 
-/// Find all bare `http://` or `https://` URLs in the text.
+/// Find all bare `http://`, `https://`, or `ftp://` URLs in the text.
 /// A URL is a contiguous run of non-whitespace characters starting with the scheme.
 fn find_bare_urls(text: &str) -> Vec<&str> {
     let mut results = Vec::new();
@@ -125,23 +145,18 @@ fn find_bare_urls(text: &str) -> Vec<&str> {
     let mut i = 0;
 
     while i < len {
-        // Look for 'h' or 'H' as a quick filter.
-        if !matches!(bytes[i], b'h' | b'H') {
-            i += 1;
-            continue;
-        }
         let remaining = &bytes[i..];
-        if starts_with_http(remaining) {
-            // Find end of URL (next whitespace).
+        let is_http = matches!(bytes[i], b'h' | b'H') && starts_with_http(remaining);
+        let is_extra = !is_http && starts_with_extra_scheme(remaining);
+        if is_http || is_extra {
             let start = i;
             while i < len && !bytes[i].is_ascii_whitespace() {
                 i += 1;
             }
-            // Safety: the original text is valid UTF-8 and we split on ASCII boundaries.
             let candidate = &text[start..i];
             let cleaned = strip_url_tail(candidate);
-            // At minimum "http://x" (8 chars).
-            if cleaned.len() > 8 {
+            // At minimum "ftp://x" (7 chars).
+            if cleaned.len() > 7 {
                 results.push(cleaned);
             }
         } else {
@@ -149,6 +164,17 @@ fn find_bare_urls(text: &str) -> Vec<&str> {
         }
     }
     results
+}
+
+/// Check if the remaining bytes start with an extra scheme (e.g., `ftp://`).
+fn starts_with_extra_scheme(bytes: &[u8]) -> bool {
+    for scheme in EXTRA_SCHEMES {
+        let sb = scheme.as_bytes();
+        if bytes.len() >= sb.len() && bytes[..sb.len()].eq_ignore_ascii_case(sb) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Strip trailing punctuation that is not part of the URL.
@@ -209,21 +235,25 @@ fn count_byte(bytes: &[u8], needle: u8) -> usize {
     bytes.iter().filter(|&&b| b == needle).count()
 }
 
-/// Check if a raw URL string is allowed (valid URL, http/https scheme, passes SSRF check).
+/// Check if a raw URL string is allowed (valid URL, recognized scheme, passes SSRF check).
 fn is_allowed_url(raw: &str) -> bool {
+    // Extra schemes (ftp://) are allowed without SSRF check — is_safe_url is http(s)-only.
+    if starts_with_extra_scheme(raw.as_bytes()) {
+        return true;
+    }
+
     // Quick scheme check before attempting full parse.
-    if !raw.starts_with("http://")
-        && !raw.starts_with("https://")
-        && !raw.starts_with("HTTP://")
-        && !raw.starts_with("HTTPS://")
-    {
-        // Case-insensitive prefix check.
+    let has_http = raw.starts_with("http://")
+        || raw.starts_with("https://")
+        || raw.starts_with("HTTP://")
+        || raw.starts_with("HTTPS://");
+    if !has_http {
         let lower = raw.get(..8).map(str::to_ascii_lowercase);
-        if !matches!(lower.as_deref(), Some("https://") | Some("http://\x00")) {
-            let lower7 = raw.get(..7).map(str::to_ascii_lowercase);
-            if !matches!(lower7.as_deref(), Some("http://")) {
-                return false;
-            }
+        let lower7 = raw.get(..7).map(str::to_ascii_lowercase);
+        let is_http_ci = matches!(lower.as_deref(), Some("https://"))
+            || matches!(lower7.as_deref(), Some("http://"));
+        if !is_http_ci {
+            return false;
         }
     }
     security::is_safe_url(raw)
@@ -318,12 +348,13 @@ mod tests {
     }
 
     #[test]
-    fn no_non_http_schemes() {
+    fn ftp_scheme_supported() {
         let cfg = ExtractLinksConfig::default();
         let text = "ftp://files.example.com ssh://server.example.com https://ok.example.com";
         let urls = extract_links(text, &cfg);
-        assert_eq!(urls.len(), 1);
-        assert_eq!(urls[0], "https://ok.example.com");
+        assert_eq!(urls.len(), 2);
+        assert_eq!(urls[0], "ftp://files.example.com");
+        assert_eq!(urls[1], "https://ok.example.com");
     }
 
     #[test]
@@ -387,5 +418,30 @@ mod tests {
     fn trailing_quotes_stripped() {
         let urls = find_bare_urls(r#""https://example.com""#);
         assert_eq!(urls[0], "https://example.com");
+    }
+
+    #[test]
+    fn multibyte_text_with_markdown_links() {
+        let cfg = ExtractLinksConfig::default();
+        // Korean text with markdown link — must not corrupt multibyte chars.
+        let text = "한국어 [링크](https://docs.example.com) 텍스트 https://bare.example.com 끝";
+        let urls = extract_links(text, &cfg);
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://bare.example.com");
+
+        // Verify strip_markdown_links preserves Korean correctly.
+        let stripped = strip_markdown_links(text);
+        assert!(stripped.contains("한국어"));
+        assert!(stripped.contains("텍스트"));
+        assert!(stripped.contains("끝"));
+    }
+
+    #[test]
+    fn emoji_with_markdown_links() {
+        let cfg = ExtractLinksConfig::default();
+        let text = "🌍 [link](https://skip.com) 🚀 https://keep.com 🎉";
+        let urls = extract_links(text, &cfg);
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://keep.com");
     }
 }

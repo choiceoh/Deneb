@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/tokenutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"unicode/utf8"
 )
 
 // Microcompact defaults.
@@ -166,11 +166,7 @@ func MicrocompactMessages(messages []llm.Message, now time.Time) ([]llm.Message,
 }
 
 // estimateTokens provides a rough token estimate using rune count.
-// Korean text uses ~2 runes per token with BPE tokenizers.
+// Delegates to tokenutil.EstimateTokens (shared across chat subsystem).
 func estimateTokens(s string) int {
-	n := utf8.RuneCountInString(s) / 2
-	if n < 1 {
-		return 1
-	}
-	return n
+	return tokenutil.EstimateTokens(s)
 }

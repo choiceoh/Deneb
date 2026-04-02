@@ -100,7 +100,14 @@ func NewSubagentCommandDepsFromACP(registry *acp.ACPRegistry, cfg ...ACPCommandD
 				}
 				// Send initial task message to spawned session.
 				if config.SessionSendFn != nil {
-					_ = config.SessionSendFn(result.SessionKey, params.Task)
+					if sendErr := config.SessionSendFn(result.SessionKey, params.Task); sendErr != nil {
+						return &SubagentSpawnResult{
+							Status:          "error",
+							ChildSessionKey: result.SessionKey,
+							RunID:           result.AgentID,
+							Error:           fmt.Sprintf("spawned but initial message failed: %v", sendErr),
+						}, nil
+					}
 				}
 				return &SubagentSpawnResult{
 					Status:          "accepted",

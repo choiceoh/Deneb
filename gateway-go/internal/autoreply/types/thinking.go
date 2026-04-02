@@ -57,6 +57,27 @@ const (
 	UsageFull   UsageDisplayLevel = "full"
 )
 
+// BudgetTokens returns the token budget for a thinking level.
+// Returns 0 for ThinkOff or unrecognized levels (meaning thinking is disabled).
+func (l ThinkLevel) BudgetTokens() int {
+	switch l {
+	case ThinkMinimal:
+		return 1024
+	case ThinkLow:
+		return 4096
+	case ThinkMedium:
+		return 10240
+	case ThinkHigh:
+		return 32768
+	case ThinkXHigh:
+		return 65536
+	case ThinkAdaptive:
+		return 16384
+	default:
+		return 0
+	}
+}
+
 // BaseThinkingLevels returns the standard thinking levels (without xhigh).
 func BaseThinkingLevels() []ThinkLevel {
 	return []ThinkLevel{ThinkOff, ThinkMinimal, ThinkLow, ThinkMedium, ThinkHigh, ThinkAdaptive}
