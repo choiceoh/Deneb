@@ -20,7 +20,7 @@ import (
 // batch_read — Read multiple files in one call
 // ---------------------------------------------------------------------------
 
-// ToolBatchRead reads up to 20 files in a single call using parallel I/O.
+// ToolBatchRead reads up to 40 files in a single call using parallel I/O.
 // Each file supports the same options as the read tool (offset, limit, function).
 // Per-file errors are reported inline without aborting the entire batch.
 // Results are reassembled in the original request order.
@@ -127,8 +127,8 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		if maxFiles <= 0 {
 			maxFiles = 5
 		}
-		if maxFiles > 20 {
-			maxFiles = 20
+		if maxFiles > 40 {
+			maxFiles = 40
 		}
 
 		searchPath := defaultDir
