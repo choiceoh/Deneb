@@ -38,7 +38,7 @@ func TestPrefetch_EmptyMessage(t *testing.T) {
 }
 
 func TestPrefetch_NoDeps(t *testing.T) {
-	result := Prefetch(context.Background(), "비금도 진행상황", Deps{})
+	result := Prefetch(context.Background(), "비금도 해상태양광 진행상황 알려줘", Deps{})
 	if result != "" {
 		t.Errorf("expected empty with no deps, got: %q", result)
 	}

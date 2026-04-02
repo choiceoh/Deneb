@@ -225,6 +225,9 @@ func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]st
 
 	err := cmd.Run()
 	duration := time.Since(start).Milliseconds()
+	if duration == 0 {
+		duration = 1 // ensure sub-millisecond executions report at least 1ms
+	}
 
 	result := HookResult{
 		HookID:   hook.ID,
