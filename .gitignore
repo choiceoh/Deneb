@@ -51,3 +51,5 @@ gateway-go/deneb-gateway
 docs/.generated/config-baseline.json
 docs/.generated/config-baseline.jsonl
 .autoresearch/
+cache/
+.claude/worktrees/
