@@ -56,7 +56,7 @@ impl TableBuilder {
 
     fn end_cell(&mut self) {
         if self.in_cell {
-            let text = self.cell_buf.trim().replace('|', "\\|");
+            let text = escape_table_cell(self.cell_buf.trim());
             self.current_cells.push(text);
             self.cell_buf.clear();
             self.in_cell = false;
@@ -610,6 +610,23 @@ pub(crate) fn emit(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Escape markdown-special characters inside a table cell.
+/// Pipes, backslashes, and inline formatting chars are escaped so the
+/// Markdown table structure is preserved.
+fn escape_table_cell(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 4);
+    for ch in text.chars() {
+        match ch {
+            '|' | '\\' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
+}
 
 fn heading_level(name: TagName) -> usize {
     match name {
