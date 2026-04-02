@@ -89,8 +89,7 @@ type runDeps struct {
 	replyFunc        ReplyFunc                         // optional; delivers response to originating channel
 	mediaSendFn      MediaSendFunc                     // optional; delivers files to originating channel
 	typingFn         TypingFunc                        // optional; sends typing indicator during run
-	reactionFn       ReactionFunc                      // optional; sets emoji reaction for status phases
-	removeReactionFn ReactionFunc                      // optional; removes emoji reaction
+	reactionFn ReactionFunc // optional; sets emoji reaction for status phases
 	// channelUploadLimitFn returns the max file upload size for a channel ID.
 	// Returns 0 if no limit is registered (tool applies its own default).
 	channelUploadLimitFn func(channelID string) int64 // optional
@@ -117,7 +116,6 @@ type runDeps struct {
 	sessionMemory    *SessionMemoryStore // optional; structured session state
 	contextCfg       ContextConfig
 	compactionCfg    CompactionConfig
-	toolDenySet          map[string]bool // tools to hide from the model (deny-rule filtering)
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string
