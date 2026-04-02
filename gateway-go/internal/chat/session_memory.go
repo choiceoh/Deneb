@@ -4,15 +4,14 @@
 // after compaction when detailed context is lost.
 //
 // Design choices:
-//   - All sections are plain strings (not arrays/structs). LLMs generate
-//     freeform text far more reliably than nested JSON. Simpler parsing,
-//     fewer failure modes.
-//   - Sections are agent-generic (not coding-specific). Files/Functions are
-//     handled by RunCache and proactive context; Learnings are handled by
-//     Memory Store fact extraction. Session memory fills a different niche:
-//     task continuity within a session.
-//   - Updated per-run (not per-turn) to balance quality vs cost. One
-//     lightweight LLM call per user message, sharing the memoryExtractSem.
+//   - Markdown-based format (not JSON). LLMs generate freeform markdown far
+//     more reliably than nested JSON, and the output is directly injectable
+//     into system prompts without conversion.
+//   - Claude Code–inspired forked-agent pattern: the local sglang model receives
+//     the FULL recent transcript (not just truncated snippets) so it has complete
+//     visibility into what happened — tool calls, errors, reasoning, etc.
+//   - Updated per-run (not per-turn) to balance quality vs cost. One sglang
+//     call per user message, sharing the memoryExtractSem.
 package chat
 
 import (
@@ -28,114 +27,95 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-// SessionMemory holds the structured working state of a single session.
-// All sections are plain strings — the lightweight LLM generates freeform
-// text for each, not structured arrays. This is intentional: freeform text
-// is more robust against LLM output variance and more flexible in content.
-type SessionMemory struct {
-	Summary     string `json:"summary"`                // What this session is about (1-2 sentences)
-	State       string `json:"state"`                  // What just happened / what's next
-	TaskContext string `json:"task_context,omitempty"` // Active goals, constraints, specs
-	Progress    string `json:"progress,omitempty"`     // Completed and pending items
-	Decisions   string `json:"decisions,omitempty"`    // Key choices made and rationale (survives compaction)
-	Errors      string `json:"errors,omitempty"`       // Unresolved issues or recent corrections
-	Worklog     string `json:"worklog,omitempty"`      // Chronological log of significant actions
-}
+// ---------------------------------------------------------------------------
+// Session memory template — Claude Code–inspired markdown sections
+// ---------------------------------------------------------------------------
 
-// Section character limits. Each section is truncated independently.
-// Total budget: ~5000 chars (~1500 tokens) — modest relative to the
-// 100K token context budget.
+// sessionMemoryTemplate is the initial template for new session memory files.
+// Section headers and italic descriptions are structural — only the content
+// below them is updated by the LLM.
+const sessionMemoryTemplate = `# Session Title
+_세션을 설명하는 5-10 단어의 구체적인 제목_
+
+# Current State
+_지금 진행 중인 작업, 아직 완료되지 않은 항목, 즉시 다음 단계_
+
+# Task Specification
+_사용자가 요청한 것, 설계 결정, 제약 조건 등 설명적 컨텍스트_
+
+# Files and Functions
+_중요 파일 목록, 각 파일의 역할, 왜 관련 있는지 간략히_
+
+# Workflow
+_보통 실행하는 명령어와 순서, 출력 해석 방법_
+
+# Errors and Corrections
+_발생한 에러와 해결 방법, 사용자가 수정한 것, 실패한 접근법 (다시 시도 금지)_
+
+# Decisions
+_내린 결정과 근거, 거부된 대안, 사용자가 확인한 선택_
+
+# Worklog
+_시간순으로 시도한 것, 한 것을 매우 간결하게. 도구 사용 포함 (어떤 파일을 읽고/수정했는지, 시도→실패→성공 흐름)_
+`
+
+// Session memory limits.
 const (
-	smLimitSummary     = 300
-	smLimitState       = 300
-	smLimitTaskContext = 800
-	smLimitProgress    = 600
-	smLimitDecisions   = 600
-	smLimitErrors      = 400
-	smLimitWorklog     = 800
+	// maxSessionMemoryTokens is the hard cap for total session memory content.
+	// 30K tokens (~120K chars) — generous budget since storage is local and
+	// prompt injection is independently capped by per-section truncation.
+	maxSessionMemoryTokens = 30_000
+
+	// maxSectionTokens is the per-section soft cap (matches Claude Code's MAX_SECTION_LENGTH).
+	maxSectionTokens = 2000
+
+	// maxTranscriptMessages is the maximum number of recent transcript messages
+	// sent to the sglang model for session memory extraction. With 200K context
+	// this is generous but prevents degenerate cases.
+	maxTranscriptMessages = 150
+
+	// sessionMemoryUpdateTimeout is the max time for a single sglang call.
+	// Increased from 20s to 60s because the model now receives full transcript.
+	sessionMemoryUpdateTimeout = 60 * time.Second
 )
 
-// Trim enforces character limits on all sections (in-place).
-func (m *SessionMemory) Trim() {
-	m.Summary = truncRunes(m.Summary, smLimitSummary)
-	m.State = truncRunes(m.State, smLimitState)
-	m.TaskContext = truncRunes(m.TaskContext, smLimitTaskContext)
-	m.Progress = truncRunes(m.Progress, smLimitProgress)
-	m.Decisions = truncRunes(m.Decisions, smLimitDecisions)
-	m.Errors = truncRunes(m.Errors, smLimitErrors)
-	m.Worklog = truncRunes(m.Worklog, smLimitWorklog)
-}
-
-// IsEmpty returns true when the memory has no meaningful content.
-func (m *SessionMemory) IsEmpty() bool {
-	return m.Summary == "" && m.State == "" && m.TaskContext == "" &&
-		m.Progress == "" && m.Decisions == "" && m.Errors == "" &&
-		m.Worklog == ""
-}
-
-// FormatForPrompt renders the session memory as a compact text block for
-// the system prompt. Empty sections are omitted. Returns "" if all empty.
-func (m *SessionMemory) FormatForPrompt() string {
-	if m.IsEmpty() {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("## Session State\n")
-	b.WriteString("이 세션의 구조화된 작업 상태입니다. 이전 대화에서 자동 생성되었습니다.\n\n")
-	writeSection(&b, "요약", m.Summary)
-	writeSection(&b, "현재 상태", m.State)
-	writeSection(&b, "작업 컨텍스트", m.TaskContext)
-	writeSection(&b, "진행 상황", m.Progress)
-	writeSection(&b, "결정 사항", m.Decisions)
-	writeSection(&b, "오류/문제", m.Errors)
-	writeSection(&b, "작업 이력", m.Worklog)
-	return b.String()
-}
-
-func writeSection(b *strings.Builder, label, content string) {
-	if content == "" {
-		return
-	}
-	fmt.Fprintf(b, "### %s\n%s\n\n", label, content)
-}
-
 // ---------------------------------------------------------------------------
-// In-memory store (sessionKey → *SessionMemory)
+// In-memory store (sessionKey → markdown string)
 // ---------------------------------------------------------------------------
 
 // SessionMemoryStore is a thread-safe in-memory store backed by disk.
+// Stores session memory as markdown strings (not structured JSON).
 type SessionMemoryStore struct {
 	mu      sync.RWMutex
-	entries map[string]*SessionMemory
+	entries map[string]string
 	baseDir string // empty = no disk persistence
 }
 
 // NewSessionMemoryStore creates a store. Pass empty baseDir for in-memory only.
 func NewSessionMemoryStore(baseDir string) *SessionMemoryStore {
 	return &SessionMemoryStore{
-		entries: make(map[string]*SessionMemory),
+		entries: make(map[string]string),
 		baseDir: baseDir,
 	}
 }
 
-// Get returns the session memory for the given key, or nil.
-func (s *SessionMemoryStore) Get(sessionKey string) *SessionMemory {
+// Get returns the session memory markdown for the given key, or "".
+func (s *SessionMemoryStore) Get(sessionKey string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.entries[sessionKey]
 }
 
 // Set stores the session memory and persists to disk (async).
-func (s *SessionMemoryStore) Set(sessionKey string, mem *SessionMemory) {
+func (s *SessionMemoryStore) Set(sessionKey string, content string) {
 	s.mu.Lock()
-	s.entries[sessionKey] = mem
+	s.entries[sessionKey] = content
 	s.mu.Unlock()
 	if s.baseDir != "" {
-		go s.saveToDisk(sessionKey, mem)
+		go s.saveToDisk(sessionKey, content)
 	}
 }
 
@@ -150,20 +130,16 @@ func (s *SessionMemoryStore) Delete(sessionKey string) {
 }
 
 func (s *SessionMemoryStore) diskPath(sessionKey string) string {
-	return filepath.Join(s.baseDir, sanitizeKey(sessionKey)+".memory.json")
+	return filepath.Join(s.baseDir, sanitizeKey(sessionKey)+".memory.md")
 }
 
-func (s *SessionMemoryStore) saveToDisk(sessionKey string, mem *SessionMemory) {
+func (s *SessionMemoryStore) saveToDisk(sessionKey string, content string) {
 	path := s.diskPath(sessionKey)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
-	data, err := json.Marshal(mem)
-	if err != nil {
-		return
-	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
 		return
 	}
 	os.Rename(tmp, path)
@@ -184,24 +160,36 @@ func (s *SessionMemoryStore) LoadFromDisk() int {
 	defer s.mu.Unlock()
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".memory.json") {
+		if !strings.HasSuffix(name, ".memory.md") {
 			continue
 		}
-		key := unsanitizeKey(strings.TrimSuffix(name, ".memory.json"))
+		key := unsanitizeKey(strings.TrimSuffix(name, ".memory.md"))
 		data, err := os.ReadFile(filepath.Join(s.baseDir, name))
 		if err != nil {
 			continue
 		}
-		var mem SessionMemory
-		if err := json.Unmarshal(data, &mem); err != nil {
-			continue
-		}
-		if !mem.IsEmpty() {
-			s.entries[key] = &mem
+		content := strings.TrimSpace(string(data))
+		if content != "" && !isTemplateOnly(content) {
+			s.entries[key] = content
 			loaded++
 		}
 	}
 	return loaded
+}
+
+// FormatForPrompt returns the session memory content for system prompt injection.
+// Wraps in a section header if non-empty. Returns "" if empty.
+func FormatForPrompt(content string) string {
+	if content == "" || isTemplateOnly(content) {
+		return ""
+	}
+	// Truncate sections that are too long for prompt injection.
+	truncated := truncateSessionMemoryForPrompt(content)
+	var b strings.Builder
+	b.WriteString("## Session State\n")
+	b.WriteString("이 세션의 작업 상태입니다. 이전 대화에서 자동 생성되었습니다.\n\n")
+	b.WriteString(truncated)
+	return b.String()
 }
 
 // sanitizeKey makes a session key safe for use as a filename.
@@ -215,38 +203,44 @@ func unsanitizeKey(key string) string {
 }
 
 // ---------------------------------------------------------------------------
-// LLM-based update
+// LLM-based update (forked-agent pattern via local sglang)
 // ---------------------------------------------------------------------------
 
-const sessionMemoryUpdateTimeout = 20 * time.Second
-
-// sessionMemorySystemPrompt instructs the lightweight LLM on how to update
-// session memory. Korean because the primary interaction language is Korean.
+// sessionMemorySystemPrompt instructs the sglang model to update session memory.
+// The model receives the full conversation transcript and current notes, then
+// outputs the complete updated markdown.
 const sessionMemorySystemPrompt = `당신은 AI 에이전트의 세션 메모리 관리자입니다.
-대화 내용을 분석하여 세션 메모리를 업데이트하세요.
+대화 내용을 분석하여 세션 메모리 파일을 업데이트하세요.
+
+중요: 이 메시지와 지시사항은 실제 사용자 대화의 일부가 아닙니다. "노트 작성"이나 이 업데이트 지시를 세션 메모리 내용에 포함하지 마세요.
 
 규칙:
 - 모든 섹션은 한국어로 작성
-- 간결하게 (각 섹션 2-5줄)
-- 이전 메모리의 중요한 내용을 보존하되, 최신 정보로 갱신
-- 해결된 에러는 errors에서 제거하고 해결 기록만 남기기
-- worklog는 시간순 (최근 것만, 오래된 항목은 자연스럽게 탈락)
-- 변화가 없으면 정확히 null 반환 (JSON 아닌 텍스트 null)
+- 섹션 헤더(# 으로 시작하는 줄)와 이탤릭 설명(_으로 감싼 줄)은 절대 수정/삭제/추가하지 마세요
+- 이탤릭 설명 아래의 실제 내용만 업데이트하세요
+- 구체적이고 정보 밀도 높게 작성: 파일 경로, 함수명, 에러 메시지, 정확한 명령어 등 포함
+- 각 섹션은 ~2000 토큰 이내로 유지. 한도에 가까워지면 덜 중요한 내용을 압축하되 핵심 정보는 보존
+- "Current State"는 항상 최신 작업을 반영하도록 업데이트 (compaction 후 연속성에 중요)
+- "Worklog"는 시간순으로 주요 작업 기록, 도구 사용 내역 포함 (어떤 파일을 읽고/수정했는지, 시도→실패→성공 흐름)
+- 해결된 에러는 "Errors and Corrections"에서 제거하고 해결 기록만 남기기
+- 변화가 없으면 정확히 NO_CHANGE 반환 (다른 텍스트 없이)
+- CLAUDE.md에 이미 있는 정보는 포함하지 마세요
 
-JSON 형식으로 반환:
-{"summary":"...","state":"...","task_context":"...","progress":"...","decisions":"...","errors":"...","worklog":"..."}`
+전체 업데이트된 마크다운을 반환하세요. 구조를 유지하면서 내용만 업데이트합니다.`
 
-// UpdateSessionMemory calls the lightweight LLM to update session memory
-// based on the latest run. Designed to be called inside the existing
-// post-run goroutine alongside memory extraction (shares memoryExtractSem).
+// UpdateSessionMemory calls the local sglang model with the full recent
+// transcript to update the session memory markdown. Designed to be called
+// inside the existing post-run goroutine alongside memory extraction.
+//
+// Unlike the previous implementation that received truncated snippets, this
+// sends the full recent conversation so the model has complete visibility into
+// tool calls, errors, file paths, and reasoning.
 func UpdateSessionMemory(
 	ctx context.Context,
 	store *SessionMemoryStore,
+	transcript TranscriptStore,
 	sessionKey string,
-	userMessage string,
-	agentText string,
-	turns int,
-	stopReason string,
+	toolSummary string,
 	logger *slog.Logger,
 ) {
 	if store == nil {
@@ -263,39 +257,54 @@ func UpdateSessionMemory(
 	memCtx, cancel := context.WithTimeout(ctx, sessionMemoryUpdateTimeout)
 	defer cancel()
 
-	// Build the user message for the update LLM call.
-	existing := store.Get(sessionKey)
-	var existingJSON string
-	if existing != nil && !existing.IsEmpty() {
-		data, _ := json.Marshal(existing)
-		existingJSON = string(data)
-	} else {
-		existingJSON = "없음 (첫 실행)"
+	// Load current session memory (or template for first run).
+	currentMemory := store.Get(sessionKey)
+	if currentMemory == "" {
+		currentMemory = sessionMemoryTemplate
 	}
 
-	userPrompt := fmt.Sprintf(`현재 세션 메모리:
-%s
+	// Load recent transcript messages for full context.
+	var transcriptText string
+	if transcript != nil {
+		msgs, _, err := transcript.Load(sessionKey, maxTranscriptMessages)
+		if err != nil {
+			logger.Debug("session memory: failed to load transcript", "error", err)
+		} else {
+			transcriptText = formatTranscriptForMemory(msgs)
+		}
+	}
 
-이번 실행:
-- 사용자: %s
-- 에이전트: %s
-- 턴: %d, 결과: %s
+	if transcriptText == "" {
+		logger.Debug("session memory: no transcript available, skipping")
+		return
+	}
 
-세션 메모리를 업데이트하세요.`,
-		existingJSON,
-		truncRunes(userMessage, 200),
-		truncRunes(agentText, 1500),
-		turns,
-		stopReason,
-	)
+	// Build the user prompt with full context.
+	var userPrompt strings.Builder
+	userPrompt.WriteString("위의 대화 기록을 바탕으로 세션 메모리를 업데이트하세요.\n\n")
+
+	if toolSummary != "" {
+		clean := strings.TrimPrefix(toolSummary, "[Tools used: ")
+		clean = strings.TrimSuffix(clean, "]")
+		fmt.Fprintf(&userPrompt, "이번 실행에서 사용한 도구: %s\n\n", clean)
+	}
+
+	fmt.Fprintf(&userPrompt, "현재 세션 메모리 내용:\n```\n%s\n```\n\n", currentMemory)
+	userPrompt.WriteString("위 세션 메모리를 업데이트하여 전체 마크다운을 반환하세요.")
+
+	// Build messages: conversation transcript as context + update instruction.
+	// The transcript goes as prior messages so the model "sees" the full conversation,
+	// then the update instruction is the final user message.
+	messages := buildMemoryUpdateMessages(transcriptText, userPrompt.String())
 
 	resp, err := lwClient.Complete(memCtx, llm.ChatRequest{
-		Model: pilot.GetLightweightModel(),
-		Messages: []llm.Message{
-			llm.NewTextMessage("system", sessionMemorySystemPrompt),
-			llm.NewTextMessage("user", userPrompt),
+		Model:     pilot.GetLightweightModel(),
+		Messages:  messages,
+		System:    llm.SystemString(sessionMemorySystemPrompt),
+		MaxTokens: 8192,
+		ExtraBody: map[string]any{
+			"chat_template_kwargs": map[string]any{"enable_thinking": false},
 		},
-		MaxTokens: 1024,
 	})
 	if err != nil {
 		logger.Debug("session memory update failed", "error", err)
@@ -303,33 +312,252 @@ func UpdateSessionMemory(
 	}
 
 	resp = strings.TrimSpace(resp)
-	if resp == "" || resp == "null" {
+	if resp == "" || resp == "NO_CHANGE" {
 		return
 	}
 
-	// Strip markdown code fences if present.
+	// Strip markdown code fences if the model wrapped the output.
 	resp = stripCodeFence(resp)
 
-	var updated SessionMemory
-	if err := json.Unmarshal([]byte(resp), &updated); err != nil {
-		logger.Debug("session memory: invalid JSON from LLM",
-			"error", err, "resp", truncRunes(resp, 200))
+	// Validate: must contain at least one section header.
+	if !strings.Contains(resp, "# ") {
+		logger.Debug("session memory: invalid output (no section headers)",
+			"resp_len", len(resp))
 		return
 	}
 
-	updated.Trim()
-	if updated.IsEmpty() {
-		return
-	}
+	// Enforce total token budget.
+	resp = enforceTokenBudget(resp, maxSessionMemoryTokens)
 
-	store.Set(sessionKey, &updated)
+	store.Set(sessionKey, resp)
+	// Extract title for log (first line after "# Session Title\n").
+	title := extractTitle(resp)
 	logger.Debug("session memory updated",
-		"session", sessionKey, "summary", truncRunes(updated.Summary, 60))
+		"session", sessionKey, "title", truncRunes(title, 60))
+}
+
+// ---------------------------------------------------------------------------
+// Transcript formatting
+// ---------------------------------------------------------------------------
+
+// formatTranscriptForMemory formats ChatMessages into a readable conversation
+// format for the sglang model. Includes role labels, timestamps, and rich
+// content blocks (tool_use, tool_result) when available.
+func formatTranscriptForMemory(msgs []ChatMessage) string {
+	if len(msgs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, msg := range msgs {
+		role := msg.Role
+		if role == "" {
+			role = "user"
+		}
+		if msg.Timestamp > 0 {
+			t := time.UnixMilli(msg.Timestamp)
+			fmt.Fprintf(&b, "[%s %s]\n", t.Format("15:04"), role)
+		} else {
+			fmt.Fprintf(&b, "[%s]\n", role)
+		}
+		b.WriteString(formatRichContent(msg.Content))
+		b.WriteString("\n\n")
+	}
+	return b.String()
+}
+
+// formatRichContent converts a ChatMessage's json.RawMessage content into a
+// human-readable string that preserves tool call structure. For text-only
+// messages, returns the plain text. For rich messages (ContentBlock arrays),
+// formats each block with type annotations so the session memory LLM can
+// see the full action flow.
+func formatRichContent(content json.RawMessage) string {
+	if len(content) == 0 {
+		return ""
+	}
+
+	// Try JSON string first (text-only, legacy format).
+	var s string
+	if json.Unmarshal(content, &s) == nil {
+		return s
+	}
+
+	// Try ContentBlock array (rich format from Task 1).
+	var blocks []json.RawMessage
+	if json.Unmarshal(content, &blocks) != nil {
+		return string(content)
+	}
+
+	var b strings.Builder
+	for _, raw := range blocks {
+		var base struct {
+			Type      string          `json:"type"`
+			Text      string          `json:"text,omitempty"`
+			Name      string          `json:"name,omitempty"`
+			Input     json.RawMessage `json:"input,omitempty"`
+			ToolUseID string          `json:"tool_use_id,omitempty"`
+			Content   string          `json:"content,omitempty"`
+			IsError   bool            `json:"is_error,omitempty"`
+		}
+		if json.Unmarshal(raw, &base) != nil {
+			continue
+		}
+		switch base.Type {
+		case "text":
+			if base.Text != "" {
+				b.WriteString(base.Text)
+				b.WriteByte('\n')
+			}
+		case "tool_use":
+			inputSummary := truncRunes(string(base.Input), 200)
+			fmt.Fprintf(&b, "[tool:%s(%s)]\n", base.Name, inputSummary)
+		case "tool_result":
+			output := truncRunes(base.Content, 500)
+			if base.IsError {
+				fmt.Fprintf(&b, "[result → ERROR: %s]\n", output)
+			} else {
+				fmt.Fprintf(&b, "[result → %s]\n", output)
+			}
+		default:
+			// Skip thinking blocks and other internal types.
+		}
+	}
+	return b.String()
+}
+
+// buildMemoryUpdateMessages constructs the message array for the sglang call.
+// The transcript is sent as a user message (context), followed by the update
+// instruction as another user message. This gives the model full visibility
+// into the conversation while keeping the instruction separate.
+func buildMemoryUpdateMessages(transcriptText, instruction string) []llm.Message {
+	return []llm.Message{
+		llm.NewTextMessage("user", "다음은 이 세션의 대화 기록입니다:\n\n"+transcriptText),
+		llm.NewTextMessage("assistant", "대화 기록을 확인했습니다. 세션 메모리 업데이트 지시를 주세요."),
+		llm.NewTextMessage("user", instruction),
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Token budget enforcement
+// ---------------------------------------------------------------------------
+
+// enforceTokenBudget truncates oversized sections to fit within the total
+// token budget. Uses rough estimation (chars/4 for token count).
+func enforceTokenBudget(content string, maxTokens int) string {
+	if roughTokenCount(content) <= maxTokens {
+		return content
+	}
+
+	// Parse sections and truncate the largest ones.
+	sections := parseSections(content)
+	maxCharsPerSection := maxSectionTokens * 4 // rough char estimate
+
+	var b strings.Builder
+	for _, sec := range sections {
+		b.WriteString(sec.header)
+		b.WriteByte('\n')
+		body := sec.body
+		if len(body) > maxCharsPerSection {
+			// Truncate at line boundary.
+			lines := strings.Split(body, "\n")
+			var kept strings.Builder
+			for _, line := range lines {
+				if kept.Len()+len(line)+1 > maxCharsPerSection {
+					break
+				}
+				kept.WriteString(line)
+				kept.WriteByte('\n')
+			}
+			kept.WriteString("[... 섹션이 길어서 잘림 ...]\n")
+			body = kept.String()
+		}
+		b.WriteString(body)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+type section struct {
+	header string
+	body   string
+}
+
+func parseSections(content string) []section {
+	lines := strings.Split(content, "\n")
+	var sections []section
+	var current *section
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# ") {
+			if current != nil {
+				sections = append(sections, *current)
+			}
+			current = &section{header: line}
+		} else if current != nil {
+			current.body += line + "\n"
+		}
+	}
+	if current != nil {
+		sections = append(sections, *current)
+	}
+	return sections
+}
+
+func roughTokenCount(s string) int {
+	return len(s) / 4
+}
+
+// extractTitle returns the content after "# Session Title" header.
+func extractTitle(content string) string {
+	lines := strings.Split(content, "\n")
+	inTitle := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# Session Title") {
+			inTitle = true
+			continue
+		}
+		if inTitle {
+			// Hit next section header — no title content found.
+			if strings.HasPrefix(line, "# ") {
+				break
+			}
+			trimmed := strings.TrimSpace(line)
+			// Skip italic description lines.
+			if strings.HasPrefix(trimmed, "_") && strings.HasSuffix(trimmed, "_") {
+				continue
+			}
+			if trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// isTemplateOnly returns true if the content is just the empty template
+// (all sections have only italic descriptions, no real content).
+func isTemplateOnly(content string) bool {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		// Skip section headers.
+		if strings.HasPrefix(trimmed, "# ") {
+			continue
+		}
+		// Skip italic description lines.
+		if strings.HasPrefix(trimmed, "_") && strings.HasSuffix(trimmed, "_") {
+			continue
+		}
+		// Found real content — not template-only.
+		return false
+	}
+	return true
+}
 
 // truncRunes truncates s to maxRunes runes, appending "…" if truncated.
 func truncRunes(s string, maxRunes int) string {
@@ -340,19 +568,45 @@ func truncRunes(s string, maxRunes int) string {
 	return string(runes[:maxRunes]) + "…"
 }
 
-// stripCodeFence removes ```json ... ``` or ``` ... ``` wrapping.
+// stripCodeFence removes ```markdown ... ``` or ``` ... ``` wrapping.
 func stripCodeFence(s string) string {
-	if idx := strings.Index(s, "```json"); idx >= 0 {
-		s = s[idx+7:]
-		if end := strings.Index(s, "```"); end >= 0 {
-			return strings.TrimSpace(s[:end])
-		}
-	}
-	if idx := strings.Index(s, "```"); idx >= 0 {
-		s = s[idx+3:]
-		if end := strings.Index(s, "```"); end >= 0 {
-			return strings.TrimSpace(s[:end])
+	for _, prefix := range []string{"```markdown", "```md", "```json", "```"} {
+		if idx := strings.Index(s, prefix); idx >= 0 {
+			inner := s[idx+len(prefix):]
+			if end := strings.Index(inner, "```"); end >= 0 {
+				return strings.TrimSpace(inner[:end])
+			}
 		}
 	}
 	return s
+}
+
+// truncateSessionMemoryForPrompt truncates each section to maxSectionTokens
+// when injecting into the system prompt. Prevents oversized session memory
+// from consuming the entire prompt budget.
+func truncateSessionMemoryForPrompt(content string) string {
+	sections := parseSections(content)
+	maxChars := maxSectionTokens * 4
+
+	var b strings.Builder
+	for _, sec := range sections {
+		b.WriteString(sec.header)
+		b.WriteByte('\n')
+		body := sec.body
+		if len(body) > maxChars {
+			lines := strings.Split(body, "\n")
+			var kept strings.Builder
+			for _, line := range lines {
+				if kept.Len()+len(line)+1 > maxChars {
+					break
+				}
+				kept.WriteString(line)
+				kept.WriteByte('\n')
+			}
+			kept.WriteString("[... 잘림 ...]\n")
+			body = kept.String()
+		}
+		b.WriteString(body)
+	}
+	return strings.TrimSpace(b.String())
 }

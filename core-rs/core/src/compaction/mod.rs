@@ -565,15 +565,18 @@ pub fn find_shallowest_condensation_candidate(
     None
 }
 
-/// Build leaf source text by concatenating messages with timestamps.
+/// Build leaf source text by concatenating messages with timestamps and roles.
 ///
-/// Format: `[YYYY-MM-DD HH:mm TZ]\n{content}\n\n...`
+/// Format: `[YYYY-MM-DD HH:mm TZ | role]\n{content}\n\n...`
+///
+/// Including the role helps the summarizer understand conversational flow
+/// and preserve episodic structure (who said/did what, in what order).
 pub fn build_leaf_source_text(messages: &[MessageRecord], timezone: &str) -> String {
     if messages.is_empty() {
         return String::new();
     }
-    // Pre-estimate capacity: timestamp ~25 chars + brackets/newline + content.
-    let cap: usize = messages.iter().map(|m| m.content.len() + 30).sum();
+    // Pre-estimate capacity: timestamp ~25 chars + role ~15 chars + brackets/pipes/newline + content.
+    let cap: usize = messages.iter().map(|m| m.content.len() + 45).sum();
     let mut out = String::with_capacity(cap);
     for (i, msg) in messages.iter().enumerate() {
         if i > 0 {
@@ -582,6 +585,8 @@ pub fn build_leaf_source_text(messages: &[MessageRecord], timezone: &str) -> Str
         let ts = timestamp::format_timestamp(msg.created_at, timezone);
         out.push('[');
         out.push_str(&ts);
+        out.push_str(" | ");
+        out.push_str(&msg.role);
         out.push_str("]\n");
         out.push_str(&msg.content);
     }
@@ -1013,6 +1018,38 @@ mod tests {
         let text = build_leaf_source_text(&messages, "UTC");
         assert!(text.contains("Hello world"));
         assert!(text.contains("2024"));
+        assert!(text.contains("| user]"));
+    }
+
+    #[test]
+    fn test_build_leaf_source_text_multi_role() {
+        let messages = vec![
+            MessageRecord {
+                message_id: 1,
+                conversation_id: 1,
+                seq: 1,
+                role: "user".into(),
+                content: "Fix the bug".into(),
+                token_count: 3,
+                created_at: 1711324800000,
+            },
+            MessageRecord {
+                message_id: 2,
+                conversation_id: 1,
+                seq: 2,
+                role: "assistant".into(),
+                content: "[Tools used: read_file x1, edit x1]\n\nFixed the null check.".into(),
+                token_count: 10,
+                created_at: 1711324860000,
+            },
+        ];
+        let text = build_leaf_source_text(&messages, "UTC");
+        assert!(text.contains("| user]"));
+        assert!(text.contains("| assistant]"));
+        // Verify ordering: user before assistant
+        let user_pos = text.find("| user]").expect("user role");
+        let asst_pos = text.find("| assistant]").expect("assistant role");
+        assert!(user_pos < asst_pos);
     }
 
     #[test]

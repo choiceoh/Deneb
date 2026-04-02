@@ -327,8 +327,8 @@ func executeAgentRun(
 		// Session memory: pre-format for prompt injection.
 		var sessionMemoryText string
 		if deps.sessionMemory != nil {
-			if mem := deps.sessionMemory.Get(params.SessionKey); mem != nil {
-				sessionMemoryText = mem.FormatForPrompt()
+			if content := deps.sessionMemory.Get(params.SessionKey); content != "" {
+				sessionMemoryText = FormatForPrompt(content)
 			}
 		}
 

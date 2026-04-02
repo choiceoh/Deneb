@@ -327,14 +327,9 @@ func handleRunSuccess(
 			// goroutine don't eat into the session-memory deadline.
 			if deps.sessionMemory != nil {
 				smCtx, smCancel := context.WithTimeout(base, sessionMemoryUpdateTimeout)
-				// Use AllText so session memory captures intermediate findings,
-			// not just the last turn's text.
-			smText := result.AllText
-			if smText == "" {
-				smText = result.Text
-			}
-			UpdateSessionMemory(smCtx, deps.sessionMemory, params.SessionKey,
-					params.Message, smText, result.Turns, result.StopReason, logger)
+				smToolSummary := formatToolActivitySummary(result.ToolActivities)
+				UpdateSessionMemory(smCtx, deps.sessionMemory, deps.transcript,
+					params.SessionKey, smToolSummary, logger)
 				smCancel()
 			}
 		}()
