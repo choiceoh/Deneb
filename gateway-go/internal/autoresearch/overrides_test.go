@@ -56,6 +56,54 @@ func TestExtractConstantsMultipleFiles(t *testing.T) {
 	}
 }
 
+func TestExtractConstantsGoConstBlock(t *testing.T) {
+	dir := t.TempDir()
+	// Simulate a Go const block with tab indentation (like search_params.go).
+	content := "const (\n\tweightHybrid       = 0.40\n\tweightImportance   = 0.25\n)\n"
+	if err := os.WriteFile(filepath.Join(dir, "params.go"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	constants := []ConstantDef{
+		{Name: "WEIGHT_HYBRID", File: "params.go", Pattern: `weightHybrid\s*=\s*([\d.]+)`, Type: "float"},
+		{Name: "WEIGHT_IMPORTANCE", File: "params.go", Pattern: `weightImportance\s*=\s*([\d.]+)`, Type: "float"},
+	}
+	vals, err := ExtractConstants(dir, constants)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vals["WEIGHT_HYBRID"] != "0.40" {
+		t.Errorf("WEIGHT_HYBRID = %q, want %q", vals["WEIGHT_HYBRID"], "0.40")
+	}
+	if vals["WEIGHT_IMPORTANCE"] != "0.25" {
+		t.Errorf("WEIGHT_IMPORTANCE = %q, want %q", vals["WEIGHT_IMPORTANCE"], "0.25")
+	}
+}
+
+func TestExtractConstantsMissingHint(t *testing.T) {
+	dir := t.TempDir()
+	// File has tab-indented constant, but pattern expects start-of-line.
+	content := "const (\n\tmyConst = 42\n)\n"
+	if err := os.WriteFile(filepath.Join(dir, "f.go"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	constants := []ConstantDef{
+		{Name: "MY_CONST", File: "f.go", Pattern: `^myConst\s*=\s*(\d+)`, Type: "int"},
+	}
+	_, err := ExtractConstants(dir, constants)
+	if err == nil {
+		t.Fatal("expected error for anchored pattern on indented constant")
+	}
+	// Error should include the actual line for debugging.
+	if !strings.Contains(err.Error(), "actual line") {
+		t.Errorf("error should include actual line hint, got: %s", err)
+	}
+	if !strings.Contains(err.Error(), "myConst") {
+		t.Errorf("error should include constant name in hint, got: %s", err)
+	}
+}
+
 func TestExtractConstantsMissing(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "train.py"), []byte("nothing here\n"), 0o644); err != nil {

@@ -29,6 +29,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 			CacheEnabled    bool                        `json:"cache_enabled"`
 			Format          string                      `json:"format"`
 			Constants       []autoresearch.ConstantDef  `json:"constants"`
+			AutoStart       bool                        `json:"auto_start"`
 		}
 		if err := jsonutil.UnmarshalInto("autoresearch params", input, &p); err != nil {
 			return "", err
@@ -49,10 +50,12 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 			return autoresearchStatus(runner, p.Workdir)
 		case "results":
 			return autoresearchResults(p.Workdir, p.Format)
+		case "update_constants":
+			return autoresearchUpdateConstants(runner, p.Workdir, p.Constants, p.AutoStart)
 		case "apply_overrides":
 			return autoresearchApplyOverrides(p.Workdir)
 		default:
-			return "", fmt.Errorf("unknown action: %s (use init, start, stop, status, results, or apply_overrides)", p.Action)
+			return "", fmt.Errorf("unknown action: %s (use init, start, stop, status, results, update_constants, or apply_overrides)", p.Action)
 		}
 	}
 }
@@ -92,6 +95,17 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		cfg.BaselineMetric = &baselineMetric
 		cfg.BestMetric = &baselineMetric
 		baselineMsg = fmt.Sprintf("\nBaseline %s: %.6f", metricName, baselineMetric)
+	}
+
+	// Pre-flight: verify constant patterns actually match the source files.
+	// This catches tab/space indentation mismatches before the experiment starts,
+	// preventing the agent from entering a discover→retry loop.
+	if cfg.IsConstantsMode() {
+		if _, extractErr := autoresearch.ExtractConstants(workdir, cfg.Constants); extractErr != nil {
+			return "", fmt.Errorf("constants pattern pre-flight failed: %w\n\n"+
+				"Fix the pattern and re-run init. The pattern must match the actual file content "+
+				"(check for tab indentation in Go const blocks).", extractErr)
+		}
 	}
 
 	// Save config to workspace (with baseline if available).
@@ -180,6 +194,57 @@ func autoresearchStatus(runner *autoresearch.Runner, workdir string) (string, er
 		status = "STOPPED"
 	}
 	return fmt.Sprintf("[%s]\n\n%s", status, autoresearch.Summary(workdir, cfg)), nil
+}
+
+func autoresearchUpdateConstants(runner *autoresearch.Runner, workdir string, constants []autoresearch.ConstantDef, autoStart bool) (string, error) {
+	if runner.IsRunning() {
+		runner.Stop()
+	}
+
+	cfg, err := autoresearch.LoadConfig(workdir)
+	if err != nil {
+		return "", fmt.Errorf("load config: %w", err)
+	}
+	if len(constants) == 0 {
+		return "", fmt.Errorf("constants is required for update_constants")
+	}
+
+	// Update constants in the existing config.
+	cfg.Constants = constants
+
+	// Validate the updated config.
+	if err := cfg.Validate(); err != nil {
+		return "", fmt.Errorf("invalid constants: %w", err)
+	}
+
+	// Pre-flight: verify patterns match actual file content.
+	extracted, extractErr := autoresearch.ExtractConstants(workdir, cfg.Constants)
+	if extractErr != nil {
+		return "", fmt.Errorf("pattern pre-flight failed: %w\n\nFix the pattern and retry.", extractErr)
+	}
+
+	// Save updated config.
+	if err := autoresearch.SaveConfig(workdir, cfg); err != nil {
+		return "", fmt.Errorf("save config: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Constants updated and verified:\n")
+	for _, cd := range constants {
+		sb.WriteString(fmt.Sprintf("  %s = %s (pattern OK)\n", cd.Name, extracted[cd.Name]))
+	}
+
+	if autoStart {
+		if startErr := runner.Start(workdir); startErr != nil {
+			sb.WriteString(fmt.Sprintf("\nAuto-start failed: %v", startErr))
+		} else {
+			sb.WriteString("\nExperiment restarted automatically.")
+		}
+	} else {
+		sb.WriteString("\nRun action=start to resume the experiment.")
+	}
+
+	return sb.String(), nil
 }
 
 func autoresearchApplyOverrides(workdir string) (string, error) {

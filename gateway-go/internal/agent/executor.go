@@ -185,9 +185,17 @@ func RunAgent(
 			cfg.OnTurn(turn+1, result.Usage.InputTokens+result.Usage.OutputTokens)
 		}
 
-		// Keep latest text as the final text.
+		// Text: last turn's text for channel reply (avoids re-sending
+		// content already streamed to the user).
+		// AllText: accumulated text from all turns for transcript persistence,
+		// so intermediate findings (e.g., "tab indentation is the issue")
+		// survive into the next run's context assembly.
 		if turnRes.text != "" {
 			result.Text = turnRes.text
+			if result.AllText != "" {
+				result.AllText += "\n\n"
+			}
+			result.AllText += turnRes.text
 		}
 
 		// --- Max-output-tokens recovery ---
@@ -253,6 +261,13 @@ func RunAgent(
 				}
 			}
 
+			// Persist the terminal assistant message (not appended to messages
+			// since the loop is ending, but must be in transcript for next run).
+			if cfg.OnMessagePersist != nil && turnRes.text != "" {
+				cfg.OnMessagePersist(llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+				result.TurnsPersisted++
+			}
+
 			result.StopReason = turnRes.stopReason
 			if result.StopReason == "" {
 				result.StopReason = "end_turn"
@@ -272,7 +287,12 @@ func RunAgent(
 		}
 
 		// Build assistant message with all content blocks from this turn.
-		messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+		assistantMsg := llm.NewBlockMessage("assistant", turnRes.contentBlocks)
+		messages = append(messages, assistantMsg)
+		if cfg.OnMessagePersist != nil {
+			cfg.OnMessagePersist(assistantMsg)
+			result.TurnsPersisted++
+		}
 
 		// Execute tools and collect results.
 		var toolResults []llm.ContentBlock
@@ -397,7 +417,12 @@ func RunAgent(
 			})
 		}
 
-		messages = append(messages, llm.NewBlockMessage("user", toolResults))
+		toolResultMsg := llm.NewBlockMessage("user", toolResults)
+		messages = append(messages, toolResultMsg)
+		if cfg.OnMessagePersist != nil {
+			cfg.OnMessagePersist(toolResultMsg)
+			result.TurnsPersisted++
+		}
 
 		// Mid-loop compaction: check if context is growing too large and
 		// compact proactively before the LLM rejects with context_length_exceeded.

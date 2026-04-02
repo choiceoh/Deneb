@@ -176,14 +176,14 @@ func TestIntegration_SimpleTextResponse(t *testing.T) {
 	}
 
 	// First message should be user.
-	if msgs[0].Role != "user" || msgs[0].Content != "hello" {
-		t.Errorf("msgs[0] = {%s, %q}, want {user, hello}", msgs[0].Role, msgs[0].Content)
+	if msgs[0].Role != "user" || msgs[0].TextContent() != "hello" {
+		t.Errorf("msgs[0] = {%s, %q}, want {user, hello}", msgs[0].Role, msgs[0].TextContent())
 	}
 	// Last message should be assistant.
 	last := msgs[len(msgs)-1]
-	if last.Role != "assistant" || last.Content != "Integration test response" {
+	if last.Role != "assistant" || last.TextContent() != "Integration test response" {
 		t.Errorf("last msg = {%s, %q}, want {assistant, Integration test response}",
-			last.Role, last.Content)
+			last.Role, last.TextContent())
 	}
 
 	// Verify broadcast events were emitted.
@@ -292,8 +292,8 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 	// The persisted assistant message includes a tool activity summary prefix
 	// (e.g., "[Tools used: greet]\n\n") followed by the actual response text.
 	wantSuffix := "Hello Peter!"
-	if last.Role != "assistant" || !strings.HasSuffix(last.Content, wantSuffix) {
-		t.Errorf("last msg = {%s, %q}, want suffix %q", last.Role, last.Content, wantSuffix)
+	if last.Role != "assistant" || !strings.HasSuffix(last.TextContent(), wantSuffix) {
+		t.Errorf("last msg = {%s, %q}, want suffix %q", last.Role, last.TextContent(), wantSuffix)
 	}
 
 	// LLM should have been called at least twice (tool call + final response).
@@ -415,17 +415,17 @@ func TestIntegration_MultipleMessagesHistory(t *testing.T) {
 	if total != 4 {
 		t.Fatalf("total = %d, want 4", total)
 	}
-	if msgs[0].Role != "user" || msgs[0].Content != "first message" {
-		t.Errorf("msgs[0] = {%s, %q}", msgs[0].Role, msgs[0].Content)
+	if msgs[0].Role != "user" || msgs[0].TextContent() != "first message" {
+		t.Errorf("msgs[0] = {%s, %q}", msgs[0].Role, msgs[0].TextContent())
 	}
-	if msgs[1].Role != "assistant" || msgs[1].Content != "First reply" {
-		t.Errorf("msgs[1] = {%s, %q}", msgs[1].Role, msgs[1].Content)
+	if msgs[1].Role != "assistant" || msgs[1].TextContent() != "First reply" {
+		t.Errorf("msgs[1] = {%s, %q}", msgs[1].Role, msgs[1].TextContent())
 	}
-	if msgs[2].Role != "user" || msgs[2].Content != "second message" {
-		t.Errorf("msgs[2] = {%s, %q}", msgs[2].Role, msgs[2].Content)
+	if msgs[2].Role != "user" || msgs[2].TextContent() != "second message" {
+		t.Errorf("msgs[2] = {%s, %q}", msgs[2].Role, msgs[2].TextContent())
 	}
-	if msgs[3].Role != "assistant" || msgs[3].Content != "Second reply" {
-		t.Errorf("msgs[3] = {%s, %q}", msgs[3].Role, msgs[3].Content)
+	if msgs[3].Role != "assistant" || msgs[3].TextContent() != "Second reply" {
+		t.Errorf("msgs[3] = {%s, %q}", msgs[3].Role, msgs[3].TextContent())
 	}
 
 	// Verify History RPC returns the messages.

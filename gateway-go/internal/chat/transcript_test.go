@@ -4,14 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 )
 
 func TestFileTranscriptStore_AppendAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFileTranscriptStore(dir)
 
-	msg1 := ChatMessage{Role: "user", Content: "hello"}
-	msg2 := ChatMessage{Role: "assistant", Content: "hi there"}
+	msg1 := NewTextChatMessage("user", "hello", 0)
+	msg2 := NewTextChatMessage("assistant", "hi there", 0)
 
 	if err := store.Append("test-session", msg1); err != nil {
 		t.Fatalf("Append msg1: %v", err)
@@ -30,11 +32,11 @@ func TestFileTranscriptStore_AppendAndLoad(t *testing.T) {
 	if len(msgs) != 2 {
 		t.Fatalf("len(msgs) = %d, want 2", len(msgs))
 	}
-	if msgs[0].Content != "hello" {
-		t.Errorf("msgs[0].Content = %q", msgs[0].Content)
+	if msgs[0].TextContent() != "hello" {
+		t.Errorf("msgs[0].Content = %q", msgs[0].TextContent())
 	}
-	if msgs[1].Content != "hi there" {
-		t.Errorf("msgs[1].Content = %q", msgs[1].Content)
+	if msgs[1].TextContent() != "hi there" {
+		t.Errorf("msgs[1].Content = %q", msgs[1].TextContent())
 	}
 }
 
@@ -43,7 +45,7 @@ func TestFileTranscriptStore_LoadWithLimit(t *testing.T) {
 	store := NewFileTranscriptStore(dir)
 
 	for i := 0; i < 5; i++ {
-		store.Append("session", ChatMessage{Role: "user", Content: "msg"})
+		store.Append("session", NewTextChatMessage("user", "msg", 0))
 	}
 
 	msgs, total, err := store.Load("session", 2)
@@ -75,7 +77,7 @@ func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "dir")
 	store := NewFileTranscriptStore(dir)
 
-	err := store.Append("session", ChatMessage{Role: "user", Content: "test"})
+	err := store.Append("session", NewTextChatMessage("user", "test", 0))
 	if err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -89,8 +91,8 @@ func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 func TestMemoryTranscriptStore_AppendAndLoad(t *testing.T) {
 	store := NewMemoryTranscriptStore()
 
-	store.Append("s1", ChatMessage{Role: "user", Content: "a"})
-	store.Append("s1", ChatMessage{Role: "assistant", Content: "b"})
+	store.Append("s1", NewTextChatMessage("user", "a", 0))
+	store.Append("s1", NewTextChatMessage("assistant", "b", 0))
 
 	msgs, total, err := store.Load("s1", 0)
 	if err != nil {
@@ -101,9 +103,9 @@ func TestMemoryTranscriptStore_AppendAndLoad(t *testing.T) {
 	}
 
 	// Verify independence from store.
-	msgs[0].Content = "modified"
+	msgs[0].Content = toolctx.MarshalJSONString("modified")
 	msgs2, _, _ := store.Load("s1", 0)
-	if msgs2[0].Content != "a" {
+	if msgs2[0].TextContent() != "a" {
 		t.Error("modifying returned slice should not affect store")
 	}
 }

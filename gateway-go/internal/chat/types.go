@@ -48,3 +48,6 @@ type AbortEntry = toolctx.AbortEntry
 
 // MediaSendFunc delivers a file to the originating channel.
 type MediaSendFunc = toolctx.MediaSendFunc
+
+// NewTextChatMessage creates a ChatMessage with text-only content.
+var NewTextChatMessage = toolctx.NewTextChatMessage

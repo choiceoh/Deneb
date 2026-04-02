@@ -177,7 +177,7 @@ func handleAssemblyCommand(cmdJSON json.RawMessage, msgs []ChatMessage) (any, er
 				"ordinal":     i,
 				"itemType":    "message",
 				"messageId":   i,
-				"tokenCount":  estimateTokens(msg.Content),
+				"tokenCount":  estimateTokens(msg.TextContent()),
 				"depth":       0,
 				"isCondensed": false,
 			}
@@ -238,6 +238,8 @@ func assembleContextFallback(
 
 // transcriptToMessages converts ChatMessage transcript entries to LLM messages.
 // System prompt is injected via ChatRequest.System, not as a message here.
+// Content is passed through directly as json.RawMessage so rich content
+// (block arrays with tool_use, tool_result, thinking) is preserved.
 func transcriptToMessages(transcript []ChatMessage) []llm.Message {
 	msgs := make([]llm.Message, 0, len(transcript))
 	for _, t := range transcript {
@@ -245,7 +247,9 @@ func transcriptToMessages(transcript []ChatMessage) []llm.Message {
 		if role == "" {
 			role = "user"
 		}
-		msgs = append(msgs, llm.NewTextMessage(role, t.Content))
+		// Pass Content directly — both ChatMessage.Content and llm.Message.Content
+		// are json.RawMessage, so rich block arrays are preserved without re-encoding.
+		msgs = append(msgs, llm.Message{Role: role, Content: t.Content})
 	}
 	return msgs
 }

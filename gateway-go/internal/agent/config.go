@@ -90,6 +90,12 @@ type AgentConfig struct {
 	//   - optional system prompt addition from compaction summaries
 	//   - error (non-fatal; logged and ignored)
 	OnMidLoopCompact func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error)
+
+	// OnMessagePersist is called each time a message is appended to the in-memory
+	// messages array during the agent loop. The chat layer uses this to persist
+	// each turn's assistant and tool_result messages to transcript immediately,
+	// so intermediate findings survive across runs.
+	OnMessagePersist func(msg llm.Message)
 }
 
 // NudgeBudgetConfig configures token-budget continuation (Claude Code pattern).
@@ -120,10 +126,15 @@ type ToolActivity struct {
 
 // AgentResult is the outcome of an agent run.
 type AgentResult struct {
-	Text       string
+	Text       string // last turn's text (for channel reply — avoids duplicating streamed content)
+	AllText    string // accumulated text from ALL turns (for transcript persistence + session memory)
 	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns"
 	Usage      llm.TokenUsage
 	Turns      int
+
+	// TurnsPersisted counts messages persisted via OnMessagePersist during
+	// the run. When > 0, handleRunSuccess skips aggregate transcript write.
+	TurnsPersisted int
 
 	// ToolActivities records every tool invocation in execution order.
 	// Used to persist a tool activity summary alongside the assistant response

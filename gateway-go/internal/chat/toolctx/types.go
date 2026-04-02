@@ -86,13 +86,86 @@ type DeliveryContext struct {
 }
 
 // ChatMessage represents a message in a session transcript.
+// Content is json.RawMessage so it can hold either a plain JSON string
+// (legacy text-only) or an array of ContentBlocks (rich format with
+// tool_use, tool_result, thinking blocks). Use TextContent() to extract
+// text, NewTextChatMessage() to construct text-only messages.
 type ChatMessage struct {
 	Role        string           `json:"role"`
-	Content     string           `json:"content,omitempty"`
+	Content     json.RawMessage  `json:"content,omitempty"`
 	Attachments []ChatAttachment `json:"attachments,omitempty"`
 	Timestamp   int64            `json:"timestamp,omitempty"`
 	ParentID    string           `json:"parentId,omitempty"`
 	ID          string           `json:"id,omitempty"`
+}
+
+// NewTextChatMessage creates a ChatMessage with text-only content.
+func NewTextChatMessage(role, text string, ts int64) ChatMessage {
+	return ChatMessage{
+		Role:      role,
+		Content:   MarshalJSONString(text),
+		Timestamp: ts,
+	}
+}
+
+// TextContent extracts a plain text string from Content.
+// If Content is a JSON string, returns the unquoted string.
+// If Content is a ContentBlock array, joins all text block values.
+// Returns "" if Content is nil or empty.
+func (m *ChatMessage) TextContent() string {
+	if len(m.Content) == 0 {
+		return ""
+	}
+	// Try JSON string first (most common, legacy format).
+	var s string
+	if err := json.Unmarshal(m.Content, &s); err == nil {
+		return s
+	}
+	// Try ContentBlock array (rich format).
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text,omitempty"`
+	}
+	if err := json.Unmarshal(m.Content, &blocks); err == nil {
+		var texts []string
+		for _, b := range blocks {
+			if b.Type == "text" && b.Text != "" {
+				texts = append(texts, b.Text)
+			}
+		}
+		if len(texts) > 0 {
+			return joinTexts(texts)
+		}
+	}
+	// Fallback: return raw content as string (shouldn't happen).
+	return string(m.Content)
+}
+
+// HasContent returns true if Content is non-empty.
+func (m *ChatMessage) HasContent() bool {
+	if len(m.Content) == 0 {
+		return false
+	}
+	// Check if it's an empty JSON string ("").
+	return string(m.Content) != `""`
+}
+
+// MarshalJSONString returns s as a JSON-encoded string (with quotes).
+func MarshalJSONString(s string) json.RawMessage {
+	data, _ := json.Marshal(s)
+	return data
+}
+
+// joinTexts joins text fragments with newlines.
+func joinTexts(texts []string) string {
+	if len(texts) == 1 {
+		return texts[0]
+	}
+	result := texts[0]
+	for _, t := range texts[1:] {
+		result += "\n\n" + t
+	}
+	return result
 }
 
 // ChatAttachment represents an attachment on a chat message.
