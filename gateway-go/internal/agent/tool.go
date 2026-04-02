@@ -12,3 +12,11 @@ import (
 type ToolExecutor interface {
 	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
 }
+
+// ConcurrencyChecker is an optional interface that ToolExecutor implementations
+// can satisfy to declare which tools are safe for parallel execution. When the
+// executor receives a ToolExecutor that implements this interface, it uses
+// IsConcurrencySafe instead of the built-in fallback set.
+type ConcurrencyChecker interface {
+	IsConcurrencySafe(name string) bool
+}
