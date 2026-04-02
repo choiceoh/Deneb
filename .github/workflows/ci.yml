@@ -107,6 +107,27 @@ jobs:
         working-directory: core-rs
         run: cargo test
 
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Coverage (cargo-llvm-cov)
+        working-directory: core-rs
+        run: |
+          cargo llvm-cov --workspace --no-fail-fast 2>&1 | tee coverage.txt
+          TOTAL=$(grep '^TOTAL' coverage.txt | awk '{print $NF}' | tr -d '%')
+          echo "Rust coverage: ${TOTAL}%"
+          if [ -n "$TOTAL" ] && [ "$(echo "$TOTAL < 40" | bc -l)" -eq 1 ]; then
+            echo "::error::Rust coverage ${TOTAL}% is below 40% threshold"
+            exit 1
+          fi
+
+      - name: Upload Rust coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage
+          path: core-rs/coverage.txt
+          retention-days: 7
+
       - name: Upload static library
         uses: actions/upload-artifact@v4
         with:
@@ -213,8 +234,14 @@ jobs:
       - name: Test (CGo + Rust FFI, race detector)
         run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
 
-      - name: Coverage summary
-        run: go tool cover -func=coverage.out
+      - name: Coverage gate (threshold 50%)
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $NF}' | tr -d '%')
+          echo "Total coverage: ${TOTAL}%"
+          if [ "$(echo "$TOTAL < 50" | bc -l)" -eq 1 ]; then
+            echo "::error::Go coverage ${TOTAL}% is below 50% threshold"
+            exit 1
+          fi
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

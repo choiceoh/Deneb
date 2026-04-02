@@ -15,7 +15,10 @@ func TestWebSocketHandshake(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New("127.0.0.1:0")
+	srv, err := New("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)
@@ -89,7 +92,10 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New("127.0.0.1:0")
+	srv, err := New("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)
@@ -126,7 +132,10 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := New("127.0.0.1:0")
+	srv, err := New("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)
