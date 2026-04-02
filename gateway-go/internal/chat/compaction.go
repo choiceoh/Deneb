@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -31,11 +32,17 @@ const (
 var proactiveCompaction struct {
 	lastRun        atomic.Int64 // epoch millis of last completed sweep
 	running        atomic.Bool  // prevents concurrent sweeps
+	cbOnce         sync.Once
 	circuitBreaker *compaction2.CompactionCircuitBreaker
 }
 
-func init() {
-	proactiveCompaction.circuitBreaker = compaction2.NewCompactionCircuitBreaker()
+// getCompactionCircuitBreaker returns the lazily-initialized circuit breaker.
+// Uses sync.Once to ensure thread-safe single initialization.
+func getCompactionCircuitBreaker() *compaction2.CompactionCircuitBreaker {
+	proactiveCompaction.cbOnce.Do(func() {
+		proactiveCompaction.circuitBreaker = compaction2.NewCompactionCircuitBreaker()
+	})
+	return proactiveCompaction.circuitBreaker
 }
 
 // CompactionConfig configures compaction behavior.
@@ -76,7 +83,7 @@ func triggerProactiveCompaction(
 	}
 
 	// Circuit breaker: skip if compaction has failed too many times consecutively.
-	if proactiveCompaction.circuitBreaker.IsTripped() {
+	if getCompactionCircuitBreaker().IsTripped() {
 		logger.Debug("proactive compaction: circuit breaker tripped, skipping")
 		return
 	}
@@ -120,14 +127,14 @@ func triggerProactiveCompaction(
 			shutdownCtx, deps, params, client, logger,
 		)
 		if compErr != nil {
-			tripped := proactiveCompaction.circuitBreaker.RecordFailure()
+			tripped := getCompactionCircuitBreaker().RecordFailure()
 			logger.Warn("proactive compaction: sweep failed",
 				"error", compErr,
-				"consecutiveFailures", proactiveCompaction.circuitBreaker.ConsecutiveFailures(),
+				"consecutiveFailures", getCompactionCircuitBreaker().ConsecutiveFailures(),
 				"circuitTripped", tripped)
 			return
 		}
-		proactiveCompaction.circuitBreaker.RecordSuccess()
+		getCompactionCircuitBreaker().RecordSuccess()
 		proactiveCompaction.lastRun.Store(time.Now().UnixMilli())
 		logger.Info("proactive compaction: background sweep completed, next assembly will include summaries")
 	}()
