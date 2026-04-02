@@ -301,8 +301,9 @@ func resolveAPIKey(providerID string) string {
 		return resolveSglangAPIKey()
 	case "google":
 		return os.Getenv("GEMINI_API_KEY")
+	case "zai":
+		return os.Getenv("ZAI_API_KEY")
 	default:
-		// For zai and others, keys are resolved through AuthManager at call time.
 		return ""
 	}
 }

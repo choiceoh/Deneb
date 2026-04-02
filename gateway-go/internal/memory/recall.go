@@ -374,7 +374,7 @@ func processBackfill(store *Store, data *BackfillData, logger *slog.Logger) {
 	}
 
 	for _, r := range data.Relations {
-		if r.FromID <= 0 || r.ToID <= 0 || r.Type == "" {
+		if r.FromID <= 0 || r.ToID <= 0 || r.Type == "" || !isValidRelationType(r.Type) {
 			continue
 		}
 		confidence := r.Confidence
