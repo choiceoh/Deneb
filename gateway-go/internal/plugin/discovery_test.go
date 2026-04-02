@@ -113,7 +113,8 @@ func TestPluginDiscovererClearCache(t *testing.T) {
 func TestDiscoverPluginsEmptyRoots(t *testing.T) {
 	d := NewPluginDiscoverer(slog.Default())
 	result := d.DiscoverPlugins(DiscoverPluginsParams{
-		Roots: PluginSourceRoots{},
+		Roots:        PluginSourceRoots{},
+		OwnershipUID: -1,
 	})
 	if result == nil {
 		t.Fatal("expected non-nil result")
@@ -140,7 +141,8 @@ func TestDiscoverPluginsFromDirectory(t *testing.T) {
 		Roots: PluginSourceRoots{
 			Global: tmpDir,
 		},
-		NoCache: true,
+		OwnershipUID: -1,
+		NoCache:      true,
 	})
 
 	if len(result.Candidates) != 1 {
@@ -180,8 +182,9 @@ func TestDiscoverPluginsWithPackageJSON(t *testing.T) {
 
 	d := NewPluginDiscoverer(slog.Default())
 	result := d.DiscoverPlugins(DiscoverPluginsParams{
-		Roots:   PluginSourceRoots{Global: tmpDir},
-		NoCache: true,
+		Roots:        PluginSourceRoots{Global: tmpDir},
+		OwnershipUID: -1,
+		NoCache:      true,
 	})
 
 	if len(result.Candidates) != 1 {
@@ -224,8 +227,9 @@ func TestDiscoverPluginsWithExtensions(t *testing.T) {
 
 	d := NewPluginDiscoverer(slog.Default())
 	result := d.DiscoverPlugins(DiscoverPluginsParams{
-		Roots:   PluginSourceRoots{Global: tmpDir},
-		NoCache: true,
+		Roots:        PluginSourceRoots{Global: tmpDir},
+		OwnershipUID: -1,
+		NoCache:      true,
 	})
 
 	if len(result.Candidates) != 2 {
@@ -251,6 +255,7 @@ func TestDiscoverPluginsDeduplication(t *testing.T) {
 			Global:    tmpDir,
 		},
 		WorkspaceDir: tmpDir,
+		OwnershipUID: -1,
 		NoCache:      true,
 	})
 
@@ -272,8 +277,9 @@ func TestDiscoverPluginsIgnoresBakDirectories(t *testing.T) {
 
 	d := NewPluginDiscoverer(slog.Default())
 	result := d.DiscoverPlugins(DiscoverPluginsParams{
-		Roots:   PluginSourceRoots{Global: tmpDir},
-		NoCache: true,
+		Roots:        PluginSourceRoots{Global: tmpDir},
+		OwnershipUID: -1,
+		NoCache:      true,
 	})
 
 	if len(result.Candidates) != 0 {
@@ -325,7 +331,8 @@ func TestDiscoverPluginsCaching(t *testing.T) {
 
 	d := NewPluginDiscoverer(slog.Default())
 	params := DiscoverPluginsParams{
-		Roots: PluginSourceRoots{Global: tmpDir},
+		Roots:        PluginSourceRoots{Global: tmpDir},
+		OwnershipUID: -1,
 	}
 
 	result1 := d.DiscoverPlugins(params)
@@ -354,8 +361,9 @@ func TestDiscoverPluginsFromExtraPath(t *testing.T) {
 
 	d := NewPluginDiscoverer(slog.Default())
 	result := d.DiscoverPlugins(DiscoverPluginsParams{
-		ExtraPaths: []string{pluginFile},
-		NoCache:    true,
+		ExtraPaths:   []string{pluginFile},
+		OwnershipUID: -1,
+		NoCache:      true,
 	})
 
 	if len(result.Candidates) != 1 {
@@ -391,6 +399,7 @@ func TestDiscoverPluginsOriginPrecedence(t *testing.T) {
 			Global:    globalDir,
 		},
 		WorkspaceDir: workDir,
+		OwnershipUID: -1,
 		NoCache:      true,
 	})
 

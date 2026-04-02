@@ -6,17 +6,27 @@ import (
 	"testing"
 )
 
+// isolatedConfig returns a DiscoverConfig that won't pick up skills from the
+// real home directory (~/.deneb/skills, ~/.agents/skills).
+func isolatedConfig(workspaceDir string) DiscoverConfig {
+	return DiscoverConfig{
+		WorkspaceDir:     workspaceDir,
+		ManagedSkillsDir: filepath.Join(workspaceDir, ".empty-managed"),
+	}
+}
+
 func TestDiscoverWorkspaceSkills_empty(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{
-		WorkspaceDir: tmpDir,
-	})
+	cfg := isolatedConfig(tmpDir)
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 0 {
 		t.Fatalf("expected 0 entries, got %d", len(entries))
 	}
 }
 
 func TestDiscoverWorkspaceSkills_singleSkill(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	skillsDir := filepath.Join(tmpDir, "skills", "test-skill")
 	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
@@ -34,9 +44,8 @@ This is a test skill.
 		t.Fatal(err)
 	}
 
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{
-		WorkspaceDir: tmpDir,
-	})
+	cfg := isolatedConfig(tmpDir)
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
@@ -52,6 +61,7 @@ This is a test skill.
 }
 
 func TestDiscoverWorkspaceSkills_precedence(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	bundledDir := filepath.Join(tmpDir, "bundled")
 	workspaceDir := filepath.Join(tmpDir, "workspace")
@@ -66,10 +76,9 @@ func TestDiscoverWorkspaceSkills_precedence(t *testing.T) {
 	os.MkdirAll(wsSkillDir, 0o755)
 	os.WriteFile(filepath.Join(wsSkillDir, "SKILL.md"), []byte("---\nname: my-skill\ndescription: workspace version\n---\n"), 0o644)
 
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{
-		WorkspaceDir:     workspaceDir,
-		BundledSkillsDir: bundledDir,
-	})
+	cfg := isolatedConfig(workspaceDir)
+	cfg.BundledSkillsDir = bundledDir
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry (merged), got %d", len(entries))
 	}
@@ -80,6 +89,7 @@ func TestDiscoverWorkspaceSkills_precedence(t *testing.T) {
 }
 
 func TestDiscoverWorkspaceSkills_oversizedSkip(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	skillsDir := filepath.Join(tmpDir, "skills", "big-skill")
 	os.MkdirAll(skillsDir, 0o755)
@@ -91,9 +101,8 @@ func TestDiscoverWorkspaceSkills_oversizedSkip(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(skillsDir, "SKILL.md"), bigContent, 0o644)
 
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{
-		WorkspaceDir: tmpDir,
-	})
+	cfg := isolatedConfig(tmpDir)
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 0 {
 		t.Fatalf("expected 0 entries (oversized should be skipped), got %d", len(entries))
 	}
@@ -133,13 +142,15 @@ func TestIsPathInside(t *testing.T) {
 }
 
 func TestDiscoverWorkspaceSkills_categoryFromFrontmatter(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	skillsDir := filepath.Join(tmpDir, "skills", "my-tool")
 	os.MkdirAll(skillsDir, 0o755)
 	content := "---\nname: my-tool\nversion: \"1.0.0\"\ncategory: devops\ndescription: A tool\n---\n# Body\n"
 	os.WriteFile(filepath.Join(skillsDir, "SKILL.md"), []byte(content), 0o644)
 
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	cfg := isolatedConfig(tmpDir)
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
@@ -152,6 +163,7 @@ func TestDiscoverWorkspaceSkills_categoryFromFrontmatter(t *testing.T) {
 }
 
 func TestDiscoverWorkspaceSkills_nestedCategoryDir(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 
 	// Create nested category layout: skills/coding/my-agent/SKILL.md
@@ -160,7 +172,8 @@ func TestDiscoverWorkspaceSkills_nestedCategoryDir(t *testing.T) {
 	content := "---\nname: my-agent\ndescription: An agent skill\n---\n# Body\n"
 	os.WriteFile(filepath.Join(nestedSkillDir, "SKILL.md"), []byte(content), 0o644)
 
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	cfg := isolatedConfig(tmpDir)
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
@@ -174,6 +187,7 @@ func TestDiscoverWorkspaceSkills_nestedCategoryDir(t *testing.T) {
 }
 
 func TestDiscoverWorkspaceSkills_nestedCategoryOverride(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 
 	// Nested layout with frontmatter category override.
@@ -182,7 +196,8 @@ func TestDiscoverWorkspaceSkills_nestedCategoryOverride(t *testing.T) {
 	content := "---\nname: my-cli\ncategory: integration\ndescription: A CLI tool\n---\n"
 	os.WriteFile(filepath.Join(nestedSkillDir, "SKILL.md"), []byte(content), 0o644)
 
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	cfg := isolatedConfig(tmpDir)
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
@@ -193,6 +208,7 @@ func TestDiscoverWorkspaceSkills_nestedCategoryOverride(t *testing.T) {
 }
 
 func TestDiscoverWorkspaceSkills_mixedFlatAndNested(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 
 	// Flat skill: skills/flat-skill/SKILL.md
@@ -205,7 +221,8 @@ func TestDiscoverWorkspaceSkills_mixedFlatAndNested(t *testing.T) {
 	os.MkdirAll(nestedDir, 0o755)
 	os.WriteFile(filepath.Join(nestedDir, "SKILL.md"), []byte("---\nname: nested-skill\ndescription: nested\n---\n"), 0o644)
 
-	entries := DiscoverWorkspaceSkills(DiscoverConfig{WorkspaceDir: tmpDir})
+	cfg := isolatedConfig(tmpDir)
+	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
