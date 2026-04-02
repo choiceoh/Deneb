@@ -96,6 +96,7 @@ func Goodbye() string {
 // ─── ToolSearchAndRead ─────────────────────────────────────────────────────
 
 func TestToolSearchAndRead_basic(t *testing.T) {
+	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("foo bar baz\nqux quux\n"), 0o644)
 	os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("no match here\n"), 0o644)
@@ -119,6 +120,7 @@ func TestToolSearchAndRead_basic(t *testing.T) {
 }
 
 func TestToolSearchAndRead_noMatch(t *testing.T) {
+	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "file.txt"), []byte("hello world\n"), 0o644)
 
@@ -132,6 +134,7 @@ func TestToolSearchAndRead_noMatch(t *testing.T) {
 }
 
 func TestToolSearchAndRead_maxFiles(t *testing.T) {
+	requireRg(t)
 	tmp := t.TempDir()
 	for i := 0; i < 5; i++ {
 		name := filepath.Join(tmp, strings.Repeat("a", i+1)+".txt")

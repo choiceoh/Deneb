@@ -51,11 +51,11 @@ func TestHasMedia(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "non-image document",
+			name: "non-image document (PDF, parseable by liteparse)",
 			msg: &telegram.Message{
 				Document: &telegram.Document{FileID: "doc2", MimeType: "application/pdf"},
 			},
-			want: false,
+			want: true, // liteparse supports PDF extraction
 		},
 		{
 			name: "audio only (not processed)",

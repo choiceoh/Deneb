@@ -74,7 +74,7 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// Discover and load plugins.
 	if s.pluginDiscoverer != nil {
 		s.safeGo("plugin-discovery", func() {
-			result := s.pluginDiscoverer.DiscoverPlugins(plugin.DiscoverPluginsParams{})
+			result := s.pluginDiscoverer.DiscoverPlugins(plugin.NewDiscoverPluginsParams())
 			s.logger.Info("plugins discovered", "count", len(result.Candidates))
 		})
 	}
