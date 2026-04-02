@@ -34,6 +34,7 @@ import (
 
 // ExtractLinks extracts safe URLs from message text using the Rust parser.
 // Strips markdown link syntax, deduplicates, and SSRF-checks each URL.
+// Uses auto-grow buffer strategy for robustness with large inputs.
 func ExtractLinks(text string, maxLinks int) ([]string, error) {
 	if len(text) == 0 {
 		return nil, nil
@@ -43,25 +44,25 @@ func ExtractLinks(text string, maxLinks int) ([]string, error) {
 	}
 	config := fmt.Sprintf(`{"max_links":%d}`, maxLinks)
 
-	// Output buffer: URLs are shorter than input text.
-	outSize := initialBufSize(len(text), 1, 4096)
-	out := make([]byte, outSize)
+	initialSize := initialBufSize(len(text), 1, 4096)
 
 	textPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(text)))
 	configPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(config)))
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
 
-	rc := C.deneb_extract_links(
-		textPtr, C.ulong(len(text)),
-		configPtr, C.ulong(len(config)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return nil, ffiError("extract_links", int(rc))
+	data, err := ffiCallWithGrow("extract_links", initialSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_extract_links(
+				textPtr, C.ulong(len(text)),
+				configPtr, C.ulong(len(config)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
 
 	var urls []string
-	if err := json.Unmarshal(out[:rc], &urls); err != nil {
+	if err := json.Unmarshal(data, &urls); err != nil {
 		return nil, fmt.Errorf("ffi: extract_links: invalid JSON output: %w", err)
 	}
 	return urls, nil
@@ -145,23 +146,25 @@ func Base64Canonicalize(input string) (string, error) {
 
 // ParseMediaTokens extracts MEDIA: tokens from text output.
 // Returns cleaned text, extracted media URLs, and audio_as_voice flag.
+// Uses auto-grow buffer strategy for robustness with large inputs.
 func ParseMediaTokens(text string) (cleanText string, mediaURLs []string, audioAsVoice bool, err error) {
 	if len(text) == 0 {
 		return "", nil, false, nil
 	}
 
-	outSize := len(text) + 4096
-	out := make([]byte, outSize)
+	initialSize := initialBufSize(len(text), 1, 4096)
 
 	textPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(text)))
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
 
-	rc := C.deneb_parse_media_tokens(
-		textPtr, C.ulong(len(text)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return text, nil, false, ffiError("parse_media_tokens", int(rc))
+	data, err2 := ffiCallWithGrow("parse_media_tokens", initialSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_parse_media_tokens(
+				textPtr, C.ulong(len(text)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err2 != nil {
+		return text, nil, false, err2
 	}
 
 	var result struct {
@@ -169,7 +172,7 @@ func ParseMediaTokens(text string) (cleanText string, mediaURLs []string, audioA
 		MediaURLs    []string `json:"media_urls,omitempty"`
 		AudioAsVoice bool     `json:"audio_as_voice,omitempty"`
 	}
-	if err := json.Unmarshal(out[:rc], &result); err != nil {
+	if err := json.Unmarshal(data, &result); err != nil {
 		return text, nil, false, fmt.Errorf("ffi: parse_media_tokens: invalid JSON output: %w", err)
 	}
 	return result.Text, result.MediaURLs, result.AudioAsVoice, nil
