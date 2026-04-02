@@ -604,6 +604,11 @@ func executeAgentRun(
 			MinDeltaTokens:   500,
 		},
 		MaxOutputTokensRecovery: 3,
+		// Suppress nudge when continue_run was already called — the explicit
+		// continuation will start a fresh run, so nudging wastes turns.
+		ContinuationRequested: func() bool {
+			return contSignal != nil && contSignal.Requested()
+		},
 		StreamingToolExecution:  true,
 		// Mid-loop compaction: evaluate context size after each tool turn and
 		// compact proactively before the LLM hits context_length_exceeded.

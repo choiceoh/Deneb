@@ -74,6 +74,12 @@ type AgentConfig struct {
 	// "resume where you left off" message. Default: 0 (disabled). Recommended: 3.
 	MaxOutputTokensRecovery int
 
+	// ContinuationRequested returns true when the continue_run tool has been
+	// called during this run. When set, the nudge budget continuation is
+	// suppressed to avoid wasting turns — the explicit continuation will
+	// handle follow-up work after the run completes.
+	ContinuationRequested func() bool
+
 	// OnMidLoopCompact is called after tool results are appended to the message
 	// history on each turn. If the callback returns a non-nil replacement slice,
 	// the executor swaps the message history with the compacted version. This
