@@ -880,22 +880,14 @@ func executeAgentRun(
 			}
 		}
 
-		// On tool start, stop the draft loop and delete the draft message
-		// so any partially-streamed command text is removed immediately.
-		// The final reply will be delivered by the normal pipeline.
+		// On tool start, stop the draft loop so no more edits are pushed.
+		// Keep the draft message alive — the deferred cleanup will store
+		// its ID on the delivery context so the final reply pipeline can
+		// edit it in-place. SanitizeDraftText already strips tool call
+		// markup and code blocks during streaming, so deletion is not needed.
 		prevOnToolStart := hooks.OnToolStart
 		hooks.OnToolStart = func(name, reason string) {
 			draftCtrl.StopForClear()
-			// Delete the draft message to remove any leaked command text.
-			draftMu.Lock()
-			msgID := draftMsgID
-			draftMsgID = ""
-			draftMu.Unlock()
-			if msgID != "" && deps.draftDeleteFn != nil {
-				delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-				defer cancel()
-				_ = deps.draftDeleteFn(delCtx, delivery, msgID)
-			}
 			if prevOnToolStart != nil {
 				prevOnToolStart(name, reason)
 			}
