@@ -404,11 +404,20 @@ func resolveTimezone() string {
 	return "UTC"
 }
 
+// cachedHostname is resolved once at startup to avoid os.Hostname() syscall per turn.
+var (
+	cachedHostname     string
+	cachedHostnameOnce sync.Once
+)
+
 // BuildDefaultRuntimeInfo creates RuntimeInfo from the current environment.
+// Static fields (hostname, OS, arch) are cached; only model fields change per request.
 func BuildDefaultRuntimeInfo(model, defaultModel string) *RuntimeInfo {
-	hostname, _ := os.Hostname()
+	cachedHostnameOnce.Do(func() {
+		cachedHostname, _ = os.Hostname()
+	})
 	return &RuntimeInfo{
-		Host:         hostname,
+		Host:         cachedHostname,
 		OS:           "linux",
 		Arch:         runtime.GOARCH,
 		Model:        model,
