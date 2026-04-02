@@ -49,7 +49,7 @@ const CONDENSED_MIN_INPUT_RATIO: f64 = 0.1;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompactionConfig {
-    /// Context threshold as fraction of budget (default 0.75).
+    /// Context threshold as fraction of budget (default 0.80).
     #[serde(default = "default_context_threshold")]
     pub context_threshold: f64,
     /// Number of fresh tail turns to protect (default 8).
@@ -88,7 +88,7 @@ pub struct CompactionConfig {
 }
 
 fn default_context_threshold() -> f64 {
-    0.75
+    0.80
 }
 fn default_fresh_tail_count() -> u32 {
     8
@@ -115,7 +115,7 @@ fn default_max_rounds() -> u32 {
 impl Default for CompactionConfig {
     fn default() -> Self {
         Self {
-            context_threshold: 0.75,
+            context_threshold: 0.80,
             fresh_tail_count: 8,
             leaf_min_fanout: 8,
             condensed_min_fanout: 4,
@@ -248,10 +248,14 @@ pub struct SummaryRecord {
 
 // ── Pure functions ──────────────────────────────────────────────────────────
 
-/// Estimate token count from text length (matches TypeScript `Math.ceil(text.length / 4)`).
+/// Estimate token count from Unicode char count.
+/// Korean BPE averages ~2 chars/token; English ~4 chars/token.
+/// Divisor 2 is calibrated for Korean (the primary language) and accepts
+/// a 2x overestimate for ASCII-only content. Matches Go `estimateTokens`.
 #[inline]
 pub fn estimate_tokens(text: &str) -> u64 {
-    (text.len() as u64).div_ceil(4)
+    let chars = text.chars().count() as u64;
+    (chars / 2).max(1)
 }
 
 /// Evaluate whether compaction is needed.
@@ -759,14 +763,17 @@ mod tests {
 
     #[test]
     fn test_estimate_tokens() {
-        assert_eq!(estimate_tokens(""), 0);
-        assert_eq!(estimate_tokens("a"), 1);
+        // chars / 2, min 1 — calibrated for Korean BPE (~2 chars/token).
+        assert_eq!(estimate_tokens(""), 1); // min clamp
+        assert_eq!(estimate_tokens("a"), 1); // 1/2=0 → min 1
         assert_eq!(estimate_tokens("ab"), 1);
         assert_eq!(estimate_tokens("abc"), 1);
-        assert_eq!(estimate_tokens("abcd"), 1);
+        assert_eq!(estimate_tokens("abcd"), 2);
         assert_eq!(estimate_tokens("abcde"), 2);
-        assert_eq!(estimate_tokens("abcdefgh"), 2);
-        assert_eq!(estimate_tokens("abcdefghi"), 3);
+        assert_eq!(estimate_tokens("abcdefgh"), 4);
+        assert_eq!(estimate_tokens("abcdefghi"), 4);
+        // Korean: 5 chars → 2 tokens (accurate for BPE)
+        assert_eq!(estimate_tokens("안녕하세요"), 2);
     }
 
     #[test]
@@ -776,13 +783,13 @@ mod tests {
         assert!(!decision.should_compact);
         assert_eq!(decision.reason, CompactionReason::None);
         assert_eq!(decision.current_tokens, 500);
-        assert_eq!(decision.threshold, 750);
+        assert_eq!(decision.threshold, 800); // 0.80 * 1000
     }
 
     #[test]
     fn test_evaluate_above_threshold() {
         let config = CompactionConfig::default();
-        let decision = evaluate(&config, 800, 0, 1000);
+        let decision = evaluate(&config, 810, 0, 1000); // above 0.80 threshold
         assert!(decision.should_compact);
         assert_eq!(decision.reason, CompactionReason::Threshold);
     }
@@ -790,9 +797,9 @@ mod tests {
     #[test]
     fn test_evaluate_uses_max_of_stored_and_live() {
         let config = CompactionConfig::default();
-        let decision = evaluate(&config, 100, 800, 1000);
+        let decision = evaluate(&config, 100, 810, 1000); // live > 0.80 threshold
         assert!(decision.should_compact);
-        assert_eq!(decision.current_tokens, 800);
+        assert_eq!(decision.current_tokens, 810);
     }
 
     #[test]
@@ -1057,7 +1064,7 @@ mod tests {
         let config = CompactionConfig::default();
         let json = serde_json::to_string(&config)?;
         let parsed: CompactionConfig = serde_json::from_str(&json)?;
-        assert_eq!(parsed.context_threshold, 0.75);
+        assert_eq!(parsed.context_threshold, 0.80);
         assert_eq!(parsed.fresh_tail_count, 8);
         assert_eq!(parsed.max_rounds, 10);
         Ok(())

@@ -208,14 +208,14 @@ mod tests {
 
     #[test]
     fn test_compaction_estimate_tokens_napi() {
-        assert_eq!(compaction_estimate_tokens("hello world".into()), 3);
-        assert_eq!(compaction_estimate_tokens("".into()), 0);
+        assert_eq!(compaction_estimate_tokens("hello world".into()), 5); // 11 chars / 2
+        assert_eq!(compaction_estimate_tokens("".into()), 1); // min clamp
     }
 
     #[test]
     fn test_compaction_evaluate_napi() -> Result<(), Box<dyn std::error::Error>> {
         let config_json = serde_json::to_string(&CompactionConfig::default())?;
-        let result = compaction_evaluate(config_json, 800, 0, 1000);
+        let result = compaction_evaluate(config_json, 810, 0, 1000); // above 0.80 threshold
         let decision: CompactionDecision = serde_json::from_str(&result)?;
         assert!(decision.should_compact);
         Ok(())

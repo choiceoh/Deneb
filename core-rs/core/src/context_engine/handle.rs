@@ -388,12 +388,12 @@ mod tests {
     fn test_resolve_config_invalid_returns_defaults() -> Result<(), Box<dyn std::error::Error>> {
         let result = context_resolve_config("not-json".to_string());
         let config: AuroraConfig = serde_json::from_str(&result)?;
-        assert_eq!(config.context_threshold, 0.75);
+        assert_eq!(config.context_threshold, 0.80);
         Ok(())
     }
 
     #[test]
     fn test_estimate_tokens_napi() {
-        assert_eq!(context_estimate_tokens("hello world".into()), 3);
+        assert_eq!(context_estimate_tokens("hello world".into()), 5); // 11 chars / 2
     }
 }
