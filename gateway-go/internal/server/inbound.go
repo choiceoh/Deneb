@@ -16,6 +16,8 @@ import (
 
 	"sort"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/config"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
@@ -1079,6 +1081,14 @@ func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery,
 
 	// Apply model change.
 	p.chatHandler.SetDefaultModel(fullModelID)
+
+	// Persist to deneb.json so the choice survives restarts.
+	go func() {
+		cfgPath := config.ResolveConfigPath()
+		if err := config.PersistDefaultModel(cfgPath, fullModelID, p.logger); err != nil {
+			p.logger.Warn("failed to persist model choice", "model", fullModelID, "error", err)
+		}
+	}()
 
 	displayModel := shortModelName(fullModelID)
 
