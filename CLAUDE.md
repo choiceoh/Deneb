@@ -43,6 +43,8 @@
 | `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
 | `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/server/method_registry.go`, `gateway-go/internal/rpc/rpcutil/gateway_hub.go` |
+| `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go`, `core-rs/**/*.rs`, `proto/**/*.proto` |
+| `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go`, `core-rs/**/*.rs` |
 
 ---
 
@@ -55,6 +57,7 @@
 3. **Build Go gateway:** `make go`
 4. **Run tests:** `make test` (Rust + Go + CLI)
 5. **Fast iteration:** `make rust-debug` (debug mode, faster) + `make go-dev` (auto-restart)
+6. **Live test:** `scripts/dev-live-test.sh restart && scripts/dev-live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
 
 **Build order:** Proto schemas → Rust core (static lib) → Go gateway (links Rust via CGo)
 
