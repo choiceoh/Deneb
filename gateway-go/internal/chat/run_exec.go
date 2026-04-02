@@ -613,7 +613,8 @@ func executeAgentRun(
 			BudgetThreshold:  0.9,
 			MinDeltaTokens:   300,
 		},
-		MaxOutputTokensRecovery: 3,
+		MaxOutputTokensRecovery:     3,
+		MaxOutputTokensScaleFactors: []float64{1.5, 2.0, 2.0},
 		// Suppress nudge when continue_run was already called — the explicit
 		// continuation will start a fresh run, so nudging wastes turns.
 		ContinuationRequested: func() bool {
