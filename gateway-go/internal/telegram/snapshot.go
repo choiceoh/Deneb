@@ -33,7 +33,7 @@ type AccountSnapshot struct {
 	LastProbeAt       int64  `json:"lastProbeAt,omitempty"`
 }
 
-// ChannelSnapshot is the JSON payload returned by channels.status.
+// ChannelSnapshot is the JSON payload returned by telegram.status.
 // Single-channel: always contains exactly one "telegram" entry.
 type ChannelSnapshot struct {
 	Channels map[string]AccountSnapshot `json:"channels"`
@@ -64,7 +64,7 @@ func (s *SnapshotStore) Get() AccountSnapshot {
 	return s.snap
 }
 
-// Snapshot returns the full channel snapshot for the channels.status RPC.
+// Snapshot returns the full channel snapshot for the telegram.status RPC.
 func (s *SnapshotStore) Snapshot() ChannelSnapshot {
 	snap := s.Get()
 	return ChannelSnapshot{

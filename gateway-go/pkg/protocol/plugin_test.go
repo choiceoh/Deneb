@@ -12,7 +12,7 @@ func TestPluginMetaJSON(t *testing.T) {
 	meta := protocol.PluginMeta{
 		ID:          "test-plugin",
 		Name:        "Test Plugin",
-		Kind:        protocol.PluginKindChannel,
+		Kind:        protocol.PluginKindProvider,
 		Version:     "1.0.0",
 		Enabled:     true,
 		Description: &desc,
@@ -28,8 +28,8 @@ func TestPluginMetaJSON(t *testing.T) {
 	if decoded.ID != "test-plugin" {
 		t.Errorf("ID = %q, want %q", decoded.ID, "test-plugin")
 	}
-	if decoded.Kind != protocol.PluginKindChannel {
-		t.Errorf("Kind = %q, want %q", decoded.Kind, protocol.PluginKindChannel)
+	if decoded.Kind != protocol.PluginKindProvider {
+		t.Errorf("Kind = %q, want %q", decoded.Kind, protocol.PluginKindProvider)
 	}
 	if decoded.Description == nil || *decoded.Description != "A test plugin" {
 		t.Errorf("Description = %v, want %q", decoded.Description, "A test plugin")
@@ -42,7 +42,7 @@ func TestPluginMetaJSON(t *testing.T) {
 func TestPluginRegistrySnapshotJSON(t *testing.T) {
 	snapshot := protocol.PluginRegistrySnapshot{
 		Plugins: []protocol.PluginMeta{
-			{ID: "telegram", Name: "Telegram", Kind: protocol.PluginKindChannel, Version: "1.0.0", Enabled: true},
+			{ID: "telegram", Name: "Telegram", Kind: protocol.PluginKindProvider, Version: "1.0.0", Enabled: true},
 		},
 		Health: []protocol.PluginHealthStatus{
 			{PluginID: "telegram", Healthy: true},
