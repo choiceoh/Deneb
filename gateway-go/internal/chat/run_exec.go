@@ -111,6 +111,10 @@ func executeAgentRun(
 		workspaceDir = resolveWorkspaceDirForPrompt()
 	}
 
+	// Pre-warm context file snapshot for this session so disk I/O happens
+	// before the parallel prep phase (no-op if already cached from a prior turn).
+	prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+
 	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
 	// Agent tools pass role names ("main", "lightweight", "pilot", "fallback").
 	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
