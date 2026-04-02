@@ -49,10 +49,10 @@ func TestEstimateTokens(t *testing.T) {
 
 func TestSelectMessagesByIDs(t *testing.T) {
 	msgs := []ChatMessage{
-		{Role: "user", Content: "msg0"},
-		{Role: "assistant", Content: "msg1"},
-		{Role: "user", Content: "msg2"},
-		{Role: "assistant", Content: "msg3"},
+		NewTextChatMessage("user", "msg0", 0),
+		NewTextChatMessage("assistant", "msg1", 0),
+		NewTextChatMessage("user", "msg2", 0),
+		NewTextChatMessage("assistant", "msg3", 0),
 	}
 
 	t.Run("empty IDs returns all", func(t *testing.T) {
@@ -74,11 +74,11 @@ func TestSelectMessagesByIDs(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("got %d messages, want 2", len(got))
 		}
-		if got[0].Content != "msg0" {
-			t.Errorf("got[0].Content = %q, want %q", got[0].Content, "msg0")
+		if got[0].TextContent() != "msg0" {
+			t.Errorf("got[0].TextContent() = %q, want %q", got[0].TextContent(), "msg0")
 		}
-		if got[1].Content != "msg2" {
-			t.Errorf("got[1].Content = %q, want %q", got[1].Content, "msg2")
+		if got[1].TextContent() != "msg2" {
+			t.Errorf("got[1].TextContent() = %q, want %q", got[1].TextContent(), "msg2")
 		}
 	})
 
@@ -94,8 +94,8 @@ func TestSelectMessagesByIDs(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("got %d messages, want 1", len(got))
 		}
-		if got[0].Content != "msg0" {
-			t.Errorf("got[0].Content = %q, want %q", got[0].Content, "msg0")
+		if got[0].TextContent() != "msg0" {
+			t.Errorf("got[0].TextContent() = %q, want %q", got[0].TextContent(), "msg0")
 		}
 	})
 }
@@ -103,8 +103,8 @@ func TestSelectMessagesByIDs(t *testing.T) {
 func TestTranscriptToMessages(t *testing.T) {
 	t.Run("converts roles and content", func(t *testing.T) {
 		transcript := []ChatMessage{
-			{Role: "user", Content: "hello"},
-			{Role: "assistant", Content: "hi there"},
+			NewTextChatMessage("user", "hello", 0),
+			NewTextChatMessage("assistant", "hi there", 0),
 		}
 		msgs := transcriptToMessages(transcript)
 		if len(msgs) != 2 {
@@ -120,7 +120,7 @@ func TestTranscriptToMessages(t *testing.T) {
 
 	t.Run("empty role defaults to user", func(t *testing.T) {
 		transcript := []ChatMessage{
-			{Role: "", Content: "no role"},
+			NewTextChatMessage("", "no role", 0),
 		}
 		msgs := transcriptToMessages(transcript)
 		if msgs[0].Role != "user" {
@@ -138,8 +138,8 @@ func TestTranscriptToMessages(t *testing.T) {
 
 func TestHandleAssemblyCommand(t *testing.T) {
 	msgs := []ChatMessage{
-		{Role: "user", Content: "hello world"},
-		{Role: "assistant", Content: "hi"},
+		NewTextChatMessage("user", "hello world", 0),
+		NewTextChatMessage("assistant", "hi", 0),
 	}
 
 	t.Run("fetchContextItems", func(t *testing.T) {

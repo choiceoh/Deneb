@@ -523,7 +523,7 @@ func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logge
 	case "fetchCandidates":
 		items := make([]map[string]any, len(msgs))
 		for i, msg := range msgs {
-			tokenCount := estimateTokens(msg.Content)
+			tokenCount := estimateTokens(msg.TextContent())
 			items[i] = map[string]any{
 				"ordinal":    i,
 				"messageId":  i,
@@ -548,7 +548,7 @@ func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logge
 		var parts []string
 		for _, id := range summarizeCmd.MessageIDs {
 			if id >= 0 && id < len(msgs) {
-				text := msgs[id].Content
+				text := msgs[id].TextContent()
 				if runeText := []rune(text); len(runeText) > 200 {
 					text = string(runeText[:200]) + "..."
 				}

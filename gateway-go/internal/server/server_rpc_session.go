@@ -186,7 +186,7 @@ func (s *Server) registerSessionRPCMethods() {
 			contents := make([]string, len(msgs))
 			for i, m := range msgs {
 				roles[i] = m.Role
-				contents[i] = m.Content
+				contents[i] = m.TextContent()
 			}
 			return roles, contents, nil
 		}

@@ -382,11 +382,7 @@ func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protoco
 
 	// Use native transcript store if available.
 	if h.transcript != nil {
-		msg := ChatMessage{
-			Role:      p.Role,
-			Content:   content,
-			Timestamp: time.Now().UnixMilli(),
-		}
+		msg := NewTextChatMessage(p.Role, content, time.Now().UnixMilli())
 		if err := h.transcript.Append(p.SessionKey, msg); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, "transcript write error: "+err.Error()))

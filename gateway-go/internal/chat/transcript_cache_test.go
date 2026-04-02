@@ -3,6 +3,8 @@ package chat
 import (
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 )
 
 // countingStore wraps MemoryTranscriptStore and counts Load calls.
@@ -24,7 +26,7 @@ func TestCachedTranscriptStore_CacheHit(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
-	inner.Append("s1", ChatMessage{Role: "user", Content: "hello"})
+	inner.Append("s1", NewTextChatMessage("user", "hello", 0))
 
 	// First load: cache miss.
 	msgs, total, err := cache.Load("s1", 0)
@@ -55,13 +57,13 @@ func TestCachedTranscriptStore_WriteThrough(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
-	inner.Append("s1", ChatMessage{Role: "user", Content: "first"})
+	inner.Append("s1", NewTextChatMessage("user", "first", 0))
 
 	// Prime cache.
 	cache.Load("s1", 0)
 
 	// Append via cache (write-through).
-	cache.Append("s1", ChatMessage{Role: "assistant", Content: "second"})
+	cache.Append("s1", NewTextChatMessage("assistant", "second", 0))
 
 	// Load should return 2 messages without hitting inner store again.
 	msgs, total, err := cache.Load("s1", 0)
@@ -80,7 +82,7 @@ func TestCachedTranscriptStore_InvalidateOnDelete(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
-	inner.Append("s1", ChatMessage{Role: "user", Content: "msg"})
+	inner.Append("s1", NewTextChatMessage("user", "msg", 0))
 	cache.Load("s1", 0)
 
 	cache.Delete("s1")
@@ -103,7 +105,7 @@ func TestCachedTranscriptStore_AppendBeforeLoad(t *testing.T) {
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
 	// Append via cache before any Load call.
-	cache.Append("s1", ChatMessage{Role: "user", Content: "first"})
+	cache.Append("s1", NewTextChatMessage("user", "first", 0))
 
 	// Load must be served from the seeded cache entry — no inner Load call.
 	msgs, total, err := cache.Load("s1", 0)
@@ -122,7 +124,7 @@ func TestCachedTranscriptStore_TTLExpiry(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 1*time.Millisecond)
 
-	inner.Append("s1", ChatMessage{Role: "user", Content: "msg"})
+	inner.Append("s1", NewTextChatMessage("user", "msg", 0))
 	cache.Load("s1", 0)
 	time.Sleep(5 * time.Millisecond)
 
@@ -138,7 +140,7 @@ func TestCachedTranscriptStore_LimitSlicing(t *testing.T) {
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
 	for i := 0; i < 10; i++ {
-		inner.Append("s1", ChatMessage{Role: "user", Content: "msg"})
+		inner.Append("s1", NewTextChatMessage("user", "msg", 0))
 	}
 
 	msgs, total, err := cache.Load("s1", 3)
@@ -157,15 +159,15 @@ func TestCachedTranscriptStore_ReturnsCopy(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
-	inner.Append("s1", ChatMessage{Role: "user", Content: "original"})
+	inner.Append("s1", NewTextChatMessage("user", "original", 0))
 	msgs, _, _ := cache.Load("s1", 0)
 
 	// Mutate returned slice.
-	msgs[0].Content = "MUTATED"
+	msgs[0].Content = toolctx.MarshalJSONString("MUTATED")
 
 	// Reload — should still see original.
 	msgs2, _, _ := cache.Load("s1", 0)
-	if msgs2[0].Content != "original" {
-		t.Fatalf("cache was corrupted: got %q, want %q", msgs2[0].Content, "original")
+	if msgs2[0].TextContent() != "original" {
+		t.Fatalf("cache was corrupted: got %q, want %q", msgs2[0].TextContent(), "original")
 	}
 }

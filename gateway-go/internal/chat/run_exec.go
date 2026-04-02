@@ -87,11 +87,7 @@ func executeAgentRun(
 
 	// 1. Persist user message to transcript + Aurora store.
 	if deps.transcript != nil && params.Message != "" {
-		userMsg := ChatMessage{
-			Role:      "user",
-			Content:   params.Message,
-			Timestamp: time.Now().UnixMilli(),
-		}
+		userMsg := NewTextChatMessage("user", params.Message, time.Now().UnixMilli())
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
 		}
@@ -612,6 +608,10 @@ func executeAgentRun(
 		// Mid-loop compaction: evaluate context size after each tool turn and
 		// compact proactively before the LLM hits context_length_exceeded.
 		OnMidLoopCompact: buildMidLoopCompactor(deps, params, logger),
+		// Per-turn message persistence: persist each assistant and tool_result
+		// message immediately to transcript so intermediate findings survive
+		// across runs (fixes the "short-term memory loss" bug).
+		OnMessagePersist: buildMessagePersister(deps, params, logger),
 	}
 
 	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
@@ -1148,5 +1148,39 @@ func resolveThinkingConfig(level string) *llm.ThinkingConfig {
 		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
 	default:
 		return nil
+	}
+}
+
+// buildMessagePersister returns a callback that persists each message to the
+// transcript store immediately. This ensures intermediate assistant text and
+// tool results survive across runs — fixing the "short-term memory loss" bug
+// where the agent forgot discoveries made in earlier turns.
+func buildMessagePersister(
+	deps runDeps,
+	params RunParams,
+	logger *slog.Logger,
+) func(msg llm.Message) {
+	if deps.transcript == nil {
+		return nil
+	}
+	return func(msg llm.Message) {
+		chatMsg := ChatMessage{
+			Role:      msg.Role,
+			Content:   msg.Content, // json.RawMessage — rich blocks preserved
+			Timestamp: time.Now().UnixMilli(),
+		}
+		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
+			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
+		}
+		// Sync to Aurora for compaction awareness.
+		if deps.auroraStore != nil && !isSystemSession(params.SessionKey) {
+			text := chatMsg.TextContent()
+			if text != "" {
+				tokenCount := uint64(estimateTokens(text))
+				if _, err := deps.auroraStore.SyncMessage(1, msg.Role, text, tokenCount); err != nil {
+					logger.Warn("per-turn aurora sync failed", "role", msg.Role, "error", err)
+				}
+			}
+		}
 	}
 }

@@ -245,7 +245,7 @@ func ToolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "Session %q history (%d of %d messages):\n\n", p.SessionKey, len(msgs), total)
 		for i, msg := range msgs {
-			content := msg.Content
+			content := msg.TextContent()
 			if len(content) > 500 {
 				content = content[:500] + "..."
 			}
@@ -307,15 +307,15 @@ func ToolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 
 				if hasBefore {
 					c := m.Context[0]
-					content := Truncate(c.Content, 200)
+					content := Truncate(c.TextContent(), 200)
 					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
 				}
 
-				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, Truncate(m.Message.Content, 500))
+				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, Truncate(m.Message.TextContent(), 500))
 
 				if hasAfter {
 					c := m.Context[len(m.Context)-1]
-					content := Truncate(c.Content, 200)
+					content := Truncate(c.TextContent(), 200)
 					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
 				}
 				sb.WriteString("\n")

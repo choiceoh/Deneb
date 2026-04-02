@@ -155,10 +155,7 @@ func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) erro
 
 // AppendSystemNote appends a system-role message with the given text.
 func (s *FileTranscriptStore) AppendSystemNote(sessionKey, text string) error {
-	return s.Append(sessionKey, ChatMessage{
-		Role:    "system",
-		Content: text,
-	})
+	return s.Append(sessionKey, NewTextChatMessage("system", text, 0))
 }
 
 // ListKeys returns all session keys by scanning JSONL files in baseDir.
@@ -190,7 +187,7 @@ func searchMessages(msgs []ChatMessage, queryLower string, remaining *int) []Mat
 		if *remaining <= 0 {
 			break
 		}
-		if strings.Contains(strings.ToLower(msg.Content), queryLower) {
+		if strings.Contains(strings.ToLower(msg.TextContent()), queryLower) {
 			m := MatchedMsg{Index: i, Message: msg}
 			if i > 0 {
 				m.Context = append(m.Context, msgs[i-1])

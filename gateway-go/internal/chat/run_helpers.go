@@ -61,11 +61,7 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 	}
 	sb.WriteString(" Continue or adjust based on the user's new message.]")
 
-	msg := ChatMessage{
-		Role:      "user",
-		Content:   sb.String(),
-		Timestamp: time.Now().UnixMilli(),
-	}
+	msg := NewTextChatMessage("user", sb.String(), time.Now().UnixMilli())
 	if err := deps.transcript.Append(sessionKey, msg); err != nil {
 		logger.Warn("failed to persist interrupted context", "error", err)
 	} else {
@@ -124,32 +120,35 @@ func handleRunSuccess(
 	// next context assembly includes what the agent actually did — not just
 	// what it said. This fixes the "amnesia" bug where the agent forgets
 	// its own tool work after a few turns.
-	persistText := result.Text
-	toolSummary := formatToolActivitySummary(result.ToolActivities)
-	if toolSummary != "" && persistText != "" {
-		persistText = toolSummary + "\n\n" + persistText
-	}
+	// When per-turn persistence was active (TurnsPersisted > 0), each
+	// assistant and tool_result message was already written to transcript
+	// during the agent loop. Skip the aggregate write to avoid duplicates.
+	if result.TurnsPersisted == 0 {
+		// Legacy path: persist accumulated text as a single assistant message.
+		persistText := result.AllText
+		if persistText == "" {
+			persistText = result.Text
+		}
+		toolSummary := formatToolActivitySummary(result.ToolActivities)
+		if toolSummary != "" && persistText != "" {
+			persistText = toolSummary + "\n\n" + persistText
+		}
 
-	if deps.transcript != nil && persistText != "" {
-		assistantMsg := ChatMessage{
-			Role:      "assistant",
-			Content:   persistText,
-			Timestamp: now,
+		if deps.transcript != nil && persistText != "" {
+			assistantMsg := NewTextChatMessage("assistant", persistText, now)
+			if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
+				logger.Error("failed to persist assistant message", "error", err)
+			}
+			if deps.emitTranscriptFn != nil {
+				deps.emitTranscriptFn(params.SessionKey, assistantMsg, "")
+			}
 		}
-		if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
-			logger.Error("failed to persist assistant message", "error", err)
-		}
-		if deps.emitTranscriptFn != nil {
-			deps.emitTranscriptFn(params.SessionKey, assistantMsg, "")
-		}
-	}
-	// Sync Aurora summaries for channel replies when available.
-	// Skip for system sessions — diary heartbeat and similar background tasks
-	// must not pollute the shared Aurora conversation context.
-	if deps.auroraStore != nil && persistText != "" && !isSystemSession(params.SessionKey) {
-		tokenCount := uint64(estimateTokens(persistText))
-		if _, err := deps.auroraStore.SyncMessage(1, "assistant", persistText, tokenCount); err != nil {
-			logger.Warn("aurora: failed to sync assistant message", "error", err)
+		// Sync Aurora summaries for channel replies when available.
+		if deps.auroraStore != nil && persistText != "" && !isSystemSession(params.SessionKey) {
+			tokenCount := uint64(estimateTokens(persistText))
+			if _, err := deps.auroraStore.SyncMessage(1, "assistant", persistText, tokenCount); err != nil {
+				logger.Warn("aurora: failed to sync assistant message", "error", err)
+			}
 		}
 	}
 
@@ -328,8 +327,14 @@ func handleRunSuccess(
 			// goroutine don't eat into the session-memory deadline.
 			if deps.sessionMemory != nil {
 				smCtx, smCancel := context.WithTimeout(base, sessionMemoryUpdateTimeout)
-				UpdateSessionMemory(smCtx, deps.sessionMemory, params.SessionKey,
-					params.Message, result.Text, result.Turns, result.StopReason, logger)
+				// Use AllText so session memory captures intermediate findings,
+			// not just the last turn's text.
+			smText := result.AllText
+			if smText == "" {
+				smText = result.Text
+			}
+			UpdateSessionMemory(smCtx, deps.sessionMemory, params.SessionKey,
+					params.Message, smText, result.Turns, result.StopReason, logger)
 				smCancel()
 			}
 		}()

@@ -63,16 +63,12 @@ func TestCompaction_ContextOverflowRetry(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	sessionKey := "compact-retry-1"
 	for i := 0; i < 50; i++ {
-		transcript.Append(sessionKey, ChatMessage{
-			Role:      "user",
-			Content:   fmt.Sprintf("Message %d: %s", i, strings.Repeat("padding ", 20)),
-			Timestamp: int64(i * 1000),
-		})
-		transcript.Append(sessionKey, ChatMessage{
-			Role:      "assistant",
-			Content:   fmt.Sprintf("Reply %d: %s", i, strings.Repeat("response ", 20)),
-			Timestamp: int64(i*1000 + 500),
-		})
+		transcript.Append(sessionKey, NewTextChatMessage("user",
+			fmt.Sprintf("Message %d: %s", i, strings.Repeat("padding ", 20)),
+			int64(i*1000)))
+		transcript.Append(sessionKey, NewTextChatMessage("assistant",
+			fmt.Sprintf("Reply %d: %s", i, strings.Repeat("response ", 20)),
+			int64(i*1000+500)))
 	}
 
 	sm := session.NewManager()
@@ -491,11 +487,8 @@ func TestCompaction_ContextOverflowLegacyReducesBudget(t *testing.T) {
 
 	// Fill transcript with many messages.
 	for i := 0; i < 100; i++ {
-		transcript.Append(sessionKey, ChatMessage{
-			Role:      "user",
-			Content:   fmt.Sprintf("Message %d", i),
-			Timestamp: int64(i),
-		})
+		transcript.Append(sessionKey, NewTextChatMessage("user",
+			fmt.Sprintf("Message %d", i), int64(i)))
 	}
 
 	// Call handleContextOverflowLegacy with a very small budget.

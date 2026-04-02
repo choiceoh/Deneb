@@ -19,8 +19,8 @@ func TestDefaultCompactionConfig(t *testing.T) {
 
 func TestHandleSweepCommandLegacyFetchCandidates(t *testing.T) {
 	msgs := []ChatMessage{
-		{Role: "user", Content: "hello world", Timestamp: 1000},
-		{Role: "assistant", Content: "hi there", Timestamp: 2000},
+		NewTextChatMessage("user", "hello world", 1000),
+		NewTextChatMessage("assistant", "hi there", 2000),
 	}
 
 	cmd := json.RawMessage(`{"type":"fetchCandidates"}`)
@@ -61,8 +61,8 @@ func TestHandleSweepCommandLegacyFetchCandidates(t *testing.T) {
 
 func TestHandleSweepCommandLegacySummarize(t *testing.T) {
 	msgs := []ChatMessage{
-		{Role: "user", Content: "short message"},
-		{Role: "assistant", Content: strings.Repeat("a", 300)}, // long message, should truncate at 200
+		NewTextChatMessage("user", "short message", 0),
+		NewTextChatMessage("assistant", strings.Repeat("a", 300), 0), // long message, should truncate at 200
 	}
 
 	cmd := json.RawMessage(`{"type":"summarize","messageIds":[0,1]}`)
@@ -96,7 +96,7 @@ func TestHandleSweepCommandLegacySummarize(t *testing.T) {
 
 func TestHandleSweepCommandLegacySummarizeOutOfRange(t *testing.T) {
 	msgs := []ChatMessage{
-		{Role: "user", Content: "only message"},
+		NewTextChatMessage("user", "only message", 0),
 	}
 
 	// Include out-of-range index.

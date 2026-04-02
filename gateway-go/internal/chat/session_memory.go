@@ -284,7 +284,7 @@ func UpdateSessionMemory(
 세션 메모리를 업데이트하세요.`,
 		existingJSON,
 		truncRunes(userMessage, 200),
-		truncRunes(agentText, 500),
+		truncRunes(agentText, 1500),
 		turns,
 		stopReason,
 	)

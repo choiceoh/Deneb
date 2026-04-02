@@ -165,6 +165,21 @@ Each constant requires:
 - `type` — `float`, `int`, or `string`
 - `min`/`max` — optional bounds (float/int only)
 
+### Pattern Tips
+
+Patterns use `FindStringSubmatch` (not anchored), so they match anywhere in the file.
+Do NOT use `^` anchors — indented lines (tabs/spaces) will not match.
+
+**Go `const` block** (tab-indented):
+```go
+const (
+	weightHybrid       = 0.40   // ← starts with \t
+	weightImportance   = 0.25
+)
+```
+Correct pattern: `weightHybrid\s*=\s*([\d.]+)` — no `^`, no `\t` prefix needed.
+The `\s*` between name and `=` handles variable spacing.
+
 ### How It Works
 
 1. Constants are extracted from original files using the regex pattern
