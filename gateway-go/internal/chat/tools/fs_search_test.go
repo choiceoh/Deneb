@@ -173,6 +173,7 @@ func TestToolGrep_missingPattern(t *testing.T) {
 }
 
 func TestToolGrep_findsMatch(t *testing.T) {
+	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\nfunc hello() {}\n"), 0o644)
 
@@ -255,6 +256,7 @@ func TestSplitGlobs_spacesAroundComma(t *testing.T) {
 // ─── ToolGrep: include filter with comma-separated globs ────────────────────
 
 func TestToolGrep_commaSeparatedInclude(t *testing.T) {
+	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\n"), 0o644)
 	os.WriteFile(filepath.Join(tmp, "lib.rs"), []byte("fn hello() {}\n"), 0o644)
@@ -339,6 +341,7 @@ func TestStripRgFlag_absent(t *testing.T) {
 // ─── ToolGrep: fileType normalization ──────────────────────────────────────
 
 func TestToolGrep_fileTypeNormalization(t *testing.T) {
+	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\n"), 0o644)
 	os.WriteFile(filepath.Join(tmp, "lib.py"), []byte("import os\n"), 0o644)
@@ -357,6 +360,7 @@ func TestToolGrep_fileTypeNormalization(t *testing.T) {
 }
 
 func TestToolGrep_noMatch(t *testing.T) {
+	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\n"), 0o644)
 
