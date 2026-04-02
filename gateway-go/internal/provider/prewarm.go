@@ -48,11 +48,12 @@ func PrewarmModel(ctx context.Context, logger *slog.Logger) {
 		return
 	}
 
-	baseURL := cfg.BaseURL
+	baseURL := ExpandEnvVars(cfg.BaseURL)
 	if baseURL == "" {
 		baseURL = resolvePrewarmBaseURL(providerID)
 	}
-	client := llm.NewClient(baseURL, cfg.APIKey,
+	apiKey := ExpandEnvVars(cfg.APIKey)
+	client := llm.NewClient(baseURL, apiKey,
 		llm.WithLogger(logger),
 		llm.WithRetry(0, 0, 0), // No retries inside client; we handle retries here.
 	)
