@@ -3,7 +3,7 @@
 # Run via cron or systemd timer to get proactive notifications
 # before Claude Code auth expires.
 #
-# Suggested cron: */30 * * * * /home/admin/deneb/scripts/auth-monitor.sh
+# Suggested cron: */30 * * * * /home/choiceoh/deneb/scripts/auth-monitor.sh
 #
 # Environment variables:
 #   NOTIFY_PHONE - Phone number to send Deneb notification (e.g., +1234567890)

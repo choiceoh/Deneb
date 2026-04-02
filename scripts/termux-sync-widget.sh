@@ -7,7 +7,7 @@ termux-toast "Syncing Deneb auth..."
 
 # Run sync on l36 server
 SERVER="${DENEB_SERVER:-l36}"
-RESULT=$(ssh "$SERVER" '/home/admin/deneb/scripts/sync-claude-code-auth.sh' 2>&1)
+RESULT=$(ssh "$SERVER" '/home/choiceoh/deneb/scripts/sync-claude-code-auth.sh' 2>&1)
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ]; then

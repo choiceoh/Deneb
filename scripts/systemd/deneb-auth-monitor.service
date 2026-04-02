@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/home/admin/deneb/scripts/auth-monitor.sh
+ExecStart=/home/choiceoh/deneb/scripts/auth-monitor.sh
 # Configure notification channels via environment
 Environment=WARN_HOURS=2
 # Environment=NOTIFY_PHONE=+1234567890
