@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -374,7 +375,9 @@ func learnContact(email string) {
 	local := strings.ToLower(strings.SplitN(email, "@", 2)[0])
 	key := "gmail.contacts." + local
 	if _, ok := store.get(key); !ok {
-		_ = store.set(key, email)
+		if err := store.set(key, email); err != nil {
+			slog.Warn("gmail: failed to cache contact", "email", email, "err", err)
+		}
 	}
 }
 
