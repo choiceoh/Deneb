@@ -54,3 +54,4 @@ docs/.generated/config-baseline.jsonl
 .autoresearch-wt/
 cache/
 .claude/worktrees/
+deneb

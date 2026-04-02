@@ -69,7 +69,7 @@ type RunParams struct {
 const (
 	defaultMaxTokens     = 8192
 	defaultMaxTurns      = 25
-	defaultAgentTimeout  = 10 * time.Minute
+	defaultAgentTimeout  = 60 * time.Minute
 	maxCompactionRetries = 2
 )
 
@@ -326,25 +326,44 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		}
 	}
 
-	// Autonomous continuation: if the LLM called continue_run and we haven't
-	// exceeded the max continuation limit, start a new run automatically.
+	// Autonomous continuation: trigger a new run when:
+	// (a) the LLM explicitly called continue_run, OR
+	// (b) the agent was cut off by hitting max_turns, OR
+	// (c) the run had meaningful work (code changes) and this is the first run
+	//     → auto-start a verification continuation to check the work.
 	maxConts := deps.maxContinuations
 	if maxConts <= 0 {
 		maxConts = 5
 	}
-	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() &&
-		params.ContinuationIndex < maxConts && deps.startRunFn != nil {
-		reason := chatResult.ContSignal.Reason()
+
+	var contReason string
+	var contMessage string
+	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() {
+		contReason = chatResult.ContSignal.Reason()
+		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s. Continue your work.]"
+	} else if chatResult.StopReason == "max_turns" || chatResult.StopReason == "timeout" {
+		// Agent was cut off by turn limit or timeout while actively working.
+		// Auto-continue so work isn't lost.
+		contReason = fmt.Sprintf("에이전트가 %s에 도달했지만 작업이 진행 중이었습니다", chatResult.StopReason)
+		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s. 이전 실행이 중단된 지점부터 이어서 작업하세요. 중단된 작업의 컨텍스트는 대화 히스토리에 있습니다.]"
+	} else if params.ContinuationIndex == 0 && hadMutatingToolActivity(chatResult.ToolActivities) {
+		// First run had code changes — auto-start verification pass.
+		contReason = "코드 변경 후 검증"
+		contMessage = "[System: Autonomous continuation %d/%d. 이전 실행에서 코드를 변경했습니다. 변경 사항을 검증하세요: 빌드가 되는지, 테스트가 통과하는지, 추가 작업이 필요한지 확인하고 이어서 진행하세요. 모든 것이 정상이면 최종 요약으로 마무리하세요.]"
+	}
+
+	if contReason != "" && params.ContinuationIndex < maxConts && deps.startRunFn != nil {
 		nextIndex := params.ContinuationIndex + 1
 		logger.Info("autonomous continuation triggered",
-			"reason", reason,
+			"reason", contReason,
 			"continuation", nextIndex,
-			"maxContinuations", maxConts)
+			"maxContinuations", maxConts,
+			"stopReason", chatResult.StopReason)
 
 		contParams := RunParams{
 			SessionKey:        params.SessionKey,
 			ClientRunID:       shortid.New("cont"),
-			Message:           fmt.Sprintf("[System: Autonomous continuation %d/%d. Reason: %s. Continue your work.]", nextIndex, maxConts, reason),
+			Message:           fmt.Sprintf(contMessage, nextIndex, maxConts, contReason),
 			Delivery:          params.Delivery,
 			Model:             params.Model,
 			WorkspaceDir:      params.WorkspaceDir,
@@ -352,4 +371,23 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		}
 		deps.startRunFn(contParams)
 	}
+}
+
+// mutatingTools are tools that change the filesystem or run commands.
+// When a run uses these, it likely needs a verification follow-up.
+var mutatingTools = map[string]bool{
+	"edit": true, "write": true, "exec": true,
+	"git": true, "multi_edit": true, "notebook_edit": true,
+}
+
+// hadMutatingToolActivity reports whether any tool call in the run was a
+// code-changing operation (edit, write, exec, etc.). Used to decide if an
+// automatic verification continuation is warranted.
+func hadMutatingToolActivity(activities []agent.ToolActivity) bool {
+	for _, a := range activities {
+		if mutatingTools[a.Name] {
+			return true
+		}
+	}
+	return false
 }

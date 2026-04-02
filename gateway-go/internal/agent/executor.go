@@ -221,7 +221,8 @@ func RunAgent(
 			// --- Nudge budget continuation ---
 			// If the agent finished normally but the token budget is not exhausted,
 			// inject a nudge message to prompt for remaining work.
-			if cfg.NudgeBudget != nil && turnRes.stopReason == "end_turn" && turn > 0 {
+			contAlreadyRequested := cfg.ContinuationRequested != nil && cfg.ContinuationRequested()
+			if cfg.NudgeBudget != nil && turnRes.stopReason == "end_turn" && turn > 0 && !contAlreadyRequested {
 				nb := cfg.NudgeBudget
 				maxConts := nb.MaxContinuations
 				if maxConts <= 0 {
@@ -256,7 +257,7 @@ func RunAgent(
 						"budgetUsed", fmt.Sprintf("%.1f%%", budgetUsed*100))
 					messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 					messages = append(messages, llm.NewTextMessage("user",
-						"[Continue: check if there's anything else to do for this task. If the task is fully complete, respond with a brief summary.]"))
+						"[System: 작업이 완료되지 않았다면 이어서 진행하세요. 완전히 끝난 경우에만 최종 요약으로 마무리하세요.]"))
 					continue
 				}
 			}
@@ -417,6 +418,16 @@ func RunAgent(
 			})
 		}
 
+		// Inject turn budget warning when approaching the limit so the LLM
+		// can call continue_run proactively (it has no other way to know).
+		turnBudgetWarning := buildTurnBudgetWarning(turn, cfg.MaxTurns)
+		if turnBudgetWarning != "" {
+			toolResults = append(toolResults, llm.ContentBlock{
+				Type: "text",
+				Text: turnBudgetWarning,
+			})
+		}
+
 		toolResultMsg := llm.NewBlockMessage("user", toolResults)
 		messages = append(messages, toolResultMsg)
 		if cfg.OnMessagePersist != nil {
@@ -448,6 +459,31 @@ func RunAgent(
 	result.NudgeContinuations = nudgeContinuationCount
 	result.MaxTokensRecoveries = maxTokensRecoveryCount
 	return result, nil
+}
+
+// buildTurnBudgetWarning returns a warning message when the agent is
+// approaching the turn limit. This gives the LLM visibility into its
+// remaining budget so it can call continue_run proactively.
+// Returns "" when no warning is needed.
+func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
+	remaining := maxTurns - currentTurn - 1 // -1 because turn is 0-based and we just finished it
+	if remaining <= 0 {
+		return ""
+	}
+	// Warning at 80% of budget (5 turns remaining out of 25).
+	threshold := maxTurns / 5
+	if threshold < 3 {
+		threshold = 3
+	}
+	if remaining > threshold {
+		return ""
+	}
+	if remaining <= 2 {
+		return fmt.Sprintf("[System: ⚠️ 턴 한도 임박 — 남은 턴 %d/%d. 작업이 남아있으면 지금 continue_run을 호출하세요.]",
+			remaining, maxTurns)
+	}
+	return fmt.Sprintf("[System: 턴 예산 정보 — 남은 턴 %d/%d. 작업이 많이 남아있으면 continue_run 호출을 준비하세요.]",
+		remaining, maxTurns)
 }
 
 // maxToolConcurrency is the maximum number of read-only tools that can
