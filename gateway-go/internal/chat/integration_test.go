@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -288,8 +289,11 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 		t.Fatalf("transcript load: %v", err)
 	}
 	last := msgs[len(msgs)-1]
-	if last.Role != "assistant" || last.Content != "Hello Peter!" {
-		t.Errorf("last msg = {%s, %q}, want {assistant, Hello Peter!}", last.Role, last.Content)
+	// The persisted assistant message includes a tool activity summary prefix
+	// (e.g., "[Tools used: greet]\n\n") followed by the actual response text.
+	wantSuffix := "Hello Peter!"
+	if last.Role != "assistant" || !strings.HasSuffix(last.Content, wantSuffix) {
+		t.Errorf("last msg = {%s, %q}, want suffix %q", last.Role, last.Content, wantSuffix)
 	}
 
 	// LLM should have been called at least twice (tool call + final response).

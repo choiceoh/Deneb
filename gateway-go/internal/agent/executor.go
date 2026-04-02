@@ -388,6 +388,15 @@ func RunAgent(
 			}
 		}
 
+		// Record tool activities for context persistence.
+		for i, tc := range turnRes.toolCalls {
+			isErr := i < len(toolResults) && toolResults[i].IsError
+			result.ToolActivities = append(result.ToolActivities, ToolActivity{
+				Name:    tc.Name,
+				IsError: isErr,
+			})
+		}
+
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
 
 		// Mid-loop compaction: check if context is growing too large and

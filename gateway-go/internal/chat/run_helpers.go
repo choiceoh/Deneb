@@ -120,10 +120,20 @@ func handleRunSuccess(
 		TextLen:      len(result.Text),
 	})
 	// Persist assistant message to transcript + Aurora store.
-	if deps.transcript != nil && result.Text != "" {
+	// When tool activities were recorded, prepend a compact summary so the
+	// next context assembly includes what the agent actually did — not just
+	// what it said. This fixes the "amnesia" bug where the agent forgets
+	// its own tool work after a few turns.
+	persistText := result.Text
+	toolSummary := formatToolActivitySummary(result.ToolActivities)
+	if toolSummary != "" && persistText != "" {
+		persistText = toolSummary + "\n\n" + persistText
+	}
+
+	if deps.transcript != nil && persistText != "" {
 		assistantMsg := ChatMessage{
 			Role:      "assistant",
-			Content:   result.Text,
+			Content:   persistText,
 			Timestamp: now,
 		}
 		if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
@@ -136,9 +146,9 @@ func handleRunSuccess(
 	// Sync Aurora summaries for channel replies when available.
 	// Skip for system sessions — diary heartbeat and similar background tasks
 	// must not pollute the shared Aurora conversation context.
-	if deps.auroraStore != nil && result.Text != "" && !isSystemSession(params.SessionKey) {
-		tokenCount := uint64(estimateTokens(result.Text))
-		if _, err := deps.auroraStore.SyncMessage(1, "assistant", result.Text, tokenCount); err != nil {
+	if deps.auroraStore != nil && persistText != "" && !isSystemSession(params.SessionKey) {
+		tokenCount := uint64(estimateTokens(persistText))
+		if _, err := deps.auroraStore.SyncMessage(1, "assistant", persistText, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync assistant message", "error", err)
 		}
 	}
@@ -784,6 +794,53 @@ func (r *ToolRegistry) Definitions() []ToolDef {
 		defs = append(defs, r.tools[name])
 	}
 	return defs
+}
+
+// formatToolActivitySummary builds a compact, context-friendly summary of tool
+// invocations from an agent run. Returns "" when there are no activities.
+//
+// The output is a bracketed metadata line that lists each unique tool with its
+// call count, e.g.:
+//
+//	[Tools used: read_file ×3, edit ×2, exec ×1]
+//
+// This is prepended to the assistant's text before persisting to the transcript
+// and Aurora store, so subsequent context assemblies include what the agent
+// actually did — not just what it said.
+func formatToolActivitySummary(activities []agent.ToolActivity) string {
+	if len(activities) == 0 {
+		return ""
+	}
+
+	// Count occurrences preserving first-seen order.
+	type entry struct {
+		name  string
+		count int
+	}
+	seen := make(map[string]int) // name -> index in ordered
+	var ordered []entry
+	for _, a := range activities {
+		if idx, ok := seen[a.Name]; ok {
+			ordered[idx].count++
+		} else {
+			seen[a.Name] = len(ordered)
+			ordered = append(ordered, entry{name: a.Name, count: 1})
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString("[Tools used: ")
+	for i, e := range ordered {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(e.name)
+		if e.count > 1 {
+			fmt.Fprintf(&sb, " ×%d", e.count)
+		}
+	}
+	sb.WriteString("]")
+	return sb.String()
 }
 
 // toPromptToolDefs converts chat.ToolDef slice to the minimal prompt.ToolDef
