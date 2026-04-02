@@ -599,9 +599,9 @@ func executeAgentRun(
 		},
 		// Enable nudge budget continuation and max-tokens recovery.
 		NudgeBudget: &agent.NudgeBudgetConfig{
-			MaxContinuations: 3,
+			MaxContinuations: 5,
 			BudgetThreshold:  0.9,
-			MinDeltaTokens:   500,
+			MinDeltaTokens:   300,
 		},
 		MaxOutputTokensRecovery: 3,
 		StreamingToolExecution:  true,
