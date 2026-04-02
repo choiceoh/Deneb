@@ -212,8 +212,8 @@ func TestPhase1MethodsReachableViaRPC(t *testing.T) {
 		{"health.check", `{"method":"health.check","id":"p1"}`},
 		{"system.info", `{"method":"system.info","id":"p2"}`},
 		{"sessions.list", `{"method":"sessions.list","id":"p3"}`},
-		{"channels.status", `{"method":"channels.status","id":"p4"}`},
-		{"channels.health", `{"method":"channels.health","id":"p5"}`},
+		{"telegram.status", `{"method":"telegram.status","id":"p4"}`},
+		{"telegram.health", `{"method":"telegram.health","id":"p5"}`},
 		{"security.is_safe_url", `{"method":"security.is_safe_url","id":"p6","params":{"url":"https://example.com"}}`},
 		// data is base64-encoded PNG header: 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
 		{"media.detect_mime", `{"method":"media.detect_mime","id":"p7","params":{"data":"iVBORw0KGgo="}}`},

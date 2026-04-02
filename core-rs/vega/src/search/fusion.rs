@@ -187,21 +187,22 @@ fn score_sqlite_chunks(
 }
 
 /// Convert SQLite chunk rows to unified result format.
-pub fn sqlite_rows_to_unified(chunks: &[ChunkRow]) -> Vec<UnifiedResult> {
+/// Takes ownership to avoid cloning all string fields.
+pub fn sqlite_rows_to_unified(chunks: Vec<ChunkRow>) -> Vec<UnifiedResult> {
     chunks
-        .iter()
+        .into_iter()
         .map(|r| UnifiedResult {
             project_id: r.project_id,
-            project_name: r.name.clone(),
-            client: r.client.clone(),
-            status: r.status.clone(),
-            person: r.person_internal.clone(),
-            content: r.content.clone(),
-            heading: r.section_heading.clone(),
+            project_name: r.name,
+            client: r.client,
+            status: r.status,
+            person: r.person_internal,
+            content: r.content,
+            heading: r.section_heading,
             score: 0.0,
             source: "sqlite".into(),
-            entry_date: r.entry_date.clone(),
-            chunk_type: r.chunk_type.clone(),
+            entry_date: r.entry_date,
+            chunk_type: r.chunk_type,
             metadata: FxHashMap::default(),
         })
         .collect()

@@ -69,7 +69,7 @@ pub unsafe extern "C" fn deneb_context_assembly_step(
             Ok(s) => s,
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
-        let json = crate::context_engine::handle::context_assembly_step(handle, resp_str.to_string());
+        let json = crate::context_engine::handle::context_assembly_step(handle, resp_str);
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }
@@ -152,7 +152,7 @@ pub unsafe extern "C" fn deneb_context_expand_step(
             Ok(s) => s,
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
-        let json = crate::context_engine::handle::context_expand_step(handle, resp_str.to_string());
+        let json = crate::context_engine::handle::context_expand_step(handle, resp_str);
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }

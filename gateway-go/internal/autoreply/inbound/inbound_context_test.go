@@ -25,8 +25,8 @@ func TestFinalizeInboundContextFull_BasicDefaults(t *testing.T) {
 
 func TestFinalizeInboundContextFull_GroupChat(t *testing.T) {
 	ctx := &types.MsgContext{
-		Body:    "hello",
-		IsGroup: true,
+		Body:          "hello",
+		SessionOrigin: types.SessionOrigin{IsGroup: true},
 	}
 	FinalizeInboundContextFull(ctx, FinalizeInboundContextOptions{})
 
@@ -38,9 +38,9 @@ func TestFinalizeInboundContextFull_GroupChat(t *testing.T) {
 func TestFinalizeInboundContextFull_BodyPriorityChain(t *testing.T) {
 	// When CommandBody is set, BodyForAgent should prefer it over Body.
 	ctx := &types.MsgContext{
-		Body:        "envelope text",
-		CommandBody: "/status",
-		RawBody:     "raw text",
+		Body:           "envelope text",
+		CommandControl: types.CommandControl{CommandBody: "/status"},
+		RawBody:        "raw text",
 	}
 	FinalizeInboundContextFull(ctx, FinalizeInboundContextOptions{})
 
@@ -52,8 +52,8 @@ func TestFinalizeInboundContextFull_BodyPriorityChain(t *testing.T) {
 
 func TestFinalizeInboundContextFull_ForceBodyForAgent(t *testing.T) {
 	ctx := &types.MsgContext{
-		Body:        "body text",
-		CommandBody: "/status",
+		Body:           "body text",
+		CommandControl: types.CommandControl{CommandBody: "/status"},
 	}
 	FinalizeInboundContextFull(ctx, FinalizeInboundContextOptions{
 		ForceBodyForAgent: true,
@@ -115,8 +115,8 @@ func TestFinalizeInboundContextFull_NilContext(t *testing.T) {
 
 func TestFinalizeInboundContextFull_MediaType(t *testing.T) {
 	ctx := &types.MsgContext{
-		Body:      "photo",
-		MediaPath: "/tmp/photo.jpg",
+		Body:         "photo",
+		MediaContext: types.MediaContext{MediaPath: "/tmp/photo.jpg"},
 	}
 	FinalizeInboundContextFull(ctx, FinalizeInboundContextOptions{})
 

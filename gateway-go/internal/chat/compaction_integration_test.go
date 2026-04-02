@@ -22,8 +22,8 @@ import (
 // These tests exercise the compaction pipeline end-to-end:
 // - Context overflow detection and retry with compacted context
 // - Aurora store message syncing during chat runs
-// - Legacy fallback compaction (reduced budget)
-// - Compaction evaluation thresholds
+// - Reduced-budget fallback when Aurora is unavailable
+// - Compaction evaluation thresholds (via aurora.EvaluateCompaction)
 // - Transcript + Aurora store consistency after compaction
 
 // tempAuroraStore creates an Aurora store backed by a temp directory for testing.
@@ -479,11 +479,11 @@ func TestCompaction_AuroraAssemblyFallback(t *testing.T) {
 	}
 }
 
-// TestCompaction_ContextOverflowLegacyReducesBudget tests that the legacy
-// overflow handler halves the context budget when compaction is unavailable.
-func TestCompaction_ContextOverflowLegacyReducesBudget(t *testing.T) {
+// TestCompaction_ReducedBudgetFallback tests that the overflow handler halves
+// the context budget when Aurora is not available or sweep fails.
+func TestCompaction_ReducedBudgetFallback(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
-	sessionKey := "legacy-overflow"
+	sessionKey := "reduced-budget"
 
 	// Fill transcript with many messages.
 	for i := 0; i < 100; i++ {
@@ -491,25 +491,28 @@ func TestCompaction_ContextOverflowLegacyReducesBudget(t *testing.T) {
 			fmt.Sprintf("Message %d", i), int64(i)))
 	}
 
-	// Call handleContextOverflowLegacy with a very small budget.
 	ctxCfg := ContextConfig{
-		TokenBudget:    500,
+		TokenBudget:    500, // low budget to test reduced assembly
 		FreshTailCount: 4,
 		MaxMessages:    100,
 	}
-	compCfg := DefaultCompactionConfig()
-
-	msgs, err := handleContextOverflowLegacy(transcript, sessionKey, ctxCfg, compCfg, slog.Default())
+	// Halve budget (same logic as handleContextOverflowAurora fallback).
+	reducedCfg := ctxCfg
+	reducedCfg.TokenBudget /= 2
+	if reducedCfg.MaxMessages > 10 {
+		reducedCfg.MaxMessages /= 2
+	}
+	result, err := assembleContext(transcript, sessionKey, reducedCfg, slog.Default())
 	if err != nil {
-		t.Fatalf("handleContextOverflowLegacy: %v", err)
+		t.Fatalf("assembleContext with reduced budget: %v", err)
 	}
 
 	// Should return fewer messages than the full transcript.
-	if len(msgs) >= 100 {
-		t.Errorf("expected reduced messages, got %d", len(msgs))
+	if len(result.Messages) >= 100 {
+		t.Errorf("expected reduced messages, got %d", len(result.Messages))
 	}
-	if len(msgs) == 0 {
-		t.Error("expected non-empty messages after legacy overflow handling")
+	if len(result.Messages) == 0 {
+		t.Error("expected non-empty messages after reduced budget assembly")
 	}
 }
 

@@ -80,6 +80,49 @@ ffi_string_to_buffer!(
     }
 );
 
+/// C FFI: Convert HTML to Markdown with options.
+/// `opts_ptr` is a JSON object: `{"strip_noise": true}`.
+/// When `strip_noise` is true, noise elements (nav, aside, svg, iframe, form)
+/// are suppressed in addition to script/style/noscript.
+/// Writes JSON `{"text":"...","title":"..."}` to `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// All pointers must be valid for their respective lengths.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_html_to_markdown_with_opts(
+    html_ptr: *const u8,
+    html_len: usize,
+    opts_ptr: *const u8,
+    opts_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if html_ptr.is_null() || opts_ptr.is_null() || out_ptr.is_null() {
+        return FFI_ERR_NULL_POINTER;
+    }
+    if html_len > FFI_MAX_INPUT_LEN {
+        return FFI_ERR_INPUT_TOO_LARGE;
+    }
+    let html_slice = std::slice::from_raw_parts(html_ptr, html_len);
+    let opts_slice = std::slice::from_raw_parts(opts_ptr, opts_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(FFI_ERR_RUST_PANIC, move || {
+        let html_str = match std::str::from_utf8(html_slice) {
+            Ok(s) => s,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
+        };
+        let opts: crate::parsing::html_to_markdown::HtmlToMarkdownOptions =
+            match serde_json::from_slice(opts_slice) {
+                Ok(o) => o,
+                Err(_) => return FFI_ERR_JSON_ERROR,
+            };
+        let result =
+            crate::parsing::html_to_markdown::html_to_markdown_with_opts(html_str, &opts);
+        ffi_write_json(out_slice, &result)
+    })
+}
+
 /// C FFI: Estimate decoded size of a base64 string.
 /// Returns estimated byte count (>= 0) on success, negative on error.
 ///

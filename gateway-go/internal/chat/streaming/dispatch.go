@@ -3,10 +3,10 @@ package streaming
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"golang.org/x/sync/errgroup"
 )
 
 // DispatchResult reports the outcome of delivering a message to one channel.
@@ -41,16 +41,17 @@ func Dispatch(
 	}
 
 	results := make([]DispatchResult, len(targets))
-	g, gctx := errgroup.WithContext(ctx)
+	var wg sync.WaitGroup
 
 	for i, t := range targets {
-		g.Go(func() error {
-			results[i] = deliverToTelegram(gctx, tgPlugin, t, text, media)
-			return nil // Never return error — collect per-target, don't cancel siblings.
-		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = deliverToTelegram(ctx, tgPlugin, t, text, media)
+		}()
 	}
 
-	g.Wait()
+	wg.Wait()
 	return results
 }
 

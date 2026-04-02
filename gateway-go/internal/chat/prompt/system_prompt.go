@@ -25,6 +25,12 @@ type ToolDef struct {
 	Name string
 }
 
+// DeferredToolInfo describes a deferred tool for system prompt listing.
+type DeferredToolInfo struct {
+	Name        string
+	Description string
+}
+
 // cachedTimezone and cachedTimezoneLocation cache the resolved timezone
 // at startup to avoid time.LoadLocation() on every chat message.
 var (
@@ -63,15 +69,16 @@ func loadCachedTimezone() (string, *time.Location) {
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
 type SystemPromptParams struct {
-	WorkspaceDir  string
-	ToolDefs      []ToolDef
-	SkillsPrompt  string // pre-built skills XML from skills/prompt.go
-	UserTimezone  string
-	ContextFiles  []ContextFile
-	RuntimeInfo   *RuntimeInfo
-	Channel       string
-	DocsPath      string
-	SessionMemory string // pre-formatted session state block (empty = omit)
+	WorkspaceDir   string
+	ToolDefs       []ToolDef
+	DeferredTools  []DeferredToolInfo // deferred tools: name+description listed in prompt
+	SkillsPrompt   string            // pre-built skills XML from skills/prompt.go
+	UserTimezone   string
+	ContextFiles   []ContextFile
+	RuntimeInfo    *RuntimeInfo
+	Channel        string
+	DocsPath       string
+	SessionMemory  string // pre-formatted session state block (empty = omit)
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -121,9 +128,18 @@ func buildStaticCacheKey(toolDefs []ToolDef) string {
 // Semi-static: skills prompt (changes only when skills are added/removed, not per request).
 // Dynamic: memory, workspace, context files, runtime (changes per request).
 func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText, dynamicText string) {
-	toolSet := make(map[string]bool, len(params.ToolDefs))
+	// eagerSet: only eager tools (for compact tool list display).
+	eagerSet := make(map[string]bool, len(params.ToolDefs))
 	for _, def := range params.ToolDefs {
-		toolSet[def.Name] = true
+		eagerSet[def.Name] = true
+	}
+	// toolSet: eager + deferred (for conditional prompt sections like pilot, sessions_spawn).
+	toolSet := make(map[string]bool, len(params.ToolDefs)+len(params.DeferredTools))
+	for k, v := range eagerSet {
+		toolSet[k] = v
+	}
+	for _, dt := range params.DeferredTools {
+		toolSet[dt.Name] = true
 	}
 
 	// --- Static block (cached) ---
@@ -174,7 +190,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// Tooling: compact categorized list (descriptions are in tool schemas).
 		s.WriteString("## Tooling\n")
 		s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
-		writeCompactToolList(&s, toolSet)
+		writeCompactToolList(&s, eagerSet)
+		if len(params.DeferredTools) > 0 {
+			s.WriteString("\nDeferred tools (call `fetch_tools` to activate before use):\n")
+			for _, dt := range params.DeferredTools {
+				fmt.Fprintf(&s, "- %s: %s\n", dt.Name, truncateDescription(dt.Description, 80))
+			}
+		}
 		s.WriteString("\n")
 
 		// Tool Usage (compressed: parallel, first-class, CLI, pilot, chaining).
@@ -331,6 +353,15 @@ func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock
 	}
 }
 
+// truncateDescription truncates a description to maxLen runes, appending "..." if needed.
+func truncateDescription(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
+}
+
 // writeCompactToolList writes a categorized tool name list (no descriptions).
 func writeCompactToolList(sb *strings.Builder, toolSet map[string]bool) {
 	for _, cat := range toolCategories {
@@ -404,11 +435,20 @@ func resolveTimezone() string {
 	return "UTC"
 }
 
+// cachedHostname is resolved once at startup to avoid os.Hostname() syscall per turn.
+var (
+	cachedHostname     string
+	cachedHostnameOnce sync.Once
+)
+
 // BuildDefaultRuntimeInfo creates RuntimeInfo from the current environment.
+// Static fields (hostname, OS, arch) are cached; only model fields change per request.
 func BuildDefaultRuntimeInfo(model, defaultModel string) *RuntimeInfo {
-	hostname, _ := os.Hostname()
+	cachedHostnameOnce.Do(func() {
+		cachedHostname, _ = os.Hostname()
+	})
 	return &RuntimeInfo{
-		Host:         hostname,
+		Host:         cachedHostname,
 		OS:           "linux",
 		Arch:         runtime.GOARCH,
 		Model:        model,
@@ -507,7 +547,13 @@ func buildCodingPromptSections(params SystemPromptParams) (staticText, dynamicTe
 	if toolSet["continue_run"] {
 		s.WriteString("## 자율 연속 실행\n")
 		s.WriteString("작업이 완료되지 않았는데 도구 호출 한도에 가까워지면 `continue_run` 도구를 호출하세요.\n")
-		s.WriteString("새 실행이 자동으로 시작되고 대화 컨텍스트가 유지됩니다. 최대 5회 연속 가능.\n\n")
+		s.WriteString("새 실행이 자동으로 시작되고 세션 메모리를 통해 컨텍스트가 유지됩니다.\n\n")
+		s.WriteString("### 장기 작업 전략\n")
+		s.WriteString("복잡한 작업 시작 시:\n")
+		s.WriteString("1. 전체 작업을 단계별로 계획 (탐색 → 설계 → 구현 → 테스트 → 검증)\n")
+		s.WriteString("2. 각 단계의 완료 기준을 명확히 정의\n")
+		s.WriteString("3. `continue_run` 호출 시 `progress_summary`에 현재 진행 상황 기록\n")
+		s.WriteString("4. 주요 마일스톤 완료 시 `message` 도구로 사용자에게 진행 보고\n\n")
 		s.WriteString("`continue_run`을 호출하지 말아야 하는 경우:\n")
 		s.WriteString("- 작업이 완료된 경우\n")
 		s.WriteString("- 사용자 확인이 필요한 경우\n")

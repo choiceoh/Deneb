@@ -18,6 +18,8 @@ import (
 // ---------------------------------------------------------------------------
 
 // ACPDeps holds dependencies for ACP RPC methods.
+// Pointer receiver required: enabled field is an atomic.Bool mutated by
+// IsEnabled/SetEnabled, so ACPMethods takes *ACPDeps (not a value).
 type ACPDeps struct {
 	Registry     *acp.ACPRegistry
 	Bindings     *acp.SessionBindingService

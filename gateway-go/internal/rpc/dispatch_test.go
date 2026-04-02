@@ -2,8 +2,13 @@ package rpc
 
 import (
 	"context"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -119,5 +124,169 @@ func TestDispatchPanicRecovery(t *testing.T) {
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrUnavailable {
 		t.Errorf("expected UNAVAILABLE error, got: %+v", resp.Error)
+	}
+}
+
+func TestDispatchWithMiddleware(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+
+	var order []string
+	var mu sync.Mutex
+	record := func(s string) {
+		mu.Lock()
+		order = append(order, s)
+		mu.Unlock()
+	}
+
+	mw1 := func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+			record("mw1-before")
+			resp := next(ctx, req)
+			record("mw1-after")
+			return resp
+		}
+	}
+	mw2 := func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+			record("mw2-before")
+			resp := next(ctx, req)
+			record("mw2-after")
+			return resp
+		}
+	}
+
+	d.UseMiddleware(mw1, mw2)
+	d.Register("test.mw", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		record("handler")
+		resp, _ := protocol.NewResponseOK(req.ID, "ok")
+		return resp
+	})
+
+	req := &protocol.RequestFrame{ID: "mw-1", Method: "test.mw"}
+	resp := d.Dispatch(context.Background(), req)
+	if !resp.OK {
+		t.Fatalf("expected OK, got error: %+v", resp.Error)
+	}
+
+	// Wait for goroutine to complete and record all entries.
+	time.Sleep(10 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"mw1-before", "mw2-before", "handler", "mw2-after", "mw1-after"}
+	if len(order) != len(want) {
+		t.Fatalf("expected %d calls, got %d: %v", len(want), len(order), order)
+	}
+	for i, w := range want {
+		if order[i] != w {
+			t.Errorf("order[%d] = %q, want %q (full: %v)", i, order[i], w, order)
+		}
+	}
+}
+
+func TestDispatchWithMiddlewareAuthReject(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+
+	authMw := middleware.Auth(map[string]bool{"public.method": true})
+	d.UseMiddleware(authMw)
+
+	d.Register("private.method", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp, _ := protocol.NewResponseOK(req.ID, "should not reach")
+		return resp
+	})
+
+	// No RequestContext attached — should be rejected.
+	req := &protocol.RequestFrame{ID: "auth-1", Method: "private.method"}
+	resp := d.Dispatch(context.Background(), req)
+	if resp.OK {
+		t.Fatal("expected auth rejection for unauthenticated request")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrUnauthorized {
+		t.Fatalf("expected UNAUTHORIZED, got: %+v", resp.Error)
+	}
+}
+
+func TestDispatchWithWorkerPool(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+	pool := NewWorkerPool(2)
+	d.SetWorkerPool(pool)
+
+	var maxConcurrent atomic.Int64
+	var running atomic.Int64
+	var wg sync.WaitGroup
+
+	d.Register("slow.work", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		cur := running.Add(1)
+		for {
+			old := maxConcurrent.Load()
+			if cur <= old || maxConcurrent.CompareAndSwap(old, cur) {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+		running.Add(-1)
+		wg.Done()
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
+	})
+
+	// Fire 6 concurrent requests through a pool of size 2.
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func(id int) {
+			req := &protocol.RequestFrame{ID: "wp-" + string(rune('0'+id)), Method: "slow.work"}
+			d.Dispatch(context.Background(), req)
+		}(i)
+	}
+
+	wg.Wait()
+
+	if got := maxConcurrent.Load(); got > 2 {
+		t.Errorf("expected max concurrency ≤2 with pool size 2, got %d", got)
+	}
+
+	// pool.done is incremented in the Submit defer AFTER the handler returns,
+	// so it may lag slightly behind wg.Done() which fires inside the handler.
+	// Poll briefly to let the last goroutine's defer complete.
+	deadline := time.After(2 * time.Second)
+	for {
+		if pool.Stats().Done == 6 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("expected 6 done, got %d", pool.Stats().Done)
+		default:
+			runtime.Gosched()
+		}
+	}
+}
+
+func TestDispatchTimeoutCancelsHandler(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+
+	var handlerCanceled atomic.Bool
+	d.Register("cancellable", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		<-ctx.Done()
+		handlerCanceled.Store(true)
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	req := &protocol.RequestFrame{ID: "cancel-test", Method: "cancellable"}
+	resp := d.Dispatch(ctx, req)
+
+	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
+		t.Fatalf("expected AGENT_TIMEOUT, got: %+v", resp.Error)
+	}
+
+	// Give the handler goroutine time to observe cancellation.
+	time.Sleep(20 * time.Millisecond)
+
+	if !handlerCanceled.Load() {
+		t.Error("handler did not observe context cancellation after timeout")
 	}
 }

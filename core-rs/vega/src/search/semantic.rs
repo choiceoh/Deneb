@@ -4,25 +4,11 @@
 //! or Gemini API). Uses SIMD-accelerated cosine similarity and rayon parallelism.
 
 use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-/// Semantic search result for a single chunk.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticResult {
-    pub chunk_id: i64,
-    pub project_id: i64,
-    pub project_name: String,
-    pub client: String,
-    pub status: String,
-    pub person_internal: String,
-    pub section_heading: String,
-    pub content: String,
-    pub chunk_type: String,
-    pub entry_date: String,
-    pub score: f64,
-}
+use super::fts_search::ChunkRow;
 
 /// Configuration for semantic search.
 #[derive(Debug, Clone)]
@@ -50,7 +36,7 @@ pub fn semantic_search_with_vec(
     query_vec: &[f32],
     config: &SemanticConfig,
     project_filter: Option<&[i64]>,
-) -> Vec<SemanticResult> {
+) -> Vec<ChunkRow> {
     if query_vec.is_empty() {
         return Vec::new();
     }
@@ -122,9 +108,13 @@ pub fn semantic_search_with_vec(
     // in parallel over (index, embedding) pairs, then build results sequentially.
     let embeddings: Vec<Vec<f32>> = all_rows.iter().map(|row| blob_to_f32_vec(&row.1)).collect();
 
-    // Parallel cosine similarity (SIMD-accelerated, leverages DGX Spark cores).
-    let scores: Vec<(usize, f64)> = (0..embeddings.len())
-        .into_par_iter()
+    // Cosine similarity (SIMD-accelerated; parallel on DGX Spark when enabled).
+    #[cfg(feature = "parallel")]
+    let iter = (0..embeddings.len()).into_par_iter();
+    #[cfg(not(feature = "parallel"))]
+    let iter = 0..embeddings.len();
+
+    let scores: Vec<(usize, f64)> = iter
         .filter_map(|i: usize| {
             let chunk_vec: &Vec<f32> = &embeddings[i];
             if chunk_vec.len() != query_vec.len() {
@@ -139,34 +129,30 @@ pub fn semantic_search_with_vec(
         })
         .collect();
 
-    // Build results from scored indices.
-    let mut results: Vec<SemanticResult> = scores
+    // Build results from scored indices (sorted by cosine similarity descending).
+    let mut scored: Vec<(usize, f64)> = scores;
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(config.top_k);
+
+    scored
         .into_iter()
-        .map(|(i, score)| {
+        .map(|(i, _score)| {
             let row = &all_rows[i];
-            SemanticResult {
+            ChunkRow {
                 chunk_id: row.0,
                 project_id: row.2,
-                project_name: row.3.clone(),
+                name: row.3.clone(),
                 client: row.4.clone(),
                 status: row.5.clone(),
                 person_internal: row.6.clone(),
+                capacity: String::new(),
                 section_heading: row.7.clone(),
                 content: row.8.clone(),
                 chunk_type: row.9.clone(),
                 entry_date: row.10.clone(),
-                score,
             }
         })
-        .collect();
-
-    results.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    results.truncate(config.top_k);
-    results
+        .collect()
 }
 
 // -- Utility functions --

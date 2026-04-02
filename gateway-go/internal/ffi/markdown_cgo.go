@@ -97,10 +97,7 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 
 	// Output is typically larger than input due to JSON structure.
 	// Use 6x multiplier with 16 KB floor to handle complex markdown safely.
-	outSize := len(markdown) * 6
-	if outSize < 16384 {
-		outSize = 16384
-	}
+	outSize := initialBufSize(len(markdown), 6, 16384)
 	out := make([]byte, outSize)
 
 	mdPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(markdown)))
@@ -133,10 +130,7 @@ func MarkdownDetectFences(text string) (json.RawMessage, error) {
 		return json.RawMessage("[]"), nil
 	}
 
-	outSize := len(text) * 2
-	if outSize < 4096 {
-		outSize = 4096
-	}
+	outSize := initialBufSize(len(text), 2, 4096)
 	out := make([]byte, outSize)
 
 	textPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(text)))

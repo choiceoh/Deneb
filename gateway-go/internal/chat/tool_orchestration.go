@@ -16,20 +16,6 @@ import (
 // Default concurrency cap for parallel tool execution.
 const defaultToolConcurrency = 10
 
-// readOnlyTools is the set of tools safe for concurrent execution.
-// These tools do not modify the filesystem or other shared state.
-var readOnlyTools = map[string]bool{
-	"read":      true,
-	"grep":      true,
-	"glob":      true,
-	"find":      true,
-	"tree":      true,
-	"process":   true,
-	"kv":        true,
-	"knowledge": true,
-	"memory":    true,
-}
-
 // ToolCall represents a pending tool call from the LLM.
 type ToolCall struct {
 	ID    string // tool_use_id
@@ -52,11 +38,17 @@ type ToolBatch struct {
 }
 
 // PartitionToolCalls groups consecutive tool calls into batches.
-// Consecutive read-only tools form concurrent batches; each write tool
-// gets its own serial batch.
-func PartitionToolCalls(calls []ToolCall) []ToolBatch {
+// Consecutive concurrency-safe tools form concurrent batches; each
+// non-safe tool gets its own serial batch.
+//
+// isSafe reports whether a tool name is safe for concurrent execution.
+// When nil, all tools are treated as serial.
+func PartitionToolCalls(calls []ToolCall, isSafe func(string) bool) []ToolBatch {
 	if len(calls) == 0 {
 		return nil
+	}
+	if isSafe == nil {
+		isSafe = func(string) bool { return false }
 	}
 
 	var batches []ToolBatch
@@ -73,7 +65,7 @@ func PartitionToolCalls(calls []ToolCall) []ToolBatch {
 	}
 
 	for _, call := range calls {
-		if readOnlyTools[call.Name] {
+		if isSafe(call.Name) {
 			currentReadBatch = append(currentReadBatch, call)
 		} else {
 			flushReads()
@@ -172,7 +164,3 @@ func ExecuteBatch(
 	return results
 }
 
-// IsReadOnlyTool returns true if the tool name is in the read-only set.
-func IsReadOnlyTool(name string) bool {
-	return readOnlyTools[name]
-}

@@ -9,8 +9,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -525,6 +529,18 @@ func (h *Handler) buildRunDeps() runDeps {
 		},
 		maxContinuations:    5,
 		continuationEnabled: true,
+
+		// chatport boundary: wire concrete autoreply implementations.
+		newTypingSignaler: func(onStart func()) chatport.TypingSignaler {
+			ctrl := typing.NewTypingController(typing.TypingControllerConfig{
+				OnStart:    onStart,
+				IntervalMs: 5000, // Telegram typing expires after 5s
+			})
+			return typing.NewFullTypingSignaler(ctrl, typing.TypingModeInstant, false)
+		},
+		sanitizeDraft:        reply.SanitizeDraftText,
+		parseReplyDirectives: reply.ParseReplyDirectives,
+		isTransientError:     autoreply.IsTransientHTTPError,
 	}
 	h.callbackMu.RUnlock()
 	return deps

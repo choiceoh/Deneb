@@ -58,7 +58,7 @@ var requiredMethods = []string{
 	"sessions.send",
 	"sessions.steer",
 
-	// Channel events (channels.start/stop/restart are conditional on Telegram config).
+	// Telegram events (telegram.start/stop/restart are conditional on Telegram config).
 	"events.broadcast",
 	"subscribe.session",
 	"subscribe.session.messages",

@@ -572,8 +572,8 @@ func execToolSchema() map[string]any {
 			},
 			"timeout": map[string]any{
 				"type":        "number",
-				"description": "Timeout in seconds (default: 30, max: 600)",
-				"default":     30,
+				"description": "Timeout in seconds (default: 60, max: 600)",
+				"default":     60,
 				"minimum":     1,
 				"maximum":     600,
 			},
@@ -1271,7 +1271,7 @@ func batchReadToolSchema() map[string]any {
 					"required": []string{"file_path"},
 				},
 				"minItems": 1,
-				"maxItems": 20,
+				"maxItems": 40,
 			},
 		},
 		"required": []string{"files"},
@@ -1656,7 +1656,32 @@ func continueRunToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Brief description of remaining work for the next continuation run",
 			},
+			"progress_summary": map[string]any{
+				"type":        "string",
+				"description": "Summary of what was accomplished in this run (sent to user as progress report)",
+			},
 		},
-		"required": []string{"reason"},
+		"required": []string{"reason", "progress_summary"},
+	}
+}
+
+func fetchToolsToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"names": map[string]any{
+				"type":        "array",
+				"description": "Exact tool names to activate (from the deferred tools list)",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"minItems": 1,
+				"maxItems": 10,
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Keyword search to find matching deferred tools (alternative to names)",
+			},
+		},
 	}
 }

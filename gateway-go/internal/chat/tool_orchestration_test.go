@@ -7,9 +7,18 @@ import (
 	"time"
 )
 
+// testConcurrencySafe mirrors the original hardcoded read-only set for tests.
+var testConcurrencySafe = map[string]bool{
+	"read": true, "grep": true, "glob": true, "find": true,
+	"tree": true, "process": true, "kv": true, "knowledge": true,
+	"memory": true,
+}
+
+func testIsSafe(name string) bool { return testConcurrencySafe[name] }
+
 func TestPartitionToolCalls(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
-		batches := PartitionToolCalls(nil)
+		batches := PartitionToolCalls(nil, testIsSafe)
 		if len(batches) != 0 {
 			t.Error("expected empty")
 		}
@@ -21,7 +30,7 @@ func TestPartitionToolCalls(t *testing.T) {
 			{ID: "2", Name: "grep"},
 			{ID: "3", Name: "glob"},
 		}
-		batches := PartitionToolCalls(calls)
+		batches := PartitionToolCalls(calls, testIsSafe)
 		if len(batches) != 1 {
 			t.Fatalf("expected 1 batch, got %d", len(batches))
 		}
@@ -37,10 +46,10 @@ func TestPartitionToolCalls(t *testing.T) {
 		calls := []ToolCall{
 			{ID: "1", Name: "read"},
 			{ID: "2", Name: "grep"},
-			{ID: "3", Name: "edit"},   // write — breaks the batch
+			{ID: "3", Name: "edit"}, // write — breaks the batch
 			{ID: "4", Name: "read"},
 		}
-		batches := PartitionToolCalls(calls)
+		batches := PartitionToolCalls(calls, testIsSafe)
 		if len(batches) != 3 {
 			t.Fatalf("expected 3 batches, got %d", len(batches))
 		}
@@ -60,13 +69,29 @@ func TestPartitionToolCalls(t *testing.T) {
 			{ID: "1", Name: "edit"},
 			{ID: "2", Name: "exec"},
 		}
-		batches := PartitionToolCalls(calls)
+		batches := PartitionToolCalls(calls, testIsSafe)
 		if len(batches) != 2 {
 			t.Fatalf("expected 2 batches, got %d", len(batches))
 		}
 		for _, b := range batches {
 			if b.Concurrent {
 				t.Error("write batches should not be concurrent")
+			}
+		}
+	})
+
+	t.Run("nil checker treats all as serial", func(t *testing.T) {
+		calls := []ToolCall{
+			{ID: "1", Name: "read"},
+			{ID: "2", Name: "grep"},
+		}
+		batches := PartitionToolCalls(calls, nil)
+		if len(batches) != 2 {
+			t.Fatalf("expected 2 serial batches, got %d", len(batches))
+		}
+		for _, b := range batches {
+			if b.Concurrent {
+				t.Error("nil checker should produce serial batches")
 			}
 		}
 	})

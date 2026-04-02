@@ -17,23 +17,13 @@ import (
 
 // buildThinkingConfig maps a ThinkLevel to the corresponding llm.ThinkingConfig.
 // Returns nil for ThinkOff or unset, which disables extended thinking.
+// Token budgets are defined in types.ThinkLevel.BudgetTokens() (single source of truth).
 func buildThinkingConfig(level types.ThinkLevel) *llm.ThinkingConfig {
-	switch level {
-	case types.ThinkMinimal:
-		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 1024}
-	case types.ThinkLow:
-		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
-	case types.ThinkMedium:
-		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 10240}
-	case types.ThinkHigh:
-		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
-	case types.ThinkXHigh:
-		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 65536}
-	case types.ThinkAdaptive:
-		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
-	default:
+	budget := level.BudgetTokens()
+	if budget <= 0 {
 		return nil
 	}
+	return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: budget}
 }
 
 // thinkingStreamer wraps an LLMStreamer to inject a ThinkingConfig into every request.
@@ -91,6 +81,9 @@ func marshalInput(input map[string]any) json.RawMessage {
 	if input == nil {
 		return nil
 	}
-	raw, _ := json.Marshal(input)
+	raw, err := json.Marshal(input)
+	if err != nil {
+		return []byte("{}")
+	}
 	return raw
 }

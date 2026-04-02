@@ -77,7 +77,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
             return FFI_ERR_INPUT_TOO_LARGE;
         }
         let handle = crate::compaction::handle::compaction_sweep_new(
-            config_str.to_string(),
+            config_str,
             conversation_id as u32,
             token_budget as u32,
             force != 0,
@@ -142,7 +142,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
             Ok(s) => s,
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
-        let json = crate::compaction::handle::compaction_sweep_step(handle, resp_str.to_string());
+        let json = crate::compaction::handle::compaction_sweep_step(handle, resp_str);
         ffi_write_bytes(out_slice, json.as_bytes())
     })
 }

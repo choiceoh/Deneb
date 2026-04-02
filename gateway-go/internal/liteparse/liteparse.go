@@ -113,6 +113,15 @@ func Parse(ctx context.Context, data []byte, fileName string) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		// Return partial output if available — better than nothing for large docs
+		// that partially succeed before hitting an error.
+		partial := strings.TrimSpace(stdout.String())
+		if partial != "" {
+			if len(partial) > maxOutputBytes {
+				partial = partial[:maxOutputBytes] + "\n\n[... 텍스트가 너무 길어 잘렸습니다]"
+			}
+			return partial, nil
+		}
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg == "" {
 			errMsg = err.Error()

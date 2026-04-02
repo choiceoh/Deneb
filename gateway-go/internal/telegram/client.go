@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"mime/multipart"
 	"net/http"
 	"strings"
@@ -510,11 +509,7 @@ func retryDelay(attempt int, err error) time.Duration {
 	if isAPIError(err, &apiErr) && apiErr.RetryAfter > 0 {
 		return time.Duration(apiErr.RetryAfter) * time.Second
 	}
-	delay := time.Duration(float64(defaultRetryBase) * math.Pow(2, float64(attempt-1)))
-	if delay > defaultRetryMax {
-		delay = defaultRetryMax
-	}
-	return delay
+	return httpretry.Backoff{Base: defaultRetryBase, Max: defaultRetryMax}.Delay(attempt)
 }
 
 // isAPIError checks if err is or wraps an *APIError.

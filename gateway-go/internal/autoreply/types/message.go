@@ -1,57 +1,75 @@
 package types
 
-// MsgContext represents the inbound message context (mirrors TS MsgContext).
-type MsgContext struct {
-	Body              string
-	BodyForAgent      string
+// SessionOrigin holds routing/session fields shared between MsgContext and SessionState.
+// Embedded in both to eliminate field duplication (DRY).
+type SessionOrigin struct {
+	SessionKey string
+	Channel    string
+	AccountID  string
+	ThreadID   string
+	IsGroup    bool
+}
+
+// MediaContext holds media attachment fields for inbound messages.
+// Supports both single-file (MediaPath/MediaUrl) and multi-file (MediaPaths/MediaUrls)
+// patterns with parallel MediaTypes array for per-file MIME types.
+type MediaContext struct {
+	MediaPath       string
+	MediaPaths      []string // multiple media file paths
+	MediaUrl        string
+	MediaUrls       []string // multiple media URLs
+	MediaType       string
+	MediaTypes      []string // per-file media types (parallel to MediaPaths/MediaUrls)
+	MediaRemoteHost string   // remote host for SCP-based media staging
+}
+
+// SenderInfo holds metadata about the message sender.
+type SenderInfo struct {
+	SenderID      string
+	SenderName    string
+	ForwardedFrom string
+	WasMentioned  bool
+	ChatType      string // "direct", "group", "supergroup", "channel"
+}
+
+// CommandControl holds command processing state set during inbound dispatch.
+type CommandControl struct {
 	CommandBody       string
-	BodyForCommands   string
-	RawBody           string
-	From              string
-	To                string
-	SessionKey        string
-	MessageSid        string
-	ReplyToID         string
-	MediaPath         string
-	MediaPaths        []string // multiple media file paths
-	MediaUrl          string
-	MediaUrls         []string // multiple media URLs
-	MediaType         string
-	MediaTypes        []string // per-file media types (parallel to MediaPaths/MediaUrls)
-	MediaRemoteHost   string   // remote host for SCP-based media staging
-	Transcript        string
-	WasMentioned      bool
 	CommandAuthorized bool
-	CommandSource     string // "text" or "native"
-	Channel           string
-	AccountID         string
-	ThreadID          string
-	IsGroup           bool
-	ChatType          string // "direct", "group", "supergroup", "channel"
-	SenderID          string
-	SenderName        string
-	ForwardedFrom     string
+	CommandSource     string // "text", "native", or "inline"
+}
+
+// MsgContext represents the inbound message context (mirrors TS MsgContext).
+// Fields are grouped by concern via embedded structs; promoted field access
+// (e.g. msg.SessionKey, msg.MediaPath) works unchanged at all read sites.
+type MsgContext struct {
+	// Message content: body variants for different processing stages.
+	Body            string
+	BodyForAgent    string
+	BodyForCommands string
+	RawBody         string
+	From            string
+	To              string
+	MessageSid      string
+	ReplyToID       string
+
+	SessionOrigin  // routing: SessionKey, Channel, AccountID, ThreadID, IsGroup
+	MediaContext   // attachments: MediaPath(s), MediaUrl(s), MediaType(s), MediaRemoteHost
+	SenderInfo     // sender: SenderID, SenderName, ForwardedFrom, WasMentioned, ChatType
+	CommandControl // command: CommandBody, CommandAuthorized, CommandSource
 }
 
 // TemplateContext provides agent execution context for system prompt injection.
 type TemplateContext struct {
-	SessionKey string
-	AgentID    string
-	Channel    string
-	IsGroup    bool
-	MediaPath  string
-	MediaPaths []string
-	MediaUrl   string
-	MediaUrls  []string
+	AgentID string
+	SessionOrigin
+	MediaContext
 }
 
 // BlockReplyContext provides context for block-level reply delivery.
 type BlockReplyContext struct {
-	SessionKey string
-	Channel    string
-	To         string
-	AccountID  string
-	ThreadID   string
+	To string
+	SessionOrigin
 }
 
 // ModelSelectedContext tracks the resolved model for a reply.
