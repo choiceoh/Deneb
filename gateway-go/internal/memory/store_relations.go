@@ -18,6 +18,21 @@ const (
 	RelationRelated     = "related"
 )
 
+// validRelationTypes is the set of allowed relation_type values matching the
+// SQLite CHECK constraint on fact_relations.
+var validRelationTypes = map[string]bool{
+	RelationEvolves:     true,
+	RelationContradicts: true,
+	RelationSupports:    true,
+	RelationCauses:      true,
+	RelationRelated:     true,
+}
+
+// isValidRelationType returns true if the relation type matches the CHECK constraint.
+func isValidRelationType(rt string) bool {
+	return validRelationTypes[rt]
+}
+
 // FactRelation represents a directed edge between two facts.
 type FactRelation struct {
 	ID           int64     `json:"id"`
@@ -169,6 +184,11 @@ func (s *Store) GetRelationChain(ctx context.Context, factID int64, relationType
 // Called from post-processing after fact insertion. Best-effort: errors are logged, not fatal.
 func (s *Store) resolveRelations(ctx context.Context, newFactID int64, ef ExtractedFact, logger *slog.Logger) {
 	if ef.RelationType == "" {
+		return
+	}
+	if !isValidRelationType(ef.RelationType) {
+		logger.Debug("resolve relation: invalid relation_type from LLM, skipping",
+			"relation_type", ef.RelationType, "fact_id", newFactID)
 		return
 	}
 
