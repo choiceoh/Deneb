@@ -52,10 +52,7 @@ func MemoryBuildFtsQuery(raw string) (string, error) {
 		return "", nil
 	}
 
-	initialSize := len(raw) * 3
-	if initialSize < 4096 {
-		initialSize = 4096
-	}
+	initialSize := initialBufSize(len(raw), 3, 4096)
 
 	rawPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(raw)))
 	data, err := ffiCallWithGrow("memory_build_fts_query", initialSize,
@@ -92,11 +89,8 @@ func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
 
 	// Pre-estimate output size: merged results are typically 3-5x input size
 	// due to JSON structure expansion. Use 4x with 16 KB floor to minimize
-	// grow-and-retry FFI round trips. ffiCallWithGrow caps this at maxGrowBufSize.
-	initialSize := len(paramsJSON) * 4
-	if initialSize < 16384 {
-		initialSize = 16384
-	}
+	// grow-and-retry FFI round trips.
+	initialSize := initialBufSize(len(paramsJSON), 4, 16384)
 
 	paramsPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(paramsJSON)))
 	data, err := ffiCallWithGrow("memory_merge_hybrid_results", initialSize,
@@ -120,10 +114,7 @@ func MemoryExtractKeywords(query string) ([]string, error) {
 		return nil, nil
 	}
 
-	initialSize := len(query) * 4
-	if initialSize < 4096 {
-		initialSize = 4096
-	}
+	initialSize := initialBufSize(len(query), 4, 4096)
 
 	queryPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(query)))
 	data, err := ffiCallWithGrow("memory_extract_keywords", initialSize,
