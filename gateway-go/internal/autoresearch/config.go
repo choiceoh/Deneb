@@ -26,13 +26,39 @@ type ConstantDef struct {
 	File string `json:"file"`
 	// Pattern is a regex with exactly one capture group for the constant's value.
 	// Example: `lr\s*=\s*([\d.]+)` captures "0.001" from "lr = 0.001".
-	Pattern string `json:"pattern"`
+	// When empty, a pattern is auto-generated from Name + Type so that agents
+	// don't need to write regex manually.
+	Pattern string `json:"pattern,omitempty"`
 	// Type is the value type: "float", "int", or "string".
 	Type string `json:"type"`
 	// Min is an optional lower bound (float/int types only).
 	Min *float64 `json:"min,omitempty"`
 	// Max is an optional upper bound (float/int types only).
 	Max *float64 `json:"max,omitempty"`
+}
+
+// EffectivePattern returns the regex pattern for this constant. If Pattern is
+// set, it is returned as-is. Otherwise a robust pattern is auto-generated from
+// Name and Type, tolerating any leading whitespace (tabs, spaces) and flexible
+// spacing around the `=` sign.
+func (cd ConstantDef) EffectivePattern() string {
+	if cd.Pattern != "" {
+		return cd.Pattern
+	}
+	// Escape the name for regex safety (handles names with special chars).
+	escaped := regexp.QuoteMeta(cd.Name)
+	// Build a capture group appropriate for the value type.
+	var capture string
+	switch cd.Type {
+	case "int":
+		capture = `(-?\d+)`
+	case "string":
+		capture = `"([^"]*)"`
+	default: // float
+		capture = `(-?[\d.]+(?:e[+-]?\d+)?)`
+	}
+	// Allow any leading whitespace and flexible spacing around `=`.
+	return `\b` + escaped + `\s*=\s*` + capture
 }
 
 // OverrideSet is the persisted set of best-found override values.
@@ -268,7 +294,8 @@ func (c *Config) Validate() error {
 		for _, tf := range c.TargetFiles {
 			targetSet[tf] = true
 		}
-		for i, cd := range c.Constants {
+		for i := range c.Constants {
+			cd := &c.Constants[i]
 			if cd.Name == "" {
 				return fmt.Errorf("constants[%d]: name is required", i)
 			}
@@ -278,16 +305,21 @@ func (c *Config) Validate() error {
 			if !targetSet[cd.File] {
 				return fmt.Errorf("constants[%d] (%s): file %q not in target_files", i, cd.Name, cd.File)
 			}
-			if cd.Pattern == "" {
-				return fmt.Errorf("constants[%d] (%s): pattern is required", i, cd.Name)
-			}
-			if _, err := regexp.Compile(cd.Pattern); err != nil {
-				return fmt.Errorf("constants[%d] (%s): invalid pattern: %w", i, cd.Name, err)
+			// Default type to "float" when empty — most constants are floats.
+			if cd.Type == "" {
+				cd.Type = "float"
 			}
 			switch cd.Type {
 			case "float", "int", "string":
 			default:
 				return fmt.Errorf("constants[%d] (%s): type must be float, int, or string, got %q", i, cd.Name, cd.Type)
+			}
+			// Auto-fill Pattern from Name + Type when empty.
+			if cd.Pattern == "" {
+				cd.Pattern = cd.EffectivePattern()
+			}
+			if _, err := regexp.Compile(cd.Pattern); err != nil {
+				return fmt.Errorf("constants[%d] (%s): invalid pattern: %w", i, cd.Name, err)
 			}
 		}
 	}

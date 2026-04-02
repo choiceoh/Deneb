@@ -3,6 +3,7 @@ package autoresearch
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -335,5 +336,136 @@ func TestReplaceCapture(t *testing.T) {
 	want := "lr = 0.002  # learning rate\nbatch_size = 32\n"
 	if result != want {
 		t.Errorf("got:\n%s\nwant:\n%s", result, want)
+	}
+}
+
+func TestReplaceCaptureTabIndented(t *testing.T) {
+	// Simulates Go const block with tab indentation.
+	content := "const (\n\tweightHybrid       = 0.40\n\tweightImportance   = 0.25\n)\n"
+
+	// Agent writes pattern without leading \t — should still work via fallback.
+	result, err := replaceCapture(content, `weightHybrid\s*=\s*([\d.]+)`, "0.55")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result, "0.55") {
+		t.Errorf("expected 0.55 in result:\n%s", result)
+	}
+	if !strings.Contains(result, "\tweightHybrid") {
+		t.Errorf("expected tab indentation preserved:\n%s", result)
+	}
+
+	// Agent writes pattern with explicit \t — should also work.
+	result2, err := replaceCapture(content, `\tweightImportance\s*=\s*([\d.]+)`, "0.30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result2, "0.30") {
+		t.Errorf("expected 0.30 in result:\n%s", result2)
+	}
+}
+
+func TestEffectivePatternAutoGenerate(t *testing.T) {
+	cd := ConstantDef{Name: "weightHybrid", Type: "float"}
+	pattern := cd.EffectivePattern()
+
+	// Should match tab-indented Go constants.
+	content := "const (\n\tweightHybrid       = 0.40\n)\n"
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(content)
+	if len(m) < 2 {
+		t.Fatalf("auto-generated pattern %q didn't match content", pattern)
+	}
+	if m[1] != "0.40" {
+		t.Errorf("captured %q, want %q", m[1], "0.40")
+	}
+}
+
+func TestEffectivePatternAutoGenerateInt(t *testing.T) {
+	cd := ConstantDef{Name: "ftsAndMinResults", Type: "int"}
+	pattern := cd.EffectivePattern()
+
+	content := "\tftsAndMinResults      = 3\n"
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(content)
+	if len(m) < 2 {
+		t.Fatalf("auto-generated pattern %q didn't match", pattern)
+	}
+	if m[1] != "3" {
+		t.Errorf("captured %q, want %q", m[1], "3")
+	}
+}
+
+func TestExtractConstantsAutoPattern(t *testing.T) {
+	dir := t.TempDir()
+	content := "const (\n\tweightHybrid       = 0.40\n\tweightImportance   = 0.25\n)\n"
+	if err := os.WriteFile(filepath.Join(dir, "params.go"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// No Pattern specified — should auto-generate and work.
+	constants := []ConstantDef{
+		{Name: "weightHybrid", File: "params.go", Type: "float"},
+		{Name: "weightImportance", File: "params.go", Type: "float"},
+	}
+	vals, err := ExtractConstants(dir, constants)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vals["weightHybrid"] != "0.40" {
+		t.Errorf("weightHybrid = %q, want %q", vals["weightHybrid"], "0.40")
+	}
+	if vals["weightImportance"] != "0.25" {
+		t.Errorf("weightImportance = %q, want %q", vals["weightImportance"], "0.25")
+	}
+}
+
+func TestValidateAutoFillPattern(t *testing.T) {
+	cfg := Config{
+		TargetFiles:     []string{"params.go"},
+		MetricCmd:       "go test ./...",
+		MetricName:      "score",
+		MetricDirection: "maximize",
+		BranchTag:       "test",
+		Constants: []ConstantDef{
+			{Name: "weightHybrid", File: "params.go", Type: "float"},
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validation failed: %v", err)
+	}
+	// Pattern should be auto-filled.
+	if cfg.Constants[0].Pattern == "" {
+		t.Error("Pattern should be auto-filled after Validate()")
+	}
+}
+
+func TestValidateAutoFillType(t *testing.T) {
+	cfg := Config{
+		TargetFiles:     []string{"params.go"},
+		MetricCmd:       "go test ./...",
+		MetricName:      "score",
+		MetricDirection: "maximize",
+		BranchTag:       "test",
+		Constants: []ConstantDef{
+			{Name: "weightHybrid", File: "params.go"},
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validation failed: %v", err)
+	}
+	// Type should default to "float".
+	if cfg.Constants[0].Type != "float" {
+		t.Errorf("Type = %q, want %q", cfg.Constants[0].Type, "float")
+	}
+}
+
+func TestPatternVariantsFallback(t *testing.T) {
+	// Pattern with explicit \t that doesn't match non-tab content.
+	// The fallback with \s* should still work.
+	content := "  weightHybrid = 0.40\n"
+	_, err := findWithFallback(content, `\tweightHybrid\s*=\s*([\d.]+)`)
+	if err != nil {
+		t.Fatalf("fallback should handle \\t -> \\s* relaxation: %v", err)
 	}
 }
