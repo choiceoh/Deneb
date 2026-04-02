@@ -9,7 +9,6 @@ on:
   pull_request:
     paths:
       - "proto/**"
-      - "core-rs/core/src/ffi_utils.rs"
       - "core-rs/core/build.rs"
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
@@ -18,14 +17,12 @@ on:
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
       - "scripts/proto-gen.sh"
-      - "scripts/gen-ffi-errors.sh"
-      - "scripts/gen-proto-error-codes.sh"
+      - "scripts/gen-error-codes.sh"
       - "scripts/error-code-sync-check.sh"
   push:
     branches: [main]
     paths:
       - "proto/**"
-      - "core-rs/core/src/ffi_utils.rs"
       - "core-rs/core/build.rs"
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
@@ -34,8 +31,7 @@ on:
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
       - "scripts/proto-gen.sh"
-      - "scripts/gen-ffi-errors.sh"
-      - "scripts/gen-proto-error-codes.sh"
+      - "scripts/gen-error-codes.sh"
       - "scripts/error-code-sync-check.sh"
 
 concurrency:
@@ -53,7 +49,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       proto: ${{ steps.filter.outputs.proto }}
-      ffi-gen: ${{ steps.filter.outputs.ffi-gen }}
       tool-schemas: ${{ steps.filter.outputs.tool-schemas }}
       model-caps: ${{ steps.filter.outputs.model-caps }}
     steps:
@@ -69,11 +64,8 @@ jobs:
               - "core-rs/core/Cargo.toml"
               - "core-rs/Cargo.toml"
               - "scripts/proto-gen.sh"
-              - "scripts/gen-proto-error-codes.sh"
+              - "scripts/gen-error-codes.sh"
               - "scripts/error-code-sync-check.sh"
-            ffi-gen:
-              - "core-rs/core/src/ffi_utils.rs"
-              - "scripts/gen-ffi-errors.sh"
             tool-schemas:
               - "gateway-go/internal/chat/tool_schemas.yaml"
               - "gateway-go/cmd/tool-schema-gen/**"
@@ -83,7 +75,7 @@ jobs:
 
 # ── Domain check jobs ──────────────────────────────────────────────────────
 
-  # proto → Go types + proto → Rust types + gateway.proto → error_codes.rs
+  # proto → Go types + Rust types + error codes (ErrorCode + FfiErrorCode)
   proto:
     name: proto types + error codes
     needs: changes
@@ -115,20 +107,8 @@ jobs:
       - name: proto generate check (proto → Go + Rust)
         run: make proto-check
 
-      - name: error code 3-way sync check (gateway.proto → error_codes.rs)
-        run: ./scripts/error-code-sync-check.sh
-
-  # ffi_utils.rs → ffi_error_codes_gen.go
-  ffi-gen:
-    name: ffi error codes
-    needs: changes
-    if: needs.changes.outputs.ffi-gen == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: ffi error codes check (ffi_utils.rs → ffi_error_codes_gen.go)
-        run: make ffi-gen-check
+      - name: error codes check (gateway.proto → Rust + Go)
+        run: make error-codes-gen-check
 
   # tool_schemas.yaml → tool_schemas_gen.go
   tool-schemas:
