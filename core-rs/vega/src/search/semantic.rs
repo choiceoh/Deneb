@@ -5,6 +5,7 @@
 
 use rusqlite::Connection;
 
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 use super::fts_search::ChunkRow;
@@ -107,9 +108,13 @@ pub fn semantic_search_with_vec(
     // in parallel over (index, embedding) pairs, then build results sequentially.
     let embeddings: Vec<Vec<f32>> = all_rows.iter().map(|row| blob_to_f32_vec(&row.1)).collect();
 
-    // Parallel cosine similarity (SIMD-accelerated, leverages DGX Spark cores).
-    let scores: Vec<(usize, f64)> = (0..embeddings.len())
-        .into_par_iter()
+    // Cosine similarity (SIMD-accelerated; parallel on DGX Spark when enabled).
+    #[cfg(feature = "parallel")]
+    let iter = (0..embeddings.len()).into_par_iter();
+    #[cfg(not(feature = "parallel"))]
+    let iter = 0..embeddings.len();
+
+    let scores: Vec<(usize, f64)> = iter
         .filter_map(|i: usize| {
             let chunk_vec: &Vec<f32> = &embeddings[i];
             if chunk_vec.len() != query_vec.len() {

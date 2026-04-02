@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
@@ -34,21 +33,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 		s.logger.Info("unified memory store initialized")
 
 		if auroraStore, aErr := unifiedStore.NewAuroraStoreWithLogger(s.logger); aErr != nil {
-			s.logger.Warn("aurora store unavailable from unified db, compaction will use legacy fallback", "error", aErr)
+			s.logger.Warn("aurora store unavailable from unified db", "error", aErr)
 		} else {
 			chatCfg.AuroraStore = auroraStore
 			s.logger.Info("aurora compaction store initialized (unified)")
-		}
-	}
-
-	// Legacy fallback for Aurora compaction.
-	if chatCfg.AuroraStore == nil {
-		auroraStore, aErr := aurora.NewStore(aurora.DefaultStoreConfig(), s.logger)
-		if aErr != nil {
-			s.logger.Warn("aurora store unavailable, compaction will use legacy fallback", "error", aErr)
-		} else {
-			chatCfg.AuroraStore = auroraStore
-			s.logger.Info("aurora compaction store initialized")
 		}
 	}
 
@@ -63,12 +51,11 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
 
-	// Structured memory store (Honcho-style).
+	// Structured memory store (Honcho-style) — always from unified DB.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
-	dbPath := filepath.Join(home, ".deneb", "memory.db")
 	memStore := chatCfg.MemoryStore
 	if memStore == nil && unifiedStore != nil {
 		unifiedMemStore, uErr := unifiedStore.NewMemoryStore()
@@ -78,16 +65,6 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 			memStore = unifiedMemStore
 			chatCfg.MemoryStore = memStore
 			s.logger.Info("aurora-memory: structured store initialized (unified)")
-		}
-	}
-	if memStore == nil {
-		legacyStore, mErr := memory.NewStore(dbPath)
-		if mErr != nil {
-			s.logger.Warn("memory store unavailable", "error", mErr)
-		} else {
-			memStore = legacyStore
-			chatCfg.MemoryStore = memStore
-			s.logger.Info("aurora-memory: structured store initialized", "db", dbPath)
 		}
 	}
 	if memStore == nil {
