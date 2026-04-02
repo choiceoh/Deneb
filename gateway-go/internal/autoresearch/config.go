@@ -72,6 +72,10 @@ type Params struct {
 	PlateauThreshold int `json:"plateau_threshold,omitempty"`
 	// DefaultTimeBudgetSec is the fallback time budget when Config.TimeBudgetSec is 0.
 	DefaultTimeBudgetSec int `json:"default_time_budget_sec,omitempty"`
+	// MaxIterations is the total number of iterations to run before auto-stopping.
+	// When reached, the runner stops and sends a completion report with chart.
+	// 0 means unlimited (manual stop only). Default: 30.
+	MaxIterations int `json:"max_iterations,omitempty"`
 }
 
 // DefaultParams returns the canonical default values for all tunable parameters.
@@ -92,6 +96,7 @@ func DefaultParams() Params {
 		TrendWindowSize:        10,
 		PlateauThreshold:       5,
 		DefaultTimeBudgetSec:   300,
+		MaxIterations:          30,
 	}
 }
 
@@ -141,6 +146,14 @@ func (p *Params) applyDefaults() {
 	}
 	if p.DefaultTimeBudgetSec <= 0 {
 		p.DefaultTimeBudgetSec = d.DefaultTimeBudgetSec
+	}
+	// MaxIterations: 0 means "not set" (JSON omitempty), default to 30.
+	// Negative means unlimited (explicit opt-out).
+	if p.MaxIterations == 0 {
+		p.MaxIterations = d.MaxIterations
+	}
+	if p.MaxIterations < 0 {
+		p.MaxIterations = 0
 	}
 
 	// Sanity: stuck thresholds must be in ascending order.

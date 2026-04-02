@@ -20,6 +20,9 @@ import (
 // Notifier delivers progress updates to the user (e.g., via Telegram).
 type Notifier interface {
 	Notify(ctx context.Context, message string) error
+	// NotifyPhoto sends a PNG image with an optional caption.
+	// Implementations that don't support photos should fall back to Notify.
+	NotifyPhoto(ctx context.Context, png []byte, caption string) error
 }
 
 // RunBaseline executes the metric command once to establish a baseline value.
@@ -203,39 +206,114 @@ func (r *Runner) Stop() {
 	r.logger.Info("autoresearch stopped")
 }
 
-// loop is the main experiment loop. It runs until ctx is cancelled.
+// loop is the main experiment loop. It runs until ctx is cancelled or
+// MaxIterations is reached (if > 0). On exit — regardless of reason
+// (max iterations, manual stop, context cancel, panic) — it sends a
+// completion report with summary and chart to the notifier.
 func (r *Runner) loop(ctx context.Context, workdir string) {
+	stopReason := "stopped"
+
 	defer func() {
 		if rv := recover(); rv != nil {
 			r.logger.Error("autoresearch panic recovered", "panic", rv)
+			stopReason = fmt.Sprintf("crashed (panic: %v)", rv)
 		}
 		r.mu.Lock()
 		r.running = false
 		r.mu.Unlock()
+
+		// Always send a completion report on exit, regardless of stop reason.
+		r.sendCompletionReport(workdir, stopReason)
 	}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			r.notify(context.Background(), "Autoresearch stopped.")
+			stopReason = "manually stopped"
 			return
 		default:
+		}
+
+		// Check if we've reached the max iteration limit.
+		if r.params.MaxIterations > 0 {
+			cfg, err := LoadConfig(workdir)
+			if err == nil && cfg.TotalIterations >= r.params.MaxIterations {
+				r.logger.Info("autoresearch reached max iterations",
+					"total", cfg.TotalIterations, "max", r.params.MaxIterations)
+				stopReason = fmt.Sprintf("completed (%d/%d iterations)", cfg.TotalIterations, r.params.MaxIterations)
+				return
+			}
 		}
 
 		err := r.runOneIteration(ctx, workdir)
 		if err != nil {
 			if ctx.Err() != nil {
-				return // context cancelled, exit cleanly
+				stopReason = "cancelled"
+				return
 			}
 			r.logger.Error("autoresearch iteration failed", "error", err)
 			// Brief pause before retrying after error.
 			select {
 			case <-ctx.Done():
+				stopReason = "cancelled"
 				return
 			case <-time.After(time.Duration(r.params.RetryPauseSec) * time.Second):
 			}
 		}
 	}
+}
+
+// sendCompletionReport generates and sends the final experiment summary
+// and chart to the notifier (Telegram). Called from the loop's defer on
+// any exit — max iterations, manual stop, cancel, or panic.
+func (r *Runner) sendCompletionReport(workdir string, reason string) {
+	ctx := context.Background()
+
+	cfg, err := LoadConfig(workdir)
+	if err != nil {
+		r.notify(ctx, fmt.Sprintf("Autoresearch %s (no config found for report).", reason))
+		return
+	}
+
+	// Skip report if no iterations were run.
+	if cfg.TotalIterations == 0 {
+		r.notify(ctx, fmt.Sprintf("Autoresearch %s (no iterations completed).", reason))
+		return
+	}
+
+	// Send text summary.
+	summary := Summary(workdir, cfg)
+	r.notify(ctx, fmt.Sprintf("Autoresearch %s\n\n%s", reason, summary))
+
+	// Generate and send chart.
+	rows, err := ParseResults(workdir)
+	if err != nil || len(rows) == 0 {
+		r.logger.Warn("skipping chart: no results to render", "error", err)
+		return
+	}
+	png, err := RenderChart(rows, cfg)
+	if err != nil {
+		r.logger.Error("failed to render completion chart", "error", err)
+		return
+	}
+	// Also save to disk for later reference.
+	if _, saveErr := SaveChart(workdir, rows, cfg); saveErr != nil {
+		r.logger.Warn("failed to save chart to disk", "error", saveErr)
+	}
+
+	caption := fmt.Sprintf("%s — %d iterations", cfg.MetricName, cfg.TotalIterations)
+	if cfg.BestMetric != nil {
+		caption = fmt.Sprintf("%s — %d iterations, best: %.6f",
+			cfg.MetricName, cfg.TotalIterations, *cfg.BestMetric)
+		if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
+			improvement := (*cfg.BaselineMetric - *cfg.BestMetric) / *cfg.BaselineMetric * 100
+			if cfg.MetricDirection == "maximize" {
+				improvement = (*cfg.BestMetric - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+			}
+			caption += fmt.Sprintf(" (%.2f%%)", improvement)
+		}
+	}
+	r.notifyPhoto(ctx, png, caption)
 }
 
 // runOneIteration performs a single modify-verify-decide cycle.
@@ -950,6 +1028,17 @@ func (r *Runner) notify(ctx context.Context, msg string) {
 	if n != nil {
 		if err := n.Notify(ctx, msg); err != nil {
 			r.logger.Error("notification failed", "error", err)
+		}
+	}
+}
+
+func (r *Runner) notifyPhoto(ctx context.Context, png []byte, caption string) {
+	r.mu.Lock()
+	n := r.notifier
+	r.mu.Unlock()
+	if n != nil {
+		if err := n.NotifyPhoto(ctx, png, caption); err != nil {
+			r.logger.Error("photo notification failed", "error", err)
 		}
 	}
 }
