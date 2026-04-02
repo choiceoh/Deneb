@@ -20,6 +20,12 @@ var jsonToolCallRe = regexp.MustCompile(`(?s)\{"(?:name|type)":\s*"(?:function|t
 // <|python_tag|>..., <|function|>..., or similar special tokens.
 var pipeFunctionRe = regexp.MustCompile(`<\|(?:python_tag|function|tool_call)\|>[^\n]*(?:\n|$)`)
 
+// bracketToolCallRe matches [tool:NAME(ARGS)] patterns that the LLM may
+// mimic from session memory transcripts. Also matches the corresponding
+// [result → ...] lines.
+var bracketToolCallRe = regexp.MustCompile(`(?m)^\[tool:[a-z_]+\(.*\)\]\s*$`)
+var bracketResultRe = regexp.MustCompile(`(?m)^\[result → .*\]\s*$`)
+
 // StripLeakedToolCallMarkup removes leaked tool-call envelope text that should
 // stay internal. Handles multiple model-specific formats:
 //   - Llama-style: <function=name>...<arg_key>...<arg_value>...</tool_call>
@@ -51,6 +57,11 @@ func StripLeakedToolCallMarkup(text string) string {
 
 	// Strip model-specific special tokens.
 	trimmed = pipeFunctionRe.ReplaceAllString(trimmed, "")
+
+	// Strip [tool:NAME(ARGS)] and [result → ...] lines mimicked from
+	// session memory transcripts.
+	trimmed = bracketToolCallRe.ReplaceAllString(trimmed, "")
+	trimmed = bracketResultRe.ReplaceAllString(trimmed, "")
 
 	return strings.TrimSpace(trimmed)
 }

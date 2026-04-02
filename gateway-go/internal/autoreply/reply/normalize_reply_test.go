@@ -149,6 +149,21 @@ Done`,
 			in:   "<|python_tag|>exec(command='ls')\n파일 목록입니다.",
 			want: "파일 목록입니다.",
 		},
+		{
+			name: "removes bracket tool call from session memory format",
+			in:   "먼저 멈추고 확인한다.\n[tool:autoresearch({\"action\":\"stop\",\"workdir\":\"/home/choiceoh/Deneb\"})]\n완료.",
+			want: "먼저 멈추고 확인한다.\n\n완료.",
+		},
+		{
+			name: "removes bracket tool call with result",
+			in:   "확인합니다.\n[tool:read_file({\"path\":\"/tmp/x\"})]\n[result → file contents here]\n끝.",
+			want: "확인합니다.\n\n\n끝.",
+		},
+		{
+			name: "removes tool-only text",
+			in:   "[tool:autoresearch({\"action\":\"stop\",\"workdir\":\"/home/choiceoh/Deneb\"})]",
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -222,6 +237,11 @@ func TestSanitizeDraftText(t *testing.T) {
 			name: "preserves normal text",
 			in:   "PR을 확인하겠습니다.",
 			want: "PR을 확인하겠습니다.",
+		},
+		{
+			name: "strips bracket tool call and code block together",
+			in:   "확인해볼게\n[tool:exec({\"command\":\"git status\"})]\n```bash\ngit status\n```",
+			want: "확인해볼게",
 		},
 	}
 
