@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
@@ -190,6 +191,23 @@ func (s *Server) registerSessionRPCMethods() {
 			}
 			return roles, contents, nil
 		}
+	}
+
+	// Inject subagent completion results into parent session transcripts.
+	// When a subagent finishes, its output is appended as a system note to
+	// the parent session so the LLM sees what the subagent produced.
+	if s.acpDeps != nil && transcriptStore != nil {
+		projector := acp.NewACPProjector(s.acpDeps.Registry)
+		s.acpResultInjectionUnsub = acp.StartSubagentResultInjection(acp.ResultInjectionDeps{
+			Registry:   s.acpDeps.Registry,
+			Projector:  projector,
+			Sessions:   s.sessions,
+			Transcript: acp.TranscriptAppendFunc(func(sessionKey, text string) error {
+				msg := chat.NewTextChatMessage("system", text, 0)
+				return transcriptStore.Append(sessionKey, msg)
+			}),
+			Logger: s.logger,
+		})
 	}
 
 	// Chat, BTW, Exec, Aurora, cron wiring, and Telegram pipeline are

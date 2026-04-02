@@ -329,6 +329,9 @@ func (s *Server) doShutdown() error {
 	if s.acpLifecycleUnsub != nil {
 		s.acpLifecycleUnsub()
 	}
+	if s.acpResultInjectionUnsub != nil {
+		s.acpResultInjectionUnsub()
+	}
 	if s.snapshotLifecycleUnsub != nil {
 		s.snapshotLifecycleUnsub()
 	}
