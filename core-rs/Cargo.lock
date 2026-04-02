@@ -159,17 +159,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deneb-agent-runtime"
-version = "0.1.0"
-dependencies = [
- "regex",
- "rustc-hash",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "deneb-core"
 version = "4.9.0"
 dependencies = [
