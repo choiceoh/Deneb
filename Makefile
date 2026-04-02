@@ -7,7 +7,7 @@
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-arm64 \
        deny machete \
-       test clean check fmt generate generate-check \
+       test clean check check/fast check-rust check-cli check-go fmt generate generate-check \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
        tool-schemas tool-schemas-check \
        model-caps model-caps-check \
@@ -192,8 +192,19 @@ test: rust-test go-test cli-test
 clean: rust-clean go-clean cli-clean
 	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: generate-check rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
+# Per-language check groups (used as parallel units).
+check-rust: rust-fmt rust-clippy rust-test
+check-cli: cli-fmt cli-clippy cli-test
+check-go: go-fmt go-vet go-test
+
+# Full check: generate-check first (sequential), then Rust/CLI/Go in parallel.
+check: generate-check
+	@$(MAKE) -j3 check-rust check-cli check-go
 	@echo "All checks passed"
+
+# Fast check: format + lint only (no tests). Good for pre-commit gate.
+check/fast: rust-fmt rust-clippy cli-fmt cli-clippy go-fmt go-vet
+	@echo "Fast checks passed (fmt + lint, no tests)"
 
 # Run all code generation pipelines in dependency order.
 generate: proto tool-schemas model-caps ffi-gen proto-error-codes-gen
@@ -315,7 +326,8 @@ info:
 	@echo "  make test       - Run Rust + Go + CLI tests"
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"
-	@echo "  make check      - Run all checks (Rust + Go + CLI)"
+	@echo "  make check      - Run all checks in parallel (Rust + Go + CLI)"
+	@echo "  make check/fast - Fast checks: fmt + lint only, no tests"
 	@echo "  make generate         - Run all code generation pipelines"
 	@echo "  make generate-check   - Verify all generated files (per domain, names failing group)"
 	@echo "  make tool-schemas-check  - Verify tool_schemas_gen.go is up to date"
