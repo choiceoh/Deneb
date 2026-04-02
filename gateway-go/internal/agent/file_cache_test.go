@@ -193,3 +193,144 @@ func TestFileCache_UpdateExisting(t *testing.T) {
 		t.Error("expected updated content")
 	}
 }
+
+func TestCheckStaleness_NeverRead(t *testing.T) {
+	fc := NewFileCache(10)
+	// File never cached → no staleness (first write is always allowed).
+	if err := fc.CheckStaleness("/tmp/never-read.go"); err != nil {
+		t.Errorf("expected nil for uncached file, got: %v", err)
+	}
+}
+
+func TestCheckStaleness_Fresh(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fresh.txt")
+	os.WriteFile(path, []byte("hello"), 0o644)
+
+	info, _ := os.Stat(path)
+	fc := NewFileCache(10)
+	fc.Set(path, &FileCacheEntry{
+		Path:        path,
+		MTime:       info.ModTime(),
+		Size:        info.Size(),
+		ContentHash: ContentHashOf([]byte("hello")),
+	})
+
+	if err := fc.CheckStaleness(path); err != nil {
+		t.Errorf("expected fresh file to pass staleness check, got: %v", err)
+	}
+}
+
+func TestCheckStaleness_Stale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stale.txt")
+	os.WriteFile(path, []byte("original"), 0o644)
+
+	info, _ := os.Stat(path)
+	fc := NewFileCache(10)
+	fc.Set(path, &FileCacheEntry{
+		Path:        path,
+		MTime:       info.ModTime(),
+		Size:        info.Size(),
+		ContentHash: ContentHashOf([]byte("original")),
+	})
+
+	// Modify the file externally.
+	time.Sleep(10 * time.Millisecond) // ensure mtime differs
+	os.WriteFile(path, []byte("modified externally"), 0o644)
+
+	err := fc.CheckStaleness(path)
+	if err == nil {
+		t.Fatal("expected staleness error for modified file")
+	}
+	if !containsSubstring(err.Error(), "modified since last read") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestCheckStaleness_MtimeChangedContentSame(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "synced.txt")
+	content := []byte("same content")
+	os.WriteFile(path, content, 0o644)
+
+	info, _ := os.Stat(path)
+	fc := NewFileCache(10)
+	fc.Set(path, &FileCacheEntry{
+		Path:        path,
+		MTime:       info.ModTime(),
+		Size:        info.Size(),
+		ContentHash: ContentHashOf(content),
+	})
+
+	// Rewrite with identical content (simulates cloud-sync mtime bump).
+	time.Sleep(10 * time.Millisecond)
+	os.WriteFile(path, content, 0o644)
+
+	// Mtime changed but content hash matches → should pass.
+	if err := fc.CheckStaleness(path); err != nil {
+		t.Errorf("expected cloud-sync false positive to pass, got: %v", err)
+	}
+}
+
+func TestUpdateAfterWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update.txt")
+	os.WriteFile(path, []byte("v1"), 0o644)
+
+	info, _ := os.Stat(path)
+	fc := NewFileCache(10)
+	fc.Set(path, &FileCacheEntry{
+		Path:        path,
+		MTime:       info.ModTime(),
+		Size:        info.Size(),
+		ContentHash: ContentHashOf([]byte("v1")),
+	})
+
+	// Write new content and update cache.
+	os.WriteFile(path, []byte("v2"), 0o644)
+	fc.UpdateAfterWrite(path)
+
+	// Staleness check should pass with the updated state.
+	if err := fc.CheckStaleness(path); err != nil {
+		t.Errorf("expected fresh after UpdateAfterWrite, got: %v", err)
+	}
+
+	// Verify the hash was updated.
+	entry := fc.Get(path)
+	if entry == nil {
+		t.Fatal("expected cache entry after update")
+	}
+	if entry.ContentHash != ContentHashOf([]byte("v2")) {
+		t.Error("content hash not updated")
+	}
+}
+
+func TestContentHashOf(t *testing.T) {
+	h1 := ContentHashOf([]byte("hello"))
+	h2 := ContentHashOf([]byte("hello"))
+	h3 := ContentHashOf([]byte("world"))
+
+	if h1 != h2 {
+		t.Error("identical content should produce identical hash")
+	}
+	if h1 == h3 {
+		t.Error("different content should produce different hash")
+	}
+	if h1 == 0 {
+		t.Error("hash should not be zero for non-empty content")
+	}
+}
+
+func containsSubstring(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

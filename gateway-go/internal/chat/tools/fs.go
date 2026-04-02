@@ -109,12 +109,13 @@ func ToolRead(defaultDir string) ToolFunc {
 		if useCache {
 			if info, statErr := os.Stat(path); statErr == nil && info.Size() <= fc.MaxEntrySize() {
 				fc.Set(path, &agent.FileCacheEntry{
-					Path:      path,
-					MTime:     info.ModTime(),
-					Size:      info.Size(),
-					Content:   output,
-					ReadAt:    time.Now(),
-					ReadCount: 1,
+					Path:        path,
+					MTime:       info.ModTime(),
+					Size:        info.Size(),
+					Content:     output,
+					ContentHash: agent.ContentHashOf(data),
+					ReadAt:      time.Now(),
+					ReadCount:   1,
 				})
 			}
 		}
@@ -261,7 +262,7 @@ func formatFunctionLines(displayPath string, lines []string, start, end int, fun
 // --- Write tool ---
 
 func ToolWrite(defaultDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath string `json:"file_path"`
 			Content  string `json:"content"`
@@ -275,6 +276,14 @@ func ToolWrite(defaultDir string) ToolFunc {
 
 		path := ResolvePath(p.FilePath, defaultDir)
 
+		// Staleness check: reject if the file changed since our last read.
+		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
+			if err := fc.CheckStaleness(path); err != nil {
+				return "", err
+			}
+			defer fc.UpdateAfterWrite(path)
+		}
+
 		if err := atomicfile.WriteFile(path, []byte(p.Content), nil); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
@@ -285,7 +294,7 @@ func ToolWrite(defaultDir string) ToolFunc {
 // --- Edit tool ---
 
 func ToolEdit(defaultDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath   string `json:"file_path"`
 			OldString  string `json:"old_string"`
@@ -305,6 +314,14 @@ func ToolEdit(defaultDir string) ToolFunc {
 		}
 
 		path := ResolvePath(p.FilePath, defaultDir)
+
+		// Staleness check: reject if the file changed since our last read.
+		fc := toolctx.FileCacheFromContext(ctx)
+		if fc != nil {
+			if err := fc.CheckStaleness(path); err != nil {
+				return "", err
+			}
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", fmt.Errorf("failed to read file: %w", err)
@@ -312,14 +329,29 @@ func ToolEdit(defaultDir string) ToolFunc {
 
 		content := string(data)
 
+		// Helper: update cache after a successful write.
+		updateCache := func() {
+			if fc != nil {
+				fc.UpdateAfterWrite(path)
+			}
+		}
+
 		// Regex-based replacement.
 		if p.Regex {
-			return editWithRegex(path, p.FilePath, content, p.OldString, p.NewString, p.ReplaceAll)
+			result, err := editWithRegex(path, p.FilePath, content, p.OldString, p.NewString, p.ReplaceAll)
+			if err == nil {
+				updateCache()
+			}
+			return result, err
 		}
 
 		// Line-targeted replacement.
 		if p.Line > 0 {
-			return editAtLine(path, p.FilePath, content, p.OldString, p.NewString, p.Line)
+			result, err := editAtLine(path, p.FilePath, content, p.OldString, p.NewString, p.Line)
+			if err == nil {
+				updateCache()
+			}
+			return result, err
 		}
 
 		count := strings.Count(content, p.OldString)
@@ -340,6 +372,7 @@ func ToolEdit(defaultDir string) ToolFunc {
 		if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
+		updateCache()
 		if count > 1 {
 			return fmt.Sprintf("Edited %s (%d replacements)", p.FilePath, count), nil
 		}
