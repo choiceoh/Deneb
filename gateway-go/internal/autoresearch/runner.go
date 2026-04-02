@@ -113,11 +113,19 @@ func (r *Runner) IsRunning() bool {
 	return r.running
 }
 
-// Workdir returns the current experiment workspace.
+// Workdir returns the most recently used experiment workspace.
 func (r *Runner) Workdir() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.workdir
+}
+
+// SetWorkdir records the experiment workspace directory. Called on init
+// so that /chart can find the experiment even before start.
+func (r *Runner) SetWorkdir(dir string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.workdir = dir
 }
 
 // Start launches the autonomous experiment loop in a background goroutine.

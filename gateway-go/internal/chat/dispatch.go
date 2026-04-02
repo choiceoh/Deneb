@@ -246,7 +246,17 @@ func (h *Handler) handleSlashCommand(
 		h.deliverSlashResponse(delivery, "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.")
 
 	case "chart":
-		workdir := resolveWorkspaceDirForPrompt()
+		// Prefer the most recently used autoresearch workdir (from Runner)
+		// so /chart works regardless of the global workspace config.
+		var workdir string
+		h.callbackMu.RLock()
+		if h.autoresearchWorkdirFn != nil {
+			workdir = h.autoresearchWorkdirFn()
+		}
+		h.callbackMu.RUnlock()
+		if workdir == "" {
+			workdir = resolveWorkspaceDirForPrompt()
+		}
 		cfg, err := autoresearch.LoadConfig(workdir)
 		if err != nil {
 			h.deliverSlashResponse(delivery, "실험이 없습니다. autoresearch를 먼저 실행하세요.")
