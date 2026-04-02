@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -13,13 +12,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	compaction2 "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
 // Compaction defaults.
 const (
-	defaultContextThreshold = 0.80
 	// proactiveCompactionCooldown is the minimum interval between proactive sweeps.
 	// Prevents repeated LLM summarization calls on consecutive messages.
 	proactiveCompactionCooldown = 5 * time.Minute
@@ -43,28 +40,6 @@ func getCompactionCircuitBreaker() *compaction2.CompactionCircuitBreaker {
 		proactiveCompaction.circuitBreaker = compaction2.NewCompactionCircuitBreaker()
 	})
 	return proactiveCompaction.circuitBreaker
-}
-
-// CompactionConfig configures compaction behavior.
-type CompactionConfig struct {
-	ContextThreshold float64 `json:"contextThreshold"` // fraction of budget (default 0.80)
-	FreshTailCount   int     `json:"freshTailCount"`   // messages to protect (default 32)
-}
-
-// DefaultCompactionConfig returns sensible defaults.
-func DefaultCompactionConfig() CompactionConfig {
-	return CompactionConfig{
-		ContextThreshold: defaultContextThreshold,
-		FreshTailCount:   defaultFreshTailCount,
-	}
-}
-
-// CompactionDecision is the parsed result from compaction evaluation.
-type CompactionDecision struct {
-	ShouldCompact bool   `json:"shouldCompact"`
-	Reason        string `json:"reason"`
-	CurrentTokens uint64 `json:"currentTokens"`
-	Threshold     uint64 `json:"threshold"`
 }
 
 // triggerProactiveCompaction fires a background Aurora sweep if stored tokens
@@ -95,13 +70,15 @@ func triggerProactiveCompaction(
 		}
 	}
 
-	// Threshold check.
+	// Threshold check via Rust evaluation (single source of truth).
 	storedTokens, err := deps.auroraStore.FetchTokenCount(1)
 	if err != nil || storedTokens == 0 {
 		return
 	}
-	threshold := uint64(deps.compactionCfg.ContextThreshold * float64(deps.contextCfg.TokenBudget))
-	if storedTokens <= threshold {
+	shouldCompact, _, err := aurora.EvaluateCompaction(
+		deps.compactionCfg, storedTokens, 0, deps.contextCfg.TokenBudget,
+	)
+	if err != nil || !shouldCompact {
 		return
 	}
 
@@ -112,7 +89,6 @@ func triggerProactiveCompaction(
 
 	logger.Info("proactive compaction: stored tokens exceed threshold, starting background sweep",
 		"storedTokens", storedTokens,
-		"threshold", threshold,
 		"budget", deps.contextCfg.TokenBudget,
 	)
 
@@ -277,25 +253,6 @@ func syncMessagesToAurora(store *aurora.Store, messages []llm.Message, logger *s
 	}
 }
 
-// evaluateCompaction checks whether context compaction is needed.
-func evaluateCompaction(cfg CompactionConfig, storedTokens, liveTokens, tokenBudget uint64) (*CompactionDecision, error) {
-	configJSON, err := json.Marshal(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal compaction config: %w", err)
-	}
-
-	resultJSON, err := ffi.CompactionEvaluate(string(configJSON), storedTokens, liveTokens, tokenBudget)
-	if err != nil {
-		return nil, fmt.Errorf("compaction evaluate: %w", err)
-	}
-
-	var decision CompactionDecision
-	if err := json.Unmarshal(resultJSON, &decision); err != nil {
-		return nil, fmt.Errorf("parse compaction decision: %w", err)
-	}
-	return &decision, nil
-}
-
 // handleContextOverflowAurora handles context overflow using the Aurora compaction system.
 // Runs a full hierarchical sweep via Rust FFI.
 // Returns the compacted messages, an optional system prompt addition from Aurora
@@ -312,9 +269,9 @@ func handleContextOverflowAurora(
 	}
 
 	logger.Info("aurora: running compaction sweep on overflow")
-	sweepCfg := aurora.DefaultSweepConfig()
-	sweepCfg.ContextThreshold = deps.compactionCfg.ContextThreshold
-	sweepCfg.FreshTailCount = uint32(deps.compactionCfg.FreshTailCount)
+
+	// Use compactionCfg directly — it's now aurora.SweepConfig.
+	sweepCfg := deps.compactionCfg
 
 	// Use lightweight model for cost-efficient compaction summaries.
 	lwClient := pilot.GetLightweightClient()

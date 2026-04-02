@@ -50,7 +50,7 @@ type Handler struct {
 
 	// Agent run configuration.
 	contextCfg           ContextConfig
-	compactionCfg        CompactionConfig
+	compactionCfg        aurora.SweepConfig
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string
@@ -148,7 +148,7 @@ type HandlerConfig struct {
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
 	ContextCfg           ContextConfig
-	CompactionCfg        CompactionConfig
+	CompactionCfg        aurora.SweepConfig
 	DefaultModel         string
 	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
 	DefaultSystem        string
@@ -172,7 +172,7 @@ func DefaultHandlerConfig() HandlerConfig {
 		MaxHistoryCount: 200,
 		MaxMessageBytes: 128 * 1024, // 128 KB
 		ContextCfg:      DefaultContextConfig(),
-		CompactionCfg:   DefaultCompactionConfig(),
+		CompactionCfg:   aurora.DefaultSweepConfig(),
 		MaxTokens:       defaultMaxTokens,
 	}
 }

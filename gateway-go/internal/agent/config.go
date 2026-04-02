@@ -88,6 +88,13 @@ type AgentConfig struct {
 	// handle follow-up work after the run completes.
 	ContinuationRequested func() bool
 
+	// DynamicToolsProvider is called before each turn starting from turn 1.
+	// When it returns a non-empty slice, those tools are appended to cfg.Tools
+	// (deduplicating by name). Used by the deferred tools system: fetch_tools
+	// activates tools mid-run, and this hook injects their schemas into
+	// subsequent LLM requests.
+	DynamicToolsProvider func() []llm.Tool
+
 	// OnMidLoopCompact is called after tool results are appended to the message
 	// history on each turn. If the callback returns a non-nil replacement slice,
 	// the executor swaps the message history with the compacted version. This

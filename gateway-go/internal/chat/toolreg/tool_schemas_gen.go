@@ -1664,3 +1664,24 @@ func continueRunToolSchema() map[string]any {
 		"required": []string{"reason", "progress_summary"},
 	}
 }
+
+func fetchToolsToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"names": map[string]any{
+				"type":        "array",
+				"description": "Exact tool names to activate (from the deferred tools list)",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"minItems": 1,
+				"maxItems": 10,
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Keyword search to find matching deferred tools (alternative to names)",
+			},
+		},
+	}
+}
