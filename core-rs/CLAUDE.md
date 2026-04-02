@@ -19,7 +19,6 @@ Rust workspace providing protocol validation, security, media, memory search, ma
 |-------|------|---------|
 | `deneb-core` | `core/` | Main crate: FFI exports, protocol, security, media, memory search, markdown, context engine, compaction |
 | `deneb-vega` | `vega/` | SQLite FTS5 search engine (optional `ml` feature for semantic search) |
-| `deneb-agent-runtime` | `agent-runtime/` | Agent lifecycle, model selection |
 
 ## Feature Flags
 
