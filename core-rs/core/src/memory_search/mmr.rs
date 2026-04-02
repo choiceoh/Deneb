@@ -1,5 +1,6 @@
 //! Maximal Marginal Relevance (MMR) re-ranking for search result diversity.
 
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
@@ -147,10 +148,15 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
         return indices;
     }
 
-    // Pre-tokenize all items in parallel (benefits from 20-core DGX Spark).
-    // Uses TokenSet to avoid per-token String allocations.
+    // Pre-tokenize all items. Uses TokenSet to avoid per-token String allocations.
+    #[cfg(feature = "parallel")]
     let token_cache: Vec<TokenSet> = items
         .par_iter()
+        .map(|item| TokenSet::new(&item.content))
+        .collect();
+    #[cfg(not(feature = "parallel"))]
+    let token_cache: Vec<TokenSet> = items
+        .iter()
         .map(|item| TokenSet::new(&item.content))
         .collect();
 
@@ -197,6 +203,7 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
     let mut best_sim_cache: Vec<f64> = vec![0.0; items.len()];
 
     // Threshold for parallelising the cache-update sweep (O(remaining) Jaccard calls).
+    #[cfg(feature = "parallel")]
     const PAR_THRESHOLD: usize = 32;
 
     let pick_best = |remaining: &[usize], best_sim: &[f64]| {
@@ -228,6 +235,7 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
 
         // Update cache: compute Jaccard between the newly selected item and each
         // remaining candidate, raising the cached max if the new similarity is higher.
+        #[cfg(feature = "parallel")]
         if remaining.len() >= PAR_THRESHOLD {
             // Parallel update when the sweep is large enough to benefit from rayon.
             let new_sims: Vec<f64> = remaining
@@ -245,6 +253,13 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
                 if sim > best_sim_cache[r] {
                     best_sim_cache[r] = sim;
                 }
+            }
+        }
+        #[cfg(not(feature = "parallel"))]
+        for &r in &remaining {
+            let sim = jaccard_similarity_sets(&set_cache[r], &set_cache[idx]);
+            if sim > best_sim_cache[r] {
+                best_sim_cache[r] = sim;
             }
         }
     }

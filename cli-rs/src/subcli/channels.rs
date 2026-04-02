@@ -38,7 +38,7 @@ pub async fn run(args: &ChannelsArgs) -> Result<(), CliError> {
             if *no_usage {
                 params["noUsage"] = serde_json::json!(true);
             }
-            rpc_print_fmt("channels.list", params, gw, "Fetching channels...", |result, json_mode| {
+            rpc_print_fmt("telegram.list", params, gw, "Fetching channels...", |result, json_mode| {
                 if json_mode {
                     println!("{}", serde_json::to_string_pretty(&result)?);
                     return Ok(());
@@ -56,7 +56,7 @@ pub async fn run(args: &ChannelsArgs) -> Result<(), CliError> {
             }
             params["timeoutMs"] = serde_json::json!(gw.timeout);
             let spinner_msg = if probe { "Probing channels..." } else { "Fetching channel status..." };
-            rpc_print_fmt("channels.status", params, gw, spinner_msg, move |result, json_mode| {
+            rpc_print_fmt("telegram.status", params, gw, spinner_msg, move |result, json_mode| {
                 if json_mode {
                     println!("{}", serde_json::to_string_pretty(&result)?);
                     return Ok(());

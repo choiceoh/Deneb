@@ -58,20 +58,27 @@ pub fn estimate_base64_decoded_bytes(input: &str) -> usize {
 
 /// Validate and canonicalize a base64 string.
 ///
-/// Strips whitespace, validates that:
+/// Strips whitespace, normalizes URL-safe characters (`-` → `+`, `_` → `/`),
+/// and validates that:
 /// - The result is non-empty
 /// - Length is a multiple of 4
 /// - All characters are `[A-Za-z0-9+/]` with up to 2 trailing `=`
 ///
 /// Returns `Some(canonical)` on success, `None` on invalid input.
 pub fn canonicalize_base64(input: &str) -> Option<String> {
-    // Strip whitespace.
+    // Strip whitespace and normalize URL-safe base64 chars.
     let mut cleaned = String::with_capacity(input.len());
     for &b in input.as_bytes() {
         if b.is_ascii_whitespace() {
             continue;
         }
-        cleaned.push(b as char);
+        // URL-safe base64 uses '-' for '+' and '_' for '/'.
+        let normalized = match b {
+            b'-' => b'+',
+            b'_' => b'/',
+            other => other,
+        };
+        cleaned.push(normalized as char);
     }
 
     if cleaned.is_empty() || !cleaned.len().is_multiple_of(4) {
@@ -181,5 +188,19 @@ mod tests {
     #[test]
     fn canonicalize_triple_padding() {
         assert!(canonicalize_base64("A===").is_none());
+    }
+
+    #[test]
+    fn canonicalize_url_safe_base64() {
+        // URL-safe uses '-' for '+' and '_' for '/'.
+        assert_eq!(canonicalize_base64("ab-_").as_deref(), Some("ab+/"));
+        // Mixed standard and URL-safe chars.
+        assert_eq!(canonicalize_base64("ab+_").as_deref(), Some("ab+/"));
+    }
+
+    #[test]
+    fn estimate_url_safe_base64() {
+        // URL-safe chars don't affect size estimation (same count).
+        assert_eq!(estimate_base64_decoded_bytes("ab-_"), 3);
     }
 }

@@ -6,16 +6,13 @@ import (
 )
 
 // SessionState holds the resolved state for a reply session.
+// Embeds SessionOrigin for routing fields shared with MsgContext.
 type SessionState struct {
-	SessionKey      string
+	SessionOrigin
 	AgentID         string
 	IsNew           bool
 	IsReset         bool
-	IsGroup         bool
 	IsThread        bool
-	Channel         string
-	AccountID       string
-	ThreadID        string
 	Model           string
 	Provider        string
 	ThinkLevel      ThinkLevel
@@ -26,6 +23,7 @@ type SessionState struct {
 	GroupActivation GroupActivationMode
 	SendPolicy      string
 	ToolPreset      string // tool preset restricting available tools (researcher, implementer, verifier, coordinator)
+	DeepWork        bool   // deep work mode: extended timeouts and continuations for 2-3 hour autonomous sessions
 	CreatedAt       int64
 	UpdatedAt       int64
 }

@@ -78,7 +78,7 @@ var eventScopeGuards = map[string][]string{
 	"session.tool":            {ScopeRead},
 	"agent":                   {ScopeRead},
 	"agent.event":             {ScopeRead},
-	"channels.changed":        {ScopeRead},
+	"telegram.changed":        {ScopeRead},
 	"config.changed":          {ScopeAdmin},
 	"process.completed":       {ScopeWrite, ScopeAdmin},
 	"heartbeat":               {ScopeRead},

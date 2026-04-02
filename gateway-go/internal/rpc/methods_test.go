@@ -54,7 +54,7 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 	}
 	expected := []string{
 		"health.check", "sessions.get", "sessions.list", "sessions.delete",
-		"channels.list", "channels.get", "channels.status", "channels.health",
+		"telegram.list", "telegram.get", "telegram.status", "telegram.health",
 		"system.info", "protocol.validate", "protocol.validate_params",
 		"security.validate_session_key", "security.sanitize_html",
 		"security.is_safe_url", "security.validate_error_code",
@@ -140,13 +140,13 @@ func TestRPCSmokeFrequentMethods(t *testing.T) {
 			expectOK: true,
 		},
 		{
-			name:     "channels status",
-			method:   "channels.status",
+			name:     "telegram status",
+			method:   "telegram.status",
 			expectOK: true,
 		},
 		{
-			name:         "channels health",
-			method:       "channels.health",
+			name:         "telegram health",
+			method:       "telegram.health",
 			expectOK:     true,
 			expectFields: []string{"channels"},
 		},
@@ -486,20 +486,20 @@ func TestSessionsList(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Channel method contract tests
+// Telegram method contract tests
 // ---------------------------------------------------------------------------
 
-func TestChannelsList(t *testing.T) {
+func TestTelegramList(t *testing.T) {
 	d := testDispatcher()
-	resp := dispatch(t, d, "channels.list", nil)
+	resp := dispatch(t, d, "telegram.list", nil)
 	if !resp.OK {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
 	}
 }
 
-func TestChannelsGet_MissingID(t *testing.T) {
+func TestTelegramGet_MissingID(t *testing.T) {
 	d := testDispatcher()
-	resp := dispatch(t, d, "channels.get", map[string]any{})
+	resp := dispatch(t, d, "telegram.get", map[string]any{})
 	if resp.OK {
 		t.Error("expected error for missing id")
 	}
@@ -508,9 +508,9 @@ func TestChannelsGet_MissingID(t *testing.T) {
 	}
 }
 
-func TestChannelsGet_NotFound(t *testing.T) {
+func TestTelegramGet_NotFound(t *testing.T) {
 	d := testDispatcher()
-	resp := dispatch(t, d, "channels.get", map[string]string{"id": "nonexistent-chan"})
+	resp := dispatch(t, d, "telegram.get", map[string]string{"id": "nonexistent-chan"})
 	if resp.OK {
 		t.Error("expected error for nonexistent channel")
 	}
@@ -519,9 +519,9 @@ func TestChannelsGet_NotFound(t *testing.T) {
 	}
 }
 
-func TestChannelsStatus(t *testing.T) {
+func TestTelegramStatus(t *testing.T) {
 	d := testDispatcher()
-	resp := dispatch(t, d, "channels.status", nil)
+	resp := dispatch(t, d, "telegram.status", nil)
 	if !resp.OK {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
 	}

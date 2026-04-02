@@ -73,8 +73,9 @@ func TestFullManifestRegistryLoad(t *testing.T) {
 	registry := NewFullManifestRegistry(discoverer, logger)
 
 	result := registry.Load(LoadManifestRegistryParams{
-		Roots:   PluginSourceRoots{Global: tmpDir},
-		NoCache: true,
+		Roots:        PluginSourceRoots{Global: tmpDir},
+		OwnershipUID: -1,
+		NoCache:      true,
 	})
 
 	if len(result.Plugins) != 1 {
@@ -141,6 +142,7 @@ func TestFullManifestRegistryDeduplication(t *testing.T) {
 			Global:    globalDir,
 		},
 		WorkspaceDir: workDir,
+		OwnershipUID: -1,
 		NoCache:      true,
 	})
 
@@ -164,7 +166,8 @@ func TestFullManifestRegistryCaching(t *testing.T) {
 	registry := NewFullManifestRegistry(discoverer, logger)
 
 	params := LoadManifestRegistryParams{
-		Roots: PluginSourceRoots{Global: tmpDir},
+		Roots:        PluginSourceRoots{Global: tmpDir},
+		OwnershipUID: -1,
 	}
 
 	r1 := registry.Load(params)

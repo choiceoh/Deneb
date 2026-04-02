@@ -52,22 +52,22 @@ func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 	}
 }
 
-func TestChannelsGetMissingAndNotFound(t *testing.T) {
+func TestTelegramGetMissingAndNotFound(t *testing.T) {
 	d := NewDispatcher(testLogger())
 	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager()})
 
-	missing := dispatch(t, d, "channels.get", map[string]any{})
+	missing := dispatch(t, d, "telegram.get", map[string]any{})
 	if missing.OK || missing.Error == nil || missing.Error.Code != protocol.ErrMissingParam {
 		t.Fatalf("expected missing param error, got %+v", missing)
 	}
 
-	notFound := dispatch(t, d, "channels.get", map[string]any{"id": "nope"})
+	notFound := dispatch(t, d, "telegram.get", map[string]any{"id": "nope"})
 	if notFound.OK || notFound.Error == nil || notFound.Error.Code != protocol.ErrNotFound {
 		t.Fatalf("expected not found error, got %+v", notFound)
 	}
 
 	// Without TelegramPlugin set, "telegram" should also be not found.
-	notFound = dispatch(t, d, "channels.get", map[string]any{"id": "telegram"})
+	notFound = dispatch(t, d, "telegram.get", map[string]any{"id": "telegram"})
 	if notFound.OK || notFound.Error == nil || notFound.Error.Code != protocol.ErrNotFound {
 		t.Fatalf("expected not found for telegram without plugin, got %+v", notFound)
 	}

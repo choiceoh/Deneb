@@ -28,6 +28,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
@@ -111,6 +112,17 @@ func executeAgentRun(
 		workspaceDir = resolveWorkspaceDirForPrompt()
 	}
 
+	// Pre-warm context file snapshot for this session so disk I/O happens
+	// before the parallel prep phase (no-op if already cached from a prior turn).
+	prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+
+	// Cache session lookup: fetched once and reused throughout this function
+	// to avoid repeated map lookups + lock acquisitions.
+	var cachedSession *session.Session
+	if deps.sessions != nil {
+		cachedSession = deps.sessions.Get(params.SessionKey)
+	}
+
 	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
 	// Agent tools pass role names ("main", "lightweight", "pilot", "fallback").
 	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
@@ -126,15 +138,13 @@ func executeAgentRun(
 		}
 		// Raw model ID → no role mapping, no fallback chain (direct override).
 	}
-	if model == "" && deps.sessions != nil {
-		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.SpawnedBy != "" {
-			// Sub-agent: use explicit session model if set at spawn time,
-			// otherwise fall back to the configured subagent default model.
-			if sess.Model != "" {
-				model = sess.Model
-			} else if deps.subagentDefaultModel != "" {
-				model = deps.subagentDefaultModel
-			}
+	if model == "" && cachedSession != nil && cachedSession.SpawnedBy != "" {
+		// Sub-agent: use explicit session model if set at spawn time,
+		// otherwise fall back to the configured subagent default model.
+		if cachedSession.Model != "" {
+			model = cachedSession.Model
+		} else if deps.subagentDefaultModel != "" {
+			model = deps.subagentDefaultModel
 		}
 	}
 	if model == "" {
@@ -177,14 +187,12 @@ func executeAgentRun(
 	// agent and a "<provider>-subagent" config exists, use the alternate
 	// API key. This allows main and sub-agents to use different accounts
 	// on the same provider (separate rate limits).
-	if deps.sessions != nil && providerID != "" {
-		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.SpawnedBy != "" {
-			alt := providerID + "-subagent"
-			if deps.providerConfigs != nil {
-				if _, ok := deps.providerConfigs[alt]; ok {
-					logger.Info("subagent provider remap", "from", providerID, "to", alt)
-					providerID = alt
-				}
+	if cachedSession != nil && cachedSession.SpawnedBy != "" && providerID != "" {
+		alt := providerID + "-subagent"
+		if deps.providerConfigs != nil {
+			if _, ok := deps.providerConfigs[alt]; ok {
+				logger.Info("subagent provider remap", "from", providerID, "to", alt)
+				providerID = alt
 			}
 		}
 	}
@@ -301,10 +309,8 @@ func executeAgentRun(
 
 	// Resolve session tool preset early (needed for both system prompt and tool list).
 	var sessionToolPreset string
-	if deps.sessions != nil {
-		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
-			sessionToolPreset = sess.ToolPreset
-		}
+	if cachedSession != nil {
+		sessionToolPreset = cachedSession.ToolPreset
 	}
 
 	// System prompt build (parallel).
@@ -406,7 +412,8 @@ func executeAgentRun(
 	}
 
 	if contextErr != nil {
-		logger.Warn("context assembly failed, using message only", "error", contextErr)
+		logger.Error("context assembly failed, proceeding with degraded context",
+			"sessionKey", params.SessionKey, "error", contextErr)
 	}
 
 	// Proactive compaction: if stored tokens exceed the threshold, fire a
@@ -538,8 +545,8 @@ func executeAgentRun(
 
 	// Resolve thinking config from the session's ThinkingLevel setting.
 	var thinkingCfg *llm.ThinkingConfig
-	if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.ThinkingLevel != "" {
-		thinkingCfg = resolveThinkingConfig(sess.ThinkingLevel)
+	if cachedSession != nil && cachedSession.ThinkingLevel != "" {
+		thinkingCfg = resolveThinkingConfig(cachedSession.ThinkingLevel)
 	}
 
 	// Override max tokens if the caller (e.g., OpenAI HTTP endpoint) specified one.
@@ -547,9 +554,19 @@ func executeAgentRun(
 		maxTokens = *params.MaxTokens
 	}
 
+	// Deep work mode: extend per-run limits for long autonomous sessions.
+	maxTurns := defaultMaxTurns
+	agentTimeout := defaultAgentTimeout
+	nudgeConts := 5
+	if params.DeepWork {
+		maxTurns = 50
+		agentTimeout = 30 * time.Minute
+		nudgeConts = 7
+	}
+
 	cfg := agent.AgentConfig{
-		MaxTurns:         defaultMaxTurns,
-		Timeout:          defaultAgentTimeout,
+		MaxTurns:         maxTurns,
+		Timeout:          agentTimeout,
 		Model:            model,
 		System:           systemPrompt,
 		Tools:            tools,
@@ -595,11 +612,12 @@ func executeAgentRun(
 		},
 		// Enable nudge budget continuation and max-tokens recovery.
 		NudgeBudget: &agent.NudgeBudgetConfig{
-			MaxContinuations: 5,
+			MaxContinuations: nudgeConts,
 			BudgetThreshold:  0.9,
 			MinDeltaTokens:   300,
 		},
-		MaxOutputTokensRecovery: 3,
+		MaxOutputTokensRecovery:     3,
+		MaxOutputTokensScaleFactors: []float64{1.5, 2.0, 2.0},
 		// Suppress nudge when continue_run was already called — the explicit
 		// continuation will start a fresh run, so nudging wastes turns.
 		ContinuationRequested: func() bool {
@@ -995,10 +1013,10 @@ func executeAgentRun(
 				)
 				if compErr != nil {
 					// Record compaction failure for circuit breaker.
-					proactiveCompaction.circuitBreaker.RecordFailure()
+					getCompactionCircuitBreaker().RecordFailure()
 					return nil, fmt.Errorf("compaction failed: %w (original: %w)", compErr, runErr)
 				}
-				proactiveCompaction.circuitBreaker.RecordSuccess()
+				getCompactionCircuitBreaker().RecordSuccess()
 				messages = compactedMsgs
 
 				// Post-compaction file restoration: re-inject recently accessed

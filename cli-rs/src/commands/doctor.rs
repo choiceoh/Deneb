@@ -320,7 +320,7 @@ async fn check_channels(results: &mut Vec<DiagResult>, args: &DoctorArgs, cfg: &
             url: args.url.clone(),
             token: args.token.clone(),
             password: args.password.clone(),
-            method: "channels.status".to_string(),
+            method: "telegram.status".to_string(),
             params: Some(serde_json::json!({"probe": true, "timeoutMs": 5000})),
             timeout_ms: args.timeout,
             expect_final: false,

@@ -268,6 +268,9 @@ func TestValidToken_RefreshFailsOnBadResponse(t *testing.T) {
 }
 
 func TestGetClient_RetriableOnFailure(t *testing.T) {
+	// Point HOME to empty dir so no real credentials are found.
+	t.Setenv("HOME", t.TempDir())
+
 	// Reset the global singleton for this test.
 	globalMu.Lock()
 	savedClient := globalClient

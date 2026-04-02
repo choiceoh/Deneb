@@ -2,13 +2,14 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 )
 
 func TestDefaultContextConfig(t *testing.T) {
 	cfg := DefaultContextConfig()
-	if cfg.TokenBudget != 100_000 {
-		t.Errorf("TokenBudget = %d, want %d", cfg.TokenBudget, 100_000)
+	if cfg.TokenBudget != defaultTokenBudget {
+		t.Errorf("TokenBudget = %d, want %d", cfg.TokenBudget, defaultTokenBudget)
 	}
 	if cfg.FreshTailCount != 48 {
 		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, 48)
@@ -134,6 +135,111 @@ func TestTranscriptToMessages(t *testing.T) {
 			t.Errorf("got %d messages, want 0", len(msgs))
 		}
 	})
+}
+
+func TestAssembleContextFallback(t *testing.T) {
+	store := newMemTranscriptStore()
+
+	// Populate with messages.
+	for i := 0; i < 5; i++ {
+		msg := NewTextChatMessage("user", fmt.Sprintf("message %d", i), int64(i*1000))
+		store.Append("test", msg)
+	}
+
+	t.Run("returns tail N messages", func(t *testing.T) {
+		cfg := DefaultContextConfig()
+		cfg.MaxMessages = 3
+		result, err := assembleContextFallback(store, "test", cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result.Messages) != 3 {
+			t.Errorf("got %d messages, want 3", len(result.Messages))
+		}
+		if result.TotalMessages != 5 {
+			t.Errorf("TotalMessages = %d, want 5", result.TotalMessages)
+		}
+	})
+
+	t.Run("returns all when MaxMessages is larger", func(t *testing.T) {
+		cfg := DefaultContextConfig()
+		cfg.MaxMessages = 100
+		result, err := assembleContextFallback(store, "test", cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result.Messages) != 5 {
+			t.Errorf("got %d messages, want 5", len(result.Messages))
+		}
+	})
+
+	t.Run("empty session returns empty result", func(t *testing.T) {
+		cfg := DefaultContextConfig()
+		result, err := assembleContextFallback(store, "nonexistent", cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result.Messages) != 0 {
+			t.Errorf("got %d messages, want 0", len(result.Messages))
+		}
+	})
+
+	t.Run("zero MaxMessages uses default", func(t *testing.T) {
+		cfg := DefaultContextConfig()
+		cfg.MaxMessages = 0
+		result, err := assembleContextFallback(store, "test", cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// defaultMaxMessages = 100, so all 5 messages should be returned.
+		if len(result.Messages) != 5 {
+			t.Errorf("got %d messages, want 5", len(result.Messages))
+		}
+	})
+}
+
+// memTranscriptStore is a minimal in-memory TranscriptStore for testing.
+type memTranscriptStore struct {
+	data map[string][]ChatMessage
+}
+
+func newMemTranscriptStore() *memTranscriptStore {
+	return &memTranscriptStore{data: make(map[string][]ChatMessage)}
+}
+
+func (s *memTranscriptStore) Load(key string, limit int) ([]ChatMessage, int, error) {
+	msgs := s.data[key]
+	total := len(msgs)
+	if limit > 0 && limit < total {
+		msgs = msgs[total-limit:]
+	}
+	return msgs, total, nil
+}
+
+func (s *memTranscriptStore) Append(key string, msg ChatMessage) error {
+	s.data[key] = append(s.data[key], msg)
+	return nil
+}
+
+func (s *memTranscriptStore) Delete(key string) error {
+	delete(s.data, key)
+	return nil
+}
+
+func (s *memTranscriptStore) ListKeys() ([]string, error) {
+	keys := make([]string, 0, len(s.data))
+	for k := range s.data {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+func (s *memTranscriptStore) Search(_ string, _ int) ([]SearchResult, error) {
+	return nil, nil
+}
+
+func (s *memTranscriptStore) CloneRecent(_, _ string, _ int) error {
+	return nil
 }
 
 func TestHandleAssemblyCommand(t *testing.T) {

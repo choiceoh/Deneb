@@ -6,7 +6,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
@@ -95,21 +94,9 @@ func BuildAgentPayload(cfg AgentTurnConfig, history []AgentMessage, tools []Agen
 	}
 
 	// Configure thinking based on think level.
-	switch cfg.ThinkLevel {
-	case types.ThinkOff, "":
-		// No thinking config needed.
-	case types.ThinkMinimal:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 1024}
-	case types.ThinkLow:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 4096}
-	case types.ThinkMedium:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 10240}
-	case types.ThinkHigh:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 32768}
-	case types.ThinkXHigh:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 65536}
-	case types.ThinkAdaptive:
-		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 16384}
+	// Token budgets defined in ThinkLevel.BudgetTokens() (single source of truth).
+	if budget := cfg.ThinkLevel.BudgetTokens(); budget > 0 {
+		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: budget}
 	}
 
 	return payload
