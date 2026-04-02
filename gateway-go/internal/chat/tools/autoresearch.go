@@ -25,6 +25,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 			BranchTag       string                      `json:"branch_tag"`
 			Model           string                      `json:"model"`
 			MetricPattern   string                      `json:"metric_pattern"`
+			MaxIterations   int                         `json:"max_iterations"`
 			Format          string                      `json:"format"`
 			Constants       []autoresearch.ConstantDef  `json:"constants"`
 		}
@@ -38,7 +39,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 		switch p.Action {
 		case "init":
 			return autoresearchInit(ctx, runner, p.Workdir, p.TargetFiles, p.MetricCmd,
-				p.MetricName, p.MetricDirection, p.TimeBudgetSec, p.BranchTag, p.Model, p.MetricPattern, p.Constants)
+				p.MetricName, p.MetricDirection, p.TimeBudgetSec, p.BranchTag, p.Model, p.MetricPattern, p.MaxIterations, p.Constants)
 		case "start":
 			return autoresearchStart(runner, p.Workdir)
 		case "stop":
@@ -57,7 +58,8 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 
 func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir string,
 	targetFiles []string, metricCmd, metricName, metricDirection string,
-	timeBudgetSec int, branchTag, model, metricPattern string, constants []autoresearch.ConstantDef) (string, error) {
+	timeBudgetSec int, branchTag, model, metricPattern string, maxIterations int,
+	constants []autoresearch.ConstantDef) (string, error) {
 
 	if runner.IsRunning() {
 		return "", fmt.Errorf("autoresearch already running — stop it first")
@@ -73,6 +75,7 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		Model:           model,
 		MetricPattern:   metricPattern,
 		Constants:       constants,
+		Params:          autoresearch.Params{MaxIterations: maxIterations},
 	}
 	if err := cfg.Validate(); err != nil {
 		return "", err
@@ -99,14 +102,20 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		modeStr = fmt.Sprintf("constants-override (%d constants)", len(cfg.Constants))
 	}
 
+	iterInfo := fmt.Sprintf("%d iterations", cfg.Params.MaxIterations)
+	if cfg.Params.MaxIterations == 0 {
+		iterInfo = "unlimited"
+	}
+
 	return fmt.Sprintf("Autoresearch initialized in %s\n"+
 		"Mode: %s\n"+
 		"Metric: %s (%s)\n"+
 		"Target files: %v\n"+
 		"Time budget: %ds/experiment\n"+
+		"Max iterations: %s (auto-stop + report)\n"+
 		"Branch tag: autoresearch/%s%s\n\n"+
 		"Run autoresearch with action=start to begin the autonomous loop.",
-		workdir, modeStr, metricName, metricDirection, targetFiles, cfg.TimeBudgetSec, branchTag, baselineMsg), nil
+		workdir, modeStr, metricName, metricDirection, targetFiles, cfg.TimeBudgetSec, iterInfo, branchTag, baselineMsg), nil
 }
 
 func autoresearchStart(runner *autoresearch.Runner, workdir string) (string, error) {
@@ -115,12 +124,17 @@ func autoresearchStart(runner *autoresearch.Runner, workdir string) (string, err
 	}
 	cfg, _ := autoresearch.LoadConfig(workdir)
 	if cfg != nil {
+		iterInfo := fmt.Sprintf("auto-stop after %d", cfg.Params.MaxIterations)
+		if cfg.Params.MaxIterations == 0 {
+			iterInfo = "unlimited (manual stop)"
+		}
 		return fmt.Sprintf("Autoresearch started: optimizing %s (%s)\n"+
 			"Branch: autoresearch/%s\n"+
 			"Target: %v\n"+
 			"Time budget: %ds/experiment\n"+
-			"The loop runs autonomously. Use action=status to check progress, action=stop to halt.",
-			cfg.MetricName, cfg.MetricDirection, cfg.BranchTag, cfg.TargetFiles, cfg.TimeBudgetSec), nil
+			"Iterations: %s\n"+
+			"The loop runs autonomously. A completion report with chart will be sent when done.",
+			cfg.MetricName, cfg.MetricDirection, cfg.BranchTag, cfg.TargetFiles, cfg.TimeBudgetSec, iterInfo), nil
 	}
 	return "Autoresearch started.", nil
 }

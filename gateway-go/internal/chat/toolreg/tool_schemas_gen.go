@@ -1591,6 +1591,12 @@ func autoresearchToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Regex with one capture group to extract the metric value from experiment output (init only). Example: 'val_bpb:\\s*([\\d.]+)' extracts 1.087 from 'val_bpb: 1.087'. If omitted, uses default heuristic (last number on last stdout line).",
 			},
+			"max_iterations": map[string]any{
+				"type":        "number",
+				"description": "Max iterations before auto-stop and sending completion report (init only, default: 30). Set -1 for unlimited.",
+				"default":     30,
+				"minimum":     -1,
+			},
 			"format": map[string]any{
 				"type":        "string",
 				"enum":        []string{"tsv", "summary", "chart"},
