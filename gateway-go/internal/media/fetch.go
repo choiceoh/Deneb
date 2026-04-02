@@ -258,7 +258,7 @@ func parseContentDispositionFileName(header string) string {
 
 func readBodySnippet(body io.Reader, maxChars int) string {
 	data := make([]byte, maxChars)
-	n, _ := io.ReadFull(body, data)
+	n, _ := io.ReadFull(body, data) //nolint:errcheck // partial reads expected; we only need a prefix
 	s := string(data[:n])
 	// Collapse whitespace.
 	s = strings.Join(strings.Fields(s), " ")

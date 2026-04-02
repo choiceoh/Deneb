@@ -32,6 +32,16 @@ repos:
           - --exclude-files
           - '(^|/)Cargo\.lock$'
 
+  # Go linting (golangci-lint)
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.5.0
+    hooks:
+      - id: golangci-lint
+        args: [--new, ./...]
+        entry: bash -c 'cd gateway-go && golangci-lint run "$@"' --
+        files: '\.go$'
+        pass_filenames: false
+
   # Shell script linting
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.11.0

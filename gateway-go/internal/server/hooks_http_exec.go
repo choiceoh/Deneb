@@ -541,7 +541,13 @@ func sha256Hex(s string) string {
 // generateUUID generates a random UUID v4.
 func generateUUID() string {
 	var buf [16]byte
-	_, _ = rand.Read(buf[:])
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback: timestamp-based pseudo-UUID.
+		t := time.Now().UnixNano()
+		for i := range buf {
+			buf[i] = byte(t >> (i * 4))
+		}
+	}
 	buf[6] = (buf[6] & 0x0f) | 0x40 // version 4
 	buf[8] = (buf[8] & 0x3f) | 0x80 // variant 10
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",

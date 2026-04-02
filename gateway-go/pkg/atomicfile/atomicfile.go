@@ -66,7 +66,9 @@ func WriteFile(path string, data []byte, opts *Options) error {
 
 	// Write to a temp file in the same directory (same filesystem → atomic rename).
 	randBytes := make([]byte, 8)
-	rand.Read(randBytes)
+	if _, err := rand.Read(randBytes); err != nil {
+		return fmt.Errorf("atomicfile: random: %w", err)
+	}
 	tmp := fmt.Sprintf("%s.%d.%s.tmp", path, os.Getpid(), hex.EncodeToString(randBytes))
 
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, opts.perm())

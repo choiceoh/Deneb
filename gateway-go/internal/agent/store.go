@@ -239,6 +239,8 @@ func (s *Store) SetFile(agentID, name, contentBase64 string) (*FileEntry, error)
 
 func genAgentID() string {
 	b := make([]byte, 8)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("agent-%d", time.Now().UnixNano())
+	}
 	return "agent-" + hex.EncodeToString(b)
 }
