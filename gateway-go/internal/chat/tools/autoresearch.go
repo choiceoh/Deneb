@@ -26,6 +26,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 			Model           string                      `json:"model"`
 			MetricPattern   string                      `json:"metric_pattern"`
 			MaxIterations   int                         `json:"max_iterations"`
+			CacheEnabled    bool                        `json:"cache_enabled"`
 			Format          string                      `json:"format"`
 			Constants       []autoresearch.ConstantDef  `json:"constants"`
 		}
@@ -39,7 +40,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 		switch p.Action {
 		case "init":
 			return autoresearchInit(ctx, runner, p.Workdir, p.TargetFiles, p.MetricCmd,
-				p.MetricName, p.MetricDirection, p.TimeBudgetSec, p.BranchTag, p.Model, p.MetricPattern, p.MaxIterations, p.Constants)
+				p.MetricName, p.MetricDirection, p.TimeBudgetSec, p.BranchTag, p.Model, p.MetricPattern, p.MaxIterations, p.CacheEnabled, p.Constants)
 		case "start":
 			return autoresearchStart(runner, p.Workdir)
 		case "stop":
@@ -59,7 +60,7 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir string,
 	targetFiles []string, metricCmd, metricName, metricDirection string,
 	timeBudgetSec int, branchTag, model, metricPattern string, maxIterations int,
-	constants []autoresearch.ConstantDef) (string, error) {
+	cacheEnabled bool, constants []autoresearch.ConstantDef) (string, error) {
 
 	if runner.IsRunning() {
 		return "", fmt.Errorf("autoresearch already running — stop it first")
@@ -74,6 +75,7 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		BranchTag:       branchTag,
 		Model:           model,
 		MetricPattern:   metricPattern,
+		CacheEnabled:    cacheEnabled,
 		Constants:       constants,
 		Params:          autoresearch.Params{MaxIterations: maxIterations},
 	}
@@ -110,15 +112,21 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		iterInfo = "unlimited"
 	}
 
+	cacheInfo := "disabled"
+	if cfg.CacheEnabled {
+		cacheInfo = cfg.ResolveCacheDir(workdir)
+	}
+
 	return fmt.Sprintf("Autoresearch initialized in %s\n"+
 		"Mode: %s\n"+
 		"Metric: %s (%s)\n"+
 		"Target files: %v\n"+
 		"Time budget: %ds/experiment\n"+
 		"Max iterations: %s (auto-stop + report)\n"+
+		"Cache: %s\n"+
 		"Branch tag: autoresearch/%s%s\n\n"+
 		"Run autoresearch with action=start to begin the autonomous loop.",
-		workdir, modeStr, metricName, metricDirection, targetFiles, cfg.TimeBudgetSec, iterInfo, branchTag, baselineMsg), nil
+		workdir, modeStr, metricName, metricDirection, targetFiles, cfg.TimeBudgetSec, iterInfo, cacheInfo, branchTag, baselineMsg), nil
 }
 
 func autoresearchStart(runner *autoresearch.Runner, workdir string) (string, error) {

@@ -1597,6 +1597,11 @@ func autoresearchToolSchema() map[string]any {
 				"default":     30,
 				"minimum":     -1,
 			},
+			"cache_enabled": map[string]any{
+				"type":        "boolean",
+				"description": "Enable persistent cache directory for experiment commands (init only). When true, sets AUTORESEARCH_CACHE_DIR env var so expensive operations (LLM inference, embeddings) can cache results across iterations.",
+				"default":     false,
+			},
 			"format": map[string]any{
 				"type":        "string",
 				"enum":        []string{"tsv", "summary", "chart"},

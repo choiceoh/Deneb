@@ -194,6 +194,15 @@ type Config struct {
 	// Example: `val_bpb:\s*([\d.]+)` extracts 1.087 from "val_bpb: 1.087".
 	// If empty, the runner uses the default heuristic (last number on last line).
 	MetricPattern string `json:"metric_pattern,omitempty"`
+	// CacheEnabled enables a persistent cache directory for experiment commands.
+	// When true, the runner sets AUTORESEARCH_CACHE_DIR env var pointing to a
+	// stable cache directory (.autoresearch/cache/) so that expensive operations
+	// like LLM inference or embedding computation can cache their results across
+	// iterations.
+	CacheEnabled bool `json:"cache_enabled,omitempty"`
+	// CacheDir overrides the default cache directory path. If empty and
+	// CacheEnabled is true, defaults to .autoresearch/cache/ inside workdir.
+	CacheDir string `json:"cache_dir,omitempty"`
 	// OriginalBranch records the branch autoresearch was started from,
 	// so we know where to return after the experiment completes.
 	OriginalBranch string `json:"original_branch,omitempty"`
@@ -284,6 +293,21 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// ResolveCacheDir returns the cache directory path for this experiment.
+// Returns empty string if caching is disabled.
+func (c *Config) ResolveCacheDir(workdir string) string {
+	if !c.CacheEnabled {
+		return ""
+	}
+	if c.CacheDir != "" {
+		if filepath.IsAbs(c.CacheDir) {
+			return c.CacheDir
+		}
+		return filepath.Join(workdir, c.CacheDir)
+	}
+	return filepath.Join(workdir, configDir, "cache")
 }
 
 // IsBetter returns true if newVal is better than oldVal according to the
