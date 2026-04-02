@@ -52,6 +52,11 @@ pub(crate) enum TagName {
     Header,
     Footer,
     Title,
+    Nav,
+    Aside,
+    Svg,
+    Iframe,
+    Form,
     Other,
 }
 
@@ -96,6 +101,11 @@ impl TagName {
             "header" => Self::Header,
             "footer" => Self::Footer,
             "title" => Self::Title,
+            "nav" => Self::Nav,
+            "aside" => Self::Aside,
+            "svg" => Self::Svg,
+            "iframe" => Self::Iframe,
+            "form" => Self::Form,
             _ => Self::Other,
         }
     }

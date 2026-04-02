@@ -11,13 +11,23 @@ pub(crate) fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)
 
     // Named entities (case-insensitive).
     let named: &[(&str, char)] = &[
-        ("&nbsp;", ' '),
+        ("&nbsp;", '\u{00A0}'),
         ("&amp;", '&'),
         ("&quot;", '"'),
         ("&lt;", '<'),
         ("&gt;", '>'),
         ("&#39;", '\''),
         ("&apos;", '\''),
+        ("&mdash;", '—'),
+        ("&ndash;", '–'),
+        ("&hellip;", '…'),
+        ("&laquo;", '«'),
+        ("&raquo;", '»'),
+        ("&copy;", '©'),
+        ("&reg;", '®'),
+        ("&trade;", '™'),
+        ("&bull;", '•'),
+        ("&middot;", '·'),
     ];
 
     // Only lowercase a small bounded prefix — never the entire remaining input.
