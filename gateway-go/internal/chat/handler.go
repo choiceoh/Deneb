@@ -102,6 +102,10 @@ type Handler struct {
 	// Protected by callbackMu.
 	pluginHookRunner *plugin.TypedHookRunner
 
+	// autoresearchWorkdirFn returns the most recently used autoresearch workdir.
+	// Protected by callbackMu.
+	autoresearchWorkdirFn func() string
+
 	// hookRegistry fires user-defined shell hooks on message/tool events.
 	// Protected by callbackMu.
 	hookRegistry *hooks.Registry
@@ -394,6 +398,14 @@ func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {
 func (h *Handler) SetShutdownCtx(ctx context.Context) {
 	h.callbackMu.Lock()
 	h.shutdownCtx = ctx
+	h.callbackMu.Unlock()
+}
+
+// SetAutoresearchWorkdirFn sets the function that returns the most recently
+// used autoresearch workdir (typically Runner.Workdir).
+func (h *Handler) SetAutoresearchWorkdirFn(fn func() string) {
+	h.callbackMu.Lock()
+	h.autoresearchWorkdirFn = fn
 	h.callbackMu.Unlock()
 }
 

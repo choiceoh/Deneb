@@ -144,6 +144,11 @@ func (s *Server) registerSessionRPCMethods() {
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
 
+	// Wire autoresearch workdir resolver so /chart finds the experiment dir.
+	if s.autoresearchRunner != nil {
+		s.chatHandler.SetAutoresearchWorkdirFn(s.autoresearchRunner.Workdir)
+	}
+
 	// Wire transcript cloner for cron shadow session support.
 	// Shadow sessions clone recent transcript from the main session for context.
 	if s.cronService != nil && transcriptDir != "" {

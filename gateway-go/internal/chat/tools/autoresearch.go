@@ -94,6 +94,9 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 		return "", fmt.Errorf("save config: %w", err)
 	}
 
+	// Record workdir so /chart can find the experiment.
+	runner.SetWorkdir(workdir)
+
 	modeStr := "file-rewrite"
 	if cfg.IsConstantsMode() {
 		modeStr = fmt.Sprintf("constants-override (%d constants)", len(cfg.Constants))
