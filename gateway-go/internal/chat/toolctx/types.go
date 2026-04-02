@@ -16,12 +16,13 @@ type ToolFunc func(ctx context.Context, input json.RawMessage) (string, error)
 
 // ToolDef describes a tool with its schema, description, and executor function.
 type ToolDef struct {
-	Name        string
-	Description string
-	InputSchema map[string]any
-	Fn          ToolFunc
-	Hidden      bool   // if true, excluded from LLMTools() but still callable via Execute
-	Profile     string // optional: "coding" = coding-only, "" = available in all profiles
+	Name            string
+	Description     string
+	InputSchema     map[string]any
+	Fn              ToolFunc
+	Hidden          bool   // if true, excluded from LLMTools() but still callable via Execute
+	Profile         string // optional: "coding" = coding-only, "" = available in all profiles
+	ConcurrencySafe bool   // if true, safe for parallel execution (no shared-state mutations)
 }
 
 // ToolRegistrar accepts tool registrations. Implemented by chat.ToolRegistry.

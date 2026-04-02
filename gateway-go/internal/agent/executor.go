@@ -56,6 +56,10 @@ func RunAgent(
 
 	result := &AgentResult{}
 
+	// Build concurrency checker: uses ConcurrencyChecker interface if available,
+	// otherwise falls back to the hardcoded read-only tool set.
+	isConcurrencySafe := buildConcurrencyCheck(tools)
+
 	// Max-output-tokens recovery: tracks how many times we've auto-resumed
 	// after the LLM response was truncated by max_tokens.
 	var maxTokensRecoveryCount int
@@ -355,7 +359,7 @@ func RunAgent(
 					}
 				}
 				for i, tc := range turnRes.toolCalls {
-					if isReadOnlyTool(tc.Name) {
+					if isConcurrencySafe(tc.Name) {
 						if !curBatch.concurrent && len(curBatch.indices) > 0 {
 							flush()
 						}
@@ -502,15 +506,23 @@ func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
 // execute concurrently in a single batch.
 const maxToolConcurrency = 10
 
-// readOnlyToolSet lists tools safe for concurrent execution.
-var readOnlyToolSet = map[string]bool{
+// readOnlyToolFallback is used when ToolExecutor does not implement
+// ConcurrencyChecker. Prefer declaring ConcurrencySafe on ToolDef instead.
+var readOnlyToolFallback = map[string]bool{
 	"read": true, "grep": true, "glob": true, "find": true,
 	"tree": true, "process": true, "kv": true, "knowledge": true,
 	"memory": true,
 }
 
-// isReadOnlyTool returns true if the tool name is safe for concurrent execution.
-func isReadOnlyTool(name string) bool { return readOnlyToolSet[name] }
+// buildConcurrencyCheck returns a function that checks whether a tool is safe
+// for concurrent execution. If the ToolExecutor implements ConcurrencyChecker,
+// its IsConcurrencySafe method is used; otherwise falls back to the hardcoded set.
+func buildConcurrencyCheck(tools ToolExecutor) func(string) bool {
+	if cc, ok := tools.(ConcurrencyChecker); ok {
+		return cc.IsConcurrencySafe
+	}
+	return func(name string) bool { return readOnlyToolFallback[name] }
+}
 
 // turnResult holds the parsed output of a single LLM turn.
 type turnResult struct {
