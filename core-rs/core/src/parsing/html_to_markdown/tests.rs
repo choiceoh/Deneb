@@ -611,3 +611,43 @@ fn strip_noise_nested_nav() {
     assert!(result.text.contains("article content"), "got: {}", result.text);
     assert!(!result.text.contains("Home"), "nested nav suppressed: {}", result.text);
 }
+
+// --- Extended entity tests ---
+
+#[test]
+fn decodes_typography_entities() {
+    let html = "<p>&mdash; &ndash; &hellip; &laquo;text&raquo; &lsquo;x&rsquo; &ldquo;y&rdquo;</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains('\u{2014}'), "mdash missing: {}", result.text);
+    assert!(result.text.contains('\u{2013}'), "ndash missing: {}", result.text);
+    assert!(result.text.contains('\u{2026}'), "hellip missing: {}", result.text);
+    assert!(result.text.contains('\u{00AB}'), "laquo missing: {}", result.text);
+    assert!(result.text.contains('\u{00BB}'), "raquo missing: {}", result.text);
+    assert!(result.text.contains('\u{2018}'), "lsquo missing: {}", result.text);
+    assert!(result.text.contains('\u{2019}'), "rsquo missing: {}", result.text);
+    assert!(result.text.contains('\u{201C}'), "ldquo missing: {}", result.text);
+    assert!(result.text.contains('\u{201D}'), "rdquo missing: {}", result.text);
+}
+
+#[test]
+fn decodes_symbol_entities() {
+    let html = "<p>&copy; &reg; &trade; &deg; &euro; &pound;</p>";
+    let result = html_to_markdown(html);
+    assert!(result.text.contains('\u{00A9}'), "copy: {}", result.text);
+    assert!(result.text.contains('\u{00AE}'), "reg: {}", result.text);
+    assert!(result.text.contains('\u{2122}'), "trade: {}", result.text);
+    assert!(result.text.contains('\u{00B0}'), "deg: {}", result.text);
+    assert!(result.text.contains('\u{20AC}'), "euro: {}", result.text);
+    assert!(result.text.contains('\u{00A3}'), "pound: {}", result.text);
+}
+
+#[test]
+fn table_escapes_backslash() {
+    let html = "<table><tr><td>a\\b</td><td>c</td></tr></table>";
+    let result = html_to_markdown(html);
+    assert!(
+        result.text.contains(r"a\\b"),
+        "backslash should be escaped, got: {}",
+        result.text
+    );
+}
