@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"strings"
@@ -44,6 +45,7 @@ type RuntimeConfigParams struct {
 	ControlUIEnabled  *bool
 	Auth              *ResolvedGatewayAuth
 	TailscaleOverride *GatewayTailscaleConfig
+	Logger            *slog.Logger
 }
 
 // ResolveGatewayRuntimeConfig validates constraints and produces the final runtime config.
@@ -55,26 +57,31 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		gw = &GatewayConfig{}
 	}
 
+	logger := params.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	// Resolve bind mode and host.
 	bindMode := params.Bind
 	if bindMode == "" {
 		bindMode = gw.Bind
 	}
 	if bindMode == "" {
-		bindMode = "loopback"
+		bindMode = BindLoopback
 	}
 
 	bindHost := params.Host
 	if bindHost == "" {
 		var err error
-		bindHost, err = resolveBindHost(bindMode, gw.CustomBindHost)
+		bindHost, err = resolveBindHost(bindMode, gw.CustomBindHost, logger)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Validate loopback constraint.
-	if bindMode == "loopback" && !isLoopbackHost(bindHost) {
+	if bindMode == BindLoopback && !isLoopbackHost(bindHost) {
 		return nil, fmt.Errorf(
 			"gateway bind=loopback resolved to non-loopback host %s; refusing fallback to a network bind",
 			bindHost,
@@ -82,7 +89,7 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	}
 
 	// Validate custom bind host.
-	if bindMode == "custom" {
+	if bindMode == BindCustom {
 		customHost := strings.TrimSpace(gw.CustomBindHost)
 		if customHost == "" {
 			return nil, fmt.Errorf("gateway.bind=custom requires gateway.customBindHost")
@@ -140,7 +147,7 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	}
 
 	// Tailscale.
-	tailscaleCfg := GatewayTailscaleConfig{Mode: "off"}
+	tailscaleCfg := GatewayTailscaleConfig{Mode: TailscaleOff}
 	if gw.Tailscale != nil {
 		tailscaleCfg = *gw.Tailscale
 	}
@@ -149,11 +156,11 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	}
 	tailscaleMode := tailscaleCfg.Mode
 	if tailscaleMode == "" {
-		tailscaleMode = "off"
+		tailscaleMode = TailscaleOff
 	}
 
 	// Resolved auth.
-	resolvedAuth := ResolvedGatewayAuth{Mode: "token"}
+	resolvedAuth := ResolvedGatewayAuth{Mode: AuthModeToken}
 	if params.Auth != nil {
 		resolvedAuth = *params.Auth
 	}
@@ -162,19 +169,19 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	// ── Validation constraints ──
 
 	// Tailscale funnel requires password auth.
-	if tailscaleMode == "funnel" && authMode != "password" {
+	if tailscaleMode == TailscaleFunnel && authMode != AuthModePassword {
 		return nil, fmt.Errorf(
 			"tailscale funnel requires gateway auth mode=password (set gateway.auth.password or DENEB_GATEWAY_PASSWORD)",
 		)
 	}
 
 	// Tailscale serve/funnel requires loopback bind.
-	if tailscaleMode != "off" && !isLoopbackHost(bindHost) {
+	if tailscaleMode != TailscaleOff && !isLoopbackHost(bindHost) {
 		return nil, fmt.Errorf("tailscale serve/funnel requires gateway bind=loopback (127.0.0.1)")
 	}
 
 	// Non-loopback requires auth.
-	if !isLoopbackHost(bindHost) && !resolvedAuth.HasSharedSecret() && authMode != "trusted-proxy" {
+	if !isLoopbackHost(bindHost) && !resolvedAuth.HasSharedSecret() && authMode != AuthModeTrustedProxy {
 		return nil, fmt.Errorf(
 			"refusing to bind gateway to %s:%d without auth (set gateway.auth.token/password, or set DENEB_GATEWAY_TOKEN/DENEB_GATEWAY_PASSWORD)",
 			bindHost, params.Port,
@@ -196,7 +203,7 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 
 	// Trusted-proxy auth requires trustedProxies.
 	trustedProxies := gw.TrustedProxies
-	if authMode == "trusted-proxy" {
+	if authMode == AuthModeTrustedProxy {
 		if len(trustedProxies) == 0 {
 			return nil, fmt.Errorf(
 				"gateway auth mode=trusted-proxy requires gateway.trustedProxies to be configured with at least one proxy IP",
@@ -223,21 +230,21 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	}
 
 	// Channel health defaults.
-	channelHealthCheck := 5
+	channelHealthCheck := DefaultChannelHealthCheckMinutes
 	if gw.ChannelHealthCheckMinutes != nil {
 		channelHealthCheck = *gw.ChannelHealthCheckMinutes
 	}
-	channelStale := 30
+	channelStale := DefaultChannelStaleThresholdMinutes
 	if gw.ChannelStaleEventThresholdMinutes != nil {
 		channelStale = *gw.ChannelStaleEventThresholdMinutes
 	}
-	channelMaxRestarts := 10
+	channelMaxRestarts := DefaultChannelMaxRestartsPerHour
 	if gw.ChannelMaxRestartsPerHour != nil {
 		channelMaxRestarts = *gw.ChannelMaxRestartsPerHour
 	}
 
 	// Reload config (always populated with defaults by loader).
-	reloadCfg := GatewayReloadConfig{Mode: "hybrid"}
+	reloadCfg := GatewayReloadConfig{Mode: ReloadHybrid}
 	if gw.Reload != nil {
 		reloadCfg = *gw.Reload
 	}
@@ -269,23 +276,23 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 }
 
 // resolveBindHost maps a bind mode to an IP address.
-func resolveBindHost(mode, customHost string) (string, error) {
+func resolveBindHost(mode, customHost string, logger *slog.Logger) (string, error) {
 	switch mode {
-	case "loopback", "":
+	case BindLoopback, "":
 		return "127.0.0.1", nil
-	case "lan", "all":
+	case BindLAN, "all":
 		return "0.0.0.0", nil
-	case "auto":
+	case BindAuto:
 		// Prefer loopback; this simplified version always returns loopback.
 		// Full implementation would check if loopback is available.
 		return "127.0.0.1", nil
-	case "tailnet":
+	case BindTailnet:
 		// Try to find a Tailscale IP (100.64.0.0/10).
-		if ip := findTailscaleIP(); ip != "" {
+		if ip := findTailscaleIP(logger); ip != "" {
 			return ip, nil
 		}
 		return "127.0.0.1", nil
-	case "custom":
+	case BindCustom:
 		host := strings.TrimSpace(customHost)
 		if host == "" {
 			return "", fmt.Errorf("gateway.bind=custom requires gateway.customBindHost")
@@ -335,10 +342,11 @@ func isTrustedProxyAddress(addr string, trustedProxies []string) bool {
 }
 
 // findTailscaleIP scans network interfaces for a Tailscale IP (100.64.0.0/10).
-func findTailscaleIP() string {
+func findTailscaleIP(logger *slog.Logger) string {
 	_, tsNet, _ := net.ParseCIDR("100.64.0.0/10")
 	ifaces, err := net.Interfaces()
 	if err != nil {
+		logger.Warn("failed to enumerate network interfaces for Tailscale IP detection", "error", err)
 		return ""
 	}
 	for _, iface := range ifaces {
@@ -359,6 +367,7 @@ func findTailscaleIP() string {
 			}
 		}
 	}
+	logger.Warn("no Tailscale IP found in 100.64.0.0/10 range; falling back to loopback")
 	return ""
 }
 

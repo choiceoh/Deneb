@@ -28,7 +28,7 @@ func GetSchema() *SchemaNode {
 				Properties: map[string]*SchemaNode{
 					"port": {Type: "number", Description: "Gateway port", Default: DefaultGatewayPort},
 					"mode": {Type: "string", Description: "Gateway mode", Enum: []string{"local", "remote"}},
-					"bind": {Type: "string", Description: "Bind mode", Enum: []string{"auto", "lan", "loopback", "custom", "tailnet"}},
+					"bind": {Type: "string", Description: "Bind mode", Enum: []string{BindAuto, BindLAN, BindLoopback, BindCustom, BindTailnet}},
 				},
 			},
 			"logging": {
@@ -43,14 +43,14 @@ func GetSchema() *SchemaNode {
 				Type:        "object",
 				Description: "Session configuration",
 				Properties: map[string]*SchemaNode{
-					"mainKey": {Type: "string", Description: "Main session key", Default: "main"},
+					"mainKey": {Type: "string", Description: "Main session key", Default: DefaultSessionMainKey},
 				},
 			},
 			"agents": {
 				Type:        "object",
 				Description: "Agent runtime configuration",
 				Properties: map[string]*SchemaNode{
-					"maxConcurrent": {Type: "number", Description: "Maximum concurrent agents", Default: 8},
+					"maxConcurrent": {Type: "number", Description: "Maximum concurrent agents", Default: DefaultAgentMaxConcurrent},
 				},
 			},
 		},
