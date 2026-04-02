@@ -157,9 +157,6 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		}, result.DurationMs)
 	}
 
-	// 10c. Build delivery info from session state for reply routing.
-	_ = session.BuildSessionDelivery(sess, msg)
-
 	// 11. Track model fallback transitions for user notification.
 	if result != nil && result.FallbackActive {
 		transition := model.ResolveFallbackTransition(

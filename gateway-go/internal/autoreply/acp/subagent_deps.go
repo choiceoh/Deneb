@@ -106,7 +106,10 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 		if sess != nil {
 			timeoutAt := time.Now().Add(30 * time.Minute).UnixMilli()
 			sess.TimeoutAt = &timeoutAt
-			_ = d.Sessions.Set(sess)
+			if err := d.Sessions.Set(sess); err != nil {
+				d.logger().Warn("failed to persist subagent session timeout",
+					"agentId", agentID, "sessionKey", sessionKey, "error", err)
+			}
 		}
 	}
 
@@ -147,10 +150,13 @@ func (d *SubagentInfraDeps) KillSubagent(agentID string) error {
 		return fmt.Errorf("agent %q not found", agentID)
 	}
 
-	// Kill descendants first.
+	// Kill descendants first (best-effort: log failures but continue cleanup).
 	children := d.ACPRegistry.List(agentID)
 	for _, child := range children {
-		_ = d.KillSubagent(child.ID)
+		if err := d.KillSubagent(child.ID); err != nil {
+			d.logger().Warn("failed to kill child subagent",
+				"parentId", agentID, "childId", child.ID, "error", err)
+		}
 	}
 
 	// Kill the agent.
@@ -158,7 +164,10 @@ func (d *SubagentInfraDeps) KillSubagent(agentID string) error {
 
 	// Abort its session if possible.
 	if d.AbortSession != nil && agent.SessionKey != "" {
-		_ = d.AbortSession(agent.SessionKey)
+		if err := d.AbortSession(agent.SessionKey); err != nil {
+			d.logger().Warn("failed to abort subagent session",
+				"agentId", agentID, "sessionKey", agent.SessionKey, "error", err)
+		}
 	}
 
 	return nil
@@ -201,7 +210,10 @@ func (d *SubagentInfraDeps) ResetSubagent(agentID, reason string) error {
 
 	// Abort any running session.
 	if d.AbortSession != nil && agent.SessionKey != "" {
-		_ = d.AbortSession(agent.SessionKey)
+		if err := d.AbortSession(agent.SessionKey); err != nil {
+			d.logger().Warn("failed to abort session during reset",
+				"agentId", agentID, "sessionKey", agent.SessionKey, "error", err)
+		}
 	}
 
 	// Re-register as idle with fresh timestamp.
