@@ -71,8 +71,16 @@ type AgentConfig struct {
 
 	// MaxOutputTokensRecovery is the maximum number of times to auto-recover when
 	// the LLM response is truncated by max_tokens. Each recovery injects a
-	// "resume where you left off" message. Default: 0 (disabled). Recommended: 3.
+	// "resume where you left off" message and increases MaxTokens for the next
+	// call. Default: 0 (disabled). Recommended: 3.
 	MaxOutputTokensRecovery int
+
+	// MaxOutputTokensScaleFactors controls how MaxTokens is scaled on each
+	// successive max_tokens recovery. Entry [i] is the multiplier for recovery
+	// attempt i+1 (1-indexed). For example, {1.5, 2.0, 2.0} means: 1st recovery
+	// uses 1.5× the original MaxTokens, 2nd and 3rd use 2×.
+	// When nil or shorter than the recovery attempt, defaults to 2× for missing entries.
+	MaxOutputTokensScaleFactors []float64
 
 	// ContinuationRequested returns true when the continue_run tool has been
 	// called during this run. When set, the nudge budget continuation is
