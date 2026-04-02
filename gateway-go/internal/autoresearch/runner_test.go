@@ -58,7 +58,7 @@ func TestConfigValidate(t *testing.T) {
 				MetricName:      "m",
 				MetricDirection: "minimize",
 				BranchTag:       "t",
-				TimeBudgetSec:   0, // should default to 300
+				TimeBudgetSec:   0, // should default to 3600
 			},
 		},
 	}
@@ -687,7 +687,7 @@ func TestDefaultParams(t *testing.T) {
 		{"RecentFailedWindow", p.RecentFailedWindow, 5},
 		{"TrendWindowSize", p.TrendWindowSize, 10},
 		{"PlateauThreshold", p.PlateauThreshold, 5},
-		{"DefaultTimeBudgetSec", p.DefaultTimeBudgetSec, 300},
+		{"DefaultTimeBudgetSec", p.DefaultTimeBudgetSec, 3600},
 		{"MaxIterations", p.MaxIterations, 30},
 	}
 	for _, c := range checks {

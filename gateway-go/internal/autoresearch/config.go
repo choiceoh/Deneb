@@ -121,7 +121,7 @@ func DefaultParams() Params {
 		RecentFailedWindow:     5,
 		TrendWindowSize:        10,
 		PlateauThreshold:       5,
-		DefaultTimeBudgetSec:   300,
+		DefaultTimeBudgetSec:   3600,
 		MaxIterations:          30,
 	}
 }
