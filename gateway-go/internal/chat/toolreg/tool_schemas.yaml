@@ -1396,6 +1396,10 @@
       description: "Max iterations before auto-stop and sending completion report (init only, default: 30). Set -1 for unlimited."
       default: 30
       minimum: -1
+    cache_enabled:
+      type: boolean
+      description: "Enable persistent cache directory for experiment commands (init only). When true, sets AUTORESEARCH_CACHE_DIR env var so expensive operations (LLM inference, embeddings) can cache results across iterations."
+      default: false
     format:
       type: string
       enum:

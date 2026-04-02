@@ -38,6 +38,14 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 	cmd.Dir = workdir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("TIME_BUDGET=%d", cfg.TimeBudgetSec))
 
+	// Provide cache directory for baseline run too, so expensive results
+	// computed during baseline are available for subsequent iterations.
+	if cacheDir := cfg.ResolveCacheDir(workdir); cacheDir != "" {
+		if mkErr := os.MkdirAll(cacheDir, 0o755); mkErr == nil {
+			cmd.Env = append(cmd.Env, "AUTORESEARCH_CACHE_DIR="+cacheDir)
+		}
+	}
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0, fmt.Errorf("baseline command failed: %w\nOutput: %s", err, string(output))
@@ -978,6 +986,15 @@ func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config)
 	cmd := exec.CommandContext(expCtx, "bash", "-c", cfg.MetricCmd)
 	cmd.Dir = workdir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("TIME_BUDGET=%d", cfg.TimeBudgetSec))
+
+	// Provide a persistent cache directory for expensive operations
+	// (LLM inference, embeddings, etc.) that don't change across iterations.
+	if cacheDir := cfg.ResolveCacheDir(workdir); cacheDir != "" {
+		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+			r.logger.Warn("failed to create cache dir", "path", cacheDir, "error", err)
+		}
+		cmd.Env = append(cmd.Env, "AUTORESEARCH_CACHE_DIR="+cacheDir)
+	}
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
