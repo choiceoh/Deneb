@@ -127,6 +127,23 @@ func (s *Server) registerSessionRPCMethods() {
 		chatCfg,
 	)
 
+	// Wire server-level status data for /status command.
+	s.chatHandler.SetStatusDepsFunc(func(sessionKey string) chat.StatusDeps {
+		sd := chat.StatusDeps{
+			Version:       s.version,
+			StartedAt:     s.startedAt,
+			RustFFI:       s.rustFFI,
+			WSConnections: s.clientCnt.Load(),
+		}
+		if s.sessions != nil {
+			sd.SessionCount = s.sessions.Count()
+		}
+		if sess := s.sessions.Get(sessionKey); sess != nil && sess.FailureReason != "" {
+			sd.LastFailureReason = sess.FailureReason
+		}
+		return sd
+	})
+
 	// Wire SendFn after handler creation to avoid circular deps.
 	sendFn := func(sessionKey, message string) error {
 		fakeReq := &protocol.RequestFrame{

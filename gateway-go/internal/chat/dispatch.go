@@ -306,8 +306,152 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	if model == "" && h.registry != nil {
 		model = h.registry.FullModelID(modelrole.RoleMain)
 	}
-	return fmt.Sprintf("세션: %s\n모델: %s\n상태: %s",
-		sessionKey, model, string(sess.Status))
+
+	var sections []string
+
+	// Session + status.
+	statusIcon := "🟢"
+	switch sess.Status {
+	case session.StatusRunning:
+		statusIcon = "🔄"
+	case session.StatusFailed:
+		statusIcon = "❌"
+	case session.StatusKilled:
+		statusIcon = "⛔"
+	case session.StatusTimeout:
+		statusIcon = "⏰"
+	}
+	sections = append(sections, fmt.Sprintf("📋 **세션:** `%s` %s %s", sessionKey, statusIcon, string(sess.Status)))
+
+	// Model.
+	if model != "" {
+		sections = append(sections, fmt.Sprintf("🤖 **모델:** %s", model))
+	}
+
+	// Mode settings.
+	var modes []string
+	if sess.ThinkingLevel != "" && sess.ThinkingLevel != "off" {
+		modes = append(modes, fmt.Sprintf("Think: %s", sess.ThinkingLevel))
+	}
+	if sess.FastMode != nil && *sess.FastMode {
+		modes = append(modes, "Fast: on")
+	}
+	if sess.ReasoningLevel != "" && sess.ReasoningLevel != "off" {
+		modes = append(modes, fmt.Sprintf("Reasoning: %s", sess.ReasoningLevel))
+	}
+	if sess.ElevatedLevel != "" && sess.ElevatedLevel != "off" {
+		modes = append(modes, fmt.Sprintf("Elevated: %s", sess.ElevatedLevel))
+	}
+	if sess.ToolPreset != "" {
+		modes = append(modes, fmt.Sprintf("Preset: %s", sess.ToolPreset))
+	}
+	if len(modes) > 0 {
+		sections = append(sections, "⚙️ **모드:** "+strings.Join(modes, " | "))
+	}
+
+	// Token usage from session.
+	if sess.TotalTokens != nil && *sess.TotalTokens > 0 {
+		in, out := int64(0), int64(0)
+		if sess.InputTokens != nil {
+			in = *sess.InputTokens
+		}
+		if sess.OutputTokens != nil {
+			out = *sess.OutputTokens
+		}
+		sections = append(sections, fmt.Sprintf("📊 **토큰:** %s (in: %s, out: %s)",
+			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(in), formatCompactTokens(out)))
+	}
+
+	// Channel.
+	if sess.Channel != "" {
+		sections = append(sections, fmt.Sprintf("📡 **채널:** %s", sess.Channel))
+	}
+
+	// Active runs.
+	activeRuns := h.countActiveRuns(sessionKey)
+	if activeRuns > 0 {
+		sections = append(sections, fmt.Sprintf("🏃 **실행 중:** %d개", activeRuns))
+	}
+
+	// Pending messages.
+	h.pendingMu.Lock()
+	pendingCount := 0
+	if q, ok := h.pendingMsgs[sessionKey]; ok {
+		pendingCount = q.len()
+	}
+	h.pendingMu.Unlock()
+	if pendingCount > 0 {
+		sections = append(sections, fmt.Sprintf("📬 **대기 중:** %d개", pendingCount))
+	}
+
+	// Server-level info from StatusDepsFunc.
+	if h.statusDepsFunc != nil {
+		sd := h.statusDepsFunc(sessionKey)
+		if sd.Version != "" {
+			uptime := ""
+			if !sd.StartedAt.IsZero() {
+				uptime = fmt.Sprintf(" | Uptime: %s", formatUptime(time.Since(sd.StartedAt)))
+			}
+			sections = append(sections, fmt.Sprintf("🖥️ **Gateway** v%s%s", sd.Version, uptime))
+		}
+		rustIcon := "❌"
+		if sd.RustFFI {
+			rustIcon = "✅"
+		}
+		sections = append(sections, fmt.Sprintf("🔧 Rust Core: %s | Sessions: %d | WS: %d",
+			rustIcon, sd.SessionCount, sd.WSConnections))
+		if sd.LastFailureReason != "" {
+			sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sd.LastFailureReason))
+		}
+	}
+
+	// Session failure reason (from session itself).
+	if sess.FailureReason != "" && (h.statusDepsFunc == nil) {
+		sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sess.FailureReason))
+	}
+
+	return strings.Join(sections, "\n")
+}
+
+// countActiveRuns returns the number of active runs for a session.
+func (h *Handler) countActiveRuns(sessionKey string) int {
+	h.abortMu.Lock()
+	defer h.abortMu.Unlock()
+	count := 0
+	for _, entry := range h.abortMap {
+		if entry.SessionKey == sessionKey {
+			count++
+		}
+	}
+	return count
+}
+
+// formatCompactTokens formats token counts in compact form (e.g. "1.2M", "890K", "500").
+func formatCompactTokens(n int64) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// formatUptime formats a duration as compact uptime (e.g. "2d 5h 32m").
+func formatUptime(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
 // buildRunDeps assembles the dependency struct for runAgentAsync.
