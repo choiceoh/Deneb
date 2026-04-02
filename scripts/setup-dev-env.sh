@@ -77,11 +77,11 @@ build_mcp_server() {
 setup_mcp_json() {
     local mcp_json="$REPO_ROOT/.mcp.json"
     if [ -f "$mcp_json" ]; then return 0; fi
-    cat > "$mcp_json" <<'MCPEOF'
+    cat > "$mcp_json" <<MCPEOF
 {
   "mcpServers": {
     "deneb": {
-      "command": "/home/user/Deneb/bin/deneb-mcp",
+      "command": "$REPO_ROOT/bin/deneb-mcp",
       "args": ["--gateway-url", "http://127.0.0.1:18789", "--verbose"]
     }
   }
