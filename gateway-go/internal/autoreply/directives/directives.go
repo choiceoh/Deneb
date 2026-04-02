@@ -42,6 +42,8 @@ type InlineDirectives struct {
 	HasQueueDirective bool
 	QueueReset        bool
 	RawQueueMode      string
+
+	HasDeepWorkDirective bool
 }
 
 // Regex patterns for directive extraction.
@@ -53,6 +55,7 @@ var (
 	elevatedDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/elevated(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	statusDirectiveRe    = regexp.MustCompile(`(?i)(?:^|\s)/status\s*$`)
 	queueDirectiveRe     = regexp.MustCompile(`(?i)(?:^|\s)/queue(?:\s+([a-zA-Z0-9_-]+))?\s*`)
+	deepworkDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/deepwork\s*`)
 )
 
 // ParseInlineDirectives extracts all inline directives from a message body.
@@ -114,6 +117,12 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 		text = modelResult.Cleaned
 	}
 
+	// Extract /deepwork directive.
+	if deepworkDirectiveRe.MatchString(text) {
+		result.HasDeepWorkDirective = true
+		text = deepworkDirectiveRe.ReplaceAllString(text, " ")
+	}
+
 	// Extract /queue directive.
 	if m := queueDirectiveRe.FindStringSubmatchIndex(text); m != nil {
 		result.HasQueueDirective = true
@@ -145,7 +154,8 @@ func IsDirectiveOnly(directives InlineDirectives) bool {
 		!directives.HasReasoningDirective &&
 		!directives.HasElevatedDirective &&
 		!directives.HasModelDirective &&
-		!directives.HasQueueDirective {
+		!directives.HasQueueDirective &&
+		!directives.HasDeepWorkDirective {
 		return false
 	}
 	return strings.TrimSpace(directives.Cleaned) == ""

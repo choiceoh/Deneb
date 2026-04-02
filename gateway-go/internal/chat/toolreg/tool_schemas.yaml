@@ -1454,5 +1454,9 @@
     reason:
       type: string
       description: "Brief description of remaining work for the next continuation run"
+    progress_summary:
+      type: string
+      description: "Summary of what was accomplished in this run (sent to user as progress report)"
   required:
     - reason
+    - progress_summary

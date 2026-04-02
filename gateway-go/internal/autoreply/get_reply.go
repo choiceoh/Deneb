@@ -124,6 +124,7 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 		ContextTokens:  contextTokens,
 		MaxTokens:      maxTokens,
 		AuthProfile:    selection.AuthProfile,
+		DeepWork:       sess.DeepWork,
 	}
 
 	// Record inbound user message in history tracker.
@@ -262,6 +263,9 @@ func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.Sess
 	}
 	if inline.HasModelDirective && inline.RawModelDirective != "" {
 		session.Model = inline.RawModelDirective
+	}
+	if inline.HasDeepWorkDirective {
+		session.DeepWork = true
 	}
 
 	// Handle /status as inline directive.

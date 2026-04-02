@@ -547,9 +547,19 @@ func executeAgentRun(
 		maxTokens = *params.MaxTokens
 	}
 
+	// Deep work mode: extend per-run limits for long autonomous sessions.
+	maxTurns := defaultMaxTurns
+	agentTimeout := defaultAgentTimeout
+	nudgeConts := 5
+	if params.DeepWork {
+		maxTurns = 50
+		agentTimeout = 30 * time.Minute
+		nudgeConts = 7
+	}
+
 	cfg := agent.AgentConfig{
-		MaxTurns:         defaultMaxTurns,
-		Timeout:          defaultAgentTimeout,
+		MaxTurns:         maxTurns,
+		Timeout:          agentTimeout,
 		Model:            model,
 		System:           systemPrompt,
 		Tools:            tools,
@@ -595,7 +605,7 @@ func executeAgentRun(
 		},
 		// Enable nudge budget continuation and max-tokens recovery.
 		NudgeBudget: &agent.NudgeBudgetConfig{
-			MaxContinuations: 5,
+			MaxContinuations: nudgeConts,
 			BudgetThreshold:  0.9,
 			MinDeltaTokens:   300,
 		},
