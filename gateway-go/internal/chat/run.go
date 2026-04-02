@@ -119,7 +119,7 @@ type runDeps struct {
 	emitTranscriptFn func(sessionKey string, message any, messageID string)
 	sessionMemory    *SessionMemoryStore // optional; structured session state
 	contextCfg       ContextConfig
-	compactionCfg    CompactionConfig
+	compactionCfg    aurora.SweepConfig
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string

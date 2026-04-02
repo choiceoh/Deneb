@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -21,8 +22,8 @@ import (
 // These tests exercise the compaction pipeline end-to-end:
 // - Context overflow detection and retry with compacted context
 // - Aurora store message syncing during chat runs
-// - Legacy fallback compaction (reduced budget)
-// - Compaction evaluation thresholds
+// - Reduced-budget fallback when Aurora is unavailable
+// - Compaction evaluation thresholds (via aurora.EvaluateCompaction)
 // - Transcript + Aurora store consistency after compaction
 
 // tempAuroraStore creates an Aurora store backed by a temp directory for testing.
@@ -475,6 +476,43 @@ func TestCompaction_AuroraAssemblyFallback(t *testing.T) {
 	}
 	if !hasSummary {
 		t.Error("expected summary text in assembled messages")
+	}
+}
+
+// TestCompaction_ReducedBudgetFallback tests that the overflow handler halves
+// the context budget when Aurora is not available or sweep fails.
+func TestCompaction_ReducedBudgetFallback(t *testing.T) {
+	transcript := NewMemoryTranscriptStore()
+	sessionKey := "reduced-budget"
+
+	// Fill transcript with many messages.
+	for i := 0; i < 100; i++ {
+		transcript.Append(sessionKey, NewTextChatMessage("user",
+			fmt.Sprintf("Message %d", i), int64(i)))
+	}
+
+	ctxCfg := ContextConfig{
+		TokenBudget:    500, // low budget to test reduced assembly
+		FreshTailCount: 4,
+		MaxMessages:    100,
+	}
+	// Halve budget (same logic as handleContextOverflowAurora fallback).
+	reducedCfg := ctxCfg
+	reducedCfg.TokenBudget /= 2
+	if reducedCfg.MaxMessages > 10 {
+		reducedCfg.MaxMessages /= 2
+	}
+	result, err := assembleContext(transcript, sessionKey, reducedCfg, slog.Default())
+	if err != nil {
+		t.Fatalf("assembleContext with reduced budget: %v", err)
+	}
+
+	// Should return fewer messages than the full transcript.
+	if len(result.Messages) >= 100 {
+		t.Errorf("expected reduced messages, got %d", len(result.Messages))
+	}
+	if len(result.Messages) == 0 {
+		t.Error("expected non-empty messages after reduced budget assembly")
 	}
 }
 

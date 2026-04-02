@@ -16,6 +16,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
@@ -33,7 +34,7 @@ type QueryDeps struct {
 	Microcompact func(messages []llm.Message, now time.Time) ([]llm.Message, compact.MicrocompactResult)
 
 	// EvaluateCompaction checks if full compaction is needed.
-	EvaluateCompaction func(cfg CompactionConfig, storedTokens, liveTokens, tokenBudget uint64) (*CompactionDecision, error)
+	EvaluateCompaction func(cfg aurora.SweepConfig, storedTokens, liveTokens, tokenBudget uint64) (bool, string, error)
 
 	// GenerateUUID produces a unique identifier (for tool use IDs, etc.).
 	GenerateUUID func() string
@@ -45,7 +46,7 @@ func ProductionQueryDeps() QueryDeps {
 		CompleteModel:      productionComplete,
 		StreamModel:        productionStream,
 		Microcompact:       compact.MicrocompactMessages,
-		EvaluateCompaction: evaluateCompaction,
+		EvaluateCompaction: aurora.EvaluateCompaction,
 		GenerateUUID:       generateUUID,
 	}
 }
