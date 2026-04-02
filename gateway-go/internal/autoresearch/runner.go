@@ -71,15 +71,16 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 
 // Runner manages the autoresearch experiment loop.
 type Runner struct {
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	running  bool
-	workdir  string
-	client   *llm.Client
-	model    string
-	params   Params // snapshot of tunable params from config at Start() time
-	notifier Notifier
-	logger   *slog.Logger
+	mu          sync.Mutex
+	cancel      context.CancelFunc
+	running     bool
+	workdir     string // original repo directory (state lives here)
+	worktreeDir string // isolated worktree for experiments (empty when not running)
+	client      *llm.Client
+	model       string
+	params      Params // snapshot of tunable params from config at Start() time
+	notifier    Notifier
+	logger      *slog.Logger
 }
 
 // NewRunner creates an autoresearch runner.
@@ -128,7 +129,13 @@ func (r *Runner) SetWorkdir(dir string) {
 	r.workdir = dir
 }
 
+// worktreeSubdir is the directory name for the isolated experiment worktree.
+// Stored next to .autoresearch/ in the repo root, gitignored separately.
+const worktreeSubdir = ".autoresearch-wt"
+
 // Start launches the autonomous experiment loop in a background goroutine.
+// The experiment runs in an isolated git worktree so the main working tree
+// is never switched to a different branch or modified.
 func (r *Runner) Start(workdir string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -153,35 +160,52 @@ func (r *Runner) Start(workdir string) error {
 		return err
 	}
 
-	// Create isolated experiment branch if not already on one.
-	branchName := "autoresearch/" + cfg.BranchTag
+	// Record original branch.
 	currentBranch, _ := gitCurrentBranch(context.Background(), workdir)
-	if currentBranch != branchName {
-		// Record original branch for potential return.
-		cfg.OriginalBranch = currentBranch
-		if err := SaveConfig(workdir, cfg); err != nil {
-			return fmt.Errorf("save config with original branch: %w", err)
-		}
+	cfg.OriginalBranch = currentBranch
+	if err := SaveConfig(workdir, cfg); err != nil {
+		return fmt.Errorf("save config with original branch: %w", err)
+	}
 
-		// Check if the experiment branch already exists.
-		if gitBranchExists(context.Background(), workdir, branchName) {
-			// Switch to existing experiment branch.
-			if err := gitCheckout(context.Background(), workdir, branchName); err != nil {
-				return fmt.Errorf("switch to experiment branch: %w", err)
-			}
-			r.logger.Info("switched to existing experiment branch", "branch", branchName)
-		} else {
-			// Create new experiment branch from current HEAD.
-			if err := gitCheckoutNewBranch(context.Background(), workdir, branchName); err != nil {
-				return fmt.Errorf("create experiment branch: %w", err)
-			}
-			r.logger.Info("created experiment branch", "branch", branchName)
+	// Create isolated worktree for the experiment.
+	branchName := "autoresearch/" + cfg.BranchTag
+	wtPath := filepath.Join(workdir, worktreeSubdir)
+
+	// Clean up stale worktree from a previous run if it exists.
+	if _, statErr := os.Stat(wtPath); statErr == nil {
+		r.logger.Info("cleaning up stale worktree", "path", wtPath)
+		_ = gitWorktreeRemove(context.Background(), workdir, wtPath)
+		// If worktree remove didn't fully clean up, remove the directory.
+		os.RemoveAll(wtPath)
+	}
+
+	// Create worktree with experiment branch.
+	createBranch := !gitBranchExists(context.Background(), workdir, branchName)
+	if err := gitWorktreeAdd(context.Background(), workdir, wtPath, branchName, createBranch); err != nil {
+		return fmt.Errorf("create experiment worktree: %w", err)
+	}
+	if createBranch {
+		r.logger.Info("created experiment branch in worktree", "branch", branchName, "worktree", wtPath)
+	} else {
+		r.logger.Info("using existing experiment branch in worktree", "branch", branchName, "worktree", wtPath)
+	}
+
+	// Symlink .autoresearch/ state from source dir into worktree so all
+	// config/results reads and writes go to the original location.
+	stateDir := filepath.Join(workdir, configDir)
+	wtStateLink := filepath.Join(wtPath, configDir)
+	if err := os.Symlink(stateDir, wtStateLink); err != nil {
+		// Non-fatal: fall back to copying config if symlink fails.
+		r.logger.Warn("symlink failed, copying config instead", "error", err)
+		os.MkdirAll(filepath.Join(wtPath, configDir), 0o755)
+		if data, readErr := os.ReadFile(configPath(workdir)); readErr == nil {
+			os.WriteFile(configPath(wtPath), data, 0o644)
 		}
 	}
 
 	// Record the kept commit as the current HEAD on the experiment branch.
 	if cfg.KeptCommit == "" {
-		headSHA, _ := gitRevParse(context.Background(), workdir, "HEAD")
+		headSHA, _ := gitRevParse(context.Background(), wtPath, "HEAD")
 		cfg.KeptCommit = headSHA
 		if err := SaveConfig(workdir, cfg); err != nil {
 			r.logger.Warn("failed to save experiment config", "error", err)
@@ -192,16 +216,18 @@ func (r *Runner) Start(workdir string) error {
 	r.cancel = cancel
 	r.running = true
 	r.workdir = workdir
+	r.worktreeDir = wtPath
 	r.model = cfg.Model
 	r.params = cfg.Params
 
-	go r.loop(ctx, workdir)
-	r.logger.Info("autoresearch started", "workdir", workdir, "metric", cfg.MetricName,
-		"branch", branchName)
+	go r.loop(ctx, wtPath)
+	r.logger.Info("autoresearch started", "workdir", workdir, "worktree", wtPath,
+		"metric", cfg.MetricName, "branch", branchName)
 	return nil
 }
 
-// Stop halts the running experiment loop.
+// Stop halts the running experiment loop. Worktree cleanup happens in the
+// loop's defer after the completion report is sent.
 func (r *Runner) Stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -212,6 +238,31 @@ func (r *Runner) Stop() {
 	}
 	r.running = false
 	r.logger.Info("autoresearch stopped")
+}
+
+// cleanupWorktree removes the experiment worktree. Called from the loop's
+// defer after the completion report has been sent.
+func (r *Runner) cleanupWorktree() {
+	r.mu.Lock()
+	wtDir := r.worktreeDir
+	srcDir := r.workdir
+	r.worktreeDir = ""
+	r.mu.Unlock()
+
+	if wtDir == "" || srcDir == "" {
+		return
+	}
+
+	// Remove the .autoresearch symlink first so git worktree remove
+	// doesn't follow it and delete the source state.
+	os.Remove(filepath.Join(wtDir, configDir))
+
+	if err := gitWorktreeRemove(context.Background(), srcDir, wtDir); err != nil {
+		r.logger.Error("failed to remove worktree", "path", wtDir, "error", err)
+		// Last resort: remove the directory directly.
+		os.RemoveAll(wtDir)
+	}
+	r.logger.Info("cleaned up experiment worktree", "path", wtDir)
 }
 
 // loop is the main experiment loop. It runs until ctx is cancelled or
@@ -232,6 +283,9 @@ func (r *Runner) loop(ctx context.Context, workdir string) {
 
 		// Always send a completion report on exit, regardless of stop reason.
 		r.sendCompletionReport(workdir, stopReason)
+
+		// Clean up the isolated worktree after reporting.
+		r.cleanupWorktree()
 	}()
 
 	for {
@@ -1259,6 +1313,39 @@ func gitCheckout(ctx context.Context, dir, branch string) error {
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout %s: %s", branch, string(out))
+	}
+	return nil
+}
+
+// gitWorktreeAdd creates an isolated git worktree at wtPath on the given branch.
+// If createBranch is true, the branch is created from the current HEAD.
+func gitWorktreeAdd(ctx context.Context, repoDir, wtPath, branch string, createBranch bool) error {
+	args := []string{"worktree", "add"}
+	if createBranch {
+		args = append(args, "-b", branch, wtPath)
+	} else {
+		args = append(args, wtPath, branch)
+	}
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git worktree add %s (%s): %s", wtPath, branch, string(out))
+	}
+	return nil
+}
+
+// gitWorktreeRemove removes a git worktree. It first tries a normal remove,
+// then falls back to --force if needed.
+func gitWorktreeRemove(ctx context.Context, repoDir, wtPath string) error {
+	cmd := exec.CommandContext(ctx, "git", "worktree", "remove", wtPath)
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		// Force remove on failure (e.g., dirty worktree).
+		cmd2 := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", wtPath)
+		cmd2.Dir = repoDir
+		if out2, err2 := cmd2.CombinedOutput(); err2 != nil {
+			return fmt.Errorf("git worktree remove --force %s: %s (first attempt: %s)", wtPath, string(out2), string(out))
+		}
 	}
 	return nil
 }
