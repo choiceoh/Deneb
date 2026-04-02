@@ -454,51 +454,49 @@ fn is_likely_local_path(candidate: &str) -> bool {
         || candidate.starts_with("\\\\")
 }
 
+/// Single-pass whitespace normalization:
+/// - Trim trailing whitespace on each line
+/// - Collapse consecutive blank lines into one newline
+/// - Collapse consecutive spaces/tabs into a single space
 fn collapse_whitespace(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-
-    // Collapse trailing whitespace on lines.
-    for line in input.split('\n') {
-        let trimmed_end = line.trim_end();
-        result.push_str(trimmed_end);
-        result.push('\n');
-    }
-    // Remove trailing newline added by loop.
-    if result.ends_with('\n') {
-        result.pop();
-    }
-
-    // Collapse multiple consecutive blank lines.
-    let mut final_result = String::with_capacity(result.len());
-    let mut newline_count = 0;
-    for ch in result.chars() {
-        if ch == '\n' {
-            newline_count += 1;
-            if newline_count <= 1 {
-                final_result.push('\n');
-            }
-        } else {
-            newline_count = 0;
-            final_result.push(ch);
-        }
-    }
-
-    // Collapse multiple spaces.
-    let mut collapsed = String::with_capacity(final_result.len());
+    let mut out = String::with_capacity(input.len());
+    // trailing_ws tracks spaces/tabs that may be trailing (not yet flushed).
+    let mut trailing_ws: usize = 0;
+    let mut newline_count: u32 = 0;
     let mut prev_space = false;
-    for ch in final_result.chars() {
-        if ch == ' ' || ch == '\t' {
-            if !prev_space {
-                collapsed.push(' ');
+
+    for ch in input.chars() {
+        match ch {
+            '\n' => {
+                // Drop any trailing whitespace before the newline.
+                trailing_ws = 0;
+                prev_space = false;
+                newline_count += 1;
+                if newline_count <= 1 {
+                    out.push('\n');
+                }
             }
-            prev_space = true;
-        } else {
-            prev_space = false;
-            collapsed.push(ch);
+            ' ' | '\t' => {
+                newline_count = 0;
+                // Buffer this as potential trailing whitespace.
+                if !prev_space {
+                    trailing_ws += 1;
+                }
+                prev_space = true;
+            }
+            _ => {
+                // Flush buffered whitespace as a single space.
+                if trailing_ws > 0 || prev_space {
+                    out.push(' ');
+                    trailing_ws = 0;
+                }
+                prev_space = false;
+                newline_count = 0;
+                out.push(ch);
+            }
         }
     }
-
-    collapsed
+    out
 }
 
 #[cfg(test)]
