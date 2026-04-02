@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -140,7 +141,9 @@ func ToolGateway(repoDir string) ToolFunc {
 				"updatedAt": time.Now().Format(time.RFC3339),
 			}
 			sentinelData, _ := json.Marshal(sentinel)
-			_ = os.WriteFile(sentinelPath, sentinelData, 0644)
+			if err := os.WriteFile(sentinelPath, sentinelData, 0644); err != nil {
+				slog.Warn("gateway: failed to write update sentinel", "path", sentinelPath, "err", err)
+			}
 
 			return fmt.Sprintf("Update completed successfully.\nGit pull: %s\nBuild: OK\nRestart the gateway to apply changes.", strings.TrimSpace(string(pullOut))), nil
 

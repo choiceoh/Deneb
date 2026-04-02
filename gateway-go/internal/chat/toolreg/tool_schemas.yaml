@@ -501,8 +501,8 @@
       description: Working directory (defaults to workspace root)
     timeout:
       type: number
-      description: "Timeout in seconds (default: 30, max: 600)"
-      default: 30
+      description: "Timeout in seconds (default: 60, max: 600)"
+      default: 60
       minimum: 1
       maximum: 600
     background:
@@ -1122,7 +1122,7 @@
         required:
           - file_path
       minItems: 1
-      maxItems: 20
+      maxItems: 40
   required:
     - files
 

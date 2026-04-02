@@ -155,7 +155,10 @@ func ToolTree(defaultDir string) ToolFunc {
 
 		if p.Pattern == "" && !p.DirsOnly {
 			if out, used, err := treeWithEza(ctx, dir, maxDepth, p.ShowHidden); used {
-				return out, err
+				if err != nil {
+					return "", err
+				}
+				return TruncateForLLM(out), nil
 			}
 		}
 
@@ -165,7 +168,7 @@ func ToolTree(defaultDir string) ToolFunc {
 		fileCount, dirCount := buildTree(&sb, dir, "", maxDepth, 0, p.ShowHidden, p.DirsOnly, p.Pattern)
 
 		fmt.Fprintf(&sb, "\n%d directories, %d files", dirCount, fileCount)
-		return sb.String(), nil
+		return TruncateForLLM(sb.String()), nil
 	}
 }
 

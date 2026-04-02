@@ -20,7 +20,7 @@ import (
 // batch_read — Read multiple files in one call
 // ---------------------------------------------------------------------------
 
-// ToolBatchRead reads up to 20 files in a single call using parallel I/O.
+// ToolBatchRead reads up to 40 files in a single call using parallel I/O.
 // Each file supports the same options as the read tool (offset, limit, function).
 // Per-file errors are reported inline without aborting the entire batch.
 // Results are reassembled in the original request order.
@@ -89,7 +89,7 @@ func ToolBatchRead(defaultDir string) ToolFunc {
 		}
 
 		fmt.Fprintf(&sb, "\n---\n[batch_read: %d/%d files read successfully]\n", successCount, n)
-		return sb.String(), nil
+		return TruncateForLLM(sb.String()), nil
 	}
 }
 
@@ -127,8 +127,8 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		if maxFiles <= 0 {
 			maxFiles = 5
 		}
-		if maxFiles > 20 {
-			maxFiles = 20
+		if maxFiles > 40 {
+			maxFiles = 40
 		}
 
 		searchPath := defaultDir
@@ -229,7 +229,65 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 			return "No matches found.", nil
 		}
 
-		// Step 3: For each file (up to max_files), read context around matches.
+		// Step 3: Read files in parallel (up to max_files), then assemble in order.
+		filesToRead := fileOrder
+		if len(filesToRead) > maxFiles {
+			filesToRead = filesToRead[:maxFiles]
+		}
+
+		type fileResult struct {
+			output string
+			err    error
+		}
+		fileResults := make([]fileResult, len(filesToRead))
+
+		var wg sync.WaitGroup
+		wg.Add(len(filesToRead))
+		for i, filePath := range filesToRead {
+			go func(idx int, fp string) {
+				defer wg.Done()
+				fm := fileMap[fp]
+				data, err := os.ReadFile(fp)
+				if err != nil {
+					fileResults[idx] = fileResult{err: err}
+					return
+				}
+
+				lines := strings.Split(string(data), "\n")
+				totalLines := len(lines)
+
+				displayPath := fp
+				if rel, relErr := filepath.Rel(defaultDir, fp); relErr == nil {
+					displayPath = rel
+				}
+
+				ranges := mergeRanges(fm.lines, contextLines, totalLines)
+
+				var fsb strings.Builder
+				fmt.Fprintf(&fsb, "[File: %s | %d lines | matches at lines: %v]\n",
+					displayPath, totalLines, fm.lines)
+
+				for ri, r := range ranges {
+					if ri > 0 {
+						fsb.WriteString("  ...\n")
+					}
+					for j := r.start; j <= r.end && j < totalLines; j++ {
+						marker := " "
+						for _, ml := range fm.lines {
+							if j+1 == ml {
+								marker = ">"
+								break
+							}
+						}
+						fmt.Fprintf(&fsb, "%s%6d\t%s\n", marker, j+1, lines[j])
+					}
+				}
+				fileResults[idx] = fileResult{output: fsb.String()}
+			}(i, filePath)
+		}
+		wg.Wait()
+
+		// Assemble results in original order.
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "[search_and_read: pattern=%q, %d files matched", p.Pattern, len(fileOrder))
 		if len(fileOrder) > maxFiles {
@@ -237,53 +295,13 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		}
 		sb.WriteString("]\n")
 
-		filesShown := 0
-		for _, filePath := range fileOrder {
-			if filesShown >= maxFiles {
-				break
-			}
-
-			fm := fileMap[filePath]
-			data, err := os.ReadFile(filePath)
-			if err != nil {
-				fmt.Fprintf(&sb, "\n---\n[Error reading %s: %s]\n", filePath, err.Error())
-				filesShown++
+		for i, r := range fileResults {
+			sb.WriteString("\n---\n")
+			if r.err != nil {
+				fmt.Fprintf(&sb, "[Error reading %s: %s]\n", filesToRead[i], r.err.Error())
 				continue
 			}
-
-			lines := strings.Split(string(data), "\n")
-			totalLines := len(lines)
-
-			// Build display path relative to search path.
-			displayPath := filePath
-			if rel, err := filepath.Rel(defaultDir, filePath); err == nil {
-				displayPath = rel
-			}
-
-			// Merge overlapping ranges from all match locations.
-			ranges := mergeRanges(fm.lines, contextLines, totalLines)
-
-			sb.WriteString("\n---\n")
-			fmt.Fprintf(&sb, "[File: %s | %d lines | matches at lines: %v]\n",
-				displayPath, totalLines, fm.lines)
-
-			for ri, r := range ranges {
-				if ri > 0 {
-					sb.WriteString("  ...\n")
-				}
-				for i := r.start; i <= r.end && i < totalLines; i++ {
-					marker := " "
-					for _, ml := range fm.lines {
-						if i+1 == ml {
-							marker = ">"
-							break
-						}
-					}
-					fmt.Fprintf(&sb, "%s%6d\t%s\n", marker, i+1, lines[i])
-				}
-			}
-
-			filesShown++
+			sb.WriteString(r.output)
 		}
 
 		if len(fileOrder) > maxFiles {
@@ -291,7 +309,7 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 				len(fileOrder)-maxFiles)
 		}
 
-		return sb.String(), nil
+		return TruncateForLLM(sb.String()), nil
 	}
 }
 

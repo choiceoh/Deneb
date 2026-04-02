@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -46,7 +47,9 @@ func (s *kvStore) load() {
 	if err != nil {
 		return // file doesn't exist yet
 	}
-	_ = json.Unmarshal(data, &s.data)
+	if err := json.Unmarshal(data, &s.data); err != nil {
+		slog.Warn("kv: failed to parse store", "path", s.path, "err", err)
+	}
 }
 
 // save persists the in-memory store to disk.
@@ -83,7 +86,9 @@ func (s *kvStore) delete(key string) bool {
 		return false
 	}
 	delete(s.data, key)
-	_ = s.save()
+	if err := s.save(); err != nil {
+		slog.Warn("kv: failed to persist after delete", "key", key, "err", err)
+	}
 	return true
 }
 
