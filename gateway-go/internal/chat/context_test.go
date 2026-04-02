@@ -7,8 +7,8 @@ import (
 
 func TestDefaultContextConfig(t *testing.T) {
 	cfg := DefaultContextConfig()
-	if cfg.TokenBudget != 100_000 {
-		t.Errorf("TokenBudget = %d, want %d", cfg.TokenBudget, 100_000)
+	if cfg.TokenBudget != 204_000 {
+		t.Errorf("TokenBudget = %d, want %d", cfg.TokenBudget, 204_000)
 	}
 	if cfg.FreshTailCount != 48 {
 		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, 48)
