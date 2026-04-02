@@ -270,6 +270,56 @@ func persistGeneratedToken(configPath, token string, logger *slog.Logger) error 
 	return nil
 }
 
+// PersistDefaultModel writes the given model ID into agents.defaultModel
+// in the config file, preserving all other fields.
+func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+
+	var raw map[string]any
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("reading config: %w", err)
+		}
+		raw = make(map[string]any)
+	} else {
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return fmt.Errorf("parsing config: %w", err)
+		}
+	}
+
+	// Set agents.defaultModel.
+	agents, ok := raw["agents"].(map[string]any)
+	if !ok {
+		agents = make(map[string]any)
+		raw["agents"] = agents
+	}
+	agents["defaultModel"] = model
+
+	// Update meta.
+	meta, ok := raw["meta"].(map[string]any)
+	if !ok {
+		meta = make(map[string]any)
+		raw["meta"] = meta
+	}
+	meta["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, append(out, '\n'), 0600); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+
+	logger.Info("persisted default model", "model", model, "path", configPath)
+	return nil
+}
+
 // mergeAuthConfig merges an override auth config into the base.
 func mergeAuthConfig(base, override *GatewayAuthConfig) *GatewayAuthConfig {
 	if override == nil {

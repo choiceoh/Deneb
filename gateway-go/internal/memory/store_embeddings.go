@@ -104,26 +104,24 @@ func (s *Store) PendingEmbeddings(ctx context.Context, limit int) ([]Fact, error
 		 LIMIT ?`, limit)
 }
 
-// RetryPendingEmbeddings embeds facts that are missing embeddings.
+// RetryPendingEmbeddings embeds facts that are missing embeddings using batch API.
 // Returns the number of successfully embedded facts.
 // Designed to run during dreaming Phase 0 as a best-effort recovery.
-func (s *Store) RetryPendingEmbeddings(ctx context.Context, embedFn func(ctx context.Context, factID int64, content string) error) (int, error) {
+func (s *Store) RetryPendingEmbeddings(ctx context.Context, batchEmbedFn func(ctx context.Context, facts []struct{ ID int64; Content string }) (int, error)) (int, error) {
 	pending, err := s.PendingEmbeddings(ctx, 50)
 	if err != nil {
 		return 0, err
 	}
-
-	embedded := 0
-	for _, f := range pending {
-		if ctx.Err() != nil {
-			break
-		}
-		if err := embedFn(ctx, f.ID, f.Content); err != nil {
-			continue // best-effort: skip failures, try next
-		}
-		embedded++
+	if len(pending) == 0 {
+		return 0, nil
 	}
-	return embedded, nil
+
+	batch := make([]struct{ ID int64; Content string }, len(pending))
+	for i, f := range pending {
+		batch[i] = struct{ ID int64; Content string }{ID: f.ID, Content: f.Content}
+	}
+
+	return batchEmbedFn(ctx, batch)
 }
 
 // LoadEmbeddingsForMerge returns embeddings, merge depths, and categories for
