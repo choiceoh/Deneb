@@ -103,3 +103,16 @@ func NewContinuationSignal() *ContinuationSignal {
 func WithContinuationSignal(ctx context.Context, sig *ContinuationSignal) context.Context {
 	return toolctx.WithContinuationSignal(ctx, sig)
 }
+
+// DeferredActivation is a re-export of toolctx.DeferredActivation.
+type DeferredActivation = toolctx.DeferredActivation
+
+// NewDeferredActivation creates a new (empty) DeferredActivation tracker.
+func NewDeferredActivation() *DeferredActivation {
+	return toolctx.NewDeferredActivation()
+}
+
+// WithDeferredActivation attaches a DeferredActivation to ctx.
+func WithDeferredActivation(ctx context.Context, da *DeferredActivation) context.Context {
+	return toolctx.WithDeferredActivation(ctx, da)
+}

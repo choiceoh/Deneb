@@ -847,12 +847,15 @@ func formatToolActivitySummary(activities []agent.ToolActivity) string {
 }
 
 // toPromptToolDefs converts chat.ToolDef slice to the minimal prompt.ToolDef
-// slice needed for system prompt assembly. Only the Name field is required
-// by the prompt package; the full ToolDef (with Fn, Schema, etc.) stays in chat/.
+// slice needed for system prompt assembly. Deferred tools are excluded — they
+// are listed separately via DeferredSummaries in SystemPromptParams.
 func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
-	out := make([]prompt.ToolDef, len(defs))
-	for i, d := range defs {
-		out[i] = prompt.ToolDef{Name: d.Name}
+	out := make([]prompt.ToolDef, 0, len(defs))
+	for _, d := range defs {
+		if d.Deferred {
+			continue
+		}
+		out = append(out, prompt.ToolDef{Name: d.Name})
 	}
 	return out
 }

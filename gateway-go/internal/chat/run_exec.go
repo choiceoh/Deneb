@@ -339,10 +339,26 @@ func executeAgentRun(
 		// Build tool defs — filtered if a preset is active.
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
 		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
+
+		// Deferred tool summaries for system prompt listing.
+		deferredSummaries := deps.tools.DeferredSummaries()
+		var deferredToolInfos []prompt.DeferredToolInfo
+		for _, ds := range deferredSummaries {
+			// Skip deferred tools not in the allowed preset (if preset is active).
+			if len(allowed) > 0 && !allowed[ds.Name] {
+				continue
+			}
+			deferredToolInfos = append(deferredToolInfos, prompt.DeferredToolInfo{
+				Name:        ds.Name,
+				Description: ds.Description,
+			})
+		}
+
 		spp := prompt.SystemPromptParams{
-			WorkspaceDir: workspaceDir,
-			ToolDefs:     toolDefs,
-			UserTimezone: tz,
+			WorkspaceDir:  workspaceDir,
+			ToolDefs:      toolDefs,
+			DeferredTools: deferredToolInfos,
+			UserTimezone:  tz,
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
 			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
@@ -541,6 +557,11 @@ func executeAgentRun(
 		contSignal = NewContinuationSignal()
 	}
 
+	// DeferredActivation: tracks which deferred tools have been activated via
+	// fetch_tools during this run. The executor reads it each turn to inject
+	// newly activated tool schemas into the ChatRequest.
+	deferredActivation := NewDeferredActivation()
+
 	// Resolve thinking config from the session's ThinkingLevel setting.
 	var thinkingCfg *llm.ThinkingConfig
 	if cachedSession != nil && cachedSession.ThinkingLevel != "" {
@@ -603,10 +624,18 @@ func executeAgentRun(
 			ctx = WithRunCache(ctx, runCache)
 			ctx = WithFileCache(ctx, fileCache)
 			ctx = WithToolPreset(ctx, sessionToolPreset)
+			ctx = WithDeferredActivation(ctx, deferredActivation)
 			if contSignal != nil {
 				ctx = WithContinuationSignal(ctx, contSignal)
 			}
 			return ctx
+		},
+		DynamicToolsProvider: func() []llm.Tool {
+			names := deferredActivation.ActivatedNames()
+			if len(names) == 0 {
+				return nil
+			}
+			return deps.tools.DeferredLLMTools(names)
 		},
 		// Enable nudge budget continuation and max-tokens recovery.
 		NudgeBudget: &agent.NudgeBudgetConfig{

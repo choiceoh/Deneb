@@ -1460,3 +1460,21 @@
   required:
     - reason
     - progress_summary
+
+# ---------------------------------------------------------------------------
+# Deferred tool activation
+# ---------------------------------------------------------------------------
+
+- name: fetch_tools
+  properties:
+    names:
+      type: array
+      description: "Exact tool names to activate (from the deferred tools list)"
+      items:
+        type: string
+      minItems: 1
+      maxItems: 10
+    query:
+      type: string
+      description: "Keyword search to find matching deferred tools (alternative to names)"
+  required: []

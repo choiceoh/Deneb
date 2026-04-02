@@ -25,6 +25,12 @@ type ToolDef struct {
 	Name string
 }
 
+// DeferredToolInfo describes a deferred tool for system prompt listing.
+type DeferredToolInfo struct {
+	Name        string
+	Description string
+}
+
 // cachedTimezone and cachedTimezoneLocation cache the resolved timezone
 // at startup to avoid time.LoadLocation() on every chat message.
 var (
@@ -63,15 +69,16 @@ func loadCachedTimezone() (string, *time.Location) {
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
 type SystemPromptParams struct {
-	WorkspaceDir  string
-	ToolDefs      []ToolDef
-	SkillsPrompt  string // pre-built skills XML from skills/prompt.go
-	UserTimezone  string
-	ContextFiles  []ContextFile
-	RuntimeInfo   *RuntimeInfo
-	Channel       string
-	DocsPath      string
-	SessionMemory string // pre-formatted session state block (empty = omit)
+	WorkspaceDir   string
+	ToolDefs       []ToolDef
+	DeferredTools  []DeferredToolInfo // deferred tools: name+description listed in prompt
+	SkillsPrompt   string            // pre-built skills XML from skills/prompt.go
+	UserTimezone   string
+	ContextFiles   []ContextFile
+	RuntimeInfo    *RuntimeInfo
+	Channel        string
+	DocsPath       string
+	SessionMemory  string // pre-formatted session state block (empty = omit)
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -121,9 +128,18 @@ func buildStaticCacheKey(toolDefs []ToolDef) string {
 // Semi-static: skills prompt (changes only when skills are added/removed, not per request).
 // Dynamic: memory, workspace, context files, runtime (changes per request).
 func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText, dynamicText string) {
-	toolSet := make(map[string]bool, len(params.ToolDefs))
+	// eagerSet: only eager tools (for compact tool list display).
+	eagerSet := make(map[string]bool, len(params.ToolDefs))
 	for _, def := range params.ToolDefs {
-		toolSet[def.Name] = true
+		eagerSet[def.Name] = true
+	}
+	// toolSet: eager + deferred (for conditional prompt sections like pilot, sessions_spawn).
+	toolSet := make(map[string]bool, len(params.ToolDefs)+len(params.DeferredTools))
+	for k, v := range eagerSet {
+		toolSet[k] = v
+	}
+	for _, dt := range params.DeferredTools {
+		toolSet[dt.Name] = true
 	}
 
 	// --- Static block (cached) ---
@@ -174,7 +190,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// Tooling: compact categorized list (descriptions are in tool schemas).
 		s.WriteString("## Tooling\n")
 		s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
-		writeCompactToolList(&s, toolSet)
+		writeCompactToolList(&s, eagerSet)
+		if len(params.DeferredTools) > 0 {
+			s.WriteString("\nDeferred tools (call `fetch_tools` to activate before use):\n")
+			for _, dt := range params.DeferredTools {
+				fmt.Fprintf(&s, "- %s: %s\n", dt.Name, truncateDescription(dt.Description, 80))
+			}
+		}
 		s.WriteString("\n")
 
 		// Tool Usage (compressed: parallel, first-class, CLI, pilot, chaining).
@@ -329,6 +351,15 @@ func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock
 		{Type: "text", Text: staticText, CacheControl: ephemeral},
 		{Type: "text", Text: dynamicText, CacheControl: ephemeral},
 	}
+}
+
+// truncateDescription truncates a description to maxLen runes, appending "..." if needed.
+func truncateDescription(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
 }
 
 // writeCompactToolList writes a categorized tool name list (no descriptions).
