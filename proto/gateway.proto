@@ -38,6 +38,22 @@ enum ErrorCode {
   ERROR_CODE_FEATURE_DISABLED = 22;
 }
 
+// FfiErrorCode enumerates C ABI return codes for extern "C" functions.
+// Values here are positive; generators negate them for Rust/Go output.
+// Positive FFI return values from buffer-writing functions are bytes written,
+// not error codes.
+enum FfiErrorCode {
+  FFI_ERROR_CODE_UNSPECIFIED = 0;
+  FFI_ERROR_CODE_NULL_POINTER = 1;
+  FFI_ERROR_CODE_INVALID_UTF8 = 2;
+  FFI_ERROR_CODE_OUTPUT_TOO_SMALL = 3;
+  FFI_ERROR_CODE_INPUT_TOO_LARGE = 4;
+  FFI_ERROR_CODE_JSON_ERROR = 5;
+  FFI_ERROR_CODE_OVERFLOW = 6;
+  FFI_ERROR_CODE_VALIDATION = 7;
+  FFI_ERROR_CODE_RUST_PANIC = 99;
+}
+
 // ErrorShape is the structured error payload embedded in ResponseFrame.error.
 message ErrorShape {
   string code = 1;    // ErrorCode string (e.g., "NOT_FOUND").

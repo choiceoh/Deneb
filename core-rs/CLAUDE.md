@@ -52,10 +52,11 @@ Rust workspace providing protocol validation, security, media, memory search, ma
 2. Create Go wrapper in `gateway-go/internal/ffi/*_cgo.go`
 3. Create fallback in `gateway-go/internal/ffi/*_noffi.go`
 4. If adding new error codes:
-   - Edit `proto/gateway.proto` (`ErrorCode` enum); add `// retryable` on retryable codes.
-   - Run `make proto-error-codes-gen` to regenerate `core/src/protocol/error_codes.rs`.
-   - Never edit `error_codes.rs` by hand — it is auto-generated.
-5. Run `make proto-error-codes-gen-check` to verify the generated file is up to date.
+   - Protocol codes: edit `proto/gateway.proto` (`ErrorCode` enum); add `// retryable` on retryable codes.
+   - FFI codes: edit `proto/gateway.proto` (`FfiErrorCode` enum); values are positive, negated by generator.
+   - Run `make error-codes-gen` to regenerate `error_codes.rs`, `errors_gen.go`, and `ffi_error_codes_gen.go`.
+   - Never edit these generated files by hand.
+5. Run `make error-codes-gen-check` to verify generated files are up to date.
 
 ### Stateful FFI Pattern
 

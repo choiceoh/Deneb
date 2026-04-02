@@ -11,8 +11,8 @@
        proto proto-go proto-rust proto-check proto-lint proto-watch \
        tool-schemas tool-schemas-check \
        model-caps model-caps-check \
-       ffi-gen ffi-gen-check \
-       proto-error-codes-gen proto-error-codes-gen-check error-code-sync \
+       error-codes-gen error-codes-gen-check \
+       ffi-gen ffi-gen-check proto-error-codes-gen proto-error-codes-gen-check error-code-sync \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -196,21 +196,19 @@ check: generate-check rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test
 	@echo "All checks passed"
 
 # Run all code generation pipelines in dependency order.
-generate: proto tool-schemas model-caps ffi-gen proto-error-codes-gen
+generate: proto tool-schemas model-caps error-codes-gen
 	@echo "All code generation pipelines completed"
 
 # Verify generated sources are up to date.
 # Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@echo "==> [1/5] proto types (proto → Go + Rust)"
+	@echo "==> [1/4] proto types (proto → Go + Rust)"
 	@$(MAKE) proto-check
-	@echo "==> [2/5] proto error codes (gateway.proto → error_codes.rs)"
-	@$(MAKE) proto-error-codes-gen-check
-	@echo "==> [3/5] ffi error codes (ffi_utils.rs → ffi_error_codes_gen.go)"
-	@$(MAKE) ffi-gen-check
-	@echo "==> [4/5] tool schemas (tool_schemas.yaml → tool_schemas_gen.go)"
+	@echo "==> [2/4] error codes (gateway.proto → Rust + Go)"
+	@$(MAKE) error-codes-gen-check
+	@echo "==> [3/4] tool schemas (tool_schemas.yaml → tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
-	@echo "==> [5/5] model capabilities (model_caps.yaml → model_caps_gen.go)"
+	@echo "==> [4/4] model capabilities (model_caps.yaml → model_caps_gen.go)"
 	@$(MAKE) model-caps-check
 	@echo "All generation checks passed"
 
@@ -271,34 +269,27 @@ model-caps-check:
 		-out  internal/autoreply/thinking/model_caps_gen.go
 	@git diff --exit-code -- gateway-go/internal/autoreply/thinking/model_caps_gen.go
 
-# --- FFI error code generation ---
+# --- Error code generation (unified) ---
 #
-# Rust ffi_utils.rs is the single source of truth for FFI error codes.
-# ffi_error_codes_gen.go is generated from it — never edit it by hand.
+# proto/gateway.proto is the single source of truth for ALL error codes:
+#   - ErrorCode enum → protocol-level codes (Rust enum + Go string constants)
+#   - FfiErrorCode enum → C ABI return codes (Rust constants + Go int constants)
+# Generated files: error_codes.rs, errors_gen.go, ffi_error_codes_gen.go.
 
-# Regenerate gateway-go/internal/ffi/ffi_error_codes_gen.go from ffi_utils.rs.
-ffi-gen:
-	./scripts/gen-ffi-errors.sh
+# Regenerate all error code files from proto/gateway.proto.
+error-codes-gen:
+	./scripts/gen-error-codes.sh
 
-# Verify ffi_error_codes_gen.go is up to date (fails if Rust and Go are out of sync).
-ffi-gen-check:
-	./scripts/gen-ffi-errors.sh --check
+# Verify all error code files are up to date.
+error-codes-gen-check:
+	./scripts/gen-error-codes.sh --check
 
-# --- Protocol error code generation ---
-#
-# proto/gateway.proto is the single source of truth for the ErrorCode enum.
-# error_codes.rs is generated from it — never edit it by hand.
-
-# Regenerate core-rs/core/src/protocol/error_codes.rs from proto/gateway.proto.
-proto-error-codes-gen:
-	./scripts/gen-proto-error-codes.sh
-
-# Verify error_codes.rs is up to date (fails if proto and Rust are out of sync).
-proto-error-codes-gen-check:
-	./scripts/gen-proto-error-codes.sh --check
-
-# Legacy alias — kept for compatibility with external scripts.
-error-code-sync: proto-error-codes-gen-check
+# Legacy aliases — kept for backward compatibility.
+ffi-gen: error-codes-gen
+ffi-gen-check: error-codes-gen-check
+proto-error-codes-gen: error-codes-gen
+proto-error-codes-gen-check: error-codes-gen-check
+error-code-sync: error-codes-gen-check
 
 # --- Info ---
 

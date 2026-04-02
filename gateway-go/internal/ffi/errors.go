@@ -7,8 +7,8 @@ import (
 )
 
 // FFI return codes are defined in ffi_error_codes_gen.go (auto-generated from
-// core-rs/core/src/ffi_utils.rs). To add or modify a code, edit ffi_utils.rs
-// and run: make ffi-gen
+// proto/gateway.proto FfiErrorCode enum). To add or modify a code, edit
+// gateway.proto and run: make error-codes-gen
 
 // maxGrowBufSize is the upper limit for automatic buffer growth (16 MB).
 const maxGrowBufSize = 16 * 1024 * 1024

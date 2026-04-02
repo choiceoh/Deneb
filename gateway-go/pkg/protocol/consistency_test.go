@@ -152,10 +152,10 @@ func TestStateVersionConsistency(t *testing.T) {
 	)
 }
 
-// TestErrorCodeConsistency verifies that the hand-written error code string
-// constants in errors.go match every non-UNSPECIFIED value in the generated
-// ErrorCode protobuf enum. This catches additions to the proto that aren't
-// reflected in the Go constants (or vice versa).
+// TestErrorCodeConsistency verifies that the generated error code string
+// constants in errors_gen.go match every non-UNSPECIFIED value in the
+// protoc-gen-go ErrorCode enum. Both are generated from proto/gateway.proto
+// but via different generators, so this cross-validates correctness.
 func TestErrorCodeConsistency(t *testing.T) {
 	// Hand-written string constants from errors.go.
 	handWritten := []string{

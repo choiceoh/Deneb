@@ -38,19 +38,26 @@ Shared type definitions compiled to Go and Rust. Source of truth for cross-langu
 
 ## Error Code Generation
 
-`proto/gateway.proto` is the **single source of truth** for the `ErrorCode` enum.
-`core-rs/core/src/protocol/error_codes.rs` is **auto-generated** — never edit it by hand.
+`proto/gateway.proto` is the **single source of truth** for all error codes:
+- `ErrorCode` enum — protocol-level codes (NOT_FOUND, UNAUTHORIZED, etc.)
+- `FfiErrorCode` enum — C ABI return codes (NULL_POINTER, INVALID_UTF8, etc.)
 
-When changing the `ErrorCode` enum:
+Generated files (all auto-generated — never edit by hand):
+- `core-rs/core/src/protocol/error_codes.rs` — Rust ErrorCode enum + FFI_ERR_* constants
+- `gateway-go/pkg/protocol/errors_gen.go` — Go Err* string constants
+- `gateway-go/internal/ffi/ffi_error_codes_gen.go` — Go rc* int constants
 
-1. Edit `gateway.proto` — add/remove/rename `ERROR_CODE_*` values.
-   - Mark retryable codes with a trailing `// retryable` comment.
-2. Run `make proto-error-codes-gen` to regenerate `error_codes.rs`.
-3. Commit both files together.
+When changing error codes:
+
+1. Edit `gateway.proto` — add/remove/rename `ERROR_CODE_*` or `FFI_ERROR_CODE_*` values.
+   - Mark retryable protocol codes with a trailing `// retryable` comment.
+   - FfiErrorCode values are positive in proto; the generator negates them for Rust/Go.
+2. Run `make error-codes-gen` to regenerate all three output files.
+3. Commit proto + generated files together.
 
 ```
-make proto-error-codes-gen        # regenerate Rust file
-make proto-error-codes-gen-check  # verify it is up to date (used by make check)
+make error-codes-gen        # regenerate all error code files
+make error-codes-gen-check  # verify all are up to date (used by make check)
 ```
 
 ## Config
