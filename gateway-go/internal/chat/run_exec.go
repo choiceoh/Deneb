@@ -609,6 +609,9 @@ func executeAgentRun(
 		},
 		MaxOutputTokensRecovery: 3,
 		StreamingToolExecution:  true,
+		// Mid-loop compaction: evaluate context size after each tool turn and
+		// compact proactively before the LLM hits context_length_exceeded.
+		OnMidLoopCompact: buildMidLoopCompactor(deps, params, logger),
 	}
 
 	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
