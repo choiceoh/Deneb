@@ -82,11 +82,12 @@ type Runner struct {
 	mu          sync.Mutex
 	cancel      context.CancelFunc
 	running     bool
-	workdir     string // original repo directory (state lives here)
-	worktreeDir string // isolated worktree for experiments (empty when not running)
-	client      *llm.Client
-	model       string
-	params      Params // snapshot of tunable params from config at Start() time
+	workdir      string // original repo directory (state lives here)
+	worktreeDir  string // isolated worktree for experiments (empty when not running)
+	client       *llm.Client
+	model        string
+	defaultModel string // server-injected default (e.g., lightweight model); overrides Params.DefaultModel
+	params       Params // snapshot of tunable params from config at Start() time
 	notifier    Notifier
 	logger      *slog.Logger
 }
@@ -106,6 +107,28 @@ func (r *Runner) SetLLMClient(client *llm.Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.client = client
+}
+
+// SetDefaultModel overrides the default model name used when Config.Model is
+// empty. This allows the server to wire the lightweight (local) model for
+// autoresearch without changing Config or Params defaults.
+func (r *Runner) SetDefaultModel(model string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.defaultModel = model
+}
+
+// resolveModel returns the model to use for an LLM call.
+// Priority: per-experiment Config.Model > server-injected defaultModel > Params.DefaultModel.
+// Must be called with r.mu held.
+func (r *Runner) resolveModel(cfg *Config) string {
+	if r.model != "" {
+		return r.model
+	}
+	if r.defaultModel != "" {
+		return r.defaultModel
+	}
+	return cfg.Params.DefaultModel
 }
 
 // SetNotifier sets the notifier for progress updates.
@@ -419,12 +442,8 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 
 	r.mu.Lock()
 	client := r.client
-	model := r.model
+	model := r.resolveModel(cfg)
 	r.mu.Unlock()
-
-	if model == "" {
-		model = cfg.Params.DefaultModel
-	}
 
 	llmResp, err := client.Complete(ctx, llm.ChatRequest{
 		Model:     model,
@@ -1138,12 +1157,8 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 
 	r.mu.Lock()
 	client := r.client
-	model := r.model
+	model := r.resolveModel(cfg)
 	r.mu.Unlock()
-
-	if model == "" {
-		model = cfg.Params.DefaultModel
-	}
 
 	llmResp, err := client.Complete(ctx, llm.ChatRequest{
 		Model:     model,
