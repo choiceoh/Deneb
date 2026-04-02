@@ -14,20 +14,9 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
-
-// ReplyDirectiveParseResult holds the result of parsing reply directives.
-type ReplyDirectiveParseResult struct {
-	Text           string
-	MediaURLs      []string
-	MediaURL       string
-	ReplyToID      string
-	ReplyToCurrent bool
-	ReplyToTag     bool
-	AudioAsVoice   bool
-	IsSilent       bool
-}
 
 // --- MEDIA: token parsing (mirrors src/media/parse.ts) ---
 
@@ -279,7 +268,7 @@ func splitMediaFromOutputFallback(raw string) (text string, mediaURLs []string, 
 
 // ParseReplyDirectives parses reply directives from raw agent output text.
 // Extracts MEDIA: tokens, threading tags, and silent tokens.
-func ParseReplyDirectives(raw string, currentMessageID string, silentToken string) ReplyDirectiveParseResult {
+func ParseReplyDirectives(raw string, currentMessageID string, silentToken string) chatport.ReplyDirectives {
 	text, mediaURLs, mediaURL, audioAsVoice := splitMediaFromOutput(raw)
 
 	// Strip leaked tool-call markup (e.g. "<function=read>...</tool_call>")
@@ -308,7 +297,7 @@ func ParseReplyDirectives(raw string, currentMessageID string, silentToken strin
 		text = ""
 	}
 
-	return ReplyDirectiveParseResult{
+	return chatport.ReplyDirectives{
 		Text:           text,
 		MediaURLs:      mediaURLs,
 		MediaURL:       mediaURL,

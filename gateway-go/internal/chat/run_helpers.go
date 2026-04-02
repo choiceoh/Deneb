@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
@@ -157,10 +156,10 @@ func handleRunSuccess(
 	}
 
 	// Deliver response back to the originating channel (e.g., Telegram).
-	// Use reply.ParseReplyDirectives for unified processing: silent token
+	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
-	if params.Delivery != nil && result.Text != "" {
-		directives := reply.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
+	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives != nil {
+		directives := deps.parseReplyDirectives(result.Text, params.Delivery.MessageID, "")
 		if directives.IsSilent {
 			logger.Info("suppressing silent reply (NO_REPLY)")
 			// Clean up draft streaming message when reply is suppressed.
