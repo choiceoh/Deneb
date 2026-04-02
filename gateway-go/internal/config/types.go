@@ -6,6 +6,77 @@ package config
 
 import "encoding/json"
 
+// ── Typed enum constants ─────────────────────────────────────────────────────
+
+// Gateway bind modes.
+const (
+	BindAuto     = "auto"
+	BindLAN      = "lan"
+	BindLoopback = "loopback"
+	BindCustom   = "custom"
+	BindTailnet  = "tailnet"
+)
+
+// Gateway auth modes.
+const (
+	AuthModeNone         = "none"
+	AuthModeToken        = "token"
+	AuthModePassword     = "password"
+	AuthModeTrustedProxy = "trusted-proxy"
+)
+
+// Tailscale modes.
+const (
+	TailscaleOff   = "off"
+	TailscaleServe = "serve"
+	TailscaleFunnel = "funnel"
+)
+
+// Config reload modes.
+const (
+	ReloadOff     = "off"
+	ReloadRestart = "restart"
+	ReloadHot     = "hot"
+	ReloadHybrid  = "hybrid"
+)
+
+// Remote transport modes.
+const (
+	TransportSSH    = "ssh"
+	TransportDirect = "direct"
+)
+
+// Browser routing modes.
+const (
+	BrowserAuto   = "auto"
+	BrowserManual = "manual"
+	BrowserOff    = "off"
+)
+
+// Logging formats.
+const (
+	LogFormatText = "text"
+	LogFormatJSON = "json"
+)
+
+// ── Default values ───────────────────────────────────────────────────────────
+
+const (
+	DefaultChannelHealthCheckMinutes   = 5
+	DefaultChannelStaleThresholdMinutes = 30
+	DefaultChannelMaxRestartsPerHour   = 10
+	DefaultReloadDebounceMs            = 300
+	DefaultReloadDeferralTimeoutMs     = 300_000
+	DefaultAuthRateLimitMaxAttempts    = 10
+	DefaultAuthRateLimitWindowMs       = 60_000
+	DefaultAuthRateLimitLockoutMs      = 300_000
+	DefaultSessionMainKey              = "main"
+	DefaultAgentMaxConcurrent          = 8
+	DefaultSubagentMaxConcurrent       = 2
+	DefaultLogRedactSensitive          = "tools"
+	DefaultMaxHookTimeoutMs            = 300_000 // 5 minutes
+)
+
 // DenebConfig is the top-level configuration object read from deneb.json.
 // Only gateway-relevant sections are fully typed; other sections are preserved
 // as raw JSON for forwarding to the Node.js Plugin Host bridge.

@@ -94,7 +94,7 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 		// Validate bind mode.
 		if gw.Bind != "" {
 			switch gw.Bind {
-			case "auto", "lan", "loopback", "custom", "tailnet":
+			case BindAuto, BindLAN, BindLoopback, BindCustom, BindTailnet:
 				// Valid.
 			default:
 				issues = append(issues, ConfigIssue{
@@ -105,7 +105,7 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 		}
 
 		// Validate custom bind host.
-		if gw.Bind == "custom" && strings.TrimSpace(gw.CustomBindHost) == "" {
+		if gw.Bind == BindCustom && strings.TrimSpace(gw.CustomBindHost) == "" {
 			issues = append(issues, ConfigIssue{
 				Path:    "gateway.customBindHost",
 				Message: "gateway.bind=custom requires gateway.customBindHost",
@@ -126,7 +126,7 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 		// Validate auth mode.
 		if gw.Auth != nil && gw.Auth.Mode != "" {
 			switch gw.Auth.Mode {
-			case "none", "token", "password", "trusted-proxy":
+			case AuthModeNone, AuthModeToken, AuthModePassword, AuthModeTrustedProxy:
 				// Valid.
 			default:
 				issues = append(issues, ConfigIssue{
@@ -139,7 +139,7 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 		// Validate tailscale mode.
 		if gw.Tailscale != nil && gw.Tailscale.Mode != "" {
 			switch gw.Tailscale.Mode {
-			case "off", "serve", "funnel":
+			case TailscaleOff, TailscaleServe, TailscaleFunnel:
 				// Valid.
 			default:
 				issues = append(issues, ConfigIssue{
@@ -152,13 +152,58 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 		// Validate reload mode.
 		if gw.Reload != nil && gw.Reload.Mode != "" {
 			switch gw.Reload.Mode {
-			case "off", "restart", "hot", "hybrid":
+			case ReloadOff, ReloadRestart, ReloadHot, ReloadHybrid:
 				// Valid.
 			default:
 				issues = append(issues, ConfigIssue{
 					Path:    "gateway.reload.mode",
 					Message: fmt.Sprintf("invalid reload mode %q", gw.Reload.Mode),
 				})
+			}
+		}
+	}
+
+	// Validate hooks.
+	if cfg.Hooks != nil {
+		seenIDs := make(map[string]bool)
+		for i, hook := range cfg.Hooks.Entries {
+			prefix := fmt.Sprintf("hooks.entries[%d]", i)
+
+			if strings.TrimSpace(hook.Event) == "" {
+				issues = append(issues, ConfigIssue{
+					Path:    prefix + ".event",
+					Message: "hook entry requires a non-empty event",
+				})
+			}
+
+			if strings.TrimSpace(hook.Command) == "" {
+				issues = append(issues, ConfigIssue{
+					Path:    prefix + ".command",
+					Message: "hook entry requires a non-empty command",
+				})
+			}
+
+			if hook.TimeoutMs != nil && *hook.TimeoutMs < 0 {
+				issues = append(issues, ConfigIssue{
+					Path:    prefix + ".timeoutMs",
+					Message: fmt.Sprintf("timeoutMs must be non-negative (got %d)", *hook.TimeoutMs),
+				})
+			}
+			if hook.TimeoutMs != nil && *hook.TimeoutMs > DefaultMaxHookTimeoutMs {
+				warnings = append(warnings, fmt.Sprintf(
+					"%s.timeoutMs: %d exceeds recommended maximum (%d ms)",
+					prefix, *hook.TimeoutMs, DefaultMaxHookTimeoutMs,
+				))
+			}
+
+			if hook.ID != "" {
+				if seenIDs[hook.ID] {
+					issues = append(issues, ConfigIssue{
+						Path:    prefix + ".id",
+						Message: fmt.Sprintf("duplicate hook ID %q", hook.ID),
+					})
+				}
+				seenIDs[hook.ID] = true
 			}
 		}
 	}
@@ -177,13 +222,13 @@ func applyDefaults(cfg *DenebConfig) {
 		cfg.Gateway.Port = &port
 	}
 	if cfg.Gateway.Bind == "" {
-		cfg.Gateway.Bind = "loopback"
+		cfg.Gateway.Bind = BindLoopback
 	}
 	if cfg.Gateway.Auth == nil {
 		cfg.Gateway.Auth = &GatewayAuthConfig{}
 	}
 	if cfg.Gateway.Auth.Mode == "" {
-		cfg.Gateway.Auth.Mode = "token"
+		cfg.Gateway.Auth.Mode = AuthModeToken
 	}
 	if cfg.Gateway.ControlUI == nil {
 		cfg.Gateway.ControlUI = &GatewayControlUIConfig{}
@@ -196,32 +241,32 @@ func applyDefaults(cfg *DenebConfig) {
 		cfg.Gateway.Tailscale = &GatewayTailscaleConfig{}
 	}
 	if cfg.Gateway.Tailscale.Mode == "" {
-		cfg.Gateway.Tailscale.Mode = "off"
+		cfg.Gateway.Tailscale.Mode = TailscaleOff
 	}
 	if cfg.Gateway.ChannelHealthCheckMinutes == nil {
-		v := 5
+		v := DefaultChannelHealthCheckMinutes
 		cfg.Gateway.ChannelHealthCheckMinutes = &v
 	}
 	if cfg.Gateway.ChannelStaleEventThresholdMinutes == nil {
-		v := 30
+		v := DefaultChannelStaleThresholdMinutes
 		cfg.Gateway.ChannelStaleEventThresholdMinutes = &v
 	}
 	if cfg.Gateway.ChannelMaxRestartsPerHour == nil {
-		v := 10
+		v := DefaultChannelMaxRestartsPerHour
 		cfg.Gateway.ChannelMaxRestartsPerHour = &v
 	}
 	if cfg.Gateway.Reload == nil {
 		cfg.Gateway.Reload = &GatewayReloadConfig{}
 	}
 	if cfg.Gateway.Reload.Mode == "" {
-		cfg.Gateway.Reload.Mode = "hybrid"
+		cfg.Gateway.Reload.Mode = ReloadHybrid
 	}
 	if cfg.Gateway.Reload.DebounceMs == nil {
-		v := 300
+		v := DefaultReloadDebounceMs
 		cfg.Gateway.Reload.DebounceMs = &v
 	}
 	if cfg.Gateway.Reload.DeferralTimeoutMs == nil {
-		v := 300000
+		v := DefaultReloadDeferralTimeoutMs
 		cfg.Gateway.Reload.DeferralTimeoutMs = &v
 	}
 
@@ -231,15 +276,15 @@ func applyDefaults(cfg *DenebConfig) {
 	}
 	rl := cfg.Gateway.Auth.RateLimit
 	if rl.MaxAttempts == nil {
-		v := 10
+		v := DefaultAuthRateLimitMaxAttempts
 		rl.MaxAttempts = &v
 	}
 	if rl.WindowMs == nil {
-		v := 60000
+		v := DefaultAuthRateLimitWindowMs
 		rl.WindowMs = &v
 	}
 	if rl.LockoutMs == nil {
-		v := 300000
+		v := DefaultAuthRateLimitLockoutMs
 		rl.LockoutMs = &v
 	}
 	if rl.ExemptLoopback == nil {
@@ -252,7 +297,7 @@ func applyDefaults(cfg *DenebConfig) {
 		cfg.Session = &SessionConfig{}
 	}
 	if cfg.Session.MainKey == "" {
-		cfg.Session.MainKey = "main"
+		cfg.Session.MainKey = DefaultSessionMainKey
 	}
 
 	// Agent defaults.
@@ -260,11 +305,11 @@ func applyDefaults(cfg *DenebConfig) {
 		cfg.Agents = &AgentsConfig{}
 	}
 	if cfg.Agents.MaxConcurrent == nil {
-		v := 8
+		v := DefaultAgentMaxConcurrent
 		cfg.Agents.MaxConcurrent = &v
 	}
 	if cfg.Agents.SubagentMaxConcurrent == nil {
-		v := 2
+		v := DefaultSubagentMaxConcurrent
 		cfg.Agents.SubagentMaxConcurrent = &v
 	}
 
@@ -273,8 +318,18 @@ func applyDefaults(cfg *DenebConfig) {
 		cfg.Logging = &LoggingConfig{}
 	}
 	if cfg.Logging.RedactSensitive == "" {
-		cfg.Logging.RedactSensitive = "tools"
+		cfg.Logging.RedactSensitive = DefaultLogRedactSensitive
 	}
+}
+
+// ValidateRawConfig parses and validates raw JSON config bytes, returning any issues.
+func ValidateRawConfig(raw []byte) (issues []ConfigIssue, warnings []string, err error) {
+	var cfg DenebConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return []ConfigIssue{{Message: "JSON parse failed: " + err.Error()}}, nil, nil
+	}
+	issues, warnings = validateConfig(&cfg)
+	return issues, warnings, nil
 }
 
 // hashRaw computes a SHA-256 hex hash of the raw config bytes (or "" for nil).

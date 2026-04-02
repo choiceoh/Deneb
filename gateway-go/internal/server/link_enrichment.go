@@ -119,9 +119,10 @@ func fetchAndConvert(ctx context.Context, url string, fetchFn FetchFunc, logger 
 	var title, content string
 
 	if isHTMLContent(contentType) {
-		// Strip noise elements (nav, ads, cookie banners) before conversion.
+		// Strip noise: Go handles class/ID patterns (ads, cookie banners),
+		// Rust handles tag-level noise (nav, aside, svg, iframe, form).
 		cleaned := web.StripNoiseElements(string(data))
-		text, t, err := ffi.HtmlToMarkdown(cleaned)
+		text, t, err := ffi.HtmlToMarkdownStripNoise(cleaned)
 		if err != nil {
 			logger.Debug("html-to-markdown failed", "url", url, "error", err)
 			// Fall back to raw text with basic tag stripping.

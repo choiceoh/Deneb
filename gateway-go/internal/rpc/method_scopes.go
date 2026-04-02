@@ -51,15 +51,15 @@ var methodScopes = map[string]auth.Scope{
 	"sessions.overflow_check":       auth.ScopeRead,
 	"sessions.lifecycle":            auth.ScopeWrite,
 
-	// --- Channels (read/write/admin) ---
-	"channels.list":    auth.ScopeRead,
-	"channels.get":     auth.ScopeRead,
-	"channels.status":  auth.ScopeRead,
-	"channels.health":  auth.ScopeRead,
-	"channels.start":   auth.ScopeAdmin,
-	"channels.stop":    auth.ScopeAdmin,
-	"channels.restart": auth.ScopeAdmin,
-	"channels.logout":  auth.ScopeWrite,
+	// --- Telegram (read/write/admin) ---
+	"telegram.list":    auth.ScopeRead,
+	"telegram.get":     auth.ScopeRead,
+	"telegram.status":  auth.ScopeRead,
+	"telegram.health":  auth.ScopeRead,
+	"telegram.start":   auth.ScopeAdmin,
+	"telegram.stop":    auth.ScopeAdmin,
+	"telegram.restart": auth.ScopeAdmin,
+	"telegram.logout":  auth.ScopeWrite,
 
 	// --- Messaging ---
 	"send":        auth.ScopeWrite,

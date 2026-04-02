@@ -1,13 +1,10 @@
-// Package channel provides RPC handlers for channel lifecycle, event
-// subscription, and messaging (send/poll) methods. These were migrated from
-// the flat rpc package (methods_channel.go, methods_events.go,
-// methods_messaging.go) into a domain-based handler subpackage.
-package channel
+// Package handlertelegram provides RPC handlers for Telegram lifecycle
+// (start/stop/restart) and messaging (send/poll) methods.
+package handlertelegram
 
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
@@ -22,20 +19,13 @@ import (
 // Deps structs
 // ---------------------------------------------------------------------------
 
-// LifecycleDeps holds the dependencies for channel lifecycle RPC methods
-// (channels.start, channels.stop, channels.restart).
+// LifecycleDeps holds the dependencies for Telegram lifecycle RPC methods
+// (telegram.start, telegram.stop, telegram.restart).
 type LifecycleDeps struct {
 	TelegramPlugin *telegram.Plugin
 	Hooks          *hooks.Registry
 	InternalHooks  *hooks.InternalRegistry
 	Broadcaster    *events.Broadcaster
-}
-
-// EventsDeps holds the dependencies for event subscription RPC methods
-// (subscribe.session, sessions.subscribe, etc.).
-type EventsDeps struct {
-	Broadcaster *events.Broadcaster
-	Logger      *slog.Logger
 }
 
 // MessagingDeps holds dependencies for send/poll RPC methods.
@@ -48,150 +38,16 @@ type MessagingDeps struct {
 // Method registries
 // ---------------------------------------------------------------------------
 
-// LifecycleMethods returns channel start/stop/restart RPC handlers.
+// LifecycleMethods returns Telegram start/stop/restart RPC handlers.
 // Returns nil if TelegramPlugin is not configured.
 func LifecycleMethods(deps LifecycleDeps) map[string]rpcutil.HandlerFunc {
 	if deps.TelegramPlugin == nil {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"channels.start":   channelStart(deps),
-		"channels.stop":    channelStop(deps),
-		"channels.restart": channelRestart(deps),
-	}
-}
-
-// EventsMethods returns event subscription and streaming RPC handlers.
-// Also includes TS-compatible aliases (sessions.subscribe, etc.)
-// that map to the same handlers as subscribe.session, etc.
-// Returns nil if Broadcaster is not configured.
-//
-// Note: "node.event" is registered by handlernode.Methods (not here) to
-// avoid duplicate registration — the node package's implementation is the
-// authoritative handler for node event broadcasting.
-func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
-	if deps.Broadcaster == nil {
-		return nil
-	}
-
-	// Define handlers once, register under both legacy and TS-compatible names.
-	subscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			ConnID string `json:"connId"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" {
-			return rpcerr.MissingParam("connId").Response(req.ID)
-		}
-		deps.Broadcaster.SubscribeSessionEvents(p.ConnID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
-		return resp
-	}
-
-	unsubscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			ConnID string `json:"connId"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" {
-			return rpcerr.MissingParam("connId").Response(req.ID)
-		}
-		deps.Broadcaster.UnsubscribeSessionEvents(p.ConnID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
-		return resp
-	}
-
-	subscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			ConnID     string `json:"connId"`
-			SessionKey string `json:"sessionKey"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.SessionKey == "" {
-			return rpcerr.MissingParam("connId and sessionKey").Response(req.ID)
-		}
-		deps.Broadcaster.SubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
-		return resp
-	}
-
-	unsubscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			ConnID     string `json:"connId"`
-			SessionKey string `json:"sessionKey"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.SessionKey == "" {
-			return rpcerr.MissingParam("connId and sessionKey").Response(req.ID)
-		}
-		deps.Broadcaster.UnsubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
-		return resp
-	}
-
-	// Tool event subscription: routes session.tool events for a specific run
-	// to a single connection instead of broadcasting to all subscribers.
-	subscribeToolEvents := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			ConnID string `json:"connId"`
-			RunID  string `json:"runId"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.RunID == "" {
-			return rpcerr.MissingParam("connId and runId").Response(req.ID)
-		}
-		deps.Broadcaster.RegisterToolEventRecipient(p.RunID, p.ConnID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
-		return resp
-	}
-
-	unsubscribeToolEvents := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			RunID string `json:"runId"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.RunID == "" {
-			return rpcerr.MissingParam("runId").Response(req.ID)
-		}
-		deps.Broadcaster.UnregisterToolEventRecipient(p.RunID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
-		return resp
-	}
-
-	return map[string]rpcutil.HandlerFunc{
-		// Legacy Go names.
-		"subscribe.session":            subscribeSession,
-		"unsubscribe.session":          unsubscribeSession,
-		"subscribe.session.messages":   subscribeMessages,
-		"unsubscribe.session.messages": unsubscribeMessages,
-
-		// TS-compatible aliases.
-		"sessions.subscribe":            subscribeSession,
-		"sessions.unsubscribe":          unsubscribeSession,
-		"sessions.messages.subscribe":   subscribeMessages,
-		"sessions.messages.unsubscribe": unsubscribeMessages,
-
-		// Tool event routing.
-		"sessions.tools.subscribe":   subscribeToolEvents,
-		"sessions.tools.unsubscribe": unsubscribeToolEvents,
-	}
-}
-
-func eventsBroadcast(deps EventsDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			Event   string `json:"event"`
-			Payload any    `json:"payload"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Event == "" {
-			return rpcerr.MissingParam("event").Response(req.ID)
-		}
-		sent, _ := deps.Broadcaster.Broadcast(p.Event, p.Payload)
-		return protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
-	}
-}
-
-// BroadcastMethods returns the events.broadcast handler.
-func BroadcastMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
-	if deps.Broadcaster == nil {
-		return nil
-	}
-	return map[string]rpcutil.HandlerFunc{
-		"events.broadcast": eventsBroadcast(deps),
+		"telegram.start":   telegramStart(deps),
+		"telegram.stop":    telegramStop(deps),
+		"telegram.restart": telegramRestart(deps),
 	}
 }
 
@@ -205,12 +61,12 @@ func MessagingMethods(deps MessagingDeps) map[string]rpcutil.HandlerFunc {
 }
 
 // ---------------------------------------------------------------------------
-// Channel lifecycle handlers
+// Telegram lifecycle handlers
 // ---------------------------------------------------------------------------
 
-// emitChannelLifecycleEvent fires the appropriate hook and broadcasts a
-// channels.changed event after a successful channel operation.
-func emitChannelLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.Event, action string) {
+// emitTelegramLifecycleEvent fires the appropriate hook and broadcasts a
+// telegram.changed event after a successful Telegram operation.
+func emitTelegramLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.Event, action string) {
 	env := map[string]string{"DENEB_CHANNEL_ID": id}
 	if deps.Hooks != nil {
 		go func() {
@@ -225,7 +81,7 @@ func emitChannelLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.Ev
 		}()
 	}
 	if deps.Broadcaster != nil {
-		deps.Broadcaster.Broadcast("channels.changed", map[string]any{
+		deps.Broadcaster.Broadcast("telegram.changed", map[string]any{
 			"channelId": id,
 			"action":    action,
 			"ts":        time.Now().UnixMilli(),
@@ -233,7 +89,7 @@ func emitChannelLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.Ev
 	}
 }
 
-func channelStart(deps LifecycleDeps) rpcutil.HandlerFunc {
+func telegramStart(deps LifecycleDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ID string `json:"id"`
@@ -247,13 +103,13 @@ func channelStart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
 			return rpcerr.Unavailable("channel start failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
-		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
+		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
 		resp := protocol.MustResponseOK(req.ID, map[string]any{"started": true, "id": p.ID})
 		return resp
 	}
 }
 
-func channelStop(deps LifecycleDeps) rpcutil.HandlerFunc {
+func telegramStop(deps LifecycleDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ID string `json:"id"`
@@ -267,13 +123,13 @@ func channelStop(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := deps.TelegramPlugin.Stop(ctx); err != nil {
 			return rpcerr.Unavailable("channel stop failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
-		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
+		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
 		resp := protocol.MustResponseOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
 		return resp
 	}
 }
 
-func channelRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
+func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ID string `json:"id"`
@@ -288,7 +144,7 @@ func channelRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
 			return rpcerr.Unavailable("channel restart failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
-		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
+		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
 		resp := protocol.MustResponseOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
 		return resp
 	}

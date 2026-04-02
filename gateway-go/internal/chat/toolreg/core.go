@@ -73,10 +73,11 @@ func RegisterAutoresearchTool(registry toolctx.ToolRegistrar, runner *autoresear
 func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, sglang *SglangDeps) {
 	workspaceDir := deps.WorkspaceDir
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "read",
-		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
-		InputSchema: readToolSchema(),
-		Fn:          tools.ToolRead(workspaceDir),
+		Name:            "read",
+		Description:     "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
+		InputSchema:     readToolSchema(),
+		Fn:              tools.ToolRead(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "write",
@@ -91,16 +92,18 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Fn:          tools.ToolEdit(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "grep",
-		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
-		InputSchema: grepToolSchema(),
-		Fn:          tools.ToolGrep(workspaceDir),
+		Name:            "grep",
+		Description:     "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
+		InputSchema:     grepToolSchema(),
+		Fn:              tools.ToolGrep(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "find",
-		Description: "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
-		InputSchema: findToolSchema(),
-		Fn:          tools.ToolFind(workspaceDir),
+		Name:            "find",
+		Description:     "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
+		InputSchema:     findToolSchema(),
+		Fn:              tools.ToolFind(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "multi_edit",
@@ -109,22 +112,25 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Fn:          tools.ToolMultiEdit(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "tree",
-		Description: "Display directory tree with depth control. Uses eza/exa for fast default listings when available. Filters: dirs_only, pattern glob, show_hidden. Skips node_modules/.git/target etc",
-		InputSchema: treeToolSchema(),
-		Fn:          tools.ToolTree(workspaceDir),
+		Name:            "tree",
+		Description:     "Display directory tree with depth control. Uses eza/exa for fast default listings when available. Filters: dirs_only, pattern glob, show_hidden. Skips node_modules/.git/target etc",
+		InputSchema:     treeToolSchema(),
+		Fn:              tools.ToolTree(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "diff",
-		Description: "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
-		InputSchema: diffToolSchema(),
-		Fn:          tools.ToolDiff(workspaceDir),
+		Name:            "diff",
+		Description:     "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
+		InputSchema:     diffToolSchema(),
+		Fn:              tools.ToolDiff(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "analyze",
-		Description: "Code analysis: outline (file structure), symbols (find definitions), references (find usages), imports (dependency graph), signature (function signatures). Supports Go (AST) and Rust (regex)",
-		InputSchema: analyzeToolSchema(),
-		Fn:          tools.ToolAnalyze(workspaceDir),
+		Name:            "analyze",
+		Description:     "Code analysis: outline (file structure), symbols (find definitions), references (find usages), imports (dependency graph), signature (function signatures). Supports Go (AST) and Rust (regex)",
+		InputSchema:     analyzeToolSchema(),
+		Fn:              tools.ToolAnalyze(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "test",
@@ -139,10 +145,11 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Fn:          tools.ToolGit(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "memory",
-		Description: "Unified memory: search facts + files, get/set/forget individual facts, deep recall, diary logging. Actions: search (default), get, set, forget, recall (deep), status, browse, log (append detailed narrative to diary), daily (read recent diary entries)",
-		InputSchema: memoryToolSchema(),
-		Fn:          tools.ToolMemory(&deps.Vega, workspaceDir, slog.Default()),
+		Name:            "memory",
+		Description:     "Unified memory: search facts + files, get/set/forget individual facts, deep recall, diary logging. Actions: search (default), get, set, forget, recall (deep), status, browse, log (append detailed narrative to diary), daily (read recent diary entries)",
+		InputSchema:     memoryToolSchema(),
+		Fn:              tools.ToolMemory(&deps.Vega, workspaceDir, slog.Default()),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gateway",
@@ -154,10 +161,11 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 	// Spillover: read full content of a previously spilled large tool result.
 	if deps.SpilloverStore != nil {
 		registry.RegisterTool(toolctx.ToolDef{
-			Name:        "read_spillover",
-			Description: "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
-			InputSchema: readSpilloverToolSchema(),
-			Fn:          tools.ToolSpilloverRead(deps.SpilloverStore),
+			Name:            "read_spillover",
+			Description:     "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
+			InputSchema:     readSpilloverToolSchema(),
+			Fn:              tools.ToolSpilloverRead(deps.SpilloverStore),
+			ConcurrencySafe: true,
 		})
 	}
 
@@ -179,10 +187,11 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 		Fn:          tools.ToolExec(d.Mgr, d.WorkspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "process",
-		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
-		InputSchema: processToolSchema(),
-		Fn:          tools.ToolProcess(d.Mgr),
+		Name:            "process",
+		Description:     "Manage background exec sessions: list running, poll/log output, kill by sessionId",
+		InputSchema:     processToolSchema(),
+		Fn:              tools.ToolProcess(d.Mgr),
+		ConcurrencySafe: true,
 	})
 }
 
@@ -191,38 +200,43 @@ func RegisterWebTools(registry toolctx.ToolRegistrar) {
 	webCache := web.NewFetchCache()
 	sglang := web.NewSGLangExtractor()
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "web",
-		Description: "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
-		InputSchema: webToolSchema(),
-		Fn:          web.Tool(webCache, sglang),
+		Name:            "web",
+		Description:     "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
+		InputSchema:     webToolSchema(),
+		Fn:              web.Tool(webCache, sglang),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "http",
-		Description: "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
-		InputSchema: httpToolSchema(),
-		Fn:          tools.ToolHTTP(),
+		Name:            "http",
+		Description:     "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
+		InputSchema:     httpToolSchema(),
+		Fn:              tools.ToolHTTP(),
+		ConcurrencySafe: true,
 	})
 }
 
 // RegisterSessionTools registers session management tools.
 func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "sessions_list",
-		Description: "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
-		InputSchema: sessionsListToolSchema(),
-		Fn:          tools.ToolSessionsList(d.Manager),
+		Name:            "sessions_list",
+		Description:     "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
+		InputSchema:     sessionsListToolSchema(),
+		Fn:              tools.ToolSessionsList(d.Manager),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "sessions_history",
-		Description: "Fetch message history from another session (default: last 20 messages)",
-		InputSchema: sessionsHistoryToolSchema(),
-		Fn:          tools.ToolSessionsHistory(d.Transcript),
+		Name:            "sessions_history",
+		Description:     "Fetch message history from another session (default: last 20 messages)",
+		InputSchema:     sessionsHistoryToolSchema(),
+		Fn:              tools.ToolSessionsHistory(d.Transcript),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "sessions_search",
-		Description: "Search all past session transcripts by keyword",
-		InputSchema: sessionsSearchToolSchema(),
-		Fn:          tools.ToolSessionsSearch(d.Transcript),
+		Name:            "sessions_search",
+		Description:     "Search all past session transcripts by keyword",
+		InputSchema:     sessionsSearchToolSchema(),
+		Fn:              tools.ToolSessionsSearch(d.Transcript),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions_send",
@@ -311,26 +325,29 @@ func buildSglangProbe(sglang *SglangDeps) tools.SglangProbe {
 // RegisterInfraTools registers infrastructure health-check tools.
 func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sglang *SglangDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "health_check",
-		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
-		InputSchema: healthCheckToolSchema(),
-		Fn:          tools.ToolHealthCheck(d, buildSglangProbe(sglang)),
+		Name:            "health_check",
+		Description:     "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
+		InputSchema:     healthCheckToolSchema(),
+		Fn:              tools.ToolHealthCheck(d, buildSglangProbe(sglang)),
+		ConcurrencySafe: true,
 	})
 }
 
 // RegisterMediaTools registers image analysis and media delivery tools.
 func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "image",
-		Description: "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
-		InputSchema: imageToolSchema(),
-		Fn:          tools.ToolImage(llmClient, defaultModel),
+		Name:            "image",
+		Description:     "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
+		InputSchema:     imageToolSchema(),
+		Fn:              tools.ToolImage(llmClient, defaultModel),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "youtube_transcript",
-		Description: "Extract transcript/subtitles and metadata from a YouTube video",
-		InputSchema: youtubeTranscriptToolSchema(),
-		Fn:          tools.ToolYouTubeTranscript(),
+		Name:            "youtube_transcript",
+		Description:     "Extract transcript/subtitles and metadata from a YouTube video",
+		InputSchema:     youtubeTranscriptToolSchema(),
+		Fn:              tools.ToolYouTubeTranscript(),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "send_file",
@@ -343,10 +360,11 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, d
 // RegisterDataTools registers persistent storage tools.
 func RegisterDataTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "kv",
-		Description: "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
-		InputSchema: kvToolSchema(),
-		Fn:          tools.ToolKV(),
+		Name:            "kv",
+		Description:     "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
+		InputSchema:     kvToolSchema(),
+		Fn:              tools.ToolKV(),
+		ConcurrencySafe: true,
 	})
 }
 
@@ -354,22 +372,25 @@ func RegisterDataTools(registry toolctx.ToolRegistrar) {
 // operations into higher-level, multi-step workflows.
 func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "batch_read",
-		Description: "Read multiple files in one call (up to 20). Each file supports offset/limit/function extraction. Partial failures reported individually without aborting",
-		InputSchema: batchReadToolSchema(),
-		Fn:          tools.ToolBatchRead(workspaceDir),
+		Name:            "batch_read",
+		Description:     "Read multiple files in one call (up to 20). Each file supports offset/limit/function extraction. Partial failures reported individually without aborting",
+		InputSchema:     batchReadToolSchema(),
+		Fn:              tools.ToolBatchRead(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "search_and_read",
-		Description: "Grep for a pattern then auto-read matching files with surrounding context. Combines grep+read into one step. Returns file content around each match",
-		InputSchema: searchAndReadToolSchema(),
-		Fn:          tools.ToolSearchAndRead(workspaceDir),
+		Name:            "search_and_read",
+		Description:     "Grep for a pattern then auto-read matching files with surrounding context. Combines grep+read into one step. Returns file content around each match",
+		InputSchema:     searchAndReadToolSchema(),
+		Fn:              tools.ToolSearchAndRead(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "inspect",
-		Description: "Deep code inspection: file outline + imports + git history in one call. depth=shallow (outline+imports), deep (+git log+stats), symbol (+definition+references+blame). Auto-promotes to symbol depth when symbol param is set",
-		InputSchema: inspectToolSchema(),
-		Fn:          tools.ToolInspect(workspaceDir),
+		Name:            "inspect",
+		Description:     "Deep code inspection: file outline + imports + git history in one call. depth=shallow (outline+imports), deep (+git log+stats), symbol (+definition+references+blame). Auto-promotes to symbol depth when symbol param is set",
+		InputSchema:     inspectToolSchema(),
+		Fn:              tools.ToolInspect(workspaceDir),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "apply_patch",
@@ -382,17 +403,19 @@ func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) 
 // RegisterHiddenTools registers pilot-only hidden tools.
 func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writer) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "agent_logs",
-		Description: "현재 세션의 이전 에이전트 런 상세 로그를 조회합니다. 문제 진단, 이전 실행 결과 확인, 도구 실행 시간 분석에 사용합니다",
-		InputSchema: agentLogsToolSchema(),
-		Fn:          tools.ToolAgentLogs(agentLog),
-		Hidden:      true,
+		Name:            "agent_logs",
+		Description:     "현재 세션의 이전 에이전트 런 상세 로그를 조회합니다. 문제 진단, 이전 실행 결과 확인, 도구 실행 시간 분석에 사용합니다",
+		InputSchema:     agentLogsToolSchema(),
+		Fn:              tools.ToolAgentLogs(agentLog),
+		Hidden:          true,
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "gateway_logs",
-		Description: "게이트웨이 프로세스 로그를 조회합니다. 레벨/패키지/패턴 필터링 지원. 서버 오류 진단, 요청 추적, 성능 분석에 사용합니다",
-		InputSchema: gatewayLogsToolSchema(),
-		Fn:          tools.ToolGatewayLogs(),
-		Hidden:      true,
+		Name:            "gateway_logs",
+		Description:     "게이트웨이 프로세스 로그를 조회합니다. 레벨/패키지/패턴 필터링 지원. 서버 오류 진단, 요청 추적, 성능 분석에 사용합니다",
+		InputSchema:     gatewayLogsToolSchema(),
+		Fn:              tools.ToolGatewayLogs(),
+		Hidden:          true,
+		ConcurrencySafe: true,
 	})
 }

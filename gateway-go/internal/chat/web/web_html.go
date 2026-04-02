@@ -35,10 +35,10 @@ func processHTML(ctx context.Context, html string, url string, sglang *SGLangExt
 	// Step 2: Detect quality signals from raw HTML.
 	meta.Signals = detectSignals(html)
 
-	// Step 3: Strip noise elements — the critical preprocessing step.
-	// This removes nav, aside, footer, ads, cookie banners, comments, etc.
-	// Even when SGLang is available, pre-stripping reduces input tokens
-	// and prevents noise from confusing the AI extraction.
+	// Step 3: Strip noise elements.
+	// Tag-level noise (nav, aside, svg, iframe, form) is handled by Rust via
+	// strip_noise option. Class/ID-based noise (cookie banners, ads, sidebars,
+	// comments) is still handled by Go's StripNoiseElements.
 	cleaned := StripNoiseElements(html)
 
 	// Step 4: Convert to Markdown.
@@ -48,12 +48,12 @@ func processHTML(ctx context.Context, html string, url string, sglang *SGLangExt
 		if err != nil {
 			slog.Warn("sglang extraction failed, falling back to FFI",
 				"url", url, "error", err)
-			content = ffiConvert(cleaned)
+			content = ffiConvertStripNoise(cleaned)
 		} else {
 			content = extracted
 		}
 	} else {
-		content = ffiConvert(cleaned)
+		content = ffiConvertStripNoise(cleaned)
 	}
 
 	// Step 5: Post-extraction quality check.
@@ -71,6 +71,17 @@ func ffiConvert(html string) string {
 	if err != nil {
 		slog.Warn("ffi html-to-markdown failed", "error", err)
 		return html
+	}
+	return text
+}
+
+// ffiConvertStripNoise performs FFI-backed HTML -> Markdown with noise stripping.
+// Suppresses nav, aside, svg, iframe, form elements at the Rust level.
+func ffiConvertStripNoise(html string) string {
+	text, _, err := ffi.HtmlToMarkdownStripNoise(html)
+	if err != nil {
+		slog.Warn("ffi html-to-markdown-strip-noise failed", "error", err)
+		return ffiConvert(html)
 	}
 	return text
 }

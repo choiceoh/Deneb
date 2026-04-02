@@ -56,7 +56,7 @@ impl TableBuilder {
 
     fn end_cell(&mut self) {
         if self.in_cell {
-            let text = self.cell_buf.trim().replace('|', "\\|");
+            let text = escape_table_cell(self.cell_buf.trim());
             self.current_cells.push(text);
             self.cell_buf.clear();
             self.in_cell = false;
@@ -103,37 +103,128 @@ impl TableBuilder {
 }
 
 // ---------------------------------------------------------------------------
+// EmitCtx — centralized output routing for nested HTML contexts
+// ---------------------------------------------------------------------------
+
+/// Tracks which nested HTML context is active and routes text output
+/// to the correct buffer (main output, link, blockquote, table cell, or title).
+struct EmitCtx {
+    out: String,
+    title: Option<String>,
+
+    // Suppression (script/style/noscript)
+    suppress_depth: usize,
+
+    // Block state
+    list_stack: Vec<ListCtx>,
+    in_pre: bool,
+    in_code_in_pre: bool,
+
+    // Compound element buffers
+    in_title: bool,
+    title_buf: String,
+    in_link: bool,
+    link_href: Option<String>,
+    link_buf: String,
+    in_blockquote: bool,
+    blockquote_buf: String,
+    in_table: bool,
+    table_builder: TableBuilder,
+}
+
+impl EmitCtx {
+    fn new(capacity: usize) -> Self {
+        Self {
+            out: String::with_capacity(capacity),
+            title: None,
+            suppress_depth: 0,
+            list_stack: Vec::new(),
+            in_pre: false,
+            in_code_in_pre: false,
+            in_title: false,
+            title_buf: String::new(),
+            in_link: false,
+            link_href: None,
+            link_buf: String::new(),
+            in_blockquote: false,
+            blockquote_buf: String::new(),
+            in_table: false,
+            table_builder: TableBuilder::default(),
+        }
+    }
+
+    /// Push a string to whichever buffer is currently active.
+    fn push(&mut self, s: &str) {
+        if self.in_title {
+            self.title_buf.push_str(s);
+        } else if self.in_link {
+            self.link_buf.push_str(s);
+        } else if self.in_blockquote {
+            self.blockquote_buf.push_str(s);
+        } else if self.in_table && self.table_builder.in_cell {
+            self.table_builder.cell_buf.push_str(s);
+        } else {
+            self.out.push_str(s);
+        }
+    }
+
+    /// Push a single character to the active buffer.
+    fn push_char(&mut self, ch: char) {
+        if self.in_title {
+            self.title_buf.push(ch);
+        } else if self.in_link {
+            self.link_buf.push(ch);
+        } else if self.in_blockquote {
+            self.blockquote_buf.push(ch);
+        } else if self.in_table {
+            self.table_builder.push_char(ch);
+        } else {
+            self.out.push(ch);
+        }
+    }
+
+    /// Get the active output buffer for compound element emission (link close, image).
+    fn active_buf(&mut self) -> &mut String {
+        if self.in_blockquote {
+            &mut self.blockquote_buf
+        } else if self.in_table && self.table_builder.in_cell {
+            &mut self.table_builder.cell_buf
+        } else {
+            &mut self.out
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Emitter
 // ---------------------------------------------------------------------------
 
 /// Emit Markdown from a token stream. Returns `(text, title)`.
-pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<String>) {
-    let mut out = String::with_capacity(input_len);
-    let mut title: Option<String> = None;
-
-    // State tracking
-    let mut suppress_depth: usize = 0; // inside <script>/<style>/<noscript>
-    let mut list_stack: Vec<ListCtx> = Vec::new();
-    let mut in_pre = false;
-    let mut in_code_in_pre = false; // <code> inside <pre>
-
-    // Buffering for compound elements
-    let mut in_title = false;
-    let mut title_buf = String::new();
-    let mut in_link = false;
-    let mut link_href: Option<String> = None;
-    let mut link_buf = String::new();
-    let mut in_blockquote = false;
-    let mut blockquote_buf = String::new();
-    let mut in_table = false;
-    let mut table_builder = TableBuilder::default();
+/// When `strip_noise` is true, nav/aside/svg/iframe/form content is suppressed.
+pub(crate) fn emit(
+    tokens: &[Token<'_>],
+    input_len: usize,
+    strip_noise: bool,
+) -> (String, Option<String>) {
+    let mut ctx = EmitCtx::new(input_len);
 
     for token in tokens {
-        // --- Suppressed content (script/style/noscript) ---
-        if suppress_depth > 0 {
+        // --- Suppressed content (script/style/noscript + noise tags) ---
+        if ctx.suppress_depth > 0 {
             if let Token::TagClose(name) = token {
-                if matches!(name, TagName::Script | TagName::Style | TagName::Noscript) {
-                    suppress_depth = suppress_depth.saturating_sub(1);
+                let is_always_suppressed =
+                    matches!(name, TagName::Script | TagName::Style | TagName::Noscript);
+                let is_noise_suppressed = strip_noise
+                    && matches!(
+                        name,
+                        TagName::Nav
+                            | TagName::Aside
+                            | TagName::Svg
+                            | TagName::Iframe
+                            | TagName::Form
+                    );
+                if is_always_suppressed || is_noise_suppressed {
+                    ctx.suppress_depth = ctx.suppress_depth.saturating_sub(1);
                 }
             }
             continue;
@@ -145,11 +236,17 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: name @ (TagName::Script | TagName::Style | TagName::Noscript),
                 ..
             } => {
-                suppress_depth += 1;
-                // Also handle the case where the tokenizer already consumed
-                // inner content and pushed TagClose — suppress_depth will be
-                // decremented when we see it.
+                ctx.suppress_depth += 1;
                 let _ = name;
+            }
+
+            // --- Noise suppression (when strip_noise enabled) ---
+            Token::TagOpen {
+                name:
+                    TagName::Nav | TagName::Aside | TagName::Svg | TagName::Iframe | TagName::Form,
+                ..
+            } if strip_noise => {
+                ctx.suppress_depth += 1;
             }
 
             // --- Title extraction ---
@@ -157,14 +254,14 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::Title,
                 ..
             } => {
-                in_title = true;
-                title_buf.clear();
+                ctx.in_title = true;
+                ctx.title_buf.clear();
             }
             Token::TagClose(TagName::Title) => {
-                in_title = false;
-                let t = normalize_inline(&title_buf);
+                ctx.in_title = false;
+                let t = normalize_inline(&ctx.title_buf);
                 if !t.is_empty() {
-                    title = Some(t);
+                    ctx.title = Some(t);
                 }
             }
 
@@ -173,40 +270,30 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::A,
                 raw,
             } => {
-                in_link = true;
-                link_href = extract_attr(raw, "href");
-                link_buf.clear();
+                ctx.in_link = true;
+                ctx.link_href = extract_attr(raw, "href");
+                ctx.link_buf.clear();
             }
             Token::TagClose(TagName::A) => {
-                if in_link {
-                    let label = normalize_inline(&link_buf);
-                    let target = if in_blockquote {
-                        &mut blockquote_buf
-                    } else if in_table {
-                        // Table cell handles differently
-                        if table_builder.in_cell {
-                            &mut table_builder.cell_buf
-                        } else {
-                            &mut out
-                        }
-                    } else {
-                        &mut out
-                    };
-                    if let Some(ref h) = link_href {
+                if ctx.in_link {
+                    let label = normalize_inline(&ctx.link_buf);
+                    // Take href before borrowing ctx.active_buf() to satisfy borrow checker.
+                    let href = ctx.link_href.take();
+                    let target = ctx.active_buf();
+                    if let Some(h) = href {
                         if label.is_empty() {
-                            target.push_str(h);
+                            target.push_str(&h);
                         } else {
                             target.push('[');
                             target.push_str(&label);
                             target.push_str("](");
-                            target.push_str(h);
+                            target.push_str(&h);
                             target.push(')');
                         }
                     } else {
                         target.push_str(&label);
                     }
-                    in_link = false;
-                    link_href = None;
+                    ctx.in_link = false;
                 }
             }
 
@@ -214,103 +301,37 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
             Token::TagOpen {
                 name: TagName::Strong | TagName::B,
                 ..
-            } => push_to_active(
-                "**",
-                &mut out,
-                in_link,
-                &mut link_buf,
-                in_blockquote,
-                &mut blockquote_buf,
-                in_table,
-                &mut table_builder,
-                in_title,
-                &mut title_buf,
-            ),
-            Token::TagClose(TagName::Strong | TagName::B) => push_to_active(
-                "**",
-                &mut out,
-                in_link,
-                &mut link_buf,
-                in_blockquote,
-                &mut blockquote_buf,
-                in_table,
-                &mut table_builder,
-                in_title,
-                &mut title_buf,
-            ),
+            }
+            | Token::TagClose(TagName::Strong | TagName::B) => ctx.push("**"),
 
             // --- Emphasis (italic) ---
             Token::TagOpen {
                 name: TagName::Em | TagName::I,
                 ..
-            } => push_to_active(
-                "*",
-                &mut out,
-                in_link,
-                &mut link_buf,
-                in_blockquote,
-                &mut blockquote_buf,
-                in_table,
-                &mut table_builder,
-                in_title,
-                &mut title_buf,
-            ),
-            Token::TagClose(TagName::Em | TagName::I) => push_to_active(
-                "*",
-                &mut out,
-                in_link,
-                &mut link_buf,
-                in_blockquote,
-                &mut blockquote_buf,
-                in_table,
-                &mut table_builder,
-                in_title,
-                &mut title_buf,
-            ),
+            }
+            | Token::TagClose(TagName::Em | TagName::I) => ctx.push("*"),
 
             // --- Strikethrough ---
             Token::TagOpen {
                 name: TagName::S | TagName::Del | TagName::Strike,
                 ..
-            } => push_to_active(
-                "~~",
-                &mut out,
-                in_link,
-                &mut link_buf,
-                in_blockquote,
-                &mut blockquote_buf,
-                in_table,
-                &mut table_builder,
-                in_title,
-                &mut title_buf,
-            ),
-            Token::TagClose(TagName::S | TagName::Del | TagName::Strike) => push_to_active(
-                "~~",
-                &mut out,
-                in_link,
-                &mut link_buf,
-                in_blockquote,
-                &mut blockquote_buf,
-                in_table,
-                &mut table_builder,
-                in_title,
-                &mut title_buf,
-            ),
+            }
+            | Token::TagClose(TagName::S | TagName::Del | TagName::Strike) => ctx.push("~~"),
 
             // --- Pre blocks ---
             Token::TagOpen {
                 name: TagName::Pre, ..
             } => {
-                in_pre = true;
+                ctx.in_pre = true;
             }
             Token::TagClose(TagName::Pre) => {
                 // If code-in-pre wasn't started (bare <pre> without <code>),
                 // close the fenced block.
-                if in_pre && !in_code_in_pre {
-                    out.push_str("\n```\n");
+                if ctx.in_pre && !ctx.in_code_in_pre {
+                    ctx.out.push_str("\n```\n");
                 }
-                in_pre = false;
-                in_code_in_pre = false;
+                ctx.in_pre = false;
+                ctx.in_code_in_pre = false;
             }
 
             // --- Code ---
@@ -318,44 +339,22 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::Code,
                 raw,
             } => {
-                if in_pre {
-                    in_code_in_pre = true;
+                if ctx.in_pre {
+                    ctx.in_code_in_pre = true;
                     let lang = extract_code_language(raw);
-                    out.push_str("\n```");
-                    out.push_str(&lang);
-                    out.push('\n');
+                    ctx.out.push_str("\n```");
+                    ctx.out.push_str(&lang);
+                    ctx.out.push('\n');
                 } else {
-                    push_to_active(
-                        "`",
-                        &mut out,
-                        in_link,
-                        &mut link_buf,
-                        in_blockquote,
-                        &mut blockquote_buf,
-                        in_table,
-                        &mut table_builder,
-                        in_title,
-                        &mut title_buf,
-                    );
+                    ctx.push("`");
                 }
             }
             Token::TagClose(TagName::Code) => {
-                if in_code_in_pre {
-                    out.push_str("\n```\n");
-                    in_code_in_pre = false;
+                if ctx.in_code_in_pre {
+                    ctx.out.push_str("\n```\n");
+                    ctx.in_code_in_pre = false;
                 } else {
-                    push_to_active(
-                        "`",
-                        &mut out,
-                        in_link,
-                        &mut link_buf,
-                        in_blockquote,
-                        &mut blockquote_buf,
-                        in_table,
-                        &mut table_builder,
-                        in_title,
-                        &mut title_buf,
-                    );
+                    ctx.push("`");
                 }
             }
 
@@ -372,14 +371,14 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
             } => {
                 let level = heading_level(*name);
                 let prefix = "#".repeat(level);
-                out.push('\n');
-                out.push_str(&prefix);
-                out.push(' ');
+                ctx.out.push('\n');
+                ctx.out.push_str(&prefix);
+                ctx.out.push(' ');
             }
             Token::TagClose(
                 TagName::H1 | TagName::H2 | TagName::H3 | TagName::H4 | TagName::H5 | TagName::H6,
             ) => {
-                out.push('\n');
+                ctx.out.push('\n');
             }
 
             // --- Images ---
@@ -397,13 +396,7 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                     let label = alt
                         .filter(|a| !a.is_empty())
                         .unwrap_or_else(|| filename_from_url(src));
-                    let target = if in_blockquote {
-                        &mut blockquote_buf
-                    } else if in_table && table_builder.in_cell {
-                        &mut table_builder.cell_buf
-                    } else {
-                        &mut out
-                    };
+                    let target = ctx.active_buf();
                     target.push('[');
                     target.push_str(&label);
                     target.push_str("](");
@@ -417,21 +410,21 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::Blockquote,
                 ..
             } => {
-                in_blockquote = true;
-                blockquote_buf.clear();
+                ctx.in_blockquote = true;
+                ctx.blockquote_buf.clear();
             }
             Token::TagClose(TagName::Blockquote) => {
-                if in_blockquote {
-                    let text = normalize_inline(&blockquote_buf);
+                if ctx.in_blockquote {
+                    let text = normalize_inline(&ctx.blockquote_buf);
                     if !text.is_empty() {
-                        out.push('\n');
+                        ctx.out.push('\n');
                         for line in text.lines() {
-                            out.push_str("> ");
-                            out.push_str(line);
-                            out.push('\n');
+                            ctx.out.push_str("> ");
+                            ctx.out.push_str(line);
+                            ctx.out.push('\n');
                         }
                     }
-                    in_blockquote = false;
+                    ctx.in_blockquote = false;
                 }
             }
 
@@ -440,51 +433,51 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::Table,
                 ..
             } => {
-                in_table = true;
-                table_builder = TableBuilder::default();
+                ctx.in_table = true;
+                ctx.table_builder = TableBuilder::default();
             }
             Token::TagClose(TagName::Table) => {
-                if in_table {
-                    let md = table_builder.to_markdown();
+                if ctx.in_table {
+                    let md = ctx.table_builder.to_markdown();
                     if !md.is_empty() {
-                        out.push('\n');
-                        out.push_str(&md);
+                        ctx.out.push('\n');
+                        ctx.out.push_str(&md);
                     }
-                    in_table = false;
+                    ctx.in_table = false;
                 }
             }
             Token::TagOpen {
                 name: TagName::Tr, ..
             } => {
-                if in_table {
-                    table_builder.start_row();
+                if ctx.in_table {
+                    ctx.table_builder.start_row();
                 }
             }
             Token::TagClose(TagName::Tr) => {
-                if in_table {
-                    table_builder.end_cell(); // close any open cell
-                    table_builder.end_row();
+                if ctx.in_table {
+                    ctx.table_builder.end_cell();
+                    ctx.table_builder.end_row();
                 }
             }
             Token::TagOpen {
                 name: TagName::Th, ..
             } => {
-                if in_table {
-                    table_builder.end_cell(); // close previous cell if any
-                    table_builder.start_cell(true);
+                if ctx.in_table {
+                    ctx.table_builder.end_cell();
+                    ctx.table_builder.start_cell(true);
                 }
             }
             Token::TagOpen {
                 name: TagName::Td, ..
             } => {
-                if in_table {
-                    table_builder.end_cell();
-                    table_builder.start_cell(false);
+                if ctx.in_table {
+                    ctx.table_builder.end_cell();
+                    ctx.table_builder.start_cell(false);
                 }
             }
             Token::TagClose(TagName::Th | TagName::Td) => {
-                if in_table {
-                    table_builder.end_cell();
+                if ctx.in_table {
+                    ctx.table_builder.end_cell();
                 }
             }
 
@@ -492,27 +485,27 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
             Token::TagOpen {
                 name: TagName::Ol, ..
             } => {
-                list_stack.push(ListCtx::Ordered(0));
+                ctx.list_stack.push(ListCtx::Ordered(0));
             }
             Token::TagOpen {
                 name: TagName::Ul, ..
             } => {
-                list_stack.push(ListCtx::Unordered);
+                ctx.list_stack.push(ListCtx::Unordered);
             }
             Token::TagClose(TagName::Ol | TagName::Ul) => {
-                list_stack.pop();
+                ctx.list_stack.pop();
             }
             Token::TagOpen {
                 name: TagName::Li, ..
             } => {
-                let prefix = match list_stack.last_mut() {
+                let prefix = match ctx.list_stack.last_mut() {
                     Some(ListCtx::Ordered(counter)) => {
                         *counter += 1;
                         format!("\n{counter}. ")
                     }
                     Some(ListCtx::Unordered) | None => "\n- ".to_string(),
                 };
-                out.push_str(&prefix);
+                ctx.out.push_str(&prefix);
             }
             Token::TagClose(TagName::Li) => {
                 // No action needed — content already emitted.
@@ -527,7 +520,7 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 name: TagName::Br | TagName::Hr,
                 ..
             } => {
-                out.push('\n');
+                ctx.out.push('\n');
             }
 
             // --- Block-closing tags → newline ---
@@ -539,58 +532,55 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
                 | TagName::Header
                 | TagName::Footer,
             ) => {
-                out.push('\n');
+                ctx.out.push('\n');
             }
 
             // --- Text content ---
             Token::Text(s) => {
-                if in_title {
-                    title_buf.push_str(s);
-                } else if in_link {
-                    link_buf.push_str(s);
-                } else if in_blockquote {
-                    blockquote_buf.push_str(s);
-                } else if in_table {
-                    table_builder.push_text(s);
+                if ctx.in_title {
+                    ctx.title_buf.push_str(s);
+                } else if ctx.in_link {
+                    ctx.link_buf.push_str(s);
+                } else if ctx.in_blockquote {
+                    ctx.blockquote_buf.push_str(s);
+                } else if ctx.in_table {
+                    ctx.table_builder.push_text(s);
                 } else {
-                    out.push_str(s);
+                    ctx.out.push_str(s);
                 }
             }
-            Token::Entity(ch) => {
-                if in_title {
-                    title_buf.push(*ch);
-                } else if in_link {
-                    link_buf.push(*ch);
-                } else if in_blockquote {
-                    blockquote_buf.push(*ch);
-                } else if in_table {
-                    table_builder.push_char(*ch);
-                } else {
-                    out.push(*ch);
-                }
-            }
-            Token::AmpersandLiteral => {
-                if in_title {
-                    title_buf.push('&');
-                } else if in_link {
-                    link_buf.push('&');
-                } else if in_blockquote {
-                    blockquote_buf.push('&');
-                } else if in_table {
-                    table_builder.push_char('&');
-                } else {
-                    out.push('&');
-                }
-            }
+            Token::Entity(ch) => ctx.push_char(*ch),
+            Token::AmpersandLiteral => ctx.push_char('&'),
 
             // --- All other tags: skip (strip) ---
+            // Includes TagName::Other and noise tags (Nav, Aside, Svg, Iframe, Form)
+            // when strip_noise is disabled — their content flows through as text.
             Token::TagOpen {
-                name: TagName::Other,
+                name:
+                    TagName::Other
+                    | TagName::Nav
+                    | TagName::Aside
+                    | TagName::Svg
+                    | TagName::Iframe
+                    | TagName::Form,
                 ..
             }
-            | Token::TagClose(TagName::Other)
+            | Token::TagClose(
+                TagName::Other
+                | TagName::Nav
+                | TagName::Aside
+                | TagName::Svg
+                | TagName::Iframe
+                | TagName::Form,
+            )
             | Token::SelfClosing {
-                name: TagName::Other,
+                name:
+                    TagName::Other
+                    | TagName::Nav
+                    | TagName::Aside
+                    | TagName::Svg
+                    | TagName::Iframe
+                    | TagName::Form,
                 ..
             } => {}
 
@@ -614,38 +604,28 @@ pub(crate) fn emit(tokens: &[Token<'_>], input_len: usize) -> (String, Option<St
         }
     }
 
-    (out, title)
+    (ctx.out, ctx.title)
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Push a string to whichever buffer is currently active.
-#[allow(clippy::too_many_arguments)]
-fn push_to_active(
-    s: &str,
-    out: &mut String,
-    in_link: bool,
-    link_buf: &mut String,
-    in_blockquote: bool,
-    blockquote_buf: &mut String,
-    in_table: bool,
-    table_builder: &mut TableBuilder,
-    in_title: bool,
-    title_buf: &mut String,
-) {
-    if in_title {
-        title_buf.push_str(s);
-    } else if in_link {
-        link_buf.push_str(s);
-    } else if in_blockquote {
-        blockquote_buf.push_str(s);
-    } else if in_table && table_builder.in_cell {
-        table_builder.cell_buf.push_str(s);
-    } else {
-        out.push_str(s);
+/// Escape markdown-special characters inside a table cell.
+/// Pipes, backslashes, and inline formatting chars are escaped so the
+/// Markdown table structure is preserved.
+fn escape_table_cell(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 4);
+    for ch in text.chars() {
+        match ch {
+            '|' | '\\' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
     }
+    out
 }
 
 fn heading_level(name: TagName) -> usize {

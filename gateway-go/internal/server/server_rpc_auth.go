@@ -27,7 +27,7 @@ func (s *Server) registerAuthRPCMethods() {
 	s.dispatcher.Register("browser.request", stubUnavailable)
 	s.dispatcher.Register("web.login.start", stubUnavailable)
 	s.dispatcher.Register("web.login.wait", stubUnavailable)
-	s.dispatcher.Register("channels.logout", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.dispatcher.Register("telegram.logout", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Channel string `json:"channel"`
 		}
@@ -46,12 +46,12 @@ func (s *Server) registerAuthRPCMethods() {
 		// Stop the channel (logout = stop + clear).
 		loggedOut := true
 		if err := s.telegramPlug.Stop(ctx); err != nil {
-			s.logger.Warn("channels.logout: stop failed", "channel", p.Channel, "error", err)
+			s.logger.Warn("telegram.logout: stop failed", "channel", p.Channel, "error", err)
 			loggedOut = false
 		}
 		// Broadcast channel change event.
 		if loggedOut {
-			s.broadcaster.Broadcast("channels.changed", map[string]any{
+			s.broadcaster.Broadcast("telegram.changed", map[string]any{
 				"channelId": p.Channel,
 				"action":    "logged_out",
 				"ts":        time.Now().UnixMilli(),

@@ -16,7 +16,7 @@ import (
 
 // maxOutputRunes caps tool output sent to the LLM to avoid wasting tokens.
 // Head and tail are preserved for context; the middle is elided.
-const maxOutputRunes = 30000
+const maxOutputRunes = 50000
 
 // TruncateForLLM keeps the first half and last half of output when it exceeds
 // maxOutputRunes, inserting a clear elision marker in the middle.
@@ -98,7 +98,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			return "", err
 		}
 
-		timeoutMs := int64(30000)
+		timeoutMs := int64(60000)
 		if p.Timeout > 0 {
 			timeoutMs = int64(p.Timeout * 1000)
 		}

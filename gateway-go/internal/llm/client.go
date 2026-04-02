@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"strconv"
@@ -235,17 +233,7 @@ func (c *Client) backoffDelay(attempt int, err error) time.Duration {
 		}
 	}
 
-	delay := time.Duration(float64(base) * math.Pow(2, float64(attempt-1)))
-	if delay > c.maxDelay {
-		delay = c.maxDelay
-	}
-
-	// Add 0-25% jitter to avoid synchronized retries.
-	if delay > 0 {
-		jitter := time.Duration(rand.Int64N(int64(delay) / 4))
-		delay += jitter
-	}
-	return delay
+	return httpretry.Backoff{Base: base, Max: c.maxDelay, Jitter: 0.25}.Delay(attempt)
 }
 
 // parseRetryAfter parses the Retry-After header value as seconds.

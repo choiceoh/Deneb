@@ -14,7 +14,7 @@ func testLogger() *slog.Logger {
 func TestRegistryBasic(t *testing.T) {
 	r := NewRegistry(testLogger())
 
-	err := r.Register(PluginMeta{ID: "telegram", Kind: KindChannel, Enabled: true})
+	err := r.Register(PluginMeta{ID: "telegram", Kind: KindProvider, Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,9 +45,9 @@ func TestRegistryBasic(t *testing.T) {
 	})
 
 	t.Run("list by kind", func(t *testing.T) {
-		channels := r.ListByKind(KindChannel)
-		if len(channels) != 1 {
-			t.Errorf("expected 1 channel, got %d", len(channels))
+		providers := r.ListByKind(KindProvider)
+		if len(providers) != 2 {
+			t.Errorf("expected 2 providers, got %d", len(providers))
 		}
 	})
 
@@ -58,7 +58,7 @@ func TestRegistryBasic(t *testing.T) {
 	})
 
 	t.Run("empty id error", func(t *testing.T) {
-		err := r.Register(PluginMeta{Kind: KindChannel})
+		err := r.Register(PluginMeta{Kind: KindProvider})
 		if err == nil {
 			t.Error("expected error for empty ID")
 		}

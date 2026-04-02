@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"golang.org/x/sys/unix"
+	"syscall"
 )
 
 // Options controls optional behaviours of WriteFile.
@@ -59,10 +59,10 @@ func WriteFile(path string, data []byte, opts *Options) error {
 	}
 	defer lockFd.Close()
 
-	if err := unix.Flock(int(lockFd.Fd()), unix.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(lockFd.Fd()), syscall.LOCK_EX); err != nil {
 		return fmt.Errorf("atomicfile: flock %s: %w", lockPath, err)
 	}
-	defer unix.Flock(int(lockFd.Fd()), unix.LOCK_UN) //nolint:errcheck
+	defer syscall.Flock(int(lockFd.Fd()), syscall.LOCK_UN) //nolint:errcheck
 
 	// Write to a temp file in the same directory (same filesystem → atomic rename).
 	randBytes := make([]byte, 8)

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -33,10 +34,8 @@ const (
 	sglangHealthPing = 3 * time.Second // HTTP timeout for health check
 )
 
-// ToolExecutor executes a named tool with JSON input and returns the result.
-type ToolExecutor interface {
-	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
-}
+// ToolExecutor is an alias for toolctx.ToolExecutor, the canonical definition.
+type ToolExecutor = toolctx.ToolExecutor
 
 // --- Thinking mode for pilot analysis ---
 

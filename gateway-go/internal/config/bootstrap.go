@@ -44,9 +44,9 @@ type ResolvedGatewayAuth struct {
 // HasSharedSecret returns true if the auth has a non-empty token or password.
 func (a *ResolvedGatewayAuth) HasSharedSecret() bool {
 	switch a.Mode {
-	case "token":
+	case AuthModeToken:
 		return strings.TrimSpace(a.Token) != ""
-	case "password":
+	case AuthModePassword:
 		return strings.TrimSpace(a.Password) != ""
 	default:
 		return false
@@ -143,7 +143,7 @@ func resolveStartupAuth(cfg *DenebConfig, logger *slog.Logger) (*ResolvedGateway
 	authCfg := cfg.Gateway.Auth
 	mode := authCfg.Mode
 	if mode == "" {
-		mode = "token"
+		mode = AuthModeToken
 	}
 
 	resolved := &ResolvedGatewayAuth{
@@ -153,10 +153,10 @@ func resolveStartupAuth(cfg *DenebConfig, logger *slog.Logger) (*ResolvedGateway
 	var generatedToken string
 
 	switch mode {
-	case "none":
+	case AuthModeNone:
 		// No auth required.
 
-	case "token":
+	case AuthModeToken:
 		token := resolveSecretValue(authCfg.Token, "DENEB_GATEWAY_TOKEN")
 		if token == "" {
 			// Auto-generate a random token.
@@ -170,14 +170,14 @@ func resolveStartupAuth(cfg *DenebConfig, logger *slog.Logger) (*ResolvedGateway
 		}
 		resolved.Token = token
 
-	case "password":
+	case AuthModePassword:
 		password := resolveSecretValue(authCfg.Password, "DENEB_GATEWAY_PASSWORD")
 		if password == "" {
 			return nil, "", fmt.Errorf("gateway auth mode=password requires a password (set gateway.auth.password or DENEB_GATEWAY_PASSWORD)")
 		}
 		resolved.Password = password
 
-	case "trusted-proxy":
+	case AuthModeTrustedProxy:
 		if authCfg.TrustedProxy == nil || authCfg.TrustedProxy.UserHeader == "" {
 			return nil, "", fmt.Errorf("gateway auth mode=trusted-proxy requires gateway.auth.trustedProxy.userHeader")
 		}

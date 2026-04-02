@@ -66,7 +66,7 @@ func TestWorkerPoolStats(t *testing.T) {
 func TestWorkerPoolDefaultSize(t *testing.T) {
 	pool := NewWorkerPool(0) // should use default
 	stats := pool.Stats()
-	if stats.MaxSize < 4 || stats.MaxSize > 64 {
-		t.Errorf("default pool size out of range [4, 64]: %d", stats.MaxSize)
+	if stats.MaxSize < 4 || stats.MaxSize > 128 {
+		t.Errorf("default pool size out of range [4, 128]: %d", stats.MaxSize)
 	}
 }

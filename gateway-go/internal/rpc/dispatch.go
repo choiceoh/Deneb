@@ -188,13 +188,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 // If a WorkerPool is attached, the handler goroutine is submitted through
 // the pool to bound concurrent handler execution. Panics are caught and
 // converted to UNAVAILABLE error responses rather than crashing the server.
+//
+// When the caller's context expires before the handler finishes, safeCall
+// cancels a derived context so the handler can observe the cancellation and
+// exit promptly, freeing the worker pool slot.
 func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, handler HandlerFunc) *protocol.ResponseFrame {
 	type result struct {
 		resp *protocol.ResponseFrame
 	}
 	ch := make(chan result, 1)
 
+	// Derive a cancellable context so we can signal the handler to stop
+	// when the caller's deadline fires and we return a timeout response.
+	handlerCtx, handlerCancel := context.WithCancel(ctx)
+
 	run := func() {
+		defer handlerCancel()
 		defer func() {
 			if r := recover(); r != nil {
 				d.logger.Error("handler panic", "method", req.Method, "panic", r,
@@ -205,7 +214,7 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 				))}
 			}
 		}()
-		ch <- result{resp: handler(ctx, req)}
+		ch <- result{resp: handler(handlerCtx, req)}
 	}
 
 	if pool := d.pool.Load(); pool != nil {
@@ -218,6 +227,9 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 	case r := <-ch:
 		return r.resp
 	case <-ctx.Done():
+		// Cancel the handler's context so it can observe the cancellation
+		// and release the worker pool slot promptly.
+		handlerCancel()
 		d.logger.Warn("handler timeout", "method", req.Method)
 		return protocol.NewResponseError(req.ID, protocol.NewError(
 			protocol.ErrAgentTimeout,

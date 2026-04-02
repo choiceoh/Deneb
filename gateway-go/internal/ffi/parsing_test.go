@@ -341,6 +341,23 @@ func TestParseMediaTokens_FileScheme(t *testing.T) {
 	_ = text
 }
 
+func TestParseMediaTokens_InsideFenceIgnored(t *testing.T) {
+	input := "text\n```\nMEDIA: https://example.com/skip.png\n```\nMEDIA: https://example.com/keep.png"
+	text, urls, _, err := ParseMediaTokens(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(urls) != 1 {
+		t.Fatalf("expected 1 URL (fence-skipped), got %d: %v", len(urls), urls)
+	}
+	if urls[0] != "https://example.com/keep.png" {
+		t.Errorf("expected keep.png, got %s", urls[0])
+	}
+	if !strings.Contains(text, "MEDIA: https://example.com/skip.png") {
+		t.Errorf("fenced MEDIA line should be preserved in text")
+	}
+}
+
 func TestParseMediaTokens_WindowsPath(t *testing.T) {
 	_, urls, _, err := ParseMediaTokens("MEDIA: C:\\Users\\test\\photo.jpg")
 	if err != nil {

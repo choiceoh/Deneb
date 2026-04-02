@@ -129,11 +129,14 @@ impl SearchRouter {
         // Apply mode override if provided.
         if let Some(route) = forced_route {
             analysis.route = route;
-            analysis.reason = format!("forced:{}", match route {
-                SearchRoute::Sqlite => "bm25",
-                SearchRoute::Semantic => "semantic",
-                SearchRoute::Hybrid => "hybrid",
-            });
+            analysis.reason = format!(
+                "forced:{}",
+                match route {
+                    SearchRoute::Sqlite => "bm25",
+                    SearchRoute::Semantic => "semantic",
+                    SearchRoute::Hybrid => "hybrid",
+                }
+            );
         }
 
         let extracted = &analysis.extracted;
@@ -181,25 +184,13 @@ impl SearchRouter {
                 semantic_used = true;
                 semantic_count = sem_results.len();
 
-                for sr in &sem_results {
+                for sr in sem_results {
                     if !sqlite_result
                         .chunks
                         .iter()
                         .any(|c| c.chunk_id == sr.chunk_id)
                     {
-                        sqlite_result.chunks.push(fts_search::ChunkRow {
-                            chunk_id: sr.chunk_id,
-                            project_id: sr.project_id,
-                            name: sr.project_name.clone(),
-                            client: sr.client.clone(),
-                            status: sr.status.clone(),
-                            person_internal: sr.person_internal.clone(),
-                            capacity: String::new(),
-                            section_heading: sr.section_heading.clone(),
-                            content: sr.content.clone(),
-                            chunk_type: sr.chunk_type.clone(),
-                            entry_date: sr.entry_date.clone(),
-                        });
+                        sqlite_result.chunks.push(sr);
                     }
                 }
             }
@@ -214,8 +205,9 @@ impl SearchRouter {
             Vec::new()
         };
 
-        // 5. Build unified results
-        let mut unified = sqlite_rows_to_unified(&sqlite_result.chunks);
+        // 5. Build unified results (consumes chunks to avoid cloning)
+        let sqlite_count = sqlite_result.chunks.len();
+        let mut unified = sqlite_rows_to_unified(sqlite_result.chunks);
 
         // Apply project scores to unified results
         let score_map: FxHashMap<i64, f64> = project_scores
@@ -246,7 +238,7 @@ impl SearchRouter {
                 route: route_str.into(),
                 semantic_available: self.semantic_available(),
                 semantic_used,
-                sqlite_count: sqlite_result.chunks.len(),
+                sqlite_count,
                 semantic_count,
                 rerank_mode: self.config.rerank_mode.clone(),
             },
