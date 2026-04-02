@@ -16,7 +16,7 @@ import (
 
 // Compaction defaults.
 const (
-	defaultContextThreshold = 0.75
+	defaultContextThreshold = 0.80
 	// proactiveCompactionCooldown is the minimum interval between proactive sweeps.
 	// Prevents repeated LLM summarization calls on consecutive messages.
 	proactiveCompactionCooldown = 5 * time.Minute
