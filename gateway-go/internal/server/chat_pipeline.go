@@ -23,7 +23,7 @@ import (
 // initMemorySubsystem initializes unified store, Aurora compaction store,
 // structured memory store, Gemini embedder, Jina reranker, dreaming adapter,
 // and MEMORY.md auto-migration. All results are set on chatCfg and s.
-func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole.Registry) {
+func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **modelrole.Registry) {
 	// Unified memory store (single DB for all tiers).
 	unifiedStore, err := unified.New(unified.DefaultConfig(), s.logger)
 	if err != nil {
@@ -41,8 +41,8 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 	// Model role registry.
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
 	chatCfg.SubagentDefaultModel = resolveSubagentDefaultModel(s.logger)
-	reg2 := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
-	*reg = *reg2
+	reg := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
+	*regPtr = reg
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
 

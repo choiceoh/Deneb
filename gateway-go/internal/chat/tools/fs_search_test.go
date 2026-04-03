@@ -5,19 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// requireRg skips the test if ripgrep is not installed.
-func requireRg(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("rg"); err != nil {
-		t.Skip("ripgrep (rg) not installed, skipping")
-	}
-}
 
 // ─── clampInt ────────────────────────────────────────────────────────────────
 

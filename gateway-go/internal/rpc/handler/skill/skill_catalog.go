@@ -145,19 +145,21 @@ func toolsCatalog() rpcutil.HandlerFunc {
 	groups := buildCoreToolCatalog()
 
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			AgentID string `json:"agentId"`
-			// IncludePlugins is accepted but ignored; plugin tools are not
-			// available in the standalone Go gateway catalog.
-			IncludePlugins *bool `json:"includePlugins"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
-		agentID := p.AgentID
-		if agentID == "" {
-			agentID = "default"
+		// All params are optional; allow callers to omit them entirely.
+		agentID := "default"
+		if len(req.Params) > 0 {
+			p, errResp := rpcutil.DecodeParams[struct {
+				AgentID string `json:"agentId"`
+				// IncludePlugins is accepted but ignored; plugin tools are not
+				// available in the standalone Go gateway catalog.
+				IncludePlugins *bool `json:"includePlugins"`
+			}](req)
+			if errResp != nil {
+				return errResp
+			}
+			if p.AgentID != "" {
+				agentID = p.AgentID
+			}
 		}
 
 		return rpcutil.RespondOK(req.ID, map[string]any{

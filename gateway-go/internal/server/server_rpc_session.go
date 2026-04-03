@@ -10,8 +10,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
@@ -84,7 +84,7 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.AgentLog = agentLogWriter
 
 	// Phase 1: Memory subsystem (unified store, Aurora, memory, embedder, reranker).
-	var reg modelrole.Registry
+	var reg *modelrole.Registry
 	s.initMemorySubsystem(&chatCfg, &reg)
 
 	// Create centralized SGLang hub now that the model registry is available.
@@ -93,7 +93,7 @@ func (s *Server) registerSessionRPCMethods() {
 	memory.SetSglangHub(s.sglangHub)
 
 	// Phase 2: Tool deps + registration (core, plugin, autoresearch).
-	s.initToolsAndDeps(&chatCfg, &reg, transcriptStore, agentLogWriter)
+	s.initToolsAndDeps(&chatCfg, reg, transcriptStore, agentLogWriter)
 
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
@@ -207,9 +207,9 @@ func (s *Server) registerSessionRPCMethods() {
 	if s.acpDeps != nil && transcriptStore != nil {
 		projector := acp.NewACPProjector(s.acpDeps.Registry)
 		s.acpResultInjectionUnsub = acp.StartSubagentResultInjection(acp.ResultInjectionDeps{
-			Registry:   s.acpDeps.Registry,
-			Projector:  projector,
-			Sessions:   s.sessions,
+			Registry:  s.acpDeps.Registry,
+			Projector: projector,
+			Sessions:  s.sessions,
 			Transcript: acp.TranscriptAppendFunc(func(sessionKey, text string) error {
 				msg := chat.NewTextChatMessage("system", text, 0)
 				return transcriptStore.Append(sessionKey, msg)

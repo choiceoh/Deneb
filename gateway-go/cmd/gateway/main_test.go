@@ -17,7 +17,10 @@ func TestSmokeHealthEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := server.New("127.0.0.1:0")
+	srv, err := server.New("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)
@@ -48,7 +51,10 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := server.New("127.0.0.1:0")
+	srv, err := server.New("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
 	addr, err := srv.StartAndListen(ctx)
 	if err != nil {
 		t.Fatalf("StartAndListen: %v", err)
