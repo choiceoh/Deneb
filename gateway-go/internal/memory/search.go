@@ -7,6 +7,8 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
 // RerankFunc is a function that reranks documents by query relevance.
@@ -21,11 +23,12 @@ type RerankResult struct {
 
 // SearchOpts configures a memory search.
 type SearchOpts struct {
-	Limit         int     // max results (default 10)
-	Category      string  // filter by category (empty = all)
-	MinScore      float64 // minimum final score threshold
-	MinImportance float64 // minimum importance to include (0 = all; use 0.7 for FTS-only mode)
-	EntityFilter  string  // filter by entity name (empty = all)
+	Limit         int      // max results (default 10)
+	Category      string   // filter by category (empty = all)
+	MinScore      float64  // minimum final score threshold
+	MinImportance float64  // minimum importance to include (0 = all; use 0.7 for FTS-only mode)
+	EntityFilter  string   // filter by entity name (empty = all)
+	ExtraKeywords []string // additional keywords to include in FTS (e.g., from LLM expansion)
 }
 
 // SearchResult is a scored fact from a search query.
@@ -130,7 +133,26 @@ func (s *Store) ftsSearch(ctx context.Context, query string, opts SearchOpts) (m
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	tokens := splitTokens(query)
+	// Use Rust keyword extraction for multilingual tokenization (stop-word removal,
+	// Korean particle stripping, CJK bigrams). Falls back to naive whitespace split.
+	tokens, err := ffi.MemoryExtractKeywords(query)
+	if err != nil || len(tokens) == 0 {
+		tokens = splitTokens(query)
+	}
+
+	// Append caller-supplied extra keywords (e.g., from Vega LLM expansion).
+	if len(opts.ExtraKeywords) > 0 {
+		seen := make(map[string]bool, len(tokens))
+		for _, t := range tokens {
+			seen[t] = true
+		}
+		for _, kw := range opts.ExtraKeywords {
+			if !seen[kw] {
+				tokens = append(tokens, kw)
+				seen[kw] = true
+			}
+		}
+	}
 
 	// Stage 1: AND query (all tokens must match) for higher precision.
 	andQuery := buildFTSQuery(tokens, "AND")

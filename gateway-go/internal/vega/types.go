@@ -45,6 +45,14 @@ type HealthChecker interface {
 	HealthCheck(ctx context.Context) HealthStatus
 }
 
+// ExpandingBackend is an optional interface that backends can implement
+// to expose LLM-expanded search terms alongside results. This allows
+// callers (e.g., knowledge prefetch) to reuse expansion terms for other
+// search backends (e.g., memory FTS) without a separate LLM call.
+type ExpandingBackend interface {
+	SearchWithExpansion(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, []string, error)
+}
+
 // SearchResult is a single search result.
 type SearchResult struct {
 	ProjectID   int     `json:"projectId"`
