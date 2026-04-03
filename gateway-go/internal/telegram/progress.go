@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -19,15 +20,16 @@ const (
 	// statusSummaryTimeout is the maximum time to wait for a summary LLM call.
 	statusSummaryTimeout = 10 * time.Second
 
-	// maxReasonLen caps each thinking-text snippet sent to the summarizer.
-	maxReasonLen = 300
+	// maxArgHintLen caps the rendered argument hint in runes.
+	maxArgHintLen = 30
 
 	// maxSummaryLen caps the rendered summary line in runes.
 	maxSummaryLen = 40
 )
 
 // SummarizeFn calls a local LLM to summarize recent agent activity into a
-// short Korean phrase. The input is a slice of recent thinking-text snippets.
+// short Korean phrase. The input is a slice of recent tool activity descriptions
+// (tool name + argument hints).
 type SummarizeFn func(ctx context.Context, reasons []string) (string, error)
 
 // ProgressTracker edits a single Telegram message in-place to show
@@ -42,7 +44,7 @@ type ProgressTracker struct {
 	// Status summary support: periodically summarize what the agent is doing
 	// via a local LLM call and insert the result into the progress message.
 	completedCount int
-	reasons        []string         // accumulated thinking texts from OnToolStart
+	activities     []string         // accumulated tool activity descriptions for summarizer
 	statusInserts  map[int]string   // stepIndex -> summary phrase to render after that step
 	summarizeFn    SummarizeFn      // injected; nil = no summaries
 	pendingSummary atomic.Bool      // prevents overlapping LLM calls
@@ -50,8 +52,11 @@ type ProgressTracker struct {
 
 // ProgressStep records a single tool invocation and its current status.
 type ProgressStep struct {
-	Tool   string
-	Status string // "running", "done", "error"
+	Tool    string
+	Status  string // "running", "done", "error"
+	ArgHint string // short argument summary (e.g., "progress.go:80-150")
+	StartAt time.Time
+	Elapsed time.Duration // set on completion
 }
 
 // toolNameKorean maps tool names to Korean labels for vibe coder display.
@@ -84,7 +89,7 @@ var toolNameKorean = map[string]string{
 
 // NewProgressTracker creates a tracker bound to a specific Telegram chat.
 // summarizeFn is optional; when non-nil, the tracker periodically calls it to
-// generate Korean status summaries from accumulated thinking text.
+// generate Korean status summaries from accumulated tool activity descriptions.
 func NewProgressTracker(client *Client, chatID int64, summarizeFn SummarizeFn) *ProgressTracker {
 	return &ProgressTracker{
 		client:      client,
@@ -94,18 +99,26 @@ func NewProgressTracker(client *Client, chatID int64, summarizeFn SummarizeFn) *
 }
 
 // OnToolStart records a new tool execution and sends or edits the progress message.
-// reason is the LLM's thinking text explaining why this tool is being called;
-// it may be empty for models that don't produce thinking blocks.
-func (pt *ProgressTracker) OnToolStart(ctx context.Context, name, reason string) {
+// input is the raw JSON tool arguments; the tracker extracts a short hint from it.
+func (pt *ProgressTracker) OnToolStart(ctx context.Context, name string, input []byte) {
+	hint := extractArgHint(name, input)
+
 	pt.mu.Lock()
-	pt.steps = append(pt.steps, ProgressStep{Tool: name, Status: "running"})
-	if reason != "" {
-		// Truncate long thinking text to avoid sending huge prompts to summarizer.
-		if len([]rune(reason)) > maxReasonLen {
-			reason = string([]rune(reason)[:maxReasonLen])
-		}
-		pt.reasons = append(pt.reasons, reason)
+	pt.steps = append(pt.steps, ProgressStep{
+		Tool:    name,
+		Status:  "running",
+		ArgHint: hint,
+		StartAt: time.Now(),
+	})
+
+	// Build activity description for summarizer: "tool_name: hint" or just "tool_name".
+	var activity string
+	if hint != "" {
+		activity = name + ": " + hint
+	} else {
+		activity = name
 	}
+	pt.activities = append(pt.activities, activity)
 	pt.mu.Unlock()
 
 	pt.updateMessage(ctx)
@@ -113,8 +126,10 @@ func (pt *ProgressTracker) OnToolStart(ctx context.Context, name, reason string)
 
 // OnToolComplete marks a tool step as done or errored and updates the message.
 // Every statusLineInterval completions, it asynchronously calls the summarizer
-// to generate a Korean status line from accumulated thinking text.
+// to generate a Korean status line from accumulated tool activity descriptions.
 func (pt *ProgressTracker) OnToolComplete(ctx context.Context, name string, isError bool) {
+	now := time.Now()
+
 	pt.mu.Lock()
 	var completedIdx int
 	for i := len(pt.steps) - 1; i >= 0; i-- {
@@ -124,6 +139,7 @@ func (pt *ProgressTracker) OnToolComplete(ctx context.Context, name string, isEr
 			} else {
 				pt.steps[i].Status = "done"
 			}
+			pt.steps[i].Elapsed = now.Sub(pt.steps[i].StartAt)
 			completedIdx = i
 			break
 		}
@@ -133,34 +149,34 @@ func (pt *ProgressTracker) OnToolComplete(ctx context.Context, name string, isEr
 	shouldSummarize := pt.summarizeFn != nil &&
 		pt.completedCount >= statusLineInterval &&
 		pt.completedCount%statusLineInterval == 0 &&
-		len(pt.reasons) > 0
+		len(pt.activities) > 0
 
-	var reasonsCopy []string
+	var activitiesCopy []string
 	insertIdx := completedIdx
 	if shouldSummarize {
-		// Copy and reset accumulated reasons for this batch.
-		reasonsCopy = make([]string, len(pt.reasons))
-		copy(reasonsCopy, pt.reasons)
-		pt.reasons = pt.reasons[:0]
+		// Copy and reset accumulated activities for this batch.
+		activitiesCopy = make([]string, len(pt.activities))
+		copy(activitiesCopy, pt.activities)
+		pt.activities = pt.activities[:0]
 	}
 	pt.mu.Unlock()
 
 	pt.updateMessage(ctx)
 
 	if shouldSummarize && pt.pendingSummary.CompareAndSwap(false, true) {
-		go pt.runSummary(insertIdx, reasonsCopy)
+		go pt.runSummary(insertIdx, activitiesCopy)
 	}
 }
 
 // runSummary calls the summarizer in a background goroutine and inserts the
 // result into statusInserts for the next updateMessage call.
-func (pt *ProgressTracker) runSummary(insertIdx int, reasons []string) {
+func (pt *ProgressTracker) runSummary(insertIdx int, activities []string) {
 	defer pt.pendingSummary.Store(false)
 
 	sCtx, cancel := context.WithTimeout(context.Background(), statusSummaryTimeout)
 	defer cancel()
 
-	summary, err := pt.summarizeFn(sCtx, reasons)
+	summary, err := pt.summarizeFn(sCtx, activities)
 	if err != nil {
 		slog.Debug("progress summary failed", "error", err)
 		return
@@ -213,11 +229,14 @@ func sanitizeSummary(raw string) string {
 
 // Finalize marks all remaining running steps as done and performs a final update.
 func (pt *ProgressTracker) Finalize(ctx context.Context) {
+	now := time.Now()
+
 	pt.mu.Lock()
 	anyChanged := false
 	for i := range pt.steps {
 		if pt.steps[i].Status == "running" {
 			pt.steps[i].Status = "done"
+			pt.steps[i].Elapsed = now.Sub(pt.steps[i].StartAt)
 			anyChanged = true
 		}
 	}
@@ -297,6 +316,18 @@ func (pt *ProgressTracker) renderText() string {
 
 		fmt.Fprintf(&b, "\n%s %s", icon, label)
 
+		// Append argument hint if present.
+		if s.ArgHint != "" {
+			fmt.Fprintf(&b, " — %s", s.ArgHint)
+		}
+
+		// Append elapsed time for completed steps.
+		if s.Status == "done" || s.Status == "error" {
+			if s.Elapsed > 0 {
+				fmt.Fprintf(&b, " (%s)", formatElapsed(s.Elapsed))
+			}
+		}
+
 		if inserts != nil {
 			if phrase, ok := inserts[i]; ok {
 				fmt.Fprintf(&b, "\n💭 %s", phrase)
@@ -305,4 +336,117 @@ func (pt *ProgressTracker) renderText() string {
 	}
 
 	return b.String()
+}
+
+// formatElapsed formats a duration as a human-readable short string.
+func formatElapsed(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+// extractArgHint pulls a short, human-readable hint from the raw JSON tool
+// input based on the tool name. Returns empty string if no useful hint can
+// be extracted.
+func extractArgHint(toolName string, input []byte) string {
+	if len(input) == 0 {
+		return ""
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(input, &m); err != nil {
+		return ""
+	}
+
+	var hint string
+	switch toolName {
+	case "read", "write", "tree", "ls":
+		hint = jsonString(m["path"])
+	case "edit", "multi_edit":
+		hint = jsonString(m["file"])
+		if hint == "" {
+			hint = jsonString(m["path"])
+		}
+	case "exec", "test":
+		hint = jsonString(m["command"])
+	case "grep", "search_and_read":
+		hint = jsonString(m["pattern"])
+		if dir := jsonString(m["path"]); dir != "" {
+			hint += " in " + dir
+		}
+	case "find":
+		hint = jsonString(m["pattern"])
+		if dir := jsonString(m["directory"]); dir != "" {
+			hint += " in " + dir
+		}
+	case "git":
+		hint = jsonString(m["command"])
+	case "web":
+		hint = jsonString(m["query"])
+		if hint == "" {
+			hint = jsonString(m["url"])
+		}
+	case "memory":
+		hint = jsonString(m["query"])
+	case "send_file":
+		hint = jsonString(m["path"])
+	case "gmail":
+		hint = jsonString(m["action"])
+	case "diff":
+		hint = jsonString(m["path"])
+	case "message":
+		hint = jsonString(m["channel"])
+	case "pilot":
+		hint = jsonString(m["question"])
+	case "image":
+		hint = jsonString(m["action"])
+	default:
+		// Try common field names.
+		for _, key := range []string{"path", "file", "command", "query", "pattern"} {
+			if v := jsonString(m[key]); v != "" {
+				hint = v
+				break
+			}
+		}
+	}
+
+	if hint == "" {
+		return ""
+	}
+
+	// Trim path prefixes for readability.
+	hint = trimPathPrefix(hint)
+
+	// Truncate to maxArgHintLen runes.
+	runes := []rune(hint)
+	if len(runes) > maxArgHintLen {
+		hint = string(runes[:maxArgHintLen]) + "…"
+	}
+	return hint
+}
+
+// jsonString extracts a string value from a json.RawMessage.
+// Returns empty string if the value is not a JSON string.
+func jsonString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return s
+}
+
+// trimPathPrefix removes common workspace path prefixes so that progress
+// shows relative paths like "progress.go" instead of "/home/user/project/progress.go".
+func trimPathPrefix(s string) string {
+	// Find last path component for very long absolute paths.
+	if len(s) > 60 {
+		if idx := strings.LastIndex(s, "/"); idx > 0 {
+			return "…/" + s[idx+1:]
+		}
+	}
+	return s
 }
