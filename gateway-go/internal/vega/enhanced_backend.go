@@ -370,6 +370,85 @@ func (eb *EnhancedBackend) HealthCheck(ctx context.Context) HealthStatus {
 	return HealthStatus{Components: components}
 }
 
+// SearchWithExpansion is like Search but also returns the LLM-expanded terms.
+// Callers can use these terms to augment parallel searches (e.g., memory FTS).
+func (eb *EnhancedBackend) SearchWithExpansion(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, []string, error) {
+	// Check cache first.
+	cacheKey := searchCacheKey(query, opts)
+	if cached, ok := eb.cache.get(cacheKey); ok {
+		eb.logger.Debug("vega: cache hit (with expansion)", "query", query)
+		return cached, nil, nil // no expansion terms on cache hit
+	}
+
+	var (
+		queryVec []float32
+		expanded []string
+		mu       sync.Mutex
+	)
+
+	// Phase 1: Parallel SGLang calls (embedding + expansion).
+	var wg sync.WaitGroup
+
+	if eb.embedder != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			vec, err := eb.embedder.EmbedQuery(ctx, query)
+			if err != nil {
+				eb.logger.Debug("vega: embedding failed, falling back to FTS", "error", err)
+				return
+			}
+			mu.Lock()
+			queryVec = vec
+			mu.Unlock()
+		}()
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		terms := eb.expander.Expand(ctx, query)
+		if len(terms) > 0 {
+			mu.Lock()
+			expanded = terms
+			mu.Unlock()
+		}
+	}()
+
+	wg.Wait()
+
+	// Phase 2: Search with embedding vector via Rust FFI.
+	results, err := eb.searchWithVector(ctx, query, queryVec, opts)
+	if err != nil {
+		return nil, expanded, err
+	}
+
+	// Phase 3: Supplemental expanded FTS if results are sparse.
+	if len(results) < 5 && len(expanded) > 0 {
+		expandedQuery := BuildExpandedQuery(query, expanded)
+		eb.logger.Debug("vega: running expanded FTS", "query", expandedQuery)
+		moreResults, err := eb.rust.Search(ctx, expandedQuery, opts)
+		if err == nil && len(moreResults) > 0 {
+			results = mergeResults(results, moreResults)
+		}
+	}
+
+	// Phase 4: Cross-encoder reranking (optional).
+	if eb.reranker != nil && len(results) > 1 {
+		results = eb.rerankResults(ctx, query, results)
+	}
+
+	// Apply limit.
+	if opts.Limit > 0 && len(results) > opts.Limit {
+		results = results[:opts.Limit]
+	}
+
+	// Cache results.
+	eb.cache.put(cacheKey, results)
+
+	return results, expanded, nil
+}
+
 // Close is a no-op.
 func (eb *EnhancedBackend) Close() error {
 	return nil

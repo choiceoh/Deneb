@@ -63,6 +63,7 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 	var (
 		wg               sync.WaitGroup
 		vegaResults      []vega.SearchResult
+		vegaExpanded     []string // LLM-expanded terms from Vega (shared with Memory)
 		memMatches       []chattools.MemoryMatch
 		structFacts      []memory.SearchResult
 		unifiedResults   []unified.SearchResult
@@ -71,13 +72,24 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 	)
 
 	// Vega search (project knowledge DB).
+	// Use SearchWithExpansion when available to capture LLM-expanded terms
+	// for sharing with Memory FTS search.
 	if deps.VegaBackend != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results, err := deps.VegaBackend.Search(ctx, message, vega.SearchOpts{Limit: knowledgeMaxVega})
-			if err == nil {
-				vegaResults = results
+			opts := vega.SearchOpts{Limit: knowledgeMaxVega}
+			if eb, ok := deps.VegaBackend.(vega.ExpandingBackend); ok {
+				results, expanded, err := eb.SearchWithExpansion(ctx, message, opts)
+				if err == nil {
+					vegaResults = results
+					vegaExpanded = expanded
+				}
+			} else {
+				results, err := deps.VegaBackend.Search(ctx, message, opts)
+				if err == nil {
+					vegaResults = results
+				}
 			}
 		}()
 	}
@@ -148,6 +160,30 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 	}
 
 	wg.Wait()
+
+	// Supplemental Memory FTS with Vega LLM expansion terms.
+	// When Memory search returned sparse results and Vega produced expansion terms,
+	// run a second FTS pass with the expanded keywords to improve recall.
+	const sparseThreshold = 3
+	if len(vegaExpanded) > 0 && deps.MemoryStore != nil && !deps.SkipMemorySearch && len(structFacts) < sparseThreshold {
+		var queryVec []float32
+		if deps.MemoryEmbedder != nil {
+			if vec, err := deps.MemoryEmbedder.EmbedQuery(ctx, message); err == nil {
+				queryVec = vec
+			}
+		}
+		supplementOpts := memory.SearchOpts{
+			Limit:         knowledgeMaxMemory,
+			ExtraKeywords: vegaExpanded,
+		}
+		if deps.MemoryEmbedder == nil {
+			supplementOpts.MinImportance = 0.6
+		}
+		supplemental, err := deps.MemoryStore.SearchFacts(ctx, message, queryVec, supplementOpts)
+		if err == nil && len(supplemental) > 0 {
+			structFacts = mergeMemoryResults(structFacts, supplemental)
+		}
+	}
 
 	// Build the combined knowledge section.
 	var parts []string
@@ -636,6 +672,21 @@ func deduplicateFactsAgainstTier1(facts []memory.SearchResult, tier1 string) []m
 		filtered = append(filtered, f)
 	}
 	return filtered
+}
+
+// mergeMemoryResults appends supplemental results to existing, deduplicating by fact ID.
+func mergeMemoryResults(existing, supplemental []memory.SearchResult) []memory.SearchResult {
+	seen := make(map[int64]bool, len(existing))
+	for _, sr := range existing {
+		seen[sr.Fact.ID] = true
+	}
+	for _, sr := range supplemental {
+		if !seen[sr.Fact.ID] {
+			existing = append(existing, sr)
+			seen[sr.Fact.ID] = true
+		}
+	}
+	return existing
 }
 
 // formatKeySection formats a set of user_model keys into "- Label: value" lines.
