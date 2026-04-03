@@ -3,7 +3,6 @@
 # Run this once to set up:
 # 1. Long-lived Claude Code token
 # 2. Auth monitoring with notifications
-# 3. Instructions for Termux widgets
 
 set -euo pipefail
 
@@ -81,39 +80,14 @@ systemctl --user enable --now deneb-auth-monitor.timer
 echo "Auth monitor installed and running."
 echo ""
 
-# Step 4: Termux widget setup
-echo "Step 4: Termux widget setup (for phone)"
-echo ""
-echo "To set up quick auth from your phone:"
-echo ""
-echo "1. Install Termux and Termux:Widget from F-Droid"
-echo "2. Create ~/.shortcuts/ directory in Termux:"
-echo "   mkdir -p ~/.shortcuts"
-echo ""
-echo "3. Copy the widget scripts:"
-echo "   scp $SCRIPT_DIR/termux-quick-auth.sh phone:~/.shortcuts/ClawdAuth"
-echo "   scp $SCRIPT_DIR/termux-auth-widget.sh phone:~/.shortcuts/ClawdAuth-Full"
-echo ""
-echo "4. Make them executable on phone:"
-echo "   ssh phone 'chmod +x ~/.shortcuts/Clawd*'"
-echo ""
-echo "5. Add Termux:Widget to your home screen"
-echo "6. Tap the widget to see your auth scripts"
-echo ""
-echo "The quick widget (ClawdAuth) shows status and opens auth URL if needed."
-echo "The full widget (ClawdAuth-Full) provides guided re-auth flow."
-echo ""
-
 # Summary
 echo "=== Setup Complete ==="
 echo ""
 echo "What's configured:"
 echo "  - Auth status: $SCRIPT_DIR/claude-auth-status.sh"
-echo "  - Mobile re-auth: $SCRIPT_DIR/mobile-reauth.sh"
 echo "  - Auth monitor: systemctl --user status deneb-auth-monitor.timer"
 echo ""
 echo "Quick commands:"
 echo "  Check auth:  $SCRIPT_DIR/claude-auth-status.sh"
-echo "  Re-auth:     $SCRIPT_DIR/mobile-reauth.sh"
 echo "  Test monitor: $SCRIPT_DIR/auth-monitor.sh"
 echo ""
