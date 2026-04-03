@@ -35,6 +35,9 @@ const (
 type ClientConfig struct {
 	// Token is the bot API token.
 	Token string
+	// BaseURL overrides the API base URL (e.g. "http://localhost:18792/botTOKEN").
+	// When set, used as-is instead of apiBaseURL+Token. For testing with mock servers.
+	BaseURL string
 	// HTTPClient overrides the default HTTP client (for proxy support, custom timeouts).
 	// If nil, a client with IPv4-fallback transport is created automatically.
 	HTTPClient *http.Client
@@ -72,9 +75,14 @@ func NewClient(cfg ClientConfig) *Client {
 		maxRetries = *cfg.MaxRetries
 	}
 
+	baseURL := apiBaseURL + cfg.Token
+	if cfg.BaseURL != "" {
+		baseURL = cfg.BaseURL
+	}
+
 	return &Client{
 		token:      cfg.Token,
-		baseURL:    apiBaseURL + cfg.Token,
+		baseURL:    baseURL,
 		httpClient: httpClient,
 		logger:     logger,
 		maxRetries: maxRetries,

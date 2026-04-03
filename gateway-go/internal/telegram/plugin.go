@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 )
@@ -119,11 +120,17 @@ func (p *Plugin) Start(ctx context.Context) error {
 		}
 	}
 
-	p.client = NewClient(ClientConfig{
+	clientCfg := ClientConfig{
 		Token:      p.config.BotToken,
 		HTTPClient: httpClient,
 		Logger:     p.logger,
-	})
+	}
+	// TELEGRAM_API_BASE allows pointing the client at a mock server for testing.
+	if base := os.Getenv("TELEGRAM_API_BASE"); base != "" {
+		clientCfg.BaseURL = base + p.config.BotToken
+		p.logger.Info("using custom telegram API base", "base", base)
+	}
+	p.client = NewClient(clientCfg)
 
 	// Verify bot token.
 	me, err := p.client.GetMe(ctx)
