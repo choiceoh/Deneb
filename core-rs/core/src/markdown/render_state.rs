@@ -287,9 +287,8 @@ impl RenderState {
     }
 
     pub(crate) fn handle_link_close(&mut self) {
-        let link = match self.link_stack_mut().pop() {
-            Some(l) => l,
-            None => return,
+        let Some(link) = self.link_stack_mut().pop() else {
+            return;
         };
         let href = link.href.trim().to_string();
         if href.is_empty() {

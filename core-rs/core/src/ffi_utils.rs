@@ -14,7 +14,7 @@ pub(crate) use crate::protocol::error_codes::{
 };
 
 /// Maximum input size for FFI string functions (16 MB).
-/// Prevents DoS via pathologically large inputs.
+/// Prevents `DoS` via pathologically large inputs.
 pub(crate) const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
 // Thread-local buffer holding the message from the most recent caught panic.
@@ -97,9 +97,8 @@ macro_rules! ffi_string_to_int {
             // SAFETY: pointer is null-checked above and length is bounded.
             let input_slice = std::slice::from_raw_parts($in_ptr, $in_len);
             ffi_catch(FFI_ERR_RUST_PANIC, move || {
-                let $input_str = match std::str::from_utf8(input_slice) {
-                    Ok(s) => s,
-                    Err(_) => return FFI_ERR_INVALID_UTF8,
+                let Ok($input_str) = std::str::from_utf8(input_slice) else {
+                    return FFI_ERR_INVALID_UTF8;
                 };
                 $body
             })
@@ -152,9 +151,8 @@ macro_rules! ffi_string_to_buffer {
             let input_slice = std::slice::from_raw_parts($in_ptr, $in_len);
             let $out_slice = std::slice::from_raw_parts_mut($out_ptr, $out_len);
             ffi_catch(FFI_ERR_RUST_PANIC, move || {
-                let $input_str = match std::str::from_utf8(input_slice) {
-                    Ok(s) => s,
-                    Err(_) => return FFI_ERR_INVALID_UTF8,
+                let Ok($input_str) = std::str::from_utf8(input_slice) else {
+                    return FFI_ERR_INVALID_UTF8;
                 };
                 $body
             })
@@ -165,9 +163,8 @@ macro_rules! ffi_string_to_buffer {
 /// Write a serializable value as JSON into an output buffer.
 /// Returns bytes written on success, or a negative FFI error code.
 pub(crate) fn ffi_write_json(out: &mut [u8], value: &impl serde::Serialize) -> i32 {
-    let json = match serde_json::to_string(value) {
-        Ok(j) => j,
-        Err(_) => return FFI_ERR_JSON_ERROR,
+    let Ok(json) = serde_json::to_string(value) else {
+        return FFI_ERR_JSON_ERROR;
     };
     ffi_write_bytes(out, json.as_bytes())
 }

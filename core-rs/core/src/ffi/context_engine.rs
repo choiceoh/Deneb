@@ -65,9 +65,8 @@ pub unsafe extern "C" fn deneb_context_assembly_step(
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let resp_str = match std::str::from_utf8(resp_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(resp_str) = std::str::from_utf8(resp_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
         let json = crate::context_engine::handle::context_assembly_step(handle, resp_str);
         ffi_write_bytes(out_slice, json.as_bytes())
@@ -148,9 +147,8 @@ pub unsafe extern "C" fn deneb_context_expand_step(
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let resp_str = match std::str::from_utf8(resp_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(resp_str) = std::str::from_utf8(resp_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
         let json = crate::context_engine::handle::context_expand_step(handle, resp_str);
         ffi_write_bytes(out_slice, json.as_bytes())

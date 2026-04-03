@@ -4,8 +4,8 @@
 
 use std::path::PathBuf;
 
-/// Schema version for the Vega SQLite database.
-/// Matches Python SCHEMA_VERSION = 6.
+/// Schema version for the Vega `SQLite` database.
+/// Matches Python `SCHEMA_VERSION` = 6.
 pub const SCHEMA_VERSION: u32 = 6;
 
 /// Vega protocol version for Deneb compatibility.
@@ -17,13 +17,13 @@ pub const VERSION: &str = "2.0.0";
 /// Runtime configuration for Vega.
 #[derive(Debug, Clone)]
 pub struct VegaConfig {
-    /// Path to the SQLite database file.
+    /// Path to the `SQLite` database file.
     pub db_path: PathBuf,
     /// Directory containing project markdown files.
     pub md_dir: PathBuf,
-    /// Reranking mode: "vega_only" (cosine + BM25 fusion) or "none" (BM25 only).
+    /// Reranking mode: "`vega_only`" (cosine + BM25 fusion) or "none" (BM25 only).
     pub rerank_mode: String,
-    /// Inference backend: "sglang" (default, embeddings via Go HTTP) or "sqlite_only" (FTS only).
+    /// Inference backend: "sglang" (default, embeddings via Go HTTP) or "`sqlite_only`" (FTS only).
     pub inference_backend: String,
 }
 
@@ -59,7 +59,7 @@ impl VegaConfig {
         cfg
     }
 
-    /// Check if the inference backend uses SGLang (embeddings provided externally via Go).
+    /// Check if the inference backend uses `SGLang` (embeddings provided externally via Go).
     pub fn has_sglang(&self) -> bool {
         self.inference_backend == "sglang"
     }
@@ -77,7 +77,7 @@ impl VegaConfig {
         std::fs::read_dir(&self.md_dir)
             .map(|entries| {
                 entries
-                    .filter_map(|e| e.ok())
+                    .filter_map(std::result::Result::ok)
                     .any(|e| e.path().extension().is_some_and(|ext| ext == "md"))
             })
             .unwrap_or(false)

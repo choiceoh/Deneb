@@ -154,7 +154,7 @@ mod tests {
             start_line: 1,
             end_line: 10,
             source: "memory".to_string(),
-            snippet: format!("snippet for {}", id),
+            snippet: format!("snippet for {id}"),
             score,
         }
     }
@@ -166,7 +166,7 @@ mod tests {
             start_line: 1,
             end_line: 10,
             source: "memory".to_string(),
-            snippet: format!("keyword snippet for {}", id),
+            snippet: format!("keyword snippet for {id}"),
             score,
         }
     }

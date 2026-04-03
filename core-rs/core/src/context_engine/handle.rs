@@ -58,7 +58,9 @@ impl ContextEngineStore {
 
 /// Lock the context engine store. Recovers from poison to avoid cascading panics.
 fn lock_context_store() -> std::sync::MutexGuard<'static, ContextEngineStore> {
-    CONTEXT_ENGINES.lock().unwrap_or_else(|e| e.into_inner())
+    CONTEXT_ENGINES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // ── Assembly engine exports ──────────────────────────────────────────────────
@@ -157,18 +159,18 @@ fn empty_expand_done() -> String {
 /// Create a new grep engine. Returns a handle (u32).
 pub fn context_grep_new(
     query: String,
-    mode: String,
-    scope: String,
+    mode: &str,
+    scope: &str,
     conversation_id: Option<u32>,
     since_ms: Option<f64>,
     before_ms: Option<f64>,
     limit: Option<u32>,
 ) -> u32 {
-    let grep_mode = match mode.as_str() {
+    let grep_mode = match mode {
         "full_text" => GrepMode::FullText,
         _ => GrepMode::Regex,
     };
-    let grep_scope = match scope.as_str() {
+    let grep_scope = match scope {
         "messages" => GrepScope::Messages,
         "summaries" => GrepScope::Summaries,
         _ => GrepScope::Both,
@@ -270,8 +272,8 @@ pub fn context_engine_drop(handle: u32) {
 // ── Pure function exports ────────────────────────────────────────────────────
 
 /// Validate and resolve an Aurora config from JSON. Returns validated config JSON.
-pub fn context_resolve_config(config_json: String) -> String {
-    match serde_json::from_str::<AuroraConfig>(&config_json) {
+pub fn context_resolve_config(config_json: &str) -> String {
+    match serde_json::from_str::<AuroraConfig>(config_json) {
         Ok(config) => {
             let validated = config.validated();
             serde_json::to_string(&validated).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
@@ -286,8 +288,8 @@ pub fn context_resolve_config(config_json: String) -> String {
 }
 
 /// Estimate token count from text.
-pub fn context_estimate_tokens(text: String) -> u32 {
-    estimate_tokens(&text) as u32
+pub fn context_estimate_tokens(text: &str) -> u32 {
+    estimate_tokens(text) as u32
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -344,8 +346,8 @@ mod tests {
     fn test_grep_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let handle = context_grep_new(
             "test".to_string(),
-            "regex".to_string(),
-            "both".to_string(),
+            "regex",
+            "both",
             None,
             None,
             None,
@@ -377,7 +379,7 @@ mod tests {
     #[test]
     fn test_resolve_config_valid() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"contextThreshold": 0.5, "freshTailCount": 16}"#;
-        let result = context_resolve_config(json.to_string());
+        let result = context_resolve_config(json);
         let config: AuroraConfig = serde_json::from_str(&result)?;
         assert_eq!(config.context_threshold, 0.5);
         assert_eq!(config.fresh_tail_count, 16);
@@ -386,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_resolve_config_invalid_returns_defaults() -> Result<(), Box<dyn std::error::Error>> {
-        let result = context_resolve_config("not-json".to_string());
+        let result = context_resolve_config("not-json");
         let config: AuroraConfig = serde_json::from_str(&result)?;
         assert_eq!(config.context_threshold, 0.80);
         Ok(())
@@ -394,6 +396,6 @@ mod tests {
 
     #[test]
     fn test_estimate_tokens_napi() {
-        assert_eq!(context_estimate_tokens("hello world".into()), 5); // 11 chars / 2
+        assert_eq!(context_estimate_tokens("hello world"), 5); // 11 chars / 2
     }
 }

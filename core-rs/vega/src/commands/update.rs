@@ -17,9 +17,8 @@ use super::{find_project_id, open_db, CommandResult};
 ///   - priority: new priority value (optional)
 ///   - notes: additional notes (optional)
 pub fn cmd_update(args: &Value, config: &VegaConfig) -> CommandResult {
-    let project_query = match args.get("project").and_then(|v| v.as_str()) {
-        Some(p) => p,
-        None => return CommandResult::err("update", "project 파라미터가 필요합니다"),
+    let Some(project_query) = args.get("project").and_then(|v| v.as_str()) else {
+        return CommandResult::err("update", "project 파라미터가 필요합니다");
     };
 
     let conn = match open_db(config) {
@@ -28,14 +27,11 @@ pub fn cmd_update(args: &Value, config: &VegaConfig) -> CommandResult {
     };
 
     // Resolve project
-    let project_id = match find_project_id(config, project_query) {
-        Some(id) => id,
-        None => {
-            return CommandResult::err(
-                "update",
-                &format!("프로젝트를 찾을 수 없습니다: {project_query}"),
-            )
-        }
+    let Some(project_id) = find_project_id(config, project_query) else {
+        return CommandResult::err(
+            "update",
+            &format!("프로젝트를 찾을 수 없습니다: {project_query}"),
+        );
     };
 
     // Get current project name

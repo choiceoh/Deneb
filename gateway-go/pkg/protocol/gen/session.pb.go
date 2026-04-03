@@ -26,7 +26,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// SessionRunStatus represents the lifecycle state of a session run.
+// `SessionRunStatus` represents the lifecycle state of a session run.
 // Transitions: RUNNING → {DONE | FAILED | KILLED | TIMEOUT}.
 type SessionRunStatus int32
 
@@ -86,7 +86,7 @@ func (SessionRunStatus) EnumDescriptor() ([]byte, []int) {
 	return file_session_proto_rawDescGZIP(), []int{0}
 }
 
-// SessionKind identifies the conversation scope of a session.
+// `SessionKind` identifies the conversation scope of a session.
 type SessionKind int32
 
 const (
@@ -151,7 +151,7 @@ func (SessionKind) EnumDescriptor() ([]byte, []int) {
 	return file_session_proto_rawDescGZIP(), []int{1}
 }
 
-// SessionLifecyclePhase identifies the phase of a lifecycle event.
+// `SessionLifecyclePhase` identifies the phase of a lifecycle event.
 type SessionLifecyclePhase int32
 
 const (
@@ -204,8 +204,8 @@ func (SessionLifecyclePhase) EnumDescriptor() ([]byte, []int) {
 	return file_session_proto_rawDescGZIP(), []int{2}
 }
 
-// GatewaySessionRow — full session state.
-// TypeScript: GatewaySessionRow in session-utils.types.ts
+// `GatewaySessionRow` — full session state.
+// TypeScript: `GatewaySessionRow` in session-utils.types.ts
 type GatewaySessionRow struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Key                string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -576,7 +576,7 @@ func (x *GatewaySessionRow) GetLastAccountId() string {
 	return ""
 }
 
-// SessionTransition represents a state transition event.
+// `SessionTransition` represents a state transition event.
 // Used for audit logging and event broadcasting.
 type SessionTransition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -670,7 +670,7 @@ func (x *SessionTransition) GetAborted() bool {
 	return false
 }
 
-// SessionLifecycleEvent represents a session lifecycle event.
+// `SessionLifecycleEvent` represents a session lifecycle event.
 type SessionLifecycleEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -747,7 +747,7 @@ func (x *SessionLifecycleEvent) GetAborted() bool {
 	return false
 }
 
-// SessionPreviewItem — a single item in a session preview.
+// `SessionPreviewItem` — a single item in a session preview.
 type SessionPreviewItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Role          string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"` // "user" | "assistant" | "tool" | "system" | "other"
@@ -800,7 +800,7 @@ func (x *SessionPreviewItem) GetText() string {
 	return ""
 }
 
-// SessionsPreviewEntry — preview of a session.
+// `SessionsPreviewEntry` — preview of a session.
 type SessionsPreviewEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`

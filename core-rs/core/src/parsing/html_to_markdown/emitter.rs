@@ -242,8 +242,7 @@ pub(crate) fn emit(
 
             // --- Noise suppression (when strip_noise enabled) ---
             Token::TagOpen {
-                name:
-                    TagName::Nav | TagName::Aside | TagName::Svg | TagName::Iframe | TagName::Form,
+                name: TagName::Nav | TagName::Aside | TagName::Svg | TagName::Iframe | TagName::Form,
                 ..
             } if strip_noise => {
                 ctx.suppress_depth += 1;

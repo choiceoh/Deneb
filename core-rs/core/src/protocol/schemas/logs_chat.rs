@@ -32,7 +32,7 @@ define_schema! {
     }
 }
 
-/// InputProvenanceSchema: `{ kind: enum, ...optional string fields }`
+/// `InputProvenanceSchema`: `{ kind: enum, ...optional string fields }`
 fn check_input_provenance(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
     if require_object(v, p, e) {
         let Some(prov) = v.as_object() else {

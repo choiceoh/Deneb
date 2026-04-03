@@ -65,10 +65,10 @@ fn extract_contacts_for_project(conn: &Connection, query: &str) -> Result<Vec<Va
           AND c.chunk_type IN ('person_internal', 'person_external', 'body', 'note')
         ORDER BY c.chunk_type, c.seq
     ";
-    let pattern = format!("%{}%", query);
+    let pattern = format!("%{query}%");
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map(rusqlite::params![pattern, query], |row| {
             let body: String = row.get(0)?;
@@ -77,14 +77,14 @@ fn extract_contacts_for_project(conn: &Connection, query: &str) -> Result<Vec<Va
             let project_id: i64 = row.get(3)?;
             Ok((body, chunk_type, title, project_id))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut contacts = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for row in rows {
         let (body, chunk_type, title, project_id) =
-            row.map_err(|e| format!("행 읽기 실패: {}", e))?;
+            row.map_err(|e| format!("행 읽기 실패: {e}"))?;
         let extracted = extract_from_text(&body, &chunk_type, &title, project_id);
         for contact in extracted {
             let key = contact["name"].as_str().unwrap_or("").to_string();
@@ -108,7 +108,7 @@ fn extract_all_contacts(conn: &Connection) -> Result<Vec<Value>, String> {
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
@@ -117,14 +117,14 @@ fn extract_all_contacts(conn: &Connection) -> Result<Vec<Value>, String> {
             let project_id: i64 = row.get(3)?;
             Ok((body, chunk_type, title, project_id))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut contacts = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for row in rows {
         let (body, chunk_type, title, project_id) =
-            row.map_err(|e| format!("행 읽기 실패: {}", e))?;
+            row.map_err(|e| format!("행 읽기 실패: {e}"))?;
         let extracted = extract_from_text(&body, &chunk_type, &title, project_id);
         for contact in extracted {
             let key = contact["name"].as_str().unwrap_or("").to_string();
@@ -191,14 +191,14 @@ fn extract_from_text(
         .collect();
 
     for caps in name_re.captures_iter(body) {
-        let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        let name = caps.get(1).map_or("", |m| m.as_str());
         let title = caps
             .get(2)
             .map(|m| m.as_str().to_string())
             .unwrap_or_default();
 
         // Try to associate nearby phone/email with this name
-        let name_pos = caps.get(0).map(|m| m.start()).unwrap_or(0);
+        let name_pos = caps.get(0).map_or(0, |m| m.start());
 
         let nearby_phone = phones
             .iter()
@@ -238,6 +238,18 @@ fn extract_from_text(
     }
 
     contacts
+}
+
+pub struct ContactsHandler;
+
+impl super::CommandHandler for ContactsHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_contacts(args, config)
+    }
 }
 
 #[cfg(test)]
@@ -323,17 +335,5 @@ mod tests {
         let contacts = extract_from_text(body, "note", "프로젝트", 1);
         assert!(!contacts.is_empty());
         assert_eq!(contacts[0]["phone"], "01012345678");
-    }
-}
-
-pub struct ContactsHandler;
-
-impl super::CommandHandler for ContactsHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_contacts(args, config)
     }
 }

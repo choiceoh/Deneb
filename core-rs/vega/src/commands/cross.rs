@@ -149,19 +149,19 @@ fn find_vendor_overlaps(conn: &Connection) -> Result<Vec<(String, Vec<String>)>,
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
             let title: String = row.get(1)?;
             Ok((body, title))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut vendor_map: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     for row in rows {
-        let (body, title) = row.map_err(|e| format!("행 읽기 실패: {}", e))?;
+        let (body, title) = row.map_err(|e| format!("행 읽기 실패: {e}"))?;
         let vendor_name = body.lines().next().unwrap_or(&body).trim().to_string();
         if !vendor_name.is_empty() {
             vendor_map
@@ -198,19 +198,19 @@ fn find_material_overlaps(conn: &Connection) -> Result<Vec<(String, Vec<String>)
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
             let title: String = row.get(1)?;
             Ok((body, title))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut material_map: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     for row in rows {
-        let (body, title) = row.map_err(|e| format!("행 읽기 실패: {}", e))?;
+        let (body, title) = row.map_err(|e| format!("행 읽기 실패: {e}"))?;
         let material_name = body.lines().next().unwrap_or(&body).trim().to_string();
         if !material_name.is_empty() {
             material_map
@@ -246,19 +246,19 @@ fn find_personnel_overload(conn: &Connection) -> Result<Vec<(String, Vec<String>
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
             let title: String = row.get(1)?;
             Ok((body, title))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut person_map: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     for row in rows {
-        let (body, title) = row.map_err(|e| format!("행 읽기 실패: {}", e))?;
+        let (body, title) = row.map_err(|e| format!("행 읽기 실패: {e}"))?;
         // Extract person name (first line of body)
         let person_name = body.lines().next().unwrap_or(&body).trim().to_string();
         if !person_name.is_empty() {
@@ -307,7 +307,7 @@ fn find_schedule_conflicts(conn: &Connection) -> Result<Vec<Value>, String> {
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let proj1: String = row.get(0)?;
@@ -317,11 +317,11 @@ fn find_schedule_conflicts(conn: &Connection) -> Result<Vec<Value>, String> {
                 "project2": proj2
             }))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut results = Vec::new();
     for row in rows {
-        results.push(row.map_err(|e| format!("행 읽기 실패: {}", e))?);
+        results.push(row.map_err(|e| format!("행 읽기 실패: {e}"))?);
     }
     Ok(results)
 }
@@ -339,19 +339,19 @@ fn find_tech_synergy(conn: &Connection) -> Result<Vec<(String, Vec<String>)>, St
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let tag: String = row.get(0)?;
             let title: String = row.get(1)?;
             Ok((tag, title))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut tag_map: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     for row in rows {
-        let (tag, title) = row.map_err(|e| format!("행 읽기 실패: {}", e))?;
+        let (tag, title) = row.map_err(|e| format!("행 읽기 실패: {e}"))?;
         tag_map.entry(tag).or_default().push(title);
     }
 

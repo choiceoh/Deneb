@@ -6,7 +6,7 @@ use crate::config::VegaConfig;
 use super::{open_db, CommandResult};
 
 /// Recent activity query.
-/// Returns the latest comm_log entries and chunks across all projects
+/// Returns the latest `comm_log` entries and chunks across all projects
 /// within a configurable day range (default 7 days).
 ///
 /// Args:
@@ -14,8 +14,14 @@ use super::{open_db, CommandResult};
 ///   - limit: max results per category (default 50)
 ///   - project: optional project filter
 pub fn cmd_recent(args: &Value, config: &VegaConfig) -> CommandResult {
-    let days = args.get("days").and_then(|v| v.as_i64()).unwrap_or(7);
-    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(50);
+    let days = args
+        .get("days")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(7);
+    let limit = args
+        .get("limit")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(50);
     let project_filter = args.get("project").and_then(|v| v.as_str());
 
     let conn = match open_db(config) {
@@ -43,8 +49,8 @@ pub fn cmd_recent(args: &Value, config: &VegaConfig) -> CommandResult {
     };
 
     // Summary stats
-    let total_comms = comms.as_ref().map(|c| c.len()).unwrap_or(0);
-    let total_chunks = chunks.as_ref().map(|c| c.len()).unwrap_or(0);
+    let total_comms = comms.as_ref().map(std::vec::Vec::len).unwrap_or(0);
+    let total_chunks = chunks.as_ref().map(std::vec::Vec::len).unwrap_or(0);
 
     CommandResult::ok(
         "recent",
@@ -88,7 +94,7 @@ fn fetch_recent_comms(
             }))
         })
         .map_err(|e| format!("쿼리 실행 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(rows)
@@ -124,7 +130,7 @@ fn fetch_recent_comms_filtered(
             }))
         })
         .map_err(|e| format!("쿼리 실행 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(rows)
@@ -158,7 +164,7 @@ fn fetch_recent_chunks(
             }))
         })
         .map_err(|e| format!("쿼리 실행 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(rows)
@@ -193,7 +199,7 @@ fn fetch_recent_chunks_filtered(
             }))
         })
         .map_err(|e| format!("쿼리 실행 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(rows)

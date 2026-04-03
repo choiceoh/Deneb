@@ -26,7 +26,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// AgentStatus tracks the lifecycle of an agent execution.
+// `AgentStatus` tracks the lifecycle of an agent execution.
 type AgentStatus int32
 
 const (
@@ -85,7 +85,7 @@ func (AgentStatus) EnumDescriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{0}
 }
 
-// AgentSpawnRequest initiates a new agent execution.
+// `AgentSpawnRequest` initiates a new agent execution.
 type AgentSpawnRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	SessionKey       string                 `protobuf:"bytes,1,opt,name=session_key,json=sessionKey,proto3" json:"session_key,omitempty"`
@@ -170,7 +170,7 @@ func (x *AgentSpawnRequest) GetParentSessionKey() string {
 	return ""
 }
 
-// AgentStatusUpdate reports a change in agent execution state.
+// `AgentStatusUpdate` reports a change in agent execution state.
 type AgentStatusUpdate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionKey    string                 `protobuf:"bytes,1,opt,name=session_key,json=sessionKey,proto3" json:"session_key,omitempty"`
@@ -239,7 +239,7 @@ func (x *AgentStatusUpdate) GetReason() string {
 	return ""
 }
 
-// AgentExecutionResult is the final result of an agent execution.
+// `AgentExecutionResult` is the final result of an agent execution.
 type AgentExecutionResult struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	SessionKey       string                 `protobuf:"bytes,1,opt,name=session_key,json=sessionKey,proto3" json:"session_key,omitempty"`

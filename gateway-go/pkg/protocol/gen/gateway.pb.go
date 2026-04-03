@@ -31,7 +31,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ErrorCode enumerates all known gateway error codes.
+// `ErrorCode` enumerates all known gateway error codes.
 // Mirrors src/gateway/protocol/schema/error-codes.ts.
 type ErrorCode int32
 
@@ -43,7 +43,7 @@ const (
 	ErrorCode_ERROR_CODE_AGENT_TIMEOUT   ErrorCode = 3 // retryable
 	ErrorCode_ERROR_CODE_INVALID_REQUEST ErrorCode = 4
 	ErrorCode_ERROR_CODE_UNAVAILABLE     ErrorCode = 5 // retryable
-	// INVALID_REQUEST refinements
+	// `INVALID_REQUEST` refinements
 	ErrorCode_ERROR_CODE_MISSING_PARAM     ErrorCode = 10
 	ErrorCode_ERROR_CODE_NOT_FOUND         ErrorCode = 11
 	ErrorCode_ERROR_CODE_UNAUTHORIZED      ErrorCode = 12
@@ -121,7 +121,7 @@ func (ErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_gateway_proto_rawDescGZIP(), []int{0}
 }
 
-// FfiErrorCode enumerates C ABI return codes for extern "C" functions.
+// `FfiErrorCode` enumerates C ABI return codes for extern "C" functions.
 // Values here are positive; generators negate them for Rust/Go output.
 // Positive FFI return values from buffer-writing functions are bytes written,
 // not error codes.
@@ -192,10 +192,10 @@ func (FfiErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_gateway_proto_rawDescGZIP(), []int{1}
 }
 
-// ErrorShape is the structured error payload embedded in ResponseFrame.error.
+// `ErrorShape` is the structured error payload embedded in `ResponseFrame.error`.
 type ErrorShape struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
-	Code    string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`       // ErrorCode string (e.g., "NOT_FOUND").
+	Code    string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`       // `ErrorCode` string (e.g., `NOT_FOUND`).
 	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"` // Human-readable error description.
 	// Optional structured details (schema varies by error code).
 	// This field is absent when no details are provided. Clients MUST treat it
@@ -281,7 +281,7 @@ func (x *ErrorShape) GetCause() string {
 	return ""
 }
 
-// RequestFrame — client-to-server RPC request.
+// `RequestFrame` — client-to-server RPC request.
 // TypeScript: { type: "req", id: string, method: string, params?: unknown }
 type RequestFrame struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -343,8 +343,8 @@ func (x *RequestFrame) GetParams() *structpb.Struct {
 	return nil
 }
 
-// ResponseFrame — server-to-client RPC response.
-// TypeScript: { type: "res", id: string, ok: bool, payload?: unknown, error?: ErrorShape }
+// `ResponseFrame` — server-to-client RPC response.
+// TypeScript: { type: "res", id: string, ok: bool, payload?: unknown, error?: `ErrorShape` }
 type ResponseFrame struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -413,7 +413,7 @@ func (x *ResponseFrame) GetError() *ErrorShape {
 	return nil
 }
 
-// StateVersion tracks monotonic version counters for client-side cache invalidation.
+// `StateVersion` tracks monotonic version counters for client-side cache invalidation.
 // Clients compare these against their local state to decide when to re-fetch.
 type StateVersion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -467,8 +467,8 @@ func (x *StateVersion) GetHealth() uint64 {
 	return 0
 }
 
-// EventFrame — server-to-client async event.
-// TypeScript: { type: "event", event: string, payload?: unknown, seq?: number, stateVersion?: StateVersion }
+// `EventFrame` — server-to-client async event.
+// TypeScript: { type: "event", event: string, payload?: unknown, seq?: number, stateVersion?: `StateVersion` }
 type EventFrame struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Event         string                 `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
@@ -537,7 +537,7 @@ func (x *EventFrame) GetStateVersion() *StateVersion {
 	return nil
 }
 
-// GatewayFrame is a union of all frame types, discriminated by the type field.
+// `GatewayFrame` is a union of all frame types, discriminated by the type field.
 // On the wire (JSON), the "type" field is "req", "res", or "event".
 type GatewayFrame struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -637,7 +637,7 @@ func (*GatewayFrame_Response) isGatewayFrame_Frame() {}
 
 func (*GatewayFrame_Event) isGatewayFrame_Frame() {}
 
-// PresenceEntry represents a connected device/client.
+// `PresenceEntry` represents a connected device/client.
 type PresenceEntry struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Host             *string                `protobuf:"bytes,1,opt,name=host,proto3,oneof" json:"host,omitempty"`
@@ -802,7 +802,7 @@ func (x *PresenceEntry) GetInstanceId() string {
 	return ""
 }
 
-// HelloOk — initial connection handshake response.
+// `HelloOk` — initial connection handshake response.
 type HelloOk struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Protocol uint32                 `protobuf:"varint,1,opt,name=protocol,proto3" json:"protocol,omitempty"`

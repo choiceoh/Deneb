@@ -1,4 +1,4 @@
-//! Fence span parsing — detects fenced code blocks (``` or ~~~) in raw
+//! Fence span parsing — detects fenced code blocks (`` ``` `` or `~~~`) in raw
 //! markdown text.
 //!
 //! Mirrors `parseFenceSpans`, `findFenceSpanAt`, `isSafeFenceBreak`
@@ -101,7 +101,7 @@ pub fn parse_fence_spans(buffer: &str) -> Vec<FenceSpan> {
     spans
 }
 
-/// Match a fence line: `^( {0,3})(`{3,}|~{3,})(.*)$`
+/// Match a fence line: `` ^( {0,3})(`{3,}|~{3,})(.*)$ ``
 /// Returns (indent, marker, rest) or None.
 fn match_fence_line(line: &str) -> Option<(&str, &str, &str)> {
     let bytes = line.as_bytes();

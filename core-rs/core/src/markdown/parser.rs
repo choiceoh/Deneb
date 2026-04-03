@@ -317,8 +317,8 @@ mod tests {
         markdown_to_ir(md, &ParseOptions::default())
     }
 
-    fn parse_with(md: &str, opts: ParseOptions) -> MarkdownIR {
-        markdown_to_ir(md, &opts)
+    fn parse_with(md: &str, opts: &ParseOptions) -> MarkdownIR {
+        markdown_to_ir(md, opts)
     }
 
     #[test]
@@ -378,7 +378,7 @@ mod tests {
     fn heading_bold() {
         let ir = parse_with(
             "# Title",
-            ParseOptions {
+            &ParseOptions {
                 heading_style: HeadingStyle::Bold,
                 ..Default::default()
             },
@@ -428,7 +428,7 @@ mod tests {
     fn blockquote_prefix() {
         let ir = parse_with(
             "> text",
-            ParseOptions {
+            &ParseOptions {
                 blockquote_prefix: "> ".to_string(),
                 ..Default::default()
             },
@@ -440,7 +440,7 @@ mod tests {
     fn spoiler() {
         let ir = parse_with(
             "||hidden||",
-            ParseOptions {
+            &ParseOptions {
                 enable_spoilers: true,
                 ..Default::default()
             },
@@ -473,7 +473,7 @@ mod tests {
     fn table_bullets() {
         let ir = parse_with(
             "| A | B |\n|---|---|\n| 1 | 2 |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Bullets,
                 ..Default::default()
             },
@@ -486,7 +486,7 @@ mod tests {
     fn table_bullets_header_value_format() {
         let ir = parse_with(
             "| Name | Value |\n|------|-------|\n| A | 1 |\n| B | 2 |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Bullets,
                 ..Default::default()
             },
@@ -510,7 +510,7 @@ mod tests {
     fn table_code() {
         let ir = parse_with(
             "| A | B |\n|---|---|\n| 1 | 2 |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Code,
                 ..Default::default()
             },
@@ -527,7 +527,7 @@ mod tests {
     fn table_bullets_trimmed_cells() {
         let ir = parse_with(
             "| Name  | Value |\n|-------|-------|\n|  A    |   1   |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Bullets,
                 ..Default::default()
             },
@@ -544,7 +544,7 @@ mod tests {
     fn table_bullets_skip_empty_value_cells() {
         let ir = parse_with(
             "| Name | Value |\n|------|-------|\n| A | |\n| B | 2 |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Bullets,
                 ..Default::default()
             },
@@ -558,7 +558,7 @@ mod tests {
     fn table_bullets_fallback_column_name_when_header_empty() {
         let ir = parse_with(
             "| Name | |\n|------|--|\n| A | 1 |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Bullets,
                 ..Default::default()
             },
@@ -574,7 +574,7 @@ mod tests {
     fn table_bullets_preserve_links_and_styles() {
         let ir = parse_with(
             "| Name | Notes |\n|------|-------|\n| A | **[site](https://example.com)** |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Bullets,
                 ..Default::default()
             },
@@ -592,7 +592,7 @@ mod tests {
     fn table_code_trims_and_aligns_columns() {
         let ir = parse_with(
             "| Name | Value |\n|------|-------|\n|  A   |   1   |\n| B | 22 |",
-            ParseOptions {
+            &ParseOptions {
                 table_mode: TableMode::Code,
                 ..Default::default()
             },

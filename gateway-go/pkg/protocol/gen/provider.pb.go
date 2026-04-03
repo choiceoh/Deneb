@@ -26,7 +26,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ProviderMeta describes a registered model provider.
+// `ProviderMeta` describes a registered model provider.
 type ProviderMeta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -103,12 +103,12 @@ func (x *ProviderMeta) GetEnvVars() []string {
 	return nil
 }
 
-// ProviderAuthMethod describes one authentication method for a provider.
+// `ProviderAuthMethod` describes one authentication method for a provider.
 type ProviderAuthMethod struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Label string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
-	// Auth kind: "oauth", "api_key", "token", "device_code", "custom".
+	// Auth kind: "oauth", "`api_key`", "token", "`device_code`", "custom".
 	Kind          string  `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
 	Hint          *string `protobuf:"bytes,4,opt,name=hint,proto3,oneof" json:"hint,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -173,7 +173,7 @@ func (x *ProviderAuthMethod) GetHint() string {
 	return ""
 }
 
-// ProviderCatalogEntry represents a single model in the provider catalog.
+// `ProviderCatalogEntry` represents a single model in the provider catalog.
 type ProviderCatalogEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
@@ -258,7 +258,7 @@ func (x *ProviderCatalogEntry) GetApiType() string {
 	return ""
 }
 
-// ProviderCatalogSnapshot is a point-in-time view of all discovered models.
+// `ProviderCatalogSnapshot` is a point-in-time view of all discovered models.
 type ProviderCatalogSnapshot struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	Providers     []*ProviderMeta         `protobuf:"bytes,1,rep,name=providers,proto3" json:"providers,omitempty"`

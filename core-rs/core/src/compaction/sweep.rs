@@ -423,7 +423,7 @@ impl SweepEngine {
     /// Advance the state machine with a host response. Returns the next command.
     pub fn step(&mut self, response: SweepResponse) -> SweepCommand {
         match self.phase.clone() {
-            Phase::Init => self.handle_init(response),
+            Phase::Init => self.handle_init(&response),
             Phase::FetchingItems => self.handle_fetching_items(response),
             Phase::PrefetchingMessages => self.handle_prefetching_messages(response),
 
@@ -432,7 +432,7 @@ impl SweepEngine {
             Phase::LeafSummarizeNormal => self.handle_leaf_summarize_normal(response),
             Phase::LeafSummarizeAggressive => self.handle_leaf_summarize_aggressive(response),
             Phase::LeafPersist => self.handle_leaf_persist(response),
-            Phase::LeafPostTokenCount => self.handle_leaf_post_token_count(response),
+            Phase::LeafPostTokenCount => self.handle_leaf_post_token_count(&response),
             Phase::LeafPersistEvent => self.handle_leaf_persist_event(response),
 
             Phase::CondensedFetchDepths => self.handle_condensed_fetch_depths(response),
@@ -445,7 +445,7 @@ impl SweepEngine {
                 self.handle_condensed_summarize_aggressive(response)
             }
             Phase::CondensedPersist => self.handle_condensed_persist(response),
-            Phase::CondensedPostTokenCount => self.handle_condensed_post_token_count(response),
+            Phase::CondensedPostTokenCount => self.handle_condensed_post_token_count(&response),
             Phase::CondensedPersistEvent => self.handle_condensed_persist_event(response),
 
             Phase::Done => self.done_result(),
@@ -454,8 +454,8 @@ impl SweepEngine {
 
     // ── Phase handlers ──────────────────────────────────────────────────────
 
-    fn handle_init(&mut self, response: SweepResponse) -> SweepCommand {
-        if let SweepResponse::TokenCount { count } = response {
+    fn handle_init(&mut self, response: &SweepResponse) -> SweepCommand {
+        if let SweepResponse::TokenCount { count } = *response {
             self.tokens_before = count;
             self.previous_tokens = count;
 
@@ -686,7 +686,7 @@ impl SweepEngine {
         self.handle_post_persist(Phase::LeafPostTokenCount)
     }
 
-    fn handle_leaf_post_token_count(&mut self, response: SweepResponse) -> SweepCommand {
+    fn handle_leaf_post_token_count(&mut self, response: &SweepResponse) -> SweepCommand {
         self.handle_post_token_count(response, "leaf", Phase::LeafPersistEvent)
     }
 
@@ -970,7 +970,7 @@ impl SweepEngine {
         self.handle_post_persist(Phase::CondensedPostTokenCount)
     }
 
-    fn handle_condensed_post_token_count(&mut self, response: SweepResponse) -> SweepCommand {
+    fn handle_condensed_post_token_count(&mut self, response: &SweepResponse) -> SweepCommand {
         self.handle_post_token_count(response, "condensed", Phase::CondensedPersistEvent)
     }
 
@@ -1066,11 +1066,11 @@ impl SweepEngine {
     /// Persist compaction event after token count fetch.
     fn handle_post_token_count(
         &mut self,
-        response: SweepResponse,
+        response: &SweepResponse,
         pass_name: &str,
         next_phase: Phase,
     ) -> SweepCommand {
-        let tokens_after = match response {
+        let tokens_after = match *response {
             SweepResponse::TokenCount { count } => count,
             _ => self.previous_tokens,
         };
@@ -1141,7 +1141,7 @@ mod tests {
                 assert!(!result.action_taken);
                 assert_eq!(result.tokens_before, 500);
             }
-            _ => return Err(format!("Expected Done, got {:?}", cmd).into()),
+            _ => return Err(format!("Expected Done, got {cmd:?}").into()),
         }
         Ok(())
     }
@@ -1158,7 +1158,7 @@ mod tests {
             SweepCommand::Done { result } => {
                 assert!(!result.action_taken);
             }
-            _ => return Err(format!("Expected Done, got {:?}", cmd).into()),
+            _ => return Err(format!("Expected Done, got {cmd:?}").into()),
         }
         Ok(())
     }

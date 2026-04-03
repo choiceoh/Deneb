@@ -157,6 +157,7 @@ mod tests {
 
     #[test]
     fn test_parse_memory_date_from_path() {
+        #[allow(clippy::type_complexity)]
         let cases: &[(&str, Option<(i32, u32, u32)>)] = &[
             ("memory/2026-01-07.md", Some((2026, 1, 7))),
             ("some/dir/memory/2024-12-25.md", Some((2024, 12, 25))),

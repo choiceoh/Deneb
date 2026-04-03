@@ -15,7 +15,7 @@ impl super::CommandHandler for EmbedHandler {
 }
 
 /// embed: Generate embeddings for chunks.
-/// In sglang mode, embedding is handled by the Go gateway via SGLang HTTP API.
+/// In sglang mode, embedding is handled by the Go gateway via `SGLang` HTTP API.
 /// This Rust-side command is retained for backward compatibility but returns
 /// a message directing to the Go-side embed pipeline.
 #[allow(unused_variables)]

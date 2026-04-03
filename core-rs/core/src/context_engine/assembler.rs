@@ -376,7 +376,7 @@ mod tests {
                 assert_eq!(result.raw_message_count, 0);
                 assert_eq!(result.total_context_items, 0);
             }
-            _ => panic!("Expected Done, got {:?}", cmd),
+            _ => panic!("Expected Done, got {cmd:?}"),
         }
     }
 
@@ -397,7 +397,7 @@ mod tests {
                 assert_eq!(result.selected_item_ids.len(), 5);
                 assert!(result.system_prompt_addition.is_none());
             }
-            _ => panic!("Expected Done, got {:?}", cmd),
+            _ => panic!("Expected Done, got {cmd:?}"),
         }
     }
 
@@ -425,7 +425,7 @@ mod tests {
                 assert_eq!(result.selected_item_ids[1], "msg_3");
                 assert_eq!(result.selected_item_ids[2], "msg_4");
             }
-            _ => panic!("Expected Done, got {:?}", cmd),
+            _ => panic!("Expected Done, got {cmd:?}"),
         }
     }
 
@@ -446,7 +446,7 @@ mod tests {
                 assert_eq!(result.estimated_tokens, 300);
                 assert_eq!(result.selected_item_ids.len(), 3);
             }
-            _ => panic!("Expected Done, got {:?}", cmd),
+            _ => panic!("Expected Done, got {cmd:?}"),
         }
     }
 
@@ -483,7 +483,7 @@ mod tests {
                 // Has summaries → system prompt addition
                 assert!(result.system_prompt_addition.is_some());
             }
-            _ => panic!("Expected Done, got {:?}", cmd),
+            _ => panic!("Expected Done, got {cmd:?}"),
         }
     }
 

@@ -137,9 +137,7 @@ fn vega_search_impl(query_json: &str) -> String {
         });
 
     // Parse optional mode override ("bm25", "semantic", "hybrid").
-    let mode: Option<&str> = parsed
-        .get("mode")
-        .and_then(|v| v.as_str());
+    let mode: Option<&str> = parsed.get("mode").and_then(|v| v.as_str());
 
     let base = cached_vega_config();
     let config = if let Some(cfg) = parsed.get("config") {

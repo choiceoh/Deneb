@@ -143,8 +143,7 @@ pub fn split_sections(text: &str) -> (Vec<Section>, Vec<CommEntry>) {
     // Text before first heading
     let first_start = heading_matches
         .first()
-        .map(|m| m.start())
-        .unwrap_or(text.len());
+        .map_or(text.len(), regex::Match::start);
     let intro = &text[..first_start];
     if !intro.trim().is_empty() {
         // Skip table rows, keep remaining text
@@ -186,7 +185,7 @@ pub fn split_sections(text: &str) -> (Vec<Section>, Vec<CommEntry>) {
             parse_comm_block(&entry_date, &body, &mut comm_entries);
             if !body.is_empty() {
                 sections.push(Section {
-                    heading: format!("로그 {}", entry_date),
+                    heading: format!("로그 {entry_date}"),
                     body,
                     entry_date: Some(entry_date),
                 });

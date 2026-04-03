@@ -9,7 +9,7 @@ package deneb.session;
 
 option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
-// SessionRunStatus represents the lifecycle state of a session run.
+// `SessionRunStatus` represents the lifecycle state of a session run.
 // Transitions: RUNNING → {DONE | FAILED | KILLED | TIMEOUT}.
 enum SessionRunStatus {
   SESSION_RUN_STATUS_UNSPECIFIED = 0;
@@ -20,7 +20,7 @@ enum SessionRunStatus {
   SESSION_RUN_STATUS_TIMEOUT = 5;
 }
 
-// SessionKind identifies the conversation scope of a session.
+// `SessionKind` identifies the conversation scope of a session.
 enum SessionKind {
   SESSION_KIND_UNSPECIFIED = 0;
   SESSION_KIND_DIRECT = 1;
@@ -32,8 +32,8 @@ enum SessionKind {
   SESSION_KIND_SHADOW = 7;
 }
 
-// GatewaySessionRow — full session state.
-// TypeScript: GatewaySessionRow in session-utils.types.ts
+// `GatewaySessionRow` — full session state.
+// TypeScript: `GatewaySessionRow` in session-utils.types.ts
 message GatewaySessionRow {
   string key = 1;
   SessionKind kind = 2;
@@ -93,7 +93,7 @@ message GatewaySessionRow {
   optional string last_account_id = 41;
 }
 
-// SessionTransition represents a state transition event.
+// `SessionTransition` represents a state transition event.
 // Used for audit logging and event broadcasting.
 message SessionTransition {
   string key = 1;
@@ -105,7 +105,7 @@ message SessionTransition {
   optional bool aborted = 7;
 }
 
-// SessionLifecyclePhase identifies the phase of a lifecycle event.
+// `SessionLifecyclePhase` identifies the phase of a lifecycle event.
 enum SessionLifecyclePhase {
   SESSION_LIFECYCLE_PHASE_UNSPECIFIED = 0;
   SESSION_LIFECYCLE_PHASE_START = 1;
@@ -113,7 +113,7 @@ enum SessionLifecyclePhase {
   SESSION_LIFECYCLE_PHASE_ERROR = 3;
 }
 
-// SessionLifecycleEvent represents a session lifecycle event.
+// `SessionLifecycleEvent` represents a session lifecycle event.
 message SessionLifecycleEvent {
   string key = 1;
   SessionLifecyclePhase phase = 2;
@@ -122,13 +122,13 @@ message SessionLifecycleEvent {
   optional bool aborted = 5;
 }
 
-// SessionPreviewItem — a single item in a session preview.
+// `SessionPreviewItem` — a single item in a session preview.
 message SessionPreviewItem {
   string role = 1; // "user" | "assistant" | "tool" | "system" | "other"
   string text = 2;
 }
 
-// SessionsPreviewEntry — preview of a session.
+// `SessionsPreviewEntry` — preview of a session.
 message SessionsPreviewEntry {
   string key = 1;
   string status = 2; // "ok" | "empty" | "missing" | "error"

@@ -25,7 +25,7 @@ struct FenceSpan {
     end: usize,
 }
 
-/// Parse fenced code block spans (``` or ~~~).
+/// Parse fenced code block spans (`` ``` `` or `~~~`).
 fn parse_fence_spans(text: &str) -> Vec<FenceSpan> {
     let mut spans = Vec::new();
     let lines: Vec<&str> = text.split('\n').collect();

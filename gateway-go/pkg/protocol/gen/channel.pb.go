@@ -26,7 +26,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ChannelCapabilities describes the messaging features a channel supports.
+// `ChannelCapabilities` describes the messaging features a channel supports.
 // Used by the chat pipeline to adapt behavior (e.g., skip reactions if unsupported).
 type ChannelCapabilities struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -160,7 +160,7 @@ func (x *ChannelCapabilities) GetBlockStreaming() bool {
 	return false
 }
 
-// ChannelMeta describes static channel metadata for display and selection UIs.
+// `ChannelMeta` describes static channel metadata for display and selection UIs.
 type ChannelMeta struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Id                     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -333,7 +333,7 @@ func (x *ChannelMeta) GetPreferOver() []string {
 	return nil
 }
 
-// ChannelAccountSnapshot captures the runtime state of a channel account.
+// `ChannelAccountSnapshot` captures the runtime state of a channel account.
 // Includes connection health, activity timestamps, and configuration status.
 type ChannelAccountSnapshot struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`

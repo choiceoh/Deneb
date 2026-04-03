@@ -69,7 +69,7 @@ fn get_status_groups(conn: &Connection) -> Result<Value, String> {
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let group: String = row.get(0)?;
@@ -84,11 +84,11 @@ fn get_status_groups(conn: &Connection) -> Result<Value, String> {
                     .collect::<Vec<&str>>()
             }))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut groups = Vec::new();
     for row in rows {
-        groups.push(row.map_err(|e| format!("행 읽기 실패: {}", e))?);
+        groups.push(row.map_err(|e| format!("행 읽기 실패: {e}"))?);
     }
     Ok(json!(groups))
 }
@@ -110,7 +110,7 @@ fn get_person_workload(conn: &Connection) -> Result<Value, String> {
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
@@ -130,16 +130,16 @@ fn get_person_workload(conn: &Connection) -> Result<Value, String> {
                 "status": status,
                 "projects": projects.unwrap_or_default()
                     .split(',')
-                    .map(|s| s.trim())
+                    .map(str::trim)
                     .filter(|s| !s.is_empty())
                     .collect::<Vec<&str>>()
             }))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut workload = Vec::new();
     for row in rows {
-        workload.push(row.map_err(|e| format!("행 읽기 실패: {}", e))?);
+        workload.push(row.map_err(|e| format!("행 읽기 실패: {e}"))?);
     }
     Ok(json!(workload))
 }
@@ -155,7 +155,7 @@ fn get_recent_activity(conn: &Connection) -> Result<Value, String> {
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let logged_at: String = row.get(0)?;
@@ -169,11 +169,11 @@ fn get_recent_activity(conn: &Connection) -> Result<Value, String> {
                 "project_id": project_id
             }))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut activity = Vec::new();
     for row in rows {
-        activity.push(row.map_err(|e| format!("행 읽기 실패: {}", e))?);
+        activity.push(row.map_err(|e| format!("행 읽기 실패: {e}"))?);
     }
     Ok(json!(activity))
 }
@@ -182,7 +182,7 @@ fn get_recent_activity(conn: &Connection) -> Result<Value, String> {
 fn get_key_metrics(conn: &Connection) -> Result<Value, String> {
     let total_projects: i64 = conn
         .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))
-        .map_err(|e| format!("쿼리 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실패: {e}"))?;
 
     let active_projects: i64 = conn
         .query_row(
@@ -190,11 +190,11 @@ fn get_key_metrics(conn: &Connection) -> Result<Value, String> {
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("쿼리 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실패: {e}"))?;
 
     let total_comm_logs: i64 = conn
         .query_row("SELECT COUNT(*) FROM comm_log", [], |row| row.get(0))
-        .map_err(|e| format!("쿼리 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실패: {e}"))?;
 
     let recent_comm_count: i64 = conn
         .query_row(
@@ -202,15 +202,15 @@ fn get_key_metrics(conn: &Connection) -> Result<Value, String> {
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("쿼리 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실패: {e}"))?;
 
     let total_chunks: i64 = conn
         .query_row("SELECT COUNT(*) FROM chunks", [], |row| row.get(0))
-        .map_err(|e| format!("쿼리 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실패: {e}"))?;
 
     let total_tags: i64 = conn
         .query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))
-        .map_err(|e| format!("쿼리 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실패: {e}"))?;
 
     let stale_count: i64 = conn
         .query_row(
@@ -266,12 +266,12 @@ impl super::CommandHandler for DashboardHandler {
     fn summary(&self, data: &serde_json::Value) -> String {
         let total = data
             .get("total_projects")
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
         let active = data
             .get("active_projects")
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
-        format!("전체 {}개 중 활성 {}개", total, active)
+        format!("전체 {total}개 중 활성 {active}개")
     }
 }

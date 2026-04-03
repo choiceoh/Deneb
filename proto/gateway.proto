@@ -15,7 +15,7 @@ option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
 import "google/protobuf/struct.proto";
 
-// ErrorCode enumerates all known gateway error codes.
+// `ErrorCode` enumerates all known gateway error codes.
 // Mirrors src/gateway/protocol/schema/error-codes.ts.
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;
@@ -25,7 +25,7 @@ enum ErrorCode {
   ERROR_CODE_AGENT_TIMEOUT = 3;    // retryable
   ERROR_CODE_INVALID_REQUEST = 4;
   ERROR_CODE_UNAVAILABLE = 5;      // retryable
-  // INVALID_REQUEST refinements
+  // `INVALID_REQUEST` refinements
   ERROR_CODE_MISSING_PARAM = 10;
   ERROR_CODE_NOT_FOUND = 11;
   ERROR_CODE_UNAUTHORIZED = 12;
@@ -38,7 +38,7 @@ enum ErrorCode {
   ERROR_CODE_FEATURE_DISABLED = 22;
 }
 
-// FfiErrorCode enumerates C ABI return codes for extern "C" functions.
+// `FfiErrorCode` enumerates C ABI return codes for extern "C" functions.
 // Values here are positive; generators negate them for Rust/Go output.
 // Positive FFI return values from buffer-writing functions are bytes written,
 // not error codes.
@@ -54,9 +54,9 @@ enum FfiErrorCode {
   FFI_ERROR_CODE_RUST_PANIC = 99;
 }
 
-// ErrorShape is the structured error payload embedded in ResponseFrame.error.
+// `ErrorShape` is the structured error payload embedded in `ResponseFrame.error`.
 message ErrorShape {
-  string code = 1;    // ErrorCode string (e.g., "NOT_FOUND").
+  string code = 1;    // `ErrorCode` string (e.g., `NOT_FOUND`).
   string message = 2; // Human-readable error description.
   // Optional structured details (schema varies by error code).
   // This field is absent when no details are provided. Clients MUST treat it
@@ -68,7 +68,7 @@ message ErrorShape {
   optional string cause = 6;         // Underlying cause for debugging.
 }
 
-// RequestFrame — client-to-server RPC request.
+// `RequestFrame` — client-to-server RPC request.
 // TypeScript: { type: "req", id: string, method: string, params?: unknown }
 message RequestFrame {
   string id = 1;
@@ -76,8 +76,8 @@ message RequestFrame {
   google.protobuf.Struct params = 3;
 }
 
-// ResponseFrame — server-to-client RPC response.
-// TypeScript: { type: "res", id: string, ok: bool, payload?: unknown, error?: ErrorShape }
+// `ResponseFrame` — server-to-client RPC response.
+// TypeScript: { type: "res", id: string, ok: bool, payload?: unknown, error?: `ErrorShape` }
 message ResponseFrame {
   string id = 1;
   bool ok = 2;
@@ -85,15 +85,15 @@ message ResponseFrame {
   ErrorShape error = 4;
 }
 
-// StateVersion tracks monotonic version counters for client-side cache invalidation.
+// `StateVersion` tracks monotonic version counters for client-side cache invalidation.
 // Clients compare these against their local state to decide when to re-fetch.
 message StateVersion {
   uint64 presence = 1; // Incremented on any presence change (connect/disconnect/update).
   uint64 health = 2;   // Incremented on channel health state changes.
 }
 
-// EventFrame — server-to-client async event.
-// TypeScript: { type: "event", event: string, payload?: unknown, seq?: number, stateVersion?: StateVersion }
+// `EventFrame` — server-to-client async event.
+// TypeScript: { type: "event", event: string, payload?: unknown, seq?: number, stateVersion?: `StateVersion` }
 message EventFrame {
   string event = 1;
   google.protobuf.Value payload = 2;
@@ -101,7 +101,7 @@ message EventFrame {
   StateVersion state_version = 4;
 }
 
-// GatewayFrame is a union of all frame types, discriminated by the type field.
+// `GatewayFrame` is a union of all frame types, discriminated by the type field.
 // On the wire (JSON), the "type" field is "req", "res", or "event".
 message GatewayFrame {
   oneof frame {
@@ -111,7 +111,7 @@ message GatewayFrame {
   }
 }
 
-// PresenceEntry represents a connected device/client.
+// `PresenceEntry` represents a connected device/client.
 message PresenceEntry {
   optional string host = 1;
   optional string ip = 2;
@@ -131,7 +131,7 @@ message PresenceEntry {
   optional string instance_id = 16;
 }
 
-// HelloOk — initial connection handshake response.
+// `HelloOk` — initial connection handshake response.
 message HelloOk {
   uint32 protocol = 1;
 

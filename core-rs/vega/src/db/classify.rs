@@ -8,7 +8,7 @@ use regex::Regex;
 use rustc_hash::FxHashMap;
 
 /// Classify a section by heading and content keywords.
-/// Returns one of: status, next_action, history, comm_log, technical, issue,
+/// Returns one of: status, `next_action`, history, `comm_log`, technical, issue,
 /// schedule, financial, permit, summary, contract, attachment, other.
 pub fn classify_section(heading: &str, content: &str) -> &'static str {
     let h = heading.to_lowercase();
@@ -64,7 +64,7 @@ pub fn extract_tags(
     // Meta-based tags
     if let Some(client) = meta.get("client") {
         if !client.is_empty() {
-            tags.insert(format!("고객:{}", client));
+            tags.insert(format!("고객:{client}"));
         }
     }
     if let Some(person) = meta.get("person_internal") {
@@ -73,13 +73,13 @@ pub fn extract_tags(
         for p in splitter.split(person) {
             let p = p.trim();
             if !p.is_empty() {
-                tags.insert(format!("담당:{}", p));
+                tags.insert(format!("담당:{p}"));
             }
         }
     }
     if let Some(status) = meta.get("status") {
         if !status.is_empty() {
-            tags.insert(format!("상태:{}", status));
+            tags.insert(format!("상태:{status}"));
         }
     }
 
@@ -105,7 +105,7 @@ pub fn extract_tags(
     for (key, val) in meta {
         if key.starts_with('_') && !val.is_empty() {
             let tag_name = key.trim_start_matches('_');
-            tags.insert(format!("기술:{}", tag_name));
+            tags.insert(format!("기술:{tag_name}"));
         }
     }
 
@@ -147,7 +147,7 @@ pub fn extract_tags(
     ];
     for (tag, keywords) in tech_kw {
         if keywords.iter().any(|kw| all_text.contains(kw)) {
-            tags.insert(format!("기술:{}", tag));
+            tags.insert(format!("기술:{tag}"));
         }
     }
 
@@ -162,7 +162,7 @@ pub fn extract_tags(
     ];
     for (tag, keywords) in type_kw {
         if keywords.iter().any(|kw| all_text.contains(kw)) {
-            tags.insert(format!("유형:{}", tag));
+            tags.insert(format!("유형:{tag}"));
         }
     }
 
