@@ -631,6 +631,14 @@ func (c *Client) Complete(ctx context.Context, req ChatRequest) (string, error) 
 		return "", fmt.Errorf("marshal openai request: %w", err)
 	}
 
+	// Merge ExtraBody fields (e.g., sglang's chat_template_kwargs, timeout).
+	if len(req.ExtraBody) > 0 {
+		body, err = mergeJSONFields(body, req.ExtraBody)
+		if err != nil {
+			return "", fmt.Errorf("merge extra body: %w", err)
+		}
+	}
+
 	url := c.baseURL + "/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {

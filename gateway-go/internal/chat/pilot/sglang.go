@@ -585,6 +585,16 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 		}
 	}
 
+	// Inject server-side timeout so sglang aborts generation when the
+	// gateway's context deadline expires. Without this, cancelled requests
+	// become zombies that hold KV cache until max_tokens is exhausted.
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline).Seconds() - 2.0 // 2s headroom for network
+		if remaining > 1 {
+			merged["timeout"] = remaining
+		}
+	}
+
 	req := llm.ChatRequest{
 		Model:     model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userMessage)},

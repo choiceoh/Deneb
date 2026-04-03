@@ -73,9 +73,13 @@ const (
 	maxSectionTokens = 2000
 
 	// maxTranscriptMessages is the maximum number of recent transcript messages
-	// sent to the sglang model for session memory extraction. With 200K context
-	// this is generous but prevents degenerate cases.
-	maxTranscriptMessages = 150
+	// sent to the sglang model for session memory extraction.
+	maxTranscriptMessages = 30
+
+	// maxTranscriptChars caps the formatted transcript text sent to sglang.
+	// 32K chars ≈ 8K tokens — sufficient for recent context while preventing
+	// long conversations from exhausting KV cache on the local model.
+	maxTranscriptChars = 32_000
 
 	// sessionMemoryUpdateTimeout is the max time for a single sglang call.
 	// Increased from 20s to 60s because the model now receives full transcript.
@@ -279,6 +283,16 @@ func UpdateSessionMemory(
 		return
 	}
 
+	// Truncate transcript to prevent KV cache exhaustion on the local model.
+	// Keep the most recent portion (tail) since it's the most relevant.
+	if len(transcriptText) > maxTranscriptChars {
+		transcriptText = transcriptText[len(transcriptText)-maxTranscriptChars:]
+		// Find the first complete message boundary to avoid mid-message truncation.
+		if idx := strings.Index(transcriptText, "\n["); idx > 0 {
+			transcriptText = "[... 이전 대화 생략 ...]\n" + transcriptText[idx+1:]
+		}
+	}
+
 	// Build the user prompt with full context.
 	var userPrompt strings.Builder
 	userPrompt.WriteString("위의 대화 기록을 바탕으로 세션 메모리를 업데이트하세요.\n\n")
@@ -297,14 +311,24 @@ func UpdateSessionMemory(
 	// then the update instruction is the final user message.
 	messages := buildMemoryUpdateMessages(transcriptText, userPrompt.String())
 
+	// Build ExtraBody with reasoning disabled + server-side timeout to prevent
+	// zombie requests that hold KV cache after the gateway cancels the context.
+	smExtra := map[string]any{
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
+	}
+	if deadline, ok := memCtx.Deadline(); ok {
+		remaining := time.Until(deadline).Seconds() - 2.0
+		if remaining > 1 {
+			smExtra["timeout"] = remaining
+		}
+	}
+
 	resp, err := lwClient.Complete(memCtx, llm.ChatRequest{
 		Model:     pilot.GetLightweightModel(),
 		Messages:  messages,
 		System:    llm.SystemString(sessionMemorySystemPrompt),
-		MaxTokens: 8192,
-		ExtraBody: map[string]any{
-			"chat_template_kwargs": map[string]any{"enable_thinking": false},
-		},
+		MaxTokens: 4096,
+		ExtraBody: smExtra,
 	})
 	if err != nil {
 		logger.Debug("session memory update failed", "error", err)
