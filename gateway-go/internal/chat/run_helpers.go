@@ -24,11 +24,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// memoryExtractSem is an alias for the unified sglang background semaphore.
-// All background sglang calls (proactive context, tool compression, auto memory,
-// session memory) share this semaphore to prevent KV cache exhaustion.
-var memoryExtractSem = sglangBackgroundSem
-
 // persistInterruptedContext saves a context note to the transcript when a run
 // is aborted while tools were executing. This ensures the next run has context
 // about what was being done, preventing the "amnesia" bug where the assistant
@@ -269,17 +264,13 @@ func handleRunSuccess(
 				base = context.Background()
 			}
 
-			// Limit concurrent extractions to avoid overloading sglang.
-			// Include base.Done to bail out early on server shutdown.
+			// Concurrency for sglang calls is managed by the centralized
+			// sglang hub's token budget. Bail early on server shutdown.
 			select {
-			case memoryExtractSem <- struct{}{}:
-				defer func() { <-memoryExtractSem }()
 			case <-base.Done():
 				logger.Debug("memory extraction skipped: context canceled")
 				return
 			default:
-				logger.Debug("memory extraction skipped: semaphore full")
-				return
 			}
 			memCtx, memCancel := context.WithTimeout(base, autoMemoryTimeout)
 			defer memCancel()

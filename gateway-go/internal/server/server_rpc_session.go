@@ -15,7 +15,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
@@ -84,6 +86,11 @@ func (s *Server) registerSessionRPCMethods() {
 	// Phase 1: Memory subsystem (unified store, Aurora, memory, embedder, reranker).
 	var reg modelrole.Registry
 	s.initMemorySubsystem(&chatCfg, &reg)
+
+	// Create centralized SGLang hub now that the model registry is available.
+	s.sglangHub = sglang.New(sglang.Config{}, &reg, s.logger)
+	chatCfg.SglangHub = s.sglangHub
+	memory.SetSglangHub(s.sglangHub)
 
 	// Phase 2: Tool deps + registration (core, plugin, autoresearch).
 	s.initToolsAndDeps(&chatCfg, &reg, transcriptStore, agentLogWriter)
