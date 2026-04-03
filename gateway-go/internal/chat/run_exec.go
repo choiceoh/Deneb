@@ -381,12 +381,7 @@ func executeAgentRun(
 			workerAddition = prompt.WorkerPromptAddition(sessionToolPreset, scratchpadDir)
 		}
 
-		var sp string
-		if ch == "telegram" {
-			sp = prompt.BuildCodingSystemPrompt(spp)
-		} else {
-			sp = prompt.BuildSystemPrompt(spp)
-		}
+		sp := prompt.BuildSystemPrompt(spp)
 		if workerAddition != "" {
 			sp += "\n" + workerAddition
 		}
