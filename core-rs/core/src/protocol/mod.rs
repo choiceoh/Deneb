@@ -9,8 +9,9 @@
 pub mod constants;
 pub mod error_codes;
 pub mod gen;
-pub mod schemas;
+#[macro_use]
 pub mod validation;
+pub mod schemas;
 
 use serde::Deserialize;
 use thiserror::Error;

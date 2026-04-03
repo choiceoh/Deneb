@@ -2,128 +2,47 @@
 
 use crate::protocol::validation::*;
 
-pub fn validate_talk_mode_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_talk_mode_params {
+        [req "enabled" => boolean],
+        [opt "phase" => string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["enabled", "phase"], path, errors);
-    if check_required(obj, "enabled", path, errors) {
-        check_boolean(&obj["enabled"], &format!("{path}/enabled"), errors);
-    }
-    check_optional(obj, "phase", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
 }
 
-pub fn validate_talk_config_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_talk_config_params {
+        [opt "includeSecrets" => boolean],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["includeSecrets"], path, errors);
-    check_optional(obj, "includeSecrets", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
 }
 
-pub fn validate_channels_status_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_channels_status_params {
+        [opt "probe" => boolean],
+        [opt "timeoutMs" => integer(Some(0), None)],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["probe", "timeoutMs"], path, errors);
-    check_optional(obj, "probe", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
-    check_optional(obj, "timeoutMs", path, errors, |v, p, e| {
-        check_integer(v, p, Some(0), None, e);
-    });
 }
 
-pub fn validate_channels_logout_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_channels_logout_params {
+        [req "channel" => non_empty_string],
+        [opt "accountId" => string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["channel", "accountId"], path, errors);
-    if check_required(obj, "channel", path, errors) {
-        check_non_empty_string(&obj["channel"], &format!("{path}/channel"), errors);
-    }
-    check_optional(obj, "accountId", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
 }
 
-pub fn validate_web_login_start_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_web_login_start_params {
+        [opt "force" => boolean],
+        [opt "timeoutMs" => integer(Some(0), None)],
+        [opt "verbose" => boolean],
+        [opt "accountId" => string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    let allowed = &["force", "timeoutMs", "verbose", "accountId"];
-    check_no_additional_properties(obj, allowed, path, errors);
-    check_optional(obj, "force", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
-    check_optional(obj, "timeoutMs", path, errors, |v, p, e| {
-        check_integer(v, p, Some(0), None, e);
-    });
-    check_optional(obj, "verbose", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
-    check_optional(obj, "accountId", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
 }
 
-pub fn validate_web_login_wait_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_web_login_wait_params {
+        [opt "timeoutMs" => integer(Some(0), None)],
+        [opt "accountId" => string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["timeoutMs", "accountId"], path, errors);
-    check_optional(obj, "timeoutMs", path, errors, |v, p, e| {
-        check_integer(v, p, Some(0), None, e);
-    });
-    check_optional(obj, "accountId", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
 }
 
 #[cfg(test)]
