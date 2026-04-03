@@ -142,7 +142,7 @@ func (pm *PromptManager) memoryRecall(ctx context.Context, query string) (*Promp
 		return nil, fmt.Errorf("query argument is required")
 	}
 	params, _ := json.Marshal(map[string]any{"query": query, "limit": 20})
-	results, err := pm.bridge.Call(ctx, "memory.search", params)
+	results, err := pm.bridge.Call(ctx, "vega.memory-search", params)
 	if err != nil {
 		return nil, fmt.Errorf("memory search: %w", err)
 	}
@@ -212,7 +212,7 @@ func (pm *PromptManager) vegaDeepSearch(ctx context.Context, query string) (*Pro
 	memParams, _ := json.Marshal(map[string]any{"query": query, "limit": 10})
 
 	vegaResults, _ := pm.bridge.Call(ctx, "vega.ffi.search", vegaParams)
-	memResults, _ := pm.bridge.Call(ctx, "memory.search", memParams)
+	memResults, _ := pm.bridge.Call(ctx, "vega.memory-search", memParams)
 
 	data := fmt.Sprintf("## Deep Search: %q\n\n### Vega Semantic Search\n```json\n%s\n```\n\n### Memory Search\n```json\n%s\n```",
 		query, prettyJSON(vegaResults), prettyJSON(memResults))
