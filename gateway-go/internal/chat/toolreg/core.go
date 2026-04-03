@@ -433,7 +433,7 @@ func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) 
 	})
 }
 
-// RegisterHiddenTools registers pilot-only hidden tools.
+// RegisterHiddenTools registers hidden tools (agent/gateway logs).
 func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writer) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "agent_logs",

@@ -171,7 +171,6 @@ const (
 	compressMaxTokens = 1024
 	compressTimeout   = 20 * time.Second
 	// Tools whose output should never be compressed (they're already structured/small).
-	toolCompressSkipPrefix = "pilot" // pilot already uses sglang, don't double-process
 )
 
 // toolCompressSkipSet contains tools whose output should not be compressed.
@@ -179,8 +178,7 @@ const (
 //   - Already-structured outputs (grep, find, tree, git, analyze, diff): file:line:match
 //     or directory-tree format; LLM compression loses structure and is slower than
 //     the existing GrepResultSummarizer / OutputTrimmer pipeline.
-//   - Tools that already use sglang internally (pilot) or return small JSON (kv,
-//     sessions_list) where compression adds no value.
+//   - Tools that return small JSON (kv, sessions_list) where compression adds no value.
 var toolCompressSkipSet = map[string]bool{
 	// Structured-output tools — already handled by post-processors.
 	"grep":    true,
@@ -190,9 +188,8 @@ var toolCompressSkipSet = map[string]bool{
 	"analyze": true,
 	"diff":    true,
 	// Internal / already-small tools.
-	"pilot":         true,
-	"memory":        true,
-	"kv":            true,
+	"memory": true,
+	"kv":     true,
 	"sessions_list": true,
 }
 

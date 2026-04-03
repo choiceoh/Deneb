@@ -8,7 +8,7 @@ import (
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
 // It delegates to toolreg.RegisterCoreTools for the bulk of registrations,
-// then adds tools that depend on chat-internal state (pilot, post-processors).
+// then adds tools that depend on chat-internal state (post-processors).
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	sglang := &toolreg.SglangDeps{
 		CheckSglangHealth: pilot.CheckSglangHealth,
@@ -18,15 +18,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 	// Skills discovery: lists non-always skills on demand (lightweight prompt strategy).
 	toolreg.RegisterSkillsTools(registry, GetCachedSkillsSnapshot)
-
-	// Pilot registered here: it depends on sglang hooks from chat/sglang_hooks.go.
-	registry.RegisterTool(ToolDef{
-		Name:        "pilot",
-		Description: "Local AI analysis for noisy outputs or multi-source orchestration. Prefer direct tools for simple read/grep/find/tree/git/web/http/memory-style lookups. Shortcuts: file, exec, grep, find, url, diff, test, tree, git_log, health, memory, vega, image + more",
-		InputSchema: toolreg.PilotToolSchema(),
-		Fn:          pilot.ToolPilot(registry, deps.WorkspaceDir),
-		Deferred:    true,
-	})
 
 	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.
 	registry.RegisterTool(ToolDef{

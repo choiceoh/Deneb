@@ -58,7 +58,6 @@ func TestBuildSystemPromptCompactToolList(t *testing.T) {
 			{Name: "read"},
 			{Name: "write"},
 			{Name: "exec"},
-			{Name: "pilot"},
 		},
 	}
 
@@ -71,10 +70,6 @@ func TestBuildSystemPromptCompactToolList(t *testing.T) {
 	if !strings.Contains(prompt, "Exec: exec") {
 		t.Error("expected compact Exec category")
 	}
-	if !strings.Contains(prompt, "AI: pilot") {
-		t.Error("expected compact AI category")
-	}
-
 	// Should NOT contain verbose per-tool descriptions in the tool list.
 	if strings.Contains(prompt, "- read: Read files") {
 		t.Error("expected compact list, not verbose per-tool descriptions")
@@ -244,23 +239,6 @@ func TestBuildDefaultRuntimeInfo(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptPilotSection(t *testing.T) {
-	params := SystemPromptParams{
-		WorkspaceDir: "/tmp",
-		ToolDefs: []ToolDef{
-			{Name: "pilot"},
-		},
-	}
-
-	prompt := BuildSystemPrompt(params)
-	if !strings.Contains(prompt, "pilot") {
-		t.Error("expected pilot guidance in Tool Usage when pilot tool registered")
-	}
-	if !strings.Contains(prompt, "$ref") {
-		t.Error("expected tool chaining info when pilot tool registered")
-	}
-}
-
 func TestBuildSystemPromptNoPilotSection(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
@@ -270,8 +248,8 @@ func TestBuildSystemPromptNoPilotSection(t *testing.T) {
 	}
 
 	prompt := BuildSystemPrompt(params)
-	if strings.Contains(prompt, "## Pilot & Chaining") {
-		t.Error("Pilot section should not appear when pilot tool not registered")
+	if strings.Contains(prompt, "pilot") {
+		t.Error("pilot references should not appear in system prompt")
 	}
 }
 
@@ -281,7 +259,6 @@ func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 		ToolDefs: []ToolDef{
 			{Name: "read"},
 			{Name: "exec"},
-			{Name: "pilot"},
 		},
 		UserTimezone: "UTC",
 	}
