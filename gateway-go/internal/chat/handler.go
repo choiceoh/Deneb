@@ -230,7 +230,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		maxHistoryCount:      cfg.MaxHistoryCount,
 		maxMessageBytes:      cfg.MaxMessageBytes,
 	}
-	// Set the package-level model role registry for sglang hooks and pilot tools.
+	// Set the package-level model role registry for sglang hooks.
 	if h.registry != nil {
 		pilot.SetModelRoleRegistry(h.registry)
 	}

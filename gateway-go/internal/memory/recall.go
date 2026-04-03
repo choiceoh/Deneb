@@ -1,9 +1,9 @@
 // recall.go — Dedicated LLM-based memory recall with relation chain traversal,
 // entity expansion, and lazy backfill of missing entity/relation data.
 //
-// The recall engine runs as a pilot LLM call in parallel with the main LLM,
+// The recall engine runs as a local LLM call in parallel with the main LLM,
 // producing a rich context pack of relevant facts, entity summaries, and
-// a timeline. Falls back to standard SearchFacts when the pilot is unavailable.
+// a timeline. Falls back to standard SearchFacts when the local LLM is unavailable.
 package memory
 
 import (
@@ -71,7 +71,7 @@ type BackfillRelation struct {
 	Confidence float64 `json:"confidence"`
 }
 
-// recallSystemPrompt is the system prompt for the recall pilot LLM.
+// recallSystemPrompt is the system prompt for the recall local LLM.
 const recallSystemPrompt = `당신은 메모리 recall 전용 어시스턴트입니다. 오직 메모리 검색과 컨텍스트 구성에만 집중하세요.
 
 규칙:
@@ -105,9 +105,9 @@ backfill: 아래 "빈 팩트" 목록에 해당하는 팩트들은 엔티티/관�
 
 Return ONLY valid JSON, no markdown fences, no explanation.`
 
-// Recall performs a pilot LLM-based memory recall for the given user message.
+// Recall performs a local LLM-based memory recall for the given user message.
 // It searches facts, expands via entities and relation chains, then asks the
-// pilot LLM to select and organize the most relevant facts.
+// local LLM to select and organize the most relevant facts.
 //
 // Returns formatted knowledge text ready for system prompt injection, or ""
 // if recall produces no results. Falls back to standard search on any error.
@@ -162,11 +162,11 @@ func Recall(ctx context.Context, store *Store, embedder *Embedder, client *llm.C
 	// Phase 4: Identify facts missing entity/relation data for backfill.
 	backfillIDs := findBackfillCandidates(ctx, store, candidates, 20)
 
-	// Phase 5: Build prompt and call pilot LLM.
+	// Phase 5: Build prompt and call local LLM.
 	userPrompt := buildRecallPrompt(message, candidates, backfillIDs)
 	result, err := callLLMJSON[RecallResult](ctx, client, model, recallSystemPrompt, userPrompt, 2048)
 	if err != nil {
-		logger.Debug("recall: pilot LLM failed, using raw search results", "error", err)
+		logger.Debug("recall: local LLM failed, using raw search results", "error", err)
 		return formatCandidatesAsKnowledge(candidates)
 	}
 
@@ -311,7 +311,7 @@ func findBackfillCandidates(ctx context.Context, store *Store, candidates []Sear
 	return ids
 }
 
-// buildRecallPrompt constructs the user prompt for the recall pilot LLM.
+// buildRecallPrompt constructs the user prompt for the recall local LLM.
 func buildRecallPrompt(message string, candidates []SearchResult, backfillIDs []int64) string {
 	var sb strings.Builder
 
@@ -437,7 +437,7 @@ func formatRecallResult(result *RecallResult, candidates []SearchResult) string 
 	return sb.String()
 }
 
-// formatCandidatesAsKnowledge is the fallback formatter when pilot LLM fails.
+// formatCandidatesAsKnowledge is the fallback formatter when local LLM fails.
 // Produces the same format as the standard knowledge prefetch.
 func formatCandidatesAsKnowledge(candidates []SearchResult) string {
 	if len(candidates) == 0 {

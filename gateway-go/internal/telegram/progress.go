@@ -80,7 +80,6 @@ var toolNameKorean = map[string]string{
 	"send_file":       "파일 전송",
 	"web":             "웹 검색",
 	"memory":          "메모리 검색",
-	"pilot":           "AI 분석",
 	"image":           "이미지 분석",
 	"gmail":           "이메일",
 	"message":         "메시지 전송",
@@ -397,8 +396,6 @@ func extractArgHint(toolName string, input []byte) string {
 		hint = jsonString(m["path"])
 	case "message":
 		hint = jsonString(m["channel"])
-	case "pilot":
-		hint = jsonString(m["question"])
 	case "image":
 		hint = jsonString(m["action"])
 	default:

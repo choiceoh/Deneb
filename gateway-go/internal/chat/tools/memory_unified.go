@@ -417,7 +417,7 @@ func boolLabel(b bool) string {
 }
 
 // memoryRecall performs deep memory recall with entity expansion, relation chain
-// traversal, and pilot LLM organization. Use when the agent needs rich context
+// traversal, and local LLM organization. Use when the agent needs rich context
 // about past conversations, decisions, or user preferences.
 func memoryRecall(ctx context.Context, d *toolctx.VegaDeps, p memoryParams, logger *slog.Logger) (string, error) {
 	if p.Query == "" {

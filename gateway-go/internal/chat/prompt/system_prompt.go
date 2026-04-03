@@ -102,7 +102,6 @@ var toolCategories = []struct {
 	{"Code", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test"}},
 	{"Git", []string{"git"}},
 	{"Exec", []string{"exec", "process"}},
-	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory"}},
 	{"System", []string{"message", "gateway"}},
@@ -208,10 +207,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")
 		s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail), grep >200 lines capped, find >500 grouped.\n")
 		s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n")
-		if toolSet["pilot"] {
-			s.WriteString("- `pilot`: 여러 소스 종합/요약에 사용. 단일 작업(읽기/검색/실행)은 read/grep/exec 직접 호출.\n")
-			s.WriteString("- Tool chaining: `\"$ref\": \"<tool_use_id>\"`로 도구 간 출력 전달 (`_ref_content`, 30s timeout).\n")
-		}
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
