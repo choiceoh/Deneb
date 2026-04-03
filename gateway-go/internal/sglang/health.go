@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	healthCheckInterval = 30 * time.Second
-	healthWarmupTTL     = 5 * time.Second
+	healthCheckInterval = 1 * time.Minute
+	healthWarmupTTL     = 10 * time.Second
 	healthWarmupPeriod  = 1 * time.Minute
 	healthPingTimeout   = 3 * time.Second
-	healthInferTimeout  = 5 * time.Second
+	healthInferTimeout  = 15 * time.Second
 	healthTestPrompt    = "1+1="
 	healthTestMaxTokens = 4
 )
@@ -80,10 +80,11 @@ func (hc *healthChecker) check() {
 		return
 	}
 
-	// Drain the stream — we just need to confirm some tokens arrive.
+	// Drain the stream — any content (thinking or text) means the model is alive.
 	got := false
 	for ev := range events {
-		if ev.Type == "content_block_delta" {
+		switch ev.Type {
+		case "content_block_start", "content_block_delta":
 			got = true
 		}
 	}
