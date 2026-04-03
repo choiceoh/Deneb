@@ -25,6 +25,8 @@ extern int deneb_validate_params(
 	const unsigned char *method_ptr, unsigned long method_len,
 	const unsigned char *json_ptr, unsigned long json_len,
 	unsigned char *errors_out, unsigned long errors_out_len);
+extern int deneb_get_last_panic_msg(
+	unsigned char *out_ptr, unsigned long out_len);
 */
 import "C"
 import (
@@ -202,4 +204,15 @@ func ValidateErrorCode(code string) bool {
 	ptr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(code)))
 	rc := C.deneb_validate_error_code(ptr, C.ulong(len(code)))
 	return rc == 0
+}
+
+// getLastPanicMsg retrieves the panic message from the most recent Rust panic
+// on the current OS thread. Returns empty string if no panic was recorded.
+func getLastPanicMsg() string {
+	var buf [4096]byte
+	rc := C.deneb_get_last_panic_msg((*C.uchar)(unsafe.Pointer(&buf[0])), C.ulong(len(buf)))
+	if rc <= 0 {
+		return ""
+	}
+	return string(buf[:rc])
 }

@@ -35,8 +35,9 @@ func GetSchema() *SchemaNode {
 				Type:        "object",
 				Description: "Logging configuration",
 				Properties: map[string]*SchemaNode{
-					"level": {Type: "string", Description: "Log level", Enum: []string{"debug", "info", "warn", "error"}},
-					"file":  {Type: "string", Description: "Log file path"},
+					"level":  {Type: "string", Description: "Log level", Enum: []string{"debug", "info", "warn", "error"}},
+					"format": {Type: "string", Description: "Log output format", Enum: []string{LogFormatText, LogFormatJSON}},
+					"file":   {Type: "string", Description: "Log file path"},
 				},
 			},
 			"session": {

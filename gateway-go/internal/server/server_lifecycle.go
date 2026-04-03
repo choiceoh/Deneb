@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -242,16 +243,7 @@ func (s *Server) doShutdown() error {
 
 	// 4. Stop gateway event subscriptions (bounded to avoid hanging).
 	if s.gatewaySubs != nil {
-		done := make(chan struct{})
-		go func() {
-			s.gatewaySubs.Stop()
-			close(done)
-		}()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			s.logger.Warn("gatewaySubs.Stop timed out after 5s")
-		}
+		stopWithTimeout(5*time.Second, "gatewaySubs.Stop", s.logger, s.gatewaySubs.Stop)
 	}
 
 	// 5. Stop dedupe background GC.
@@ -338,7 +330,22 @@ func (s *Server) doShutdown() error {
 		s.snapshotLifecycleUnsub()
 	}
 
+	// 13. Wait for background goroutines launched via safeGo to finish.
+	stopWithTimeout(5*time.Second, "bgWg.Wait", s.logger, s.bgWg.Wait)
+
 	return httpErr
+}
+
+// stopWithTimeout runs fn in a goroutine and waits up to d for it to finish.
+// Logs a warning with the given label if the timeout is exceeded.
+func stopWithTimeout(d time.Duration, label string, logger *slog.Logger, fn func()) {
+	done := make(chan struct{})
+	go func() { fn(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(d):
+		logger.Warn(label + " timed out")
+	}
 }
 
 // broadcastShutdownEvent sends a shutdown event to all authenticated clients

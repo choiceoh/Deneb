@@ -160,6 +160,17 @@ type Manager struct {
 	sessions map[string]*Session
 	eventBus *EventBus
 	gcOnce   sync.Once // ensures StartGC spawns at most one GC goroutine
+
+	// emitMu serializes state-mutation + event-emission as an atomic unit.
+	// Without this, a gap between mu.Unlock() and eventBus.Emit() allows
+	// concurrent mutations to interleave, causing out-of-order events
+	// (e.g., EventDeleted arriving after a concurrent EventCreated for the
+	// same key).
+	//
+	// Lock ordering: emitMu → mu (never acquire mu then emitMu).
+	// Event subscribers must NOT call mutating Manager methods (Set, Delete,
+	// Create, Patch, etc.) or they will deadlock on emitMu re-entry.
+	emitMu sync.Mutex
 }
 
 // NewManager creates an empty session manager with an integrated event bus.
@@ -208,7 +219,6 @@ func (m *Manager) evictStale() {
 				evicted = append(evicted, key)
 			}
 		} else if s.Status == StatusRunning && s.TimeoutAt != nil && nowMs > *s.TimeoutAt {
-			// Force-timeout running sessions past their deadline.
 			s.Status = StatusTimeout
 			endedAt := nowMs
 			s.EndedAt = &endedAt
@@ -217,6 +227,15 @@ func (m *Manager) evictStale() {
 		}
 	}
 	m.mu.Unlock()
+
+	if len(evicted) == 0 && len(timedOut) == 0 {
+		return
+	}
+
+	// Hold emitMu only for the event emission phase so concurrent
+	// mutations cannot interleave between deletion and EventDeleted.
+	m.emitMu.Lock()
+	defer m.emitMu.Unlock()
 
 	for _, key := range evicted {
 		m.eventBus.Emit(Event{Kind: EventDeleted, Key: key})
@@ -261,6 +280,9 @@ func (m *Manager) Set(s *Session) error {
 	if s == nil || s.Key == "" {
 		return nil
 	}
+	m.emitMu.Lock()
+	defer m.emitMu.Unlock()
+
 	m.mu.Lock()
 	old := m.sessions[s.Key]
 	var oldStatus RunStatus
@@ -288,6 +310,9 @@ func (m *Manager) Set(s *Session) error {
 
 // Delete removes a session by key. Returns true if the session existed.
 func (m *Manager) Delete(key string) bool {
+	m.emitMu.Lock()
+	defer m.emitMu.Unlock()
+
 	m.mu.Lock()
 	s := m.sessions[key]
 	ok := s != nil
@@ -330,6 +355,9 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 	if key == "" {
 		return nil
 	}
+	m.emitMu.Lock()
+	defer m.emitMu.Unlock()
+
 	m.mu.Lock()
 	now := time.Now()
 	s := &Session{
@@ -355,6 +383,9 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 //   - Unknown phase: no-op — returns existing session or a KindUnknown stub so
 //     callers can always dereference the result safely without nil checks.
 func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session {
+	m.emitMu.Lock()
+	defer m.emitMu.Unlock()
+
 	m.mu.Lock()
 
 	existing := m.sessions[key]

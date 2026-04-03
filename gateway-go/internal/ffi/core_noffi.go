@@ -243,3 +243,8 @@ func ValidateParams(method, jsonStr string) (valid bool, errorsJSON []byte, err 
 func ValidateErrorCode(code string) bool {
 	return knownErrorCodes[code]
 }
+
+// getLastPanicMsg is a no-op in pure-Go builds (no Rust panic to retrieve).
+func getLastPanicMsg() string {
+	return ""
+}

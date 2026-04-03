@@ -17,8 +17,15 @@ pub(crate) use crate::protocol::error_codes::{
 /// Prevents DoS via pathologically large inputs.
 pub(crate) const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
+// Thread-local buffer holding the message from the most recent caught panic.
+// Populated by `ffi_catch` and read by `deneb_get_last_panic_msg`.
+std::thread_local! {
+    static LAST_PANIC_MSG: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
 /// Wraps an FFI body in `catch_unwind` to prevent Rust panics from aborting
-/// the Go process. Returns `panic_rc` if the closure panics.
+/// the Go process. Returns `panic_rc` if the closure panics. The panic
+/// message is captured in a thread-local buffer retrievable via
+/// `deneb_get_last_panic_msg`.
 ///
 /// # Safety
 /// Callers must ensure the closure does not rely on invariants that could
@@ -27,8 +34,44 @@ pub(crate) const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 pub(crate) fn ffi_catch(panic_rc: i32, f: impl FnOnce() -> i32) -> i32 {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
         Ok(rc) => rc,
-        Err(_) => panic_rc,
+        Err(payload) => {
+            let msg = if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = payload.downcast_ref::<&str>() {
+                (*s).to_owned()
+            } else {
+                "<non-string panic payload>".to_owned()
+            };
+            LAST_PANIC_MSG.with(|m| *m.borrow_mut() = msg);
+            panic_rc
+        }
     }
+}
+
+/// Retrieves the most recent panic message stored by `ffi_catch` on the
+/// current thread. Returns the number of bytes written, or a negative error
+/// code if the buffer is too small. Returns 0 if no panic has been recorded.
+///
+/// # Safety
+/// `out_ptr` must point to a buffer of at least `out_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_get_last_panic_msg(out_ptr: *mut u8, out_len: usize) -> i32 {
+    if out_ptr.is_null() {
+        return FFI_ERR_NULL_POINTER;
+    }
+    LAST_PANIC_MSG.with(|m| {
+        let msg = m.borrow();
+        if msg.is_empty() {
+            return 0;
+        }
+        let bytes = msg.as_bytes();
+        if bytes.len() > out_len {
+            return FFI_ERR_OUTPUT_TOO_SMALL;
+        }
+        let out = std::slice::from_raw_parts_mut(out_ptr, out_len);
+        out[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
 }
 
 macro_rules! ffi_string_to_int {
