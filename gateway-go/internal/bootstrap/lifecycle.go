@@ -15,7 +15,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
@@ -87,7 +86,6 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 		if err := d.Start(func() {}); err != nil {
 			return fmt.Errorf("daemon start failed: %w", err)
 		}
-		go provider.PrewarmModel(ctx, log.Logger)
 		return svc.Server.Run(ctx)
 	}, log.Logger)
 
@@ -102,7 +100,6 @@ func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 		logging.PrintBanner(os.Stderr, bannerInfo, log.UseColor)
 	}
 	return RunWithSignals(func(ctx context.Context) error {
-		go provider.PrewarmModel(ctx, log.Logger)
 		return svc.Server.Run(ctx)
 	}, log.Logger)
 }
