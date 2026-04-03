@@ -16,7 +16,7 @@ define_schema! {
     }
 }
 
-/// WizardAnswerSchema: `{ stepId: NonEmptyString, value?: Unknown }`
+/// `WizardAnswerSchema`: `{ stepId: NonEmptyString, value?: Unknown }`
 fn check_wizard_answer(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
     if !require_object(v, p, e) {
         return;

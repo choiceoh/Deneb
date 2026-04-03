@@ -301,5 +301,4 @@ mod tests {
         assert!(is_valid_keyword("api"));
         assert!(is_valid_keyword("my_var"));
     }
-
 }
