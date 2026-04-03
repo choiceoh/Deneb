@@ -986,7 +986,6 @@ func (p *InboundProcessor) quickChangeModels() []modelEntry {
 		}{
 			{modelrole.RoleMain, "main"},
 			{modelrole.RoleLightweight, "lightweight"},
-			{modelrole.RolePilot, "pilot"},
 			{modelrole.RoleFallback, "fallback"},
 		}
 		seen := make(map[string]bool)
