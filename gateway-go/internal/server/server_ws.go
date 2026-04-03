@@ -165,8 +165,6 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 		s.clientCnt.Add(-1)
 	}()
 
-	s.logger.Info("websocket connected", "connId", client.connID, "remote", r.RemoteAddr)
-
 	// Handshake: first message must be a connect request.
 	handshakeCtx, handshakeCancel := context.WithTimeout(r.Context(), time.Duration(protocol.HandshakeTimeoutMs)*time.Millisecond)
 	if err := s.handleHandshake(handshakeCtx, client, r.RemoteAddr); err != nil {
@@ -179,6 +177,8 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handshakeCancel()
+
+	s.logger.Info("websocket connected", "connId", client.connID, "remote", r.RemoteAddr)
 
 	conn.SetReadLimit(protocol.MaxPayloadBytes)
 

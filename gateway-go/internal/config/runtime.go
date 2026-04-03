@@ -21,6 +21,8 @@ type GatewayRuntimeConfig struct {
 	OpenAIChatCompletionsConfig   *GatewayHTTPChatCompletionsConfig
 	OpenResponsesEnabled          bool
 	OpenResponsesConfig           *GatewayHTTPResponsesConfig
+	AnthropicMessagesEnabled      bool
+	AnthropicMessagesConfig       *GatewayHTTPAnthropicMessagesConfig
 	StrictTransportSecurityHeader string
 	ResolvedAuth                  ResolvedGatewayAuth
 	AuthMode                      string
@@ -134,6 +136,16 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		openResponsesConfig = rc
 		if rc.Enabled != nil && *rc.Enabled {
 			openResponsesEnabled = true
+		}
+	}
+
+	anthropicMessagesEnabled := false
+	var anthropicMessagesConfig *GatewayHTTPAnthropicMessagesConfig
+	if gw.HTTP != nil && gw.HTTP.Endpoints != nil && gw.HTTP.Endpoints.AnthropicMessages != nil {
+		am := gw.HTTP.Endpoints.AnthropicMessages
+		anthropicMessagesConfig = am
+		if am.Enabled != nil && *am.Enabled {
+			anthropicMessagesEnabled = true
 		}
 	}
 
@@ -259,6 +271,8 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		OpenAIChatCompletionsConfig:   openAIChatCompletionsConfig,
 		OpenResponsesEnabled:          openResponsesEnabled,
 		OpenResponsesConfig:           openResponsesConfig,
+		AnthropicMessagesEnabled:      anthropicMessagesEnabled,
+		AnthropicMessagesConfig:       anthropicMessagesConfig,
 		StrictTransportSecurityHeader: stsHeader,
 		ResolvedAuth:                  resolvedAuth,
 		AuthMode:                      authMode,
