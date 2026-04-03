@@ -313,11 +313,22 @@ async def main():
             print('Handshake FAILED:', json.dumps(hello, indent=2))
             sys.exit(1)
 
+        # Create session.
+        sess = f'dev-chat-{int(time.time()*1000)}'
+        await ws.send(json.dumps({
+            'type': 'req', 'id': 'chat-sess', 'method': 'sessions.create',
+            'params': {'key': sess, 'kind': 'direct'}
+        }))
+        sess_resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+        if not sess_resp.get('ok'):
+            print('Session create FAILED:', json.dumps(sess_resp, indent=2))
+            sys.exit(1)
+
         # Send chat message.
         rpc_id = f'chat-{int(time.time()*1000)}'
         rpc = {
             'type': 'req', 'id': rpc_id, 'method': 'chat.send',
-            'params': {'message': MESSAGE}
+            'params': {'sessionKey': sess, 'message': MESSAGE}
         }
         print(f'==> Sending chat: {MESSAGE[:80]}')
         await ws.send(json.dumps(rpc))
