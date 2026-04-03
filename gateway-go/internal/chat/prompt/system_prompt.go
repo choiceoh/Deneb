@@ -69,16 +69,16 @@ func loadCachedTimezone() (string, *time.Location) {
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
 type SystemPromptParams struct {
-	WorkspaceDir   string
-	ToolDefs       []ToolDef
-	DeferredTools  []DeferredToolInfo // deferred tools: name+description listed in prompt
-	SkillsPrompt   string            // pre-built skills XML from skills/prompt.go
-	UserTimezone   string
-	ContextFiles   []ContextFile
-	RuntimeInfo    *RuntimeInfo
-	Channel        string
-	DocsPath       string
-	SessionMemory  string // pre-formatted session state block (empty = omit)
+	WorkspaceDir  string
+	ToolDefs      []ToolDef
+	DeferredTools []DeferredToolInfo // deferred tools: name+description listed in prompt
+	SkillsPrompt  string             // pre-built skills XML from skills/prompt.go
+	UserTimezone  string
+	ContextFiles  []ContextFile
+	RuntimeInfo   *RuntimeInfo
+	Channel       string
+	DocsPath      string
+	SessionMemory string // pre-formatted session state block (empty = omit)
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -237,14 +237,20 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Semi-static block (skills — changes only when skills are added/removed) ---
 	var ss strings.Builder
 	if params.SkillsPrompt != "" {
-		ss.WriteString("## Skills (mandatory)\n")
+		ss.WriteString("## Skills\n")
 		ss.WriteString("Before replying: scan <available_skills> <description> entries.\n")
 		ss.WriteString("- If exactly one skill clearly applies: read its SKILL.md at <location> with `read`, then follow it.\n")
 		ss.WriteString("- If multiple could apply: choose the most specific one, then read/follow it.\n")
 		ss.WriteString("- If none clearly apply: do not read any SKILL.md.\n")
 		ss.WriteString("Constraints: never read more than one skill up front; only read after selecting.\n")
 		ss.WriteString(params.SkillsPrompt)
-		ss.WriteString("\n\n")
+		ss.WriteString("\n")
+		ss.WriteString("Additional skills are available via the `skills_list` tool. Use it when a task might match a skill not listed above.\n\n")
+	} else {
+		// No always-skills, but discoverable skills may still exist.
+		ss.WriteString("## Skills\n")
+		ss.WriteString("Skills provide specialized instructions for specific tasks.\n")
+		ss.WriteString("Use the `skills_list` tool to discover available skills when a task might benefit from one.\n\n")
 	}
 
 	// --- Dynamic block ---

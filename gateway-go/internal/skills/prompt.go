@@ -15,12 +15,13 @@ import (
 
 // PromptSkill is the input type for prompt building.
 type PromptSkill struct {
-	Name                   string `json:"name"`
-	Description            string `json:"description,omitempty"`
-	FilePath               string `json:"filePath"`
-	Category               string `json:"category,omitempty"`
-	Version                string `json:"version,omitempty"`
-	DisableModelInvocation bool   `json:"disableModelInvocation,omitempty"`
+	Name                   string    `json:"name"`
+	Description            string    `json:"description,omitempty"`
+	FilePath               string    `json:"filePath"`
+	Category               string    `json:"category,omitempty"`
+	Version                string    `json:"version,omitempty"`
+	Type                   SkillType `json:"type,omitempty"`
+	DisableModelInvocation bool      `json:"disableModelInvocation,omitempty"`
 }
 
 // PromptResult is the output of prompt building.
@@ -201,6 +202,57 @@ func CompactSkillPaths(skills []PromptSkill) []PromptSkill {
 		}
 	}
 	return result
+}
+
+// FormatSkillsListResponse formats discoverable skills for the skills_list tool response.
+// Supports optional query and category filters.
+func FormatSkillsListResponse(skills []PromptSkill, query, category string) string {
+	query = strings.ToLower(strings.TrimSpace(query))
+	category = strings.ToLower(strings.TrimSpace(category))
+
+	var filtered []PromptSkill
+	for _, s := range skills {
+		if category != "" && strings.ToLower(s.Category) != category {
+			continue
+		}
+		if query != "" {
+			nameMatch := strings.Contains(strings.ToLower(s.Name), query)
+			descMatch := strings.Contains(strings.ToLower(s.Description), query)
+			catMatch := strings.Contains(strings.ToLower(s.Category), query)
+			if !nameMatch && !descMatch && !catMatch {
+				continue
+			}
+		}
+		filtered = append(filtered, s)
+	}
+
+	if len(filtered) == 0 {
+		if query != "" || category != "" {
+			return "No skills match the given filter."
+		}
+		return "No discoverable skills available."
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("%d skills available. Use `read` to load a skill's SKILL.md when needed.\n\n", len(filtered)))
+	for _, s := range filtered {
+		b.WriteString("- **")
+		b.WriteString(s.Name)
+		b.WriteString("**")
+		if s.Category != "" {
+			b.WriteString(" [")
+			b.WriteString(s.Category)
+			b.WriteString("]")
+		}
+		if s.Description != "" {
+			b.WriteString(": ")
+			b.WriteString(s.Description)
+		}
+		b.WriteString("\n  → ")
+		b.WriteString(s.FilePath)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // BuildTruncationNote generates the truncation/compact warning message.

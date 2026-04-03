@@ -14,13 +14,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
-	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -31,27 +31,88 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
-// cachedSkillsPrompt caches the workspace skills prompt at startup to avoid
-// re-scanning the filesystem on every chat message. Single-user deployment:
-// skills don't change at runtime.
-var (
-	cachedSkillsPrompt     string
-	cachedSkillsPromptOnce sync.Once
-)
+// skillsPromptCache is a version-aware cache for the workspace skills prompt.
+// Invalidated when the skills watcher bumps the version (file changes detected).
+var skillsCache struct {
+	mu       sync.RWMutex
+	prompt   string
+	snapshot *skills.FullSkillSnapshot
+	version  int64
+	built    bool
+}
 
-// loadCachedSkillsPrompt returns the cached skills prompt, building it on first call.
-func loadCachedSkillsPrompt(workspaceDir string) string {
-	cachedSkillsPromptOnce.Do(func() {
-		snapshot := skills.BuildWorkspaceSkillSnapshot(skills.SnapshotConfig{
-			DiscoverConfig: skills.DiscoverConfig{
-				WorkspaceDir: workspaceDir,
-			},
-		})
-		if snapshot != nil {
-			cachedSkillsPrompt = snapshot.Prompt
-		}
+// skillsWatcher is the shared watcher that monitors SKILL.md file changes.
+// Initialized once by InitSkillsWatcher.
+var skillsWatcher *skills.Watcher
+
+// InitSkillsWatcher creates and starts the skills watcher for a workspace.
+// Call once at server startup. The watcher invalidates the skills prompt cache
+// when SKILL.md files change on disk.
+func InitSkillsWatcher(workspaceDir string) {
+	if skillsWatcher != nil {
+		return
+	}
+	skillsWatcher = skills.NewWatcher(nil)
+	skillsWatcher.RegisterChangeListener(func(event skills.SkillsChangeEvent) {
+		skillsCache.mu.Lock()
+		skillsCache.built = false
+		skillsCache.mu.Unlock()
 	})
-	return cachedSkillsPrompt
+	skillsWatcher.EnsureWatcher(workspaceDir, nil, 250)
+}
+
+// loadCachedSkillsPrompt returns the cached skills prompt, rebuilding it when
+// the watcher version changes or on first call.
+func loadCachedSkillsPrompt(workspaceDir string) string {
+	skillsCache.mu.RLock()
+	if skillsCache.built {
+		prompt := skillsCache.prompt
+		skillsCache.mu.RUnlock()
+		return prompt
+	}
+	skillsCache.mu.RUnlock()
+
+	skillsCache.mu.Lock()
+	defer skillsCache.mu.Unlock()
+
+	// Double-check after acquiring write lock.
+	if skillsCache.built {
+		return skillsCache.prompt
+	}
+
+	cfg := skills.SnapshotConfig{
+		DiscoverConfig: skills.DiscoverConfig{
+			WorkspaceDir: workspaceDir,
+		},
+	}
+	// Discover entries first so we can cache them for slash command routing.
+	allEntries := skills.DiscoverWorkspaceSkills(cfg.DiscoverConfig)
+	SetCachedSkillEntries(allEntries, 0)
+
+	snapshot := skills.BuildWorkspaceSkillSnapshot(cfg)
+	if snapshot != nil {
+		skillsCache.prompt = snapshot.Prompt
+		skillsCache.snapshot = snapshot
+	} else {
+		skillsCache.prompt = ""
+		skillsCache.snapshot = nil
+	}
+	skillsCache.built = true
+	return skillsCache.prompt
+}
+
+// GetCachedSkillsSnapshot returns the last-built skills snapshot, or nil.
+func GetCachedSkillsSnapshot() *skills.FullSkillSnapshot {
+	skillsCache.mu.RLock()
+	defer skillsCache.mu.RUnlock()
+	return skillsCache.snapshot
+}
+
+// InvalidateSkillsCache forces the skills prompt to be rebuilt on next access.
+func InvalidateSkillsCache() {
+	skillsCache.mu.Lock()
+	skillsCache.built = false
+	skillsCache.mu.Unlock()
 }
 
 // chatRunResult wraps the agent result with chat-layer continuation info.
@@ -645,7 +706,7 @@ func executeAgentRun(
 		ContinuationRequested: func() bool {
 			return contSignal != nil && contSignal.Requested()
 		},
-		StreamingToolExecution:  true,
+		StreamingToolExecution: true,
 		// Mid-loop compaction: evaluate context size after each tool turn and
 		// compact proactively before the LLM hits context_length_exceeded.
 		OnMidLoopCompact: buildMidLoopCompactor(deps, params, logger),

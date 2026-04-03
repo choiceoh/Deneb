@@ -20,11 +20,12 @@ type SkillSummary struct {
 // FullSkillSnapshot is the complete result of building a workspace skill snapshot,
 // matching the TypeScript SkillSnapshot type.
 type FullSkillSnapshot struct {
-	Prompt         string         `json:"prompt"`
-	Skills         []SkillSummary `json:"skills"`
-	SkillFilter    []string       `json:"skillFilter,omitempty"`
-	ResolvedSkills []PromptSkill  `json:"resolvedSkills,omitempty"`
-	Version        int64          `json:"version,omitempty"`
+	Prompt             string         `json:"prompt"`
+	Skills             []SkillSummary `json:"skills"`
+	SkillFilter        []string       `json:"skillFilter,omitempty"`
+	ResolvedSkills     []PromptSkill  `json:"resolvedSkills,omitempty"`
+	DiscoverableSkills []PromptSkill  `json:"discoverableSkills,omitempty"` // non-always skills for on-demand listing
+	Version            int64          `json:"version,omitempty"`
 }
 
 // SnapshotConfig holds all the configuration for building a snapshot.
@@ -48,15 +49,21 @@ func BuildWorkspaceSkillSnapshot(cfg SnapshotConfig) *FullSkillSnapshot {
 	filtered := FilterBySkillFilter(eligible, cfg.SkillFilter)
 
 	// Separate model-invocation-enabled entries for prompt.
-	var promptEntries []SkillEntry
+	// Split into always (injected in system prompt) and discoverable (on-demand via skills_list tool).
+	var alwaysEntries, discoverableEntries []SkillEntry
 	for _, entry := range filtered {
-		if entry.Invocation == nil || !entry.Invocation.DisableModelInvocation {
-			promptEntries = append(promptEntries, entry)
+		if entry.Invocation != nil && entry.Invocation.DisableModelInvocation {
+			continue
+		}
+		if entry.Metadata != nil && entry.Metadata.Always {
+			alwaysEntries = append(alwaysEntries, entry)
+		} else {
+			discoverableEntries = append(discoverableEntries, entry)
 		}
 	}
 
-	// Convert to PromptSkill and compact paths.
-	promptSkills := entriesToPromptSkills(promptEntries)
+	// Only always-skills go into the system prompt.
+	promptSkills := entriesToPromptSkills(alwaysEntries)
 	promptSkills = CompactSkillPaths(promptSkills)
 
 	// Build prompt with limits.
@@ -94,17 +101,23 @@ func BuildWorkspaceSkillSnapshot(cfg SnapshotConfig) *FullSkillSnapshot {
 		summaries = append(summaries, s)
 	}
 
-	// Build resolved skills (canonical paths, not compacted).
-	resolvedSkills := entriesToPromptSkills(promptEntries)
+	// Build resolved skills (canonical paths, not compacted) — includes both always and discoverable.
+	allPromptEntries := append(alwaysEntries, discoverableEntries...)
+	resolvedSkills := entriesToPromptSkills(allPromptEntries)
+
+	// Build discoverable skills list (compacted paths for tool responses).
+	discoverableSkills := entriesToPromptSkills(discoverableEntries)
+	discoverableSkills = CompactSkillPaths(discoverableSkills)
 
 	normalizedFilter := NormalizeSkillFilter(cfg.SkillFilter)
 
 	return &FullSkillSnapshot{
-		Prompt:         finalPrompt,
-		Skills:         summaries,
-		SkillFilter:    normalizedFilter,
-		ResolvedSkills: resolvedSkills,
-		Version:        cfg.SnapshotVersion,
+		Prompt:             finalPrompt,
+		Skills:             summaries,
+		SkillFilter:        normalizedFilter,
+		ResolvedSkills:     resolvedSkills,
+		DiscoverableSkills: discoverableSkills,
+		Version:            cfg.SnapshotVersion,
 	}
 }
 
@@ -121,6 +134,7 @@ func entriesToPromptSkills(entries []SkillEntry) []PromptSkill {
 			FilePath:               entry.Skill.FilePath,
 			Category:               entry.Skill.Category,
 			Version:                entry.Skill.Version,
+			Type:                   entry.Skill.Type,
 			DisableModelInvocation: disableModel,
 		})
 	}
