@@ -78,7 +78,7 @@ fn find_red_status_projects(conn: &Connection) -> Result<Vec<Value>, String> {
 
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
@@ -86,7 +86,7 @@ fn find_red_status_projects(conn: &Connection) -> Result<Vec<Value>, String> {
             let status: String = row.get(2)?;
             Ok((id, name, status))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut items = Vec::new();
     for row in rows.flatten() {
@@ -103,7 +103,7 @@ fn find_red_status_projects(conn: &Connection) -> Result<Vec<Value>, String> {
     Ok(items)
 }
 
-/// Find action items with past due dates by scanning next_action chunks.
+/// Find action items with past due dates by scanning `next_action` chunks.
 fn find_overdue_actions(conn: &Connection) -> Result<Vec<Value>, String> {
     let sql = r#"
         SELECT c.project_id, p.name, c.content
@@ -114,7 +114,7 @@ fn find_overdue_actions(conn: &Connection) -> Result<Vec<Value>, String> {
 
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let project_id: i64 = row.get(0)?;
@@ -122,7 +122,7 @@ fn find_overdue_actions(conn: &Connection) -> Result<Vec<Value>, String> {
             let content: String = row.get(2)?;
             Ok((project_id, name, content))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let date_re = &*DATE_EXTRACT_RE;
     let today = chrono_today_str();
@@ -165,7 +165,7 @@ fn find_overloaded_persons(conn: &Connection) -> Result<Vec<Value>, String> {
 
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let person: String = row.get(0)?;
@@ -173,7 +173,7 @@ fn find_overloaded_persons(conn: &Connection) -> Result<Vec<Value>, String> {
             let projects: String = row.get(2)?;
             Ok((person, cnt, projects))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut items = Vec::new();
     for row in rows.flatten() {
@@ -207,7 +207,7 @@ fn find_stale_projects(conn: &Connection) -> Result<Vec<Value>, String> {
 
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
@@ -216,7 +216,7 @@ fn find_stale_projects(conn: &Connection) -> Result<Vec<Value>, String> {
             let last_comm: Option<String> = row.get(3)?;
             Ok((id, name, status, last_comm))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut items = Vec::new();
     for row in rows.flatten() {
@@ -234,7 +234,7 @@ fn find_stale_projects(conn: &Connection) -> Result<Vec<Value>, String> {
     Ok(items)
 }
 
-/// Returns today's date as YYYY-MM-DD string (no chrono dependency, uses SQLite).
+/// Returns today's date as YYYY-MM-DD string (no chrono dependency, uses `SQLite`).
 fn chrono_today_str() -> String {
     // Use a simple approach: current date via std
     let now = std::time::SystemTime::now();
@@ -246,7 +246,7 @@ fn chrono_today_str() -> String {
     let days = secs / 86400;
     // Convert days since 1970-01-01 to YYYY-MM-DD
     let (y, m, d) = days_to_ymd(days);
-    format!("{:04}-{:02}-{:02}", y, m, d)
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 fn days_to_ymd(days_since_epoch: i64) -> (i64, i64, i64) {
@@ -262,6 +262,63 @@ fn days_to_ymd(days_since_epoch: i64) -> (i64, i64, i64) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
     (y, m, d)
+}
+
+pub struct UrgentHandler;
+
+impl super::CommandHandler for UrgentHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_urgent(args, config)
+    }
+
+    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "total": data.get("total"), "critical": data.get("critical"),
+            "overdue": data.get("overdue"), "stale": data.get("stale"),
+            "items": data.get("items").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter().take(5).map(|i| json!({
+                    "project_name": i.get("project_name"),
+                    "priority": i.get("priority"), "reason": i.get("reason"),
+                })).collect::<Vec<_>>()
+            }),
+        })
+    }
+
+    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
+        let mut hints: Vec<serde_json::Value> = Vec::new();
+        let critical = data
+            .get("critical")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        let total = data
+            .get("total")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        if critical > 0 {
+            hints.push(json!({"situation": "has_critical", "tone": "alert",
+                "guide": "긴급 프로젝트가 있습니다. 이것을 먼저 언급하세요."}));
+        } else if total == 0 {
+            hints.push(json!({"situation": "all_clear", "tone": "reassuring",
+                "guide": "긴급 항목이 없습니다. 짧게 '현재 긴급한 것은 없습니다'라고 답하세요."}));
+        }
+        hints
+    }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        let total = data
+            .get("total")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        let critical = data
+            .get("critical")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        format!("관심 필요 {total}건 (긴급 {critical}건)")
+    }
 }
 
 #[cfg(test)]
@@ -316,51 +373,6 @@ mod tests {
         assert_eq!(&today[7..8], "-");
         // Year should be reasonable
         let year: i32 = today[0..4].parse().expect("year as i32");
-        assert!(year >= 2024 && year <= 2100);
-    }
-}
-
-pub struct UrgentHandler;
-
-impl super::CommandHandler for UrgentHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_urgent(args, config)
-    }
-
-    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
-        json!({
-            "total": data.get("total"), "critical": data.get("critical"),
-            "overdue": data.get("overdue"), "stale": data.get("stale"),
-            "items": data.get("items").and_then(|v| v.as_array()).map(|arr| {
-                arr.iter().take(5).map(|i| json!({
-                    "project_name": i.get("project_name"),
-                    "priority": i.get("priority"), "reason": i.get("reason"),
-                })).collect::<Vec<_>>()
-            }),
-        })
-    }
-
-    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
-        let mut hints: Vec<serde_json::Value> = Vec::new();
-        let critical = data.get("critical").and_then(|v| v.as_i64()).unwrap_or(0);
-        let total = data.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
-        if critical > 0 {
-            hints.push(json!({"situation": "has_critical", "tone": "alert",
-                "guide": "긴급 프로젝트가 있습니다. 이것을 먼저 언급하세요."}));
-        } else if total == 0 {
-            hints.push(json!({"situation": "all_clear", "tone": "reassuring",
-                "guide": "긴급 항목이 없습니다. 짧게 '현재 긴급한 것은 없습니다'라고 답하세요."}));
-        }
-        hints
-    }
-
-    fn summary(&self, data: &serde_json::Value) -> String {
-        let total = data.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
-        let critical = data.get("critical").and_then(|v| v.as_i64()).unwrap_or(0);
-        format!("관심 필요 {}건 (긴급 {}건)", total, critical)
+        assert!((2024..=2100).contains(&year));
     }
 }

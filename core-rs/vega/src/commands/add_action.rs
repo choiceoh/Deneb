@@ -15,23 +15,20 @@ use super::{find_project_id, open_db, CommandResult};
 ///   - section: "action" (default) or "history"
 ///   - date: optional date string (defaults to today)
 pub fn cmd_add_action(args: &Value, config: &VegaConfig) -> CommandResult {
-    let project_query = match args.get("project").and_then(|v| v.as_str()) {
-        Some(p) => p,
-        None => return CommandResult::err("add-action", "project 파라미터가 필요합니다"),
+    let Some(project_query) = args.get("project").and_then(|v| v.as_str()) else {
+        return CommandResult::err("add-action", "project 파라미터가 필요합니다");
     };
-    let text = match args.get("text").and_then(|v| v.as_str()) {
-        Some(t) => t,
-        None => return CommandResult::err("add-action", "text 파라미터가 필요합니다"),
+    let Some(text) = args.get("text").and_then(|v| v.as_str()) else {
+        return CommandResult::err("add-action", "text 파라미터가 필요합니다");
     };
     let section_type = args
         .get("section")
         .and_then(|v| v.as_str())
         .unwrap_or("action");
-    let date = args
-        .get("date")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
+    let date = args.get("date").and_then(|v| v.as_str()).map_or_else(
+        || chrono::Local::now().format("%Y-%m-%d").to_string(),
+        std::string::ToString::to_string,
+    );
 
     // Resolve project
     let project_id = find_project_id(config, project_query);

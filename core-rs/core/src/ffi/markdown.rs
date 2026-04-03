@@ -30,9 +30,8 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
     let md_slice = std::slice::from_raw_parts(md_ptr, md_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let md_str = match std::str::from_utf8(md_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(md_str) = std::str::from_utf8(md_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
         let options = if !opts_ptr.is_null() && opts_len > 0 {
             // SAFETY: opts_ptr is non-null (checked in this branch), opts_len > 0.

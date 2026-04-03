@@ -125,7 +125,7 @@ fn get_active_projects(conn: &Connection) -> Result<Vec<(i64, String, String)>, 
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
@@ -133,11 +133,11 @@ fn get_active_projects(conn: &Connection) -> Result<Vec<(i64, String, String)>, 
             let status: String = row.get(2)?;
             Ok((id, title, status))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut projects = Vec::new();
     for row in rows {
-        projects.push(row.map_err(|e| format!("행 읽기 실패: {}", e))?);
+        projects.push(row.map_err(|e| format!("행 읽기 실패: {e}"))?);
     }
     Ok(projects)
 }
@@ -153,18 +153,18 @@ fn extract_amount_for_project(conn: &Connection, project_id: i64) -> Result<f64,
     ";
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map(rusqlite::params![project_id], |row| {
             let body: String = row.get(0)?;
             Ok(body)
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut max_amount: f64 = 0.0;
 
     for row in rows {
-        let body = row.map_err(|e| format!("행 읽기 실패: {}", e))?;
+        let body = row.map_err(|e| format!("행 읽기 실패: {e}"))?;
         let amount = extract_amount_from_text(&body);
         if amount > max_amount {
             max_amount = amount;
@@ -201,7 +201,7 @@ fn extract_amount_from_text(text: &str) -> f64 {
 
     // Check 만원 patterns
     for caps in ten_thousands_re.captures_iter(text) {
-        let raw = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+        let raw = caps.get(1).map_or("0", |m| m.as_str());
         let cleaned = raw.replace(',', "");
         let ten_thousands: f64 = cleaned.parse().unwrap_or(0.0);
         let amount = ten_thousands * 10_000.0;
@@ -212,7 +212,7 @@ fn extract_amount_from_text(text: &str) -> f64 {
 
     // Check plain 원 patterns (comma-formatted)
     for caps in won_re.captures_iter(text) {
-        let raw = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+        let raw = caps.get(1).map_or("0", |m| m.as_str());
         let cleaned = raw.replace(',', "");
         let amount: f64 = cleaned.parse().unwrap_or(0.0);
         if amount > max_amount {
@@ -281,16 +281,42 @@ fn format_amount(amount: f64) -> String {
         let billions = amount / 100_000_000.0;
         let remainder = (amount % 100_000_000.0) / 10_000.0;
         if remainder > 0.0 {
-            format!("{:.0}억 {:.0}만원", billions, remainder)
+            format!("{billions:.0}억 {remainder:.0}만원")
         } else {
-            format!("{:.0}억원", billions)
+            format!("{billions:.0}억원")
         }
     } else if amount >= 10_000.0 {
         format!("{:.0}만원", amount / 10_000.0)
     } else if amount > 0.0 {
-        format!("{:.0}원", amount)
+        format!("{amount:.0}원")
     } else {
         "미정".to_string()
+    }
+}
+
+pub struct PipelineHandler;
+
+impl super::CommandHandler for PipelineHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_pipeline(args, config)
+    }
+
+    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
+        let _ = data;
+        vec![json!({"situation": "pipeline_view",
+            "guide": "금액/수주 현황입니다. 총액과 상위 프로젝트를 먼저 언급하세요."})]
+    }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        let total = data
+            .get("total_amount")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.0);
+        format!("파이프라인 총 {total:.1}억원")
     }
 }
 
@@ -329,31 +355,5 @@ mod tests {
         assert_eq!(format_amount(250_000_000.0), "2억 5000만원");
         assert_eq!(format_amount(5_000_000.0), "500만원");
         assert_eq!(format_amount(0.0), "미정");
-    }
-}
-
-pub struct PipelineHandler;
-
-impl super::CommandHandler for PipelineHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_pipeline(args, config)
-    }
-
-    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
-        let _ = data;
-        vec![json!({"situation": "pipeline_view",
-            "guide": "금액/수주 현황입니다. 총액과 상위 프로젝트를 먼저 언급하세요."})]
-    }
-
-    fn summary(&self, data: &serde_json::Value) -> String {
-        let total = data
-            .get("total_amount")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-        format!("파이프라인 총 {:.1}억원", total)
     }
 }

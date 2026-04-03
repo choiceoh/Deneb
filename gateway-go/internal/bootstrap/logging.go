@@ -24,8 +24,8 @@ func BuildEarlyLogger(flagLevel string) *slog.Logger {
 	}))
 }
 
-// BuildLogger constructs the full structured logger from config and a CLI flag override.
-func BuildLogger(cfg *config.DenebConfig, flagLevel string) LoggingResult {
+// BuildLogger constructs the full structured logger from config and CLI flag overrides.
+func BuildLogger(cfg *config.DenebConfig, flagLevel, flagFormat string) LoggingResult {
 	resolvedLevel := "info"
 	if cfg.Logging != nil && cfg.Logging.Level != "" {
 		resolvedLevel = cfg.Logging.Level
@@ -38,6 +38,9 @@ func BuildLogger(cfg *config.DenebConfig, flagLevel string) LoggingResult {
 	logFormat := "text"
 	if cfg.Logging != nil && cfg.Logging.Format != "" {
 		logFormat = cfg.Logging.Format
+	}
+	if flagFormat != "" {
+		logFormat = flagFormat
 	}
 
 	var handler slog.Handler

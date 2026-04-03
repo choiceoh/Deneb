@@ -1,10 +1,14 @@
 package ffi
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"unsafe"
 )
+
+// ErrFFITimeout is returned when an FFI call exceeds its context deadline.
+var ErrFFITimeout = fmt.Errorf("ffi: call timed out")
 
 // FFI return codes are defined in ffi_error_codes_gen.go (auto-generated from
 // proto/gateway.proto FfiErrorCode enum). To add or modify a code, edit
@@ -75,11 +79,46 @@ func ffiCallWithPool(fn string, pool *sync.Pool, call func(outPtr unsafe.Pointer
 		pool.Put(buf)
 		return result, nil
 	}
+	// Read panic message immediately after C returns, while still on the
+	// same OS thread. Thread-local storage becomes unreliable after any
+	// Go scheduling point.
+	panicMsg := ""
+	if rc == rcRustPanic {
+		panicMsg = getLastPanicMsg()
+	}
 	pool.Put(buf) // return before fallback to avoid holding two large buffers
 	if rc == rcOutputTooSmall {
 		return ffiCallWithGrow(fn, len(buf)*2, call)
 	}
+	if panicMsg != "" {
+		return nil, fmt.Errorf("ffi: %s: rust panic: %s", fn, panicMsg)
+	}
 	return nil, ffiError(fn, rc)
+}
+
+// ffiCallWithGrowCtx is like ffiCallWithGrow but respects context cancellation.
+// The FFI call runs in a separate goroutine; if ctx is canceled before the call
+// returns, ErrFFITimeout is returned immediately. The underlying FFI call still
+// runs to completion (cannot interrupt C code) but its result is discarded.
+func ffiCallWithGrowCtx(ctx context.Context, fn string, initialSize int, call func(outPtr unsafe.Pointer, outLen int) int) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrFFITimeout, fn, err)
+	}
+	type result struct {
+		data []byte
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		d, e := ffiCallWithGrow(fn, initialSize, call)
+		ch <- result{d, e}
+	}()
+	select {
+	case r := <-ch:
+		return r.data, r.err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%w: %s: %v", ErrFFITimeout, fn, ctx.Err())
+	}
 }
 
 // ffiCallWithGrow calls an FFI function that writes into an output buffer,
@@ -104,6 +143,14 @@ func ffiCallWithGrow(fn string, initialSize int, call func(outPtr unsafe.Pointer
 		rc := call(outPtr, size)
 		if rc >= 0 {
 			return out[:rc], nil
+		}
+		// Read panic message immediately after C returns, while still on
+		// the same OS thread. Thread-local storage becomes unreliable
+		// after any Go scheduling point.
+		if rc == rcRustPanic {
+			if msg := getLastPanicMsg(); msg != "" {
+				return nil, fmt.Errorf("ffi: %s: rust panic: %s", fn, msg)
+			}
 		}
 		if rc == rcOutputTooSmall && size < maxGrowBufSize {
 			size *= 2

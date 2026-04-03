@@ -23,13 +23,11 @@ pub fn cmd_mail_append(args: &Value, config: &VegaConfig) -> CommandResult {
         .get("date")
         .and_then(|v| v.as_str())
         .unwrap_or("(날짜 없음)");
-    let body = match args.get("body").and_then(|v| v.as_str()) {
-        Some(b) => b,
-        None => return CommandResult::err("mail-append", "body 파라미터가 필요합니다"),
+    let Some(body) = args.get("body").and_then(|v| v.as_str()) else {
+        return CommandResult::err("mail-append", "body 파라미터가 필요합니다");
     };
-    let project_query = match args.get("project").and_then(|v| v.as_str()) {
-        Some(p) => p,
-        None => return CommandResult::err("mail-append", "project 파라미터가 필요합니다"),
+    let Some(project_query) = args.get("project").and_then(|v| v.as_str()) else {
+        return CommandResult::err("mail-append", "project 파라미터가 필요합니다");
     };
 
     // Resolve project name to .md file
@@ -105,7 +103,7 @@ fn resolve_project_md(config: &VegaConfig, query: &str) -> PathBuf {
 
     // Try case-insensitive match
     if let Ok(entries) = fs::read_dir(md_dir) {
-        for entry in entries.filter_map(|e| e.ok()) {
+        for entry in entries.filter_map(std::result::Result::ok) {
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
             if name_str.ends_with(".md") {

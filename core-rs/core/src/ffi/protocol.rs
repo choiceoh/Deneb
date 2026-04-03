@@ -61,13 +61,11 @@ pub unsafe extern "C" fn deneb_validate_params(
     let json_slice = std::slice::from_raw_parts(json_ptr, json_len);
 
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let method_str = match std::str::from_utf8(method_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(method_str) = std::str::from_utf8(method_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
-        let json_str = match std::str::from_utf8(json_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(json_str) = std::str::from_utf8(json_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
 
         match crate::protocol::validation::validate_params(method_str, json_str) {

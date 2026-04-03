@@ -46,7 +46,7 @@ impl super::CommandHandler for SearchHandler {
         let n = data
             .get("result_count")
             .and_then(|rc| rc.get("projects"))
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
         if n == 0 {
             hints.push(json!({"situation": "no_results",
@@ -57,7 +57,7 @@ impl super::CommandHandler for SearchHandler {
                 .and_then(|v| v.as_array())
                 .and_then(|a| a.first())
                 .and_then(|p| p.get("id"))
-                .and_then(|v| v.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0);
             hints.push(json!({"situation": "single_match",
                 "guide": format!("정확히 1개 프로젝트 매칭. 추가 정보: brief {}", pid)}));
@@ -68,7 +68,7 @@ impl super::CommandHandler for SearchHandler {
         if data
             .get("search_meta")
             .and_then(|m| m.get("semantic_used"))
-            .and_then(|v| v.as_bool())
+            .and_then(serde_json::Value::as_bool)
             .unwrap_or(false)
         {
             hints.push(json!({"situation": "semantic_enriched",
@@ -83,10 +83,13 @@ impl super::CommandHandler for SearchHandler {
 
     fn summary(&self, data: &Value) -> String {
         let rc = data.get("result_count").unwrap_or(&Value::Null);
-        let projects = rc.get("projects").and_then(|v| v.as_i64()).unwrap_or(0);
+        let projects = rc
+            .get("projects")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
         let comms = rc
             .get("communications")
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
         let top_names: Vec<String> = data
             .get("projects")
@@ -99,10 +102,7 @@ impl super::CommandHandler for SearchHandler {
             })
             .unwrap_or_default();
         if top_names.is_empty() {
-            format!(
-                "검색 결과: {}개 프로젝트, {}건 커뮤니케이션",
-                projects, comms
-            )
+            format!("검색 결과: {projects}개 프로젝트, {comms}건 커뮤니케이션")
         } else {
             format!(
                 "검색 결과: {} ({}개 프로젝트, {}건 커뮤니케이션)",
@@ -115,8 +115,8 @@ impl super::CommandHandler for SearchHandler {
 }
 
 /// search: Full hybrid search with fusion ranking.
-/// Port of Python vega/commands/search.py with match_reasons, follow_up_hint,
-/// suggestions, auto_brief, and communications truncation.
+/// Port of Python vega/commands/search.py with `match_reasons`, `follow_up_hint`,
+/// suggestions, `auto_brief`, and communications truncation.
 pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
     let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
     if query.is_empty() {
@@ -156,7 +156,9 @@ pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                             }
                         }
                         // Update score to max
-                        if let Some(cur_score) = proj.get("score").and_then(|v| v.as_f64()) {
+                        if let Some(cur_score) =
+                            proj.get("score").and_then(serde_json::Value::as_f64)
+                        {
                             if item.score > cur_score {
                                 proj["score"] = json!(item.score);
                             }
@@ -210,14 +212,14 @@ pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                     .unwrap_or_default();
 
                 if sources.iter().any(|s| s == "sqlite") {
-                    let has_comm = proj
-                        .get("sections")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .any(|s| s.get("type").and_then(|v| v.as_str()) == Some("comm_log"))
-                        })
-                        .unwrap_or(false);
+                    let has_comm =
+                        proj.get("sections")
+                            .and_then(|v| v.as_array())
+                            .is_some_and(|arr| {
+                                arr.iter().any(|s| {
+                                    s.get("type").and_then(|v| v.as_str()) == Some("comm_log")
+                                })
+                            });
                     if has_comm {
                         reasons.push("커뮤니케이션");
                     }
@@ -225,8 +227,7 @@ pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                         || proj
                             .get("sections")
                             .and_then(|v| v.as_array())
-                            .map(|a| a.len())
-                            .unwrap_or(0)
+                            .map_or(0, std::vec::Vec::len)
                             > 1
                     {
                         reasons.push("본문");
@@ -342,7 +343,10 @@ pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                     "검색 결과 없음. show <ID>, brief <프로젝트명> 형태로 직접 조회해보세요."
                 );
             } else if proj_count == 1 {
-                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                let top_id = projects[0]
+                    .get("id")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0);
                 data["follow_up_hint"] = json!(format!(
                     "show {} / brief {} / timeline {}",
                     top_id, top_id, top_id
@@ -354,13 +358,19 @@ pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                     }
                 }
             } else if proj_count > 5 {
-                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                let top_id = projects[0]
+                    .get("id")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0);
                 data["follow_up_hint"] = json!(format!(
                     "결과 {}건. show {} / brief {} 로 상세 확인",
                     proj_count, top_id, top_id
                 ));
             } else {
-                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                let top_id = projects[0]
+                    .get("id")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0);
                 data["follow_up_hint"] = json!(format!(
                     "show {} / brief {} / timeline {}",
                     top_id, top_id, top_id
@@ -369,6 +379,6 @@ pub(super) fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
 
             CommandResult::ok("search", data)
         }
-        Err(e) => CommandResult::err("search", &format!("검색 오류: {}", e)),
+        Err(e) => CommandResult::err("search", &format!("검색 오류: {e}")),
     }
 }

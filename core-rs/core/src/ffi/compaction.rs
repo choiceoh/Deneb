@@ -30,13 +30,13 @@ pub unsafe extern "C" fn deneb_compaction_evaluate(
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let config_str = match std::str::from_utf8(config_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(config_str) = std::str::from_utf8(config_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
-        let config: crate::compaction::CompactionConfig = match serde_json::from_str(config_str) {
-            Ok(c) => c,
-            Err(_) => return FFI_ERR_JSON_ERROR,
+        let Ok(config): Result<crate::compaction::CompactionConfig, _> =
+            serde_json::from_str(config_str)
+        else {
+            return FFI_ERR_JSON_ERROR;
         };
         let decision =
             crate::compaction::evaluate(&config, stored_tokens, live_tokens, token_budget);
@@ -68,9 +68,8 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
     // SAFETY: config_ptr is null-checked above, config_len bounded by FFI_MAX_INPUT_LEN.
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let config_str = match std::str::from_utf8(config_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(config_str) = std::str::from_utf8(config_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
         // Validate u64→u32 narrowing to prevent silent truncation.
         if conversation_id > u32::MAX as u64 || token_budget > u32::MAX as u64 {
@@ -138,9 +137,8 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let resp_str = match std::str::from_utf8(resp_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(resp_str) = std::str::from_utf8(resp_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
         let json = crate::compaction::handle::compaction_sweep_step(handle, resp_str);
         ffi_write_bytes(out_slice, json.as_bytes())

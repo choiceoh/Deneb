@@ -1,7 +1,7 @@
 //! Structured project brief command.
 //!
 //! Port of Python vega/commands/brief.py — full structured brief with
-//! next_actions, risks, key_points, recent_comms, recommended_commands.
+//! `next_actions`, risks, `key_points`, `recent_comms`, `recommended_commands`.
 //! Supports multi-project brief ("brief 5 10 15").
 
 use regex::Regex;
@@ -43,7 +43,7 @@ pub fn build_single_brief(conn: &Connection, pid: i64) -> Result<Value, String> 
                 }))
             },
         )
-        .map_err(|_| format!("프로젝트 ID {} 없음", pid))?;
+        .map_err(|_| format!("프로젝트 ID {pid} 없음"))?;
 
     let proj_name = proj
         .get("name")
@@ -75,7 +75,7 @@ pub fn build_single_brief(conn: &Connection, pid: i64) -> Result<Value, String> 
             ))
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     // Bucket by chunk_type
@@ -154,7 +154,7 @@ pub fn build_single_brief(conn: &Connection, pid: i64) -> Result<Value, String> 
             }))
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     let recent_comms: Vec<&Value> = comms.iter().take(3).collect();
@@ -254,6 +254,157 @@ pub fn cmd_brief(args: &Value, config: &VegaConfig) -> CommandResult {
             "brief",
             "프로젝트를 특정할 수 없습니다. ID 또는 프로젝트명을 포함해주세요.",
         ),
+    }
+}
+
+pub struct BriefHandler;
+
+impl super::CommandHandler for BriefHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_brief(args, config)
+    }
+
+    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
+        let mut kept = json!({});
+        for key in [
+            "project_id",
+            "project_name",
+            "status",
+            "client",
+            "person_internal",
+            "latest_activity",
+            "next_actions",
+            "risks",
+        ] {
+            if let Some(v) = data.get(key) {
+                kept[key] = v.clone();
+            }
+        }
+        kept["comm_count"] = json!(data
+            .get("recent_comms")
+            .and_then(|v| v.as_array())
+            .map_or(0, std::vec::Vec::len));
+        kept
+    }
+
+    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
+        let mut hints: Vec<serde_json::Value> = Vec::new();
+        if data
+            .get("risks")
+            .and_then(|v| v.as_array())
+            .is_some_and(|a| !a.is_empty())
+        {
+            hints.push(json!({"situation": "has_risks",
+                "guide": "리스크 항목이 있습니다. 상태/액션 보고 후 리스크를 별도 강조하세요."}));
+        }
+        if data
+            .get("next_actions")
+            .and_then(|v| v.as_array())
+            .is_none_or(std::vec::Vec::is_empty)
+        {
+            let pid = data
+                .get("project_id")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0);
+            hints.push(json!({"situation": "no_actions",
+                "guide": "다음 액션이 비어 있습니다. 액션 추가를 물어보세요.",
+                "suggested_followup": format!("add-action {}", pid)}));
+        }
+        hints
+    }
+
+    fn build_bundle(
+        &self,
+        data: &serde_json::Value,
+        conn: Option<&Connection>,
+    ) -> serde_json::Value {
+        let Some(conn) = conn else {
+            return json!({});
+        };
+        let mut bundle = json!({});
+        let pid = data.get("project_id").and_then(serde_json::Value::as_i64);
+        if let Some(pid) = pid {
+            // Check overdue actions
+            if let Ok(mut stmt) = conn.prepare(
+                "SELECT content FROM chunks WHERE project_id=?1 AND chunk_type='next_action'",
+            ) {
+                let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+                if let Ok(rows) = stmt.query_map(rusqlite::params![pid], |r| r.get::<_, String>(0))
+                {
+                    if let Ok(date_re) = regex::Regex::new(r"20\d{2}[-/]\d{2}[-/]\d{2}") {
+                        for content in rows.flatten() {
+                            for m in date_re.find_iter(&content) {
+                                let d = m.as_str().replace('/', "-");
+                                if d <= today {
+                                    bundle["urgency"] = json!({"priority": "overdue",
+                                        "reason": format!("기한 도래: {}", d)});
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Related projects by same person
+            let person = data
+                .get("person_internal")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if let Some(first_name) = person.split_whitespace().next() {
+                if !first_name.is_empty() {
+                    if let Ok(mut stmt) = conn.prepare(
+                        "SELECT id, name, status FROM projects WHERE person_internal LIKE ?1 AND id != ?2 LIMIT 3"
+                    ) {
+                        let pattern = format!("%{}%", crate::utils::escape_like(first_name));
+                        if let Ok(rows) = stmt.query_map(rusqlite::params![pattern, pid], |r| {
+                            Ok(json!({"id": r.get::<_, i64>(0)?, "name": r.get::<_, String>(1)?, "status": r.get::<_, String>(2)?}))
+                        }) {
+                            let related: Vec<serde_json::Value> = rows.flatten().collect();
+                            if !related.is_empty() {
+                                bundle["related_projects"] = json!(related);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        bundle
+    }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        if data.get("briefs").is_some() {
+            let count = data
+                .get("count")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0);
+            format!("{count}개 프로젝트 브리프")
+        } else {
+            let name = data
+                .get("project_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let actions = data
+                .get("next_actions")
+                .and_then(|v| v.as_array())
+                .map_or(0, std::vec::Vec::len);
+            let risks = data
+                .get("risks")
+                .and_then(|v| v.as_array())
+                .map_or(0, std::vec::Vec::len);
+            format!(
+                "[{}] {} — 액션 {}개, 리스크 {}개",
+                data.get("project_id")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0),
+                name,
+                actions,
+                risks
+            )
+        }
     }
 }
 
@@ -360,154 +511,5 @@ mod tests {
         let result = build_single_brief(&conn, 999);
         assert!(result.is_err());
         Ok(())
-    }
-}
-
-pub struct BriefHandler;
-
-impl super::CommandHandler for BriefHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_brief(args, config)
-    }
-
-    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
-        let mut kept = json!({});
-        for key in [
-            "project_id",
-            "project_name",
-            "status",
-            "client",
-            "person_internal",
-            "latest_activity",
-            "next_actions",
-            "risks",
-        ] {
-            if let Some(v) = data.get(key) {
-                kept[key] = v.clone();
-            }
-        }
-        kept["comm_count"] = json!(data
-            .get("recent_comms")
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0));
-        kept
-    }
-
-    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
-        let mut hints: Vec<serde_json::Value> = Vec::new();
-        if data
-            .get("risks")
-            .and_then(|v| v.as_array())
-            .map(|a| !a.is_empty())
-            .unwrap_or(false)
-        {
-            hints.push(json!({"situation": "has_risks",
-                "guide": "리스크 항목이 있습니다. 상태/액션 보고 후 리스크를 별도 강조하세요."}));
-        }
-        if data
-            .get("next_actions")
-            .and_then(|v| v.as_array())
-            .map(|a| a.is_empty())
-            .unwrap_or(true)
-        {
-            let pid = data.get("project_id").and_then(|v| v.as_i64()).unwrap_or(0);
-            hints.push(json!({"situation": "no_actions",
-                "guide": "다음 액션이 비어 있습니다. 액션 추가를 물어보세요.",
-                "suggested_followup": format!("add-action {}", pid)}));
-        }
-        hints
-    }
-
-    fn build_bundle(
-        &self,
-        data: &serde_json::Value,
-        conn: Option<&Connection>,
-    ) -> serde_json::Value {
-        let conn = match conn {
-            Some(c) => c,
-            None => return json!({}),
-        };
-        let mut bundle = json!({});
-        let pid = data.get("project_id").and_then(|v| v.as_i64());
-        if let Some(pid) = pid {
-            // Check overdue actions
-            if let Ok(mut stmt) = conn.prepare(
-                "SELECT content FROM chunks WHERE project_id=?1 AND chunk_type='next_action'",
-            ) {
-                let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-                if let Ok(rows) = stmt.query_map(rusqlite::params![pid], |r| r.get::<_, String>(0))
-                {
-                    if let Ok(date_re) = regex::Regex::new(r"20\d{2}[-/]\d{2}[-/]\d{2}") {
-                        for content in rows.flatten() {
-                            for m in date_re.find_iter(&content) {
-                                let d = m.as_str().replace('/', "-");
-                                if d <= today {
-                                    bundle["urgency"] = json!({"priority": "overdue",
-                                        "reason": format!("기한 도래: {}", d)});
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // Related projects by same person
-            let person = data
-                .get("person_internal")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if let Some(first_name) = person.split_whitespace().next() {
-                if !first_name.is_empty() {
-                    if let Ok(mut stmt) = conn.prepare(
-                        "SELECT id, name, status FROM projects WHERE person_internal LIKE ?1 AND id != ?2 LIMIT 3"
-                    ) {
-                        let pattern = format!("%{}%", crate::utils::escape_like(first_name));
-                        if let Ok(rows) = stmt.query_map(rusqlite::params![pattern, pid], |r| {
-                            Ok(json!({"id": r.get::<_, i64>(0)?, "name": r.get::<_, String>(1)?, "status": r.get::<_, String>(2)?}))
-                        }) {
-                            let related: Vec<serde_json::Value> = rows.flatten().collect();
-                            if !related.is_empty() {
-                                bundle["related_projects"] = json!(related);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        bundle
-    }
-
-    fn summary(&self, data: &serde_json::Value) -> String {
-        if data.get("briefs").is_some() {
-            let count = data.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-            format!("{}개 프로젝트 브리프", count)
-        } else {
-            let name = data
-                .get("project_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            let actions = data
-                .get("next_actions")
-                .and_then(|v| v.as_array())
-                .map(|a| a.len())
-                .unwrap_or(0);
-            let risks = data
-                .get("risks")
-                .and_then(|v| v.as_array())
-                .map(|a| a.len())
-                .unwrap_or(0);
-            format!(
-                "[{}] {} — 액션 {}개, 리스크 {}개",
-                data.get("project_id").and_then(|v| v.as_i64()).unwrap_or(0),
-                name,
-                actions,
-                risks
-            )
-        }
     }
 }

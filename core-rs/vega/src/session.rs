@@ -1,7 +1,7 @@
 //! Session context management for Vega.
 //!
 //! Port of Python vega/core.py session functions:
-//! load_session, save_session, update_session, resolve_session_context.
+//! `load_session`, `save_session`, `update_session`, `resolve_session_context`.
 //! Stores recent project IDs and command history for pronoun resolution.
 
 use std::collections::VecDeque;
@@ -37,11 +37,11 @@ impl VegaSession {
     /// Save session to disk.
     pub fn save(&self, session_path: &PathBuf) -> Result<(), String> {
         let data =
-            serde_json::to_string_pretty(self).map_err(|e| format!("세션 직렬화 실패: {}", e))?;
+            serde_json::to_string_pretty(self).map_err(|e| format!("세션 직렬화 실패: {e}"))?;
         if let Some(parent) = session_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        fs::write(session_path, data).map_err(|e| format!("세션 저장 실패: {}", e))
+        fs::write(session_path, data).map_err(|e| format!("세션 저장 실패: {e}"))
     }
 
     /// Update session after a command execution.
@@ -55,18 +55,18 @@ impl VegaSession {
         if let Some(id) = data
             .get("project")
             .and_then(|p| p.get("id"))
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
         {
             new_ids.push(id);
         }
-        if let Some(id) = data.get("project_id").and_then(|v| v.as_i64()) {
+        if let Some(id) = data.get("project_id").and_then(serde_json::Value::as_i64) {
             new_ids.push(id);
         }
 
         // Multiple project results
         if let Some(projects) = data.get("projects").and_then(|v| v.as_array()) {
             for p in projects.iter().take(3) {
-                if let Some(id) = p.get("id").and_then(|v| v.as_i64()) {
+                if let Some(id) = p.get("id").and_then(serde_json::Value::as_i64) {
                     new_ids.push(id);
                 }
             }

@@ -18,9 +18,8 @@ use super::{open_db, CommandResult};
 ///   - priority: priority level (optional, default "보통")
 ///   - template: template type (default "default")
 pub fn cmd_template(args: &Value, config: &VegaConfig) -> CommandResult {
-    let name = match args.get("name").and_then(|v| v.as_str()) {
-        Some(n) => n,
-        None => return CommandResult::err("template", "name 파라미터가 필요합니다"),
+    let Some(name) = args.get("name").and_then(|v| v.as_str()) else {
+        return CommandResult::err("template", "name 파라미터가 필요합니다");
     };
     let client = args.get("client").and_then(|v| v.as_str()).unwrap_or("");
     let person = args.get("person").and_then(|v| v.as_str()).unwrap_or("");

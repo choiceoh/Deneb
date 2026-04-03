@@ -30,13 +30,11 @@ pub unsafe extern "C" fn deneb_extract_links(
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let text_str = match std::str::from_utf8(text_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(text_str) = std::str::from_utf8(text_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
-        let config_str = match std::str::from_utf8(config_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(config_str) = std::str::from_utf8(config_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
 
         #[derive(serde::Deserialize)]
@@ -108,17 +106,15 @@ pub unsafe extern "C" fn deneb_html_to_markdown_with_opts(
     let opts_slice = std::slice::from_raw_parts(opts_ptr, opts_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let html_str = match std::str::from_utf8(html_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
+        let Ok(html_str) = std::str::from_utf8(html_slice) else {
+            return FFI_ERR_INVALID_UTF8;
         };
         let opts: crate::parsing::html_to_markdown::HtmlToMarkdownOptions =
             match serde_json::from_slice(opts_slice) {
                 Ok(o) => o,
                 Err(_) => return FFI_ERR_JSON_ERROR,
             };
-        let result =
-            crate::parsing::html_to_markdown::html_to_markdown_with_opts(html_str, &opts);
+        let result = crate::parsing::html_to_markdown::html_to_markdown_with_opts(html_str, &opts);
         ffi_write_json(out_slice, &result)
     })
 }
@@ -139,9 +135,8 @@ pub unsafe extern "C" fn deneb_base64_estimate(input_ptr: *const u8, input_len: 
     // SAFETY: input_ptr is null-checked above, input_len bounded by FFI_MAX_INPUT_LEN.
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let input_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8 as i64,
+        let Ok(input_str) = std::str::from_utf8(slice) else {
+            return FFI_ERR_INVALID_UTF8 as i64;
         };
         crate::parsing::base64_util::estimate_base64_decoded_bytes(input_str) as i64
     }))

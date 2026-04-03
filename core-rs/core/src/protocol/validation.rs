@@ -652,9 +652,8 @@ pub fn validate_params(method: &str, json: &str) -> Result<ValidationResult, Val
     let value: serde_json::Value =
         serde_json::from_str(json).map_err(ValidateParamsError::InvalidJson)?;
 
-    let validator = match lookup_validator(method) {
-        Some(v) => v,
-        None => return Err(ValidateParamsError::UnknownMethod(method.to_string())),
+    let Some(validator) = lookup_validator(method) else {
+        return Err(ValidateParamsError::UnknownMethod(method.to_string()));
     };
 
     let mut errors = Vec::new();
@@ -804,6 +803,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_validate_params_unknown_method() {
         let result = validate_params("nonexistent.method", "{}");
         assert!(result.is_err());
@@ -814,6 +814,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_validate_params_invalid_json() {
         let result = validate_params("sessions.list", "{not json}");
         assert!(result.is_err());

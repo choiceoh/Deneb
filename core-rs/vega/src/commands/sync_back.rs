@@ -1,6 +1,6 @@
 //! Sync DB changes back to .md files.
 //!
-//! Port of Python vega/addons/sync_back.py.
+//! Port of Python `vega/addons/sync_back.py`.
 
 use std::fs;
 
@@ -21,7 +21,7 @@ static STATUS_TABLE_RE: LazyLock<Regex> = LazyLock::new(|| {
 pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
     let dry_run = args
         .get("dry_run")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
 
     let conn = match open_db(config) {
@@ -54,7 +54,7 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
             r.get::<_, Option<String>>(5)?,
         ))
     }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows.filter_map(std::result::Result::ok).collect(),
         Err(e) => return CommandResult::err("sync-back", &format!("쿼리 실행 실패: {e}")),
     };
 

@@ -445,6 +445,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_negative_seq_rejected() {
         let json = r#"{"type":"event","event":"health","seq":-1}"#;
         let err = validate_frame(json).unwrap_err();
@@ -469,9 +470,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_oversized_id_rejected() {
         let long_id = "x".repeat(300);
-        let json = format!(r#"{{"type":"req","id":"{}","method":"test"}}"#, long_id);
+        let json = format!(r#"{{"type":"req","id":"{long_id}","method":"test"}}"#);
         let err = validate_frame(&json).unwrap_err();
         assert!(err.to_string().contains("maximum length"));
     }
@@ -479,7 +481,7 @@ mod tests {
     #[test]
     fn test_oversized_method_rejected() {
         let long_method = "m".repeat(300);
-        let json = format!(r#"{{"type":"req","id":"1","method":"{}"}}"#, long_method);
+        let json = format!(r#"{{"type":"req","id":"1","method":"{long_method}"}}"#);
         assert!(validate_frame(&json).is_err());
     }
 
@@ -495,7 +497,7 @@ mod tests {
         use super::*;
         use proptest::prelude::*;
 
-        /// Strategy for non-empty strings that fit within MAX_SHORT_FIELD_LEN.
+        /// Strategy for non-empty strings that fit within `MAX_SHORT_FIELD_LEN`.
         fn short_nonempty_string() -> impl Strategy<Value = String> {
             "[a-zA-Z0-9_.]{1,64}"
         }

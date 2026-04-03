@@ -21,8 +21,7 @@ pub const GATEWAY_CLIENT_IDS: &[&str] = &[
 // Gateway client modes — src/gateway/protocol/client-info.ts
 // ---------------------------------------------------------------------------
 
-pub const GATEWAY_CLIENT_MODES: &[&str] =
-    &["cli", "ui", "backend", "node", "probe", "test"];
+pub const GATEWAY_CLIENT_MODES: &[&str] = &["cli", "ui", "backend", "node", "probe", "test"];
 
 // ---------------------------------------------------------------------------
 // Input provenance kinds — src/sessions/input-provenance.ts

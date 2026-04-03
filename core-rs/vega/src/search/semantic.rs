@@ -1,6 +1,6 @@
 //! Semantic search for Vega.
 //!
-//! Provides vector-based search using pre-computed embeddings (e.g. from SGLang
+//! Provides vector-based search using pre-computed embeddings (e.g. from `SGLang`
 //! or Gemini API). Uses SIMD-accelerated cosine similarity and rayon parallelism.
 
 use rusqlite::Connection;
@@ -29,7 +29,7 @@ impl Default for SemanticConfig {
 }
 
 /// Semantic search with a pre-computed query vector.
-/// Used when embeddings are generated externally (e.g. via SGLang HTTP API).
+/// Used when embeddings are generated externally (e.g. via `SGLang` HTTP API).
 /// Reuses the same SIMD-accelerated cosine similarity and rayon parallelism.
 pub fn semantic_search_with_vec(
     conn: &Connection,

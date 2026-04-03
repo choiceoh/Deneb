@@ -3,7 +3,7 @@
 //! This module contains only the generic, command-agnostic AI utilities.
 //! Per-command depth filtering, hints, bundle generation, and summary
 //! strings have been moved to each command's `CommandHandler` trait impl
-//! (compact_result, ai_hints, build_bundle, summary) so each command owns
+//! (`compact_result`, `ai_hints`, `build_bundle`, summary) so each command owns
 //! its own presentation logic.
 
 use regex::Regex;
@@ -57,8 +57,8 @@ pub fn smart_route(query: &str) -> (&'static str, f64) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// Try to auto-correct a failed command by re-routing.
-/// Port of Python _try_auto_correct with 5 correction patterns.
-/// Returns Some((corrected_command, modified_query)) if correction possible.
+/// Port of Python _`try_auto_correct` with 5 correction patterns.
+/// Returns `Some((corrected_command`, `modified_query`)) if correction possible.
 pub fn try_auto_correct(
     command: &str,
     query: &str,
@@ -86,11 +86,11 @@ pub fn try_auto_correct(
         let proj_count = data
             .get("result_count")
             .and_then(|rc| rc.get("projects"))
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(-1);
         if proj_count == 0 {
             if let Some(ab) = data.get("_auto_brief") {
-                if let Some(pid) = ab.get("project_id").and_then(|v| v.as_i64()) {
+                if let Some(pid) = ab.get("project_id").and_then(serde_json::Value::as_i64) {
                     return Some(("brief", pid.to_string()));
                 }
             }
@@ -98,7 +98,7 @@ pub fn try_auto_correct(
             if let Some(suggestions) = data.get("suggestions").and_then(|v| v.as_array()) {
                 for s in suggestions {
                     if s.get("kind").and_then(|v| v.as_str()) == Some("project") {
-                        if let Some(pid) = s.get("project_id").and_then(|v| v.as_i64()) {
+                        if let Some(pid) = s.get("project_id").and_then(serde_json::Value::as_i64) {
                             return Some(("brief", pid.to_string()));
                         }
                     }
@@ -124,7 +124,7 @@ pub fn try_auto_correct(
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// Apply output format transformation.
-/// Port of Python _apply_format: summary, detail, markdown, ids.
+/// Port of Python _`apply_format`: summary, detail, markdown, ids.
 pub fn apply_format(data: &Value, _command: &str, fmt: &str) -> Value {
     match fmt {
         "ids" => {
@@ -151,7 +151,7 @@ pub fn apply_format(data: &Value, _command: &str, fmt: &str) -> Value {
                     lines.push(format!(
                         "| {} | {} | {} | {} |",
                         p.get("id")
-                            .and_then(|v| v.as_i64())
+                            .and_then(serde_json::Value::as_i64)
                             .map(|v| v.to_string())
                             .unwrap_or_default(),
                         p.get("name").and_then(|v| v.as_str()).unwrap_or(""),
@@ -177,7 +177,7 @@ pub fn apply_format(data: &Value, _command: &str, fmt: &str) -> Value {
                     .map(|p| {
                         format!(
                             "[{}] {} — {}",
-                            p.get("id").and_then(|v| v.as_i64()).unwrap_or(0),
+                            p.get("id").and_then(serde_json::Value::as_i64).unwrap_or(0),
                             p.get("name").and_then(|v| v.as_str()).unwrap_or(""),
                             p.get("status").and_then(|v| v.as_str()).unwrap_or(""),
                         )

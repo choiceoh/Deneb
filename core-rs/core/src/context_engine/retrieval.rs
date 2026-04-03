@@ -10,7 +10,7 @@
 //!
 //! ## State Machine Diagrams
 //!
-//! ### GrepEngine (2 steps, trivial)
+//! ### `GrepEngine` (2 steps, trivial)
 //!
 //! ```text
 //!  start() → Grep{query, mode, scope, ...}
@@ -18,7 +18,7 @@
 //!  [Start] ──► host executes Grep ──► step(GrepResults) ──► GrepDone
 //! ```
 //!
-//! ### DescribeEngine (2 steps, trivial)
+//! ### `DescribeEngine` (2 steps, trivial)
 //!
 //! ```text
 //!  start() → FetchLineage{summary_id}
@@ -26,7 +26,7 @@
 //!  [Start] ──► host fetches lineage ──► step(Lineage) ──► DescribeDone
 //! ```
 //!
-//! ### ExpandEngine (multi-step DAG traversal)
+//! ### `ExpandEngine` (multi-step DAG traversal)
 //!
 //! ```text
 //!  start() → FetchSummary{root_summary_id}
@@ -501,7 +501,7 @@ impl ExpandEngine {
     /// Advance the state machine.
     pub fn step(&mut self, response: RetrievalResponse) -> RetrievalCommand {
         match self.phase.clone() {
-            ExpandPhase::FetchRoot => self.handle_fetch_root(response),
+            ExpandPhase::FetchRoot => self.handle_fetch_root(&response),
             ExpandPhase::FetchingChildren => self.handle_fetching_children(response),
             ExpandPhase::ExpandingChild { child_index } => {
                 self.handle_expanding_child(response, child_index)
@@ -517,8 +517,8 @@ impl ExpandEngine {
 
     // ── Phase handlers ───────────────────────────────────────────────────────
 
-    fn handle_fetch_root(&mut self, response: RetrievalResponse) -> RetrievalCommand {
-        if let RetrievalResponse::Summary { kind, .. } = &response {
+    fn handle_fetch_root(&mut self, response: &RetrievalResponse) -> RetrievalCommand {
+        if let RetrievalResponse::Summary { kind, .. } = response {
             if kind == "condensed" && self.max_depth > 0 {
                 // Fetch children for recursive expansion
                 self.phase = ExpandPhase::FetchingChildren;

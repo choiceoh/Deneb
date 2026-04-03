@@ -9,7 +9,7 @@ package deneb.provider;
 
 option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
-// ProviderMeta describes a registered model provider.
+// `ProviderMeta` describes a registered model provider.
 message ProviderMeta {
   string id = 1;
   string label = 2;
@@ -18,16 +18,16 @@ message ProviderMeta {
   repeated string env_vars = 5;
 }
 
-// ProviderAuthMethod describes one authentication method for a provider.
+// `ProviderAuthMethod` describes one authentication method for a provider.
 message ProviderAuthMethod {
   string id = 1;
   string label = 2;
-  // Auth kind: "oauth", "api_key", "token", "device_code", "custom".
+  // Auth kind: "oauth", "`api_key`", "token", "`device_code`", "custom".
   string kind = 3;
   optional string hint = 4;
 }
 
-// ProviderCatalogEntry represents a single model in the provider catalog.
+// `ProviderCatalogEntry` represents a single model in the provider catalog.
 message ProviderCatalogEntry {
   string provider = 1;
   string model_id = 2;
@@ -37,7 +37,7 @@ message ProviderCatalogEntry {
   optional string api_type = 6;
 }
 
-// ProviderCatalogSnapshot is a point-in-time view of all discovered models.
+// `ProviderCatalogSnapshot` is a point-in-time view of all discovered models.
 message ProviderCatalogSnapshot {
   repeated ProviderMeta providers = 1;
   repeated ProviderCatalogEntry entries = 2;

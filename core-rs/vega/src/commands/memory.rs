@@ -9,11 +9,13 @@ use super::{open_db, CommandResult};
 /// FTS5 full-text search across chunks.
 /// Args: query (string), limit (int, default 20), project (optional string)
 pub fn cmd_memory_search(args: &Value, config: &VegaConfig) -> CommandResult {
-    let query = match args.get("query").and_then(|v| v.as_str()) {
-        Some(q) => q,
-        None => return CommandResult::err("memory-search", "query 파라미터가 필요합니다"),
+    let Some(query) = args.get("query").and_then(|v| v.as_str()) else {
+        return CommandResult::err("memory-search", "query 파라미터가 필요합니다");
     };
-    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20);
+    let limit = args
+        .get("limit")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(20);
     let project_filter = args.get("project").and_then(|v| v.as_str());
 
     let conn = match open_db(config) {
@@ -122,14 +124,17 @@ fn sanitize_fts_query(query: &str) -> String {
 // These are now handled by the Go gateway via SGLang HTTP API.
 
 /// Index .md files into DB with content hash tracking.
-/// Scans md_dir, computes SHA-256 hash per file, upserts chunks.
+/// Scans `md_dir`, computes SHA-256 hash per file, upserts chunks.
 pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
     let conn = match open_db(config) {
         Ok(c) => c,
         Err(e) => return CommandResult::err("memory-update", &e),
     };
 
-    let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+    let force = args
+        .get("force")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
     let md_dir = &config.md_dir;
 
     if !md_dir.exists() {
@@ -150,7 +155,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
     let mut errors: Vec<String> = Vec::new();
 
     let entries: Vec<_> = match fs::read_dir(md_dir) {
-        Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
+        Ok(rd) => rd.filter_map(std::result::Result::ok).collect(),
         Err(e) => return CommandResult::err("memory-update", &format!("디렉토리 읽기 실패: {e}")),
     };
 
@@ -250,7 +255,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
     )
 }
 
-/// Parse markdown into (section_name, content) pairs.
+/// Parse markdown into (`section_name`, content) pairs.
 fn parse_md_sections(content: &str) -> Vec<(String, String)> {
     let mut sections = Vec::new();
     let mut current_section = String::from("_header");
@@ -289,7 +294,7 @@ fn compute_content_hash(content: &str) -> String {
 }
 
 /// Generate embeddings for chunks.
-/// In sglang mode, embedding is handled by the Go gateway via SGLang HTTP API.
+/// In sglang mode, embedding is handled by the Go gateway via `SGLang` HTTP API.
 pub fn cmd_memory_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
     if config.has_sglang() {
         return CommandResult::ok(
@@ -369,6 +374,66 @@ pub fn cmd_memory_version(_args: &Value, _config: &VegaConfig) -> CommandResult 
             },
         }),
     )
+}
+
+pub struct MemorySearchHandler;
+
+impl super::CommandHandler for MemorySearchHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_memory_search(args, config)
+    }
+}
+
+pub struct MemoryUpdateHandler;
+
+impl super::CommandHandler for MemoryUpdateHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_memory_update(args, config)
+    }
+}
+
+pub struct MemoryEmbedHandler;
+
+impl super::CommandHandler for MemoryEmbedHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_memory_embed(args, config)
+    }
+}
+
+pub struct MemoryStatusHandler;
+
+impl super::CommandHandler for MemoryStatusHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_memory_status(args, config)
+    }
+}
+
+pub struct MemoryVersionHandler;
+
+impl super::CommandHandler for MemoryVersionHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_memory_version(args, config)
+    }
 }
 
 #[cfg(test)]
@@ -463,65 +528,5 @@ mod tests {
         let hash = compute_content_hash("test");
         assert_eq!(hash.len(), 16); // 16 hex chars = 64-bit hash
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-}
-
-pub struct MemorySearchHandler;
-
-impl super::CommandHandler for MemorySearchHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_memory_search(args, config)
-    }
-}
-
-pub struct MemoryUpdateHandler;
-
-impl super::CommandHandler for MemoryUpdateHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_memory_update(args, config)
-    }
-}
-
-pub struct MemoryEmbedHandler;
-
-impl super::CommandHandler for MemoryEmbedHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_memory_embed(args, config)
-    }
-}
-
-pub struct MemoryStatusHandler;
-
-impl super::CommandHandler for MemoryStatusHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_memory_status(args, config)
-    }
-}
-
-pub struct MemoryVersionHandler;
-
-impl super::CommandHandler for MemoryVersionHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_memory_version(args, config)
     }
 }

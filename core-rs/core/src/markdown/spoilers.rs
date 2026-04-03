@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn handle_spoiler_applies_style() {
         let mut state = make_state();
-        let input = format!("{}secret{}", SPOILER_OPEN, SPOILER_CLOSE);
+        let input = format!("{SPOILER_OPEN}secret{SPOILER_CLOSE}");
         handle_spoiler_text(&mut state, &input);
         assert_eq!(state.text, "secret");
         assert_eq!(state.styles.len(), 1);
@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn handle_spoiler_mixed_content() {
         let mut state = make_state();
-        let input = format!("hello {}world{} bye", SPOILER_OPEN, SPOILER_CLOSE);
+        let input = format!("hello {SPOILER_OPEN}world{SPOILER_CLOSE} bye");
         handle_spoiler_text(&mut state, &input);
         assert!(state.text.contains("hello"));
         assert!(state.text.contains("world"));

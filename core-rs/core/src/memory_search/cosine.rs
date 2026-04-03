@@ -25,7 +25,7 @@ pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     }
 }
 
-/// Final cosine computation: dot / √(norm_a × norm_b).
+/// Final cosine computation: dot / √(`norm_a` × `norm_b`).
 /// Returns 0.0 for zero-norm vectors to avoid division by zero.
 ///
 /// Uses `√(norm_a × norm_b)` instead of `√norm_a × √norm_b` — one fewer sqrt call.
@@ -186,7 +186,7 @@ mod tests {
                 b in prop::collection::vec(-1e6_f64..1e6_f64, 0..128),
             ) {
                 let sim = cosine_similarity(&a, &b);
-                prop_assert!(sim >= -1.0 && sim <= 1.0,
+                prop_assert!((-1.0..=1.0).contains(&sim),
                     "result {} out of [-1, 1]", sim);
             }
 

@@ -14,9 +14,9 @@ pub mod handle;
 pub mod sweep;
 pub mod timestamp;
 
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use rustc_hash::FxHashMap;
 use thiserror::Error;
 
 /// Errors that can occur during compaction operations.
@@ -418,9 +418,8 @@ pub fn select_leaf_chunk(
             break;
         }
 
-        let msg_id = match item.message_id {
-            Some(id) => id,
-            None => continue,
+        let Some(msg_id) = item.message_id else {
+            continue;
         };
 
         let msg_tokens = messages.get(&msg_id).map_or(0, resolve_message_token_count);
@@ -490,24 +489,18 @@ pub fn select_condensed_chunk(
             continue;
         }
 
-        let summary_id = match &item.summary_id {
-            Some(id) => id,
-            None => {
-                if !ordinals.is_empty() {
-                    break;
-                }
-                continue;
+        let Some(summary_id) = &item.summary_id else {
+            if !ordinals.is_empty() {
+                break;
             }
+            continue;
         };
 
-        let summary = match summaries.get(summary_id) {
-            Some(s) => s,
-            None => {
-                if !ordinals.is_empty() {
-                    break;
-                }
-                continue;
+        let Some(summary) = summaries.get(summary_id) else {
+            if !ordinals.is_empty() {
+                break;
             }
+            continue;
         };
 
         if summary.depth != target_depth {
@@ -904,16 +897,16 @@ mod tests {
                 ordinal: i,
                 item_type: ContextItemType::Summary,
                 message_id: None,
-                summary_id: Some(format!("sum_{}", i)),
+                summary_id: Some(format!("sum_{i}")),
                 created_at: 1000 + i as i64,
             })
             .collect();
         let mut summaries = FxHashMap::default();
         for i in 0..4u64 {
             summaries.insert(
-                format!("sum_{}", i),
+                format!("sum_{i}"),
                 SummaryRecord {
-                    summary_id: format!("sum_{}", i),
+                    summary_id: format!("sum_{i}"),
                     conversation_id: 1,
                     kind: SummaryKind::Leaf,
                     depth: 0,
@@ -961,7 +954,7 @@ mod tests {
 
     #[test]
     fn test_compute_descendant_counts() {
-        let summaries = vec![
+        let summaries = [
             SummaryRecord {
                 summary_id: "a".into(),
                 conversation_id: 1,
@@ -1029,6 +1022,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn test_build_leaf_source_text_multi_role() {
         let messages = vec![
             MessageRecord {

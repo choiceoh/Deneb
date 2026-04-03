@@ -21,8 +21,8 @@ impl super::CommandHandler for ShowHandler {
             "status": data.get("status").or(data.get("project").and_then(|p| p.get("status"))),
             "client": data.get("client").or(data.get("project").and_then(|p| p.get("client"))),
             "person_internal": data.get("person_internal").or(data.get("project").and_then(|p| p.get("person_internal"))),
-            "section_count": data.get("sections").and_then(|v| v.as_array()).map(|a| a.len()),
-            "comm_count": data.get("communications").and_then(|v| v.as_array()).map(|a| a.len()),
+            "section_count": data.get("sections").and_then(|v| v.as_array()).map(std::vec::Vec::len),
+            "comm_count": data.get("communications").and_then(|v| v.as_array()).map(std::vec::Vec::len),
         })
     }
 
@@ -30,7 +30,7 @@ impl super::CommandHandler for ShowHandler {
         let pid = data
             .get("id")
             .or(data.get("project").and_then(|p| p.get("id")))
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
         if pid > 0 {
             vec![json!({"situation": "show_detail",
@@ -41,9 +41,8 @@ impl super::CommandHandler for ShowHandler {
     }
 
     fn build_bundle(&self, data: &Value, conn: Option<&Connection>) -> Value {
-        let conn = match conn {
-            Some(c) => c,
-            None => return json!({}),
+        let Some(conn) = conn else {
+            return json!({});
         };
         let mut bundle = json!({});
         let client = data
@@ -55,8 +54,8 @@ impl super::CommandHandler for ShowHandler {
         let show_pid = data
             .get("project")
             .and_then(|p| p.get("id"))
-            .and_then(|v| v.as_i64())
-            .or_else(|| data.get("id").and_then(|v| v.as_i64()));
+            .and_then(serde_json::Value::as_i64)
+            .or_else(|| data.get("id").and_then(serde_json::Value::as_i64));
         if !client.is_empty() {
             if let (Some(pid), Some(first_word)) = (show_pid, client.split_whitespace().next()) {
                 if let Ok(mut stmt) = conn.prepare(
@@ -83,7 +82,7 @@ impl super::CommandHandler for ShowHandler {
             .and_then(|p| p.get("name"))
             .and_then(|v| v.as_str())
             .unwrap_or("?");
-        format!("프로젝트 상세: {}", name)
+        format!("프로젝트 상세: {name}")
     }
 }
 
@@ -97,7 +96,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
     let project_id = args
         .get("id")
         .or_else(|| args.get("project_id"))
-        .and_then(|v| v.as_i64());
+        .and_then(serde_json::Value::as_i64);
 
     let project_id = match project_id {
         Some(id) => id,
@@ -108,7 +107,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
             }
             match ctx.find_project(query) {
                 Some(id) => id,
-                None => return CommandResult::err("show", &format!("프로젝트 '{}' 없음", query)),
+                None => return CommandResult::err("show", &format!("프로젝트 '{query}' 없음")),
             }
         }
     };
@@ -132,9 +131,8 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
         },
     );
 
-    let proj = match proj {
-        Ok(p) => p,
-        Err(_) => return CommandResult::err("show", &format!("프로젝트 ID {} 없음", project_id)),
+    let Ok(proj) = proj else {
+        return CommandResult::err("show", &format!("프로젝트 ID {project_id} 없음"));
     };
 
     // Chunks
@@ -152,7 +150,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
             "date": r.get::<_, Option<String>>(3)?,
         }))
     }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows.filter_map(std::result::Result::ok).collect(),
         Err(e) => return CommandResult::err("show", &format!("청크 쿼리 실행 실패: {e}")),
     };
 
@@ -167,7 +165,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
         Err(e) => return CommandResult::err("show", &format!("태그 쿼리 준비 실패: {e}")),
     };
     let tags: Vec<String> = match stmt.query_map(params![project_id], |r| r.get(0)) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows.filter_map(std::result::Result::ok).collect(),
         Err(e) => return CommandResult::err("show", &format!("태그 쿼리 실행 실패: {e}")),
     };
 
@@ -186,7 +184,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
             "summary": r.get::<_, Option<String>>(3)?,
         }))
     }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows.filter_map(std::result::Result::ok).collect(),
         Err(e) => return CommandResult::err("show", &format!("통신 쿼리 실행 실패: {e}")),
     };
 

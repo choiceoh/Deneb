@@ -3,10 +3,6 @@
 //! Ports `crc32`, `pngChunk`, `fillPixel`, and `encodePngRgba` from
 //! `src/media/png-encode.ts`.
 
-/// Minimal PNG encoder for generating simple RGBA images.
-///
-/// Ports `crc32`, `pngChunk`, `fillPixel`, and `encodePngRgba` from
-/// `src/media/png-encode.ts`.
 // ---------------------------------------------------------------------------
 // CRC32 table (precomputed at compile time)
 // ---------------------------------------------------------------------------
@@ -89,16 +85,14 @@ pub fn fill_pixel_impl(buf: &mut [u8], x: i32, y: i32, width: i32, rgba: [u8; 4]
 /// Returns an empty Vec if dimensions would cause integer overflow.
 pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
     // Use checked arithmetic to prevent overflow on large dimensions.
-    let stride = match (width as usize).checked_mul(4) {
-        Some(s) => s,
-        None => return Vec::new(),
+    let Some(stride) = (width as usize).checked_mul(4) else {
+        return Vec::new();
     };
-    let raw_len = match stride
+    let Some(raw_len) = stride
         .checked_add(1)
         .and_then(|s| s.checked_mul(height as usize))
-    {
-        Some(l) => l,
-        None => return Vec::new(),
+    else {
+        return Vec::new();
     };
     let mut raw = vec![0u8; raw_len];
 
@@ -114,8 +108,7 @@ pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
     }
 
     // PNG IDAT uses zlib (deflate with zlib header)
-    let compressed =
-        miniz_oxide::deflate::compress_to_vec_zlib(&raw, 6);
+    let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&raw, 6);
 
     // Build PNG
     let signature: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];

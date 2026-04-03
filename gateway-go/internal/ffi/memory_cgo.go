@@ -20,6 +20,7 @@ extern int deneb_memory_extract_keywords(
 */
 import "C"
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"unsafe"
@@ -76,10 +77,9 @@ func MemoryBuildFtsQuery(raw string) (string, error) {
 // avoid large buffer allocations before the FFI call.
 const maxMergeParamsSize = 2 * 1024 * 1024 // 2 MB
 
-// MemoryMergeHybridResults merges vector and FTS search results using the Rust
-// hybrid merge pipeline. Takes JSON-encoded MergeParams, returns JSON results.
-// The output buffer grows automatically if the Rust side signals it is too small.
-func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
+// MemoryMergeHybridResultsCtx merges vector and FTS search results using the
+// Rust hybrid merge pipeline, respecting context cancellation.
+func MemoryMergeHybridResultsCtx(ctx context.Context, paramsJSON string) (json.RawMessage, error) {
 	if len(paramsJSON) == 0 {
 		return nil, fmt.Errorf("ffi: memory_merge: empty params")
 	}
@@ -93,7 +93,7 @@ func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
 	initialSize := initialBufSize(len(paramsJSON), 4, 16384)
 
 	paramsPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(paramsJSON)))
-	data, err := ffiCallWithGrow("memory_merge_hybrid_results", initialSize,
+	data, err := ffiCallWithGrowCtx(ctx, "memory_merge_hybrid_results", initialSize,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_memory_merge_hybrid_results(
 				paramsPtr, C.ulong(len(paramsJSON)),
@@ -104,6 +104,12 @@ func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
 		return nil, err
 	}
 	return json.RawMessage(data), nil
+}
+
+// MemoryMergeHybridResults merges vector and FTS search results using the Rust
+// hybrid merge pipeline. Takes JSON-encoded MergeParams, returns JSON results.
+func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
+	return MemoryMergeHybridResultsCtx(context.Background(), paramsJSON)
 }
 
 // MemoryExtractKeywords extracts searchable keywords from a query string

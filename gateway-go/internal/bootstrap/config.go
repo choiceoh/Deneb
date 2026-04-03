@@ -19,6 +19,7 @@ type Flags struct {
 	PIDFile    string
 	DaemonMode bool
 	LogLevel   string
+	LogFormat  string
 }
 
 // ParseFlags parses CLI flags from os.Args and resolves the version string.
@@ -30,6 +31,7 @@ func ParseFlags(compiledVersion string) Flags {
 	pidFile := flag.String("pid-file", "", "Path to PID file for daemon mode")
 	daemonMode := flag.Bool("daemon", false, "Run as daemon (write PID file, check for existing)")
 	logLevel := flag.String("log-level", "", "Log level: debug, info, warn, error (overrides config)")
+	logFormat := flag.String("log-format", "", "Log format: text, json (overrides config)")
 	flag.Parse()
 
 	v := *version
@@ -45,6 +47,7 @@ func ParseFlags(compiledVersion string) Flags {
 		PIDFile:    *pidFile,
 		DaemonMode: *daemonMode,
 		LogLevel:   *logLevel,
+		LogFormat:  *logFormat,
 	}
 }
 

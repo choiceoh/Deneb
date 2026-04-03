@@ -31,7 +31,10 @@ pub fn cmd_changelog(args: &Value, config: &VegaConfig) -> CommandResult {
     let changes = diff_snapshots(&prev, &current_snapshot);
 
     // Optionally save the new snapshot (default: true)
-    let save = args.get("save").and_then(|v| v.as_bool()).unwrap_or(true);
+    let save = args
+        .get("save")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
 
     if save {
         if let Err(e) = save_snapshot(&snapshot_path, &current_snapshot) {
@@ -75,17 +78,14 @@ fn snapshot_path(config: &VegaConfig) -> PathBuf {
 
 /// Load a previous snapshot from disk. Returns empty map if missing/corrupt.
 fn load_snapshot(path: &PathBuf) -> FxHashMap<i64, Value> {
-    let data = match fs::read_to_string(path) {
-        Ok(d) => d,
-        Err(_) => return FxHashMap::default(),
+    let Ok(data) = fs::read_to_string(path) else {
+        return FxHashMap::default();
     };
-    let val: Value = match serde_json::from_str(&data) {
-        Ok(v) => v,
-        Err(_) => return FxHashMap::default(),
+    let Ok(val) = serde_json::from_str::<Value>(&data) else {
+        return FxHashMap::default();
     };
-    let obj = match val.as_object() {
-        Some(o) => o,
-        None => return FxHashMap::default(),
+    let Some(obj) = val.as_object() else {
+        return FxHashMap::default();
     };
 
     let mut map = FxHashMap::default();
@@ -109,7 +109,7 @@ fn build_snapshot(conn: &Connection) -> Result<FxHashMap<i64, Value>, String> {
     let projects: Vec<(i64, String, Option<String>)> = stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
         .map_err(|e| format!("프로젝트 조회 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     for (pid, name, status) in &projects {
@@ -200,8 +200,14 @@ fn diff_snapshots(prev: &FxHashMap<i64, Value>, current: &FxHashMap<i64, Value>)
                 }
 
                 // New comms
-                let old_count = old.get("comm_count").and_then(|v| v.as_i64()).unwrap_or(0);
-                let new_count = cur.get("comm_count").and_then(|v| v.as_i64()).unwrap_or(0);
+                let old_count = old
+                    .get("comm_count")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0);
+                let new_count = cur
+                    .get("comm_count")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0);
                 if new_count > old_count {
                     new_comms.push(json!({
                         "id": id,
@@ -262,6 +268,18 @@ fn diff_snapshots(prev: &FxHashMap<i64, Value>, current: &FxHashMap<i64, Value>)
         "modified_chunks": modified_chunks,
         "new_chunks": new_chunks,
     })
+}
+
+pub struct ChangelogHandler;
+
+impl super::CommandHandler for ChangelogHandler {
+    fn execute(
+        &self,
+        config: &crate::config::VegaConfig,
+        args: &serde_json::Value,
+    ) -> super::CommandResult {
+        cmd_changelog(args, config)
+    }
 }
 
 #[cfg(test)]
@@ -446,17 +464,5 @@ mod tests {
                 .len(),
             0
         );
-    }
-}
-
-pub struct ChangelogHandler;
-
-impl super::CommandHandler for ChangelogHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_changelog(args, config)
     }
 }

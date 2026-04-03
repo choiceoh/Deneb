@@ -83,10 +83,10 @@ fn find_person_projects(
         ORDER BY p.name
     "#;
 
-    let pattern = format!("%{}%", name);
+    let pattern = format!("%{name}%");
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map(params![chunk_type, pattern], |row| {
             let id: i64 = row.get(0)?;
@@ -95,7 +95,7 @@ fn find_person_projects(
             let content: String = row.get(3)?;
             Ok((id, proj_name, status, content))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut items = Vec::new();
     for (id, proj_name, status, content) in rows.flatten() {
@@ -122,10 +122,10 @@ fn find_person_comm_logs(conn: &Connection, name: &str) -> Result<Vec<Value>, St
         LIMIT 50
     "#;
 
-    let pattern = format!("%{}%", name);
+    let pattern = format!("%{name}%");
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map(params![pattern], |row| {
             let id: i64 = row.get(0)?;
@@ -145,7 +145,7 @@ fn find_person_comm_logs(conn: &Connection, name: &str) -> Result<Vec<Value>, St
                 summary,
             ))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut items = Vec::new();
     for (id, project_id, proj_name, comm_date, counterpart, method, summary) in rows.flatten() {
@@ -162,7 +162,7 @@ fn find_person_comm_logs(conn: &Connection, name: &str) -> Result<Vec<Value>, St
     Ok(items)
 }
 
-/// Find action items (next_action chunks) mentioning a person.
+/// Find action items (`next_action` chunks) mentioning a person.
 fn find_person_actions(conn: &Connection, name: &str) -> Result<Vec<Value>, String> {
     let sql = r#"
         SELECT c.project_id, p.name, c.content
@@ -173,10 +173,10 @@ fn find_person_actions(conn: &Connection, name: &str) -> Result<Vec<Value>, Stri
         ORDER BY p.name
     "#;
 
-    let pattern = format!("%{}%", name);
+    let pattern = format!("%{name}%");
     let mut stmt = conn
         .prepare(sql)
-        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 준비 실패: {e}"))?;
     let rows = stmt
         .query_map(params![pattern], |row| {
             let project_id: i64 = row.get(0)?;
@@ -184,7 +184,7 @@ fn find_person_actions(conn: &Connection, name: &str) -> Result<Vec<Value>, Stri
             let content: String = row.get(2)?;
             Ok((project_id, proj_name, content))
         })
-        .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
+        .map_err(|e| format!("쿼리 실행 실패: {e}"))?;
 
     let mut items = Vec::new();
     for (project_id, proj_name, content) in rows.flatten() {
@@ -222,7 +222,7 @@ impl super::CommandHandler for PersonHandler {
     fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
         let count = data
             .get("project_count")
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
         if count >= 5 {
             vec![json!({"situation": "overloaded",
@@ -237,9 +237,8 @@ impl super::CommandHandler for PersonHandler {
         data: &serde_json::Value,
         conn: Option<&rusqlite::Connection>,
     ) -> serde_json::Value {
-        let conn = match conn {
-            Some(c) => c,
-            None => return json!({}),
+        let Some(conn) = conn else {
+            return json!({});
         };
         let mut bundle = json!({});
         if let Ok(mut stmt) = conn.prepare(
@@ -263,8 +262,8 @@ impl super::CommandHandler for PersonHandler {
         let name = data.get("person").and_then(|v| v.as_str()).unwrap_or("?");
         let count = data
             .get("project_count")
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
-        format!("{}: 프로젝트 {}개", name, count)
+        format!("{name}: 프로젝트 {count}개")
     }
 }

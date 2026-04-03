@@ -348,7 +348,7 @@ func executeAgentRun(
 				FreshTailCount: deps.contextCfg.FreshTailCount,
 				MaxMessages:    deps.contextCfg.MaxMessages,
 			}
-			asmResult, err := aurora.Assemble(deps.auroraStore, 1, asmCfg, logger)
+			asmResult, err := aurora.Assemble(ctx, deps.auroraStore, 1, asmCfg, logger)
 			if err != nil {
 				logger.Warn("aurora context assembly failed, falling back to transcript", "error", err)
 			} else if len(asmResult.Messages) > 0 {

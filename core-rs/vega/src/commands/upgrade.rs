@@ -27,11 +27,11 @@ pub(super) fn cmd_upgrade(_args: &Value, config: &VegaConfig) -> CommandResult {
         .unwrap_or(0);
 
     if let Err(e) = init_db(&conn) {
-        return CommandResult::err("upgrade", &format!("스키마 업그레이드 실패: {}", e));
+        return CommandResult::err("upgrade", &format!("스키마 업그레이드 실패: {e}"));
     }
 
     if let Err(e) = crate::db::schema::rebuild_fts(&conn) {
-        return CommandResult::err("upgrade", &format!("FTS 리빌드 실패: {}", e));
+        return CommandResult::err("upgrade", &format!("FTS 리빌드 실패: {e}"));
     }
 
     let ver_after: u32 = conn

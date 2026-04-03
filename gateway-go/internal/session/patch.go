@@ -92,6 +92,9 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 // Patch applies a PatchFields to the session identified by key.
 // Creates the session if it doesn't exist. Returns a snapshot copy.
 func (m *Manager) Patch(key string, patch PatchFields) *Session {
+	m.emitMu.Lock()
+	defer m.emitMu.Unlock()
+
 	m.mu.Lock()
 	s := m.sessions[key]
 	if s == nil {
@@ -111,6 +114,9 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 // ResetSession resets a session's runtime state to initial values.
 // Returns a snapshot copy of the reset session, or nil if not found.
 func (m *Manager) ResetSession(key string) *Session {
+	m.emitMu.Lock()
+	defer m.emitMu.Unlock()
+
 	m.mu.Lock()
 	s := m.sessions[key]
 	if s == nil {

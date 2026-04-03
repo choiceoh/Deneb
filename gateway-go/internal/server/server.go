@@ -104,14 +104,21 @@ type Server struct {
 	// Resolved once at startup from environment variables; never mutated.
 	githubWebhookCfg *GitHubWebhookConfig
 
+	// bgWg tracks background goroutines launched via safeGo so that
+	// shutdown can wait for them to finish before exiting.
+	bgWg sync.WaitGroup
+
 	// OnListening is called after the TCP listener is bound successfully.
 	// Use this to print the startup banner or signal readiness to external callers.
 	OnListening func(addr net.Addr)
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
+// The goroutine is tracked by bgWg so shutdown can wait for completion.
 func (s *Server) safeGo(name string, fn func()) {
+	s.bgWg.Add(1)
 	go func() {
+		defer s.bgWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				s.logger.Error("panic in background goroutine", "goroutine", name, "panic", r)
