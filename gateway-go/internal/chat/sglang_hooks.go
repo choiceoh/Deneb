@@ -378,7 +378,7 @@ func appendToMemoryFile(workspaceDir, content string, logger *slog.Logger) {
 // Called by ProgressTracker every N tool completions to generate a short Korean
 // status line from accumulated thinking text.
 
-const activitySummarySystemPrompt = `에이전트의 최근 생각 과정을 보고 지금 무엇을 하고 있는지 한국어 한 줄(30자 이내)로 요약하세요.
+const activitySummarySystemPrompt = `에이전트의 최근 도구 사용 내역을 보고 지금 무엇을 하고 있는지 한국어 한 줄(30자 이내)로 요약하세요.
 
 규칙:
 - "~하는 중" 형태로 끝내기 (예: "테스트 지연 원인 파악하는 중", "수정 결과 검증하는 중")
@@ -387,22 +387,23 @@ const activitySummarySystemPrompt = `에이전트의 최근 생각 과정을 보
 - 나쁜 예: "코드 검색", "파일 읽는 중" / 좋은 예: "캐시 구조 이해하는 중", "빌드 오류 원인 추적 중"`
 
 // SummarizeToolActivity uses the local sglang model to summarize recent agent
-// thinking into a short Korean phrase for the progress tracker status line.
-// Returns empty string on failure (caller should treat as a no-op).
-func SummarizeToolActivity(ctx context.Context, reasons []string) (string, error) {
+// tool activity into a short Korean phrase for the progress tracker status line.
+// The input is a slice of tool activity descriptions (e.g., "read: progress.go",
+// "grep: OnToolStart in gateway-go/"). Returns empty string on failure.
+func SummarizeToolActivity(ctx context.Context, activities []string) (string, error) {
 	if !pilot.CheckSglangHealth() {
 		return "", fmt.Errorf("sglang unavailable")
 	}
 
-	// Build user message from recent thinking snippets.
+	// Build user message from recent tool activity descriptions.
 	var b strings.Builder
-	b.WriteString("최근 에이전트 생각 과정:\n\n")
-	limit := len(reasons)
+	b.WriteString("최근 에이전트 도구 사용 내역:\n\n")
+	limit := len(activities)
 	if limit > 5 {
-		reasons = reasons[limit-5:]
+		activities = activities[limit-5:]
 	}
-	for i, r := range reasons {
-		snippet := pilot.TruncateInput(r, 300)
+	for i, a := range activities {
+		snippet := pilot.TruncateInput(a, 200)
 		fmt.Fprintf(&b, "%d. %s\n", i+1, snippet)
 	}
 

@@ -72,6 +72,7 @@ type ToolProgressEvent struct {
 	Type    string // "start", "complete"
 	Name    string // tool name
 	Reason  string // raw thinking block text for summarization (only for "start"; may be empty)
+	Input   []byte // raw JSON tool arguments (only for "start"; may be nil)
 	IsError bool   // true if tool execution failed (only for "complete")
 	Result  string // truncated error output for display (only for "complete" when IsError; may be empty)
 }

@@ -42,9 +42,6 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		// Session continuity.
 		"shadow.continuity":        handleContinuity(deps),
 		"shadow.continuity.resume": handleResumeSummary(deps),
-		// GitHub activity (Kairos integration).
-		"shadow.github":        handleGitHub(deps),
-		"shadow.github.events": handleGitHubEvents(deps),
 	}
 }
 
@@ -247,38 +244,3 @@ func handleResumeSummary(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-// --- shadow.github ---
-
-func handleGitHub(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		tracker := deps.Shadow.GitHubTracker()
-		if tracker == nil {
-			return rpcutil.RespondOK(req.ID, map[string]any{"available": false})
-		}
-		summary := tracker.GetActivitySummary()
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"available": true,
-			"activity":  summary,
-		})
-	}
-}
-
-// --- shadow.github.events ---
-
-func handleGitHubEvents(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		tracker := deps.Shadow.GitHubTracker()
-		if tracker == nil {
-			return rpcutil.RespondOK(req.ID, map[string]any{"available": false})
-		}
-		events := tracker.GetRecentEvents()
-		if events == nil {
-			events = []shadowsvc.GitHubEventRecord{}
-		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"available": true,
-			"events":    events,
-			"count":     len(events),
-		})
-	}
-}
