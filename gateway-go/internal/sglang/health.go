@@ -59,20 +59,20 @@ func (hc *healthChecker) check() {
 		return
 	}
 
-	// Phase 2: actual inference test. This catches hung servers that still
-	// respond to metadata endpoints.
+	// Phase 2: non-streaming inference test. Catches hung servers that still
+	// respond to metadata endpoints. Uses NoThinking + non-streaming to avoid
+	// thinking-mode timeout issues.
 	ctx, cancel := context.WithTimeout(hc.hub.ctx, healthInferTimeout)
 	defer cancel()
 
-	// Build a minimal request — 1 token input, 4 tokens output.
 	req := llm.ChatRequest{
 		Model:     hc.hub.model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", healthTestPrompt)},
 		MaxTokens: healthTestMaxTokens,
-		Stream:    true,
+		ExtraBody: NoThinking,
 	}
 
-	events, err := hc.hub.client.StreamChat(ctx, req)
+	reply, err := hc.hub.client.Complete(ctx, req)
 	if err != nil {
 		hc.hub.healthy.Store(false)
 		hc.hub.lastHealthCheck.Store(time.Now().Unix())
@@ -80,15 +80,7 @@ func (hc *healthChecker) check() {
 		return
 	}
 
-	// Drain the stream — any content (thinking or text) means the model is alive.
-	got := false
-	for ev := range events {
-		switch ev.Type {
-		case "content_block_start", "content_block_delta":
-			got = true
-		}
-	}
-
+	got := len(reply) > 0
 	hc.hub.healthy.Store(got)
 	hc.hub.lastHealthCheck.Store(time.Now().Unix())
 	if !got {
