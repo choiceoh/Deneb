@@ -3,8 +3,8 @@ package shadow
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,15 +53,9 @@ type Service struct {
 	// Failure tracking for escalation.
 	recentFailures []int64 // timestamps of recent failures
 
-	// Extended modules (initialized in NewService).
-	buildWatcher       *BuildWatcher
-	contextPrefetcher  *ContextPrefetcher
-	memoryConsolidator *MemoryConsolidator
-	sessionContinuity  *SessionContinuity
-	usageAnalytics     *UsageAnalytics
-	errorLearner       *ErrorLearner
-	codeReviewer       *CodeReviewer
-	cronSuggester      *CronSuggester
+	// Active modules (initialized in NewService).
+	sessionContinuity *SessionContinuity
+	errorLearner      *ErrorLearner
 
 	listeners []EventListener
 }
@@ -78,15 +72,8 @@ func NewService(cfg Config) *Service {
 		svcCancel:  svcCancel,
 		sessionKey: "shadow:" + cfg.MainSessionKey,
 	}
-	// Initialize all sub-modules.
-	svc.buildWatcher = newBuildWatcher(svc)
-	svc.contextPrefetcher = newContextPrefetcher(svc)
-	svc.memoryConsolidator = newMemoryConsolidator(svc)
 	svc.sessionContinuity = newSessionContinuity(svc)
-	svc.usageAnalytics = newUsageAnalytics(svc)
 	svc.errorLearner = newErrorLearner(svc)
-	svc.codeReviewer = newCodeReviewer(svc)
-	svc.cronSuggester = newCronSuggester(svc)
 	return svc
 }
 
@@ -115,9 +102,6 @@ func (s *Service) Start() {
 	if s.cfg.Sessions != nil {
 		s.unsubEvents = s.cfg.Sessions.EventBusRef().Subscribe(s.onSessionEvent)
 	}
-
-	// Start periodic digest loop.
-	go s.digestLoop()
 
 	s.cfg.Logger.Info("shadow monitoring started", "session", s.cfg.MainSessionKey)
 }
@@ -203,7 +187,7 @@ func (s *Service) onTranscriptAppend(sessionKey string, msg json.RawMessage) {
 	// Core task detection.
 	s.analyzeMessage(sessionKey, msg)
 
-	// Parse once for all modules.
+	// Parse for active modules.
 	var parsed struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
@@ -212,45 +196,12 @@ func (s *Service) onTranscriptAppend(sessionKey string, msg json.RawMessage) {
 		return
 	}
 
-	// Dispatch to extended modules.
-	s.usageAnalytics.RecordActivity()
-	s.memoryConsolidator.OnMessageForMemory(sessionKey, msg)
 	s.sessionContinuity.OnMessage(msg)
-	s.contextPrefetcher.OnMessageForTopic(parsed.Content)
 	s.errorLearner.OnMessageForErrors(sessionKey, parsed.Content)
-	s.cronSuggester.OnMessageForCron(parsed.Content)
-
-	// Detect code changes for background review.
-	if DetectCodeChange(parsed.Content) {
-		s.codeReviewer.OnCodeChangeDetected(truncate(parsed.Content, 100))
-	}
-
-	// Detect git push for build watching.
-	if branch, detected := detectPush(parsed.Content); detected {
-		s.buildWatcher.OnPushDetected(branch)
-	}
-
-	// Record topic for analytics.
-	if topic := detectTopic(parsed.Content); topic != "" {
-		s.usageAnalytics.RecordTopic(topic)
-	}
 }
 
 // onSessionEvent handles session lifecycle events.
 func (s *Service) onSessionEvent(event session.Event) {
-	// Track all session transitions for analytics (not just main session).
-	if event.NewStatus != "" && event.OldStatus == session.StatusRunning {
-		sess := s.cfg.Sessions.Get(event.Key)
-		if sess != nil && !sess.Kind.IsInternal() {
-			var startedAt, endedAt int64
-			if sess.StartedAt != nil {
-				startedAt = *sess.StartedAt
-			}
-			endedAt = time.Now().UnixMilli()
-			s.usageAnalytics.RecordSessionRun(event.Key, string(event.NewStatus), startedAt, endedAt)
-		}
-	}
-
 	// Track error resolution (failed → running → done).
 	if event.NewStatus == session.StatusDone && event.OldStatus == session.StatusRunning {
 		s.errorLearner.RecordResolution(event.Key, "세션 정상 완료")
@@ -263,81 +214,6 @@ func (s *Service) onSessionEvent(event session.Event) {
 	s.checkHealthIndicators(event)
 }
 
-// digestLoop sends periodic summaries every digestInterval.
-func (s *Service) digestLoop() {
-	ticker := time.NewTicker(digestInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.svcCtx.Done():
-			return
-		case <-ticker.C:
-			s.sendDigest()
-		}
-	}
-}
-
-// sendDigest sends a Telegram notification summarizing pending tasks and alerts.
-func (s *Service) sendDigest() {
-	s.mu.Lock()
-	pending := countPending(s.pendingTasks)
-	alertCount := len(s.healthAlerts)
-	notifier := s.cfg.Notifier
-	s.mu.Unlock()
-
-	if pending == 0 && alertCount == 0 {
-		return // nothing to report
-	}
-	if notifier == nil {
-		return
-	}
-
-	msg := fmt.Sprintf("📋 Shadow 모니터링 요약\n• 대기 중인 작업: %d건\n• 건강 알림: %d건", pending, alertCount)
-
-	// Append top 3 pending tasks.
-	s.mu.Lock()
-	var topTasks []TrackedTask
-	for _, t := range s.pendingTasks {
-		if t.Status == "pending" {
-			topTasks = append(topTasks, t)
-			if len(topTasks) >= 3 {
-				break
-			}
-		}
-	}
-	s.mu.Unlock()
-
-	for i, t := range topTasks {
-		msg += fmt.Sprintf("\n  %d. %s", i+1, truncate(t.Content, 60))
-	}
-
-	// Append analytics summary.
-	analyticsDigest := s.usageAnalytics.FormatDailyDigest()
-	if analyticsDigest != "" {
-		msg += "\n\n" + analyticsDigest
-	}
-
-	// Append cron suggestions count.
-	cronSuggestions := s.cronSuggester.GetSuggestions()
-	if len(cronSuggestions) > 0 {
-		msg += fmt.Sprintf("\n\n⏰ 크론 작업 제안: %d건", len(cronSuggestions))
-	}
-
-	// Save continuity snapshot before digest.
-	s.sessionContinuity.SaveSnapshot()
-
-	ctx, cancel := context.WithTimeout(s.svcCtx, 15*time.Second)
-	defer cancel()
-	if err := notifier.Notify(ctx, msg); err != nil {
-		s.cfg.Logger.Warn("shadow digest notification failed", "error", err)
-	}
-
-	s.emit(ShadowEvent{Type: "digest", Payload: map[string]any{
-		"pendingTasks": pending,
-		"alerts":       alertCount,
-	}})
-}
 
 // emit broadcasts a ShadowEvent to all registered listeners.
 func (s *Service) emit(event ShadowEvent) {
@@ -351,50 +227,25 @@ func (s *Service) emit(event ShadowEvent) {
 	}
 }
 
-// ExtendedStatus returns the full shadow status including all module states.
-func (s *Service) ExtendedStatus() ExtendedStatus {
-	base := s.Status()
-	ext := ExtendedStatus{ServiceStatus: base}
+// ShadowPromptSection returns a pre-formatted text block for system prompt
+// injection, combining continuity snapshot and recurring error insights.
+// Returns "" if nothing to inject.
+func (s *Service) ShadowPromptSection() string {
+	var parts []string
 
-	report := s.usageAnalytics.GetReport()
-	ext.Analytics = &report
-	ext.CronSuggestions = s.cronSuggester.GetSuggestions()
-	ext.RecentReviews = s.codeReviewer.GetRecentReviews()
-	ext.ExtractedFacts = len(s.memoryConsolidator.GetExtractedFacts(""))
-	ext.RecurringErrors = len(s.errorLearner.GetRecurringErrors())
-	ext.Continuity = s.sessionContinuity.LoadSnapshot()
-	ext.PrefetchedCtx = s.contextPrefetcher.GetPrefetchedContexts()
+	if resume := s.sessionContinuity.GetResumeSummary(); resume != "" {
+		parts = append(parts, resume)
+	}
 
-	return ext
-}
+	if insights := s.errorLearner.FormatForPrompt(); insights != "" {
+		parts = append(parts, insights)
+	}
 
-// BuildWatcher returns the build watcher module.
-func (s *Service) BuildWatcher() *BuildWatcher { return s.buildWatcher }
+	if len(parts) == 0 {
+		return ""
+	}
 
-// ContextPrefetcher returns the context prefetcher module.
-func (s *Service) ContextPrefetcher() *ContextPrefetcher { return s.contextPrefetcher }
-
-// MemoryConsolidator returns the memory consolidator module.
-func (s *Service) MemoryConsolidator() *MemoryConsolidator { return s.memoryConsolidator }
-
-// SessionContinuity returns the session continuity module.
-func (s *Service) SessionContinuity() *SessionContinuity { return s.sessionContinuity }
-
-// UsageAnalytics returns the usage analytics module.
-func (s *Service) UsageAnalytics() *UsageAnalytics { return s.usageAnalytics }
-
-// ErrorLearner returns the error learner module.
-func (s *Service) ErrorLearner() *ErrorLearner { return s.errorLearner }
-
-// CodeReviewer returns the code reviewer module.
-func (s *Service) CodeReviewer() *CodeReviewer { return s.codeReviewer }
-
-// CronSuggester returns the cron suggester module.
-func (s *Service) CronSuggester() *CronSuggester { return s.cronSuggester }
-
-// notifyCtx returns a context with a 15-second timeout for notifications.
-func (s *Service) notifyCtx() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(s.svcCtx, 15*time.Second)
+	return "## Shadow Context\n\n" + strings.Join(parts, "\n\n") + "\n"
 }
 
 func countPending(tasks []TrackedTask) int {

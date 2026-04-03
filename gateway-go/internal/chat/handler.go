@@ -45,6 +45,7 @@ type Handler struct {
 	memoryEmbedder  *memory.Embedder                  // optional; fact embedding
 	unifiedStore    *unified.Store                    // optional; unified memory (search + tier-1)
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
+	shadowPromptFn  func() string                    // optional; returns shadow context for system prompt
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
 	registry        *modelrole.Registry               // centralized model role registry
 	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
@@ -415,6 +416,14 @@ func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {
 func (h *Handler) SetShutdownCtx(ctx context.Context) {
 	h.callbackMu.Lock()
 	h.shutdownCtx = ctx
+	h.callbackMu.Unlock()
+}
+
+// SetShadowPromptFn sets the function that returns shadow monitoring context
+// (session continuity + recurring error patterns) for system prompt injection.
+func (h *Handler) SetShadowPromptFn(fn func() string) {
+	h.callbackMu.Lock()
+	h.shadowPromptFn = fn
 	h.callbackMu.Unlock()
 }
 

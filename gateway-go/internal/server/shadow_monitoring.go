@@ -51,10 +51,16 @@ func (s *Server) initShadowMonitoring(hub *rpcutil.GatewayHub) {
 		hub.Broadcast("shadow.event", event)
 	})
 
-	// Register shadow RPC methods (shadow.status, shadow.tasks, shadow.task.dismiss).
+	// Register shadow RPC methods (shadow.status for debugging).
 	s.dispatcher.RegisterDomain(handlershadow.Methods(handlershadow.Deps{
 		Shadow: s.shadowSvc,
 	}))
 
 	s.shadowSvc.Start()
+
+	// Wire shadow context into the system prompt so the agent has
+	// session continuity and recurring error insights automatically.
+	if s.chatHandler != nil {
+		s.chatHandler.SetShadowPromptFn(s.shadowSvc.ShadowPromptSection)
+	}
 }
