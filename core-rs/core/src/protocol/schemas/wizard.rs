@@ -2,71 +2,38 @@
 
 use crate::protocol::validation::*;
 
-pub fn validate_wizard_start_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_wizard_start_params {
+        [opt "mode" => string_enum["local", "remote"]],
+        [opt "workspace" => string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["mode", "workspace"], path, errors);
-    check_optional(obj, "mode", path, errors, |v, p, e| {
-        check_string_enum(v, p, &["local", "remote"], e);
-    });
-    check_optional(obj, "workspace", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
 }
 
-pub fn validate_wizard_next_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_wizard_next_params {
+        [req "sessionId" => non_empty_string],
+        [opt "answer" => custom(check_wizard_answer)],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["sessionId", "answer"], path, errors);
-    if check_required(obj, "sessionId", path, errors) {
-        check_non_empty_string(&obj["sessionId"], &format!("{path}/sessionId"), errors);
-    }
-    check_optional(obj, "answer", path, errors, |v, p, e| {
-        // WizardAnswerSchema: { stepId: NonEmptyString, value?: Unknown }
-        if !require_object(v, p, e) {
-            return;
-        }
-        let Some(answer_obj) = v.as_object() else {
-            return;
-        };
-        check_no_additional_properties(answer_obj, &["stepId", "value"], p, e);
-        if check_required(answer_obj, "stepId", p, e) {
-            check_non_empty_string(&answer_obj["stepId"], &format!("{p}/stepId"), e);
-        }
-        // value is Type.Unknown() — no validation.
-    });
 }
 
-fn validate_session_id_only(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
+/// WizardAnswerSchema: `{ stepId: NonEmptyString, value?: Unknown }`
+fn check_wizard_answer(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
+    if !require_object(v, p, e) {
         return;
     }
-    let Some(obj) = value.as_object() else {
+    let Some(obj) = v.as_object() else {
         return;
     };
-    check_no_additional_properties(obj, &["sessionId"], path, errors);
-    if check_required(obj, "sessionId", path, errors) {
-        check_non_empty_string(&obj["sessionId"], &format!("{path}/sessionId"), errors);
+    check_no_additional_properties(obj, &["stepId", "value"], p, e);
+    if check_required(obj, "stepId", p, e) {
+        check_non_empty_string(&obj["stepId"], &format!("{p}/stepId"), e);
+    }
+    // value is Type.Unknown() — no validation.
+}
+
+define_schema! {
+    fn validate_session_id_only {
+        [req "sessionId" => non_empty_string],
     }
 }
 

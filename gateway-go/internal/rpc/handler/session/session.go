@@ -79,12 +79,12 @@ func ExecMethods(deps ExecDeps) map[string]rpcutil.HandlerFunc {
 
 func sessionsPatch(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key string `json:"key"`
 			session.PatchFields
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		key, errResp := rpcutil.RequireKey(req.ID, p.Key)
 		if errResp != nil {
@@ -108,12 +108,12 @@ func sessionsPatch(deps Deps) rpcutil.HandlerFunc {
 
 func sessionsReset(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key    string `json:"key"`
 			Reason string `json:"reason"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		key, errResp := rpcutil.RequireKey(req.ID, p.Key)
 		if errResp != nil {
@@ -205,7 +205,7 @@ func sessionsPreview(deps Deps) rpcutil.HandlerFunc {
 
 func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key            string `json:"key"`
 			SessionID      string `json:"sessionId"`
 			Label          string `json:"label"`
@@ -213,9 +213,9 @@ func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
 			SpawnedBy      string `json:"spawnedBy"`
 			IncludeGlobal  *bool  `json:"includeGlobal"`
 			IncludeUnknown *bool  `json:"includeUnknown"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		idCount := boolCount(p.Key != "", p.SessionID != "", p.Label != "")
@@ -270,15 +270,15 @@ func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
 
 func sessionsCompact(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key string `json:"key"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
-		}
-		key, errResp := rpcutil.RequireKey(req.ID, p.Key)
+		}](req)
 		if errResp != nil {
 			return errResp
+		}
+		key, errResp2 := rpcutil.RequireKey(req.ID, p.Key)
+		if errResp2 != nil {
+			return errResp2
 		}
 
 		if deps.Compressor == nil || deps.Transcripts == nil {
@@ -298,7 +298,7 @@ func sessionsCompact(deps Deps) rpcutil.HandlerFunc {
 				Response(req.ID)
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":        result.OK,
 			"key":       key,
 			"compacted": result.Compacted,
@@ -319,13 +319,11 @@ func sessionsCompact(deps Deps) rpcutil.HandlerFunc {
 
 func sessionsRepair(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			SessionKey string `json:"sessionKey"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.MissingParam("sessionKey").
-				WithMethod("sessions.repair").
-				Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		if p.SessionKey == "" {
@@ -345,7 +343,7 @@ func sessionsRepair(deps Deps) rpcutil.HandlerFunc {
 		// In native Go mode, transcript repair is handled by the session
 		// manager's compaction pipeline. Return success to indicate the
 		// session is valid and repair can proceed.
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"sessionKey": p.SessionKey,
 			"status":     "repair_queued",
 		})
@@ -358,19 +356,17 @@ func sessionsRepair(deps Deps) rpcutil.HandlerFunc {
 
 func sessionsOverflowCheck(_ Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			SessionKey    string `json:"sessionKey"`
 			CurrentTokens int64  `json:"currentTokens"`
 			MaxTokens     int64  `json:"maxTokens"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.MissingParam("params").
-				WithMethod("sessions.overflow_check").
-				Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		if p.MaxTokens <= 0 {
-			return protocol.MustResponseOK(req.ID, map[string]any{
+			return rpcutil.RespondOK(req.ID, map[string]any{
 				"isOverflow": false,
 				"usage":      0.0,
 			})
@@ -379,7 +375,7 @@ func sessionsOverflowCheck(_ Deps) rpcutil.HandlerFunc {
 		usage := float64(p.CurrentTokens) / float64(p.MaxTokens)
 		isOverflow := usage > 0.9 // 90% threshold
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"isOverflow":          isOverflow,
 			"usage":               usage,
 			"emergencyPruneRatio": minf(maxf((usage-0.7)/usage, 0), 0.5),

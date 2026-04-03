@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -41,7 +42,7 @@ func ApprovalMethods(deps ApprovalDeps) map[string]rpcutil.HandlerFunc {
 
 func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID                  string            `json:"id,omitempty"`
 			Command             string            `json:"command"`
 			CommandArgv         []string          `json:"commandArgv,omitempty"`
@@ -60,14 +61,12 @@ func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
 			TurnSourceTo        string            `json:"turnSourceTo,omitempty"`
 			TurnSourceAccountID string            `json:"turnSourceAccountId,omitempty"`
 			TurnSourceThreadID  string            `json:"turnSourceThreadId,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Command == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "command is required"))
+			return rpcerr.MissingParam("command").Response(req.ID)
 		}
 
 		var turnSource *approval.TurnSourceInfo
@@ -106,17 +105,15 @@ func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
 		}
 
 		if p.TwoPhase {
-			resp := protocol.MustResponseOK(req.ID, map[string]any{
+			return rpcutil.RespondOK(req.ID, map[string]any{
 				"status":      "accepted",
 				"id":          created.ID,
 				"createdAtMs": created.CreatedAtMs,
 				"expiresAtMs": created.ExpiresAtMs,
 			})
-			return resp
 		}
 
-		resp := protocol.MustResponseOK(req.ID, created)
-		return resp
+		return rpcutil.RespondOK(req.ID, created)
 	}
 }
 
@@ -126,18 +123,15 @@ func execApprovalWaitDecision(deps ApprovalDeps) rpcutil.HandlerFunc {
 			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id is required"))
+			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 
 		existing := deps.Store.Get(p.ID)
 		if existing == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "approval request not found"))
+			return rpcerr.NotFound("approval request").Response(req.ID)
 		}
 		if existing.Decision != nil {
-			resp := protocol.MustResponseOK(req.ID, existing)
-			return resp
+			return rpcutil.RespondOK(req.ID, existing)
 		}
 
 		// Wait for decision or context cancellation.
@@ -146,31 +140,26 @@ func execApprovalWaitDecision(deps ApprovalDeps) rpcutil.HandlerFunc {
 		case <-ch:
 			result := deps.Store.Get(p.ID)
 			if result == nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrNotFound, "approval request expired"))
+				return rpcerr.New(protocol.ErrNotFound, "approval request expired").Response(req.ID)
 			}
-			resp := protocol.MustResponseOK(req.ID, result)
-			return resp
+			return rpcutil.RespondOK(req.ID, result)
 		case <-ctx.Done():
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrAgentTimeout, "wait for decision timed out"))
+			return rpcerr.New(protocol.ErrAgentTimeout, "wait for decision timed out").Response(req.ID)
 		}
 	}
 }
 
 func execApprovalResolve(deps ApprovalDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID       string `json:"id"`
 			Decision string `json:"decision"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.ID == "" || p.Decision == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id and decision are required"))
+			return rpcerr.New(protocol.ErrMissingParam, "id and decision are required").Response(req.ID)
 		}
 
 		var decision approval.Decision
@@ -182,13 +171,11 @@ func execApprovalResolve(deps ApprovalDeps) rpcutil.HandlerFunc {
 		case "deny":
 			decision = approval.DecisionDeny
 		default:
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "invalid decision: must be allow-once, allow-always, or deny"))
+			return rpcerr.New(protocol.ErrValidationFailed, "invalid decision: must be allow-once, allow-always, or deny").Response(req.ID)
 		}
 
 		if err := deps.Store.Resolve(p.ID, decision); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, err.Error()))
+			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
 		}
 
 		if deps.Broadcaster != nil {
@@ -198,8 +185,7 @@ func execApprovalResolve(deps ApprovalDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
 	}
 }
 
@@ -212,26 +198,23 @@ func execApprovalsGet(deps ApprovalDeps) rpcutil.HandlerFunc {
 				LoadedAt: 0,
 			}
 		}
-		resp := protocol.MustResponseOK(req.ID, snapshot)
-		return resp
+		return rpcutil.RespondOK(req.ID, snapshot)
 	}
 }
 
 func execApprovalsSet(deps ApprovalDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			File     approval.ApprovalsFile `json:"file"`
 			BaseHash string                 `json:"baseHash,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		deps.Store.SetGlobalSnapshot(p.File, p.BaseHash)
 
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
 	}
 }
 

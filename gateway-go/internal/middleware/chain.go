@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -88,10 +89,7 @@ func Auth(publicMethods map[string]bool) Middleware {
 
 			rc := GetRequestContext(ctx)
 			if rc == nil || !rc.Authenticated {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrUnauthorized,
-					"authentication required",
-				))
+				return rpcerr.Unauthorized("authentication required").Response(req.ID)
 			}
 			return next(ctx, req)
 		}

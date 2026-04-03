@@ -2,185 +2,69 @@
 
 use crate::protocol::validation::*;
 
-pub fn validate_exec_approvals_get_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! { pub fn validate_exec_approvals_get_params {} }
+
+define_schema! {
+    pub fn validate_exec_approvals_set_params {
+        [req "file" => object],
+        [opt "baseHash" => non_empty_string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &[], path, errors);
 }
 
-pub fn validate_exec_approvals_set_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_exec_approval_request_params {
+        [opt "id" => non_empty_string],
+        [opt "command" => non_empty_string],
+        [opt "commandArgv" => custom(check_string_array)],
+        [opt "systemRunPlan" => any],
+        [opt "env" => any],
+        [opt_null "cwd" => string],
+        [opt_null "nodeId" => string],
+        [opt_null "host" => string],
+        [opt_null "security" => string],
+        [opt_null "ask" => string],
+        [opt_null "agentId" => string],
+        [opt_null "resolvedPath" => string],
+        [opt_null "sessionKey" => string],
+        [opt_null "turnSourceChannel" => string],
+        [opt_null "turnSourceTo" => string],
+        [opt_null "turnSourceAccountId" => string],
+        [opt_null "turnSourceThreadId" => custom(check_string_or_number)],
+        [opt "timeoutMs" => integer(Some(1), None)],
+        [opt "twoPhase" => boolean],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["file", "baseHash"], path, errors);
-    if check_required(obj, "file", path, errors) {
-        // ExecApprovalsFileSchema is complex; validate as object.
-        require_object(&obj["file"], &format!("{path}/file"), errors);
-    }
-    check_optional(obj, "baseHash", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
 }
 
-pub fn validate_exec_approval_request_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    let allowed = &[
-        "id",
-        "command",
-        "commandArgv",
-        "systemRunPlan",
-        "env",
-        "cwd",
-        "nodeId",
-        "host",
-        "security",
-        "ask",
-        "agentId",
-        "resolvedPath",
-        "sessionKey",
-        "turnSourceChannel",
-        "turnSourceTo",
-        "turnSourceAccountId",
-        "turnSourceThreadId",
-        "timeoutMs",
-        "twoPhase",
-    ];
-    check_no_additional_properties(obj, allowed, path, errors);
-
-    check_optional(obj, "id", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
-    check_optional(obj, "command", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
-    check_optional(obj, "commandArgv", path, errors, |v, p, e| {
-        if check_array(v, p, e) {
-            if let Some(arr) = v.as_array() {
-                for (i, item) in arr.iter().enumerate() {
-                    check_string(item, &format!("{p}/{i}"), e);
-                }
-            }
-        }
-    });
-    // systemRunPlan, env are complex — accept as objects.
-    check_optional(obj, "timeoutMs", path, errors, |v, p, e| {
-        check_integer(v, p, Some(1), None, e);
-    });
-    check_optional(obj, "twoPhase", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
-    // Nullable string fields
-    for f in &[
-        "cwd",
-        "nodeId",
-        "host",
-        "security",
-        "ask",
-        "agentId",
-        "resolvedPath",
-        "sessionKey",
-        "turnSourceChannel",
-        "turnSourceTo",
-        "turnSourceAccountId",
-    ] {
-        check_optional_nullable(obj, f, path, errors, |v, p, e| {
-            check_string(v, p, e);
+/// Accept string or number (e.g., thread IDs).
+fn check_string_or_number(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
+    if !v.is_string() && !v.is_number() {
+        e.push(ValidationError {
+            path: p.to_string(),
+            message: "must be string or number".to_string(),
+            keyword: "type",
         });
     }
-    // turnSourceThreadId: string | number | null
-    check_optional_nullable(obj, "turnSourceThreadId", path, errors, |v, p, e| {
-        if !v.is_string() && !v.is_number() {
-            e.push(ValidationError {
-                path: p.to_string(),
-                message: "must be string or number".to_string(),
-                keyword: "type",
-            });
-        }
-    });
 }
 
-pub fn validate_exec_approval_resolve_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["id", "decision"], path, errors);
-    if check_required(obj, "id", path, errors) {
-        check_non_empty_string(&obj["id"], &format!("{path}/id"), errors);
-    }
-    if check_required(obj, "decision", path, errors) {
-        check_non_empty_string(&obj["decision"], &format!("{path}/decision"), errors);
+define_schema! {
+    pub fn validate_exec_approval_resolve_params {
+        [req "id" => non_empty_string],
+        [req "decision" => non_empty_string],
     }
 }
 
-pub fn validate_exec_approvals_node_get_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["nodeId"], path, errors);
-    if check_required(obj, "nodeId", path, errors) {
-        check_non_empty_string(&obj["nodeId"], &format!("{path}/nodeId"), errors);
+define_schema! {
+    pub fn validate_exec_approvals_node_get_params {
+        [req "nodeId" => non_empty_string],
     }
 }
 
-pub fn validate_exec_approvals_node_set_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    pub fn validate_exec_approvals_node_set_params {
+        [req "nodeId" => non_empty_string],
+        [req "file" => object],
+        [opt "baseHash" => non_empty_string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["nodeId", "file", "baseHash"], path, errors);
-    if check_required(obj, "nodeId", path, errors) {
-        check_non_empty_string(&obj["nodeId"], &format!("{path}/nodeId"), errors);
-    }
-    if check_required(obj, "file", path, errors) {
-        require_object(&obj["file"], &format!("{path}/file"), errors);
-    }
-    check_optional(obj, "baseHash", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
 }
 
 #[cfg(test)]

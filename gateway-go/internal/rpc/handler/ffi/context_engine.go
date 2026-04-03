@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -24,141 +25,140 @@ func ContextEngineMethods() map[string]rpcutil.HandlerFunc {
 
 func contextAssemblyNew() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ConversationID uint64 `json:"conversation_id"`
 			TokenBudget    uint64 `json:"token_budget"`
 			FreshTailCount uint32 `json:"fresh_tail_count"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		handle, err := ffipkg.ContextAssemblyNew(p.ConversationID, p.TokenBudget, p.FreshTailCount)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"handle": handle})
+		return rpcutil.RespondOK(req.ID, map[string]any{"handle": handle})
 	}
 }
 
 func contextAssemblyStart() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Handle uint32 `json:"handle"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.Handle == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "handle is required"))
+		if p.Handle == 0 {
+			return rpcerr.MissingParam("handle").Response(req.ID)
 		}
 		result, err := ffipkg.ContextAssemblyStart(p.Handle)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
+		return rpcutil.RespondOK(req.ID, json.RawMessage(result))
 	}
 }
 
 func contextAssemblyStep() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Handle   uint32          `json:"handle"`
 			Response json.RawMessage `json:"response"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.Handle == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "handle is required"))
+		if p.Handle == 0 {
+			return rpcerr.MissingParam("handle").Response(req.ID)
 		}
 		if len(p.Response) == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "response is required"))
+			return rpcerr.MissingParam("response").Response(req.ID)
 		}
 		result, err := ffipkg.ContextAssemblyStep(p.Handle, p.Response)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
+		return rpcutil.RespondOK(req.ID, json.RawMessage(result))
 	}
 }
 
 func contextExpandNew() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			SummaryID       string `json:"summary_id"`
 			MaxDepth        uint32 `json:"max_depth"`
 			IncludeMessages bool   `json:"include_messages"`
 			TokenCap        uint64 `json:"token_cap"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.SummaryID == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "summary_id is required"))
+			return rpcerr.MissingParam("summary_id").Response(req.ID)
 		}
 		handle, err := ffipkg.ContextExpandNew(p.SummaryID, p.MaxDepth, p.IncludeMessages, p.TokenCap)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"handle": handle})
+		return rpcutil.RespondOK(req.ID, map[string]any{"handle": handle})
 	}
 }
 
 func contextExpandStart() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Handle uint32 `json:"handle"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.Handle == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "handle is required"))
+		if p.Handle == 0 {
+			return rpcerr.MissingParam("handle").Response(req.ID)
 		}
 		result, err := ffipkg.ContextExpandStart(p.Handle)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
+		return rpcutil.RespondOK(req.ID, json.RawMessage(result))
 	}
 }
 
 func contextExpandStep() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Handle   uint32          `json:"handle"`
 			Response json.RawMessage `json:"response"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.Handle == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "handle is required"))
+		if p.Handle == 0 {
+			return rpcerr.MissingParam("handle").Response(req.ID)
 		}
 		if len(p.Response) == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "response is required"))
+			return rpcerr.MissingParam("response").Response(req.ID)
 		}
 		result, err := ffipkg.ContextExpandStep(p.Handle, p.Response)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
+		return rpcutil.RespondOK(req.ID, json.RawMessage(result))
 	}
 }
 
 func contextEngineDrop() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Handle uint32 `json:"handle"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.Handle == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "handle is required"))
+		if p.Handle == 0 {
+			return rpcerr.MissingParam("handle").Response(req.ID)
 		}
 		ffipkg.ContextEngineDrop(p.Handle)
-		return protocol.MustResponseOK(req.ID, map[string]any{"dropped": true})
+		return rpcutil.RespondOK(req.ID, map[string]any{"dropped": true})
 	}
 }

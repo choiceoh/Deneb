@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -19,39 +20,35 @@ func MarkdownMethods() map[string]rpcutil.HandlerFunc {
 
 func markdownToIR() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Markdown string `json:"markdown"`
 			Options  string `json:"options"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		ir, err := ffipkg.MarkdownToIR(p.Markdown, p.Options)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
 		// ir is already JSON; wrap in the response directly.
-		return protocol.MustResponseOK(req.ID, json.RawMessage(ir))
+		return rpcutil.RespondOK(req.ID, json.RawMessage(ir))
 	}
 }
 
 func markdownDetectFences() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Text string `json:"text"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		fences, err := ffipkg.MarkdownDetectFences(p.Text)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"fences": fences,
 		})
 	}

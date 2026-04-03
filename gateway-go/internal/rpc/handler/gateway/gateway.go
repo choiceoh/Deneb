@@ -52,7 +52,7 @@ func RuntimeMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 
 func health(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"status": "ok",
 			"uptime": time.Since(deps.StartedAt).Milliseconds(),
 		})
@@ -80,7 +80,7 @@ func status(deps Deps) rpcutil.HandlerFunc {
 		if deps.AgentCacheSize != nil {
 			agentStats["cacheSize"] = deps.AgentCacheSize()
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"version":     deps.Version,
 			"channels":    channels,
 			"sessions":    sessions,
@@ -92,7 +92,7 @@ func status(deps Deps) rpcutil.HandlerFunc {
 
 func identity(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"version": deps.Version,
 			"runtime": "go",
 			"uptime":  time.Since(deps.StartedAt).Milliseconds(),
@@ -107,7 +107,7 @@ func lastHeartbeat(deps Deps) rpcutil.HandlerFunc {
 		if deps.LastHeartbeatMs != nil {
 			ts = deps.LastHeartbeatMs()
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"lastHeartbeatMs": ts,
 		})
 	}
@@ -115,7 +115,7 @@ func lastHeartbeat(deps Deps) rpcutil.HandlerFunc {
 
 func setHeartbeats() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
+		return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
 	}
 }
 
@@ -133,10 +133,10 @@ func systemPresence(deps Deps) rpcutil.HandlerFunc {
 			payload = p.Payload
 		}
 		if deps.Broadcast == nil {
-			return protocol.MustResponseOK(req.ID, map[string]int{"sent": 0})
+			return rpcutil.RespondOK(req.ID, map[string]int{"sent": 0})
 		}
 		sent, _ := deps.Broadcast("presence", payload)
-		return protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
+		return rpcutil.RespondOK(req.ID, map[string]int{"sent": sent})
 	}
 }
 
@@ -155,10 +155,10 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 				protocol.ErrMissingParam, "event is required"))
 		}
 		if deps.Broadcast == nil {
-			return protocol.MustResponseOK(req.ID, map[string]int{"sent": 0})
+			return rpcutil.RespondOK(req.ID, map[string]int{"sent": 0})
 		}
 		sent, _ := deps.Broadcast(p.Event, p.Payload)
-		return protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
+		return rpcutil.RespondOK(req.ID, map[string]int{"sent": sent})
 	}
 }
 
@@ -167,35 +167,35 @@ func modelsList(deps Deps) rpcutil.HandlerFunc {
 		models := []any{}
 		if deps.Models != nil {
 			if provided := deps.Models(); provided != nil {
-				return protocol.MustResponseOK(req.ID, map[string]any{"models": provided})
+				return rpcutil.RespondOK(req.ID, map[string]any{"models": provided})
 			}
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"models": models})
+		return rpcutil.RespondOK(req.ID, map[string]any{"models": models})
 	}
 }
 
 func configGet(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.RuntimeConfig == nil {
-			return protocol.MustResponseOK(req.ID, map[string]string{"status": "not_loaded"})
+			return rpcutil.RespondOK(req.ID, map[string]string{"status": "not_loaded"})
 		}
 		cfg := deps.RuntimeConfig()
 		if cfg == nil {
-			return protocol.MustResponseOK(req.ID, map[string]string{"status": "not_loaded"})
+			return rpcutil.RespondOK(req.ID, map[string]string{"status": "not_loaded"})
 		}
-		return protocol.MustResponseOK(req.ID, cfg)
+		return rpcutil.RespondOK(req.ID, cfg)
 	}
 }
 
 func daemonStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.DaemonStatus == nil {
-			return protocol.MustResponseOK(req.ID, map[string]string{"state": "not_configured"})
+			return rpcutil.RespondOK(req.ID, map[string]string{"state": "not_configured"})
 		}
 		status, ok := deps.DaemonStatus()
 		if !ok {
-			return protocol.MustResponseOK(req.ID, map[string]string{"state": "not_configured"})
+			return rpcutil.RespondOK(req.ID, map[string]string{"state": "not_configured"})
 		}
-		return protocol.MustResponseOK(req.ID, status)
+		return rpcutil.RespondOK(req.ID, status)
 	}
 }

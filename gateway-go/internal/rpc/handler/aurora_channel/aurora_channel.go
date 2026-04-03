@@ -31,7 +31,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 // No params required. Returns {"ok": true}.
 func handlePing() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok": true,
 		})
 	}
@@ -51,13 +51,13 @@ func handlePing() rpcutil.HandlerFunc {
 //   - tokens (object): Token usage {input, output, total}.
 func handleChat(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Message    string `json:"message"`
 			SessionKey string `json:"sessionKey"`
 			Model      string `json:"model"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.New(protocol.ErrInvalidRequest, "params required").Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Message == "" {
 			return rpcerr.MissingParam("message").Response(req.ID)
@@ -75,7 +75,7 @@ func handleChat(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrDependencyFailed, "aurora.chat failed: "+err.Error()).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":  result.Text,
 			"model": result.Model,
 			"tokens": map[string]int{
@@ -99,12 +99,12 @@ func handleChat(deps Deps) rpcutil.HandlerFunc {
 //   - model (string): The model used.
 func handleMemory(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Query      string `json:"query"`
 			SessionKey string `json:"sessionKey"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.New(protocol.ErrInvalidRequest, "params required").Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Query == "" {
 			return rpcerr.MissingParam("query").Response(req.ID)
@@ -124,7 +124,7 @@ func handleMemory(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrDependencyFailed, "aurora.memory failed: "+err.Error()).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":  result.Text,
 			"model": result.Model,
 		})

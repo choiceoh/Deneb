@@ -33,11 +33,13 @@ globs: ["gateway-go/**/*.go", "core-rs/**/*.rs", "proto/**/*.proto"]
 
 | Command | Description |
 |---|---|
-| `quality` | **전체 품질 테스트** (health + chat + tool + formatting) |
+| `quality` | **전체 품질 테스트** (health + chat + tool + formatting + tools-deep + edge) |
 | `quality health` | 서브시스템 상태 품질 |
 | `quality chat` | 한국어 응답 품질 (언어, 톤, 내용 충실도) |
 | `quality tools` | 도구 사용 품질 (적절한 도구 선택, 완료, 에러 없음) |
 | `quality format` | 포맷 품질 (마크다운, 목록, Telegram 안전성) |
+| `quality tools-deep` | 도구 심층 테스트 (파일 읽기/검색/실행/메모리 결과 정확성, 에러 핸들링) |
+| `quality edge` | 에지 케이스 테스트 (빈 입력/긴 입력/특수문자/코드블록/모호한 의도/멀티턴) |
 | `quality-custom "메시지"` | 커스텀 메시지로 품질 테스트 |
 
 ### Log Analysis
@@ -64,6 +66,10 @@ globs: ["gateway-go/**/*.go", "core-rs/**/*.rs", "proto/**/*.proto"]
 | **도구 사용 완결** | 시작된 도구가 반드시 완료되었는지, 에러 없는지 |
 | **스트리밍 흐름** | 이벤트가 정상적으로 흘렀는지 |
 | **응답 시간** | 레이턴시 임계값 이내인지 |
+| **도구 결과 정확성** | read/grep/exec 등 도구 결과가 실제 데이터와 일치하는지 |
+| **도구 에러 핸들링** | 존재하지 않는 파일 읽기 등 에러 상황에서 크래시 없이 안내하는지 |
+| **에지 입력 안정성** | 빈 입력, 5000자+ 장문, 특수문자, 코드블록 등에서 크래시 없는지 |
+| **멀티턴 컨텍스트** | 같은 세션 내 이전 대화 내용을 기억하고 참조하는지 |
 
 ## 필수 절차: 코드 수정 완료 후
 
@@ -162,6 +168,65 @@ ITERATE_RESULT metric=3 build=ok server=ok checks=3/3 latency_ms=1835
 scripts/dev-iterate.sh --metric "python3 my_metric.py"
 # metric 스크립트는 stdout에 metric_value=N 출력해야 함
 ```
+
+## 유저 증상 재현 (Reproduction)
+
+유저가 문제를 보고하면, AI 에이전트가 직접 유저 역할을 해서 증상을 라이브로 재현한다.
+
+### chat-check: 메시지 + assertion
+
+유저의 실제 메시지를 보내고 assertion으로 증상 유무를 판별:
+```bash
+# 한국어 응답 확인
+scripts/dev-live-test.sh chat-check "안녕" --expect-korean
+
+# 특정 패턴이 응답에 있는지
+scripts/dev-live-test.sh chat-check "날씨 알려줘" --expect "날씨|기온|온도"
+
+# 특정 패턴이 없는지 (누출 검사)
+scripts/dev-live-test.sh chat-check "안녕" --expect-not "<thinking>"
+
+# 특정 도구가 호출되는지
+scripts/dev-live-test.sh chat-check "시스템 상태" --expect-tool health
+
+# 레이턴시 확인
+scripts/dev-live-test.sh chat-check "안녕" --max-latency 10000
+
+# 조합
+scripts/dev-live-test.sh chat-check "파일 목록 보여줘" \
+    --expect-korean --expect-tool fs --max-latency 30000
+```
+
+### 멀티턴 재현: multi-chat
+
+같은 세션에서 여러 턴을 보내 컨텍스트 유지 문제를 재현:
+```bash
+# 컨텍스트 유지 확인
+scripts/dev-live-test.sh multi-chat \
+    "내 이름은 홍길동이야" \
+    "내 이름이 뭐라고 했지?" \
+    --expect-context "홍길동"
+
+# 연속 대화 흐름
+scripts/dev-live-test.sh multi-chat \
+    "프로젝트 상태 알려줘" \
+    "더 자세히 설명해줘"
+```
+
+### 도구 호출 검증: tool-check
+
+특정 도구가 올바르게 호출 + 완료되는지:
+```bash
+scripts/dev-live-test.sh tool-check health "시스템 상태 확인해줘"
+scripts/dev-live-test.sh tool-check vega "최근 대화 검색해줘"
+```
+
+### AI 에이전트의 증상 재현 절차
+
+1. 유저가 보고한 메시지를 그대로 `chat-check`에 넣고 적절한 assertion 조합
+2. 실패한 체크를 기반으로 코드 수정
+3. 수정 후 같은 테스트 재실행하여 수정 확인
+4. `logs-errors`로 숨은 에러 확인
 
 ## 주의사항
 

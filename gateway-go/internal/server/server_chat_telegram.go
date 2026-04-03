@@ -243,7 +243,7 @@ func (s *Server) wireTelegramChatHandler() {
 
 		switch event.Type {
 		case "start":
-			pt.OnToolStart(ctx, event.Name, event.Reason)
+			pt.OnToolStart(ctx, event.Name, event.Input)
 		case "complete":
 			pt.OnToolComplete(ctx, event.Name, event.IsError)
 		case "finalize":
@@ -346,7 +346,7 @@ func (s *Server) wireTelegramChatHandler() {
 	// Register Telegram's per-channel upload limit for the send_file tool.
 	s.chatHandler.SetChannelUploadLimit("telegram", s.telegramPlug.MaxUploadBytes())
 
-	s.logger.Info("telegram chat handler wired (with autoreply preprocessing)")
+	s.logger.Debug("telegram chat handler wired")
 }
 
 // loadTelegramConfig extracts Telegram channel config from deneb.json.

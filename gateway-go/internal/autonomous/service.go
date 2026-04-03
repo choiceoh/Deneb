@@ -283,7 +283,7 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 func (s *Service) runTaskLoop(ctx context.Context, task PeriodicTask) {
 	name := task.Name()
 	interval := task.Interval()
-	s.logger.Info("periodic task started", "task", name, "interval", interval)
+	s.logger.Debug("periodic task started", "task", name, "interval", interval)
 
 	// Initial grace period before first run (30 seconds).
 	initialTimer := time.NewTimer(30 * time.Second)

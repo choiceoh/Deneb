@@ -8,7 +8,7 @@ import "github.com/choiceoh/deneb/gateway-go/internal/llm"
 type StreamHooks struct {
 	OnTextDelta  func(text string)                              // text delta streamed from LLM
 	OnThinking   func()                                        // reasoning/thinking delta received
-	OnToolStart  func(name, reason string)                     // tool invocation about to execute; reason is a brief thinking summary
+	OnToolStart  func(name, reason string, input []byte)        // tool invocation about to execute; reason is thinking text, input is raw JSON args
 	OnToolEmit   func(name, toolUseID string)                  // tool start broadcast (name + ID for streaming)
 	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
 	// OnBeforeToolCall is called before each tool execution. Returns true to

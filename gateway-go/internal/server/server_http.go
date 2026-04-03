@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -169,16 +170,12 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 
 	limited := http.MaxBytesReader(w, r.Body, maxRPCBodyBytes)
 	if err := json.NewDecoder(limited).Decode(&req); err != nil {
-		s.writeJSON(w, http.StatusBadRequest, protocol.NewResponseError("", protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid JSON",
-		)))
+		s.writeJSON(w, http.StatusBadRequest, rpcerr.InvalidRequest("invalid JSON").Response(""))
 		return
 	}
 
 	if req.Method == "" || req.ID == "" {
-		s.writeJSON(w, http.StatusBadRequest, protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "method and id are required",
-		)))
+		s.writeJSON(w, http.StatusBadRequest, rpcerr.New(protocol.ErrMissingParam, "method and id are required").Response(req.ID))
 		return
 	}
 
@@ -192,9 +189,7 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		if token != "" {
 			claims, err := s.authValidator.ValidateToken(token)
 			if err != nil {
-				s.writeJSON(w, http.StatusUnauthorized, protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrUnauthorized, "invalid token: "+err.Error(),
-				)))
+				s.writeJSON(w, http.StatusUnauthorized, rpcerr.Unauthorized("invalid token: "+err.Error()).Response(req.ID))
 				return
 			}
 			role = string(claims.Role)

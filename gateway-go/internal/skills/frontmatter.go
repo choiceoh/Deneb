@@ -10,16 +10,46 @@ import (
 // ParsedFrontmatter is a map of key-value pairs extracted from a SKILL.md header.
 type ParsedFrontmatter map[string]string
 
+// SkillType defines how a skill is executed.
+type SkillType string
+
+const (
+	// SkillTypePrompt is the default: LLM reads SKILL.md and follows instructions.
+	SkillTypePrompt SkillType = "prompt"
+	// SkillTypeLocal executes a command directly and returns output string (no LLM roundtrip).
+	SkillTypeLocal SkillType = "local"
+	// SkillTypeSystem dispatches to a gateway-internal handler (e.g., /reset, /status).
+	SkillTypeSystem SkillType = "system"
+)
+
+// IsValidSkillType checks if the given type string is a recognized skill type.
+func IsValidSkillType(t string) bool {
+	switch SkillType(t) {
+	case SkillTypePrompt, SkillTypeLocal, SkillTypeSystem:
+		return true
+	}
+	return false
+}
+
 // DenebSkillMetadata represents parsed skill metadata from frontmatter.
 type DenebSkillMetadata struct {
-	Always     bool               `json:"always,omitempty"`
-	SkillKey   string             `json:"skillKey,omitempty"`
-	PrimaryEnv string             `json:"primaryEnv,omitempty"`
-	Emoji      string             `json:"emoji,omitempty"`
-	Homepage   string             `json:"homepage,omitempty"`
-	Tags       []string           `json:"tags,omitempty"`
-	Requires   *SkillRequires     `json:"requires,omitempty"`
-	Install    []SkillInstallSpec `json:"install,omitempty"`
+	Always        bool               `json:"always,omitempty"`
+	SkillKey      string             `json:"skillKey,omitempty"`
+	PrimaryEnv    string             `json:"primaryEnv,omitempty"`
+	Emoji         string             `json:"emoji,omitempty"`
+	Homepage      string             `json:"homepage,omitempty"`
+	Tags          []string           `json:"tags,omitempty"`
+	Requires      *SkillRequires     `json:"requires,omitempty"`
+	Install       []SkillInstallSpec `json:"install,omitempty"`
+	LocalExec     *SkillLocalExec    `json:"localExec,omitempty"`
+	SystemHandler string             `json:"systemHandler,omitempty"`
+}
+
+// SkillLocalExec defines execution config for local-type skills.
+type SkillLocalExec struct {
+	Command   string   `json:"command"`
+	Args      []string `json:"args,omitempty"`
+	TimeoutMs int      `json:"timeoutMs,omitempty"` // default 30000
 }
 
 // SkillRequires defines dependency requirements for a skill.
@@ -203,6 +233,26 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 			}
 		}
 	}
+
+	// Parse local exec config.
+	if execRaw, ok := obj["localExec"]; ok {
+		var execObj map[string]json.RawMessage
+		if json.Unmarshal(execRaw, &execObj) == nil {
+			le := &SkillLocalExec{}
+			parseJSONString(execObj, "command", &le.Command)
+			le.Args = parseJSONStringList(execObj, "args")
+			var timeout float64
+			if parseJSONFloat(execObj, "timeoutMs", &timeout) {
+				le.TimeoutMs = int(timeout)
+			}
+			if le.Command != "" {
+				meta.LocalExec = le
+			}
+		}
+	}
+
+	// Parse system handler name.
+	parseJSONString(obj, "systemHandler", &meta.SystemHandler)
 
 	// Parse install specs.
 	if installRaw, ok := obj["install"]; ok {

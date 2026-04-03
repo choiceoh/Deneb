@@ -4,7 +4,6 @@ package handlertelegram
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
@@ -91,10 +90,13 @@ func emitTelegramLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.E
 
 func telegramStart(deps LifecycleDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		if p.ID != "telegram" {
@@ -104,17 +106,19 @@ func telegramStart(deps LifecycleDeps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("channel start failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
-		resp := protocol.MustResponseOK(req.ID, map[string]any{"started": true, "id": p.ID})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]any{"started": true, "id": p.ID})
 	}
 }
 
 func telegramStop(deps LifecycleDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		if p.ID != "telegram" {
@@ -124,17 +128,19 @@ func telegramStop(deps LifecycleDeps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("channel stop failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
-		resp := protocol.MustResponseOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
 	}
 }
 
 func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		if p.ID != "telegram" {
@@ -145,8 +151,7 @@ func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("channel restart failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
-		resp := protocol.MustResponseOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
 	}
 }
 
@@ -156,7 +161,7 @@ func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 
 func messagingSend(deps MessagingDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Channel string `json:"channel"`
 			To      string `json:"to"`
 			Text    string `json:"text"`
@@ -167,9 +172,9 @@ func messagingSend(deps MessagingDeps) rpcutil.HandlerFunc {
 			ReplyTo  int64 `json:"replyTo,omitempty"`
 			ThreadID int64 `json:"threadId,omitempty"`
 			Silent   bool  `json:"silent,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		// Route to Telegram if channel matches and plugin is available.
@@ -219,12 +224,11 @@ func messagingSend(deps MessagingDeps) rpcutil.HandlerFunc {
 			if len(results) > 0 {
 				resultData = results[0]
 			}
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			return rpcutil.RespondOK(req.ID, map[string]any{
 				"ok":      true,
 				"channel": "telegram",
 				"result":  resultData,
 			})
-			return resp
 		}
 
 		// No other channels available in standalone Go gateway.
@@ -239,20 +243,18 @@ func messagingPoll(deps MessagingDeps) rpcutil.HandlerFunc {
 			bot := deps.TelegramPlugin.Bot()
 			if bot != nil {
 				messages := bot.DrainMessages()
-				resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+				return rpcutil.RespondOK(req.ID, map[string]any{
 					"channel":  "telegram",
 					"messages": messages,
 					"count":    len(messages),
 				})
-				return resp
 			}
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"messages": []any{},
 			"count":    0,
 		})
-		return resp
 	}
 }
 

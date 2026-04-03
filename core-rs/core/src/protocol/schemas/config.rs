@@ -2,68 +2,23 @@
 
 use crate::protocol::validation::*;
 
-pub fn validate_config_get_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! { pub fn validate_config_get_params {} }
+
+define_schema! {
+    pub fn validate_config_set_params {
+        [req "raw" => non_empty_string],
+        [opt "baseHash" => non_empty_string],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &[], path, errors);
 }
 
-pub fn validate_config_set_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! {
+    fn validate_config_apply_like {
+        [req "raw" => non_empty_string],
+        [opt "baseHash" => non_empty_string],
+        [opt "sessionKey" => string],
+        [opt "note" => string],
+        [opt "restartDelayMs" => integer(Some(0), None)],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["raw", "baseHash"], path, errors);
-    if check_required(obj, "raw", path, errors) {
-        check_non_empty_string(&obj["raw"], &format!("{path}/raw"), errors);
-    }
-    check_optional(obj, "baseHash", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
-}
-
-fn validate_config_apply_like(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    let allowed = &["raw", "baseHash", "sessionKey", "note", "restartDelayMs"];
-    check_no_additional_properties(obj, allowed, path, errors);
-    if check_required(obj, "raw", path, errors) {
-        check_non_empty_string(&obj["raw"], &format!("{path}/raw"), errors);
-    }
-    check_optional(obj, "baseHash", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
-    check_optional(obj, "sessionKey", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
-    check_optional(obj, "note", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
-    check_optional(obj, "restartDelayMs", path, errors, |v, p, e| {
-        check_integer(v, p, Some(0), None, e);
-    });
 }
 
 pub fn validate_config_apply_params(
@@ -82,69 +37,31 @@ pub fn validate_config_patch_params(
     validate_config_apply_like(value, path, errors);
 }
 
-pub fn validate_config_schema_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &[], path, errors);
-}
+define_schema! { pub fn validate_config_schema_params {} }
 
-pub fn validate_config_schema_lookup_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["path"], path, errors);
-    if check_required(obj, "path", path, errors) {
-        let p_path = format!("{path}/path");
-        check_non_empty_string(&obj["path"], &p_path, errors);
-        check_max_length(&obj["path"], &p_path, 1024, errors);
-        #[allow(clippy::expect_used)]
-        static PATH_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-            regex::Regex::new(r"^[A-Za-z0-9_./\[\]\-*]+$").expect("valid regex")
-        });
-        check_pattern(&obj["path"], &p_path, &PATH_RE, errors);
+define_schema! {
+    pub fn validate_config_schema_lookup_params {
+        [req "path" => custom(check_config_path)],
     }
 }
 
-pub fn validate_update_run_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+fn check_config_path(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
+    check_non_empty_string(v, p, e);
+    check_max_length(v, p, 1024, e);
+    #[allow(clippy::expect_used)]
+    static PATH_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"^[A-Za-z0-9_./\[\]\-*]+$").expect("valid regex")
+    });
+    check_pattern(v, p, &PATH_RE, e);
+}
+
+define_schema! {
+    pub fn validate_update_run_params {
+        [opt "sessionKey" => string],
+        [opt "note" => string],
+        [opt "restartDelayMs" => integer(Some(0), None)],
+        [opt "timeoutMs" => integer(Some(1), None)],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    let allowed = &["sessionKey", "note", "restartDelayMs", "timeoutMs"];
-    check_no_additional_properties(obj, allowed, path, errors);
-    check_optional(obj, "sessionKey", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
-    check_optional(obj, "note", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
-    check_optional(obj, "restartDelayMs", path, errors, |v, p, e| {
-        check_integer(v, p, Some(0), None, e);
-    });
-    check_optional(obj, "timeoutMs", path, errors, |v, p, e| {
-        check_integer(v, p, Some(1), None, e);
-    });
 }
 
 #[cfg(test)]

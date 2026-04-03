@@ -57,7 +57,4 @@ func (s *Server) initShadowMonitoring(hub *rpcutil.GatewayHub) {
 	}))
 
 	s.shadowSvc.Start()
-	s.logger.Info("shadow monitoring service initialized",
-		"mainSession", mainSessionKey,
-	)
 }
