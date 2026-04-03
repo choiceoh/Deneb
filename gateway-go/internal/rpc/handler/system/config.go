@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -29,11 +30,10 @@ func ConfigReloadMethods(deps ConfigReloadDeps) map[string]rpcutil.HandlerFunc {
 		"config.reload": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 			snapshot, err := config.LoadConfigFromDefaultPath()
 			if err != nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrUnavailable, "config reload failed: "+err.Error()))
+				return rpcerr.Unavailable("config reload failed: " + err.Error()).Response(req.ID)
 			}
 			if !snapshot.Valid {
-				resp := protocol.MustResponseOK(req.ID, map[string]any{
+				resp := rpcutil.RespondOK(req.ID, map[string]any{
 					"valid":  false,
 					"issues": snapshot.Issues,
 				})
@@ -45,7 +45,7 @@ func ConfigReloadMethods(deps ConfigReloadDeps) map[string]rpcutil.HandlerFunc {
 				deps.OnReloaded(snapshot)
 			}
 
-			resp := protocol.MustResponseOK(req.ID, map[string]any{
+			resp := rpcutil.RespondOK(req.ID, map[string]any{
 				"valid":  true,
 				"path":   snapshot.Path,
 				"config": snapshot.Config,
@@ -82,11 +82,10 @@ func configGet() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		snapshot, err := config.LoadConfigFromDefaultPath()
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to load config: "+err.Error()))
+			return rpcerr.Unavailable("failed to load config: " + err.Error()).Response(req.ID)
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"path":     snapshot.Path,
 			"exists":   snapshot.Exists,
 			"valid":    snapshot.Valid,
@@ -101,44 +100,38 @@ func configGet() rpcutil.HandlerFunc {
 
 func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Raw      string `json:"raw"`
 			BaseHash string `json:"baseHash"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Raw == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "raw is required"))
+			return rpcerr.MissingParam("raw").Response(req.ID)
 		}
 
 		// Validate JSON syntax and config structure.
 		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "config validation error: "+err.Error()))
+			return rpcerr.ValidationFailed("config validation error: " + err.Error()).Response(req.ID)
 		}
 		if len(issues) > 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "invalid config: "+issues[0].String()))
+			return rpcerr.ValidationFailed("invalid config: " + issues[0].String()).Response(req.ID)
 		}
 
 		// Load current config to verify baseHash (optimistic concurrency).
 		snapshot, loadErr := config.LoadConfigFromDefaultPath()
 		if loadErr == nil && snapshot != nil && p.BaseHash != "" {
 			if snapshot.Hash != p.BaseHash {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrConflict, "config has been modified since last read (hash mismatch)"))
+				return rpcerr.Conflict("config has been modified since last read (hash mismatch)").Response(req.ID)
 			}
 		}
 
 		// Write config to the default path.
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0644); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to write config: "+err.Error()))
+			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
 		}
 
 		newHash := config.HashString(p.Raw)
@@ -147,7 +140,7 @@ func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			deps.Broadcaster("config.changed", map[string]any{"hash": newHash})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":       true,
 			"hash":     newHash,
 			"warnings": warnings,
@@ -158,46 +151,40 @@ func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Raw            string `json:"raw"`
 			BaseHash       string `json:"baseHash"`
 			SessionKey     string `json:"sessionKey,omitempty"`
 			Note           string `json:"note,omitempty"`
 			RestartDelayMs int    `json:"restartDelayMs,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Raw == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "raw is required"))
+			return rpcerr.MissingParam("raw").Response(req.ID)
 		}
 
 		// Validate JSON syntax and config structure.
 		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "config validation error: "+err.Error()))
+			return rpcerr.ValidationFailed("config validation error: " + err.Error()).Response(req.ID)
 		}
 		if len(issues) > 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "invalid config: "+issues[0].String()))
+			return rpcerr.ValidationFailed("invalid config: " + issues[0].String()).Response(req.ID)
 		}
 
 		// Concurrency check.
 		snapshot, loadErr := config.LoadConfigFromDefaultPath()
 		if loadErr == nil && snapshot != nil && p.BaseHash != "" {
 			if snapshot.Hash != p.BaseHash {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrConflict, "config has been modified since last read (hash mismatch)"))
+				return rpcerr.Conflict("config has been modified since last read (hash mismatch)").Response(req.ID)
 			}
 		}
 
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0644); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to write config: "+err.Error()))
+			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
 		}
 
 		newHash := config.HashString(p.Raw)
@@ -210,7 +197,7 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":       true,
 			"hash":     newHash,
 			"warnings": warnings,
@@ -221,49 +208,43 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Raw            string `json:"raw"`
 			BaseHash       string `json:"baseHash"`
 			SessionKey     string `json:"sessionKey,omitempty"`
 			Note           string `json:"note,omitempty"`
 			RestartDelayMs int    `json:"restartDelayMs,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Raw == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "raw is required"))
+			return rpcerr.MissingParam("raw").Response(req.ID)
 		}
 
 		// Parse the patch.
 		var patch map[string]any
 		if err := json.Unmarshal([]byte(p.Raw), &patch); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "invalid JSON patch: "+err.Error()))
+			return rpcerr.ValidationFailed("invalid JSON patch: " + err.Error()).Response(req.ID)
 		}
 
 		// Load current config for concurrency check.
 		snapshot, err := config.LoadConfigFromDefaultPath()
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to load config: "+err.Error()))
+			return rpcerr.Unavailable("failed to load config: " + err.Error()).Response(req.ID)
 		}
 
 		// Concurrency check.
 		if p.BaseHash != "" {
 			if snapshot.Hash != p.BaseHash {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrConflict, "config has been modified since last read (hash mismatch)"))
+				return rpcerr.Conflict("config has been modified since last read (hash mismatch)").Response(req.ID)
 			}
 		}
 
 		// Merge patch into current config.
 		var current map[string]any
 		if err := json.Unmarshal([]byte(snapshot.Raw), &current); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to parse current config: "+err.Error()))
+			return rpcerr.Unavailable("failed to parse current config: " + err.Error()).Response(req.ID)
 		}
 		for k, v := range patch {
 			current[k] = v
@@ -271,25 +252,21 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 		merged, err := json.MarshalIndent(current, "", "  ")
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to marshal merged config"))
+			return rpcerr.Unavailable("failed to marshal merged config").Response(req.ID)
 		}
 
 		// Validate merged config before writing.
 		issues, warnings, valErr := config.ValidateRawConfig(merged)
 		if valErr != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "config validation error: "+valErr.Error()))
+			return rpcerr.ValidationFailed("config validation error: " + valErr.Error()).Response(req.ID)
 		}
 		if len(issues) > 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "merged config is invalid: "+issues[0].String()))
+			return rpcerr.ValidationFailed("merged config is invalid: " + issues[0].String()).Response(req.ID)
 		}
 
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, merged, 0644); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to write config: "+err.Error()))
+			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
 		}
 
 		newHash := config.HashString(string(merged))
@@ -302,7 +279,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":       true,
 			"hash":     newHash,
 			"warnings": warnings,
@@ -314,27 +291,26 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 func configSchema(_ ConfigAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		schema := config.GetSchema()
-		resp := protocol.MustResponseOK(req.ID, schema)
+		resp := rpcutil.RespondOK(req.ID, schema)
 		return resp
 	}
 }
 
 func configSchemaLookup(_ ConfigAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Path string `json:"path"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Path == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "path is required"))
+		}](req)
+		if errResp != nil || p.Path == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
 		}
 
 		node := config.LookupSchema(p.Path)
 		if node == nil {
-			resp := protocol.MustResponseOK(req.ID, nil)
+			resp := rpcutil.RespondOK(req.ID, nil)
 			return resp
 		}
-		resp := protocol.MustResponseOK(req.ID, node)
+		resp := rpcutil.RespondOK(req.ID, node)
 		return resp
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -21,8 +22,7 @@ func (s *Server) registerAuthRPCMethods() {
 	// Registered explicitly so callers receive ErrUnavailable instead of
 	// "unknown method", and RPC parity tests pass.
 	stubUnavailable := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrUnavailable, req.Method+" not available (requires browser/web-login integration)"))
+		return rpcerr.Unavailable(req.Method + " not available (requires browser/web-login integration)").Response(req.ID)
 	}
 	s.dispatcher.Register("browser.request", stubUnavailable)
 	s.dispatcher.Register("web.login.start", stubUnavailable)
@@ -35,13 +35,11 @@ func (s *Server) registerAuthRPCMethods() {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.Channel == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "channel is required"))
+			return rpcerr.MissingParam("channel").Response(req.ID)
 		}
 		// Validate channel exists.
 		if p.Channel != "telegram" || s.telegramPlug == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "channel not found: "+p.Channel))
+			return rpcerr.Newf(protocol.ErrNotFound, "channel not found: %s", p.Channel).Response(req.ID)
 		}
 		// Stop the channel (logout = stop + clear).
 		loggedOut := true
