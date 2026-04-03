@@ -19,6 +19,16 @@ const (
 
 	// jpegQuality is the ffmpeg JPEG output quality (2 = high quality, 31 = low).
 	jpegQuality = 5
+
+	// Duration thresholds (seconds) for frame count selection.
+	durationShort  = 3  // <= 3s: 1 frame
+	durationMedium = 10 // <= 10s: 3 frames
+	durationLong   = 60 // <= 60s: 4 frames
+
+	// Edge offset for timestamp placement (avoids grabbing very start/end).
+	edgeOffsetRatio = 0.05 // 5% of duration
+	edgeOffsetMin   = 0.5  // minimum 0.5s
+	edgeOffsetMax   = 2.0  // maximum 2.0s
 )
 
 // ExtractFrames extracts representative JPEG frames from video data using ffmpeg.
@@ -91,11 +101,11 @@ func ExtractFrames(videoData []byte, duration int) ([][]byte, error) {
 // selectFrameCount determines how many frames to extract based on video duration.
 func selectFrameCount(duration int) int {
 	switch {
-	case duration <= 3:
+	case duration <= durationShort:
 		return 1
-	case duration <= 10:
+	case duration <= durationMedium:
 		return 3
-	case duration <= 60:
+	case duration <= durationLong:
 		return 4
 	default:
 		return maxFrames
@@ -115,13 +125,13 @@ func selectTimestamps(duration, count int) []float64 {
 		return []float64{d / 2}
 	}
 
-	// Offset from edges: 5% of duration, minimum 0.5s, maximum 2s.
-	offset := d * 0.05
-	if offset < 0.5 {
-		offset = 0.5
+	// Offset from edges to avoid grabbing black frames at start/end.
+	offset := d * edgeOffsetRatio
+	if offset < edgeOffsetMin {
+		offset = edgeOffsetMin
 	}
-	if offset > 2.0 {
-		offset = 2.0
+	if offset > edgeOffsetMax {
+		offset = edgeOffsetMax
 	}
 
 	usable := d - 2*offset
