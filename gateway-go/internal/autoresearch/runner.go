@@ -1444,13 +1444,15 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 		return nil
 	}
 
-	// Step 4: Apply overrides temporarily. defer restore() ensures originals
-	// are always restored, even on panic.
+	// Step 4: Apply overrides temporarily.
 	restore, err := ApplyOverrides(workdir, cfg.Constants, overrides)
 	if err != nil {
 		return fmt.Errorf("apply overrides: %w", err)
 	}
-	defer restore()
+	// Panic guard: restore files if experiment panics. The explicit
+	// restore() below handles the normal path. ApplyOverrides uses
+	// sync.Once internally so double-calls are safe.
+	defer func() { restore() }()
 
 	// Step 5: Run experiment with overridden files (check cache first).
 	var expResult *experimentResult
@@ -1529,9 +1531,6 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 
 		if row.Kept {
 			row.BestSoFar = metricValue
-			cfg.BestMetric = &metricValue
-			cfg.KeptIterations++
-			cfg.ConsecutiveFailures = 0
 
 			// Save best overrides to overrides.json.
 			ov := &OverrideSet{Values: overrides}
@@ -1540,26 +1539,37 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 			}
 
 			// Commit overrides.json (not modified source files).
+			// Only update BestMetric/BestCommit after a successful commit
+			// to avoid inconsistent state when commit fails.
 			commitMsg := fmt.Sprintf("autoresearch #%d: %s", iteration, hypothesis)
 			if commitErr := gitCommit(ctx, workdir, commitMsg); commitErr != nil {
-				r.logger.Error("failed to commit overrides", "error", commitErr)
+				r.logger.Error("failed to commit overrides, treating as discarded", "error", commitErr)
+				row.Kept = false
+				row.BestSoFar = currentBest
+				row.DeltaFromBest = 0
+				cfg.ConsecutiveFailures++
+				r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARD (commit failed): %s=%.6f\nHypothesis: %s",
+					iteration, cfg.MetricName, metricValue, hypothesis))
 			} else {
 				commitHash, _ := gitRevParse(ctx, workdir, "HEAD")
 				row.CommitHash = commitHash
+				cfg.BestMetric = &metricValue
 				cfg.BestCommit = commitHash
 				cfg.KeptCommit = commitHash
-			}
+				cfg.KeptIterations++
+				cfg.ConsecutiveFailures = 0
 
-			improvementInfo := ""
-			if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
-				improvement := (*cfg.BaselineMetric - metricValue) / *cfg.BaselineMetric * 100
-				if cfg.MetricDirection == "maximize" {
-					improvement = (metricValue - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+				improvementInfo := ""
+				if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
+					improvement := (*cfg.BaselineMetric - metricValue) / *cfg.BaselineMetric * 100
+					if cfg.MetricDirection == "maximize" {
+						improvement = (metricValue - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+					}
+					improvementInfo = fmt.Sprintf(" (%.2f%% from baseline)", improvement)
 				}
-				improvementInfo = fmt.Sprintf(" (%.2f%% from baseline)", improvement)
+				r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s\nOverrides: %v",
+					iteration, cfg.MetricName, metricValue, improvementInfo, hypothesis, overrides))
 			}
-			r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s\nOverrides: %v",
-				iteration, cfg.MetricName, metricValue, improvementInfo, hypothesis, overrides))
 		} else {
 			row.BestSoFar = currentBest
 			cfg.ConsecutiveFailures++
@@ -1897,7 +1907,10 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 	}
 
 	// Step 6: Record all results + decide keep/discard.
+	// The kept variant's row is deferred until after commit (Bug fix:
+	// constants mode needs the commit hash before recording the row).
 	keptAny := false
+	var keptRow *ResultRow
 	for i, res := range results {
 		row := ResultRow{
 			Iteration:   iteration,
@@ -1911,6 +1924,7 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 		if res.err != nil {
 			row.Kept = false
 			row.BestSoFar = currentBest
+			row.DeltaFromBest = 0
 		} else if i == bestIdx && (cfg.BestMetric == nil || cfg.IsBetter(bestMetric, *cfg.BestMetric)) {
 			row.Kept = true
 			row.CommitHash = res.commitHash
@@ -1923,10 +1937,6 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 			if cfg.BestMetric != nil {
 				row.DeltaFromBest = res.metric - *cfg.BestMetric
 			}
-		}
-
-		if err := AppendResult(primaryWt, row); err != nil {
-			r.logger.Error("failed to append result", "variant", i, "error", err)
 		}
 
 		// Save experiment output.
@@ -1947,6 +1957,16 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 			}
 			os.WriteFile(filepath.Join(dir, logFile), []byte(sb.String()), 0o644)
 		}
+
+		// Defer the kept row until after commit so it gets the correct hash.
+		if row.Kept {
+			keptRowCopy := row
+			keptRow = &keptRowCopy
+		} else {
+			if err := AppendResult(primaryWt, row); err != nil {
+				r.logger.Error("failed to append result", "variant", i, "error", err)
+			}
+		}
 	}
 
 	// Step 7: Update config state.
@@ -1957,7 +1977,7 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 		cfg.KeptIterations++
 		cfg.ConsecutiveFailures = 0
 
-		// Constants mode: save best overrides.
+		// Constants mode: save best overrides and commit.
 		if cfg.IsConstantsMode() {
 			ov := &OverrideSet{Values: hypotheses[bestIdx].overrides}
 			if saveErr := SaveOverrides(primaryWt, ov); saveErr != nil {
@@ -1968,10 +1988,22 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 				hash, _ := gitRevParse(ctx, primaryWt, "HEAD")
 				cfg.BestCommit = hash
 				cfg.KeptCommit = hash
+				if keptRow != nil {
+					keptRow.CommitHash = hash
+				}
 			}
 		}
 	} else {
-		cfg.ConsecutiveFailures++
+		// All hypotheses failed: increment by the number of active slots
+		// so stuck recovery thresholds trigger at the right pace.
+		cfg.ConsecutiveFailures += activeSlots
+	}
+
+	// Append the deferred kept row (now has correct commit hash).
+	if keptRow != nil {
+		if err := AppendResult(primaryWt, *keptRow); err != nil {
+			r.logger.Error("failed to append kept result", "error", err)
+		}
 	}
 
 	cfg.TotalIterations = iteration
