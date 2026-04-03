@@ -29,6 +29,7 @@ type SearchOpts struct {
 	MinImportance float64  // minimum importance to include (0 = all; use 0.7 for FTS-only mode)
 	EntityFilter  string   // filter by entity name (empty = all)
 	ExtraKeywords []string // additional keywords to include in FTS (e.g., from LLM expansion)
+	SkipRerank    bool     // skip cross-encoder reranking (caller will rerank separately)
 }
 
 // SearchResult is a scored fact from a search query.
@@ -115,7 +116,8 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 	results = dedupResults(results, s.searchParams().DedupJaccardThreshold)
 
 	// Phase 4: Cross-encoder reranking (optional).
-	if s.reranker != nil && len(results) > 1 {
+	// Skipped when caller will rerank separately (e.g., Recall after entity/relation expansion).
+	if s.reranker != nil && len(results) > 1 && !opts.SkipRerank {
 		results = s.rerankFacts(ctx, query, results)
 	}
 

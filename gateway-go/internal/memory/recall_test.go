@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExpandViaEntities(t *testing.T) {
@@ -74,73 +75,134 @@ func TestMergeSearchResults(t *testing.T) {
 	}
 }
 
-func TestFindBackfillCandidates(t *testing.T) {
-	s := tempStore(t)
+func TestRerankCandidates(t *testing.T) {
+	candidates := []SearchResult{
+		{Fact: Fact{ID: 1, Content: "저관련 팩트"}, Score: 0.3},
+		{Fact: Fact{ID: 2, Content: "고관련 팩트"}, Score: 0.5},
+		{Fact: Fact{ID: 3, Content: "중관련 팩트"}, Score: 0.4},
+	}
+
+	// Mock reranker: returns reversed order (ID=3 highest, ID=1 lowest).
+	mockReranker := func(ctx context.Context, query string, docs []string, topN int) ([]RerankResult, error) {
+		return []RerankResult{
+			{Index: 1, RelevanceScore: 0.95}, // ID=2
+			{Index: 2, RelevanceScore: 0.80}, // ID=3
+			{Index: 0, RelevanceScore: 0.30}, // ID=1
+		}, nil
+	}
+
 	ctx := context.Background()
+	result := rerankCandidates(ctx, mockReranker, "테스트 쿼리", candidates, nil)
 
-	id1, _ := s.InsertFact(ctx, Fact{Content: "팩트 A — 엔티티 있음", Category: CategoryContext, Importance: 0.6})
-	id2, _ := s.InsertFact(ctx, Fact{Content: "팩트 B — 엔티티 없음", Category: CategoryContext, Importance: 0.6})
-
-	eid, _ := s.UpsertEntity(ctx, "TestEntity", EntityConcept)
-	_ = s.LinkFactEntity(ctx, id1, eid, "subject")
-
-	candidates := []SearchResult{
-		{Fact: Fact{ID: id1}, Score: 0.9},
-		{Fact: Fact{ID: id2}, Score: 0.8},
+	if len(result) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(result))
 	}
-
-	backfillIDs := findBackfillCandidates(ctx, s, candidates, 20)
-
-	if len(backfillIDs) != 1 {
-		t.Fatalf("expected 1 backfill candidate, got %d", len(backfillIDs))
-	}
-	if backfillIDs[0] != id2 {
-		t.Errorf("expected backfill ID=%d, got %d", id2, backfillIDs[0])
+	// First result should be ID=2 (highest reranker score).
+	if result[0].Fact.ID != 2 {
+		t.Errorf("expected first result ID=2, got %d", result[0].Fact.ID)
 	}
 }
 
-func TestBuildRecallPrompt(t *testing.T) {
+func TestBuildTimeline(t *testing.T) {
+	now := time.Now()
 	candidates := []SearchResult{
-		{Fact: Fact{ID: 42, Content: "SQLite 선호", Category: CategoryPreference, Importance: 0.8}, Score: 0.9},
+		{Fact: Fact{ID: 1, Content: "두번째 일", CreatedAt: now}},
+		{Fact: Fact{ID: 2, Content: "첫번째 일", CreatedAt: now.Add(-24 * time.Hour)}},
 	}
-	backfillIDs := []int64{42}
 
-	prompt := buildRecallPrompt("SQLite 관련 결정", candidates, backfillIDs)
-
-	if prompt == "" {
-		t.Fatal("expected non-empty prompt")
+	timeline := buildTimeline(candidates)
+	if timeline == "" {
+		t.Fatal("expected non-empty timeline")
 	}
-	if !strings.Contains(prompt, "SQLite 관련 결정") {
-		t.Error("prompt should contain user message")
-	}
-	if !strings.Contains(prompt, "id:42") {
-		t.Error("prompt should contain fact ID")
-	}
-	if !strings.Contains(prompt, "빈 팩트 ID: [42]") {
-		t.Error("prompt should contain backfill IDs")
+	// Timeline should have arrow separator.
+	if !strings.Contains(timeline, "→") {
+		t.Error("timeline should contain arrow separator")
 	}
 }
 
-func TestFormatCandidatesAsKnowledge(t *testing.T) {
+func TestBuildTimeline_SingleFact(t *testing.T) {
 	candidates := []SearchResult{
-		{Fact: Fact{ID: 1, Content: "테스트 팩트", Category: CategoryContext, Importance: 0.6}, Score: 0.8},
+		{Fact: Fact{ID: 1, Content: "유일한 팩트", CreatedAt: time.Now()}},
+	}
+	timeline := buildTimeline(candidates)
+	if timeline != "" {
+		t.Errorf("expected empty timeline for single fact, got %q", timeline)
+	}
+}
+
+func TestBuildEntitySummary(t *testing.T) {
+	candidates := []SearchResult{
+		{Fact: Fact{ID: 1, Category: CategoryDecision}, Score: 0.9},
+		{Fact: Fact{ID: 2, Category: CategoryContext}, Score: 0.8},
+	}
+	entityNames := map[int64][]string{
+		1: {"SGLang"},
+		2: {"SGLang"},
 	}
 
-	result := formatCandidatesAsKnowledge(candidates)
+	summary := buildEntitySummary(candidates, entityNames)
+	if summary == "" {
+		t.Fatal("expected non-empty entity summary")
+	}
+	if !strings.Contains(summary, "SGLang") {
+		t.Error("entity summary should contain entity name")
+	}
+	if !strings.Contains(summary, "2개 팩트") {
+		t.Error("entity summary should contain fact count")
+	}
+}
+
+func TestBuildEntitySummary_NoEntities(t *testing.T) {
+	candidates := []SearchResult{
+		{Fact: Fact{ID: 999}, Score: 0.9},
+	}
+	entityNames := map[int64][]string{}
+
+	summary := buildEntitySummary(candidates, entityNames)
+	if summary != "" {
+		t.Errorf("expected empty summary for facts with no entities, got %q", summary)
+	}
+}
+
+func TestFormatRecallKnowledge(t *testing.T) {
+	candidates := []SearchResult{
+		{Fact: Fact{ID: 1, Content: "테스트 팩트", Category: CategoryContext, Importance: 0.6, CreatedAt: time.Now()}, Score: 0.8},
+	}
+	entityNames := map[int64][]string{}
+
+	result := formatRecallKnowledge(candidates, entityNames)
 	if result == "" {
 		t.Fatal("expected non-empty result")
 	}
-	if !strings.Contains(result, "### 메모리") {
-		t.Error("result should contain header")
+	if !strings.Contains(result, "### 메모리 (recall)") {
+		t.Error("result should contain recall header")
 	}
 	if !strings.Contains(result, "테스트 팩트") {
 		t.Error("result should contain fact content")
 	}
 }
 
-func TestFormatCandidatesAsKnowledge_Empty(t *testing.T) {
-	result := formatCandidatesAsKnowledge(nil)
+func TestFormatRecallKnowledge_Empty(t *testing.T) {
+	result := formatRecallKnowledge(nil, nil)
 	if result != "" {
 		t.Errorf("expected empty result for nil candidates, got %q", result)
+	}
+}
+
+func TestTruncateContent(t *testing.T) {
+	short := "짧은 텍스트"
+	if truncateContent(short, 40) != short {
+		t.Error("short text should not be truncated")
+	}
+
+	long := strings.Repeat("가", 50)
+	truncated := truncateContent(long, 10)
+	if !strings.HasSuffix(truncated, "...") {
+		t.Error("truncated text should end with ...")
+	}
+	// 10 runes + "..."
+	runes := []rune(truncated)
+	if len(runes) != 13 { // 10 + 3 for "..."
+		t.Errorf("expected 13 runes, got %d", len(runes))
 	}
 }

@@ -208,9 +208,14 @@ func NewStoreFromDB(db *sql.DB) (*Store, error) {
 }
 
 // SetReranker configures an optional cross-encoder reranker for search results.
-// When set, SearchFacts will rerank results after hybrid scoring.
+// When set, SearchFacts and Recall will rerank results after hybrid scoring.
 func (s *Store) SetReranker(fn RerankFunc) {
 	s.reranker = fn
+}
+
+// Reranker returns the configured reranker function, or nil if not set.
+func (s *Store) Reranker() RerankFunc {
+	return s.reranker
 }
 
 // SetFactMutateCallback registers a function called when facts are mutated
