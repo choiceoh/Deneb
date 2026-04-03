@@ -237,6 +237,39 @@ func (h *Handler) handleSlashCommand(
 	case "think":
 		h.deliverSlashResponse(delivery, "사고 모드가 토글되었습니다.")
 
+	case "mode":
+		sess := h.sessions.Get(sessionKey)
+		if sess == nil {
+			h.deliverSlashResponse(delivery, "세션이 없습니다.")
+			break
+		}
+		arg := strings.ToLower(strings.TrimSpace(cmd.Args))
+		switch arg {
+		case "대화", "chat", "conversation":
+			sess.ToolPreset = "conversation"
+			_ = h.sessions.Set(sess)
+			h.deliverSlashResponse(delivery, "💬 대화 모드로 전환되었습니다. 웹 검색만 사용합니다.")
+		case "일반", "normal", "":
+			// Toggle: if already in conversation mode, switch to normal; otherwise switch to conversation.
+			if arg == "" {
+				if sess.ToolPreset == "conversation" {
+					sess.ToolPreset = ""
+					_ = h.sessions.Set(sess)
+					h.deliverSlashResponse(delivery, "🔧 일반 모드로 전환되었습니다. 모든 도구를 사용합니다.")
+				} else {
+					sess.ToolPreset = "conversation"
+					_ = h.sessions.Set(sess)
+					h.deliverSlashResponse(delivery, "💬 대화 모드로 전환되었습니다. 웹 검색만 사용합니다.")
+				}
+			} else {
+				sess.ToolPreset = ""
+				_ = h.sessions.Set(sess)
+				h.deliverSlashResponse(delivery, "🔧 일반 모드로 전환되었습니다. 모든 도구를 사용합니다.")
+			}
+		default:
+			h.deliverSlashResponse(delivery, "사용법: /mode [대화|일반] — 인자 없이 토글")
+		}
+
 	case "coordinator":
 		// Activate coordinator mode: set ToolPreset on the session, reset transcript.
 		h.InterruptActiveRun(sessionKey)
@@ -361,7 +394,11 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		modes = append(modes, fmt.Sprintf("Elevated: %s", sess.ElevatedLevel))
 	}
 	if sess.ToolPreset != "" {
-		modes = append(modes, fmt.Sprintf("Preset: %s", sess.ToolPreset))
+		presetLabel := sess.ToolPreset
+		if sess.ToolPreset == "conversation" {
+			presetLabel = "대화모드"
+		}
+		modes = append(modes, fmt.Sprintf("Preset: %s", presetLabel))
 	}
 	if len(modes) > 0 {
 		sections = append(sections, "⚙️ **모드:** "+strings.Join(modes, " | "))

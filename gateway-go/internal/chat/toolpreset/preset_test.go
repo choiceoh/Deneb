@@ -75,6 +75,24 @@ func TestAllowedTools_Coordinator(t *testing.T) {
 	}
 }
 
+func TestAllowedTools_Conversation(t *testing.T) {
+	allowed := AllowedTools(PresetConversation)
+	if allowed == nil {
+		t.Fatal("conversation preset should return non-nil allowed set")
+	}
+	for _, name := range []string{"web", "http", "memory", "fetch_tools"} {
+		if !allowed[name] {
+			t.Errorf("conversation preset should include %q", name)
+		}
+	}
+	// Conversation should NOT have file/exec/code tools.
+	for _, name := range []string{"read", "write", "edit", "exec", "git", "grep", "find"} {
+		if allowed[name] {
+			t.Errorf("conversation preset should NOT include %q", name)
+		}
+	}
+}
+
 func TestAllowedTools_None(t *testing.T) {
 	if allowed := AllowedTools(PresetNone); allowed != nil {
 		t.Error("empty preset should return nil (no restriction)")
@@ -88,7 +106,7 @@ func TestAllowedTools_Unknown(t *testing.T) {
 }
 
 func TestIsValid(t *testing.T) {
-	for _, p := range []Preset{PresetNone, PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator} {
+	for _, p := range []Preset{PresetNone, PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator, PresetConversation} {
 		if !IsValid(p) {
 			t.Errorf("IsValid(%q) should be true", p)
 		}
@@ -100,7 +118,7 @@ func TestIsValid(t *testing.T) {
 
 func TestKnownPresets(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 4 {
-		t.Errorf("expected 4 known presets, got %d", len(presets))
+	if len(presets) != 5 {
+		t.Errorf("expected 5 known presets, got %d", len(presets))
 	}
 }
