@@ -65,8 +65,8 @@ const (
 	DefaultZaiModel   = "glm-5v-turbo"
 
 	DefaultGoogleBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
-	DefaultPilotModel    = "gemini-3-flash-preview"
-	DefaultFallbackModel = "gemini-3.1-pro-preview"
+	DefaultPilotModel    = "Qwen/Qwen3.5-35B-A3B"
+	DefaultFallbackModel = "Qwen/Qwen3.5-35B-A3B"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
@@ -87,9 +87,6 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 	mainBaseURL := resolveBaseURL(mainProvider)
 	mainAPIKey := resolveAPIKey(mainProvider)
 
-	// Resolve Google API key for fallback/pilot models.
-	googleAPIKey := os.Getenv("GEMINI_API_KEY")
-
 	models := map[Role]ModelConfig{
 		RoleMain: {
 			ProviderID: mainProvider,
@@ -104,16 +101,16 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 			APIKey:     resolveSglangAPIKey(),
 		},
 		RolePilot: {
-			ProviderID: "google",
+			ProviderID: "sglang",
 			Model:      DefaultPilotModel,
-			BaseURL:    DefaultGoogleBaseURL,
-			APIKey:     googleAPIKey,
+			BaseURL:    DefaultSglangBaseURL,
+			APIKey:     resolveSglangAPIKey(),
 		},
 		RoleFallback: {
-			ProviderID: "google",
+			ProviderID: "sglang",
 			Model:      DefaultFallbackModel,
-			BaseURL:    DefaultGoogleBaseURL,
-			APIKey:     googleAPIKey,
+			BaseURL:    DefaultSglangBaseURL,
+			APIKey:     resolveSglangAPIKey(),
 		},
 	}
 

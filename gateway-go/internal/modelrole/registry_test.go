@@ -17,8 +17,8 @@ func TestResolveModel(t *testing.T) {
 		// Role names resolve to full model IDs.
 		{"main", "zai/test-model", RoleMain, true},
 		{"lightweight", "sglang/" + DefaultSglangModel, RoleLightweight, true},
-		{"pilot", "google/" + DefaultPilotModel, RolePilot, true},
-		{"fallback", "google/" + DefaultFallbackModel, RoleFallback, true},
+		{"pilot", "sglang/" + DefaultPilotModel, RolePilot, true},
+		{"fallback", "sglang/" + DefaultFallbackModel, RoleFallback, true},
 		// Actual model names pass through unchanged.
 		{"google/gemini-3.1-pro", "google/gemini-3.1-pro", "", false},
 		{"some-unknown-model", "some-unknown-model", "", false},
@@ -51,8 +51,9 @@ func TestRoleForModel(t *testing.T) {
 	}{
 		{"zai/test-model", RoleMain, true},
 		{"sglang/" + DefaultSglangModel, RoleLightweight, true},
-		{"google/" + DefaultPilotModel, RolePilot, true},
-		{"google/" + DefaultFallbackModel, RoleFallback, true},
+		// Pilot and fallback share the same sglang model as lightweight;
+		// RoleForModel returns the first match in iteration order (lightweight).
+		{"sglang/" + DefaultPilotModel, RoleLightweight, true},
 		{"unknown/model", "", false},
 	}
 

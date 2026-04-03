@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -560,7 +559,7 @@ func GetLightweightModel() string {
 
 // GetPilotClient returns the LLM client for the pilot model role.
 func GetPilotClient() *llm.Client {
-	return getRoleClient(modelrole.RolePilot, modelrole.DefaultGoogleBaseURL, os.Getenv("GEMINI_API_KEY"))
+	return getRoleClient(modelrole.RolePilot, modelrole.DefaultSglangBaseURL, "local")
 }
 
 // GetPilotModel returns the model name for the pilot role.
