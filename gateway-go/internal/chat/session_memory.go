@@ -84,6 +84,16 @@ const (
 	// sessionMemoryUpdateTimeout is the max time for a single sglang call.
 	// Increased from 20s to 60s because the model now receives full transcript.
 	sessionMemoryUpdateTimeout = 60 * time.Second
+
+	// sessionMemoryDebounce is the minimum interval between session memory updates.
+	// If the previous update completed less than this ago, skip the current one.
+	sessionMemoryDebounce = 30 * time.Second
+
+	// trivialDeltaUserChars / trivialDeltaResponseChars define the threshold
+	// below which a turn is considered too trivial to warrant a session memory
+	// update (e.g., "응" + short acknowledgment).
+	trivialDeltaUserChars     = 20
+	trivialDeltaResponseChars = 100
 )
 
 // ---------------------------------------------------------------------------
@@ -93,16 +103,20 @@ const (
 // SessionMemoryStore is a thread-safe in-memory store backed by disk.
 // Stores session memory as markdown strings (not structured JSON).
 type SessionMemoryStore struct {
-	mu      sync.RWMutex
-	entries map[string]string
-	baseDir string // empty = no disk persistence
+	mu          sync.RWMutex
+	entries     map[string]string
+	lastTotal   map[string]int       // tracks transcript total at last update per session
+	lastUpdated map[string]time.Time // tracks when last update completed per session
+	baseDir     string               // empty = no disk persistence
 }
 
 // NewSessionMemoryStore creates a store. Pass empty baseDir for in-memory only.
 func NewSessionMemoryStore(baseDir string) *SessionMemoryStore {
 	return &SessionMemoryStore{
-		entries: make(map[string]string),
-		baseDir: baseDir,
+		entries:     make(map[string]string),
+		lastTotal:   make(map[string]int),
+		lastUpdated: make(map[string]time.Time),
+		baseDir:     baseDir,
 	}
 }
 
@@ -123,10 +137,35 @@ func (s *SessionMemoryStore) Set(sessionKey string, content string) {
 	}
 }
 
+// GetLastTotal returns the transcript message count at the last session memory update.
+func (s *SessionMemoryStore) GetLastTotal(sessionKey string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastTotal[sessionKey]
+}
+
+// SetLastTotal records the transcript message count after a successful update.
+func (s *SessionMemoryStore) SetLastTotal(sessionKey string, total int) {
+	s.mu.Lock()
+	s.lastTotal[sessionKey] = total
+	s.lastUpdated[sessionKey] = time.Now()
+	s.mu.Unlock()
+}
+
+// ShouldDebounce returns true if the last update was too recent to warrant another.
+func (s *SessionMemoryStore) ShouldDebounce(sessionKey string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	t, ok := s.lastUpdated[sessionKey]
+	return ok && time.Since(t) < sessionMemoryDebounce
+}
+
 // Delete removes session memory from store and disk.
 func (s *SessionMemoryStore) Delete(sessionKey string) {
 	s.mu.Lock()
 	delete(s.entries, sessionKey)
+	delete(s.lastTotal, sessionKey)
+	delete(s.lastUpdated, sessionKey)
 	s.mu.Unlock()
 	if s.baseDir != "" {
 		os.Remove(s.diskPath(sessionKey)) // best-effort
@@ -250,6 +289,11 @@ func UpdateSessionMemory(
 	if store == nil {
 		return
 	}
+	// Debounce: skip if last update was too recent.
+	if store.ShouldDebounce(sessionKey) {
+		logger.Debug("session memory: debounced (too recent)")
+		return
+	}
 	lwClient := pilot.GetLightweightClient()
 	if lwClient == nil {
 		return
@@ -267,14 +311,46 @@ func UpdateSessionMemory(
 		currentMemory = sessionMemoryTemplate
 	}
 
-	// Load recent transcript messages for full context.
+	// Load recent transcript messages — only new messages since last update.
 	var transcriptText string
+	var currentTotal int
 	if transcript != nil {
-		msgs, _, err := transcript.Load(sessionKey, maxTranscriptMessages)
+		msgs, total, err := transcript.Load(sessionKey, maxTranscriptMessages)
 		if err != nil {
 			logger.Debug("session memory: failed to load transcript", "error", err)
 		} else {
+			currentTotal = total
+			lastTotal := store.GetLastTotal(sessionKey)
+
+			// Calculate how many messages are new since last update.
+			newCount := total - lastTotal
+			if newCount <= 0 {
+				logger.Debug("session memory: no new messages since last update",
+					"total", total, "lastTotal", lastTotal)
+				return
+			}
+
+			// From the loaded messages (tail of transcript), take only the new ones.
+			// If newCount > len(msgs), all loaded messages are new (plus some we can't see).
+			if newCount < len(msgs) {
+				msgs = msgs[len(msgs)-newCount:]
+			}
+
+			// Skip trivial deltas: short user message + short response
+			// (e.g., "응" + "네, 알겠습니다") — nothing meaningful to update.
+			if lastTotal > 0 && isTrivialDelta(msgs) {
+				logger.Debug("session memory: trivial delta, skipping sglang call",
+					"newMsgs", newCount)
+				store.SetLastTotal(sessionKey, total)
+				return
+			}
+
 			transcriptText = formatTranscriptForMemory(msgs)
+			if lastTotal > 0 {
+				logger.Debug("session memory: delta mode",
+					"newMsgs", newCount, "totalMsgs", total,
+					"deltaChars", len(transcriptText))
+			}
 		}
 	}
 
@@ -295,7 +371,7 @@ func UpdateSessionMemory(
 
 	// Build the user prompt with full context.
 	var userPrompt strings.Builder
-	userPrompt.WriteString("위의 대화 기록을 바탕으로 세션 메모리를 업데이트하세요.\n\n")
+	userPrompt.WriteString("위의 새로운 대화 기록을 바탕으로 세션 메모리를 업데이트하세요.\n(이전 대화는 현재 세션 메모리에 이미 반영되어 있습니다.)\n\n")
 
 	if toolSummary != "" {
 		clean := strings.TrimPrefix(toolSummary, "[Tools used: ")
@@ -327,7 +403,7 @@ func UpdateSessionMemory(
 		Model:     pilot.GetLightweightModel(),
 		Messages:  messages,
 		System:    llm.SystemString(sessionMemorySystemPrompt),
-		MaxTokens: 4096,
+		MaxTokens: 2048,
 		ExtraBody: smExtra,
 	})
 	if err != nil {
@@ -337,6 +413,7 @@ func UpdateSessionMemory(
 
 	resp = strings.TrimSpace(resp)
 	if resp == "" || resp == "NO_CHANGE" {
+		store.SetLastTotal(sessionKey, currentTotal)
 		return
 	}
 
@@ -354,10 +431,29 @@ func UpdateSessionMemory(
 	resp = enforceTokenBudget(resp, maxSessionMemoryTokens)
 
 	store.Set(sessionKey, resp)
+	store.SetLastTotal(sessionKey, currentTotal)
 	// Extract title for log (first line after "# Session Title\n").
 	title := extractTitle(resp)
 	logger.Debug("session memory updated",
-		"session", sessionKey, "title", truncRunes(title, 60))
+		"session", sessionKey, "title", truncRunes(title, 60),
+		"deltaTotal", currentTotal)
+}
+
+// isTrivialDelta returns true when new messages are too short/simple to
+// warrant an sglang call. Checks total content length across user and
+// assistant messages — if both are tiny, nothing meaningful changed.
+func isTrivialDelta(msgs []ChatMessage) bool {
+	var userChars, respChars int
+	for _, m := range msgs {
+		n := utf8.RuneCount(m.Content)
+		switch m.Role {
+		case "user":
+			userChars += n
+		case "assistant":
+			respChars += n
+		}
+	}
+	return userChars < trivialDeltaUserChars && respChars < trivialDeltaResponseChars
 }
 
 // ---------------------------------------------------------------------------
@@ -454,8 +550,8 @@ func formatRichContent(content json.RawMessage) string {
 // into the conversation while keeping the instruction separate.
 func buildMemoryUpdateMessages(transcriptText, instruction string) []llm.Message {
 	return []llm.Message{
-		llm.NewTextMessage("user", "다음은 이 세션의 대화 기록입니다:\n\n"+transcriptText),
-		llm.NewTextMessage("assistant", "대화 기록을 확인했습니다. 세션 메모리 업데이트 지시를 주세요."),
+		llm.NewTextMessage("user", "다음은 이 세션의 새로운 대화 기록입니다 (이전 대화는 세션 메모리에 이미 반영됨):\n\n"+transcriptText),
+		llm.NewTextMessage("assistant", "새 대화 기록을 확인했습니다. 세션 메모리 업데이트 지시를 주세요."),
 		llm.NewTextMessage("user", instruction),
 	}
 }
