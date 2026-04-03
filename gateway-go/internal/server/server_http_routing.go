@@ -34,6 +34,9 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /v1/models", s.handleModels)
 	mux.HandleFunc("POST /v1/responses", s.handleResponses)
 
+	// Anthropic Messages API endpoint (Claude Desktop integration).
+	mux.HandleFunc("POST /v1/messages", s.handleMessages)
+
 	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
 	if s.hooksHTTP != nil {
 		hooksHandler := s.hooksHTTP

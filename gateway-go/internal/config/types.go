@@ -27,8 +27,8 @@ const (
 
 // Tailscale modes.
 const (
-	TailscaleOff   = "off"
-	TailscaleServe = "serve"
+	TailscaleOff    = "off"
+	TailscaleServe  = "serve"
 	TailscaleFunnel = "funnel"
 )
 
@@ -62,19 +62,19 @@ const (
 // ── Default values ───────────────────────────────────────────────────────────
 
 const (
-	DefaultChannelHealthCheckMinutes   = 5
+	DefaultChannelHealthCheckMinutes    = 5
 	DefaultChannelStaleThresholdMinutes = 30
-	DefaultChannelMaxRestartsPerHour   = 10
-	DefaultReloadDebounceMs            = 300
-	DefaultReloadDeferralTimeoutMs     = 300_000
-	DefaultAuthRateLimitMaxAttempts    = 10
-	DefaultAuthRateLimitWindowMs       = 60_000
-	DefaultAuthRateLimitLockoutMs      = 300_000
-	DefaultSessionMainKey              = "main"
-	DefaultAgentMaxConcurrent          = 8
-	DefaultSubagentMaxConcurrent       = 2
-	DefaultLogRedactSensitive          = "tools"
-	DefaultMaxHookTimeoutMs            = 300_000 // 5 minutes
+	DefaultChannelMaxRestartsPerHour    = 10
+	DefaultReloadDebounceMs             = 300
+	DefaultReloadDeferralTimeoutMs      = 300_000
+	DefaultAuthRateLimitMaxAttempts     = 10
+	DefaultAuthRateLimitWindowMs        = 60_000
+	DefaultAuthRateLimitLockoutMs       = 300_000
+	DefaultSessionMainKey               = "main"
+	DefaultAgentMaxConcurrent           = 8
+	DefaultSubagentMaxConcurrent        = 2
+	DefaultLogRedactSensitive           = "tools"
+	DefaultMaxHookTimeoutMs             = 300_000 // 5 minutes
 )
 
 // DenebConfig is the top-level configuration object read from deneb.json.
@@ -201,8 +201,15 @@ type GatewayHTTPConfig struct {
 
 // GatewayHTTPEndpointsConfig for HTTP API endpoints.
 type GatewayHTTPEndpointsConfig struct {
-	ChatCompletions *GatewayHTTPChatCompletionsConfig `json:"chatCompletions,omitempty"`
-	Responses       *GatewayHTTPResponsesConfig       `json:"responses,omitempty"`
+	ChatCompletions   *GatewayHTTPChatCompletionsConfig   `json:"chatCompletions,omitempty"`
+	Responses         *GatewayHTTPResponsesConfig         `json:"responses,omitempty"`
+	AnthropicMessages *GatewayHTTPAnthropicMessagesConfig `json:"anthropicMessages,omitempty"`
+}
+
+// GatewayHTTPAnthropicMessagesConfig for /v1/messages endpoint (Anthropic Messages API proxy).
+type GatewayHTTPAnthropicMessagesConfig struct {
+	Enabled      *bool `json:"enabled,omitempty"`
+	MaxBodyBytes *int  `json:"maxBodyBytes,omitempty"`
 }
 
 // GatewayHTTPSecurityHeadersConfig for HTTP security headers.
