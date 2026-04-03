@@ -122,7 +122,7 @@ func executeAgentRun(
 	}
 
 	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
-	// Agent tools pass role names ("main", "lightweight", "pilot", "fallback").
+	// Agent tools pass role names ("main", "lightweight", "fallback").
 	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
 	// are treated as direct overrides (no fallback chain).
 	model := params.Model

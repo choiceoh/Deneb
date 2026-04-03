@@ -218,7 +218,7 @@ func ToolPilot(tools ToolExecutor, workspaceDir string) func(ctx context.Context
 		systemPrompt := BuildPilotSystemPrompt(workspaceDir, thinking)
 		userMsg := BuildPilotPrompt(p.Task, p.OutputFormat, p.MaxLength, gathered)
 
-		result, err := CallPilotLLM(ctx, systemPrompt, userMsg, maxTokens)
+		result, err := CallLocalLLM(ctx, systemPrompt, userMsg, maxTokens)
 		if err != nil {
 			// Graceful degradation: return raw tool results if LLM fails.
 			logger.Warn("pilot: LLM call failed, falling back to raw results",

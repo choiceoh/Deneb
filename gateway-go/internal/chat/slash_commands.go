@@ -54,7 +54,7 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "kill",
 		}
 	case "model":
-		// Accepts model ID ("google/gemini-3.1-pro") or role name ("main", "lightweight", "pilot", "fallback").
+		// Accepts model ID ("google/gemini-3.1-pro") or role name ("main", "lightweight", "fallback").
 		if args == "" {
 			return &SlashResult{
 				Handled:  true,

@@ -990,7 +990,7 @@ func sessionsSpawnToolSchema() map[string]any {
 			},
 			"model": map[string]any{
 				"type":        "string",
-				"enum":        []string{"main", "lightweight", "pilot", "fallback"},
+				"enum":        []string{"main", "lightweight", "fallback"},
 				"description": "Model role to use (default: main)",
 			},
 			"tool_preset": map[string]any{
@@ -1045,7 +1045,7 @@ func imageToolSchema() map[string]any {
 			},
 			"model": map[string]any{
 				"type":        "string",
-				"enum":        []string{"main", "lightweight", "pilot", "fallback"},
+				"enum":        []string{"main", "lightweight", "fallback"},
 				"description": "Model role to use (default: lightweight)",
 			},
 		},

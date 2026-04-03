@@ -873,7 +873,7 @@
       description: Human-readable label
     model:
       type: string
-      enum: ["main", "lightweight", "pilot", "fallback"]
+      enum: ["main", "lightweight", "fallback"]
       description: "Model role to use (default: main)"
     tool_preset:
       type: string
@@ -921,7 +921,7 @@
       description: "Multiple image paths or URLs (up to 20)"
     model:
       type: string
-      enum: ["main", "lightweight", "pilot", "fallback"]
+      enum: ["main", "lightweight", "fallback"]
       description: "Model role to use (default: lightweight)"
 
 - name: youtube_transcript

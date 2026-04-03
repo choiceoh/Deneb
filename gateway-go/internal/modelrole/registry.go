@@ -27,8 +27,7 @@ type Role string
 const (
 	RoleMain        Role = "main"
 	RoleLightweight Role = "lightweight"
-	RolePilot       Role = "pilot"
-	RoleFallback    Role = "fallback"
+	RoleFallback Role = "fallback"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -65,7 +64,6 @@ const (
 	DefaultZaiModel   = "glm-5v-turbo"
 
 	DefaultGoogleBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
-	DefaultPilotModel    = "Qwen/Qwen3.5-35B-A3B"
 	DefaultFallbackModel = "gemini-3.1-pro-preview"
 )
 
@@ -103,12 +101,6 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 			BaseURL:    DefaultSglangBaseURL,
 			APIKey:     resolveSglangAPIKey(),
 		},
-		RolePilot: {
-			ProviderID: "sglang",
-			Model:      DefaultPilotModel,
-			BaseURL:    DefaultSglangBaseURL,
-			APIKey:     resolveSglangAPIKey(),
-		},
 		RoleFallback: {
 			ProviderID: "google",
 			Model:      DefaultFallbackModel,
@@ -131,7 +123,6 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 	logger.Info("modelrole: registry initialized",
 		"main", logModelAlias(models[RoleMain]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
-		"pilot", logModelAlias(models[RolePilot]),
 		"fallback", logModelAlias(models[RoleFallback]),
 	)
 
@@ -183,12 +174,12 @@ func (r *Registry) Client(role Role) *llm.Client {
 }
 
 // ResolveModel resolves a model string that may be a role name ("main", "lightweight",
-// "pilot", "fallback") into the actual full model ID. If the string is already a
+// "fallback") into the actual full model ID. If the string is already a
 // model name (not a role), it is returned unchanged along with ok=false.
 // This allows callers to accept either role names or raw model names.
 func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Role, ok bool) {
 	switch Role(modelOrRole) {
-	case RoleMain, RoleLightweight, RolePilot, RoleFallback:
+	case RoleMain, RoleLightweight, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
 	}
@@ -200,7 +191,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for _, role := range []Role{RoleMain, RoleLightweight, RolePilot, RoleFallback} {
+	for _, role := range []Role{RoleMain, RoleLightweight, RoleFallback} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -224,8 +215,6 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		return []Role{RoleMain, RoleLightweight, RoleFallback}
 	case RoleLightweight:
 		return []Role{RoleLightweight, RoleFallback}
-	case RolePilot:
-		return []Role{RolePilot, RoleFallback}
 	case RoleFallback:
 		return []Role{RoleFallback}
 	default:

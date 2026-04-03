@@ -23,9 +23,8 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout       = 15 * time.Second // local sglang: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
-	proactiveRemoteTimeout = 20 * time.Second // remote fallback (Gemini Flash) needs more time
-	proactiveMaxTokens     = 1024
+	proactiveTimeout   = 15 * time.Second // local sglang: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
+	proactiveMaxTokens = 1024
 	proactiveMinMsgLen     = 20 // skip for very short messages
 )
 
@@ -94,17 +93,11 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 		return ""
 	}
 	// Check sglang health (cached probe, no per-call overhead).
-	sglangUp := pilot.CheckSglangHealth()
-	if !sglangUp && !pilot.HasRegistry() {
+	if !pilot.CheckSglangHealth() && !pilot.HasRegistry() {
 		return ""
 	}
 
-	timeout := proactiveTimeout
-	if !sglangUp {
-		timeout = proactiveRemoteTimeout
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
 	defer cancel()
 
 	// Gather workspace signals: recent file list + memory file snippets.
@@ -130,16 +123,9 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	// Memory content is provided to the main LLM by PrefetchKnowledge (importance-weighted).
 	// Reading MEMORY.md here would be redundant I/O on every message.
 
-	var result string
-	var err error
-	if sglangUp {
-		result, err = pilot.CallLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
-	} else {
-		// sglang down — use pilot model (Gemini Flash) for proactive context.
-		result, err = pilot.CallPilotLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
-	}
+	result, err := pilot.CallLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
 	if err != nil {
-		logger.Debug("proactive context failed", "error", err, "remote", !sglangUp)
+		logger.Debug("proactive context failed", "error", err)
 		return ""
 	}
 
