@@ -70,7 +70,6 @@ func (hc *healthChecker) check() {
 		Messages:  []llm.Message{llm.NewTextMessage("user", healthTestPrompt)},
 		MaxTokens: healthTestMaxTokens,
 		Stream:    true,
-		ExtraBody: NoThinking,
 	}
 
 	events, err := hc.hub.client.StreamChat(ctx, req)
