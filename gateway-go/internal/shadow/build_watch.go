@@ -14,10 +14,8 @@ type BuildWatcher struct {
 	// State (guarded by svc.mu).
 	lastPushAt    int64  // unix ms
 	lastBranch    string // branch that was pushed
-	lastRepo      string // repo that was pushed to (set by webhook path)
-	pushSource    string // "webhook" or "text_detect"
+	pushSource    string // "text_detect"
 	watchingBuild bool   // true while polling build status
-	ciReceived    chan struct{} // closed when OnCIResult is called
 }
 
 func newBuildWatcher(svc *Service) *BuildWatcher {
@@ -41,84 +39,6 @@ func (bw *BuildWatcher) OnPushDetected(branch string) {
 
 	// Start async build check (local polling fallback).
 	go bw.pollBuildStatus()
-}
-
-// OnGitHubPush is called when a real GitHub push webhook is received.
-// This is the preferred path over text-based OnPushDetected.
-func (bw *BuildWatcher) OnGitHubPush(branch string, commitCount int, repo string) {
-	bw.svc.mu.Lock()
-	bw.lastPushAt = time.Now().UnixMilli()
-	bw.lastBranch = branch
-	bw.lastRepo = repo
-	bw.pushSource = "webhook"
-	bw.watchingBuild = true
-	bw.ciReceived = make(chan struct{})
-	bw.svc.mu.Unlock()
-
-	bw.svc.cfg.Logger.Info("shadow: GitHub push webhook received, waiting for CI",
-		"branch", branch,
-		"commits", commitCount,
-		"repo", repo,
-	)
-
-	// Wait for CI result from workflow_run webhook; fall back to local check after 10min.
-	go bw.waitForCIOrFallback()
-}
-
-// OnCIResult is called when a workflow_run completed event arrives via webhook.
-func (bw *BuildWatcher) OnCIResult(branch string, passed bool, workflow string) {
-	bw.svc.mu.Lock()
-	bw.watchingBuild = false
-	// Signal waitForCIOrFallback that CI result arrived.
-	if bw.ciReceived != nil {
-		select {
-		case <-bw.ciReceived:
-			// already closed
-		default:
-			close(bw.ciReceived)
-		}
-	}
-	bw.svc.mu.Unlock()
-
-	status := "CI 성공"
-	if !passed {
-		status = fmt.Sprintf("CI 실패: %s", workflow)
-	}
-
-	bw.svc.emit(ShadowEvent{Type: "build_status", Payload: map[string]any{
-		"branch":   branch,
-		"status":   status,
-		"source":   "github_webhook",
-		"workflow": workflow,
-	}})
-
-	if !passed {
-		bw.notifyBuildFailure(status)
-	}
-}
-
-// waitForCIOrFallback waits up to 10 minutes for a CI result from webhook.
-// If no result arrives, falls back to local build polling.
-func (bw *BuildWatcher) waitForCIOrFallback() {
-	bw.svc.mu.Lock()
-	ch := bw.ciReceived
-	bw.svc.mu.Unlock()
-
-	if ch == nil {
-		return
-	}
-
-	select {
-	case <-ch:
-		// CI result arrived via OnCIResult — nothing more to do.
-		return
-	case <-time.After(10 * time.Minute):
-		// No CI webhook received — repo may not have CI configured.
-		bw.svc.cfg.Logger.Info("shadow: no CI webhook received after 10min, falling back to local check")
-		bw.pollBuildStatus()
-	case <-bw.svc.svcCtx.Done():
-		return
-	}
 }
 
 // pollBuildStatus checks build status periodically after a push.

@@ -141,11 +141,6 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 			s.logger.Debug("github webhook: GITHUB_WEBHOOK_CHAT_ID not set, skipping telegram delivery")
 		}
 
-		// Dispatch to shadow monitoring service for enriched tracking.
-		if s.shadowSvc != nil {
-			s.shadowSvc.OnGitHubEvent(eventType, payload)
-		}
-
 		// Fire github.webhook hooks (shell + internal).
 		env := map[string]string{
 			"GITHUB_EVENT":       eventType,
