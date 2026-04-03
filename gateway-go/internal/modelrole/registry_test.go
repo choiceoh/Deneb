@@ -131,8 +131,8 @@ func TestLogModelAlias(t *testing.T) {
 	}{
 		{
 			name: "plain model",
-			cfg:  ModelConfig{ProviderID: "zai", Model: "glm-5turbo"},
-			want: "glm-5turbo",
+			cfg:  ModelConfig{ProviderID: "zai", Model: "glm-5-turbo"},
+			want: "glm-5-turbo",
 		},
 		{
 			name: "nested model path",

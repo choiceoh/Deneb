@@ -58,7 +58,7 @@ func (p *InboundProcessor) quickChangeModels() []modelEntry {
 			provider string
 			model    string
 		}{
-			{"zai", "glm-5turbo"},
+			{"zai", "glm-5-turbo"},
 			{"zai", "glm-5.1"},
 		}
 		for _, e := range extras {
