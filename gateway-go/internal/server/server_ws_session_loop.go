@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
@@ -42,8 +43,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 				return
 			}
 			// Send error response so the client knows the frame was rejected.
-			errResp := protocol.NewResponseError("", protocol.NewError(
-				protocol.ErrInvalidRequest, "malformed JSON frame"))
+			errResp := rpcerr.InvalidRequest("malformed JSON frame").Response("")
 			if writeErr := s.writeFrame(ctx, client, errResp); writeErr != nil {
 				return
 			}
@@ -72,8 +72,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		// Deduplicate: reject requests with recently-seen IDs.
 		if !s.dedupe.Check(req.ID) {
 			s.logger.Debug("duplicate request", "connId", client.connID, "id", req.ID)
-			errResp := protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrConflict, "duplicate request ID"))
+			errResp := rpcerr.Conflict("duplicate request ID").Response(req.ID)
 			if err := s.writeFrame(ctx, client, errResp); err != nil {
 				return
 			}

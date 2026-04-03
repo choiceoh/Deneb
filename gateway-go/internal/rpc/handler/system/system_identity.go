@@ -19,7 +19,7 @@ func IdentityMethods(version string) map[string]rpcutil.HandlerFunc {
 
 	return map[string]rpcutil.HandlerFunc{
 		"gateway.identity.get": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-			resp := protocol.MustResponseOK(req.ID, map[string]any{
+			resp := rpcutil.RespondOK(req.ID, map[string]any{
 				"hostname": hostname,
 				"version":  version,
 				"runtime":  "go",

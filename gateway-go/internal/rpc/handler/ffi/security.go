@@ -20,15 +20,14 @@ func SecurityMethods() map[string]rpcutil.HandlerFunc {
 
 func securityValidateSessionKey() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key string `json:"key"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		err := ffipkg.ValidateSessionKey(p.Key)
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"valid": err == nil,
 		})
 	}
@@ -36,14 +35,13 @@ func securityValidateSessionKey() rpcutil.HandlerFunc {
 
 func securitySanitizeHTML() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Input string `json:"input"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"output": ffipkg.SanitizeHTML(p.Input),
 		})
 	}
@@ -51,14 +49,13 @@ func securitySanitizeHTML() rpcutil.HandlerFunc {
 
 func securityIsSafeURL() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			URL string `json:"url"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"safe": ffipkg.IsSafeURL(p.URL),
 		})
 	}
@@ -66,14 +63,13 @@ func securityIsSafeURL() rpcutil.HandlerFunc {
 
 func securityValidateErrorCode() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Code string `json:"code"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"valid": ffipkg.ValidateErrorCode(p.Code),
 		})
 	}

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -99,8 +100,7 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 		if logDir == "" {
 			home, err := os.UserHomeDir()
 			if err != nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrUnavailable, "cannot determine home directory: "+err.Error()))
+				return rpcerr.Unavailable("cannot determine home directory: " + err.Error()).Response(req.ID)
 			}
 			logDir = filepath.Join(home, ".deneb", "logs")
 		}
@@ -108,21 +108,18 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 		// Find the most recent log file.
 		logFile, err := findLatestLogFile(logDir)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "no log files found: "+err.Error()))
+			return rpcerr.Newf(protocol.ErrNotFound, "no log files found: %v", err).Response(req.ID)
 		}
 
 		f, err := os.Open(logFile)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "cannot open log file: "+err.Error()))
+			return rpcerr.Unavailable("cannot open log file: " + err.Error()).Response(req.ID)
 		}
 		defer f.Close()
 
 		info, err := f.Stat()
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "cannot stat log file: "+err.Error()))
+			return rpcerr.Unavailable("cannot stat log file: " + err.Error()).Response(req.ID)
 		}
 
 		fileSize := info.Size()
@@ -141,8 +138,7 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 		// Seek to cursor position.
 		if cursor > 0 {
 			if _, err := f.Seek(cursor, io.SeekStart); err != nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrUnavailable, "seek failed: "+err.Error()))
+				return rpcerr.Unavailable("seek failed: " + err.Error()).Response(req.ID)
 			}
 		}
 

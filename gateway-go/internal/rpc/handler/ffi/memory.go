@@ -4,6 +4,7 @@ import (
 	"context"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -21,16 +22,15 @@ func MemoryMethods() map[string]rpcutil.HandlerFunc {
 
 func memoryCosineSimilarity() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			A []float64 `json:"a"`
 			B []float64 `json:"b"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		similarity := ffipkg.MemoryCosineSimilarity(p.A, p.B)
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"similarity": similarity,
 		})
 	}
@@ -38,14 +38,13 @@ func memoryCosineSimilarity() rpcutil.HandlerFunc {
 
 func memoryBm25RankToScore() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Rank float64 `json:"rank"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"score": ffipkg.MemoryBm25RankToScore(p.Rank),
 		})
 	}
@@ -53,19 +52,17 @@ func memoryBm25RankToScore() rpcutil.HandlerFunc {
 
 func memoryBuildFtsQuery() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Raw string `json:"raw"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		query, err := ffipkg.MemoryBuildFtsQuery(p.Raw)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"query": query,
 		})
 	}
@@ -74,15 +71,13 @@ func memoryBuildFtsQuery() rpcutil.HandlerFunc {
 func memoryMergeHybridResults() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if len(req.Params) == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "params required"))
+			return rpcerr.New(protocol.ErrMissingParam, "params required").Response(req.ID)
 		}
 		results, err := ffipkg.MemoryMergeHybridResults(string(req.Params))
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"results": results,
 		})
 	}
@@ -90,19 +85,17 @@ func memoryMergeHybridResults() rpcutil.HandlerFunc {
 
 func memoryExtractKeywords() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Query string `json:"query"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		keywords, err := ffipkg.MemoryExtractKeywords(p.Query)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"keywords": keywords,
 		})
 	}

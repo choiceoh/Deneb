@@ -92,12 +92,12 @@ func handleInject(deps Deps) rpcutil.HandlerFunc {
 // Returns the side question answer text, and broadcasts a chat.side_result event.
 func handleChatBtw(deps BtwDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Question   string `json:"question"`
 			SessionKey string `json:"sessionKey"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.New(protocol.ErrInvalidRequest, "params required").Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Question == "" {
 			return rpcerr.MissingParam("question").Response(req.ID)
@@ -126,7 +126,7 @@ func handleChatBtw(deps BtwDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text": text,
 		})
 	}

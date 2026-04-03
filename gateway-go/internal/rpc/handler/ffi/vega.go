@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -43,30 +44,26 @@ func VegaMethods(deps VegaDeps) map[string]rpcutil.HandlerFunc {
 func vegaFFIExecute() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if len(req.Params) == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "params required"))
+			return rpcerr.New(protocol.ErrMissingParam, "params required").Response(req.ID)
 		}
 		result, err := ffipkg.VegaExecute(string(req.Params))
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
+		return rpcutil.RespondOK(req.ID, json.RawMessage(result))
 	}
 }
 
 func vegaFFISearch() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if len(req.Params) == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "params required"))
+			return rpcerr.New(protocol.ErrMissingParam, "params required").Response(req.ID)
 		}
 		result, err := ffipkg.VegaSearch(string(req.Params))
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
+		return rpcutil.RespondOK(req.ID, json.RawMessage(result))
 	}
 }
 
@@ -78,15 +75,13 @@ func vegaBackendHandler(backend vega.Backend, cmd string) rpcutil.HandlerFunc {
 		var args map[string]any
 		if len(req.Params) > 0 {
 			if err := json.Unmarshal(req.Params, &args); err != nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrMissingParam, "invalid params: "+err.Error()))
+				return rpcerr.InvalidParams(err).Response(req.ID)
 			}
 		}
 
 		result, err := backend.Execute(ctx, cmd, args)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "vega: "+err.Error()))
+			return rpcerr.Newf(protocol.ErrDependencyFailed, "vega: %s", err).Response(req.ID)
 		}
 
 		return protocol.MustResponseOKRaw(req.ID, result)

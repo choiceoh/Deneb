@@ -5,10 +5,10 @@ package presence
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -155,17 +155,16 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 func systemPresence(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		entries := deps.Store.List()
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"entries": entries,
 		})
-		return resp
 	}
 }
 
 // systemEvent records a presence event and broadcasts the updated list.
 func systemEvent(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Text            string   `json:"text"`
 			DeviceID        string   `json:"deviceId,omitempty"`
 			InstanceID      string   `json:"instanceId,omitempty"`
@@ -180,13 +179,12 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 			Roles           []string `json:"roles,omitempty"`
 			Scopes          []string `json:"scopes,omitempty"`
 			Tags            []string `json:"tags,omitempty"`
-		}
-		if len(req.Params) > 0 {
-			_ = json.Unmarshal(req.Params, &p)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Text == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "text required"))
+			return rpcerr.New(protocol.ErrMissingParam, "text required").Response(req.ID)
 		}
 
 		entry := deps.Store.Update(PresenceEntry{
@@ -213,8 +211,7 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		_ = entry // used for broadcast above
-		resp := protocol.MustResponseOK(req.ID, map[string]any{"ok": true})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
 	}
 }
 
@@ -240,23 +237,21 @@ func lastHeartbeat(deps HeartbeatDeps) rpcutil.HandlerFunc {
 				"enabled": deps.State.Enabled(),
 			}
 		}
-		resp := protocol.MustResponseOK(req.ID, last)
-		return resp
+		return rpcutil.RespondOK(req.ID, last)
 	}
 }
 
 // setHeartbeats enables or disables heartbeats and broadcasts the config change.
 func setHeartbeats(deps HeartbeatDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Enabled *bool `json:"enabled"`
-		}
-		if len(req.Params) > 0 {
-			_ = json.Unmarshal(req.Params, &p)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Enabled == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "invalid set-heartbeats params: enabled (boolean) required"))
+			return rpcerr.ValidationFailed("invalid set-heartbeats params: enabled (boolean) required").Response(req.ID)
 		}
 
 		deps.State.SetEnabled(*p.Enabled)
@@ -267,10 +262,9 @@ func setHeartbeats(deps HeartbeatDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":      true,
 			"enabled": *p.Enabled,
 		})
-		return resp
 	}
 }

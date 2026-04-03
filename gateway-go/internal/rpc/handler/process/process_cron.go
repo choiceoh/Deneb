@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -38,13 +39,12 @@ func CronAdvancedMethods(deps CronAdvancedDeps) map[string]rpcutil.HandlerFunc {
 
 func cronWake(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Mode string `json:"mode"`
 			Text string `json:"text"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		nextHeartbeat := deps.Cron.NextRunAt()
@@ -57,7 +57,7 @@ func cronWake(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"nextHeartbeatAtMs": nextHeartbeat,
 			"mode":              p.Mode,
 		})
@@ -71,7 +71,7 @@ func cronStatus(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		nextRun := deps.Cron.NextRunAt()
 		taskCount := len(deps.Cron.List())
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"running":     running,
 			"nextRunAtMs": nextRun,
 			"taskCount":   taskCount,
@@ -82,32 +82,28 @@ func cronStatus(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 
 func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Name       string `json:"name"`
 			Schedule   string `json:"schedule"`
 			Command    string `json:"command"`
 			AgentID    string `json:"agentId,omitempty"`
 			SessionKey string `json:"sessionKey,omitempty"`
 			Enabled    *bool  `json:"enabled,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Name == "" || p.Schedule == "" || p.Command == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "name, schedule, and command are required"))
+			return rpcerr.New(protocol.ErrMissingParam, "name, schedule, and command are required").Response(req.ID)
 		}
 		const maxCommandLen = 4096
 		if len(p.Command) > maxCommandLen {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "command exceeds maximum length of 4096 characters"))
+			return rpcerr.New(protocol.ErrValidationFailed, "command exceeds maximum length of 4096 characters").Response(req.ID)
 		}
 
 		schedule, err := cron.ParseSchedule(p.Schedule)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrValidationFailed, "invalid schedule: "+err.Error()))
+			return rpcerr.Newf(protocol.ErrValidationFailed, "invalid schedule: %v", err).Response(req.ID)
 		}
 
 		// Use name as the task ID.
@@ -116,15 +112,14 @@ func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			// The actual cron command execution is handled by the task runner.
 			return nil
 		}); regErr != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrConflict, regErr.Error()))
+			return rpcerr.Wrap(protocol.ErrConflict, regErr).Response(req.ID)
 		}
 
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "added", "id": p.Name})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"id":       p.Name,
 			"name":     p.Name,
 			"schedule": p.Schedule,
@@ -136,14 +131,13 @@ func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 
 func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID    string         `json:"id,omitempty"`
 			JobID string         `json:"jobId,omitempty"`
 			Patch map[string]any `json:"patch"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		id := p.ID
@@ -151,13 +145,11 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			id = p.JobID
 		}
 		if id == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id or jobId is required"))
+			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
 		if err := deps.Cron.Update(id, p.Patch); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, err.Error()))
+			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
 		}
 
 		if deps.Broadcaster != nil {
@@ -165,20 +157,19 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		}
 
 		status := deps.Cron.Get(id)
-		resp := protocol.MustResponseOK(req.ID, status)
+		resp := rpcutil.RespondOK(req.ID, status)
 		return resp
 	}
 }
 
 func cronRemove(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID    string `json:"id,omitempty"`
 			JobID string `json:"jobId,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		id := p.ID
@@ -186,8 +177,7 @@ func cronRemove(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			id = p.JobID
 		}
 		if id == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id or jobId is required"))
+			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
 		removed := deps.Cron.Unregister(id)
@@ -196,21 +186,20 @@ func cronRemove(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "removed", "id": id})
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"removed": removed})
+		resp := rpcutil.RespondOK(req.ID, map[string]bool{"removed": removed})
 		return resp
 	}
 }
 
 func cronRun(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID    string `json:"id,omitempty"`
 			JobID string `json:"jobId,omitempty"`
 			Mode  string `json:"mode,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		id := p.ID
@@ -218,17 +207,15 @@ func cronRun(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			id = p.JobID
 		}
 		if id == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id or jobId is required"))
+			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
 		result, err := deps.Cron.RunNow(ctx, id)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, err.Error()))
+			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
 		}
 
-		resp := protocol.MustResponseOK(req.ID, result)
+		resp := rpcutil.RespondOK(req.ID, result)
 		return resp
 	}
 }
@@ -279,7 +266,7 @@ func cronRuns(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			} else {
 				page = deps.RunLog.ReadPageAll(opts)
 			}
-			return protocol.MustResponseOK(req.ID, map[string]any{
+			return rpcutil.RespondOK(req.ID, map[string]any{
 				"runs":       page.Entries,
 				"total":      page.Total,
 				"hasMore":    page.HasMore,
@@ -288,7 +275,7 @@ func cronRuns(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		}
 
 		runs := deps.Cron.Runs(id, limit, offset)
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		resp := rpcutil.RespondOK(req.ID, map[string]any{
 			"runs":  runs,
 			"total": len(runs),
 		})
@@ -337,19 +324,18 @@ func cronListPage(deps CronServiceDeps) rpcutil.HandlerFunc {
 			SortDir:         p.SortDir,
 		})
 
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
 func cronGetJob(deps CronServiceDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID    string `json:"id,omitempty"`
 			JobID string `json:"jobId,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		id := p.ID
@@ -357,16 +343,14 @@ func cronGetJob(deps CronServiceDeps) rpcutil.HandlerFunc {
 			id = p.JobID
 		}
 		if id == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id or jobId is required"))
+			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
 		job := deps.Service.GetJob(id)
 		if job == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "job not found: "+id))
+			return rpcerr.Newf(protocol.ErrNotFound, "job not found: %s", id).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, job)
+		return rpcutil.RespondOK(req.ID, job)
 	}
 }

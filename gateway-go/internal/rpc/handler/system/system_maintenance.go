@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -35,8 +36,7 @@ func MaintenanceMethods(deps MaintenanceDeps) map[string]rpcutil.HandlerFunc {
 func maintenanceRun(deps MaintenanceDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.Runner == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "maintenance runner not available"))
+			return rpcerr.Unavailable("maintenance runner not available").Response(req.ID)
 		}
 
 		var p struct {
@@ -77,8 +77,7 @@ func maintenanceStatus(deps MaintenanceDeps) rpcutil.HandlerFunc {
 func maintenanceSummary(deps MaintenanceDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.Runner == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "maintenance runner not available"))
+			return rpcerr.Unavailable("maintenance runner not available").Response(req.ID)
 		}
 
 		report := deps.Runner.LastReport()
@@ -144,8 +143,7 @@ func updateRun(deps UpdateDeps) rpcutil.HandlerFunc {
 			var err error
 			repoDir, err = os.Getwd()
 			if err != nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrUnavailable, "cannot determine working directory: "+err.Error()))
+				return rpcerr.Unavailable("cannot determine working directory: " + err.Error()).Response(req.ID)
 			}
 		}
 
