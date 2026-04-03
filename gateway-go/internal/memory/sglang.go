@@ -64,13 +64,18 @@ func callSglang(ctx context.Context, client *llm.Client, model, system, user str
 
 // callSglangJSON is like callSglang but requests JSON-formatted output
 // via response_format. Use for endpoints that must return valid JSON.
-// An optional overrideFmt can be passed to use json_schema mode instead
-// of the default json_object (e.g., for constrained decoding).
+// An optional guidedSchema can be passed to enable SGLang's native
+// guided_json constrained decoding (xgrammar) for reliable structured output.
 // When the centralized sglang hub is available, routes through it.
-func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int, overrideFmt ...*llm.ResponseFormat) (string, error) {
+func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int, guidedSchema ...json.RawMessage) (string, error) {
 	rf := &llm.ResponseFormat{Type: "json_object"}
-	if len(overrideFmt) > 0 && overrideFmt[0] != nil {
-		rf = overrideFmt[0]
+
+	// Build extra body with guided_json if a schema is provided.
+	// guided_json is SGLang's native parameter for grammar-constrained
+	// decoding, more reliable than response_format json_schema.
+	var extra map[string]any
+	if len(guidedSchema) > 0 && guidedSchema[0] != nil {
+		extra = map[string]any{"guided_json": guidedSchema[0]}
 	}
 
 	// Hub path.
@@ -82,6 +87,7 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 			Priority:       sglang.PriorityBackground,
 			CallerTag:      "memory_json", // covers fact extraction, dreaming phases
 			ResponseFormat: rf,
+			ExtraBody:      extra,
 			NoCache:        true, // JSON extractions are non-deterministic
 		})
 		if err != nil {
@@ -90,7 +96,14 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 		return resp.Text, nil
 	}
 
-	// Legacy direct path.
+	// Legacy direct path — merge guided_json with NoThinking.
+	merged := make(map[string]any, len(sglang.NoThinking)+len(extra))
+	for k, v := range sglang.NoThinking {
+		merged[k] = v
+	}
+	for k, v := range extra {
+		merged[k] = v
+	}
 	events, err := client.StreamChat(ctx, llm.ChatRequest{
 		Model:          model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", user)},
@@ -98,7 +111,7 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 		MaxTokens:      maxTokens,
 		Stream:         true,
 		ResponseFormat: rf,
-		ExtraBody:      sglang.NoThinking,
+		ExtraBody:      merged,
 	})
 	if err != nil {
 		return "", err
