@@ -2,44 +2,12 @@
 
 use crate::protocol::validation::*;
 
-pub fn validate_secrets_reload_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &[], path, errors);
-}
+define_schema! { pub fn validate_secrets_reload_params {} }
 
-pub fn validate_secrets_resolve_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &["commandName", "targetIds"], path, errors);
-    if check_required(obj, "commandName", path, errors) {
-        check_non_empty_string(&obj["commandName"], &format!("{path}/commandName"), errors);
-    }
-    if check_required(obj, "targetIds", path, errors) {
-        let tp = format!("{path}/targetIds");
-        if check_array(&obj["targetIds"], &tp, errors) {
-            if let Some(arr) = obj["targetIds"].as_array() {
-                for (i, item) in arr.iter().enumerate() {
-                    check_non_empty_string(item, &format!("{tp}/{i}"), errors);
-                }
-            }
-        }
+define_schema! {
+    pub fn validate_secrets_resolve_params {
+        [req "commandName" => non_empty_string],
+        [req "targetIds" => custom(check_non_empty_string_array)],
     }
 }
 

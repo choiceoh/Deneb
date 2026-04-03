@@ -2,134 +2,48 @@
 
 use crate::protocol::validation::*;
 
-pub fn validate_cron_list_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+// ---------------------------------------------------------------------------
+// cron.list / cron.status
+// ---------------------------------------------------------------------------
+
+define_schema! {
+    pub fn validate_cron_list_params {
+        [opt "includeDisabled" => boolean],
+        [opt "limit" => integer(Some(1), Some(200))],
+        [opt "offset" => integer(Some(0), None)],
+        [opt "query" => string],
+        [opt "enabled" => string_enum["all", "enabled", "disabled"]],
+        [opt "sortBy" => string_enum["nextRunAtMs", "updatedAtMs", "name"]],
+        [opt "sortDir" => string_enum["asc", "desc"]],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    let allowed = &[
-        "includeDisabled",
-        "limit",
-        "offset",
-        "query",
-        "enabled",
-        "sortBy",
-        "sortDir",
-    ];
-    check_no_additional_properties(obj, allowed, path, errors);
-    check_optional(obj, "includeDisabled", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
-    check_optional(obj, "limit", path, errors, |v, p, e| {
-        check_integer(v, p, Some(1), Some(200), e);
-    });
-    check_optional(obj, "offset", path, errors, |v, p, e| {
-        check_integer(v, p, Some(0), None, e);
-    });
-    check_optional(obj, "query", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
-    check_optional(obj, "enabled", path, errors, |v, p, e| {
-        check_string_enum(v, p, &["all", "enabled", "disabled"], e);
-    });
-    check_optional(obj, "sortBy", path, errors, |v, p, e| {
-        check_string_enum(v, p, &["nextRunAtMs", "updatedAtMs", "name"], e);
-    });
-    check_optional(obj, "sortDir", path, errors, |v, p, e| {
-        check_string_enum(v, p, &["asc", "desc"], e);
-    });
 }
 
-pub fn validate_cron_status_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+define_schema! { pub fn validate_cron_status_params {} }
+
+// ---------------------------------------------------------------------------
+// cron.add
+// ---------------------------------------------------------------------------
+
+define_schema! {
+    pub fn validate_cron_add_params {
+        [req "name" => non_empty_string],
+        [opt_null "agentId" => non_empty_string],
+        [opt_null "sessionKey" => non_empty_string],
+        [opt "description" => string],
+        [opt "enabled" => boolean],
+        [opt "deleteAfterRun" => boolean],
+        [req "schedule" => custom(validate_cron_schedule)],
+        [req "sessionTarget" => custom(validate_cron_session_target)],
+        [req "wakeMode" => string_enum["next-heartbeat", "now"]],
+        [req "payload" => custom(validate_cron_payload)],
+        [opt "delivery" => any],
+        [opt "failureAlert" => any],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    check_no_additional_properties(obj, &[], path, errors);
 }
 
-pub fn validate_cron_add_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
-    }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    let allowed = &[
-        "name",
-        "agentId",
-        "sessionKey",
-        "description",
-        "enabled",
-        "deleteAfterRun",
-        "schedule",
-        "sessionTarget",
-        "wakeMode",
-        "payload",
-        "delivery",
-        "failureAlert",
-    ];
-    check_no_additional_properties(obj, allowed, path, errors);
-
-    if check_required(obj, "name", path, errors) {
-        check_non_empty_string(&obj["name"], &format!("{path}/name"), errors);
-    }
-    // Common optional fields
-    check_optional_nullable(obj, "agentId", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
-    check_optional_nullable(obj, "sessionKey", path, errors, |v, p, e| {
-        check_non_empty_string(v, p, e);
-    });
-    check_optional(obj, "description", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
-    check_optional(obj, "enabled", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
-    check_optional(obj, "deleteAfterRun", path, errors, |v, p, e| {
-        check_boolean(v, p, e);
-    });
-
-    if check_required(obj, "schedule", path, errors) {
-        validate_cron_schedule(&obj["schedule"], &format!("{path}/schedule"), errors);
-    }
-    if check_required(obj, "sessionTarget", path, errors) {
-        validate_cron_session_target(
-            &obj["sessionTarget"],
-            &format!("{path}/sessionTarget"),
-            errors,
-        );
-    }
-    if check_required(obj, "wakeMode", path, errors) {
-        check_string_enum(
-            &obj["wakeMode"],
-            &format!("{path}/wakeMode"),
-            &["next-heartbeat", "now"],
-            errors,
-        );
-    }
-    if check_required(obj, "payload", path, errors) {
-        validate_cron_payload(&obj["payload"], &format!("{path}/payload"), errors);
-    }
-    // delivery and failureAlert are complex — accept as objects for now.
-}
+// ---------------------------------------------------------------------------
+// Discriminated union validators (manual — not expressible via define_schema!)
+// ---------------------------------------------------------------------------
 
 fn validate_cron_schedule(
     value: &serde_json::Value,
@@ -267,6 +181,10 @@ fn validate_cron_payload(value: &serde_json::Value, path: &str, errors: &mut Vec
     }
 }
 
+// ---------------------------------------------------------------------------
+// cron.update / cron.remove / cron.run (id-or-jobId union)
+// ---------------------------------------------------------------------------
+
 /// cron.update and cron.remove use cronIdOrJobIdParams — union of { id } | { jobId }
 fn validate_cron_id_or_job_id(
     value: &serde_json::Value,
@@ -338,109 +256,73 @@ pub fn validate_cron_run_params(
     }
 }
 
-pub fn validate_cron_runs_params(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
-    if !require_object(value, path, errors) {
-        return;
+// ---------------------------------------------------------------------------
+// cron.runs
+// ---------------------------------------------------------------------------
+
+define_schema! {
+    pub fn validate_cron_runs_params {
+        [opt "scope" => string_enum["job", "all"]],
+        [opt "id" => custom(check_cron_run_job_id)],
+        [opt "jobId" => custom(check_cron_run_job_id)],
+        [opt "limit" => integer(Some(1), Some(200))],
+        [opt "offset" => integer(Some(0), None)],
+        [opt "statuses" => custom(check_statuses_array)],
+        [opt "status" => string_enum["all", "ok", "error", "skipped"]],
+        [opt "deliveryStatuses" => custom(check_delivery_statuses_array)],
+        [opt "deliveryStatus" => string_enum["delivered", "not-delivered", "unknown", "not-requested"]],
+        [opt "query" => string],
+        [opt "sortDir" => string_enum["asc", "desc"]],
     }
-    let Some(obj) = value.as_object() else {
-        return;
-    };
-    let allowed = &[
-        "scope",
-        "id",
-        "jobId",
-        "limit",
-        "offset",
-        "statuses",
-        "status",
-        "deliveryStatuses",
-        "deliveryStatus",
-        "query",
-        "sortDir",
-    ];
-    check_no_additional_properties(obj, allowed, path, errors);
+}
 
-    check_optional(obj, "scope", path, errors, |v, p, e| {
-        check_string_enum(v, p, &["job", "all"], e);
-    });
-
-    // id and jobId use CronRunLogJobIdSchema: minLength 1, pattern ^[^/\\]+$
+fn check_cron_run_job_id(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
     #[allow(clippy::expect_used)]
     static JOB_ID_RE: std::sync::LazyLock<regex::Regex> =
         std::sync::LazyLock::new(|| regex::Regex::new(r"^[^/\\]+$").expect("valid regex"));
-    for f in &["id", "jobId"] {
-        check_optional(obj, f, path, errors, |v, p, e| {
-            check_non_empty_string(v, p, e);
-            check_pattern(v, p, &JOB_ID_RE, e);
-        });
-    }
+    check_non_empty_string(v, p, e);
+    check_pattern(v, p, &JOB_ID_RE, e);
+}
 
-    check_optional(obj, "limit", path, errors, |v, p, e| {
-        check_integer(v, p, Some(1), Some(200), e);
-    });
-    check_optional(obj, "offset", path, errors, |v, p, e| {
-        check_integer(v, p, Some(0), None, e);
-    });
-    check_optional(obj, "statuses", path, errors, |v, p, e| {
-        if check_array(v, p, e) {
-            check_min_items(v, p, 1, e);
-            if let Some(arr) = v.as_array() {
-                if arr.len() > 3 {
-                    e.push(ValidationError {
-                        path: p.to_string(),
-                        message: "must NOT have more than 3 items".to_string(),
-                        keyword: "maxItems",
-                    });
-                }
-                for (i, item) in arr.iter().enumerate() {
-                    check_string_enum(item, &format!("{p}/{i}"), &["ok", "error", "skipped"], e);
-                }
+fn check_statuses_array(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
+    if check_array(v, p, e) {
+        check_min_items(v, p, 1, e);
+        if let Some(arr) = v.as_array() {
+            if arr.len() > 3 {
+                e.push(ValidationError {
+                    path: p.to_string(),
+                    message: "must NOT have more than 3 items".to_string(),
+                    keyword: "maxItems",
+                });
+            }
+            for (i, item) in arr.iter().enumerate() {
+                check_string_enum(item, &format!("{p}/{i}"), &["ok", "error", "skipped"], e);
             }
         }
-    });
-    check_optional(obj, "status", path, errors, |v, p, e| {
-        check_string_enum(v, p, &["all", "ok", "error", "skipped"], e);
-    });
-    check_optional(obj, "deliveryStatuses", path, errors, |v, p, e| {
-        if check_array(v, p, e) {
-            check_min_items(v, p, 1, e);
-            if let Some(arr) = v.as_array() {
-                if arr.len() > 4 {
-                    e.push(ValidationError {
-                        path: p.to_string(),
-                        message: "must NOT have more than 4 items".to_string(),
-                        keyword: "maxItems",
-                    });
-                }
-                for (i, item) in arr.iter().enumerate() {
-                    check_string_enum(
-                        item,
-                        &format!("{p}/{i}"),
-                        &["delivered", "not-delivered", "unknown", "not-requested"],
-                        e,
-                    );
-                }
+    }
+}
+
+fn check_delivery_statuses_array(v: &serde_json::Value, p: &str, e: &mut Vec<ValidationError>) {
+    if check_array(v, p, e) {
+        check_min_items(v, p, 1, e);
+        if let Some(arr) = v.as_array() {
+            if arr.len() > 4 {
+                e.push(ValidationError {
+                    path: p.to_string(),
+                    message: "must NOT have more than 4 items".to_string(),
+                    keyword: "maxItems",
+                });
+            }
+            for (i, item) in arr.iter().enumerate() {
+                check_string_enum(
+                    item,
+                    &format!("{p}/{i}"),
+                    &["delivered", "not-delivered", "unknown", "not-requested"],
+                    e,
+                );
             }
         }
-    });
-    check_optional(obj, "deliveryStatus", path, errors, |v, p, e| {
-        check_string_enum(
-            v,
-            p,
-            &["delivered", "not-delivered", "unknown", "not-requested"],
-            e,
-        );
-    });
-    check_optional(obj, "query", path, errors, |v, p, e| {
-        check_string(v, p, e);
-    });
-    check_optional(obj, "sortDir", path, errors, |v, p, e| {
-        check_string_enum(v, p, &["asc", "desc"], e);
-    });
+    }
 }
 
 #[cfg(test)]
