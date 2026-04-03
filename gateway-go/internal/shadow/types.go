@@ -3,10 +3,7 @@
 // (task detection, health monitoring, periodic digests).
 package shadow
 
-import (
-	"context"
-	"time"
-)
+import "context"
 
 // TrackedTask is a pending task detected from conversation content.
 type TrackedTask struct {
@@ -55,21 +52,6 @@ type ShadowEvent struct {
 type Notifier interface {
 	Notify(ctx context.Context, message string) error
 }
-
-// ExtendedStatus is the full shadow status including all modules.
-type ExtendedStatus struct {
-	ServiceStatus
-	Analytics       *UsageReport        `json:"analytics,omitempty"`
-	CronSuggestions []CronSuggestion    `json:"cronSuggestions,omitempty"`
-	RecentReviews   []CodeReviewResult  `json:"recentReviews,omitempty"`
-	ExtractedFacts  int                 `json:"extractedFacts"`
-	RecurringErrors int                 `json:"recurringErrors"`
-	Continuity      *ContinuitySnapshot `json:"continuity,omitempty"`
-	PrefetchedCtx   []PrefetchedContext `json:"prefetchedContexts,omitempty"`
-}
-
-// digestInterval is how often the shadow service sends a periodic summary.
-const digestInterval = 4 * time.Hour
 
 // maxPendingTasks caps the in-memory tracked task list.
 const maxPendingTasks = 100
