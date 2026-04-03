@@ -1546,6 +1546,7 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 				r.logger.Error("failed to commit overrides, treating as discarded", "error", commitErr)
 				row.Kept = false
 				row.BestSoFar = currentBest
+				row.DeltaFromBest = 0
 				cfg.ConsecutiveFailures++
 				r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARD (commit failed): %s=%.6f\nHypothesis: %s",
 					iteration, cfg.MetricName, metricValue, hypothesis))
@@ -1923,6 +1924,7 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 		if res.err != nil {
 			row.Kept = false
 			row.BestSoFar = currentBest
+			row.DeltaFromBest = 0
 		} else if i == bestIdx && (cfg.BestMetric == nil || cfg.IsBetter(bestMetric, *cfg.BestMetric)) {
 			row.Kept = true
 			row.CommitHash = res.commitHash

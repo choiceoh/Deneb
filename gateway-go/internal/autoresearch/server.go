@@ -23,7 +23,8 @@ type ServerManager struct {
 	lastHash  string // content hash when server was last (re)started
 	workdir   string
 	serverCmd string
-	logPath   string // path to server log file
+	logPath   string   // path to server log file
+	logFile   *os.File // open log file handle, closed on stop
 	logger    *slog.Logger
 }
 
@@ -78,6 +79,7 @@ func (sm *ServerManager) startLocked() error {
 		return fmt.Errorf("start server: %w", err)
 	}
 	sm.cmd = cmd
+	sm.logFile = logFile
 
 	// Wait for health check.
 	if sm.healthURL != "" {
@@ -160,6 +162,12 @@ func (sm *ServerManager) stopLocked() {
 	}
 	_ = sm.cmd.Wait()
 	sm.cmd = nil
+
+	// Close the log file to avoid descriptor leaks across restarts.
+	if sm.logFile != nil {
+		sm.logFile.Close()
+		sm.logFile = nil
+	}
 }
 
 // IsRunning returns true if the server process is alive.
