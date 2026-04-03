@@ -21,7 +21,7 @@ func TestParseModelID(t *testing.T) {
 		wantModel string
 	}{
 		{"google/gemini-3.0-flash", "google", "gemini-3.0-flash"},
-		{"zai/glm-5turbo", "zai", "glm-5turbo"},
+		{"zai/glm-5-turbo", "zai", "glm-5-turbo"},
 		{"anthropic/claude-3-opus", "anthropic", "claude-3-opus"},
 		{"gpt-4", "", "gpt-4"},
 		{"claude-3-sonnet", "", "claude-3-sonnet"},
