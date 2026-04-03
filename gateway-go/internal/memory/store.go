@@ -14,15 +14,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
-	"fmt"
 	"log/slog"
 	"math"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
 // Fact categories matching Honcho's structured memory model.
@@ -199,155 +194,6 @@ func GraphMigrateDDL() []string {
 	}
 }
 
-// schema v1 for the memory store.
-const schemaSQL = `
-PRAGMA journal_mode = WAL;
-PRAGMA busy_timeout = 5000;
-PRAGMA foreign_keys = ON;
-PRAGMA synchronous = NORMAL;
-PRAGMA cache_size = -16000;
-PRAGMA mmap_size = 268435456;
-PRAGMA temp_store = MEMORY;
-
-CREATE TABLE IF NOT EXISTS facts (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	content TEXT NOT NULL,
-	category TEXT NOT NULL DEFAULT 'context',
-	importance REAL NOT NULL DEFAULT 0.5,
-	source TEXT DEFAULT 'auto_extract',
-	created_at TEXT NOT NULL,
-	updated_at TEXT NOT NULL,
-	last_accessed_at TEXT,
-	access_count INTEGER NOT NULL DEFAULT 0,
-	verified_at TEXT,
-	expires_at TEXT,
-	superseded_by INTEGER REFERENCES facts(id),
-	active INTEGER NOT NULL DEFAULT 1,
-	merge_depth INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_facts_active ON facts(active);
-CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
-CREATE INDEX IF NOT EXISTS idx_facts_importance ON facts(importance DESC);
-CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
-
--- Composite indexes for common filtered queries (active=1 prefix).
-CREATE INDEX IF NOT EXISTS idx_facts_active_importance ON facts(active, importance DESC);
-CREATE INDEX IF NOT EXISTS idx_facts_active_category ON facts(active, category, importance DESC);
-CREATE INDEX IF NOT EXISTS idx_facts_active_created ON facts(active, created_at DESC);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
-	content,
-	category,
-	content=facts,
-	content_rowid=id,
-	tokenize='unicode61'
-);
-
--- Trigram index for Korean/CJK substring matching (fallback when unicode61 misses).
-CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts_trigram USING fts5(
-	content,
-	content=facts,
-	content_rowid=id,
-	tokenize='trigram'
-);
-
--- Triggers to keep FTS in sync with facts table.
-CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
-	INSERT INTO facts_fts(rowid, content, category)
-	VALUES (new.id, new.content, new.category);
-	INSERT INTO facts_fts_trigram(rowid, content)
-	VALUES (new.id, new.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
-	INSERT INTO facts_fts(facts_fts, rowid, content, category)
-	VALUES ('delete', old.id, old.content, old.category);
-	INSERT INTO facts_fts_trigram(facts_fts_trigram, rowid, content)
-	VALUES ('delete', old.id, old.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE OF content, category ON facts BEGIN
-	INSERT INTO facts_fts(facts_fts, rowid, content, category)
-	VALUES ('delete', old.id, old.content, old.category);
-	INSERT INTO facts_fts(rowid, content, category)
-	VALUES (new.id, new.content, new.category);
-	INSERT INTO facts_fts_trigram(facts_fts_trigram, rowid, content)
-	VALUES ('delete', old.id, old.content);
-	INSERT INTO facts_fts_trigram(rowid, content)
-	VALUES (new.id, new.content);
-END;
-
-CREATE TABLE IF NOT EXISTS fact_embeddings (
-	fact_id INTEGER PRIMARY KEY REFERENCES facts(id) ON DELETE CASCADE,
-	embedding BLOB NOT NULL,
-	model_name TEXT NOT NULL,
-	updated_at TEXT NOT NULL
-);
-
-` + GraphSchemaSQL + `
-
-CREATE TABLE IF NOT EXISTS user_model (
-	key TEXT PRIMARY KEY,
-	value TEXT NOT NULL,
-	confidence REAL NOT NULL DEFAULT 0.5,
-	updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS dreaming_log (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	ran_at TEXT NOT NULL,
-	facts_verified INTEGER NOT NULL DEFAULT 0,
-	facts_merged INTEGER NOT NULL DEFAULT 0,
-	facts_expired INTEGER NOT NULL DEFAULT 0,
-	patterns_extracted INTEGER NOT NULL DEFAULT 0,
-	duration_ms INTEGER NOT NULL DEFAULT 0
-);
-
--- Metadata for tracking turn counts and other state.
-CREATE TABLE IF NOT EXISTS metadata (
-	key TEXT PRIMARY KEY,
-	value TEXT NOT NULL
-);
-`
-
-// migrateSchema applies incremental schema changes for existing databases.
-func migrateSchema(db *sql.DB) {
-	// v1 → v2: add facts_pruned column to dreaming_log.
-	_, _ = db.Exec(`ALTER TABLE dreaming_log ADD COLUMN facts_pruned INTEGER NOT NULL DEFAULT 0`)
-	// v2 → v3: add merge_depth for cascade prevention in fact merging.
-	_, _ = db.Exec(`ALTER TABLE facts ADD COLUMN merge_depth INTEGER NOT NULL DEFAULT 0`)
-	// v3 → v4: explicit index on fact_embeddings.fact_id for DELETE CASCADE
-	// performance. Older databases created before fact_id was the PRIMARY KEY
-	// may not have an implicit B-tree index, causing O(N) scans on fact deletion.
-	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_fact_embeddings_fact_id ON fact_embeddings(fact_id)`)
-
-	// v4 → v5: knowledge graph tables (fact_relations, entities, fact_entities).
-	for _, ddl := range GraphMigrateDDL() {
-		_, _ = db.Exec(ddl)
-	}
-
-	// v5 → v6: fix entities CHECK constraint to include 'unknown'.
-	// SQLite cannot ALTER a CHECK constraint, so we recreate the table.
-	// Must disable foreign keys to allow DROP while fact_entities references entities.
-	// The migration is idempotent — a no-op if the constraint is already correct.
-	_, _ = db.Exec(`PRAGMA foreign_keys = OFF`)
-	_, _ = db.Exec(`
-		CREATE TABLE IF NOT EXISTS entities_v6 (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			name          TEXT NOT NULL UNIQUE,
-			entity_type   TEXT NOT NULL DEFAULT 'unknown' CHECK(entity_type IN ('person','project','tool','system','concept','organization','unknown')),
-			first_seen    TEXT NOT NULL,
-			last_seen     TEXT NOT NULL,
-			mention_count INTEGER NOT NULL DEFAULT 1
-		)`)
-	_, _ = db.Exec(`INSERT OR IGNORE INTO entities_v6 SELECT * FROM entities`)
-	_, _ = db.Exec(`DROP TABLE IF EXISTS entities`)
-	_, _ = db.Exec(`ALTER TABLE entities_v6 RENAME TO entities`)
-	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)`)
-	_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
-}
-
 // NewStoreFromDB creates a memory store using a pre-opened database connection.
 // Used by the unified store to share a single DB across subsystems.
 // The caller owns the DB lifecycle — Close() on this store is a no-op.
@@ -357,42 +203,6 @@ func NewStoreFromDB(db *sql.DB) (*Store, error) {
 		logger: slog.Default(),
 		shared: true,
 	}
-	return store, nil
-}
-
-// NewStore opens or creates a memory database at dbPath.
-func NewStore(dbPath string) (*Store, error) {
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return nil, fmt.Errorf("memory store: create dir: %w", err)
-	}
-
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("memory store: open db: %w", err)
-	}
-
-	// Single connection for WAL mode simplicity.
-	db.SetMaxOpenConns(1)
-
-	if _, err := db.Exec(schemaSQL); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("memory store: init schema: %w", err)
-	}
-
-	// Schema migrations for existing databases.
-	migrateSchema(db)
-
-	store := &Store{db: db, logger: slog.Default()}
-
-	// One-time compaction: clean accumulated low-quality noise on first upgrade.
-	ctx := context.Background()
-	if v, _ := store.GetMeta(ctx, "compaction_v1"); v == "" {
-		if n, err := store.CompactMemory(ctx); err == nil && n > 0 {
-			store.logger.Info("one-time compaction completed", "removed", n)
-		}
-		_ = store.SetMeta(ctx, "compaction_v1", "done")
-	}
-
 	return store, nil
 }
 

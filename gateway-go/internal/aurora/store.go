@@ -12,13 +12,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
 // maxCompactionEvents is the maximum number of compaction events retained.
@@ -36,19 +32,6 @@ type Store struct {
 	closeErr  error
 }
 
-// storeData is the legacy JSON on-disk schema, used only for migration.
-type storeData struct {
-	ContextItems         []ContextItem            `json:"contextItems"`
-	Messages             map[string]MessageRecord `json:"messages"`
-	Summaries            map[string]SummaryRecord `json:"summaries"`
-	SummaryParents       map[string][]string      `json:"summaryParents"`
-	SummaryMessages      map[string][]uint64      `json:"summaryMessages"`
-	CompactionEvents     []CompactionEvent        `json:"compactionEvents"`
-	TransferredSummaries map[string]int64         `json:"transferredSummaries"`
-	NextOrdinalVal       uint64                   `json:"nextOrdinal"`
-	NextMessageID        uint64                   `json:"nextMessageId"`
-}
-
 // CompactionEvent is a persisted compaction event record.
 type CompactionEvent struct {
 	ConversationID   uint64 `json:"conversationId"`
@@ -58,21 +41,6 @@ type CompactionEvent struct {
 	TokensAfter      uint64 `json:"tokensAfter"`
 	CreatedSummaryID string `json:"createdSummaryId"`
 	CreatedAt        int64  `json:"createdAt"`
-}
-
-// StoreConfig configures the Aurora store.
-type StoreConfig struct {
-	// DatabasePath is the SQLite database file path.
-	// Default: ~/.deneb/aurora.db
-	DatabasePath string `json:"databasePath"`
-}
-
-// DefaultStoreConfig returns production defaults for single-user DGX Spark.
-func DefaultStoreConfig() StoreConfig {
-	home, _ := os.UserHomeDir()
-	return StoreConfig{
-		DatabasePath: filepath.Join(home, ".deneb", "aurora.db"),
-	}
 }
 
 // ── Data types matching Rust core-rs types ──────────────────────────────────
@@ -166,99 +134,6 @@ type PersistEventInput struct {
 	CreatedSummaryID string `json:"createdSummaryId"`
 }
 
-// ── Schema ──────────────────────────────────────────────────────────────────
-
-const schemaSQL = `
-PRAGMA journal_mode = WAL;
-PRAGMA busy_timeout = 5000;
-PRAGMA foreign_keys = ON;
-
--- Monotonic ID generators (replaces NextOrdinalVal / NextMessageID).
-CREATE TABLE IF NOT EXISTS sequences (
-	name  TEXT PRIMARY KEY,
-	value INTEGER NOT NULL DEFAULT 0
-);
-
--- Context items with composite index on (conversation_id, ordinal).
-CREATE TABLE IF NOT EXISTS context_items (
-	conversation_id INTEGER NOT NULL,
-	ordinal         INTEGER NOT NULL,
-	item_type       TEXT NOT NULL,  -- 'message' or 'summary'
-	message_id      INTEGER,
-	summary_id      TEXT,
-	created_at      INTEGER NOT NULL,
-	PRIMARY KEY (conversation_id, ordinal)
-);
-
-CREATE INDEX IF NOT EXISTS idx_ci_conv ON context_items(conversation_id);
-
--- Chat messages.
-CREATE TABLE IF NOT EXISTS messages (
-	message_id      INTEGER PRIMARY KEY,
-	conversation_id INTEGER NOT NULL,
-	seq             INTEGER NOT NULL,
-	role            TEXT NOT NULL,
-	content         TEXT NOT NULL,
-	token_count     INTEGER NOT NULL,
-	created_at      INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id);
-
--- Summaries (leaf and condensed).
-CREATE TABLE IF NOT EXISTS summaries (
-	summary_id                TEXT PRIMARY KEY,
-	conversation_id           INTEGER NOT NULL,
-	kind                      TEXT NOT NULL,  -- 'leaf' or 'condensed'
-	depth                     INTEGER NOT NULL DEFAULT 0,
-	content                   TEXT NOT NULL,
-	token_count               INTEGER NOT NULL,
-	file_ids                  TEXT NOT NULL DEFAULT '[]',  -- JSON array
-	earliest_at               INTEGER,
-	latest_at                 INTEGER,
-	descendant_count          INTEGER NOT NULL DEFAULT 0,
-	descendant_token_count    INTEGER NOT NULL DEFAULT 0,
-	source_message_token_count INTEGER NOT NULL DEFAULT 0,
-	created_at                INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_sum_conv ON summaries(conversation_id);
-
--- Summary parent relationships (DAG).
-CREATE TABLE IF NOT EXISTS summary_parents (
-	summary_id TEXT NOT NULL,
-	parent_id  TEXT NOT NULL,
-	PRIMARY KEY (summary_id, parent_id)
-);
-
--- Summary-to-message links.
-CREATE TABLE IF NOT EXISTS summary_messages (
-	summary_id TEXT NOT NULL,
-	message_id INTEGER NOT NULL,
-	PRIMARY KEY (summary_id, message_id)
-);
-
--- Compaction event audit log.
-CREATE TABLE IF NOT EXISTS compaction_events (
-	id               INTEGER PRIMARY KEY AUTOINCREMENT,
-	conversation_id  INTEGER NOT NULL,
-	pass             TEXT NOT NULL,
-	level            TEXT NOT NULL,
-	tokens_before    INTEGER NOT NULL,
-	tokens_after     INTEGER NOT NULL,
-	created_summary_id TEXT NOT NULL,
-	created_at       INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_ce_conv ON compaction_events(conversation_id);
-
--- Memory transfer tracking.
-CREATE TABLE IF NOT EXISTS transferred_summaries (
-	summary_id    TEXT PRIMARY KEY,
-	transferred_at INTEGER NOT NULL
-);
-`
-
 // ── Constructor ─────────────────────────────────────────────────────────────
 
 // NewStoreFromDB creates an Aurora store using a pre-opened database connection.
@@ -274,184 +149,6 @@ func NewStoreFromDB(db *sql.DB, logger *slog.Logger) (*Store, error) {
 		logger: logger,
 	}
 	return s, nil
-}
-
-// NewStore opens or creates an Aurora SQLite store.
-// If a legacy JSON file (aurora.json) exists alongside the DB path,
-// it is migrated automatically.
-func NewStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	dir := filepath.Dir(cfg.DatabasePath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("aurora store: mkdir %s: %w", dir, err)
-	}
-
-	db, err := sql.Open("sqlite", cfg.DatabasePath)
-	if err != nil {
-		return nil, fmt.Errorf("aurora store: open db: %w", err)
-	}
-	db.SetMaxOpenConns(1)
-
-	if _, err := db.Exec(schemaSQL); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("aurora store: init schema: %w", err)
-	}
-
-	s := &Store{
-		db:     db,
-		dbPath: cfg.DatabasePath,
-		logger: logger,
-	}
-
-	// One-time migration from legacy JSON file.
-	if err := s.migrateFromJSON(dir); err != nil {
-		logger.Warn("aurora store: json migration failed, starting fresh", "error", err)
-	}
-
-	// Log current state.
-	var itemCount, msgCount, sumCount int
-	db.QueryRow(`SELECT COUNT(*) FROM context_items`).Scan(&itemCount)
-	db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&msgCount)
-	db.QueryRow(`SELECT COUNT(*) FROM summaries`).Scan(&sumCount)
-
-	logger.Info("aurora store opened", "path", cfg.DatabasePath,
-		"items", itemCount, "messages", msgCount, "summaries", sumCount)
-	return s, nil
-}
-
-// ── JSON Migration ─────────────────────────────────────────────────────────
-
-// migrateFromJSON imports data from a legacy aurora.json file if it exists.
-// After successful import, the JSON file is renamed to aurora.json.migrated.
-func (s *Store) migrateFromJSON(dir string) error {
-	// Check common legacy paths: same dir as DB, or the old default.
-	candidates := []string{
-		filepath.Join(dir, "aurora.json"),
-	}
-	// If the DB path changed from the old default, also check the old path.
-	home, _ := os.UserHomeDir()
-	oldDefault := filepath.Join(home, ".deneb", "aurora.json")
-	if dir != filepath.Join(home, ".deneb") {
-		candidates = append(candidates, oldDefault)
-	}
-
-	var jsonPath string
-	var raw []byte
-	for _, p := range candidates {
-		data, err := os.ReadFile(p)
-		if err == nil && len(data) > 0 {
-			jsonPath = p
-			raw = data
-			break
-		}
-	}
-	if jsonPath == "" {
-		return nil // no legacy file
-	}
-
-	// Check if we already have data (migration already happened).
-	var count int
-	s.db.QueryRow(`SELECT COUNT(*) FROM context_items`).Scan(&count)
-	if count > 0 {
-		return nil // already migrated
-	}
-
-	var legacy storeData
-	if err := json.Unmarshal(raw, &legacy); err != nil {
-		return fmt.Errorf("parse legacy json: %w", err)
-	}
-
-	s.logger.Info("aurora store: migrating from JSON", "path", jsonPath,
-		"items", len(legacy.ContextItems),
-		"messages", len(legacy.Messages),
-		"summaries", len(legacy.Summaries))
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin migration tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Import sequences.
-	tx.Exec(`INSERT OR REPLACE INTO sequences (name, value) VALUES ('ordinal', ?)`, legacy.NextOrdinalVal)
-	tx.Exec(`INSERT OR REPLACE INTO sequences (name, value) VALUES ('message_id', ?)`, legacy.NextMessageID)
-
-	// Import context items.
-	ciStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO context_items (conversation_id, ordinal, item_type, message_id, summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
-	defer ciStmt.Close()
-	for _, ci := range legacy.ContextItems {
-		var msgID, sumID any
-		if ci.MessageID != nil {
-			msgID = *ci.MessageID
-		}
-		if ci.SummaryID != nil {
-			sumID = *ci.SummaryID
-		}
-		ciStmt.Exec(ci.ConversationID, ci.Ordinal, ci.ItemType, msgID, sumID, ci.CreatedAt)
-	}
-
-	// Import messages.
-	msgStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO messages (message_id, conversation_id, seq, role, content, token_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-	defer msgStmt.Close()
-	for _, m := range legacy.Messages {
-		msgStmt.Exec(m.MessageID, m.ConversationID, m.Seq, m.Role, m.Content, m.TokenCount, m.CreatedAt)
-	}
-
-	// Import summaries.
-	sumStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summaries (summary_id, conversation_id, kind, depth, content, token_count, file_ids, earliest_at, latest_at, descendant_count, descendant_token_count, source_message_token_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	defer sumStmt.Close()
-	for _, sr := range legacy.Summaries {
-		fileIDsJSON, _ := json.Marshal(sr.FileIDs)
-		sumStmt.Exec(sr.SummaryID, sr.ConversationID, sr.Kind, sr.Depth, sr.Content, sr.TokenCount, string(fileIDsJSON), sr.EarliestAt, sr.LatestAt, sr.DescendantCount, sr.DescendantTokenCount, sr.SourceMessageTokenCount, sr.CreatedAt)
-	}
-
-	// Import summary parents.
-	spStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_parents (summary_id, parent_id) VALUES (?, ?)`)
-	defer spStmt.Close()
-	for sid, parents := range legacy.SummaryParents {
-		for _, pid := range parents {
-			spStmt.Exec(sid, pid)
-		}
-	}
-
-	// Import summary messages.
-	smStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_messages (summary_id, message_id) VALUES (?, ?)`)
-	defer smStmt.Close()
-	for sid, msgIDs := range legacy.SummaryMessages {
-		for _, mid := range msgIDs {
-			smStmt.Exec(sid, mid)
-		}
-	}
-
-	// Import compaction events.
-	ceStmt, _ := tx.Prepare(`INSERT INTO compaction_events (conversation_id, pass, level, tokens_before, tokens_after, created_summary_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-	defer ceStmt.Close()
-	for _, e := range legacy.CompactionEvents {
-		ceStmt.Exec(e.ConversationID, e.Pass, e.Level, e.TokensBefore, e.TokensAfter, e.CreatedSummaryID, e.CreatedAt)
-	}
-
-	// Import transferred summaries.
-	tsStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO transferred_summaries (summary_id, transferred_at) VALUES (?, ?)`)
-	defer tsStmt.Close()
-	for sid, ts := range legacy.TransferredSummaries {
-		tsStmt.Exec(sid, ts)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit migration: %w", err)
-	}
-
-	// Rename legacy file so we don't re-migrate.
-	if err := os.Rename(jsonPath, jsonPath+".migrated"); err != nil {
-		s.logger.Warn("aurora store: could not rename legacy json", "error", err)
-	} else {
-		s.logger.Info("aurora store: migration complete, renamed to .migrated", "path", jsonPath)
-	}
-
-	return nil
 }
 
 // ── Transfer tracking ──────────────────────────────────────────────────────
