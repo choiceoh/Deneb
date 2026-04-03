@@ -224,7 +224,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if err := s.registerEarlyMethods(hub, denebDir); err != nil {
 		return nil, fmt.Errorf("register early methods: %w", err)
 	}
-	s.registerSessionRPCMethods()          // chat pipeline init + handler creation
+	s.registerSessionRPCMethods() // chat pipeline init + handler creation
 	if s.sglangHub != nil {
 		hub.SetSglangHub(s.sglangHub)
 	}

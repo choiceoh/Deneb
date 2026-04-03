@@ -17,10 +17,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -88,7 +88,7 @@ func (s *Server) registerSessionRPCMethods() {
 	s.initMemorySubsystem(&chatCfg, &reg)
 
 	// Create centralized SGLang hub now that the model registry is available.
-	s.sglangHub = sglang.New(sglang.Config{}, &reg, s.logger)
+	s.sglangHub = sglang.New(sglang.Config{}, reg, s.logger)
 	chatCfg.SglangHub = s.sglangHub
 	memory.SetSglangHub(s.sglangHub)
 
