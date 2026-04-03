@@ -169,6 +169,65 @@ scripts/dev-iterate.sh --metric "python3 my_metric.py"
 # metric 스크립트는 stdout에 metric_value=N 출력해야 함
 ```
 
+## 유저 증상 재현 (Reproduction)
+
+유저가 문제를 보고하면, AI 에이전트가 직접 유저 역할을 해서 증상을 라이브로 재현한다.
+
+### chat-check: 메시지 + assertion
+
+유저의 실제 메시지를 보내고 assertion으로 증상 유무를 판별:
+```bash
+# 한국어 응답 확인
+scripts/dev-live-test.sh chat-check "안녕" --expect-korean
+
+# 특정 패턴이 응답에 있는지
+scripts/dev-live-test.sh chat-check "날씨 알려줘" --expect "날씨|기온|온도"
+
+# 특정 패턴이 없는지 (누출 검사)
+scripts/dev-live-test.sh chat-check "안녕" --expect-not "<thinking>"
+
+# 특정 도구가 호출되는지
+scripts/dev-live-test.sh chat-check "시스템 상태" --expect-tool health
+
+# 레이턴시 확인
+scripts/dev-live-test.sh chat-check "안녕" --max-latency 10000
+
+# 조합
+scripts/dev-live-test.sh chat-check "파일 목록 보여줘" \
+    --expect-korean --expect-tool fs --max-latency 30000
+```
+
+### 멀티턴 재현: multi-chat
+
+같은 세션에서 여러 턴을 보내 컨텍스트 유지 문제를 재현:
+```bash
+# 컨텍스트 유지 확인
+scripts/dev-live-test.sh multi-chat \
+    "내 이름은 홍길동이야" \
+    "내 이름이 뭐라고 했지?" \
+    --expect-context "홍길동"
+
+# 연속 대화 흐름
+scripts/dev-live-test.sh multi-chat \
+    "프로젝트 상태 알려줘" \
+    "더 자세히 설명해줘"
+```
+
+### 도구 호출 검증: tool-check
+
+특정 도구가 올바르게 호출 + 완료되는지:
+```bash
+scripts/dev-live-test.sh tool-check health "시스템 상태 확인해줘"
+scripts/dev-live-test.sh tool-check vega "최근 대화 검색해줘"
+```
+
+### AI 에이전트의 증상 재현 절차
+
+1. 유저가 보고한 메시지를 그대로 `chat-check`에 넣고 적절한 assertion 조합
+2. 실패한 체크를 기반으로 코드 수정
+3. 수정 후 같은 테스트 재실행하여 수정 확인
+4. `logs-errors`로 숨은 에러 확인
+
 ## 주의사항
 
 - 반복 테스트는 포트 **18791** (dev=18790, prod=18789와 분리)

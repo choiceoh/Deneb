@@ -20,6 +20,11 @@
 #   scripts/dev-live-test.sh logs-errors        Show only error/warning lines from logs
 #   scripts/dev-live-test.sh logs-since SECS    Show logs from last N seconds
 #
+# Reproduction (AI agent reproduces user-reported symptoms):
+#   scripts/dev-live-test.sh chat-check MSG [--expect PAT] [--expect-tool TOOL] ...
+#   scripts/dev-live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
+#   scripts/dev-live-test.sh tool-check TOOL_NAME MSG
+#
 # The dev instance runs on port 18790 (separate from production on 18789).
 
 set -euo pipefail
@@ -718,6 +723,12 @@ case "${1:-help}" in
   logs-grep)   shift; cmd_logs_grep "$@" ;;
   logs-errors) shift; cmd_logs_errors "$@" ;;
   logs-since)  shift; cmd_logs_since "$@" ;;
+
+  # --- Reproduction commands (delegate to dev-reproduce.py) ---
+  chat-check)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" chat-check "$@" ;;
+  multi-chat)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" multi-chat "$@" ;;
+  tool-check)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" tool-check "$@" ;;
+
   help|*)
     echo "Usage: scripts/dev-live-test.sh COMMAND [ARGS]"
     echo ""
@@ -736,6 +747,12 @@ case "${1:-help}" in
     echo "  chat MSG            Send chat message, stream full response"
     echo "  quality [SCENARIO]  Quality test (all|health|chat|tools|format|tools-deep|edge)"
     echo "  quality-custom MSG  Quality test with custom message"
+    echo ""
+    echo "Reproduction (for AI agents to reproduce user-reported symptoms):"
+    echo "  chat-check MSG [--expect PAT] [--expect-not PAT] [--expect-tool TOOL]"
+    echo "                      Chat + assertions (Korean, latency, patterns, tools)"
+    echo "  multi-chat M1 M2..  Multi-turn chat on same session (context carryover)"
+    echo "  tool-check TOOL MSG Verify specific tool invocation"
     echo ""
     echo "Autoresearch:"
     echo "  metric-script       Generate metric script for autoresearch"
