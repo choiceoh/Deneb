@@ -124,18 +124,18 @@ const (
 
 // FlowRecord represents a higher-level workflow that groups related tasks.
 type FlowRecord struct {
-	FlowID          string     `json:"flowId"`
-	Label           string     `json:"label"`
-	Status          FlowStatus `json:"status"`
-	OwnerKey        string     `json:"ownerKey"`
-	ParentSessionKey string   `json:"parentSessionKey,omitempty"`
-	CreatedAt       int64      `json:"createdAt"`
-	UpdatedAt       int64      `json:"updatedAt"`
-	CompletedAt     int64      `json:"completedAt,omitempty"`
-	Error           string     `json:"error,omitempty"`
-	TaskCount       int        `json:"taskCount"`
-	CompletedCount  int        `json:"completedCount"`
-	FailedCount     int        `json:"failedCount"`
+	FlowID           string     `json:"flowId"`
+	Label            string     `json:"label"`
+	Status           FlowStatus `json:"status"`
+	OwnerKey         string     `json:"ownerKey"`
+	ParentSessionKey string     `json:"parentSessionKey,omitempty"`
+	CreatedAt        int64      `json:"createdAt"`
+	UpdatedAt        int64      `json:"updatedAt"`
+	CompletedAt      int64      `json:"completedAt,omitempty"`
+	Error            string     `json:"error,omitempty"`
+	TaskCount        int        `json:"taskCount"`
+	CompletedCount   int        `json:"completedCount"`
+	FailedCount      int        `json:"failedCount"`
 }
 
 // TaskEventRecord is an audit trail entry for a task state change.
@@ -148,12 +148,12 @@ type TaskEventRecord struct {
 
 // RegistrySummary provides aggregate statistics.
 type RegistrySummary struct {
-	Total    int                       `json:"total"`
-	Active   int                       `json:"active"`
-	Terminal int                       `json:"terminal"`
-	Failures int                       `json:"failures"`
-	ByStatus  map[TaskStatus]int       `json:"byStatus"`
-	ByRuntime map[TaskRuntime]int      `json:"byRuntime"`
+	Total     int                 `json:"total"`
+	Active    int                 `json:"active"`
+	Terminal  int                 `json:"terminal"`
+	Failures  int                 `json:"failures"`
+	ByStatus  map[TaskStatus]int  `json:"byStatus"`
+	ByRuntime map[TaskRuntime]int `json:"byRuntime"`
 }
 
 // NowMs returns the current time in milliseconds.

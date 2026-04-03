@@ -6,7 +6,6 @@ import (
 	"context"
 
 	agentpkg "github.com/choiceoh/deneb/gateway-go/internal/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
@@ -15,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -22,14 +22,14 @@ import (
 // agent.status, sessions.create, sessions.lifecycle, plus
 // process, cron, and hooks management.
 type ExtendedDeps struct {
-	Sessions         *session.Manager
-	TelegramPlugin   *telegram.Plugin
-	GatewaySubs      *events.GatewayEventSubscriptions
-	Processes        *process.Manager
-	Cron             *cron.Scheduler
-	Hooks            *hooks.Registry
-	InternalHooks    *hooks.InternalRegistry
-	Broadcaster      rpcutil.BroadcastFunc
+	Sessions       *session.Manager
+	TelegramPlugin *telegram.Plugin
+	GatewaySubs    *events.GatewayEventSubscriptions
+	Processes      *process.Manager
+	Cron           *cron.Scheduler
+	Hooks          *hooks.Registry
+	InternalHooks  *hooks.InternalRegistry
+	Broadcaster    rpcutil.BroadcastFunc
 }
 
 // AgentsDeps holds the dependencies for agents CRUD RPC methods.
@@ -80,10 +80,10 @@ func CRUDMethods(deps AgentsDeps) map[string]rpcutil.HandlerFunc {
 	}
 
 	return map[string]rpcutil.HandlerFunc{
-		"agents.list":      agentsList(deps),
-		"agents.create":    agentsCreate(deps),
-		"agents.update":    agentsUpdate(deps),
-		"agents.delete":    agentsDelete(deps),
+		"agents.list":       agentsList(deps),
+		"agents.create":     agentsCreate(deps),
+		"agents.update":     agentsUpdate(deps),
+		"agents.delete":     agentsDelete(deps),
 		"agents.files.list": agentsFilesList(deps),
 		"agents.files.get":  agentsFilesGet(deps),
 		"agents.files.set":  agentsFilesSet(deps),
@@ -272,11 +272,11 @@ func agentStatus(deps ExtendedDeps) rpcutil.HandlerFunc {
 			"activeSessions": activeSessions,
 			"totalSessions":  deps.Sessions.Count(),
 			"channels": func() []string {
-			if deps.TelegramPlugin != nil {
-				return []string{"telegram"}
-			}
-			return nil
-		}(),
+				if deps.TelegramPlugin != nil {
+					return []string{"telegram"}
+				}
+				return nil
+			}(),
 		}
 
 		if deps.Processes != nil {
@@ -573,4 +573,3 @@ func agentsFilesSet(deps AgentsDeps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, file)
 	}
 }
-

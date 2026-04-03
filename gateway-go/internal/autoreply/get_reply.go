@@ -217,12 +217,12 @@ type ReplyDeps struct {
 	Registry        *handlers.CommandRegistry
 	Router          *handlers.CommandRouter
 	History         *session.HistoryTracker
-	AbortMemory     *session.AbortMemory                   // tracks recently aborted sessions for dedup
-	AbortCutoff     *session.SessionAbortCutoffEntry        // current abort cutoff marker for message filtering
-	SessionFunc     func(key string) *types.SessionState   // resolve session by key
-	PreprocessHooks []MessagePreprocessHook                 // hooks to run before directive parsing
-	ModelCandidates []model.ModelCandidate                  // available models for directive resolution
-	CommandDeps     *handlers.CommandDeps                   // server-level deps for command handlers (status, subagents, etc.)
+	AbortMemory     *session.AbortMemory                 // tracks recently aborted sessions for dedup
+	AbortCutoff     *session.SessionAbortCutoffEntry     // current abort cutoff marker for message filtering
+	SessionFunc     func(key string) *types.SessionState // resolve session by key
+	PreprocessHooks []MessagePreprocessHook              // hooks to run before directive parsing
+	ModelCandidates []model.ModelCandidate               // available models for directive resolution
+	CommandDeps     *handlers.CommandDeps                // server-level deps for command handlers (status, subagents, etc.)
 	// OnSessionEvent fires session lifecycle hooks (abort, reset, etc.)
 	// via the plugin hook system. nil = events silently dropped.
 	OnSessionEvent func(eventType, sessionKey, reason string)

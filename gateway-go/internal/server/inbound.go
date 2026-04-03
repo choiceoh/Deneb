@@ -580,7 +580,6 @@ func (p *InboundProcessor) sendCommandReply(chatID string, result *handlers.Comm
 	}
 }
 
-
 // extractCommandKey pulls the command name from a slash-prefixed message.
 // "/model gpt-4" → "model", "/new" → "new".
 func extractCommandKey(text string) string {

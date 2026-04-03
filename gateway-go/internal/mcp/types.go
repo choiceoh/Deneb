@@ -183,9 +183,9 @@ type ResourceSubscribeParams struct {
 
 // Prompt describes an MCP prompt.
 type Prompt struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Arguments   []PromptArg     `json:"arguments,omitempty"`
+	Name        string      `json:"name"`
+	Description string      `json:"description,omitempty"`
+	Arguments   []PromptArg `json:"arguments,omitempty"`
 }
 
 // PromptArg describes a prompt argument.

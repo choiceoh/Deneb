@@ -28,11 +28,11 @@ const (
 type ContinueReason string
 
 const (
-	ContinueToolUse             ContinueReason = "tool_use"               // model requested tool execution
-	ContinueCompactRetry        ContinueReason = "compact_retry"          // retrying after compaction
-	ContinueMaxOutputRecovery   ContinueReason = "max_output_recovery"    // recovering from truncated output
-	ContinueBudgetContinuation  ContinueReason = "budget_continuation"    // continuing within token budget
-	ContinueModelFallback       ContinueReason = "model_fallback"         // retrying with fallback model
+	ContinueToolUse            ContinueReason = "tool_use"            // model requested tool execution
+	ContinueCompactRetry       ContinueReason = "compact_retry"       // retrying after compaction
+	ContinueMaxOutputRecovery  ContinueReason = "max_output_recovery" // recovering from truncated output
+	ContinueBudgetContinuation ContinueReason = "budget_continuation" // continuing within token budget
+	ContinueModelFallback      ContinueReason = "model_fallback"      // retrying with fallback model
 )
 
 // QueryTransition records the outcome of a single query loop iteration.

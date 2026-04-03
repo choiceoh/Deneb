@@ -87,7 +87,7 @@ type HookMapping struct {
 // HookWakePayload is the request body for /hooks/wake.
 type HookWakePayload struct {
 	Text   string `json:"text"`
-	Mode   string `json:"mode,omitempty"`   // "now" or "next-heartbeat"
+	Mode   string `json:"mode,omitempty"` // "now" or "next-heartbeat"
 	Target string `json:"target,omitempty"`
 }
 
@@ -424,4 +424,3 @@ func (h *HooksHTTPHandler) Handle(w http.ResponseWriter, r *http.Request) bool {
 	writeText(w, http.StatusNotFound, "unknown hook endpoint")
 	return true
 }
-

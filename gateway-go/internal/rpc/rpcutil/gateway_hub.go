@@ -88,12 +88,12 @@ type GatewayHub struct {
 	processes *process.Manager
 
 	// Channel plugins.
-	telegram      *telegram.Plugin        // nil until SetTelegram (early phase).
+	telegram      *telegram.Plugin // nil until SetTelegram (early phase).
 	hooks         *hooks.Registry
 	internalHooks *hooks.InternalRegistry // nil-safe
 
 	// Agent pipeline.
-	chat       *chat.Handler    // nil until SetChat (late phase).
+	chat       *chat.Handler // nil until SetChat (late phase).
 	agents     *agent.Store
 	jobTracker *agent.JobTracker
 
@@ -151,27 +151,27 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 
 // --- Read-only accessors ---
 
-func (h *GatewayHub) Broadcaster() *events.Broadcaster            { return h.broadcaster }
+func (h *GatewayHub) Broadcaster() *events.Broadcaster               { return h.broadcaster }
 func (h *GatewayHub) GatewaySubs() *events.GatewayEventSubscriptions { return h.gatewaySubs }
-func (h *GatewayHub) Sessions() *session.Manager                  { return h.sessions }
-func (h *GatewayHub) Processes() *process.Manager                 { return h.processes }
-func (h *GatewayHub) Telegram() *telegram.Plugin                  { return h.telegram }
-func (h *GatewayHub) Hooks() *hooks.Registry                     { return h.hooks }
-func (h *GatewayHub) InternalHooks() *hooks.InternalRegistry      { return h.internalHooks }
-func (h *GatewayHub) Chat() *chat.Handler                        { return h.chat }
-func (h *GatewayHub) Agents() *agent.Store                       { return h.agents }
-func (h *GatewayHub) JobTracker() *agent.JobTracker               { return h.jobTracker }
-func (h *GatewayHub) Cron() *cron.Scheduler                      { return h.cronScheduler }
-func (h *GatewayHub) CronService() *cron.Service                  { return h.cronService }
-func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog      { return h.cronPersistLog }
-func (h *GatewayHub) Tasks() *tasks.Registry                     { return h.tasks }
-func (h *GatewayHub) Approvals() *approval.Store                  { return h.approvals }
-func (h *GatewayHub) Skills() *skill.Manager                     { return h.skills }
-func (h *GatewayHub) Wizard() *wizard.Engine                     { return h.wizard }
-func (h *GatewayHub) Talk() *talk.State                          { return h.talk }
-func (h *GatewayHub) Logger() *slog.Logger                       { return h.logger }
-func (h *GatewayHub) Version() string                            { return h.version }
-func (h *GatewayHub) SglangHub() *sglang.Hub                     { return h.sglangHub }
+func (h *GatewayHub) Sessions() *session.Manager                     { return h.sessions }
+func (h *GatewayHub) Processes() *process.Manager                    { return h.processes }
+func (h *GatewayHub) Telegram() *telegram.Plugin                     { return h.telegram }
+func (h *GatewayHub) Hooks() *hooks.Registry                         { return h.hooks }
+func (h *GatewayHub) InternalHooks() *hooks.InternalRegistry         { return h.internalHooks }
+func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
+func (h *GatewayHub) Agents() *agent.Store                           { return h.agents }
+func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
+func (h *GatewayHub) Cron() *cron.Scheduler                          { return h.cronScheduler }
+func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
+func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }
+func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
+func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
+func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
+func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
+func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
+func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
+func (h *GatewayHub) Version() string                                { return h.version }
+func (h *GatewayHub) SglangHub() *sglang.Hub                         { return h.sglangHub }
 
 // --- Late-binding setters ---
 

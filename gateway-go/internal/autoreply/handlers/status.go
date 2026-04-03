@@ -27,7 +27,7 @@ type StatusReport struct {
 	ElevatedLevel   types.ElevatedLevel
 	SendPolicy      string
 	GroupActivation types.GroupActivationMode
-	RunCount int
+	RunCount        int
 
 	// Context usage.
 	ContextUsedTokens  int

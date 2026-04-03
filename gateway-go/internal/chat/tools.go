@@ -30,12 +30,12 @@ type ToolDef = toolctx.ToolDef
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {
-	mu                      sync.RWMutex
-	tools                   map[string]ToolDef
-	order                   []string // preserves registration order
-	postProcess             *PostProcessRegistry
-	spillStore              *agent.SpilloverStore // optional; spills large tool results to disk
-	cachedLLMTools []llm.Tool // cached tool list; invalidated on RegisterTool
+	mu             sync.RWMutex
+	tools          map[string]ToolDef
+	order          []string // preserves registration order
+	postProcess    *PostProcessRegistry
+	spillStore     *agent.SpilloverStore // optional; spills large tool results to disk
+	cachedLLMTools []llm.Tool            // cached tool list; invalidated on RegisterTool
 }
 
 // NewToolRegistry creates an empty tool registry.

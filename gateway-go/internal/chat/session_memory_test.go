@@ -166,7 +166,7 @@ func TestTruncRunes(t *testing.T) {
 		wantLen int
 	}{
 		{"hello", 10, 5},
-		{"hello world", 5, 6},             // 5 + "…"
+		{"hello world", 5, 6},  // 5 + "…"
 		{"한글 테스트 문장입니다", 4, 5}, // 4 Korean runes + "…"
 		{"", 10, 0},
 	}

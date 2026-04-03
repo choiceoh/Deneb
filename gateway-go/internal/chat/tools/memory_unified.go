@@ -26,8 +26,8 @@ type memoryParams struct {
 	Limit      int     `json:"limit"`
 	Sort       string  `json:"sort"`
 	Offset     int     `json:"offset"`
-	Title      string  `json:"title"`      // log action: entry heading
-	Days       int     `json:"days"`       // recall action: how many days back (default 1 = today only)
+	Title      string  `json:"title"` // log action: entry heading
+	Days       int     `json:"days"`  // recall action: how many days back (default 1 = today only)
 }
 
 // ToolMemory creates the unified memory tool that combines structured fact store

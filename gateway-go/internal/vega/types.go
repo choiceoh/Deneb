@@ -31,7 +31,7 @@ type ComponentHealth struct {
 	Name      string `json:"name"`
 	Available bool   `json:"available"`
 	Latency   string `json:"latency,omitempty"` // e.g. "123ms"
-	Detail    string `json:"detail,omitempty"`   // model name, endpoint, or error message
+	Detail    string `json:"detail,omitempty"`  // model name, endpoint, or error message
 }
 
 // HealthStatus is the aggregated health report from a backend.

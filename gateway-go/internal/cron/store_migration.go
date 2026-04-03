@@ -12,13 +12,13 @@ import (
 
 // StoreMigrationIssues tracks counts of legacy patterns found during migration.
 type StoreMigrationIssues struct {
-	JobID                        int `json:"jobId,omitempty"`
-	LegacyScheduleString         int `json:"legacyScheduleString,omitempty"`
-	LegacyScheduleCron           int `json:"legacyScheduleCron,omitempty"`
-	LegacyPayloadKind            int `json:"legacyPayloadKind,omitempty"`
-	LegacyPayloadProvider        int `json:"legacyPayloadProvider,omitempty"`
-	LegacyTopLevelPayloadFields  int `json:"legacyTopLevelPayloadFields,omitempty"`
-	LegacyDeliveryMode           int `json:"legacyDeliveryMode,omitempty"`
+	JobID                       int `json:"jobId,omitempty"`
+	LegacyScheduleString        int `json:"legacyScheduleString,omitempty"`
+	LegacyScheduleCron          int `json:"legacyScheduleCron,omitempty"`
+	LegacyPayloadKind           int `json:"legacyPayloadKind,omitempty"`
+	LegacyPayloadProvider       int `json:"legacyPayloadProvider,omitempty"`
+	LegacyTopLevelPayloadFields int `json:"legacyTopLevelPayloadFields,omitempty"`
+	LegacyDeliveryMode          int `json:"legacyDeliveryMode,omitempty"`
 }
 
 // StoreMigrationResult holds the outcome of normalizing stored jobs.
@@ -381,7 +381,6 @@ func stripLegacyTopLevelFields(raw map[string]any) bool {
 	}
 	return found
 }
-
 
 func normalizeScheduleMap(sched map[string]any, raw map[string]any) bool {
 	mutated := false

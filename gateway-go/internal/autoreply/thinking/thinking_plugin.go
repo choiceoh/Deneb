@@ -1,8 +1,8 @@
 package thinking
 
 import (
-	"sync"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"sync"
 )
 
 // ProviderThinkingContext provides context for plugin-based thinking level resolution.

@@ -27,13 +27,13 @@ func VegaMethods(deps VegaDeps) map[string]rpcutil.HandlerFunc {
 	// Register backend-forwarding commands if a backend is available.
 	if deps.Backend != nil {
 		vegaCommands := map[string]string{
-			"vega.ask":            "ask",
-			"vega.update":         "update",
-			"vega.add-action":     "add-action",
-			"vega.mail-append":    "mail-append",
-			"vega.version":        "version",
-			"vega.memory-search":  "memory-search",
-			"vega.memory-update":  "memory-update",
+			"vega.ask":           "ask",
+			"vega.update":        "update",
+			"vega.add-action":    "add-action",
+			"vega.mail-append":   "mail-append",
+			"vega.version":       "version",
+			"vega.memory-search": "memory-search",
+			"vega.memory-update": "memory-update",
 		}
 		for method, cmd := range vegaCommands {
 			m[method] = vegaBackendHandler(deps.Backend, cmd)

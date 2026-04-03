@@ -12,10 +12,10 @@ import (
 
 // Context assembly defaults.
 const (
-	defaultTokenBudget             = 204_000
-	defaultSystemPromptBudget      = 65_536
-	defaultFreshTailCount          = 48
-	defaultMaxMessages             = 100
+	defaultTokenBudget        = 204_000
+	defaultSystemPromptBudget = 65_536
+	defaultFreshTailCount     = 48
+	defaultMaxMessages        = 100
 	// runesPerToken re-exports the shared constant for local callers
 	// (compaction, sweep, etc.) that use it directly in math expressions.
 	runesPerToken = tokenutil.RunesPerToken

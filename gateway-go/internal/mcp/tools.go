@@ -197,8 +197,8 @@ type toolDef struct {
 
 // ToolRegistry holds the tool definitions indexed by MCP tool name.
 type ToolRegistry struct {
-	tools    []toolDef
-	byName   map[string]*toolDef
+	tools  []toolDef
+	byName map[string]*toolDef
 }
 
 // NewToolRegistry creates and indexes the tool registry.

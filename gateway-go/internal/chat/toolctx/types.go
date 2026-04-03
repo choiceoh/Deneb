@@ -86,10 +86,10 @@ type ProviderConfig struct {
 
 // DeliveryContext carries channel routing information for a chat message.
 type DeliveryContext struct {
-	Channel   string `json:"channel,omitempty"`
-	To        string `json:"to,omitempty"`
-	AccountID string `json:"accountId,omitempty"`
-	ThreadID  string `json:"threadId,omitempty"`
+	Channel    string `json:"channel,omitempty"`
+	To         string `json:"to,omitempty"`
+	AccountID  string `json:"accountId,omitempty"`
+	ThreadID   string `json:"threadId,omitempty"`
 	MessageID  string `json:"messageId,omitempty"`  // triggering message ID for reply threading
 	DraftMsgID string `json:"draftMsgId,omitempty"` // draft streaming message ID for edit-in-place on completion
 }

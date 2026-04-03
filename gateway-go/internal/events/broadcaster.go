@@ -82,8 +82,8 @@ var eventScopeGuards = map[string][]string{
 	"config.changed":          {ScopeAdmin},
 	"process.completed":       {ScopeWrite, ScopeAdmin},
 	"heartbeat":               {ScopeRead},
-	"dreaming.cycle":           {ScopeRead},
-	"shadow.event":             {ScopeRead},
+	"dreaming.cycle":          {ScopeRead},
+	"shadow.event":            {ScopeRead},
 }
 
 // maxBufferedBytes is the threshold for slow consumer detection.
@@ -105,7 +105,6 @@ type Broadcaster struct {
 	// Tool event recipients: runId -> connID.
 	toolRecipientMu sync.RWMutex
 	toolRecipients  map[string]string
-
 }
 
 type subscriberEntry struct {
@@ -363,7 +362,6 @@ func (b *Broadcaster) GetToolEventRecipient(runID string) string {
 	defer b.toolRecipientMu.RUnlock()
 	return b.toolRecipients[runID]
 }
-
 
 // MergedSessionRecipients returns the union of session event subscribers and
 // session message subscribers for a given session key.

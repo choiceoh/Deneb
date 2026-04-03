@@ -13,13 +13,13 @@ type ReplyButton struct {
 // Button action constants. These are parsed by HandleTelegramInteraction
 // to dispatch the appropriate follow-up action.
 const (
-	ActionCommit  = "commit"
-	ActionTest    = "test"
-	ActionRevert  = "revert"
-	ActionPush    = "push"
-	ActionNext    = "new"
-	ActionFix     = "fix"
-	ActionDetails = "details"
+	ActionCommit      = "commit"
+	ActionTest        = "test"
+	ActionRevert      = "revert"
+	ActionPush        = "push"
+	ActionNext        = "new"
+	ActionFix         = "fix"
+	ActionDetails     = "details"
 	ActionRetry       = "retry"
 	ActionModelSwitch = "model"
 )

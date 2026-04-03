@@ -33,16 +33,16 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func (s *Server) registerBuiltinMethods() {
 	s.dispatcher.RegisterDomain(handlergateway.RuntimeMethods(handlergateway.Deps{
-		Version:         s.version,
-		StartedAt:       s.startedAt,
-		RustFFI:         s.rustFFI,
+		Version:   s.version,
+		StartedAt: s.startedAt,
+		RustFFI:   s.rustFFI,
 		ChannelsStatus: func() any {
 			if s.telegramPlug != nil {
 				return map[string]telegram.Status{"telegram": s.telegramPlug.Status()}

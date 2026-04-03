@@ -3,8 +3,8 @@
 // Deferred tools have their name+description visible in the system prompt but
 // full JSON schemas are not sent in the initial Tools array. When the LLM
 // needs a deferred tool, it calls fetch_tools to:
-//   1. Get the full schema description (returned as text).
-//   2. Signal DeferredActivation so the executor injects schemas on the next turn.
+//  1. Get the full schema description (returned as text).
+//  2. Signal DeferredActivation so the executor injects schemas on the next turn.
 package tools
 
 import (

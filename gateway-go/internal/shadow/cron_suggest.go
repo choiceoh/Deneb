@@ -12,19 +12,19 @@ type CronSuggester struct {
 	svc *Service
 
 	// State (guarded by svc.mu).
-	suggestions     []CronSuggestion
-	taskMentions    map[string][]int64 // normalized task → timestamps of mentions
+	suggestions  []CronSuggestion
+	taskMentions map[string][]int64 // normalized task → timestamps of mentions
 }
 
 // CronSuggestion is a proposed cron job based on detected patterns.
 type CronSuggestion struct {
-	ID          string `json:"id"`
-	Task        string `json:"task"`        // what the cron should do
-	Schedule    string `json:"schedule"`    // suggested cron expression
-	Reason      string `json:"reason"`      // Korean explanation
-	DetectedAt  int64  `json:"detectedAt"`  // unix ms
-	MentionCount int   `json:"mentionCount"` // how many times the task was mentioned
-	Status      string `json:"status"`      // "suggested", "accepted", "dismissed"
+	ID           string `json:"id"`
+	Task         string `json:"task"`         // what the cron should do
+	Schedule     string `json:"schedule"`     // suggested cron expression
+	Reason       string `json:"reason"`       // Korean explanation
+	DetectedAt   int64  `json:"detectedAt"`   // unix ms
+	MentionCount int    `json:"mentionCount"` // how many times the task was mentioned
+	Status       string `json:"status"`       // "suggested", "accepted", "dismissed"
 }
 
 func newCronSuggester(svc *Service) *CronSuggester {
@@ -36,19 +36,19 @@ func newCronSuggester(svc *Service) *CronSuggester {
 
 // cronKeywords detect time-based repetitive patterns.
 var cronKeywords = map[string]string{
-	"매일":    "0 9 * * *",    // daily at 9am
-	"매주":    "0 9 * * 1",    // weekly Monday 9am
-	"매시간":   "0 * * * *",    // hourly
-	"주기적으로":  "0 */4 * * *",  // every 4 hours
-	"정기적으로":  "0 */4 * * *",
-	"매번":    "0 */2 * * *",  // every 2 hours
-	"every day":   "0 9 * * *",
-	"every week":  "0 9 * * 1",
-	"every hour":  "0 * * * *",
-	"daily":       "0 9 * * *",
-	"weekly":      "0 9 * * 1",
-	"아침마다":   "0 9 * * *",    // every morning
-	"저녁마다":   "0 18 * * *",   // every evening
+	"매일":         "0 9 * * *",   // daily at 9am
+	"매주":         "0 9 * * 1",   // weekly Monday 9am
+	"매시간":        "0 * * * *",   // hourly
+	"주기적으로":      "0 */4 * * *", // every 4 hours
+	"정기적으로":      "0 */4 * * *",
+	"매번":         "0 */2 * * *", // every 2 hours
+	"every day":  "0 9 * * *",
+	"every week": "0 9 * * 1",
+	"every hour": "0 * * * *",
+	"daily":      "0 9 * * *",
+	"weekly":     "0 9 * * 1",
+	"아침마다":       "0 9 * * *",  // every morning
+	"저녁마다":       "0 18 * * *", // every evening
 }
 
 // OnMessageForCron checks if a message mentions repetitive tasks.

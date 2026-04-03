@@ -146,7 +146,7 @@ func StructuredFormatter(_ context.Context, _ string, output string) string {
 		return output
 	}
 	// Only attempt if it looks like JSON.
-	if (trimmed[0] != '{' && trimmed[0] != '[') {
+	if trimmed[0] != '{' && trimmed[0] != '[' {
 		return output
 	}
 	var parsed any

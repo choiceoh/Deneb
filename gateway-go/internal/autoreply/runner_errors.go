@@ -7,14 +7,14 @@ type AgentErrorKind int
 
 const (
 	AgentErrorUnknown         AgentErrorKind = iota
-	AgentErrorTransient                       // 502, 503, 521, 429, 529 — retryable
-	AgentErrorContextOverflow                 // context too large — needs session reset
-	AgentErrorBilling                         // billing/payment — terminal
-	AgentErrorRoleOrdering                    // role alternation — needs session reset
-	AgentErrorCompaction                      // compaction failure — needs session reset
-	AgentErrorAuth                            // 401/invalid key — terminal
-	AgentErrorRateLimit                       // 429 specifically — terminal with backoff hint
-	AgentErrorServerDown                      // 502/503/521/529 (non-429) — terminal
+	AgentErrorTransient                      // 502, 503, 521, 429, 529 — retryable
+	AgentErrorContextOverflow                // context too large — needs session reset
+	AgentErrorBilling                        // billing/payment — terminal
+	AgentErrorRoleOrdering                   // role alternation — needs session reset
+	AgentErrorCompaction                     // compaction failure — needs session reset
+	AgentErrorAuth                           // 401/invalid key — terminal
+	AgentErrorRateLimit                      // 429 specifically — terminal with backoff hint
+	AgentErrorServerDown                     // 502/503/521/529 (non-429) — terminal
 )
 
 // ClassifyAgentError determines the error kind from a raw error message.

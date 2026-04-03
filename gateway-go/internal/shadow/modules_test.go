@@ -64,10 +64,10 @@ func TestExtractFacts(t *testing.T) {
 		content string
 		wantN   int
 	}{
-		{"나는 Go를 좋아하고 Rust도 선호합니다", 1},    // "좋아하" and "선호하" dedupe by overlap
-		{"version 2.0 릴리스 준비", 1},               // "릴리스"
+		{"나는 Go를 좋아하고 Rust도 선호합니다", 1}, // "좋아하" and "선호하" dedupe by overlap
+		{"version 2.0 릴리스 준비", 1},      // "릴리스"
 		{"그냥 일반 대화입니다", 0},
-		{"we decided to use PostgreSQL", 1},        // "we decided"
+		{"we decided to use PostgreSQL", 1}, // "we decided"
 	}
 	for _, tt := range tests {
 		facts := extractFacts(tt.content, "test")

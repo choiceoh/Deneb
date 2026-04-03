@@ -192,4 +192,3 @@ func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery,
 		p.logger.Warn("failed to edit model switch message", "error", err)
 	}
 }
-

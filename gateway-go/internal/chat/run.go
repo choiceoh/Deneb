@@ -81,19 +81,19 @@ const (
 // Optional fields (may be nil): transcript, tools, authManager,
 // broadcast, broadcastRaw, jobTracker. Required: sessions, logger.
 type runDeps struct {
-	sessions         *session.Manager                  // required
-	llmClient        *llm.Client                       // optional; resolved from authManager if nil
-	transcript       TranscriptStore                   // optional; history unavailable without it
-	tools            *ToolRegistry                     // optional; no tool use if nil
-	authManager      *provider.AuthManager             // optional; uses pre-configured client if nil
-	providerRuntime  *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
-	broadcast        BroadcastFunc                     // optional
-	broadcastRaw     streaming.BroadcastRawFunc        // optional
-	jobTracker       *agent.JobTracker                 // optional
-	replyFunc        ReplyFunc                         // optional; delivers response to originating channel
-	mediaSendFn      MediaSendFunc                     // optional; delivers files to originating channel
-	typingFn         TypingFunc                        // optional; sends typing indicator during run
-	reactionFn ReactionFunc // optional; sets emoji reaction for status phases
+	sessions        *session.Manager                  // required
+	llmClient       *llm.Client                       // optional; resolved from authManager if nil
+	transcript      TranscriptStore                   // optional; history unavailable without it
+	tools           *ToolRegistry                     // optional; no tool use if nil
+	authManager     *provider.AuthManager             // optional; uses pre-configured client if nil
+	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
+	broadcast       BroadcastFunc                     // optional
+	broadcastRaw    streaming.BroadcastRawFunc        // optional
+	jobTracker      *agent.JobTracker                 // optional
+	replyFunc       ReplyFunc                         // optional; delivers response to originating channel
+	mediaSendFn     MediaSendFunc                     // optional; delivers files to originating channel
+	typingFn        TypingFunc                        // optional; sends typing indicator during run
+	reactionFn      ReactionFunc                      // optional; sets emoji reaction for status phases
 	// channelUploadLimitFn returns the max file upload size for a channel ID.
 	// Returns 0 if no limit is registered (tool applies its own default).
 	channelUploadLimitFn func(channelID string) int64 // optional
@@ -116,14 +116,14 @@ type runDeps struct {
 	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
 	// emitTranscriptFn sends transcript updates (user/assistant message appends)
 	// to the gateway event subscription pipeline. Optional; nil if not wired.
-	emitTranscriptFn func(sessionKey string, message any, messageID string)
-	sessionMemory    *SessionMemoryStore // optional; structured session state
-	contextCfg       ContextConfig
-	compactionCfg    aurora.SweepConfig
+	emitTranscriptFn     func(sessionKey string, message any, messageID string)
+	sessionMemory        *SessionMemoryStore // optional; structured session state
+	contextCfg           ContextConfig
+	compactionCfg        aurora.SweepConfig
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string
-	maxTokens        int
+	maxTokens            int
 	// shutdownCtx is the server lifecycle context; used to bound background
 	// goroutines (e.g., auto-memory extraction) so they stop on server shutdown.
 	shutdownCtx context.Context

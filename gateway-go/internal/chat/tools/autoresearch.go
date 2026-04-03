@@ -16,21 +16,21 @@ import (
 func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Action          string                      `json:"action"`
-			Workdir         string                      `json:"workdir"`
-			TargetFiles     []string                    `json:"target_files"`
-			MetricCmd       string                      `json:"metric_cmd"`
-			MetricName      string                      `json:"metric_name"`
-			MetricDirection string                      `json:"metric_direction"`
-			TimeBudgetSec   int                         `json:"time_budget_sec"`
-			BranchTag       string                      `json:"branch_tag"`
-			Model           string                      `json:"model"`
-			MetricPattern   string                      `json:"metric_pattern"`
-			MaxIterations   int                         `json:"max_iterations"`
-			CacheEnabled    bool                        `json:"cache_enabled"`
-			Format          string                      `json:"format"`
-			Constants       []autoresearch.ConstantDef  `json:"constants"`
-			AutoStart       bool                        `json:"auto_start"`
+			Action          string                     `json:"action"`
+			Workdir         string                     `json:"workdir"`
+			TargetFiles     []string                   `json:"target_files"`
+			MetricCmd       string                     `json:"metric_cmd"`
+			MetricName      string                     `json:"metric_name"`
+			MetricDirection string                     `json:"metric_direction"`
+			TimeBudgetSec   int                        `json:"time_budget_sec"`
+			BranchTag       string                     `json:"branch_tag"`
+			Model           string                     `json:"model"`
+			MetricPattern   string                     `json:"metric_pattern"`
+			MaxIterations   int                        `json:"max_iterations"`
+			CacheEnabled    bool                       `json:"cache_enabled"`
+			Format          string                     `json:"format"`
+			Constants       []autoresearch.ConstantDef `json:"constants"`
+			AutoStart       bool                       `json:"auto_start"`
 		}
 		if err := jsonutil.UnmarshalInto("autoresearch params", input, &p); err != nil {
 			return "", err

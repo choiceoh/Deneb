@@ -17,8 +17,8 @@ type ErrorLearner struct {
 
 // ErrorRecord captures an error occurrence with context.
 type ErrorRecord struct {
-	Pattern     string `json:"pattern"`     // normalized error signature
-	Message     string `json:"message"`     // original error message (truncated)
+	Pattern     string `json:"pattern"` // normalized error signature
+	Message     string `json:"message"` // original error message (truncated)
 	SessionKey  string `json:"sessionKey"`
 	OccurredAt  int64  `json:"occurredAt"`  // unix ms
 	Resolution  string `json:"resolution"`  // how it was resolved (if known)

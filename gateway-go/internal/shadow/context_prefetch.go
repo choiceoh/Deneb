@@ -11,9 +11,9 @@ type ContextPrefetcher struct {
 	svc *Service
 
 	// State (guarded by svc.mu).
-	currentTopic    string
-	topicStartedAt  int64
-	prefetchedCtx   []PrefetchedContext
+	currentTopic   string
+	topicStartedAt int64
+	prefetchedCtx  []PrefetchedContext
 }
 
 // PrefetchedContext is pre-gathered context ready for the main session.
@@ -31,29 +31,29 @@ func newContextPrefetcher(svc *Service) *ContextPrefetcher {
 
 // topicKeywords maps topic keywords to relevant code areas.
 var topicKeywords = map[string][]string{
-	"telegram":  {"internal/telegram/", "internal/server/inbound_telegram.go", "internal/server/server_chat.go"},
-	"chat":      {"internal/chat/", "internal/llm/"},
-	"memory":    {"internal/memory/", "internal/aurora/", "internal/unified/"},
-	"cron":      {"internal/cron/", "internal/autonomous/"},
-	"session":   {"internal/session/", "internal/server/session_manager.go"},
-	"auth":      {"internal/auth/", "internal/provider/"},
-	"vega":      {"internal/vega/", "core-rs/vega/"},
-	"proto":     {"proto/", "pkg/protocol/"},
-	"tool":      {"internal/chat/tools/", "internal/chat/toolreg/"},
-	"ffi":       {"internal/ffi/", "core-rs/core/src/lib.rs"},
-	"shadow":    {"internal/shadow/"},
-	"deploy":    {"scripts/", "Makefile"},
-	"test":      {"*_test.go"},
-	"docs":      {"docs/"},
-	"webhook":   {"internal/server/webhook_github.go"},
-	"skill":     {"internal/skill/", "skills/"},
-	"exec":      {"internal/process/", "internal/chat/tools/exec.go"},
-	"코딩":      {"internal/telegram/"},
-	"빌드":      {"Makefile", "scripts/"},
-	"테스트":    {"*_test.go"},
-	"배포":      {"scripts/release*", ".github/workflows/"},
-	"메모리":    {"internal/memory/", "internal/aurora/"},
-	"검색":      {"internal/vega/"},
+	"telegram": {"internal/telegram/", "internal/server/inbound_telegram.go", "internal/server/server_chat.go"},
+	"chat":     {"internal/chat/", "internal/llm/"},
+	"memory":   {"internal/memory/", "internal/aurora/", "internal/unified/"},
+	"cron":     {"internal/cron/", "internal/autonomous/"},
+	"session":  {"internal/session/", "internal/server/session_manager.go"},
+	"auth":     {"internal/auth/", "internal/provider/"},
+	"vega":     {"internal/vega/", "core-rs/vega/"},
+	"proto":    {"proto/", "pkg/protocol/"},
+	"tool":     {"internal/chat/tools/", "internal/chat/toolreg/"},
+	"ffi":      {"internal/ffi/", "core-rs/core/src/lib.rs"},
+	"shadow":   {"internal/shadow/"},
+	"deploy":   {"scripts/", "Makefile"},
+	"test":     {"*_test.go"},
+	"docs":     {"docs/"},
+	"webhook":  {"internal/server/webhook_github.go"},
+	"skill":    {"internal/skill/", "skills/"},
+	"exec":     {"internal/process/", "internal/chat/tools/exec.go"},
+	"코딩":       {"internal/telegram/"},
+	"빌드":       {"Makefile", "scripts/"},
+	"테스트":      {"*_test.go"},
+	"배포":       {"scripts/release*", ".github/workflows/"},
+	"메모리":      {"internal/memory/", "internal/aurora/"},
+	"검색":       {"internal/vega/"},
 }
 
 // OnMessageForTopic analyzes a message for topic context and triggers prefetch

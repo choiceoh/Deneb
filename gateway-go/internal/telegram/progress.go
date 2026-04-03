@@ -44,10 +44,10 @@ type ProgressTracker struct {
 	// Status summary support: periodically summarize what the agent is doing
 	// via a local LLM call and insert the result into the progress message.
 	completedCount int
-	activities     []string         // accumulated tool activity descriptions for summarizer
-	statusInserts  map[int]string   // stepIndex -> summary phrase to render after that step
-	summarizeFn    SummarizeFn      // injected; nil = no summaries
-	pendingSummary atomic.Bool      // prevents overlapping LLM calls
+	activities     []string       // accumulated tool activity descriptions for summarizer
+	statusInserts  map[int]string // stepIndex -> summary phrase to render after that step
+	summarizeFn    SummarizeFn    // injected; nil = no summaries
+	pendingSummary atomic.Bool    // prevents overlapping LLM calls
 }
 
 // ProgressStep records a single tool invocation and its current status.

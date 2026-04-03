@@ -11,11 +11,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
+	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )

@@ -159,7 +159,6 @@ func (u *SessionUsage) FormatUsage() string {
 		u.TotalTokens, u.InputTokens, u.OutputTokens, u.RunCount)
 }
 
-
 // SessionDelivery handles reply delivery to the originating channel.
 type SessionDelivery struct {
 	Channel   string

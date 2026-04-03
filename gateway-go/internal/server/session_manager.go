@@ -19,6 +19,6 @@ type SessionManager struct {
 
 	// Autoreply session subsystems.
 	abortMemory    *arSession.AbortMemory    // tracks recently aborted sessions for dedup
-	historyTracker *arSession.HistoryTracker  // per-session conversation history
-	sessionUsage   *arSession.SessionUsage    // aggregate token usage for /status reporting
+	historyTracker *arSession.HistoryTracker // per-session conversation history
+	sessionUsage   *arSession.SessionUsage   // aggregate token usage for /status reporting
 }

@@ -58,6 +58,7 @@ var categoryImportanceMultiplier = map[string]float64{
 //   - At steepness days:  0.5
 //   - At 2×steepness:     0.2
 //   - At 3×steepness:     0.1
+//
 // Lower values = faster decay. Factual records (decision, context, solution)
 // get higher steepness so recent project history persists across sessions.
 var categorySteepnessDays = map[string]float64{

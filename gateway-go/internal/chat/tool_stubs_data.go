@@ -6,5 +6,5 @@ import (
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 )
 
-func toolSubagents(d *SessionDeps) ToolFunc { return chattools.ToolSubagents(d) }
+func toolSubagents(d *SessionDeps) ToolFunc               { return chattools.ToolSubagents(d) }
 func toolImage(client *llm.Client, model string) ToolFunc { return chattools.ToolImage(client, model) }

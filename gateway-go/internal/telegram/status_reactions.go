@@ -99,15 +99,15 @@ type StatusReactionControllerParams struct {
 
 // StatusReactionController manages agent status display via message reactions.
 type StatusReactionController struct {
-	mu           sync.Mutex
-	enabled      bool
-	setReaction  func(emoji string) error
-	emojis       StatusReactionEmojis
-	timing       StatusReactionTiming
-	onError      func(err error)
-	currentEmoji string
-	pendingEmoji string
-	finished     bool
+	mu             sync.Mutex
+	enabled        bool
+	setReaction    func(emoji string) error
+	emojis         StatusReactionEmojis
+	timing         StatusReactionTiming
+	onError        func(err error)
+	currentEmoji   string
+	pendingEmoji   string
+	finished       bool
 	debounceTimer  *time.Timer
 	stallSoftTimer *time.Timer
 	stallHardTimer *time.Timer

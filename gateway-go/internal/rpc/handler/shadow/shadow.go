@@ -28,16 +28,16 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		"shadow.tasks":        handleTasks(deps),
 		"shadow.task.dismiss": handleDismiss(deps),
 		// Analytics.
-		"shadow.analytics":    handleAnalytics(deps),
+		"shadow.analytics": handleAnalytics(deps),
 		// Memory.
-		"shadow.facts":        handleFacts(deps),
+		"shadow.facts": handleFacts(deps),
 		// Errors.
 		"shadow.errors":         handleErrors(deps),
 		"shadow.errors.insight": handleErrorInsight(deps),
 		// Code review.
-		"shadow.reviews":       handleReviews(deps),
+		"shadow.reviews": handleReviews(deps),
 		// Cron suggestions.
-		"shadow.cron.suggestions":       handleCronSuggestions(deps),
+		"shadow.cron.suggestions":        handleCronSuggestions(deps),
 		"shadow.cron.suggestion.dismiss": handleCronDismiss(deps),
 		// Session continuity.
 		"shadow.continuity":        handleContinuity(deps),
@@ -243,4 +243,3 @@ func handleResumeSummary(deps Deps) rpcutil.HandlerFunc {
 		})
 	}
 }
-

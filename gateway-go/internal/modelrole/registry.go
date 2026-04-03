@@ -27,7 +27,7 @@ type Role string
 const (
 	RoleMain        Role = "main"
 	RoleLightweight Role = "lightweight"
-	RoleFallback Role = "fallback"
+	RoleFallback    Role = "fallback"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -272,7 +272,6 @@ func resolveBaseURL(providerID string) string {
 		return DefaultZaiBaseURL // assume zai for unknown
 	}
 }
-
 
 // resolveSglangAPIKey reads SGLANG_API_KEY from environment, defaulting to "local"
 // for local sglang servers that require a bearer token.

@@ -691,4 +691,3 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 		t.Errorf("OnToolResult called %d times, want 1", toolResults)
 	}
 }
-

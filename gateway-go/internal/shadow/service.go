@@ -392,7 +392,6 @@ func (s *Service) CodeReviewer() *CodeReviewer { return s.codeReviewer }
 // CronSuggester returns the cron suggester module.
 func (s *Service) CronSuggester() *CronSuggester { return s.cronSuggester }
 
-
 // notifyCtx returns a context with a 15-second timeout for notifications.
 func (s *Service) notifyCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(s.svcCtx, 15*time.Second)

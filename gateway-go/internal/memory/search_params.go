@@ -22,7 +22,7 @@ const (
 	defaultSteepnessDays  = 7.0
 	ftsAndMinResults      = 3
 	dedupJaccardThreshold = 0.60
-	decayPower          = 2.0
+	decayPower            = 2.0
 )
 
 // SearchParams holds all tunable search scoring parameters.

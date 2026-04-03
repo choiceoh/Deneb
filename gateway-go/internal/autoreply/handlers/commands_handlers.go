@@ -43,9 +43,9 @@ type RPCZeroCallsReport struct {
 
 // CommandDeps holds dependencies available to command handlers.
 type CommandDeps struct {
-	SubagentRuns    func() []subagentpkg.SubagentRunRecord // for /agents
-	Status          *StatusDeps                            // Server-level data for /status command.
-	ZeroCallsFn     func() *RPCZeroCallsReport             // for /zerocalls
+	SubagentRuns func() []subagentpkg.SubagentRunRecord // for /agents
+	Status       *StatusDeps                            // Server-level data for /status command.
+	ZeroCallsFn  func() *RPCZeroCallsReport             // for /zerocalls
 }
 
 // StatusDeps holds server-level data for the /status command.

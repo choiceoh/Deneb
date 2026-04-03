@@ -19,8 +19,8 @@ type CodeReviewer struct {
 
 // CodeReviewResult captures the outcome of a background code check.
 type CodeReviewResult struct {
-	Trigger    string   `json:"trigger"`    // what triggered the review
-	CheckedAt  int64    `json:"checkedAt"`  // unix ms
+	Trigger    string   `json:"trigger"`   // what triggered the review
+	CheckedAt  int64    `json:"checkedAt"` // unix ms
 	VetPassed  bool     `json:"vetPassed"`
 	VetOutput  string   `json:"vetOutput,omitempty"`
 	FmtClean   bool     `json:"fmtClean"`

@@ -46,7 +46,10 @@ func (e *Embedder) EmbedAndStore(ctx context.Context, factID int64, content stri
 
 // EmbedBatchAndStore embeds multiple facts in a single batch API call and stores
 // the vectors. Returns the number of successfully stored embeddings.
-func (e *Embedder) EmbedBatchAndStore(ctx context.Context, facts []struct{ ID int64; Content string }) (int, error) {
+func (e *Embedder) EmbedBatchAndStore(ctx context.Context, facts []struct {
+	ID      int64
+	Content string
+}) (int, error) {
 	if len(facts) == 0 {
 		return 0, nil
 	}

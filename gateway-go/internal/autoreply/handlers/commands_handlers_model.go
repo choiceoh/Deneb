@@ -60,4 +60,3 @@ func handleVerboseCommand(ctx CommandContext) (*CommandResult, error) {
 		SkipAgent:  true,
 	}, nil
 }
-

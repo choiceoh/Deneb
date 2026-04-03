@@ -16,7 +16,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-
 const (
 	importanceTimeout   = 30 * time.Second
 	importanceMaxTokens = 1536
@@ -38,7 +37,7 @@ type ExtractedFact struct {
 	Category     string   `json:"category"`
 	Importance   float64  `json:"importance"`
 	ExpiryHint   string   `json:"expiry_hint,omitempty"`   // ISO8601 or empty
-	Entities     []string `json:"entities,omitempty"`       // related entity names (max 5)
+	Entities     []string `json:"entities,omitempty"`      // related entity names (max 5)
 	RelationType string   `json:"relation_type,omitempty"` // 'evolves', 'contradicts', 'supports', 'causes'
 }
 
@@ -633,4 +632,3 @@ func truncate(s string, maxRunes int) string {
 	}
 	return string(runes[:maxRunes]) + "..."
 }
-

@@ -202,7 +202,6 @@ func lookPathManual(bin string) bool {
 	return false
 }
 
-
 // FilterEligibleSkills filters a slice of entries by eligibility.
 func FilterEligibleSkills(entries []SkillEntry, ctx EligibilityContext) []SkillEntry {
 	var result []SkillEntry

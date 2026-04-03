@@ -664,7 +664,6 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	return text, nil
 }
 
-
 // CollectStream reads all events from a streaming LLM response and returns the text.
 func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	var sb strings.Builder
