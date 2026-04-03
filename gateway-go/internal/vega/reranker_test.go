@@ -79,10 +79,32 @@ func TestReranker_EmptyDocs(t *testing.T) {
 	}
 }
 
-func TestReranker_NilWithoutAPIKey(t *testing.T) {
+func TestReranker_ValidWithoutAPIKey(t *testing.T) {
 	reranker := NewReranker(RerankConfig{})
-	if reranker != nil {
-		t.Error("expected nil reranker without API key")
+	if reranker == nil {
+		t.Error("expected valid reranker without API key (local server mode)")
+	}
+}
+
+func TestReranker_NoAuthHeaderWithoutAPIKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			t.Errorf("expected no Authorization header, got %q", auth)
+		}
+		resp := rerankResponse{
+			Results: []RerankResult{{Index: 0, RelevanceScore: 0.9}},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	reranker := NewReranker(RerankConfig{URL: srv.URL + "/v1/rerank"})
+	results, err := reranker.Rerank(context.Background(), "query", []string{"doc"}, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 }
 
