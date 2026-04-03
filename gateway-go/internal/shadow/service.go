@@ -106,28 +106,22 @@ func (s *Service) Start() {
 	// Create shadow session in the session manager.
 	if s.cfg.Sessions != nil {
 		s.cfg.Sessions.Create(s.sessionKey, session.KindShadow)
-		s.cfg.Logger.Info("shadow session created", "key", s.sessionKey, "monitoring", s.cfg.MainSessionKey)
 	}
 
 	// Subscribe to transcript appends for real-time monitoring.
 	if s.cfg.TranscriptWriter != nil {
 		s.unsubAppend = s.cfg.TranscriptWriter.OnAppend(s.onTranscriptAppend)
-		s.cfg.Logger.Info("shadow monitoring: subscribed to transcript appends")
 	}
 
 	// Subscribe to session lifecycle events.
 	if s.cfg.Sessions != nil {
 		s.unsubEvents = s.cfg.Sessions.EventBusRef().Subscribe(s.onSessionEvent)
-		s.cfg.Logger.Info("shadow monitoring: subscribed to session events")
 	}
 
 	// Start periodic digest loop.
 	go s.digestLoop()
 
-	s.cfg.Logger.Info("shadow monitoring service started",
-		"sessionKey", s.sessionKey,
-		"mainSession", s.cfg.MainSessionKey,
-	)
+	s.cfg.Logger.Info("shadow monitoring started", "session", s.cfg.MainSessionKey)
 }
 
 // Stop shuts down the shadow monitoring service.

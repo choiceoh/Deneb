@@ -73,7 +73,6 @@ func (s *Server) registerSessionRPCMethods() {
 	var agentLogWriter *agentlog.Writer
 	if home, err := os.UserHomeDir(); err == nil {
 		agentLogWriter = agentlog.NewWriter(home + "/.deneb/agent-logs")
-		s.logger.Info("agent detail log initialized", "dir", home+"/.deneb/agent-logs")
 	}
 
 	chatCfg := chat.DefaultHandlerConfig()
@@ -296,7 +295,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				timezone: "Asia/Seoul",
 				logger:   s.logger,
 			})
-			s.logger.Info("memory flush task registered with autonomous service")
 		}
 	}
 
@@ -308,7 +306,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			activity:    s.activity,
 			logger:      s.logger,
 		})
-		s.logger.Info("diary heartbeat task registered with autonomous service (2h interval)")
 
 		// Register diary SQL migration task: every 12 hours, matured diary
 		// entries (≥2 days old) are distilled into structured SQL facts.
@@ -319,7 +316,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				workspaceDir: workspaceDir,
 				logger:       s.logger,
 			})
-			s.logger.Info("diary-sql-migration task registered with autonomous service (12h interval)")
 		}
 	}
 

@@ -69,8 +69,9 @@ func (r *Registry) restore() error {
 		r.flows[f.FlowID] = f
 	}
 
-	r.logger.Info("task registry restored",
-		"tasks", len(r.tasks), "flows", len(r.flows))
+	if len(r.tasks) > 0 || len(r.flows) > 0 {
+		r.logger.Info("task registry restored", "tasks", len(r.tasks), "flows", len(r.flows))
+	}
 	return nil
 }
 
