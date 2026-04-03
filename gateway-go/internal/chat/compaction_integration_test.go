@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 )
 
 // --- Compaction integration tests ---
@@ -26,16 +27,20 @@ import (
 // - Compaction evaluation thresholds (via aurora.EvaluateCompaction)
 // - Transcript + Aurora store consistency after compaction
 
-// tempAuroraStore creates an Aurora store backed by a temp directory for testing.
+// tempAuroraStore creates an Aurora store backed by a temp unified DB for testing.
 func tempAuroraStore(t *testing.T) *aurora.Store {
 	t.Helper()
 	dir := t.TempDir()
-	cfg := aurora.StoreConfig{DatabasePath: filepath.Join(dir, "aurora.db")}
-	s, err := aurora.NewStore(cfg, nil)
+	cfg := unified.Config{DatabasePath: filepath.Join(dir, "deneb.db")}
+	u, err := unified.New(cfg, nil)
 	if err != nil {
-		t.Fatalf("NewStore: %v", err)
+		t.Fatalf("unified.New: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { u.Close() })
+	s, err := u.NewAuroraStore()
+	if err != nil {
+		t.Fatalf("NewAuroraStore: %v", err)
+	}
 	return s
 }
 

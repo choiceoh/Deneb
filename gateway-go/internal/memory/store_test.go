@@ -12,12 +12,11 @@ import (
 
 func tempStore(t *testing.T) *Store {
 	t.Helper()
-	dir := t.TempDir()
-	s, err := NewStore(filepath.Join(dir, "test_memory.db"))
+	db := openTestDB(t)
+	s, err := NewStoreFromDB(db)
 	if err != nil {
-		t.Fatalf("NewStore: %v", err)
+		t.Fatalf("NewStoreFromDB: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
 	return s
 }
 

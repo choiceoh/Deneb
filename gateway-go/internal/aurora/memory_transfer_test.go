@@ -3,7 +3,6 @@ package aurora
 import (
 	"log/slog"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -68,15 +67,12 @@ func TestShouldTransfer(t *testing.T) {
 }
 
 func TestTransferredSummaryTracking(t *testing.T) {
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "aurora.db")
-
+	db := openTestDB(t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	store, err := NewStore(StoreConfig{DatabasePath: storePath}, logger)
+	store, err := NewStoreFromDB(db, logger)
 	if err != nil {
-		t.Fatalf("NewStore: %v", err)
+		t.Fatalf("NewStoreFromDB: %v", err)
 	}
-	defer store.Close()
 
 	// Initially not transferred.
 	if store.IsTransferred("summary-1") {
@@ -97,17 +93,11 @@ func TestTransferredSummaryTracking(t *testing.T) {
 		t.Error("expected summary-2 to NOT be transferred")
 	}
 
-	// Flush debounced writes before reloading from disk.
-	if err := store.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
-
-	// Verify persistence: reload store from disk.
-	store2, err := NewStore(StoreConfig{DatabasePath: storePath}, logger)
+	// Verify persistence: create a second store on the same DB.
+	store2, err := NewStoreFromDB(db, logger)
 	if err != nil {
-		t.Fatalf("NewStore reload: %v", err)
+		t.Fatalf("NewStoreFromDB reload: %v", err)
 	}
-	defer store2.Close()
 
 	if !store2.IsTransferred("summary-1") {
 		t.Error("expected summary-1 to persist after reload")
@@ -115,15 +105,12 @@ func TestTransferredSummaryTracking(t *testing.T) {
 }
 
 func TestTransferredCleanupOnCondensation(t *testing.T) {
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "aurora.db")
-
+	db := openTestDB(t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	store, err := NewStore(StoreConfig{DatabasePath: storePath}, logger)
+	store, err := NewStoreFromDB(db, logger)
 	if err != nil {
-		t.Fatalf("NewStore: %v", err)
+		t.Fatalf("NewStoreFromDB: %v", err)
 	}
-	defer store.Close()
 
 	// Create leaf summaries and mark them as transferred.
 	leaf1 := "leaf-1"

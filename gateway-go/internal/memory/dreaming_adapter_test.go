@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -15,12 +14,11 @@ func discardLogger() *slog.Logger {
 
 func tempStoreForDreaming(t *testing.T) *Store {
 	t.Helper()
-	dir := t.TempDir()
-	s, err := NewStore(filepath.Join(dir, "dreaming_test.db"))
+	db := openTestDB(t)
+	s, err := NewStoreFromDB(db)
 	if err != nil {
-		t.Fatalf("NewStore: %v", err)
+		t.Fatalf("NewStoreFromDB: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
 	return s
 }
 
