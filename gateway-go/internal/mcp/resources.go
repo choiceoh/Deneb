@@ -123,13 +123,13 @@ func (rm *ResourceManager) resolveURI(uri string) (string, map[string]any, error
 		key := strings.TrimPrefix(uri, "deneb://sessions/")
 		if strings.HasSuffix(key, "/history") {
 			key = strings.TrimSuffix(key, "/history")
-			return "sessions.preview", map[string]any{"session_key": key}, nil
+			return "sessions.preview", map[string]any{"keys": []string{key}}, nil
 		}
-		return "sessions.preview", map[string]any{"session_key": key}, nil
+		return "sessions.preview", map[string]any{"keys": []string{key}}, nil
 	}
 	if strings.HasPrefix(uri, "deneb://memory/") {
 		query := strings.TrimPrefix(uri, "deneb://memory/")
-		return "memory.search", map[string]any{"query": query}, nil
+		return "vega.memory-search", map[string]any{"query": query}, nil
 	}
 
 	// Static URIs.

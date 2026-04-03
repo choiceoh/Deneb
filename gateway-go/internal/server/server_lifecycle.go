@@ -75,7 +75,9 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	if s.pluginDiscoverer != nil {
 		s.safeGo("plugin-discovery", func() {
 			result := s.pluginDiscoverer.DiscoverPlugins(plugin.NewDiscoverPluginsParams())
-			s.logger.Info("plugins discovered", "count", len(result.Candidates))
+			if len(result.Candidates) > 0 {
+				s.logger.Info("plugins discovered", "count", len(result.Candidates))
+			}
 		})
 	}
 

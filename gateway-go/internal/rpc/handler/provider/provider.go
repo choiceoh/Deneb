@@ -3,10 +3,10 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -74,42 +74,40 @@ func providersList(deps Deps) rpcutil.HandlerFunc {
 			providers = append(providers, serializePlugin(snap[id]))
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"providers": providers,
 		})
-		return resp
 	}
 }
 
 func providersGet(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "id is required"))
+		if p.ID == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 
 		plugin := deps.Providers.GetByNormalizedID(p.ID)
 		if plugin == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "provider not found: "+p.ID))
+			return rpcerr.Newf(protocol.ErrNotFound, "provider not found: %s", p.ID).Response(req.ID)
 		}
 
-		resp := protocol.MustResponseOK(req.ID, serializePlugin(plugin))
-		return resp
+		return rpcutil.RespondOK(req.ID, serializePlugin(plugin))
 	}
 }
 
 func providersCatalog(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Provider string `json:"provider"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		// If provider specified, check if it supports catalog locally.
@@ -118,57 +116,49 @@ func providersCatalog(deps Deps) rpcutil.HandlerFunc {
 			if cp, ok := plugin.(provider.CatalogProvider); ok {
 				result, err := cp.Catalog(ctx, provider.CatalogContext{})
 				if err == nil && result != nil {
-					resp := protocol.MustResponseOK(req.ID, result)
-					return resp
+					return rpcutil.RespondOK(req.ID, result)
 				}
 			}
 		}
 
 		// Empty catalog fallback.
-		resp := protocol.MustResponseOK(req.ID, provider.CatalogResult{
+		return rpcutil.RespondOK(req.ID, provider.CatalogResult{
 			Entries: []provider.CatalogEntry{},
 		})
-		return resp
 	}
 }
 
 func providersAuthPrepare(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p provider.RuntimeAuthContext
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid auth params: "+err.Error()))
+		p, errResp := rpcutil.DecodeParams[provider.RuntimeAuthContext](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Provider == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "provider is required"))
+			return rpcerr.MissingParam("provider").Response(req.ID)
 		}
 
 		if deps.AuthManager == nil {
-			resp := protocol.MustResponseOK(req.ID, provider.PreparedAuth{
+			return rpcutil.RespondOK(req.ID, provider.PreparedAuth{
 				APIKey: p.APIKey,
 			})
-			return resp
 		}
 
 		prepared, err := deps.AuthManager.Prepare(ctx, p)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "auth prepare failed: "+err.Error()))
+			return rpcerr.Newf(protocol.ErrDependencyFailed, "auth prepare failed: %v", err).Response(req.ID)
 		}
 
-		resp := protocol.MustResponseOK(req.ID, prepared)
-		return resp
+		return rpcutil.RespondOK(req.ID, prepared)
 	}
 }
 
 func modelsList(deps ModelsDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.Providers == nil {
-			resp := protocol.MustResponseOK(req.ID, map[string]any{
+			return rpcutil.RespondOK(req.ID, map[string]any{
 				"models": []any{},
 			})
-			return resp
 		}
 
 		snap := deps.Providers.Snapshot()
@@ -196,9 +186,8 @@ func modelsList(deps ModelsDeps) rpcutil.HandlerFunc {
 			models = []provider.CatalogEntry{}
 		}
 
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"models": models,
 		})
-		return resp
 	}
 }

@@ -4,7 +4,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 
 	agentpkg "github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -95,9 +94,9 @@ func CRUDMethods(deps AgentsDeps) map[string]rpcutil.HandlerFunc {
 
 func processExec(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p process.ExecRequest
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		p, errResp := rpcutil.DecodeParams[process.ExecRequest](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Command == "" {
 			return rpcerr.MissingParam("command").Response(req.ID)
@@ -114,44 +113,50 @@ func processExec(deps ExtendedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
 func processKill(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		if err := deps.Processes.Kill(p.ID); err != nil {
 			return rpcerr.NotFound("process").Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]bool{"killed": true})
+		return rpcutil.RespondOK(req.ID, map[string]bool{"killed": true})
 	}
 }
 
 func processGet(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		tracked := deps.Processes.Get(p.ID)
 		if tracked == nil {
 			return rpcerr.NotFound("process").Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, tracked)
+		return rpcutil.RespondOK(req.ID, tracked)
 	}
 }
 
 func processList(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, deps.Processes.List())
+		return rpcutil.RespondOK(req.ID, deps.Processes.List())
 	}
 }
 
@@ -159,36 +164,42 @@ func processList(deps ExtendedDeps) rpcutil.HandlerFunc {
 
 func cronList(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, deps.Cron.List())
+		return rpcutil.RespondOK(req.ID, deps.Cron.List())
 	}
 }
 
 func cronGet(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		status := deps.Cron.Get(p.ID)
 		if status == nil {
 			return rpcerr.NotFound("cron task").Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, status)
+		return rpcutil.RespondOK(req.ID, status)
 	}
 }
 
 func cronUnregister(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		found := deps.Cron.Unregister(p.ID)
-		return protocol.MustResponseOK(req.ID, map[string]bool{"removed": found})
+		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": found})
 	}
 }
 
@@ -196,50 +207,53 @@ func cronUnregister(deps ExtendedDeps) rpcutil.HandlerFunc {
 
 func hooksList(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, deps.Hooks.List())
+		return rpcutil.RespondOK(req.ID, deps.Hooks.List())
 	}
 }
 
 func hooksRegister(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var hook hooks.Hook
-		if err := json.Unmarshal(req.Params, &hook); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		hook, errResp := rpcutil.DecodeParams[hooks.Hook](req)
+		if errResp != nil {
+			return errResp
 		}
 		if err := deps.Hooks.Register(hook); err != nil {
 			return rpcerr.Conflict(err.Error()).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]bool{"registered": true})
+		return rpcutil.RespondOK(req.ID, map[string]bool{"registered": true})
 	}
 }
 
 func hooksUnregister(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ID string `json:"id"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 		found := deps.Hooks.Unregister(p.ID)
-		return protocol.MustResponseOK(req.ID, map[string]bool{"removed": found})
+		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": found})
 	}
 }
 
 func hooksFire(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Event hooks.Event       `json:"event"`
 			Env   map[string]string `json:"env,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Event == "" {
 			return rpcerr.MissingParam("event").Response(req.ID)
 		}
 		results := deps.Hooks.Fire(ctx, p.Event, p.Env)
-		return protocol.MustResponseOK(req.ID, results)
+		return rpcutil.RespondOK(req.ID, results)
 	}
 }
 
@@ -279,18 +293,18 @@ func agentStatus(deps ExtendedDeps) rpcutil.HandlerFunc {
 			result["cronTasks"] = len(deps.Cron.List())
 		}
 
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
 func sessionsCreate(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key  string `json:"key"`
 			Kind string `json:"kind"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Key == "" {
 			return rpcerr.MissingParam("key").Response(req.ID)
@@ -309,13 +323,13 @@ func sessionsCreate(deps ExtendedDeps) rpcutil.HandlerFunc {
 				Reason:     "created",
 			})
 		}
-		return protocol.MustResponseOK(req.ID, s)
+		return rpcutil.RespondOK(req.ID, s)
 	}
 }
 
 func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Key        string `json:"key"`
 			Phase      string `json:"phase"`
 			Ts         int64  `json:"ts"`
@@ -323,9 +337,9 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 			Aborted    bool   `json:"aborted,omitempty"`
 			StartedAt  *int64 `json:"startedAt,omitempty"`
 			EndedAt    *int64 `json:"endedAt,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Key == "" || p.Phase == "" {
 			return rpcerr.MissingParam("key and phase").Response(req.ID)
@@ -382,7 +396,7 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 			}
 		}
 
-		return protocol.MustResponseOK(req.ID, s)
+		return rpcutil.RespondOK(req.ID, s)
 	}
 }
 
@@ -394,13 +408,13 @@ func agentsList(deps AgentsDeps) rpcutil.HandlerFunc {
 		if agents == nil {
 			agents = make([]*agentpkg.Agent, 0)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"agents": agents})
+		return rpcutil.RespondOK(req.ID, map[string]any{"agents": agents})
 	}
 }
 
 func agentsCreate(deps AgentsDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID      string            `json:"agentId,omitempty"`
 			Name         string            `json:"name,omitempty"`
 			Description  string            `json:"description,omitempty"`
@@ -408,9 +422,9 @@ func agentsCreate(deps AgentsDeps) rpcutil.HandlerFunc {
 			SystemPrompt string            `json:"systemPrompt,omitempty"`
 			Tools        []string          `json:"tools,omitempty"`
 			Metadata     map[string]string `json:"metadata,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		created := deps.Agents.Create(agentpkg.CreateParams{
@@ -430,18 +444,18 @@ func agentsCreate(deps AgentsDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{"agent": created})
+		return rpcutil.RespondOK(req.ID, map[string]any{"agent": created})
 	}
 }
 
 func agentsUpdate(deps AgentsDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID string         `json:"agentId"`
 			Patch   map[string]any `json:"patch"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.AgentID == "" {
 			return rpcerr.MissingParam("agentId").Response(req.ID)
@@ -459,16 +473,19 @@ func agentsUpdate(deps AgentsDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{"agent": updated})
+		return rpcutil.RespondOK(req.ID, map[string]any{"agent": updated})
 	}
 }
 
 func agentsDelete(deps AgentsDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID string `json:"agentId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.AgentID == "" {
+		if p.AgentID == "" {
 			return rpcerr.MissingParam("agentId").Response(req.ID)
 		}
 
@@ -484,16 +501,19 @@ func agentsDelete(deps AgentsDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]bool{"removed": true})
+		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": true})
 	}
 }
 
 func agentsFilesList(deps AgentsDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID string `json:"agentId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.AgentID == "" {
+		if p.AgentID == "" {
 			return rpcerr.MissingParam("agentId").Response(req.ID)
 		}
 
@@ -505,18 +525,18 @@ func agentsFilesList(deps AgentsDeps) rpcutil.HandlerFunc {
 			files = make([]*agentpkg.FileEntry, 0)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{"files": files})
+		return rpcutil.RespondOK(req.ID, map[string]any{"files": files})
 	}
 }
 
 func agentsFilesGet(deps AgentsDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID string `json:"agentId"`
 			Name    string `json:"name"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.AgentID == "" || p.Name == "" {
 			return rpcerr.MissingParam("agentId and name").Response(req.ID)
@@ -527,19 +547,19 @@ func agentsFilesGet(deps AgentsDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("agent file").WithAgent(p.AgentID).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, file)
+		return rpcutil.RespondOK(req.ID, file)
 	}
 }
 
 func agentsFilesSet(deps AgentsDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID       string `json:"agentId"`
 			Name          string `json:"name"`
 			ContentBase64 string `json:"contentBase64,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.AgentID == "" || p.Name == "" {
 			return rpcerr.MissingParam("agentId and name").Response(req.ID)
@@ -550,7 +570,7 @@ func agentsFilesSet(deps AgentsDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("agent").WithAgent(p.AgentID).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, file)
+		return rpcutil.RespondOK(req.ID, file)
 	}
 }
 

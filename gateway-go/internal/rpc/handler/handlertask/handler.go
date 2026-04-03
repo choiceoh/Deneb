@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -42,7 +43,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 func taskStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		sum := deps.Registry.Summary()
-		return protocol.MustResponseOK(req.ID, sum)
+		return rpcutil.RespondOK(req.ID, sum)
 	}
 }
 
@@ -90,7 +91,7 @@ func taskList(deps Deps) rpcutil.HandlerFunc {
 			list = filtered
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"tasks": list,
 			"count": len(list),
 		})
@@ -118,16 +119,14 @@ func taskGet(deps Deps) rpcutil.HandlerFunc {
 		case p.RunID != "":
 			t = deps.Registry.GetByRunID(p.RunID)
 		default:
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "taskId or runId required"))
+			return rpcerr.New(protocol.ErrMissingParam, "taskId or runId required").Response(req.ID)
 		}
 
 		if t == nil {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrNotFound, "task not found"))
+			return rpcerr.NotFound("task").Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, t)
+		return rpcutil.RespondOK(req.ID, t)
 	}
 }
 
@@ -144,17 +143,15 @@ func taskEvents(deps Deps) rpcutil.HandlerFunc {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.TaskID == "" {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "taskId required"))
+			return rpcerr.New(protocol.ErrMissingParam, "taskId required").Response(req.ID)
 		}
 
 		events, err := deps.Registry.ListEvents(p.TaskID)
 		if err != nil {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrUnavailable, err.Error()))
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"taskId": p.TaskID,
 			"events": events,
 		})
@@ -174,16 +171,14 @@ func taskCancel(deps Deps) rpcutil.HandlerFunc {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.TaskID == "" {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "taskId required"))
+			return rpcerr.New(protocol.ErrMissingParam, "taskId required").Response(req.ID)
 		}
 
 		if err := tasks.CancelTask(deps.Registry, p.TaskID); err != nil {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrUnavailable, err.Error()))
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"cancelled": true,
 			"taskId":    p.TaskID,
 		})
@@ -195,7 +190,7 @@ func taskCancel(deps Deps) rpcutil.HandlerFunc {
 func taskAudit(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		summary := tasks.RunAudit(deps.Registry, tasks.AuditOptions{})
-		return protocol.MustResponseOK(req.ID, summary)
+		return rpcutil.RespondOK(req.ID, summary)
 	}
 }
 
@@ -219,7 +214,7 @@ func flowList(deps Deps) rpcutil.HandlerFunc {
 			list = deps.Registry.ListFlows()
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"flows": list,
 			"count": len(list),
 		})
@@ -239,19 +234,17 @@ func flowShow(deps Deps) rpcutil.HandlerFunc {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.FlowID == "" {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "flowId required"))
+			return rpcerr.New(protocol.ErrMissingParam, "flowId required").Response(req.ID)
 		}
 
 		flow := deps.Registry.GetFlow(p.FlowID)
 		if flow == nil {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrNotFound, "flow not found"))
+			return rpcerr.NotFound("flow").Response(req.ID)
 		}
 
 		flowTasks := deps.Registry.ListByFlowID(p.FlowID)
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"flow":  flow,
 			"tasks": flowTasks,
 		})
@@ -271,17 +264,15 @@ func flowCancel(deps Deps) rpcutil.HandlerFunc {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.FlowID == "" {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "flowId required"))
+			return rpcerr.New(protocol.ErrMissingParam, "flowId required").Response(req.ID)
 		}
 
 		cancelled, err := tasks.CancelFlow(deps.Registry, p.FlowID)
 		if err != nil {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrNotFound, err.Error()))
+			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"cancelled":      true,
 			"flowId":         p.FlowID,
 			"tasksCancelled": cancelled,

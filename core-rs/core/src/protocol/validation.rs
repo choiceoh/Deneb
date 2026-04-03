@@ -193,7 +193,13 @@ pub fn is_valid_exec_secret_ref_id(s: &str) -> bool {
         return false;
     }
     for &b in &bytes[1..] {
-        if !(b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b':' || b == b'/' || b == b'-') {
+        if !(b.is_ascii_alphanumeric()
+            || b == b'.'
+            || b == b'_'
+            || b == b':'
+            || b == b'/'
+            || b == b'-')
+        {
             return false;
         }
     }
@@ -456,6 +462,184 @@ pub fn check_optional_nullable<F>(
             checker(value, &path, errors);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Array helpers
+// ---------------------------------------------------------------------------
+
+/// Check that a value is an array of non-empty strings.
+pub fn check_non_empty_string_array(
+    value: &serde_json::Value,
+    path: &str,
+    errors: &mut Vec<ValidationError>,
+) {
+    if check_array(value, path, errors) {
+        if let Some(arr) = value.as_array() {
+            for (i, item) in arr.iter().enumerate() {
+                check_non_empty_string(item, &format!("{path}/{i}"), errors);
+            }
+        }
+    }
+}
+
+/// Check that a value is an array of strings.
+pub fn check_string_array(
+    value: &serde_json::Value,
+    path: &str,
+    errors: &mut Vec<ValidationError>,
+) {
+    if check_array(value, path, errors) {
+        if let Some(arr) = value.as_array() {
+            for (i, item) in arr.iter().enumerate() {
+                check_string(item, &format!("{path}/{i}"), errors);
+            }
+        }
+    }
+}
+
+/// Check that a value is a non-empty array (minItems: 1) of non-empty strings.
+pub fn check_non_empty_string_array_min1(
+    value: &serde_json::Value,
+    path: &str,
+    errors: &mut Vec<ValidationError>,
+) {
+    if check_array(value, path, errors) {
+        check_min_items(value, path, 1, errors);
+        if let Some(arr) = value.as_array() {
+            for (i, item) in arr.iter().enumerate() {
+                check_non_empty_string(item, &format!("{path}/{i}"), errors);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Schema validation macro
+// ---------------------------------------------------------------------------
+
+/// Declarative macro for RPC parameter schema validators.
+///
+/// Generates a complete validator function with the standard preamble
+/// (`require_object` → `check_no_additional_properties`) and per-field checks.
+///
+/// # Field kinds
+/// - `req` — required field (must be present)
+/// - `opt` — optional (skipped if absent)
+/// - `opt_null` — optional + nullable (skipped if absent or null)
+///
+/// # Type specs
+/// `string`, `non_empty_string`, `boolean`, `integer(min, max)`,
+/// `string_enum["a", "b"]`, `literal(val)`, `array`, `object`, `any`,
+/// `non_empty_string, max_length(N)`, `string, max_length(N)`,
+/// `custom(fn_or_closure)`.
+///
+/// # Examples
+/// ```ignore
+/// define_schema! {
+///     pub fn validate_foo_params {
+///         [req "name" => non_empty_string],
+///         [opt "limit" => integer(Some(1), None)],
+///         [opt_null "label" => string_enum["a", "b"]],
+///     }
+/// }
+///
+/// // Empty object (no fields allowed):
+/// define_schema! { pub fn validate_bar_params {} }
+/// ```
+macro_rules! define_schema {
+    // ---- Entry: function with fields ----
+    (
+        $(#[$meta:meta])*
+        $vis:vis fn $name:ident {
+            $( [$kind:ident $field:literal => $($spec:tt)+] ),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        $vis fn $name(
+            value: &serde_json::Value,
+            path: &str,
+            errors: &mut Vec<ValidationError>,
+        ) {
+            if !require_object(value, path, errors) {
+                return;
+            }
+            let Some(obj) = value.as_object() else {
+                return;
+            };
+            check_no_additional_properties(obj, &[$($field),*], path, errors);
+            $(
+                define_schema!(@field obj, path, errors; $kind $field => $($spec)+);
+            )*
+        }
+    };
+
+    // ---- Entry: empty object (no fields) ----
+    (
+        $(#[$meta:meta])*
+        $vis:vis fn $name:ident {}
+    ) => {
+        $(#[$meta])*
+        $vis fn $name(
+            value: &serde_json::Value,
+            path: &str,
+            errors: &mut Vec<ValidationError>,
+        ) {
+            if !require_object(value, path, errors) {
+                return;
+            }
+            let Some(obj) = value.as_object() else {
+                return;
+            };
+            check_no_additional_properties(obj, &[], path, errors);
+        }
+    };
+
+    // ---- Required field ----
+    (@field $obj:ident, $path:ident, $errors:ident; req $field:literal => $($spec:tt)+) => {
+        if check_required($obj, $field, $path, $errors) {
+            let __p = format!(concat!("{}/", $field), $path);
+            define_schema!(@check &$obj[$field], &__p, $errors; $($spec)+);
+        }
+    };
+
+    // ---- Optional field ----
+    (@field $obj:ident, $path:ident, $errors:ident; opt $field:literal => $($spec:tt)+) => {
+        check_optional($obj, $field, $path, $errors, |__v, __p, __e| {
+            define_schema!(@check __v, __p, __e; $($spec)+);
+        });
+    };
+
+    // ---- Optional nullable field ----
+    (@field $obj:ident, $path:ident, $errors:ident; opt_null $field:literal => $($spec:tt)+) => {
+        check_optional_nullable($obj, $field, $path, $errors, |__v, __p, __e| {
+            define_schema!(@check __v, __p, __e; $($spec)+);
+        });
+    };
+
+    // ---- Type checks ----
+    (@check $v:expr, $p:expr, $e:expr; string) => { check_string($v, $p, $e); };
+    (@check $v:expr, $p:expr, $e:expr; non_empty_string) => { check_non_empty_string($v, $p, $e); };
+    (@check $v:expr, $p:expr, $e:expr; boolean) => { check_boolean($v, $p, $e); };
+    (@check $v:expr, $p:expr, $e:expr; integer($min:expr, $max:expr)) => {
+        check_integer($v, $p, $min, $max, $e);
+    };
+    (@check $v:expr, $p:expr, $e:expr; string_enum[$($val:literal),+ $(,)?]) => {
+        check_string_enum($v, $p, &[$($val),+], $e);
+    };
+    (@check $v:expr, $p:expr, $e:expr; literal($val:expr)) => { check_literal($v, $p, $val, $e); };
+    (@check $v:expr, $p:expr, $e:expr; array) => { check_array($v, $p, $e); };
+    (@check $v:expr, $p:expr, $e:expr; object) => { require_object($v, $p, $e); };
+    (@check $v:expr, $p:expr, $e:expr; any) => {};
+    (@check $v:expr, $p:expr, $e:expr; non_empty_string, max_length($max:expr)) => {
+        check_non_empty_string($v, $p, $e);
+        check_max_length($v, $p, $max, $e);
+    };
+    (@check $v:expr, $p:expr, $e:expr; string, max_length($max:expr)) => {
+        check_string($v, $p, $e);
+        check_max_length($v, $p, $max, $e);
+    };
+    (@check $v:expr, $p:expr, $e:expr; custom($func:expr)) => { ($func)($v, $p, $e); };
 }
 
 // ---------------------------------------------------------------------------

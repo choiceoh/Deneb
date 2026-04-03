@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -19,12 +20,14 @@ func ProtocolMethods() map[string]rpcutil.HandlerFunc {
 
 func protocolValidate() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Frame string `json:"frame"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.Frame == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "frame is required"))
+		if p.Frame == "" {
+			return rpcerr.MissingParam("frame").Response(req.ID)
 		}
 		err := ffipkg.ValidateFrame(p.Frame)
 		backend := "go-fallback"
@@ -32,11 +35,11 @@ func protocolValidate() rpcutil.HandlerFunc {
 			backend = "rust"
 		}
 		if err != nil {
-			return protocol.MustResponseOK(req.ID, map[string]any{
+			return rpcutil.RespondOK(req.ID, map[string]any{
 				"valid": false, "error": err.Error(), "backend": backend,
 			})
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"valid": true, "backend": backend,
 		})
 	}
@@ -44,26 +47,22 @@ func protocolValidate() rpcutil.HandlerFunc {
 
 func protocolValidateParams() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Method string `json:"method"`
 			Params string `json:"params"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Method == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "method is required"))
+			return rpcerr.MissingParam("method").Response(req.ID)
 		}
 		if p.Params == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "params is required"))
+			return rpcerr.MissingParam("params").Response(req.ID)
 		}
 		valid, errorsJSON, err := ffipkg.ValidateParams(p.Method, p.Params)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
+			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
 		backend := "go-fallback"
 		if ffipkg.Available {
@@ -73,6 +72,6 @@ func protocolValidateParams() rpcutil.HandlerFunc {
 		if errorsJSON != nil {
 			result["errors"] = json.RawMessage(errorsJSON)
 		}
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
