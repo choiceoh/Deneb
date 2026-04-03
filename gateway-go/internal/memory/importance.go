@@ -47,43 +47,37 @@ type factsResponse struct {
 	Facts []ExtractedFact `json:"facts"`
 }
 
-// factsResponseFormat uses json_schema mode for constrained decoding.
-// This forces the model (via xgrammar) to produce structurally valid JSON
-// matching the schema, preventing the common failure modes where small models
-// output thinking text, markdown, or malformed JSON instead.
-var factsResponseFormat = &llm.ResponseFormat{
-	Type: "json_schema",
-	JsonSchema: json.RawMessage(`{
-		"name": "facts_response",
-		"strict": true,
-		"schema": {
-			"type": "object",
-			"properties": {
-				"facts": {
-					"type": "array",
-					"items": {
-						"type": "object",
-						"properties": {
-							"content": {"type": "string"},
-							"category": {"type": "string"},
-							"importance": {"type": "number"},
-							"expiry_hint": {"type": "string"},
-							"entities": {
-								"type": "array",
-								"items": {"type": "string"}
-							},
-							"relation_type": {"type": "string"}
-						},
-						"required": ["content", "category", "importance", "expiry_hint", "entities", "relation_type"],
-						"additionalProperties": false
-					}
-				}
-			},
-			"required": ["facts"],
-			"additionalProperties": false
+// factsJSONSchema is the raw JSON Schema passed to SGLang as guided_json.
+// This triggers xgrammar constrained decoding at the token level, forcing
+// the model to produce structurally valid JSON matching this schema.
+// Unlike response_format json_schema (which SGLang may not support),
+// guided_json is the native SGLang parameter for grammar-constrained output.
+var factsJSONSchema = json.RawMessage(`{
+	"type": "object",
+	"properties": {
+		"facts": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"content": {"type": "string"},
+					"category": {"type": "string"},
+					"importance": {"type": "number"},
+					"expiry_hint": {"type": "string"},
+					"entities": {
+						"type": "array",
+						"items": {"type": "string"}
+					},
+					"relation_type": {"type": "string"}
+				},
+				"required": ["content", "category", "importance", "expiry_hint", "entities", "relation_type"],
+				"additionalProperties": false
+			}
 		}
-	}`),
-}
+	},
+	"required": ["facts"],
+	"additionalProperties": false
+}`)
 
 // importanceSystemPrompt uses Honcho Neuromancer XR-style reasoning:
 // 1. Explicit extraction — what was directly stated
@@ -241,7 +235,7 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 
 	var facts []ExtractedFact
 	for attempt := range 2 {
-		text, err := callSglangJSON(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens, factsResponseFormat)
+		text, err := callSglangJSON(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens, factsJSONSchema)
 		if err != nil {
 			return nil, fmt.Errorf("importance extraction: %w", err)
 		}
