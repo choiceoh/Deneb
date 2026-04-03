@@ -12,25 +12,46 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// sglangNoThinking disables reasoning mode for all local sglang calls.
-// Qwen3.5 reasoning adds latency and "Thinking Process:" preambles that
-// leak into output; none of our sglang tasks need it.
-var sglangNoThinking = map[string]any{
-	"chat_template_kwargs": map[string]any{"enable_thinking": false},
+// pkgSglangHub is the centralized sglang hub for token budget management.
+// Set via SetSglangHub during server initialization. When set, callSglang
+// and callSglangJSON route through the hub instead of making direct calls.
+var pkgSglangHub *sglang.Hub
+
+// SetSglangHub sets the centralized sglang hub for the memory package.
+func SetSglangHub(h *sglang.Hub) {
+	pkgSglangHub = h
 }
 
 // callSglang sends a streaming chat request to the local SGLang model and collects the full response.
+// When the centralized sglang hub is available, routes through it for token budget management.
 func callSglang(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
+	// Hub path: centralized token budget, priority queue, zombie prevention.
+	if h := pkgSglangHub; h != nil {
+		resp, err := h.Submit(ctx, sglang.Request{
+			System:    system,
+			Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+			MaxTokens: maxTokens,
+			Priority:  sglang.PriorityBackground,
+			CallerTag: "memory",
+		})
+		if err != nil {
+			return "", err
+		}
+		return resp.Text, nil
+	}
+
+	// Legacy direct path.
 	events, err := client.StreamChat(ctx, llm.ChatRequest{
 		Model:     model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
-		ExtraBody: sglangNoThinking,
+		ExtraBody: sglang.NoThinking,
 	})
 	if err != nil {
 		return "", err
@@ -43,7 +64,26 @@ func callSglang(ctx context.Context, client *llm.Client, model, system, user str
 
 // callSglangJSON is like callSglang but requests JSON-formatted output
 // via response_format. Use for endpoints that must return valid JSON.
+// When the centralized sglang hub is available, routes through it.
 func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
+	// Hub path.
+	if h := pkgSglangHub; h != nil {
+		resp, err := h.Submit(ctx, sglang.Request{
+			System:         system,
+			Messages:       []llm.Message{llm.NewTextMessage("user", user)},
+			MaxTokens:      maxTokens,
+			Priority:       sglang.PriorityBackground,
+			CallerTag:      "memory_json", // covers fact extraction, dreaming phases
+			ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+			NoCache:        true, // JSON extractions are non-deterministic
+		})
+		if err != nil {
+			return "", err
+		}
+		return resp.Text, nil
+	}
+
+	// Legacy direct path.
 	events, err := client.StreamChat(ctx, llm.ChatRequest{
 		Model:          model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", user)},
@@ -51,7 +91,7 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 		MaxTokens:      maxTokens,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
-		ExtraBody:      sglangNoThinking,
+		ExtraBody:      sglang.NoThinking,
 	})
 	if err != nil {
 		return "", err

@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
@@ -96,6 +97,9 @@ type GatewayHub struct {
 	agents     *agent.Store
 	jobTracker *agent.JobTracker
 
+	// SGLang hub — centralized local LLM request management.
+	sglangHub *sglang.Hub
+
 	// Scheduling.
 	cronScheduler  *cron.Scheduler
 	cronService    *cron.Service
@@ -167,8 +171,12 @@ func (h *GatewayHub) Wizard() *wizard.Engine                     { return h.wiza
 func (h *GatewayHub) Talk() *talk.State                          { return h.talk }
 func (h *GatewayHub) Logger() *slog.Logger                       { return h.logger }
 func (h *GatewayHub) Version() string                            { return h.version }
+func (h *GatewayHub) SglangHub() *sglang.Hub                     { return h.sglangHub }
 
 // --- Late-binding setters ---
+
+// SetSglangHub sets the centralized SGLang hub (created early, before method registration).
+func (h *GatewayHub) SetSglangHub(sh *sglang.Hub) { h.sglangHub = sh }
 
 // SetTelegram sets the Telegram plugin (created during early registration phase).
 func (h *GatewayHub) SetTelegram(p *telegram.Plugin) { h.telegram = p }

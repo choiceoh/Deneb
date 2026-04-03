@@ -18,6 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -147,6 +148,7 @@ type HandlerConfig struct {
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
+	SglangHub            *sglang.Hub               // centralized sglang request hub
 	ContextCfg           ContextConfig
 	CompactionCfg        aurora.SweepConfig
 	DefaultModel         string
@@ -231,6 +233,10 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	// Set the package-level model role registry for sglang hooks and pilot tools.
 	if h.registry != nil {
 		pilot.SetModelRoleRegistry(h.registry)
+	}
+	// Wire centralized sglang hub for token budget management and health checks.
+	if cfg.SglangHub != nil {
+		pilot.SetSglangHub(cfg.SglangHub)
 	}
 	go h.abortGCLoop()
 	return h

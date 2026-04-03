@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 )
 
 const (
@@ -199,6 +200,68 @@ func stripAnalysisScratchpad(s string) string {
 		s = strings.TrimSpace(s[:start] + s[end+len("</analysis>"):])
 	}
 	return s
+}
+
+// NewHubSummarizer creates a Summarizer that routes through the centralized
+// sglang hub for token budget management and priority queuing.
+// Falls back to deterministic truncation if the hub is nil.
+func NewHubSummarizer(hub *sglang.Hub) Summarizer {
+	return func(text string, aggressive bool, opts *SummarizeOptions) (string, error) {
+		if hub == nil {
+			return deterministicFallback(text), nil
+		}
+
+		system := compactionSystemPrompt
+		if aggressive {
+			system += aggressiveAddendum
+		}
+
+		var userMsg strings.Builder
+		if opts != nil {
+			if opts.IsCondensed != nil && *opts.IsCondensed {
+				fmt.Fprintf(&userMsg, "[Condensed summary pass, depth=%d]\n", safeUint32(opts.Depth))
+				userMsg.WriteString(`The input contains previously structured XML summaries. Merge them:
+- Combine <summary> sections into a higher-level narrative.
+- Merge <timeline> sections: keep only significant causal chains (attempts that failed → what succeeded). Drop routine steps but preserve pivots and key breakthroughs.
+- Deduplicate <decisions> (keep the final decision if a topic was revisited).
+- Remove <pending> items that were resolved in later summaries.
+- Merge <references>, keeping only still-relevant file paths.
+`)
+			}
+			if opts.TargetTokens != nil {
+				fmt.Fprintf(&userMsg, "[Target: ~%d tokens]\n", *opts.TargetTokens)
+			}
+			if opts.PreviousSummary != nil && *opts.PreviousSummary != "" {
+				fmt.Fprintf(&userMsg, "[Previous summary for context:]\n%s\n\n", *opts.PreviousSummary)
+			}
+		}
+		userMsg.WriteString("Summarize the following conversation segment:\n\n")
+		userMsg.WriteString(text)
+
+		ctx, cancel := context.WithTimeout(context.Background(), summarizeTimeout)
+		defer cancel()
+
+		resp, err := hub.Submit(ctx, sglang.Request{
+			System:    system,
+			Messages:  []llm.Message{llm.NewTextMessage("user", userMsg.String())},
+			MaxTokens: 4096,
+			Priority:  sglang.PriorityBackground,
+			CallerTag: "aurora_compaction",
+		})
+		if err != nil {
+			return "", fmt.Errorf("summarize hub call: %w", err)
+		}
+
+		summary := strings.TrimSpace(resp.Text)
+		if summary == "" {
+			return deterministicFallback(text), nil
+		}
+		summary = stripAnalysisScratchpad(summary)
+		if summary == "" {
+			return deterministicFallback(text), nil
+		}
+		return summary, nil
+	}
 }
 
 func safeUint32(p *uint32) uint32 {

@@ -274,9 +274,15 @@ func handleContextOverflowAurora(
 	sweepCfg := deps.compactionCfg
 
 	// Use lightweight model for cost-efficient compaction summaries.
+	// Prefer hub-routed summarizer for token budget management.
 	lwClient := pilot.GetLightweightClient()
 	lwModel := pilot.GetLightweightModel()
-	summarizer := aurora.NewLLMSummarizer(lwClient, lwModel)
+	var summarizer aurora.Summarizer
+	if sHub := pilot.GetSglangHub(); sHub != nil {
+		summarizer = aurora.NewHubSummarizer(sHub)
+	} else {
+		summarizer = aurora.NewLLMSummarizer(lwClient, lwModel)
+	}
 
 	// Build inline fact extractor: replaces the async flushMemory/transferSummary
 	// bridge with synchronous extraction during the sweep persist step.

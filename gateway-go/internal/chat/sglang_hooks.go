@@ -18,12 +18,6 @@ import (
 //  2. Tool Output Compression: after tool execution, compress large outputs
 //  3. Auto Memory: after successful run, extract key learnings to MEMORY.md
 
-// sglangBackgroundSem limits concurrent background sglang requests across all
-// hooks (proactive context, tool compression, auto memory, session memory).
-// This prevents concurrent requests from exhausting KV cache on the local model,
-// which can cause a deadlock where no new request can be scheduled.
-var sglangBackgroundSem = make(chan struct{}, 2)
-
 // --- 1. Proactive Context ---
 // Injected in executeAgentRun, between context assembly and agent loop.
 // The local model analyzes the user's message and gathers relevant context.
@@ -98,20 +92,12 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	if isLowInfoMessage(userMessage) {
 		return ""
 	}
-	// Check sglang health (cached probe, no per-call overhead).
+	// Check sglang health (inference-based when hub is active).
 	if !pilot.CheckSglangHealth() && !pilot.HasRegistry() {
 		return ""
 	}
 
-	// Acquire sglang background semaphore (non-blocking — skip if busy).
-	select {
-	case sglangBackgroundSem <- struct{}{}:
-		defer func() { <-sglangBackgroundSem }()
-	default:
-		logger.Debug("proactive context skipped: sglang semaphore full")
-		return ""
-	}
-
+	// Concurrency is managed by the centralized sglang hub's token budget.
 	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
 	defer cancel()
 
@@ -234,14 +220,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 		return output
 	}
 
-	// Acquire sglang background semaphore (non-blocking — return original if busy).
-	select {
-	case sglangBackgroundSem <- struct{}{}:
-		defer func() { <-sglangBackgroundSem }()
-	default:
-		return output
-	}
-
+	// Concurrency is managed by the centralized sglang hub's token budget.
 	ctx, cancel := context.WithTimeout(ctx, compressTimeout)
 	defer cancel()
 
@@ -418,14 +397,7 @@ func SummarizeToolActivity(ctx context.Context, activities []string) (string, er
 		return "", fmt.Errorf("sglang unavailable")
 	}
 
-	// Acquire sglang background semaphore (non-blocking — skip if busy).
-	select {
-	case sglangBackgroundSem <- struct{}{}:
-		defer func() { <-sglangBackgroundSem }()
-	default:
-		return "", fmt.Errorf("sglang semaphore full")
-	}
-
+	// Concurrency is managed by the centralized sglang hub's token budget.
 	// Build user message from recent tool activity descriptions.
 	var b strings.Builder
 	b.WriteString("최근 에이전트 도구 사용 내역:\n\n")

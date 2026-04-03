@@ -11,7 +11,7 @@
 //     the FULL recent transcript (not just truncated snippets) so it has complete
 //     visibility into what happened — tool calls, errors, reasoning, etc.
 //   - Updated per-run (not per-turn) to balance quality vs cost. One sglang
-//     call per user message, sharing the memoryExtractSem.
+//     call per user message, routed through the centralized sglang hub.
 package chat
 
 import (
@@ -28,6 +28,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 )
 
 // ---------------------------------------------------------------------------
@@ -294,10 +295,6 @@ func UpdateSessionMemory(
 		logger.Debug("session memory: debounced (too recent)")
 		return
 	}
-	lwClient := pilot.GetLightweightClient()
-	if lwClient == nil {
-		return
-	}
 	if !pilot.CheckSglangHealth() {
 		return
 	}
@@ -387,29 +384,28 @@ func UpdateSessionMemory(
 	// then the update instruction is the final user message.
 	messages := buildMemoryUpdateMessages(transcriptText, userPrompt.String())
 
-	// Build ExtraBody with reasoning disabled + server-side timeout to prevent
-	// zombie requests that hold KV cache after the gateway cancels the context.
-	smExtra := map[string]any{
-		"chat_template_kwargs": map[string]any{"enable_thinking": false},
-	}
-	if deadline, ok := memCtx.Deadline(); ok {
-		remaining := time.Until(deadline).Seconds() - 2.0
-		if remaining > 1 {
-			smExtra["timeout"] = remaining
-		}
+	// Submit through the centralized sglang hub for token budget management
+	// and zombie request prevention. The hub injects noThinking + server-side
+	// timeout automatically.
+	sHub := pilot.GetSglangHub()
+	if sHub == nil {
+		logger.Debug("session memory: sglang hub not available")
+		return
 	}
 
-	resp, err := lwClient.Complete(memCtx, llm.ChatRequest{
-		Model:     pilot.GetLightweightModel(),
+	hubResp, err := sHub.Submit(memCtx, sglang.Request{
+		System:    sessionMemorySystemPrompt,
 		Messages:  messages,
-		System:    llm.SystemString(sessionMemorySystemPrompt),
 		MaxTokens: 2048,
-		ExtraBody: smExtra,
+		Priority:  sglang.PriorityNormal,
+		CallerTag: "session_memory",
+		NoCache:   true, // session memory is always unique
 	})
 	if err != nil {
 		logger.Debug("session memory update failed", "error", err)
 		return
 	}
+	resp := hubResp.Text
 
 	resp = strings.TrimSpace(resp)
 	if resp == "" || resp == "NO_CHANGE" {

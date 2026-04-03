@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
 )
 
 // --- Package-level model role registry ---
@@ -25,6 +26,7 @@ import (
 var (
 	pkgRegistry     *modelrole.Registry
 	pkgRegistryOnce sync.Once
+	pkgSglangHub    *sglang.Hub
 )
 
 // SetModelRoleRegistry sets the package-level model role registry.
@@ -33,6 +35,18 @@ func SetModelRoleRegistry(reg *modelrole.Registry) {
 	pkgRegistryOnce.Do(func() {
 		pkgRegistry = reg
 	})
+}
+
+// SetSglangHub sets the centralized sglang hub. When set, CallLocalLLM and
+// CheckSglangHealth delegate to the hub instead of making direct calls.
+func SetSglangHub(h *sglang.Hub) {
+	pkgSglangHub = h
+}
+
+// GetSglangHub returns the centralized sglang hub, or nil if not set.
+// Used by callers (e.g., session memory) that need multi-message submission.
+func GetSglangHub() *sglang.Hub {
+	return pkgSglangHub
 }
 
 // LightweightBaseURL returns the base URL for the lightweight model.
@@ -51,9 +65,13 @@ var (
 	sglangStartedAt = time.Now()
 )
 
-// SglangRecentlyDown returns true if the last health check was done and returned unhealthy.
-// Used by callers to skip sglang-dependent operations without re-probing.
+// SglangRecentlyDown returns true if sglang is known to be unhealthy.
+// When the hub is set, delegates to the hub's cached health state (background
+// inference-based probe). Otherwise falls back to the legacy atomic cache.
 func SglangRecentlyDown() bool {
+	if pkgSglangHub != nil {
+		return !pkgSglangHub.IsHealthy()
+	}
 	return !sglangHealthy.Load() && sglangLastCheck.Load() > 0
 }
 
@@ -63,8 +81,14 @@ func HasRegistry() bool {
 }
 
 // CheckSglangHealth returns true if the local sglang server is reachable.
-// Result is cached for sglangHealthTTL to avoid per-call overhead.
+// When the sglang hub is set, delegates to the hub's inference-based health check.
+// Otherwise falls back to the legacy /v1/models metadata probe.
 func CheckSglangHealth() bool {
+	if pkgSglangHub != nil {
+		return pkgSglangHub.IsHealthy()
+	}
+
+	// Legacy fallback: metadata-only probe.
 	now := time.Now().Unix()
 	last := sglangLastCheck.Load()
 	ttl := sglangHealthTTL
@@ -75,7 +99,6 @@ func CheckSglangHealth() bool {
 		return sglangHealthy.Load()
 	}
 
-	// Probe /v1/models — lightweight endpoint.
 	ctx, cancel := context.WithTimeout(context.Background(), sglangHealthPing)
 	defer cancel()
 
@@ -557,17 +580,18 @@ func GetLightweightModel() string {
 	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultSglangModel)
 }
 
-// sglangNoThinking is the default ExtraBody that disables reasoning mode for
-// all local sglang calls. Qwen3.5 reasoning adds latency and "Thinking Process:"
-// preambles that leak into output; none of our sglang hooks need it.
-var sglangNoThinking = map[string]any{
-	"chat_template_kwargs": map[string]any{"enable_thinking": false},
-}
-
 // CallLocalLLM invokes the lightweight (local sglang) model with fallback chain.
+// When the sglang hub is set, delegates to the hub for token budget management,
+// priority queuing, and zombie request prevention.
 // Optional extraBody maps are merged into the request body (e.g. for chat_template_kwargs).
 // Reasoning mode is disabled by default for all calls.
 func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+	// Hub path: centralized token budget, priority queue, health check.
+	if pkgSglangHub != nil {
+		return pkgSglangHub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
+	}
+
+	// Legacy path: direct sglang call (used when hub is not yet wired).
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
@@ -575,8 +599,8 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	model := GetLightweightModel()
 
 	// Always disable reasoning by default; caller-supplied extraBody merges on top.
-	merged := make(map[string]any, len(sglangNoThinking))
-	for k, v := range sglangNoThinking {
+	merged := make(map[string]any, len(sglang.NoThinking))
+	for k, v := range sglang.NoThinking {
 		merged[k] = v
 	}
 	if len(extraBody) > 0 && extraBody[0] != nil {
