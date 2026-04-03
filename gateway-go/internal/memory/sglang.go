@@ -64,8 +64,15 @@ func callSglang(ctx context.Context, client *llm.Client, model, system, user str
 
 // callSglangJSON is like callSglang but requests JSON-formatted output
 // via response_format. Use for endpoints that must return valid JSON.
+// An optional overrideFmt can be passed to use json_schema mode instead
+// of the default json_object (e.g., for constrained decoding).
 // When the centralized sglang hub is available, routes through it.
-func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
+func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int, overrideFmt ...*llm.ResponseFormat) (string, error) {
+	rf := &llm.ResponseFormat{Type: "json_object"}
+	if len(overrideFmt) > 0 && overrideFmt[0] != nil {
+		rf = overrideFmt[0]
+	}
+
 	// Hub path.
 	if h := pkgSglangHub; h != nil {
 		resp, err := h.Submit(ctx, sglang.Request{
@@ -74,7 +81,7 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 			MaxTokens:      maxTokens,
 			Priority:       sglang.PriorityBackground,
 			CallerTag:      "memory_json", // covers fact extraction, dreaming phases
-			ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+			ResponseFormat: rf,
 			NoCache:        true, // JSON extractions are non-deterministic
 		})
 		if err != nil {
@@ -90,7 +97,7 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 		System:         llm.SystemString(system),
 		MaxTokens:      maxTokens,
 		Stream:         true,
-		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+		ResponseFormat: rf,
 		ExtraBody:      sglang.NoThinking,
 	})
 	if err != nil {
