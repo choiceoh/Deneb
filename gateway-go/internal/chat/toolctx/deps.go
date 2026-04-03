@@ -22,7 +22,7 @@ type CoreToolDeps struct {
 	LLMClient      *llm.Client
 	DefaultModel   string
 	AgentLog       *agentlog.Writer
-	SpilloverStore *agent.SpilloverStore  // optional; spills large tool results to disk
+	SpilloverStore *agent.SpilloverStore // optional; spills large tool results to disk
 }
 
 // ProcessDeps holds dependencies for exec and process management tools.

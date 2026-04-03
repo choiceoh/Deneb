@@ -41,9 +41,9 @@ var (
 	colBackground = color.RGBA{255, 255, 255, 255}
 	colGrid       = color.RGBA{224, 224, 224, 255}
 	colAxis       = color.RGBA{51, 51, 51, 255}
-	colKept       = color.RGBA{46, 204, 64, 255}  // green
-	colDiscarded  = color.RGBA{255, 65, 54, 255}   // red
-	colBestLine   = color.RGBA{0, 116, 217, 255}   // blue
+	colKept       = color.RGBA{46, 204, 64, 255} // green
+	colDiscarded  = color.RGBA{255, 65, 54, 255} // red
+	colBestLine   = color.RGBA{0, 116, 217, 255} // blue
 	colText       = color.RGBA{17, 17, 17, 255}
 	colLegendBg   = color.RGBA{245, 245, 245, 255}
 )

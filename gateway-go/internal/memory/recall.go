@@ -36,10 +36,10 @@ func DefaultRecallConfig() RecallConfig {
 
 // RecallResult is the context pack produced by the recall engine.
 type RecallResult struct {
-	Facts          []RecalledFact        `json:"relevant_facts"`
-	EntitySummary  map[string]string     `json:"entity_summaries,omitempty"`
-	Timeline       string                `json:"timeline,omitempty"`
-	Backfill       *BackfillData         `json:"backfill,omitempty"`
+	Facts         []RecalledFact    `json:"relevant_facts"`
+	EntitySummary map[string]string `json:"entity_summaries,omitempty"`
+	Timeline      string            `json:"timeline,omitempty"`
+	Backfill      *BackfillData     `json:"backfill,omitempty"`
 }
 
 // RecalledFact is a fact selected by the recall engine with a reason.
@@ -51,7 +51,7 @@ type RecalledFact struct {
 // BackfillData contains entity/relation extractions for facts that were
 // missing this data. Processed asynchronously after recall completes.
 type BackfillData struct {
-	Entities  []BackfillEntity  `json:"entities,omitempty"`
+	Entities  []BackfillEntity   `json:"entities,omitempty"`
 	Relations []BackfillRelation `json:"relations,omitempty"`
 }
 

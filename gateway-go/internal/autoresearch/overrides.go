@@ -72,7 +72,6 @@ func ExtractConstants(workdir string, constants []ConstantDef) (map[string]strin
 	return values, nil
 }
 
-
 // ApplyOverrides replaces constant values in target files with the given
 // overrides. Returns a restore function that reverts all files to their
 // original content. The restore function is safe to call multiple times.

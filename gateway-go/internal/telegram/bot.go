@@ -6,7 +6,6 @@ import (
 	"math/rand/v2"
 	"sync"
 	"time"
-
 )
 
 // UpdateHandler is called for each incoming update.
@@ -15,10 +14,10 @@ type UpdateHandler func(ctx context.Context, update *Update)
 // Bot manages the Telegram bot lifecycle: long-polling for updates,
 // dispatching to handlers, and tracking update offsets.
 type Bot struct {
-	runMu    sync.Mutex
-	running  bool
-	stopFunc context.CancelFunc
-	client   *Client
+	runMu     sync.Mutex
+	running   bool
+	stopFunc  context.CancelFunc
+	client    *Client
 	config    *Config
 	logger    *slog.Logger
 	handlerMu sync.Mutex

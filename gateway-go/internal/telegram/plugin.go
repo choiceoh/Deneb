@@ -61,18 +61,18 @@ func (p *Plugin) SetStatus(s Status) {
 
 // Capabilities returns the capabilities of the Telegram channel.
 type Capabilities struct {
-	ChatTypes      []string `json:"chatTypes"`
-	Polls          bool     `json:"polls,omitempty"`
-	Reactions      bool     `json:"reactions,omitempty"`
-	Edit           bool     `json:"edit,omitempty"`
-	Unsend         bool     `json:"unsend,omitempty"`
-	Reply          bool     `json:"reply,omitempty"`
-	Effects        bool     `json:"effects,omitempty"`
-	GroupManagement bool    `json:"groupManagement,omitempty"`
-	Threads        bool     `json:"threads,omitempty"`
-	Media          bool     `json:"media,omitempty"`
-	NativeCommands bool     `json:"nativeCommands,omitempty"`
-	BlockStreaming bool     `json:"blockStreaming,omitempty"`
+	ChatTypes       []string `json:"chatTypes"`
+	Polls           bool     `json:"polls,omitempty"`
+	Reactions       bool     `json:"reactions,omitempty"`
+	Edit            bool     `json:"edit,omitempty"`
+	Unsend          bool     `json:"unsend,omitempty"`
+	Reply           bool     `json:"reply,omitempty"`
+	Effects         bool     `json:"effects,omitempty"`
+	GroupManagement bool     `json:"groupManagement,omitempty"`
+	Threads         bool     `json:"threads,omitempty"`
+	Media           bool     `json:"media,omitempty"`
+	NativeCommands  bool     `json:"nativeCommands,omitempty"`
+	BlockStreaming  bool     `json:"blockStreaming,omitempty"`
 }
 
 // Capabilities returns Telegram's capabilities.

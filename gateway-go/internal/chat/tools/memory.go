@@ -183,7 +183,6 @@ func SearchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMat
 	return matches
 }
 
-
 // CollectMemoryFiles finds MEMORY.md and memory/*.md in the workspace.
 // Results are cached with a short TTL to avoid repeated directory scans
 // within the same agent turn.

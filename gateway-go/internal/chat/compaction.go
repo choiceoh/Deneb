@@ -10,8 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	compaction2 "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 

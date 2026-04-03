@@ -3,8 +3,8 @@
 package streaming
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"log/slog"
 	"sync"
 	"time"

@@ -15,9 +15,9 @@ import (
 // context.Context, and discarded when the turn ends.
 type TurnContext struct {
 	mu      sync.Mutex
-	results map[string]*TurnResult   // keyed by tool_use_id
+	results map[string]*TurnResult     // keyed by tool_use_id
 	waiters map[string][]chan struct{} // signals when a result is stored
-	stats   map[string]*toolStat      // per-tool-name timing stats
+	stats   map[string]*toolStat       // per-tool-name timing stats
 }
 
 // toolStat accumulates completion-time samples for a single tool name within a turn.

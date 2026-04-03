@@ -19,28 +19,28 @@ type UsageAnalytics struct {
 }
 
 type sessionRun struct {
-	Key       string `json:"key"`
-	StartedAt int64  `json:"startedAt"`
-	EndedAt   int64  `json:"endedAt"`
-	Status    string `json:"status"` // "done", "failed", "timeout", "killed"
-	DurationMs int64 `json:"durationMs"`
+	Key        string `json:"key"`
+	StartedAt  int64  `json:"startedAt"`
+	EndedAt    int64  `json:"endedAt"`
+	Status     string `json:"status"` // "done", "failed", "timeout", "killed"
+	DurationMs int64  `json:"durationMs"`
 }
 
 type failureRecord struct {
-	Key       string `json:"key"`
-	Ts        int64  `json:"ts"`
-	Status    string `json:"status"`
+	Key    string `json:"key"`
+	Ts     int64  `json:"ts"`
+	Status string `json:"status"`
 }
 
 // UsageReport is the analytics snapshot returned via RPC.
 type UsageReport struct {
-	TotalSessions    int            `json:"totalSessions"`
-	SuccessRate      float64        `json:"successRate"`     // percentage
-	AvgDurationMs    int64          `json:"avgDurationMs"`
-	PeakHours        []int          `json:"peakHours"`       // top 3 most active hours
-	TopTopics        []TopicStat    `json:"topTopics"`       // most frequent topics
-	RecentFailures   int            `json:"recentFailures"`  // failures in last 24h
-	DailyTokens      map[string]int64 `json:"dailyTokens,omitempty"`
+	TotalSessions  int              `json:"totalSessions"`
+	SuccessRate    float64          `json:"successRate"` // percentage
+	AvgDurationMs  int64            `json:"avgDurationMs"`
+	PeakHours      []int            `json:"peakHours"`      // top 3 most active hours
+	TopTopics      []TopicStat      `json:"topTopics"`      // most frequent topics
+	RecentFailures int              `json:"recentFailures"` // failures in last 24h
+	DailyTokens    map[string]int64 `json:"dailyTokens,omitempty"`
 }
 
 // TopicStat is a topic + frequency pair.

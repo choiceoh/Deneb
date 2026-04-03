@@ -12,11 +12,11 @@ import (
 // These replace Discord-style embed colors with emoji-based indicators
 // optimized for Telegram's HTML parse mode.
 const (
-	ColorSuccess = "\u2705" // ✅
-	ColorError   = "\u274C" // ❌
+	ColorSuccess = "\u2705"       // ✅
+	ColorError   = "\u274C"       // ❌
 	ColorWarning = "\u26A0\uFE0F" // ⚠️
 	ColorInfo    = "\u2139\uFE0F" // ℹ️
-	ColorPending = "\u23F3" // ⏳
+	ColorPending = "\u23F3"       // ⏳
 )
 
 // --- Data types for embed builders ---

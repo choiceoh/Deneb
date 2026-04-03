@@ -9,9 +9,9 @@
 package streaming
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"encoding/json"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"log/slog"
 	"strings"
 	"sync"

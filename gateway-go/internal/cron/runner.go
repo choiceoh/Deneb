@@ -9,8 +9,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
 // RunOutcome represents the result of a cron job execution.

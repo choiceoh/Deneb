@@ -25,7 +25,7 @@ import (
 const (
 	proactiveTimeout   = 15 * time.Second // local sglang: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
 	proactiveMaxTokens = 1024
-	proactiveMinMsgLen     = 20 // skip for very short messages
+	proactiveMinMsgLen = 20 // skip for very short messages
 )
 
 const proactiveSystemPrompt = `You are a context preparation assistant.
@@ -191,8 +191,8 @@ var toolCompressSkipSet = map[string]bool{
 	"diff":    true,
 	// Internal / already-small tools.
 	"pilot":         true,
-	"memory": true,
-	"kv":     true,
+	"memory":        true,
+	"kv":            true,
 	"sessions_list": true,
 }
 

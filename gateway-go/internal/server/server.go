@@ -47,16 +47,16 @@ type ServerTransport struct {
 
 // ServerRPC owns dispatcher construction and RPC/auth wiring state.
 type ServerRPC struct {
-	dispatcher             *rpc.Dispatcher
-	authValidator          *auth.Validator
-	providers              *provider.Registry
-	authManager            *provider.AuthManager
-	providerRuntime        *provider.ProviderRuntimeResolver
-	authRateLimiter        *auth.AuthRateLimiter
-	acpDeps                *handlerprocess.ACPDeps
-	acpLifecycleUnsub      func()
+	dispatcher              *rpc.Dispatcher
+	authValidator           *auth.Validator
+	providers               *provider.Registry
+	authManager             *provider.AuthManager
+	providerRuntime         *provider.ProviderRuntimeResolver
+	authRateLimiter         *auth.AuthRateLimiter
+	acpDeps                 *handlerprocess.ACPDeps
+	acpLifecycleUnsub       func()
 	acpResultInjectionUnsub func()
-	snapshotLifecycleUnsub func()
+	snapshotLifecycleUnsub  func()
 }
 
 // ServerRuntime owns long-running runtime health/activity trackers.
@@ -131,13 +131,13 @@ func (s *Server) safeGo(name string, fn func()) {
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) (*Server, error) {
 	s := &Server{
-		ServerTransport:      &ServerTransport{addr: addr},
-		ServerRPC:            &ServerRPC{},
-		ServerRuntime:        &ServerRuntime{},
+		ServerTransport:     &ServerTransport{addr: addr},
+		ServerRPC:           &ServerRPC{},
+		ServerRuntime:       &ServerRuntime{},
 		PluginSubsystem:     &PluginSubsystem{},
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
-		rustFFI:            ffi.Available,
+		rustFFI:             ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
 			protocol.DedupeMax,
@@ -224,7 +224,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if err := s.registerEarlyMethods(hub, denebDir); err != nil {
 		return nil, fmt.Errorf("register early methods: %w", err)
 	}
-	s.registerSessionRPCMethods()          // chat pipeline init + handler creation
+	s.registerSessionRPCMethods() // chat pipeline init + handler creation
 	if s.sglangHub != nil {
 		hub.SetSglangHub(s.sglangHub)
 	}

@@ -7,10 +7,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"

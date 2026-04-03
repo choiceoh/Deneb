@@ -232,17 +232,17 @@ func TestRegistry_PutAndGet(t *testing.T) {
 	reg := testRegistry(t)
 
 	task := &TaskRecord{
-		TaskID:         "task-1",
-		Runtime:        RuntimeCron,
-		OwnerKey:       "owner-a",
-		ScopeKind:      ScopeSession,
-		RunID:          "run-123",
+		TaskID:          "task-1",
+		Runtime:         RuntimeCron,
+		OwnerKey:        "owner-a",
+		ScopeKind:       ScopeSession,
+		RunID:           "run-123",
 		ChildSessionKey: "child-sess",
-		Task:           "test",
-		Status:         StatusRunning,
-		DeliveryStatus: DeliveryPending,
-		NotifyPolicy:   NotifyDoneOnly,
-		CreatedAt:      1000,
+		Task:            "test",
+		Status:          StatusRunning,
+		DeliveryStatus:  DeliveryPending,
+		NotifyPolicy:    NotifyDoneOnly,
+		CreatedAt:       1000,
 	}
 
 	if err := reg.Put(task); err != nil {

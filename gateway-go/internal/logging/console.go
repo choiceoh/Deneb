@@ -22,21 +22,21 @@ import (
 
 // ANSI escape sequences for styling.
 const (
-	ansiReset    = "\033[0m"
-	ansiBold     = "\033[1m"
-	ansiDim      = "\033[2m"
-	ansiItalic   = "\033[3m"
-	ansiRed      = "\033[31m"
-	ansiGreen    = "\033[32m"
-	ansiYellow   = "\033[33m"
-	ansiBlue     = "\033[34m"
-	ansiCyan     = "\033[36m"
-	ansiBoldRed  = "\033[1;31m"
-	ansiBoldGrn  = "\033[1;32m"
-	ansiBoldYel  = "\033[1;33m"
-	ansiBoldBlu  = "\033[1;34m"
-	ansiBoldCyn  = "\033[1;36m"
-	ansiDimCyn   = "\033[2;36m"
+	ansiReset   = "\033[0m"
+	ansiBold    = "\033[1m"
+	ansiDim     = "\033[2m"
+	ansiItalic  = "\033[3m"
+	ansiRed     = "\033[31m"
+	ansiGreen   = "\033[32m"
+	ansiYellow  = "\033[33m"
+	ansiBlue    = "\033[34m"
+	ansiCyan    = "\033[36m"
+	ansiBoldRed = "\033[1;31m"
+	ansiBoldGrn = "\033[1;32m"
+	ansiBoldYel = "\033[1;33m"
+	ansiBoldBlu = "\033[1;34m"
+	ansiBoldCyn = "\033[1;36m"
+	ansiDimCyn  = "\033[2;36m"
 )
 
 // pkgAttrKey is the attribute key rendered as a colored [tag] instead of key=value.

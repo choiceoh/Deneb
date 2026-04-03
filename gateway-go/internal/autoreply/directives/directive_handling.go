@@ -408,4 +408,3 @@ func boolToOnOff(b bool) string {
 	}
 	return "off"
 }
-

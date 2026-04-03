@@ -147,7 +147,6 @@ func resolveFromCandidates(rawModel, rawProvider string, candidates []ModelCandi
 	return nil
 }
 
-
 // ResolveStoredModelOverride checks session and parent session for model overrides.
 func ResolveStoredModelOverride(sessionModel, parentSessionModel, configModel string) string {
 	if sessionModel != "" {

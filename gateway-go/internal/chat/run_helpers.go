@@ -559,7 +559,6 @@ const (
 	defaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 )
 
-
 // executeAgentRunWithDelta is a variant of executeAgentRun that accepts a direct
 // onDelta callback for streaming text to HTTP clients.
 func executeAgentRunWithDelta(
@@ -850,4 +849,3 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 	}
 	return out
 }
-

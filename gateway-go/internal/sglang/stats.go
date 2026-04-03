@@ -5,12 +5,12 @@ import "sync/atomic"
 // HubStats tracks hub-level counters for observability.
 // All fields are safe for concurrent access.
 type HubStats struct {
-	Submitted  atomic.Int64
-	Completed  atomic.Int64
-	Failed     atomic.Int64
-	Cancelled  atomic.Int64
-	Dropped    atomic.Int64 // background requests dropped due to queue overflow
-	CacheHits  atomic.Int64
+	Submitted   atomic.Int64
+	Completed   atomic.Int64
+	Failed      atomic.Int64
+	Cancelled   atomic.Int64
+	Dropped     atomic.Int64 // background requests dropped due to queue overflow
+	CacheHits   atomic.Int64
 	CacheMisses atomic.Int64
 }
 

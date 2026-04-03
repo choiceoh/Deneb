@@ -123,16 +123,19 @@ func TestOnToolComplete_NoSummaryWithoutFn(t *testing.T) {
 }
 
 func TestOnToolComplete_NoSummaryWithEmptyInput(t *testing.T) {
-	called := false
+	called := make(chan struct{}, 1)
 	mockSummarize := func(ctx context.Context, activities []string) (string, error) {
-		called = true
-		return "should not be called", nil
+		select {
+		case called <- struct{}{}:
+		default:
+		}
+		return "요약 결과", nil
 	}
 
 	pt := NewProgressTracker(nil, 0, mockSummarize)
 	ctx := context.Background()
 
-	// Complete 4 tools without any input.
+	// Complete 4 tools without any input (nil → activity is just tool name).
 	for i := 0; i < 4; i++ {
 		pt.OnToolStart(ctx, "read", nil)
 		pt.OnToolComplete(ctx, "read", false)
@@ -140,8 +143,12 @@ func TestOnToolComplete_NoSummaryWithEmptyInput(t *testing.T) {
 
 	// Activities are still generated (tool name without hint), so summarizer
 	// should still be called — the tool name alone is useful context.
-	// Only skip if activities slice is empty, which can't happen here.
-	_ = called
+	select {
+	case <-called:
+		// summarizer was called as expected
+	case <-time.After(2 * time.Second):
+		t.Error("expected summarizer to be called after 4 completions, but it was not")
+	}
 }
 
 func TestSanitizeSummary(t *testing.T) {

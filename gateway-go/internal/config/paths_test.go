@@ -169,4 +169,3 @@ func TestGatewayPortPolicyPrecedence(t *testing.T) {
 		})
 	}
 }
-

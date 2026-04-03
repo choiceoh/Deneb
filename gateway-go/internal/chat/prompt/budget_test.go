@@ -15,7 +15,7 @@ func TestEstimateTokens(t *testing.T) {
 		{"single char", "a", 1},
 		{"short ascii", "hello", 2},
 		{"korean text", "안녕하세요 반갑습니다", 5}, // 10 runes / 2
-		{"mixed", "hello 세계", 4},                // 8 runes / 2
+		{"mixed", "hello 세계", 4},          // 8 runes / 2
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -35,8 +35,8 @@ type ServiceConfig struct {
 
 	// Shadow session support: when MainSessionKey and TranscriptCloner are set,
 	// cron runs can inherit recent conversation context via KindShadow sessions.
-	MainSessionKey   string            // primary user session key for cloning context
-	TranscriptCloner TranscriptCloner  // clones transcript messages between sessions
+	MainSessionKey   string           // primary user session key for cloning context
+	TranscriptCloner TranscriptCloner // clones transcript messages between sessions
 }
 
 // ServiceStatus is a snapshot of the cron service health and pending jobs.

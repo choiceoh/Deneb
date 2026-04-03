@@ -19,7 +19,6 @@ import (
 	"time"
 )
 
-
 // Spillover thresholds.
 const (
 	MaxResultChars   = 32 * 1024 // 32K chars — results larger than this are spilled

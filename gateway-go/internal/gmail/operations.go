@@ -16,23 +16,23 @@ type apiMessageList struct {
 		ID       string `json:"id"`
 		ThreadID string `json:"threadId"`
 	} `json:"messages"`
-	NextPageToken  string `json:"nextPageToken"`
-	ResultSizeEst  int    `json:"resultSizeEstimate"`
+	NextPageToken string `json:"nextPageToken"`
+	ResultSizeEst int    `json:"resultSizeEstimate"`
 }
 
 type apiMessage struct {
-	ID       string       `json:"id"`
-	ThreadID string       `json:"threadId"`
-	LabelIDs []string     `json:"labelIds"`
-	Snippet  string       `json:"snippet"`
-	Payload  *apiPayload  `json:"payload"`
+	ID       string      `json:"id"`
+	ThreadID string      `json:"threadId"`
+	LabelIDs []string    `json:"labelIds"`
+	Snippet  string      `json:"snippet"`
+	Payload  *apiPayload `json:"payload"`
 }
 
 type apiPayload struct {
-	Headers []apiHeader  `json:"headers"`
-	Body    *apiBody     `json:"body"`
-	Parts   []apiPayload `json:"parts"`
-	MimeType string      `json:"mimeType"`
+	Headers  []apiHeader  `json:"headers"`
+	Body     *apiBody     `json:"body"`
+	Parts    []apiPayload `json:"parts"`
+	MimeType string       `json:"mimeType"`
 }
 
 type apiHeader struct {

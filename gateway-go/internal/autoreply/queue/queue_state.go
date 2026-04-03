@@ -17,16 +17,16 @@ const (
 // All field access must be guarded by mu to prevent races between the
 // enqueue caller and the drain goroutine.
 type FollowupQueueState struct {
-	mu             sync.Mutex          `json:"-"`
+	mu             sync.Mutex                `json:"-"`
 	Items          []types.FollowupRun       `json:"items"`
-	Draining       bool                `json:"draining"`
-	LastEnqueuedAt int64               `json:"lastEnqueuedAt"`
+	Draining       bool                      `json:"draining"`
+	LastEnqueuedAt int64                     `json:"lastEnqueuedAt"`
 	Mode           types.FollowupQueueMode   `json:"mode"`
-	DebounceMs     int                 `json:"debounceMs"`
-	Cap            int                 `json:"cap"`
+	DebounceMs     int                       `json:"debounceMs"`
+	Cap            int                       `json:"cap"`
 	DropPolicy     types.FollowupDropPolicy  `json:"dropPolicy"`
-	DroppedCount   int                 `json:"droppedCount"`
-	SummaryLines   []string            `json:"summaryLines"`
+	DroppedCount   int                       `json:"droppedCount"`
+	SummaryLines   []string                  `json:"summaryLines"`
 	LastRun        *types.FollowupRunContext `json:"lastRun,omitempty"`
 }
 

@@ -4,10 +4,11 @@
 // Inspired by Honcho's inference-layer memory architecture.
 //
 // Sub-files:
-//   store_facts.go      — fact CRUD (InsertFact … ActiveFactCount)
-//   store_meta.go       — user model, dreaming log, metadata
-//   store_embeddings.go — embedding storage and loading
-//   store_export.go     — ExportToMarkdown, ExportToFile, ImportFromMarkdown
+//
+//	store_facts.go      — fact CRUD (InsertFact … ActiveFactCount)
+//	store_meta.go       — user model, dreaming log, metadata
+//	store_embeddings.go — embedding storage and loading
+//	store_export.go     — ExportToMarkdown, ExportToFile, ImportFromMarkdown
 package memory
 
 import (

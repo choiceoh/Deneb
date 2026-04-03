@@ -22,7 +22,7 @@ type PeriodicTask interface {
 type TaskStatus struct {
 	Name       string `json:"name"`
 	Running    bool   `json:"running"`
-	LastRunAt  int64  `json:"lastRunAt,omitempty"`  // unix millis
+	LastRunAt  int64  `json:"lastRunAt,omitempty"` // unix millis
 	LastError  string `json:"lastError,omitempty"`
 	RunCount   int64  `json:"runCount"`
 	ErrorCount int64  `json:"errorCount"`

@@ -24,9 +24,9 @@ type Deps struct {
 	Broadcast       func(event string, payload any) (int, []error)
 	Models          func() any
 	RuntimeConfig   func() map[string]any
-	DaemonStatus      func() (any, bool)
-	AgentActiveRuns   func() int
-	AgentCacheSize    func() int
+	DaemonStatus    func() (any, bool)
+	AgentActiveRuns func() int
+	AgentCacheSize  func() int
 }
 
 // RuntimeMethods returns the health/status/runtime handler map.

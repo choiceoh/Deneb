@@ -144,4 +144,3 @@ func TestFormatCandidatesAsKnowledge_Empty(t *testing.T) {
 		t.Errorf("expected empty result for nil candidates, got %q", result)
 	}
 }
-

@@ -6,8 +6,8 @@
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"strings"
 	"time"
 )

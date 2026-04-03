@@ -13,10 +13,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 )
 
 // Deps holds optional dependencies for knowledge prefetch.

@@ -19,8 +19,8 @@ type ChatRequest struct {
 	TopP             *float64        `json:"top_p,omitempty"`
 	TopK             *int            `json:"top_k,omitempty"`
 	StopSequences    []string        `json:"stop_sequences,omitempty"`
-	FrequencyPenalty *float64 `json:"frequency_penalty,omitempty"`
-	PresencePenalty  *float64 `json:"presence_penalty,omitempty"`
+	FrequencyPenalty *float64        `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64        `json:"presence_penalty,omitempty"`
 
 	// ResponseFormat requests structured output.
 	// Use &ResponseFormat{Type: "json_object"} for JSON mode.

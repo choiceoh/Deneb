@@ -1,9 +1,9 @@
 package media
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"errors"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"log/slog"
 	"os"
 	"os/exec"

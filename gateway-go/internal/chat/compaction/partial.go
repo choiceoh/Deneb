@@ -66,10 +66,10 @@ func DefaultPartialCompactConfig(messageCount int) PartialCompactConfig {
 
 // PartialCompactResult describes the outcome.
 type PartialCompactResult struct {
-	PreservedCount  int    // messages kept verbatim
-	SummarizedCount int    // messages that were summarized
-	SummaryTokens   int    // estimated tokens in the summary
-	CachePreserved  bool   // true if prompt cache prefix is intact
+	PreservedCount  int  // messages kept verbatim
+	SummarizedCount int  // messages that were summarized
+	SummaryTokens   int  // estimated tokens in the summary
+	CachePreserved  bool // true if prompt cache prefix is intact
 	Direction       CompactionDirection
 }
 

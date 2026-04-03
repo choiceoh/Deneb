@@ -15,9 +15,9 @@ type SessionContinuity struct {
 	svc *Service
 
 	// State (guarded by svc.mu).
-	lastSnapshot    *ContinuitySnapshot
-	lastSnapshotAt  int64 // unix ms
-	recentMessages  []continuityMessage
+	lastSnapshot   *ContinuitySnapshot
+	lastSnapshotAt int64 // unix ms
+	recentMessages []continuityMessage
 }
 
 // ContinuitySnapshot captures the state needed to resume a session.
@@ -25,9 +25,9 @@ type ContinuitySnapshot struct {
 	SessionKey      string   `json:"sessionKey"`
 	Topic           string   `json:"topic"`           // current conversation topic
 	RecentSummary   string   `json:"recentSummary"`   // brief summary of recent conversation
-	PendingTasks    []string `json:"pendingTasks"`     // task descriptions still pending
-	LastUserMessage string   `json:"lastUserMessage"`  // last user message for context
-	SavedAt         int64    `json:"savedAt"`          // unix ms
+	PendingTasks    []string `json:"pendingTasks"`    // task descriptions still pending
+	LastUserMessage string   `json:"lastUserMessage"` // last user message for context
+	SavedAt         int64    `json:"savedAt"`         // unix ms
 }
 
 type continuityMessage struct {

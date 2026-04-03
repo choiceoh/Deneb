@@ -3,8 +3,8 @@
 package queue
 
 import (
-	"strings"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"strings"
 )
 
 // NormalizeFollowupQueueMode parses a raw string into a types.FollowupQueueMode.

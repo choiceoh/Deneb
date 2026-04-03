@@ -27,8 +27,8 @@ const (
 	// Stage 1 LLM token limits.
 	stage1MaxTokens = 768
 	// Stage 2 (final analysis) token limit.
-	stage2MaxTokens    = 1536
-	batchStage2Tokens  = 4096 // batch analysis needs more tokens
+	stage2MaxTokens   = 1536
+	batchStage2Tokens = 4096 // batch analysis needs more tokens
 
 	// Stage 3: memory extraction.
 	stage3Timeout   = 30 * time.Second
@@ -38,10 +38,10 @@ const (
 // PipelineDeps holds dependencies for the multi-stage analysis pipeline.
 type PipelineDeps struct {
 	GmailClient *gmail.Client
-	LLMClient   *llm.Client    // main LLM for final analysis (stage 2)
-	LocalClient *llm.Client    // local SGLang for extractors (stage 1)
-	LocalModel  string         // SGLang model name
-	MainModel   string         // main LLM model name
+	LLMClient   *llm.Client      // main LLM for final analysis (stage 2)
+	LocalClient *llm.Client      // local SGLang for extractors (stage 1)
+	LocalModel  string           // SGLang model name
+	MainModel   string           // main LLM model name
 	MemStore    *memory.Store    // for memory recall (nil = skip stage 1b)
 	MemEmbed    *memory.Embedder // for vector search query embedding (nil = FTS only)
 	Logger      *slog.Logger     // optional; nil = slog.Default()
@@ -195,11 +195,11 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 
 	// Stage 1: parallel extraction.
 	var (
-		threadCtx  ThreadContext
-		memoryCtx  MemoryContext
-		threadErr  error
-		memoryErr  error
-		wg         sync.WaitGroup
+		threadCtx ThreadContext
+		memoryCtx MemoryContext
+		threadErr error
+		memoryErr error
+		wg        sync.WaitGroup
 	)
 
 	wg.Add(1)

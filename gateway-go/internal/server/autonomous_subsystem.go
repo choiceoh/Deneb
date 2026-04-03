@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 )

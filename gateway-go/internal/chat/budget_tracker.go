@@ -29,10 +29,10 @@ const (
 // BudgetTracker tracks token usage across query loop continuations and
 // detects when further continuations yield diminishing returns.
 type BudgetTracker struct {
-	continuationCount  int
-	lastDeltaTokens    int
-	lastGlobalTokens   int
-	startedAt          time.Time
+	continuationCount int
+	lastDeltaTokens   int
+	lastGlobalTokens  int
+	startedAt         time.Time
 }
 
 // NewBudgetTracker creates a fresh budget tracker.

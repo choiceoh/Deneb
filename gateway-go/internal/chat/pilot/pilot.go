@@ -267,13 +267,13 @@ func ToolPilot(tools ToolExecutor, workspaceDir string) func(ctx context.Context
 
 // PilotParams is the parsed tool input.
 type PilotParams struct {
-	Task         string          `json:"task"`
-	Sources      []SourceSpec    `json:"sources"`
-	Content      string          `json:"content"`
-	Items        []string        `json:"items"`
-	OutputFormat string          `json:"output_format"`
-	MaxLength    string          `json:"max_length"`
-	Chain        bool            `json:"chain"`
+	Task         string            `json:"task"`
+	Sources      []SourceSpec      `json:"sources"`
+	Content      string            `json:"content"`
+	Items        []string          `json:"items"`
+	OutputFormat string            `json:"output_format"`
+	MaxLength    string            `json:"max_length"`
+	Chain        bool              `json:"chain"`
 	PostProcess  []PostProcessStep `json:"post_process"`
 
 	// Shortcuts.

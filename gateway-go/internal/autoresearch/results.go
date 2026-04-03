@@ -17,8 +17,8 @@ type ResultRow struct {
 	Kept          bool      `json:"kept"`
 	CommitHash    string    `json:"commit_hash"`
 	DurationSec   int       `json:"duration_sec"`
-	BestSoFar     float64   `json:"best_so_far"`    // running best at this point
-	DeltaFromBest float64   `json:"delta_from_best"` // difference from best (positive = improved)
+	BestSoFar     float64   `json:"best_so_far"`       // running best at this point
+	DeltaFromBest float64   `json:"delta_from_best"`   // difference from best (positive = improved)
 	Variant       int       `json:"variant,omitempty"` // parallel variant index (0-based), omitted in sequential mode
 }
 

@@ -157,4 +157,3 @@ func (eq ExpandedSearchQuery) FormatForLog() string {
 	}
 	return fmt.Sprintf("%s (+%d terms)", eq.Original, len(eq.Expanded))
 }
-

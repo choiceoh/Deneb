@@ -19,11 +19,11 @@ type MemoryConsolidator struct {
 
 // ExtractedFact is an important fact extracted from conversation.
 type ExtractedFact struct {
-	Content    string `json:"content"`    // the fact itself
-	Category   string `json:"category"`   // "preference", "technical", "personal", "project"
-	Source     string `json:"source"`     // session key + approximate context
-	ExtractedAt int64 `json:"extractedAt"` // unix ms
-	Importance string `json:"importance"` // "high", "medium", "low"
+	Content     string `json:"content"`     // the fact itself
+	Category    string `json:"category"`    // "preference", "technical", "personal", "project"
+	Source      string `json:"source"`      // session key + approximate context
+	ExtractedAt int64  `json:"extractedAt"` // unix ms
+	Importance  string `json:"importance"`  // "high", "medium", "low"
 }
 
 type bufferedMessage struct {

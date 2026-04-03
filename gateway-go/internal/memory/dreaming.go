@@ -437,7 +437,10 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 
 	merged := 0
 	consecutiveRejects := 0
-	var pendingEmbeds []struct{ ID int64; Content string }
+	var pendingEmbeds []struct {
+		ID      int64
+		Content string
+	}
 	// Limit merges per cycle to avoid excessive LLM calls.
 	maxMerges := 25
 	for _, p := range pairs {
@@ -498,7 +501,10 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		_ = store.SupersedeFact(ctx, p.b, newID)
 
 		// Collect for batch embedding after the loop.
-		pendingEmbeds = append(pendingEmbeds, struct{ ID int64; Content string }{ID: newID, Content: result.MergedContent})
+		pendingEmbeds = append(pendingEmbeds, struct {
+			ID      int64
+			Content string
+		}{ID: newID, Content: result.MergedContent})
 
 		merged++
 		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID, "sim", fmt.Sprintf("%.3f", p.sim))
@@ -679,7 +685,10 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 	}
 
 	count := 0
-	var pendingEmbeds []struct{ ID int64; Content string }
+	var pendingEmbeds []struct {
+		ID      int64
+		Content string
+	}
 	for _, p := range wrapper.Patterns {
 		if p.Content == "" {
 			continue
@@ -700,7 +709,10 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 			continue
 		}
 		count++
-		pendingEmbeds = append(pendingEmbeds, struct{ ID int64; Content string }{ID: id, Content: p.Content})
+		pendingEmbeds = append(pendingEmbeds, struct {
+			ID      int64
+			Content string
+		}{ID: id, Content: p.Content})
 	}
 
 	// Batch-embed all patterns in a single API call.

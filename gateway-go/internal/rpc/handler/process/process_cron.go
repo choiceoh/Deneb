@@ -11,7 +11,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-
 // CronAdvancedDeps holds the dependencies for advanced cron RPC methods.
 type CronAdvancedDeps struct {
 	Cron        *cron.Scheduler

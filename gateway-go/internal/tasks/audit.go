@@ -24,8 +24,8 @@ const (
 
 // Default thresholds.
 const (
-	DefaultStaleQueuedMs  int64 = 10 * 60 * 1000  // 10 minutes
-	DefaultStaleRunningMs int64 = 30 * 60 * 1000  // 30 minutes
+	DefaultStaleQueuedMs  int64 = 10 * 60 * 1000 // 10 minutes
+	DefaultStaleRunningMs int64 = 30 * 60 * 1000 // 30 minutes
 )
 
 // AuditFinding is a single audit result.
@@ -39,11 +39,11 @@ type AuditFinding struct {
 
 // AuditSummary aggregates audit findings.
 type AuditSummary struct {
-	Total    int                  `json:"total"`
-	Errors   int                  `json:"errors"`
-	Warnings int                  `json:"warnings"`
-	ByCode   map[AuditCode]int    `json:"byCode"`
-	Findings []*AuditFinding      `json:"findings"`
+	Total    int               `json:"total"`
+	Errors   int               `json:"errors"`
+	Warnings int               `json:"warnings"`
+	ByCode   map[AuditCode]int `json:"byCode"`
+	Findings []*AuditFinding   `json:"findings"`
 }
 
 // AuditOptions configures audit behavior.
