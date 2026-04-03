@@ -163,8 +163,8 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			RecallClient:   reg.Client(modelrole.RoleFallback),
 			RecallModel:    reg.Model(modelrole.RoleFallback),
 		},
-		LLMClient:    reg.Client(modelrole.RoleFallback),
-		DefaultModel: reg.Model(modelrole.RoleFallback),
+		LLMClient:    reg.Client(modelrole.RoleLightweight),
+		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
 	}
 
