@@ -32,7 +32,7 @@ type TypedHookRunner struct {
 // NewTypedHookRunner creates a new typed hook runner.
 func NewTypedHookRunner(logger *slog.Logger) *TypedHookRunner {
 	return &TypedHookRunner{
-		logger: logger,
+		logger: logger.With("pkg", "hooks"),
 	}
 }
 
@@ -325,7 +325,7 @@ func (r *TypedHookRunner) RunTargetedInboundClaim(ctx context.Context, pluginID 
 // --- Error handling ---
 
 func (r *TypedHookRunner) handleError(name HookName, pluginID string, err error) {
-	r.logger.Error("[hooks] hook handler failed",
+	r.logger.Error("hook handler failed",
 		"hook", string(name),
 		"plugin", pluginID,
 		"error", sanitizeHookError(err),

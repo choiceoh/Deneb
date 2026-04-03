@@ -58,7 +58,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		} else {
 			s.telegramPlug = telegram.NewPlugin(tgCfg, s.logger)
 			hub.SetTelegram(s.telegramPlug)
-			s.logger.Info("telegram channel configured")
 		}
 	}
 

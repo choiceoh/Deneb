@@ -136,7 +136,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 			protocol.DedupeMax,
 		),
 		version: "0.1.0-go",
-		logger:  slog.New(slog.NewJSONHandler(os.Stderr, nil)),
+		logger:  slog.Default(),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),
 			abortMemory:    arSession.NewAbortMemory(2000),

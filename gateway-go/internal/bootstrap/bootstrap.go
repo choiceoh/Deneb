@@ -8,9 +8,7 @@
 package bootstrap
 
 import (
-	"fmt"
 	"log/slog"
-	"os"
 )
 
 // Run executes the full gateway startup sequence and returns an OS exit code.
@@ -21,7 +19,7 @@ func Run(compiledVersion string) int {
 	earlyLogger := BuildEarlyLogger(flags.LogLevel)
 	cfg, err := LoadConfig(flags, earlyLogger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		earlyLogger.Error("configuration failed", "error", err)
 		return 1
 	}
 
