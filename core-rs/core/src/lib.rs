@@ -14,7 +14,6 @@
 
 // FFI utilities: error codes, FFI_MAX_INPUT_LEN, ffi_catch
 mod ffi_utils;
-use ffi_utils::*;
 
 // Core modules (C FFI + Rust API)
 pub mod compaction;
@@ -52,6 +51,7 @@ pub use ffi::vega::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ffi_utils::FFI_ERR_VALIDATION;
 
     fn ffi_validate_params(method: &str, params_json: &str, out: &mut [u8]) -> (i32, String) {
         let code = unsafe {

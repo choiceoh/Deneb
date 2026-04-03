@@ -1,7 +1,7 @@
 //! Result fusion and re-ranking for Vega hybrid search.
 //!
-//! Port of Python vega/search/router.py — _rerank_fusion section.
-//! Combines SQLite FTS results with semantic search results using project-level scoring.
+//! Port of Python vega/search/router.py — _`rerank_fusion` section.
+//! Combines `SQLite` FTS results with semantic search results using project-level scoring.
 
 use rustc_hash::FxHashMap;
 
@@ -55,7 +55,7 @@ fn negate_date_str(date_str: &str) -> String {
         .collect()
 }
 
-/// Score SQLite chunk results per-project.
+/// Score `SQLite` chunk results per-project.
 fn score_sqlite_chunks(
     chunks: &[ChunkRow],
     extracted: &ExtractedFields,
@@ -186,7 +186,7 @@ fn score_sqlite_chunks(
     (project_scores, name_by_id, id_by_name)
 }
 
-/// Convert SQLite chunk rows to unified result format.
+/// Convert `SQLite` chunk rows to unified result format.
 /// Takes ownership to avoid cloning all string fields.
 pub fn sqlite_rows_to_unified(chunks: Vec<ChunkRow>) -> Vec<UnifiedResult> {
     chunks
@@ -210,7 +210,7 @@ pub fn sqlite_rows_to_unified(chunks: Vec<ChunkRow>) -> Vec<UnifiedResult> {
 
 /// Perform fusion scoring and re-ranking on combined search results.
 ///
-/// Takes SQLite search results and returns:
+/// Takes `SQLite` search results and returns:
 /// - Re-sorted chunks by project score
 /// - Project score list
 /// - Unified results

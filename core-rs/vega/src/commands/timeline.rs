@@ -31,7 +31,7 @@ pub(super) fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
     let project_id = args
         .get("id")
         .or_else(|| args.get("project_id"))
-        .and_then(|v| v.as_i64());
+        .and_then(serde_json::Value::as_i64);
 
     let project_id = match project_id {
         Some(id) => id,
@@ -126,7 +126,10 @@ mod tests {
             result.data.get("project_name").and_then(|v| v.as_str()),
             Some("Timeline Project")
         );
-        assert_eq!(result.data.get("count").and_then(|v| v.as_u64()), Some(1));
+        assert_eq!(
+            result.data.get("count").and_then(serde_json::Value::as_u64),
+            Some(1)
+        );
         Ok(())
     }
 

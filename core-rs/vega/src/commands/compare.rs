@@ -5,7 +5,7 @@ use super::{CommandContext, CommandResult};
 use crate::config::VegaConfig;
 
 /// Compare two projects: shared/unique vendors, materials, persons, tags.
-/// Args: { "project_a": "프로젝트A", "project_b": "프로젝트B" }
+/// Args: { "`project_a"`: "프로젝트A", "`project_b"`: "프로젝트B" }
 pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
     let ctx = match CommandContext::new(config) {
         Ok(c) => c,
@@ -21,23 +21,11 @@ pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
         None => return CommandResult::err("compare", "project_b를 입력해주세요"),
     };
 
-    let id_a = match ctx.find_project(proj_a) {
-        Some(id) => id,
-        None => {
-            return CommandResult::err(
-                "compare",
-                &format!("프로젝트를 찾을 수 없습니다: {}", proj_a),
-            )
-        }
+    let Some(id_a) = ctx.find_project(proj_a) else {
+        return CommandResult::err("compare", &format!("프로젝트를 찾을 수 없습니다: {proj_a}"));
     };
-    let id_b = match ctx.find_project(proj_b) {
-        Some(id) => id,
-        None => {
-            return CommandResult::err(
-                "compare",
-                &format!("프로젝트를 찾을 수 없습니다: {}", proj_b),
-            )
-        }
+    let Some(id_b) = ctx.find_project(proj_b) else {
+        return CommandResult::err("compare", &format!("프로젝트를 찾을 수 없습니다: {proj_b}"));
     };
 
     // Compare each dimension
@@ -58,9 +46,9 @@ pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
             "summary": format!(
                 "{}와 {} 비교: 공통 업체 {}건, 공통 자재 {}건, 공통 인원 {}건",
                 proj_a, proj_b,
-                vendors["shared"].as_array().map(|a| a.len()).unwrap_or(0),
-                materials["shared"].as_array().map(|a| a.len()).unwrap_or(0),
-                persons["shared"].as_array().map(|a| a.len()).unwrap_or(0),
+                vendors["shared"].as_array().map_or(0, std::vec::Vec::len),
+                materials["shared"].as_array().map_or(0, std::vec::Vec::len),
+                persons["shared"].as_array().map_or(0, std::vec::Vec::len),
             ),
         }),
     )
@@ -71,18 +59,16 @@ fn compare_dimension(conn: &Connection, id_a: i64, id_b: i64, chunk_type: &str) 
     let get_set = |project_id: i64| -> Vec<String> {
         let sql =
             "SELECT DISTINCT TRIM(content) FROM chunks WHERE project_id = ?1 AND chunk_type = ?2";
-        let mut stmt = match conn.prepare(sql) {
-            Ok(s) => s,
-            Err(_) => return Vec::new(),
+        let Ok(mut stmt) = conn.prepare(sql) else {
+            return Vec::new();
         };
-        let rows = match stmt.query_map(params![project_id, chunk_type], |row| {
+        let Ok(rows) = stmt.query_map(params![project_id, chunk_type], |row| {
             let content: String = row.get(0)?;
             Ok(content)
-        }) {
-            Ok(r) => r,
-            Err(_) => return Vec::new(),
+        }) else {
+            return Vec::new();
         };
-        rows.filter_map(|r| r.ok())
+        rows.filter_map(std::result::Result::ok)
             .filter(|s| !s.is_empty())
             .collect()
     };
@@ -105,18 +91,16 @@ fn compare_dimension(conn: &Connection, id_a: i64, id_b: i64, chunk_type: &str) 
 fn compare_tags(conn: &Connection, id_a: i64, id_b: i64) -> Value {
     let get_tags = |project_id: i64| -> Vec<String> {
         let sql = "SELECT DISTINCT TRIM(t.name) FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?1";
-        let mut stmt = match conn.prepare(sql) {
-            Ok(s) => s,
-            Err(_) => return Vec::new(),
+        let Ok(mut stmt) = conn.prepare(sql) else {
+            return Vec::new();
         };
-        let rows = match stmt.query_map(params![project_id], |row| {
+        let Ok(rows) = stmt.query_map(params![project_id], |row| {
             let name: String = row.get(0)?;
             Ok(name)
-        }) {
-            Ok(r) => r,
-            Err(_) => return Vec::new(),
+        }) else {
+            return Vec::new();
         };
-        rows.filter_map(|r| r.ok())
+        rows.filter_map(std::result::Result::ok)
             .filter(|s| !s.is_empty())
             .collect()
     };
@@ -135,7 +119,7 @@ fn compare_tags(conn: &Connection, id_a: i64, id_b: i64) -> Value {
     })
 }
 
-/// Project statistics: counts of projects, chunks, comm_logs, tags.
+/// Project statistics: counts of projects, chunks, `comm_logs`, tags.
 /// Args: {} (no args needed)
 pub fn cmd_stats(_args: &Value, config: &VegaConfig) -> CommandResult {
     let ctx = match CommandContext::new(config) {
@@ -187,17 +171,15 @@ fn count_rows(conn: &Connection, sql: &str) -> i64 {
 
 fn get_chunk_type_counts(conn: &Connection) -> Value {
     let sql = "SELECT chunk_type, COUNT(*) FROM chunks GROUP BY chunk_type ORDER BY COUNT(*) DESC";
-    let mut stmt = match conn.prepare(sql) {
-        Ok(s) => s,
-        Err(_) => return json!({}),
+    let Ok(mut stmt) = conn.prepare(sql) else {
+        return json!({});
     };
-    let rows = match stmt.query_map([], |row| {
+    let Ok(rows) = stmt.query_map([], |row| {
         let ctype: String = row.get(0)?;
         let cnt: i64 = row.get(1)?;
         Ok((ctype, cnt))
-    }) {
-        Ok(r) => r,
-        Err(_) => return json!({}),
+    }) else {
+        return json!({});
     };
 
     let mut map = serde_json::Map::new();
@@ -209,17 +191,15 @@ fn get_chunk_type_counts(conn: &Connection) -> Value {
 
 fn get_status_counts(conn: &Connection) -> Value {
     let sql = "SELECT status, COUNT(*) FROM projects GROUP BY status ORDER BY COUNT(*) DESC";
-    let mut stmt = match conn.prepare(sql) {
-        Ok(s) => s,
-        Err(_) => return json!({}),
+    let Ok(mut stmt) = conn.prepare(sql) else {
+        return json!({});
     };
-    let rows = match stmt.query_map([], |row| {
+    let Ok(rows) = stmt.query_map([], |row| {
         let status: String = row.get(0)?;
         let cnt: i64 = row.get(1)?;
         Ok((status, cnt))
-    }) {
-        Ok(r) => r,
-        Err(_) => return json!({}),
+    }) else {
+        return json!({});
     };
 
     let mut map = serde_json::Map::new();

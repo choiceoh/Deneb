@@ -325,24 +325,21 @@ pub fn analyze_query(query: &str) -> QueryAnalysis {
         (
             SearchRoute::Hybrid,
             0.8,
-            format!(
-                "구조화({}) + 의미({}) → 혼합 검색",
-                structural_score, semantic_score
-            ),
+            format!("구조화({structural_score}) + 의미({semantic_score}) → 혼합 검색"),
         )
     } else if structural_score > 0 {
         if has_keywords {
             (
                 SearchRoute::Hybrid,
                 0.7,
-                format!("구조화({}) + 키워드 → 혼합 검색", structural_score),
+                format!("구조화({structural_score}) + 키워드 → 혼합 검색"),
             )
         } else {
             let conf = (0.7 + structural_score as f64 * 0.05).min(0.95);
             (
                 SearchRoute::Sqlite,
                 conf,
-                format!("구조화 필드 감지({}) → SQLite 우선", structural_score),
+                format!("구조화 필드 감지({structural_score}) → SQLite 우선"),
             )
         }
     } else {
@@ -351,17 +348,14 @@ pub fn analyze_query(query: &str) -> QueryAnalysis {
             (
                 SearchRoute::Hybrid,
                 0.75,
-                format!(
-                    "의미({}) + 키워드 → SQLite + 의미 검색 병행",
-                    semantic_score
-                ),
+                format!("의미({semantic_score}) + 키워드 → SQLite + 의미 검색 병행"),
             )
         } else {
             let conf = (0.7 + semantic_score as f64 * 0.05).min(0.95);
             (
                 SearchRoute::Semantic,
                 conf,
-                format!("의미 검색 패턴({}) → 벡터 검색 우선", semantic_score),
+                format!("의미 검색 패턴({semantic_score}) → 벡터 검색 우선"),
             )
         }
     };

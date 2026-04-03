@@ -38,7 +38,7 @@ pub(super) fn cmd_tags(_args: &Value, config: &VegaConfig) -> CommandResult {
             "project_count": r.get::<_, i64>(1)?,
         }))
     }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows.filter_map(std::result::Result::ok).collect(),
         Err(e) => return CommandResult::err("tags", &format!("태그 쿼리 실패: {e}")),
     };
 
@@ -46,6 +46,7 @@ pub(super) fn cmd_tags(_args: &Value, config: &VegaConfig) -> CommandResult {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use std::path::PathBuf;
 
@@ -102,7 +103,9 @@ mod tests {
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].get("name").and_then(|v| v.as_str()), Some("urgent"));
         assert_eq!(
-            tags[0].get("project_count").and_then(|v| v.as_i64()),
+            tags[0]
+                .get("project_count")
+                .and_then(serde_json::Value::as_i64),
             Some(1)
         );
         Ok(())

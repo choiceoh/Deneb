@@ -326,9 +326,8 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
                 let frame = frames
                     .last_mut()
                     .unwrap_or_else(|| unreachable!("frame stack invariant: non-empty"));
-                let previous = match &mut frame.last_token {
-                    Some(t) => t,
-                    None => continue,
+                let Some(previous) = &mut frame.last_token else {
+                    continue;
                 };
                 if previous.contains_repetition {
                     return true;
@@ -376,8 +375,8 @@ pub fn has_nested_repetition_impl(source: &str) -> bool {
 /// Check whether a regex source pattern contains nested repetition (`ReDoS` risk).
 ///
 /// This is the Rust equivalent of `hasNestedRepetition` from `src/security/safe-regex.ts`.
-pub fn has_nested_repetition(source: String) -> bool {
-    has_nested_repetition_impl(&source)
+pub fn has_nested_repetition(source: &str) -> bool {
+    has_nested_repetition_impl(source)
 }
 
 // ---------------------------------------------------------------------------

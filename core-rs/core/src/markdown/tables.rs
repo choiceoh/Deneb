@@ -154,9 +154,8 @@ fn render_table_bullet_value(
 }
 
 pub(crate) fn render_table_as_bullets(state: &mut RenderState) {
-    let table = match state.table.take() {
-        Some(t) => t,
-        None => return,
+    let Some(table) = state.table.take() else {
+        return;
     };
 
     let headers: Vec<TableCell> = table.headers.iter().map(trim_cell).collect();
@@ -208,9 +207,8 @@ pub(crate) fn render_table_as_bullets(state: &mut RenderState) {
 }
 
 pub(crate) fn render_table_as_code(state: &mut RenderState) {
-    let table = match state.table.take() {
-        Some(t) => t,
-        None => return,
+    let Some(table) = state.table.take() else {
+        return;
     };
 
     let headers: Vec<TableCell> = table.headers.iter().map(trim_cell).collect();
@@ -359,6 +357,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn bullets_row_label_is_bold() {
         let mut state = make_state_with_table(
             vec![make_cell("Name"), make_cell("Score")],

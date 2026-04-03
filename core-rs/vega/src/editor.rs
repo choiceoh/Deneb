@@ -1,6 +1,6 @@
 //! Markdown section editor for Vega.
 //!
-//! Port of Python vega/editor/md.py and vega/md_editor.py.
+//! Port of Python vega/editor/md.py and `vega/md_editor.py`.
 //! Provides section-level editing of project .md files.
 
 use std::fs;
@@ -12,7 +12,7 @@ use rusqlite::{params, Connection};
 use crate::config::VegaConfig;
 
 /// Find the .md file path for a project by ID or name.
-/// Returns (project_id, project_name, md_path) or None.
+/// Returns (`project_id`, `project_name`, `md_path`) or None.
 pub fn find_md_path(
     config: &VegaConfig,
     project_ref: &str,
@@ -56,7 +56,7 @@ pub fn find_md_path(
     None
 }
 
-/// Resolve source_file to an absolute path, checking existence.
+/// Resolve `source_file` to an absolute path, checking existence.
 fn resolve_source_path(config: &VegaConfig, source_file: &str) -> Option<PathBuf> {
     let clean = source_file
         .trim_start_matches("memory:")
@@ -82,7 +82,7 @@ fn resolve_source_path(config: &VegaConfig, source_file: &str) -> Option<PathBuf
 }
 
 /// Update a metadata field in a .md file's table.
-/// Returns (success, old_value, message).
+/// Returns (success, `old_value`, message).
 pub fn update_meta_field(
     md_path: &Path,
     field_name: &str,
@@ -90,7 +90,7 @@ pub fn update_meta_field(
 ) -> (bool, String, String) {
     let content = match fs::read_to_string(md_path) {
         Ok(c) => c,
-        Err(e) => return (false, String::new(), format!("파일 읽기 실패: {}", e)),
+        Err(e) => return (false, String::new(), format!("파일 읽기 실패: {e}")),
     };
 
     // Find the field in markdown table: | **필드명** | 값 |
@@ -99,9 +99,8 @@ pub fn update_meta_field(
         regex::escape(field_name)
     );
 
-    let re = match Regex::new(&pattern) {
-        Ok(r) => r,
-        Err(_) => return (false, String::new(), "패턴 생성 실패".to_string()),
+    let Ok(re) = Regex::new(&pattern) else {
+        return (false, String::new(), "패턴 생성 실패".to_string());
     };
 
     if let Some(cap) = re.captures(&content) {
@@ -124,15 +123,15 @@ pub fn update_meta_field(
             Ok(()) => (
                 true,
                 old_value.clone(),
-                format!("{}: {} → {}", field_name, old_value, new_value),
+                format!("{field_name}: {old_value} → {new_value}"),
             ),
-            Err(e) => (false, old_value, format!("파일 쓰기 실패: {}", e)),
+            Err(e) => (false, old_value, format!("파일 쓰기 실패: {e}")),
         }
     } else {
         (
             false,
             String::new(),
-            format!("필드 '{}' 를 찾을 수 없습니다", field_name),
+            format!("필드 '{field_name}' 를 찾을 수 없습니다"),
         )
     }
 }
@@ -154,7 +153,7 @@ pub fn update_db_field(
     };
 
     if let Ok(conn) = Connection::open(&config.db_path) {
-        let sql = format!("UPDATE projects SET {} = ?1 WHERE id = ?2", column);
+        let sql = format!("UPDATE projects SET {column} = ?1 WHERE id = ?2");
         conn.execute(&sql, params![new_value, project_id]).is_ok()
     } else {
         false
@@ -176,16 +175,15 @@ pub fn add_history_entry(md_path: &Path, text: &str) -> (bool, String) {
 fn add_to_section(md_path: &Path, section_name: &str, text: &str) -> (bool, String) {
     let content = match fs::read_to_string(md_path) {
         Ok(c) => c,
-        Err(e) => return (false, format!("파일 읽기 실패: {}", e)),
+        Err(e) => return (false, format!("파일 읽기 실패: {e}")),
     };
 
     let heading_pattern = format!(r"(?m)^##\s+{}", regex::escape(section_name));
-    let heading_re = match Regex::new(&heading_pattern) {
-        Ok(r) => r,
-        Err(_) => return (false, "패턴 생성 실패".to_string()),
+    let Ok(heading_re) = Regex::new(&heading_pattern) else {
+        return (false, "패턴 생성 실패".to_string());
     };
 
-    let entry = format!("- {}\n", text);
+    let entry = format!("- {text}\n");
 
     let new_content = if let Some(m) = heading_re.find(&content) {
         // Find end of heading line
@@ -222,7 +220,7 @@ fn add_to_section(md_path: &Path, section_name: &str, text: &str) -> (bool, Stri
     };
 
     match fs::write(md_path, new_content) {
-        Ok(()) => (true, format!("{} 섹션에 추가 완료", section_name)),
-        Err(e) => (false, format!("파일 쓰기 실패: {}", e)),
+        Ok(()) => (true, format!("{section_name} 섹션에 추가 완료")),
+        Err(e) => (false, format!("파일 쓰기 실패: {e}")),
     }
 }

@@ -55,29 +55,31 @@ impl EngineStore {
 
 /// Lock the engine store. Recovers from poison to avoid cascading panics.
 fn lock_engine_store() -> std::sync::MutexGuard<'static, EngineStore> {
-    ENGINES.lock().unwrap_or_else(|e| e.into_inner())
+    ENGINES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // ── Pure function exports ───────────────────────────────────────────────────
 
 /// Estimate token count from text (ceil(len/4)).
-pub fn compaction_estimate_tokens(text: String) -> u32 {
-    estimate_tokens(&text) as u32
+pub fn compaction_estimate_tokens(text: &str) -> u32 {
+    estimate_tokens(text) as u32
 }
 
 /// Format an epoch-millisecond timestamp as `YYYY-MM-DD HH:mm TZ`.
-pub fn compaction_format_timestamp(epoch_ms: i64, tz: String) -> String {
-    timestamp::format_timestamp(epoch_ms, &tz)
+pub fn compaction_format_timestamp(epoch_ms: i64, tz: &str) -> String {
+    timestamp::format_timestamp(epoch_ms, tz)
 }
 
 /// Evaluate whether compaction is needed. Returns JSON `CompactionDecision`.
 pub fn compaction_evaluate(
-    config_json: String,
+    config_json: &str,
     stored_tokens: u32,
     live_tokens: u32,
     token_budget: u32,
 ) -> String {
-    match compaction_evaluate_impl(&config_json, stored_tokens, live_tokens, token_budget) {
+    match compaction_evaluate_impl(config_json, stored_tokens, live_tokens, token_budget) {
         Ok(json) => json,
         Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
     }
@@ -100,8 +102,8 @@ fn compaction_evaluate_impl(
 }
 
 /// Resolve fresh tail ordinal from context items JSON.
-pub fn compaction_resolve_fresh_tail_ordinal(items_json: String, fresh_tail_count: u32) -> f64 {
-    let items: Vec<ContextItem> = match serde_json::from_str(&items_json) {
+pub fn compaction_resolve_fresh_tail_ordinal(items_json: &str, fresh_tail_count: u32) -> f64 {
+    let items: Vec<ContextItem> = match serde_json::from_str(items_json) {
         Ok(i) => i,
         Err(_) => return f64::INFINITY,
     };
@@ -114,31 +116,31 @@ pub fn compaction_resolve_fresh_tail_ordinal(items_json: String, fresh_tail_coun
 }
 
 /// Build leaf source text from messages JSON. Returns formatted text.
-pub fn compaction_build_leaf_source_text(messages_json: String, tz: String) -> String {
-    let messages: Vec<MessageRecord> = match serde_json::from_str(&messages_json) {
+pub fn compaction_build_leaf_source_text(messages_json: &str, tz: &str) -> String {
+    let messages: Vec<MessageRecord> = match serde_json::from_str(messages_json) {
         Ok(m) => m,
         Err(e) => return format!("error: {e}"),
     };
-    build_leaf_source_text(&messages, &tz)
+    build_leaf_source_text(&messages, tz)
 }
 
 /// Build condensed source text from summaries JSON. Returns formatted text.
-pub fn compaction_build_condensed_source_text(summaries_json: String, tz: String) -> String {
-    let summaries: Vec<SummaryRecord> = match serde_json::from_str(&summaries_json) {
+pub fn compaction_build_condensed_source_text(summaries_json: &str, tz: &str) -> String {
+    let summaries: Vec<SummaryRecord> = match serde_json::from_str(summaries_json) {
         Ok(s) => s,
         Err(e) => return format!("error: {e}"),
     };
-    build_condensed_source_text(&summaries, &tz)
+    build_condensed_source_text(&summaries, tz)
 }
 
 /// Generate a summary ID from content and timestamp.
-pub fn compaction_generate_summary_id(content: String, now_ms: f64) -> String {
-    generate_summary_id(&content, now_ms as i64)
+pub fn compaction_generate_summary_id(content: &str, now_ms: f64) -> String {
+    generate_summary_id(content, now_ms as i64)
 }
 
 /// Deterministic fallback when LLM summarization fails.
-pub fn compaction_deterministic_fallback(source: String, input_tokens: u32) -> String {
-    deterministic_fallback(&source, input_tokens as u64)
+pub fn compaction_deterministic_fallback(source: &str, input_tokens: u32) -> String {
+    deterministic_fallback(source, input_tokens as u64)
 }
 
 // ── Sweep engine exports ────────────────────────────────────────────────────
@@ -208,14 +210,14 @@ mod tests {
 
     #[test]
     fn test_compaction_estimate_tokens_napi() {
-        assert_eq!(compaction_estimate_tokens("hello world".into()), 5); // 11 chars / 2
-        assert_eq!(compaction_estimate_tokens("".into()), 1); // min clamp
+        assert_eq!(compaction_estimate_tokens("hello world"), 5); // 11 chars / 2
+        assert_eq!(compaction_estimate_tokens(""), 1); // min clamp
     }
 
     #[test]
     fn test_compaction_evaluate_napi() -> Result<(), Box<dyn std::error::Error>> {
         let config_json = serde_json::to_string(&CompactionConfig::default())?;
-        let result = compaction_evaluate(config_json, 810, 0, 1000); // above 0.80 threshold
+        let result = compaction_evaluate(&config_json, 810, 0, 1000); // above 0.80 threshold
         let decision: CompactionDecision = serde_json::from_str(&result)?;
         assert!(decision.should_compact);
         Ok(())
@@ -243,13 +245,13 @@ mod tests {
 
     #[test]
     fn test_compaction_format_timestamp_napi() {
-        let result = compaction_format_timestamp(1711324800000, "UTC".into());
+        let result = compaction_format_timestamp(1711324800000, "UTC");
         assert_eq!(result, "2024-03-25 00:00 UTC");
     }
 
     #[test]
     fn test_compaction_generate_summary_id_napi() {
-        let id = compaction_generate_summary_id("hello".into(), 1000.0);
+        let id = compaction_generate_summary_id("hello", 1000.0);
         assert!(id.starts_with("sum_"));
         assert_eq!(id.len(), 20);
     }

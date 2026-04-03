@@ -1,6 +1,6 @@
 //! Stop word lists for query keyword extraction.
 //!
-//! Each language is a `const` slice so callers can build HashSets or iterate
+//! Each language is a `const` slice so callers can build `HashSets` or iterate
 //! without allocating at compile time.  The Korean trailing-particle list is
 //! also kept here because it is purely language data.
 
@@ -232,4 +232,3 @@ pub const KO_TRAILING_PARTICLES: &[&str] = &[
     "에서", "으로", "에게", "한테", "처럼", "같이", "보다", "까지", "부터", "마다", "밖에", "대로",
     "은", "는", "이", "가", "을", "를", "의", "에", "로", "와", "과", "도", "만",
 ];
-

@@ -1,7 +1,7 @@
-//! SQLite schema v6 for Vega project database.
+//! `SQLite` schema v6 for Vega project database.
 //!
 //! Port of Python vega/db/schema.py — matches the real production schema
-//! with projects, chunks, tags, chunk_tags, comm_log, FTS5 indexes, and triggers.
+//! with projects, chunks, tags, `chunk_tags`, `comm_log`, FTS5 indexes, and triggers.
 
 use rusqlite::Connection;
 

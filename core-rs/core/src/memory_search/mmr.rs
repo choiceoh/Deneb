@@ -53,7 +53,7 @@ impl TokenSet {
 #[cfg(test)]
 fn tokenize(text: &str) -> HashSet<String> {
     let ts = TokenSet::new(text);
-    ts.tokens().map(|s| s.to_string()).collect()
+    ts.tokens().map(std::string::ToString::to_string).collect()
 }
 
 /// Jaccard similarity between two token sets (borrowed).

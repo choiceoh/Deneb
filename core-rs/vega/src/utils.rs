@@ -1,8 +1,8 @@
 //! Utility functions for Vega — fuzzy matching, SQL safety, Korean NL extraction.
 //!
 //! Port of Python vega/core.py utility functions:
-//! escape_like, fuzzy_find_project, find_project_id_in_text,
-//! extract_days, extract_limit, extract_bullets, build_search_suggestions.
+//! `escape_like`, `fuzzy_find_project`, `find_project_id_in_text`,
+//! `extract_days`, `extract_limit`, `extract_bullets`, `build_search_suggestions`.
 
 use regex::Regex;
 use rusqlite::Connection;
@@ -264,7 +264,7 @@ pub fn extract_bullets(content: &str, limit: usize) -> Vec<String> {
 
 /// Find a project ID from natural language text by scoring tokens
 /// against DB project names using fuzzy matching.
-/// Returns (project_id, matched_name, score).
+/// Returns (`project_id`, `matched_name`, score).
 pub fn find_project_id_in_text(
     conn: &Connection,
     text: &str,
@@ -283,7 +283,7 @@ pub fn find_project_id_in_text(
             ))
         })
         .ok()?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|(_, name)| !name.is_empty())
         .collect();
 
@@ -321,11 +321,10 @@ pub fn build_search_suggestions(conn: &Connection, query: &str, limit: usize) ->
     let mut seen_clients = std::collections::HashSet::new();
     let mut seen_persons = std::collections::HashSet::new();
 
-    let mut stmt = match conn
-        .prepare("SELECT id, name, client, person_internal, person_external FROM projects")
-    {
-        Ok(s) => s,
-        Err(_) => return suggestions,
+    let Ok(mut stmt) =
+        conn.prepare("SELECT id, name, client, person_internal, person_external FROM projects")
+    else {
+        return suggestions;
     };
 
     let rows: Vec<(i64, String, String, String, String)> = match stmt.query_map([], |r| {
@@ -337,7 +336,7 @@ pub fn build_search_suggestions(conn: &Connection, query: &str, limit: usize) ->
             r.get::<_, Option<String>>(4)?.unwrap_or_default(),
         ))
     }) {
-        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Ok(iter) => iter.filter_map(std::result::Result::ok).collect(),
         Err(_) => return suggestions,
     };
 
@@ -425,19 +424,19 @@ mod tests {
     #[test]
     fn test_sequence_similarity_similar() {
         let score = sequence_similarity("비금또", "비금도");
-        assert!(score >= 0.5, "Expected >= 0.5 but got {}", score);
+        assert!(score >= 0.5, "Expected >= 0.5 but got {score}");
     }
 
     #[test]
     fn test_sequence_similarity_different() {
         let score = sequence_similarity("서울", "부산");
-        assert!(score < 0.3, "Expected < 0.3 but got {}", score);
+        assert!(score < 0.3, "Expected < 0.3 but got {score}");
     }
 
     #[test]
     fn test_fuzzy_match_score_containment() {
         let score = fuzzy_match_score("비금도 프로젝트", "비금도");
-        assert!(score >= 0.85, "Expected >= 0.85 but got {}", score);
+        assert!(score >= 0.85, "Expected >= 0.85 but got {score}");
     }
 
     #[test]

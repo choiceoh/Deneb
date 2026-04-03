@@ -73,7 +73,7 @@ impl CommandResult {
 
 /// Trait implemented by every command handler.
 ///
-/// The optional AI helper methods (compact_result, ai_hints, build_bundle, summary)
+/// The optional AI helper methods (`compact_result`, `ai_hints`, `build_bundle`, summary)
 /// replace the centralised `match command { ... }` dispatch in ai.rs so each command
 /// owns its own presentation and hint logic.
 pub trait CommandHandler: Send + Sync {
@@ -186,7 +186,7 @@ impl CommandContext {
 }
 
 /// Route patterns: NL query → command name.
-/// Full port of Python NL_ROUTES from core.py.
+/// Full port of Python `NL_ROUTES` from core.py.
 static ROUTE_PATTERNS: &[(&str, &str)] = &[
     // 긴급/관심 필요
     (r"급한|긴급|위험|관심.*필요|우선순위|blocked|막힌", "urgent"),
@@ -363,7 +363,7 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
                 .data
                 .get("result_count")
                 .and_then(|rc| rc.get("projects"))
-                .and_then(|v| v.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(-1)
                 == 0)
     {
@@ -435,7 +435,7 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
             if let Some(handler) = registry.get(command) {
                 let conn = Connection::open(&config.db_path).ok();
                 let b = handler.build_bundle(&result.data, conn.as_ref());
-                if b.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+                if b.as_object().is_some_and(|o| !o.is_empty()) {
                     Some(b)
                 } else {
                     None
@@ -485,8 +485,8 @@ pub fn execute_query(query: &str, config: &VegaConfig) -> CommandResult {
 // -- Helpers --
 
 pub(super) fn open_db(config: &VegaConfig) -> Result<Connection, String> {
-    let conn = Connection::open(&config.db_path).map_err(|e| format!("DB 열기 실패: {}", e))?;
-    init_db(&conn).map_err(|e| format!("스키마 초기화 실패: {}", e))?;
+    let conn = Connection::open(&config.db_path).map_err(|e| format!("DB 열기 실패: {e}"))?;
+    init_db(&conn).map_err(|e| format!("스키마 초기화 실패: {e}"))?;
     Ok(conn)
 }
 
@@ -500,7 +500,7 @@ pub(super) fn truncate(s: &str, max: usize) -> String {
         s.to_string()
     } else {
         let truncated: String = s.chars().take(max).collect();
-        format!("{}...", truncated)
+        format!("{truncated}...")
     }
 }
 

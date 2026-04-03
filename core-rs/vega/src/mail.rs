@@ -1,6 +1,6 @@
 //! Mail → Markdown conversion for Vega.
 //!
-//! Port of Python vega/mail/converter.py and vega/mail_to_md.py.
+//! Port of Python vega/mail/converter.py and `vega/mail_to_md.py`.
 //! Processes incoming email data and appends to project .md files.
 
 use std::fs;
@@ -55,15 +55,12 @@ pub fn process_mail(mail_data: &Value, config: &VegaConfig, dry_run: bool) -> Va
     // Find matching project
     let project_id = find_project_for_mail(config, project_hint, subject, sender);
 
-    let (pid, pname, md_path) = match project_id {
-        Some((id, name, path)) => (id, name, path),
-        None => {
-            return json!({
-                "error": "매칭되는 프로젝트를 찾을 수 없습니다",
-                "subject": subject,
-                "sender": sender,
-            });
-        }
+    let Some((pid, pname, md_path)) = project_id else {
+        return json!({
+            "error": "매칭되는 프로젝트를 찾을 수 없습니다",
+            "subject": subject,
+            "sender": sender,
+        });
     };
 
     // Build comm_log entry
@@ -169,7 +166,7 @@ fn find_project_for_mail(
     }
 
     // Try matching by subject keywords against project names
-    let search_text = format!("{} {}", subject, sender);
+    let search_text = format!("{subject} {sender}");
     let rows: Vec<(i64, String, Option<String>)> = conn
         .prepare("SELECT id, name, source_file FROM projects")
         .ok()?
@@ -181,7 +178,7 @@ fn find_project_for_mail(
             ))
         })
         .ok()?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .map(|(id, name, sf)| (id, name.unwrap_or_default(), sf))
         .collect();
 
@@ -218,7 +215,7 @@ fn find_project_for_mail(
     })
 }
 
-/// Resolve .md file path from source_file field.
+/// Resolve .md file path from `source_file` field.
 fn resolve_md_path(config: &VegaConfig, source_file: &str) -> PathBuf {
     let clean = source_file
         .trim_start_matches("memory:")
@@ -240,15 +237,14 @@ fn append_mail_to_md(
 ) -> Result<(), String> {
     let content = fs::read_to_string(md_path).unwrap_or_default();
 
-    let entry = format!("- [{}] {}: {} — {}\n", date, sender, subject, summary);
+    let entry = format!("- [{date}] {sender}: {subject} — {summary}\n");
 
     // Find "## 커뮤니케이션" or "## 이력" section
     let new_content = if let Some(m) = COMM_SECTION_RE.find(&content) {
         // Insert after the heading line
         let pos = content[m.end()..]
             .find('\n')
-            .map(|p| m.end() + p + 1)
-            .unwrap_or(m.end());
+            .map_or(m.end(), |p| m.end() + p + 1);
         format!("{}{}{}", &content[..pos], entry, &content[pos..])
     } else if let Some(m) = HISTORY_SECTION_RE.find(&content) {
         // Insert before 이력 section
@@ -263,7 +259,7 @@ fn append_mail_to_md(
         format!("{}\n## 커뮤니케이션\n{}", content.trim_end(), entry)
     };
 
-    fs::write(md_path, new_content).map_err(|e| format!("파일 쓰기 실패: {}", e))
+    fs::write(md_path, new_content).map_err(|e| format!("파일 쓰기 실패: {e}"))
 }
 
 /// Truncate body text for summary.
@@ -273,6 +269,6 @@ fn truncate_body(body: &str, max_chars: usize) -> String {
         trimmed.to_string()
     } else {
         let truncated: String = trimmed.chars().take(max_chars).collect();
-        format!("{}...", truncated)
+        format!("{truncated}...")
     }
 }

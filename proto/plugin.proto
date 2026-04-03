@@ -9,7 +9,7 @@ package deneb.plugin;
 
 option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
-// PluginKind identifies the type of a plugin.
+// `PluginKind` identifies the type of a plugin.
 enum PluginKind {
   PLUGIN_KIND_UNSPECIFIED = 0;
   reserved 1; // was PLUGIN_KIND_CHANNEL
@@ -17,7 +17,7 @@ enum PluginKind {
   PLUGIN_KIND_FEATURE = 3;
 }
 
-// PluginMeta describes a registered plugin.
+// `PluginMeta` describes a registered plugin.
 message PluginMeta {
   string id = 1;
   string name = 2;
@@ -28,7 +28,7 @@ message PluginMeta {
   optional string source = 7;
 }
 
-// PluginHealthStatus represents the health of a single plugin.
+// `PluginHealthStatus` represents the health of a single plugin.
 message PluginHealthStatus {
   string plugin_id = 1;
   bool healthy = 2;
@@ -37,7 +37,7 @@ message PluginHealthStatus {
   optional int64 uptime_ms = 5;
 }
 
-// PluginRegistrySnapshot is a point-in-time view of all registered plugins.
+// `PluginRegistrySnapshot` is a point-in-time view of all registered plugins.
 message PluginRegistrySnapshot {
   repeated PluginMeta plugins = 1;
   repeated PluginHealthStatus health = 2;

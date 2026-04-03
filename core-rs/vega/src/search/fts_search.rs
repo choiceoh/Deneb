@@ -1,6 +1,6 @@
-//! SQLite FTS5 search engine for Vega.
+//! `SQLite` FTS5 search engine for Vega.
 //!
-//! Port of Python vega/search/router.py — sqlite_search section.
+//! Port of Python vega/search/router.py — `sqlite_search` section.
 //! Multi-stage search: strict FTS → broad FTS → trigram → LIKE fallback.
 
 use std::collections::HashSet;
@@ -45,7 +45,7 @@ pub struct CommRow {
     pub summary: String,
 }
 
-/// Result of a SQLite search.
+/// Result of a `SQLite` search.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SqliteSearchResult {
     pub chunks: Vec<ChunkRow>,
@@ -84,13 +84,13 @@ fn sanitize_fts_single(term: &str) -> Option<String> {
         return None;
     }
     if FTS_RESERVED.contains(t.to_uppercase().as_str()) {
-        return Some(format!("\"{}\"", t));
+        return Some(format!("\"{t}\""));
     }
     if t.contains(':') {
-        return Some(format!("\"{}\"", t));
+        return Some(format!("\"{t}\""));
     }
     if SPECIAL_CHARS.is_match(t) {
-        return Some(format!("\"{}\"", t));
+        return Some(format!("\"{t}\""));
     }
     if !HAS_ALNUM.is_match(t) {
         return None;
@@ -159,7 +159,7 @@ fn preprocess_korean(query: &str) -> Vec<String> {
     result
 }
 
-/// Execute a full SQLite search (chunks + comms).
+/// Execute a full `SQLite` search (chunks + comms).
 pub fn sqlite_search(
     conn: &Connection,
     query: &str,
@@ -176,8 +176,8 @@ pub fn sqlite_search(
         let mut cl_conds = Vec::new();
         for cl in &extracted.clients {
             cl_conds.push("(p.client LIKE ? OR p.name LIKE ?)".to_string());
-            params.push(format!("%{}%", cl));
-            params.push(format!("%{}%", cl));
+            params.push(format!("%{cl}%"));
+            params.push(format!("%{cl}%"));
         }
         conditions.push(format!("({})", cl_conds.join(" OR ")));
     }
@@ -187,8 +187,8 @@ pub fn sqlite_search(
         let mut p_conds = Vec::new();
         for p in &extracted.persons {
             p_conds.push("(p.person_internal LIKE ? OR c.content LIKE ?)".to_string());
-            params.push(format!("%{}%", p));
-            params.push(format!("%{}%", p));
+            params.push(format!("%{p}%"));
+            params.push(format!("%{p}%"));
         }
         conditions.push(format!("({})", p_conds.join(" OR ")));
     }
@@ -205,12 +205,12 @@ pub fn sqlite_search(
             let mut all_terms = vec![s.clone()];
             for (key, syns) in synonyms {
                 if s == key {
-                    all_terms.extend(syns.iter().map(|s| s.to_string()));
+                    all_terms.extend(syns.iter().map(std::string::ToString::to_string));
                 }
             }
             for syn in &all_terms {
                 s_conds.push("p.status LIKE ?".to_string());
-                params.push(format!("%{}%", syn));
+                params.push(format!("%{syn}%"));
             }
         }
         conditions.push(format!("({})", s_conds.join(" OR ")));
@@ -350,7 +350,7 @@ fn run_chunk_query(
         for term in &extracted.keywords {
             if !term.trim().is_empty() {
                 all_conditions.push("c.content LIKE ?".into());
-                all_params.push(format!("%{}%", term));
+                all_params.push(format!("%{term}%"));
             }
         }
     } else if !query.trim().is_empty()
@@ -359,7 +359,7 @@ fn run_chunk_query(
         && extracted.statuses.is_empty()
     {
         all_conditions.push("c.content LIKE ?".into());
-        all_params.push(format!("%{}%", query));
+        all_params.push(format!("%{query}%"));
     }
 
     // Tag filter
@@ -367,8 +367,8 @@ fn run_chunk_query(
         let mut tag_conds = Vec::new();
         for tag in &extracted.tags {
             tag_conds.push("(c.content LIKE ? OR p.name LIKE ?)".to_string());
-            all_params.push(format!("%{}%", tag));
-            all_params.push(format!("%{}%", tag));
+            all_params.push(format!("%{tag}%"));
+            all_params.push(format!("%{tag}%"));
         }
         all_conditions.push(format!("({})", tag_conds.join(" OR ")));
     }
@@ -384,16 +384,14 @@ fn run_chunk_query(
                 CASE WHEN p.status LIKE '%완료%' OR p.status LIKE '%취소%' THEN 1 ELSE 0 END,
                 bm25(chunks_fts, 5.0, 3.0, 2.0, 1.0),
                 c.entry_date DESC NULLS LAST
-             LIMIT {}",
-            CHUNK_LIMIT
+             LIMIT {CHUNK_LIMIT}"
         ));
     } else {
         sql.push_str(&format!(
             " ORDER BY
                 CASE WHEN p.status LIKE '%완료%' OR p.status LIKE '%취소%' THEN 1 ELSE 0 END,
                 c.entry_date DESC NULLS LAST, p.id DESC
-             LIMIT {}",
-            CHUNK_LIMIT
+             LIMIT {CHUNK_LIMIT}"
         ));
     }
 
@@ -408,10 +406,9 @@ fn run_trigram_query(conn: &Connection, query: &str) -> Result<Vec<ChunkRow>, ru
          FROM chunks c JOIN projects p ON c.project_id = p.id
          JOIN chunks_fts_trigram tri ON tri.rowid = c.id
          WHERE chunks_fts_trigram MATCH ?
-         LIMIT {}",
-        CHUNK_LIMIT
+         LIMIT {CHUNK_LIMIT}"
     );
-    let quoted = format!("\"{}\"", query);
+    let quoted = format!("\"{query}\"");
     execute_chunk_query(conn, &sql, &[quoted])
 }
 
@@ -432,7 +429,7 @@ fn run_like_query(
         .iter()
         .map(|_| "c.content LIKE ?".to_string())
         .collect();
-    let mut like_params: Vec<String> = all_terms.iter().map(|t| format!("%{}%", t)).collect();
+    let mut like_params: Vec<String> = all_terms.iter().map(|t| format!("%{t}%")).collect();
 
     let mut sql = format!(
         "SELECT DISTINCT c.id as chunk_id, p.id as project_id,
@@ -450,7 +447,7 @@ fn run_like_query(
             like_params.push(id.to_string());
         }
     }
-    sql.push_str(&format!(" LIMIT {}", LIKE_LIMIT));
+    sql.push_str(&format!(" LIMIT {LIKE_LIMIT}"));
 
     execute_chunk_query(conn, &sql, &like_params)
 }
@@ -483,9 +480,8 @@ fn run_comm_query(
         sanitize_fts_single(query)
     };
 
-    let fts_q = match comm_fts_query {
-        Some(q) => q,
-        None => return Vec::new(),
+    let Some(fts_q) = comm_fts_query else {
+        return Vec::new();
     };
 
     let mut sql = String::from(
@@ -508,14 +504,13 @@ fn run_comm_query(
         let mut cl_conds = Vec::new();
         for cl in &extracted.clients {
             cl_conds.push("p.name LIKE ?".to_string());
-            params.push(format!("%{}%", cl));
+            params.push(format!("%{cl}%"));
         }
         sql.push_str(&format!(" AND ({})", cl_conds.join(" OR ")));
     }
 
     sql.push_str(&format!(
-        " ORDER BY cl.log_date DESC, bm25(comm_fts, 3.0, 2.0, 2.0, 1.0) LIMIT {}",
-        COMM_LIMIT
+        " ORDER BY cl.log_date DESC, bm25(comm_fts, 3.0, 2.0, 2.0, 1.0) LIMIT {COMM_LIMIT}"
     ));
 
     execute_comm_query(conn, &sql, &params).unwrap_or_default()

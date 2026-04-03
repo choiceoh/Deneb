@@ -149,6 +149,7 @@ impl super::CommandHandler for HealthHandler {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use std::path::PathBuf;
 
@@ -175,7 +176,7 @@ mod tests {
 
         let cfg = VegaConfig {
             db_path,
-            md_dir: PathBuf::from(md_dir),
+            md_dir,
             ..VegaConfig::default()
         };
         Ok((tmp, cfg))

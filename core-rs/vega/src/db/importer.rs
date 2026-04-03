@@ -1,6 +1,6 @@
 //! File import and incremental update logic.
 //!
-//! Port of Python vega/db/importer.py — imports .md files into the Vega SQLite database.
+//! Port of Python vega/db/importer.py — imports .md files into the Vega `SQLite` database.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -60,7 +60,7 @@ pub fn import_files(config: &VegaConfig) -> Result<ImportStats, Box<dyn std::err
                 stats.imported += 1;
             }
             Err(e) => {
-                stats.errors.push(format!("{}: {}", fname, e));
+                stats.errors.push(format!("{fname}: {e}"));
             }
         }
     }
@@ -174,7 +174,7 @@ pub fn import_incremental(config: &VegaConfig) -> Result<ImportStats, Box<dyn st
     let existing_hashes: HashMap<String, String> = conn
         .prepare("SELECT source_file, content_hash FROM file_hashes")?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     let mut stats = ImportStats::default();
@@ -194,7 +194,7 @@ pub fn import_incremental(config: &VegaConfig) -> Result<ImportStats, Box<dyn st
             Ok(UpsertResult::Skipped) => stats.skipped += 1,
             Ok(UpsertResult::Updated) => stats.imported += 1,
             Err(e) => {
-                stats.errors.push(format!("{}: {}", fname, e));
+                stats.errors.push(format!("{fname}: {e}"));
             }
         }
     }
@@ -430,9 +430,8 @@ fn collect_md_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn collect_md_files_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
     };
     for entry in entries.flatten() {
         let path = entry.path();

@@ -55,7 +55,8 @@ fn decodes_entities() {
 
 #[test]
 fn decodes_extended_entities() {
-    let html = "<p>&mdash; &ndash; &hellip; &laquo; &raquo; &copy; &reg; &trade; &bull; &middot;</p>";
+    let html =
+        "<p>&mdash; &ndash; &hellip; &laquo; &raquo; &copy; &reg; &trade; &bull; &middot;</p>";
     let result = html_to_markdown(html);
     assert!(result.text.contains('—'), "mdash: {}", result.text);
     assert!(result.text.contains('–'), "ndash: {}", result.text);
@@ -275,7 +276,7 @@ fn youtube_like_korean_html() {
 /// Regression test for the X.com/Twitter HTML panic.
 ///
 /// Production logs showed:
-///   panicked at core/src/parsing/html_to_markdown.rs:295:21:
+///   panicked at `core/src/parsing/html_to_markdown.rs:295:21`:
 ///   byte index 1374 is not a char boundary; it is inside '…' (bytes 1373..1376)
 ///
 /// The input is Korean X.com HTML where the U+2026 ELLIPSIS character (3-byte
@@ -580,8 +581,16 @@ fn strip_noise_suppresses_nav() {
     let result = super::html_to_markdown_with_opts(html, &opts);
     assert!(result.text.contains("content"), "got: {}", result.text);
     assert!(result.text.contains("more"), "got: {}", result.text);
-    assert!(!result.text.contains("Home"), "nav should be suppressed: {}", result.text);
-    assert!(!result.text.contains("About"), "nav should be suppressed: {}", result.text);
+    assert!(
+        !result.text.contains("Home"),
+        "nav should be suppressed: {}",
+        result.text
+    );
+    assert!(
+        !result.text.contains("About"),
+        "nav should be suppressed: {}",
+        result.text
+    );
 }
 
 #[test]
@@ -591,8 +600,16 @@ fn strip_noise_suppresses_aside_svg_iframe_form() {
     let result = super::html_to_markdown_with_opts(html, &opts);
     assert!(result.text.contains("keep"), "got: {}", result.text);
     assert!(result.text.contains("end"), "got: {}", result.text);
-    assert!(!result.text.contains("sidebar"), "aside suppressed: {}", result.text);
-    assert!(!result.text.contains("frame"), "iframe suppressed: {}", result.text);
+    assert!(
+        !result.text.contains("sidebar"),
+        "aside suppressed: {}",
+        result.text
+    );
+    assert!(
+        !result.text.contains("frame"),
+        "iframe suppressed: {}",
+        result.text
+    );
 }
 
 #[test]
@@ -600,7 +617,11 @@ fn strip_noise_off_preserves_nav() {
     // Default (strip_noise=false) should preserve nav content.
     let html = "<p>content</p><nav><a href='/'>Home</a></nav>";
     let result = html_to_markdown(html);
-    assert!(result.text.contains("Home"), "nav should be preserved by default: {}", result.text);
+    assert!(
+        result.text.contains("Home"),
+        "nav should be preserved by default: {}",
+        result.text
+    );
 }
 
 #[test]
@@ -608,8 +629,16 @@ fn strip_noise_nested_nav() {
     let opts = super::HtmlToMarkdownOptions { strip_noise: true };
     let html = "<nav><ul><li><a href='/'>Home</a></li><li><a href='/about'>About</a></li></ul></nav><p>article content</p>";
     let result = super::html_to_markdown_with_opts(html, &opts);
-    assert!(result.text.contains("article content"), "got: {}", result.text);
-    assert!(!result.text.contains("Home"), "nested nav suppressed: {}", result.text);
+    assert!(
+        result.text.contains("article content"),
+        "got: {}",
+        result.text
+    );
+    assert!(
+        !result.text.contains("Home"),
+        "nested nav suppressed: {}",
+        result.text
+    );
 }
 
 // --- Extended entity tests ---
@@ -618,15 +647,51 @@ fn strip_noise_nested_nav() {
 fn decodes_typography_entities() {
     let html = "<p>&mdash; &ndash; &hellip; &laquo;text&raquo; &lsquo;x&rsquo; &ldquo;y&rdquo;</p>";
     let result = html_to_markdown(html);
-    assert!(result.text.contains('\u{2014}'), "mdash missing: {}", result.text);
-    assert!(result.text.contains('\u{2013}'), "ndash missing: {}", result.text);
-    assert!(result.text.contains('\u{2026}'), "hellip missing: {}", result.text);
-    assert!(result.text.contains('\u{00AB}'), "laquo missing: {}", result.text);
-    assert!(result.text.contains('\u{00BB}'), "raquo missing: {}", result.text);
-    assert!(result.text.contains('\u{2018}'), "lsquo missing: {}", result.text);
-    assert!(result.text.contains('\u{2019}'), "rsquo missing: {}", result.text);
-    assert!(result.text.contains('\u{201C}'), "ldquo missing: {}", result.text);
-    assert!(result.text.contains('\u{201D}'), "rdquo missing: {}", result.text);
+    assert!(
+        result.text.contains('\u{2014}'),
+        "mdash missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{2013}'),
+        "ndash missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{2026}'),
+        "hellip missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{00AB}'),
+        "laquo missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{00BB}'),
+        "raquo missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{2018}'),
+        "lsquo missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{2019}'),
+        "rsquo missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{201C}'),
+        "ldquo missing: {}",
+        result.text
+    );
+    assert!(
+        result.text.contains('\u{201D}'),
+        "rdquo missing: {}",
+        result.text
+    );
 }
 
 #[test]

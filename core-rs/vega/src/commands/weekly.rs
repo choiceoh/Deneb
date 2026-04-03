@@ -24,8 +24,12 @@ pub fn cmd_weekly(args: &Value, config: &VegaConfig) -> CommandResult {
     let total_activity: i64 = projects
         .iter()
         .map(|p| {
-            p.get("comm_count").and_then(|v| v.as_i64()).unwrap_or(0)
-                + p.get("chunk_count").and_then(|v| v.as_i64()).unwrap_or(0)
+            p.get("comm_count")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0)
+                + p.get("chunk_count")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0)
         })
         .sum();
 
@@ -86,7 +90,7 @@ fn fetch_active_projects(conn: &Connection, since: &str) -> Result<Vec<Value>, S
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })
         .map_err(|e| format!("프로젝트 조회 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     let mut projects: Vec<Value> = Vec::new();
@@ -114,7 +118,7 @@ fn fetch_active_projects(conn: &Connection, since: &str) -> Result<Vec<Value>, S
     Ok(projects)
 }
 
-/// Fetch comm_log entries for a project since a date.
+/// Fetch `comm_log` entries for a project since a date.
 fn fetch_recent_comms(
     conn: &Connection,
     project_id: i64,
@@ -140,7 +144,7 @@ fn fetch_recent_comms(
             }))
         })
         .map_err(|e| format!("커뮤니케이션 조회 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(rows)
@@ -170,7 +174,7 @@ fn fetch_recent_chunks(
             }))
         })
         .map_err(|e| format!("청크 조회 실패: {e}"))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(rows)
@@ -190,8 +194,8 @@ impl super::CommandHandler for WeeklyHandler {
     fn summary(&self, data: &serde_json::Value) -> String {
         let active = data
             .get("active_projects")
-            .and_then(|v| v.as_i64())
+            .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
-        format!("활성 프로젝트 {}개", active)
+        format!("활성 프로젝트 {active}개")
     }
 }

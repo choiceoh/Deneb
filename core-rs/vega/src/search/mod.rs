@@ -18,7 +18,7 @@ use fts_search::sqlite_search;
 use fusion::{rerank_fusion, sqlite_rows_to_unified, ProjectScore, UnifiedResult};
 use query_analyzer::{analyze_query, normalize_query, QueryAnalysis, SearchRoute};
 
-/// Full search result returned by SearchRouter.
+/// Full search result returned by `SearchRouter`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub query: String,
@@ -40,7 +40,7 @@ pub struct SearchMeta {
     pub rerank_mode: String,
 }
 
-/// Main search router. Analyzes queries, runs SQLite search, optionally runs
+/// Main search router. Analyzes queries, runs `SQLite` search, optionally runs
 /// semantic search via pre-computed embeddings (SGLang/Gemini), and applies
 /// fusion ranking.
 pub struct SearchRouter {
@@ -81,7 +81,7 @@ impl SearchRouter {
         self.search_inner(query, query_embedding, forced_route)
     }
 
-    /// Execute a full search: analyze → SQLite FTS → semantic (optional) → fusion → unified.
+    /// Execute a full search: analyze → `SQLite` FTS → semantic (optional) → fusion → unified.
     /// When `query_embedding` is provided (from SGLang/Gemini), uses it for semantic search.
     pub fn search_with_embedding(
         &self,

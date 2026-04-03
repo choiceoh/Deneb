@@ -15,7 +15,7 @@ impl super::CommandHandler for ListHandler {
 
     fn compact_result(&self, data: &Value) -> Value {
         json!({
-            "total": data.get("projects").and_then(|v| v.as_array()).map(|a| a.len()),
+            "total": data.get("projects").and_then(|v| v.as_array()).map(std::vec::Vec::len),
             "projects": data.get("projects").and_then(|v| v.as_array()).map(|arr| {
                 arr.iter().map(|p| json!({
                     "id": p.get("id"), "name": p.get("name"), "status": p.get("status"),
@@ -28,8 +28,7 @@ impl super::CommandHandler for ListHandler {
         let count = data
             .get("projects")
             .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
+            .map_or(0, std::vec::Vec::len);
         vec![json!({"situation": "project_list",
             "guide": format!("{}개 프로젝트 목록입니다. 상세는 brief <ID>로 확인하세요.", count)})]
     }
@@ -64,7 +63,7 @@ pub(super) fn cmd_list(_args: &Value, config: &VegaConfig) -> CommandResult {
             "comms": r.get::<_, i64>(7)?,
         }))
     }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows.filter_map(std::result::Result::ok).collect(),
         Err(e) => return CommandResult::err("list", &format!("프로젝트 목록 쿼리 실패: {e}")),
     };
 
@@ -72,6 +71,7 @@ pub(super) fn cmd_list(_args: &Value, config: &VegaConfig) -> CommandResult {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use std::path::PathBuf;
 
@@ -124,8 +124,16 @@ mod tests {
             .and_then(|v| v.as_array())
             .expect("projects should be an array");
         assert_eq!(projects.len(), 1);
-        assert_eq!(projects[0].get("chunks").and_then(|v| v.as_i64()), Some(1));
-        assert_eq!(projects[0].get("comms").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(
+            projects[0]
+                .get("chunks")
+                .and_then(serde_json::Value::as_i64),
+            Some(1)
+        );
+        assert_eq!(
+            projects[0].get("comms").and_then(serde_json::Value::as_i64),
+            Some(1)
+        );
         Ok(())
     }
 }

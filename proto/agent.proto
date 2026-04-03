@@ -9,7 +9,7 @@ package deneb.agent;
 
 option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
-// AgentStatus tracks the lifecycle of an agent execution.
+// `AgentStatus` tracks the lifecycle of an agent execution.
 enum AgentStatus {
   AGENT_STATUS_UNSPECIFIED = 0;
   AGENT_STATUS_SPAWNING = 1;
@@ -19,7 +19,7 @@ enum AgentStatus {
   AGENT_STATUS_KILLED = 5;
 }
 
-// AgentSpawnRequest initiates a new agent execution.
+// `AgentSpawnRequest` initiates a new agent execution.
 message AgentSpawnRequest {
   string session_key = 1;
   optional string model = 2;
@@ -29,7 +29,7 @@ message AgentSpawnRequest {
   optional string parent_session_key = 6;
 }
 
-// AgentStatusUpdate reports a change in agent execution state.
+// `AgentStatusUpdate` reports a change in agent execution state.
 message AgentStatusUpdate {
   string session_key = 1;
   AgentStatus status = 2;
@@ -37,7 +37,7 @@ message AgentStatusUpdate {
   optional string reason = 4;
 }
 
-// AgentExecutionResult is the final result of an agent execution.
+// `AgentExecutionResult` is the final result of an agent execution.
 message AgentExecutionResult {
   string session_key = 1;
   AgentStatus final_status = 2;

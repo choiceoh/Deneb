@@ -8,7 +8,7 @@
 
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 
-/// Map common IANA timezone names to (offset_seconds_east, abbreviation).
+/// Map common IANA timezone names to (`offset_seconds_east`, abbreviation).
 /// Standard offsets only; DST is not tracked.
 fn iana_to_offset(tz: &str) -> Option<(i32, &'static str)> {
     Some(match tz {
