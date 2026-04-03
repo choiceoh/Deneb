@@ -188,8 +188,8 @@ var toolCompressSkipSet = map[string]bool{
 	"analyze": true,
 	"diff":    true,
 	// Internal / already-small tools.
-	"memory": true,
-	"kv":     true,
+	"memory":        true,
+	"kv":            true,
 	"sessions_list": true,
 }
 

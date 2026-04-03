@@ -61,10 +61,8 @@ pub fn get_env_trimmed(key: &str) -> Option<String> {
 /// Read all environment-derived config inputs.
 pub fn read_config_env() -> ConfigEnv {
     let home_dir = resolve_home_dir();
-    let state_dir_override = get_env_trimmed("DENEB_STATE_DIR")
-        .map(|v| expand_user_path(&v));
-    let config_path_override = get_env_trimmed("DENEB_CONFIG_PATH")
-        .map(|v| expand_user_path(&v));
+    let state_dir_override = get_env_trimmed("DENEB_STATE_DIR").map(|v| expand_user_path(&v));
+    let config_path_override = get_env_trimmed("DENEB_CONFIG_PATH").map(|v| expand_user_path(&v));
     let gateway_port_override = get_env_trimmed("DENEB_GATEWAY_PORT")
         .and_then(|raw| raw.parse::<u16>().ok())
         .filter(|port| *port > 0);
