@@ -10,8 +10,8 @@ func allTools() []toolDef {
 				Name:        "deneb_chat_send",
 				Description: "Send a message to Deneb's AI agent and get a response. The agent can execute tools, write code, and perform complex tasks.",
 				InputSchema: objectSchema(
-					prop("message", "string", "The message to send to the agent"),
-					prop("session_key", "string", "Optional session key. If omitted, uses the active session"),
+					requiredProp("sessionKey", "string", "The session key to send to"),
+					requiredProp("message", "string", "The message to send to the agent"),
 				),
 			},
 		},
@@ -21,7 +21,8 @@ func allTools() []toolDef {
 				Name:        "deneb_chat_btw",
 				Description: "Ask Deneb a side question without affecting the main conversation context. Useful for quick lookups.",
 				InputSchema: objectSchema(
-					prop("message", "string", "The side question to ask"),
+					requiredProp("question", "string", "The side question to ask"),
+					requiredProp("sessionKey", "string", "The active session key"),
 				),
 			},
 		},
@@ -51,7 +52,7 @@ func allTools() []toolDef {
 				Name:        "deneb_sessions_send",
 				Description: "Send a message to a specific session by key.",
 				InputSchema: objectSchema(
-					requiredProp("session_key", "string", "The session key to send to"),
+					requiredProp("key", "string", "The session key to send to"),
 					requiredProp("message", "string", "The message to send"),
 				),
 			},
@@ -62,31 +63,21 @@ func allTools() []toolDef {
 				Name:        "deneb_sessions_history",
 				Description: "Get a summary/preview of a session's conversation history.",
 				InputSchema: objectSchema(
-					requiredProp("session_key", "string", "The session key"),
+					requiredProp("keys", "array", "Array of session keys to preview"),
 				),
 			},
 		},
 
 		// --- Memory ---
 		{
-			rpcMethod: "memory.search",
+			rpcMethod: "vega.memory-search",
 			tool: Tool{
 				Name:        "deneb_memory_search",
-				Description: "Search Deneb's persistent memory using hybrid search (vector + keyword). Returns relevant memories and diary entries.",
+				Description: "Search Deneb's persistent memory using FTS5 full-text search. Returns relevant memories and diary entries.",
 				InputSchema: objectSchema(
 					requiredProp("query", "string", "Search query"),
-					prop("limit", "integer", "Maximum number of results (default: 10)"),
-				),
-			},
-		},
-		{
-			rpcMethod: "memory.set",
-			tool: Tool{
-				Name:        "deneb_memory_set",
-				Description: "Store a new entry in Deneb's persistent memory.",
-				InputSchema: objectSchema(
-					requiredProp("key", "string", "Memory key/identifier"),
-					requiredProp("value", "string", "Content to store"),
+					prop("limit", "integer", "Maximum number of results (default: 20)"),
+					prop("project", "string", "Optional project name filter"),
 				),
 			},
 		},
@@ -152,9 +143,7 @@ func allTools() []toolDef {
 			tool: Tool{
 				Name:        "deneb_config_get",
 				Description: "Read the current gateway configuration.",
-				InputSchema: objectSchema(
-					prop("path", "string", "Optional dot-separated config path to read a specific section"),
-				),
+				InputSchema: objectSchema(),
 			},
 		},
 		{
@@ -174,7 +163,7 @@ func allTools() []toolDef {
 				Description: "Invoke any Deneb agent tool by name (exec, read, write, edit, grep, git, test, memory, web, http, etc.). Use this for tools not directly exposed as MCP tools.",
 				InputSchema: objectSchema(
 					requiredProp("tool", "string", "Tool name (e.g. 'exec', 'read', 'grep', 'git')"),
-					prop("input", "object", "Tool-specific input parameters as JSON object"),
+					prop("args", "object", "Tool-specific input parameters as JSON object"),
 				),
 			},
 		},
@@ -185,8 +174,7 @@ func allTools() []toolDef {
 				Description: "Execute a system command on the DGX Spark server.",
 				InputSchema: objectSchema(
 					requiredProp("command", "string", "The command to execute"),
-					prop("timeout", "integer", "Timeout in seconds (default: 30)"),
-					prop("background", "boolean", "Run in background (default: false)"),
+					prop("timeoutMs", "integer", "Timeout in milliseconds (default: 30000)"),
 				),
 			},
 		},
