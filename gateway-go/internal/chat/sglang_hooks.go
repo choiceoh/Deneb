@@ -18,6 +18,12 @@ import (
 //  2. Tool Output Compression: after tool execution, compress large outputs
 //  3. Auto Memory: after successful run, extract key learnings to MEMORY.md
 
+// sglangBackgroundSem limits concurrent background sglang requests across all
+// hooks (proactive context, tool compression, auto memory, session memory).
+// This prevents concurrent requests from exhausting KV cache on the local model,
+// which can cause a deadlock where no new request can be scheduled.
+var sglangBackgroundSem = make(chan struct{}, 2)
+
 // --- 1. Proactive Context ---
 // Injected in executeAgentRun, between context assembly and agent loop.
 // The local model analyzes the user's message and gathers relevant context.
@@ -94,6 +100,15 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	}
 	// Check sglang health (cached probe, no per-call overhead).
 	if !pilot.CheckSglangHealth() && !pilot.HasRegistry() {
+		return ""
+	}
+
+	// Acquire sglang background semaphore (non-blocking — skip if busy).
+	select {
+	case sglangBackgroundSem <- struct{}{}:
+		defer func() { <-sglangBackgroundSem }()
+	default:
+		logger.Debug("proactive context skipped: sglang semaphore full")
 		return ""
 	}
 
@@ -216,6 +231,14 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 	}
 	// Skip if sglang was recently confirmed down (cached result only, no probe).
 	if pilot.SglangRecentlyDown() {
+		return output
+	}
+
+	// Acquire sglang background semaphore (non-blocking — return original if busy).
+	select {
+	case sglangBackgroundSem <- struct{}{}:
+		defer func() { <-sglangBackgroundSem }()
+	default:
 		return output
 	}
 
@@ -393,6 +416,14 @@ const activitySummarySystemPrompt = `에이전트의 최근 도구 사용 내역
 func SummarizeToolActivity(ctx context.Context, activities []string) (string, error) {
 	if !pilot.CheckSglangHealth() {
 		return "", fmt.Errorf("sglang unavailable")
+	}
+
+	// Acquire sglang background semaphore (non-blocking — skip if busy).
+	select {
+	case sglangBackgroundSem <- struct{}{}:
+		defer func() { <-sglangBackgroundSem }()
+	default:
+		return "", fmt.Errorf("sglang semaphore full")
 	}
 
 	// Build user message from recent tool activity descriptions.
