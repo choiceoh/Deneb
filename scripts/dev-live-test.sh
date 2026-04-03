@@ -734,7 +734,7 @@ case "${1:-help}" in
     echo "  rpc M [P]           Single RPC call (new connection per call)"
     echo "  session C1 C2..     Multi-turn: multiple RPCs on one connection"
     echo "  chat MSG            Send chat message, stream full response"
-    echo "  quality [SCENARIO]  Quality test (all|health|chat|tools|format)"
+    echo "  quality [SCENARIO]  Quality test (all|health|chat|tools|format|tools-deep|edge)"
     echo "  quality-custom MSG  Quality test with custom message"
     echo ""
     echo "Autoresearch:"
