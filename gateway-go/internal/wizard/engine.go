@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // SessionStatus represents the lifecycle state of a wizard session.
@@ -158,6 +159,8 @@ func (e *Engine) GetStatus(sessionID string) (*Session, error) {
 
 func genSessionID() string {
 	b := make([]byte, 12)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("wiz-%d", time.Now().UnixNano())
+	}
 	return "wiz-" + hex.EncodeToString(b)
 }

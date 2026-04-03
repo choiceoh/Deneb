@@ -39,8 +39,9 @@ Rust core is linked as a static library via CGo. Each FFI module has two files:
 
 Modules: `core`, `memory`, `markdown`, `parsing`, `context_engine`, `compaction`, `vega`
 
-FFI error codes in `internal/ffi/ffi_error_codes_gen.go` are generated from `core-rs/core/src/ffi_utils.rs` via `make ffi-gen`.
-Protocol error codes (`ErrorCode` enum) are defined in `proto/gateway.proto` and auto-generated into `core-rs/core/src/protocol/error_codes.rs` via `make proto-error-codes-gen`.
+All error codes are defined in `proto/gateway.proto` and auto-generated via `make error-codes-gen`:
+- Protocol codes (`ErrorCode` enum) → `pkg/protocol/errors_gen.go` + `core-rs/core/src/protocol/error_codes.rs`
+- FFI codes (`FfiErrorCode` enum) → `internal/ffi/ffi_error_codes_gen.go` + same Rust file
 
 ## Common Tasks
 
@@ -63,7 +64,8 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 |------|--------|---------|
 | `internal/chat/toolreg/tool_schemas_gen.go` | `internal/chat/toolreg/tool_schemas.yaml` | `make tool-schemas` |
 | `internal/autoreply/thinking/model_caps_gen.go` | `internal/autoreply/thinking/model_caps.yaml` | `make model-caps` |
-| `internal/ffi/ffi_error_codes_gen.go` | `core-rs/core/src/ffi_utils.rs` | `make ffi-gen` |
+| `internal/ffi/ffi_error_codes_gen.go` | `proto/gateway.proto` (FfiErrorCode) | `make error-codes-gen` |
+| `pkg/protocol/errors_gen.go` | `proto/gateway.proto` (ErrorCode) | `make error-codes-gen` |
 | `pkg/protocol/gen/*.pb.go` | `proto/*.proto` | `make proto` |
 
 To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.

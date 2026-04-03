@@ -24,10 +24,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// memoryExtractSem limits concurrent memory extraction goroutines to prevent
-// overloading the local sglang model during rapid successive messages (e.g.,
-// Telegram message bursts). At most 2 extractions run concurrently.
-var memoryExtractSem = make(chan struct{}, 2)
+// memoryExtractSem is an alias for the unified sglang background semaphore.
+// All background sglang calls (proactive context, tool compression, auto memory,
+// session memory) share this semaphore to prevent KV cache exhaustion.
+var memoryExtractSem = sglangBackgroundSem
 
 // persistInterruptedContext saves a context note to the transcript when a run
 // is aborted while tools were executing. This ensures the next run has context

@@ -5,7 +5,6 @@ package skill
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
@@ -54,14 +53,15 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 
 func skillsStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			AgentID string `json:"agentId,omitempty"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		_ = json.Unmarshal(req.Params, &p)
 
 		status := deps.Skills.GetStatus(p.AgentID)
-		resp := protocol.MustResponseOK(req.ID, status)
-		return resp
+		return rpcutil.RespondOK(req.ID, status)
 	}
 }
 
@@ -71,8 +71,7 @@ func skillsBins(deps Deps) rpcutil.HandlerFunc {
 		if bins == nil {
 			bins = make([]string, 0)
 		}
-		resp := protocol.MustResponseOK(req.ID, map[string]any{"bins": bins})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]any{"bins": bins})
 	}
 }
 

@@ -22,6 +22,10 @@ linters:
     - exhaustive
     - copyloopvar
     - intrange
+    - gosec
+    - nakedret
+    - thelper
+    - usestdlibvars
   settings:
     errcheck:
       check-type-assertions: true
@@ -56,6 +60,12 @@ linters:
       checks:
         - all
         - "-SA1019"
+    gosec:
+      excludes:
+        - G104  # Handled via errcheck linter instead.
+        - G304  # File path from variable — common in gateway serving files.
+    nakedret:
+      max-func-lines: 20
     exhaustive:
       default-signifies-exhaustive: true
   exclusions:
@@ -66,12 +76,13 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # Test files: relax errcheck and style linters.
+      # Test files: relax errcheck, style, and security linters.
       - path: "_test\\.go$"
         linters:
           - errcheck
           - gocritic
           - unparam
+          - gosec
       # Generated protobuf code.
       - path: "pkg/protocol/gen/"
         linters:

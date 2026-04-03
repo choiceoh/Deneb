@@ -25,6 +25,8 @@ type Skill struct {
 	Version string `json:"version,omitempty"`
 	// Source indicates where the skill was discovered.
 	Source SkillSource `json:"source"`
+	// Type defines how the skill is executed: prompt (default), local, or system.
+	Type SkillType `json:"type,omitempty"`
 }
 
 // SkillSource indicates the origin of a skill.

@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -20,11 +21,11 @@ type Services struct {
 
 // WireServices assembles the gateway server with all backing services:
 // Gemini embedder, Vega search backend, and Jina reranker.
-func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.Logger, version string, useColor bool) Services {
+func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.Logger, version string, useColor bool) (Services, error) {
 	geminiEmbedder := newGeminiEmbedder(logger)
 	jinaKey := vega.GetJinaAPIKey()
 
-	srv := server.New(addr,
+	srv, err := server.New(addr,
 		server.WithLogger(logger),
 		server.WithVersion(version),
 		server.WithConfig(rtCfg),
@@ -32,23 +33,20 @@ func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.
 		server.WithGeminiEmbedder(geminiEmbedder),
 		server.WithJinaAPIKey(jinaKey),
 	)
+	if err != nil {
+		return Services{}, fmt.Errorf("server init: %w", err)
+	}
 
 	vegaEnabled := initVega(srv, logger, geminiEmbedder)
 
 	return Services{
 		Server:      srv,
 		VegaEnabled: vegaEnabled,
-	}
+	}, nil
 }
 
 func newGeminiEmbedder(logger *slog.Logger) *embedding.GeminiEmbedder {
-	embedder := embedding.NewGeminiEmbedder(os.Getenv("GEMINI_API_KEY"), logger)
-	if embedder != nil {
-		logger.Info("gemini: embedding enabled (gemini-embedding-2-preview)")
-	} else {
-		logger.Info("gemini: embedding disabled (GEMINI_API_KEY not set)")
-	}
-	return embedder
+	return embedding.NewGeminiEmbedder(os.Getenv("GEMINI_API_KEY"), logger)
 }
 
 // initVega configures the Vega search backend with Gemini embedding,

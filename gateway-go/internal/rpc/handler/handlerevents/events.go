@@ -4,7 +4,6 @@ package handlerevents
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
@@ -35,79 +34,97 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 
 	// Define handlers once, register under both legacy and TS-compatible names.
 	subscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ConnID string `json:"connId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" {
+		if p.ConnID == "" {
 			return rpcerr.MissingParam("connId").Response(req.ID)
 		}
 		deps.Broadcaster.SubscribeSessionEvents(p.ConnID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
+		resp := rpcutil.RespondOK(req.ID, map[string]bool{"subscribed": true})
 		return resp
 	}
 
 	unsubscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ConnID string `json:"connId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" {
+		if p.ConnID == "" {
 			return rpcerr.MissingParam("connId").Response(req.ID)
 		}
 		deps.Broadcaster.UnsubscribeSessionEvents(p.ConnID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		resp := rpcutil.RespondOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
 	}
 
 	subscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ConnID     string `json:"connId"`
 			SessionKey string `json:"sessionKey"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.SessionKey == "" {
+		if p.ConnID == "" || p.SessionKey == "" {
 			return rpcerr.MissingParam("connId and sessionKey").Response(req.ID)
 		}
 		deps.Broadcaster.SubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
+		resp := rpcutil.RespondOK(req.ID, map[string]bool{"subscribed": true})
 		return resp
 	}
 
 	unsubscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ConnID     string `json:"connId"`
 			SessionKey string `json:"sessionKey"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.SessionKey == "" {
+		if p.ConnID == "" || p.SessionKey == "" {
 			return rpcerr.MissingParam("connId and sessionKey").Response(req.ID)
 		}
 		deps.Broadcaster.UnsubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		resp := rpcutil.RespondOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
 	}
 
 	// Tool event subscription: routes session.tool events for a specific run
 	// to a single connection instead of broadcasting to all subscribers.
 	subscribeToolEvents := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			ConnID string `json:"connId"`
 			RunID  string `json:"runId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.RunID == "" {
+		if p.ConnID == "" || p.RunID == "" {
 			return rpcerr.MissingParam("connId and runId").Response(req.ID)
 		}
 		deps.Broadcaster.RegisterToolEventRecipient(p.RunID, p.ConnID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
+		resp := rpcutil.RespondOK(req.ID, map[string]bool{"subscribed": true})
 		return resp
 	}
 
 	unsubscribeToolEvents := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			RunID string `json:"runId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.RunID == "" {
+		if p.RunID == "" {
 			return rpcerr.MissingParam("runId").Response(req.ID)
 		}
 		deps.Broadcaster.UnregisterToolEventRecipient(p.RunID)
-		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		resp := rpcutil.RespondOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
 	}
 
@@ -142,14 +159,17 @@ func BroadcastMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 
 func eventsBroadcast(deps EventsDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Event   string `json:"event"`
 			Payload any    `json:"payload"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Event == "" {
+		if p.Event == "" {
 			return rpcerr.MissingParam("event").Response(req.ID)
 		}
 		sent, _ := deps.Broadcaster.Broadcast(p.Event, p.Payload)
-		return protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
+		return rpcutil.RespondOK(req.ID, map[string]int{"sent": sent})
 	}
 }

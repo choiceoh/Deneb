@@ -20,6 +20,11 @@
 #   scripts/dev-live-test.sh logs-errors        Show only error/warning lines from logs
 #   scripts/dev-live-test.sh logs-since SECS    Show logs from last N seconds
 #
+# Reproduction (AI agent reproduces user-reported symptoms):
+#   scripts/dev-live-test.sh chat-check MSG [--expect PAT] [--expect-tool TOOL] ...
+#   scripts/dev-live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
+#   scripts/dev-live-test.sh tool-check TOOL_NAME MSG
+#
 # The dev instance runs on port 18790 (separate from production on 18789).
 
 set -euo pipefail
@@ -313,11 +318,22 @@ async def main():
             print('Handshake FAILED:', json.dumps(hello, indent=2))
             sys.exit(1)
 
+        # Create session.
+        sess = f'dev-chat-{int(time.time()*1000)}'
+        await ws.send(json.dumps({
+            'type': 'req', 'id': 'chat-sess', 'method': 'sessions.create',
+            'params': {'key': sess, 'kind': 'direct'}
+        }))
+        sess_resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+        if not sess_resp.get('ok'):
+            print('Session create FAILED:', json.dumps(sess_resp, indent=2))
+            sys.exit(1)
+
         # Send chat message.
         rpc_id = f'chat-{int(time.time()*1000)}'
         rpc = {
             'type': 'req', 'id': rpc_id, 'method': 'chat.send',
-            'params': {'message': MESSAGE}
+            'params': {'sessionKey': sess, 'message': MESSAGE}
         }
         print(f'==> Sending chat: {MESSAGE[:80]}')
         await ws.send(json.dumps(rpc))
@@ -707,6 +723,12 @@ case "${1:-help}" in
   logs-grep)   shift; cmd_logs_grep "$@" ;;
   logs-errors) shift; cmd_logs_errors "$@" ;;
   logs-since)  shift; cmd_logs_since "$@" ;;
+
+  # --- Reproduction commands (delegate to dev-reproduce.py) ---
+  chat-check)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" chat-check "$@" ;;
+  multi-chat)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" multi-chat "$@" ;;
+  tool-check)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" tool-check "$@" ;;
+
   help|*)
     echo "Usage: scripts/dev-live-test.sh COMMAND [ARGS]"
     echo ""
@@ -723,8 +745,14 @@ case "${1:-help}" in
     echo "  rpc M [P]           Single RPC call (new connection per call)"
     echo "  session C1 C2..     Multi-turn: multiple RPCs on one connection"
     echo "  chat MSG            Send chat message, stream full response"
-    echo "  quality [SCENARIO]  Quality test (all|health|chat|tools|format)"
+    echo "  quality [SCENARIO]  Quality test (all|health|chat|tools|format|tools-deep|edge)"
     echo "  quality-custom MSG  Quality test with custom message"
+    echo ""
+    echo "Reproduction (for AI agents to reproduce user-reported symptoms):"
+    echo "  chat-check MSG [--expect PAT] [--expect-not PAT] [--expect-tool TOOL]"
+    echo "                      Chat + assertions (Korean, latency, patterns, tools)"
+    echo "  multi-chat M1 M2..  Multi-turn chat on same session (context carryover)"
+    echo "  tool-check TOOL MSG Verify specific tool invocation"
     echo ""
     echo "Autoresearch:"
     echo "  metric-script       Generate metric script for autoresearch"

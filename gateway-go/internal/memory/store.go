@@ -388,8 +388,7 @@ func NewStore(dbPath string) (*Store, error) {
 	ctx := context.Background()
 	if v, _ := store.GetMeta(ctx, "compaction_v1"); v == "" {
 		if n, err := store.CompactMemory(ctx); err == nil && n > 0 {
-			// Log to stderr since slog may not be available yet.
-			fmt.Fprintf(os.Stderr, "aurora-memory: one-time compaction removed %d noise facts\n", n)
+			store.logger.Info("one-time compaction completed", "removed", n)
 		}
 		_ = store.SetMeta(ctx, "compaction_v1", "done")
 	}

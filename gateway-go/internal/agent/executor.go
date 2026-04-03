@@ -724,7 +724,7 @@ func executeOneTool(
 	runLog *agentlog.RunLogger,
 ) llm.ContentBlock {
 	if hooks.OnToolStart != nil {
-		hooks.OnToolStart(tc.Name, turnReason)
+		hooks.OnToolStart(tc.Name, turnReason, tc.Input)
 	}
 	if hooks.OnToolEmit != nil {
 		hooks.OnToolEmit(tc.Name, tc.ID)

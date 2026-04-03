@@ -1,9 +1,8 @@
-// reranker.go — HTTP client for cross-encoder reranking via Jina Reranker API.
+// reranker.go — HTTP client for cross-encoder reranking.
 //
-// Calls the Jina AI /v1/rerank endpoint to score query-document pairs using
-// jina-reranker-v2-base-multilingual.
-//
-// API docs: https://api.jina.ai
+// Calls a /v1/rerank endpoint to score query-document pairs using a
+// cross-encoder model. Supports both local (jina-reranker-v3) and remote
+// (Jina API) backends.
 package vega
 
 import (
@@ -23,10 +22,10 @@ const (
 	// Truncate documents to avoid exceeding the model's context window (8192 tokens).
 	// ~1000 chars is a safe limit for typical multilingual content.
 	maxRerankDocChars = 1000
-	// Default Jina Reranker API endpoint.
-	defaultRerankURL = "https://api.jina.ai/v1/rerank"
+	// Default reranker endpoint (local jina-reranker-v3 server).
+	defaultRerankURL = "http://localhost:8090/v1/rerank"
 	// Default model.
-	defaultJinaRerankModel = "jina-reranker-v2-base-multilingual"
+	defaultJinaRerankModel = "jinaai/jina-reranker-v3"
 )
 
 // RerankResult holds a single reranked document with its relevance score.
@@ -44,9 +43,10 @@ type Reranker struct {
 	logger *slog.Logger
 }
 
-// RerankConfig configures the Jina reranker client.
+// RerankConfig configures the reranker client.
 type RerankConfig struct {
-	// APIKey is the Jina AI API key (required). Read from JINA_API_KEY env.
+	// APIKey is the bearer token for the reranker endpoint.
+	// Optional for local servers; required for remote Jina API.
 	APIKey string
 	// URL overrides the default Jina API endpoint (optional).
 	URL string
@@ -55,12 +55,9 @@ type RerankConfig struct {
 	Logger *slog.Logger
 }
 
-// NewReranker creates a reranker client that calls the Jina Reranker API.
-// Returns nil if APIKey is empty.
+// NewReranker creates a reranker client. Always returns a valid client
+// (local server needs no API key). Pass APIKey for remote Jina API usage.
 func NewReranker(cfg RerankConfig) *Reranker {
-	if cfg.APIKey == "" {
-		return nil
-	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -129,7 +126,9 @@ func (r *Reranker) Rerank(ctx context.Context, query string, documents []string,
 		return nil, fmt.Errorf("reranker: create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+r.apiKey)
+	if r.apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+r.apiKey)
+	}
 
 	resp, err := r.client.Do(httpReq)
 	if err != nil {

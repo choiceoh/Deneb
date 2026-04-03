@@ -15,10 +15,13 @@ type LoggingResult struct {
 	UseColor bool
 }
 
-// BuildEarlyLogger creates a minimal text-format logger for use before config loads.
+// BuildEarlyLogger creates a minimal console-format logger for use before config loads.
 func BuildEarlyLogger(flagLevel string) *slog.Logger {
 	level := ParseLogLevel(flagLevel)
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	return slog.New(logging.NewConsoleHandler(os.Stderr, &logging.ConsoleOptions{
+		Level: level,
+		Color: true,
+	}))
 }
 
 // BuildLogger constructs the full structured logger from config and a CLI flag override.

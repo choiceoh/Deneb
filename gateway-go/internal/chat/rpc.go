@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -20,26 +21,21 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		Attachments  []ChatAttachment `json:"attachments,omitempty"`
 		Delivery     *DeliveryContext `json:"delivery,omitempty"`
 		ClientRunID  string           `json:"clientRunId,omitempty"`
-		Model        string           `json:"model,omitempty"` // role name: "main","lightweight","pilot","fallback"
+		Model        string           `json:"model,omitempty"` // role name: "main","lightweight","fallback"
 		WorkspaceDir string           `json:"workspaceDir,omitempty"`
 		DeepWork     bool             `json:"deepWork,omitempty"` // extended autonomous mode (2-3 hours)
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid chat.send params: "+err.Error()))
+		return rpcerr.InvalidRequest("invalid chat.send params: " + err.Error()).Response(req.ID)
 	}
 	if p.SessionKey == "" {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "sessionKey is required"))
+		return rpcerr.MissingParam("sessionKey").Response(req.ID)
 	}
 	if p.Message == "" && len(p.Attachments) == 0 {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "message or attachments required"))
+		return rpcerr.New(protocol.ErrMissingParam, "message or attachments required").Response(req.ID)
 	}
 	if len(p.Message) > h.maxMessageBytes {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest,
-			fmt.Sprintf("message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes)))
+		return rpcerr.Newf(protocol.ErrInvalidRequest, "message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes).Response(req.ID)
 	}
 
 	// Pre-process slash commands before dispatching to agent.
@@ -88,12 +84,10 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 		IdempotencyKey string           `json:"idempotencyKey,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid sessions.send params: "+err.Error()))
+		return rpcerr.InvalidRequest("invalid sessions.send params: " + err.Error()).Response(req.ID)
 	}
 	if p.Key == "" {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "key is required"))
+		return rpcerr.MissingParam("key").Response(req.ID)
 	}
 
 	// Interrupt any active run and clear the pending queue for this session.
@@ -122,16 +116,14 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 		Key          string `json:"key"`
 		Message      string `json:"message,omitempty"`
 		Thinking     string `json:"thinking,omitempty"`
-		Model        string `json:"model,omitempty"` // role name: "main","lightweight","pilot","fallback"
+		Model        string `json:"model,omitempty"` // role name: "main","lightweight","fallback"
 		SystemPrompt string `json:"systemPrompt,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid sessions.steer params: "+err.Error()))
+		return rpcerr.InvalidRequest("invalid sessions.steer params: " + err.Error()).Response(req.ID)
 	}
 	if p.Key == "" {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "key is required"))
+		return rpcerr.MissingParam("key").Response(req.ID)
 	}
 
 	// Interrupt any active run and clear the pending queue for this session.
@@ -156,12 +148,10 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 		RunID string `json:"runId,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid sessions.abort params: "+err.Error()))
+		return rpcerr.InvalidRequest("invalid sessions.abort params: " + err.Error()).Response(req.ID)
 	}
 	if p.Key == "" && p.RunID == "" {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "key or runId is required"))
+		return rpcerr.New(protocol.ErrMissingParam, "key or runId is required").Response(req.ID)
 	}
 
 	h.abortMu.Lock()
@@ -257,12 +247,10 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 		Limit      int    `json:"limit,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid chat.history params"))
+		return rpcerr.InvalidRequest("invalid chat.history params").Response(req.ID)
 	}
 	if p.SessionKey == "" {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "sessionKey is required"))
+		return rpcerr.MissingParam("sessionKey").Response(req.ID)
 	}
 
 	limit := p.Limit
@@ -274,8 +262,7 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 	if h.transcript != nil {
 		msgs, total, err := h.transcript.Load(p.SessionKey, limit)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "transcript load error: "+err.Error()))
+			return rpcerr.DependencyFailed("transcript load error: " + err.Error()).Response(req.ID)
 		}
 		if msgs == nil {
 			msgs = []ChatMessage{}
@@ -302,12 +289,10 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 		SessionKey  string `json:"sessionKey"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid chat.abort params"))
+		return rpcerr.InvalidRequest("invalid chat.abort params").Response(req.ID)
 	}
 	if p.ClientRunID == "" && p.SessionKey == "" {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "clientRunId or sessionKey is required"))
+		return rpcerr.New(protocol.ErrMissingParam, "clientRunId or sessionKey is required").Response(req.ID)
 	}
 
 	h.abortMu.Lock()
@@ -333,8 +318,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 	h.abortMu.Unlock()
 
 	if !found {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrNotFound, "no active run found"))
+		return rpcerr.NotFound("no active run").Response(req.ID)
 	}
 
 	// Clear pending queue and transition session to killed.
@@ -369,12 +353,10 @@ func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protoco
 		Content    string `json:"content"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrInvalidRequest, "invalid chat.inject params"))
+		return rpcerr.InvalidRequest("invalid chat.inject params").Response(req.ID)
 	}
 	if p.SessionKey == "" || p.Content == "" {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrMissingParam, "sessionKey and content are required"))
+		return rpcerr.New(protocol.ErrMissingParam, "sessionKey and content are required").Response(req.ID)
 	}
 	if p.Role == "" {
 		p.Role = "assistant"
@@ -386,8 +368,7 @@ func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protoco
 	if h.transcript != nil {
 		msg := NewTextChatMessage(p.Role, content, time.Now().UnixMilli())
 		if err := h.transcript.Append(p.SessionKey, msg); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "transcript write error: "+err.Error()))
+			return rpcerr.DependencyFailed("transcript write error: " + err.Error()).Response(req.ID)
 		}
 		if h.broadcast != nil {
 			h.broadcast("sessions.changed", map[string]any{
@@ -400,6 +381,5 @@ func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protoco
 	}
 
 	// No transcript store available.
-	return protocol.NewResponseError(req.ID, protocol.NewError(
-		protocol.ErrDependencyFailed, "no transcript store available"))
+	return rpcerr.DependencyFailed("no transcript store available").Response(req.ID)
 }

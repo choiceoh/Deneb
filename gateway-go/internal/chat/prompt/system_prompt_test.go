@@ -88,11 +88,14 @@ func TestBuildSystemPromptSkillsInjection(t *testing.T) {
 	}
 
 	prompt := BuildSystemPrompt(params)
-	if !strings.Contains(prompt, "## Skills (mandatory)") {
+	if !strings.Contains(prompt, "## Skills") {
 		t.Error("missing skills section")
 	}
 	if !strings.Contains(prompt, "test-skill") {
 		t.Error("missing skill content")
+	}
+	if !strings.Contains(prompt, "skills_list") {
+		t.Error("missing skills_list tool hint for discoverable skills")
 	}
 }
 
@@ -102,8 +105,12 @@ func TestBuildSystemPromptNoSkills(t *testing.T) {
 	}
 
 	prompt := BuildSystemPrompt(params)
-	if strings.Contains(prompt, "## Skills") {
-		t.Error("skills section should not appear when no skills prompt")
+	// Even without always-skills, the skills section appears with skills_list tool hint.
+	if !strings.Contains(prompt, "## Skills") {
+		t.Error("skills section should always appear with skills_list tool hint")
+	}
+	if !strings.Contains(prompt, "skills_list") {
+		t.Error("missing skills_list tool hint")
 	}
 }
 

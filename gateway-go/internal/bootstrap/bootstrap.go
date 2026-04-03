@@ -8,9 +8,7 @@
 package bootstrap
 
 import (
-	"fmt"
 	"log/slog"
-	"os"
 )
 
 // Run executes the full gateway startup sequence and returns an OS exit code.
@@ -21,7 +19,7 @@ func Run(compiledVersion string) int {
 	earlyLogger := BuildEarlyLogger(flags.LogLevel)
 	cfg, err := LoadConfig(flags, earlyLogger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		earlyLogger.Error("configuration failed", "error", err)
 		return 1
 	}
 
@@ -39,7 +37,11 @@ func Run(compiledVersion string) int {
 	}
 
 	// Phase 3: services — wire server, Gemini embedder, Vega backend.
-	svc := WireServices(cfg.Addr, cfg.RuntimeCfg, log.Logger, flags.Version, log.UseColor)
+	svc, err := WireServices(cfg.Addr, cfg.RuntimeCfg, log.Logger, flags.Version, log.UseColor)
+	if err != nil {
+		log.Logger.Error("server initialization failed", "error", err)
+		return 1
+	}
 
 	// Phase 4: lifecycle — daemon or foreground run with signal handling.
 	if flags.DaemonMode || flags.PIDFile != "" {

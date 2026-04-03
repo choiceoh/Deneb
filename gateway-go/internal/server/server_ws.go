@@ -17,6 +17,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )
@@ -164,8 +165,6 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 		s.clientCnt.Add(-1)
 	}()
 
-	s.logger.Info("websocket connected", "connId", client.connID, "remote", r.RemoteAddr)
-
 	// Handshake: first message must be a connect request.
 	handshakeCtx, handshakeCancel := context.WithTimeout(r.Context(), time.Duration(protocol.HandshakeTimeoutMs)*time.Millisecond)
 	if err := s.handleHandshake(handshakeCtx, client, r.RemoteAddr); err != nil {
@@ -178,6 +177,8 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handshakeCancel()
+
+	s.logger.Info("websocket connected", "connId", client.connID, "remote", r.RemoteAddr)
 
 	conn.SetReadLimit(protocol.MaxPayloadBytes)
 
@@ -238,10 +239,9 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 	}
 
 	if !protocol.ValidateProtocolVersion(&params) {
-		errShape := protocol.NewError(protocol.ErrInvalidRequest,
-			fmt.Sprintf("protocol version mismatch: server=%d, client range=%d-%d",
-				protocol.ProtocolVersion, params.MinProtocol, params.MaxProtocol))
-		if err := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); err != nil {
+		rpcErr := rpcerr.Newf(protocol.ErrInvalidRequest, "protocol version mismatch: server=%d, client range=%d-%d",
+			protocol.ProtocolVersion, params.MinProtocol, params.MaxProtocol)
+		if err := s.writeFrame(ctx, client, rpcErr.Response(req.ID)); err != nil {
 			s.logger.Error("failed to send protocol error", "connId", client.connID, "error", err)
 		}
 		return fmt.Errorf("protocol version mismatch")
@@ -263,9 +263,8 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 	if s.authRateLimiter != nil && params.Auth != nil && params.Auth.Token != "" {
 		allowed, retryMs := s.authRateLimiter.Check(rateLimitKey)
 		if !allowed {
-			errShape := protocol.NewError(protocol.ErrUnauthorized,
-				fmt.Sprintf("rate limited, retry after %dms", retryMs))
-			if writeErr := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); writeErr != nil {
+			rpcErr := rpcerr.Newf(protocol.ErrUnauthorized, "rate limited, retry after %dms", retryMs)
+			if writeErr := s.writeFrame(ctx, client, rpcErr.Response(req.ID)); writeErr != nil {
 				s.logger.Error("failed to send rate limit error", "connId", client.connID, "error", writeErr)
 			}
 			return fmt.Errorf("auth rate limited")
@@ -280,8 +279,8 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 			if s.authRateLimiter != nil {
 				s.authRateLimiter.RecordFailure(rateLimitKey)
 			}
-			errShape := protocol.NewError(protocol.ErrUnauthorized, "invalid token: "+err.Error())
-			if writeErr := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); writeErr != nil {
+			rpcErr := rpcerr.Unauthorized("invalid token: " + err.Error())
+			if writeErr := s.writeFrame(ctx, client, rpcErr.Response(req.ID)); writeErr != nil {
 				s.logger.Error("failed to send auth error", "connId", client.connID, "error", writeErr)
 			}
 			return fmt.Errorf("token validation failed: %w", err)

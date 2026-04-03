@@ -14,5 +14,4 @@ type PluginSubsystem struct {
 	pluginDiscoverer      *plugin.PluginDiscoverer
 	pluginTypedHookRunner *plugin.TypedHookRunner
 	pluginRouter          *pluginrouter.Router
-	conversationBindings  *plugin.ConversationBindingStore
 }

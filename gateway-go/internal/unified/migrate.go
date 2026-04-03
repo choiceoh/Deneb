@@ -135,7 +135,7 @@ func buildMemoryIndex(tx *sql.Tx, logger *slog.Logger) error {
 		return fmt.Errorf("count memory index rows: %w", err)
 	}
 
-	logger.Info("unified store: memory index reconciled", "indexed", indexed)
+	logger.Debug("memory index reconciled", "indexed", indexed)
 	return nil
 }
 

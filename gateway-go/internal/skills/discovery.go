@@ -166,6 +166,12 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 			Metadata:    ResolveDenebMetadata(fm),
 			Invocation:  ptrInvocationPolicy(ResolveSkillInvocationPolicy(fm)),
 		}
+		// Resolve skill type from frontmatter (default: prompt).
+		if t, ok := fm["type"]; ok && IsValidSkillType(t) {
+			entry.Skill.Type = SkillType(t)
+		} else {
+			entry.Skill.Type = SkillTypePrompt
+		}
 		// Use description from frontmatter if available, else from SKILL.md parsing.
 		if desc, ok := fm["description"]; ok && desc != "" {
 			entry.Skill.Description = desc

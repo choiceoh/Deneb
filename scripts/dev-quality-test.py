@@ -6,7 +6,9 @@ Connects to the dev gateway via WebSocket, sends test scenarios,
 and evaluates response QUALITY — not just "did it work."
 
 Usage:
-    python3 scripts/dev-quality-test.py [--port 18790] [--scenario all|chat|tools|format|perf]
+    python3 scripts/dev-quality-test.py [--port 18790] [--scenario all|chat|tools|format|tools-deep|edge]
+    python3 scripts/dev-quality-test.py --scenario tools-deep  # deep tool correctness tests
+    python3 scripts/dev-quality-test.py --scenario edge         # edge case input tests
     python3 scripts/dev-quality-test.py --custom "안녕, 오늘 날씨 어때?"
     python3 scripts/dev-quality-test.py --report  # full quality report
 """
@@ -501,6 +503,472 @@ async def test_chat_formatting(client: GatewayClient) -> QualityResult:
     return result
 
 
+async def test_tools_file_read(client: GatewayClient) -> QualityResult:
+    """Test: file read tool correctness — ask to read a known file and verify content."""
+    result = QualityResult(name="tools-file-read")
+
+    # /etc/hostname always exists on Linux and has predictable content.
+    capture = await client.chat("read 도구로 /etc/hostname 파일 읽어서 내용 알려줘. 파일 내용을 그대로 보여줘.")
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("rpc_success", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    # Should have used the read tool.
+    read_used = any(t["name"] == "read" for t in capture.tool_starts)
+    result.add_check("used_read_tool", read_used,
+                     f"tools: {[t['name'] for t in capture.tool_starts]}")
+
+    # Tool should have completed without error.
+    read_errors = [t for t in capture.tool_results if t["name"] == "read" and t.get("isError")]
+    result.add_check("read_no_error", len(read_errors) == 0,
+                     f"read errors: {len(read_errors)}")
+
+    # Reply should contain the actual hostname (check tool result was relayed).
+    import socket
+    hostname = socket.gethostname()
+    has_hostname = hostname.lower() in capture.reply_text.lower()
+    # Also check tool result content if available.
+    if not has_hostname:
+        for tr in capture.tool_results:
+            if tr.get("name") == "read" and "result" in tr:
+                has_hostname = hostname.lower() in tr["result"].lower()
+                break
+    result.add_check("result_contains_hostname", has_hostname,
+                     f"expected '{hostname}' in reply")
+
+    result.add_check("tools_clean", *check_no_hallucinated_tool(capture))
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+async def test_tools_grep_search(client: GatewayClient) -> QualityResult:
+    """Test: grep/search tool — search for a known pattern and verify results."""
+    result = QualityResult(name="tools-grep-search")
+
+    capture = await client.chat(
+        "grep 도구로 gateway-go/cmd/gateway/main.go 파일에서 'func main' 패턴을 찾아줘. "
+        "몇 번째 줄에 있는지 알려줘."
+    )
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("rpc_success", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    # Should have used grep or search_and_read or find.
+    search_tools = {"grep", "search_and_read", "find", "read"}
+    used_search = any(t["name"] in search_tools for t in capture.tool_starts)
+    result.add_check("used_search_tool", used_search,
+                     f"tools: {[t['name'] for t in capture.tool_starts]}")
+
+    # Reply should mention "func main" or a line number.
+    has_result = bool(re.search(r"func\s+main|line\s*\d+|\d+\s*번", capture.reply_text, re.IGNORECASE))
+    result.add_check("result_has_match", has_result,
+                     "reply references func main or line number")
+
+    result.add_check("tools_clean", *check_no_hallucinated_tool(capture))
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+async def test_tools_exec(client: GatewayClient) -> QualityResult:
+    """Test: exec tool — run a command and verify output correctness."""
+    result = QualityResult(name="tools-exec")
+
+    capture = await client.chat("exec 도구로 'echo hello-deneb-test' 명령어 실행하고 결과 보여줘")
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("rpc_success", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    # Should have used exec tool.
+    exec_used = any(t["name"] == "exec" for t in capture.tool_starts)
+    result.add_check("used_exec_tool", exec_used,
+                     f"tools: {[t['name'] for t in capture.tool_starts]}")
+
+    # Reply or tool result should contain the echo output.
+    has_output = "hello-deneb-test" in capture.reply_text
+    if not has_output:
+        for tr in capture.tool_results:
+            if tr.get("name") == "exec" and "result" in tr:
+                has_output = "hello-deneb-test" in tr["result"]
+                break
+    result.add_check("output_correct", has_output,
+                     "expected 'hello-deneb-test' in output")
+
+    # Exec should not have errored.
+    exec_errors = [t for t in capture.tool_results if t["name"] == "exec" and t.get("isError")]
+    result.add_check("exec_no_error", len(exec_errors) == 0,
+                     f"exec errors: {len(exec_errors)}")
+
+    result.add_check("tools_clean", *check_no_hallucinated_tool(capture))
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+async def test_tools_multi_step(client: GatewayClient) -> QualityResult:
+    """Test: multi-tool chain — task requiring multiple tools in sequence."""
+    result = QualityResult(name="tools-multi-step")
+
+    capture = await client.chat(
+        "gateway-go/cmd/gateway/main.go 파일의 총 줄 수를 알려줘. "
+        "exec 도구로 'wc -l' 명령을 써도 되고, read 도구로 직접 읽어도 돼."
+    )
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("rpc_success", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    # Should have used at least one tool.
+    result.add_check("used_tools", len(capture.tool_starts) > 0,
+                     f"{len(capture.tool_starts)} tools used")
+
+    # Reply should contain a number (the line count).
+    has_number = bool(re.search(r"\d{2,}", capture.reply_text))
+    result.add_check("result_has_line_count", has_number,
+                     "reply contains a numeric line count")
+
+    result.add_check("tools_clean", *check_no_hallucinated_tool(capture))
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+async def test_tools_error_handling(client: GatewayClient) -> QualityResult:
+    """Test: tool error handling — request that triggers a tool error gracefully."""
+    result = QualityResult(name="tools-error-handling")
+
+    # Ask to read a nonexistent file — should handle error gracefully.
+    capture = await client.chat(
+        "/tmp/nonexistent-deneb-test-file-12345.txt 파일 읽어줘"
+    )
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    # The chat itself should complete (not crash), even if a tool errored.
+    result.add_check("chat_completed", ok,
+                     "chat completed despite tool error")
+
+    # Reply should acknowledge the error (file not found, etc.).
+    error_keywords = ["없", "존재하지", "not found", "찾을 수", "에러", "error", "실패"]
+    has_error_ack = any(kw in capture.reply_text.lower() for kw in error_keywords)
+    result.add_check("error_acknowledged", has_error_ack,
+                     "reply acknowledges file not found")
+
+    # Should not have crashed or returned empty.
+    result.add_check("has_reply", *check_response_substance(capture.reply_text))
+
+    # No leaked internal errors.
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+async def test_tools_memory(client: GatewayClient) -> QualityResult:
+    """Test: memory tool — search/status action works correctly."""
+    result = QualityResult(name="tools-memory")
+
+    capture = await client.chat("memory 도구로 현재 메모리 상태 확인해줘. status action 사용해.")
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("rpc_success", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    # Should have used memory tool.
+    memory_used = any(t["name"] == "memory" for t in capture.tool_starts)
+    result.add_check("used_memory_tool", memory_used,
+                     f"tools: {[t['name'] for t in capture.tool_starts]}")
+
+    # Reply should contain memory status info (count, size, etc.).
+    status_keywords = ["메모리", "memory", "항목", "entries", "count", "상태", "총"]
+    has_status = any(kw in capture.reply_text.lower() for kw in status_keywords)
+    result.add_check("result_has_status", has_status,
+                     "reply contains memory status info")
+
+    result.add_check("tools_clean", *check_no_hallucinated_tool(capture))
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+# --- Edge Case Test Scenarios ---
+
+async def test_edge_empty_message(client: GatewayClient) -> QualityResult:
+    """Test: empty/whitespace-only message handling."""
+    result = QualityResult(name="edge-empty-message")
+
+    capture = await client.chat("   ")
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    # Should either complete gracefully or return an error — not crash.
+    completed = ok or final_state in ("done", "error")
+    result.add_check("no_crash", completed,
+                     f"state={final_state}, ok={ok}")
+
+    # Should not have leaked internal tokens.
+    if capture.reply_text:
+        result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+    else:
+        result.add_check("no_leaked_markup", True, "no reply (acceptable for empty input)")
+
+    result.add_check("latency", *check_latency(capture.latency_ms, 30000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks)
+    return result
+
+
+async def test_edge_long_message(client: GatewayClient) -> QualityResult:
+    """Test: very long input message handling."""
+    result = QualityResult(name="edge-long-message")
+
+    # 5000 chars of Korean text — should handle without crash.
+    long_msg = "이것은 매우 긴 메시지입니다. " * 250  # ~5000 chars
+    long_msg += "이 긴 메시지의 마지막에 질문: 1+1은?"
+    capture = await client.chat(long_msg)
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("chat_completed", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    result.add_check("has_reply", *check_response_substance(capture.reply_text))
+
+    # Should answer the question at the end.
+    has_answer = "2" in capture.reply_text
+    result.add_check("answered_question", has_answer,
+                     "reply contains '2' (answer to 1+1)")
+
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:2])
+    return result
+
+
+async def test_edge_special_chars(client: GatewayClient) -> QualityResult:
+    """Test: special characters, emoji, and markup in input."""
+    result = QualityResult(name="edge-special-chars")
+
+    msg = '이모지 테스트 🎉🚀💻 & 특수문자 <b>bold</b> "quotes" \'single\' `code` $var {json}'
+    capture = await client.chat(msg)
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("chat_completed", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    result.add_check("has_reply", *check_response_substance(capture.reply_text))
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+    result.add_check("telegram_safe", *check_telegram_safe(capture.reply_text))
+    result.add_check("latency", *check_latency(capture.latency_ms, 30000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:2])
+    return result
+
+
+async def test_edge_code_block(client: GatewayClient) -> QualityResult:
+    """Test: code block in user message — should not confuse the parser."""
+    result = QualityResult(name="edge-code-block")
+
+    msg = """다음 코드를 설명해줘:
+```python
+def hello():
+    print("안녕하세요")
+    return {"status": "ok"}
+```
+이 함수가 뭘 하는 거야?"""
+    capture = await client.chat(msg)
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("chat_completed", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    result.add_check("has_reply", *check_response_substance(capture.reply_text, min_chars=20))
+
+    # Reply should reference the function or its behavior.
+    code_keywords = ["함수", "function", "hello", "print", "안녕", "return", "dict", "출력"]
+    has_explanation = any(kw in capture.reply_text.lower() for kw in code_keywords)
+    result.add_check("explains_code", has_explanation,
+                     "reply explains the code")
+
+    result.add_check("korean_response", *check_korean_response(capture.reply_text))
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+    result.add_check("latency", *check_latency(capture.latency_ms, 30000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+async def test_edge_ambiguous_intent(client: GatewayClient) -> QualityResult:
+    """Test: ambiguous message — should respond helpfully, not use tools unnecessarily."""
+    result = QualityResult(name="edge-ambiguous-intent")
+
+    capture = await client.chat("음...")
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("chat_completed", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    result.add_check("has_reply", *check_response_substance(capture.reply_text))
+
+    # Should NOT have used heavy tools for a vague message.
+    heavy_tools = {"exec", "write", "edit", "git", "autoresearch", "gateway"}
+    heavy_used = [t["name"] for t in capture.tool_starts if t["name"] in heavy_tools]
+    result.add_check("no_unnecessary_tools", len(heavy_used) == 0,
+                     f"heavy tools used: {heavy_used}" if heavy_used else "no heavy tools")
+
+    result.add_check("korean_response", *check_korean_response(capture.reply_text))
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+    result.add_check("latency", *check_latency(capture.latency_ms, 30000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:2])
+    return result
+
+
+async def test_edge_mixed_language(client: GatewayClient) -> QualityResult:
+    """Test: mixed Korean/English input — should respond in Korean per Korean-first policy."""
+    result = QualityResult(name="edge-mixed-language")
+
+    capture = await client.chat(
+        "Hey, 이 프로젝트의 main entry point가 어디에 있어? "
+        "gateway-go directory 안에 있을 것 같은데 확인해줘."
+    )
+    result.latency_ms = capture.latency_ms
+    result.reply_text = capture.reply_text
+    result.tool_calls = [t["name"] for t in capture.tool_starts]
+
+    final_state = capture.final_response.get("payload", {}).get("state", "")
+    ok = capture.final_response.get("ok", False) or final_state == "done"
+    result.add_check("chat_completed", ok and not capture.errors,
+                     " ".join(capture.errors) if capture.errors else "")
+
+    result.add_check("has_reply", *check_response_substance(capture.reply_text))
+
+    # Should still respond in Korean (Korean-first policy).
+    result.add_check("korean_response", *check_korean_response(capture.reply_text))
+
+    # Should mention gateway-go or main.go.
+    path_keywords = ["gateway-go", "main.go", "cmd/gateway", "entry point", "진입점"]
+    has_path = any(kw in capture.reply_text.lower() for kw in path_keywords)
+    result.add_check("mentions_path", has_path,
+                     "reply references the entry point location")
+
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
+    result.add_check("latency", *check_latency(capture.latency_ms, 60000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
+async def test_edge_rapid_followup(client: GatewayClient) -> QualityResult:
+    """Test: rapid follow-up messages in the same session — context coherence."""
+    result = QualityResult(name="edge-rapid-followup")
+
+    session_key = await client.create_session()
+
+    # First message.
+    capture1 = await client.chat("내 이름은 테스트유저야. 기억해.", session_key=session_key)
+    # Second message referencing the first.
+    capture2 = await client.chat("내 이름이 뭐라고 했지?", session_key=session_key)
+
+    result.latency_ms = capture2.latency_ms
+    result.reply_text = capture2.reply_text
+
+    final_state = capture2.final_response.get("payload", {}).get("state", "")
+    ok = capture2.final_response.get("ok", False) or final_state == "done"
+    result.add_check("chat_completed", ok and not capture2.errors,
+                     " ".join(capture2.errors) if capture2.errors else "")
+
+    result.add_check("has_reply", *check_response_substance(capture2.reply_text))
+
+    # Should remember "테스트유저" from the previous turn.
+    has_context = "테스트유저" in capture2.reply_text
+    result.add_check("remembers_context", has_context,
+                     "'테스트유저' in reply" if has_context else "failed to recall name")
+
+    result.add_check("korean_response", *check_korean_response(capture2.reply_text))
+    result.add_check("no_leaked_markup", *check_no_leaked_markup(capture2.reply_text))
+    result.add_check("latency", *check_latency(capture2.latency_ms, 30000))
+
+    passed_count = sum(1 for _, p, _ in result.checks if p)
+    result.score = passed_count / max(len(result.checks), 1)
+    result.passed = all(p for _, p, _ in result.checks[:3])
+    return result
+
+
 async def test_custom_message(client: GatewayClient, message: str) -> QualityResult:
     """Test: custom user message with full quality checks."""
     result = QualityResult(name=f"custom: {message[:40]}")
@@ -617,6 +1085,36 @@ async def run(args):
                 print("Running: chat-formatting...")
                 results.append(await test_chat_formatting(client))
 
+            if scenario in ("all", "tools-deep"):
+                print("Running: tools-file-read...")
+                results.append(await test_tools_file_read(client))
+                print("Running: tools-grep-search...")
+                results.append(await test_tools_grep_search(client))
+                print("Running: tools-exec...")
+                results.append(await test_tools_exec(client))
+                print("Running: tools-multi-step...")
+                results.append(await test_tools_multi_step(client))
+                print("Running: tools-error-handling...")
+                results.append(await test_tools_error_handling(client))
+                print("Running: tools-memory...")
+                results.append(await test_tools_memory(client))
+
+            if scenario in ("all", "edge"):
+                print("Running: edge-empty-message...")
+                results.append(await test_edge_empty_message(client))
+                print("Running: edge-long-message...")
+                results.append(await test_edge_long_message(client))
+                print("Running: edge-special-chars...")
+                results.append(await test_edge_special_chars(client))
+                print("Running: edge-code-block...")
+                results.append(await test_edge_code_block(client))
+                print("Running: edge-ambiguous-intent...")
+                results.append(await test_edge_ambiguous_intent(client))
+                print("Running: edge-mixed-language...")
+                results.append(await test_edge_mixed_language(client))
+                print("Running: edge-rapid-followup...")
+                results.append(await test_edge_rapid_followup(client))
+
     except Exception as e:
         print(f"Test error: {e}")
         import traceback
@@ -631,7 +1129,8 @@ async def run(args):
 def main():
     parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test")
     parser.add_argument("--port", type=int, default=PORT, help=f"Gateway port (default: {PORT})")
-    parser.add_argument("--scenario", default="all", choices=["all", "health", "chat", "tools", "format"],
+    parser.add_argument("--scenario", default="all",
+                        choices=["all", "health", "chat", "tools", "format", "tools-deep", "edge"],
                         help="Test scenario to run")
     parser.add_argument("--custom", type=str, help="Custom chat message to test")
     parser.add_argument("--report", action="store_true", help="Run full quality report (same as --scenario all)")

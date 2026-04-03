@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -347,7 +346,7 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	prompt := fmt.Sprintf("Task: %s\n\nInitial analysis:\n%s\n\nDo you need to call any follow-up tools to improve this answer?",
 		task, TruncateHead(initialResult, 4000))
 
-	decision, err := CallPilotLLM(ctx, chainSystemPrompt, prompt, 1024)
+	decision, err := CallLocalLLM(ctx, chainSystemPrompt, prompt, 1024)
 	if err != nil {
 		logger.Debug("pilot chain: planning failed", "error", err)
 		return ""
@@ -409,7 +408,7 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	}
 
 	systemPrompt := BuildPilotSystemPrompt(workspaceDir, false)
-	final, err := CallPilotLLM(ctx, systemPrompt, sb.String(), pilotMaxTokens)
+	final, err := CallLocalLLM(ctx, systemPrompt, sb.String(), pilotMaxTokens)
 	if err != nil {
 		logger.Debug("pilot chain: final synthesis failed", "error", err)
 		return ""
@@ -558,16 +557,6 @@ func GetLightweightModel() string {
 	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultSglangModel)
 }
 
-// GetPilotClient returns the LLM client for the pilot model role.
-func GetPilotClient() *llm.Client {
-	return getRoleClient(modelrole.RolePilot, modelrole.DefaultGoogleBaseURL, os.Getenv("GEMINI_API_KEY"))
-}
-
-// GetPilotModel returns the model name for the pilot role.
-func GetPilotModel() string {
-	return getRoleModel(modelrole.RolePilot, modelrole.DefaultPilotModel)
-}
-
 // sglangNoThinking is the default ExtraBody that disables reasoning mode for
 // all local sglang calls. Qwen3.5 reasoning adds latency and "Thinking Process:"
 // preambles that leak into output; none of our sglang hooks need it.
@@ -593,6 +582,16 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	if len(extraBody) > 0 && extraBody[0] != nil {
 		for k, v := range extraBody[0] {
 			merged[k] = v
+		}
+	}
+
+	// Inject server-side timeout so sglang aborts generation when the
+	// gateway's context deadline expires. Without this, cancelled requests
+	// become zombies that hold KV cache until max_tokens is exhausted.
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline).Seconds() - 2.0 // 2s headroom for network
+		if remaining > 1 {
+			merged["timeout"] = remaining
 		}
 	}
 
@@ -641,56 +640,6 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	return text, nil
 }
 
-// CallPilotLLM invokes the pilot model (e.g. Gemini) with fallback chain.
-func CallPilotLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
-	defer cancel()
-
-	client := GetPilotClient()
-	model := GetPilotModel()
-
-	req := llm.ChatRequest{
-		Model:     model,
-		Messages:  []llm.Message{llm.NewTextMessage("user", userMessage)},
-		System:    llm.SystemString(system),
-		MaxTokens: maxTokens,
-		Stream:    true,
-	}
-
-	events, err := client.StreamChat(ctx, req)
-	if err != nil {
-		if pkgRegistry != nil {
-			fbChain := pkgRegistry.FallbackChain(modelrole.RolePilot)
-			for _, role := range fbChain[1:] {
-				fbCfg := pkgRegistry.Config(role)
-				fbClient := pkgRegistry.Client(role)
-				if fbClient == nil {
-					continue
-				}
-				req.Model = fbCfg.Model
-				events, err = fbClient.StreamChat(ctx, req)
-				if err == nil {
-					break
-				}
-			}
-			if err != nil {
-				return "", fmt.Errorf("all models failed: %w", err)
-			}
-		} else {
-			return "", fmt.Errorf("pilot stream: %w", err)
-		}
-	}
-
-	text, err := CollectStream(ctx, events)
-	if err != nil {
-		return "", err
-	}
-
-	if text == "" {
-		return "(no response from pilot model)", nil
-	}
-	return text, nil
-}
 
 // CollectStream reads all events from a streaming LLM response and returns the text.
 func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {

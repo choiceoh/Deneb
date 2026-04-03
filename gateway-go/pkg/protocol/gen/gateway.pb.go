@@ -121,6 +121,77 @@ func (ErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_gateway_proto_rawDescGZIP(), []int{0}
 }
 
+// FfiErrorCode enumerates C ABI return codes for extern "C" functions.
+// Values here are positive; generators negate them for Rust/Go output.
+// Positive FFI return values from buffer-writing functions are bytes written,
+// not error codes.
+type FfiErrorCode int32
+
+const (
+	FfiErrorCode_FFI_ERROR_CODE_UNSPECIFIED      FfiErrorCode = 0
+	FfiErrorCode_FFI_ERROR_CODE_NULL_POINTER     FfiErrorCode = 1
+	FfiErrorCode_FFI_ERROR_CODE_INVALID_UTF8     FfiErrorCode = 2
+	FfiErrorCode_FFI_ERROR_CODE_OUTPUT_TOO_SMALL FfiErrorCode = 3
+	FfiErrorCode_FFI_ERROR_CODE_INPUT_TOO_LARGE  FfiErrorCode = 4
+	FfiErrorCode_FFI_ERROR_CODE_JSON_ERROR       FfiErrorCode = 5
+	FfiErrorCode_FFI_ERROR_CODE_OVERFLOW         FfiErrorCode = 6
+	FfiErrorCode_FFI_ERROR_CODE_VALIDATION       FfiErrorCode = 7
+	FfiErrorCode_FFI_ERROR_CODE_RUST_PANIC       FfiErrorCode = 99
+)
+
+// Enum value maps for FfiErrorCode.
+var (
+	FfiErrorCode_name = map[int32]string{
+		0:  "FFI_ERROR_CODE_UNSPECIFIED",
+		1:  "FFI_ERROR_CODE_NULL_POINTER",
+		2:  "FFI_ERROR_CODE_INVALID_UTF8",
+		3:  "FFI_ERROR_CODE_OUTPUT_TOO_SMALL",
+		4:  "FFI_ERROR_CODE_INPUT_TOO_LARGE",
+		5:  "FFI_ERROR_CODE_JSON_ERROR",
+		6:  "FFI_ERROR_CODE_OVERFLOW",
+		7:  "FFI_ERROR_CODE_VALIDATION",
+		99: "FFI_ERROR_CODE_RUST_PANIC",
+	}
+	FfiErrorCode_value = map[string]int32{
+		"FFI_ERROR_CODE_UNSPECIFIED":      0,
+		"FFI_ERROR_CODE_NULL_POINTER":     1,
+		"FFI_ERROR_CODE_INVALID_UTF8":     2,
+		"FFI_ERROR_CODE_OUTPUT_TOO_SMALL": 3,
+		"FFI_ERROR_CODE_INPUT_TOO_LARGE":  4,
+		"FFI_ERROR_CODE_JSON_ERROR":       5,
+		"FFI_ERROR_CODE_OVERFLOW":         6,
+		"FFI_ERROR_CODE_VALIDATION":       7,
+		"FFI_ERROR_CODE_RUST_PANIC":       99,
+	}
+)
+
+func (x FfiErrorCode) Enum() *FfiErrorCode {
+	p := new(FfiErrorCode)
+	*p = x
+	return p
+}
+
+func (x FfiErrorCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FfiErrorCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_gateway_proto_enumTypes[1].Descriptor()
+}
+
+func (FfiErrorCode) Type() protoreflect.EnumType {
+	return &file_gateway_proto_enumTypes[1]
+}
+
+func (x FfiErrorCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FfiErrorCode.Descriptor instead.
+func (FfiErrorCode) EnumDescriptor() ([]byte, []int) {
+	return file_gateway_proto_rawDescGZIP(), []int{1}
+}
+
 // ErrorShape is the structured error payload embedded in ResponseFrame.error.
 type ErrorShape struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -1171,7 +1242,17 @@ const file_gateway_proto_rawDesc = "" +
 	"\x14ERROR_CODE_FORBIDDEN\x10\x0f\x12 \n" +
 	"\x1cERROR_CODE_NODE_DISCONNECTED\x10\x14\x12 \n" +
 	"\x1cERROR_CODE_DEPENDENCY_FAILED\x10\x15\x12\x1f\n" +
-	"\x1bERROR_CODE_FEATURE_DISABLED\x10\x16B7Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/genb\x06proto3"
+	"\x1bERROR_CODE_FEATURE_DISABLED\x10\x16*\xb3\x02\n" +
+	"\fFfiErrorCode\x12\x1e\n" +
+	"\x1aFFI_ERROR_CODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bFFI_ERROR_CODE_NULL_POINTER\x10\x01\x12\x1f\n" +
+	"\x1bFFI_ERROR_CODE_INVALID_UTF8\x10\x02\x12#\n" +
+	"\x1fFFI_ERROR_CODE_OUTPUT_TOO_SMALL\x10\x03\x12\"\n" +
+	"\x1eFFI_ERROR_CODE_INPUT_TOO_LARGE\x10\x04\x12\x1d\n" +
+	"\x19FFI_ERROR_CODE_JSON_ERROR\x10\x05\x12\x1b\n" +
+	"\x17FFI_ERROR_CODE_OVERFLOW\x10\x06\x12\x1d\n" +
+	"\x19FFI_ERROR_CODE_VALIDATION\x10\a\x12\x1d\n" +
+	"\x19FFI_ERROR_CODE_RUST_PANIC\x10cB7Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/genb\x06proto3"
 
 var (
 	file_gateway_proto_rawDescOnce sync.Once
@@ -1185,39 +1266,40 @@ func file_gateway_proto_rawDescGZIP() []byte {
 	return file_gateway_proto_rawDescData
 }
 
-var file_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_gateway_proto_goTypes = []any{
 	(ErrorCode)(0),             // 0: deneb.gateway.ErrorCode
-	(*ErrorShape)(nil),         // 1: deneb.gateway.ErrorShape
-	(*RequestFrame)(nil),       // 2: deneb.gateway.RequestFrame
-	(*ResponseFrame)(nil),      // 3: deneb.gateway.ResponseFrame
-	(*StateVersion)(nil),       // 4: deneb.gateway.StateVersion
-	(*EventFrame)(nil),         // 5: deneb.gateway.EventFrame
-	(*GatewayFrame)(nil),       // 6: deneb.gateway.GatewayFrame
-	(*PresenceEntry)(nil),      // 7: deneb.gateway.PresenceEntry
-	(*HelloOk)(nil),            // 8: deneb.gateway.HelloOk
-	(*HelloOk_ServerInfo)(nil), // 9: deneb.gateway.HelloOk.ServerInfo
-	(*HelloOk_Features)(nil),   // 10: deneb.gateway.HelloOk.Features
-	(*HelloOk_Policy)(nil),     // 11: deneb.gateway.HelloOk.Policy
-	(*HelloOk_AuthInfo)(nil),   // 12: deneb.gateway.HelloOk.AuthInfo
-	(*structpb.Value)(nil),     // 13: google.protobuf.Value
-	(*structpb.Struct)(nil),    // 14: google.protobuf.Struct
+	(FfiErrorCode)(0),          // 1: deneb.gateway.FfiErrorCode
+	(*ErrorShape)(nil),         // 2: deneb.gateway.ErrorShape
+	(*RequestFrame)(nil),       // 3: deneb.gateway.RequestFrame
+	(*ResponseFrame)(nil),      // 4: deneb.gateway.ResponseFrame
+	(*StateVersion)(nil),       // 5: deneb.gateway.StateVersion
+	(*EventFrame)(nil),         // 6: deneb.gateway.EventFrame
+	(*GatewayFrame)(nil),       // 7: deneb.gateway.GatewayFrame
+	(*PresenceEntry)(nil),      // 8: deneb.gateway.PresenceEntry
+	(*HelloOk)(nil),            // 9: deneb.gateway.HelloOk
+	(*HelloOk_ServerInfo)(nil), // 10: deneb.gateway.HelloOk.ServerInfo
+	(*HelloOk_Features)(nil),   // 11: deneb.gateway.HelloOk.Features
+	(*HelloOk_Policy)(nil),     // 12: deneb.gateway.HelloOk.Policy
+	(*HelloOk_AuthInfo)(nil),   // 13: deneb.gateway.HelloOk.AuthInfo
+	(*structpb.Value)(nil),     // 14: google.protobuf.Value
+	(*structpb.Struct)(nil),    // 15: google.protobuf.Struct
 }
 var file_gateway_proto_depIdxs = []int32{
-	13, // 0: deneb.gateway.ErrorShape.details:type_name -> google.protobuf.Value
-	14, // 1: deneb.gateway.RequestFrame.params:type_name -> google.protobuf.Struct
-	13, // 2: deneb.gateway.ResponseFrame.payload:type_name -> google.protobuf.Value
-	1,  // 3: deneb.gateway.ResponseFrame.error:type_name -> deneb.gateway.ErrorShape
-	13, // 4: deneb.gateway.EventFrame.payload:type_name -> google.protobuf.Value
-	4,  // 5: deneb.gateway.EventFrame.state_version:type_name -> deneb.gateway.StateVersion
-	2,  // 6: deneb.gateway.GatewayFrame.request:type_name -> deneb.gateway.RequestFrame
-	3,  // 7: deneb.gateway.GatewayFrame.response:type_name -> deneb.gateway.ResponseFrame
-	5,  // 8: deneb.gateway.GatewayFrame.event:type_name -> deneb.gateway.EventFrame
-	9,  // 9: deneb.gateway.HelloOk.server:type_name -> deneb.gateway.HelloOk.ServerInfo
-	10, // 10: deneb.gateway.HelloOk.features:type_name -> deneb.gateway.HelloOk.Features
-	11, // 11: deneb.gateway.HelloOk.policy:type_name -> deneb.gateway.HelloOk.Policy
-	12, // 12: deneb.gateway.HelloOk.auth:type_name -> deneb.gateway.HelloOk.AuthInfo
+	14, // 0: deneb.gateway.ErrorShape.details:type_name -> google.protobuf.Value
+	15, // 1: deneb.gateway.RequestFrame.params:type_name -> google.protobuf.Struct
+	14, // 2: deneb.gateway.ResponseFrame.payload:type_name -> google.protobuf.Value
+	2,  // 3: deneb.gateway.ResponseFrame.error:type_name -> deneb.gateway.ErrorShape
+	14, // 4: deneb.gateway.EventFrame.payload:type_name -> google.protobuf.Value
+	5,  // 5: deneb.gateway.EventFrame.state_version:type_name -> deneb.gateway.StateVersion
+	3,  // 6: deneb.gateway.GatewayFrame.request:type_name -> deneb.gateway.RequestFrame
+	4,  // 7: deneb.gateway.GatewayFrame.response:type_name -> deneb.gateway.ResponseFrame
+	6,  // 8: deneb.gateway.GatewayFrame.event:type_name -> deneb.gateway.EventFrame
+	10, // 9: deneb.gateway.HelloOk.server:type_name -> deneb.gateway.HelloOk.ServerInfo
+	11, // 10: deneb.gateway.HelloOk.features:type_name -> deneb.gateway.HelloOk.Features
+	12, // 11: deneb.gateway.HelloOk.policy:type_name -> deneb.gateway.HelloOk.Policy
+	13, // 12: deneb.gateway.HelloOk.auth:type_name -> deneb.gateway.HelloOk.AuthInfo
 	13, // [13:13] is the sub-list for method output_type
 	13, // [13:13] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
@@ -1245,7 +1327,7 @@ func file_gateway_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gateway_proto_rawDesc), len(file_gateway_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,

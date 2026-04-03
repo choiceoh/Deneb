@@ -30,8 +30,8 @@ func (s *Server) initGmailPoll() {
 
 	cfg := gmailpoll.Config{
 		StateDir:    stateDir,
-		LLMClient:   s.modelRegistry.Client(modelrole.RoleFallback),
-		Model:       s.modelRegistry.Model(modelrole.RoleFallback),
+		LLMClient:   s.modelRegistry.Client(modelrole.RoleLightweight),
+		Model:       s.modelRegistry.Model(modelrole.RoleLightweight),
 		LocalClient: s.modelRegistry.Client(modelrole.RoleLightweight),
 		LocalModel:  s.modelRegistry.Model(modelrole.RoleLightweight),
 	}

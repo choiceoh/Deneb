@@ -33,15 +33,15 @@ func ToolMethods(deps ToolDeps) map[string]rpcutil.HandlerFunc {
 // Uses the manual unmarshal pattern because toolsExecLocal needs both ctx and req.
 func toolsInvoke(deps ToolDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Tool       string         `json:"tool"`
 			Action     string         `json:"action,omitempty"`
 			Args       map[string]any `json:"args,omitempty"`
 			SessionKey string         `json:"sessionKey,omitempty"`
 			DryRun     bool           `json:"dryRun,omitempty"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Tool == "" {
 			return rpcerr.MissingParam("tool").Response(req.ID)
@@ -60,12 +60,11 @@ func toolsInvoke(deps ToolDeps) rpcutil.HandlerFunc {
 // toolsExecLocal executes a bash/exec tool locally using the process manager.
 func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDeps, tool string, args map[string]any, dryRun bool) *protocol.ResponseFrame {
 	if dryRun {
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"tool":   tool,
 			"dryRun": true,
 			"args":   args,
 		})
-		return resp
 	}
 
 	command, _ := args["command"].(string)
@@ -98,8 +97,7 @@ func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDe
 		TimeoutMs:  timeoutMs,
 	})
 
-	resp := protocol.MustResponseOK(req.ID, result)
-	return resp
+	return rpcutil.RespondOK(req.ID, result)
 }
 
 // toolsList handles "tools.list" — returns the available tool catalog.
@@ -121,10 +119,9 @@ func toolsList(_ ToolDeps) rpcutil.HandlerFunc {
 	}
 
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"tools": tools,
 		})
-		return resp
 	}
 }
 

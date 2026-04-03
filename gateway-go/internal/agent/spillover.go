@@ -27,6 +27,11 @@ const (
 	PreviewTailChars = 1024      // last 1K chars in preview
 	SpilloverTTL     = 30 * time.Minute
 	cleanupInterval  = 10 * time.Minute
+
+	// hashInputLimit caps content bytes fed into the spillover ID hash.
+	hashInputLimit = 256
+	// hashIDBytes is the number of SHA-256 bytes used for the spill ID (8 hex chars).
+	hashIDBytes = 4
 )
 
 // spillEntry tracks a single spilled result on disk.
@@ -61,8 +66,8 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 	}
 
 	now := time.Now()
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%s", content[:min(256, len(content))], now.UnixNano(), sessionKey)))
-	spillID := fmt.Sprintf("sp_%x", hash[:4]) // 8 hex chars
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%s", content[:min(hashInputLimit, len(content))], now.UnixNano(), sessionKey)))
+	spillID := fmt.Sprintf("sp_%x", hash[:hashIDBytes])
 
 	safeSess := sanitizeSessionKey(sessionKey)
 	safeTool := sanitizeToolName(toolName)

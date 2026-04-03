@@ -632,49 +632,11 @@ impl SweepEngine {
     }
 
     fn handle_leaf_summarize_normal(&mut self, response: SweepResponse) -> SweepCommand {
-        if let SweepResponse::SummaryText { text } = response {
-            let summary_tokens = estimate_tokens(&text);
-            if summary_tokens < self.pass.source_tokens {
-                // Normal succeeded
-                self.pass.summary_content = text;
-                self.level = Some(CompactionLevel::Normal);
-                return self.prepare_leaf_persist();
-            }
-
-            // Escalate to aggressive
-            self.phase = Phase::LeafSummarizeAggressive;
-            return SweepCommand::Summarize {
-                text: self.pass.source_text.clone(),
-                aggressive: true,
-                options: Some(SummarizeOptions {
-                    previous_summary: self.pass.previous_summary.clone(),
-                    is_condensed: Some(false),
-                    depth: None,
-                    target_tokens: None,
-                }),
-            };
-        }
-        // Unexpected response — fallback
-        self.pass.summary_content =
-            deterministic_fallback(&self.pass.source_text, self.pass.source_tokens);
-        self.level = Some(CompactionLevel::Fallback);
-        self.prepare_leaf_persist()
+        self.handle_summarize_normal(response, false, None)
     }
 
     fn handle_leaf_summarize_aggressive(&mut self, response: SweepResponse) -> SweepCommand {
-        if let SweepResponse::SummaryText { text } = response {
-            let summary_tokens = estimate_tokens(&text);
-            if summary_tokens < self.pass.source_tokens {
-                self.pass.summary_content = text;
-                self.level = Some(CompactionLevel::Aggressive);
-                return self.prepare_leaf_persist();
-            }
-        }
-        // Deterministic fallback
-        self.pass.summary_content =
-            deterministic_fallback(&self.pass.source_text, self.pass.source_tokens);
-        self.level = Some(CompactionLevel::Fallback);
-        self.prepare_leaf_persist()
+        self.handle_summarize_aggressive(response, false)
     }
 
     fn prepare_leaf_persist(&mut self) -> SweepCommand {
@@ -721,40 +683,15 @@ impl SweepEngine {
     fn handle_leaf_persist(&mut self, _response: SweepResponse) -> SweepCommand {
         self.action_taken = true;
         self.pass.leaf_iter += 1;
-
-        // Fetch updated token count
-        self.phase = Phase::LeafPostTokenCount;
-        SweepCommand::FetchTokenCount {
-            conversation_id: self.conversation_id,
-        }
+        self.handle_post_persist(Phase::LeafPostTokenCount)
     }
 
     fn handle_leaf_post_token_count(&mut self, response: SweepResponse) -> SweepCommand {
-        let tokens_after = match response {
-            SweepResponse::TokenCount { count } => count,
-            _ => self.previous_tokens,
-        };
-
-        // Persist event (best-effort)
-        self.phase = Phase::LeafPersistEvent;
-        SweepCommand::PersistEvent {
-            input: PersistEventInput {
-                conversation_id: self.conversation_id,
-                pass: "leaf".to_string(),
-                level: self.level.unwrap_or(CompactionLevel::Normal),
-                tokens_before: self.pass.tokens_before,
-                tokens_after,
-                created_summary_id: self.created_summary_id.clone().unwrap_or_default(),
-            },
-        }
+        self.handle_post_token_count(response, "leaf", Phase::LeafPersistEvent)
     }
 
     fn handle_leaf_persist_event(&mut self, _response: SweepResponse) -> SweepCommand {
-        // Re-fetch context items after mutation
-        self.phase = Phase::FetchingItems;
-        SweepCommand::FetchContextItems {
-            conversation_id: self.conversation_id,
-        }
+        self.refetch_context_items()
     }
 
     // ── Phase 2: Condensed passes ───────────────────────────────────────────
@@ -969,45 +906,11 @@ impl SweepEngine {
     }
 
     fn handle_condensed_summarize_normal(&mut self, response: SweepResponse) -> SweepCommand {
-        if let SweepResponse::SummaryText { text } = response {
-            let summary_tokens = estimate_tokens(&text);
-            if summary_tokens < self.pass.source_tokens {
-                self.pass.summary_content = text;
-                self.level = Some(CompactionLevel::Normal);
-                return self.prepare_condensed_persist();
-            }
-
-            self.phase = Phase::CondensedSummarizeAggressive;
-            return SweepCommand::Summarize {
-                text: self.pass.source_text.clone(),
-                aggressive: true,
-                options: Some(SummarizeOptions {
-                    previous_summary: self.pass.previous_summary.clone(),
-                    is_condensed: Some(true),
-                    depth: Some(self.pass.target_depth + 1),
-                    target_tokens: None,
-                }),
-            };
-        }
-        self.pass.summary_content =
-            deterministic_fallback(&self.pass.source_text, self.pass.source_tokens);
-        self.level = Some(CompactionLevel::Fallback);
-        self.prepare_condensed_persist()
+        self.handle_summarize_normal(response, true, Some(self.pass.target_depth + 1))
     }
 
     fn handle_condensed_summarize_aggressive(&mut self, response: SweepResponse) -> SweepCommand {
-        if let SweepResponse::SummaryText { text } = response {
-            let summary_tokens = estimate_tokens(&text);
-            if summary_tokens < self.pass.source_tokens {
-                self.pass.summary_content = text;
-                self.level = Some(CompactionLevel::Aggressive);
-                return self.prepare_condensed_persist();
-            }
-        }
-        self.pass.summary_content =
-            deterministic_fallback(&self.pass.source_text, self.pass.source_tokens);
-        self.level = Some(CompactionLevel::Fallback);
-        self.prepare_condensed_persist()
+        self.handle_summarize_aggressive(response, true)
     }
 
     fn prepare_condensed_persist(&mut self) -> SweepCommand {
@@ -1064,24 +967,119 @@ impl SweepEngine {
         self.action_taken = true;
         self.condensed = true;
         self.pass.condensed_iter += 1;
+        self.handle_post_persist(Phase::CondensedPostTokenCount)
+    }
 
-        self.phase = Phase::CondensedPostTokenCount;
+    fn handle_condensed_post_token_count(&mut self, response: SweepResponse) -> SweepCommand {
+        self.handle_post_token_count(response, "condensed", Phase::CondensedPersistEvent)
+    }
+
+    fn handle_condensed_persist_event(&mut self, _response: SweepResponse) -> SweepCommand {
+        self.refetch_context_items()
+    }
+
+    // ── Shared helpers for leaf/condensed phases ──────────────────────────────
+
+    /// Handle "normal" summarization result for either leaf or condensed pass.
+    fn handle_summarize_normal(
+        &mut self,
+        response: SweepResponse,
+        is_condensed: bool,
+        depth: Option<u32>,
+    ) -> SweepCommand {
+        if let SweepResponse::SummaryText { text } = response {
+            let summary_tokens = estimate_tokens(&text);
+            if summary_tokens < self.pass.source_tokens {
+                self.pass.summary_content = text;
+                self.level = Some(CompactionLevel::Normal);
+                return if is_condensed {
+                    self.prepare_condensed_persist()
+                } else {
+                    self.prepare_leaf_persist()
+                };
+            }
+
+            // Escalate to aggressive
+            self.phase = if is_condensed {
+                Phase::CondensedSummarizeAggressive
+            } else {
+                Phase::LeafSummarizeAggressive
+            };
+            return SweepCommand::Summarize {
+                text: self.pass.source_text.clone(),
+                aggressive: true,
+                options: Some(SummarizeOptions {
+                    previous_summary: self.pass.previous_summary.clone(),
+                    is_condensed: Some(is_condensed),
+                    depth,
+                    target_tokens: None,
+                }),
+            };
+        }
+        // Unexpected response — fallback
+        self.pass.summary_content =
+            deterministic_fallback(&self.pass.source_text, self.pass.source_tokens);
+        self.level = Some(CompactionLevel::Fallback);
+        if is_condensed {
+            self.prepare_condensed_persist()
+        } else {
+            self.prepare_leaf_persist()
+        }
+    }
+
+    /// Handle "aggressive" summarization result for either leaf or condensed pass.
+    fn handle_summarize_aggressive(
+        &mut self,
+        response: SweepResponse,
+        is_condensed: bool,
+    ) -> SweepCommand {
+        if let SweepResponse::SummaryText { text } = response {
+            let summary_tokens = estimate_tokens(&text);
+            if summary_tokens < self.pass.source_tokens {
+                self.pass.summary_content = text;
+                self.level = Some(CompactionLevel::Aggressive);
+                return if is_condensed {
+                    self.prepare_condensed_persist()
+                } else {
+                    self.prepare_leaf_persist()
+                };
+            }
+        }
+        self.pass.summary_content =
+            deterministic_fallback(&self.pass.source_text, self.pass.source_tokens);
+        self.level = Some(CompactionLevel::Fallback);
+        if is_condensed {
+            self.prepare_condensed_persist()
+        } else {
+            self.prepare_leaf_persist()
+        }
+    }
+
+    /// Fetch updated token count after a persist (leaf or condensed).
+    fn handle_post_persist(&mut self, next_phase: Phase) -> SweepCommand {
+        self.phase = next_phase;
         SweepCommand::FetchTokenCount {
             conversation_id: self.conversation_id,
         }
     }
 
-    fn handle_condensed_post_token_count(&mut self, response: SweepResponse) -> SweepCommand {
+    /// Persist compaction event after token count fetch.
+    fn handle_post_token_count(
+        &mut self,
+        response: SweepResponse,
+        pass_name: &str,
+        next_phase: Phase,
+    ) -> SweepCommand {
         let tokens_after = match response {
             SweepResponse::TokenCount { count } => count,
             _ => self.previous_tokens,
         };
 
-        self.phase = Phase::CondensedPersistEvent;
+        self.phase = next_phase;
         SweepCommand::PersistEvent {
             input: PersistEventInput {
                 conversation_id: self.conversation_id,
-                pass: "condensed".to_string(),
+                pass: pass_name.to_string(),
                 level: self.level.unwrap_or(CompactionLevel::Normal),
                 tokens_before: self.pass.tokens_before,
                 tokens_after,
@@ -1090,8 +1088,8 @@ impl SweepEngine {
         }
     }
 
-    fn handle_condensed_persist_event(&mut self, _response: SweepResponse) -> SweepCommand {
-        // Re-fetch items and continue condensed phase
+    /// Re-fetch context items after a persist event.
+    fn refetch_context_items(&mut self) -> SweepCommand {
         self.phase = Phase::FetchingItems;
         SweepCommand::FetchContextItems {
             conversation_id: self.conversation_id,

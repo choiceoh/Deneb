@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -169,10 +170,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 	handler, ok := snap[req.Method]
 
 	if !ok {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrNotFound,
-			fmt.Sprintf("unknown method: %q", req.Method),
-		))
+		return rpcerr.Newf(protocol.ErrNotFound, "unknown method: %q", req.Method).Response(req.ID)
 	}
 
 	// Wrap handler through middleware chain if one is installed.
@@ -208,10 +206,7 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 			if r := recover(); r != nil {
 				d.logger.Error("handler panic", "method", req.Method, "panic", r,
 					"stack", string(debug.Stack()))
-				ch <- result{resp: protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrUnavailable,
-					fmt.Sprintf("internal error handling %q", req.Method),
-				))}
+				ch <- result{resp: rpcerr.Newf(protocol.ErrUnavailable, "internal error handling %q", req.Method).Response(req.ID)}
 			}
 		}()
 		ch <- result{resp: handler(handlerCtx, req)}
@@ -231,9 +226,6 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 		// and release the worker pool slot promptly.
 		handlerCancel()
 		d.logger.Warn("handler timeout", "method", req.Method)
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrAgentTimeout,
-			fmt.Sprintf("handler %q did not complete within deadline", req.Method),
-		))
+		return rpcerr.Newf(protocol.ErrAgentTimeout, "handler %q did not complete within deadline", req.Method).Response(req.ID)
 	}
 }

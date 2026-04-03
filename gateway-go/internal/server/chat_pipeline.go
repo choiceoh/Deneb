@@ -30,22 +30,17 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 		s.logger.Warn("unified store unavailable", "error", err)
 	} else {
 		chatCfg.UnifiedStore = unifiedStore
-		s.logger.Info("unified memory store initialized")
 
 		if auroraStore, aErr := unifiedStore.NewAuroraStoreWithLogger(s.logger); aErr != nil {
 			s.logger.Warn("aurora store unavailable from unified db", "error", aErr)
 		} else {
 			chatCfg.AuroraStore = auroraStore
-			s.logger.Info("aurora compaction store initialized (unified)")
 		}
 	}
 
 	// Model role registry.
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
 	chatCfg.SubagentDefaultModel = resolveSubagentDefaultModel(s.logger)
-	if chatCfg.SubagentDefaultModel != "" {
-		s.logger.Info("subagent default model configured", "model", chatCfg.SubagentDefaultModel)
-	}
 	reg2 := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel)
 	*reg = *reg2
 	chatCfg.Registry = reg
@@ -64,7 +59,6 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 		} else {
 			memStore = unifiedMemStore
 			chatCfg.MemoryStore = memStore
-			s.logger.Info("aurora-memory: structured store initialized (unified)")
 		}
 	}
 	if memStore == nil {
@@ -88,14 +82,12 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 				svc.IncrementDreamTurn(ctx)
 			}
 		}
-	} else {
-		s.logger.Info("aurora-memory: embedding disabled (GEMINI_API_KEY not set)")
 	}
 
-	// Jina cross-encoder reranker.
-	if s.jinaAPIKey != "" {
+	// Cross-encoder reranker (local jina-reranker-v3 by default).
+	{
 		reranker := vega.NewReranker(vega.RerankConfig{
-			APIKey: s.jinaAPIKey,
+			APIKey: s.jinaAPIKey, // optional; empty for local server
 			Logger: s.logger,
 		})
 		if reranker != nil {
@@ -141,7 +133,6 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 // tools, and stores toolDeps on the server.
 func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Registry, transcriptStore chat.TranscriptStore, agentLogWriter *agentlog.Writer) {
 	workspaceDir := resolveWorkspaceDir()
-	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
 	s.toolDeps = &chat.CoreToolDeps{
 		WorkspaceDir: workspaceDir,
@@ -160,11 +151,11 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		Vega: chat.VegaDeps{
 			MemoryStore:    chatCfg.MemoryStore,
 			MemoryEmbedder: chatCfg.MemoryEmbedder,
-			RecallClient:   reg.Client(modelrole.RoleFallback),
-			RecallModel:    reg.Model(modelrole.RoleFallback),
+			RecallClient:   reg.Client(modelrole.RoleLightweight),
+			RecallModel:    reg.Model(modelrole.RoleLightweight),
 		},
-		LLMClient:    reg.Client(modelrole.RoleFallback),
-		DefaultModel: reg.Model(modelrole.RoleFallback),
+		LLMClient:    reg.Client(modelrole.RoleLightweight),
+		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
 	}
 

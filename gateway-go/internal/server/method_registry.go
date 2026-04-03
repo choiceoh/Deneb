@@ -10,6 +10,7 @@
 package server
 
 import (
+	"fmt"
 	"path/filepath"
 
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
@@ -31,12 +32,12 @@ import (
 
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
-func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) {
+func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) error {
 	hub.AdvancePhase(rpcutil.PhaseEarly)
 
 	// Fail fast if core hub fields are missing.
 	if err := hub.Validate(); err != nil {
-		panic("server init: " + err.Error())
+		return fmt.Errorf("server init: hub validation: %w", err)
 	}
 
 	// Lazy-init presence/heartbeat state.
@@ -57,7 +58,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		} else {
 			s.telegramPlug = telegram.NewPlugin(tgCfg, s.logger)
 			hub.SetTelegram(s.telegramPlug)
-			s.logger.Info("telegram channel configured")
 		}
 	}
 
@@ -179,6 +179,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// Special-case registrations with embedded business logic.
 	s.registerConfigLifecycleMethods()
 	s.registerAuthRPCMethods()
+	return nil
 }
 
 // registerLateMethods registers RPC domains that depend on chatHandler.

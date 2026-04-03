@@ -18,14 +18,19 @@ import (
 //  2. Tool Output Compression: after tool execution, compress large outputs
 //  3. Auto Memory: after successful run, extract key learnings to MEMORY.md
 
+// sglangBackgroundSem limits concurrent background sglang requests across all
+// hooks (proactive context, tool compression, auto memory, session memory).
+// This prevents concurrent requests from exhausting KV cache on the local model,
+// which can cause a deadlock where no new request can be scheduled.
+var sglangBackgroundSem = make(chan struct{}, 2)
+
 // --- 1. Proactive Context ---
 // Injected in executeAgentRun, between context assembly and agent loop.
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout       = 15 * time.Second // local sglang: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
-	proactiveRemoteTimeout = 20 * time.Second // remote fallback (Gemini Flash) needs more time
-	proactiveMaxTokens     = 1024
+	proactiveTimeout   = 15 * time.Second // local sglang: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
+	proactiveMaxTokens = 1024
 	proactiveMinMsgLen     = 20 // skip for very short messages
 )
 
@@ -94,17 +99,20 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 		return ""
 	}
 	// Check sglang health (cached probe, no per-call overhead).
-	sglangUp := pilot.CheckSglangHealth()
-	if !sglangUp && !pilot.HasRegistry() {
+	if !pilot.CheckSglangHealth() && !pilot.HasRegistry() {
 		return ""
 	}
 
-	timeout := proactiveTimeout
-	if !sglangUp {
-		timeout = proactiveRemoteTimeout
+	// Acquire sglang background semaphore (non-blocking — skip if busy).
+	select {
+	case sglangBackgroundSem <- struct{}{}:
+		defer func() { <-sglangBackgroundSem }()
+	default:
+		logger.Debug("proactive context skipped: sglang semaphore full")
+		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
 	defer cancel()
 
 	// Gather workspace signals: recent file list + memory file snippets.
@@ -130,16 +138,9 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	// Memory content is provided to the main LLM by PrefetchKnowledge (importance-weighted).
 	// Reading MEMORY.md here would be redundant I/O on every message.
 
-	var result string
-	var err error
-	if sglangUp {
-		result, err = pilot.CallLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
-	} else {
-		// sglang down — use pilot model (Gemini Flash) for proactive context.
-		result, err = pilot.CallPilotLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
-	}
+	result, err := pilot.CallLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
 	if err != nil {
-		logger.Debug("proactive context failed", "error", err, "remote", !sglangUp)
+		logger.Debug("proactive context failed", "error", err)
 		return ""
 	}
 
@@ -230,6 +231,14 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 	}
 	// Skip if sglang was recently confirmed down (cached result only, no probe).
 	if pilot.SglangRecentlyDown() {
+		return output
+	}
+
+	// Acquire sglang background semaphore (non-blocking — return original if busy).
+	select {
+	case sglangBackgroundSem <- struct{}{}:
+		defer func() { <-sglangBackgroundSem }()
+	default:
 		return output
 	}
 
@@ -392,7 +401,7 @@ func appendToMemoryFile(workspaceDir, content string, logger *slog.Logger) {
 // Called by ProgressTracker every N tool completions to generate a short Korean
 // status line from accumulated thinking text.
 
-const activitySummarySystemPrompt = `에이전트의 최근 생각 과정을 보고 지금 무엇을 하고 있는지 한국어 한 줄(30자 이내)로 요약하세요.
+const activitySummarySystemPrompt = `에이전트의 최근 도구 사용 내역을 보고 지금 무엇을 하고 있는지 한국어 한 줄(30자 이내)로 요약하세요.
 
 규칙:
 - "~하는 중" 형태로 끝내기 (예: "테스트 지연 원인 파악하는 중", "수정 결과 검증하는 중")
@@ -401,22 +410,31 @@ const activitySummarySystemPrompt = `에이전트의 최근 생각 과정을 보
 - 나쁜 예: "코드 검색", "파일 읽는 중" / 좋은 예: "캐시 구조 이해하는 중", "빌드 오류 원인 추적 중"`
 
 // SummarizeToolActivity uses the local sglang model to summarize recent agent
-// thinking into a short Korean phrase for the progress tracker status line.
-// Returns empty string on failure (caller should treat as a no-op).
-func SummarizeToolActivity(ctx context.Context, reasons []string) (string, error) {
+// tool activity into a short Korean phrase for the progress tracker status line.
+// The input is a slice of tool activity descriptions (e.g., "read: progress.go",
+// "grep: OnToolStart in gateway-go/"). Returns empty string on failure.
+func SummarizeToolActivity(ctx context.Context, activities []string) (string, error) {
 	if !pilot.CheckSglangHealth() {
 		return "", fmt.Errorf("sglang unavailable")
 	}
 
-	// Build user message from recent thinking snippets.
-	var b strings.Builder
-	b.WriteString("최근 에이전트 생각 과정:\n\n")
-	limit := len(reasons)
-	if limit > 5 {
-		reasons = reasons[limit-5:]
+	// Acquire sglang background semaphore (non-blocking — skip if busy).
+	select {
+	case sglangBackgroundSem <- struct{}{}:
+		defer func() { <-sglangBackgroundSem }()
+	default:
+		return "", fmt.Errorf("sglang semaphore full")
 	}
-	for i, r := range reasons {
-		snippet := pilot.TruncateInput(r, 300)
+
+	// Build user message from recent tool activity descriptions.
+	var b strings.Builder
+	b.WriteString("최근 에이전트 도구 사용 내역:\n\n")
+	limit := len(activities)
+	if limit > 5 {
+		activities = activities[limit-5:]
+	}
+	for i, a := range activities {
+		snippet := pilot.TruncateInput(a, 200)
 		fmt.Fprintf(&b, "%d. %s\n", i+1, snippet)
 	}
 

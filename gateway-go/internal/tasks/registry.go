@@ -54,7 +54,7 @@ func NewRegistry(store *Store, logger *slog.Logger) (*Registry, error) {
 func (r *Registry) restore() error {
 	tasks, err := r.store.ListAll()
 	if err != nil {
-		return err
+		return fmt.Errorf("list tasks: %w", err)
 	}
 	for _, t := range tasks {
 		r.tasks[t.TaskID] = t
@@ -63,14 +63,15 @@ func (r *Registry) restore() error {
 
 	flows, err := r.store.ListFlows()
 	if err != nil {
-		return err
+		return fmt.Errorf("list flows: %w", err)
 	}
 	for _, f := range flows {
 		r.flows[f.FlowID] = f
 	}
 
-	r.logger.Info("task registry restored",
-		"tasks", len(r.tasks), "flows", len(r.flows))
+	if len(r.tasks) > 0 || len(r.flows) > 0 {
+		r.logger.Info("task registry restored", "tasks", len(r.tasks), "flows", len(r.flows))
+	}
 	return nil
 }
 
@@ -91,7 +92,7 @@ func (r *Registry) Put(t *TaskRecord) error {
 
 	if err := r.store.UpsertTask(t); err != nil {
 		r.logger.Error("task registry: store upsert failed", "taskId", t.TaskID, "error", err)
-		return err
+		return fmt.Errorf("store upsert task %s: %w", t.TaskID, err)
 	}
 	return nil
 }

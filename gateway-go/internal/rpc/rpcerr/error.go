@@ -149,3 +149,28 @@ func Conflict(msg string) *Error {
 func FeatureDisabled(feature string) *Error {
 	return New(protocol.ErrFeatureDisabled, feature+" is disabled")
 }
+
+// InvalidRequest returns an INVALID_REQUEST error with a direct message.
+func InvalidRequest(msg string) *Error {
+	return New(protocol.ErrInvalidRequest, msg)
+}
+
+// DependencyFailed returns a DEPENDENCY_FAILED error.
+func DependencyFailed(msg string) *Error {
+	return New(protocol.ErrDependencyFailed, msg)
+}
+
+// ValidationFailed returns a VALIDATION_FAILED error.
+func ValidationFailed(msg string) *Error {
+	return New(protocol.ErrValidationFailed, msg)
+}
+
+// Unauthorized returns an UNAUTHORIZED error.
+func Unauthorized(msg string) *Error {
+	return New(protocol.ErrUnauthorized, msg)
+}
+
+// AgentTimeout returns an AGENT_TIMEOUT error.
+func AgentTimeout(msg string) *Error {
+	return New(protocol.ErrAgentTimeout, msg)
+}
