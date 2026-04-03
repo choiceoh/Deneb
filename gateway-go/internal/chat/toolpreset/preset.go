@@ -7,11 +7,12 @@ package toolpreset
 type Preset string
 
 const (
-	PresetNone        Preset = ""            // no restriction — all tools available
-	PresetResearcher  Preset = "researcher"  // read-only exploration tools
-	PresetImplementer Preset = "implementer" // read + write + build tools
-	PresetVerifier    Preset = "verifier"    // read + test + exec tools
-	PresetCoordinator Preset = "coordinator" // orchestration tools only
+	PresetNone         Preset = ""             // no restriction — all tools available
+	PresetResearcher   Preset = "researcher"   // read-only exploration tools
+	PresetImplementer  Preset = "implementer"  // read + write + build tools
+	PresetVerifier     Preset = "verifier"     // read + test + exec tools
+	PresetCoordinator  Preset = "coordinator"  // orchestration tools only
+	PresetConversation Preset = "conversation" // chat + web tools only (대화모드)
 )
 
 // researcherTools are read-only exploration tools for codebase investigation.
@@ -46,6 +47,12 @@ var coordinatorTools = toSet(
 	"fetch_tools",
 )
 
+// conversationTools are minimal tools for conversation mode (대화모드).
+// Only web access and memory — no file system, exec, or code tools.
+var conversationTools = toSet(
+	"web", "http", "memory", "fetch_tools",
+)
+
 // AllowedTools returns the set of tool names permitted for a given preset.
 // Returns nil when preset is empty or unknown (meaning no restriction).
 func AllowedTools(preset Preset) map[string]bool {
@@ -58,6 +65,8 @@ func AllowedTools(preset Preset) map[string]bool {
 		return verifierTools
 	case PresetCoordinator:
 		return coordinatorTools
+	case PresetConversation:
+		return conversationTools
 	default:
 		return nil
 	}
@@ -66,7 +75,7 @@ func AllowedTools(preset Preset) map[string]bool {
 // IsValid returns true if the preset is a recognized value (including empty).
 func IsValid(preset Preset) bool {
 	switch preset {
-	case PresetNone, PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator:
+	case PresetNone, PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator, PresetConversation:
 		return true
 	default:
 		return false
@@ -75,7 +84,7 @@ func IsValid(preset Preset) bool {
 
 // KnownPresets returns all non-empty preset values.
 func KnownPresets() []Preset {
-	return []Preset{PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator}
+	return []Preset{PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator, PresetConversation}
 }
 
 func toSet(names ...string) map[string]bool {
