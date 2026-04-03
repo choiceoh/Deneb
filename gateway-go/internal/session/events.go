@@ -1,6 +1,9 @@
 package session
 
-import "sync"
+import (
+	"log/slog"
+	"sync"
+)
 
 // EventKind identifies the type of session event.
 type EventKind string
@@ -79,11 +82,15 @@ func (b *EventBus) Emit(event Event) {
 	b.mu.RUnlock()
 
 	// Each handler is called in an isolated closure with panic recovery.
-	// Panics are silently swallowed to prevent a buggy subscriber from
-	// disrupting event delivery to other subscribers.
+	// Panics are logged and recovered so a buggy subscriber does not
+	// disrupt event delivery to other subscribers.
 	for _, h := range snapshot {
 		func() {
-			defer func() { recover() }()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("event bus: handler panicked", "event", event.Kind, "key", event.Key, "panic", r)
+				}
+			}()
 			h(event)
 		}()
 	}
