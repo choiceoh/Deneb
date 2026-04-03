@@ -5,6 +5,7 @@
 package aurora
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -34,20 +35,23 @@ type AssemblyResult struct {
 
 // Assemble selects messages and summaries from the Aurora store that fit
 // within the token budget. Uses Rust FFI when available; falls back to
-// simple tail-N selection.
+// simple tail-N selection. The context is checked between FFI iterations
+// so callers can cancel long-running assembly.
 func Assemble(
+	ctx context.Context,
 	store *Store,
 	conversationID uint64,
 	cfg AssemblyConfig,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
 	if ffi.Available {
-		return assembleFFI(store, conversationID, cfg, logger)
+		return assembleFFI(ctx, store, conversationID, cfg, logger)
 	}
 	return assembleFallback(store, conversationID, cfg, logger)
 }
 
 func assembleFFI(
+	ctx context.Context,
 	store *Store,
 	conversationID uint64,
 	cfg AssemblyConfig,
@@ -67,6 +71,10 @@ func assembleFFI(
 
 	const maxIterations = 50
 	for i := 0; i < maxIterations; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("aurora assembly: %w", err)
+		}
+
 		var cmd struct {
 			Type string `json:"type"`
 		}

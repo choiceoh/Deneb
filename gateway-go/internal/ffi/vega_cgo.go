@@ -13,20 +13,20 @@ extern int deneb_vega_search(
 */
 import "C"
 import (
+	"context"
 	"errors"
 	"unsafe"
 )
 
 const vegaOutBufSize = 1024 * 1024 // 1 MB default output buffer (grows on demand up to 16 MB)
 
-// VegaExecute executes a Vega command via the Rust FFI.
-// Returns the raw JSON response bytes. The output buffer grows automatically.
-func VegaExecute(cmd string) ([]byte, error) {
+// VegaExecuteCtx executes a Vega command via the Rust FFI, respecting context cancellation.
+func VegaExecuteCtx(ctx context.Context, cmd string) ([]byte, error) {
 	if len(cmd) == 0 {
 		return nil, errors.New("ffi: vega_execute: empty input")
 	}
 	cmdPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(cmd)))
-	return ffiCallWithGrow("vega_execute", vegaOutBufSize,
+	return ffiCallWithGrowCtx(ctx, "vega_execute", vegaOutBufSize,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_vega_execute(
 				cmdPtr, C.ulong(len(cmd)),
@@ -35,18 +35,27 @@ func VegaExecute(cmd string) ([]byte, error) {
 		})
 }
 
-// VegaSearch executes a Vega search query via the Rust FFI.
-// Returns the raw JSON results bytes. The output buffer grows automatically.
-func VegaSearch(query string) ([]byte, error) {
+// VegaSearchCtx executes a Vega search query via the Rust FFI, respecting context cancellation.
+func VegaSearchCtx(ctx context.Context, query string) ([]byte, error) {
 	if len(query) == 0 {
 		return nil, errors.New("ffi: vega_search: empty input")
 	}
 	queryPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(query)))
-	return ffiCallWithGrow("vega_search", vegaOutBufSize,
+	return ffiCallWithGrowCtx(ctx, "vega_search", vegaOutBufSize,
 		func(outPtr unsafe.Pointer, outLen int) int {
 			return int(C.deneb_vega_search(
 				queryPtr, C.ulong(len(query)),
 				(*C.uchar)(outPtr), C.ulong(outLen),
 			))
 		})
+}
+
+// VegaExecute executes a Vega command via the Rust FFI.
+func VegaExecute(cmd string) ([]byte, error) {
+	return VegaExecuteCtx(context.Background(), cmd)
+}
+
+// VegaSearch executes a Vega search query via the Rust FFI.
+func VegaSearch(query string) ([]byte, error) {
+	return VegaSearchCtx(context.Background(), query)
 }

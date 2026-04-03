@@ -447,7 +447,7 @@ func TestCompaction_AuroraAssemblyFallback(t *testing.T) {
 		FreshTailCount: 32,
 		MaxMessages:    100,
 	}
-	result, err := aurora.Assemble(store, 1, cfg, nil)
+	result, err := aurora.Assemble(context.Background(), store, 1, cfg, nil)
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
@@ -685,7 +685,7 @@ func TestCompaction_EndToEndChatWithAurora(t *testing.T) {
 			FreshTailCount: 4,
 			MaxMessages:    100,
 		}
-		asmResult, err := aurora.Assemble(auroraStore, 1, asmCfg, nil)
+		asmResult, err := aurora.Assemble(context.Background(), auroraStore, 1, asmCfg, nil)
 		if err != nil {
 			t.Fatalf("Assemble after compaction: %v", err)
 		}

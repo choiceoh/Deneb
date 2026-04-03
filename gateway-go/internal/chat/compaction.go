@@ -336,7 +336,7 @@ func handleContextOverflowAurora(
 		FreshTailCount: deps.contextCfg.FreshTailCount,
 		MaxMessages:    deps.contextCfg.MaxMessages,
 	}
-	asmResult, err := aurora.Assemble(deps.auroraStore, 1, asmCfg, logger)
+	asmResult, err := aurora.Assemble(ctx, deps.auroraStore, 1, asmCfg, logger)
 	if err != nil {
 		return nil, "", fmt.Errorf("aurora reassemble after compaction: %w", err)
 	}

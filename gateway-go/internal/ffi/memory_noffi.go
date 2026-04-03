@@ -3,6 +3,7 @@
 package ffi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math"
@@ -65,6 +66,11 @@ func MemoryBuildFtsQuery(raw string) (string, error) {
 		return "", nil
 	}
 	return strings.Join(tokens, " OR "), nil
+}
+
+// MemoryMergeHybridResultsCtx is the context-aware variant (noffi delegates to the non-ctx version).
+func MemoryMergeHybridResultsCtx(ctx context.Context, paramsJSON string) (json.RawMessage, error) {
+	return MemoryMergeHybridResults(paramsJSON)
 }
 
 // MemoryMergeHybridResults is a pure-Go fallback for hybrid search merge.
