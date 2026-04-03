@@ -17,7 +17,7 @@ pub enum ErrorCode {
     AgentTimeout = 3,
     InvalidRequest = 4,
     Unavailable = 5,
-    // INVALID_REQUEST refinements
+    // `INVALID_REQUEST` refinements
     MissingParam = 10,
     NotFound = 11,
     Unauthorized = 12,

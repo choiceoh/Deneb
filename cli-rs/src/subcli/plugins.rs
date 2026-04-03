@@ -141,12 +141,24 @@ fn print_plugins_table(result: &serde_json::Value) {
     let mut table = styled_table();
     table.set_header(vec!["ID", "Version", "Enabled"]);
     for p in plugins {
-        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or(Symbols::DASH);
-        let version = p.get("version").and_then(|v| v.as_str()).unwrap_or(Symbols::DASH);
+        let id = p
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or(Symbols::DASH);
+        let version = p
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or(Symbols::DASH);
         let enabled = p
             .get("enabled")
             .and_then(|v| v.as_bool())
-            .map(|b| if b { Symbols::DOT_FILLED } else { Symbols::DASH })
+            .map(|b| {
+                if b {
+                    Symbols::DOT_FILLED
+                } else {
+                    Symbols::DASH
+                }
+            })
             .unwrap_or(Symbols::DASH);
         table.add_row(vec![id, version, enabled]);
     }

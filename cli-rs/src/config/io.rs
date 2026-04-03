@@ -29,9 +29,8 @@ fn parse_config_json5(raw: &str, path: &Path) -> Result<DenebConfig, CliError> {
     if let Ok(config) = serde_json::from_str::<DenebConfig>(raw) {
         return Ok(config);
     }
-    json5::from_str(raw).map_err(|e| {
-        CliError::Config(format!("failed to parse config at {}: {e}", path.display()))
-    })
+    json5::from_str(raw)
+        .map_err(|e| CliError::Config(format!("failed to parse config at {}: {e}", path.display())))
 }
 
 /// Best-effort config load: returns default config on any error.

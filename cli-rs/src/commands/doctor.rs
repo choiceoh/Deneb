@@ -267,11 +267,7 @@ fn check_config(
     }
 }
 
-async fn check_gateway_health(
-    results: &mut Vec<DiagResult>,
-    args: &DoctorArgs,
-    cfg: &DenebConfig,
-) {
+async fn check_gateway_health(results: &mut Vec<DiagResult>, args: &DoctorArgs, cfg: &DenebConfig) {
     let result = crate::terminal::progress::with_spinner(
         "Checking gateway...",
         !is_json_mode(args.json),

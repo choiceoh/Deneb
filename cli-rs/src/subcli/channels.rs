@@ -38,14 +38,20 @@ pub async fn run(args: &ChannelsArgs) -> Result<(), CliError> {
             if *no_usage {
                 params["noUsage"] = serde_json::json!(true);
             }
-            rpc_print_fmt("telegram.list", params, gw, "Fetching channels...", |result, json_mode| {
-                if json_mode {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
-                    return Ok(());
-                }
-                print_channels_list(&result);
-                Ok(())
-            })
+            rpc_print_fmt(
+                "telegram.list",
+                params,
+                gw,
+                "Fetching channels...",
+                |result, json_mode| {
+                    if json_mode {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                        return Ok(());
+                    }
+                    print_channels_list(&result);
+                    Ok(())
+                },
+            )
             .await
         }
         ChannelsCommand::Status { probe, gw } => {
@@ -55,15 +61,25 @@ pub async fn run(args: &ChannelsArgs) -> Result<(), CliError> {
                 params["probe"] = serde_json::json!(true);
             }
             params["timeoutMs"] = serde_json::json!(gw.timeout);
-            let spinner_msg = if probe { "Probing channels..." } else { "Fetching channel status..." };
-            rpc_print_fmt("telegram.status", params, gw, spinner_msg, move |result, json_mode| {
-                if json_mode {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
-                    return Ok(());
-                }
-                print_channels_status(&result, probe);
-                Ok(())
-            })
+            let spinner_msg = if probe {
+                "Probing channels..."
+            } else {
+                "Fetching channel status..."
+            };
+            rpc_print_fmt(
+                "telegram.status",
+                params,
+                gw,
+                spinner_msg,
+                move |result, json_mode| {
+                    if json_mode {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                        return Ok(());
+                    }
+                    print_channels_status(&result, probe);
+                    Ok(())
+                },
+            )
             .await
         }
     }
@@ -105,9 +121,19 @@ fn print_channels_list(result: &serde_json::Value) {
             let enabled = acct
                 .get("enabled")
                 .and_then(|v| v.as_bool())
-                .map(|b| if b { Symbols::DOT_FILLED } else { Symbols::DASH })
+                .map(|b| {
+                    if b {
+                        Symbols::DOT_FILLED
+                    } else {
+                        Symbols::DASH
+                    }
+                })
                 .unwrap_or(Symbols::DASH);
-            table.add_row(vec![channel.clone(), account_id.to_string(), enabled.to_string()]);
+            table.add_row(vec![
+                channel.clone(),
+                account_id.to_string(),
+                enabled.to_string(),
+            ]);
         }
     }
 
@@ -131,7 +157,14 @@ fn print_channels_status(result: &serde_json::Value, probe: bool) {
     println!();
 
     let mut table = styled_table();
-    let mut headers = vec!["Channel", "Account", "Enabled", "Configured", "Linked", "Connected"];
+    let mut headers = vec![
+        "Channel",
+        "Account",
+        "Enabled",
+        "Configured",
+        "Linked",
+        "Connected",
+    ];
     if probe {
         headers.push("Probe");
     }

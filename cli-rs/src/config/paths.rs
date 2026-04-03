@@ -203,7 +203,10 @@ mod tests {
                 case.default_dir_exists,
                 case.first_existing_legacy.map(Path::new),
             );
-            let basename = result.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            let basename = result
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
             assert_eq!(
                 basename, case.expected_basename,
                 "case '{}': expected {:?}, got {:?}",
@@ -251,7 +254,10 @@ mod tests {
                 case.config_path_override.map(Path::new),
                 case.first_existing_candidate.map(Path::new),
             );
-            let basename = result.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            let basename = result
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
             assert_eq!(
                 basename, case.expected_basename,
                 "case '{}': expected {:?}, got {:?}",
@@ -333,7 +339,10 @@ mod tests {
 
     #[test]
     fn resolve_gateway_port_falls_back_to_default() {
-        assert_eq!(resolve_gateway_port_policy(None, None), DEFAULT_GATEWAY_PORT);
+        assert_eq!(
+            resolve_gateway_port_policy(None, None),
+            DEFAULT_GATEWAY_PORT
+        );
     }
 
     #[test]

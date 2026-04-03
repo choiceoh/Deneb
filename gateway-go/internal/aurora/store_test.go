@@ -340,4 +340,3 @@ func TestFetchEmptyCollections(t *testing.T) {
 		t.Errorf("expected 0 tokens, got %d", total)
 	}
 }
-

@@ -40,14 +40,20 @@ pub async fn run(args: &ModelsArgs) -> Result<(), CliError> {
                 "all": all,
                 "provider": provider,
             });
-            rpc_print_fmt("models.list", params, gw, "Fetching models...", |result, json_mode| {
-                if json_mode {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
-                    return Ok(());
-                }
-                print_models_list(&result);
-                Ok(())
-            })
+            rpc_print_fmt(
+                "models.list",
+                params,
+                gw,
+                "Fetching models...",
+                |result, json_mode| {
+                    if json_mode {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                        return Ok(());
+                    }
+                    print_models_list(&result);
+                    Ok(())
+                },
+            )
             .await
         }
         ModelsCommand::Status { gw } => {
@@ -93,7 +99,10 @@ fn print_models_list(result: &serde_json::Value) {
         table.set_header(vec!["Model", "Provider", "Type"]);
 
         for model in models {
-            let id = model.get("id").and_then(|v| v.as_str()).unwrap_or(Symbols::DASH);
+            let id = model
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(Symbols::DASH);
             let prov = model
                 .get("provider")
                 .and_then(|v| v.as_str())
@@ -114,7 +123,10 @@ fn print_models_list(result: &serde_json::Value) {
             println!();
         }
     } else {
-        println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(result).unwrap_or_default()
+        );
     }
 }
 
