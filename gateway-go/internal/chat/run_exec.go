@@ -693,7 +693,7 @@ func executeAgentRun(
 		hooks.OnThinking = func() {
 			typingSignaler.SignalReasoningDelta()
 		}
-		hooks.OnToolStart = func(_ string, _ string) {
+		hooks.OnToolStart = func(_ string, _ string, _ []byte) {
 			typingSignaler.SignalToolStart()
 		}
 	}
@@ -706,9 +706,9 @@ func executeAgentRun(
 			statusCtrl.SetThinking()
 		}
 		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string) {
+		hooks.OnToolStart = func(name, reason string, input []byte) {
 			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason)
+				prevOnToolStart(name, reason, input)
 			}
 			statusCtrl.SetTool(name)
 		}
@@ -728,11 +728,11 @@ func executeAgentRun(
 	if deps.toolProgressFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
 		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string) {
+		hooks.OnToolStart = func(name, reason string, input []byte) {
 			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason)
+				prevOnToolStart(name, reason, input)
 			}
-			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "start", Name: name, Reason: reason})
+			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "start", Name: name, Reason: reason, Input: input})
 		}
 		prevOnToolResult := hooks.OnToolResult
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
@@ -747,9 +747,9 @@ func executeAgentRun(
 	// clients receive real-time agent activity events via the event bus.
 	if deps.emitAgentFn != nil {
 		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string) {
+		hooks.OnToolStart = func(name, reason string, input []byte) {
 			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason)
+				prevOnToolStart(name, reason, input)
 			}
 			deps.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
 				"tool": name,
@@ -935,10 +935,10 @@ func executeAgentRun(
 		// edit it in-place. SanitizeDraftText already strips tool call
 		// markup and code blocks during streaming, so deletion is not needed.
 		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string) {
+		hooks.OnToolStart = func(name, reason string, input []byte) {
 			draftCtrl.StopForClear()
 			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason)
+				prevOnToolStart(name, reason, input)
 			}
 		}
 	}

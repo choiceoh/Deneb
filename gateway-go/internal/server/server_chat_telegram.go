@@ -243,7 +243,7 @@ func (s *Server) wireTelegramChatHandler() {
 
 		switch event.Type {
 		case "start":
-			pt.OnToolStart(ctx, event.Name, event.Reason)
+			pt.OnToolStart(ctx, event.Name, event.Input)
 		case "complete":
 			pt.OnToolComplete(ctx, event.Name, event.IsError)
 		case "finalize":

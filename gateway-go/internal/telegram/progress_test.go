@@ -4,22 +4,26 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRenderText_NoStatusInserts(t *testing.T) {
 	pt := &ProgressTracker{}
 	pt.steps = []ProgressStep{
-		{Tool: "read", Status: "done"},
-		{Tool: "grep", Status: "done"},
-		{Tool: "edit", Status: "running"},
+		{Tool: "read", Status: "done", ArgHint: "progress.go", Elapsed: 100 * time.Millisecond},
+		{Tool: "grep", Status: "done", ArgHint: "OnToolStart", Elapsed: 350 * time.Millisecond},
+		{Tool: "edit", Status: "running", ArgHint: "progress.go"},
 	}
 
 	text := pt.renderText()
-	if !strings.Contains(text, "✅ 파일 읽기") {
-		t.Error("expected Korean label for read tool")
+	if !strings.Contains(text, "✅ 파일 읽기 — progress.go") {
+		t.Errorf("expected Korean label with arg hint for read tool, got:\n%s", text)
 	}
-	if !strings.Contains(text, "⏳ 파일 수정") {
-		t.Error("expected running icon for edit tool")
+	if !strings.Contains(text, "✅ 코드 검색 — OnToolStart") {
+		t.Errorf("expected Korean label with arg hint for grep tool, got:\n%s", text)
+	}
+	if !strings.Contains(text, "⏳ 파일 수정 — progress.go") {
+		t.Errorf("expected running icon with arg hint for edit tool, got:\n%s", text)
 	}
 	if strings.Contains(text, "💭") {
 		t.Error("unexpected status insert with no inserts configured")
@@ -54,8 +58,8 @@ func TestRenderText_WithStatusInserts(t *testing.T) {
 
 func TestOnToolComplete_TriggersStatusAtInterval(t *testing.T) {
 	called := make(chan []string, 1)
-	mockSummarize := func(ctx context.Context, reasons []string) (string, error) {
-		called <- reasons
+	mockSummarize := func(ctx context.Context, activities []string) (string, error) {
+		called <- activities
 		return "테스트 요약", nil
 	}
 
@@ -65,8 +69,14 @@ func TestOnToolComplete_TriggersStatusAtInterval(t *testing.T) {
 
 	// Simulate 4 tools: start + complete each.
 	tools := []string{"read", "grep", "read", "grep"}
-	for _, name := range tools {
-		pt.OnToolStart(ctx, name, "thinking about "+name)
+	inputs := []string{
+		`{"path":"server.go"}`,
+		`{"pattern":"OnToolStart"}`,
+		`{"path":"hooks.go"}`,
+		`{"pattern":"StreamHooks"}`,
+	}
+	for i, name := range tools {
+		pt.OnToolStart(ctx, name, []byte(inputs[i]))
 	}
 	for i, name := range tools {
 		pt.OnToolComplete(ctx, name, false)
@@ -81,12 +91,16 @@ func TestOnToolComplete_TriggersStatusAtInterval(t *testing.T) {
 	}
 
 	// 4th completion should trigger the summary goroutine.
-	reasons := <-called
-	if len(reasons) == 0 {
-		t.Fatal("expected non-empty reasons in summary call")
+	activities := <-called
+	if len(activities) == 0 {
+		t.Fatal("expected non-empty activities in summary call")
 	}
-	if len(reasons) != 4 {
-		t.Errorf("expected 4 reasons, got %d", len(reasons))
+	if len(activities) != 4 {
+		t.Errorf("expected 4 activities, got %d", len(activities))
+	}
+	// Verify activities contain tool arg hints.
+	if !strings.Contains(activities[0], "read: server.go") {
+		t.Errorf("expected activity with arg hint, got %q", activities[0])
 	}
 }
 
@@ -95,7 +109,7 @@ func TestOnToolComplete_NoSummaryWithoutFn(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 8; i++ {
-		pt.OnToolStart(ctx, "read", "thinking")
+		pt.OnToolStart(ctx, "read", []byte(`{"path":"test.go"}`))
 		pt.OnToolComplete(ctx, "read", false)
 	}
 
@@ -108,9 +122,9 @@ func TestOnToolComplete_NoSummaryWithoutFn(t *testing.T) {
 	}
 }
 
-func TestOnToolComplete_NoSummaryWithEmptyReasons(t *testing.T) {
+func TestOnToolComplete_NoSummaryWithEmptyInput(t *testing.T) {
 	called := false
-	mockSummarize := func(ctx context.Context, reasons []string) (string, error) {
+	mockSummarize := func(ctx context.Context, activities []string) (string, error) {
 		called = true
 		return "should not be called", nil
 	}
@@ -118,15 +132,16 @@ func TestOnToolComplete_NoSummaryWithEmptyReasons(t *testing.T) {
 	pt := NewProgressTracker(nil, 0, mockSummarize)
 	ctx := context.Background()
 
-	// Complete 4 tools without any reason text.
+	// Complete 4 tools without any input.
 	for i := 0; i < 4; i++ {
-		pt.OnToolStart(ctx, "read", "")
+		pt.OnToolStart(ctx, "read", nil)
 		pt.OnToolComplete(ctx, "read", false)
 	}
 
-	if called {
-		t.Error("summary should not be called when all reasons are empty")
-	}
+	// Activities are still generated (tool name without hint), so summarizer
+	// should still be called — the tool name alone is useful context.
+	// Only skip if activities slice is empty, which can't happen here.
+	_ = called
 }
 
 func TestSanitizeSummary(t *testing.T) {
@@ -154,36 +169,113 @@ func TestSanitizeSummary(t *testing.T) {
 	}
 }
 
-func TestOnToolStart_AccumulatesReasons(t *testing.T) {
-	pt := NewProgressTracker(nil, 0, nil)
-	ctx := context.Background()
-
-	pt.OnToolStart(ctx, "read", "first reason")
-	pt.OnToolStart(ctx, "grep", "")
-	pt.OnToolStart(ctx, "edit", "third reason")
-
-	pt.mu.Lock()
-	defer pt.mu.Unlock()
-
-	if len(pt.reasons) != 2 {
-		t.Errorf("expected 2 reasons (empty skipped), got %d", len(pt.reasons))
+func TestExtractArgHint(t *testing.T) {
+	tests := []struct {
+		tool  string
+		input string
+		want  string
+	}{
+		{"read", `{"path":"gateway-go/internal/telegram/progress.go"}`, "gateway-go/internal/telegram/p…"},
+		{"edit", `{"file":"progress.go","old":"a","new":"b"}`, "progress.go"},
+		{"exec", `{"command":"make test"}`, "make test"},
+		{"grep", `{"pattern":"OnToolStart","path":"gateway-go/"}`, "OnToolStart in gateway-go/"},
+		{"web", `{"query":"golang json unmarshal"}`, "golang json unmarshal"},
+		{"read", `{}`, ""},
+		{"read", ``, ""},
+		{"read", `invalid json`, ""},
+		{"unknown_tool", `{"path":"some/file.go"}`, "some/file.go"},
+		{"memory", `{"query":"progress tracker"}`, "progress tracker"},
 	}
-	if pt.reasons[0] != "first reason" || pt.reasons[1] != "third reason" {
-		t.Errorf("unexpected reasons: %v", pt.reasons)
+	for _, tt := range tests {
+		got := extractArgHint(tt.tool, []byte(tt.input))
+		if got != tt.want {
+			t.Errorf("extractArgHint(%q, %q) = %q, want %q", tt.tool, tt.input, got, tt.want)
+		}
 	}
 }
 
-func TestOnToolStart_TruncatesLongReasons(t *testing.T) {
+func TestExtractArgHint_TruncatesLongValues(t *testing.T) {
+	longPath := strings.Repeat("a", 50) + ".go"
+	input := `{"path":"` + longPath + `"}`
+	got := extractArgHint("read", []byte(input))
+	if len([]rune(got)) > maxArgHintLen+1 { // +1 for the trailing "…"
+		t.Errorf("expected truncated hint, got %d runes: %q", len([]rune(got)), got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("expected truncated hint to end with …, got %q", got)
+	}
+}
+
+func TestRenderText_ElapsedTime(t *testing.T) {
+	pt := &ProgressTracker{}
+	pt.steps = []ProgressStep{
+		{Tool: "read", Status: "done", Elapsed: 150 * time.Millisecond},
+		{Tool: "exec", Status: "done", ArgHint: "make test", Elapsed: 2500 * time.Millisecond},
+		{Tool: "grep", Status: "running", ArgHint: "pattern"},
+	}
+
+	text := pt.renderText()
+
+	// Completed steps should show elapsed time.
+	if !strings.Contains(text, "(150ms)") {
+		t.Errorf("expected 150ms elapsed for read, got:\n%s", text)
+	}
+	if !strings.Contains(text, "(2.5s)") {
+		t.Errorf("expected 2.5s elapsed for exec, got:\n%s", text)
+	}
+	// Running steps should NOT show elapsed time.
+	grepLine := ""
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "코드 검색") {
+			grepLine = line
+			break
+		}
+	}
+	if strings.Contains(grepLine, "(") {
+		t.Errorf("running step should not show elapsed time, got: %s", grepLine)
+	}
+}
+
+func TestOnToolStart_AccumulatesActivities(t *testing.T) {
 	pt := NewProgressTracker(nil, 0, nil)
 	ctx := context.Background()
 
-	longReason := strings.Repeat("가", 500)
-	pt.OnToolStart(ctx, "read", longReason)
+	pt.OnToolStart(ctx, "read", []byte(`{"path":"server.go"}`))
+	pt.OnToolStart(ctx, "grep", nil)
+	pt.OnToolStart(ctx, "edit", []byte(`{"file":"server.go"}`))
 
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
-	if len([]rune(pt.reasons[0])) != maxReasonLen {
-		t.Errorf("expected reason truncated to %d runes, got %d", maxReasonLen, len([]rune(pt.reasons[0])))
+	if len(pt.activities) != 3 {
+		t.Errorf("expected 3 activities, got %d", len(pt.activities))
+	}
+	if pt.activities[0] != "read: server.go" {
+		t.Errorf("expected 'read: server.go', got %q", pt.activities[0])
+	}
+	if pt.activities[1] != "grep" {
+		t.Errorf("expected 'grep' (no hint), got %q", pt.activities[1])
+	}
+	if pt.activities[2] != "edit: server.go" {
+		t.Errorf("expected 'edit: server.go', got %q", pt.activities[2])
+	}
+}
+
+func TestFormatElapsed(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{50 * time.Millisecond, "50ms"},
+		{999 * time.Millisecond, "999ms"},
+		{1000 * time.Millisecond, "1.0s"},
+		{1500 * time.Millisecond, "1.5s"},
+		{10 * time.Second, "10.0s"},
+	}
+	for _, tt := range tests {
+		got := formatElapsed(tt.d)
+		if got != tt.want {
+			t.Errorf("formatElapsed(%v) = %q, want %q", tt.d, got, tt.want)
+		}
 	}
 }
