@@ -359,19 +359,28 @@ def cmd_start(args):
         print(f"build: binary not found at {DEV_BINARY}")
         sys.exit(1)
 
-    # 3. Write Telegram config.
-    config = {
-        "channels": {
-            "telegram": {
-                "botToken": BOT_TOKEN,
-                "dmPolicy": "open",
-                "streaming": "partial",
-                "reactionLevel": "extensive",
-            },
-        },
+    # 3. Write config: merge production config with vchat Telegram override.
+    prod_config = {}
+    for p in [os.path.expanduser("~/.deneb/deneb.json"), os.environ.get("DENEB_CONFIG_PATH", "")]:
+        if p and os.path.exists(p):
+            try:
+                with open(p) as f:
+                    prod_config = json.load(f)
+                break
+            except Exception:
+                pass
+
+    # Inject mock Telegram channel config (override any existing telegram section).
+    if "channels" not in prod_config:
+        prod_config["channels"] = {}
+    prod_config["channels"]["telegram"] = {
+        "botToken": BOT_TOKEN,
+        "dmPolicy": "open",
+        "streaming": "partial",
+        "reactionLevel": "extensive",
     }
     with open(DEV_CONFIG, "w") as f:
-        json.dump(config, f)
+        json.dump(prod_config, f)
 
     # 4. Start gateway.
     print(f"gateway: starting on :{GATEWAY_PORT}")
