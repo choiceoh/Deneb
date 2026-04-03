@@ -1685,3 +1685,19 @@ func fetchToolsToolSchema() map[string]any {
 		},
 	}
 }
+
+func skillsListToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search filter to match skill name, description, or category",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"description": "Filter by skill category (e.g., coding, productivity, devops)",
+			},
+		},
+	}
+}

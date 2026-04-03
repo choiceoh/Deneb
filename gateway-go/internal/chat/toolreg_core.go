@@ -2,8 +2,8 @@ package chat
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -15,6 +15,9 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		BaseURL:           pilot.LightweightBaseURL,
 	}
 	toolreg.RegisterCoreTools(registry, deps, sglang)
+
+	// Skills discovery: lists non-always skills on demand (lightweight prompt strategy).
+	toolreg.RegisterSkillsTools(registry, GetCachedSkillsSnapshot)
 
 	// Pilot registered here: it depends on sglang hooks from chat/sglang_hooks.go.
 	registry.RegisterTool(ToolDef{

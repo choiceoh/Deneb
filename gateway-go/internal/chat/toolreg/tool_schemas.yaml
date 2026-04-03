@@ -1478,3 +1478,17 @@
       type: string
       description: "Keyword search to find matching deferred tools (alternative to names)"
   required: []
+
+# ---------------------------------------------------------------------------
+# Skills discovery
+# ---------------------------------------------------------------------------
+
+- name: skills_list
+  properties:
+    query:
+      type: string
+      description: "Search filter to match skill name, description, or category"
+    category:
+      type: string
+      description: "Filter by skill category (e.g., coding, productivity, devops)"
+  required: []

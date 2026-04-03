@@ -343,6 +343,18 @@ func buildSglangProbe(sglang *SglangDeps) tools.SglangProbe {
 }
 
 // RegisterInfraTools registers infrastructure health-check tools.
+// RegisterSkillsTools registers skill discovery tools.
+func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider) {
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "skills_list",
+		Description:     "List available skills for specialized tasks. Use when the current task might match a skill not in the system prompt.",
+		InputSchema:     skillsListToolSchema(),
+		Fn:              tools.ToolSkillsList(getSnapshot),
+		Deferred:        true,
+		ConcurrencySafe: true,
+	})
+}
+
 func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sglang *SglangDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "health_check",
