@@ -46,9 +46,9 @@ func NewEnhancedBackend(cfg EnhancedBackendConfig) *EnhancedBackend {
 	rust := NewRustBackend(RustBackendConfig{Logger: cfg.Logger})
 	expander := NewLLMExpander(cfg.SglangURL, cfg.SglangModel, cfg.Logger)
 
-	// Reranker uses Jina Reranker API if API key is configured.
+	// Cross-encoder reranker (local jina-reranker-v3 by default).
 	reranker := NewReranker(RerankConfig{
-		APIKey: cfg.JinaAPIKey,
+		APIKey: cfg.JinaAPIKey, // optional; empty for local server
 		Logger: cfg.Logger,
 	})
 

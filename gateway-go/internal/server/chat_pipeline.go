@@ -84,10 +84,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, reg *modelrole
 		}
 	}
 
-	// Jina cross-encoder reranker.
-	if s.jinaAPIKey != "" {
+	// Cross-encoder reranker (local jina-reranker-v3 by default).
+	{
 		reranker := vega.NewReranker(vega.RerankConfig{
-			APIKey: s.jinaAPIKey,
+			APIKey: s.jinaAPIKey, // optional; empty for local server
 			Logger: s.logger,
 		})
 		if reranker != nil {
