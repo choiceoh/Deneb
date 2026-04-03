@@ -417,8 +417,8 @@ func boolLabel(b bool) string {
 }
 
 // memoryRecall performs deep memory recall with entity expansion, relation chain
-// traversal, and local LLM organization. Use when the agent needs rich context
-// about past conversations, decisions, or user preferences.
+// traversal, and reranker-based fact selection. Use when the agent needs rich
+// context about past conversations, decisions, or user preferences.
 func memoryRecall(ctx context.Context, d *toolctx.VegaDeps, p memoryParams, logger *slog.Logger) (string, error) {
 	if p.Query == "" {
 		return "", fmt.Errorf("query is required for recall")
@@ -426,13 +426,9 @@ func memoryRecall(ctx context.Context, d *toolctx.VegaDeps, p memoryParams, logg
 	if d.MemoryStore == nil {
 		return "[memory store not configured]", nil
 	}
-	if d.RecallClient == nil {
-		// Fallback to basic search when recall LLM is unavailable.
-		return memorySearch(ctx, d, "", p)
-	}
 
 	result := memory.Recall(ctx, d.MemoryStore, d.MemoryEmbedder,
-		d.RecallClient, d.RecallModel, p.Query, memory.DefaultRecallConfig(), logger)
+		d.MemoryStore.Reranker(), p.Query, memory.DefaultRecallConfig(), logger)
 	if result == "" {
 		return fmt.Sprintf("No recalled memories for %q.", p.Query), nil
 	}
