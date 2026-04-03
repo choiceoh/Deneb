@@ -14,7 +14,6 @@ import (
 func (s *Server) initPluginSubsystem() {
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
 	s.pluginDiscoverer = plugin.NewPluginDiscoverer(s.logger)
-	s.conversationBindings = plugin.NewConversationBindingStore()
 	// Use the FullRegistry's hook runner so plugin-registered hooks and
 	// chat-fired hooks share the same TypedHookRunner instance.
 	s.pluginTypedHookRunner = s.pluginFullRegistry.HookRunner()
