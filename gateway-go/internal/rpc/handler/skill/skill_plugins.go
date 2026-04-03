@@ -39,8 +39,7 @@ func PluginMethods(deps PluginDeps) map[string]rpcutil.HandlerFunc {
 func pluginsList(deps PluginDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		plugins := deps.PluginRegistry.ListPlugins()
-		resp := protocol.MustResponseOK(req.ID, plugins)
-		return resp
+		return rpcutil.RespondOK(req.ID, plugins)
 	}
 }
 
@@ -58,7 +57,6 @@ func pluginsSnapshot(deps PluginDeps) rpcutil.HandlerFunc {
 			Health:     health,
 			SnapshotAt: time.Now().UnixMilli(),
 		}
-		resp := protocol.MustResponseOK(req.ID, snapshot)
-		return resp
+		return rpcutil.RespondOK(req.ID, snapshot)
 	}
 }

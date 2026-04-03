@@ -62,7 +62,6 @@ type Service struct {
 	errorLearner       *ErrorLearner
 	codeReviewer       *CodeReviewer
 	cronSuggester      *CronSuggester
-	githubTracker      *GitHubEventTracker
 
 	listeners []EventListener
 }
@@ -88,7 +87,6 @@ func NewService(cfg Config) *Service {
 	svc.errorLearner = newErrorLearner(svc)
 	svc.codeReviewer = newCodeReviewer(svc)
 	svc.cronSuggester = newCronSuggester(svc)
-	svc.githubTracker = newGitHubTracker(svc)
 	return svc
 }
 
@@ -106,28 +104,22 @@ func (s *Service) Start() {
 	// Create shadow session in the session manager.
 	if s.cfg.Sessions != nil {
 		s.cfg.Sessions.Create(s.sessionKey, session.KindShadow)
-		s.cfg.Logger.Info("shadow session created", "key", s.sessionKey, "monitoring", s.cfg.MainSessionKey)
 	}
 
 	// Subscribe to transcript appends for real-time monitoring.
 	if s.cfg.TranscriptWriter != nil {
 		s.unsubAppend = s.cfg.TranscriptWriter.OnAppend(s.onTranscriptAppend)
-		s.cfg.Logger.Info("shadow monitoring: subscribed to transcript appends")
 	}
 
 	// Subscribe to session lifecycle events.
 	if s.cfg.Sessions != nil {
 		s.unsubEvents = s.cfg.Sessions.EventBusRef().Subscribe(s.onSessionEvent)
-		s.cfg.Logger.Info("shadow monitoring: subscribed to session events")
 	}
 
 	// Start periodic digest loop.
 	go s.digestLoop()
 
-	s.cfg.Logger.Info("shadow monitoring service started",
-		"sessionKey", s.sessionKey,
-		"mainSession", s.cfg.MainSessionKey,
-	)
+	s.cfg.Logger.Info("shadow monitoring started", "session", s.cfg.MainSessionKey)
 }
 
 // Stop shuts down the shadow monitoring service.
@@ -332,13 +324,6 @@ func (s *Service) sendDigest() {
 		msg += fmt.Sprintf("\n\n⏰ 크론 작업 제안: %d건", len(cronSuggestions))
 	}
 
-	// Append GitHub activity summary.
-	ghDigest := s.githubTracker.FormatDigestSection()
-	if ghDigest != "" {
-		msg += "\n\n" + ghDigest
-	}
-	s.githubTracker.ResetDigestCounters()
-
 	// Save continuity snapshot before digest.
 	s.sessionContinuity.SaveSnapshot()
 
@@ -379,7 +364,6 @@ func (s *Service) ExtendedStatus() ExtendedStatus {
 	ext.RecurringErrors = len(s.errorLearner.GetRecurringErrors())
 	ext.Continuity = s.sessionContinuity.LoadSnapshot()
 	ext.PrefetchedCtx = s.contextPrefetcher.GetPrefetchedContexts()
-	ext.GitHubActivity = s.githubTracker.GetActivitySummary()
 
 	return ext
 }
@@ -408,17 +392,6 @@ func (s *Service) CodeReviewer() *CodeReviewer { return s.codeReviewer }
 // CronSuggester returns the cron suggester module.
 func (s *Service) CronSuggester() *CronSuggester { return s.cronSuggester }
 
-// GitHubTracker returns the GitHub event tracker module.
-func (s *Service) GitHubTracker() *GitHubEventTracker { return s.githubTracker }
-
-// OnGitHubEvent is the entry point for GitHub webhook events into shadow.
-// Called from the webhook handler's async goroutine.
-func (s *Service) OnGitHubEvent(eventType string, payload map[string]any) {
-	if !s.started {
-		return
-	}
-	s.githubTracker.OnEvent(eventType, payload)
-}
 
 // notifyCtx returns a context with a 15-second timeout for notifications.
 func (s *Service) notifyCtx() (context.Context, context.CancelFunc) {

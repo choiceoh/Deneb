@@ -865,39 +865,6 @@ func gatewayToolSchema() map[string]any {
 	}
 }
 
-func githubWebhookToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"enum":        []string{"setup", "list", "delete", "status"},
-				"description": "setup: register webhook on a GitHub repo; list: show webhooks; delete: remove by ID; status: show Deneb endpoint config",
-			},
-			"repo": map[string]any{
-				"type":        "string",
-				"description": "GitHub repo in owner/name format (e.g. choiceoh/Deneb). Required for setup/list/delete.",
-			},
-			"events": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "string",
-				},
-				"description": "GitHub event types to subscribe to (setup only). Default: [push, pull_request, issues, issue_comment, pull_request_review, create, delete, workflow_run]",
-			},
-			"webhook_id": map[string]any{
-				"type":        "number",
-				"description": "Webhook ID to delete (delete only)",
-			},
-			"gateway_url": map[string]any{
-				"type":        "string",
-				"description": "Override the Deneb gateway base URL (setup only). Normally auto-detected.",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func sessionsListToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1681,6 +1648,22 @@ func fetchToolsToolSchema() map[string]any {
 			"query": map[string]any{
 				"type":        "string",
 				"description": "Keyword search to find matching deferred tools (alternative to names)",
+			},
+		},
+	}
+}
+
+func skillsListToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search filter to match skill name, description, or category",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"description": "Filter by skill category (e.g., coding, productivity, devops)",
 			},
 		},
 	}

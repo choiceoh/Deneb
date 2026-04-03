@@ -3,6 +3,7 @@ package autoresearch
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -193,7 +194,9 @@ func findWithFallback(content, pattern string) (string, error) {
 }
 
 // findSubmatchIndexWithFallback tries the pattern, then relaxed variants.
-// Returns the full submatch index slice.
+// Returns the full submatch index slice for the FIRST match. If multiple
+// matches exist, only the first is used (consistent with replaceCapture
+// and findWithFallback). Returns error if no match is found.
 func findSubmatchIndexWithFallback(content, pattern string) ([]int, error) {
 	for _, p := range patternVariants(pattern) {
 		re, err := regexp.Compile(p)
@@ -202,6 +205,12 @@ func findSubmatchIndexWithFallback(content, pattern string) ([]int, error) {
 		}
 		loc := re.FindStringSubmatchIndex(content)
 		if loc != nil && len(loc) >= 4 {
+			// Warn-level check: if there are multiple matches, the caller
+			// should know only the first is replaced.
+			if all := re.FindAllStringSubmatchIndex(content, -1); len(all) > 1 {
+				slog.Warn("pattern matched multiple times, only first occurrence will be replaced",
+					"pattern", pattern, "matches", len(all))
+			}
 			return loc, nil
 		}
 	}

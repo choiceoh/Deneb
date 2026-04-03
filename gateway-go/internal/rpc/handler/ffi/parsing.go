@@ -4,6 +4,7 @@ import (
 	"context"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -21,23 +22,21 @@ func ParsingMethods() map[string]rpcutil.HandlerFunc {
 
 func parsingExtractLinks() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Text     string `json:"text"`
 			MaxLinks int    `json:"max_links"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.MaxLinks <= 0 {
 			p.MaxLinks = 5
 		}
 		urls, err := ffipkg.ExtractLinks(p.Text, p.MaxLinks)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"urls": urls,
 		})
 	}
@@ -45,41 +44,37 @@ func parsingExtractLinks() rpcutil.HandlerFunc {
 
 func parsingHtmlToMarkdown() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			HTML string `json:"html"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		text, title, err := ffipkg.HtmlToMarkdown(p.HTML)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
 		result := map[string]any{"text": text}
 		if title != "" {
 			result["title"] = title
 		}
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
 func parsingBase64Estimate() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Input string `json:"input"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		estimated, err := ffipkg.Base64Estimate(p.Input)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"estimated_bytes": estimated,
 		})
 	}
@@ -87,19 +82,17 @@ func parsingBase64Estimate() rpcutil.HandlerFunc {
 
 func parsingBase64Canonicalize() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Input string `json:"input"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		canonical, err := ffipkg.Base64Canonicalize(p.Input)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"canonical": canonical,
 		})
 	}
@@ -107,17 +100,15 @@ func parsingBase64Canonicalize() rpcutil.HandlerFunc {
 
 func parsingMediaTokens() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Text string `json:"text"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		cleanText, mediaURLs, audioAsVoice, err := ffipkg.ParseMediaTokens(p.Text)
 		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
 		result := map[string]any{"text": cleanText}
 		if len(mediaURLs) > 0 {
@@ -127,6 +118,6 @@ func parsingMediaTokens() rpcutil.HandlerFunc {
 		if audioAsVoice {
 			result["audio_as_voice"] = true
 		}
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }

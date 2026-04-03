@@ -191,7 +191,10 @@ func (s *Store) UpsertTask(t *TaskRecord) error {
 		nullStr(t.TerminalSummary), nullStr(string(t.TerminalOutcome)),
 		nullStr(t.FlowID),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("upsert task %s: %w", t.TaskID, err)
+	}
+	return nil
 }
 
 // GetTask retrieves a single task by ID.
@@ -267,20 +270,23 @@ func (s *Store) DeleteTask(taskID string) error {
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("delete task %s: begin tx: %w", taskID, err)
 	}
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`DELETE FROM task_events WHERE task_id = ?`, taskID); err != nil {
-		return err
+		return fmt.Errorf("delete task %s events: %w", taskID, err)
 	}
 	if _, err := tx.Exec(`DELETE FROM task_delivery_state WHERE task_id = ?`, taskID); err != nil {
-		return err
+		return fmt.Errorf("delete task %s delivery state: %w", taskID, err)
 	}
 	if _, err := tx.Exec(`DELETE FROM task_runs WHERE task_id = ?`, taskID); err != nil {
-		return err
+		return fmt.Errorf("delete task %s run: %w", taskID, err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete task %s: commit: %w", taskID, err)
+	}
+	return nil
 }
 
 // DeleteTerminalBefore removes terminal tasks older than the given timestamp.
@@ -290,7 +296,7 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete terminal before: begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -301,7 +307,7 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 			WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
 			AND cleanup_after IS NOT NULL AND cleanup_after < ?
 		)`, beforeMs); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete terminal events: %w", err)
 	}
 
 	// Delete delivery states.
@@ -311,7 +317,7 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 			WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
 			AND cleanup_after IS NOT NULL AND cleanup_after < ?
 		)`, beforeMs); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete terminal delivery state: %w", err)
 	}
 
 	res, err := tx.Exec(`
@@ -319,11 +325,11 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 		WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
 		AND cleanup_after IS NOT NULL AND cleanup_after < ?`, beforeMs)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete terminal runs: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete terminal before: commit: %w", err)
 	}
 	return res.RowsAffected()
 }
@@ -337,7 +343,10 @@ func (s *Store) AppendEvent(evt *TaskEventRecord) error {
 
 	_, err := s.db.Exec(`INSERT INTO task_events (task_id, at, kind, summary) VALUES (?,?,?,?)`,
 		evt.TaskID, evt.At, evt.Kind, nullStr(evt.Summary))
-	return err
+	if err != nil {
+		return fmt.Errorf("append event for task %s: %w", evt.TaskID, err)
+	}
+	return nil
 }
 
 // ListEvents returns all events for a task, ordered chronologically.
@@ -388,7 +397,10 @@ func (s *Store) UpsertFlow(f *FlowRecord) error {
 		f.CreatedAt, f.UpdatedAt, nullInt(f.CompletedAt), nullStr(f.Error),
 		f.TaskCount, f.CompletedCount, f.FailedCount,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("upsert flow %s: %w", f.FlowID, err)
+	}
+	return nil
 }
 
 // GetFlow retrieves a flow by ID.
@@ -450,7 +462,10 @@ func (s *Store) DeleteFlow(flowID string) error {
 	defer s.mu.Unlock()
 
 	_, err := s.db.Exec(`DELETE FROM flows WHERE flow_id = ?`, flowID)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete flow %s: %w", flowID, err)
+	}
+	return nil
 }
 
 // --- Summary ---

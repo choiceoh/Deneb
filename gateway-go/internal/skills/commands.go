@@ -25,6 +25,7 @@ type SkillCommandSpec struct {
 	Name        string                    `json:"name"`
 	SkillName   string                    `json:"skillName"`
 	Description string                    `json:"description"`
+	Type        SkillType                 `json:"type,omitempty"`
 	Dispatch    *SkillCommandDispatchSpec `json:"dispatch,omitempty"`
 }
 
@@ -70,6 +71,7 @@ func BuildSkillCommandSpecs(entries []SkillEntry, reserved map[string]bool) []Sk
 			Name:        unique,
 			SkillName:   rawName,
 			Description: desc,
+			Type:        entry.Skill.Type,
 		}
 		if dispatch != nil {
 			spec.Dispatch = dispatch

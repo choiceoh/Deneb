@@ -42,30 +42,30 @@ func WizardMethods(deps WizardDeps) map[string]rpcutil.HandlerFunc {
 
 func wizardStart(deps WizardDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Mode      string `json:"mode"`
 			Workspace string `json:"workspace,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.Mode == "" {
 			return rpcerr.MissingParam("mode").Response(req.ID)
 		}
 
 		session := deps.Engine.Start(p.Mode, p.Workspace)
-		return protocol.MustResponseOK(req.ID, session)
+		return rpcutil.RespondOK(req.ID, session)
 	}
 }
 
 func wizardNext(deps WizardDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			SessionID string         `json:"sessionId"`
 			Answer    *wizard.Answer `json:"answer,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.SessionID == "" {
 			return rpcerr.MissingParam("sessionId").Response(req.ID)
@@ -76,16 +76,19 @@ func wizardNext(deps WizardDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrNotFound, err.Error()).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, session)
+		return rpcutil.RespondOK(req.ID, session)
 	}
 }
 
 func wizardCancel(deps WizardDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			SessionID string `json:"sessionId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.SessionID == "" {
+		if p.SessionID == "" {
 			return rpcerr.MissingParam("sessionId").Response(req.ID)
 		}
 
@@ -94,7 +97,7 @@ func wizardCancel(deps WizardDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrNotFound, err.Error()).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"status": session.Status,
 		})
 	}
@@ -102,10 +105,13 @@ func wizardCancel(deps WizardDeps) rpcutil.HandlerFunc {
 
 func wizardStatus(deps WizardDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			SessionID string `json:"sessionId"`
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.SessionID == "" {
+		if p.SessionID == "" {
 			return rpcerr.MissingParam("sessionId").Response(req.ID)
 		}
 
@@ -114,7 +120,7 @@ func wizardStatus(deps WizardDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrNotFound, err.Error()).Response(req.ID)
 		}
 
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"status": session.Status,
 			"error":  session.Error,
 		})
@@ -150,22 +156,22 @@ func talkConfig(deps TalkDeps) rpcutil.HandlerFunc {
 		_ = json.Unmarshal(req.Params, &p)
 
 		cfg := deps.Talk.GetConfig(p.IncludeSecrets)
-		return protocol.MustResponseOK(req.ID, map[string]any{"config": cfg})
+		return rpcutil.RespondOK(req.ID, map[string]any{"config": cfg})
 	}
 }
 
 func talkMode(deps TalkDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			Enabled bool   `json:"enabled"`
 			Phase   string `json:"phase,omitempty"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 
 		result := deps.Talk.SetMode(p.Enabled, p.Phase)
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
@@ -193,24 +199,24 @@ func SecretMethods(deps SecretDeps) map[string]rpcutil.HandlerFunc {
 func secretsReload(deps SecretDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		result := deps.Resolver.Reload()
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
 func secretsResolve(deps SecretDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
+		p, errResp := rpcutil.DecodeParams[struct {
 			CommandName string   `json:"commandName"`
 			TargetIDs   []string `json:"targetIds"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
+		}](req)
+		if errResp != nil {
+			return errResp
 		}
 		if p.CommandName == "" || len(p.TargetIDs) == 0 {
 			return rpcerr.MissingParam("commandName and targetIds").Response(req.ID)
 		}
 
 		result := deps.Resolver.Resolve(p.CommandName, p.TargetIDs)
-		return protocol.MustResponseOK(req.ID, result)
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }

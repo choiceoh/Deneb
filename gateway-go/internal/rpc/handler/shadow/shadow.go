@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	shadowsvc "github.com/choiceoh/deneb/gateway-go/internal/shadow"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -41,9 +42,6 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		// Session continuity.
 		"shadow.continuity":        handleContinuity(deps),
 		"shadow.continuity.resume": handleResumeSummary(deps),
-		// GitHub activity (Kairos integration).
-		"shadow.github":        handleGitHub(deps),
-		"shadow.github.events": handleGitHubEvents(deps),
 	}
 }
 
@@ -51,7 +49,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 
 func handleStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, deps.Shadow.Status())
+		return rpcutil.RespondOK(req.ID, deps.Shadow.Status())
 	}
 }
 
@@ -59,7 +57,7 @@ func handleStatus(deps Deps) rpcutil.HandlerFunc {
 
 func handleExtendedStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, deps.Shadow.ExtendedStatus())
+		return rpcutil.RespondOK(req.ID, deps.Shadow.ExtendedStatus())
 	}
 }
 
@@ -71,7 +69,7 @@ func handleTasks(deps Deps) rpcutil.HandlerFunc {
 		if tasks == nil {
 			tasks = []shadowsvc.TrackedTask{}
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"tasks": tasks,
 			"count": len(tasks),
 		})
@@ -91,15 +89,13 @@ func handleDismiss(deps Deps) rpcutil.HandlerFunc {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.ID == "" {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "id required"))
+			return rpcerr.New(protocol.ErrMissingParam, "id required").Response(req.ID)
 		}
 		ok := deps.Shadow.DismissTask(p.ID)
 		if !ok {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrNotFound, "task not found or already dismissed"))
+			return rpcerr.New(protocol.ErrNotFound, "task not found or already dismissed").Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"dismissed": true, "id": p.ID})
+		return rpcutil.RespondOK(req.ID, map[string]any{"dismissed": true, "id": p.ID})
 	}
 }
 
@@ -107,7 +103,7 @@ func handleDismiss(deps Deps) rpcutil.HandlerFunc {
 
 func handleAnalytics(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.MustResponseOK(req.ID, deps.Shadow.UsageAnalytics().GetReport())
+		return rpcutil.RespondOK(req.ID, deps.Shadow.UsageAnalytics().GetReport())
 	}
 }
 
@@ -127,7 +123,7 @@ func handleFacts(deps Deps) rpcutil.HandlerFunc {
 		if facts == nil {
 			facts = []shadowsvc.ExtractedFact{}
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"facts": facts,
 			"count": len(facts),
 		})
@@ -142,7 +138,7 @@ func handleErrors(deps Deps) rpcutil.HandlerFunc {
 		if recurring == nil {
 			recurring = []shadowsvc.ErrorRecord{}
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"recurringErrors": recurring,
 			"count":           len(recurring),
 		})
@@ -162,14 +158,13 @@ func handleErrorInsight(deps Deps) rpcutil.HandlerFunc {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.Content == "" {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "content required"))
+			return rpcerr.New(protocol.ErrMissingParam, "content required").Response(req.ID)
 		}
 		insight := deps.Shadow.ErrorLearner().GetInsight(p.Content)
 		if insight == nil {
-			return protocol.MustResponseOK(req.ID, map[string]any{"found": false})
+			return rpcutil.RespondOK(req.ID, map[string]any{"found": false})
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"found": true, "insight": insight})
+		return rpcutil.RespondOK(req.ID, map[string]any{"found": true, "insight": insight})
 	}
 }
 
@@ -181,7 +176,7 @@ func handleReviews(deps Deps) rpcutil.HandlerFunc {
 		if reviews == nil {
 			reviews = []shadowsvc.CodeReviewResult{}
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"reviews": reviews,
 			"count":   len(reviews),
 		})
@@ -196,7 +191,7 @@ func handleCronSuggestions(deps Deps) rpcutil.HandlerFunc {
 		if suggestions == nil {
 			suggestions = []shadowsvc.CronSuggestion{}
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"suggestions": suggestions,
 			"count":       len(suggestions),
 		})
@@ -212,15 +207,13 @@ func handleCronDismiss(deps Deps) rpcutil.HandlerFunc {
 			_ = json.Unmarshal(req.Params, &p)
 		}
 		if p.ID == "" {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrMissingParam, "id required"))
+			return rpcerr.New(protocol.ErrMissingParam, "id required").Response(req.ID)
 		}
 		ok := deps.Shadow.CronSuggester().DismissSuggestion(p.ID)
 		if !ok {
-			return protocol.NewResponseError(req.ID,
-				protocol.NewError(protocol.ErrNotFound, "suggestion not found"))
+			return rpcerr.NotFound("suggestion").Response(req.ID)
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{"dismissed": true, "id": p.ID})
+		return rpcutil.RespondOK(req.ID, map[string]any{"dismissed": true, "id": p.ID})
 	}
 }
 
@@ -230,9 +223,9 @@ func handleContinuity(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		snapshot := deps.Shadow.SessionContinuity().LoadSnapshot()
 		if snapshot == nil {
-			return protocol.MustResponseOK(req.ID, map[string]any{"available": false})
+			return rpcutil.RespondOK(req.ID, map[string]any{"available": false})
 		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"available": true,
 			"snapshot":  snapshot,
 		})
@@ -244,45 +237,10 @@ func handleContinuity(deps Deps) rpcutil.HandlerFunc {
 func handleResumeSummary(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		summary := deps.Shadow.SessionContinuity().GetResumeSummary()
-		return protocol.MustResponseOK(req.ID, map[string]any{
+		return rpcutil.RespondOK(req.ID, map[string]any{
 			"available": summary != "",
 			"summary":   summary,
 		})
 	}
 }
 
-// --- shadow.github ---
-
-func handleGitHub(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		tracker := deps.Shadow.GitHubTracker()
-		if tracker == nil {
-			return protocol.MustResponseOK(req.ID, map[string]any{"available": false})
-		}
-		summary := tracker.GetActivitySummary()
-		return protocol.MustResponseOK(req.ID, map[string]any{
-			"available": true,
-			"activity":  summary,
-		})
-	}
-}
-
-// --- shadow.github.events ---
-
-func handleGitHubEvents(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		tracker := deps.Shadow.GitHubTracker()
-		if tracker == nil {
-			return protocol.MustResponseOK(req.ID, map[string]any{"available": false})
-		}
-		events := tracker.GetRecentEvents()
-		if events == nil {
-			events = []shadowsvc.GitHubEventRecord{}
-		}
-		return protocol.MustResponseOK(req.ID, map[string]any{
-			"available": true,
-			"events":    events,
-			"count":     len(events),
-		})
-	}
-}

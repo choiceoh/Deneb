@@ -30,6 +30,7 @@
   "rerank_blend_reranker": 0.70,
   "rerank_blend_hybrid": 0.30,
   "dedup_jaccard_threshold": 0.60,
+  "decay_power": 2.0,
   "verification_unverified": 0.30,
   "verification_verified": 1.00
 }

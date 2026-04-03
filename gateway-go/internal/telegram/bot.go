@@ -78,7 +78,6 @@ func (b *Bot) Start(ctx context.Context) error {
 		b.runMu.Unlock()
 	}()
 
-	b.logger.Info("telegram bot polling started")
 	return b.pollLoop(pollCtx)
 }
 

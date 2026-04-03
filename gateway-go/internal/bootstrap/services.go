@@ -46,13 +46,7 @@ func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.
 }
 
 func newGeminiEmbedder(logger *slog.Logger) *embedding.GeminiEmbedder {
-	embedder := embedding.NewGeminiEmbedder(os.Getenv("GEMINI_API_KEY"), logger)
-	if embedder != nil {
-		logger.Info("gemini: embedding enabled (gemini-embedding-2-preview)")
-	} else {
-		logger.Info("gemini: embedding disabled (GEMINI_API_KEY not set)")
-	}
-	return embedder
+	return embedding.NewGeminiEmbedder(os.Getenv("GEMINI_API_KEY"), logger)
 }
 
 // initVega configures the Vega search backend with Gemini embedding,

@@ -139,18 +139,6 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	chatID := fmt.Sprintf("%d", msg.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
-	// Plugin conversation binding: if a plugin has bound this conversation
-	// to a specific session key, use it instead of the default.
-	if p.server.conversationBindings != nil {
-		bindings := p.server.conversationBindings.ListByChannel("telegram")
-		for _, b := range bindings {
-			if b.AccountID == chatID && b.Approved && b.SessionKey != "" {
-				sessionKey = b.SessionKey
-				break
-			}
-		}
-	}
-
 	// Thread bindings: when processing a message in a forum topic thread,
 	// create a thread-specific session key so each topic gets its own context.
 	if msg.MessageThreadID != 0 && msg.IsTopicMessage {

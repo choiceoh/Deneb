@@ -39,7 +39,9 @@ func (s *Service) Start(ctx context.Context) error {
 	s.armTimerLocked(ctx)
 
 	s.running = true
-	s.logger.Info("cron service started", "total", len(storeData.Jobs), "scheduled", scheduled)
+	if scheduled > 0 {
+		s.logger.Info("cron service started", "scheduled", scheduled)
+	}
 	return nil
 }
 

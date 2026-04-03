@@ -131,7 +131,6 @@ func (p *Plugin) Start(ctx context.Context) error {
 		p.SetStatus(Status{Connected: false, Error: "getMe failed: " + err.Error()})
 		return nil
 	}
-	p.logger.Info("telegram bot verified")
 	p.botUser = me
 
 	// Start polling in background.
