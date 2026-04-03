@@ -74,6 +74,9 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 		// Content blocks — may contain text, tool_use, tool_result, or image.
 		var blocks []ContentBlock
 		if err := json.Unmarshal(m.Content, &blocks); err != nil {
+			c.logger.Warn("skipping message with unparseable content",
+				"role", m.Role, "error", err,
+				"content_preview", truncateForLog(string(m.Content), 200))
 			continue
 		}
 
@@ -269,9 +272,10 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 
 		// toolBuilders accumulates streamed tool call fragments by OpenAI tool index.
 		type toolBuilder struct {
-			id   string
-			name string
-			args []byte
+			id       string
+			name     string
+			args     []byte
+			blockIdx int // assigned Anthropic-style block index
 		}
 		toolBuilders := map[int]*toolBuilder{}
 
@@ -451,7 +455,7 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 					}
 
 					// New tool call — emit content_block_start for tool_use.
-					tb = &toolBuilder{id: tc.ID, name: tc.Function.Name}
+					tb = &toolBuilder{id: tc.ID, name: tc.Function.Name, blockIdx: nextBlockIndex}
 					toolBuilders[tc.Index] = tb
 
 					cbsPayload, _ := json.Marshal(ContentBlockStart{
@@ -478,11 +482,8 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 				// Accumulate argument fragments and emit as input_json_delta.
 				if tc.Function.Arguments != "" {
 					tb.args = append(tb.args, tc.Function.Arguments...)
-					// Block index: find the assigned index for this tool call.
-					// Tools are assigned consecutive indices after text/thinking blocks.
-					toolBlockIdx := nextBlockIndex - len(toolBuilders) + tc.Index
 					cbdPayload, _ := json.Marshal(ContentBlockDelta{
-						Index: toolBlockIdx,
+						Index: tb.blockIdx,
 						Delta: struct {
 							Type        string `json:"type"`
 							Text        string `json:"text,omitempty"`
@@ -513,10 +514,8 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 				}
 
 				// Close all open tool_use blocks.
-				toolBaseIdx := nextBlockIndex - len(toolBuilders)
-				for idx := range toolBuilders {
-					blockIdx := toolBaseIdx + idx
-					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: blockIdx})
+				for _, tb := range toolBuilders {
+					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: tb.blockIdx})
 					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
 				}
 
@@ -805,4 +804,12 @@ type openAIUsage struct {
 
 type completionTokensDetails struct {
 	ReasoningTokens int `json:"reasoning_tokens"`
+}
+
+// truncateForLog truncates s to maxLen bytes for safe inclusion in log messages.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
