@@ -151,7 +151,7 @@ async def main():
         penalty = tool_errors * 10
         total = max(s_korean + s_substance + s_clean + s_latency + s_streaming - penalty, 0)
 
-        # Detail output (stderr so it doesn't interfere with metric parsing).
+        # Detail output (stderr for human readability).
         print(f'  korean={s_korean} substance={s_substance} clean={s_clean} '
               f'latency={s_latency}({elapsed_ms:.0f}ms) streaming={s_streaming} '
               f'penalty={penalty} text_len={len(text)}', file=sys.stderr)
@@ -159,7 +159,9 @@ async def main():
             preview = text[:100].replace(chr(10), ' ')
             print(f'  reply: {preview}', file=sys.stderr)
 
+        # Machine-readable output (stdout).
         print(f'metric_value={total}')
+        print(f'DENEB_METRIC_DETAIL korean={s_korean} substance={s_substance} clean={s_clean} latency={s_latency} streaming={s_streaming} penalty={penalty}')
 
     finally:
         await ws.close()

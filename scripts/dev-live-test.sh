@@ -715,8 +715,12 @@ case "${1:-help}" in
   quality)        shift; cmd_quality "$@" ;;
   quality-custom) shift; cmd_quality_custom "$@" ;;
   metric-script)  cmd_metric_script ;;
-  ar-status)      cmd_ar_status ;;
-  ar-results)     shift; cmd_ar_results "$@" ;;
+  metric-gen)     shift; "$SCRIPT_DIR/dev-metric-gen.sh" "$@" ;;
+  ar-start)       shift; "$SCRIPT_DIR/dev-autoresearch.sh" start "$@" ;;
+  ar-stop)        "$SCRIPT_DIR/dev-autoresearch.sh" stop ;;
+  ar-status)      "$SCRIPT_DIR/dev-autoresearch.sh" status ;;
+  ar-results)     shift; "$SCRIPT_DIR/dev-ar-results.sh" "$@" ;;
+  ar-suggest)     "$SCRIPT_DIR/dev-ar-results.sh" --suggest ;;
   ar-chat)        shift; cmd_ar_chat "$@" ;;
   logs)           shift; cmd_logs "$@" ;;
   logs-watch)  cmd_logs_watch ;;
@@ -739,6 +743,15 @@ case "${1:-help}" in
   vchat-reset)   python3 "$SCRIPT_DIR/vchat.py" reset ;;
   vchat-timeline) python3 "$SCRIPT_DIR/vchat.py" timeline ;;
   vchat-logs)    shift; python3 "$SCRIPT_DIR/vchat.py" logs "$@" ;;
+
+  # vchat quality testing (Telegram pipeline quality checks).
+  vchat-quality)       shift; python3 "$SCRIPT_DIR/dev-vchat-quality.py" "$@" ;;
+  vchat-quality-custom) shift; python3 "$SCRIPT_DIR/dev-vchat-quality.py" --custom "$@" ;;
+
+  # Baseline tracking.
+  baseline)      shift; "$SCRIPT_DIR/dev-baseline.sh" "$@" ;;
+  baseline-save) "$SCRIPT_DIR/dev-baseline.sh" save ;;
+  baseline-compare) "$SCRIPT_DIR/dev-baseline.sh" compare ;;
 
   help|*)
     echo "Usage: scripts/dev-live-test.sh COMMAND [ARGS]"
@@ -775,12 +788,25 @@ case "${1:-help}" in
     echo "  vchat-reset         대화 초기화 (서버 유지)"
     echo "  vchat-timeline      전체 타임라인 출력"
     echo "  vchat-logs [-n N]   게이트웨이 로그"
+    echo "  vchat-quality [S]   텔레그램 파이프라인 품질 테스트 (korean|tool|format|multi|all)"
+    echo "  vchat-quality-custom MSG  커스텀 메시지 품질 테스트"
+    echo ""
+    echo "Baseline (regression detection):"
+    echo "  baseline save       현재 결과를 베이스라인으로 저장"
+    echo "  baseline compare    현재 결과 vs 베이스라인 비교"
+    echo "  baseline show       현재 브랜치 베이스라인 표시"
+    echo "  baseline-save       baseline save 단축"
+    echo "  baseline-compare    baseline compare 단축"
     echo ""
     echo "Autoresearch:"
-    echo "  metric-script       Generate metric script for autoresearch"
-    echo "  ar-status           Check autoresearch status via LLM agent"
-    echo "  ar-results [FMT]    Get results (tsv|chart|summary)"
-    echo "  ar-chat MSG         Send autoresearch instruction to LLM agent"
+    echo "  metric-gen [PRESET] 메트릭 스크립트 생성 (smoke|quality|vchat|combined|custom)"
+    echo "  metric-script       레거시: smoke 메트릭 스크립트 생성"
+    echo "  ar-start [OPTS]     오토리서치 시작 (--target FILE --metric PRESET)"
+    echo "  ar-stop             오토리서치 정지"
+    echo "  ar-status           오토리서치 상태 확인"
+    echo "  ar-results [FMT]    결과 조회 (--json|--table|--best|--failures|--suggest)"
+    echo "  ar-suggest          다음 행동 제안"
+    echo "  ar-chat MSG         LLM에게 오토리서치 지시 전송"
     echo ""
     echo "Logs:"
     echo "  logs [N]        Tail last N log lines (default 50)"

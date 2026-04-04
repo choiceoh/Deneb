@@ -14,7 +14,52 @@ globs: ["gateway-go/**/*.go", "core-rs/**/*.rs"]
 |---|---|
 | `scripts/dev-iterate.sh` | 빌드→서버→smoke 3체크→결과 (~2초) |
 | `scripts/dev-iterate.sh --metric CMD` | 커스텀 metric |
+| `scripts/dev-iterate.sh --vchat` | 텔레그램 파이프라인 품질 테스트 |
 | `scripts/dev-quality-metric.sh [PORT] [MSG]` | 채팅 품질 점수 0-100 (15~60초) |
+
+### 오토리서치 (자율 최적화 루프)
+
+| Command | What |
+|---|---|
+| `scripts/dev-metric-gen.sh list` | metric 프리셋 목록 |
+| `scripts/dev-metric-gen.sh PRESET` | metric 스크립트 생성 (smoke\|quality\|vchat\|combined) |
+| `scripts/dev-autoresearch.sh start --target FILE --metric PRESET` | 오토리서치 시작 |
+| `scripts/dev-autoresearch.sh status` | 상태 확인 |
+| `scripts/dev-autoresearch.sh results --json` | 결과 JSON |
+| `scripts/dev-autoresearch.sh stop` | 정지 |
+| `scripts/dev-ar-results.sh --json` | 구조화된 결과 (게이트웨이 불필요) |
+| `scripts/dev-ar-results.sh --suggest` | 다음 행동 제안 |
+
+### metric 프리셋 선택 가이드
+
+| 수정 대상 | 추천 metric | 이유 |
+|---|---|---|
+| 시스템 프롬프트/채팅 파이프라인 | `quality` (0~100) | 한국어 응답 품질 직접 측정 |
+| 텔레그램 포맷/렌더링 | `vchat --scenario format` | 실제 HTML 출력 검증 |
+| 도구 호출 로직 | `vchat --scenario tool` | 도구 진행 메시지 포함 검증 |
+| 전반적 품질 | `combined` | smoke(20%) + quality(80%) |
+| 인프라/시작 성능 | `smoke` (0~3) | 빠른 빌드+시작 확인 |
+| 특정 메시지 응답 | `custom "메시지"` | 해당 메시지 품질 직접 측정 |
+
+### 오토리서치 사용 절차
+
+1. **metric 선택**: 수정 대상에 맞는 preset 선택
+2. **시작**: `scripts/dev-autoresearch.sh start --target FILE --metric PRESET`
+3. **모니터링**: `scripts/dev-autoresearch.sh status` (진행 확인)
+4. **결과 해석**: `scripts/dev-ar-results.sh --json` → `DENEB_AR_RESULTS` 파싱
+5. **다음 행동**: `scripts/dev-ar-results.sh --suggest` → 계속/전환/멈춤 판단
+6. **적용**: 오토리서치가 찾은 최적값을 소스에 반영, `make check` 확인
+
+### 결과 해석 (DENEB_AR_RESULTS JSON)
+
+| 필드 | 의미 |
+|---|---|
+| `suggestion` | `continue_exploration` / `continue_exploitation` / `try_different_approach` / `change_strategy` / `stop_and_review` / `completed` |
+| `improvement_pct` | 베이스라인 대비 개선율 (%) |
+| `success_rate` | kept / total 비율 |
+| `consecutive_failures` | 연속 실패 횟수 (3+ = 전략 전환 필요) |
+| `top_changes` | 효과적이었던 변경 목록 + delta |
+| `recent_failures` | 최근 실패한 가설 (반복 방지) |
 
 ---
 
