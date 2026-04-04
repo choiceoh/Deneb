@@ -77,6 +77,10 @@ static KO_JOSA: LazyLock<Regex> = LazyLock::new(|| {
 static TOKEN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").expect("valid regex"));
 
+#[allow(clippy::expect_used)]
+static HAS_ALNUM_ASCII: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[A-Za-z0-9]").expect("valid regex"));
+
 /// Sanitize a single FTS5 search term.
 fn sanitize_fts_single(term: &str) -> Option<String> {
     let t = term.trim();
@@ -104,11 +108,7 @@ fn is_strong_term(term: &str) -> bool {
         return false;
     }
     let bare = term.trim_matches('"');
-    #[allow(clippy::expect_used)]
-    if Regex::new(r"[A-Za-z0-9]")
-        .expect("valid regex")
-        .is_match(bare)
-    {
+    if HAS_ALNUM_ASCII.is_match(bare) {
         return true;
     }
     bare.chars().count() >= 3
