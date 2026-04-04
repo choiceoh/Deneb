@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
 const (
@@ -15,12 +13,9 @@ const (
 	healthWarmupTTL     = 10 * time.Second
 	healthWarmupPeriod  = 1 * time.Minute
 	healthPingTimeout   = 3 * time.Second
-	healthInferTimeout  = 15 * time.Second
-	healthTestPrompt    = "1+1="
-	healthTestMaxTokens = 4
 )
 
-// healthChecker runs periodic inference-based health probes.
+// healthChecker runs periodic liveness pings against the sglang /models endpoint.
 type healthChecker struct {
 	hub     *Hub
 	baseURL string
@@ -52,40 +47,9 @@ func (hc *healthChecker) run() {
 }
 
 func (hc *healthChecker) check() {
-	// Phase 1: metadata ping (fast fail if server is completely down).
-	if !hc.pingModels() {
-		hc.hub.healthy.Store(false)
-		hc.hub.lastHealthCheck.Store(time.Now().Unix())
-		return
-	}
-
-	// Phase 2: non-streaming inference test. Catches hung servers that still
-	// respond to metadata endpoints. Uses NoThinking + non-streaming to avoid
-	// thinking-mode timeout issues.
-	ctx, cancel := context.WithTimeout(hc.hub.ctx, healthInferTimeout)
-	defer cancel()
-
-	req := llm.ChatRequest{
-		Model:     hc.hub.model,
-		Messages:  []llm.Message{llm.NewTextMessage("user", healthTestPrompt)},
-		MaxTokens: healthTestMaxTokens,
-		ExtraBody: NoThinking,
-	}
-
-	reply, err := hc.hub.client.Complete(ctx, req)
-	if err != nil {
-		hc.hub.healthy.Store(false)
-		hc.hub.lastHealthCheck.Store(time.Now().Unix())
-		hc.hub.logger.Debug("sglang health: inference failed", "error", err)
-		return
-	}
-
-	got := len(reply) > 0
-	hc.hub.healthy.Store(got)
+	alive := hc.pingModels()
+	hc.hub.healthy.Store(alive)
 	hc.hub.lastHealthCheck.Store(time.Now().Unix())
-	if !got {
-		hc.hub.logger.Debug("sglang health: inference returned no tokens")
-	}
 }
 
 func (hc *healthChecker) pingModels() bool {
