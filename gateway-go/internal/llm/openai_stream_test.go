@@ -207,7 +207,7 @@ func TestStreamChat_MultipleToolCalls(t *testing.T) {
 				"index": 0,
 				"delta": map[string]any{
 					"tool_calls": []map[string]any{{
-						"index": 0,
+						"index":    0,
 						"function": map[string]string{"arguments": `th":"f.go"}`},
 					}},
 				},
@@ -222,7 +222,7 @@ func TestStreamChat_MultipleToolCalls(t *testing.T) {
 				"index": 0,
 				"delta": map[string]any{
 					"tool_calls": []map[string]any{{
-						"index": 1,
+						"index":    1,
 						"function": map[string]string{"arguments": `tern":"foo"}`},
 					}},
 				},

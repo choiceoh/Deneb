@@ -88,7 +88,9 @@ func (s *Server) registerSessionRPCMethods() {
 	s.initMemorySubsystem(&chatCfg, &reg)
 
 	// Create centralized SGLang hub now that the model registry is available.
-	s.sglangHub = sglang.New(sglang.Config{}, reg, s.logger)
+	s.sglangHub = sglang.New(sglang.Config{
+		CJKBlockFile: os.Getenv("SGLANG_CJK_BLOCK_FILE"),
+	}, reg, s.logger)
 	chatCfg.SglangHub = s.sglangHub
 	memory.SetSglangHub(s.sglangHub)
 

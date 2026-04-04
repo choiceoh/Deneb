@@ -214,7 +214,6 @@ func (s *Service) onSessionEvent(event session.Event) {
 	s.checkHealthIndicators(event)
 }
 
-
 // emit broadcasts a ShadowEvent to all registered listeners.
 func (s *Service) emit(event ShadowEvent) {
 	event.Ts = time.Now().UnixMilli()
