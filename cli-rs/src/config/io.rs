@@ -21,9 +21,9 @@ pub fn load_config(config_path: &Path) -> Result<DenebConfig, CliError> {
     parse_config_json5(&raw, config_path)
 }
 
-/// Parse a config string into a DenebConfig.
+/// Parse a config string into a `DenebConfig`.
 ///
-/// Fast path: try standard JSON first (write_config always writes standard JSON).
+/// Fast path: try standard JSON first (`write_config` always writes standard JSON).
 /// Fallback: parse as JSON5 to support hand-edited configs with comments or trailing commas.
 fn parse_config_json5(raw: &str, path: &Path) -> Result<DenebConfig, CliError> {
     if let Ok(config) = serde_json::from_str::<DenebConfig>(raw) {
@@ -70,7 +70,7 @@ pub fn first_existing_path(candidates: &[PathBuf]) -> Option<PathBuf> {
 pub fn set_config_value(
     config: &mut DenebConfig,
     path: &str,
-    value: serde_json::Value,
+    value: &serde_json::Value,
 ) -> Result<(), CliError> {
     validate_config_path(path)?;
 
@@ -131,7 +131,7 @@ fn validate_config_path(path: &str) -> Result<(), CliError> {
         ));
     }
 
-    if path.split('.').any(|segment| segment.is_empty()) {
+    if path.split('.').any(str::is_empty) {
         return Err(CliError::Config(format!(
             "invalid config path '{path}': empty path segment",
         )));
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn set_and_unset_config_value() {
         let mut config = DenebConfig::default();
-        set_config_value(&mut config, "gateway.port", serde_json::json!(8080)).unwrap();
+        set_config_value(&mut config, "gateway.port", &serde_json::json!(8080)).unwrap();
         assert_eq!(config.gateway_port(), Some(8080));
 
         unset_config_value(&mut config, "gateway.port").unwrap();
@@ -204,11 +204,11 @@ mod tests {
     fn set_config_value_rejects_invalid_path() {
         let mut config = DenebConfig::default();
 
-        let err = set_config_value(&mut config, "", serde_json::json!(8080)).unwrap_err();
+        let err = set_config_value(&mut config, "", &serde_json::json!(8080)).unwrap_err();
         assert!(matches!(err, CliError::Config(_)));
 
         let err =
-            set_config_value(&mut config, "gateway..port", serde_json::json!(8080)).unwrap_err();
+            set_config_value(&mut config, "gateway..port", &serde_json::json!(8080)).unwrap_err();
         assert!(matches!(err, CliError::Config(_)));
     }
 

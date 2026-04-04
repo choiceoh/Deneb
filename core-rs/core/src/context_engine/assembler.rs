@@ -115,7 +115,7 @@ impl AssemblyEngine {
 
     /// Advance the state machine with a host response. Returns the next command.
     pub fn step(&mut self, response: AssemblyResponse) -> AssemblyCommand {
-        match self.phase.clone() {
+        match &self.phase {
             Phase::Init => self.handle_context_items(response),
             Phase::FetchingSummaryStats => self.handle_summary_stats(response),
             Phase::Done => self.done_result(),

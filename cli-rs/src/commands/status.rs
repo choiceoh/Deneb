@@ -90,7 +90,7 @@ fn print_status_summary(payload: &serde_json::Value, config: &config::DenebConfi
         if let Some(version) = obj.get("version").and_then(|v| v.as_str()) {
             println!("    Version   {}", muted.apply_to(version));
         }
-        if let Some(uptime) = obj.get("uptimeSeconds").and_then(|v| v.as_f64()) {
+        if let Some(uptime) = obj.get("uptimeSeconds").and_then(serde_json::Value::as_f64) {
             let hours = uptime / 3600.0;
             if hours >= 1.0 {
                 println!("    Uptime    {}", muted.apply_to(format!("{hours:.1}h")));

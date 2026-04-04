@@ -209,7 +209,7 @@ fn check_config(
                 config::set_config_value(
                     &mut cfg,
                     "gateway.auth.token",
-                    serde_json::json!(&token),
+                    &serde_json::json!(&token),
                 )?;
                 config::write_config(config_path, &cfg)?;
                 results.push(DiagResult {
@@ -232,7 +232,7 @@ fn check_config(
                     config::set_config_value(
                         &mut cfg,
                         "gateway.auth.token",
-                        serde_json::json!(&token),
+                        &serde_json::json!(&token),
                     )?;
                     config::write_config(config_path, &cfg)?;
                     results.push(DiagResult {
@@ -333,7 +333,7 @@ async fn check_channels(results: &mut Vec<DiagResult>, args: &DoctorArgs, cfg: &
                 let total: usize = channels
                     .values()
                     .filter_map(|v| v.as_array())
-                    .map(|a| a.len())
+                    .map(std::vec::Vec::len)
                     .sum();
                 results.push(DiagResult {
                     section: "channels".to_string(),

@@ -24,7 +24,7 @@ pub enum AuthSource {
 ///
 /// Precedence:
 /// 1. Explicit CLI flags (--token, --password)
-/// 2. Environment variables (DENEB_GATEWAY_TOKEN, DENEB_GATEWAY_PASSWORD)
+/// 2. Environment variables (`DENEB_GATEWAY_TOKEN`, `DENEB_GATEWAY_PASSWORD`)
 /// 3. Config file (gateway.auth.token, gateway.auth.password)
 pub fn resolve_gateway_auth(
     cli_token: Option<&str>,

@@ -101,16 +101,13 @@ pub(super) async fn cmd_delete(id: &str, force: bool, json: bool) -> Result<(), 
             .is_some_and(|i| i == id)
     });
 
-    let idx = match idx {
-        Some(i) => i,
-        None => {
-            return Err(CliError::User(format!("agent '{id}' not found")));
-        }
+    let Some(idx) = idx else {
+        return Err(CliError::User(format!("agent '{id}' not found")));
     };
 
     if agents_list[idx]
         .get("isDefault")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
     {
         return Err(CliError::User(

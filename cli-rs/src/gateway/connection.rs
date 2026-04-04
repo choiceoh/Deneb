@@ -49,7 +49,7 @@ pub fn resolve_connection_details(
 
     // Remote config URL
     let remote_url = if config.is_remote_mode() {
-        config.remote_url().map(|u| u.to_string())
+        config.remote_url().map(std::string::ToString::to_string)
     } else {
         None
     };
@@ -142,8 +142,7 @@ fn is_secure_or_loopback(url: &str) -> bool {
         // IPv4/hostname: split on last colon for port
         authority
             .rsplit_once(':')
-            .map(|(h, _)| h)
-            .unwrap_or(authority)
+            .map_or(authority, |(h, _)| h)
     };
 
     matches!(host, "127.0.0.1" | "localhost" | "::1")

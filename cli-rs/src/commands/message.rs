@@ -141,7 +141,7 @@ async fn cmd_send(args: &SendArgs) -> Result<(), CliError> {
             .and_then(|p| p.get("text"))
             .and_then(|t| t.as_str())
         {
-            println!("{}", text);
+            println!("{text}");
         } else {
             println!("{}", success.apply_to("Message sent."));
         }

@@ -2,6 +2,7 @@ package agentlog
 
 import (
 	"encoding/json"
+	"log/slog"
 	"time"
 )
 
@@ -85,13 +86,16 @@ func (rl *RunLogger) LogError(data RunErrorData) {
 func (rl *RunLogger) emit(entryType string, data any) {
 	raw, err := json.Marshal(data)
 	if err != nil {
+		slog.Warn("agentlog: marshal failed", "type", entryType, "run", rl.runID, "err", err)
 		return
 	}
-	_ = rl.w.Append(LogEntry{
+	if err := rl.w.Append(LogEntry{
 		Ts:      time.Now().UnixMilli(),
 		Type:    entryType,
 		RunID:   rl.runID,
 		Session: rl.session,
 		Data:    raw,
-	})
+	}); err != nil {
+		slog.Warn("agentlog: append failed", "type", entryType, "run", rl.runID, "err", err)
+	}
 }

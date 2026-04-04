@@ -422,7 +422,7 @@ impl SweepEngine {
 
     /// Advance the state machine with a host response. Returns the next command.
     pub fn step(&mut self, response: SweepResponse) -> SweepCommand {
-        match self.phase.clone() {
+        match &self.phase {
             Phase::Init => self.handle_init(&response),
             Phase::FetchingItems => self.handle_fetching_items(response),
             Phase::PrefetchingMessages => self.handle_prefetching_messages(response),

@@ -74,8 +74,7 @@ pub fn is_legacy_state_dir(state_dir: &Path) -> bool {
     state_dir
         .file_name()
         .and_then(|n| n.to_str())
-        .map(|name| LEGACY_STATE_DIRNAMES.contains(&name))
-        .unwrap_or(false)
+        .is_some_and(|name| LEGACY_STATE_DIRNAMES.contains(&name))
 }
 
 /// Build the ordered list of config file candidates for a given state dir.
