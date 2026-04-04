@@ -28,6 +28,9 @@ Thumbs.db
 gateway-go/gateway
 gateway-go/cover.out
 
+# Tool binaries
+tools/git-ui/git-ui
+
 # Rust build artifacts (workspace)
 /target/
 core-rs/target/
