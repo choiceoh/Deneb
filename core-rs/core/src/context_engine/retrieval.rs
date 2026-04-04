@@ -500,11 +500,11 @@ impl ExpandEngine {
 
     /// Advance the state machine.
     pub fn step(&mut self, response: RetrievalResponse) -> RetrievalCommand {
-        match self.phase.clone() {
+        match &self.phase {
             ExpandPhase::FetchRoot => self.handle_fetch_root(&response),
             ExpandPhase::FetchingChildren => self.handle_fetching_children(response),
             ExpandPhase::ExpandingChild { child_index } => {
-                self.handle_expanding_child(response, child_index)
+                self.handle_expanding_child(response, *child_index)
             }
             ExpandPhase::FetchingMessages => self.handle_fetching_messages(response),
             ExpandPhase::Done => self.done_result(),

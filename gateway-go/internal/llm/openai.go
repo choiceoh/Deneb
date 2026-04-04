@@ -33,18 +33,16 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 	}
 
 	// Convert tools to OpenAI function-calling format.
-	// Use pre-serialized schema when available to avoid re-marshaling map[string]any.
-	for _, t := range req.Tools {
-		params := t.RawInputSchema
-		if params == nil && t.InputSchema != nil {
-			params, _ = json.Marshal(t.InputSchema)
-		}
+	// PreSerialize caches RawInputSchema on the backing slice so subsequent
+	// calls with the same tools skip json.Marshal entirely.
+	for i := range req.Tools {
+		req.Tools[i].PreSerialize()
 		oaiReq.Tools = append(oaiReq.Tools, openAITool{
 			Type: "function",
 			Function: openAIFunction{
-				Name:        t.Name,
-				Description: t.Description,
-				Parameters:  params,
+				Name:        req.Tools[i].Name,
+				Description: req.Tools[i].Description,
+				Parameters:  req.Tools[i].RawInputSchema,
 			},
 		})
 	}
