@@ -7,8 +7,6 @@
 //! When a legacy name can be removed, delete the corresponding entry from the
 //! slice and its associated tests — the compiler will point out every consumer.
 
-use std::path::{Path, PathBuf};
-
 /// Legacy state directory names, in newest-to-oldest order.
 pub const LEGACY_STATE_DIRNAMES: &[&str] = &[".clawdbot", ".moldbot", ".moltbot"];
 
@@ -18,7 +16,8 @@ pub const LEGACY_CONFIG_FILENAMES: &[&str] = &["clawdbot.json", "moldbot.json", 
 /// Return the first existing legacy state directory under `home`, or `None`.
 ///
 /// Searches `LEGACY_STATE_DIRNAMES` in order; returns on the first hit.
-pub fn find_legacy_state_dir(home: &Path) -> Option<PathBuf> {
+#[cfg(test)]
+pub fn find_legacy_state_dir(home: &std::path::Path) -> Option<std::path::PathBuf> {
     LEGACY_STATE_DIRNAMES
         .iter()
         .map(|name| home.join(name))
@@ -28,7 +27,8 @@ pub fn find_legacy_state_dir(home: &Path) -> Option<PathBuf> {
 /// Return the first existing legacy config file inside `state_dir`, or `None`.
 ///
 /// Searches `LEGACY_CONFIG_FILENAMES` in order; returns on the first hit.
-pub fn find_legacy_config_file(state_dir: &Path) -> Option<PathBuf> {
+#[cfg(test)]
+pub fn find_legacy_config_file(state_dir: &std::path::Path) -> Option<std::path::PathBuf> {
     LEGACY_CONFIG_FILENAMES
         .iter()
         .map(|name| state_dir.join(name))

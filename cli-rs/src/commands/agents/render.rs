@@ -33,7 +33,7 @@ pub(super) fn print_agents_list(agents: &[serde_json::Value]) {
         let model = agent.get("model").and_then(|v| v.as_str());
         let is_default = agent
             .get("isDefault")
-            .and_then(|v| v.as_bool())
+            .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
 
         let accent = Palette::accent();

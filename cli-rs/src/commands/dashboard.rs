@@ -32,7 +32,7 @@ pub async fn run(args: &DashboardArgs) -> Result<(), CliError> {
     };
 
     // Resolve auth token for URL fragment
-    let token = cfg.auth_token().map(|t| t.to_string());
+    let token = cfg.auth_token().map(std::string::ToString::to_string);
 
     // Build dashboard URL
     let dashboard_url = if let Some(ref token) = token {

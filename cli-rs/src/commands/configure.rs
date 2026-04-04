@@ -178,7 +178,7 @@ fn configure_model(cfg: &mut config::DenebConfig, non_interactive: bool) -> Resu
     }
 
     let key = format!("providers.{provider}.apiKey");
-    config::set_config_value(cfg, &key, serde_json::json!(api_key))?;
+    config::set_config_value(cfg, &key, &serde_json::json!(api_key))?;
 
     Ok(true)
 }
@@ -203,7 +203,7 @@ fn configure_gateway(
         .map_err(|e| CliError::User(format!("prompt failed: {e}")))?;
 
     if let Ok(port) = port_str.parse::<u16>() {
-        config::set_config_value(cfg, "gateway.port", serde_json::json!(port))?;
+        config::set_config_value(cfg, "gateway.port", &serde_json::json!(port))?;
     }
 
     // Bind mode
@@ -226,7 +226,7 @@ fn configure_gateway(
     config::set_config_value(
         cfg,
         "gateway.bind",
-        serde_json::json!(bind_modes[selection]),
+        &serde_json::json!(bind_modes[selection]),
     )?;
 
     // Auth token generation
@@ -238,7 +238,7 @@ fn configure_gateway(
 
     if gen_token {
         let token = uuid::Uuid::new_v4().to_string();
-        config::set_config_value(cfg, "gateway.auth.token", serde_json::json!(&token))?;
+        config::set_config_value(cfg, "gateway.auth.token", &serde_json::json!(&token))?;
         let muted = Palette::muted();
         println!("  Token: {}", muted.apply_to(&token));
     }
@@ -281,7 +281,7 @@ async fn run_channels_check(
                 if let Some(channels) = channel_accounts {
                     let muted = Palette::muted();
                     for (channel, accounts) in channels {
-                        let count = accounts.as_array().map(|a| a.len()).unwrap_or(0);
+                        let count = accounts.as_array().map_or(0, std::vec::Vec::len);
                         println!("  {}: {} account(s)", channel, muted.apply_to(count));
                     }
                 } else {

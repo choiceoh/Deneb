@@ -17,7 +17,7 @@ pub fn is_rich() -> bool {
     console::Term::stdout().features().colors_supported()
 }
 
-/// Check if JSON output mode is requested (--json flag or DENEB_OUTPUT_JSON env).
+/// Check if JSON output mode is requested (--json flag or `DENEB_OUTPUT_JSON` env).
 pub fn is_json_mode(json_flag: bool) -> bool {
     json_flag || std::env::var("DENEB_OUTPUT_JSON").ok().as_deref() == Some("1")
 }

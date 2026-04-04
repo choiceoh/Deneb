@@ -148,17 +148,14 @@ pub async fn run(args: &SessionsArgs) -> Result<(), CliError> {
         let model = entry
             .model
             .as_deref()
-            .map(truncate_model)
-            .unwrap_or(Symbols::DASH.to_string());
+            .map_or(Symbols::DASH.to_string(), truncate_model);
         let tokens = entry
-            .total_tokens
-            .map(format_tokens)
-            .unwrap_or_else(|| Symbols::DASH.to_string());
+            .total_tokens.map_or_else(|| Symbols::DASH.to_string(), format_tokens);
 
         let display_key = if key.len() > 30 {
             format!("{}...", &key[..27])
         } else {
-            key.to_string()
+            (*key).clone()
         };
 
         table.add_row(vec![&display_key, kind, &age, &model, &tokens]);
