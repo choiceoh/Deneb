@@ -76,7 +76,7 @@ func triggerProactiveCompaction(
 		return
 	}
 	shouldCompact, _, err := aurora.EvaluateCompaction(
-		deps.compactionCfg, storedTokens, 0, deps.contextCfg.TokenBudget,
+		deps.compactionCfg, storedTokens, 0, deps.contextCfg.MemoryTokenBudget,
 	)
 	if err != nil || !shouldCompact {
 		return
@@ -89,7 +89,7 @@ func triggerProactiveCompaction(
 
 	logger.Info("proactive compaction: stored tokens exceed threshold, starting background sweep",
 		"storedTokens", storedTokens,
-		"budget", deps.contextCfg.TokenBudget,
+		"budget", deps.contextCfg.MemoryTokenBudget,
 	)
 
 	// Use shutdownCtx (server lifecycle) instead of request ctx so the sweep
@@ -117,9 +117,8 @@ func triggerProactiveCompaction(
 }
 
 // midLoopCompactionThreshold is the fraction of the token budget at which
-// mid-loop compaction triggers. Matches the proactive threshold (0.80) so
-// that mid-loop checks are consistent with background compaction.
-const midLoopCompactionThreshold = 0.80
+// mid-loop compaction triggers (0.60 = 60% of live token budget).
+const midLoopCompactionThreshold = 0.60
 
 // estimateMessagesTokens returns a rough token count for an entire message history.
 func estimateMessagesTokens(messages []llm.Message) int {
@@ -146,7 +145,7 @@ func buildMidLoopCompactor(
 	params RunParams,
 	logger *slog.Logger,
 ) func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error) {
-	budget := deps.contextCfg.TokenBudget
+	budget := deps.contextCfg.LiveTokenBudget
 	threshold := uint64(midLoopCompactionThreshold * float64(budget))
 
 	// Track last compaction turn to avoid compacting on consecutive turns.
@@ -320,7 +319,7 @@ func handleContextOverflowAurora(
 	result, err := aurora.RunSweep(
 		deps.auroraStore,
 		1, // single-user conversation ID
-		deps.contextCfg.TokenBudget,
+		deps.contextCfg.MemoryTokenBudget,
 		sweepCfg,
 		summarizer,
 		true, // force (overflow already detected)
@@ -338,7 +337,7 @@ func handleContextOverflowAurora(
 
 	// Reassemble context from Aurora store.
 	asmCfg := aurora.AssemblyConfig{
-		TokenBudget:    deps.contextCfg.TokenBudget,
+		TokenBudget:    deps.contextCfg.MemoryTokenBudget,
 		FreshTailCount: deps.contextCfg.FreshTailCount,
 		MaxMessages:    deps.contextCfg.MaxMessages,
 	}

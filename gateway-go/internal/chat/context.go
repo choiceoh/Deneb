@@ -12,8 +12,9 @@ import (
 
 // Context assembly defaults.
 const (
-	defaultTokenBudget        = 204_000
-	defaultSystemPromptBudget = 65_536
+	defaultMemoryTokenBudget  = 30_000  // Aurora transcript history injection limit
+	defaultLiveTokenBudget    = 120_000 // total agent loop token budget (system + tools + memory + live messages)
+	defaultSystemPromptBudget = 30_000
 	defaultFreshTailCount     = 48
 	defaultMaxMessages        = 100
 	// runesPerToken re-exports the shared constant for local callers
@@ -37,7 +38,8 @@ type AssemblyResult struct {
 
 // ContextConfig configures context assembly behavior.
 type ContextConfig struct {
-	TokenBudget        uint64 // max tokens for context window
+	MemoryTokenBudget  uint64 // max tokens for Aurora context (transcript history)
+	LiveTokenBudget    uint64 // total agent loop token budget (system + tools + memory + live)
 	SystemPromptBudget uint64 // max tokens for system prompt fragments
 	FreshTailCount     uint32 // messages protected from eviction
 	MaxMessages        int    // fallback limit when FFI unavailable
@@ -46,7 +48,8 @@ type ContextConfig struct {
 // DefaultContextConfig returns sensible defaults.
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
-		TokenBudget:        defaultTokenBudget,
+		MemoryTokenBudget:  defaultMemoryTokenBudget,
+		LiveTokenBudget:    defaultLiveTokenBudget,
 		SystemPromptBudget: defaultSystemPromptBudget,
 		FreshTailCount:     defaultFreshTailCount,
 		MaxMessages:        defaultMaxMessages,
@@ -83,7 +86,7 @@ func assembleContextFFI(
 	// For single-user deployment, use a fixed conversation ID.
 	var conversationID uint64 = 1
 
-	handle, err := ffi.ContextAssemblyNew(conversationID, cfg.TokenBudget, cfg.FreshTailCount)
+	handle, err := ffi.ContextAssemblyNew(conversationID, cfg.MemoryTokenBudget, cfg.FreshTailCount)
 	if err != nil {
 		logger.Warn("context assembly FFI unavailable, falling back", "error", err)
 		return assembleContextFallback(store, sessionKey, cfg)

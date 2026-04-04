@@ -7,8 +7,8 @@ import (
 
 func TestDefaultQueryConfig(t *testing.T) {
 	cfg := DefaultQueryConfig()
-	if cfg.TokenBudget != defaultTokenBudget {
-		t.Errorf("TokenBudget = %d, want %d", cfg.TokenBudget, defaultTokenBudget)
+	if cfg.MemoryTokenBudget != defaultMemoryTokenBudget {
+		t.Errorf("MemoryTokenBudget = %d, want %d", cfg.MemoryTokenBudget, defaultMemoryTokenBudget)
 	}
 	if cfg.MaxTurns != defaultMaxTurns {
 		t.Errorf("MaxTurns = %d, want %d", cfg.MaxTurns, defaultMaxTurns)
