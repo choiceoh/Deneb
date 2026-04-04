@@ -92,8 +92,9 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	if isLowInfoMessage(userMessage) {
 		return ""
 	}
-	// Check sglang health (inference-based when hub is active).
-	if !pilot.CheckSglangHealth() && !pilot.HasRegistry() {
+	// Check sglang health — skip proactive context when sglang is down,
+	// even if a model registry exists (avoids 15s timeout on dead server).
+	if pilot.SglangRecentlyDown() || !pilot.CheckSglangHealth() {
 		return ""
 	}
 
