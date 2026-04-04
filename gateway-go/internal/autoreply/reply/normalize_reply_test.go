@@ -164,6 +164,26 @@ Done`,
 			in:   "[tool:autoresearch({\"action\":\"stop\",\"workdir\":\"/home/choiceoh/Deneb\"})]",
 			want: "",
 		},
+		{
+			name: "removes truncated tool call without closing bracket",
+			in:   "[tool:exec({\"command\":\"python3 -c \\\"import json; vocab = json.load(open('tokenizer.json'))['model']['vocab']; print(len(vocab",
+			want: "",
+		},
+		{
+			name: "removes truncated tool call preserving preceding text",
+			in:   "확인해볼게요.\n[tool:exec({\"command\":\"git diff HEAD~1 -- gateway-go/internal/chat/",
+			want: "확인해볼게요.",
+		},
+		{
+			name: "removes multi-line tool call with actual newlines in args",
+			in:   "[tool:exec({\"command\":\"python3 << 'EOF'\\nimport json\\nvocab = json.load(open('tok.json'))\\nprint(len(vocab))\\nEOF\"})]",
+			want: "",
+		},
+		{
+			name: "removes tool call with embedded newlines in heredoc",
+			in:   "[tool:exec({\"command\":\"python3 << 'EOF'\nimport json\nprint('hello')\nEOF\"})]",
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -242,6 +262,16 @@ func TestSanitizeDraftText(t *testing.T) {
 			name: "strips bracket tool call and code block together",
 			in:   "확인해볼게\n[tool:exec({\"command\":\"git status\"})]\n```bash\ngit status\n```",
 			want: "확인해볼게",
+		},
+		{
+			name: "strips partial tool prefix during streaming",
+			in:   "확인해볼게\n[tool:exec",
+			want: "확인해볼게",
+		},
+		{
+			name: "strips bare tool prefix during streaming",
+			in:   "[tool:",
+			want: "",
 		},
 	}
 

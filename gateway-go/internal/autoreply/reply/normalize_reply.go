@@ -21,10 +21,15 @@ var jsonToolCallRe = regexp.MustCompile(`(?s)\{"(?:name|type)":\s*"(?:function|t
 var pipeFunctionRe = regexp.MustCompile(`<\|(?:python_tag|function|tool_call)\|>[^\n]*(?:\n|$)`)
 
 // bracketToolCallRe matches [tool:NAME(ARGS)] patterns that the LLM may
-// mimic from session memory transcripts. Also matches the corresponding
-// [result → ...] lines.
-var bracketToolCallRe = regexp.MustCompile(`(?m)^\[tool:[a-z_]+\(.*\)\]\s*$`)
+// mimic from session memory transcripts. Uses dotall ((?s)) so args
+// spanning multiple lines are captured. Also matches [result → ...] lines.
+var bracketToolCallRe = regexp.MustCompile(`(?ms)^\[tool:[a-z_]+\(.*\)\]\s*$`)
 var bracketResultRe = regexp.MustCompile(`(?m)^\[result → .*\]\s*$`)
+
+// bracketToolCallUnterminatedRe catches truncated tool calls where the LLM
+// started emitting [tool:NAME(... but the output was cut off before the
+// closing )].  Everything from the [tool: prefix to end-of-text is removed.
+var bracketToolCallUnterminatedRe = regexp.MustCompile(`(?s)\[tool:[a-z_]+\(.*`)
 
 // StripLeakedToolCallMarkup removes leaked tool-call envelope text that should
 // stay internal. Handles multiple model-specific formats:
@@ -63,6 +68,10 @@ func StripLeakedToolCallMarkup(text string) string {
 	trimmed = bracketToolCallRe.ReplaceAllString(trimmed, "")
 	trimmed = bracketResultRe.ReplaceAllString(trimmed, "")
 
+	// Strip unterminated [tool: patterns (LLM output truncated before
+	// the closing bracket, e.g. long exec commands).
+	trimmed = bracketToolCallUnterminatedRe.ReplaceAllString(trimmed, "")
+
 	return strings.TrimSpace(trimmed)
 }
 
@@ -83,6 +92,12 @@ func StripFencedCodeBlocks(text string) string {
 // suitable for streaming display in channels that suppress raw code.
 func SanitizeDraftText(text string) string {
 	text = StripLeakedToolCallMarkup(text)
+	// During streaming the LLM may be mid-way through emitting a [tool:
+	// prefix that hasn't yet grown long enough for the regex to match
+	// (e.g. "[tool:" or "[tool:exec"). Trim it so the user never sees it.
+	if idx := strings.LastIndex(text, "[tool:"); idx >= 0 {
+		text = text[:idx]
+	}
 	text = StripFencedCodeBlocks(text)
 	return strings.TrimSpace(text)
 }
