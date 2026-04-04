@@ -529,9 +529,12 @@ const maxToolConcurrency = 10
 // readOnlyToolFallback is used when ToolExecutor does not implement
 // ConcurrencyChecker. Prefer declaring ConcurrencySafe on ToolDef instead.
 var readOnlyToolFallback = map[string]bool{
-	"read": true, "grep": true, "glob": true, "find": true,
-	"tree": true, "process": true, "kv": true, "knowledge": true,
-	"memory": true,
+	"read": true, "grep": true, "find": true, "tree": true, "diff": true,
+	"analyze": true, "batch_read": true, "search_and_read": true, "inspect": true,
+	"read_spillover": true, "process": true, "kv": true, "memory": true,
+	"web": true, "http": true, "health_check": true, "image": true,
+	"sessions_list": true, "sessions_history": true, "sessions_search": true,
+	"skills_list": true, "agent_logs": true, "gateway_logs": true,
 }
 
 // buildConcurrencyCheck returns a function that checks whether a tool is safe
@@ -767,11 +770,19 @@ func executeOneTool(
 	start := time.Now()
 	var toolOutput string
 	var toolErr error
-	if tools != nil {
-		toolOutput, toolErr = tools.Execute(ctx, tc.Name, tc.Input)
-	} else {
-		toolErr = fmt.Errorf("no tool executor configured")
-	}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				toolErr = fmt.Errorf("tool executor panic: %v", r)
+				logger.Error("tool executor panic", "name", tc.Name, "panic", r)
+			}
+		}()
+		if tools != nil {
+			toolOutput, toolErr = tools.Execute(ctx, tc.Name, tc.Input)
+		} else {
+			toolErr = fmt.Errorf("no tool executor configured")
+		}
+	}()
 	elapsed := time.Since(start)
 
 	block := llm.ContentBlock{
