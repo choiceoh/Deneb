@@ -182,6 +182,35 @@ func (el *ErrorLearner) GetRecurringErrors() []ErrorRecord {
 	return result
 }
 
+// FormatForPrompt returns a compact summary of recurring error patterns (2+
+// occurrences) suitable for system prompt injection. Returns "" if none.
+func (el *ErrorLearner) FormatForPrompt() string {
+	el.svc.mu.Lock()
+	defer el.svc.mu.Unlock()
+
+	var entries []string
+	for _, r := range el.errorHistory {
+		if r.Occurrences < 2 {
+			continue
+		}
+		entry := fmt.Sprintf("- %s (%d회 발생)", truncate(r.Pattern, 80), r.Occurrences)
+		if r.Resolution != "" {
+			entry += fmt.Sprintf(" — 해결: %s", truncate(r.Resolution, 100))
+		}
+		entries = append(entries, entry)
+	}
+	if len(entries) == 0 {
+		return ""
+	}
+
+	// Cap at 5 to avoid bloating the prompt.
+	if len(entries) > 5 {
+		entries = entries[len(entries)-5:]
+	}
+
+	return "반복 에러 패턴 (같은 실수를 피하세요):\n" + strings.Join(entries, "\n")
+}
+
 // normalizeErrorPattern creates a simplified signature from an error message.
 func normalizeErrorPattern(content, matchedSig string) string {
 	lower := strings.ToLower(content)

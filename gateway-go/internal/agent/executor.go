@@ -171,7 +171,7 @@ func RunAgent(
 
 		// Consume the stream for this turn. On idle stall, retry once —
 		// the LLM API sometimes stalls transiently but recovers on reconnect.
-		err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout)
+		err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout, logger)
 		if errors.Is(err, ErrStreamIdle) && ctx.Err() == nil {
 			logger.Warn("stream idle stall detected, retrying turn",
 				"turn", turn,
@@ -179,7 +179,7 @@ func RunAgent(
 			turnRes = &turnResult{}
 			events, err = client.StreamChat(ctx, req)
 			if err == nil {
-				err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout)
+				err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout, logger)
 			}
 		}
 		if err != nil {
@@ -587,7 +587,10 @@ var ErrStreamIdle = fmt.Errorf("stream stalled: no event within idle timeout")
 //
 // idleTimeout controls how long to wait for the next event before declaring
 // the stream stalled. Zero uses defaultStreamIdleTimeout; negative disables.
-func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks, result *turnResult, idleTimeout time.Duration) error {
+func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks, result *turnResult, idleTimeout time.Duration, logger *slog.Logger) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	// Resolve idle timeout.
 	if idleTimeout == 0 {
 		idleTimeout = defaultStreamIdleTimeout
@@ -637,20 +640,31 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 			switch ev.Type {
 			case "message_start":
 				var ms llm.MessageStart
-				if json.Unmarshal(ev.Payload, &ms) == nil {
+				if err := json.Unmarshal(ev.Payload, &ms); err != nil {
+					logger.Warn("unmarshal message_start failed", "error", err)
+				} else {
 					result.usage.InputTokens = ms.Message.Usage.InputTokens
 				}
 
 			case "content_block_start":
 				var cbs llm.ContentBlockStart
-				if json.Unmarshal(ev.Payload, &cbs) == nil {
+				if err := json.Unmarshal(ev.Payload, &cbs); err != nil {
+					logger.Warn("unmarshal content_block_start failed", "error", err)
+				} else {
 					blockIndex = cbs.Index
 					currentBlock = &blockBuilder{block: cbs.ContentBlock}
 				}
 
 			case "content_block_delta":
 				var cbd llm.ContentBlockDelta
-				if json.Unmarshal(ev.Payload, &cbd) == nil && currentBlock != nil && cbd.Index == blockIndex {
+				if err := json.Unmarshal(ev.Payload, &cbd); err != nil {
+					logger.Warn("unmarshal content_block_delta failed", "error", err)
+				} else if currentBlock == nil {
+					logger.Warn("content_block_delta without active block", "index", cbd.Index)
+				} else if cbd.Index != blockIndex {
+					logger.Warn("content_block_delta index mismatch",
+						"expected", blockIndex, "got", cbd.Index)
+				} else {
 					switch cbd.Delta.Type {
 					case "text_delta":
 						currentBlock.block.Text += cbd.Delta.Text
@@ -695,7 +709,9 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 
 			case "message_delta":
 				var md llm.MessageDelta
-				if json.Unmarshal(ev.Payload, &md) == nil {
+				if err := json.Unmarshal(ev.Payload, &md); err != nil {
+					logger.Warn("unmarshal message_delta failed", "error", err)
+				} else {
 					result.stopReason = md.Delta.StopReason
 					result.usage.OutputTokens = md.Usage.OutputTokens
 				}

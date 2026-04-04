@@ -82,9 +82,6 @@ func (sc *SessionContinuity) SaveSnapshot() {
 	tasks := make([]TrackedTask, len(sc.svc.pendingTasks))
 	copy(tasks, sc.svc.pendingTasks)
 	topic := ""
-	if sc.svc.contextPrefetcher != nil {
-		topic = sc.svc.contextPrefetcher.currentTopic
-	}
 	sc.svc.mu.Unlock()
 
 	// Build summary from recent messages.

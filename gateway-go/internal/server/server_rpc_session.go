@@ -330,6 +330,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	s.initGmailPoll()
 
 	// Shadow session monitoring: observes main session conversations in the
-	// background and performs task detection, health monitoring, periodic digests.
+	// background and injects continuity + error insights into system prompt.
 	s.initShadowMonitoring(hub)
 }
