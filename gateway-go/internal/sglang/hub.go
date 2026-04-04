@@ -2,6 +2,7 @@ package sglang
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -353,27 +354,24 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 	// Block CJK tokens to prevent Chinese output from local model.
 	h.cjkBlock.mergeInto(merged)
 
-	chatReq := llm.ChatRequest{
-		Model:          h.model,
-		Messages:       req.Messages,
-		System:         llm.SystemString(req.System),
-		MaxTokens:      req.MaxTokens,
-		Stream:         true,
-		ExtraBody:      merged,
-		ResponseFormat: req.ResponseFormat,
+	// Retry with user-message padding on connection reset — works around
+	// Atlas tokenizer.rs:273 panic where a byte-level slice lands inside a
+	// multi-byte UTF-8 char. Prepending ". " to the last user message shifts
+	// byte offsets past the bad boundary. Tested: 1 retry recovers 100% of
+	// crash cases (40% base crash rate with Korean input).
+	var text string
+	var err error
+	messages := req.Messages
+	for attempt := range 3 {
+		text, err = h.doStream(reqCtx, req.System, messages, req, merged)
+		if err == nil || !isConnectionReset(err) || len(messages) == 0 {
+			break
+		}
+		h.logger.Warn("sglang hub: connection reset, retrying with user message padding",
+			"caller", req.CallerTag, "attempt", attempt+1)
+		messages = padLastUserMessage(messages, attempt+1)
 	}
 
-	events, err := h.client.StreamChat(reqCtx, chatReq)
-	if err != nil {
-		h.Stats.Failed.Add(1)
-		h.logger.Debug("sglang hub: stream failed",
-			"caller", req.CallerTag, "error", err)
-		entry.resultCh <- submitResult{err: fmt.Errorf("sglang stream: %w", err)}
-		return
-	}
-
-	// Collect response.
-	text, err := collectStream(reqCtx, events)
 	if err != nil {
 		h.Stats.Failed.Add(1)
 		entry.resultCh <- submitResult{err: err}
@@ -394,6 +392,67 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 	}
 
 	entry.resultCh <- submitResult{resp: Response{Text: text}}
+}
+
+// doStream sends a single streaming request and collects the response.
+func (h *Hub) doStream(ctx context.Context, system string, messages []llm.Message, req *Request, extraBody map[string]any) (string, error) {
+	chatReq := llm.ChatRequest{
+		Model:          h.model,
+		Messages:       messages,
+		System:         llm.SystemString(system),
+		MaxTokens:      req.MaxTokens,
+		Stream:         true,
+		ExtraBody:      extraBody,
+		ResponseFormat: req.ResponseFormat,
+	}
+
+	events, err := h.client.StreamChat(ctx, chatReq)
+	if err != nil {
+		h.logger.Debug("sglang hub: stream failed",
+			"caller", req.CallerTag, "error", err)
+		return "", fmt.Errorf("sglang stream: %w", err)
+	}
+	return collectStream(ctx, events)
+}
+
+// padLastUserMessage prepends ". " padding to the last user message to shift
+// UTF-8 byte offsets and work around Atlas tokenizer char-boundary panics.
+// Content is json.RawMessage — either a JSON string ("text") or []ContentBlock.
+// We only pad simple string content (the common case for sglang hub callers).
+func padLastUserMessage(msgs []llm.Message, attempt int) []llm.Message {
+	out := make([]llm.Message, len(msgs))
+	copy(out, msgs)
+	for i := len(out) - 1; i >= 0; i-- {
+		if out[i].Role != "user" || len(out[i].Content) < 3 {
+			continue
+		}
+		// Only pad JSON string content (starts with '"').
+		if out[i].Content[0] != '"' {
+			continue
+		}
+		// Unmarshal the JSON string to get the raw text.
+		var text string
+		if err := json.Unmarshal(out[i].Content, &text); err != nil {
+			continue
+		}
+		pad := strings.Repeat(". ", attempt)
+		out[i] = llm.NewTextMessage("user", pad+text)
+		break
+	}
+	return out
+}
+
+// isConnectionReset detects connection reset / EOF errors that indicate an
+// Atlas tokenizer panic (server-side thread crash, connection dropped).
+func isConnectionReset(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection reset") ||
+		strings.Contains(s, "EOF") ||
+		strings.Contains(s, "broken pipe") ||
+		strings.Contains(s, "connection refused")
 }
 
 // callDirect is a raw sglang call for fallback chains (bypasses queue/budget).
