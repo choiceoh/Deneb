@@ -133,8 +133,19 @@ class GatewayClient:
         rpc_id = f"quality-{self.seq}-{int(time.time() * 1000)}"
         msg = {"type": "req", "id": rpc_id, "method": method, "params": params or {}}
         await self.ws.send(json.dumps(msg))
-        resp = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=timeout))
-        return resp
+        deadline = asyncio.get_event_loop().time() + timeout
+        while True:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                raise asyncio.TimeoutError(f"rpc {method} timed out waiting for id={rpc_id}")
+            raw = await asyncio.wait_for(self.ws.recv(), timeout=remaining)
+            resp = json.loads(raw)
+            # Skip event frames and responses for other request IDs.
+            if resp.get("type") == "evt":
+                continue
+            if resp.get("id") == rpc_id:
+                return resp
+            # Non-matching response — skip (stale from previous session).
 
     async def create_session(self, key: str = "") -> str:
         """Create a session and return its key."""
@@ -172,8 +183,20 @@ class GatewayClient:
         capture = ChatCapture(start_time=time.time())
         await self.ws.send(json.dumps(msg))
 
-        # First: read the immediate RPC response ({status: "started"}).
-        initial = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_RPC))
+        # First: read the immediate RPC response, skipping stale events.
+        deadline = asyncio.get_event_loop().time() + TIMEOUT_RPC
+        initial = None
+        while True:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                raise asyncio.TimeoutError(f"chat.send timed out waiting for RPC response")
+            raw = await asyncio.wait_for(self.ws.recv(), timeout=remaining)
+            frame = json.loads(raw)
+            if frame.get("id") == rpc_id:
+                initial = frame
+                break
+            # Skip event frames and non-matching responses.
+
         capture.events.append(initial)
         if not initial.get("ok"):
             capture.final_response = initial
@@ -181,6 +204,7 @@ class GatewayClient:
             return capture
 
         # Now listen for streamed events until we get state="done"/"error"/"aborted".
+        # Filter by clientRunId to ignore autonomous continuation events.
         done_states = {"done", "error", "aborted"}
         while True:
             try:
@@ -192,11 +216,17 @@ class GatewayClient:
 
             frame = json.loads(raw)
             frame["_recv_ts"] = time.time()
+
+            # Filter: only process events for our run (skip autonomous continuations).
+            payload = frame.get("payload", {})
+            frame_run_id = payload.get("clientRunId", "")
+            if frame_run_id and frame_run_id != client_run_id:
+                continue
+
             capture.events.append(frame)
 
             # Event frames may or may not have "type" key.
             evt = frame.get("event", "")
-            payload = frame.get("payload", {})
             state = payload.get("state", "")
 
             if evt:
@@ -261,10 +291,16 @@ class GatewayClient:
 # --- Quality Checks ---
 
 def check_korean_response(text: str) -> tuple[bool, str]:
-    """Check if response contains Korean characters."""
-    korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", text))
-    total_alpha = len(re.findall(r"[a-zA-Z\uac00-\ud7af]", text))
+    """Check if response contains Korean characters (excludes code refs)."""
+    # Strip backtick-wrapped code references which are inherently English.
+    prose = re.sub(r"`[^`]+`", "", text)
+    korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", prose))
+    total_alpha = len(re.findall(r"[a-zA-Z\uac00-\ud7af]", prose))
     if total_alpha == 0:
+        # Fallback: if all content is code, check original text has any Korean.
+        korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", text))
+        if korean_chars > 0:
+            return True, f"Korean ratio: code-heavy ({korean_chars} Korean chars)"
         return False, "no alphabetic content"
     ratio = korean_chars / max(total_alpha, 1)
     if ratio > 0.3:
@@ -303,7 +339,7 @@ def check_telegram_safe(text: str) -> tuple[bool, str]:
     return True, f"length={len(text)} chars"
 
 
-def check_response_substance(text: str, min_chars: int = 10) -> tuple[bool, str]:
+def check_response_substance(text: str, min_chars: int = 10, min_alpha: int = 5) -> tuple[bool, str]:
     """Check if response has actual substance (not empty/trivial)."""
     stripped = text.strip()
     if not stripped:
@@ -312,7 +348,7 @@ def check_response_substance(text: str, min_chars: int = 10) -> tuple[bool, str]
         return False, f"too short ({len(stripped)} chars)"
     # Check it's not just whitespace or punctuation.
     alpha = re.findall(r"[\w]", stripped)
-    if len(alpha) < 5:
+    if len(alpha) < min_alpha:
         return False, "no meaningful content"
     return True, f"{len(stripped)} chars"
 
@@ -490,8 +526,8 @@ async def test_chat_formatting(client: GatewayClient) -> QualityResult:
     has_list = bool(re.search(r"[-*\d]\.\s|[-*]\s", capture.reply_text))
     result.add_check("has_list_format", has_list, "list markers present" if has_list else "no list markers")
 
-    # Check it has at least 3 items.
-    list_items = re.findall(r"[-*\d]+[\.)]\s", capture.reply_text)
+    # Check it has at least 3 items (numbered: "1. ", bulleted: "- ", checklist: "- [ ]").
+    list_items = re.findall(r"(?:^|\n)\s*[-*]\s|(?:^|\n)\s*\d+[\.)]\s|- \[[ x]\]", capture.reply_text)
     result.add_check("has_3_items", len(list_items) >= 3, f"found {len(list_items)} items")
 
     result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
@@ -690,8 +726,8 @@ async def test_tools_error_handling(client: GatewayClient) -> QualityResult:
     result.add_check("error_acknowledged", has_error_ack,
                      "reply acknowledges file not found")
 
-    # Should not have crashed or returned empty.
-    result.add_check("has_reply", *check_response_substance(capture.reply_text))
+    # Should not have crashed or returned empty (short error acks are valid).
+    result.add_check("has_reply", *check_response_substance(capture.reply_text, min_chars=5))
 
     # No leaked internal errors.
     result.add_check("no_leaked_markup", *check_no_leaked_markup(capture.reply_text))
@@ -785,7 +821,8 @@ async def test_edge_long_message(client: GatewayClient) -> QualityResult:
     result.add_check("chat_completed", ok and not capture.errors,
                      " ".join(capture.errors) if capture.errors else "")
 
-    result.add_check("has_reply", *check_response_substance(capture.reply_text))
+    # Short answers are valid for a simple math question.
+    result.add_check("has_reply", *check_response_substance(capture.reply_text, min_chars=1, min_alpha=1))
 
     # Should answer the question at the end.
     has_answer = "2" in capture.reply_text
