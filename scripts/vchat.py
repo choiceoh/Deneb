@@ -33,8 +33,8 @@ import urllib.request
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-MOCK_PORT = 18792
-GATEWAY_PORT = 18790
+MOCK_PORT = int(os.environ.get("VCHAT_MOCK_PORT", "18792"))
+GATEWAY_PORT = int(os.environ.get("VCHAT_GATEWAY_PORT", "18790"))
 BOT_TOKEN = "vchat-test-000000000:AAF-mock-token-for-local-testing"
 BOT_USER = {
     "id": 999999999,
@@ -51,12 +51,16 @@ USER = {
 }
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEV_BINARY = "/tmp/deneb-gateway-live"
+DEV_BINARY = os.environ.get("VCHAT_BINARY", "/tmp/deneb-gateway-live")
 DEV_LOG = "/tmp/deneb-vchat.log"
 DEV_CONFIG = "/tmp/deneb-vchat-config.json"
 PID_FILE = "/tmp/deneb-vchat.pid"
 
 CONTROL_BASE = f"http://127.0.0.1:{MOCK_PORT}/control"
+
+# Re-derive after env var overrides are applied.
+def _control_base():
+    return f"http://127.0.0.1:{MOCK_PORT}/control"
 
 # Response detection: no new events for this many seconds → response complete.
 SETTLE_SECS = 3.0
@@ -409,7 +413,7 @@ def cmd_start(args):
     print(f"ready: mock=:{MOCK_PORT} gateway=:{GATEWAY_PORT} log={DEV_LOG}")
     sys.stdout.flush()
 
-    # Block until killed.
+    # Cleanup handler.
     def cleanup(sig=None, frame=None):
         gw.terminate()
         try:
@@ -428,10 +432,27 @@ def cmd_start(args):
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
 
-    try:
-        gw.wait()
-    finally:
-        cleanup()
+    if args.background:
+        # Background mode: detach and let parent poll for readiness.
+        # Stay alive until SIGTERM (parent sends it via 'vchat.py stop').
+        import threading as _bg_threading
+        def _bg_watch():
+            gw.wait()
+            cleanup()
+        t = _bg_threading.Thread(target=_bg_watch, daemon=True)
+        t.start()
+        # Keep main thread alive for signal handling.
+        try:
+            while True:
+                time.sleep(3600)
+        except (KeyboardInterrupt, SystemExit):
+            cleanup()
+    else:
+        # Foreground mode: block until gateway exits.
+        try:
+            gw.wait()
+        finally:
+            cleanup()
 
 
 # ─── Client: send subcommand ────────────────────────────────────────────────
@@ -714,6 +735,7 @@ def main():
     # start
     p_start = sub.add_parser("start", help="Mock + Gateway 시작 (foreground)")
     p_start.add_argument("--no-build", action="store_true")
+    p_start.add_argument("--background", action="store_true", help="백그라운드 실행 (dev-iterate.sh 연동용)")
     p_start.set_defaults(func=cmd_start)
 
     # send
