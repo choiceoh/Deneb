@@ -229,10 +229,10 @@ func TestFormatRichContent(t *testing.T) {
 	if !strings.Contains(got, "Let me read that file.") {
 		t.Error("should contain text block")
 	}
-	if !strings.Contains(got, "[tool:read_file(") {
+	if !strings.Contains(got, "— read_file 사용:") {
 		t.Error("should contain tool_use annotation")
 	}
-	if !strings.Contains(got, "[result →") {
+	if !strings.Contains(got, "↳") {
 		t.Error("should contain tool_result annotation")
 	}
 }

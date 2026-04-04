@@ -525,13 +525,13 @@ func formatRichContent(content json.RawMessage) string {
 			}
 		case "tool_use":
 			inputSummary := truncRunes(string(base.Input), 200)
-			fmt.Fprintf(&b, "[tool:%s(%s)]\n", base.Name, inputSummary)
+			fmt.Fprintf(&b, "— %s 사용: %s\n", base.Name, inputSummary)
 		case "tool_result":
 			output := truncRunes(base.Content, 500)
 			if base.IsError {
-				fmt.Fprintf(&b, "[result → ERROR: %s]\n", output)
+				fmt.Fprintf(&b, "  ↳ 오류: %s\n", output)
 			} else {
-				fmt.Fprintf(&b, "[result → %s]\n", output)
+				fmt.Fprintf(&b, "  ↳ %s\n", output)
 			}
 		default:
 			// Skip thinking blocks and other internal types.

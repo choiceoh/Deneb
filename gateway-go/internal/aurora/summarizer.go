@@ -59,7 +59,7 @@ Keep only significant steps (skip routine reads/writes). Focus on causality: wha
 </pending>
 
 <references>
-- file:line paths, tool calls as [tool:NAME → result], URLs.
+- file:line paths, tool usage annotations (— NAME 사용: args), URLs.
 </references>
 
 Rules:
