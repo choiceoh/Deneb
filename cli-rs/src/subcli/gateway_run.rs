@@ -60,9 +60,8 @@ fn try_go_gateway(
     port: u16,
 ) -> Result<Option<Result<(), CliError>>, CliError> {
     let go_binary = find_go_binary();
-    let go_binary = match go_binary {
-        Some(p) => p,
-        None => return Ok(None),
+    let Some(go_binary) = go_binary else {
+        return Ok(None);
     };
 
     // Locate the Node.js plugin host entry point for channel extensions.
@@ -182,14 +181,14 @@ fn find_go_binary() -> Option<PathBuf> {
     // 3. dist/deneb-gateway relative to repo root (dev layout).
     // Walk up from the current exe to find the repo root by looking for Makefile.
     if let Ok(exe) = std::env::current_exe() {
-        let mut dir = exe.parent().map(|p| p.to_path_buf());
+        let mut dir = exe.parent().map(std::path::Path::to_path_buf);
         for _ in 0..5 {
             if let Some(ref d) = dir {
                 let candidate = d.join("dist").join("deneb-gateway");
                 if candidate.is_file() && d.join("Makefile").is_file() {
                     return Some(candidate);
                 }
-                dir = d.parent().map(|p| p.to_path_buf());
+                dir = d.parent().map(std::path::Path::to_path_buf);
             }
         }
     }
@@ -219,14 +218,14 @@ fn find_plugin_host_entry() -> Option<PathBuf> {
 
     // 2. dist/plugin-host/main.js relative to repo root.
     if let Ok(exe) = std::env::current_exe() {
-        let mut dir = exe.parent().map(|p| p.to_path_buf());
+        let mut dir = exe.parent().map(std::path::Path::to_path_buf);
         for _ in 0..5 {
             if let Some(ref d) = dir {
                 let candidate = d.join("dist").join("plugin-host").join("main.js");
                 if candidate.is_file() {
                     return Some(candidate);
                 }
-                dir = d.parent().map(|p| p.to_path_buf());
+                dir = d.parent().map(std::path::Path::to_path_buf);
             }
         }
     }

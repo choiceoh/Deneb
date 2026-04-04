@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Partial DenebConfig — only the fields the CLI needs.
+/// Partial `DenebConfig` — only the fields the CLI needs.
 /// Unknown fields are preserved in `extra` for roundtrip fidelity.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -83,8 +83,7 @@ impl DenebConfig {
         self.gateway
             .as_ref()
             .and_then(|g| g.mode.as_deref())
-            .map(|m| m == "remote")
-            .unwrap_or(false)
+            .is_some_and(|m| m == "remote")
     }
 
     /// Get the remote gateway URL from config.

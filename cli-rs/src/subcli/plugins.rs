@@ -151,15 +151,14 @@ fn print_plugins_table(result: &serde_json::Value) {
             .unwrap_or(Symbols::DASH);
         let enabled = p
             .get("enabled")
-            .and_then(|v| v.as_bool())
-            .map(|b| {
+            .and_then(serde_json::Value::as_bool)
+            .map_or(Symbols::DASH, |b| {
                 if b {
                     Symbols::DOT_FILLED
                 } else {
                     Symbols::DASH
                 }
-            })
-            .unwrap_or(Symbols::DASH);
+            });
         table.add_row(vec![id, version, enabled]);
     }
     println!("{table}");

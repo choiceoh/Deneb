@@ -98,7 +98,7 @@ pub async fn run(args: &OnboardArgs) -> Result<(), CliError> {
     };
 
     // Ensure gateway config exists
-    config::set_config_value(&mut cfg, "gateway.mode", serde_json::json!(&mode))?;
+    config::set_config_value(&mut cfg, "gateway.mode", &serde_json::json!(&mode))?;
 
     // Step 2: Remote URL (if remote mode)
     if mode == "remote" {
@@ -117,18 +117,18 @@ pub async fn run(args: &OnboardArgs) -> Result<(), CliError> {
         config::set_config_value(
             &mut cfg,
             "gateway.remote.url",
-            serde_json::json!(remote_url),
+            &serde_json::json!(remote_url),
         )?;
 
         if let Some(ref token) = args.remote_token {
-            config::set_config_value(&mut cfg, "gateway.auth.token", serde_json::json!(token))?;
+            config::set_config_value(&mut cfg, "gateway.auth.token", &serde_json::json!(token))?;
         }
     }
 
     // Step 3: Gateway port (local mode)
     if mode == "local" {
         if let Some(port) = args.gateway_port {
-            config::set_config_value(&mut cfg, "gateway.port", serde_json::json!(port))?;
+            config::set_config_value(&mut cfg, "gateway.port", &serde_json::json!(port))?;
         } else if !args.non_interactive {
             let port_str: String = dialoguer::Input::new()
                 .with_prompt("Gateway port")
@@ -136,19 +136,19 @@ pub async fn run(args: &OnboardArgs) -> Result<(), CliError> {
                 .interact_text()
                 .map_err(|e| CliError::User(format!("prompt failed: {e}")))?;
             if let Ok(port) = port_str.parse::<u16>() {
-                config::set_config_value(&mut cfg, "gateway.port", serde_json::json!(port))?;
+                config::set_config_value(&mut cfg, "gateway.port", &serde_json::json!(port))?;
             }
         }
 
         if let Some(ref bind) = args.gateway_bind {
-            config::set_config_value(&mut cfg, "gateway.bind", serde_json::json!(bind))?;
+            config::set_config_value(&mut cfg, "gateway.bind", &serde_json::json!(bind))?;
         }
 
         if let Some(ref auth) = args.gateway_auth {
             if auth == "token" {
                 // Generate a token if not provided
                 let token = uuid::Uuid::new_v4().to_string();
-                config::set_config_value(&mut cfg, "gateway.auth.token", serde_json::json!(token))?;
+                config::set_config_value(&mut cfg, "gateway.auth.token", &serde_json::json!(token))?;
             }
         }
     }
@@ -157,7 +157,7 @@ pub async fn run(args: &OnboardArgs) -> Result<(), CliError> {
     if let Some(ref token) = args.token {
         let provider = args.token_provider.as_deref().unwrap_or("anthropic");
         let key = format!("providers.{provider}.apiKey");
-        config::set_config_value(&mut cfg, &key, serde_json::json!(token))?;
+        config::set_config_value(&mut cfg, &key, &serde_json::json!(token))?;
     } else if !args.non_interactive {
         let providers = vec!["anthropic", "openai", "google", "ollama", "skip"];
         let selection = dialoguer::Select::new()
@@ -175,7 +175,7 @@ pub async fn run(args: &OnboardArgs) -> Result<(), CliError> {
                 .map_err(|e| CliError::User(format!("prompt failed: {e}")))?;
             if !api_key.is_empty() {
                 let key = format!("providers.{provider}.apiKey");
-                config::set_config_value(&mut cfg, &key, serde_json::json!(api_key))?;
+                config::set_config_value(&mut cfg, &key, &serde_json::json!(api_key))?;
             }
         }
     }

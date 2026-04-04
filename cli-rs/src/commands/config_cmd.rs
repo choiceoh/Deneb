@@ -90,7 +90,7 @@ fn cmd_set(path: &str, value_str: &str) -> Result<(), CliError> {
     let value: serde_json::Value = serde_json::from_str(value_str)
         .unwrap_or_else(|_| serde_json::Value::String(value_str.to_string()));
 
-    config_io::set_config_value(&mut config, path, value.clone())?;
+    config_io::set_config_value(&mut config, path, &value)?;
     config_io::write_config(&config_path, &config)?;
 
     let success = Palette::success();

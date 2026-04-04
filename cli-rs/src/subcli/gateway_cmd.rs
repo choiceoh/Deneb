@@ -177,9 +177,9 @@ async fn cmd_status(
         !json_mode,
         call_gateway_with_config(
             CallOptions {
-                url: url.map(|s| s.to_string()),
-                token: token.map(|s| s.to_string()),
-                password: password.map(|s| s.to_string()),
+                url: url.map(std::string::ToString::to_string),
+                token: token.map(std::string::ToString::to_string),
+                password: password.map(std::string::ToString::to_string),
                 method: "health".to_string(),
                 params: None,
                 timeout_ms: timeout,
@@ -208,8 +208,8 @@ async fn cmd_status(
                 if let Some(v) = payload.get("version").and_then(|v| v.as_str()) {
                     println!("  Version: {}", muted.apply_to(v));
                 }
-                if let Some(u) = payload.get("uptimeSeconds").and_then(|v| v.as_f64()) {
-                    println!("  Uptime: {}", muted.apply_to(format!("{:.0}s", u)));
+                if let Some(u) = payload.get("uptimeSeconds").and_then(serde_json::Value::as_f64) {
+                    println!("  Uptime: {}", muted.apply_to(format!("{u:.0}s")));
                 }
             }
             Ok(())
@@ -252,9 +252,9 @@ async fn cmd_call(p: CmdCallParams<'_>) -> Result<(), CliError> {
     };
 
     let result = call_gateway(CallOptions {
-        url: p.url.map(|s| s.to_string()),
-        token: p.token.map(|s| s.to_string()),
-        password: p.password.map(|s| s.to_string()),
+        url: p.url.map(std::string::ToString::to_string),
+        token: p.token.map(std::string::ToString::to_string),
+        password: p.password.map(std::string::ToString::to_string),
         method: p.method.to_string(),
         params,
         timeout_ms: p.timeout,
@@ -285,9 +285,9 @@ async fn cmd_usage_cost(
         "Fetching usage cost...",
         !json_mode,
         call_gateway(CallOptions {
-            url: url.map(|s| s.to_string()),
-            token: token.map(|s| s.to_string()),
-            password: password.map(|s| s.to_string()),
+            url: url.map(std::string::ToString::to_string),
+            token: token.map(std::string::ToString::to_string),
+            password: password.map(std::string::ToString::to_string),
             method: "usage.cost".to_string(),
             params: Some(serde_json::json!({ "days": days })),
             timeout_ms: timeout,
@@ -307,10 +307,10 @@ async fn cmd_usage_cost(
         );
 
         if let Some(obj) = result.as_object() {
-            if let Some(total) = obj.get("totalCost").and_then(|v| v.as_f64()) {
+            if let Some(total) = obj.get("totalCost").and_then(serde_json::Value::as_f64) {
                 println!("  Total: {}", muted.apply_to(format!("${total:.4}")));
             }
-            if let Some(tokens) = obj.get("totalTokens").and_then(|v| v.as_u64()) {
+            if let Some(tokens) = obj.get("totalTokens").and_then(serde_json::Value::as_u64) {
                 println!("  Tokens: {}", muted.apply_to(format!("{tokens}")));
             }
         }

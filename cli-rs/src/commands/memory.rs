@@ -77,9 +77,9 @@ async fn cmd_status(
         "Fetching memory status...",
         !json_mode,
         call_gateway(CallOptions {
-            url: url.map(|s| s.to_string()),
-            token: token.map(|s| s.to_string()),
-            password: password.map(|s| s.to_string()),
+            url: url.map(std::string::ToString::to_string),
+            token: token.map(std::string::ToString::to_string),
+            password: password.map(std::string::ToString::to_string),
             method: "memory.status".to_string(),
             params: Some(serde_json::json!({ "agentId": agent })),
             timeout_ms: timeout,
@@ -124,13 +124,13 @@ fn print_memory_status(payload: &serde_json::Value, agent: &str) {
     println!();
 
     if let Some(obj) = payload.as_object() {
-        if let Some(indexed) = obj.get("indexedCount").and_then(|v| v.as_u64()) {
+        if let Some(indexed) = obj.get("indexedCount").and_then(serde_json::Value::as_u64) {
             println!(
                 "    Indexed     {}",
                 success.apply_to(format!("{indexed} files"))
             );
         }
-        if let Some(dirty) = obj.get("dirty").and_then(|v| v.as_bool()) {
+        if let Some(dirty) = obj.get("dirty").and_then(serde_json::Value::as_bool) {
             let label = if dirty { "yes (reindex needed)" } else { "no" };
             println!("    Dirty       {}", muted.apply_to(label));
         }

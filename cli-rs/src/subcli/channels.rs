@@ -120,15 +120,14 @@ fn print_channels_list(result: &serde_json::Value) {
                 .unwrap_or(Symbols::DASH);
             let enabled = acct
                 .get("enabled")
-                .and_then(|v| v.as_bool())
-                .map(|b| {
+                .and_then(serde_json::Value::as_bool)
+                .map_or(Symbols::DASH, |b| {
                     if b {
                         Symbols::DOT_FILLED
                     } else {
                         Symbols::DASH
                     }
-                })
-                .unwrap_or(Symbols::DASH);
+                });
             table.add_row(vec![
                 channel.clone(),
                 account_id.to_string(),
@@ -185,9 +184,7 @@ fn print_channels_status(result: &serde_json::Value, probe: bool) {
             let last_activity = acct
                 .get("lastInboundAt")
                 .or_else(|| acct.get("lastOutboundAt"))
-                .and_then(|v| v.as_f64())
-                .map(format_age)
-                .unwrap_or_else(|| Symbols::DASH.to_string());
+                .and_then(serde_json::Value::as_f64).map_or_else(|| Symbols::DASH.to_string(), format_age);
 
             let mut row = vec![
                 channel.clone(),
@@ -202,7 +199,7 @@ fn print_channels_status(result: &serde_json::Value, probe: bool) {
                 let probe_ok = acct
                     .get("probe")
                     .and_then(|p| p.get("ok"))
-                    .and_then(|v| v.as_bool());
+                    .and_then(serde_json::Value::as_bool);
                 row.push(match probe_ok {
                     Some(true) => Symbols::SUCCESS.to_string(),
                     Some(false) => Symbols::ERROR.to_string(),
@@ -221,7 +218,7 @@ fn print_channels_status(result: &serde_json::Value, probe: bool) {
 
 fn bool_indicator(val: Option<&serde_json::Value>) -> String {
     use crate::terminal::Symbols;
-    match val.and_then(|v| v.as_bool()) {
+    match val.and_then(serde_json::Value::as_bool) {
         Some(true) => Symbols::DOT_FILLED.to_string(),
         _ => Symbols::DASH.to_string(),
     }
@@ -236,7 +233,7 @@ fn format_age(ts_ms: f64) -> String {
     let diff_s = ((now_ms - ts_ms) / 1000.0).max(0.0);
 
     if diff_s < 60.0 {
-        format!("{:.0}s ago", diff_s)
+        format!("{diff_s:.0}s ago")
     } else if diff_s < 3600.0 {
         format!("{:.0}m ago", diff_s / 60.0)
     } else if diff_s < 86400.0 {
