@@ -12,8 +12,9 @@
 #   scripts/dev-live-test.sh rpc METHOD [P]     Send a single RPC call via WebSocket
 #   scripts/dev-live-test.sh session CMDS...    Multi-turn WebSocket session (multiple RPCs on one connection)
 #   scripts/dev-live-test.sh chat MESSAGE       Send a chat message and stream the full response
-#   scripts/dev-live-test.sh quality [SCENARIO]  Run quality tests (all|health|chat|tools|format)
+#   scripts/dev-live-test.sh quality [SCENARIO]  Run quality tests (300 cases, YAML-driven)
 #   scripts/dev-live-test.sh quality-custom MSG Run quality test with custom message
+#   scripts/dev-live-test.sh quality-list       List all available quality tests
 #   scripts/dev-live-test.sh logs [N]           Tail dev gateway logs (default: 50 lines)
 #   scripts/dev-live-test.sh logs-watch         Follow dev gateway logs in real-time (like tail -f)
 #   scripts/dev-live-test.sh logs-grep PATTERN  Search logs for pattern
@@ -714,6 +715,7 @@ case "${1:-help}" in
   chat)           shift; cmd_chat "$@" ;;
   quality)        shift; cmd_quality "$@" ;;
   quality-custom) shift; cmd_quality_custom "$@" ;;
+  quality-list)   python3 "$SCRIPT_DIR/dev-quality-test.py" --list ;;
   metric-script)  cmd_metric_script ;;
   metric-gen)     shift; "$SCRIPT_DIR/dev-metric-gen.sh" "$@" ;;
   ar-start)       shift; "$SCRIPT_DIR/dev-autoresearch.sh" start "$@" ;;
@@ -769,8 +771,12 @@ case "${1:-help}" in
     echo "  rpc M [P]           Single RPC call (new connection per call)"
     echo "  session C1 C2..     Multi-turn: multiple RPCs on one connection"
     echo "  chat MSG            Send chat message, stream full response"
-    echo "  quality [SCENARIO]  Quality test (all|health|chat|tools|format|tools-deep|edge)"
+    echo "  quality [SCENARIO]  Quality test (300 cases, YAML-driven)"
+    echo "    Scenarios: all|core|health|daily|system|code|task|search|knowledge"
+    echo "               format|context|edge|safety|korean|persona|reasoning"
+    echo "    Legacy:    chat|tools|tools-deep (aliases for new categories)"
     echo "  quality-custom MSG  Quality test with custom message"
+    echo "  quality-list        List all available quality tests"
     echo ""
     echo "Reproduction (for AI agents to reproduce user-reported symptoms):"
     echo "  chat-check MSG [--expect PAT] [--expect-not PAT] [--expect-tool TOOL]"
