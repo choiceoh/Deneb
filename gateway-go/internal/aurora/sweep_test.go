@@ -27,8 +27,8 @@ func TestEvaluateCompaction_PureGo(t *testing.T) {
 		t.Error("expected no compaction when under threshold")
 	}
 
-	// Should compact when over threshold (0.80 × 100K = 80K boundary).
-	shouldCompact, reason, err := EvaluateCompaction(cfg, 81_000, 81_000, 100_000)
+	// Should compact when over threshold (0.60 × 100K = 60K boundary).
+	shouldCompact, reason, err := EvaluateCompaction(cfg, 61_000, 61_000, 100_000)
 	if err != nil {
 		t.Fatalf("EvaluateCompaction: %v", err)
 	}

@@ -66,7 +66,7 @@ type SweepConfig struct {
 // DefaultSweepConfig returns production defaults.
 func DefaultSweepConfig() SweepConfig {
 	return SweepConfig{
-		ContextThreshold:       0.80,
+		ContextThreshold:       0.60,
 		FreshTailCount:         8,
 		LeafMinFanout:          8,
 		CondensedMinFanout:     4,

@@ -344,7 +344,7 @@ func executeAgentRun(
 		defer prepWg.Done()
 		if deps.auroraStore != nil {
 			asmCfg := aurora.AssemblyConfig{
-				TokenBudget:    deps.contextCfg.TokenBudget,
+				TokenBudget:    deps.contextCfg.MemoryTokenBudget,
 				FreshTailCount: deps.contextCfg.FreshTailCount,
 				MaxMessages:    deps.contextCfg.MaxMessages,
 			}
@@ -1180,7 +1180,7 @@ func executeAgentRun(
 		}
 		// Check budget tracker for diminishing returns across turns.
 		totalTokens := agentResult.Usage.InputTokens + agentResult.Usage.OutputTokens
-		decision := budgetTracker.CheckBudget("", int(qCfg.TokenBudget), totalTokens)
+		decision := budgetTracker.CheckBudget("", int(qCfg.LiveTokenBudget), totalTokens)
 		if decision.Action == "stop" && decision.DiminishingReturns {
 			lastTransition = NewTerminal(TerminalDiminishingReturn, nil)
 			logger.Info("budget tracker: diminishing returns detected, stopping",

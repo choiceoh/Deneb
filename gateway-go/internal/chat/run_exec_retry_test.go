@@ -49,7 +49,7 @@ func TestCompaction_DoubleOverflowExhaustsRetries(t *testing.T) {
 	cfg.DefaultSystem = "test"
 	cfg.MaxTokens = 1024
 	cfg.ContextCfg = ContextConfig{
-		TokenBudget:    500,
+		MemoryTokenBudget: 500,
 		FreshTailCount: 2,
 		MaxMessages:    20,
 	}

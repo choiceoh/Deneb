@@ -20,8 +20,11 @@ type QueryConfig struct {
 	// ProviderID is the resolved provider (e.g., "anthropic", "google").
 	ProviderID string
 
-	// TokenBudget is the context window token budget.
-	TokenBudget uint64
+	// MemoryTokenBudget is the Aurora context (transcript history) token budget.
+	MemoryTokenBudget uint64
+
+	// LiveTokenBudget is the total agent loop token budget (system + tools + memory + live messages).
+	LiveTokenBudget uint64
 
 	// MaxTurns is the maximum agent loop iterations.
 	MaxTurns int
@@ -46,7 +49,8 @@ type QueryConfig struct {
 // Callers should override fields from RunParams before use.
 func DefaultQueryConfig() QueryConfig {
 	return QueryConfig{
-		TokenBudget:          defaultTokenBudget,
+		MemoryTokenBudget:    defaultMemoryTokenBudget,
+		LiveTokenBudget:      defaultLiveTokenBudget,
 		MaxTurns:             defaultMaxTurns,
 		MaxOutputTokens:      defaultMaxTokens,
 		AgentTimeout:         defaultAgentTimeout,

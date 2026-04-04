@@ -87,7 +87,7 @@ func TestCompaction_ContextOverflowRetry(t *testing.T) {
 	cfg.DefaultSystem = "test"
 	cfg.MaxTokens = 1024
 	cfg.ContextCfg = ContextConfig{
-		TokenBudget:    1000, // low budget to trigger overflow
+		MemoryTokenBudget: 1000, // low budget to trigger overflow
 		FreshTailCount: 4,
 		MaxMessages:    50,
 	}
@@ -194,15 +194,15 @@ func TestCompaction_EvaluateCompactionThresholds(t *testing.T) {
 		},
 		{
 			name:        "at threshold boundary",
-			stored:      80_000,
-			live:        80_000,
+			stored:      60_000,
+			live:        60_000,
 			budget:      100_000,
-			wantCompact: false, // threshold is 0.80, so 80_000 == threshold (not exceeded)
+			wantCompact: false, // threshold is 0.60, so 60_000 == threshold (not exceeded)
 		},
 		{
 			name:        "over threshold",
-			stored:      81_000,
-			live:        81_000,
+			stored:      61_000,
+			live:        61_000,
 			budget:      100_000,
 			wantCompact: true,
 		},
@@ -497,13 +497,13 @@ func TestCompaction_ReducedBudgetFallback(t *testing.T) {
 	}
 
 	ctxCfg := ContextConfig{
-		TokenBudget:    500, // low budget to test reduced assembly
+		MemoryTokenBudget: 500, // low budget to test reduced assembly
 		FreshTailCount: 4,
 		MaxMessages:    100,
 	}
 	// Halve budget (same logic as handleContextOverflowAurora fallback).
 	reducedCfg := ctxCfg
-	reducedCfg.TokenBudget /= 2
+	reducedCfg.MemoryTokenBudget /= 2
 	if reducedCfg.MaxMessages > 10 {
 		reducedCfg.MaxMessages /= 2
 	}
