@@ -38,9 +38,10 @@ type benchmarkEntity struct {
 }
 
 type benchmarkQuery struct {
-	Query        string   `json:"query"`
-	ExpectedTags []string `json:"expected_tags"`
-	Description  string   `json:"description"`
+	Query         string   `json:"query"`
+	ExpectedTags  []string `json:"expected_tags"`
+	Description   string   `json:"description"`
+	ExtraKeywords []string `json:"extra_keywords,omitempty"`
 }
 
 // testdataDir returns the path to the testdata directory relative to this file.
@@ -90,20 +91,37 @@ func embedAllFacts(t *testing.T, store *Store, embedder *Embedder) {
 }
 
 // setupVectorAndReranker creates embedder and reranker, embeds all facts.
-// Falls back to FTS-only if GEMINI_API_KEY is not set.
+// Prefers local BGE model (VEGA_MODEL_EMBEDDER), falls back to Gemini API.
 func setupVectorAndReranker(t *testing.T, store *Store) func(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
 	t.Helper()
 
-	geminiKey := os.Getenv("GEMINI_API_KEY")
-	if geminiKey == "" {
-		t.Log("GEMINI_API_KEY not set, running FTS-only")
-		return func(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
-			return store.SearchFacts(ctx, query, nil, opts)
+	var embed embedding.Embedder
+
+	// Prefer local BGE embedding via Rust FFI.
+	localModelPath := os.Getenv("VEGA_MODEL_EMBEDDER")
+	if localModelPath != "" {
+		local := embedding.NewLocalEmbedder(localModelPath, slog.Default())
+		if local != nil {
+			embed = local
+			t.Logf("using local embedder: %s", local.ModelName())
 		}
 	}
 
+	// Fall back to Gemini API.
+	if embed == nil {
+		geminiKey := os.Getenv("GEMINI_API_KEY")
+		if geminiKey == "" {
+			t.Log("no embedder available (set VEGA_MODEL_EMBEDDER or GEMINI_API_KEY), running FTS-only")
+			return func(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
+				return store.SearchFacts(ctx, query, nil, opts)
+			}
+		}
+		embed = embedding.NewGeminiEmbedder(geminiKey, slog.Default())
+		t.Log("using Gemini embedder")
+	}
+
 	embedder := NewEmbedder(
-		embedding.NewGeminiEmbedder(geminiKey, slog.Default()),
+		embed,
 		store,
 		slog.Default(),
 	)
@@ -144,6 +162,45 @@ func setupVectorAndReranker(t *testing.T, store *Store) func(ctx context.Context
 		}
 		return store.SearchFacts(ctx, query, vec, opts)
 	}
+}
+
+// setupExpander creates an LLM query expander if LOCAL_AI_URL is available.
+// Returns nil if no local AI server is configured.
+func setupExpander(t *testing.T) *vega.LLMExpander {
+	t.Helper()
+
+	localURL := os.Getenv("LOCAL_AI_URL")
+	localModel := os.Getenv("LOCAL_AI_MODEL")
+	if localURL == "" {
+		t.Log("LOCAL_AI_URL not set, using pre-computed extra_keywords")
+		return nil
+	}
+	if localModel == "" {
+		localModel = "default"
+	}
+
+	expander := vega.NewLLMExpander(localURL, localModel, slog.Default())
+	// Probe with a short test query to verify connectivity.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	terms := expander.Expand(ctx, "테스트")
+	if terms == nil {
+		t.Log("LLM expander probe failed, using pre-computed extra_keywords")
+		return nil
+	}
+	t.Logf("LLM expander ready (model=%s, probe returned %d terms)", localModel, len(terms))
+	return expander
+}
+
+// expandQuery returns LLM-expanded keywords if expander is available,
+// otherwise falls back to pre-computed extra_keywords from ground truth.
+func expandQuery(ctx context.Context, expander *vega.LLMExpander, query string, fallback []string) []string {
+	if expander != nil {
+		if terms := expander.Expand(ctx, query); len(terms) > 0 {
+			return terms
+		}
+	}
+	return fallback
 }
 
 // TestSearchBenchmarkMRR measures search quality using MRR@10 and Recall@10.
@@ -214,6 +271,7 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 	}
 
 	searchFn := setupVectorAndReranker(t, store)
+	expander := setupExpander(t)
 
 	const k = 10
 	var reciprocalRankSum float64
@@ -221,7 +279,8 @@ func TestSearchBenchmarkMRR(t *testing.T) {
 	queryCount := len(gt.Queries)
 
 	for _, q := range gt.Queries {
-		results, err := searchFn(ctx, q.Query, SearchOpts{Limit: k})
+		extraKW := expandQuery(ctx, expander, q.Query, q.ExtraKeywords)
+		results, err := searchFn(ctx, q.Query, SearchOpts{Limit: k, ExtraKeywords: extraKW})
 		if err != nil {
 			t.Errorf("query %q failed: %v", q.Query, err)
 			continue

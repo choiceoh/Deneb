@@ -23,14 +23,14 @@
   "fts_and_min_results": 3,
   "or_penalty": 0.85,
   "trigram_penalty": 0.80,
-  "vector_min_threshold": 0.30,
-  "hybrid_fts_weight": 0.70,
-  "hybrid_vec_weight": 0.30,
+  "vector_min_threshold": 0.52,
+  "hybrid_fts_weight": 1.00,
+  "hybrid_vec_weight": 0.00,
   "entity_match_baseline": 0.60,
   "rerank_blend_reranker": 0.70,
   "rerank_blend_hybrid": 0.30,
   "dedup_jaccard_threshold": 0.60,
-  "decay_power": 2.0,
+  "decay_power": 2.5,
   "verification_unverified": 0.30,
   "verification_verified": 1.00
 }
