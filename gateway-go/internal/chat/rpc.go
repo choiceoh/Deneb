@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
@@ -348,10 +349,13 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 // SendDirect programmatically sends a message to a session and triggers an
 // LLM run, just like chat.send but without going through RPC. Used by the
 // bridge injector so the main agent automatically responds to bridge messages.
+// Delivery context is derived from the session key (e.g., "telegram:123" →
+// channel="telegram", to="123") so the response reaches the user's device.
 func (h *Handler) SendDirect(sessionKey, message string) {
 	params := RunParams{
 		SessionKey: sessionKey,
 		Message:    sanitizeInput(message),
+		Delivery:   deliveryFromSessionKey(sessionKey),
 	}
 
 	if h.hasActiveRunForSession(sessionKey) {
@@ -361,6 +365,19 @@ func (h *Handler) SendDirect(sessionKey, message string) {
 	}
 
 	h.startAsyncRun("bridge", params, false)
+}
+
+// deliveryFromSessionKey extracts a DeliveryContext from a session key.
+// "telegram:7074071666" → Channel="telegram", To="7074071666".
+func deliveryFromSessionKey(key string) *DeliveryContext {
+	idx := strings.Index(key, ":")
+	if idx < 0 {
+		return nil
+	}
+	return &DeliveryContext{
+		Channel: key[:idx],
+		To:      key[idx+1:],
+	}
 }
 
 // InjectDirect injects a message into the transcript without going through RPC.
