@@ -112,6 +112,30 @@ func TestParseFactsResponse(t *testing.T) {
 			wantCount: 1,
 		},
 		{
+			name:      "double-encoded JSON with escaped quotes",
+			input:     `{\"facts\": [{\"content\": \"사용자가 Go를 선호\", \"category\": \"preference\", \"importance\": 0.8}]}`,
+			wantOK:    true,
+			wantCount: 1,
+		},
+		{
+			name:      "double-encoded JSON multiple facts",
+			input:     `{\"facts\": [{\"content\": \"fact1\", \"category\": \"decision\", \"importance\": 0.9}, {\"content\": \"fact2\", \"category\": \"context\", \"importance\": 0.6}]}`,
+			wantOK:    true,
+			wantCount: 2,
+		},
+		{
+			name:      "double-encoded bare array",
+			input:     `[{\"content\": \"fact1\", \"category\": \"preference\", \"importance\": 0.7}]`,
+			wantOK:    true,
+			wantCount: 1,
+		},
+		{
+			name:      "double-encoded with trailing comma",
+			input:     `{\"facts\": [{\"content\": \"fact1\", \"category\": \"preference\", \"importance\": 0.8},]}`,
+			wantOK:    true,
+			wantCount: 1,
+		},
+		{
 			name:      "wrong schema analysis memo",
 			input:     `{"user_query": "이제 됐나", "relationship_signal": "AI의 설명이 정확", "user_action": "에러 전달"}`,
 			wantOK:    false,

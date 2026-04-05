@@ -149,12 +149,12 @@ func TestCompaction_AuroraSyncDuringChat(t *testing.T) {
 	defer h.Close()
 
 	req := makeReq("1", "chat.send", map[string]any{
-		"sessionKey":  "aurora-sync-1",
+		"sessionKey":  "test:aurora-sync-1",
 		"message":     "hello aurora",
 		"clientRunId": "run-aurora-1",
 	})
 	h.Send(context.Background(), req)
-	waitForSessionStatus(sm, "aurora-sync-1", session.StatusDone, 5*time.Second)
+	waitForSessionStatus(sm, "test:aurora-sync-1", session.StatusDone, 5*time.Second)
 
 	// Verify Aurora store has context items for conversation 1.
 	items, err := auroraStore.FetchContextItems(1)
@@ -608,7 +608,7 @@ func TestCompaction_EndToEndChatWithAurora(t *testing.T) {
 	h := NewHandler(sm, bc.broadcast, nil, cfg)
 	defer h.Close()
 
-	sessionKey := "aurora-e2e"
+	sessionKey := "test:aurora-e2e"
 
 	// Send multiple messages.
 	for i := 0; i < 5; i++ {
