@@ -63,7 +63,9 @@ func (inj *Injector) inject(source, message string) {
 
 	content := fmt.Sprintf("[bridge:%s] %s", source, message)
 	for _, key := range keys {
-		_ = fn(key, "system", content)
+		// Use "user" role so all LLM models see it in the conversation flow.
+		// The [bridge:SOURCE] tag distinguishes it from real user messages.
+		_ = fn(key, "user", content)
 	}
 }
 
