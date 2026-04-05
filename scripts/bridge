@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Send a message to Deneb main agent via inter-agent bridge.
+# Usage: scripts/bridge "message"
+set -euo pipefail
+
+MSG="${1:?Usage: bridge \"message\"}"
+SOURCE="${2:-claude-code}"
+
+BODY=$(python3 -c "
+import json,sys
+print(json.dumps({
+    'type':'req','id':'bridge','method':'bridge.send',
+    'params':{'message':sys.argv[1],'source':sys.argv[2]}
+}))" "$MSG" "$SOURCE")
+
+RESP=$(curl -s -X POST http://127.0.0.1:18789/api/v1/rpc \
+  -H "Content-Type: application/json" \
+  -d "$BODY")
+
+python3 -c "
+import sys,json
+r=json.loads(sys.argv[1])
+if r.get('ok'):
+    p=r['payload']
+    print(f'sent={p.get(\"sent\",0)} triggered={p.get(\"triggered\",False)}')
+else:
+    print(f'error: {r.get(\"error\",{}).get(\"message\",\"unknown\")}')
+" "$RESP"
