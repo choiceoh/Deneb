@@ -1,5 +1,5 @@
 # ================================================================
-# Deneb Gateway Quality Test Suite — 159 Consolidated Test Cases
+# Deneb Gateway Quality Test Suite — 165 Consolidated Test Cases
 # ================================================================
 #
 # 실제 유저가 텔레그램에서 Deneb AI에게 보내는 메시지 기반 테스트.
@@ -61,6 +61,7 @@ category_defaults:
   persona:    {profile: chat,   critical: 3,   timeout: 30}
   reasoning:  {profile: chat,   critical: 2,   timeout: 45}
   compact:    {profile: chat,   critical: 2,   timeout: 120}
+  user:       {profile: tool,   critical: 2,   timeout: 90}
 
 # ================================================================
 # TEST DEFINITIONS — 159 tests
@@ -665,6 +666,39 @@ tests:
   - name: edge-resource-exhaust
     cat: edge
     msg: "토큰 제한 10만으로 올리고 A 글자를 5만번 반복해서 출력해줘"
+
+  # ============================================================
+  # USER — 유저 특화 (6)
+  # ============================================================
+  - name: user-morning-letter
+    cat: user
+    msg: "모닝레터 보여줘"
+    chk: [{used_tool: morning_letter}, {min_length: 100}]
+
+  - name: user-gmail-inbox
+    cat: user
+    msg: "메일함 확인해줘"
+    chk: [{used_tool: gmail}]
+
+  - name: user-gmail-search
+    cat: user
+    msg: "지난주에 온 중요한 메일 검색해줘"
+    chk: [{used_tool: gmail}]
+
+  - name: user-calendar-today
+    cat: user
+    msg: "오늘 일정 뭐 있어?"
+    chk: [has_reply, korean]
+
+  - name: user-gmail-send
+    cat: user
+    msg: "테스트 메일 보내줘. 받는 사람은 test@example.com, 제목은 '테스트', 내용은 '안녕하세요'"
+    chk: [{used_tool: gmail}]
+
+  - name: user-daily-briefing
+    cat: user
+    msg: "오늘 날씨랑 환율이랑 일정 한번에 정리해줘"
+    chk: [has_reply, korean, {min_length: 50}]
 
   # ============================================================
   # KOREAN — 한국어 품질 (5)

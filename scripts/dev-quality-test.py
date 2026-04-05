@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deneb Gateway Quality Test Runner — 159 consolidated test cases.
+Deneb Gateway Quality Test Runner — 165 consolidated test cases.
 
 Loads test definitions from quality-tests.yaml and executes them
 against the dev gateway via WebSocket.
@@ -1540,7 +1540,7 @@ def main():
         "chat", "tools", "tools-deep",
     ]
 
-    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (159 cases)")
+    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (165 cases)")
     parser.add_argument("--port", type=int, default=PORT,
                         help=f"Gateway port (default: {PORT})")
     parser.add_argument("--scenario", default="all", choices=all_scenarios,
