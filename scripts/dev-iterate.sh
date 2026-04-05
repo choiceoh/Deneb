@@ -39,6 +39,7 @@ USE_VCHAT=false
 VCHAT_SCENARIO="all"
 USE_BASELINE=false
 SAVE_BASELINE=false
+PROD_PARITY="${DEV_PROD_PARITY:-false}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --metric) METRIC_CMD="$2"; shift 2 ;;
@@ -47,6 +48,7 @@ while [[ $# -gt 0 ]]; do
     --scenario) VCHAT_SCENARIO="$2"; shift 2 ;;
     --baseline) USE_BASELINE=true; shift ;;
     --save-baseline) SAVE_BASELINE=true; shift ;;
+    --prod-parity) PROD_PARITY=true; shift ;;
     *) shift ;;
   esac
 done
@@ -84,6 +86,7 @@ data = {
     'version': 1,
     'commit': '$commit',
     'branch': '$branch',
+    'prod_parity': tobool('$PROD_PARITY'),
     'phase': {
         'build':   {'ok': tobool('${PHASE_OK[build]:-false}'), 'ms': ${PHASE_MS[build]:-0}},
         'start':   {'ok': tobool('${PHASE_OK[start]:-false}'), 'ms': ${PHASE_MS[start]:-0}},
@@ -149,7 +152,8 @@ trap cleanup EXIT
 # --- Step 1: Build ---
 echo -n "build... "
 BUILD_START=$(date +%s%N)
-if ! go build -C "$REPO_DIR/gateway-go" -ldflags "-s -w" -o "$BINARY" ./cmd/gateway/ 2>"$BUILD_LOG"; then
+DENEB_VERSION=$(git -C "$REPO_DIR" tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
+if ! go build -C "$REPO_DIR/gateway-go" -ldflags "-s -w -X main.Version=${DENEB_VERSION:-dev}" -o "$BINARY" ./cmd/gateway/ 2>"$BUILD_LOG"; then
   BUILD_MS=$(( ($(date +%s%N) - BUILD_START) / 1000000 ))
   PHASE_OK[build]=false; PHASE_MS[build]=$BUILD_MS
   echo "FAIL (${BUILD_MS}ms)"
@@ -215,10 +219,12 @@ if [[ "$USE_VCHAT" == "true" ]]; then
   done
   WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
 else
-  # Start raw gateway (no Telegram — avoids 409 conflict with production).
+  # Start raw gateway; prod-parity uses real config (minus Telegram), default uses {}.
   echo -n "start... "
   DEV_CONFIG="/tmp/deneb-iterate-config.json"
-  if [[ ! -f "$DEV_CONFIG" ]]; then
+  if [[ "$PROD_PARITY" == "true" ]]; then
+    "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
+  elif [[ ! -f "$DEV_CONFIG" ]]; then
     echo '{}' > "$DEV_CONFIG"
   fi
   DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &

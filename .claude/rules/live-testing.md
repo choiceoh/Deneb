@@ -20,6 +20,51 @@ globs: ["gateway-go/**/*.go", "core-rs/**/*.rs", "proto/**/*.proto"]
 | `start` / `stop` | dev 인스턴스 시작/종료 |
 | `status` | 상태 + /health 응답 |
 
+### Prod-Parity Mode (프로덕션 환경 동등성)
+
+기본 dev 인스턴스는 빈 설정(`{}`)으로 시작하여 프로덕션과 차이가 있다:
+
+| 항목 | Default dev | `--prod-parity` | Production |
+|---|---|---|---|
+| Config | `{}` (empty) | 프로덕션 config (Telegram 제외) | `~/.deneb/deneb.json` |
+| Providers/Auth | 미로딩 | 로딩 | 로딩 |
+| Hooks/Agents | 미로딩 | 로딩 | 로딩 |
+| Telegram | 비활성 | 비활성 (409 방지) | 활성 |
+| Rust features | `make rust` 의존 | 동일 | `make rust-dgx` (Vega+ML+CUDA) |
+| Bind | loopback | loopback | config-driven |
+
+**`--prod-parity` 사용법:**
+```bash
+# 프로덕션에 가까운 환경으로 테스트
+scripts/dev-live-test.sh --prod-parity restart
+scripts/dev-live-test.sh --prod-parity smoke
+scripts/dev-live-test.sh --prod-parity quality
+
+# 반복 테스트도 동일
+scripts/dev-iterate.sh --prod-parity
+
+# 환경변수로 기본값 설정 가능
+export DEV_PROD_PARITY=true
+```
+
+**환경 차이 확인:**
+```bash
+scripts/dev-live-test.sh parity    # dev vs prod 환경 비교 리포트
+```
+
+**dev config 생성:**
+```bash
+scripts/dev-config-gen.sh              # /tmp/deneb-dev-config.json 생성
+scripts/dev-config-gen.sh --diff       # 무엇이 제거되는지 확인
+scripts/dev-config-gen.sh --check      # 프로덕션 config 존재 여부
+```
+
+**Rust 빌드 동등성:** dev에서도 full feature로 빌드하면 Vega/ML 경로 테스트 가능:
+```bash
+make rust-dgx    # Vega+ML+CUDA (프로덕션 동일)
+make rust-vega   # Vega FTS만 (CUDA 없는 환경)
+```
+
 ### Functional Testing
 
 | Command | Description |
