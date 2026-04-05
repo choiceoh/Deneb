@@ -90,10 +90,12 @@ DEV_CONFIG="/tmp/deneb-metric-config.json"
 DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
 GW_PID=$!
 
-for _ in $(seq 1 40); do
+_WAIT_MS=50
+for _ in $(seq 1 30); do
   curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1 && break
   if ! kill -0 "$GW_PID" 2>/dev/null; then break; fi
-  sleep 0.15
+  sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
+  _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
 done
 
 if ! curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
@@ -114,14 +116,16 @@ export VCHAT_MOCK_PORT VCHAT_GATEWAY_PORT="$PORT" VCHAT_BINARY="$BINARY"
 python3 "$REPO_DIR/scripts/vchat.py" start --no-build --background &
 VCHAT_PID=$!
 
-# Wait for both mock and gateway.
-for _ in $(seq 1 80); do
+# Wait for both mock and gateway (exponential backoff).
+_WAIT_MS=50
+for _ in $(seq 1 50); do
   if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1 && \
      curl -sf "http://$HOST:$VCHAT_MOCK_PORT/control/status" > /dev/null 2>&1; then
     break
   fi
   if ! kill -0 "$VCHAT_PID" 2>/dev/null; then break; fi
-  sleep 0.2
+  sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
+  _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
 done
 
 if ! curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
