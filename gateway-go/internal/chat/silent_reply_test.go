@@ -11,9 +11,9 @@ func TestIsSilentReply(t *testing.T) {
 		{"  NO_REPLY  ", true},
 		{"\nNO_REPLY\n", true},
 		{"NO_REPLY\n", true},
-		{"NO_REPLY 🐾", true},            // Trailing emoji (model signature)
-		{"NO_REPLY  🐾", true},           // Trailing emoji with extra space
-		{"NO_REPLY 🐾🐾", true},          // Multiple trailing emoji
+		{"NO_REPLY 🐾", true},              // Trailing emoji (model signature)
+		{"NO_REPLY  🐾", true},             // Trailing emoji with extra space
+		{"NO_REPLY 🐾🐾", true},             // Multiple trailing emoji
 		{"Hello NO_REPLY", false},         // Substantive content before token
 		{"NO_REPLY Hello", false},         // Content after token
 		{"Thanks for the update.", false}, // Normal reply
