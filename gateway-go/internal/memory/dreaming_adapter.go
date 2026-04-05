@@ -110,7 +110,10 @@ func (da *DreamingAdapter) RunDream(ctx context.Context) (*autonomous.DreamRepor
 		FactsVerified:     report.FactsVerified,
 		FactsMerged:       report.FactsMerged,
 		FactsExpired:      report.FactsExpired,
+		FactsPruned:       report.FactsPruned,
 		PatternsExtracted: report.PatternsExtracted,
+		UserModelUpdated:  report.UserModelUpdated,
+		MutualUpdated:     report.MutualUpdated,
 		DurationMs:        report.Duration.Milliseconds(),
 		PhaseErrors:       report.PhaseErrors,
 	}, nil

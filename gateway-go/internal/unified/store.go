@@ -95,6 +95,10 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 	// we recreate the table. Idempotent — no-op if constraint is correct.
 	migrateEntityConstraint(db)
 
+	// Add user_model_updated and mutual_updated columns to dreaming_log
+	// for databases that predate these columns.
+	migrateDreamingLogColumns(db)
+
 	s := &Store{
 		db:     db,
 		dbPath: cfg.DatabasePath,

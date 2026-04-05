@@ -90,6 +90,8 @@ CREATE TABLE IF NOT EXISTS dreaming_log (
 	facts_expired INTEGER NOT NULL DEFAULT 0,
 	facts_pruned INTEGER NOT NULL DEFAULT 0,
 	patterns_extracted INTEGER NOT NULL DEFAULT 0,
+	user_model_updated INTEGER NOT NULL DEFAULT 0,
+	mutual_updated INTEGER NOT NULL DEFAULT 0,
 	duration_ms INTEGER NOT NULL DEFAULT 0
 );
 
