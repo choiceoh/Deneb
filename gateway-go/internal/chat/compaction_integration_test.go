@@ -88,8 +88,8 @@ func TestCompaction_ContextOverflowRetry(t *testing.T) {
 	cfg.MaxTokens = 1024
 	cfg.ContextCfg = ContextConfig{
 		MemoryTokenBudget: 1000, // low budget to trigger overflow
-		FreshTailCount: 4,
-		MaxMessages:    50,
+		FreshTailCount:    4,
+		MaxMessages:       50,
 	}
 
 	h := NewHandler(sm, bc.broadcast, nil, cfg)
@@ -498,8 +498,8 @@ func TestCompaction_ReducedBudgetFallback(t *testing.T) {
 
 	ctxCfg := ContextConfig{
 		MemoryTokenBudget: 500, // low budget to test reduced assembly
-		FreshTailCount: 4,
-		MaxMessages:    100,
+		FreshTailCount:    4,
+		MaxMessages:       100,
 	}
 	// Halve budget (same logic as handleContextOverflowAurora fallback).
 	reducedCfg := ctxCfg

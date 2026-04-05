@@ -63,10 +63,14 @@ Keep only significant steps (skip routine reads/writes). Focus on causality: wha
 </references>
 
 Rules:
+- CRITICAL: Extract and preserve ALL user-stated facts verbatim: names, numbers, dates, codes, IPs, passwords, scores, versions, identifiers. These are the highest-priority information — never drop them.
 - Preserve file paths, function names, variable names, URLs, and numeric values exactly.
+- Preserve tool execution results (command outputs, error messages, return values) — they are evidence the user may recall later.
+- Preserve user instructions about response style, format, or behavior (e.g., "use numbered lists", "speak formally").
 - Preserve speaker attribution: "사용자가 요청함" vs "AI가 제안함".
 - Write in the same language as the source material.
 - Target the specified token count.
+- When space is tight, preserve facts and tool results first, then compress narrative and filler content.
 - CRITICAL: Always include <summary>. Omit other sections if they have no content.
 - The input includes [timestamp | role] headers — use them to reconstruct the conversation flow for <timeline>.`
 
@@ -74,12 +78,12 @@ Rules:
 	aggressiveAddendum = `
 
 IMPORTANT: Aggressive compression pass. Respect the XML structure but be much more concise:
-- <summary>: 2-3 sentences maximum.
+- <summary>: 2-3 sentences maximum. But ALWAYS preserve user-stated facts (names, numbers, dates, codes, IPs, scores, keys) verbatim — these are non-compressible.
 - <timeline>: Keep only pivotal cause-effect pairs (drop routine steps). 3-5 entries max.
 - <decisions>: Keep only critical decisions (drop obvious/minor ones).
 - <pending>: Merge related items.
 - <references>: Keep only files that were actually modified.
-- Aim for 40-60% of the previous summary length.`
+- Aim for 40-60% of the previous summary length, but never sacrifice user-stated facts for length reduction.`
 
 	// summarizeTimeout is the max time for a single LLM summarization call.
 	summarizeTimeout = 90 * time.Second
@@ -104,11 +108,12 @@ func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 			if opts.IsCondensed != nil && *opts.IsCondensed {
 				fmt.Fprintf(&userMsg, "[Condensed summary pass, depth=%d]\n", safeUint32(opts.Depth))
 				userMsg.WriteString(`The input contains previously structured XML summaries. Merge them:
-- Combine <summary> sections into a higher-level narrative.
+- Combine <summary> sections into a higher-level narrative. Preserve ALL user-stated facts (names, numbers, dates, codes) from every summary — never drop these during merging.
 - Merge <timeline> sections: keep only significant causal chains (attempts that failed → what succeeded). Drop routine steps but preserve pivots and key breakthroughs.
 - Deduplicate <decisions> (keep the final decision if a topic was revisited).
 - Remove <pending> items that were resolved in later summaries.
 - Merge <references>, keeping only still-relevant file paths.
+- Preserve tool execution results and user instructions about style/format.
 `)
 			}
 			if opts.TargetTokens != nil {
@@ -221,11 +226,12 @@ func NewHubSummarizer(hub *sglang.Hub) Summarizer {
 			if opts.IsCondensed != nil && *opts.IsCondensed {
 				fmt.Fprintf(&userMsg, "[Condensed summary pass, depth=%d]\n", safeUint32(opts.Depth))
 				userMsg.WriteString(`The input contains previously structured XML summaries. Merge them:
-- Combine <summary> sections into a higher-level narrative.
+- Combine <summary> sections into a higher-level narrative. Preserve ALL user-stated facts (names, numbers, dates, codes) from every summary — never drop these during merging.
 - Merge <timeline> sections: keep only significant causal chains (attempts that failed → what succeeded). Drop routine steps but preserve pivots and key breakthroughs.
 - Deduplicate <decisions> (keep the final decision if a topic was revisited).
 - Remove <pending> items that were resolved in later summaries.
 - Merge <references>, keeping only still-relevant file paths.
+- Preserve tool execution results and user instructions about style/format.
 `)
 			}
 			if opts.TargetTokens != nil {

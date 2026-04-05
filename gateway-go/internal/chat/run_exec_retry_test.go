@@ -50,8 +50,8 @@ func TestCompaction_DoubleOverflowExhaustsRetries(t *testing.T) {
 	cfg.MaxTokens = 1024
 	cfg.ContextCfg = ContextConfig{
 		MemoryTokenBudget: 500,
-		FreshTailCount: 2,
-		MaxMessages:    20,
+		FreshTailCount:    2,
+		MaxMessages:       20,
 	}
 
 	h := NewHandler(sm, bc.broadcast, nil, cfg)

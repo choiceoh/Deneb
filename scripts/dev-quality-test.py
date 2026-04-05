@@ -1162,19 +1162,21 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
         last_capture = None
         turn_tokens = []  # Track per-turn token usage for compaction checks
         for turn in turns:
-            if "gen" in turn:
-                msg = generate_message(turn["gen"])
-            else:
-                msg = turn.get("msg", "")
-            if msg:
-                last_capture = await client.chat(msg, session_key=session_key,
-                                                 timeout=timeout)
-                usage = last_capture.token_usage
-                turn_tokens.append({
-                    "turn": len(turn_tokens) + 1,
-                    "input": usage.get("inputTokens", 0),
-                    "output": usage.get("outputTokens", 0),
-                })
+            repeat = turn.get("repeat", 1)
+            for _ri in range(repeat):
+                if "gen" in turn:
+                    msg = generate_message(turn["gen"])
+                else:
+                    msg = turn.get("msg", "")
+                if msg:
+                    last_capture = await client.chat(msg, session_key=session_key,
+                                                     timeout=timeout)
+                    usage = last_capture.token_usage
+                    turn_tokens.append({
+                        "turn": len(turn_tokens) + 1,
+                        "input": usage.get("inputTokens", 0),
+                        "output": usage.get("outputTokens", 0),
+                    })
     except Exception as e:
         result.add_check("rpc_success", False, str(e))
         result.passed = False
@@ -1436,26 +1438,25 @@ async def run(args):
             finally:
                 await client.close()
         elif args.concurrency <= 1:
-            # Sequential mode (legacy behavior).
-            client = GatewayClient(HOST, args.port)
-            await client.connect()
-            try:
-                for i, tdef in enumerate(tests, 1):
-                    name = tdef["name"]
-                    total = len(tests)
-                    print(f"[{i}/{total}] {name}...")
-                    try:
-                        r = await run_test(client, tdef, profiles, cat_defaults)
-                        results.append(r)
-                        status = "PASS" if r.passed else "FAIL"
-                        print(f"  {status} ({r.latency_ms:.0f}ms)")
-                    except Exception as e:
-                        r = QualityResult(name=name)
-                        r.add_check("execution", False, str(e))
-                        results.append(r)
-                        print(f"  ERROR: {e}")
-            finally:
-                await client.close()
+            # Sequential mode: one connection per test for multi-turn stability.
+            for i, tdef in enumerate(tests, 1):
+                name = tdef["name"]
+                total = len(tests)
+                print(f"[{i}/{total}] {name}...")
+                client = GatewayClient(HOST, args.port)
+                await client.connect()
+                try:
+                    r = await run_test(client, tdef, profiles, cat_defaults)
+                    results.append(r)
+                    status = "PASS" if r.passed else "FAIL"
+                    print(f"  {status} ({r.latency_ms:.0f}ms)")
+                except Exception as e:
+                    r = QualityResult(name=name)
+                    r.add_check("execution", False, str(e))
+                    results.append(r)
+                    print(f"  ERROR: {e}")
+                finally:
+                    await client.close()
         else:
             # Concurrent mode: semaphore(N) + pipelining.
             # Scoring/printing happens outside the semaphore so the slot
