@@ -65,8 +65,8 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 	}
 
 	// Sync to Aurora store for compaction awareness.
-	// Skip for system sessions to avoid contaminating the user's conversation context.
-	if deps.auroraStore != nil && !isSystemSession(sessionKey) {
+	// Only main sessions write to Aurora to avoid contaminating the user's conversation.
+	if deps.auroraStore != nil && isMainSession(sessionKey) {
 		tokenCount := uint64(estimateTokens(sb.String()))
 		if _, err := deps.auroraStore.SyncMessage(1, "user", sb.String(), tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync interrupted context", "error", err)
@@ -156,7 +156,7 @@ func handleRunSuccess(
 			}
 		}
 		// Sync Aurora summaries for channel replies when available.
-		if deps.auroraStore != nil && persistText != "" && !isSystemSession(params.SessionKey) {
+		if deps.auroraStore != nil && persistText != "" && isMainSession(params.SessionKey) {
 			tokenCount := uint64(estimateTokens(persistText))
 			if _, err := deps.auroraStore.SyncMessage(1, "assistant", persistText, tokenCount); err != nil {
 				logger.Warn("aurora: failed to sync assistant message", "error", err)
