@@ -345,6 +345,24 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 	return resp
 }
 
+// SendDirect programmatically sends a message to a session and triggers an
+// LLM run, just like chat.send but without going through RPC. Used by the
+// bridge injector so the main agent automatically responds to bridge messages.
+func (h *Handler) SendDirect(sessionKey, message string) {
+	params := RunParams{
+		SessionKey: sessionKey,
+		Message:    sanitizeInput(message),
+	}
+
+	if h.hasActiveRunForSession(sessionKey) {
+		h.enqueuePending(sessionKey, params)
+		h.logger.Info("bridge: queued message for active run", "sessionKey", sessionKey)
+		return
+	}
+
+	h.startAsyncRun("bridge", params, false)
+}
+
 // InjectDirect injects a message into the transcript without going through RPC.
 // Used by the bridge injector for inter-agent communication.
 // Syncs to both the file transcript AND Aurora store so the message appears

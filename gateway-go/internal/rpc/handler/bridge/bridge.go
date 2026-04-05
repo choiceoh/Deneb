@@ -1,10 +1,7 @@
 // Package bridge provides the bridge.send RPC handler for inter-agent
 // communication. It broadcasts lightweight messages to WebSocket clients
-// (including the MCP server) without triggering LLM inference.
-//
-// When an Injector is set (late-bound after chat handler creation), incoming
-// bridge messages are also injected into the active shadow session so the
-// main agent can see them in its conversation context.
+// (including the MCP server) and triggers an LLM run on the main agent's
+// active session so it can respond immediately.
 package bridge
 
 import (
@@ -19,36 +16,36 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// InjectFunc injects a message into a session transcript.
-// Signature matches chat.Handler.InjectDirect (sessionKey, role, content).
-type InjectFunc func(sessionKey, role, content string) error
+// SendFunc sends a message to a session and triggers an LLM run.
+// Signature matches chat.Handler.SendDirect.
+type SendFunc func(sessionKey, message string)
 
 // SessionLister returns active session keys matching a predicate.
 type SessionLister func() []string
 
-// Injector handles late-bound injection of bridge messages into the active
+// Injector handles late-bound delivery of bridge messages to the active
 // session. Created empty during early registration, populated after chat
 // handler is ready.
 type Injector struct {
 	mu           sync.RWMutex
-	injectFn     InjectFunc
+	sendFn       SendFunc
 	sessionsList SessionLister
 }
 
-// SetInject configures the injection function and session lister.
+// SetSend configures the send function and session lister.
 // Called from registerLateMethods after chat handler is created.
-func (inj *Injector) SetInject(fn InjectFunc, sessions SessionLister) {
+func (inj *Injector) SetSend(fn SendFunc, sessions SessionLister) {
 	inj.mu.Lock()
 	defer inj.mu.Unlock()
-	inj.injectFn = fn
+	inj.sendFn = fn
 	inj.sessionsList = sessions
 }
 
-// inject sends a bridge message into the active shadow session.
-// No-op if inject function is not yet set.
-func (inj *Injector) inject(source, message string) {
+// send delivers a bridge message to the active session and triggers an LLM run.
+// No-op if send function is not yet set.
+func (inj *Injector) send(source, message string) {
 	inj.mu.RLock()
-	fn := inj.injectFn
+	fn := inj.sendFn
 	lister := inj.sessionsList
 	inj.mu.RUnlock()
 
@@ -63,9 +60,7 @@ func (inj *Injector) inject(source, message string) {
 
 	content := fmt.Sprintf("[bridge:%s] %s", source, message)
 	for _, key := range keys {
-		// Use "user" role so all LLM models see it in the conversation flow.
-		// The [bridge:SOURCE] tag distinguishes it from real user messages.
-		_ = fn(key, "user", content)
+		fn(key, content)
 	}
 }
 
@@ -86,9 +81,8 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
-// bridgeSend broadcasts a bridge.message event to all WebSocket clients.
-// If an injector is configured, also injects the message into the active
-// shadow session for the main agent to see.
+// bridgeSend broadcasts a bridge.message event to all WebSocket clients
+// and triggers an LLM run on the main agent's active session.
 func bridgeSend(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
@@ -114,17 +108,17 @@ func bridgeSend(deps Deps) rpcutil.HandlerFunc {
 
 		sent, _ := deps.Broadcaster("bridge.message", payload)
 
-		// Inject into active shadow session so main agent sees the message.
-		injected := false
+		// Send to active session and trigger LLM run so main agent responds.
+		triggered := false
 		if deps.Injector != nil && !isFromMainAgent(p.Source) {
-			deps.Injector.inject(p.Source, p.Message)
-			injected = true
+			deps.Injector.send(p.Source, p.Message)
+			triggered = true
 		}
 
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"sent":     sent,
-			"injected": injected,
-			"ts":       ts,
+			"sent":      sent,
+			"triggered": triggered,
+			"ts":        ts,
 		})
 	}
 }
