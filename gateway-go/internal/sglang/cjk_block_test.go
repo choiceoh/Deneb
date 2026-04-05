@@ -115,6 +115,60 @@ func TestCJKBlock_MergeInto(t *testing.T) {
 	})
 }
 
+func TestCJKBlock_ConditionalInjection(t *testing.T) {
+	bias := map[string]float64{"100": -100}
+	raw, _ := json.Marshal(bias)
+	b := &cjkBlock{raw: json.RawMessage(raw), count: 1}
+
+	t.Run("default ApplyCJKBlock=false skips injection", func(t *testing.T) {
+		req := &Request{CallerTag: "memory_json"}
+		merged := map[string]any{"timeout": 30.0}
+
+		// Simulate executeRequest logic: only inject when ApplyCJKBlock is true.
+		if req.ApplyCJKBlock {
+			if _, hasGuided := merged["guided_json"]; !hasGuided {
+				b.mergeInto(merged)
+			}
+		}
+
+		if _, ok := merged["logit_bias"]; ok {
+			t.Error("CJK block should NOT be injected when ApplyCJKBlock is false")
+		}
+	})
+
+	t.Run("ApplyCJKBlock=true injects", func(t *testing.T) {
+		req := &Request{CallerTag: "calllocal", ApplyCJKBlock: true}
+		merged := map[string]any{"timeout": 30.0}
+
+		if req.ApplyCJKBlock {
+			if _, hasGuided := merged["guided_json"]; !hasGuided {
+				b.mergeInto(merged)
+			}
+		}
+
+		if _, ok := merged["logit_bias"]; !ok {
+			t.Error("CJK block should be injected when ApplyCJKBlock is true")
+		}
+	})
+
+	t.Run("ApplyCJKBlock=true with guided_json skips injection", func(t *testing.T) {
+		req := &Request{CallerTag: "test", ApplyCJKBlock: true}
+		merged := map[string]any{
+			"guided_json": json.RawMessage(`{"type":"object"}`),
+		}
+
+		if req.ApplyCJKBlock {
+			if _, hasGuided := merged["guided_json"]; !hasGuided {
+				b.mergeInto(merged)
+			}
+		}
+
+		if _, ok := merged["logit_bias"]; ok {
+			t.Error("CJK block should NOT be injected when guided_json is present")
+		}
+	})
+}
+
 func TestCJKBlock_MarshalPassthrough(t *testing.T) {
 	// Verify that json.Marshal on json.RawMessage doesn't re-encode.
 	bias := map[string]float64{"12345": -100}
