@@ -208,7 +208,10 @@ async fn cmd_status(
                 if let Some(v) = payload.get("version").and_then(|v| v.as_str()) {
                     println!("  Version: {}", muted.apply_to(v));
                 }
-                if let Some(u) = payload.get("uptimeSeconds").and_then(serde_json::Value::as_f64) {
+                if let Some(u) = payload
+                    .get("uptimeSeconds")
+                    .and_then(serde_json::Value::as_f64)
+                {
                     println!("  Uptime: {}", muted.apply_to(format!("{u:.0}s")));
                 }
             }

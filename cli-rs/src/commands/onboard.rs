@@ -148,7 +148,11 @@ pub async fn run(args: &OnboardArgs) -> Result<(), CliError> {
             if auth == "token" {
                 // Generate a token if not provided
                 let token = uuid::Uuid::new_v4().to_string();
-                config::set_config_value(&mut cfg, "gateway.auth.token", &serde_json::json!(token))?;
+                config::set_config_value(
+                    &mut cfg,
+                    "gateway.auth.token",
+                    &serde_json::json!(token),
+                )?;
             }
         }
     }
