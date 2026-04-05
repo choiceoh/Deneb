@@ -37,8 +37,9 @@ func UnmarshalInto(context string, data []byte, v any) error {
 // into T. Pipeline:
 //  1. StripThinkingTags + ExtractObject (strip noise, find {...})
 //  2. json.Unmarshal (try clean parse)
-//  3. StripTrailingCommas + retry (fix common LLM mistake: {"a":1,})
-//  4. RecoverTruncated (fix token-limit truncation)
+//  3. UnescapeDoubleEncoded + retry (fix {\"key\": ...} from guided_json)
+//  4. StripTrailingCommas + retry (fix common LLM mistake: {"a":1,})
+//  5. RecoverTruncated (fix token-limit truncation)
 //
 // Does NOT include retry or transport logic — callers handle their own retry.
 func UnmarshalLLM[T any](raw string) (T, error) {
@@ -52,7 +53,20 @@ func UnmarshalLLM[T any](raw string) (T, error) {
 		return result, nil
 	}
 
-	// Step 2: strip trailing commas (most common LLM JSON mistake).
+	// Step 2: unescape double-encoded JSON. Local models under guided_json
+	// sometimes backslash-escape all quotes: {\"key\": \"val\"} → {"key": "val"}.
+	// Must come before StripTrailingCommas since trailing comma detection gets
+	// confused by escaped quotes' string-literal tracking.
+	if unescaped := UnescapeDoubleEncoded(raw); unescaped != raw {
+		extracted := ExtractObject(unescaped)
+		if json.Unmarshal([]byte(extracted), &result) == nil {
+			return result, nil
+		}
+		// Update cleaned for subsequent steps.
+		cleaned = extracted
+	}
+
+	// Step 3: strip trailing commas (most common LLM JSON mistake).
 	sanitized := StripTrailingCommas(cleaned)
 	if sanitized != cleaned {
 		if json.Unmarshal([]byte(sanitized), &result) == nil {
@@ -60,7 +74,7 @@ func UnmarshalLLM[T any](raw string) (T, error) {
 		}
 	}
 
-	// Step 3: truncated JSON recovery.
+	// Step 4: truncated JSON recovery.
 	if recovered := RecoverTruncated(cleaned); recovered != "" {
 		if json.Unmarshal([]byte(recovered), &result) == nil {
 			return result, nil

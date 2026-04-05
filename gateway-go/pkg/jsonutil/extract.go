@@ -245,6 +245,22 @@ func RecoverTruncated(s string) string {
 	return ""
 }
 
+// ---------- Double-encoded JSON ----------
+
+// UnescapeDoubleEncoded detects and unescapes JSON where all quotes have been
+// backslash-escaped by the LLM. This is a common failure mode with local models
+// under guided_json / xgrammar constrained decoding:
+//
+//	{\"facts\": [{\"content\": \"hello\"}]}  →  {"facts": [{"content": "hello"}]}
+//
+// Returns the original string unchanged if no escaped quotes are found.
+func UnescapeDoubleEncoded(s string) string {
+	if !strings.Contains(s, `\"`) {
+		return s
+	}
+	return strings.ReplaceAll(s, `\"`, `"`)
+}
+
 // ---------- Utilities ----------
 
 // Truncate returns the first maxRunes runes of s, appending "..." if truncated.
