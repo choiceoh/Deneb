@@ -292,8 +292,8 @@ func TestBuildSystemPromptConversationMode(t *testing.T) {
 	if !strings.Contains(prompt, "현재 모드: 대화") {
 		t.Error("conversation mode block should appear when ToolPreset is 'conversation'")
 	}
-	if !strings.Contains(prompt, "코드, 파일, 실행 관련 도구는 사용할 수 없습니다") {
-		t.Error("conversation mode should state code/file tools are unavailable")
+	if !strings.Contains(prompt, "대화와 리서치에 집중하는 모드") {
+		t.Error("conversation mode should describe focus on dialogue and research")
 	}
 }
 

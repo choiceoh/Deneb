@@ -101,8 +101,7 @@ var toolCategories = []struct {
 	Names []string
 }{
 	{"File", []string{"read", "write", "edit", "grep", "find", "search_and_read", "batch_read"}},
-	{"Code", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test"}},
-	{"Git", []string{"git"}},
+	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory"}},
@@ -227,20 +226,21 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		if toolSet["sessions_spawn"] {
 			s.WriteString("## Sub-Agents\n")
 			s.WriteString("Use `sessions_spawn` to delegate work in parallel. Don't do everything yourself.\n")
-			s.WriteString("- **Investigation**: spawn a researcher to explore while you continue thinking.\n")
+			s.WriteString("- **Investigation**: spawn a researcher to explore files, the web, or any topic.\n")
 			s.WriteString("- **Independent subtasks**: if a task decomposes into 2+ independent parts, spawn workers.\n")
-			s.WriteString("- **Verification**: after changes, spawn a verifier to test while you prepare the summary.\n")
-			s.WriteString("Always set `tool_preset` (researcher/implementer/verifier). Monitor with `subagents(action:'list')`.\n")
-			s.WriteString("Depth limit: 5, breadth limit: 10. Prefer fewer focused agents over many trivial ones.\n\n")
+			s.WriteString("- **Verification**: after changes, spawn a verifier to check results.\n")
+			s.WriteString("For coding tasks: set `tool_preset` (researcher/implementer/verifier) to scope tools.\n")
+			s.WriteString("For non-coding tasks (research, writing, analysis): spawn without tool_preset so the worker has full tool access.\n")
+			s.WriteString("Monitor with `subagents(action:'list')`. Depth limit: 5, breadth limit: 10. Prefer fewer focused agents over many trivial ones.\n\n")
 		}
 
-		// Conversation mode: tell the agent code tools are not available.
+		// Conversation mode: focused on dialogue and web research.
 		if params.ToolPreset == "conversation" {
 			s.WriteString("## 현재 모드: 대화\n")
-			s.WriteString("대화 모드입니다. 코드, 파일, 실행 관련 도구는 사용할 수 없습니다.\n")
+			s.WriteString("대화와 리서치에 집중하는 모드입니다.\n")
 			s.WriteString("사용 가능: 웹 검색, HTTP 요청, 메모리.\n")
-			s.WriteString("대화, 설명, 토론, 웹 리서치에 집중하세요.\n")
-			s.WriteString("파일 읽기, 코드 편집, 명령어 실행을 제안하지 마세요 — 이 모드에서는 해당 도구가 없습니다.\n\n")
+			s.WriteString("대화, 설명, 토론, 조사, 브레인스토밍에 집중하세요.\n")
+			s.WriteString("파일이나 명령어 실행이 필요한 작업은 이 모드에서는 지원되지 않습니다.\n\n")
 		}
 
 		built := s.String()
