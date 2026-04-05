@@ -1,8 +1,8 @@
 {
-  "weight_hybrid": 0.40,
-  "weight_importance": 0.25,
+  "weight_hybrid": 0.55,
+  "weight_importance": 0.15,
   "weight_recency": 0.25,
-  "weight_verification": 0.10,
+  "weight_verification": 0.05,
   "category_importance_multiplier": {
     "decision": 1.20,
     "preference": 1.05,

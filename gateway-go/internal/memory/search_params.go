@@ -14,10 +14,10 @@ import (
 // Autoresearch reads these constants directly from this file — keep the
 // simple `name = value` format so the regex extractor can parse them.
 const (
-	weightHybrid       = 0.40
-	weightImportance   = 0.25
+	weightHybrid       = 0.55
+	weightImportance   = 0.15
 	weightRecency      = 0.25
-	weightVerification = 0.10
+	weightVerification = 0.05
 
 	defaultSteepnessDays  = 7.0
 	ftsAndMinResults      = 3
