@@ -73,7 +73,7 @@ CORE_TESTS = {
     "search-memory-status",
     "edge-empty", "edge-very-long", "edge-html-tags", "edge-code-in-msg",
     "ctx-name-recall",
-    "edge-system-prompt",
+    "edge-typo-heavy",
     "edge-nonexistent-file",
     "reason-arithmetic",
 }
