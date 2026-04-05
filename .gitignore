@@ -60,3 +60,6 @@ cache/
 deneb
 gateway-go/internal/memory/testdata/embedding_cache.json
 gateway-go/internal/memory/testdata/query_embedding_cache.json
+
+# Go build binaries
+gateway-go/dream-once

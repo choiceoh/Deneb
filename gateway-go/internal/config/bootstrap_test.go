@@ -11,6 +11,7 @@ import (
 func TestBootstrapGatewayConfigMissingFile(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 
 	result, err := BootstrapGatewayConfig(BootstrapOptions{
 		ConfigPath: cfgPath,
@@ -34,6 +35,7 @@ func TestBootstrapGatewayConfigMissingFile(t *testing.T) {
 func TestBootstrapGatewayConfigWithToken(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 	cfg := map[string]any{
 		"gateway": map[string]any{
 			"auth": map[string]any{
@@ -63,6 +65,7 @@ func TestBootstrapGatewayConfigWithToken(t *testing.T) {
 func TestBootstrapGatewayConfigTokenFromEnv(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 	os.WriteFile(cfgPath, []byte("{}"), 0644)
 	t.Setenv("DENEB_GATEWAY_TOKEN", "env-token-123")
 
@@ -84,6 +87,7 @@ func TestBootstrapGatewayConfigTokenFromEnv(t *testing.T) {
 func TestBootstrapGatewayConfigPasswordMode(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 	cfg := map[string]any{
 		"gateway": map[string]any{
 			"auth": map[string]any{
@@ -113,6 +117,7 @@ func TestBootstrapGatewayConfigPasswordMode(t *testing.T) {
 func TestBootstrapGatewayConfigPasswordModeNoPassword(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 	cfg := map[string]any{
 		"gateway": map[string]any{
 			"auth": map[string]any{
@@ -136,6 +141,7 @@ func TestBootstrapGatewayConfigPasswordModeNoPassword(t *testing.T) {
 func TestBootstrapPersistToken(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 	// No config file — should create one.
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 
@@ -179,6 +185,7 @@ func TestBootstrapPersistToken(t *testing.T) {
 func TestBootstrapAuthOverride(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 	os.WriteFile(cfgPath, []byte("{}"), 0644)
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 
@@ -225,6 +232,7 @@ func TestPersistDefaultModel(t *testing.T) {
 	t.Run("existing config", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 		existing := map[string]any{
 			"gateway": map[string]any{
 				"auth": map[string]any{"token": "keep-me"},
@@ -281,6 +289,7 @@ func TestPersistDefaultModel(t *testing.T) {
 	t.Run("no existing file", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 
 		if err := PersistDefaultModel(cfgPath, "google/gemini-3.1-pro", logger); err != nil {
 			t.Fatal(err)
