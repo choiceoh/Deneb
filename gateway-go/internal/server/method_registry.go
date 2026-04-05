@@ -223,19 +223,27 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}
 	}
 
-	// Wire bridge: send to active Telegram session + trigger LLM run.
+	// Wire bridge: send to the most recently active Telegram session.
+	// Only one session to avoid duplicate Aurora writes (shared conversationID).
 	if s.bridgeInjector != nil && s.chatHandler != nil {
 		sessions := hub.Sessions()
 		s.bridgeInjector.SetSend(
 			s.chatHandler.SendDirect,
 			func() []string {
-				var keys []string
+				var bestKey string
+				var bestUpdated int64
 				for _, sess := range sessions.List() {
 					if sess.Kind == session.KindDirect && sess.Channel == "telegram" {
-						keys = append(keys, sess.Key)
+						if sess.UpdatedAt > bestUpdated {
+							bestUpdated = sess.UpdatedAt
+							bestKey = sess.Key
+						}
 					}
 				}
-				return keys
+				if bestKey == "" {
+					return nil
+				}
+				return []string{bestKey}
 			},
 		)
 	}
