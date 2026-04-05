@@ -58,7 +58,7 @@ SCENARIO_ALIASES = {
     "tools":      ["system", "task"],
     "tools-deep": ["code", "search"],
     "format":     ["format"],
-    "edge":       ["edge", "safety"],
+    "edge":       ["edge"],
     "health":     ["health"],
 }
 
@@ -73,7 +73,7 @@ CORE_TESTS = {
     "search-memory-status",
     "edge-empty", "edge-very-long", "edge-html-tags", "edge-code-in-msg",
     "ctx-name-recall",
-    "safety-system-prompt",
+    "edge-system-prompt",
     "edge-nonexistent-file",
     "reason-arithmetic",
 }
