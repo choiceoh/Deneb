@@ -123,6 +123,27 @@
 
 ---
 
+## Live Testing Hard Gate
+
+> 단위 테스트 통과 ≠ 제품 품질. 코드 변경 후 반드시 라이브 검증.
+
+**필수 흐름** (코드 수정 완료 후):
+```bash
+scripts/dev-live-test.sh restart    # 빌드 + dev 게이트웨이 재시작
+scripts/dev-live-test.sh smoke      # Health + Ready + WebSocket 작동 확인
+scripts/dev-live-test.sh quality    # 전체 품질 테스트 (한국어/도구/포맷/에지)
+scripts/dev-live-test.sh logs-errors  # 숨은 에러 확인
+scripts/dev-live-test.sh stop       # 정리
+```
+
+- **quality test 실패 시 "완료"라고 하지 마라** — 수정 → 재시작 → 재검증.
+- **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료.
+- 포트: dev=18790, iterate=18791, prod=18789 (프로덕션 영향 없음).
+- 텔레그램 관련 수정 시 `vchat-quality` 추가 실행.
+- 상세 절차/명령어: `.claude/rules/live-testing.md` 참조.
+
+---
+
 ## Git Commit Format (REQUIRED)
 
 All commits MUST use Conventional Commit format:
