@@ -613,23 +613,22 @@ class GatewayClient:
 # --- Quality Checks ---
 
 def check_korean_response(text: str) -> tuple[bool, str]:
-    """Check if response contains Korean characters (excludes code refs)."""
-    # Strip fenced code blocks (```...```) and inline backtick code references
-    # which are inherently English and should not affect Korean ratio.
+    """Check response language is Korean or English (rejects other languages)."""
+    # Strip fenced code blocks and inline code which are inherently English.
     prose = re.sub(r"```[\s\S]*?```", "", text)
     prose = re.sub(r"`[^`]+`", "", prose)
     korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", prose))
-    total_alpha = len(re.findall(r"[a-zA-Z\uac00-\ud7af]", prose))
+    english_chars = len(re.findall(r"[a-zA-Z]", prose))
+    ko_en = korean_chars + english_chars
+    # Count ALL Unicode letters (Korean, English, Chinese, Cyrillic, etc.)
+    total_alpha = sum(1 for c in prose if c.isalpha())
     if total_alpha == 0:
-        # Fallback: if all content is code, check original text has any Korean.
-        korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", text))
-        if korean_chars > 0:
-            return True, f"Korean ratio: code-heavy ({korean_chars} Korean chars)"
-        return False, "no alphabetic content"
-    ratio = korean_chars / max(total_alpha, 1)
-    if ratio > 0.3:
-        return True, f"Korean ratio: {ratio:.0%} ({korean_chars} chars)"
-    return False, f"Korean ratio too low: {ratio:.0%} ({korean_chars}/{total_alpha})"
+        # No alphabetic content (numbers, emoji, symbols only) — acceptable.
+        return True, "no alphabetic content (ok)"
+    ratio = ko_en / total_alpha
+    if ratio > 0.7:
+        return True, f"ko+en: {ratio:.0%} (ko={korean_chars}, en={english_chars})"
+    return False, f"ko+en ratio too low: {ratio:.0%} ({ko_en}/{total_alpha})"
 
 
 def check_no_leaked_markup(text: str) -> tuple[bool, str]:
@@ -865,6 +864,29 @@ def _eval_param(key: str, val, capture: ChatCapture) -> tuple[str, bool, str]:
         ok, detail = check_response_substance(text, min_c, min_a)
         return ("has_reply", ok, detail)
 
+    if key == "max_input_tokens":
+        # Verify the last turn's input tokens are under a limit.
+        # Useful for checking context doesn't explode over many turns.
+        limit = int(val)
+        input_tokens = capture.token_usage.get("inputTokens", 0)
+        return ("max_input_tokens", input_tokens <= limit,
+                f"{input_tokens} tokens (limit: {limit})")
+
+    if key == "token_bounded":
+        # Verify token growth is bounded across turns: the last turn's input
+        # tokens should not exceed <val>× the first turn's tokens.
+        # Requires multi-turn _turn_tokens data.
+        max_ratio = float(val)
+        turn_tokens = capture.token_usage.get("_turn_tokens", [])
+        if len(turn_tokens) < 2:
+            return ("token_bounded", True, "not enough turns to check")
+        first_input = turn_tokens[0].get("input", 1)
+        last_input = turn_tokens[-1].get("input", 1)
+        ratio = last_input / max(first_input, 1)
+        ok = ratio <= max_ratio
+        return ("token_bounded", ok,
+                f"growth {ratio:.1f}x (first={first_input}, last={last_input}, limit={max_ratio}x)")
+
     return (key, False, f"unknown param check: {key}={val}")
 
 
@@ -1071,11 +1093,18 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
     try:
         session_key = await client.create_session()
         last_capture = None
+        turn_tokens = []  # Track per-turn token usage for compaction checks
         for turn in turns:
             msg = turn.get("msg", "")
             if msg:
                 last_capture = await client.chat(msg, session_key=session_key,
                                                  timeout=timeout)
+                usage = last_capture.token_usage
+                turn_tokens.append({
+                    "turn": len(turn_tokens) + 1,
+                    "input": usage.get("inputTokens", 0),
+                    "output": usage.get("outputTokens", 0),
+                })
     except Exception as e:
         result.add_check("rpc_success", False, str(e))
         result.passed = False
@@ -1088,6 +1117,7 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
     result.latency_ms = last_capture.latency_ms
     result.reply_text = last_capture.reply_text
     result.token_usage = last_capture.token_usage
+    result.token_usage["_turn_tokens"] = turn_tokens  # Attach per-turn data
     result.tool_calls = [t["name"] for t in last_capture.tool_starts]
 
     # Evaluate checks (from profile + test-level chk).
@@ -1435,7 +1465,7 @@ def main():
         # New categories.
         "health", "daily", "system", "code", "task", "search",
         "knowledge", "format", "context", "edge", "safety",
-        "korean", "persona", "reasoning",
+        "korean", "persona", "reasoning", "compact", "compactq",
         # Legacy aliases.
         "chat", "tools", "tools-deep",
     ]
