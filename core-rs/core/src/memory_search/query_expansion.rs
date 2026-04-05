@@ -106,8 +106,9 @@ fn is_valid_keyword(token: &str) -> bool {
     if token.is_empty() {
         return false;
     }
-    // Skip very short English words (likely stop words or fragments)
-    if is_pure_ascii_alpha(token) && token.len() < 3 {
+    // Skip single-letter English tokens (fragments, not useful keywords).
+    // Allow 2-char tokens — common abbreviations like AI, ML, DB, OS, UI.
+    if is_pure_ascii_alpha(token) && token.len() < 2 {
         return false;
     }
     // Skip pure numbers
@@ -296,8 +297,9 @@ mod tests {
     #[test]
     fn test_valid_keyword() {
         assert!(!is_valid_keyword(""));
-        assert!(!is_valid_keyword("ab")); // short alpha
+        assert!(!is_valid_keyword("a")); // single char
         assert!(!is_valid_keyword("123")); // pure digits
+        assert!(is_valid_keyword("ai")); // 2-char abbreviation
         assert!(is_valid_keyword("api"));
         assert!(is_valid_keyword("my_var"));
     }
