@@ -152,6 +152,13 @@ var requiredMethods = []string{
 	"wizard.start",
 	"wizard.status",
 
+	// Autoresearch.
+	"autoresearch.config",
+	"autoresearch.results",
+	"autoresearch.start",
+	"autoresearch.status",
+	"autoresearch.stop",
+
 	// Aurora.
 	"aurora.chat",
 	"aurora.memory",
