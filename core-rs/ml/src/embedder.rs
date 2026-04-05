@@ -32,22 +32,62 @@ mod inner {
     use llama_cpp_2::model::params::LlamaModelParams;
     use llama_cpp_2::model::{AddBos, LlamaModel};
 
+    // -----------------------------------------------------------------------
+    // stderr suppression — llama.cpp writes verbose init/scheduling messages
+    // directly via fprintf(stderr, ...) bypassing llama_log_set/ggml_log_set
+    // callbacks. Redirect fd 2 to /dev/null for the duration of inference.
+    // -----------------------------------------------------------------------
+
+    /// RAII guard that redirects stderr to `/dev/null` and restores on drop.
+    #[allow(unsafe_code)]
+    struct SuppressStderr {
+        saved_fd: libc::c_int,
+    }
+
+    #[allow(unsafe_code)]
+    impl SuppressStderr {
+        fn new() -> Option<Self> {
+            // SAFETY: dup/dup2/open/close are standard POSIX fd operations.
+            unsafe {
+                let saved = libc::dup(libc::STDERR_FILENO);
+                if saved < 0 {
+                    return None;
+                }
+                let devnull =
+                    libc::open(b"/dev/null\0".as_ptr().cast(), libc::O_WRONLY);
+                if devnull < 0 {
+                    libc::close(saved);
+                    return None;
+                }
+                libc::dup2(devnull, libc::STDERR_FILENO);
+                libc::close(devnull);
+                Some(Self { saved_fd: saved })
+            }
+        }
+    }
+
+    #[allow(unsafe_code)]
+    impl Drop for SuppressStderr {
+        fn drop(&mut self) {
+            unsafe {
+                libc::dup2(self.saved_fd, libc::STDERR_FILENO);
+                libc::close(self.saved_fd);
+            }
+        }
+    }
+
     /// Global llama.cpp backend (idempotent init).
     static BACKEND: OnceLock<LlamaBackend> = OnceLock::new();
 
     fn backend() -> &'static LlamaBackend {
         BACKEND.get_or_init(|| {
-            let backend = LlamaBackend::init().unwrap_or_else(|e| {
-                // If init fails, this is fatal — model inference cannot proceed.
-                panic!("llama backend init failed: {e}");
-            });
-            // Suppress llama.cpp's verbose internal logs (context alloc, graph
-            // reservation, Flash Attention auto-detect, etc.) that otherwise
-            // flood stderr on every inference call.
+            // Suppress callback-based logs before any llama.cpp call.
             llama_cpp_2::send_logs_to_tracing(
                 llama_cpp_2::LogOptions::default().with_logs_enabled(false),
             );
-            backend
+            LlamaBackend::init().unwrap_or_else(|e| {
+                panic!("llama backend init failed: {e}");
+            })
         })
     }
 
@@ -100,6 +140,10 @@ mod inner {
                 model: String::new(),
             });
         }
+
+        // Suppress stderr for the entire inference flow (model load, context
+        // creation, decode). Restored automatically when _suppress drops.
+        let _suppress = SuppressStderr::new();
 
         let loaded = get_or_load_model(model_path)?;
         let mut vectors = Vec::with_capacity(texts.len());

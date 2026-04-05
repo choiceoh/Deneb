@@ -237,6 +237,7 @@ dependencies = [
 name = "deneb-ml"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "llama-cpp-2",
  "serde",
  "serde_json",
