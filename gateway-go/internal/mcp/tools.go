@@ -186,6 +186,65 @@ func allTools() []toolDef {
 				InputSchema: objectSchema(),
 			},
 		},
+
+		// --- Autoresearch ---
+		{
+			rpcMethod: "autoresearch.status",
+			tool: Tool{
+				Name:        "deneb_autoresearch_status",
+				Description: "Get the current status of the autoresearch experiment runner including iteration counts, best metric, and latest result.",
+				InputSchema: objectSchema(),
+			},
+		},
+		{
+			rpcMethod: "autoresearch.start",
+			tool: Tool{
+				Name:        "deneb_autoresearch_start",
+				Description: "Start the autoresearch experiment loop. Config must exist at workdir/.autoresearch/config.json (use deneb_autoresearch_config first).",
+				InputSchema: objectSchema(
+					requiredProp("workdir", "string", "Workspace directory containing .autoresearch/config.json"),
+				),
+			},
+		},
+		{
+			rpcMethod: "autoresearch.stop",
+			tool: Tool{
+				Name:        "deneb_autoresearch_stop",
+				Description: "Stop the running autoresearch experiment and return final summary.",
+				InputSchema: objectSchema(),
+			},
+		},
+		{
+			rpcMethod: "autoresearch.results",
+			tool: Tool{
+				Name:        "deneb_autoresearch_results",
+				Description: "Get autoresearch experiment results as structured JSON rows with iteration, metric, hypothesis, and kept status.",
+				InputSchema: objectSchema(
+					prop("workdir", "string", "Workspace directory (defaults to current experiment workdir)"),
+					prop("format", "string", "Output format: 'json' (default, structured rows + trend) or 'tsv' (raw tab-separated)"),
+				),
+			},
+		},
+		{
+			rpcMethod: "autoresearch.config",
+			tool: Tool{
+				Name:        "deneb_autoresearch_config",
+				Description: "Initialize or update autoresearch experiment configuration. Creates .autoresearch/config.json without starting the experiment.",
+				InputSchema: objectSchema(
+					requiredProp("workdir", "string", "Workspace directory for the experiment"),
+					requiredProp("target_files", "array", "Files the agent may modify (relative to workdir)"),
+					requiredProp("metric_cmd", "string", "Shell command that runs the experiment and outputs the metric"),
+					requiredProp("metric_name", "string", "Human-readable metric name"),
+					requiredProp("metric_direction", "string", "'minimize' or 'maximize'"),
+					requiredProp("branch_tag", "string", "Suffix for experiment branch (autoresearch/<tag>)"),
+					prop("time_budget_sec", "integer", "Time budget per experiment in seconds (default: 300)"),
+					prop("max_iterations", "integer", "Max iterations before auto-stop (default: 30)"),
+					prop("model", "string", "LLM model for hypothesis generation"),
+					prop("metric_pattern", "string", "Regex with capture group to extract metric from output"),
+					prop("cache_enabled", "boolean", "Enable persistent cache across iterations"),
+				),
+			},
+		},
 	}
 }
 
