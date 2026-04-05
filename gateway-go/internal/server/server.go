@@ -29,6 +29,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -99,6 +100,10 @@ type Server struct {
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
 	*ChatManager    // chatHandler, toolDeps, telegramPlug
 	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
+
+	// bridgeInjector is late-bound: created in registerEarlyMethods,
+	// populated in registerLateMethods after chatHandler is ready.
+	bridgeInjector *handlerbridge.Injector
 
 	// githubWebhookCfg is non-nil when GITHUB_WEBHOOK_SECRET is set.
 	// Resolved once at startup from environment variables; never mutated.
