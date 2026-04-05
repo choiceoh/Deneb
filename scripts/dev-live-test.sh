@@ -233,7 +233,7 @@ CMDS = json.loads('$cmds_json')
 
 async def main():
     uri = 'ws://$DEV_HOST:$DEV_PORT/ws'
-    async with websockets.connect(uri, max_size=10*1024*1024) as ws:
+    async with websockets.connect(uri, max_size=10*1024*1024, ping_interval=None) as ws:
         # Read challenge.
         await asyncio.wait_for(ws.recv(), timeout=3)
 
@@ -320,7 +320,7 @@ MESSAGE = $(python3 -c "import json; print(json.dumps('$message'))")
 
 async def main():
     uri = 'ws://$DEV_HOST:$DEV_PORT/ws'
-    async with websockets.connect(uri, max_size=10*1024*1024) as ws:
+    async with websockets.connect(uri, max_size=10*1024*1024, ping_interval=None) as ws:
         # Challenge + handshake.
         await asyncio.wait_for(ws.recv(), timeout=3)
         connect = {
@@ -510,7 +510,7 @@ READY=$(curl -sf -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/ready" 2
 WS_OK=$(python3 -c "
 import json, asyncio, websockets
 async def main():
-    ws = await websockets.connect('ws://127.0.0.1:$PORT/ws')
+    ws = await websockets.connect('ws://127.0.0.1:$PORT/ws', ping_interval=None)
     await asyncio.wait_for(ws.recv(), timeout=3)
     connect = {'type':'req','id':'m-hs','method':'connect','params':{'minProtocol':1,'maxProtocol':5,'client':{'id':'metric','version':'1.0.0','platform':'test','mode':'control'}}}
     await ws.send(json.dumps(connect))
@@ -565,7 +565,7 @@ _chat_and_wait() {
 import json, asyncio, time, websockets
 
 async def main():
-    ws = await websockets.connect('ws://$DEV_HOST:$DEV_PORT/ws', max_size=10*1024*1024)
+    ws = await websockets.connect('ws://$DEV_HOST:$DEV_PORT/ws', max_size=10*1024*1024, ping_interval=None)
     await asyncio.wait_for(ws.recv(), timeout=3)
     connect = {'type':'req','id':'ar-hs','method':'connect','params':{'minProtocol':1,'maxProtocol':5,'client':{'id':'ar-test','version':'1.0.0','platform':'test','mode':'control'}}}
     await ws.send(json.dumps(connect))
@@ -702,7 +702,7 @@ import json, asyncio, sys, time, websockets
 
 async def main():
     uri = 'ws://$DEV_HOST:$DEV_PORT/ws'
-    async with websockets.connect(uri) as ws:
+    async with websockets.connect(uri, ping_interval=None) as ws:
         # Read challenge.
         await asyncio.wait_for(ws.recv(), timeout=3)
 

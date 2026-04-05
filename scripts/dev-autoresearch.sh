@@ -48,7 +48,7 @@ except ImportError:
 async def main():
     try:
         ws = await asyncio.wait_for(
-            websockets.connect('ws://$GW_HOST:$GW_PORT/ws', max_size=10*1024*1024),
+            websockets.connect('ws://$GW_HOST:$GW_PORT/ws', max_size=10*1024*1024, ping_interval=None),
             timeout=5)
     except Exception as e:
         print(f'ERROR: cannot connect to gateway at $GW_HOST:$GW_PORT: {e}', file=sys.stderr)

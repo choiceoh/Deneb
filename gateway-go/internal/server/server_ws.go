@@ -52,8 +52,13 @@ func isRoutineConnError(err error) bool {
 const (
 	// pingInterval is how often the server sends WebSocket pings to detect dead connections.
 	pingInterval = 30 * time.Second
+	// pingTimeout is how long to wait for a pong response before counting a failure.
+	pingTimeout = 20 * time.Second
+	// maxPingFailures is how many consecutive ping failures are tolerated before closing.
+	// Single DGX Spark: GPU inference can block pong responses temporarily.
+	maxPingFailures = 3
 	// idleTimeout disconnects clients that haven't sent any messages.
-	idleTimeout = 5 * time.Minute
+	idleTimeout = 30 * time.Minute
 	// maxConsecutiveBadFrames closes connections that send too many malformed frames.
 	maxConsecutiveBadFrames = 3
 )
@@ -99,6 +104,10 @@ func (c *WsClient) Scopes() []string {
 	return result
 }
 
+// eventWriteTimeout is the deadline for writing a single event frame.
+// Generous to handle bursts during LLM streaming on loaded DGX Spark.
+const eventWriteTimeout = 15 * time.Second
+
 // SendEvent writes event data to the WebSocket.
 // inflightBytes tracks bytes during write for slow consumer detection.
 func (c *WsClient) SendEvent(data []byte) error {
@@ -108,7 +117,7 @@ func (c *WsClient) SendEvent(data []byte) error {
 
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), eventWriteTimeout)
 	defer cancel()
 	return c.conn.Write(ctx, websocket.MessageText, data)
 }
