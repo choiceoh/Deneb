@@ -229,9 +229,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		s.bridgeInjector.SetInject(
 			s.chatHandler.InjectDirect,
 			func() []string {
+				// Inject into active Telegram conversation sessions (direct, not shadow).
 				var keys []string
 				for _, sess := range sessions.List() {
-					if sess.Kind == session.KindShadow {
+					if sess.Kind == session.KindDirect && sess.Channel == "telegram" {
 						keys = append(keys, sess.Key)
 					}
 				}
