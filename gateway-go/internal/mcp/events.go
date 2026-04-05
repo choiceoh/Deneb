@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -62,45 +61,70 @@ type gatewayEvent struct {
 }
 
 // Run connects to the gateway WebSocket and processes events.
-// Blocks until context is cancelled or connection fails.
+// Blocks until context is cancelled. Automatically reconnects with backoff.
 func (el *EventListener) Run(ctx context.Context) error {
 	wsURL := strings.Replace(el.bridge.baseURL, "http://", "ws://", 1)
 	wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
 	wsURL += "/ws"
-
-	el.logger.Info("connecting to gateway WebSocket", "url", wsURL)
 
 	header := http.Header{}
 	if el.bridge.token != "" {
 		header.Set("Authorization", "Bearer "+el.bridge.token)
 	}
 
-	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
-		HTTPHeader: header,
-	})
-	if err != nil {
-		return fmt.Errorf("websocket connect: %w", err)
-	}
-	defer conn.CloseNow()
-
-	el.logger.Info("gateway WebSocket connected")
+	backoff := time.Second
+	const maxBackoff = 30 * time.Second
 
 	for {
-		var event gatewayEvent
-		err := wsjson.Read(ctx, conn, &event)
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			el.logger.Warn("websocket read error, reconnecting", "err", err)
-			time.Sleep(2 * time.Second)
-			return el.Run(ctx) // reconnect
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 
-		if event.Type != "event" {
+		el.logger.Info("connecting to gateway WebSocket", "url", wsURL)
+
+		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+			HTTPHeader: header,
+		})
+		if err != nil {
+			el.logger.Warn("websocket connect failed, retrying", "err", err, "backoff", backoff)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff = min(backoff*2, maxBackoff)
 			continue
 		}
 
+		el.logger.Info("gateway WebSocket connected")
+		backoff = time.Second // reset on success
+
+		err = el.readLoop(ctx, conn)
+		conn.CloseNow()
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		el.logger.Warn("websocket disconnected, reconnecting", "err", err, "backoff", backoff)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		backoff = min(backoff*2, maxBackoff)
+	}
+}
+
+// readLoop reads events from the WebSocket until an error occurs.
+func (el *EventListener) readLoop(ctx context.Context, conn *websocket.Conn) error {
+	for {
+		var event gatewayEvent
+		if err := wsjson.Read(ctx, conn, &event); err != nil {
+			return err
+		}
+		if event.Type != "event" {
+			continue
+		}
 		el.handleEvent(ctx, &event)
 	}
 }

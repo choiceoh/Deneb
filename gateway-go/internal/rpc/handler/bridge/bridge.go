@@ -96,7 +96,7 @@ func bridgeSend(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("message").Response(req.ID)
 		}
 		if p.Source == "" {
-			p.Source = "gateway"
+			p.Source = "api"
 		}
 
 		ts := time.Now().UnixMilli()
