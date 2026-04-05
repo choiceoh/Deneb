@@ -246,6 +246,7 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 // signature. Callers that don't need full Request control use this.
 func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
 	req := SimpleRequest(system, userMessage, maxTokens, PriorityCritical, "calllocal")
+	req.ApplyCJKBlock = true // CallLocalLLM is used for user-facing text generation.
 	if len(extraBody) > 0 && extraBody[0] != nil {
 		req.ExtraBody = extraBody[0]
 	}
@@ -350,8 +351,14 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 		}
 	}
 
-	// Block CJK tokens to prevent Chinese output from local model.
-	h.cjkBlock.mergeInto(merged)
+	// Block CJK tokens only when explicitly requested. The 55K logit_bias
+	// entries conflict with guided_json (xgrammar) constrained decoding and
+	// severely restrict vocabulary for structured/Korean output.
+	if req.ApplyCJKBlock {
+		if _, hasGuided := merged["guided_json"]; !hasGuided {
+			h.cjkBlock.mergeInto(merged)
+		}
+	}
 
 	chatReq := llm.ChatRequest{
 		Model:          h.model,
@@ -408,8 +415,8 @@ func (h *Hub) callDirect(ctx context.Context, client *llm.Client, model, system,
 		}
 	}
 
-	// Block CJK tokens to prevent Chinese output from local model.
-	h.cjkBlock.mergeInto(merged)
+	// CJK block not applied on fallback — fallback targets are non-local
+	// models that don't need CJK suppression.
 
 	req := llm.ChatRequest{
 		Model:     model,
