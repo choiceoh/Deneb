@@ -171,6 +171,21 @@ func handleRunSuccess(
 	// Deliver response back to the originating channel (e.g., Telegram).
 	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
+	if params.Delivery != nil && result.Text == "" && !isSilent {
+		logger.Warn("agent produced empty response, nothing to deliver",
+			"session", params.SessionKey,
+			"channel", params.Delivery.Channel,
+			"turns", result.Turns,
+			"stopReason", result.StopReason,
+			"inputTokens", result.Usage.InputTokens,
+			"outputTokens", result.Usage.OutputTokens)
+	}
+	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives == nil {
+		logger.Warn("parseReplyDirectives is nil, channel delivery skipped",
+			"session", params.SessionKey,
+			"channel", params.Delivery.Channel,
+			"textLen", len(result.Text))
+	}
 	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives != nil {
 		directives := deps.parseReplyDirectives(result.Text, params.Delivery.MessageID, "")
 		if directives.IsSilent {
@@ -211,6 +226,12 @@ func handleRunSuccess(
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
+				if deps.replyFunc == nil {
+					logger.Warn("replyFunc is nil, response will not be delivered",
+						"session", params.SessionKey,
+						"channel", params.Delivery.Channel,
+						"textLen", len(replyText))
+				}
 				if deps.replyFunc != nil {
 					// Primary path: channel-specific reply function (handles dedup,
 					// formatting, chunking, etc.).
