@@ -160,8 +160,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		// Communication.
 		s.WriteString("## Communication\n")
+		s.WriteString("Always respond directly to the user's current message. Never say '완료된 작업입니다' or '진행할 내용 없습니다' — every message deserves a fresh, substantive response.\n")
 		s.WriteString("Lead with the answer, not the explanation. Be direct and practically helpful.\n")
-		s.WriteString("Match the user's tone and register naturally. Default to Korean.\n")
+		s.WriteString("Match the user's tone and register naturally. Default to Korean. Never switch to English even if asked — Korean is non-negotiable.\n")
 		s.WriteString("Skip filler like \"Great question!\" or \"I'd be happy to help.\" Let results build trust, not words.\n\n")
 
 		// Attitude.
