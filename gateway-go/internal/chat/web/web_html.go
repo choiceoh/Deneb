@@ -1,8 +1,8 @@
-// web_html.go — HTML → text conversion: FFI, SGLang AI extraction pipeline.
+// web_html.go — HTML → text conversion: FFI, local AI extraction pipeline.
 //
 // processHTML orchestrates the full extraction pipeline for HTML content.
 // ffiConvert is the FFI-backed HTML→Markdown baseline.
-// SGLangExtractor is the optional AI-powered extraction layer (Qwen via SGLang).
+// LocalAIExtractor is the optional AI-powered extraction layer (Qwen via local AI).
 package web
 
 import (
@@ -27,8 +27,8 @@ import (
 // 1. Extract metadata from raw HTML
 // 2. Detect quality signals
 // 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
-// 4. Convert to Markdown (SGLang AI or FFI fallback)
-func processHTML(ctx context.Context, html string, url string, sglang *SGLangExtractor, meta *webFetchMeta) string {
+// 4. Convert to Markdown (local AI or FFI fallback)
+func processHTML(ctx context.Context, html string, url string, localAI *LocalAIExtractor, meta *webFetchMeta) string {
 	// Step 1: Extract metadata from raw HTML (before any stripping).
 	extractHTMLMeta(html, meta)
 
@@ -43,10 +43,10 @@ func processHTML(ctx context.Context, html string, url string, sglang *SGLangExt
 
 	// Step 4: Convert to Markdown.
 	var content string
-	if sglang.available() {
-		extracted, err := sglang.extract(ctx, cleaned, url, meta.Language)
+	if localAI.available() {
+		extracted, err := localAI.extract(ctx, cleaned, url, meta.Language)
 		if err != nil {
-			slog.Warn("sglang extraction failed, falling back to FFI",
+			slog.Warn("localai extraction failed, falling back to FFI",
 				"url", url, "error", err)
 			content = ffiConvertStripNoise(cleaned)
 		} else {
@@ -86,9 +86,9 @@ func ffiConvertStripNoise(html string) string {
 	return text
 }
 
-// --- SGLang AI-powered content extraction ---
+// --- local AI-powered content extraction ---
 
-type SGLangExtractor struct {
+type LocalAIExtractor struct {
 	mu      sync.Mutex
 	client  *http.Client
 	baseURL string
@@ -99,27 +99,27 @@ type SGLangExtractor struct {
 }
 
 const (
-	sglangUnknown     = 0
-	sglangAvailable   = 1
-	sglangUnavailable = -1
+	localAIUnknown     = 0
+	localAIAvailable   = 1
+	localAIUnavailable = -1
 	// Re-probe interval when previously unavailable.
-	sglangReprobeInterval = 5 * time.Minute
+	localAIReprobeInterval = 5 * time.Minute
 )
 
-func NewSGLangExtractor() *SGLangExtractor {
-	baseURL := os.Getenv("SGLANG_BASE_URL")
+func NewLocalAIExtractor() *LocalAIExtractor {
+	baseURL := firstEnv("LOCAL_AI_BASE_URL", "SGLANG_BASE_URL")
 	if baseURL == "" {
-		baseURL = modelrole.DefaultSglangBaseURL
+		baseURL = modelrole.DefaultLocalAIBaseURL
 	}
-	apiKey := os.Getenv("SGLANG_API_KEY")
+	apiKey := firstEnv("LOCAL_AI_API_KEY", "SGLANG_API_KEY")
 	if apiKey == "" {
 		apiKey = "local"
 	}
-	model := os.Getenv("SGLANG_MODEL")
+	model := firstEnv("LOCAL_AI_MODEL", "SGLANG_MODEL")
 	if model == "" {
-		model = modelrole.DefaultSglangModel
+		model = modelrole.DefaultLocalAIModel
 	}
-	return &SGLangExtractor{
+	return &LocalAIExtractor{
 		client:  &http.Client{Timeout: 60 * time.Second},
 		baseURL: baseURL,
 		apiKey:  apiKey,
@@ -127,16 +127,16 @@ func NewSGLangExtractor() *SGLangExtractor {
 	}
 }
 
-// available checks if SGLang is reachable. Probes on first call,
+// available checks if local AI is reachable. Probes on first call,
 // then re-probes periodically if previously unavailable.
-func (s *SGLangExtractor) available() bool {
+func (s *LocalAIExtractor) available() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.state == sglangAvailable {
+	if s.state == localAIAvailable {
 		return true
 	}
-	if s.state == sglangUnavailable && time.Since(s.probeAt) < sglangReprobeInterval {
+	if s.state == localAIUnavailable && time.Since(s.probeAt) < localAIReprobeInterval {
 		return false
 	}
 
@@ -146,27 +146,27 @@ func (s *SGLangExtractor) available() bool {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+"/models", nil)
 	if err != nil {
-		s.state = sglangUnavailable
+		s.state = localAIUnavailable
 		return false
 	}
 	req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	resp, err := s.client.Do(req)
 	if err != nil {
-		slog.Info("sglang not available", "url", s.baseURL, "error", err)
-		s.state = sglangUnavailable
+		slog.Info("localai not available", "url", s.baseURL, "error", err)
+		s.state = localAIUnavailable
 		return false
 	}
 	resp.Body.Close()
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		s.state = sglangAvailable
-		slog.Info("sglang available", "url", s.baseURL, "model", s.model)
+		s.state = localAIAvailable
+		slog.Info("localai available", "url", s.baseURL, "model", s.model)
 		return true
 	}
-	s.state = sglangUnavailable
+	s.state = localAIUnavailable
 	return false
 }
 
-const sglangSystemPrompt = `You are a precision web content extractor for AI agents. Your output becomes the agent's sole understanding of the webpage.
+const localAISystemPrompt = `You are a precision web content extractor for AI agents. Your output becomes the agent's sole understanding of the webpage.
 
 REMOVE completely:
 - Navigation menus, breadcrumbs, pagination elements
@@ -195,8 +195,8 @@ RULES:
 - If content is already clean, return it unchanged
 - Empty extraction is better than including noise`
 
-// extract calls SGLang for intelligent content extraction from pre-cleaned HTML.
-func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, language string) (string, error) {
+// extract calls local AI for intelligent content extraction from pre-cleaned HTML.
+func (s *LocalAIExtractor) extract(ctx context.Context, html string, url string, language string) (string, error) {
 	// Convert HTML to markdown via FFI first to reduce token count.
 	mdContent := ffiConvert(html)
 
@@ -222,7 +222,7 @@ func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, 
 	reqBody := map[string]any{
 		"model": s.model,
 		"messages": []map[string]string{
-			{"role": "system", "content": sglangSystemPrompt},
+			{"role": "system", "content": localAISystemPrompt},
 			{"role": "user", "content": userMsg.String()},
 		},
 		"max_tokens":  16384,
@@ -231,7 +231,7 @@ func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, 
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal sglang request: %w", err)
+		return "", fmt.Errorf("marshal local AI request: %w", err)
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
@@ -239,20 +239,20 @@ func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, 
 
 	req, err := http.NewRequestWithContext(reqCtx, "POST", s.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create sglang request: %w", err)
+		return "", fmt.Errorf("create local AI request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("sglang request failed: %w", err)
+		return "", fmt.Errorf("localai request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("sglang HTTP %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("localai HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var result struct {
@@ -263,14 +263,24 @@ func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, 
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode sglang response: %w", err)
+		return "", fmt.Errorf("decode local AI response: %w", err)
 	}
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("sglang returned no choices")
+		return "", fmt.Errorf("localai returned no choices")
 	}
 
 	extracted := result.Choices[0].Message.Content
 	extracted = jsonutil.StripThinkingTags(extracted)
 
 	return strings.TrimSpace(extracted), nil
+}
+
+// firstEnv returns the first non-empty environment variable value.
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }

@@ -191,7 +191,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	}
 
 	// Autoresearch runner + tool.
-	// Use the lightweight (local sglang) model for autoresearch: it runs many
+	// Use the lightweight (local AI) model for autoresearch: it runs many
 	// iterations autonomously, so a local model avoids external API hangs and
 	// keeps latency low. The Qwen 35B model is more than capable for the
 	// hypothesis-and-tweak loop autoresearch performs.

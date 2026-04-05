@@ -6,7 +6,7 @@
 //  3. Quality signal detection (login walls, SPA shells, bot blocks)
 //
 // This Go-side preprocessing is the first line of defense for content quality.
-// It runs regardless of whether SGLang AI extraction is available.
+// It runs regardless of whether local AI extraction is available.
 package web
 
 import (

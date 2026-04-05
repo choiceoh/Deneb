@@ -12,7 +12,7 @@ import (
 // TestStreamChat_UsageOnFinishChunk verifies that input tokens are
 // captured when the provider bundles usage data on the finish_reason chunk
 // (instead of a separate usage-only chunk). This is the pattern used by
-// some OpenAI-compatible providers (Z.AI, sglang, vLLM).
+// some OpenAI-compatible providers (Z.AI, local AI, vLLM).
 func TestStreamChat_UsageOnFinishChunk(t *testing.T) {
 	// Serve a minimal streaming response where usage is on the finish chunk.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

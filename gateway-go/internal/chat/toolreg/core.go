@@ -17,25 +17,25 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-// SglangDeps holds optional sglang integration functions for tools that need
-// local LLM access (pilot). Injected by chat/ to avoid importing sglang code
+// LocalAIDeps holds optional local AI integration functions for tools that need
+// local LLM access (pilot). Injected by chat/ to avoid importing local AI code
 // from toolreg/.
-type SglangDeps struct {
-	CheckSglangHealth func() bool   // may be nil
-	BaseURL           func() string // returns sglang base URL; may be nil
+type LocalAIDeps struct {
+	CheckLocalAIHealth func() bool   // may be nil
+	BaseURL           func() string // returns local AI base URL; may be nil
 }
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 // It delegates to domain-specific Register*Tools functions.
 //
-// sglang may be nil; tools that require sglang (pilot) degrade gracefully.
-func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, sglang *SglangDeps) {
-	RegisterFSTools(registry, deps, sglang)
+// local AI may be nil; tools that require local AI (pilot) degrade gracefully.
+func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, localAI *LocalAIDeps) {
+	RegisterFSTools(registry, deps, localAI)
 	RegisterProcessTools(registry, &deps.Process)
 	RegisterWebTools(registry)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	RegisterInfraTools(registry, &deps.Vega, sglang)
+	RegisterInfraTools(registry, &deps.Vega, localAI)
 	RegisterMediaTools(registry, deps.LLMClient, deps.DefaultModel)
 	RegisterDataTools(registry)
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, &deps.Vega)
@@ -52,7 +52,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	})
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
-	// because it depends on sglang hooks that live in the chat package.
+	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
 	// needs a FetchToolsRegistry interface that chat.ToolRegistry implements.
 }
@@ -77,7 +77,7 @@ func RegisterAutoresearchTool(registry toolctx.ToolRegistrar, runner *autoresear
 }
 
 // RegisterFSTools registers file-system, code analysis, and git tools.
-func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, sglang *SglangDeps) {
+func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, localAI *LocalAIDeps) {
 	workspaceDir := deps.WorkspaceDir
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "read",
@@ -201,12 +201,12 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 // RegisterWebTools registers web fetch and HTTP tools.
 func RegisterWebTools(registry toolctx.ToolRegistrar) {
 	webCache := web.NewFetchCache()
-	sglang := web.NewSGLangExtractor()
+	localAI := web.NewLocalAIExtractor()
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "web",
 		Description:     "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch (HTML extraction, bot evasion), {query:...} search (Perplexity > Brave > DDG), {query:...,fetch:N} search+fetch top N",
 		InputSchema:     webToolSchema(),
-		Fn:              web.Tool(webCache, sglang),
+		Fn:              web.Tool(webCache, localAI),
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -317,13 +317,13 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	}
 }
 
-// buildSglangProbe converts toolreg SglangDeps into the tools.SglangProbe
+// buildLocalAIProbe converts toolreg LocalAIDeps into the tools.LocalAIProbe
 // struct expected by ToolHealthCheck.
-func buildSglangProbe(sglang *SglangDeps) tools.SglangProbe {
-	var probe tools.SglangProbe
-	if sglang != nil {
-		probe.CheckHealth = sglang.CheckSglangHealth
-		probe.BaseURL = sglang.BaseURL
+func buildLocalAIProbe(localAI *LocalAIDeps) tools.LocalAIProbe {
+	var probe tools.LocalAIProbe
+	if localAI != nil {
+		probe.CheckHealth = localAI.CheckLocalAIHealth
+		probe.BaseURL = localAI.BaseURL
 	}
 	if probe.CheckHealth == nil {
 		probe.CheckHealth = func() bool { return false }
@@ -347,12 +347,12 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 	})
 }
 
-func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, sglang *SglangDeps) {
+func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, localAI *LocalAIDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "health_check",
-		Description:     "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
+		Description:     "인프라 상태 점검: embedding (Gemini), reranker (Jina), local AI (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, localai, memory",
 		InputSchema:     healthCheckToolSchema(),
-		Fn:              tools.ToolHealthCheck(d, buildSglangProbe(sglang)),
+		Fn:              tools.ToolHealthCheck(d, buildLocalAIProbe(localAI)),
 		Deferred:        true,
 		ConcurrencySafe: true,
 	})

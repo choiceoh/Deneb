@@ -9,9 +9,9 @@ import (
 )
 
 // ShouldEnableVega determines whether the Vega backend should be activated.
-// In sglang mode, checks if the SGLang server is reachable.
-// Falls back to FTS-only mode if SGLang is unavailable but FFI is present.
-func ShouldEnableVega(ffiAvailable bool, sglangURL string, logger *slog.Logger) bool {
+// In local AI mode, checks if the local AI server is reachable.
+// Falls back to FTS-only mode if local AI is unavailable but FFI is present.
+func ShouldEnableVega(ffiAvailable bool, localAIURL string, logger *slog.Logger) bool {
 	if !ffiAvailable {
 		if logger != nil {
 			logger.Debug("vega: FFI not available, skipping activation")
@@ -19,12 +19,12 @@ func ShouldEnableVega(ffiAvailable bool, sglangURL string, logger *slog.Logger) 
 		return false
 	}
 
-	// Vega FTS (non-ML) always works with FFI, so enable regardless of SGLang.
+	// Vega FTS (non-ML) always works with FFI, so enable regardless of local AI.
 	return true
 }
 
-// IsSglangReachable checks if the SGLang server responds to /v1/models.
-func IsSglangReachable(baseURL string) bool {
+// IsLocalAIReachable checks if the local AI server responds to /v1/models.
+func IsLocalAIReachable(baseURL string) bool {
 	if baseURL == "" {
 		return false
 	}

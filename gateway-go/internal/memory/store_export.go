@@ -286,7 +286,7 @@ func truncateExport(s string, maxRunes int) string {
 }
 
 // ImportFromMarkdown parses a legacy MEMORY.md file and imports its entries as facts.
-// Handles the format produced by sglang_hooks.go: "## YYYY-MM-DD HH:MM\n\n- bullet\n- bullet\n"
+// Handles the format produced by localai_hooks.go: "## YYYY-MM-DD HH:MM\n\n- bullet\n- bullet\n"
 // Returns the number of imported facts.
 func (s *Store) ImportFromMarkdown(ctx context.Context, path string) (int, error) {
 	data, err := os.ReadFile(path)

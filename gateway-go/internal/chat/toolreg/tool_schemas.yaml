@@ -684,9 +684,9 @@
         - all
         - embedding
         - reranker
-        - sglang
+        - localai
         - memory
-      description: "Component to check (default: all). embedding=Gemini API, reranker=Jina API, sglang=local LLM, memory=aurora-memory DB"
+      description: "Component to check (default: all). embedding=Gemini API, reranker=Jina API, localai=local LLM, memory=aurora-memory DB"
 
 - name: cron
   properties:

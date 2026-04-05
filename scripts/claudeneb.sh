@@ -3,11 +3,11 @@
 #
 # Two modes:
 #   1. Anthropic mode (default): Claude Desktop OAuth → Deneb proxy → Anthropic API
-#   2. OpenAI mode (--openai): No Anthropic key needed. Uses sglang/z.ai/vLLM.
+#   2. OpenAI mode (--openai): No Anthropic key needed. Uses localai/z.ai/vLLM.
 #
 # Usage:
 #   ./scripts/claudeneb.sh                # Anthropic mode (uses Claude Desktop's own login)
-#   ./scripts/claudeneb.sh --openai       # OpenAI-compatible mode (sglang/z.ai)
+#   ./scripts/claudeneb.sh --openai       # OpenAI-compatible mode (localai/z.ai)
 #   ./scripts/claudeneb.sh --check        # Check prerequisites only
 
 set -euo pipefail
@@ -56,7 +56,7 @@ check_prerequisites() {
         if [[ -n "${CLAUDENEB_OPENAI_URL:-}" ]]; then
             pass "CLAUDENEB_OPENAI_URL = ${CLAUDENEB_OPENAI_URL}"
         else
-            # Default to sglang.
+            # Default to local AI.
             warn "CLAUDENEB_OPENAI_URL not set, will default to http://127.0.0.1:30000/v1"
         fi
         pass "OpenAI mode — no Anthropic API key needed"

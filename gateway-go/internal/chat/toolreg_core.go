@@ -10,11 +10,11 @@ import (
 // It delegates to toolreg.RegisterCoreTools for the bulk of registrations,
 // then adds tools that depend on chat-internal state (post-processors).
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
-	sglang := &toolreg.SglangDeps{
-		CheckSglangHealth: pilot.CheckSglangHealth,
+	localAI := &toolreg.LocalAIDeps{
+		CheckLocalAIHealth: pilot.CheckLocalAIHealth,
 		BaseURL:           pilot.LightweightBaseURL,
 	}
-	toolreg.RegisterCoreTools(registry, deps, sglang)
+	toolreg.RegisterCoreTools(registry, deps, localAI)
 
 	// Skills discovery: lists non-always skills on demand (lightweight prompt strategy).
 	toolreg.RegisterSkillsTools(registry, GetCachedSkillsSnapshot)

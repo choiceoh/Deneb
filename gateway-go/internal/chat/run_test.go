@@ -110,7 +110,7 @@ func TestResolveDefaultBaseURL(t *testing.T) {
 	}{
 		{"google", "https://generativelanguage.googleapis.com/v1beta/openai"},
 		{"zai", defaultZaiBaseURL},
-		{"sglang", modelrole.DefaultSglangBaseURL},
+		{"localai", modelrole.DefaultLocalAIBaseURL},
 		{"vllm", modelrole.DefaultVllmBaseURL},
 		{"openai", ""},
 		{"", ""},

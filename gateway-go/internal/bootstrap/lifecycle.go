@@ -105,17 +105,17 @@ func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 }
 
 func buildBannerInfo(version, addr string, vegaEnabled bool) logging.BannerInfo {
-	sglangBannerURL := modelrole.DefaultSglangBaseURL
-	sglangStatus := "offline"
-	if vega.IsSglangReachable(sglangBannerURL) {
-		sglangStatus = "online"
+	localAIBannerURL := modelrole.DefaultLocalAIBaseURL
+	localAIStatus := "offline"
+	if vega.IsLocalAIReachable(localAIBannerURL) {
+		localAIStatus = "online"
 	}
 	return logging.BannerInfo{
 		Version:      version,
 		Addr:         addr,
 		RustFFI:      ffi.Available,
 		VegaEnabled:  vegaEnabled,
-		SglangStatus: sglangStatus,
+		LocalAIStatus: localAIStatus,
 	}
 }
 

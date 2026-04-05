@@ -73,7 +73,7 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 // is injected into the input as "_ref_content" before execution.
 //
 // If the input contains "compress": true, the tool output is automatically
-// compressed via the local sglang model before returning. This lets the AI
+// compressed via the local AI model before returning. This lets the AI
 // agent opt-in to compression on a per-call basis to save context tokens.
 func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawMessage) (string, error) {
 	r.mu.RLock()

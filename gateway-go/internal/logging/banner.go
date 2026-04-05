@@ -18,7 +18,7 @@ type BannerInfo struct {
 	Addr         string
 	RustFFI      bool
 	VegaEnabled  bool
-	SglangStatus string // "online", "offline", or empty to hide
+	LocalAIStatus string // "online", "offline", or empty to hide
 	PID          int    // non-zero in daemon mode
 }
 
@@ -31,7 +31,7 @@ type BannerInfo struct {
 //
 //	addr      127.0.0.1:18789
 //	vega      enabled
-//	sglang    online
+//	localai    online
 //
 //	ready.
 func PrintBanner(w io.Writer, info BannerInfo, color bool) {
@@ -67,8 +67,8 @@ func PrintBanner(w io.Writer, info BannerInfo, color bool) {
 	}
 	kv("vega", vegaStatus)
 
-	if info.SglangStatus != "" {
-		kv("sglang", info.SglangStatus)
+	if info.LocalAIStatus != "" {
+		kv("localai", info.LocalAIStatus)
 	}
 
 	if info.PID > 0 {

@@ -280,7 +280,7 @@ func executeAgentRun(
 	}
 
 	// 4. Kick off proactive context as a fire-and-forget goroutine.
-	// The local sglang model analyzes the user message and returns a context
+	// The local AI model analyzes the user message and returns a context
 	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
 	// We check for the result non-blocking after the parallel section: if the
 	// hint is ready it gets injected; if not, we skip it rather than stalling.

@@ -1,9 +1,9 @@
-// Package sglang provides a centralized hub for all local SGLang LLM requests.
+// Package localai provides a centralized hub for all local AI LLM requests.
 //
 // Instead of scattered direct calls to the local model, every caller goes through
 // Hub.Submit(). The hub manages a shared token budget, priority queue, response
 // cache, inference-based health checks, and zombie request cleanup.
-package sglang
+package localai
 
 import (
 	"time"
