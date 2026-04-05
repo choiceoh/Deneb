@@ -158,14 +158,7 @@ func formatFetchResult(meta webFetchMeta, content string) string {
 	if meta.Published != "" {
 		fmt.Fprintf(&b, "Published: %s\n", meta.Published)
 	}
-	if meta.OGType != "" {
-		fmt.Fprintf(&b, "Type: %s\n", meta.OGType)
-	}
-	fmt.Fprintf(&b, "ContentType: %s\n", meta.ContentType)
 	fmt.Fprintf(&b, "StatusCode: %d\n", meta.StatusCode)
-	fmt.Fprintf(&b, "FetchTime: %dms\n", meta.FetchMs)
-	fmt.Fprintf(&b, "ContentChars: %d (original: %d, retention: %s)\n",
-		meta.ExtractChars, meta.OrigChars, meta.Retention)
 	if meta.WordCount > 0 {
 		fmt.Fprintf(&b, "WordCount: %d\n", meta.WordCount)
 	}
@@ -191,6 +184,9 @@ func formatFetchError(e webFetchErr) string {
 		fmt.Fprintf(&b, "URL: %s\n", e.URL)
 	}
 	fmt.Fprintf(&b, "Retryable: %v\n", e.Retryable)
+	if e.Hint != "" {
+		fmt.Fprintf(&b, "Hint: %s\n", e.Hint)
+	}
 	b.WriteString("</error>")
 	return b.String()
 }

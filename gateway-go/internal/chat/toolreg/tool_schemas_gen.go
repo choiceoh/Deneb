@@ -631,15 +631,15 @@ func webToolSchema() map[string]any {
 		"properties": map[string]any{
 			"url": map[string]any{
 				"type":        "string",
-				"description": "URL to fetch and extract content from",
+				"description": "URL to fetch and extract content. Handles HTML (noise-stripped), JSON, PDF/Office. Bot-block evasion included",
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query (uses Brave Search or DuckDuckGo)",
+				"description": "Web search query. Perplexity (AI answer + citations) > Brave Search > DuckDuckGo fallback",
 			},
 			"fetch": map[string]any{
 				"type":        "number",
-				"description": "When used with query: auto-fetch top N search results (1-3, default: 0 = search only)",
+				"description": "With query: auto-fetch top N results in parallel (1-3, default: 0). Saves round-trip vs separate fetches",
 			},
 			"maxChars": map[string]any{
 				"type":        "number",

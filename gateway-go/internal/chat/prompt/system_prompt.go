@@ -212,6 +212,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
+		// Web tool guidance (conditional on web/http being registered).
+		if toolSet["web"] || toolSet["http"] {
+			s.WriteString("## Web\n")
+			s.WriteString("- `web(query=...)`: web search. Returns AI answer (Perplexity) or link list (Brave/DDG).\n")
+			s.WriteString("- `web(query=..., fetch=N)`: search + auto-fetch top N pages in one call. Use when you need page content, not just snippets.\n")
+			s.WriteString("- `web(url=...)`: fetch a URL (HTML noise-stripped, PDF/Office parsed, bot-block evasion).\n")
+			s.WriteString("- `http(...)`: raw HTTP for APIs/webhooks needing custom headers, auth, or body. Not for general web pages.\n")
+			s.WriteString("- On fetch failure (403/block): try http with custom headers, or search for cached/mirror versions.\n\n")
+		}
+
 		// Sub-agent delegation guidance.
 		if toolSet["sessions_spawn"] {
 			s.WriteString("## Sub-Agents\n")

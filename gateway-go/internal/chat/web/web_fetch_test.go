@@ -354,11 +354,17 @@ func TestFormatFetchResult(t *testing.T) {
 		"Site: Test Site",
 		"FinalURL: https://example.com/final",
 		"Language: en",
-		"Type: article",
-		"FetchTime: 150ms",
+		"StatusCode: 200",
 		"WordCount: 800",
 		"Signals: cookie_consent",
 		"# Hello",
+	}
+	// Verify removed fields are no longer present.
+	removed := []string{"Type: article", "FetchTime:", "ContentChars:", "ContentType:"}
+	for _, r := range removed {
+		if strings.Contains(result, r) {
+			t.Errorf("should not contain removed field %q", r)
+		}
 	}
 	for _, check := range checks {
 		if !strings.Contains(result, check) {
@@ -391,6 +397,40 @@ func TestFormatFetchError(t *testing.T) {
 	result := formatFetchError(e)
 	if !strings.Contains(result, "<error>") || !strings.Contains(result, "Code: http_404") {
 		t.Errorf("unexpected error format: %s", result)
+	}
+}
+
+func TestFormatFetchError_WithHint(t *testing.T) {
+	e := webFetchErr{Code: "http_403", Message: "forbidden", URL: "https://x.com", Retryable: false,
+		Hint: "Try http tool with custom headers"}
+	result := formatFetchError(e)
+	if !strings.Contains(result, "Hint: Try http tool with custom headers") {
+		t.Errorf("missing hint in output: %s", result)
+	}
+}
+
+func TestClassifyFetchError_Hints(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantHint string
+	}{
+		{"403", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 403, Message: "forbidden"}, "custom headers"},
+		{"429", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 429, Message: "too many requests"}, "Rate limited"},
+		{"500", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 500, Message: "internal error"}, "Server error"},
+		{"SSRF", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "SSRF: blocked"}, "public URL"},
+		{"DNS", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "no such host"}, "typos"},
+		{"timeout", context.DeadlineExceeded, "Retry"},
+		{"content_too_large", &media.MediaFetchError{Code: media.ErrMaxBytes, Message: "too big"}, "maxChars"},
+		{"connection_refused", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "connection refused"}, "may be down"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := classifyFetchError(tt.err, "https://example.com")
+			if !strings.Contains(result.Hint, tt.wantHint) {
+				t.Errorf("hint = %q, want substring %q", result.Hint, tt.wantHint)
+			}
+		})
 	}
 }
 
