@@ -241,7 +241,10 @@ func (s *Service) runDreamingAsync() {
 			"verified", report.FactsVerified,
 			"merged", report.FactsMerged,
 			"expired", report.FactsExpired,
+			"pruned", report.FactsPruned,
 			"patterns", report.PatternsExtracted,
+			"user_model", report.UserModelUpdated,
+			"mutual", report.MutualUpdated,
 			"durationMs", report.DurationMs,
 		)
 		s.notifyDreaming(report, nil)
@@ -265,9 +268,18 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 	if err != nil {
 		msg = fmt.Sprintf("⚠️ Aurora Dream 실패: %s", truncateOutput(err.Error(), 100))
 	} else if report != nil {
-		msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 패턴 %d (%.1fs)",
-			report.FactsVerified, report.FactsMerged, report.FactsExpired,
-			report.PatternsExtracted, float64(report.DurationMs)/1000)
+		total := report.FactsVerified + report.FactsMerged + report.FactsExpired +
+			report.FactsPruned + report.PatternsExtracted +
+			report.UserModelUpdated + report.MutualUpdated
+		if total == 0 {
+			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 변경 없음 (%.1fs)", float64(report.DurationMs)/1000)
+		} else {
+			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 정리 %d, 패턴 %d, 프로필 %d, 관계 %d (%.1fs)",
+				report.FactsVerified, report.FactsMerged, report.FactsExpired,
+				report.FactsPruned, report.PatternsExtracted,
+				report.UserModelUpdated, report.MutualUpdated,
+				float64(report.DurationMs)/1000)
+		}
 		if len(report.PhaseErrors) > 0 {
 			msg += fmt.Sprintf("\n⚠️ 실패: %s", strings.Join(report.PhaseErrors, "; "))
 		}

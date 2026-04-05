@@ -75,11 +75,11 @@ func (s *Store) InsertDreamingLog(ctx context.Context, entry DreamingLogEntry) e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO dreaming_log (ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO dreaming_log (ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, user_model_updated, mutual_updated, duration_ms)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		entry.RanAt.UTC().Format(time.RFC3339),
 		entry.FactsVerified, entry.FactsMerged, entry.FactsExpired, entry.FactsPruned,
-		entry.PatternsExtracted, entry.DurationMs,
+		entry.PatternsExtracted, entry.UserModelUpdated, entry.MutualUpdated, entry.DurationMs,
 	)
 	return err
 }
@@ -92,9 +92,9 @@ func (s *Store) LastDreamingLog(ctx context.Context) (*DreamingLogEntry, error) 
 	var e DreamingLogEntry
 	var ranAt string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms
+		`SELECT id, ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, user_model_updated, mutual_updated, duration_ms
 		 FROM dreaming_log ORDER BY id DESC LIMIT 1`,
-	).Scan(&e.ID, &ranAt, &e.FactsVerified, &e.FactsMerged, &e.FactsExpired, &e.FactsPruned, &e.PatternsExtracted, &e.DurationMs)
+	).Scan(&e.ID, &ranAt, &e.FactsVerified, &e.FactsMerged, &e.FactsExpired, &e.FactsPruned, &e.PatternsExtracted, &e.UserModelUpdated, &e.MutualUpdated, &e.DurationMs)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

@@ -19,7 +19,10 @@ type DreamReport struct {
 	FactsVerified     int      `json:"factsVerified"`
 	FactsMerged       int      `json:"factsMerged"`
 	FactsExpired      int      `json:"factsExpired"`
+	FactsPruned       int      `json:"factsPruned"`
 	PatternsExtracted int      `json:"patternsExtracted"`
+	UserModelUpdated  int      `json:"userModelUpdated"`
+	MutualUpdated     int      `json:"mutualUpdated"`
 	DurationMs        int64    `json:"durationMs"`
 	PhaseErrors       []string `json:"phaseErrors,omitempty"`
 }

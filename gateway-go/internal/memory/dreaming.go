@@ -47,6 +47,8 @@ type DreamingReport struct {
 	FactsExpired      int           `json:"facts_expired"`
 	FactsPruned       int           `json:"facts_pruned"`
 	PatternsExtracted int           `json:"patterns_extracted"`
+	UserModelUpdated  int           `json:"user_model_updated"`
+	MutualUpdated     int           `json:"mutual_updated"`
 	PhaseErrors       []string      `json:"phase_errors,omitempty"`
 	Duration          time.Duration `json:"duration"`
 }
@@ -122,6 +124,30 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		}
 	}
 
+	// Early exit: skip LLM-heavy phases when there's no work to do.
+	// Check if any facts need verification and whether mutual signals accumulated.
+	// If cleanup phases changed facts, always run LLM phases to re-evaluate.
+	cleanupDid := state.report.FactsExpired + state.report.FactsPruned
+	factsForVerify, _ := store.GetFactsForDreaming(ctx)
+	muEntry, _ := store.GetUserModelEntry(ctx, "mu_signals_raw")
+	hasMuSignals := muEntry != nil && muEntry.Value != ""
+
+	if len(factsForVerify) == 0 && activeCount < 5 && !hasMuSignals && cleanupDid == 0 {
+		logger.Info("aurora-dream: skipping LLM phases, no new data",
+			"active_facts", activeCount, "facts_for_verify", 0)
+		state.report.Duration = time.Since(start)
+
+		_ = store.InsertDreamingLog(ctx, DreamingLogEntry{
+			RanAt:      start,
+			DurationMs: state.report.Duration.Milliseconds(),
+		})
+		logger.Info("aurora-dream: cycle complete (no-op)",
+			"active_facts", activeCount,
+			"duration", state.report.Duration.Round(time.Second),
+		)
+		return state.report, nil
+	}
+
 	// Phases 1–6: each gets its own timeout budget; the outer ctx is the hard ceiling.
 	// Conflict resolution is merged into the verify phase (single LLM call per batch),
 	// so there is no standalone conflict phase.
@@ -150,6 +176,8 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		FactsExpired:      state.report.FactsExpired,
 		FactsPruned:       state.report.FactsPruned,
 		PatternsExtracted: state.report.PatternsExtracted,
+		UserModelUpdated:  state.report.UserModelUpdated,
+		MutualUpdated:     state.report.MutualUpdated,
 		DurationMs:        state.report.Duration.Milliseconds(),
 	})
 
@@ -159,6 +187,9 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		"expired", state.report.FactsExpired,
 		"pruned", state.report.FactsPruned,
 		"patterns", state.report.PatternsExtracted,
+		"user_model", state.report.UserModelUpdated,
+		"mutual", state.report.MutualUpdated,
+		"active_facts", activeCount,
 		"duration", state.report.Duration.Round(time.Second),
 	)
 
@@ -793,7 +824,9 @@ type userModelPhase struct{}
 
 func (userModelPhase) Name() string { return "user_model" }
 func (userModelPhase) Run(ctx context.Context, s *dreamState) error {
-	return updateUserModel(ctx, s.store, s.client, s.model, s.logger)
+	updated, err := updateUserModel(ctx, s.store, s.client, s.model, s.logger)
+	s.report.UserModelUpdated = updated
+	return err
 }
 
 const userModelSystemPrompt = `You are a deep user profile synthesizer for a personal AI assistant.
@@ -814,15 +847,15 @@ Given facts about a user across all categories, synthesize a rich, evidence-base
 - If a key cannot be determined from available data, omit it
 Return ONLY valid JSON object, no markdown fences.`
 
-func updateUserModel(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) error {
+func updateUserModel(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	logger.Info("aurora-dream: user_model phase input", "active_facts", len(facts))
 
 	if len(facts) < 5 {
-		return nil // not enough data
+		return 0, nil // not enough data
 	}
 
 	var sb strings.Builder
@@ -836,18 +869,21 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 
 	profile, err := callLLMJSON[map[string]string](ctx, client, model, userModelSystemPrompt, sb.String(), dreamingMaxTokens)
 	if err != nil {
-		return nil // non-fatal
+		return 0, nil // non-fatal
 	}
 
+	updated := 0
 	for key, value := range profile {
 		if value == "" {
 			continue
 		}
 		if err := store.SetUserModel(ctx, key, value, 0.8); err != nil {
 			logger.Debug("aurora-dream: failed to set user model", "key", key, "error", err)
+		} else {
+			updated++
 		}
 	}
 
-	logger.Info("aurora-dream: updated user model", "keys", len(profile))
-	return nil
+	logger.Info("aurora-dream: updated user model", "keys", updated)
+	return updated, nil
 }

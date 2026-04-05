@@ -70,15 +70,15 @@ If a previous state exists, note what evolved (e.g., "이전보다 신뢰가 높
 If insufficient data for a key, omit it.
 Return ONLY valid JSON object, no markdown fences.`
 
-func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) error {
+func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	logger.Info("aurora-dream: mutual phase input", "active_facts", len(facts))
 
 	if len(facts) < 5 {
-		return nil // not enough data to synthesize
+		return 0, nil // not enough data to synthesize
 	}
 
 	// Load previous state, history, and user model for context.
@@ -151,13 +151,13 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 	// Require at least some mutual signals (facts, raw, or previous state).
 	hasRaw := entryMap["mu_signals_raw"] != ""
 	if mutualFacts == 0 && !hasRaw && prevState == "" {
-		return nil // no relationship data to synthesize
+		return 0, nil // no relationship data to synthesize
 	}
 
 	// Use higher token budget for richer synthesis.
 	profile, err := callLLMJSON[map[string]string](ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), 1024)
 	if err != nil {
-		return nil // non-fatal: LLM parse failure shouldn't block other phases
+		return 0, nil // non-fatal: LLM parse failure shouldn't block other phases
 	}
 
 	mutualKeys := map[string]bool{
@@ -193,7 +193,7 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 
 	logger.Info("aurora-dream: mutual understanding synthesis done", "keys_updated", updated, "signals_consumed", mutualFacts)
 
-	return nil
+	return updated, nil
 }
 
 // appendRelationshipHistory maintains a rolling log of relationship evolution
@@ -263,7 +263,9 @@ type mutualPhase struct{}
 
 func (mutualPhase) Name() string { return "mutual" }
 func (mutualPhase) Run(ctx context.Context, s *dreamState) error {
-	return synthesizeMutualUnderstanding(ctx, s.store, s.client, s.model, s.logger)
+	updated, err := synthesizeMutualUnderstanding(ctx, s.store, s.client, s.model, s.logger)
+	s.report.MutualUpdated = updated
+	return err
 }
 
 // formatPreviousState formats the current mutual understanding keys as

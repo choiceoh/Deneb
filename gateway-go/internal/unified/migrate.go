@@ -6,6 +6,15 @@ import (
 	"log/slog"
 )
 
+// migrateDreamingLogColumns adds user_model_updated and mutual_updated columns
+// to dreaming_log for databases created before these columns existed.
+// Idempotent — ALTER TABLE ADD COLUMN is a no-op if the column already exists
+// (SQLite returns "duplicate column name" which we ignore).
+func migrateDreamingLogColumns(db *sql.DB) {
+	db.Exec(`ALTER TABLE dreaming_log ADD COLUMN user_model_updated INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE dreaming_log ADD COLUMN mutual_updated INTEGER NOT NULL DEFAULT 0`)
+}
+
 // migrateEntityConstraint fixes the entities CHECK constraint for databases
 // created before 'unknown' was added to the allowed entity_type set.
 // SQLite cannot ALTER a CHECK constraint, so we recreate the table.

@@ -77,6 +77,8 @@ type DreamingLogEntry struct {
 	FactsExpired      int       `json:"facts_expired"`
 	FactsPruned       int       `json:"facts_pruned"`
 	PatternsExtracted int       `json:"patterns_extracted"`
+	UserModelUpdated  int       `json:"user_model_updated"`
+	MutualUpdated     int       `json:"mutual_updated"`
 	DurationMs        int64     `json:"duration_ms"`
 }
 
