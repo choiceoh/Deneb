@@ -49,6 +49,4 @@ print(json.dumps({
 
 curl -s -X POST http://127.0.0.1:18789/api/v1/rpc \
   -H "Content-Type: application/json" \
-  -d "$BODY" >/dev/null 2>&1 &
-
-exit 0
+  -d "$BODY" >/dev/null 2>&1
