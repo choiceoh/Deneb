@@ -105,27 +105,32 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	sys.WriteString("- You MUST output complete file contents. Incomplete files will cause errors.\n")
 	sys.WriteString("- Do not include explanatory text between or after file blocks.\n")
 
+	// --- Dedup hint ---
+	if r.dedupHint != "" {
+		sys.WriteString("\n=== DEDUP WARNING ===\n")
+		sys.WriteString(r.dedupHint + "\n\n")
+	}
+
 	// --- User prompt: context ---
 	var usr strings.Builder
 
 	usr.WriteString("=== TARGET FILES (you may ONLY modify these) ===\n\n")
 	for name, content := range files {
+		content = truncateFileContent(content, 200)
 		lineCount := strings.Count(content, "\n") + 1
 		usr.WriteString(fmt.Sprintf("--- %s (%d lines) ---\n", name, lineCount))
 		usr.WriteString(content)
 		usr.WriteString("\n--- end " + name + " ---\n\n")
 	}
 
-	if results != "" {
-		usr.WriteString("=== EXPERIMENT HISTORY ===\n")
-		usr.WriteString("Format: iteration | timestamp | hypothesis | metric_value | kept | commit | duration | best_so_far | delta\n\n")
-		usr.WriteString(results)
-		usr.WriteString("\n")
-	}
-
-	// Add trend analysis to help the LLM learn from patterns.
+	// Add windowed experiment history.
 	rows, _ := ParseResults(r.workdir)
 	if len(rows) > 0 {
+		usr.WriteString("=== EXPERIMENT HISTORY ===\n")
+		usr.WriteString("Format: iteration | timestamp | hypothesis | metric_value | kept | commit | duration | best_so_far | delta\n\n")
+		usr.WriteString(windowedHistory(rows, cfg.Params.HistoryWindowSize))
+		usr.WriteString("\n")
+
 		usr.WriteString("=== TREND ANALYSIS ===\n")
 		usr.WriteString(TrendAnalysis(rows, cfg))
 		usr.WriteString("\n")
@@ -280,6 +285,12 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 	sys.WriteString("  Good: 'HYPOTHESIS: double learning rate because the loss curve shows slow convergence'\n")
 	sys.WriteString("- Do not output any other text, code, or file contents.\n")
 
+	// --- Dedup hint ---
+	if r.dedupHint != "" {
+		sys.WriteString("\n=== DEDUP WARNING ===\n")
+		sys.WriteString(r.dedupHint + "\n\n")
+	}
+
 	// --- User prompt ---
 	var usr strings.Builder
 
@@ -300,22 +311,21 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 	// Source files as read-only context.
 	usr.WriteString("=== SOURCE FILES (read-only context — do NOT modify) ===\n\n")
 	for name, content := range files {
+		content = truncateFileContent(content, 200)
 		lineCount := strings.Count(content, "\n") + 1
 		usr.WriteString(fmt.Sprintf("--- %s (%d lines) ---\n", name, lineCount))
 		usr.WriteString(content)
 		usr.WriteString("\n--- end " + name + " ---\n\n")
 	}
 
-	if results != "" {
-		usr.WriteString("=== EXPERIMENT HISTORY ===\n")
-		usr.WriteString("Format: iteration | timestamp | hypothesis | metric_value | kept | commit | duration | best_so_far | delta\n\n")
-		usr.WriteString(results)
-		usr.WriteString("\n")
-	}
-
-	// Trend analysis and history (same as buildPrompt).
+	// Add windowed experiment history.
 	rows, _ := ParseResults(r.workdir)
 	if len(rows) > 0 {
+		usr.WriteString("=== EXPERIMENT HISTORY ===\n")
+		usr.WriteString("Format: iteration | timestamp | hypothesis | metric_value | kept | commit | duration | best_so_far | delta\n\n")
+		usr.WriteString(windowedHistory(rows, cfg.Params.HistoryWindowSize))
+		usr.WriteString("\n")
+
 		usr.WriteString("=== TREND ANALYSIS ===\n")
 		usr.WriteString(TrendAnalysis(rows, cfg))
 		usr.WriteString("\n")
@@ -382,4 +392,110 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 	usr.WriteString("\nPropose new values for one or more constants. Explain your reasoning in the HYPOTHESIS line.")
 
 	return promptParts{system: sys.String(), user: usr.String()}
+}
+
+// windowedHistory returns a windowed view of experiment results for the LLM prompt.
+// Always includes: baseline (iteration 0) + all kept results + last windowSize results.
+// Older discarded results are summarized as aggregate stats.
+func windowedHistory(rows []ResultRow, windowSize int) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	if len(rows) <= windowSize {
+		// All rows fit within the window — return them all.
+		var sb strings.Builder
+		for _, r := range rows {
+			sb.WriteString(formatResultRow(r))
+		}
+		return sb.String()
+	}
+
+	// Identify which rows to include in full detail.
+	windowStart := len(rows) - windowSize
+	if windowStart < 0 {
+		windowStart = 0
+	}
+
+	// Count discarded rows outside the window for the summary.
+	var outsideTotal, outsideKept int
+	for i := 0; i < windowStart; i++ {
+		if rows[i].Iteration == 0 {
+			continue // baseline always shown
+		}
+		if rows[i].Kept {
+			continue // kept rows always shown
+		}
+		outsideTotal++
+	}
+	outsideKept = 0 // all kept are shown individually
+
+	var sb strings.Builder
+
+	// Summary of older discarded iterations.
+	if outsideTotal > 0 {
+		sb.WriteString(fmt.Sprintf("[Iterations 1-%d summary: %d discarded iterations omitted (all kept iterations shown below)]\n\n",
+			rows[windowStart-1].Iteration, outsideTotal))
+	}
+
+	// Always include baseline.
+	if rows[0].Iteration == 0 {
+		sb.WriteString(formatResultRow(rows[0]))
+	}
+
+	// Include all kept rows outside the window.
+	for i := 1; i < windowStart; i++ {
+		if rows[i].Kept {
+			sb.WriteString(formatResultRow(rows[i]))
+		}
+	}
+
+	// Include all rows within the window.
+	_ = outsideKept
+	for i := windowStart; i < len(rows); i++ {
+		sb.WriteString(formatResultRow(rows[i]))
+	}
+
+	return sb.String()
+}
+
+// formatResultRow formats a single result row as a TSV line.
+func formatResultRow(r ResultRow) string {
+	kept := "false"
+	if r.Kept {
+		kept = "true"
+	}
+	commit := r.CommitHash
+	if commit == "" {
+		commit = "-"
+	}
+	return fmt.Sprintf("%d\t%s\t%s\t%.6f\t%s\t%s\t%d\t%.6f\t%.6f\n",
+		r.Iteration, r.Timestamp.UTC().Format("2006-01-02T15:04:05Z"),
+		r.Hypothesis, r.MetricValue, kept, commit,
+		r.DurationSec, r.BestSoFar, r.DeltaFromBest)
+}
+
+// truncateFileContent truncates file content to show the first and last
+// maxLines/2 lines with a truncation marker in between.
+func truncateFileContent(content string, maxLines int) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) <= maxLines {
+		return content
+	}
+
+	half := maxLines / 2
+	head := lines[:half]
+	tail := lines[len(lines)-half:]
+	omitted := len(lines) - maxLines
+
+	var sb strings.Builder
+	sb.WriteString(strings.Join(head, "\n"))
+	sb.WriteString(fmt.Sprintf("\n\n... (%d lines omitted) ...\n\n", omitted))
+	sb.WriteString(strings.Join(tail, "\n"))
+	return sb.String()
+}
+
+// estimateTokens estimates the token count of a string using a simple
+// chars/4 heuristic. This is not precise but sufficient as a safety cap.
+func estimateTokens(s string) int {
+	return len(s) / 4
 }

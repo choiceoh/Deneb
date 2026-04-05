@@ -1,9 +1,12 @@
 package autoresearch
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -319,4 +322,174 @@ func SaveExperimentOutput(workdir string, iteration int, stdout, stderr string) 
 	}
 
 	return os.WriteFile(path, []byte(sb.String()), 0o644)
+}
+
+// --- Run archival and comparison ---
+
+// RunSummary is a summary of an archived autoresearch run.
+type RunSummary struct {
+	Tag             string   `json:"tag"`
+	Path            string   `json:"path"`
+	MetricName      string   `json:"metric_name"`
+	Direction       string   `json:"direction"`
+	TotalIterations int      `json:"total_iterations"`
+	KeptIterations  int      `json:"kept_iterations"`
+	BaselineMetric  *float64 `json:"baseline_metric,omitempty"`
+	BestMetric      *float64 `json:"best_metric,omitempty"`
+	ArchivedAt      string   `json:"archived_at"`
+}
+
+// archiveDir returns the path to the archive directory.
+func archiveDir(workdir string) string {
+	return filepath.Join(workdir, configDir, "archive")
+}
+
+// ArchiveRun copies the current experiment state to an archive directory.
+// Returns the archive path.
+func ArchiveRun(workdir, tag string) (string, error) {
+	timestamp := time.Now().UTC().Format("20060102-150405")
+	archiveName := tag + "-" + timestamp
+	dst := filepath.Join(archiveDir(workdir), archiveName)
+
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return "", fmt.Errorf("create archive dir: %w", err)
+	}
+
+	// Copy config, results, chart, and overrides (if they exist).
+	filesToCopy := []string{"config.json", "results.tsv", "chart.png", "overrides.json"}
+	for _, f := range filesToCopy {
+		src := filepath.Join(workdir, configDir, f)
+		if _, err := os.Stat(src); err != nil {
+			continue // skip missing files
+		}
+		if err := copyFile(src, filepath.Join(dst, f)); err != nil {
+			return "", fmt.Errorf("copy %s: %w", f, err)
+		}
+	}
+
+	return dst, nil
+}
+
+// ListRuns scans the archive directory and returns summaries of all runs.
+func ListRuns(workdir string) ([]RunSummary, error) {
+	dir := archiveDir(workdir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read archive dir: %w", err)
+	}
+
+	var runs []RunSummary
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		cfgPath := filepath.Join(dir, entry.Name(), "config.json")
+		data, err := os.ReadFile(cfgPath)
+		if err != nil {
+			continue
+		}
+		var cfg Config
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			continue
+		}
+
+		info, _ := entry.Info()
+		archivedAt := ""
+		if info != nil {
+			archivedAt = info.ModTime().UTC().Format(time.RFC3339)
+		}
+
+		runs = append(runs, RunSummary{
+			Tag:             cfg.BranchTag,
+			Path:            filepath.Join(dir, entry.Name()),
+			MetricName:      cfg.MetricName,
+			Direction:       cfg.MetricDirection,
+			TotalIterations: cfg.TotalIterations,
+			KeptIterations:  cfg.KeptIterations,
+			BaselineMetric:  cfg.BaselineMetric,
+			BestMetric:      cfg.BestMetric,
+			ArchivedAt:      archivedAt,
+		})
+	}
+
+	// Sort by archive time descending (newest first).
+	sort.Slice(runs, func(i, j int) bool {
+		return runs[i].ArchivedAt > runs[j].ArchivedAt
+	})
+
+	return runs, nil
+}
+
+// CompareRuns compares two archived runs side-by-side.
+func CompareRuns(workdir, runA, runB string) (string, error) {
+	loadRun := func(path string) (*Config, error) {
+		data, err := os.ReadFile(filepath.Join(path, "config.json"))
+		if err != nil {
+			return nil, err
+		}
+		var cfg Config
+		return &cfg, json.Unmarshal(data, &cfg)
+	}
+
+	cfgA, err := loadRun(runA)
+	if err != nil {
+		return "", fmt.Errorf("load run A: %w", err)
+	}
+	cfgB, err := loadRun(runB)
+	if err != nil {
+		return "", fmt.Errorf("load run B: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("=== Run Comparison ===\n\n")
+	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "", "Run A", "Run B"))
+	sb.WriteString(strings.Repeat("-", 73) + "\n")
+	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Metric", cfgA.MetricName, cfgB.MetricName))
+	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Direction", cfgA.MetricDirection, cfgB.MetricDirection))
+	sb.WriteString(fmt.Sprintf("%-20s | %-25d | %-25d\n", "Iterations", cfgA.TotalIterations, cfgB.TotalIterations))
+	sb.WriteString(fmt.Sprintf("%-20s | %-25d | %-25d\n", "Kept", cfgA.KeptIterations, cfgB.KeptIterations))
+
+	fmtMetricPtr := func(p *float64) string {
+		if p == nil {
+			return "N/A"
+		}
+		return fmt.Sprintf("%.6f", *p)
+	}
+
+	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Baseline", fmtMetricPtr(cfgA.BaselineMetric), fmtMetricPtr(cfgB.BaselineMetric)))
+	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Best", fmtMetricPtr(cfgA.BestMetric), fmtMetricPtr(cfgB.BestMetric)))
+
+	if cfgA.TotalIterations > 0 {
+		sb.WriteString(fmt.Sprintf("%-20s | %-25.1f | ", "Success Rate %", float64(cfgA.KeptIterations)/float64(cfgA.TotalIterations)*100))
+	} else {
+		sb.WriteString(fmt.Sprintf("%-20s | %-25s | ", "Success Rate %", "N/A"))
+	}
+	if cfgB.TotalIterations > 0 {
+		sb.WriteString(fmt.Sprintf("%-25.1f\n", float64(cfgB.KeptIterations)/float64(cfgB.TotalIterations)*100))
+	} else {
+		sb.WriteString("N/A\n")
+	}
+
+	return sb.String(), nil
+}
+
+// copyFile copies a single file from src to dst.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }

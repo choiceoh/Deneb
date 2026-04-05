@@ -120,6 +120,16 @@ type Params struct {
 	// iteration. Each parallel slot gets its own git worktree. Default: 1
 	// (sequential, identical to current behavior). Max: 8.
 	Parallelism int `json:"parallelism,omitempty"`
+
+	// HistoryWindowSize controls how many recent results to include in full
+	// detail in the LLM prompt. Older discarded results are summarized as
+	// aggregate stats. Baseline and all kept results are always included.
+	// Default: 20.
+	HistoryWindowSize int `json:"history_window_size,omitempty"`
+	// MaxPromptTokens is a safety cap on the estimated prompt size (chars/4).
+	// When exceeded, file contents and history are progressively truncated.
+	// Default: 100000.
+	MaxPromptTokens int `json:"max_prompt_tokens,omitempty"`
 }
 
 // DefaultParams returns the canonical default values for all tunable parameters.
@@ -212,6 +222,14 @@ func (p *Params) applyDefaults() {
 		p.Parallelism = 8
 	}
 
+	// History windowing defaults.
+	if p.HistoryWindowSize <= 0 {
+		p.HistoryWindowSize = 20
+	}
+	if p.MaxPromptTokens <= 0 {
+		p.MaxPromptTokens = 100000
+	}
+
 	// Sanity: stuck thresholds must be in ascending order.
 	if p.StuckThresholdMild >= p.StuckThresholdModerate ||
 		p.StuckThresholdModerate >= p.StuckThresholdCritical {
@@ -250,6 +268,11 @@ type Config struct {
 	// Example: `val_bpb:\s*([\d.]+)` extracts 1.087 from "val_bpb: 1.087".
 	// If empty, the runner uses the default heuristic (last number on last line).
 	MetricPattern string `json:"metric_pattern,omitempty"`
+	// MetricExtractMode controls how the metric is extracted from experiment
+	// output. Values: "auto" (default: pattern > JSON > key-value > heuristic),
+	// "pattern" (MetricPattern only), "json" (DENEB_METRIC_JSON only),
+	// "last_number" (last number heuristic only).
+	MetricExtractMode string `json:"metric_extract_mode,omitempty"`
 	// CacheEnabled enables a persistent cache directory for experiment commands.
 	// When true, the runner sets AUTORESEARCH_CACHE_DIR env var pointing to a
 	// stable cache directory (.autoresearch/cache/) so that expensive operations
@@ -262,6 +285,10 @@ type Config struct {
 	// OriginalBranch records the branch autoresearch was started from,
 	// so we know where to return after the experiment completes.
 	OriginalBranch string `json:"original_branch,omitempty"`
+	// Resume enables resuming from the last checkpoint instead of starting
+	// fresh. When true and TotalIterations > 0, the runner skips baseline
+	// measurement and continues from where it left off.
+	Resume bool `json:"resume,omitempty"`
 
 	// --- Mutable state updated during the run ---
 
