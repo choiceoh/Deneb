@@ -30,6 +30,11 @@
 #   scripts/dev-live-test.sh tool-check TOOL_NAME MSG
 #
 # The dev instance runs on port 18790 (separate from production on 18789).
+#
+# Prod-parity mode (--prod-parity):
+#   Uses production config with Telegram disabled instead of empty config {}.
+#   This exercises the same code paths as production (providers, auth, hooks,
+#   agents, sessions, logging) while staying safe from Telegram 409 conflicts.
 
 set -euo pipefail
 
@@ -41,6 +46,7 @@ DEV_BINARY="/tmp/deneb-gateway-live"
 DEV_PID_FILE="/tmp/deneb-gateway-live.pid"
 DEV_LOG="/tmp/deneb-gateway-live.log"
 DEV_HOST="127.0.0.1"
+PROD_PARITY="${DEV_PROD_PARITY:-false}"
 
 # Version from git tags.
 DENEB_VERSION=$(git -C "$REPO_DIR" tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
@@ -63,9 +69,14 @@ cmd_start() {
     cmd_build
   fi
 
-  # Empty config = no Telegram polling (avoids 409 conflict with production).
+  # Config resolution: prod-parity uses real config (minus Telegram), default uses {}.
   local dev_config="/tmp/deneb-dev-config.json"
-  [[ -f "$dev_config" ]] || echo '{}' > "$dev_config"
+  if [[ "$PROD_PARITY" == "true" ]]; then
+    "$SCRIPT_DIR/dev-config-gen.sh" --out "$dev_config" >/dev/null 2>&1
+    echo "    Config: prod-parity (from ~/.deneb/deneb.json, Telegram disabled)"
+  else
+    [[ -f "$dev_config" ]] || echo '{}' > "$dev_config"
+  fi
 
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT..."
   DENEB_CONFIG_PATH="$dev_config" nohup "$DEV_BINARY" --bind loopback --port "$DEV_PORT" > "$DEV_LOG" 2>&1 &
@@ -186,6 +197,127 @@ cmd_smoke() {
 
   if (( failed )); then return 1; fi
   echo "==> All smoke tests passed"
+
+  # Brief parity note so agents know the test environment fidelity.
+  if [[ "$PROD_PARITY" == "true" ]]; then
+    echo "    (prod-parity: config from production, Telegram stripped)"
+  else
+    local dev_config="/tmp/deneb-dev-config.json"
+    local dev_size=0
+    [[ -f "$dev_config" ]] && dev_size=$(wc -c < "$dev_config" 2>/dev/null || echo 0)
+    if (( dev_size <= 4 )); then
+      echo "    (minimal config: providers/agents/hooks not loaded — use --prod-parity for full fidelity)"
+    fi
+  fi
+}
+
+cmd_parity() {
+  echo "==> Dev vs Production Parity Report"
+  echo ""
+
+  local issues=0
+
+  # 1. Config parity.
+  local dev_config="/tmp/deneb-dev-config.json"
+  local prod_config="${HOME}/.deneb/deneb.json"
+  echo "--- Config ---"
+  if [[ ! -f "$prod_config" ]]; then
+    echo "  [SKIP] No production config at $prod_config"
+  elif [[ "$PROD_PARITY" == "true" ]]; then
+    echo "  [OK]   prod-parity mode: using production config (Telegram stripped)"
+  elif [[ -f "$dev_config" ]]; then
+    local dev_size
+    dev_size=$(wc -c < "$dev_config" 2>/dev/null || echo 0)
+    if (( dev_size <= 4 )); then
+      echo "  [GAP]  Dev config is empty ({}), production has $(wc -c < "$prod_config") bytes"
+      echo "         Fix: use --prod-parity flag or run: scripts/dev-config-gen.sh"
+      issues=$((issues + 1))
+    else
+      echo "  [OK]   Dev config has content ($dev_size bytes)"
+    fi
+  else
+    echo "  [GAP]  No dev config file; will default to {}"
+    echo "         Fix: use --prod-parity flag"
+    issues=$((issues + 1))
+  fi
+  echo ""
+
+  # 2. Rust build features.
+  echo "--- Rust FFI & Features ---"
+  if _is_running; then
+    local health_json
+    health_json=$(curl -sf "http://$DEV_HOST:$DEV_PORT/health" 2>/dev/null || echo "{}")
+    local ffi_status
+    ffi_status=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('rustFfi','unknown'))" 2>/dev/null || echo "unknown")
+    local vega_status
+    vega_status=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('vegaEnabled','unknown'))" 2>/dev/null || echo "unknown")
+
+    if [[ "$ffi_status" == "True" || "$ffi_status" == "true" ]]; then
+      echo "  [OK]   Rust FFI: available"
+    else
+      echo "  [GAP]  Rust FFI: not available (production requires FFI)"
+      echo "         Fix: make rust && rebuild"
+      issues=$((issues + 1))
+    fi
+    if [[ "$vega_status" == "True" || "$vega_status" == "true" ]]; then
+      echo "  [OK]   Vega search: enabled"
+    else
+      echo "  [GAP]  Vega search: disabled (production has Vega+ML+CUDA)"
+      echo "         Fix: make rust-dgx && rebuild"
+      issues=$((issues + 1))
+    fi
+  else
+    # Check static lib feature from binary.
+    local lib_path="$REPO_DIR/core-rs/target/release/libdeneb_core.a"
+    if [[ -f "$lib_path" ]]; then
+      echo "  [OK]   Rust static lib exists ($(du -h "$lib_path" | cut -f1))"
+      # Larger lib likely has more features (core ~5MB, vega ~15MB, dgx ~30MB+).
+      local lib_kb
+      lib_kb=$(du -k "$lib_path" | cut -f1)
+      if (( lib_kb < 10000 )); then
+        echo "  [GAP]  Static lib is small (${lib_kb}KB) — likely core-only, no Vega/ML"
+        echo "         Production uses: make rust-dgx (Vega+ML+CUDA)"
+        issues=$((issues + 1))
+      fi
+    else
+      echo "  [GAP]  No Rust static lib found at $lib_path"
+      echo "         Fix: make rust (or make rust-dgx for full parity)"
+      issues=$((issues + 1))
+    fi
+  fi
+  echo ""
+
+  # 3. Environment variables.
+  echo "--- Key Environment Variables ---"
+  local env_vars=("GEMINI_API_KEY" "DENEB_EMBED_MODEL" "GITHUB_WEBHOOK_SECRET")
+  for var in "${env_vars[@]}"; do
+    if [[ -n "${!var:-}" ]]; then
+      echo "  [OK]   $var: set"
+    else
+      echo "  [INFO] $var: not set (loaded at runtime from .env if present)"
+    fi
+  done
+  # Check if .env files exist.
+  if [[ -f "$HOME/.deneb/.env" ]]; then
+    echo "  [OK]   ~/.deneb/.env: exists (loaded by gateway at startup)"
+  else
+    echo "  [INFO] ~/.deneb/.env: not found"
+  fi
+  echo ""
+
+  # 4. Port/binding.
+  echo "--- Network ---"
+  echo "  [INFO] Dev port: $DEV_PORT (production: 18789)"
+  echo "  [INFO] Dev bind: loopback (production: config-driven)"
+  echo ""
+
+  # 5. Summary.
+  if (( issues == 0 )); then
+    echo "==> No parity gaps detected"
+  else
+    echo "==> $issues parity gap(s) found"
+    echo "    Run with --prod-parity to close config gap automatically"
+  fi
 }
 
 cmd_rpc() {
@@ -731,6 +863,17 @@ asyncio.run(main())
 "
 }
 
+# --- Pre-parse global flags ---
+
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --prod-parity) PROD_PARITY=true ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+
 # --- Main dispatch ---
 
 case "${1:-help}" in
@@ -788,6 +931,9 @@ case "${1:-help}" in
   baseline)      shift; "$SCRIPT_DIR/dev-baseline.sh" "$@" ;;
   baseline-save) "$SCRIPT_DIR/dev-baseline.sh" save ;;
   baseline-compare) "$SCRIPT_DIR/dev-baseline.sh" compare ;;
+
+  # Parity report.
+  parity)        cmd_parity ;;
 
   help|*)
     echo "Usage: scripts/dev-live-test.sh COMMAND [ARGS]"
@@ -858,5 +1004,11 @@ case "${1:-help}" in
     echo "  logs-grep PAT   Search logs for pattern"
     echo "  logs-errors [N] Show only error/warning lines (last N, default 50)"
     echo "  logs-since SECS Show logs from last N seconds"
+    echo ""
+    echo "Parity:"
+    echo "  parity              Show dev vs production environment differences"
+    echo ""
+    echo "Global flags:"
+    echo "  --prod-parity       Use production config (minus Telegram) instead of {}"
     ;;
 esac
