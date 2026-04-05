@@ -22,9 +22,10 @@ type submitResult struct {
 // requestQueue is a thread-safe, heap-backed priority queue.
 // Lower Priority value = higher dispatch priority. FIFO within same priority.
 type requestQueue struct {
-	mu   sync.Mutex
-	cond *sync.Cond
-	h    queueHeap
+	mu     sync.Mutex
+	cond   *sync.Cond
+	h      queueHeap
+	closed bool // set by Close(); wakes all PopWait callers
 }
 
 func newRequestQueue() *requestQueue {
@@ -32,6 +33,14 @@ func newRequestQueue() *requestQueue {
 	q.cond = sync.NewCond(&q.mu)
 	heap.Init(&q.h)
 	return q
+}
+
+// Close marks the queue as closed and wakes all waiters. Safe to call multiple times.
+func (q *requestQueue) Close() {
+	q.mu.Lock()
+	q.closed = true
+	q.mu.Unlock()
+	q.cond.Broadcast()
 }
 
 // Push adds an entry and signals the dispatcher.
@@ -42,28 +51,16 @@ func (q *requestQueue) Push(e *queueEntry) {
 	q.cond.Signal()
 }
 
-// PopWait blocks until an entry is available or done is closed.
-// Returns nil if done fires first.
-func (q *requestQueue) PopWait(done <-chan struct{}) *queueEntry {
+// PopWait blocks until an entry is available or the queue is closed.
+// Returns nil on close. Caller must call Close() to unblock waiters.
+func (q *requestQueue) PopWait(_ <-chan struct{}) *queueEntry {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	for q.h.Len() == 0 {
-		// Release lock and wait; re-check on wake.
-		waitCh := make(chan struct{})
-		go func() {
-			q.mu.Lock()
-			q.cond.Wait()
-			q.mu.Unlock()
-			close(waitCh)
-		}()
-		q.mu.Unlock()
-		select {
-		case <-done:
-			q.mu.Lock()
-			return nil
-		case <-waitCh:
-			q.mu.Lock()
-		}
+	for q.h.Len() == 0 && !q.closed {
+		q.cond.Wait() // atomically unlocks mu, sleeps, re-locks on wake
+	}
+	if q.closed || q.h.Len() == 0 {
+		return nil
 	}
 	return heap.Pop(&q.h).(*queueEntry)
 }
