@@ -4,7 +4,7 @@ package ffi
 
 /*
 // Static linking avoids LD_LIBRARY_PATH issues at runtime.
-#cgo LDFLAGS: ${SRCDIR}/../../../core-rs/target/release/libdeneb_core.a -lm -ldl -lpthread
+#cgo LDFLAGS: ${SRCDIR}/../../../core-rs/target/release/libdeneb_core.a -lm -ldl -lpthread -lstdc++ -lgomp
 #cgo CFLAGS: -I${SRCDIR}
 
 // Deneb core FFI functions (from core-rs/src/lib.rs).

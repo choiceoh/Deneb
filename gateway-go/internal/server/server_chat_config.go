@@ -39,8 +39,8 @@ func (s *Server) initGmailPoll() {
 	// Wire memory store for pipeline context recall (reuse unified store).
 	if s.memoryStore != nil {
 		cfg.MemStore = s.memoryStore
-		if s.geminiEmbedder != nil {
-			cfg.MemEmbed = memory.NewEmbedder(s.geminiEmbedder, s.memoryStore, s.logger)
+		if s.embedder != nil {
+			cfg.MemEmbed = memory.NewEmbedder(s.embedder, s.memoryStore, s.logger)
 		}
 		s.logger.Info("gmailpoll: memory pipeline enabled")
 	}

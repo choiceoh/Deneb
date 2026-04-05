@@ -84,10 +84,10 @@ func WithHooksHTTP(h *HooksHTTPHandler) Option {
 	}
 }
 
-// WithGeminiEmbedder sets the Gemini embedder for the memory subsystem.
-func WithGeminiEmbedder(e *embedding.GeminiEmbedder) Option {
+// WithEmbedder sets the embedding provider for the memory subsystem.
+func WithEmbedder(e embedding.Embedder) Option {
 	return func(s *Server) {
-		s.geminiEmbedder = e
+		s.embedder = e
 	}
 }
 

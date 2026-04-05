@@ -112,6 +112,7 @@ func TestFallbackChain(t *testing.T) {
 func TestResolveLocalAIAPIKey(t *testing.T) {
 	// Default: returns "local" when env var is not set.
 	t.Setenv("LOCAL_AI_API_KEY", "")
+	t.Setenv("SGLANG_API_KEY", "")
 	if got := resolveLocalAIAPIKey(); got != "local" {
 		t.Errorf("resolveLocalAIAPIKey() = %q, want %q", got, "local")
 	}

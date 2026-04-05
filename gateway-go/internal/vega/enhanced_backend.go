@@ -12,11 +12,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
-// EnhancedBackend wraps RustBackend with Gemini embedding, query expansion,
+// EnhancedBackend wraps RustBackend with embedding, query expansion,
 // and cross-encoder reranking via Jina Reranker API.
 type EnhancedBackend struct {
 	rust     *RustBackend
-	embedder *embedding.GeminiEmbedder
+	embedder embedding.Embedder
 	reranker *Reranker
 	expander *LLMExpander
 	logger   *slog.Logger
@@ -25,12 +25,12 @@ type EnhancedBackend struct {
 
 // EnhancedBackendConfig configures the EnhancedBackend.
 type EnhancedBackendConfig struct {
-	Logger      *slog.Logger
+	Logger       *slog.Logger
 	LocalAIURL   string // e.g. "http://127.0.0.1:30000/v1" — used for chat/expansion
 	LocalAIModel string // e.g. "Qwen/Qwen3.5-35B-A3B" — chat model for expansion
 
-	// Embedder is the Gemini embedding client. If nil, search falls back to FTS-only.
-	Embedder *embedding.GeminiEmbedder
+	// Embedder is the embedding provider. If nil, search falls back to FTS-only.
+	Embedder embedding.Embedder
 
 	// JinaAPIKey enables cross-encoder reranking via the Jina Reranker API.
 	// If empty, reranking is skipped and results use cosine+BM25 fusion order.
