@@ -1497,3 +1497,21 @@ func skillsListToolSchema() map[string]any {
 		},
 	}
 }
+
+func bridgeToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"message": map[string]any{
+				"type":        "string",
+				"description": "Message to send to the other agent",
+			},
+			"source": map[string]any{
+				"type":        "string",
+				"description": "Your identity (default: 'deneb')",
+				"default":     "deneb",
+			},
+		},
+		"required": []string{"message"},
+	}
+}
