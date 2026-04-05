@@ -33,12 +33,12 @@ const (
 	// Per-phase timeouts prevent earlier phases from starving later ones.
 	// If a phase exceeds its budget, it's cut short but subsequent phases still run.
 	// Sum ~15m; the overall dreamingTimeout acts as a hard ceiling.
-	phaseTimeoutVerify       = 3 * time.Minute
-	phaseTimeoutMerge        = 3 * time.Minute
-	phaseTimeoutConsolidate  = 3 * time.Minute
-	phaseTimeoutPatterns     = 150 * time.Second
-	phaseTimeoutUserModel    = 2 * time.Minute
-	phaseTimeoutMutual       = 2 * time.Minute
+	phaseTimeoutVerify      = 3 * time.Minute
+	phaseTimeoutMerge       = 3 * time.Minute
+	phaseTimeoutConsolidate = 3 * time.Minute
+	phaseTimeoutPatterns    = 150 * time.Second
+	phaseTimeoutUserModel   = 2 * time.Minute
+	phaseTimeoutMutual      = 2 * time.Minute
 )
 
 // DreamingReport summarizes the results of a dreaming cycle.
@@ -638,6 +638,17 @@ func mergeDuplicatesTextOnly(ctx context.Context, store *Store, logger *slog.Log
 	}
 
 	return merged, nil
+}
+
+// --- Phase 2.5: Consolidation ---
+
+type consolidatePhase struct{}
+
+func (consolidatePhase) Name() string { return "consolidate" }
+func (consolidatePhase) Run(ctx context.Context, s *dreamState) error {
+	// TODO: implement fact consolidation (group related facts, compress).
+	s.logger.Debug("aurora-dream: consolidate phase (not yet implemented)")
+	return nil
 }
 
 // --- Phase 3: Pattern Extraction ---

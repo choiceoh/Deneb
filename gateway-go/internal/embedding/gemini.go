@@ -45,6 +45,11 @@ func NewGeminiEmbedder(apiKey string, logger *slog.Logger) *GeminiEmbedder {
 	}
 }
 
+// ModelName returns the Gemini model identifier used for embeddings.
+func (g *GeminiEmbedder) ModelName() string {
+	return geminiModel
+}
+
 // EmbedQuery embeds a single text and returns an L2-normalized float32 vector.
 func (g *GeminiEmbedder) EmbedQuery(ctx context.Context, text string) ([]float32, error) {
 	req := geminiEmbedRequest{

@@ -12,6 +12,10 @@ crate-type = ["staticlib", "rlib"]
 [features]
 # Enable Vega project search engine (Rust port of Python vega/).
 vega = ["dep:deneb-vega", "parallel", "deneb-vega?/parallel"]
+# Enable local ML inference (GGUF embedding models via llama.cpp).
+ml = ["dep:deneb-ml", "deneb-ml?/llama"]
+# Enable CUDA GPU acceleration for ML inference (DGX Spark).
+cuda = ["ml", "deneb-ml?/cuda"]
 # Enable rayon parallelism (20-core DGX Spark). Disable for leaner single-core builds.
 parallel = ["dep:rayon"]
 
@@ -49,6 +53,7 @@ pulldown-cmark = { version = "0.12", default-features = false }
 
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
+deneb-ml = { path = "../ml", optional = true }
 
 
 [dev-dependencies]

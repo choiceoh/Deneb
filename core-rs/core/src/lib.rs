@@ -43,6 +43,7 @@ pub use ffi::context_engine::*;
 pub use ffi::markdown::*;
 pub use ffi::media::*;
 pub use ffi::memory_search::*;
+pub use ffi::ml::*;
 pub use ffi::parsing::*;
 pub use ffi::protocol::*;
 pub use ffi::security::*;
@@ -200,6 +201,22 @@ mod tests {
         assert!(len > 0);
         let mime = std::str::from_utf8(&out[..len as usize])?;
         assert_eq!(mime, "image/png");
+        Ok(())
+    }
+
+    #[test]
+    fn test_ml_embed_stub() -> Result<(), Box<dyn std::error::Error>> {
+        let input = r#"{"texts":["hello"],"model_path":"/nonexistent/model.gguf"}"#;
+        let mut out = [0u8; 256];
+        let len =
+            unsafe { deneb_ml_embed(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()) };
+        assert!(len > 0);
+        let result = std::str::from_utf8(&out[..len as usize])?;
+        // Without ml feature, returns ml_not_available; with it, returns embed_failed (no model).
+        assert!(
+            result.contains("ml_not_available") || result.contains("embed_failed"),
+            "unexpected: {result}"
+        );
         Ok(())
     }
 

@@ -65,9 +65,9 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		return
 	}
 
-	// Gemini embedder + dreaming adapter.
-	if s.geminiEmbedder != nil {
-		embedder := memory.NewEmbedder(s.geminiEmbedder, memStore, s.logger)
+	// Embedding provider + dreaming adapter.
+	if s.embedder != nil {
+		embedder := memory.NewEmbedder(s.embedder, memStore, s.logger)
 		chatCfg.MemoryEmbedder = embedder
 
 		lwClient := reg.Client(modelrole.RoleLightweight)

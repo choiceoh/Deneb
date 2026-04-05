@@ -2,7 +2,7 @@
 #
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
-.PHONY: all rust rust-vega rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
+.PHONY: all rust rust-vega rust-ml rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-arm64 \
@@ -44,6 +44,14 @@ rust:
 # Build core with Vega search engine enabled (FTS-only, no ML).
 rust-vega:
 	cd core-rs && cargo build --release -p deneb-core --no-default-features --features vega
+
+# Build core with Vega + local ML inference (CPU).
+rust-ml:
+	cd core-rs && cargo build --release -p deneb-core --no-default-features --features vega,ml
+
+# Build core with Vega + ML + CUDA GPU acceleration (DGX Spark production).
+rust-dgx:
+	cd core-rs && cargo build --release -p deneb-core --no-default-features --features vega,ml,cuda
 
 # Build all workspace crates.
 rust-all:
@@ -309,6 +317,8 @@ info:
 	@echo ""
 	@echo "  make rust       - Build Rust core crate (release, CGo, minimal)"
 	@echo "  make rust-vega  - Build Rust core + Vega search (FTS-only)"
+	@echo "  make rust-ml    - Build Rust core + Vega + ML inference (CPU)"
+	@echo "  make rust-dgx   - Build Rust core + Vega + ML + CUDA (DGX Spark)"
 	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
 	@echo "  make go-dev     - Run Go gateway in dev mode (auto-restart on SIGUSR1)"
