@@ -53,26 +53,36 @@ func testdataDir() string {
 func embedAllFacts(t *testing.T, store *Store, embedder *Embedder) {
 	t.Helper()
 	ctx := context.Background()
+
+	// Collect all facts first to avoid holding the rows cursor while running
+	// embedding queries (SQLite single-connection deadlock).
+	type factRow struct {
+		id      int64
+		content string
+	}
 	rows, err := store.db.QueryContext(ctx, "SELECT id, content FROM facts WHERE active = 1")
 	if err != nil {
 		t.Fatalf("query facts for embedding: %v", err)
 	}
-	defer rows.Close()
-
-	count := 0
+	var facts []factRow
 	for rows.Next() {
-		var id int64
-		var content string
-		if err := rows.Scan(&id, &content); err != nil {
+		var f factRow
+		if err := rows.Scan(&f.id, &f.content); err != nil {
 			t.Fatalf("scan fact: %v", err)
 		}
+		facts = append(facts, f)
+	}
+	rows.Close()
+
+	count := 0
+	for _, f := range facts {
 		var cnt int
-		store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM fact_embeddings WHERE fact_id = ?", id).Scan(&cnt)
+		store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM fact_embeddings WHERE fact_id = ?", f.id).Scan(&cnt)
 		if cnt > 0 {
 			continue
 		}
-		if err := embedder.EmbedAndStore(ctx, id, content); err != nil {
-			t.Logf("embed fact %d: %v", id, err)
+		if err := embedder.EmbedAndStore(ctx, f.id, f.content); err != nil {
+			t.Logf("embed fact %d: %v", f.id, err)
 		}
 		count++
 	}
