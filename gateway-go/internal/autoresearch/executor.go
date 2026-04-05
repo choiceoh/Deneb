@@ -51,7 +51,7 @@ func RunBaseline(ctx context.Context, workdir string, cfg *Config) (float64, err
 		return 0, fmt.Errorf("baseline command failed: %w\nOutput: %s", err, string(output))
 	}
 
-	metric, err := extractMetricSmart(string(output), cfg.MetricPattern)
+	metric, err := extractMetricWithMode(string(output), cfg.MetricPattern, cfg.MetricExtractMode)
 	if err != nil {
 		return 0, fmt.Errorf("baseline metric extraction failed: %w", err)
 	}
@@ -136,6 +136,26 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 		}
 		return nil
 	}
+
+	// Step 4b: Check for duplicate hypothesis.
+	tracker := LoadHypothesisTracker(workdir)
+	changeHash := HashFileChanges(changes)
+	if dupIter, isDup := tracker.IsDuplicate(changeHash); isDup {
+		r.logger.Warn("duplicate hypothesis detected, skipping",
+			"iteration", iteration, "duplicate_of", dupIter)
+		r.dedupHint = fmt.Sprintf("Your proposal was identical to iteration #%d. Try something substantially different.", dupIter)
+		cfg.ConsecutiveFailures++
+		cfg.TotalIterations = iteration
+		if err := SaveConfig(workdir, cfg); err != nil {
+			return err
+		}
+		return nil
+	}
+	tracker.Record(changeHash, iteration)
+	if err := SaveHypothesisTracker(workdir, tracker); err != nil {
+		r.logger.Warn("failed to save dedup hashes", "error", err)
+	}
+	r.dedupHint = ""
 
 	// Step 5: Apply code changes.
 	for filename, content := range changes {
@@ -325,6 +345,26 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 		}
 		return nil
 	}
+
+	// Step 3b: Check for duplicate hypothesis.
+	tracker := LoadHypothesisTracker(workdir)
+	ovHash := HashOverrideChanges(overrides)
+	if dupIter, isDup := tracker.IsDuplicate(ovHash); isDup {
+		r.logger.Warn("duplicate hypothesis detected (constants), skipping",
+			"iteration", iteration, "duplicate_of", dupIter)
+		r.dedupHint = fmt.Sprintf("Your proposal was identical to iteration #%d. Try something substantially different.", dupIter)
+		cfg.ConsecutiveFailures++
+		cfg.TotalIterations = iteration
+		if err := SaveConfig(workdir, cfg); err != nil {
+			return err
+		}
+		return nil
+	}
+	tracker.Record(ovHash, iteration)
+	if err := SaveHypothesisTracker(workdir, tracker); err != nil {
+		r.logger.Warn("failed to save dedup hashes", "error", err)
+	}
+	r.dedupHint = ""
 
 	// Step 4: Apply overrides temporarily.
 	restore, err := ApplyOverrides(workdir, cfg.Constants, overrides)
@@ -530,11 +570,11 @@ func (r *Runner) runExperiment(ctx context.Context, workdir string, cfg *Config,
 			fmt.Errorf("experiment command failed: %w", err)
 	}
 
-	// Parse metric from stdout using pattern or heuristic.
-	metric, mErr := extractMetricSmart(stdout, cfg.MetricPattern)
+	// Parse metric from stdout using configured extraction mode.
+	metric, mErr := extractMetricWithMode(stdout, cfg.MetricPattern, cfg.MetricExtractMode)
 	if mErr != nil {
 		return &experimentResult{stdout: stdout, stderr: stderr},
-			fmt.Errorf("metric extraction failed: %w\nStdout tail: %s", mErr, tailLines(stdout, 5))
+			fmt.Errorf("metric extraction failed: %w", mErr)
 	}
 
 	return &experimentResult{metric: metric, stdout: stdout, stderr: stderr}, nil
@@ -599,18 +639,106 @@ func extractMetric(output string) (float64, error) {
 	return 0, fmt.Errorf("no numeric metric found in output")
 }
 
-// extractMetricSmart dispatches to pattern-based or heuristic extraction,
-// then validates the result for plausibility (NaN, Inf).
+// extractMetricJSON looks for DENEB_METRIC_JSON {"value": N} in output.
+func extractMetricJSON(output string) (float64, bool) {
+	const marker = "DENEB_METRIC_JSON "
+	idx := strings.LastIndex(output, marker)
+	if idx < 0 {
+		return 0, false
+	}
+	jsonStart := idx + len(marker)
+	// Find end of JSON object: scan for closing brace.
+	depth := 0
+	jsonEnd := -1
+	for i := jsonStart; i < len(output); i++ {
+		switch output[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				jsonEnd = i + 1
+			}
+		}
+		if jsonEnd > 0 {
+			break
+		}
+	}
+	if jsonEnd <= 0 {
+		return 0, false
+	}
+
+	var parsed struct {
+		Value float64 `json:"value"`
+	}
+	if err := json.Unmarshal([]byte(output[jsonStart:jsonEnd]), &parsed); err != nil {
+		return 0, false
+	}
+	return parsed.Value, true
+}
+
+// extractMetricKeyValue looks for metric_value=N in output (standard format).
+func extractMetricKeyValue(output string) (float64, bool) {
+	re := regexp.MustCompile(`metric_value=([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)`)
+	matches := re.FindAllStringSubmatch(output, -1)
+	if len(matches) == 0 {
+		return 0, false
+	}
+	// Use last match.
+	last := matches[len(matches)-1]
+	val, err := strconv.ParseFloat(last[1], 64)
+	if err != nil {
+		return 0, false
+	}
+	return val, true
+}
+
+// extractMetricSmart dispatches to the appropriate extraction method based on
+// the configured mode, then validates the result for plausibility (NaN, Inf).
+//
+// In "auto" mode (default), the priority chain is:
+// 1. MetricPattern (explicit regex) — if configured
+// 2. DENEB_METRIC_JSON {"value": N} — structured JSON
+// 3. metric_value=N — standard key-value format
+// 4. Last number heuristic — fallback
 func extractMetricSmart(output, pattern string) (float64, error) {
+	return extractMetricWithMode(output, pattern, "")
+}
+
+// extractMetricWithMode is the full extraction function with mode support.
+func extractMetricWithMode(output, pattern, mode string) (float64, error) {
 	var val float64
 	var err error
-	if pattern != "" {
+
+	switch mode {
+	case "pattern":
+		if pattern == "" {
+			return 0, fmt.Errorf("metric_extract_mode=pattern but no metric_pattern configured")
+		}
 		val, err = extractMetricWithPattern(output, pattern)
-	} else {
+	case "json":
+		v, ok := extractMetricJSON(output)
+		if !ok {
+			return 0, fmt.Errorf("no DENEB_METRIC_JSON found in output\nOutput tail:\n%s", tailLines(output, 5))
+		}
+		val = v
+	case "last_number":
 		val, err = extractMetric(output)
+	default: // "auto" or empty
+		// Priority chain: pattern > JSON > key-value > heuristic.
+		if pattern != "" {
+			val, err = extractMetricWithPattern(output, pattern)
+		} else if v, ok := extractMetricJSON(output); ok {
+			val = v
+		} else if v, ok := extractMetricKeyValue(output); ok {
+			val = v
+		} else {
+			val, err = extractMetric(output)
+		}
 	}
+
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("%w\nOutput tail:\n%s", err, tailLines(output, 5))
 	}
 	// Validate plausibility.
 	if math.IsNaN(val) {

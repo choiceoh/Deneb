@@ -53,10 +53,16 @@ func ToolAutoresearch(runner *autoresearch.Runner) ToolFunc {
 			return autoresearchResults(p.Workdir, p.Format)
 		case "update_constants":
 			return autoresearchUpdateConstants(runner, p.Workdir, p.Constants, p.AutoStart)
+		case "resume":
+			return autoresearchResume(ctx, runner, p.Workdir)
+		case "archive":
+			return autoresearchArchive(p.Workdir)
+		case "runs":
+			return autoresearchListRuns(p.Workdir)
 		case "apply_overrides":
 			return autoresearchApplyOverrides(p.Workdir)
 		default:
-			return "", fmt.Errorf("unknown action: %s (use init, start, stop, status, results, update_constants, or apply_overrides)", p.Action)
+			return "", fmt.Errorf("unknown action: %s (use init, start, stop, status, results, resume, archive, runs, update_constants, or apply_overrides)", p.Action)
 		}
 	}
 }
@@ -281,6 +287,75 @@ func autoresearchApplyOverrides(workdir string) (string, error) {
 		sb.WriteString(fmt.Sprintf("  %s = %s\n", name, val))
 	}
 	sb.WriteString("\nThe overrides are now baked into the source files. Commit when ready.")
+	return sb.String(), nil
+}
+
+func autoresearchResume(ctx context.Context, runner *autoresearch.Runner, workdir string) (string, error) {
+	if runner.IsRunning() {
+		return "", fmt.Errorf("autoresearch already running — stop it first")
+	}
+	cfg, err := autoresearch.LoadConfig(workdir)
+	if err != nil {
+		return "", fmt.Errorf("no experiment found to resume: %w", err)
+	}
+	if cfg.TotalIterations == 0 {
+		return "", fmt.Errorf("no iterations completed — use action=start instead")
+	}
+
+	cfg.Resume = true
+	if err := autoresearch.SaveConfig(workdir, cfg); err != nil {
+		return "", fmt.Errorf("save config: %w", err)
+	}
+
+	if key := toolctx.SessionKeyFromContext(ctx); key != "" {
+		runner.SetSessionKey(key)
+	}
+	if err := runner.Start(workdir); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("Autoresearch resumed from iteration %d\n"+
+		"Metric: %s (%s)\n"+
+		"Branch: autoresearch/%s\n"+
+		"Best so far: %v\n"+
+		"The loop continues autonomously.",
+		cfg.TotalIterations, cfg.MetricName, cfg.MetricDirection,
+		cfg.BranchTag, cfg.BestMetric), nil
+}
+
+func autoresearchArchive(workdir string) (string, error) {
+	cfg, err := autoresearch.LoadConfig(workdir)
+	if err != nil {
+		return "", fmt.Errorf("no experiment found: %w", err)
+	}
+	path, err := autoresearch.ArchiveRun(workdir, cfg.BranchTag)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Experiment archived to %s\n"+
+		"Metric: %s, Iterations: %d, Best: %v",
+		path, cfg.MetricName, cfg.TotalIterations, cfg.BestMetric), nil
+}
+
+func autoresearchListRuns(workdir string) (string, error) {
+	runs, err := autoresearch.ListRuns(workdir)
+	if err != nil {
+		return "", err
+	}
+	if len(runs) == 0 {
+		return "No archived runs found.", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Archived runs (%d):\n\n", len(runs)))
+	for _, run := range runs {
+		sb.WriteString(fmt.Sprintf("  %s — %s (%s)\n", run.Tag, run.MetricName, run.Direction))
+		sb.WriteString(fmt.Sprintf("    Iterations: %d, Kept: %d\n", run.TotalIterations, run.KeptIterations))
+		if run.BaselineMetric != nil && run.BestMetric != nil {
+			sb.WriteString(fmt.Sprintf("    Baseline: %.6f, Best: %.6f\n", *run.BaselineMetric, *run.BestMetric))
+		}
+		sb.WriteString(fmt.Sprintf("    Archived: %s\n\n", run.ArchivedAt))
+	}
 	return sb.String(), nil
 }
 

@@ -24,6 +24,9 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		"autoresearch.stop":    arStop(deps),
 		"autoresearch.results": arResults(deps),
 		"autoresearch.config":  arConfig(deps),
+		"autoresearch.resume":  arResume(deps),
+		"autoresearch.archive": arArchive(deps),
+		"autoresearch.runs":    arRuns(deps),
 	}
 }
 
@@ -263,6 +266,112 @@ func arConfig(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":     true,
 			"config": cfg,
+		})
+	}
+}
+
+// --- autoresearch.resume ---
+
+func arResume(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireRunner(deps, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[struct {
+			Workdir string `json:"workdir"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		if p.Workdir == "" {
+			return rpcerr.MissingParam("workdir").Response(req.ID)
+		}
+
+		cfg, err := ar.LoadConfig(p.Workdir)
+		if err != nil {
+			return rpcerr.NotFound("config").Response(req.ID)
+		}
+		if cfg.TotalIterations == 0 {
+			return rpcerr.InvalidRequest("no iterations completed — use start instead").Response(req.ID)
+		}
+
+		cfg.Resume = true
+		if err := ar.SaveConfig(p.Workdir, cfg); err != nil {
+			return rpcerr.New(protocol.ErrUnavailable, err.Error()).Response(req.ID)
+		}
+
+		if err := deps.Runner.Start(p.Workdir); err != nil {
+			return rpcerr.Conflict(err.Error()).Response(req.ID)
+		}
+		snap := deps.Runner.Status()
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":               true,
+			"running":          snap.Running,
+			"resumed_from":     cfg.TotalIterations,
+			"best_metric":      cfg.BestMetric,
+			"baseline_metric":  cfg.BaselineMetric,
+		})
+	}
+}
+
+// --- autoresearch.archive ---
+
+func arArchive(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireRunner(deps, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[struct {
+			Workdir string `json:"workdir"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		if p.Workdir == "" {
+			return rpcerr.MissingParam("workdir").Response(req.ID)
+		}
+
+		cfg, err := ar.LoadConfig(p.Workdir)
+		if err != nil {
+			return rpcerr.NotFound("config").Response(req.ID)
+		}
+		path, err := ar.ArchiveRun(p.Workdir, cfg.BranchTag)
+		if err != nil {
+			return rpcerr.New(protocol.ErrUnavailable, err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":   true,
+			"path": path,
+			"tag":  cfg.BranchTag,
+		})
+	}
+}
+
+// --- autoresearch.runs ---
+
+func arRuns(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireRunner(deps, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[struct {
+			Workdir string `json:"workdir"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		if p.Workdir == "" {
+			return rpcerr.MissingParam("workdir").Response(req.ID)
+		}
+
+		runs, err := ar.ListRuns(p.Workdir)
+		if err != nil {
+			return rpcerr.New(protocol.ErrUnavailable, err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":    true,
+			"runs":  runs,
+			"count": len(runs),
 		})
 	}
 }

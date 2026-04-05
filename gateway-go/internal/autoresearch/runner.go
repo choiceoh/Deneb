@@ -44,6 +44,9 @@ type Runner struct {
 	transcriptAppendFn TranscriptAppendFn
 	// sessionKey is the session that started this autoresearch run.
 	sessionKey string
+	// dedupHint is set when the last hypothesis was a duplicate.
+	// The next prompt includes this hint to steer the LLM away from repetition.
+	dedupHint string
 }
 
 // NewRunner creates an autoresearch runner.
@@ -191,11 +194,36 @@ func (r *Runner) Start(workdir string) error {
 		return err
 	}
 
-	// Record original branch.
-	currentBranch, _ := gitCurrentBranch(context.Background(), workdir)
-	cfg.OriginalBranch = currentBranch
-	if err := SaveConfig(workdir, cfg); err != nil {
-		return fmt.Errorf("save config with original branch: %w", err)
+	resuming := cfg.Resume && cfg.TotalIterations > 0
+
+	if resuming {
+		// Verify the experiment branch exists.
+		branchName := "autoresearch/" + cfg.BranchTag
+		if !gitBranchExists(context.Background(), workdir, branchName) {
+			return fmt.Errorf("resume failed: branch %s not found", branchName)
+		}
+		// Verify KeptCommit exists in git history.
+		if cfg.KeptCommit != "" {
+			if _, err := gitRevParse(context.Background(), workdir, cfg.KeptCommit); err != nil {
+				return fmt.Errorf("resume failed: kept commit %s not found", cfg.KeptCommit)
+			}
+		}
+		r.logger.Info("resuming autoresearch",
+			"from_iteration", cfg.TotalIterations,
+			"best_metric", cfg.BestMetric,
+			"kept_commit", cfg.KeptCommit)
+		// Clear resume flag so subsequent restarts don't auto-resume.
+		cfg.Resume = false
+		if err := SaveConfig(workdir, cfg); err != nil {
+			return fmt.Errorf("save config after resume: %w", err)
+		}
+	} else {
+		// Record original branch only on fresh start.
+		currentBranch, _ := gitCurrentBranch(context.Background(), workdir)
+		cfg.OriginalBranch = currentBranch
+		if err := SaveConfig(workdir, cfg); err != nil {
+			return fmt.Errorf("save config with original branch: %w", err)
+		}
 	}
 
 	// Create isolated worktrees for experiments.
