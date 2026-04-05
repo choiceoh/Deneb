@@ -336,6 +336,15 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		}
 	}
 
+	// Autonomous continuation is only active in Work mode (or DeepWork).
+	// Normal and Chat modes complete after a single run.
+	if !params.DeepWork {
+		sess := deps.sessions.Get(params.SessionKey)
+		if sess == nil || sess.Mode != session.ModeWork {
+			return
+		}
+	}
+
 	// Autonomous continuation: trigger a new run when:
 	// (a) the LLM explicitly called continue_run, OR
 	// (b) the agent was cut off by hitting max_turns, OR

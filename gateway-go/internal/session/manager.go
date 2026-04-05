@@ -35,6 +35,19 @@ const (
 	KindShadow   Kind = "shadow"
 )
 
+// SessionMode controls the behavioral mode of a session.
+// Each mode gates different capabilities (tool sets, autonomous continuation, etc.).
+type SessionMode string
+
+const (
+	// ModeNormal is the default mode — full tools, no autonomous continuation.
+	ModeNormal SessionMode = ""
+	// ModeChat restricts tools to conversation-only (web search, etc.).
+	ModeChat SessionMode = "chat"
+	// ModeWork enables autonomous continuation and extended agent behavior.
+	ModeWork SessionMode = "work"
+)
+
 // IsInternal returns true for session kinds that are system-internal
 // (cron, subagent, shadow) and should be excluded from user-facing listings.
 func (k Kind) IsInternal() bool {
@@ -95,9 +108,10 @@ type AgentConfig struct {
 // ExecConfig, AgentConfig) for readability; they remain flat in JSON.
 type Session struct {
 	// Core identity and lifecycle.
-	Key            string    `json:"key"`
-	Kind           Kind      `json:"kind"`
-	Status         RunStatus `json:"status,omitempty"`
+	Key            string      `json:"key"`
+	Kind           Kind        `json:"kind"`
+	Mode           SessionMode `json:"mode,omitempty"`
+	Status         RunStatus   `json:"status,omitempty"`
 	Channel        string    `json:"channel,omitempty"`
 	Model          string    `json:"model,omitempty"`
 	UpdatedAt      int64     `json:"updatedAt,omitempty"`

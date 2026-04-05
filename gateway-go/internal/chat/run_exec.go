@@ -645,14 +645,39 @@ func executeAgentRun(
 		maxTokens = *params.MaxTokens
 	}
 
-	// Deep work mode: extend per-run limits for long autonomous sessions.
-	maxTurns := defaultMaxTurns
-	agentTimeout := defaultAgentTimeout
-	nudgeConts := 5
+	// Mode-aware agent config: Work mode gets full agent capabilities;
+	// Normal/Chat modes get reduced limits for quick interactions.
+	isWorkMode := (cachedSession != nil && cachedSession.Mode == session.ModeWork) || params.DeepWork
+
+	maxTurns := 10
+	agentTimeout := 10 * time.Minute
+	if isWorkMode {
+		maxTurns = defaultMaxTurns      // 25
+		agentTimeout = defaultAgentTimeout // 60min
+	}
 	if params.DeepWork {
 		maxTurns = 50
 		agentTimeout = 30 * time.Minute
-		nudgeConts = 7
+	}
+
+	// Work-only features: nudge budget, output recovery, mid-loop compaction.
+	var nudgeBudget *agent.NudgeBudgetConfig
+	maxOutputRecovery := 1 // minimal recovery for all modes
+	maxOutputScaleFactors := []float64{1.5}
+	var midLoopCompactFn func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error)
+	if isWorkMode {
+		nudgeConts := 5
+		if params.DeepWork {
+			nudgeConts = 7
+		}
+		nudgeBudget = &agent.NudgeBudgetConfig{
+			MaxContinuations: nudgeConts,
+			BudgetThreshold:  0.9,
+			MinDeltaTokens:   300,
+		}
+		maxOutputRecovery = 3
+		maxOutputScaleFactors = []float64{1.5, 2.0, 2.0}
+		midLoopCompactFn = buildMidLoopCompactor(deps, params, logger)
 	}
 
 	cfg := agent.AgentConfig{
@@ -709,23 +734,16 @@ func executeAgentRun(
 			}
 			return deps.tools.DeferredLLMTools(names)
 		},
-		// Enable nudge budget continuation and max-tokens recovery.
-		NudgeBudget: &agent.NudgeBudgetConfig{
-			MaxContinuations: nudgeConts,
-			BudgetThreshold:  0.9,
-			MinDeltaTokens:   300,
-		},
-		MaxOutputTokensRecovery:     3,
-		MaxOutputTokensScaleFactors: []float64{1.5, 2.0, 2.0},
+		NudgeBudget:                 nudgeBudget,
+		MaxOutputTokensRecovery:     maxOutputRecovery,
+		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
 		// Suppress nudge when continue_run was already called — the explicit
 		// continuation will start a fresh run, so nudging wastes turns.
 		ContinuationRequested: func() bool {
 			return contSignal != nil && contSignal.Requested()
 		},
 		StreamingToolExecution: true,
-		// Mid-loop compaction: evaluate context size after each tool turn and
-		// compact proactively before the LLM hits context_length_exceeded.
-		OnMidLoopCompact: buildMidLoopCompactor(deps, params, logger),
+		OnMidLoopCompact:       midLoopCompactFn,
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
 		// across runs (fixes the "short-term memory loss" bug).
