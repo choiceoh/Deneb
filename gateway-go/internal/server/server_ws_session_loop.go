@@ -93,9 +93,12 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 
 // runPingLoop sends periodic WebSocket pings and disconnects idle or unresponsive clients.
 // nhooyr.io/websocket handles pong responses automatically; Ping() blocks until pong arrives.
+// Tolerates up to maxPingFailures consecutive failures before closing — GPU inference on
+// DGX Spark can temporarily delay pong responses.
 func (s *Server) runPingLoop(ctx context.Context, client *WsClient) {
 	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
+	var consecutiveFailures int
 	for {
 		select {
 		case <-ctx.Done():
@@ -107,15 +110,23 @@ func (s *Server) runPingLoop(ctx context.Context, client *WsClient) {
 				client.conn.Close(websocket.StatusGoingAway, "idle timeout")
 				return
 			}
-			// Send ping; failure means connection is dead.
-			pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			// Send ping; tolerate transient failures under load.
+			pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 			err := client.conn.Ping(pingCtx)
 			cancel()
 			if err != nil {
-				s.logger.Info("ping failed, closing connection", "connId", client.connID, "error", err)
-				client.conn.Close(websocket.StatusGoingAway, "ping timeout")
-				return
+				consecutiveFailures++
+				if consecutiveFailures >= maxPingFailures {
+					s.logger.Info("ping failed repeatedly, closing connection",
+						"connId", client.connID, "failures", consecutiveFailures, "error", err)
+					client.conn.Close(websocket.StatusGoingAway, "ping timeout")
+					return
+				}
+				s.logger.Debug("ping failed, will retry",
+					"connId", client.connID, "failures", consecutiveFailures, "max", maxPingFailures, "error", err)
+				continue
 			}
+			consecutiveFailures = 0
 		}
 	}
 }

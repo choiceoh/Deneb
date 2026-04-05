@@ -122,7 +122,7 @@ class GatewayClient:
         self.session_key = ""
 
     async def connect(self):
-        self.ws = await websockets.connect(self.uri, max_size=10 * 1024 * 1024)
+        self.ws = await websockets.connect(self.uri, max_size=10 * 1024 * 1024, ping_interval=None)
         await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_CONNECT)
         connect = {
             "type": "req", "id": "repro-hs", "method": "connect",

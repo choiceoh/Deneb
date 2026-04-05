@@ -72,7 +72,7 @@ def score_streaming(delta_count, event_count):
 async def main():
     try:
         ws = await asyncio.wait_for(
-            websockets.connect(f'ws://{HOST}:{PORT}/ws', max_size=10*1024*1024),
+            websockets.connect(f'ws://{HOST}:{PORT}/ws', max_size=10*1024*1024, ping_interval=None),
             timeout=5)
     except Exception as e:
         print(f'connect_error={e}', file=sys.stderr)

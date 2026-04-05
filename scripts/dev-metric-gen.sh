@@ -159,7 +159,7 @@ WS_OK=$(python3 -c "
 import json, asyncio, websockets, time
 async def main():
     try:
-        ws = await asyncio.wait_for(websockets.connect('ws://$HOST:$PORT/ws'), timeout=3)
+        ws = await asyncio.wait_for(websockets.connect('ws://$HOST:$PORT/ws', ping_interval=None), timeout=3)
         await asyncio.wait_for(ws.recv(), timeout=3)
         connect = {'type':'req','id':'m-hs','method':'connect','params':{'minProtocol':1,'maxProtocol':5,'client':{'id':'metric','version':'1.0.0','platform':'test','mode':'control'}}}
         await ws.send(json.dumps(connect))
@@ -250,7 +250,7 @@ WS_OK=$(python3 -c "
 import json, asyncio, websockets, time
 async def main():
     try:
-        ws = await asyncio.wait_for(websockets.connect('ws://$HOST:$PORT/ws'), timeout=3)
+        ws = await asyncio.wait_for(websockets.connect('ws://$HOST:$PORT/ws', ping_interval=None), timeout=3)
         await asyncio.wait_for(ws.recv(), timeout=3)
         connect = {'type':'req','id':'m-hs','method':'connect','params':{'minProtocol':1,'maxProtocol':5,'client':{'id':'metric','version':'1.0.0','platform':'test','mode':'control'}}}
         await ws.send(json.dumps(connect))
