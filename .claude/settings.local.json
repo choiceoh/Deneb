@@ -69,6 +69,15 @@
             "command": ".claude/hooks/worktree-auto-pr.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/bridge-notify.sh"
+          }
+        ]
       }
     ]
   }
