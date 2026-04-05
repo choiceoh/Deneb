@@ -184,7 +184,8 @@ fn print_channels_status(result: &serde_json::Value, probe: bool) {
             let last_activity = acct
                 .get("lastInboundAt")
                 .or_else(|| acct.get("lastOutboundAt"))
-                .and_then(serde_json::Value::as_f64).map_or_else(|| Symbols::DASH.to_string(), format_age);
+                .and_then(serde_json::Value::as_f64)
+                .map_or_else(|| Symbols::DASH.to_string(), format_age);
 
             let mut row = vec![
                 channel.clone(),

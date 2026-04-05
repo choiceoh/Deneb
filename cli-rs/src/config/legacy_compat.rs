@@ -36,6 +36,7 @@ pub fn find_legacy_config_file(state_dir: &std::path::Path) -> Option<std::path:
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use std::fs;

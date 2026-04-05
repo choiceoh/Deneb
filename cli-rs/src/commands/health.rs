@@ -34,10 +34,7 @@ pub async fn run(args: &HealthArgs) -> Result<(), CliError> {
 
             if let Some(obj) = payload.as_object() {
                 if let Some(uptime) = obj.get("uptimeSeconds") {
-                    println!(
-                        "       Uptime    {}",
-                        muted.apply_to(format!("{uptime}s"))
-                    );
+                    println!("       Uptime    {}", muted.apply_to(format!("{uptime}s")));
                 }
                 if let Some(version) = obj.get("version") {
                     println!(

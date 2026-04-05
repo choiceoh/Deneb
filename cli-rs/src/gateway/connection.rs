@@ -140,9 +140,7 @@ fn is_secure_or_loopback(url: &str) -> bool {
             .trim_start_matches('[')
     } else {
         // IPv4/hostname: split on last colon for port
-        authority
-            .rsplit_once(':')
-            .map_or(authority, |(h, _)| h)
+        authority.rsplit_once(':').map_or(authority, |(h, _)| h)
     };
 
     matches!(host, "127.0.0.1" | "localhost" | "::1")
