@@ -114,6 +114,9 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 		var client *http.Client
 		if stage.jar {
 			client = newCookieClient()
+		} else {
+			// Reuse the shared pooled transport for non-cookie requests.
+			client = SharedClient(30 * time.Second)
 		}
 
 		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -250,17 +253,15 @@ func googleCacheURL(originalURL string) string {
 	return "https://webcache.googleusercontent.com/search?q=cache:" + url.QueryEscape(originalURL)
 }
 
-// newCookieClient creates an http.Client with a cookie jar.
-// Some sites block requests that don't accept/send cookies,
+// newCookieClient creates an http.Client with a cookie jar backed by the shared
+// transport. Some sites block requests that don't accept/send cookies,
 // interpreting missing cookies as a bot signal.
 func newCookieClient() *http.Client {
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{
-		Jar:     jar,
-		Timeout: 60 * time.Second,
-		Transport: &http.Transport{
-			DialContext: media.SSRFSafeDialer(),
-		},
+		Jar:       jar,
+		Timeout:   60 * time.Second,
+		Transport: sharedTransport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return fmt.Errorf("too many redirects (5)")

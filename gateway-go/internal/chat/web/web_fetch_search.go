@@ -112,7 +112,7 @@ func perplexityCall(ctx context.Context, apiKey, query string) (answer string, c
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := SharedClient(30 * time.Second).Do(req)
 	if err != nil {
 		return "", nil, fmt.Errorf("perplexity request failed: %w", err)
 	}
@@ -184,7 +184,7 @@ func braveSearchRaw(ctx context.Context, apiKey, query string, count int) ([]sea
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Subscription-Token", apiKey)
 
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	resp, err := SharedClient(15 * time.Second).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("brave search failed: %w", err)
 	}
@@ -224,7 +224,7 @@ func duckDuckGoSearch(ctx context.Context, query string) (string, error) {
 	}
 	req.Header.Set("User-Agent", chromeProfile.headers["User-Agent"])
 
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := SharedClient(10 * time.Second).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("duckduckgo search failed: %w", err)
 	}

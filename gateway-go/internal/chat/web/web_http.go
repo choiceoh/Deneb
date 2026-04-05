@@ -1,18 +1,44 @@
-// web_http.go — HTTP fetch layer: error type, retry, error classification, YouTube.
+// web_http.go — HTTP fetch layer: shared transport, error type, retry, error classification, YouTube.
 //
 // Wraps stealthFetch (web_fetch_stealth.go) and translates HTTP/transport errors
 // into machine-readable webFetchErr codes for agent consumption.
+//
+// Shared transport pool: all web fetches reuse a single *http.Transport with
+// connection pooling (keep-alive, idle connection reuse) and SSRF protection.
+// This avoids per-request TCP+TLS handshake overhead.
 package web
 
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 )
+
+// sharedTransport is a connection-pooling HTTP transport shared across all web
+// fetches. Reuses TCP connections and TLS sessions to avoid per-request
+// handshake overhead. SSRF-safe via media.SSRFSafeDialer().
+var sharedTransport = &http.Transport{
+	DialContext:         media.SSRFSafeDialer(),
+	MaxIdleConns:        32,
+	MaxIdleConnsPerHost: 4,
+	IdleConnTimeout:     90 * time.Second,
+	MaxConnsPerHost:     8,
+	ForceAttemptHTTP2:   true,
+}
+
+// SharedClient returns an *http.Client backed by the shared pooled transport.
+// Timeout is per-call so callers should set it via context or the returned client.
+func SharedClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Transport: sharedTransport,
+		Timeout:   timeout,
+	}
+}
 
 // webFetchErr is a machine-readable fetch error for agent consumption.
 type webFetchErr struct {

@@ -28,7 +28,13 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
+	"golang.org/x/sync/singleflight"
 )
+
+// fetchGroup collapses duplicate in-flight URL fetches into a single request.
+// When multiple goroutines (e.g. search+fetch, concurrent tool calls) request the
+// same URL simultaneously, only one fetch executes and the result is shared.
+var fetchGroup singleflight.Group
 
 // Tool returns the unified web tool handler (fetch + search + search+fetch).
 func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, json.RawMessage) (string, error) {
@@ -90,44 +96,51 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		return applyTruncation(cached, maxChars), nil
 	}
 
-	// Size limit.
-	maxBytes := int64(maxChars * 2)
-	if maxBytes > 5*1024*1024 {
-		maxBytes = 5 * 1024 * 1024
-	}
+	// Singleflight: collapse concurrent fetches for the same URL into one request.
+	// The result is cached after the first fetch completes.
+	v, err, _ := fetchGroup.Do(targetURL, func() (any, error) {
+		maxBytes := int64(maxChars * 2)
+		if maxBytes > 5*1024*1024 {
+			maxBytes = 5 * 1024 * 1024
+		}
 
-	fetchStart := time.Now()
-	result, err := fetchWithRetry(ctx, targetURL, maxBytes)
-	fetchMs := time.Since(fetchStart).Milliseconds()
+		fetchStart := time.Now()
+		result, err := fetchWithRetry(ctx, targetURL, maxBytes)
+		fetchMs := time.Since(fetchStart).Milliseconds()
+		if err != nil {
+			return formatFetchError(classifyFetchError(err, targetURL)), nil
+		}
+
+		rawContent := normalizeCharset(result.Data, result.ContentType)
+		origChars := len(rawContent)
+
+		meta := webFetchMeta{
+			URL: targetURL, FinalURL: result.FinalURL,
+			ContentType: result.ContentType, StatusCode: result.StatusCode,
+			FetchMs: fetchMs, OrigChars: origChars,
+		}
+
+		content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
+
+		meta.ExtractChars = len(content)
+		if origChars > 0 {
+			meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
+		} else {
+			meta.Retention = "0%"
+		}
+		if meta.WordCount == 0 {
+			meta.WordCount = estimateWordCount(content)
+		}
+
+		fullResult := formatFetchResult(meta, content)
+		cache.Put(targetURL, fullResult)
+		return fullResult, nil
+	})
 	if err != nil {
-		return formatFetchError(classifyFetchError(err, targetURL)), nil
+		return "", err
 	}
 
-	rawContent := normalizeCharset(result.Data, result.ContentType)
-	origChars := len(rawContent)
-
-	meta := webFetchMeta{
-		URL: targetURL, FinalURL: result.FinalURL,
-		ContentType: result.ContentType, StatusCode: result.StatusCode,
-		FetchMs: fetchMs, OrigChars: origChars,
-	}
-
-	content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
-
-	meta.ExtractChars = len(content)
-	if origChars > 0 {
-		meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
-	} else {
-		meta.Retention = "0%"
-	}
-	if meta.WordCount == 0 {
-		meta.WordCount = estimateWordCount(content)
-	}
-
-	fullResult := formatFetchResult(meta, content)
-	cache.Put(targetURL, fullResult)
-
-	return applyTruncation(fullResult, maxChars), nil
+	return applyTruncation(v.(string), maxChars), nil
 }
 
 // webSearchAndFetch searches the web and auto-fetches the top N results.
