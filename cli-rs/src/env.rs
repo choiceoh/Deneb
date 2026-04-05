@@ -78,6 +78,7 @@ pub fn read_config_env() -> ConfigEnv {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::{get_env_trimmed, is_truthy_env, resolve_home_dir};
     use std::path::PathBuf;

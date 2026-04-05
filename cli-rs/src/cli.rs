@@ -160,6 +160,7 @@ pub enum Commands {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::{Cli, Commands};
     use clap::Parser;
