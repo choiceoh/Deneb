@@ -945,14 +945,44 @@ def _get_filler(chars: int) -> str:
     return _FILLER_CACHE[chars]
 
 
+# File-based filler: load pre-built .md files from scripts/testdata/.
+_FILLER_FILES: list[str] = []
+_FILLER_FILE_IDX: int = 0
+
+
+def _load_filler_files() -> list[str]:
+    """Load pre-built filler files from scripts/testdata/filler-*.md."""
+    global _FILLER_FILES
+    if _FILLER_FILES:
+        return _FILLER_FILES
+    filler_dir = SCRIPT_DIR / "testdata"
+    paths = sorted(filler_dir.glob("filler-*.md"))
+    if not paths:
+        raise FileNotFoundError(f"No filler files in {filler_dir}")
+    _FILLER_FILES = [p.read_text() for p in paths]
+    return _FILLER_FILES
+
+
+def _next_filler_file() -> str:
+    """Return next filler file content, cycling through available files."""
+    global _FILLER_FILE_IDX
+    files = _load_filler_files()
+    text = files[_FILLER_FILE_IDX % len(files)]
+    _FILLER_FILE_IDX += 1
+    return text
+
+
 def generate_message(gen_type: str) -> str:
     """Generate special test messages that can't be expressed in YAML."""
     if gen_type == "long_korean":
         return "이것은 매우 긴 메시지입니다. " * 250 + "마지막 질문: 1+1은?"
     if gen_type == "medium_korean":
         return "이것은 중간 길이 테스트 메시지입니다. " * 200 + "마지막 질문: 이 메시지 잘 읽었어?"
-    # filler_NNk: generate ~NN×1000 chars of filler text.
-    # Example: "filler_120k" → ~120,000 chars (~30K-40K tokens)
+    # filler: load from pre-built .md files (cycles through 7 topic files).
+    if gen_type == "filler":
+        text = _next_filler_file()
+        return text + "\n\n위 내용은 참고용 기술 문서야. 읽어두기만 해."
+    # filler_NNk: generate ~NN×1000 chars of filler text (legacy).
     m = re.match(r"filler_(\d+)k(?:_(.+))?", gen_type)
     if m:
         chars = int(m.group(1)) * 1000
