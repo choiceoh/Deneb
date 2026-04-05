@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deneb Gateway Quality Test Runner — 300 data-driven test cases.
+Deneb Gateway Quality Test Runner — 159 consolidated test cases.
 
 Loads test definitions from quality-tests.yaml and executes them
 against the dev gateway via WebSocket.
@@ -9,7 +9,7 @@ Usage:
     python3 scripts/dev-quality-test.py [--port 18790] [--scenario all]
     python3 scripts/dev-quality-test.py --scenario daily       # daily chat
     python3 scripts/dev-quality-test.py --scenario system      # system mgmt
-    python3 scripts/dev-quality-test.py --scenario core        # original 17 quick tests
+    python3 scripts/dev-quality-test.py --scenario core        # core quick tests
     python3 scripts/dev-quality-test.py --custom "메시지"       # custom message
     python3 scripts/dev-quality-test.py --list                 # list all tests
 """
@@ -62,11 +62,11 @@ SCENARIO_ALIASES = {
     "health":     ["health"],
 }
 
-# Core subset: the original ~17 essential tests for quick checks.
+# Core subset: essential tests for quick checks.
 CORE_TESTS = {
     "health-rpc", "health-http",
-    "daily-hi", "daily-who-are-you",
-    "sys-status",
+    "daily-hi", "daily-identity",
+    "sys-overview",
     "fmt-list-3",
     "code-read-main", "code-grep-pattern", "code-line-count",
     "task-echo", "task-pwd",
@@ -949,6 +949,8 @@ def generate_message(gen_type: str) -> str:
     """Generate special test messages that can't be expressed in YAML."""
     if gen_type == "long_korean":
         return "이것은 매우 긴 메시지입니다. " * 250 + "마지막 질문: 1+1은?"
+    if gen_type == "medium_korean":
+        return "이것은 중간 길이 테스트 메시지입니다. " * 200 + "마지막 질문: 이 메시지 잘 읽었어?"
     # filler_NNk: generate ~NN×1000 chars of filler text.
     # Example: "filler_120k" → ~120,000 chars (~30K-40K tokens)
     m = re.match(r"filler_(\d+)k(?:_(.+))?", gen_type)
@@ -1538,7 +1540,7 @@ def main():
         "chat", "tools", "tools-deep",
     ]
 
-    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (300 cases)")
+    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (159 cases)")
     parser.add_argument("--port", type=int, default=PORT,
                         help=f"Gateway port (default: {PORT})")
     parser.add_argument("--scenario", default="all", choices=all_scenarios,
