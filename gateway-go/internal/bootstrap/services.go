@@ -52,8 +52,8 @@ func newGeminiEmbedder(logger *slog.Logger) *embedding.GeminiEmbedder {
 // initVega configures the Vega search backend with Gemini embedding,
 // lightweight model query expansion, and Jina reranking. Returns false if unavailable.
 func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.GeminiEmbedder) bool {
-	lwURL := modelrole.DefaultLocalAIBaseURL
-	lwModel := modelrole.DefaultLocalAIModel
+	lwURL := modelrole.DefaultVllmBaseURL
+	lwModel := modelrole.DefaultVllmModel
 
 	if !vega.ShouldEnableVega(ffi.Available, lwURL, logger) {
 		logger.Info("vega: disabled (FFI not available)")

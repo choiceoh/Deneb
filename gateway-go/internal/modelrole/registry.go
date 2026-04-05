@@ -59,6 +59,7 @@ const (
 	DefaultLocalAIModel   = "Qwen/Qwen3.5-35B-A3B"
 
 	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
+	DefaultVllmModel   = "qwen3.5"
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 	DefaultZaiModel   = "glm-5-turbo"
@@ -96,10 +97,10 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 			APIKey:     mainAPIKey,
 		},
 		RoleLightweight: {
-			ProviderID: "localai",
-			Model:      DefaultLocalAIModel,
-			BaseURL:    DefaultLocalAIBaseURL,
-			APIKey:     resolveLocalAIAPIKey(),
+			ProviderID: "vllm",
+			Model:      DefaultVllmModel,
+			BaseURL:    DefaultVllmBaseURL,
+			APIKey:     resolveVllmAPIKey(),
 		},
 		RoleFallback: {
 			ProviderID: "google",
@@ -286,11 +287,22 @@ func resolveLocalAIAPIKey() string {
 	return "local"
 }
 
+// resolveVllmAPIKey reads VLLM_API_KEY from environment, defaulting to "local"
+// for local vLLM servers that accept any bearer token.
+func resolveVllmAPIKey() string {
+	if key := os.Getenv("VLLM_API_KEY"); key != "" {
+		return key
+	}
+	return "local"
+}
+
 // resolveAPIKey attempts to resolve an API key for a provider from environment.
 func resolveAPIKey(providerID string) string {
 	switch providerID {
 	case "localai":
 		return resolveLocalAIAPIKey()
+	case "vllm":
+		return resolveVllmAPIKey()
 	case "google":
 		return os.Getenv("GEMINI_API_KEY")
 	case "zai":

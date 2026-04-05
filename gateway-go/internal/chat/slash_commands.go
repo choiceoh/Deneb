@@ -105,6 +105,12 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "mode",
 			Args:     args,
 		}
+	case "mail", "메일":
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "mail",
+		}
 	case "chart":
 		return &SlashResult{
 			Handled:  true,

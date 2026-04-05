@@ -52,7 +52,7 @@ func LightweightBaseURL() string {
 	if pkgRegistry != nil {
 		return pkgRegistry.BaseURL(modelrole.RoleLightweight)
 	}
-	return modelrole.DefaultLocalAIBaseURL
+	return modelrole.DefaultVllmBaseURL
 }
 
 // --- local AI health check (cached) ---
@@ -148,12 +148,12 @@ func getRoleModel(role modelrole.Role, defaultModel string) string {
 
 // GetLightweightClient returns the cached LLM client for the lightweight model role.
 func GetLightweightClient() *llm.Client {
-	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultLocalAIBaseURL, "local")
+	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultVllmBaseURL, "local")
 }
 
 // GetLightweightModel returns the model name for the lightweight role.
 func GetLightweightModel() string {
-	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultLocalAIModel)
+	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultVllmModel)
 }
 
 // CallLocalLLM invokes the lightweight (local AI) model with fallback chain.
