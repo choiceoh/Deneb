@@ -642,14 +642,6 @@ func mergeDuplicatesTextOnly(ctx context.Context, store *Store, logger *slog.Log
 
 // --- Phase 2.5: Consolidation ---
 
-type consolidatePhase struct{}
-
-func (consolidatePhase) Name() string { return "consolidate" }
-func (consolidatePhase) Run(ctx context.Context, s *dreamState) error {
-	// TODO: implement fact consolidation (group related facts, compress).
-	s.logger.Debug("aurora-dream: consolidate phase (not yet implemented)")
-	return nil
-}
 
 // --- Phase 3: Pattern Extraction ---
 
