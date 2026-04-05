@@ -566,7 +566,23 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 		}
 	}
 
-	// 3. Fall back to pre-configured client.
+	// 3. Try registry: the modelrole.Registry has cached clients for known
+	// provider/role mappings (vllm, google, localai, etc.) with correct base
+	// URLs and API keys. This covers model-switch scenarios (e.g., /model
+	// vllm/qwen3.5) where providerConfigs and authManager have no entry.
+	if deps.registry != nil && providerID != "" {
+		for _, role := range []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RoleFallback} {
+			cfg := deps.registry.Config(role)
+			if cfg.ProviderID == providerID {
+				if client := deps.registry.Client(role); client != nil {
+					logger.Info("using provider from registry", "provider", providerID, "role", string(role))
+					return client
+				}
+			}
+		}
+	}
+
+	// 4. Fall back to pre-configured client.
 	return deps.llmClient
 }
 
