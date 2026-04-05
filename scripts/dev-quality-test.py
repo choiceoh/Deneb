@@ -571,7 +571,11 @@ class GatewayClient:
                         capture.final_response = frame
                         capture.end_time = time.time()
                         if state == "done":
-                            capture.reply_text = payload.get("text", capture.all_text)
+                            done_text = payload.get("text")
+                            if done_text is not None:
+                                capture.reply_text = done_text
+                            else:
+                                capture.reply_text = capture.all_text
                             capture.token_usage_data = payload.get("usage", {})
                         elif state in ("error", "aborted"):
                             capture.errors.append(payload.get("error", f"state={state}"))
@@ -592,7 +596,10 @@ class GatewayClient:
                 elif evt == "sessions.changed":
                     capture.status_changes.append(payload)
 
-        if not capture.reply_text and capture.all_text:
+        # Only fall back to accumulated deltas when the complete event was
+        # never received (e.g., timeout). When the server sends an explicit
+        # "done" event with text="" (e.g., suppressed NO_REPLY), respect that.
+        if not capture.reply_text and capture.all_text and not capture.final_response:
             capture.reply_text = capture.all_text
         if not capture.end_time:
             capture.end_time = time.time()
@@ -607,8 +614,10 @@ class GatewayClient:
 
 def check_korean_response(text: str) -> tuple[bool, str]:
     """Check if response contains Korean characters (excludes code refs)."""
-    # Strip backtick-wrapped code references which are inherently English.
-    prose = re.sub(r"`[^`]+`", "", text)
+    # Strip fenced code blocks (```...```) and inline backtick code references
+    # which are inherently English and should not affect Korean ratio.
+    prose = re.sub(r"```[\s\S]*?```", "", text)
+    prose = re.sub(r"`[^`]+`", "", prose)
     korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", prose))
     total_alpha = len(re.findall(r"[a-zA-Z\uac00-\ud7af]", prose))
     if total_alpha == 0:
@@ -846,12 +855,14 @@ def _eval_param(key: str, val, capture: ChatCapture) -> tuple[str, bool, str]:
                 f"{len(items)} items (min: {min_items})")
 
     if key == "has_reply":
-        # Parameterized has_reply: {has_reply: {min_chars: 20}}
+        # Parameterized has_reply: {has_reply: {min_chars: 20, min_alpha: 3}}
         if isinstance(val, dict):
             min_c = val.get("min_chars", 10)
+            min_a = val.get("min_alpha", 5)
         else:
             min_c = int(val) if val else 10
-        ok, detail = check_response_substance(text, min_c)
+            min_a = 5
+        ok, detail = check_response_substance(text, min_c, min_a)
         return ("has_reply", ok, detail)
 
     return (key, False, f"unknown param check: {key}={val}")

@@ -11,6 +11,9 @@ func TestIsSilentReply(t *testing.T) {
 		{"  NO_REPLY  ", true},
 		{"\nNO_REPLY\n", true},
 		{"NO_REPLY\n", true},
+		{"NO_REPLY 🐾", true},            // Trailing emoji (model signature)
+		{"NO_REPLY  🐾", true},           // Trailing emoji with extra space
+		{"NO_REPLY 🐾🐾", true},          // Multiple trailing emoji
 		{"Hello NO_REPLY", false},         // Substantive content before token
 		{"NO_REPLY Hello", false},         // Content after token
 		{"Thanks for the update.", false}, // Normal reply
@@ -37,8 +40,10 @@ func TestStripSilentToken(t *testing.T) {
 		{"Some text\nNO_REPLY", "Some text"},
 		{"NO_REPLY", ""},
 		{"  NO_REPLY  ", ""},
+		{"NO_REPLY 🐾", ""},
 		{"Hello world", "Hello world"},
 		{"Report done **NO_REPLY", "Report done"},
+		{"Report done **NO_REPLY 🐾", "Report done"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

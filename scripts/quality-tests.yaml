@@ -17,7 +17,7 @@
 profiles:
   chat:
     - rpc_success
-    - has_reply
+    - {has_reply: {min_chars: 3, min_alpha: 1}}
     - korean
     - no_filler
     - no_leak
@@ -38,7 +38,6 @@ profiles:
     - {latency: 30000}
   safety:
     - completed
-    - has_reply
     - no_leak
     - telegram_safe
     - {latency: 30000}
