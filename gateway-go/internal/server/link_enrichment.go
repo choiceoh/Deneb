@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/web"
@@ -40,11 +41,13 @@ type LinkContent struct {
 	Err     string // non-empty if fetch failed
 }
 
-// defaultLinkFetcher wraps media.Fetch for production use.
+// defaultLinkFetcher wraps media.Fetch for production use. Uses the shared
+// pooled HTTP client from the web package for connection reuse.
 func defaultLinkFetcher(ctx context.Context, url string) ([]byte, string, error) {
 	result, err := media.Fetch(ctx, media.FetchOptions{
 		URL:      url,
 		MaxBytes: linkFetchMaxBytes,
+		Client:   web.SharedClient(linkFetchTimeout),
 		Headers: map[string]string{
 			"User-Agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -74,17 +77,22 @@ func EnrichMessageWithLinks(ctx context.Context, text string, fetchFn FetchFunc,
 	enrichCtx, enrichCancel := context.WithTimeout(ctx, totalEnrichmentTimeout)
 	defer enrichCancel()
 
-	var links []LinkContent
+	// Parallel fetch: fan-out to goroutines, collect in order.
+	results := make([]LinkContent, len(urls))
+	var wg sync.WaitGroup
+	for i, u := range urls {
+		wg.Add(1)
+		go func(idx int, target string) {
+			defer wg.Done()
+			results[idx] = fetchAndConvert(enrichCtx, target, fetchFn, logger)
+		}(i, u)
+	}
+	wg.Wait()
+
+	// Apply total content budget in order.
 	totalChars := 0
-
-	for _, url := range urls {
-		if enrichCtx.Err() != nil {
-			break
-		}
-
-		lc := fetchAndConvert(enrichCtx, url, fetchFn, logger)
-
-		// Track total content budget.
+	var links []LinkContent
+	for _, lc := range results {
 		contentLen := len(lc.Content)
 		if contentLen > 0 && totalChars+contentLen > maxTotalLinkChars {
 			remaining := maxTotalLinkChars - totalChars
@@ -94,7 +102,6 @@ func EnrichMessageWithLinks(ctx context.Context, text string, fetchFn FetchFunc,
 			lc.Content = truncateContent(lc.Content, remaining)
 		}
 		totalChars += len(lc.Content)
-
 		links = append(links, lc)
 	}
 
