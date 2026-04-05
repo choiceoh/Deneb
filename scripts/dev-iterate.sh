@@ -106,12 +106,14 @@ with open('$RESULT_FILE', 'w') as f:
 # --- Robust process management ---
 
 _verify_port_free() {
-  local port="$1" retries=0
-  while (( retries < 20 )); do
+  local port="$1" retries=0 wait_ms=30
+  while (( retries < 15 )); do
     if ! ss -ltnp 2>/dev/null | grep -q ":$port "; then
       return 0
     fi
-    sleep 0.2; retries=$((retries+1))
+    sleep "$(awk "BEGIN {printf \"%.3f\", $wait_ms/1000}")"
+    retries=$((retries+1))
+    wait_ms=$(( wait_ms * 2 )); (( wait_ms > 200 )) && wait_ms=200
   done
   local holder
   holder=$(ss -ltnp 2>/dev/null | grep ":$port " | head -1 || true)
@@ -195,9 +197,10 @@ if [[ "$USE_VCHAT" == "true" ]]; then
   VCHAT_STARTER_PID=$!
   VCHAT_STARTED=true
 
-  # Wait for mock + gateway to be ready.
+  # Wait for mock + gateway to be ready (exponential backoff).
   HEALTHY=false
-  for _ in $(seq 1 80); do
+  _WAIT_MS=50
+  for _ in $(seq 1 50); do
     if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1 && \
        curl -sf "http://$HOST:$VCHAT_MOCK_PORT/control/status" > /dev/null 2>&1; then
       HEALTHY=true
@@ -207,7 +210,8 @@ if [[ "$USE_VCHAT" == "true" ]]; then
     if ! kill -0 "$VCHAT_STARTER_PID" 2>/dev/null; then
       break
     fi
-    sleep 0.2
+    sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
+    _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
   done
   WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
 else
@@ -220,10 +224,11 @@ else
   DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
   GW_PID=$!
 
-  # Wait for health.
+  # Wait for health (exponential backoff: 50ms → 300ms cap).
   START_WAIT_BEGIN=$(date +%s%N)
   HEALTHY=false
-  for _ in $(seq 1 40); do
+  _WAIT_MS=50
+  for _ in $(seq 1 30); do
     if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
       HEALTHY=true
       break
@@ -232,7 +237,8 @@ else
     if ! kill -0 "$GW_PID" 2>/dev/null; then
       break
     fi
-    sleep 0.15
+    sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
+    _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
   done
   WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
 fi
@@ -368,31 +374,32 @@ else
   # Collect per-check results for JSON.
   declare -a CHECK_NAMES=() CHECK_OKS=() CHECK_MSS=() CHECK_DETAILS=()
 
-  # Check 1: Health.
-  C1_START=$(date +%s%N)
-  STATUS=$(curl -sf "http://$HOST:$PORT/health" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
-  C1_MS=$(( ($(date +%s%N) - C1_START) / 1000000 ))
-  if [[ "$STATUS" == "ok" ]]; then
-    PASS=$((PASS+1)); CHECK_OKS+=(true)
-  else
-    CHECK_OKS+=(false)
-  fi
-  CHECK_NAMES+=("health"); CHECK_MSS+=("$C1_MS"); CHECK_DETAILS+=("status=$STATUS")
+  # Run all 3 checks in parallel (health, ready, ws_rpc).
+  _TMP="/tmp/deneb-smoke-$$"
+  C_PAR_START=$(date +%s%N)
 
-  # Check 2: Ready.
-  C2_START=$(date +%s%N)
-  READY=$(curl -sf -o /dev/null -w "%{http_code}" "http://$HOST:$PORT/ready" 2>/dev/null || echo "000")
-  C2_MS=$(( ($(date +%s%N) - C2_START) / 1000000 ))
-  if [[ "$READY" == "200" ]]; then
-    PASS=$((PASS+1)); CHECK_OKS+=(true)
-  else
-    CHECK_OKS+=(false)
-  fi
-  CHECK_NAMES+=("ready"); CHECK_MSS+=("$C2_MS"); CHECK_DETAILS+=("http=$READY")
+  # Check 1: Health (background).
+  (
+    _s=$(date +%s%N)
+    _v=$(curl -sf "http://$HOST:$PORT/health" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+    _ms=$(( ($(date +%s%N) - _s) / 1000000 ))
+    echo "${_v}|${_ms}"
+  ) > "$_TMP-h" 2>/dev/null &
+  _PID_H=$!
 
-  # Check 3: WebSocket handshake + RPC.
-  C3_START=$(date +%s%N)
-  WS_OUT=$(python3 -c "
+  # Check 2: Ready (background).
+  (
+    _s=$(date +%s%N)
+    _v=$(curl -sf -o /dev/null -w "%{http_code}" "http://$HOST:$PORT/ready" 2>/dev/null || echo "000")
+    _ms=$(( ($(date +%s%N) - _s) / 1000000 ))
+    echo "${_v}|${_ms}"
+  ) > "$_TMP-r" 2>/dev/null &
+  _PID_R=$!
+
+  # Check 3: WebSocket handshake + RPC (background).
+  (
+    _s=$(date +%s%N)
+    _v=$(python3 -c "
 import json, asyncio, time, websockets
 async def main():
     try:
@@ -415,9 +422,37 @@ async def main():
         print(f'0|{type(e).__name__}')
 asyncio.run(main())
 " 2>/dev/null || echo "0|python_error")
-  C3_MS=$(( ($(date +%s%N) - C3_START) / 1000000 ))
-  WS_OK="${WS_OUT%%|*}"
-  WS_DETAIL="${WS_OUT#*|}"
+    _ms=$(( ($(date +%s%N) - _s) / 1000000 ))
+    echo "${_v}|${_ms}"
+  ) > "$_TMP-w" 2>/dev/null &
+  _PID_W=$!
+
+  wait $_PID_H $_PID_R $_PID_W
+
+  # Parse health result.
+  _H_RAW=$(cat "$_TMP-h" 2>/dev/null || echo "|0")
+  STATUS="${_H_RAW%%|*}"; C1_MS="${_H_RAW##*|}"
+  if [[ "$STATUS" == "ok" ]]; then
+    PASS=$((PASS+1)); CHECK_OKS+=(true)
+  else
+    CHECK_OKS+=(false)
+  fi
+  CHECK_NAMES+=("health"); CHECK_MSS+=("$C1_MS"); CHECK_DETAILS+=("status=$STATUS")
+
+  # Parse ready result.
+  _R_RAW=$(cat "$_TMP-r" 2>/dev/null || echo "000|0")
+  READY="${_R_RAW%%|*}"; C2_MS="${_R_RAW##*|}"
+  if [[ "$READY" == "200" ]]; then
+    PASS=$((PASS+1)); CHECK_OKS+=(true)
+  else
+    CHECK_OKS+=(false)
+  fi
+  CHECK_NAMES+=("ready"); CHECK_MSS+=("$C2_MS"); CHECK_DETAILS+=("http=$READY")
+
+  # Parse ws_rpc result.
+  _W_RAW=$(cat "$_TMP-w" 2>/dev/null || echo "0|python_error|0")
+  _W_BODY="${_W_RAW%|*}"; C3_MS="${_W_RAW##*|}"
+  WS_OK="${_W_BODY%%|*}"; WS_DETAIL="${_W_BODY#*|}"
   if [[ "$WS_OK" == "1" ]]; then
     PASS=$((PASS+1)); CHECK_OKS+=(true)
   else
@@ -425,7 +460,8 @@ asyncio.run(main())
   fi
   CHECK_NAMES+=("ws_rpc"); CHECK_MSS+=("$C3_MS"); CHECK_DETAILS+=("$WS_DETAIL")
 
-  CHECK_MS=$(( ($(date +%s%N) - CHECK_START) / 1000000 ))
+  rm -f "$_TMP-h" "$_TMP-r" "$_TMP-w"
+  CHECK_MS=$(( ($(date +%s%N) - C_PAR_START) / 1000000 ))
   echo "$PASS/$TOTAL (${CHECK_MS}ms)"
   METRIC_VAL=$PASS
 

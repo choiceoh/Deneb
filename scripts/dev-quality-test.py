@@ -989,38 +989,90 @@ async def run(args):
         print(f"Available categories: {sorted(set(t.get('cat') for t in all_tests))}")
         return 1
 
-    # Connect.
-    client = GatewayClient(HOST, args.port)
+    # Connectivity check.
+    probe = GatewayClient(HOST, args.port)
     try:
-        version = await client.connect()
+        version = await probe.connect()
         count = len(tests) if not args.custom else 1
-        print(f"Connected to gateway v{version} on port {args.port} — running {count} tests")
+        conc = args.concurrency
+        conc_label = f", concurrency={conc}" if conc > 1 else ""
+        print(f"Connected to gateway v{version} on port {args.port} — running {count} tests{conc_label}")
     except Exception as e:
         print(f"Failed to connect to {HOST}:{args.port}: {e}")
         print("Is the dev gateway running? Try: scripts/dev-live-test.sh start")
         return 1
+    finally:
+        await probe.close()
 
     results = []
 
     try:
         if args.custom:
-            r = await run_custom(client, args.custom)
-            results.append(r)
+            client = GatewayClient(HOST, args.port)
+            await client.connect()
+            try:
+                r = await run_custom(client, args.custom)
+                results.append(r)
+            finally:
+                await client.close()
+        elif args.concurrency <= 1:
+            # Sequential mode (legacy behavior).
+            client = GatewayClient(HOST, args.port)
+            await client.connect()
+            try:
+                for i, tdef in enumerate(tests, 1):
+                    name = tdef["name"]
+                    total = len(tests)
+                    print(f"[{i}/{total}] {name}...")
+                    try:
+                        r = await run_test(client, tdef, profiles, cat_defaults)
+                        results.append(r)
+                        status = "PASS" if r.passed else "FAIL"
+                        print(f"  {status} ({r.latency_ms:.0f}ms)")
+                    except Exception as e:
+                        r = QualityResult(name=name)
+                        r.add_check("execution", False, str(e))
+                        results.append(r)
+                        print(f"  ERROR: {e}")
+            finally:
+                await client.close()
         else:
-            for i, tdef in enumerate(tests, 1):
+            # Concurrent mode: semaphore(N) + pipelining.
+            # Scoring/printing happens outside the semaphore so the slot
+            # is freed as soon as the LLM response is received.
+            sem = asyncio.Semaphore(args.concurrency)
+            total = len(tests)
+            done_count = 0
+            print_lock = asyncio.Lock()
+
+            async def _run_one(idx: int, tdef: dict) -> QualityResult:
+                nonlocal done_count
                 name = tdef["name"]
-                total = len(tests)
-                print(f"[{i}/{total}] {name}...")
-                try:
-                    r = await run_test(client, tdef, profiles, cat_defaults)
+                c = GatewayClient(HOST, args.port)
+                async with sem:
+                    await c.connect()
+                    try:
+                        r = await run_test(c, tdef, profiles, cat_defaults)
+                    except Exception as e:
+                        r = QualityResult(name=name)
+                        r.add_check("execution", False, str(e))
+                # Close + print outside sem — frees slot immediately after LLM response.
+                await c.close()
+                async with print_lock:
+                    done_count += 1
+                    status = "PASS" if r.passed else ("FAIL" if r.checks else "ERROR")
+                    print(f"[{done_count}/{total}] {name}... {status} ({r.latency_ms:.0f}ms)")
+                return r
+
+            tasks = [asyncio.create_task(_run_one(i, t)) for i, t in enumerate(tests)]
+            done_results = await asyncio.gather(*tasks, return_exceptions=True)
+            for r in done_results:
+                if isinstance(r, BaseException):
+                    rr = QualityResult(name="unknown")
+                    rr.add_check("execution", False, str(r))
+                    results.append(rr)
+                else:
                     results.append(r)
-                    status = "PASS" if r.passed else "FAIL"
-                    print(f"  {status} ({r.latency_ms:.0f}ms)")
-                except Exception as e:
-                    r = QualityResult(name=name)
-                    r.add_check("execution", False, str(e))
-                    results.append(r)
-                    print(f"  ERROR: {e}")
 
     except KeyboardInterrupt:
         print("\nInterrupted — showing partial results")
@@ -1028,8 +1080,6 @@ async def run(args):
         print(f"Test error: {e}")
         import traceback
         traceback.print_exc()
-    finally:
-        await client.close()
 
     if not results:
         print("No results")
@@ -1060,6 +1110,8 @@ def main():
                         help="List all available tests")
     parser.add_argument("--json", action="store_true",
                         help="Output JSON report")
+    parser.add_argument("--concurrency", type=int, default=2,
+                        help="Max concurrent test runners (default: 2)")
     parser.add_argument("--report", action="store_true",
                         help="Run full quality report (same as --scenario all)")
     args = parser.parse_args()

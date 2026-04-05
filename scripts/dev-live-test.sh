@@ -69,14 +69,15 @@ cmd_start() {
   local pid=$!
   echo "$pid" > "$DEV_PID_FILE"
 
-  # Wait for health.
-  local retries=0
-  while (( retries < 30 )); do
+  # Wait for health (exponential backoff: 50ms → 300ms cap).
+  local retries=0 wait_ms=50
+  while (( retries < 25 )); do
     if curl -sf "http://$DEV_HOST:$DEV_PORT/health" > /dev/null 2>&1; then
       echo "    Running (PID $pid, port $DEV_PORT)"
       return 0
     fi
-    sleep 0.2
+    sleep "$(awk "BEGIN {printf \"%.3f\", $wait_ms/1000}")"
+    wait_ms=$(( wait_ms * 2 )); (( wait_ms > 300 )) && wait_ms=300
     retries=$((retries + 1))
   done
 
@@ -97,14 +98,15 @@ cmd_stop() {
   kill "$pid" 2>/dev/null || true
   rm -f "$DEV_PID_FILE"
 
-  # Wait for port release.
-  local retries=0
-  while (( retries < 20 )); do
+  # Wait for port release (exponential backoff).
+  local retries=0 wait_ms=30
+  while (( retries < 15 )); do
     if ! ss -ltnp 2>/dev/null | grep -q ":$DEV_PORT "; then
       echo "    Stopped"
       return 0
     fi
-    sleep 0.2
+    sleep "$(awk "BEGIN {printf \"%.3f\", $wait_ms/1000}")"
+    wait_ms=$(( wait_ms * 2 )); (( wait_ms > 200 )) && wait_ms=200
     retries=$((retries + 1))
   done
   echo "    WARN: Port $DEV_PORT still in use"
@@ -132,42 +134,54 @@ cmd_health() {
 }
 
 cmd_smoke() {
-  echo "==> Smoke test against $DEV_HOST:$DEV_PORT"
+  echo "==> Smoke test against $DEV_HOST:$DEV_PORT (parallel)"
 
-  # 1. Health endpoint.
-  echo -n "  [1/3] GET /health ... "
-  local health
-  health=$(curl -sf "http://$DEV_HOST:$DEV_PORT/health") || { echo "FAIL"; return 1; }
-  local status
-  status=$(echo "$health" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
-  if [[ "$status" == "ok" ]]; then
-    echo "OK"
-  else
-    echo "FAIL (status=$status)"
-    return 1
-  fi
+  # Run all 3 checks in parallel.
+  local _tmp="/tmp/deneb-livetest-smoke-$$"
 
-  # 2. Ready endpoint.
-  echo -n "  [2/3] GET /ready ... "
-  local ready_code
-  ready_code=$(curl -sf -o /dev/null -w "%{http_code}" "http://$DEV_HOST:$DEV_PORT/ready") || ready_code="000"
-  if [[ "$ready_code" == "200" ]]; then
-    echo "OK"
-  else
-    echo "FAIL (HTTP $ready_code)"
-    return 1
-  fi
+  (curl -sf "http://$DEV_HOST:$DEV_PORT/health" 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null \
+    || echo "") > "$_tmp-h" &
+  local pid_h=$!
 
-  # 3. WebSocket handshake + health RPC.
-  echo -n "  [3/3] WebSocket RPC (health) ... "
+  (curl -sf -o /dev/null -w "%{http_code}" "http://$DEV_HOST:$DEV_PORT/ready" 2>/dev/null \
+    || echo "000") > "$_tmp-r" &
+  local pid_r=$!
+
+  local ws_skip=false
   if command -v python3 &>/dev/null; then
-    local ws_result
-    ws_result=$(_ws_rpc "health" "{}" 2>&1) || { echo "FAIL"; echo "    $ws_result"; return 1; }
-    echo "OK"
+    (_ws_rpc "health" "{}" > /dev/null 2>&1 && echo "ok" || echo "fail") > "$_tmp-w" &
+    local pid_w=$!
   else
-    echo "SKIP (python3 not available)"
+    echo "skip" > "$_tmp-w"
+    ws_skip=true
   fi
 
+  wait $pid_h $pid_r ${pid_w:-}
+
+  # Evaluate results.
+  local failed=0
+
+  local status
+  status=$(cat "$_tmp-h" 2>/dev/null || echo "")
+  echo -n "  [1/3] GET /health ... "
+  if [[ "$status" == "ok" ]]; then echo "OK"; else echo "FAIL (status=$status)"; failed=1; fi
+
+  local ready_code
+  ready_code=$(cat "$_tmp-r" 2>/dev/null || echo "000")
+  echo -n "  [2/3] GET /ready ... "
+  if [[ "$ready_code" == "200" ]]; then echo "OK"; else echo "FAIL (HTTP $ready_code)"; failed=1; fi
+
+  local ws_result
+  ws_result=$(cat "$_tmp-w" 2>/dev/null || echo "fail")
+  echo -n "  [3/3] WebSocket RPC (health) ... "
+  if [[ "$ws_skip" == "true" ]]; then echo "SKIP (python3 not available)"
+  elif [[ "$ws_result" == "ok" ]]; then echo "OK"
+  else echo "FAIL"; failed=1; fi
+
+  rm -f "$_tmp-h" "$_tmp-r" "$_tmp-w"
+
+  if (( failed )); then return 1; fi
   echo "==> All smoke tests passed"
 }
 
@@ -561,7 +575,7 @@ async def main():
     text = ''
     for _ in range(2000):
         try:
-            raw = await asyncio.wait_for(ws.recv(), timeout=120)
+            raw = await asyncio.wait_for(ws.recv(), timeout=30)
         except asyncio.TimeoutError:
             print(f'\n[TIMEOUT after {time.time()-start:.0f}s]')
             break

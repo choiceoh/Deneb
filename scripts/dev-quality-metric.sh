@@ -115,7 +115,7 @@ async def main():
 
         for _ in range(2000):
             try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=120)
+                raw = await asyncio.wait_for(ws.recv(), timeout=30)
             except asyncio.TimeoutError:
                 break
             frame = json.loads(raw)
