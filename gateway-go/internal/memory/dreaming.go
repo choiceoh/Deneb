@@ -24,7 +24,7 @@ import (
 const (
 	DreamingTurnThreshold    = 50
 	DreamingTimeIntervalH    = 8
-	dreamingTimeout          = 15 * time.Minute
+	dreamingTimeout          = 18 * time.Minute
 	dreamingBatchSize        = 50
 	dreamingMaxTokens        = 4096
 	similarityMergeThreshold = 0.78
@@ -33,11 +33,12 @@ const (
 	// Per-phase timeouts prevent earlier phases from starving later ones.
 	// If a phase exceeds its budget, it's cut short but subsequent phases still run.
 	// Sum ~15m; the overall dreamingTimeout acts as a hard ceiling.
-	phaseTimeoutVerify    = 3 * time.Minute
-	phaseTimeoutMerge     = 3 * time.Minute
-	phaseTimeoutPatterns  = 150 * time.Second
-	phaseTimeoutUserModel = 2 * time.Minute
-	phaseTimeoutMutual    = 2 * time.Minute
+	phaseTimeoutVerify       = 3 * time.Minute
+	phaseTimeoutMerge        = 3 * time.Minute
+	phaseTimeoutConsolidate  = 3 * time.Minute
+	phaseTimeoutPatterns     = 150 * time.Second
+	phaseTimeoutUserModel    = 2 * time.Minute
+	phaseTimeoutMutual       = 2 * time.Minute
 )
 
 // DreamingReport summarizes the results of a dreaming cycle.
@@ -157,6 +158,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	}{
 		{verifyPhase{}, phaseTimeoutVerify},
 		{mergePhase{}, phaseTimeoutMerge},
+		{consolidatePhase{}, phaseTimeoutConsolidate},
 		{patternPhase{}, phaseTimeoutPatterns},
 		{userModelPhase{}, phaseTimeoutUserModel},
 		{mutualPhase{}, phaseTimeoutMutual},
