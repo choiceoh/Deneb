@@ -171,6 +171,21 @@ func handleRunSuccess(
 	// Deliver response back to the originating channel (e.g., Telegram).
 	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
+	if params.Delivery != nil && result.Text == "" && !isSilent {
+		logger.Warn("agent produced empty response, nothing to deliver",
+			"session", params.SessionKey,
+			"channel", params.Delivery.Channel,
+			"turns", result.Turns,
+			"stopReason", result.StopReason,
+			"inputTokens", result.Usage.InputTokens,
+			"outputTokens", result.Usage.OutputTokens)
+	}
+	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives == nil {
+		logger.Warn("parseReplyDirectives is nil, channel delivery skipped",
+			"session", params.SessionKey,
+			"channel", params.Delivery.Channel,
+			"textLen", len(result.Text))
+	}
 	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives != nil {
 		directives := deps.parseReplyDirectives(result.Text, params.Delivery.MessageID, "")
 		if directives.IsSilent {
@@ -211,6 +226,12 @@ func handleRunSuccess(
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
+				if deps.replyFunc == nil {
+					logger.Warn("replyFunc is nil, response will not be delivered",
+						"session", params.SessionKey,
+						"channel", params.Delivery.Channel,
+						"textLen", len(replyText))
+				}
 				if deps.replyFunc != nil {
 					// Primary path: channel-specific reply function (handles dedup,
 					// formatting, chunking, etc.).
@@ -566,7 +587,23 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 		}
 	}
 
-	// 3. Fall back to pre-configured client.
+	// 3. Try registry: the modelrole.Registry has cached clients for known
+	// provider/role mappings (vllm, google, localai, etc.) with correct base
+	// URLs and API keys. This covers model-switch scenarios (e.g., /model
+	// vllm/qwen3.5) where providerConfigs and authManager have no entry.
+	if deps.registry != nil && providerID != "" {
+		for _, role := range []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RoleFallback} {
+			cfg := deps.registry.Config(role)
+			if cfg.ProviderID == providerID {
+				if client := deps.registry.Client(role); client != nil {
+					logger.Info("using provider from registry", "provider", providerID, "role", string(role))
+					return client
+				}
+			}
+		}
+	}
+
+	// 4. Fall back to pre-configured client.
 	return deps.llmClient
 }
 
