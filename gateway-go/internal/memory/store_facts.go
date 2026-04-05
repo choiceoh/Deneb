@@ -35,6 +35,16 @@ func (s *Store) CompactMemory(ctx context.Context) (int64, error) {
 // Lower than search dedup (0.60) to catch paraphrased duplicates at write time.
 const insertDedupJaccardThreshold = 0.55
 
+// insertDedupCosineThreshold is the cosine similarity (BGE-M3 embedding) above
+// which a new fact is considered a semantic duplicate. Stage 3 check after
+// FTS+Jaccard misses. Only active when Store.embedder is set.
+const insertDedupCosineThreshold = 0.85
+
+// insertDedupMaxEmbeddings is the maximum number of cached embeddings to scan
+// during Stage 3 dedup. Beyond this count the O(n) scan is too expensive to
+// run under the write lock.
+const insertDedupMaxEmbeddings = 2000
+
 // tier1Threshold mirrors unified.Tier1Threshold to avoid an import cycle.
 const tier1Threshold = 0.85
 
@@ -146,7 +156,66 @@ func (s *Store) findSemanticDuplicate(ctx context.Context, content, category str
 			return id
 		}
 	}
+
+	// Stage 3: embedding-based cosine similarity check.
+	// Catches paraphrased duplicates that FTS+Jaccard misses (different words,
+	// same meaning). Only active when an embedder is configured and the
+	// embedding cache is populated and within the scan size guard.
+	if id := s.findEmbeddingDuplicate(ctx, content, category); id > 0 {
+		return id
+	}
+
 	return 0
+}
+
+// findEmbeddingDuplicate performs a cosine-similarity scan over the in-memory
+// embedding cache to find a semantically duplicate fact. Returns the matching
+// fact ID, or 0 if no duplicate found.
+// Must be called with s.mu held (write lock). EmbedQuery does not touch s.mu
+// so it is safe to call under the lock.
+func (s *Store) findEmbeddingDuplicate(ctx context.Context, content, category string) int64 {
+	if s.embedder == nil {
+		return 0
+	}
+	if !s.embCacheReady || len(s.embCache) == 0 || len(s.embCache) > insertDedupMaxEmbeddings {
+		return 0
+	}
+
+	// 5-second timeout to avoid holding the write lock too long.
+	embedCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	queryVec, err := s.embedder.EmbedQuery(embedCtx, content)
+	if err != nil {
+		return 0
+	}
+
+	// Linear scan over cached embeddings.
+	var bestID int64
+	var bestSim float64
+	for factID, vec := range s.embCache {
+		sim := cosineSimilarity(queryVec, vec)
+		if sim > bestSim {
+			bestSim = sim
+			bestID = factID
+		}
+	}
+
+	if bestSim < insertDedupCosineThreshold {
+		return 0
+	}
+
+	// Verify the candidate is still active and in the same category.
+	var active int
+	var factCategory string
+	err = s.db.QueryRowContext(ctx,
+		`SELECT active, category FROM facts WHERE id = ?`, bestID,
+	).Scan(&active, &factCategory)
+	if err != nil || active != 1 || factCategory != category {
+		return 0
+	}
+
+	return bestID
 }
 
 // GetFact retrieves a fact by ID and increments its access count.

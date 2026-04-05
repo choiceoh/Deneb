@@ -70,6 +70,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		embedder := memory.NewEmbedder(s.embedder, memStore, s.logger)
 		chatCfg.MemoryEmbedder = embedder
 
+		// Wire raw embedder into the Store for semantic dedup at insert time
+		// (Stage 3: BGE-M3 cosine similarity after FTS+Jaccard).
+		memStore.SetEmbedder(s.embedder)
+
 		lwClient := reg.Client(modelrole.RoleLightweight)
 		lwModel := reg.Model(modelrole.RoleLightweight)
 		if lwClient == nil || lwModel == "" {
