@@ -3,7 +3,7 @@ package server
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
@@ -14,5 +14,5 @@ type ChatManager struct {
 	toolDeps      *chat.CoreToolDeps
 	telegramPlug  *telegram.Plugin
 	modelRegistry *modelrole.Registry
-	sglangHub     *sglang.Hub
+	localAIHub     *localai.Hub
 }

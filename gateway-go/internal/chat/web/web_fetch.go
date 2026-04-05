@@ -7,11 +7,11 @@
 //	{"query": "...", "fetch": N}          → Search+fetch (search then auto-fetch top N)
 //
 // Designed for AI agent consumption with structured metadata, machine-readable
-// errors, aggressive noise removal, SGLang AI extraction, and bot-block evasion.
+// errors, aggressive noise removal, local AI extraction, and bot-block evasion.
 //
 // Layer overview:
 //   - web_http.go           — HTTP fetch, retry, error type, error classification
-//   - web_html.go           — HTML → text (FFI, SGLang AI)
+//   - web_html.go           — HTML → text (FFI, local AI)
 //   - web_html_preprocess.go — HTML noise stripping, metadata, signals, charset
 //   - web_content.go        — Content dispatch, metadata type, output formatting
 //   - web_fetch_stealth.go  — Browser profiles, bot-block evasion
@@ -31,7 +31,7 @@ import (
 )
 
 // Tool returns the unified web tool handler (fetch + search + search+fetch).
-func Tool(cache *FetchCache, sglang *SGLangExtractor) func(context.Context, json.RawMessage) (string, error) {
+func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, json.RawMessage) (string, error) {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			URL      string `json:"url"`
@@ -50,7 +50,7 @@ func Tool(cache *FetchCache, sglang *SGLangExtractor) func(context.Context, json
 		switch {
 		case p.URL != "":
 			// Fetch mode: extract content from URL.
-			return webFetchURL(ctx, cache, sglang, p.URL, p.MaxChars)
+			return webFetchURL(ctx, cache, localAI, p.URL, p.MaxChars)
 
 		case p.Query != "":
 			if p.Count <= 0 {
@@ -61,7 +61,7 @@ func Tool(cache *FetchCache, sglang *SGLangExtractor) func(context.Context, json
 				if p.Fetch > 3 {
 					p.Fetch = 3
 				}
-				return webSearchAndFetch(ctx, cache, sglang, p.Query, p.Count, p.Fetch, p.MaxChars)
+				return webSearchAndFetch(ctx, cache, localAI, p.Query, p.Count, p.Fetch, p.MaxChars)
 			}
 			// Search-only mode: return search results.
 			return webSearch(ctx, p.Query, p.Count)
@@ -75,7 +75,7 @@ func Tool(cache *FetchCache, sglang *SGLangExtractor) func(context.Context, json
 }
 
 // webFetchURL fetches a URL and returns extracted content with metadata envelope.
-func webFetchURL(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor, targetURL string, maxChars int) (string, error) {
+func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, targetURL string, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 50000
 	}
@@ -112,7 +112,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor
 		FetchMs: fetchMs, OrigChars: origChars,
 	}
 
-	content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, sglang, &meta)
+	content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
 
 	meta.ExtractChars = len(content)
 	if origChars > 0 {
@@ -132,7 +132,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor
 
 // webSearchAndFetch searches the web and auto-fetches the top N results.
 // Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
-func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor, query string, count, fetchTop, maxChars int) (string, error) {
+func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 30000
 	}
@@ -171,7 +171,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *SGLangExt
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			c, e := webFetchURL(ctx, cache, sglang, fetchURLs[idx], perResultChars)
+			c, e := webFetchURL(ctx, cache, localAI, fetchURLs[idx], perResultChars)
 			results[idx] = fetchResult{content: c, err: e}
 		}(i)
 	}

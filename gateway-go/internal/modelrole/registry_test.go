@@ -16,7 +16,7 @@ func TestResolveModel(t *testing.T) {
 	}{
 		// Role names resolve to full model IDs.
 		{"main", "zai/test-model", RoleMain, true},
-		{"lightweight", "sglang/" + DefaultSglangModel, RoleLightweight, true},
+		{"lightweight", "vllm/" + DefaultVllmModel, RoleLightweight, true},
 		{"fallback", "google/" + DefaultFallbackModel, RoleFallback, true},
 		// Actual model names pass through unchanged.
 		{"google/gemini-3.1-pro", "google/gemini-3.1-pro", "", false},
@@ -49,7 +49,7 @@ func TestRoleForModel(t *testing.T) {
 		wantFound   bool
 	}{
 		{"zai/test-model", RoleMain, true},
-		{"sglang/" + DefaultSglangModel, RoleLightweight, true},
+		{"vllm/" + DefaultVllmModel, RoleLightweight, true},
 		{"google/" + DefaultFallbackModel, RoleFallback, true},
 		{"unknown/model", "", false},
 	}
@@ -109,17 +109,17 @@ func TestFallbackChain(t *testing.T) {
 	}
 }
 
-func TestResolveSglangAPIKey(t *testing.T) {
+func TestResolveLocalAIAPIKey(t *testing.T) {
 	// Default: returns "local" when env var is not set.
-	t.Setenv("SGLANG_API_KEY", "")
-	if got := resolveSglangAPIKey(); got != "local" {
-		t.Errorf("resolveSglangAPIKey() = %q, want %q", got, "local")
+	t.Setenv("LOCAL_AI_API_KEY", "")
+	if got := resolveLocalAIAPIKey(); got != "local" {
+		t.Errorf("resolveLocalAIAPIKey() = %q, want %q", got, "local")
 	}
 
 	// Custom key from environment.
-	t.Setenv("SGLANG_API_KEY", "my-secret-key")
-	if got := resolveSglangAPIKey(); got != "my-secret-key" {
-		t.Errorf("resolveSglangAPIKey() = %q, want %q", got, "my-secret-key")
+	t.Setenv("LOCAL_AI_API_KEY", "my-secret-key")
+	if got := resolveLocalAIAPIKey(); got != "my-secret-key" {
+		t.Errorf("resolveLocalAIAPIKey() = %q, want %q", got, "my-secret-key")
 	}
 }
 
@@ -136,7 +136,7 @@ func TestLogModelAlias(t *testing.T) {
 		},
 		{
 			name: "nested model path",
-			cfg:  ModelConfig{ProviderID: "sglang", Model: "Qwen/Qwen3.5-35B-A3B"},
+			cfg:  ModelConfig{ProviderID: "localai", Model: "Qwen/Qwen3.5-35B-A3B"},
 			want: "Qwen3.5-35B-A3B",
 		},
 		{

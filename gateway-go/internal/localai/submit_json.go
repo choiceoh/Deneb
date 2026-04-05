@@ -1,4 +1,4 @@
-package sglang
+package localai
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 // SubmitJSON sends a request through the hub and unmarshals the JSON response
-// into T. Retries once on parse failure (sglang sampling is non-deterministic).
+// into T. Retries once on parse failure (local AI sampling is non-deterministic).
 // Used by dreaming phases and fact extraction.
 func SubmitJSON[T any](h *Hub, ctx context.Context, req Request) (T, error) {
 	var zero T

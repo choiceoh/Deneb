@@ -14,17 +14,17 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 )
 
 // --- Package-level model role registry ---
 // Set once during handler initialization via SetModelRoleRegistry.
-// Used by role-based LLM helpers, CheckSglangHealth, and other lightweight-model code.
+// Used by role-based LLM helpers, CheckLocalAIHealth, and other lightweight-model code.
 
 var (
 	pkgRegistry     *modelrole.Registry
 	pkgRegistryOnce sync.Once
-	pkgSglangHub    *sglang.Hub
+	pkgLocalAIHub    *localai.Hub
 )
 
 // SetModelRoleRegistry sets the package-level model role registry.
@@ -35,16 +35,16 @@ func SetModelRoleRegistry(reg *modelrole.Registry) {
 	})
 }
 
-// SetSglangHub sets the centralized sglang hub. When set, CallLocalLLM and
-// CheckSglangHealth delegate to the hub instead of making direct calls.
-func SetSglangHub(h *sglang.Hub) {
-	pkgSglangHub = h
+// SetLocalAIHub sets the centralized local AI hub. When set, CallLocalLLM and
+// CheckLocalAIHealth delegate to the hub instead of making direct calls.
+func SetLocalAIHub(h *localai.Hub) {
+	pkgLocalAIHub = h
 }
 
-// GetSglangHub returns the centralized sglang hub, or nil if not set.
+// GetLocalAIHub returns the centralized local AI hub, or nil if not set.
 // Used by callers (e.g., session memory) that need multi-message submission.
-func GetSglangHub() *sglang.Hub {
-	return pkgSglangHub
+func GetLocalAIHub() *localai.Hub {
+	return pkgLocalAIHub
 }
 
 // LightweightBaseURL returns the base URL for the lightweight model.
@@ -52,33 +52,33 @@ func LightweightBaseURL() string {
 	if pkgRegistry != nil {
 		return pkgRegistry.BaseURL(modelrole.RoleLightweight)
 	}
-	return modelrole.DefaultSglangBaseURL
+	return modelrole.DefaultVllmBaseURL
 }
 
-// --- sglang health check (cached) ---
+// --- local AI health check (cached) ---
 
 const (
-	sglangHealthTTL  = 30 * time.Second
-	sglangWarmupTTL  = 5 * time.Second
-	sglangWarmupFor  = 2 * time.Minute
-	sglangHealthPing = 3 * time.Second
+	localAIHealthTTL  = 30 * time.Second
+	localAIWarmupTTL  = 5 * time.Second
+	localAIWarmupFor  = 2 * time.Minute
+	localAIHealthPing = 3 * time.Second
 	pilotTimeout     = 2 * time.Minute
 )
 
 var (
-	sglangHealthy   atomic.Bool
-	sglangLastCheck atomic.Int64 // unix timestamp
-	sglangStartedAt = time.Now()
+	localAIHealthy   atomic.Bool
+	localAILastCheck atomic.Int64 // unix timestamp
+	localAIStartedAt = time.Now()
 )
 
-// SglangRecentlyDown returns true if sglang is known to be unhealthy.
+// LocalAIRecentlyDown returns true if local AI is known to be unhealthy.
 // When the hub is set, delegates to the hub's cached health state (background
 // inference-based probe). Otherwise falls back to the legacy atomic cache.
-func SglangRecentlyDown() bool {
-	if pkgSglangHub != nil {
-		return !pkgSglangHub.IsHealthy()
+func LocalAIRecentlyDown() bool {
+	if pkgLocalAIHub != nil {
+		return !pkgLocalAIHub.IsHealthy()
 	}
-	return !sglangHealthy.Load() && sglangLastCheck.Load() > 0
+	return !localAIHealthy.Load() && localAILastCheck.Load() > 0
 }
 
 // HasRegistry returns true if the model role registry has been set.
@@ -86,47 +86,47 @@ func HasRegistry() bool {
 	return pkgRegistry != nil
 }
 
-// CheckSglangHealth returns true if the local sglang server is reachable.
-// When the sglang hub is set, delegates to the hub's inference-based health check.
+// CheckLocalAIHealth returns true if the local AI server is reachable.
+// When the local AI hub is set, delegates to the hub's inference-based health check.
 // Otherwise falls back to the legacy /v1/models metadata probe.
-func CheckSglangHealth() bool {
-	if pkgSglangHub != nil {
-		return pkgSglangHub.IsHealthy()
+func CheckLocalAIHealth() bool {
+	if pkgLocalAIHub != nil {
+		return pkgLocalAIHub.IsHealthy()
 	}
 
 	// Legacy fallback: metadata-only probe.
 	now := time.Now().Unix()
-	last := sglangLastCheck.Load()
-	ttl := sglangHealthTTL
-	if time.Since(sglangStartedAt) < sglangWarmupFor {
-		ttl = sglangWarmupTTL
+	last := localAILastCheck.Load()
+	ttl := localAIHealthTTL
+	if time.Since(localAIStartedAt) < localAIWarmupFor {
+		ttl = localAIWarmupTTL
 	}
 	if now-last < int64(ttl.Seconds()) {
-		return sglangHealthy.Load()
+		return localAIHealthy.Load()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), sglangHealthPing)
+	ctx, cancel := context.WithTimeout(context.Background(), localAIHealthPing)
 	defer cancel()
 
 	baseURL := LightweightBaseURL()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
 	if err != nil {
-		sglangHealthy.Store(false)
-		sglangLastCheck.Store(now)
+		localAIHealthy.Store(false)
+		localAILastCheck.Store(now)
 		return false
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		sglangHealthy.Store(false)
-		sglangLastCheck.Store(now)
+		localAIHealthy.Store(false)
+		localAILastCheck.Store(now)
 		return false
 	}
 	resp.Body.Close()
 
 	healthy := resp.StatusCode == http.StatusOK
-	sglangHealthy.Store(healthy)
-	sglangLastCheck.Store(now)
+	localAIHealthy.Store(healthy)
+	localAILastCheck.Store(now)
 	return healthy
 }
 
@@ -148,26 +148,26 @@ func getRoleModel(role modelrole.Role, defaultModel string) string {
 
 // GetLightweightClient returns the cached LLM client for the lightweight model role.
 func GetLightweightClient() *llm.Client {
-	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultSglangBaseURL, "local")
+	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultVllmBaseURL, "local")
 }
 
 // GetLightweightModel returns the model name for the lightweight role.
 func GetLightweightModel() string {
-	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultSglangModel)
+	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultVllmModel)
 }
 
-// CallLocalLLM invokes the lightweight (local sglang) model with fallback chain.
-// When the sglang hub is set, delegates to the hub for token budget management,
+// CallLocalLLM invokes the lightweight (local AI) model with fallback chain.
+// When the local AI hub is set, delegates to the hub for token budget management,
 // priority queuing, and zombie request prevention.
 // Optional extraBody maps are merged into the request body (e.g. for chat_template_kwargs).
 // Reasoning mode is disabled by default for all calls.
 func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
 	// Hub path: centralized token budget, priority queue, health check.
-	if pkgSglangHub != nil {
-		return pkgSglangHub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
+	if pkgLocalAIHub != nil {
+		return pkgLocalAIHub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
 	}
 
-	// Legacy path: direct sglang call (used when hub is not yet wired).
+	// Legacy path: direct local AI call (used when hub is not yet wired).
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
@@ -175,8 +175,8 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	model := GetLightweightModel()
 
 	// Always disable reasoning by default; caller-supplied extraBody merges on top.
-	merged := make(map[string]any, len(sglang.NoThinking))
-	for k, v := range sglang.NoThinking {
+	merged := make(map[string]any, len(localai.NoThinking))
+	for k, v := range localai.NoThinking {
 		merged[k] = v
 	}
 	if len(extraBody) > 0 && extraBody[0] != nil {
@@ -185,7 +185,7 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 		}
 	}
 
-	// Inject server-side timeout so sglang aborts generation when the
+	// Inject server-side timeout so local AI aborts generation when the
 	// gateway's context deadline expires. Without this, cancelled requests
 	// become zombies that hold KV cache until max_tokens is exhausted.
 	if deadline, ok := ctx.Deadline(); ok {
@@ -225,7 +225,7 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 				return "", fmt.Errorf("all models failed: %w", err)
 			}
 		} else {
-			return "", fmt.Errorf("sglang stream: %w", err)
+			return "", fmt.Errorf("localai stream: %w", err)
 		}
 	}
 

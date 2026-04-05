@@ -225,8 +225,8 @@ func New(addr string, opts ...Option) (*Server, error) {
 		return nil, fmt.Errorf("register early methods: %w", err)
 	}
 	s.registerSessionRPCMethods() // chat pipeline init + handler creation
-	if s.sglangHub != nil {
-		hub.SetSglangHub(s.sglangHub)
+	if s.localAIHub != nil {
+		hub.SetLocalAIHub(s.localAIHub)
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.registerLateMethods(hub)             // Chat-dependent domains

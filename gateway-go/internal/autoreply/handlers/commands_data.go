@@ -30,5 +30,8 @@ func BuiltinChatCommands() []ChatCommandDefinition {
 		// Help & info
 		{Key: "help", Description: "Show available commands", TextAliases: []string{"/help"}, Scope: ScopeText, Category: CategoryStatus},
 		{Key: "commands", Description: "List commands (paginated)", TextAliases: []string{"/commands"}, AcceptsArgs: true, Args: []CommandArgDefinition{{Name: "page", Description: "Page number (0-indexed)", Type: "number"}}, Scope: ScopeText, Category: CategoryStatus},
+
+		// Routine shortcuts (rewrite → agent passthrough)
+		{Key: "morning", NativeName: "morning", Description: "모닝레터 발송", TextAliases: []string{"/morning"}, Scope: ScopeBoth, Category: CategoryTools},
 	}
 }

@@ -156,10 +156,10 @@ func executeAgentRun(
 		}
 	}
 	// Sync to Aurora store for compaction tracking.
-	// Queue Aurora observer compaction for non-empty user messages.
-	// Skip for system sessions (e.g. diary-heartbeat) — their messages must not
-	// enter the shared Aurora context or they contaminate the user's conversation.
-	if deps.auroraStore != nil && params.Message != "" && !isSystemSession(params.SessionKey) {
+	// Only main sessions (e.g. "telegram:123") write to Aurora — dev-test,
+	// sub-task, cron, and system sessions must not enter the shared Aurora
+	// context or they contaminate the user's conversation.
+	if deps.auroraStore != nil && params.Message != "" && isMainSession(params.SessionKey) {
 		tokenCount := uint64(estimateTokens(params.Message))
 		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
 			logger.Warn("aurora: failed to sync user message", "error", err)
@@ -280,7 +280,7 @@ func executeAgentRun(
 	}
 
 	// 4. Kick off proactive context as a fire-and-forget goroutine.
-	// The local sglang model analyzes the user message and returns a context
+	// The local AI model analyzes the user message and returns a context
 	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
 	// We check for the result non-blocking after the parallel section: if the
 	// hint is ready it gets injected; if not, we skip it rather than stalling.
@@ -337,12 +337,12 @@ func executeAgentRun(
 	}()
 
 	// Context assembly (parallel).
-	// Primary: Aurora store (includes summaries from compaction).
+	// Primary: Aurora store (includes summaries from compaction) — main sessions only.
 	// Fallback: file transcript (no compaction awareness).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
-		if deps.auroraStore != nil {
+		if deps.auroraStore != nil && isMainSession(params.SessionKey) {
 			asmCfg := aurora.AssemblyConfig{
 				TokenBudget:    deps.contextCfg.MemoryTokenBudget,
 				FreshTailCount: deps.contextCfg.FreshTailCount,
@@ -1298,7 +1298,7 @@ func buildMessagePersister(
 		// Sync to Aurora for compaction awareness.
 		// Use formatRichContent to preserve tool_use/tool_result structure
 		// so the compaction summarizer can build accurate <timeline> sections.
-		if deps.auroraStore != nil && !isSystemSession(params.SessionKey) {
+		if deps.auroraStore != nil && isMainSession(params.SessionKey) {
 			text := formatRichContent(chatMsg.Content)
 			if text != "" {
 				tokenCount := uint64(estimateTokens(text))

@@ -785,7 +785,7 @@
                   "providers/perplexity-provider",
                   "providers/qianfan",
                   "providers/qwen",
-                  "providers/sglang",
+                  "providers/localai",
                   "providers/synthetic",
                   "providers/together",
                   "providers/vercel-ai-gateway",

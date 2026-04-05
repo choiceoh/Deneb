@@ -32,10 +32,10 @@ const (
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
 type ModelConfig struct {
-	ProviderID string // e.g., "zai", "sglang", "google"
+	ProviderID string // e.g., "zai", "localai", "google"
 	Model      string // model name sent to the API
 	BaseURL    string // API endpoint URL
-	APIKey     string // empty for keyless providers (e.g., local sglang)
+	APIKey     string // empty for keyless providers (e.g., local AI)
 }
 
 // clientEntry caches a lazily-initialized LLM client per role.
@@ -55,10 +55,11 @@ type Registry struct {
 
 // Default constants for known providers.
 const (
-	DefaultSglangBaseURL = "http://127.0.0.1:30000/v1"
-	DefaultSglangModel   = "Qwen/Qwen3.5-35B-A3B"
+	DefaultLocalAIBaseURL = "http://127.0.0.1:30000/v1"
+	DefaultLocalAIModel   = "Qwen/Qwen3.5-35B-A3B"
 
 	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
+	DefaultVllmModel   = "qwen3.5"
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 	DefaultZaiModel   = "glm-5-turbo"
@@ -96,10 +97,10 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 			APIKey:     mainAPIKey,
 		},
 		RoleLightweight: {
-			ProviderID: "sglang",
-			Model:      DefaultSglangModel,
-			BaseURL:    DefaultSglangBaseURL,
-			APIKey:     resolveSglangAPIKey(),
+			ProviderID: "vllm",
+			Model:      DefaultVllmModel,
+			BaseURL:    DefaultVllmBaseURL,
+			APIKey:     resolveVllmAPIKey(),
 		},
 		RoleFallback: {
 			ProviderID: "google",
@@ -262,8 +263,8 @@ func resolveBaseURL(providerID string) string {
 	switch providerID {
 	case "zai":
 		return DefaultZaiBaseURL
-	case "sglang":
-		return DefaultSglangBaseURL
+	case "localai":
+		return DefaultLocalAIBaseURL
 	case "vllm":
 		return DefaultVllmBaseURL
 	case "google":
@@ -273,10 +274,23 @@ func resolveBaseURL(providerID string) string {
 	}
 }
 
-// resolveSglangAPIKey reads SGLANG_API_KEY from environment, defaulting to "local"
-// for local sglang servers that require a bearer token.
-func resolveSglangAPIKey() string {
+// resolveLocalAIAPIKey reads LOCAL_AI_API_KEY from environment, defaulting to "local"
+// for local AI servers that require a bearer token.
+// Falls back to legacy SGLANG_API_KEY for backward compatibility.
+func resolveLocalAIAPIKey() string {
+	if key := os.Getenv("LOCAL_AI_API_KEY"); key != "" {
+		return key
+	}
 	if key := os.Getenv("SGLANG_API_KEY"); key != "" {
+		return key
+	}
+	return "local"
+}
+
+// resolveVllmAPIKey reads VLLM_API_KEY from environment, defaulting to "local"
+// for local vLLM servers that accept any bearer token.
+func resolveVllmAPIKey() string {
+	if key := os.Getenv("VLLM_API_KEY"); key != "" {
 		return key
 	}
 	return "local"
@@ -285,8 +299,10 @@ func resolveSglangAPIKey() string {
 // resolveAPIKey attempts to resolve an API key for a provider from environment.
 func resolveAPIKey(providerID string) string {
 	switch providerID {
-	case "sglang":
-		return resolveSglangAPIKey()
+	case "localai":
+		return resolveLocalAIAPIKey()
+	case "vllm":
+		return resolveVllmAPIKey()
 	case "google":
 		return os.Getenv("GEMINI_API_KEY")
 	case "zai":

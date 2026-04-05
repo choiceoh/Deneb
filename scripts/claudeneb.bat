@@ -2,7 +2,7 @@
 REM Claudeneb — Claude Desktop + Deneb (Windows)
 REM
 REM Launches Claude Desktop connected to Deneb gateway on DGX Spark.
-REM Uses OpenAI-compatible backend (sglang/z.ai) — no Anthropic key needed.
+REM Uses OpenAI-compatible backend (local AI/z.ai) — no Anthropic key needed.
 REM
 REM Setup:
 REM   1. Install Claude Desktop for Windows

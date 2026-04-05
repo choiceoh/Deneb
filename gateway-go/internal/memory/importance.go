@@ -1,4 +1,4 @@
-// importance.go — Structured fact extraction with importance scoring via SGLang.
+// importance.go — Structured fact extraction with importance scoring via local AI.
 // Inspired by Honcho's Neuromancer inference layer: every ~1000 tokens,
 // evaluate the conversation for facts worth remembering, with structured
 // category and importance scoring.
@@ -47,11 +47,11 @@ type factsResponse struct {
 	Facts []ExtractedFact `json:"facts"`
 }
 
-// factsJSONSchema is the raw JSON Schema passed to SGLang as guided_json.
+// factsJSONSchema is the raw JSON Schema passed to local AI as guided_json.
 // This triggers xgrammar constrained decoding at the token level, forcing
 // the model to produce structurally valid JSON matching this schema.
-// Unlike response_format json_schema (which SGLang may not support),
-// guided_json is the native SGLang parameter for grammar-constrained output.
+// Unlike response_format json_schema (which local AI may not support),
+// guided_json is the native local AI parameter for grammar-constrained output.
 var factsJSONSchema = json.RawMessage(`{
 	"type": "object",
 	"properties": {
@@ -235,7 +235,7 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 
 	var facts []ExtractedFact
 	for attempt := range 2 {
-		text, err := callSglangJSON(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens, factsJSONSchema)
+		text, err := callLocalAIJSON(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens, factsJSONSchema)
 		if err != nil {
 			return nil, fmt.Errorf("importance extraction: %w", err)
 		}
@@ -407,6 +407,19 @@ func parseFactsResponse(text string) ([]ExtractedFact, bool) {
 	var resp factsResponse
 	if err := json.Unmarshal([]byte(text), &resp); err == nil && resp.Facts != nil {
 		return resp.Facts, true
+	}
+
+	// Pre-process: unescape double-encoded JSON if initial parse failed.
+	// Local models under guided_json sometimes backslash-escape all quotes:
+	//   {\"facts\": [{\"content\": \"hello\"}]}
+	// Unescape here so all subsequent strategies (Case 2-7) work on clean text.
+	if unescaped := jsonutil.UnescapeDoubleEncoded(text); unescaped != text {
+		text = unescaped
+		text = jsonutil.StripTrailingCommas(text)
+		// Retry Case 1 with unescaped text.
+		if err := json.Unmarshal([]byte(text), &resp); err == nil && resp.Facts != nil {
+			return resp.Facts, true
+		}
 	}
 
 	// Case 2: bare JSON array.

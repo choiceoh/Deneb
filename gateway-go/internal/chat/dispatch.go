@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
@@ -284,6 +285,9 @@ func (h *Handler) handleSlashCommand(
 		}
 		h.deliverSlashResponse(delivery, "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.")
 
+	case "mail":
+		go h.handleMailCommand(reqID, sessionKey, delivery)
+
 	case "chart":
 		// Prefer the most recently used autoresearch workdir (from Runner)
 		// so /chart works regardless of the global workspace config.
@@ -343,6 +347,45 @@ func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
 	if err := fn(ctx, delivery, text); err != nil {
 		h.logger.Warn("slash command reply failed", "error", err)
 	}
+}
+
+// handleMailCommand fetches the Gmail inbox and either responds directly (no mail)
+// or starts an LLM run with the inbox data for analysis.
+func (h *Handler) handleMailCommand(reqID, sessionKey string, delivery *DeliveryContext) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	client, err := gmail.GetClient()
+	if err != nil {
+		h.deliverSlashResponse(delivery, "📬 Gmail 인증 정보를 찾을 수 없습니다.")
+		return
+	}
+
+	unread, err := client.Search(ctx, "is:unread", 10)
+	if err != nil {
+		h.deliverSlashResponse(delivery, fmt.Sprintf("📬 메일 조회 실패: %s", err))
+		return
+	}
+
+	var prompt string
+	if len(unread) > 0 {
+		inbox := gmail.FormatSearchResults(unread)
+		prompt = fmt.Sprintf("안 읽은 메일 %d건을 확인했어. 각 메일을 분석해서 요약해줘.\n\n%s", len(unread), inbox)
+	} else {
+		// No unread — fetch recent mail instead.
+		recent, err := client.Search(ctx, "newer_than:3d", 10)
+		if err != nil || len(recent) == 0 {
+			h.deliverSlashResponse(delivery, "📬 새로운 메일이 없습니다.")
+			return
+		}
+		inbox := gmail.FormatSearchResults(recent)
+		prompt = fmt.Sprintf("안 읽은 메일은 없어. 최근 메일 %d건을 확인했어. 요약해줘.\n\n%s", len(recent), inbox)
+	}
+	h.startAsyncRun(reqID, RunParams{
+		SessionKey: sessionKey,
+		Message:    prompt,
+		Delivery:   delivery,
+	}, false)
 }
 
 // buildSessionStatus constructs a human-readable session status string.

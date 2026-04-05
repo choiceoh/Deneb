@@ -72,12 +72,12 @@ func processFetchedContent(
 	rawBytes []byte,
 	contentType string,
 	url string,
-	sglang *SGLangExtractor,
+	localAI *LocalAIExtractor,
 	meta *webFetchMeta,
 ) string {
 	switch classifyContentType(contentType) {
 	case contentTypeHTML:
-		return processHTML(ctx, rawContent, url, sglang, meta)
+		return processHTML(ctx, rawContent, url, localAI, meta)
 	case contentTypeJSON:
 		return processJSON(rawContent)
 	case contentTypeDocument:

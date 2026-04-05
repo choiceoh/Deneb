@@ -14,7 +14,7 @@ func TestPrintBanner_NoColor(t *testing.T) {
 		Addr:         "127.0.0.1:18789",
 		RustFFI:      true,
 		VegaEnabled:  true,
-		SglangStatus: "online",
+		LocalAIStatus: "online",
 	}
 	PrintBanner(&buf, info, false)
 
@@ -25,7 +25,7 @@ func TestPrintBanner_NoColor(t *testing.T) {
 		"rust-ffi",
 		"127.0.0.1:18789",
 		"enabled",
-		"sglang",
+		"localai",
 		"online",
 		"ready.",
 	} {
@@ -47,7 +47,7 @@ func TestPrintBanner_WithColor(t *testing.T) {
 		Addr:         "127.0.0.1:18789",
 		RustFFI:      false,
 		VegaEnabled:  false,
-		SglangStatus: "offline",
+		LocalAIStatus: "offline",
 	}
 	PrintBanner(&buf, info, true)
 
@@ -59,7 +59,7 @@ func TestPrintBanner_WithColor(t *testing.T) {
 		t.Errorf("vega should show disabled:\n%s", got)
 	}
 	if !strings.Contains(got, "offline") {
-		t.Errorf("sglang should show offline:\n%s", got)
+		t.Errorf("localai should show offline:\n%s", got)
 	}
 }
 
