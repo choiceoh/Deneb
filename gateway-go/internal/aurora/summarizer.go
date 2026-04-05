@@ -270,6 +270,24 @@ func NewHubSummarizer(hub *localai.Hub) Summarizer {
 	}
 }
 
+// WithFallback wraps a primary Summarizer with a fallback: if the primary
+// returns an error, the fallback is tried before resorting to deterministic
+// truncation. This lets compaction survive a single-model failure (e.g.,
+// local sglang down) by routing to a cloud model immediately.
+func WithFallback(primary, fallback Summarizer) Summarizer {
+	if fallback == nil {
+		return primary
+	}
+	return func(text string, aggressive bool, opts *SummarizeOptions) (string, error) {
+		result, err := primary(text, aggressive, opts)
+		if err == nil {
+			return result, nil
+		}
+		// Primary failed — try fallback model immediately.
+		return fallback(text, aggressive, opts)
+	}
+}
+
 func safeUint32(p *uint32) uint32 {
 	if p == nil {
 		return 0

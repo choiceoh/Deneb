@@ -1095,6 +1095,24 @@ func executeAgentRun(
 					}
 				}
 
+				// Emergency drop: if messages are extremely large, drop oldest
+				// (keep first 2 + last 8) before expensive LLM compaction.
+				if len(messages) > 20 {
+					estTokens := estimateMessagesTokens(messages)
+					if estTokens > int(deps.contextCfg.LiveTokenBudget) {
+						const keepHead, keepTail = 2, 8
+						if len(messages) > keepHead+keepTail {
+							dropped := len(messages) - keepHead - keepTail
+							kept := make([]llm.Message, 0, keepHead+keepTail)
+							kept = append(kept, messages[:keepHead]...)
+							kept = append(kept, messages[len(messages)-keepTail:]...)
+							messages = kept
+							logger.Info("context overflow: emergency drop before compaction",
+								"dropped", dropped, "remaining", len(messages))
+						}
+					}
+				}
+
 				// Strip images before compaction — they waste tokens in the
 				// summarization call and can cause prompt-too-long errors.
 				preCompactMsgs := compact.StripImageBlocks(messages)

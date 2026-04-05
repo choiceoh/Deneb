@@ -64,7 +64,7 @@ category_defaults:
   user:       {profile: tool,   critical: 2,   timeout: 90}
 
 # ================================================================
-# TEST DEFINITIONS — 159 tests
+# TEST DEFINITIONS — 156 tests
 # ================================================================
 tests:
 
@@ -934,74 +934,37 @@ tests:
   # 다수의 턴을 발생시켜 프로액티브 컴팩션을 발동시키고 요약 품질을 검증한다.
   # ============================================================
 
-  # 1. 복수 사실 리콜 — 이름/날짜/코드가 컴팩션 후 살아남는지
-  - name: compact-fact-recall
+  # 종합 컴팩션 테스트 — 사실/정정/도구/연산 모두 주입 → filler → 전체 리콜
+  # 기존 5개 테스트(fact/tool/correction/arithmetic/mixed)를 1개로 통합.
+  # 테스트 전용 값(ZETA-*)을 사용하여 실제 메모리와 충돌 방지.
+  - name: compact-recall
     cat: compact
     timeout: 300
     turns:
-      - {msg: "기억해: 이름=박지훈, 생일=1992-03-15, 프로젝트=Phoenix-v3"}
-      - {gen: filler, repeat: 7}
-      - {msg: "아까 내 정보 3가지 (이름, 생일, 프로젝트) 모두 정확히 알려줘"}
+      # 1) 사실 주입
+      - {msg: "테스트 데이터 기억해: 코드네임=ZETA-9, 날짜=2087-11-30, IP=172.31.99.7, 담당자=한소율"}
+      # 2) 사실 정정 (IP 덮어쓰기)
+      - {msg: "아 IP 틀렸어, 172.31.99.7 아니고 10.88.3.42로 바꿔"}
+      # 3) 숫자 주입
+      - {msg: "점수판: 알파=60, 베타=85, 감마=42. 알파에 +25점 해줘. 합계도 계산해"}
+      # 4) 도구 실행
+      - {msg: "echo 'MARKER=XRAY-5501' 실행해줘"}
+      # 5) filler 7개 (5초 간격)
+      - {gen: filler, repeat: 7, delay: 5}
+      # 6) 전체 리콜 질문
+      - {msg: "이전 대화 내용 정리해줘: 1) 코드네임과 날짜 2) 현재 IP (수정된 거) 3) 3명 점수 (알파는 +25 반영) 4) echo 실행 결과"}
     chk:
-      - {contains: "박지훈"}
-      - {contains: "1992"}
-      - {contains_any: ["Phoenix", "v3"]}
+      # 사실 리콜
+      - {contains: "ZETA"}
+      - {contains: "2087"}
+      - {contains_any: ["한소율", "소율"]}
+      # 정정 확인
+      - {contains: "10.88.3.42"}
+      - {not_contains: "172.31.99.7"}
+      # 연산 확인
+      - {contains: "85"}
+      - {contains_any: ["42", "감마"]}
+      # 도구 리콜
+      - {contains_any: ["XRAY", "5501"]}
       - korean
-      - no_leak
-
-  # 2. 도구 결과 리콜 — echo 출력이 컴팩션 후에도 살아남는지
-  - name: compact-tool-recall
-    cat: compact
-    timeout: 300
-    turns:
-      - {msg: "echo 'SECRET=ALPHA-7749' 실행해줘"}
-      - {gen: filler, repeat: 7}
-      - {msg: "아까 echo 실행 결과가 뭐였어?"}
-    chk:
-      - {contains: "ALPHA-7749"}
-      - no_leak
-
-  # 3. 사실 정정 — 수정된 값만 살아남는지
-  - name: compact-correction
-    cat: compact
-    timeout: 300
-    turns:
-      - {msg: "내 서버 IP는 192.168.1.100이야"}
-      - {msg: "아니다, 10.0.0.42로 바꿨어."}
-      - {gen: filler, repeat: 7}
-      - {msg: "내 서버 IP가 뭐야?"}
-    chk:
-      - {contains: "10.0.0.42"}
-      - {not_contains: "192.168.1.100"}
-      - no_leak
-
-  # 4. 숫자 연산 — 점수판이 컴팩션 후에도 정확한지
-  - name: compact-arithmetic
-    cat: compact
-    timeout: 300
-    turns:
-      - {msg: "점수판: 홍길동=85, 김철수=92, 이영희=78"}
-      - {gen: filler, repeat: 7}
-      - {msg: "홍길동 +10점. 3명 전체 점수 알려줘."}
-    chk:
-      - {contains: "95"}
-      - {contains: "92"}
-      - {contains: "78"}
-      - no_leak
-
-  # 5. 혼합 리콜 — 사실 + echo + 파일 → 컴팩션 → 3종류 동시 리콜
-  - name: compact-mixed
-    cat: compact
-    timeout: 300
-    turns:
-      - {msg: "기억해: 환경=DGX Spark, 포트=18789, DB=SQLite"}
-      - {msg: "echo '상태=GREEN' 실행해줘"}
-      - {msg: "gateway-go/internal/chat/silent_reply.go 읽어줘"}
-      - {gen: filler, repeat: 7}
-      - {msg: "정리: 1) 환경 정보 3가지 2) echo 결과 3) silent_reply.go 함수 목록"}
-    chk:
-      - {contains_any: ["DGX", "Spark"]}
-      - {contains: "18789"}
-      - {contains_any: ["GREEN", "상태"]}
-      - {contains_any: ["IsSilentReply", "StripSilentToken"]}
       - no_leak

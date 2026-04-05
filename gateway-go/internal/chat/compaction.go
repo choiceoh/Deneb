@@ -13,6 +13,7 @@ import (
 	compaction2 "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
 
 // Compaction defaults.
@@ -202,6 +203,35 @@ func buildMidLoopCompactor(
 			return messages, "", nil
 		}
 
+		// Step 2.5: Emergency drop — if context is way over budget (>2x threshold),
+		// messages are arriving faster than compaction can process. Drop the oldest
+		// messages (keeping the first 2 + fresh tail) to bring context under control.
+		// This prevents the scenario where rapid filler messages fill context before
+		// the LLM-based compaction sweep can run.
+		emergencyThreshold := threshold * 2
+		if uint64(liveTokens) > emergencyThreshold && len(messages) > 10 {
+			// Keep first 2 messages (initial context/facts) + last 8 (fresh tail).
+			const keepHead = 2
+			const keepTail = 8
+			if len(messages) > keepHead+keepTail {
+				dropped := len(messages) - keepHead - keepTail
+				kept := make([]llm.Message, 0, keepHead+keepTail)
+				kept = append(kept, messages[:keepHead]...)
+				kept = append(kept, messages[len(messages)-keepTail:]...)
+				messages = kept
+				liveTokens = estimateMessagesTokens(messages)
+				logger.Info("mid-loop compaction: emergency drop applied",
+					"dropped", dropped,
+					"remainingMsgs", len(messages),
+					"remainingTokens", liveTokens,
+				)
+				if uint64(liveTokens) < threshold {
+					lastCompactTurn = turn
+					return messages, "", nil
+				}
+			}
+		}
+
 		// Step 3: Aurora compaction sweep (uses lightweight local LLM for summaries).
 		// Only main sessions may use Aurora sweep; others get microcompact only.
 		if deps.auroraStore == nil || !isMainSession(params.SessionKey) {
@@ -281,6 +311,7 @@ func handleContextOverflowAurora(
 
 	// Use lightweight model for cost-efficient compaction summaries.
 	// Prefer hub-routed summarizer for token budget management.
+	// On failure, fall back to the next model in the registry chain.
 	lwClient := pilot.GetLightweightClient()
 	lwModel := pilot.GetLightweightModel()
 	var summarizer aurora.Summarizer
@@ -288,6 +319,18 @@ func handleContextOverflowAurora(
 		summarizer = aurora.NewHubSummarizer(sHub)
 	} else {
 		summarizer = aurora.NewLLMSummarizer(lwClient, lwModel)
+	}
+	// Wrap with fallback: if primary summarizer fails, try fallback model.
+	if deps.registry != nil {
+		chain := deps.registry.FallbackChain(modelrole.RoleLightweight)
+		for _, role := range chain[1:] {
+			fbClient := deps.registry.Client(role)
+			fbModel := deps.registry.Model(role)
+			if fbClient != nil && fbModel != "" {
+				summarizer = aurora.WithFallback(summarizer, aurora.NewLLMSummarizer(fbClient, fbModel))
+				break
+			}
+		}
 	}
 
 	// Build inline fact extractor: replaces the async flushMemory/transferSummary
