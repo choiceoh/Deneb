@@ -223,13 +223,12 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}
 	}
 
-	// Wire bridge injector now that chatHandler is ready.
+	// Wire bridge: send to active Telegram session + trigger LLM run.
 	if s.bridgeInjector != nil && s.chatHandler != nil {
 		sessions := hub.Sessions()
-		s.bridgeInjector.SetInject(
-			s.chatHandler.InjectDirect,
+		s.bridgeInjector.SetSend(
+			s.chatHandler.SendDirect,
 			func() []string {
-				// Inject into active Telegram conversation sessions (direct, not shadow).
 				var keys []string
 				for _, sess := range sessions.List() {
 					if sess.Kind == session.KindDirect && sess.Channel == "telegram" {
