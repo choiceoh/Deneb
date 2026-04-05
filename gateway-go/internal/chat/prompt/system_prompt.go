@@ -80,6 +80,7 @@ type SystemPromptParams struct {
 	DocsPath      string
 	SessionMemory string // pre-formatted session state block (empty = omit)
 	ShadowContext string // pre-formatted shadow monitoring context (empty = omit)
+	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -220,6 +221,15 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("- **Verification**: after changes, spawn a verifier to test while you prepare the summary.\n")
 			s.WriteString("Always set `tool_preset` (researcher/implementer/verifier). Monitor with `subagents(action:'list')`.\n")
 			s.WriteString("Depth limit: 5, breadth limit: 10. Prefer fewer focused agents over many trivial ones.\n\n")
+		}
+
+		// Conversation mode: tell the agent code tools are not available.
+		if params.ToolPreset == "conversation" {
+			s.WriteString("## 현재 모드: 대화\n")
+			s.WriteString("대화 모드입니다. 코드, 파일, 실행 관련 도구는 사용할 수 없습니다.\n")
+			s.WriteString("사용 가능: 웹 검색, HTTP 요청, 메모리.\n")
+			s.WriteString("대화, 설명, 토론, 웹 리서치에 집중하세요.\n")
+			s.WriteString("파일 읽기, 코드 편집, 명령어 실행을 제안하지 마세요 — 이 모드에서는 해당 도구가 없습니다.\n\n")
 		}
 
 		built := s.String()

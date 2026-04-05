@@ -433,6 +433,7 @@ func executeAgentRun(
 			SessionMemory: sessionMemoryText,
 			ShadowContext: shadowContext,
 			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir),
+			ToolPreset:    sessionToolPreset,
 		}
 
 		// Coordinator mode: use the coordinator-specific system prompt.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
@@ -73,10 +74,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
+	// Current model.
+	currentModel := ""
+	if s.chatHandler != nil {
+		currentModel = s.chatHandler.DefaultModel()
+	}
+	if currentModel == "" && s.modelRegistry != nil {
+		currentModel = s.modelRegistry.FullModelID(modelrole.RoleMain)
+	}
+
 	uptime := time.Since(s.startedAt)
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status":    "ok",
 		"version":   s.version,
+		"model":     currentModel,
 		"uptime":    formatUptimeHTTP(uptime),
 		"uptime_ms": uptime.Milliseconds(),
 		"subsystems": map[string]any{
