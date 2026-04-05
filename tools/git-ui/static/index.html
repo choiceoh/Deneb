@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deneb Git 대시보드</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --border: #e2e6ed;
+  --text: #1a1d23;
+  --text-secondary: #5f6b7a;
+  --text-muted: #8b95a5;
+  --accent: #4f6ef7;
+  --accent-light: #eef1fe;
+  --green: #22a06b;
+  --green-light: #e6f9f0;
+  --red: #e34850;
+  --red-light: #ffeaec;
+  --orange: #e68619;
+  --orange-light: #fff7e6;
+  --purple: #8b5cf6;
+  --purple-light: #f3effe;
+  --cyan: #0891b2;
+  --cyan-light: #e0f7fa;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+  --font: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+/* ---- Layout ---- */
+.app { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px; padding: 20px 24px;
+  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.header h1 { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.header h1 .icon { font-size: 28px; }
+.header-meta { display: flex; align-items: center; gap: 16px; font-size: 14px; color: var(--text-secondary); }
+
+.branch-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; background: var(--accent-light); color: var(--accent);
+  border-radius: 20px; font-weight: 600; font-size: 14px;
+}
+.branch-badge::before { content: '🌿'; }
+
+.refresh-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 16px; cursor: pointer;
+  font-size: 14px; color: var(--text-secondary); transition: all 0.15s;
+}
+.refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Tabs ---- */
+.tabs {
+  display: flex; gap: 4px; margin-bottom: 24px;
+  background: var(--surface); padding: 6px;
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.tab {
+  padding: 10px 20px; border: none; background: transparent;
+  border-radius: var(--radius-sm); cursor: pointer; font-size: 15px;
+  font-weight: 500; color: var(--text-secondary); transition: all 0.15s;
+  font-family: var(--font);
+}
+.tab:hover { background: var(--bg); color: var(--text); }
+.tab.active { background: var(--accent); color: white; }
+.tab-icon { margin-right: 6px; }
+
+/* ---- Cards ---- */
+.card {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 20px 24px; margin-bottom: 16px;
+}
+.card-title {
+  font-size: 16px; font-weight: 700; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-desc {
+  font-size: 13px; color: var(--text-muted); margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+/* ---- Tooltip (용어 설명) ---- */
+.term {
+  border-bottom: 1px dashed var(--text-muted);
+  cursor: help; position: relative;
+}
+.term .term-tip {
+  display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%); background: #1a1d23; color: white;
+  padding: 10px 14px; border-radius: 8px; font-size: 13px;
+  white-space: normal; width: 280px; z-index: 200;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); line-height: 1.5;
+  font-weight: 400; text-align: left;
+}
+.term .term-tip::after {
+  content: ''; position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%); border: 6px solid transparent;
+  border-top-color: #1a1d23;
+}
+.term:hover .term-tip { display: block; }
+
+/* ---- Stats ---- */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 20px; text-align: center;
+}
+.stat-value { font-size: 32px; font-weight: 800; color: var(--accent); }
+.stat-label { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+.stat-help { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* ---- Workflow diagram ---- */
+.workflow {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 20px 16px; margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.wf-step {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 18px; border-radius: var(--radius);
+  min-width: 120px; text-align: center;
+}
+.wf-step-icon { font-size: 28px; margin-bottom: 6px; }
+.wf-step-label { font-size: 14px; font-weight: 600; }
+.wf-step-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.wf-step.working { background: var(--orange-light); color: var(--orange); }
+.wf-step.staging { background: var(--cyan-light); color: var(--cyan); }
+.wf-step.committed { background: var(--green-light); color: var(--green); }
+.wf-step.remote { background: var(--purple-light); color: var(--purple); }
+.wf-arrow { font-size: 24px; color: var(--text-muted); flex-shrink: 0; }
+.wf-count {
+  font-size: 20px; font-weight: 800; margin-top: 4px;
+}
+
+/* ---- File list ---- */
+.status-section { margin-bottom: 12px; }
+.status-section-title {
+  font-size: 13px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.section-help {
+  font-size: 12px; font-weight: 400; text-transform: none;
+  letter-spacing: 0; color: var(--text-muted);
+}
+.file-list { list-style: none; }
+.file-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: var(--radius-sm);
+  font-size: 14px; font-family: var(--font-mono); transition: background 0.1s;
+}
+.file-item:hover { background: var(--bg); }
+.file-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 52px; padding: 2px 8px; border-radius: 4px;
+  font-size: 12px; font-weight: 600; font-family: var(--font);
+}
+.file-badge.mod { background: var(--orange-light); color: var(--orange); }
+.file-badge.add { background: var(--green-light); color: var(--green); }
+.file-badge.del { background: var(--red-light); color: var(--red); }
+.file-badge.new { background: var(--purple-light); color: var(--purple); }
+.file-badge.ren { background: var(--accent-light); color: var(--accent); }
+.status-empty { color: var(--text-muted); font-size: 14px; padding: 20px; text-align: center; }
+
+/* ---- Timeline ---- */
+.timeline { position: relative; }
+.commit-item {
+  display: flex; gap: 16px; padding: 14px 16px;
+  border-radius: var(--radius-sm); cursor: pointer;
+  transition: all 0.15s; position: relative;
+}
+.commit-item:hover { background: var(--bg); }
+.commit-item.selected { background: var(--accent-light); }
+.timeline-track {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 24px; position: relative;
+}
+.timeline-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--surface);
+  box-shadow: 0 0 0 2px var(--accent); z-index: 1; flex-shrink: 0;
+}
+.commit-item.merge .timeline-dot {
+  background: var(--purple); box-shadow: 0 0 0 2px var(--purple);
+  border-radius: 3px; transform: rotate(45deg);
+}
+.timeline-line { width: 2px; flex-grow: 1; background: var(--border); margin-top: 4px; }
+.commit-body { flex: 1; min-width: 0; }
+.commit-subject {
+  font-size: 15px; font-weight: 600; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.commit-meta {
+  font-size: 13px; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.commit-hash {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--accent); background: var(--accent-light);
+  padding: 1px 6px; border-radius: 4px;
+}
+.commit-stats { display: flex; gap: 8px; font-size: 13px; }
+.stat-add { color: var(--green); }
+.stat-del { color: var(--red); }
+.stat-files { color: var(--text-muted); }
+.ref-tag {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;
+}
+.ref-tag.branch { background: var(--green-light); color: var(--green); }
+.ref-tag.remote { background: var(--orange-light); color: var(--orange); }
+.ref-tag.tag { background: var(--purple-light); color: var(--purple); }
+.merge-badge {
+  font-size: 11px; padding: 2px 6px;
+  background: var(--purple-light); color: var(--purple);
+  border-radius: 4px; font-weight: 600;
+}
+.commit-hint {
+  font-size: 12px; color: var(--text-muted); font-weight: 400; margin-left: 4px;
+}
+
+/* ---- Branch list ---- */
+.branch-list { list-style: none; }
+.branch-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: var(--radius-sm); transition: background 0.1s;
+}
+.branch-item:hover { background: var(--bg); }
+.branch-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.branch-dot.current { background: var(--green); }
+.branch-dot.local { background: var(--accent); }
+.branch-dot.remote { background: var(--text-muted); }
+.branch-name { font-weight: 600; font-size: 15px; font-family: var(--font-mono); }
+.branch-current-label {
+  font-size: 12px; padding: 2px 8px;
+  background: var(--green-light); color: var(--green);
+  border-radius: 4px; font-weight: 600;
+}
+.branch-subject {
+  font-size: 13px; color: var(--text-secondary); flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.branch-hash { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+
+/* ---- Detail panel ---- */
+.detail-overlay {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 640px; max-width: 92vw;
+  background: var(--surface); box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+  z-index: 100; overflow-y: auto;
+  transform: translateX(100%); transition: transform 0.25s ease; padding: 24px;
+}
+.detail-overlay.open { transform: translateX(0); }
+.detail-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.2);
+  z-index: 99; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.detail-backdrop.open { opacity: 1; pointer-events: auto; }
+.detail-close {
+  position: absolute; top: 16px; right: 16px;
+  width: 36px; height: 36px; border: none; background: var(--bg);
+  border-radius: 50%; cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center; color: var(--text-secondary);
+}
+.detail-close:hover { background: var(--border); }
+.detail-header { margin-bottom: 20px; padding-right: 40px; }
+.detail-subject { font-size: 20px; font-weight: 700; margin-bottom: 8px; line-height: 1.4; }
+.detail-body { font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; white-space: pre-wrap; }
+.detail-meta {
+  display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px;
+  color: var(--text-secondary); padding: 12px 0;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.detail-meta-item { display: flex; align-items: center; gap: 6px; }
+.detail-files { margin-top: 20px; }
+.detail-file-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--bg); font-size: 14px;
+}
+.detail-file-path {
+  font-family: var(--font-mono); font-size: 13px; flex: 1;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.detail-file-stats { display: flex; gap: 8px; font-size: 12px; flex-shrink: 0; }
+
+/* ---- Diff viewer ---- */
+.diff-viewer { margin-top: 20px; background: #1e1e2e; border-radius: var(--radius-sm); overflow: hidden; }
+.diff-viewer-header {
+  padding: 10px 16px; background: #181825; color: #cdd6f4;
+  font-size: 13px; font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.diff-toggle {
+  background: none; border: 1px solid #45475a; color: #cdd6f4;
+  padding: 4px 12px; border-radius: 4px; cursor: pointer;
+  font-size: 12px; font-family: var(--font);
+}
+.diff-toggle:hover { border-color: #89b4fa; color: #89b4fa; }
+.diff-content {
+  padding: 12px 16px; font-family: var(--font-mono);
+  font-size: 13px; line-height: 1.5; overflow-x: auto;
+  max-height: 500px; overflow-y: auto; color: #cdd6f4;
+}
+.diff-content .diff-add { color: #a6e3a1; background: rgba(166,227,161,0.08); }
+.diff-content .diff-del { color: #f38ba8; background: rgba(243,139,168,0.08); }
+.diff-content .diff-hunk { color: #89b4fa; font-weight: 600; }
+.diff-content .diff-file-header { color: #f9e2af; font-weight: 600; }
+
+/* Diff legend */
+.diff-legend {
+  display: flex; gap: 16px; padding: 8px 16px;
+  background: #181825; border-top: 1px solid #313244;
+  font-size: 12px; color: #a6adc8;
+}
+.diff-legend-item { display: flex; align-items: center; gap: 6px; }
+.diff-legend-swatch {
+  width: 14px; height: 14px; border-radius: 3px; display: inline-block;
+}
+.diff-legend-swatch.add-swatch { background: rgba(166,227,161,0.3); border: 1px solid #a6e3a1; }
+.diff-legend-swatch.del-swatch { background: rgba(243,139,168,0.3); border: 1px solid #f38ba8; }
+.diff-legend-swatch.hunk-swatch { background: rgba(137,180,250,0.3); border: 1px solid #89b4fa; }
+
+/* ---- Loading ---- */
+.loading {
+  display: flex; align-items: center; justify-content: center;
+  padding: 60px 20px; color: var(--text-muted); font-size: 16px; gap: 12px;
+}
+.spinner {
+  width: 24px; height: 24px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+.empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+
+/* ---- Help button ---- */
+.help-fab {
+  position: fixed; bottom: 24px; right: 24px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--accent); color: white; border: none;
+  font-size: 24px; cursor: pointer; box-shadow: var(--shadow-lg);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 90; transition: transform 0.15s;
+}
+.help-fab:hover { transform: scale(1.1); }
+
+/* Help modal */
+.help-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.3);
+  z-index: 200; display: none; align-items: center; justify-content: center;
+}
+.help-modal-backdrop.open { display: flex; }
+.help-modal {
+  background: var(--surface); border-radius: var(--radius);
+  max-width: 600px; width: 90vw; max-height: 85vh; overflow-y: auto;
+  padding: 32px; box-shadow: var(--shadow-lg);
+}
+.help-modal h2 { font-size: 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+.help-modal h3 { font-size: 16px; margin: 20px 0 10px; color: var(--accent); }
+.help-term {
+  padding: 12px 16px; background: var(--bg); border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.help-term-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.help-term-eng { font-size: 12px; color: var(--text-muted); font-weight: 400; font-family: var(--font-mono); }
+.help-term-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+.help-close {
+  position: absolute; top: 16px; right: 16px;
+  background: var(--bg); border: none; border-radius: 50%;
+  width: 36px; height: 36px; cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ---- Misc ---- */
+.diff-section { margin-bottom: 24px; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ---- Info box ---- */
+.info-box {
+  padding: 14px 18px; border-radius: var(--radius-sm);
+  font-size: 14px; line-height: 1.6; margin-bottom: 16px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.info-box.tip { background: var(--accent-light); color: var(--accent); }
+.info-box.success { background: var(--green-light); color: var(--green); }
+.info-box-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+
+@media (max-width: 768px) {
+  .app { padding: 12px; }
+  .header { flex-direction: column; gap: 12px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .detail-overlay { width: 100vw; }
+  .commit-meta { gap: 8px; }
+  .workflow { gap: 4px; }
+  .wf-step { min-width: 80px; padding: 10px 8px; }
+  .wf-arrow { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <header class="header">
+    <h1>
+      <span class="icon">🔮</span> Deneb Git 대시보드
+      <span style="font-size:13px; font-weight:400; color:var(--text-muted); margin-left:4px;">프로젝트의 변경 이력을 한눈에</span>
+    </h1>
+    <div class="header-meta">
+      <span class="branch-badge" id="currentBranch">-</span>
+      <button class="refresh-btn" onclick="refreshAll()">↻ 새로고침</button>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="overview"><span class="tab-icon">📊</span>전체 현황</button>
+    <button class="tab" data-tab="history"><span class="tab-icon">📜</span>저장 기록</button>
+    <button class="tab" data-tab="branches"><span class="tab-icon">🌿</span>작업 갈래</button>
+    <button class="tab" data-tab="changes"><span class="tab-icon">✏️</span>변경 사항</button>
+  </nav>
+
+  <!-- ============================================================ -->
+  <!-- Overview Tab                                                  -->
+  <!-- ============================================================ -->
+  <div class="tab-content active" id="tab-overview">
+
+    <!-- Workflow diagram -->
+    <div class="card">
+      <div class="card-title">🔄 Git 작업 흐름</div>
+      <div class="card-desc">파일을 수정하면 아래 단계를 거쳐 기록이 저장됩니다. 지금 각 단계에 몇 개의 파일이 있는지 보여줍니다.</div>
+      <div class="workflow">
+        <div class="wf-step working">
+          <div class="wf-step-icon">✏️</div>
+          <div class="wf-step-label">수정됨</div>
+          <div class="wf-step-desc">파일을 고쳤지만<br>아직 준비 안 함</div>
+          <div class="wf-count" id="wfModified">0</div>
+        </div>
+        <div class="wf-arrow">→</div>
+        <div class="wf-step staging">
+          <div class="wf-step-icon">📦</div>
+          <div class="wf-step-label">준비됨</div>
+          <div class="wf-step-desc">"이 변경을 저장할게"<br>라고 골라 놓은 상태</div>
+          <div class="wf-count" id="wfStaged">0</div>
+        </div>
+        <div class="wf-arrow">→</div>
+        <div class="wf-step committed">
+          <div class="wf-step-icon">💾</div>
+          <div class="wf-step-label">저장 완료</div>
+          <div class="wf-step-desc">내 컴퓨터에<br>기록이 남음</div>
+          <div class="wf-count" id="wfCommits">-</div>
+        </div>
+        <div class="wf-arrow">→</div>
+        <div class="wf-step remote">
+          <div class="wf-step-icon">☁️</div>
+          <div class="wf-step-label">GitHub</div>
+          <div class="wf-step-desc">인터넷에 올려서<br>백업 & 공유</div>
+          <div class="wf-count" style="font-size:14px;" id="wfRemote">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-value" id="statCommits">-</div>
+        <div class="stat-label">
+          <span class="term">전체 저장 횟수
+            <span class="term-tip">프로젝트가 시작된 이후 변경 사항을 저장(커밋)한 총 횟수입니다. 책으로 치면 "몇 번 저장했는지"와 비슷해요.</span>
+          </span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statBranches">-</div>
+        <div class="stat-label">
+          <span class="term">작업 갈래
+            <span class="term-tip">동시에 진행 중인 작업 흐름의 수입니다. 예: "메인 기능"과 "새 기능 개발"을 따로 갈래를 만들어 동시에 진행할 수 있어요.</span>
+          </span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statModified">-</div>
+        <div class="stat-label">수정했지만 아직 저장 안 한 파일</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statStaged">-</div>
+        <div class="stat-label">
+          <span class="term">저장 준비된 파일
+            <span class="term-tip">"다음에 저장할 때 포함시키겠다"고 미리 골라놓은 파일들입니다. 장바구니에 담아놓은 것과 비슷해요.</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current status -->
+    <div class="card">
+      <div class="card-title">📋 현재 상태</div>
+      <div class="card-desc">마지막으로 저장한 이후 바뀐 파일들입니다. 아무것도 없으면 "깨끗한 상태"예요.</div>
+      <div id="overviewStatus">
+        <div class="loading"><div class="spinner"></div>불러오는 중...</div>
+      </div>
+    </div>
+
+    <!-- Recent commits -->
+    <div class="card">
+      <div class="card-title">🕐 최근 저장 기록</div>
+      <div class="card-desc">최근에 저장한 변경 사항들이에요. 클릭하면 무엇이 바뀌었는지 자세히 볼 수 있습니다.</div>
+      <div id="recentCommits">
+        <div class="loading"><div class="spinner"></div>불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- History Tab                                                   -->
+  <!-- ============================================================ -->
+  <div class="tab-content" id="tab-history">
+    <div class="card">
+      <div class="card-title" style="justify-content: space-between;">
+        <div>
+          <span>📜 저장 기록 타임라인</span>
+        </div>
+        <select id="branchFilter" onchange="loadHistory()" style="
+          padding: 6px 12px; border: 1px solid var(--border);
+          border-radius: var(--radius-sm); font-family: var(--font);
+          font-size: 13px; background: var(--bg); color: var(--text);
+        ">
+          <option value="all">모든 작업 갈래</option>
+        </select>
+      </div>
+      <div class="card-desc">
+        프로젝트의 모든 저장 기록을 시간 순서대로 보여줍니다. 각 항목을 클릭하면 어떤 파일이 어떻게 바뀌었는지 확인할 수 있어요.
+        <br><span style="color:var(--purple);">◆ 마름모</span>는 두 갈래를 합친 기록,
+        <span style="color:var(--accent);">● 원</span>은 일반 저장 기록입니다.
+      </div>
+      <div class="timeline" id="commitTimeline">
+        <div class="loading"><div class="spinner"></div>불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Branches Tab                                                  -->
+  <!-- ============================================================ -->
+  <div class="tab-content" id="tab-branches">
+    <div class="info-box tip">
+      <span class="info-box-icon">💡</span>
+      <div>
+        <strong>작업 갈래(브랜치)란?</strong><br>
+        하나의 프로젝트에서 여러 작업을 동시에 할 수 있게 해주는 기능이에요.
+        예를 들어, "새 기능 만들기"와 "버그 고치기"를 각각 별도 갈래에서 작업한 뒤, 나중에 합칠 수 있습니다.
+        <br><br>
+        <span style="color:var(--green);">●</span> <strong>현재 갈래</strong> = 지금 내가 작업 중인 곳 &nbsp;
+        <span style="color:var(--accent);">●</span> <strong>내 컴퓨터</strong> = 아직 인터넷에 안 올린 갈래 &nbsp;
+        <span style="color:var(--text-muted);">●</span> <strong>GitHub</strong> = 인터넷에 올라가 있는 갈래
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">💻 내 컴퓨터의 작업 갈래</div>
+      <div class="card-desc">이 컴퓨터에 있는 갈래들입니다. 초록색 점이 지금 작업 중인 갈래예요.</div>
+      <ul class="branch-list" id="localBranches">
+        <div class="loading"><div class="spinner"></div>불러오는 중...</div>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">☁️ GitHub에 있는 작업 갈래</div>
+      <div class="card-desc">인터넷(GitHub)에 올라가 있는 갈래들이에요. 여기 있어야 다른 사람(이나 다른 컴퓨터)에서도 볼 수 있어요.</div>
+      <ul class="branch-list" id="remoteBranches">
+        <div class="loading"><div class="spinner"></div>불러오는 중...</div>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Changes Tab                                                   -->
+  <!-- ============================================================ -->
+  <div class="tab-content" id="tab-changes">
+    <div class="info-box tip">
+      <span class="info-box-icon">💡</span>
+      <div>
+        <strong>변경 사항 보는 법</strong><br>
+        아래 코드 비교 화면에서:
+        <span style="color:var(--green); font-weight:600;">초록색 줄(+)</span> = 새로 추가된 내용,
+        <span style="color:var(--red); font-weight:600;">빨간색 줄(-)</span> = 삭제된 내용,
+        흰색 줄 = 변경 없는 부분(주변 맥락)입니다.
+      </div>
+    </div>
+    <div class="card" id="changesContent">
+      <div class="card-title">✏️ 현재 변경 사항</div>
+      <div class="card-desc">마지막 저장 이후 바뀐 내용을 보여줍니다. 아직 저장(커밋)하지 않은 작업입니다.</div>
+      <div class="loading"><div class="spinner"></div>불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Slide Panel -->
+<div class="detail-backdrop" id="detailBackdrop" onclick="closeDetail()"></div>
+<div class="detail-overlay" id="detailPanel">
+  <button class="detail-close" onclick="closeDetail()">✕</button>
+  <div id="detailContent"></div>
+</div>
+
+<!-- Help FAB -->
+<button class="help-fab" onclick="toggleHelp()" title="Git 용어 사전">?</button>
+
+<!-- Help Modal -->
+<div class="help-modal-backdrop" id="helpModal" onclick="if(event.target===this)toggleHelp()">
+  <div class="help-modal" style="position:relative;">
+    <button class="help-close" onclick="toggleHelp()">✕</button>
+    <h2>📖 Git 용어 사전</h2>
+    <p style="color:var(--text-secondary); margin-bottom:16px;">Git에서 자주 쓰이는 용어들을 쉽게 설명합니다. 대시보드에서 <span style="border-bottom:1px dashed var(--text-muted);">점선 밑줄</span>이 있는 단어에 마우스를 올려도 설명을 볼 수 있어요.</p>
+
+    <h3>📦 기본 개념</h3>
+    <div class="help-term">
+      <div class="help-term-name">저장소 (Repository) <span class="help-term-eng">repository</span></div>
+      <div class="help-term-desc">프로젝트의 모든 파일과 변경 기록이 담긴 폴더예요. 이 대시보드가 보여주는 것이 바로 하나의 저장소입니다.</div>
+    </div>
+    <div class="help-term">
+      <div class="help-term-name">저장 (커밋) <span class="help-term-eng">commit</span></div>
+      <div class="help-term-desc">변경 사항을 기록하는 행위예요. 게임의 "세이브 포인트"와 비슷합니다. 커밋할 때마다 "무엇을 왜 바꿨는지" 메시지를 남깁니다.</div>
+    </div>
+    <div class="help-term">
+      <div class="help-term-name">준비 (스테이징) <span class="help-term-eng">staging</span></div>
+      <div class="help-term-desc">저장하기 전에 "이 파일을 포함시키겠다"고 고르는 단계예요. 장바구니에 물건을 담는 것처럼, 저장하고 싶은 변경만 골라 담을 수 있어요.</div>
+    </div>
+
+    <h3>🌿 갈래 & 합치기</h3>
+    <div class="help-term">
+      <div class="help-term-name">작업 갈래 (브랜치) <span class="help-term-eng">branch</span></div>
+      <div class="help-term-desc">독립적인 작업 흐름이에요. 나뭇가지처럼 본 줄기에서 갈라져 나와 독립적으로 작업한 뒤, 다시 합칠 수 있어요. "main"이 본 줄기이고, 새 기능은 새 갈래에서 만듭니다.</div>
+    </div>
+    <div class="help-term">
+      <div class="help-term-name">합치기 (머지) <span class="help-term-eng">merge</span></div>
+      <div class="help-term-desc">두 갈래의 작업을 하나로 합치는 것이에요. 새 기능 갈래에서 완성된 작업을 main 갈래에 합치면, 그 기능이 본 프로젝트에 반영됩니다.</div>
+    </div>
+    <div class="help-term">
+      <div class="help-term-name">풀 리퀘스트 (PR) <span class="help-term-eng">pull request</span></div>
+      <div class="help-term-desc">"내 작업을 합쳐주세요"라고 요청하는 것이에요. GitHub에서 코드 변경 내용을 검토하고 토론한 뒤 합칩니다.</div>
+    </div>
+
+    <h3>🔄 동기화</h3>
+    <div class="help-term">
+      <div class="help-term-name">밀어올리기 (푸시) <span class="help-term-eng">push</span></div>
+      <div class="help-term-desc">내 컴퓨터의 저장 기록을 GitHub(인터넷)에 올리는 것이에요.</div>
+    </div>
+    <div class="help-term">
+      <div class="help-term-name">내려받기 (풀) <span class="help-term-eng">pull</span></div>
+      <div class="help-term-desc">GitHub의 최신 기록을 내 컴퓨터로 가져오는 것이에요. 다른 사람이 올린 변경 사항을 받아올 때 사용합니다.</div>
+    </div>
+
+    <h3>📊 이 대시보드에서 보이는 것들</h3>
+    <div class="help-term">
+      <div class="help-term-name">해시 (Hash) <span class="help-term-eng">예: 81aa1a0c</span></div>
+      <div class="help-term-desc">각 저장 기록의 고유 ID예요. 사람의 주민등록번호처럼, 모든 커밋에는 절대 겹치지 않는 고유 번호가 있습니다. 대시보드에서 <span style="color:var(--accent);">파란 코드</span>로 표시됩니다.</div>
+    </div>
+    <div class="help-term">
+      <div class="help-term-name">변경 내용 (Diff) <span class="help-term-eng">diff</span></div>
+      <div class="help-term-desc">두 버전 사이에 무엇이 달라졌는지 보여주는 화면이에요. <span style="color:var(--green);">초록색(+)</span>은 추가된 줄, <span style="color:var(--red);">빨간색(-)</span>은 삭제된 줄입니다.</div>
+    </div>
+    <div class="help-term">
+      <div class="help-term-name">+45 -12 같은 숫자</div>
+      <div class="help-term-desc">45줄이 추가되고 12줄이 삭제되었다는 뜻이에요. 꼭 45줄을 "새로 쓴" 것은 아니고, 기존 줄을 고치면 "삭제 후 추가"로 세어집니다.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====================================================================
+// State
+// ====================================================================
+let currentTab = 'overview';
+let allBranches = [];
+
+// ====================================================================
+// API
+// ====================================================================
+async function api(path) {
+  const res = await fetch('/api/' + path);
+  return res.json();
+}
+
+// ====================================================================
+// Tabs
+// ====================================================================
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    const name = tab.dataset.tab;
+    document.getElementById('tab-' + name).classList.add('active');
+    currentTab = name;
+    if (name === 'history') loadHistory();
+    if (name === 'branches') loadBranches();
+    if (name === 'changes') loadChanges();
+  });
+});
+
+// ====================================================================
+// Overview
+// ====================================================================
+async function loadOverview() {
+  const data = await api('overview');
+  document.getElementById('currentBranch').textContent = data.currentBranch;
+  document.getElementById('statCommits').textContent = data.totalCommits.toLocaleString();
+  document.getElementById('statBranches').textContent = data.branchCount;
+
+  const status = data.statusSummary;
+  const modCount = (status.modified || []).length + (status.untracked || []).length;
+  const stagedCount = (status.staged || []).length;
+  document.getElementById('statModified').textContent = modCount;
+  document.getElementById('statStaged').textContent = stagedCount;
+
+  // Workflow diagram counts
+  document.getElementById('wfModified').textContent = modCount;
+  document.getElementById('wfStaged').textContent = stagedCount;
+  document.getElementById('wfCommits').textContent = data.totalCommits.toLocaleString();
+  document.getElementById('wfRemote').textContent = data.remoteUrl ? '연결됨' : '없음';
+
+  renderOverviewStatus(status);
+  loadRecentCommits();
+}
+
+function renderOverviewStatus(status) {
+  const el = document.getElementById('overviewStatus');
+  const hasModified = status.modified && status.modified.length > 0;
+  const hasStaged = status.staged && status.staged.length > 0;
+  const hasUntracked = status.untracked && status.untracked.length > 0;
+
+  if (!hasModified && !hasStaged && !hasUntracked) {
+    el.innerHTML = '<div class="info-box success"><span class="info-box-icon">✨</span><div><strong>깨끗한 상태!</strong> 모든 변경 사항이 저장되어 있어요. 지금은 아무 파일도 수정되지 않았습니다.</div></div>';
+    return;
+  }
+
+  let html = '';
+  if (hasStaged) {
+    html += '<div class="status-section">';
+    html += '<div class="status-section-title">📦 저장 준비 완료 <span class="section-help">— "다음 저장에 포함됩니다"</span></div>';
+    html += '<ul class="file-list">' + status.staged.map(f => fileItemHTML(f)).join('') + '</ul>';
+    html += '</div>';
+  }
+  if (hasModified) {
+    html += '<div class="status-section">';
+    html += '<div class="status-section-title">✏️ 수정됨 <span class="section-help">— "바꿨지만 아직 저장 준비를 안 한 파일"</span></div>';
+    html += '<ul class="file-list">' + status.modified.map(f => fileItemHTML(f)).join('') + '</ul>';
+    html += '</div>';
+  }
+  if (hasUntracked) {
+    html += '<div class="status-section">';
+    html += '<div class="status-section-title">🆕 새로 생긴 파일 <span class="section-help">— "Git이 아직 모르는 새 파일"</span></div>';
+    html += '<ul class="file-list">' + status.untracked.map(f => fileItemHTML(f)).join('') + '</ul>';
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function fileItemHTML(f) {
+  const badgeClass = getBadgeClass(f.status);
+  return `<li class="file-item">
+    <span class="file-badge ${badgeClass}">${f.status}</span>
+    <span>${escapeHtml(f.path)}</span>
+  </li>`;
+}
+
+function getBadgeClass(status) {
+  if (status === '수정') return 'mod';
+  if (status === '추가') return 'add';
+  if (status === '삭제') return 'del';
+  if (status === '새 파일') return 'new';
+  if (status === '이름변경') return 'ren';
+  return 'mod';
+}
+
+// ====================================================================
+// Recent Commits
+// ====================================================================
+async function loadRecentCommits() {
+  const commits = await api('log?limit=8');
+  const el = document.getElementById('recentCommits');
+  if (!commits || commits.length === 0) {
+    el.innerHTML = '<div class="empty-state">아직 저장 기록이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = renderTimeline(commits);
+}
+
+// ====================================================================
+// History Tab
+// ====================================================================
+async function loadHistory() {
+  const branch = document.getElementById('branchFilter').value;
+  const commits = await api('log?limit=100&branch=' + encodeURIComponent(branch));
+  const el = document.getElementById('commitTimeline');
+  if (!commits || commits.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div>저장 기록이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = renderTimeline(commits);
+  if (document.getElementById('branchFilter').options.length <= 1) populateBranchFilter();
+}
+
+async function populateBranchFilter() {
+  if (allBranches.length === 0) {
+    const branches = await api('branches');
+    allBranches = branches || [];
+  }
+  const sel = document.getElementById('branchFilter');
+  allBranches.filter(b => !b.isRemote).forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.name;
+    opt.textContent = (b.isCurrent ? '● ' : '') + b.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ====================================================================
+// Timeline
+// ====================================================================
+function renderTimeline(commits) {
+  return commits.map((c, i) => {
+    const isLast = i === commits.length - 1;
+    const mergeClass = c.isMerge ? ' merge' : '';
+    const refsHTML = (c.refs || []).map(r => {
+      let cls = 'branch';
+      if (r.startsWith('origin/')) cls = 'remote';
+      if (r.startsWith('tag:')) cls = 'tag';
+      return `<span class="ref-tag ${cls}">${escapeHtml(r)}</span>`;
+    }).join('');
+
+    // Friendly type hint
+    let typeHint = '';
+    if (c.isMerge) {
+      typeHint = '<span class="commit-hint">(두 갈래를 합침)</span>';
+    } else if (c.subject.startsWith('feat')) {
+      typeHint = '<span class="commit-hint">(새 기능)</span>';
+    } else if (c.subject.startsWith('fix')) {
+      typeHint = '<span class="commit-hint">(버그 수정)</span>';
+    } else if (c.subject.startsWith('refactor')) {
+      typeHint = '<span class="commit-hint">(코드 정리)</span>';
+    } else if (c.subject.startsWith('docs')) {
+      typeHint = '<span class="commit-hint">(문서 수정)</span>';
+    } else if (c.subject.startsWith('test')) {
+      typeHint = '<span class="commit-hint">(테스트)</span>';
+    } else if (c.subject.startsWith('chore')) {
+      typeHint = '<span class="commit-hint">(잡일)</span>';
+    } else if (c.subject.startsWith('perf')) {
+      typeHint = '<span class="commit-hint">(성능 개선)</span>';
+    }
+
+    return `
+    <div class="commit-item${mergeClass}" onclick="showCommitDetail('${c.hash}')">
+      <div class="timeline-track">
+        <div class="timeline-dot"></div>
+        ${isLast ? '' : '<div class="timeline-line"></div>'}
+      </div>
+      <div class="commit-body">
+        <div class="commit-subject">
+          ${c.isMerge ? '<span class="merge-badge">합침</span>' : ''}
+          ${escapeHtml(c.subject)}
+          ${typeHint}
+          ${refsHTML}
+        </div>
+        <div class="commit-meta">
+          <span class="commit-hash" title="이 저장의 고유 ID">${c.shortHash}</span>
+          <span>👤 ${escapeHtml(c.author)}</span>
+          <span>🕐 ${c.relDate}</span>
+          ${c.filesCount > 0 ? `
+          <span class="commit-stats">
+            <span class="stat-files" title="${c.filesCount}개의 파일이 변경됨">📁 ${c.filesCount}개 파일</span>
+            ${c.additions > 0 ? `<span class="stat-add" title="${c.additions}줄 추가됨">+${c.additions}</span>` : ''}
+            ${c.deletions > 0 ? `<span class="stat-del" title="${c.deletions}줄 삭제됨">-${c.deletions}</span>` : ''}
+          </span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ====================================================================
+// Commit Detail
+// ====================================================================
+async function showCommitDetail(hash) {
+  const panel = document.getElementById('detailPanel');
+  const backdrop = document.getElementById('detailBackdrop');
+  const content = document.getElementById('detailContent');
+
+  content.innerHTML = '<div class="loading"><div class="spinner"></div>불러오는 중...</div>';
+  panel.classList.add('open');
+  backdrop.classList.add('open');
+
+  const detail = await api('commit?hash=' + hash);
+
+  const refsHTML = (detail.refs || []).map(r => {
+    let cls = 'branch';
+    if (r.startsWith('origin/')) cls = 'remote';
+    if (r.startsWith('tag:')) cls = 'tag';
+    return `<span class="ref-tag ${cls}">${escapeHtml(r)}</span>`;
+  }).join(' ');
+
+  const filesHTML = (detail.files || []).map(f => `
+    <div class="detail-file-item">
+      <span class="file-badge ${getBadgeClassFromStatus(f.status)}">${f.status}</span>
+      <span class="detail-file-path" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</span>
+      <span class="detail-file-stats">
+        ${f.additions > 0 ? `<span class="stat-add" title="${f.additions}줄 추가">+${f.additions}</span>` : ''}
+        ${f.deletions > 0 ? `<span class="stat-del" title="${f.deletions}줄 삭제">-${f.deletions}</span>` : ''}
+      </span>
+    </div>
+  `).join('');
+
+  const diffHTML = detail.diff ? renderDiff(detail.diff) : '';
+
+  content.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-subject">${detail.isMerge ? '<span class="merge-badge">합침</span> ' : ''}${escapeHtml(detail.subject)}</div>
+      ${detail.body ? `<div class="detail-body">${escapeHtml(detail.body)}</div>` : ''}
+      <div style="margin-bottom: 8px;">${refsHTML}</div>
+      <div class="detail-meta">
+        <div class="detail-meta-item" title="이 저장을 한 사람">👤 ${escapeHtml(detail.author)}</div>
+        <div class="detail-meta-item" title="저장한 시각">🕐 ${detail.relDate}</div>
+        <div class="detail-meta-item" title="이 저장의 고유 ID">🔑 ${detail.shortHash}</div>
+        ${detail.parents && detail.parents.length > 0 ? `<div class="detail-meta-item" title="이전 저장 기록의 ID">⬆️ 이전: ${detail.parents.map(p => p.substring(0, 7)).join(', ')}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="detail-files">
+      <div class="card-title">📁 변경된 파일 (${(detail.files || []).length}개)</div>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">이 저장에서 바뀐 파일 목록입니다.</p>
+      ${filesHTML || '<div class="status-empty">파일 변경 정보가 없습니다</div>'}
+    </div>
+
+    ${detail.diff ? `
+    <div class="diff-viewer">
+      <div class="diff-viewer-header">
+        <span>📝 코드 변경 내용</span>
+        <button class="diff-toggle" onclick="toggleDiff()">접기/펼치기</button>
+      </div>
+      <div class="diff-legend">
+        <div class="diff-legend-item"><span class="diff-legend-swatch add-swatch"></span> 추가된 줄</div>
+        <div class="diff-legend-item"><span class="diff-legend-swatch del-swatch"></span> 삭제된 줄</div>
+        <div class="diff-legend-item"><span class="diff-legend-swatch hunk-swatch"></span> 위치 표시</div>
+      </div>
+      <div class="diff-content" id="diffContent">${diffHTML}</div>
+    </div>` : ''}
+  `;
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.getElementById('detailBackdrop').classList.remove('open');
+}
+
+function toggleDiff() {
+  const el = document.getElementById('diffContent');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function getBadgeClassFromStatus(status) {
+  if (status === '추가') return 'add';
+  if (status === '삭제') return 'del';
+  return 'mod';
+}
+
+// ====================================================================
+// Diff renderer
+// ====================================================================
+function renderDiff(raw) {
+  return escapeHtml(raw).split('\n').map(line => {
+    if (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) {
+      return `<div class="diff-file-header">${line}</div>`;
+    }
+    if (line.startsWith('@@')) {
+      return `<div class="diff-hunk">${line}</div>`;
+    }
+    if (line.startsWith('+')) {
+      return `<div class="diff-add">${line}</div>`;
+    }
+    if (line.startsWith('-')) {
+      return `<div class="diff-del">${line}</div>`;
+    }
+    return `<div>${line}</div>`;
+  }).join('');
+}
+
+// ====================================================================
+// Branches
+// ====================================================================
+async function loadBranches() {
+  const branches = await api('branches');
+  allBranches = branches || [];
+
+  const local = branches.filter(b => !b.isRemote);
+  const remote = branches.filter(b => b.isRemote);
+
+  document.getElementById('localBranches').innerHTML = local.length > 0
+    ? local.map(branchItemHTML).join('')
+    : '<div class="status-empty">로컬 갈래가 없습니다</div>';
+
+  document.getElementById('remoteBranches').innerHTML = remote.length > 0
+    ? remote.map(branchItemHTML).join('')
+    : '<div class="status-empty">원격 갈래가 없습니다</div>';
+}
+
+function branchItemHTML(b) {
+  const dotClass = b.isCurrent ? 'current' : (b.isRemote ? 'remote' : 'local');
+  return `
+    <li class="branch-item">
+      <span class="branch-dot ${dotClass}"></span>
+      <span class="branch-name">${escapeHtml(b.name)}</span>
+      ${b.isCurrent ? '<span class="branch-current-label">지금 여기서 작업 중</span>' : ''}
+      <span class="branch-subject">${escapeHtml(b.subject)}</span>
+      <span class="branch-hash" title="마지막 저장의 ID">${b.shortHash}</span>
+    </li>`;
+}
+
+// ====================================================================
+// Changes
+// ====================================================================
+async function loadChanges() {
+  const [status, diffs] = await Promise.all([api('status'), api('diff/working')]);
+  const el = document.getElementById('changesContent');
+
+  const hasModified = status.modified && status.modified.length > 0;
+  const hasStaged = status.staged && status.staged.length > 0;
+  const hasUntracked = status.untracked && status.untracked.length > 0;
+
+  let html = '<div class="card-title">✏️ 현재 변경 사항</div>';
+  html += '<div class="card-desc">마지막 저장 이후 바뀐 내용입니다. 아직 저장(커밋)하지 않은 작업이에요.</div>';
+
+  if (!hasModified && !hasStaged && !hasUntracked) {
+    html += '<div class="info-box success"><span class="info-box-icon">✨</span><div><strong>깨끗한 상태!</strong> 수정된 파일이 없어요. 모든 작업이 저장되어 있습니다.</div></div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  if (hasStaged) {
+    html += '<div class="status-section">';
+    html += '<div class="status-section-title">📦 저장 준비 완료 <span class="section-help">— "다음 저장에 포함될 파일"</span></div>';
+    html += '<ul class="file-list">' + status.staged.map(f => fileItemHTML(f)).join('') + '</ul>';
+    html += '</div>';
+  }
+  if (hasModified) {
+    html += '<div class="status-section">';
+    html += '<div class="status-section-title">✏️ 수정됨 <span class="section-help">— "바꿨지만 저장 준비를 안 한 파일"</span></div>';
+    html += '<ul class="file-list">' + status.modified.map(f => fileItemHTML(f)).join('') + '</ul>';
+    html += '</div>';
+  }
+  if (hasUntracked) {
+    html += '<div class="status-section">';
+    html += '<div class="status-section-title">🆕 새로 생긴 파일 <span class="section-help">— "Git이 아직 관리하지 않는 새 파일"</span></div>';
+    html += '<ul class="file-list">' + status.untracked.map(f => fileItemHTML(f)).join('') + '</ul>';
+    html += '</div>';
+  }
+
+  if (diffs.staged) {
+    html += `<div class="diff-section">
+      <div class="diff-viewer">
+        <div class="diff-viewer-header"><span>📦 저장 준비된 변경 내용</span></div>
+        <div class="diff-legend">
+          <div class="diff-legend-item"><span class="diff-legend-swatch add-swatch"></span> 추가된 줄</div>
+          <div class="diff-legend-item"><span class="diff-legend-swatch del-swatch"></span> 삭제된 줄</div>
+        </div>
+        <div class="diff-content">${renderDiff(diffs.staged)}</div>
+      </div>
+    </div>`;
+  }
+  if (diffs.working) {
+    html += `<div class="diff-section">
+      <div class="diff-viewer">
+        <div class="diff-viewer-header"><span>✏️ 아직 준비 안 된 변경 내용</span></div>
+        <div class="diff-legend">
+          <div class="diff-legend-item"><span class="diff-legend-swatch add-swatch"></span> 추가된 줄</div>
+          <div class="diff-legend-item"><span class="diff-legend-swatch del-swatch"></span> 삭제된 줄</div>
+        </div>
+        <div class="diff-content">${renderDiff(diffs.working)}</div>
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// ====================================================================
+// Help modal
+// ====================================================================
+function toggleHelp() {
+  document.getElementById('helpModal').classList.toggle('open');
+}
+
+// ====================================================================
+// Utilities
+// ====================================================================
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function refreshAll() {
+  loadOverview();
+  if (currentTab === 'history') loadHistory();
+  if (currentTab === 'branches') loadBranches();
+  if (currentTab === 'changes') loadChanges();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeDetail(); document.getElementById('helpModal').classList.remove('open'); }
+});
+
+// ====================================================================
+// Init
+// ====================================================================
+loadOverview();
+</script>
+
+</body>
+</html>
