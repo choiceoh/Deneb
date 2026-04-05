@@ -15,6 +15,9 @@
 #   scripts/dev-live-test.sh quality [SCENARIO]  Run quality tests (300 cases, YAML-driven)
 #   scripts/dev-live-test.sh quality-custom MSG Run quality test with custom message
 #   scripts/dev-live-test.sh quality-list       List all available quality tests
+#   scripts/dev-live-test.sh quality-history    Show past quality test runs
+#   scripts/dev-live-test.sh quality-compare A B Compare two runs
+#   scripts/dev-live-test.sh quality-trend NAME  Score trend for a test
 #   scripts/dev-live-test.sh logs [N]           Tail dev gateway logs (default: 50 lines)
 #   scripts/dev-live-test.sh logs-watch         Follow dev gateway logs in real-time (like tail -f)
 #   scripts/dev-live-test.sh logs-grep PATTERN  Search logs for pattern
@@ -418,7 +421,8 @@ asyncio.run(main())
 # Quality tests: response quality, formatting, Korean, tool usage, latency.
 cmd_quality() {
   local scenario="${1:-all}"
-  python3 "$SCRIPT_DIR/dev-quality-test.py" --port "$DEV_PORT" --scenario "$scenario"
+  shift 2>/dev/null || true
+  python3 "$SCRIPT_DIR/dev-quality-test.py" --port "$DEV_PORT" --scenario "$scenario" "$@"
 }
 
 cmd_quality_custom() {
@@ -427,7 +431,20 @@ cmd_quality_custom() {
     echo "Usage: scripts/dev-live-test.sh quality-custom MESSAGE"
     return 1
   fi
-  python3 "$SCRIPT_DIR/dev-quality-test.py" --port "$DEV_PORT" --custom "$message"
+  shift
+  python3 "$SCRIPT_DIR/dev-quality-test.py" --port "$DEV_PORT" --custom "$message" "$@"
+}
+
+cmd_quality_history() {
+  python3 "$SCRIPT_DIR/dev-quality-test.py" --history "$@"
+}
+
+cmd_quality_compare() {
+  python3 "$SCRIPT_DIR/dev-quality-test.py" --compare "$@"
+}
+
+cmd_quality_trend() {
+  python3 "$SCRIPT_DIR/dev-quality-test.py" --trend "$@"
 }
 
 # --- Autoresearch integration ---
@@ -713,9 +730,12 @@ case "${1:-help}" in
   rpc)         shift; cmd_rpc "$@" ;;
   session)     shift; cmd_session "$@" ;;
   chat)           shift; cmd_chat "$@" ;;
-  quality)        shift; cmd_quality "$@" ;;
-  quality-custom) shift; cmd_quality_custom "$@" ;;
-  quality-list)   python3 "$SCRIPT_DIR/dev-quality-test.py" --list ;;
+  quality)          shift; cmd_quality "$@" ;;
+  quality-custom)   shift; cmd_quality_custom "$@" ;;
+  quality-list)     python3 "$SCRIPT_DIR/dev-quality-test.py" --list ;;
+  quality-history)  shift; cmd_quality_history "$@" ;;
+  quality-compare)  shift; cmd_quality_compare "$@" ;;
+  quality-trend)    shift; cmd_quality_trend "$@" ;;
   metric-script)  cmd_metric_script ;;
   metric-gen)     shift; "$SCRIPT_DIR/dev-metric-gen.sh" "$@" ;;
   ar-start)       shift; "$SCRIPT_DIR/dev-autoresearch.sh" start "$@" ;;
@@ -775,8 +795,12 @@ case "${1:-help}" in
     echo "    Scenarios: all|core|health|daily|system|code|task|search|knowledge"
     echo "               format|context|edge|safety|korean|persona|reasoning"
     echo "    Legacy:    chat|tools|tools-deep (aliases for new categories)"
+    echo "    Flags:     --record (save to DB), --model MODEL (override)"
     echo "  quality-custom MSG  Quality test with custom message"
     echo "  quality-list        List all available quality tests"
+    echo "  quality-history     Show past quality test runs"
+    echo "  quality-compare A B Compare two runs side-by-side"
+    echo "  quality-trend NAME  Show score trend for a test"
     echo ""
     echo "Reproduction (for AI agents to reproduce user-reported symptoms):"
     echo "  chat-check MSG [--expect PAT] [--expect-not PAT] [--expect-tool TOOL]"

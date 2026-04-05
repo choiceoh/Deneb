@@ -24,6 +24,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Quality test result databases
+quality-results.db
+
 # Go build artifacts
 gateway-go/gateway
 gateway-go/cover.out

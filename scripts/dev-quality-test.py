@@ -22,7 +22,10 @@ import argparse
 import re
 import os
 import socket
+import sqlite3
+import subprocess
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -136,6 +139,306 @@ class ChatCapture:
             return self.token_usage_data
         payload = self.final_response.get("payload", {})
         return payload.get("usage", {})
+
+
+# --- Result Store (SQLite) ---
+
+class ResultStore:
+    """Persistent quality test result storage using SQLite."""
+
+    DEFAULT_PATH = Path.home() / ".deneb" / "quality-results.db"
+
+    def __init__(self, db_path: Path = None):
+        self.db_path = db_path or self.DEFAULT_PATH
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(str(self.db_path))
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA foreign_keys=ON")
+        self._create_tables()
+
+    def _create_tables(self):
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS runs (
+                run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp       TEXT NOT NULL,
+                model           TEXT NOT NULL DEFAULT '',
+                scenario        TEXT NOT NULL DEFAULT 'all',
+                git_branch      TEXT NOT NULL DEFAULT '',
+                git_commit      TEXT NOT NULL DEFAULT '',
+                gateway_version TEXT NOT NULL DEFAULT '',
+                total_tests     INTEGER NOT NULL DEFAULT 0,
+                passed_tests    INTEGER NOT NULL DEFAULT 0,
+                total_checks    INTEGER NOT NULL DEFAULT 0,
+                passed_checks   INTEGER NOT NULL DEFAULT 0,
+                overall_score   REAL NOT NULL DEFAULT 0.0,
+                all_passed      INTEGER NOT NULL DEFAULT 0,
+                duration_ms     REAL NOT NULL DEFAULT 0.0
+            );
+            CREATE TABLE IF NOT EXISTS test_results (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id          INTEGER NOT NULL REFERENCES runs(run_id),
+                test_name       TEXT NOT NULL,
+                category        TEXT NOT NULL DEFAULT '',
+                passed          INTEGER NOT NULL DEFAULT 0,
+                score           REAL NOT NULL DEFAULT 0.0,
+                latency_ms      REAL NOT NULL DEFAULT 0.0,
+                check_count     INTEGER NOT NULL DEFAULT 0,
+                checks_passed   INTEGER NOT NULL DEFAULT 0,
+                tools_used      TEXT NOT NULL DEFAULT '[]',
+                errors          TEXT NOT NULL DEFAULT '[]'
+            );
+            CREATE INDEX IF NOT EXISTS idx_test_results_run ON test_results(run_id);
+            CREATE INDEX IF NOT EXISTS idx_test_results_name ON test_results(test_name);
+            CREATE INDEX IF NOT EXISTS idx_runs_timestamp ON runs(timestamp);
+        """)
+
+    def record_run(self, results: list, metadata: dict) -> int:
+        total_checks = sum(len(r.checks) for r in results)
+        passed_checks = sum(sum(1 for _, p, _ in r.checks if p) for r in results)
+        overall_score = sum(r.score for r in results) / max(len(results), 1)
+
+        cur = self.conn.execute("""
+            INSERT INTO runs (timestamp, model, scenario, git_branch, git_commit,
+                              gateway_version, total_tests, passed_tests, total_checks,
+                              passed_checks, overall_score, all_passed, duration_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            metadata.get("timestamp", ""),
+            metadata.get("model", ""),
+            metadata.get("scenario", "all"),
+            metadata.get("git_branch", ""),
+            metadata.get("git_commit", ""),
+            metadata.get("gateway_version", ""),
+            len(results),
+            sum(1 for r in results if r.passed),
+            total_checks,
+            passed_checks,
+            round(overall_score, 4),
+            int(all(r.passed for r in results)),
+            metadata.get("duration_ms", 0),
+        ))
+        run_id = cur.lastrowid
+
+        for r in results:
+            cat = r.name.split("-")[0] if "-" in r.name else "other"
+            checks_p = sum(1 for _, p, _ in r.checks if p)
+            self.conn.execute("""
+                INSERT INTO test_results (run_id, test_name, category, passed, score,
+                                          latency_ms, check_count, checks_passed,
+                                          tools_used, errors)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                run_id, r.name, cat, int(r.passed), round(r.score, 4),
+                round(r.latency_ms), len(r.checks), checks_p,
+                json.dumps(r.tool_calls, ensure_ascii=False),
+                json.dumps(r.errors, ensure_ascii=False),
+            ))
+
+        self.conn.commit()
+        return run_id
+
+    def list_runs(self, limit: int = 20) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT run_id, timestamp, model, scenario, overall_score,
+                   passed_tests, total_tests, all_passed, git_branch, git_commit,
+                   duration_ms, gateway_version
+            FROM runs ORDER BY run_id DESC LIMIT ?
+        """, (limit,))
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def get_run_detail(self, run_id: int) -> dict:
+        cur = self.conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,))
+        cols = [d[0] for d in cur.description]
+        row = cur.fetchone()
+        if not row:
+            return {}
+        run = dict(zip(cols, row))
+        cur2 = self.conn.execute("""
+            SELECT test_name, category, passed, score, latency_ms,
+                   check_count, checks_passed, tools_used, errors
+            FROM test_results WHERE run_id = ? ORDER BY id
+        """, (run_id,))
+        cols2 = [d[0] for d in cur2.description]
+        run["tests"] = [dict(zip(cols2, r)) for r in cur2.fetchall()]
+        return run
+
+    def compare_runs(self, run_a: int, run_b: int) -> dict:
+        a = self.get_run_detail(run_a)
+        b = self.get_run_detail(run_b)
+        if not a or not b:
+            return {"error": f"Run {'#' + str(run_a) if not a else '#' + str(run_b)} not found"}
+
+        a_tests = {t["test_name"]: t for t in a.get("tests", [])}
+        b_tests = {t["test_name"]: t for t in b.get("tests", [])}
+        all_names = sorted(set(a_tests) | set(b_tests))
+
+        regressions = []
+        improvements = []
+        for name in all_names:
+            ta = a_tests.get(name)
+            tb = b_tests.get(name)
+            if ta and tb:
+                if ta["passed"] and not tb["passed"]:
+                    regressions.append({"name": name, "score_a": ta["score"], "score_b": tb["score"]})
+                elif not ta["passed"] and tb["passed"]:
+                    improvements.append({"name": name, "score_a": ta["score"], "score_b": tb["score"]})
+
+        return {
+            "run_a": {"id": run_a, "model": a.get("model", ""), "score": a.get("overall_score", 0),
+                      "passed": a.get("passed_tests", 0), "total": a.get("total_tests", 0)},
+            "run_b": {"id": run_b, "model": b.get("model", ""), "score": b.get("overall_score", 0),
+                      "passed": b.get("passed_tests", 0), "total": b.get("total_tests", 0)},
+            "regressions": regressions,
+            "improvements": improvements,
+        }
+
+    def test_trend(self, test_name: str, limit: int = 20) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT r.run_id, r.timestamp, r.model, t.score, t.latency_ms, t.passed
+            FROM test_results t JOIN runs r ON t.run_id = r.run_id
+            WHERE t.test_name = ?
+            ORDER BY r.run_id DESC LIMIT ?
+        """, (test_name, limit))
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def close(self):
+        self.conn.close()
+
+
+# --- Helpers ---
+
+async def detect_model(client) -> str:
+    """Get current model from gateway health RPC."""
+    try:
+        resp = await client.rpc("health")
+        if resp.get("ok"):
+            return resp.get("payload", {}).get("model", "")
+    except Exception:
+        pass
+    return ""
+
+
+def git_info() -> tuple[str, str]:
+    """Return (branch, short_commit)."""
+    try:
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=SCRIPT_DIR, text=True, timeout=5
+        ).strip()
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=SCRIPT_DIR, text=True, timeout=5
+        ).strip()
+        return branch, commit
+    except Exception:
+        return "", ""
+
+
+# --- History Display ---
+
+def print_history(store: ResultStore, limit: int = 20):
+    runs = store.list_runs(limit)
+    if not runs:
+        print("No recorded runs.")
+        return
+
+    print(f"\nQuality Test History (last {len(runs)} runs):\n")
+    print(f"  {'#':<5} {'Date':<20} {'Model':<30} {'Scenario':<10} {'Score':<8} {'Tests':<12} {'Branch'}")
+    print(f"  {'─'*5} {'─'*20} {'─'*30} {'─'*10} {'─'*8} {'─'*12} {'─'*30}")
+    for r in runs:
+        ts = r["timestamp"][:19].replace("T", " ") if r["timestamp"] else "?"
+        branch_info = r["git_branch"]
+        if r["git_commit"]:
+            branch_info += f"@{r['git_commit']}"
+        model = r["model"][:30] if r["model"] else "(unknown)"
+        score = f"{r['overall_score']:.0%}"
+        tests = f"{r['passed_tests']}/{r['total_tests']}"
+        status = "✓" if r["all_passed"] else "✗"
+        print(f"  {r['run_id']:<5} {ts:<20} {model:<30} {r['scenario']:<10} {score:<8} {status} {tests:<10} {branch_info}")
+    print()
+
+
+def print_run_detail(store: ResultStore, run_id: int):
+    detail = store.get_run_detail(run_id)
+    if not detail:
+        print(f"Run #{run_id} not found.")
+        return
+
+    ts = detail["timestamp"][:19].replace("T", " ") if detail["timestamp"] else "?"
+    print(f"\nRun #{detail['run_id']} — {ts}")
+    print(f"  Model:    {detail.get('model', '?')}")
+    print(f"  Scenario: {detail.get('scenario', '?')}")
+    print(f"  Branch:   {detail.get('git_branch', '?')}@{detail.get('git_commit', '?')}")
+    print(f"  Gateway:  v{detail.get('gateway_version', '?')}")
+    print(f"  Score:    {detail['overall_score']:.0%} ({detail['passed_tests']}/{detail['total_tests']} tests, "
+          f"{detail['passed_checks']}/{detail['total_checks']} checks)")
+    print(f"  Duration: {detail['duration_ms']:.0f}ms")
+    print()
+
+    # Group by category.
+    by_cat = {}
+    for t in detail.get("tests", []):
+        by_cat.setdefault(t["category"], []).append(t)
+
+    for cat, tests in by_cat.items():
+        cat_passed = sum(1 for t in tests if t["passed"])
+        icon = "✓" if cat_passed == len(tests) else "✗"
+        print(f"  {icon} [{cat}] {cat_passed}/{len(tests)}")
+        for t in tests:
+            ti = "✓" if t["passed"] else "✗"
+            tools = json.loads(t["tools_used"]) if t["tools_used"] != "[]" else []
+            tools_str = f" tools={tools}" if tools else ""
+            print(f"    {ti} {t['test_name']} score={t['score']:.0%} {t['latency_ms']:.0f}ms{tools_str}")
+    print()
+
+
+def print_compare(store: ResultStore, run_a: int, run_b: int):
+    diff = store.compare_runs(run_a, run_b)
+    if "error" in diff:
+        print(diff["error"])
+        return
+
+    a = diff["run_a"]
+    b = diff["run_b"]
+    score_delta = b["score"] - a["score"]
+    sign = "+" if score_delta >= 0 else ""
+    print(f"\nComparing run #{a['id']} vs #{b['id']}:\n")
+    print(f"  Model:  {a['model'] or '?'} → {b['model'] or '?'}")
+    print(f"  Score:  {a['score']:.0%} → {b['score']:.0%}  ({sign}{score_delta:.1%})")
+    print(f"  Tests:  {a['passed']}/{a['total']} → {b['passed']}/{b['total']}")
+
+    regs = diff["regressions"]
+    imps = diff["improvements"]
+    if regs:
+        print(f"\n  Regressions ({len(regs)} tests PASS → FAIL):")
+        for r in regs:
+            print(f"    ✗ {r['name']}  {r['score_a']:.0%} → {r['score_b']:.0%}")
+    if imps:
+        print(f"\n  Improvements ({len(imps)} tests FAIL → PASS):")
+        for r in imps:
+            print(f"    ✓ {r['name']}  {r['score_a']:.0%} → {r['score_b']:.0%}")
+    if not regs and not imps:
+        print("\n  No pass/fail changes between runs.")
+    print()
+
+
+def print_trend(store: ResultStore, test_name: str, limit: int = 20):
+    data = store.test_trend(test_name, limit)
+    if not data:
+        print(f"No data for test '{test_name}'.")
+        return
+
+    print(f"\nScore trend for \"{test_name}\" (last {len(data)} runs):\n")
+    print(f"  {'Run':<6} {'Date':<20} {'Model':<30} {'Score':<8} {'Latency'}")
+    print(f"  {'─'*6} {'─'*20} {'─'*30} {'─'*8} {'─'*10}")
+    for d in data:
+        ts = d["timestamp"][:19].replace("T", " ") if d["timestamp"] else "?"
+        model = d["model"][:30] if d["model"] else "?"
+        icon = "✓" if d["passed"] else "✗"
+        print(f"  #{d['run_id']:<5} {ts:<20} {model:<30} {icon} {d['score']:.0%}  {d['latency_ms']:.0f}ms")
+    print()
 
 
 # --- WebSocket Client ---
@@ -1000,9 +1303,15 @@ async def run(args):
         print("Is the dev gateway running? Try: scripts/dev-live-test.sh start")
         return 1
 
+    run_start = time.time()
     results = []
+    model = ""
 
     try:
+        # Detect model before running tests (while client is connected).
+        if args.record:
+            model = args.model or await detect_model(client)
+
         if args.custom:
             r = await run_custom(client, args.custom)
             results.append(r)
@@ -1035,7 +1344,28 @@ async def run(args):
         print("No results")
         return 1
 
-    return print_report(results, json_output=args.json)
+    exit_code = print_report(results, json_output=args.json)
+
+    # Record results to SQLite if requested.
+    if args.record and results:
+        duration_ms = (time.time() - run_start) * 1000
+        branch, commit = git_info()
+        metadata = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "model": model,
+            "scenario": scenario,
+            "git_branch": branch,
+            "git_commit": commit,
+            "gateway_version": version,
+            "duration_ms": duration_ms,
+        }
+        db_path = Path(args.db_path) if args.db_path else None
+        store = ResultStore(db_path)
+        run_id = store.record_run(results, metadata)
+        store.close()
+        print(f"\n  Recorded run #{run_id} to {store.db_path}")
+
+    return exit_code
 
 
 def main():
@@ -1062,7 +1392,37 @@ def main():
                         help="Output JSON report")
     parser.add_argument("--report", action="store_true",
                         help="Run full quality report (same as --scenario all)")
+    # Recording & history.
+    parser.add_argument("--record", action="store_true",
+                        help="Record results to persistent SQLite database")
+    parser.add_argument("--model", type=str, default="",
+                        help="Override model name (auto-detected from gateway if not set)")
+    parser.add_argument("--db-path", type=str, default="",
+                        help="Override database path (default: ~/.deneb/quality-results.db)")
+    parser.add_argument("--history", action="store_true",
+                        help="Show past run history")
+    parser.add_argument("--history-detail", type=int, metavar="RUN_ID",
+                        help="Show detailed results for a specific run")
+    parser.add_argument("--compare", nargs=2, type=int, metavar=("RUN_A", "RUN_B"),
+                        help="Compare two runs side-by-side")
+    parser.add_argument("--trend", type=str, metavar="TEST_NAME",
+                        help="Show score trend for a specific test across runs")
     args = parser.parse_args()
+
+    # History commands (no gateway needed).
+    if args.history or args.history_detail or args.compare or args.trend:
+        db_path = Path(args.db_path) if args.db_path else None
+        store = ResultStore(db_path)
+        if args.history:
+            print_history(store)
+        elif args.history_detail:
+            print_run_detail(store, args.history_detail)
+        elif args.compare:
+            print_compare(store, args.compare[0], args.compare[1])
+        elif args.trend:
+            print_trend(store, args.trend)
+        store.close()
+        return
 
     if args.report:
         args.scenario = "all"
