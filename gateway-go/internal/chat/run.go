@@ -178,8 +178,12 @@ func isSystemSession(key string) bool {
 }
 
 // isMainSession reports whether key is a top-level direct session (e.g. "telegram:123").
-// Sub-sessions ("telegram:123:task:ts"), cron, and hook sessions return false.
+// Sub-sessions ("telegram:123:task:ts"), system ("system:*"), cron, hook, and
+// bare keys (no colon, e.g. "dev-chat-xxx") return false.
 func isMainSession(key string) bool {
+	if isSystemSession(key) {
+		return false
+	}
 	idx := strings.Index(key, ":")
 	if idx < 0 {
 		return false

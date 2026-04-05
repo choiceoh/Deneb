@@ -57,6 +57,12 @@ func triggerProactiveCompaction(
 		return
 	}
 
+	// Only main sessions (e.g. "telegram:123") may trigger compaction.
+	// Dev-test, sub-task, and cron sessions must not modify the shared Aurora store.
+	if !isMainSession(params.SessionKey) {
+		return
+	}
+
 	// Circuit breaker: skip if compaction has failed too many times consecutively.
 	if getCompactionCircuitBreaker().IsTripped() {
 		logger.Debug("proactive compaction: circuit breaker tripped, skipping")
@@ -197,7 +203,8 @@ func buildMidLoopCompactor(
 		}
 
 		// Step 3: Aurora compaction sweep (uses lightweight local LLM for summaries).
-		if deps.auroraStore == nil {
+		// Only main sessions may use Aurora sweep; others get microcompact only.
+		if deps.auroraStore == nil || !isMainSession(params.SessionKey) {
 			// No Aurora store — return microcompacted messages as best effort.
 			lastCompactTurn = turn
 			if mcResult.PrunedCount > 0 {
