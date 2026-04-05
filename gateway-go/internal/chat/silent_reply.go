@@ -10,10 +10,13 @@ import (
 const SilentReplyToken = "NO_REPLY"
 
 var (
-	// silentExactRe matches the exact silent reply token with optional whitespace.
-	silentExactRe = regexp.MustCompile(`^\s*NO_REPLY\s*$`)
-	// silentTrailingRe matches a trailing NO_REPLY token at the end of mixed content.
-	silentTrailingRe = regexp.MustCompile(`(?:^|\s+|\*+)NO_REPLY\s*$`)
+	// silentExactRe matches the exact silent reply token with optional
+	// surrounding whitespace and trailing non-alphanumeric characters (e.g.,
+	// emoji like 🐾 that the model sometimes appends).
+	silentExactRe = regexp.MustCompile(`^\s*NO_REPLY[^a-zA-Z0-9]*$`)
+	// silentTrailingRe matches a trailing NO_REPLY token at the end of mixed
+	// content, allowing optional trailing non-alphanumeric characters.
+	silentTrailingRe = regexp.MustCompile(`(?:^|\s+|\*+)NO_REPLY[^a-zA-Z0-9]*$`)
 )
 
 // IsSilentReply returns true if the text is exactly the silent reply token

@@ -109,6 +109,24 @@ func handleRunSuccess(
 		OutputTokens: result.Usage.OutputTokens,
 		TextLen:      len(result.Text),
 	})
+	// Strip silent reply token (NO_REPLY) from the response text before
+	// persisting, broadcasting, or delivering. This ensures the internal
+	// token is never exposed to any client (RPC, WebSocket, Telegram) and
+	// is not stored in transcript history.
+	isSilent := IsSilentReply(result.Text)
+	if !isSilent {
+		stripped := StripSilentToken(result.Text)
+		if stripped == "" && result.Text != "" {
+			isSilent = true
+		} else {
+			result.Text = stripped
+		}
+	}
+	if isSilent {
+		result.Text = ""
+		logger.Info("suppressing silent reply (NO_REPLY)")
+	}
+
 	// Persist assistant message to transcript + Aurora store.
 	// When tool activities were recorded, prepend a compact summary so the
 	// next context assembly includes what the agent actually did — not just

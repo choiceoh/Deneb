@@ -213,7 +213,11 @@ class GatewayClient:
                     capture.final_response = frame
                     capture.end_time = time.time()
                     if state == "done":
-                        capture.reply_text = payload.get("text", capture.all_text)
+                        done_text = payload.get("text")
+                        if done_text is not None:
+                            capture.reply_text = done_text
+                        else:
+                            capture.reply_text = capture.all_text
                         capture.token_usage_data = payload.get("usage", {})
                     elif state in ("error", "aborted"):
                         capture.errors.append(payload.get("error", f"state={state}"))
@@ -237,7 +241,10 @@ class GatewayClient:
             elif evt == "sessions.changed":
                 capture.status_changes.append(payload)
 
-        if not capture.reply_text and capture.all_text:
+        # Only fall back to accumulated deltas when the complete event was
+        # never received (e.g., timeout). When the server sends an explicit
+        # "done" event with text="" (e.g., suppressed NO_REPLY), respect that.
+        if not capture.reply_text and capture.all_text and not capture.final_response:
             capture.reply_text = capture.all_text
         if not capture.end_time:
             capture.end_time = time.time()

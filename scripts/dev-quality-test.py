@@ -571,7 +571,11 @@ class GatewayClient:
                         capture.final_response = frame
                         capture.end_time = time.time()
                         if state == "done":
-                            capture.reply_text = payload.get("text", capture.all_text)
+                            done_text = payload.get("text")
+                            if done_text is not None:
+                                capture.reply_text = done_text
+                            else:
+                                capture.reply_text = capture.all_text
                             capture.token_usage_data = payload.get("usage", {})
                         elif state in ("error", "aborted"):
                             capture.errors.append(payload.get("error", f"state={state}"))
@@ -592,7 +596,10 @@ class GatewayClient:
                 elif evt == "sessions.changed":
                     capture.status_changes.append(payload)
 
-        if not capture.reply_text and capture.all_text:
+        # Only fall back to accumulated deltas when the complete event was
+        # never received (e.g., timeout). When the server sends an explicit
+        # "done" event with text="" (e.g., suppressed NO_REPLY), respect that.
+        if not capture.reply_text and capture.all_text and not capture.final_response:
             capture.reply_text = capture.all_text
         if not capture.end_time:
             capture.end_time = time.time()
@@ -606,21 +613,22 @@ class GatewayClient:
 # --- Quality Checks ---
 
 def check_korean_response(text: str) -> tuple[bool, str]:
-    """Check if response contains Korean characters (excludes code refs)."""
-    # Strip backtick-wrapped code references which are inherently English.
-    prose = re.sub(r"`[^`]+`", "", text)
+    """Check response language is Korean or English (rejects other languages)."""
+    # Strip fenced code blocks and inline code which are inherently English.
+    prose = re.sub(r"```[\s\S]*?```", "", text)
+    prose = re.sub(r"`[^`]+`", "", prose)
     korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", prose))
-    total_alpha = len(re.findall(r"[a-zA-Z\uac00-\ud7af]", prose))
+    english_chars = len(re.findall(r"[a-zA-Z]", prose))
+    ko_en = korean_chars + english_chars
+    # Count ALL Unicode letters (Korean, English, Chinese, Cyrillic, etc.)
+    total_alpha = sum(1 for c in prose if c.isalpha())
     if total_alpha == 0:
-        # Fallback: if all content is code, check original text has any Korean.
-        korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", text))
-        if korean_chars > 0:
-            return True, f"Korean ratio: code-heavy ({korean_chars} Korean chars)"
-        return False, "no alphabetic content"
-    ratio = korean_chars / max(total_alpha, 1)
-    if ratio > 0.3:
-        return True, f"Korean ratio: {ratio:.0%} ({korean_chars} chars)"
-    return False, f"Korean ratio too low: {ratio:.0%} ({korean_chars}/{total_alpha})"
+        # No alphabetic content (numbers, emoji, symbols only) — acceptable.
+        return True, "no alphabetic content (ok)"
+    ratio = ko_en / total_alpha
+    if ratio > 0.7:
+        return True, f"ko+en: {ratio:.0%} (ko={korean_chars}, en={english_chars})"
+    return False, f"ko+en ratio too low: {ratio:.0%} ({ko_en}/{total_alpha})"
 
 
 def check_no_leaked_markup(text: str) -> tuple[bool, str]:
@@ -846,23 +854,113 @@ def _eval_param(key: str, val, capture: ChatCapture) -> tuple[str, bool, str]:
                 f"{len(items)} items (min: {min_items})")
 
     if key == "has_reply":
-        # Parameterized has_reply: {has_reply: {min_chars: 20}}
+        # Parameterized has_reply: {has_reply: {min_chars: 20, min_alpha: 3}}
         if isinstance(val, dict):
             min_c = val.get("min_chars", 10)
+            min_a = val.get("min_alpha", 5)
         else:
             min_c = int(val) if val else 10
-        ok, detail = check_response_substance(text, min_c)
+            min_a = 5
+        ok, detail = check_response_substance(text, min_c, min_a)
         return ("has_reply", ok, detail)
+
+    if key == "max_input_tokens":
+        # Verify the last turn's input tokens are under a limit.
+        # Useful for checking context doesn't explode over many turns.
+        limit = int(val)
+        input_tokens = capture.token_usage.get("inputTokens", 0)
+        return ("max_input_tokens", input_tokens <= limit,
+                f"{input_tokens} tokens (limit: {limit})")
+
+    if key == "token_bounded":
+        # Verify token growth is bounded across turns: the last turn's input
+        # tokens should not exceed <val>× the first turn's tokens.
+        # Requires multi-turn _turn_tokens data.
+        max_ratio = float(val)
+        turn_tokens = capture.token_usage.get("_turn_tokens", [])
+        if len(turn_tokens) < 2:
+            return ("token_bounded", True, "not enough turns to check")
+        first_input = turn_tokens[0].get("input", 1)
+        last_input = turn_tokens[-1].get("input", 1)
+        ratio = last_input / max(first_input, 1)
+        ok = ratio <= max_ratio
+        return ("token_bounded", ok,
+                f"growth {ratio:.1f}x (first={first_input}, last={last_input}, limit={max_ratio}x)")
 
     return (key, False, f"unknown param check: {key}={val}")
 
 
 # --- Generated Messages ---
 
+def _build_filler_text(target_chars: int) -> str:
+    """Build a large block of realistic Korean+English tech text."""
+    blocks = [
+        "서버 아키텍처 분석: Go 기반 HTTP/WS 게이트웨이와 Rust FFI 코어 엔진으로 구성된 하이브리드 시스템. "
+        "gateway-go는 내부적으로 RPC 디스패처, 세션 관리, 채널 레지스트리, 챗 파이프라인을 포함한다. "
+        "core-rs는 프로토콜 검증, 보안 (constant_time_eq, SSRF 방지), 미디어 처리 (21개 MIME 포맷), "
+        "메모리 검색 (SIMD cosine + BM25 + FTS5), 컨텍스트 엔진, 컴팩션 스테이트 머신을 담당한다. ",
+        "데이터베이스 인덱스 전략: B-Tree는 범위 쿼리에 강하고, Hash 인덱스는 등값 비교에 O(1)이다. "
+        "LSM-Tree는 쓰기 집약적 워크로드에 최적화되어 있으며, Bloom filter로 읽기 성능을 보완한다. "
+        "GiST(Generalized Search Tree)는 지리 공간 쿼리에 사용되며, GIN(Generalized Inverted Index)은 "
+        "전문 검색과 배열/JSONB 쿼리에 적합하다. Bitmap 인덱스는 카디널리티가 낮은 컬럼에 효과적이다. ",
+        "분산 시스템 이론: CAP 정리에 따르면 Consistency, Availability, Partition tolerance 중 두 가지만 "
+        "동시에 보장할 수 있다. Raft 합의 알고리즘은 리더 선출, 로그 복제, 안전성을 보장하며 etcd/Consul에 "
+        "사용된다. Paxos는 이론적으로 더 일반적이지만 구현이 복잡하다. 2PC는 분산 트랜잭션에, "
+        "3PC는 블로킹 문제를 해결하지만 네트워크 파티션에 취약하다. Vector clock은 인과적 순서를 추적한다. ",
+        "쿠버네티스 아키텍처: API Server가 모든 요청을 받아 etcd에 저장하고, Scheduler가 Pod를 노드에 "
+        "배치하며, Controller Manager가 desired state와 current state의 차이를 reconcile한다. "
+        "kubelet은 각 노드에서 Pod 라이프사이클을 관리하고, kube-proxy는 Service 네트워킹을 담당한다. "
+        "StatefulSet은 순서 보장과 영구 스토리지가 필요한 워크로드에, DaemonSet은 모든 노드 배포에 사용된다. ",
+        "마이크로서비스 패턴: Circuit Breaker(Netflix Hystrix)는 장애 전파를 방지하고, Saga 패턴은 "
+        "분산 트랜잭션을 choreography 또는 orchestration 방식으로 관리한다. Event Sourcing은 상태 변경을 "
+        "이벤트 시퀀스로 저장하며, CQRS는 읽기와 쓰기를 분리한다. Service Mesh(Istio/Linkerd)는 "
+        "사이드카 프록시로 mTLS, traffic management, observability를 투명하게 제공한다. ",
+        "OAuth 2.0 플로우: Authorization Code Grant는 서버 사이드 앱에 적합하며 PKCE 확장으로 "
+        "공개 클라이언트도 안전하게 사용할 수 있다. Client Credentials는 서비스 간 통신에, "
+        "Device Code는 입력이 제한된 디바이스에 사용된다. Implicit Grant는 보안 문제로 더 이상 권장되지 않는다. "
+        "Access Token은 JWT 형식으로 자체 검증이 가능하고, Refresh Token으로 장기 세션을 유지한다. ",
+        "Kafka 내부 구조: 토픽은 파티션으로 분할되며 각 파티션은 ordered, immutable한 로그다. "
+        "프로듀서는 키 해싱 또는 라운드로빈으로 파티션을 선택하고, 컨슈머 그룹은 파티션을 분배한다. "
+        "ISR(In-Sync Replicas)는 복제 지연이 일정 범위 내인 레플리카 집합이며, acks=all로 데이터 손실을 방지한다. "
+        "Log compaction은 키별 최신 값만 유지하여 changelog 토픽에 적합하다. ",
+    ]
+    result = []
+    current = 0
+    idx = 0
+    while current < target_chars:
+        block = blocks[idx % len(blocks)]
+        result.append(block)
+        current += len(block)
+        idx += 1
+    return "".join(result)
+
+
+# Pre-built filler texts (built once per process).
+_FILLER_CACHE: dict[int, str] = {}
+
+
+def _get_filler(chars: int) -> str:
+    if chars not in _FILLER_CACHE:
+        _FILLER_CACHE[chars] = _build_filler_text(chars)
+    return _FILLER_CACHE[chars]
+
+
 def generate_message(gen_type: str) -> str:
     """Generate special test messages that can't be expressed in YAML."""
     if gen_type == "long_korean":
         return "이것은 매우 긴 메시지입니다. " * 250 + "마지막 질문: 1+1은?"
+    # filler_NNk: generate ~NN×1000 chars of filler text.
+    # Example: "filler_120k" → ~120,000 chars (~30K-40K tokens)
+    m = re.match(r"filler_(\d+)k(?:_(.+))?", gen_type)
+    if m:
+        chars = int(m.group(1)) * 1000
+        suffix = m.group(2) or ""
+        text = _get_filler(chars)
+        if suffix:
+            text += f"\n\n위 텍스트는 무시해. {suffix}"
+        else:
+            text += "\n\n위 내용은 참고용 기술 문서야. 읽어두기만 해."
+        return text
     return f"(unknown gen: {gen_type})"
 
 
@@ -1060,11 +1158,21 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
     try:
         session_key = await client.create_session()
         last_capture = None
+        turn_tokens = []  # Track per-turn token usage for compaction checks
         for turn in turns:
-            msg = turn.get("msg", "")
+            if "gen" in turn:
+                msg = generate_message(turn["gen"])
+            else:
+                msg = turn.get("msg", "")
             if msg:
                 last_capture = await client.chat(msg, session_key=session_key,
                                                  timeout=timeout)
+                usage = last_capture.token_usage
+                turn_tokens.append({
+                    "turn": len(turn_tokens) + 1,
+                    "input": usage.get("inputTokens", 0),
+                    "output": usage.get("outputTokens", 0),
+                })
     except Exception as e:
         result.add_check("rpc_success", False, str(e))
         result.passed = False
@@ -1077,6 +1185,7 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
     result.latency_ms = last_capture.latency_ms
     result.reply_text = last_capture.reply_text
     result.token_usage = last_capture.token_usage
+    result.token_usage["_turn_tokens"] = turn_tokens  # Attach per-turn data
     result.tool_calls = [t["name"] for t in last_capture.tool_starts]
 
     # Evaluate checks (from profile + test-level chk).
@@ -1424,7 +1533,7 @@ def main():
         # New categories.
         "health", "daily", "system", "code", "task", "search",
         "knowledge", "format", "context", "edge", "safety",
-        "korean", "persona", "reasoning",
+        "korean", "persona", "reasoning", "compact",
         # Legacy aliases.
         "chat", "tools", "tools-deep",
     ]

@@ -54,8 +54,9 @@ func RuntimeMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 func health(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		result := map[string]any{
-			"status": "ok",
-			"uptime": time.Since(deps.StartedAt).Milliseconds(),
+			"status":  "ok",
+			"version": deps.Version,
+			"uptime":  time.Since(deps.StartedAt).Milliseconds(),
 		}
 		if deps.CurrentModel != nil {
 			if m := deps.CurrentModel(); m != "" {
