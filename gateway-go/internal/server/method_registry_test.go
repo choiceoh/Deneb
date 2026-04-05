@@ -38,6 +38,9 @@ var requiredMethods = []string{
 	"acp.stop",
 	"acp.unbind",
 
+	// Bridge.
+	"bridge.send",
+
 	// Chat.
 	"chat.abort",
 	"chat.btw",

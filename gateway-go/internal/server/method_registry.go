@@ -17,6 +17,7 @@ import (
 	handlerautoresearch "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/autoresearch"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
+	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertelegram"
@@ -86,6 +87,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerskill.ToolMethods(handlerskill.ToolDeps{Processes: hub.Processes()}),
 		handlerskill.Methods(handlerskill.Deps{
 			Skills:      hub.Skills(),
+			Broadcaster: hub.Broadcast,
+		}),
+
+		// --- Inter-agent bridge ---
+		handlerbridge.Methods(handlerbridge.Deps{
 			Broadcaster: hub.Broadcast,
 		}),
 

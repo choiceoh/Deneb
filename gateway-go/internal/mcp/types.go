@@ -77,10 +77,11 @@ type InitializeResult struct {
 
 // ServerCaps declares server capabilities.
 type ServerCaps struct {
-	Tools     *ToolsCap     `json:"tools,omitempty"`
-	Resources *ResourcesCap `json:"resources,omitempty"`
-	Prompts   *PromptsCap   `json:"prompts,omitempty"`
-	Sampling  *SamplingCap  `json:"sampling,omitempty"`
+	Tools        *ToolsCap      `json:"tools,omitempty"`
+	Resources    *ResourcesCap  `json:"resources,omitempty"`
+	Prompts      *PromptsCap    `json:"prompts,omitempty"`
+	Sampling     *SamplingCap   `json:"sampling,omitempty"`
+	Experimental map[string]any `json:"experimental,omitempty"`
 }
 
 // ToolsCap indicates the server supports tools.
@@ -261,4 +262,11 @@ type Notification struct {
 // ResourceUpdatedParams is the params for notifications/resources/updated.
 type ResourceUpdatedParams struct {
 	URI string `json:"uri"`
+}
+
+// ChannelNotificationParams is the params for notifications/claude/channel.
+// This is the push notification format for Claude Code's channel feature.
+type ChannelNotificationParams struct {
+	Content string         `json:"content"`
+	Meta    map[string]any `json:"meta,omitempty"`
 }
