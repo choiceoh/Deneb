@@ -1,7 +1,7 @@
 {
-  "weight_hybrid": 0.55,
+  "weight_hybrid": 0.48,
   "weight_importance": 0.15,
-  "weight_recency": 0.25,
+  "weight_recency": 0.32,
   "weight_verification": 0.05,
   "category_importance_multiplier": {
     "decision": 1.20,
@@ -23,7 +23,7 @@
   "fts_and_min_results": 3,
   "or_penalty": 0.85,
   "trigram_penalty": 0.80,
-  "vector_min_threshold": 0.55,
+  "vector_min_threshold": 0.30,
   "hybrid_fts_weight": 0.70,
   "hybrid_vec_weight": 0.30,
   "entity_match_baseline": 0.60,
