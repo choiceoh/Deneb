@@ -19,6 +19,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 )
 
 // Fact categories matching Honcho's structured memory model.
@@ -86,7 +88,8 @@ type DreamingLogEntry struct {
 type Store struct {
 	db       *sql.DB
 	mu       sync.RWMutex
-	reranker RerankFunc // optional cross-encoder reranker (nil = disabled)
+	reranker RerankFunc         // optional cross-encoder reranker (nil = disabled)
+	embedder embedding.Embedder // optional embedder for semantic dedup at insert time (nil = disabled)
 	logger   *slog.Logger
 	shared   bool // true when DB is owned by unified store (don't close)
 
@@ -218,6 +221,13 @@ func (s *Store) SetReranker(fn RerankFunc) {
 // Reranker returns the configured reranker function, or nil if not set.
 func (s *Store) Reranker() RerankFunc {
 	return s.reranker
+}
+
+// SetEmbedder configures an optional raw embedder for semantic dedup at insert time.
+// When set, findSemanticDuplicate will use cosine similarity as a Stage 3 check
+// after FTS+Jaccard. Safe to call before any concurrent operations.
+func (s *Store) SetEmbedder(e embedding.Embedder) {
+	s.embedder = e
 }
 
 // SetFactMutateCallback registers a function called when facts are mutated

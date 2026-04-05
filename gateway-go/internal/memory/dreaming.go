@@ -30,6 +30,11 @@ const (
 	similarityMergeThreshold = 0.78
 	maxMergeDepth            = 2 // cascade prevention: facts at this depth are ineligible for merging
 
+	// Looser than consolidation (0.62) — we want related facts grouped for better
+	// LLM context, not exact duplicates. 0.50 catches topically related facts that
+	// benefit from being verified together.
+	verifyClusterThreshold = 0.50
+
 	// Per-phase timeouts prevent earlier phases from starving later ones.
 	// If a phase exceeds its budget, it's cut short but subsequent phases still run.
 	// Sum ~15m; the overall dreamingTimeout acts as a hard ceiling.
@@ -270,16 +275,28 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 	}
 	logger.Info("aurora-dream: verify phase input", "facts_to_verify", len(facts))
 
+	// Build semantic batches: cluster related facts so the LLM sees topically
+	// coherent groups, improving conflict detection within each batch.
+	// Falls back to sequential batching when no embeddings are available.
+	var batches [][]Fact
+	embeddings, embErr := store.LoadEmbeddings(ctx)
+	if embErr == nil && len(embeddings) > 0 {
+		batches = clusterFactsForVerify(facts, embeddings, dreamingBatchSize)
+		logger.Info("aurora-dream: verify using semantic batches", "batches", len(batches))
+	} else {
+		// Fallback: sequential batching (original behavior).
+		for i := 0; i < len(facts); i += dreamingBatchSize {
+			end := i + dreamingBatchSize
+			if end > len(facts) {
+				end = len(facts)
+			}
+			batches = append(batches, facts[i:end])
+		}
+	}
+
 	removed := map[int64]bool{} // track removed IDs across batches
 
-	// Process in batches.
-	for i := 0; i < len(facts); i += dreamingBatchSize {
-		end := i + dreamingBatchSize
-		if end > len(facts) {
-			end = len(facts)
-		}
-		batch := facts[i:end]
-
+	for _, batch := range batches {
 		v, e, c, batchErr := verifyAndResolveBatch(ctx, store, client, model, batch, removed, logger)
 		if batchErr != nil {
 			if shouldStopVerifyBatches(batchErr) {
@@ -295,6 +312,120 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 	}
 
 	return verified, expired, conflictsResolved, nil
+}
+
+// clusterFactsForVerify groups facts into semantically coherent batches using
+// union-find clustering on BGE-M3 embeddings. Related facts land in the same
+// LLM batch, improving the model's ability to detect contradictions and overlaps.
+//
+// Facts without embeddings are collected into a separate trailing batch.
+// Clusters larger than batchSize are split into sub-batches.
+func clusterFactsForVerify(facts []Fact, embeddings map[int64][]float32, batchSize int) [][]Fact {
+	// Separate facts with and without embeddings.
+	var withEmb []Fact
+	var withoutEmb []Fact
+	for _, f := range facts {
+		if _, ok := embeddings[f.ID]; ok {
+			withEmb = append(withEmb, f)
+		} else {
+			withoutEmb = append(withoutEmb, f)
+		}
+	}
+
+	if len(withEmb) == 0 {
+		// No embeddings at all — return sequential batches of all facts.
+		var batches [][]Fact
+		for i := 0; i < len(facts); i += batchSize {
+			end := i + batchSize
+			if end > len(facts) {
+				end = len(facts)
+			}
+			batches = append(batches, facts[i:end])
+		}
+		return batches
+	}
+
+	// Union-find clustering at verifyClusterThreshold.
+	parent := make(map[int64]int64, len(withEmb))
+	var find func(int64) int64
+	find = func(x int64) int64 {
+		if p, ok := parent[x]; ok && p != x {
+			parent[x] = find(p)
+			return parent[x]
+		}
+		return x
+	}
+	union := func(a, b int64) {
+		ra, rb := find(a), find(b)
+		if ra != rb {
+			parent[rb] = ra
+		}
+	}
+
+	for _, f := range withEmb {
+		parent[f.ID] = f.ID
+	}
+
+	for i := 0; i < len(withEmb); i++ {
+		for j := i + 1; j < len(withEmb); j++ {
+			sim := cosineSimilarity(embeddings[withEmb[i].ID], embeddings[withEmb[j].ID])
+			if sim >= verifyClusterThreshold {
+				union(withEmb[i].ID, withEmb[j].ID)
+			}
+		}
+	}
+
+	// Collect clusters. Use a fact-ID-indexed map for quick lookup.
+	factByID := make(map[int64]Fact, len(withEmb))
+	for _, f := range withEmb {
+		factByID[f.ID] = f
+	}
+
+	clusterMap := make(map[int64][]int64)
+	for _, f := range withEmb {
+		root := find(f.ID)
+		clusterMap[root] = append(clusterMap[root], f.ID)
+	}
+
+	// Sort clusters by size descending (largest first) for deterministic ordering.
+	type cluster struct {
+		ids []int64
+	}
+	clusters := make([]cluster, 0, len(clusterMap))
+	for _, ids := range clusterMap {
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		clusters = append(clusters, cluster{ids: ids})
+	}
+	sort.Slice(clusters, func(i, j int) bool {
+		return len(clusters[i].ids) > len(clusters[j].ids)
+	})
+
+	// Build batches: split large clusters into sub-batches of batchSize.
+	var batches [][]Fact
+	for _, cl := range clusters {
+		var clFacts []Fact
+		for _, id := range cl.ids {
+			clFacts = append(clFacts, factByID[id])
+		}
+		for i := 0; i < len(clFacts); i += batchSize {
+			end := i + batchSize
+			if end > len(clFacts) {
+				end = len(clFacts)
+			}
+			batches = append(batches, clFacts[i:end])
+		}
+	}
+
+	// Append facts without embeddings as trailing batch(es).
+	for i := 0; i < len(withoutEmb); i += batchSize {
+		end := i + batchSize
+		if end > len(withoutEmb) {
+			end = len(withoutEmb)
+		}
+		batches = append(batches, withoutEmb[i:end])
+	}
+
+	return batches
 }
 
 func shouldStopVerifyBatches(err error) bool {

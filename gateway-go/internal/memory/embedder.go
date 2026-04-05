@@ -97,3 +97,9 @@ func (e *Embedder) EmbedQuery(ctx context.Context, query string) ([]float32, err
 	defer cancel()
 	return e.embed.EmbedQuery(ctx, query)
 }
+
+// Inner returns the underlying embedding.Embedder interface.
+// Used by context assembly to perform batch embedding for semantic ranking.
+func (e *Embedder) Inner() embedding.Embedder {
+	return e.embed
+}

@@ -3,6 +3,7 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"testing"
 )
 
@@ -149,7 +150,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("returns tail N messages", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 3
-		result, err := assembleContextFallback(store, "test", cfg)
+		result, err := assembleContextFallback(store, "test", cfg, AssemblyHints{}, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -164,7 +165,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("returns all when MaxMessages is larger", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 100
-		result, err := assembleContextFallback(store, "test", cfg)
+		result, err := assembleContextFallback(store, "test", cfg, AssemblyHints{}, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -175,7 +176,7 @@ func TestAssembleContextFallback(t *testing.T) {
 
 	t.Run("empty session returns empty result", func(t *testing.T) {
 		cfg := DefaultContextConfig()
-		result, err := assembleContextFallback(store, "nonexistent", cfg)
+		result, err := assembleContextFallback(store, "nonexistent", cfg, AssemblyHints{}, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -187,7 +188,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("zero MaxMessages uses default", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 0
-		result, err := assembleContextFallback(store, "test", cfg)
+		result, err := assembleContextFallback(store, "test", cfg, AssemblyHints{}, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

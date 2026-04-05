@@ -357,7 +357,15 @@ func executeAgentRun(
 			}
 		}
 		if len(messages) == 0 && deps.transcript != nil {
-			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
+			// Build assembly hints for semantic ranking when an embedder is available.
+			var hints AssemblyHints
+			if deps.memoryEmbedder != nil && params.Message != "" {
+				hints = AssemblyHints{
+					QueryText: params.Message,
+					Embedder:  deps.memoryEmbedder.Inner(),
+				}
+			}
+			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger, hints)
 			if err != nil {
 				contextErr = err
 			} else {
