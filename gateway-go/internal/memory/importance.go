@@ -409,6 +409,19 @@ func parseFactsResponse(text string) ([]ExtractedFact, bool) {
 		return resp.Facts, true
 	}
 
+	// Pre-process: unescape double-encoded JSON if initial parse failed.
+	// Local models under guided_json sometimes backslash-escape all quotes:
+	//   {\"facts\": [{\"content\": \"hello\"}]}
+	// Unescape here so all subsequent strategies (Case 2-7) work on clean text.
+	if unescaped := jsonutil.UnescapeDoubleEncoded(text); unescaped != text {
+		text = unescaped
+		text = jsonutil.StripTrailingCommas(text)
+		// Retry Case 1 with unescaped text.
+		if err := json.Unmarshal([]byte(text), &resp); err == nil && resp.Facts != nil {
+			return resp.Facts, true
+		}
+	}
+
 	// Case 2: bare JSON array.
 	var arr []ExtractedFact
 	if err := json.Unmarshal([]byte(text), &arr); err == nil {
