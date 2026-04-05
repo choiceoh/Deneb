@@ -124,6 +124,7 @@ build_rust_core() {
 
 echo "Deneb dev environment setup"
 echo "==========================="
+echo "  [context] Claude agent running on Deneb gateway server (DGX Spark)"
 echo ""
 
 # Run independent installs in parallel
