@@ -37,10 +37,17 @@ mod inner {
 
     fn backend() -> &'static LlamaBackend {
         BACKEND.get_or_init(|| {
-            LlamaBackend::init().unwrap_or_else(|e| {
+            let backend = LlamaBackend::init().unwrap_or_else(|e| {
                 // If init fails, this is fatal — model inference cannot proceed.
                 panic!("llama backend init failed: {e}");
-            })
+            });
+            // Suppress llama.cpp's verbose internal logs (context alloc, graph
+            // reservation, Flash Attention auto-detect, etc.) that otherwise
+            // flood stderr on every inference call.
+            llama_cpp_2::send_logs_to_tracing(
+                llama_cpp_2::LogOptions::default().with_logs_enabled(false),
+            );
+            backend
         })
     }
 
