@@ -294,3 +294,38 @@ func TestWriteCompactToolList_UncategorizedTools(t *testing.T) {
 		t.Error("expected uncategorized tool in Other group")
 	}
 }
+
+func TestBuildSystemPrompt_WebToolGuidance(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "web"},
+			{Name: "http"},
+		},
+	}
+
+	prompt := BuildSystemPrompt(params)
+	if !strings.Contains(prompt, "## Web") {
+		t.Error("expected ## Web section when web/http tools are registered")
+	}
+	if !strings.Contains(prompt, "web(query=...)") {
+		t.Error("expected web search guidance")
+	}
+	if !strings.Contains(prompt, "fetch failure") || !strings.Contains(prompt, "403") {
+		t.Error("expected fetch failure guidance")
+	}
+}
+
+func TestBuildSystemPrompt_NoWebGuidanceWithoutTools(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "read"},
+		},
+	}
+
+	prompt := BuildSystemPrompt(params)
+	if strings.Contains(prompt, "## Web\n") {
+		t.Error("web guidance should not appear without web/http tools")
+	}
+}

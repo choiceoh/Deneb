@@ -204,14 +204,14 @@ func RegisterWebTools(registry toolctx.ToolRegistrar) {
 	sglang := web.NewSGLangExtractor()
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "web",
-		Description:     "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
+		Description:     "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch (HTML extraction, bot evasion), {query:...} search (Perplexity > Brave > DDG), {query:...,fetch:N} search+fetch top N",
 		InputSchema:     webToolSchema(),
 		Fn:              web.Tool(webCache, sglang),
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "http",
-		Description:     "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
+		Description:     "Raw HTTP for APIs/webhooks needing custom headers/auth/body. For web pages use web tool (has HTML extraction, bot evasion, caching)",
 		InputSchema:     httpToolSchema(),
 		Fn:              tools.ToolHTTP(),
 		ConcurrencySafe: true,

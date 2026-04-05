@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -154,17 +155,34 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *SGLangExt
 		fetchTop = len(fetchURLs)
 	}
 	if fetchTop == 0 {
+		sb.WriteString("\n[Note: fetch requested but no fetchable URLs from this search provider. Use web(url=...) to fetch specific pages.]\n")
 		return sb.String(), nil
 	}
 
+	// Parallel fetch: fan-out to goroutines, collect in order.
+	type fetchResult struct {
+		content string
+		err     error
+	}
 	perResultChars := maxChars / fetchTop
+	results := make([]fetchResult, fetchTop)
+	var wg sync.WaitGroup
+	for i := 0; i < fetchTop; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			c, e := webFetchURL(ctx, cache, sglang, fetchURLs[idx], perResultChars)
+			results[idx] = fetchResult{content: c, err: e}
+		}(i)
+	}
+	wg.Wait()
+
 	for i := 0; i < fetchTop; i++ {
 		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, fetchURLs[i])
-		content, fetchErr := webFetchURL(ctx, cache, sglang, fetchURLs[i], perResultChars)
-		if fetchErr != nil {
-			fmt.Fprintf(&sb, "Fetch failed: %s\n", fetchErr.Error())
+		if results[i].err != nil {
+			fmt.Fprintf(&sb, "Fetch failed: %s\n", results[i].err.Error())
 		} else {
-			sb.WriteString(content)
+			sb.WriteString(results[i].content)
 		}
 		sb.WriteString("\n</fetched>\n\n")
 	}
