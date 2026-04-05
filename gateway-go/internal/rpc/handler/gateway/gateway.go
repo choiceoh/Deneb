@@ -27,6 +27,7 @@ type Deps struct {
 	DaemonStatus    func() (any, bool)
 	AgentActiveRuns func() int
 	AgentCacheSize  func() int
+	CurrentModel    func() string
 }
 
 // RuntimeMethods returns the health/status/runtime handler map.
@@ -52,10 +53,16 @@ func RuntimeMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 
 func health(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		result := map[string]any{
 			"status": "ok",
 			"uptime": time.Since(deps.StartedAt).Milliseconds(),
-		})
+		}
+		if deps.CurrentModel != nil {
+			if m := deps.CurrentModel(); m != "" {
+				result["model"] = m
+			}
+		}
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 

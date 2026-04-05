@@ -32,6 +32,7 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -92,6 +93,17 @@ func (s *Server) registerBuiltinMethods() {
 				return 0
 			}
 			return s.jobTracker.CacheSize()
+		},
+		CurrentModel: func() string {
+			if s.chatHandler != nil {
+				if m := s.chatHandler.DefaultModel(); m != "" {
+					return m
+				}
+			}
+			if s.modelRegistry != nil {
+				return s.modelRegistry.FullModelID(modelrole.RoleMain)
+			}
+			return ""
 		},
 	}))
 }
