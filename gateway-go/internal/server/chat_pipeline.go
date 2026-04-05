@@ -215,4 +215,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		})
 	}
 	toolreg.RegisterAutoresearchTool(chatCfg.Tools, s.autoresearchRunner)
+
+	// Bridge: inter-agent communication tool.
+	toolreg.RegisterBridgeTool(chatCfg.Tools, s.broadcaster.Broadcast)
 }
