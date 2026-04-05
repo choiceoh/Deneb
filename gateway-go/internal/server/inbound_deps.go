@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
@@ -107,7 +108,12 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 		}
 	}
 
-	return &handlers.CommandDeps{Status: sd, SubagentRuns: subagentRunsFn, ZeroCallsFn: zeroCallsFn}
+	return &handlers.CommandDeps{
+		Status:              sd,
+		SubagentRuns:        subagentRunsFn,
+		ZeroCallsFn:         zeroCallsFn,
+		MorningLetterDataFn: tools.CollectMorningLetterData,
+	}
 }
 
 // buildModelCandidates converts the model role registry into autoreply
