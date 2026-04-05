@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["raw_value"] }
-prost = "0.13"
+prost = "0.14"
 prost-types = "0.13"
 thiserror = "2"
 regex = "1"
