@@ -14,9 +14,9 @@ import (
 // Autoresearch reads these constants directly from this file — keep the
 // simple `name = value` format so the regex extractor can parse them.
 const (
-	weightHybrid       = 0.55
+	weightHybrid       = 0.48
 	weightImportance   = 0.15
-	weightRecency      = 0.25
+	weightRecency      = 0.32
 	weightVerification = 0.05
 
 	defaultSteepnessDays  = 7.0
@@ -101,7 +101,7 @@ func DefaultSearchParams() SearchParams {
 		ORPenalty:        0.85,
 		TrigramPenalty:   0.80,
 
-		VectorMinThreshold: 0.35,
+		VectorMinThreshold: 0.30,
 		HybridFTSWeight:    0.40,
 		HybridVecWeight:    0.60,
 
