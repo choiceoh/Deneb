@@ -132,6 +132,34 @@ func (r *Runner) SetSessionKey(key string) {
 	r.sessionKey = key
 }
 
+// StatusSnapshot is a point-in-time view of the runner's state, suitable for
+// JSON serialization and RPC responses.
+type StatusSnapshot struct {
+	Running       bool   `json:"running"`
+	Workdir       string `json:"workdir,omitempty"`
+	WorktreeCount int    `json:"worktree_count"`
+	Model         string `json:"model,omitempty"`
+}
+
+// Status returns a structured snapshot of the runner's current state.
+func (r *Runner) Status() StatusSnapshot {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	snap := StatusSnapshot{
+		Running:       r.running,
+		Workdir:       r.workdir,
+		WorktreeCount: len(r.worktreeDirs),
+	}
+	if r.running {
+		if r.model != "" {
+			snap.Model = r.model
+		} else {
+			snap.Model = r.defaultModel
+		}
+	}
+	return snap
+}
+
 // worktreeSubdir is the directory name for the isolated experiment worktree.
 // Stored next to .autoresearch/ in the repo root, gitignored separately.
 const worktreeSubdir = ".autoresearch-wt"
