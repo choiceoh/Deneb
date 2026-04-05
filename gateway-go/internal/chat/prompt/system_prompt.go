@@ -314,14 +314,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("\n")
 	}
 
-	// Bridge agent awareness.
-	d.WriteString("## Bridge Agent (에이전트 간 통신)\n")
-	d.WriteString("대화 기록에 `[bridge:SOURCE]`로 시작하는 메시지가 보이면, 이것은 같은 서버에서 작업 중인 다른 AI 에이전트가 보낸 것이다.\n")
-	d.WriteString("예: `[bridge:claude-code] 질문 내용` — 이것은 Claude Code가 보낸 메시지이다.\n")
-	d.WriteString("**반드시 인식하고 응답하라:**\n")
-	d.WriteString("- 사용자(선택)가 보낸 것이 아니다. 동료 에이전트의 메시지다.\n")
-	d.WriteString("- 해당 메시지 내용에 대해 직접 답하라. '못 받았다'고 하지 마라 — 대화 기록에 있으면 받은 것이다.\n")
-	d.WriteString("- 응답 시 `[bridge:reply]` 태그를 붙여라.\n\n")
+	// Inter-agent bridge.
+	if toolSet["bridge"] {
+		d.WriteString("## 에이전트 간 통신 (Bridge)\n")
+		d.WriteString("같은 서버에서 작업 중인 다른 AI 에이전트(Claude Code 등)와 실시간 통신할 수 있다.\n\n")
+		d.WriteString("**수신**: 대화 기록에 `[bridge:SOURCE]`로 시작하는 메시지는 다른 에이전트가 보낸 것이다.\n")
+		d.WriteString("- 사용자(선택)가 보낸 것이 아니다. 동료 에이전트의 메시지다.\n")
+		d.WriteString("- 대화 기록에 있으면 받은 것이다. '못 받았다'고 하지 마라.\n\n")
+		d.WriteString("**송신**: `bridge(message=\"...\")` 도구로 다른 에이전트에게 메시지를 보낼 수 있다.\n")
+		d.WriteString("- 텍스트로 `[bridge:reply]`를 쓰는 대신 이 도구를 사용하라.\n\n")
+	}
 
 	// Context (merged: Workspace + Date/Time + Context Files + Runtime).
 	d.WriteString("## Context\n")
