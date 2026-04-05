@@ -345,6 +345,7 @@
     {
       "query": "GPU 하드웨어 스펙",
       "expected_tags": ["dgx-spark-gpu", "dgx-spark-memory"],
+      "extra_keywords": ["GPU", "NVIDIA", "DGX", "CUDA", "하드웨어", "사양"],
       "description": "Korean conceptual - hardware specification"
     },
     {
@@ -355,16 +356,19 @@
     {
       "query": "답변 스타일 선호",
       "expected_tags": ["user-prefers-concise", "user-prefers-korean", "user-prefers-apple-style"],
+      "extra_keywords": ["선호", "preference", "간결", "한국어", "스타일"],
       "description": "Korean conceptual - user preferences"
     },
     {
       "query": "배포 프로세스",
       "expected_tags": ["git-deploy-flow"],
+      "extra_keywords": ["배포", "deploy", "git pull", "재시작", "deployment"],
       "description": "Korean conceptual - deployment process"
     },
     {
       "query": "Rust Go 연동",
       "expected_tags": ["rust-go-ffi"],
+      "extra_keywords": ["FFI", "CGo", "연동", "staticlib", "integration"],
       "description": "Korean keyword match - cross-language integration"
     },
     {
@@ -390,6 +394,7 @@
     {
       "query": "오늘 작업 내용",
       "expected_tags": ["recent-config-gateway-port", "recent-config-bind", "recent-sglang-model-swap"],
+      "extra_keywords": ["최근", "변경", "오늘", "작업", "설정", "게이트웨이", "모델"],
       "description": "Recency-sensitive - today's work"
     },
     {
@@ -400,16 +405,19 @@
     {
       "query": "중요한 결정들",
       "expected_tags": ["sqlite-decision", "docker-podman", "sglang-port", "rust-go-ffi", "dreaming-cycle"],
+      "extra_keywords": ["결정", "decision", "선택", "판단", "중요"],
       "description": "Category-specific - high-importance decisions"
     },
     {
       "query": "사용자 성격 특성",
       "expected_tags": ["user-coding-style", "user-morning-routine", "user-prefers-concise"],
+      "extra_keywords": ["사용자", "user", "성격", "바이브코딩", "루틴", "선호"],
       "description": "Category-specific - user model facts"
     },
     {
       "query": "AI 관계",
       "expected_tags": ["ai-relationship-trust", "ai-relationship-humor"],
+      "extra_keywords": ["AI", "관계", "신뢰", "trust", "대화", "유머"],
       "description": "Category-specific - mutual relationship"
     },
     {
@@ -425,6 +433,7 @@
     {
       "query": "메모리 관리 전략",
       "expected_tags": ["dreaming-cycle", "memory-importance-threshold", "compaction-sweep"],
+      "extra_keywords": ["메모리", "memory", "dreaming", "컴팩션", "compaction", "중요도", "정리"],
       "description": "Multi-signal - memory management (importance + relevance)"
     },
     {

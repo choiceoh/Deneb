@@ -22,7 +22,7 @@ const (
 	defaultSteepnessDays  = 7.0
 	ftsAndMinResults      = 3
 	dedupJaccardThreshold = 0.60
-	decayPower            = 2.0
+	decayPower            = 2.5
 )
 
 // SearchParams holds all tunable search scoring parameters.
@@ -101,9 +101,9 @@ func DefaultSearchParams() SearchParams {
 		ORPenalty:        0.85,
 		TrigramPenalty:   0.80,
 
-		VectorMinThreshold: 0.30,
-		HybridFTSWeight:    0.40,
-		HybridVecWeight:    0.60,
+		VectorMinThreshold: 0.52,
+		HybridFTSWeight:    1.00,
+		HybridVecWeight:    0.00,
 
 		EntityMatchBaseline: 0.60,
 
