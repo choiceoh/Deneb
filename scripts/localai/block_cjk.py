@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Block CJK Unified Ideographs from sglang model output.
+"""Block CJK Unified Ideographs from local AI model output.
 
 Scans a model's tokenizer to find all tokens containing CJK characters
 (U+4E00-U+9FFF and extended ranges) and outputs their IDs. These can be
@@ -134,7 +134,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
         "blocked_token_ids": blocked,
     }
 
-    out_path = args.output or Path("scripts/sglang/cjk_tokens.json")
+    out_path = args.output or Path("scripts/localai/cjk_tokens.json")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, separators=(",", ":")))
@@ -148,7 +148,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
 
     # Load blocked IDs.
-    token_file = Path(args.token_file or "scripts/sglang/cjk_tokens.json")
+    token_file = Path(args.token_file or "scripts/localai/cjk_tokens.json")
     if not token_file.exists():
         print(f"Token file not found: {token_file}", file=sys.stderr)
         print("Run 'scan' first.", file=sys.stderr)
@@ -213,14 +213,14 @@ def cmd_stats(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Block CJK tokens from sglang output")
+    parser = argparse.ArgumentParser(description="Block CJK tokens from local AI output")
     sub = parser.add_subparsers(dest="command", required=True)
 
     # scan
     p_scan = sub.add_parser("scan", help="Scan tokenizer and save blocked IDs")
     p_scan.add_argument("model", help="HuggingFace model name or path")
     p_scan.add_argument("--extended", action="store_true", help="Include CJK Extension A/B, Compatibility, Radicals")
-    p_scan.add_argument("--output", "-o", help="Output JSON path (default: scripts/sglang/cjk_tokens.json)")
+    p_scan.add_argument("--output", "-o", help="Output JSON path (default: scripts/localai/cjk_tokens.json)")
 
     # verify
     p_verify = sub.add_parser("verify", help="Verify Korean is unaffected by blocking")

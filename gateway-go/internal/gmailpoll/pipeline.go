@@ -39,8 +39,8 @@ const (
 type PipelineDeps struct {
 	GmailClient *gmail.Client
 	LLMClient   *llm.Client      // main LLM for final analysis (stage 2)
-	LocalClient *llm.Client      // local SGLang for extractors (stage 1)
-	LocalModel  string           // SGLang model name
+	LocalClient *llm.Client      // local AI for extractors (stage 1)
+	LocalModel  string           // local AI model name
 	MainModel   string           // main LLM model name
 	MemStore    *memory.Store    // for memory recall (nil = skip stage 1b)
 	MemEmbed    *memory.Embedder // for vector search query embedding (nil = FTS only)
@@ -729,11 +729,11 @@ func normalizeCategory(cat string) string {
 
 // --- helpers ---
 
-// callLocalLLMJSON calls the local SGLang model with JSON mode and unmarshals the result.
+// callLocalLLMJSON calls the local AI model with JSON mode and unmarshals the result.
 func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (T, error) {
 	var zero T
 
-	// Disable reasoning for all local sglang calls — reduces latency and
+	// Disable reasoning for all local AI calls — reduces latency and
 	// prevents "Thinking Process:" preambles from leaking into JSON output.
 	noThinking := map[string]any{
 		"chat_template_kwargs": map[string]any{"enable_thinking": false},

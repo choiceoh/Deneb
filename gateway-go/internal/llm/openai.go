@@ -20,7 +20,7 @@ import (
 // message_delta, message_stop).
 //
 // This enables RunAgent to work with any OpenAI-compatible provider
-// (z.ai, sglang, vLLM, etc.) without changes to the agent loop.
+// (z.ai, localai, vLLM, etc.) without changes to the agent loop.
 func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
 	req.Stream = true
 
@@ -215,7 +215,7 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 		return nil, fmt.Errorf("marshal openai request: %w", err)
 	}
 
-	// Merge ExtraBody fields into the serialized JSON (e.g., sglang's
+	// Merge ExtraBody fields into the serialized JSON (e.g., local AI's
 	// "chat_template_kwargs": {"enable_thinking": false}).
 	if len(req.ExtraBody) > 0 {
 		body, err = mergeJSONFields(body, req.ExtraBody)
@@ -628,7 +628,7 @@ func (c *Client) Complete(ctx context.Context, req ChatRequest) (string, error) 
 		return "", fmt.Errorf("marshal openai request: %w", err)
 	}
 
-	// Merge ExtraBody fields (e.g., sglang's chat_template_kwargs, timeout).
+	// Merge ExtraBody fields (e.g., local AI's chat_template_kwargs, timeout).
 	if len(req.ExtraBody) > 0 {
 		body, err = mergeJSONFields(body, req.ExtraBody)
 		if err != nil {

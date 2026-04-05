@@ -262,9 +262,9 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6b2. Stop sglang hub (drains queued requests, cancels in-flight).
-	if s.sglangHub != nil {
-		s.sglangHub.Shutdown()
+	// 6b2. Stop local AI hub (drains queued requests, cancels in-flight).
+	if s.localAIHub != nil {
+		s.localAIHub.Shutdown()
 	}
 
 	// 6c. Close task store.

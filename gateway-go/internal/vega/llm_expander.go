@@ -23,14 +23,14 @@ const expandSystemPrompt = `프로젝트 관리 DB 검색 쿼리 확장기.
 반드시 JSON 문자열 배열만 출력하라. 사고 과정, 설명, 마크다운 없이 순수 JSON 배열만.
 예: ["태양광", "solar", "PV", "발전소"]`
 
-// LLMExpander generates expanded search terms via SGLang chat completion.
+// LLMExpander generates expanded search terms via local AI chat completion.
 type LLMExpander struct {
 	client *llm.Client
 	model  string
 	logger *slog.Logger
 }
 
-// NewLLMExpander creates a query expander that calls the SGLang server.
+// NewLLMExpander creates a query expander that calls the local AI server.
 func NewLLMExpander(baseURL, model string, logger *slog.Logger) *LLMExpander {
 	if logger == nil {
 		logger = slog.Default()

@@ -1,4 +1,4 @@
-package sglang
+package localai
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 )
 
 // cjkBlock holds pre-serialized logit_bias bytes for blocking CJK tokens.
-// Loaded and serialized once at hub startup; injected into every sglang request
+// Loaded and serialized once at hub startup; injected into every local AI request
 // as json.RawMessage to avoid re-marshaling 55K entries per request.
 type cjkBlock struct {
 	// raw is the pre-serialized logit_bias JSON: {"1234":-100,"5678":-100,...}.

@@ -3,7 +3,7 @@
 // Implements POST /v1/messages so Claude Desktop can use Deneb as its backend
 // via ANTHROPIC_BASE_URL. Receives Anthropic format from Claude Desktop,
 // converts to OpenAI format, sends to the configured OpenAI-compatible backend
-// (sglang, z.ai, vLLM), converts the response back to Anthropic SSE.
+// (local AI, z.ai, vLLM), converts the response back to Anthropic SSE.
 //
 // No Anthropic API key needed. Deneb context (SOUL.md, MEMORY.md) is injected
 // into the system prompt. Claude Code's local tools work client-side as normal.

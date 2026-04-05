@@ -20,7 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -87,12 +87,12 @@ func (s *Server) registerSessionRPCMethods() {
 	var reg *modelrole.Registry
 	s.initMemorySubsystem(&chatCfg, &reg)
 
-	// Create centralized SGLang hub now that the model registry is available.
-	s.sglangHub = sglang.New(sglang.Config{
-		CJKBlockFile: os.Getenv("SGLANG_CJK_BLOCK_FILE"),
+	// Create centralized local AI hub now that the model registry is available.
+	s.localAIHub = localai.New(localai.Config{
+		CJKBlockFile: firstEnv("LOCAL_AI_CJK_BLOCK_FILE", "SGLANG_CJK_BLOCK_FILE"),
 	}, reg, s.logger)
-	chatCfg.SglangHub = s.sglangHub
-	memory.SetSglangHub(s.sglangHub)
+	chatCfg.LocalAIHub = s.localAIHub
+	memory.SetLocalAIHub(s.localAIHub)
 
 	// Phase 2: Tool deps + registration (core, plugin, autoresearch).
 	s.initToolsAndDeps(&chatCfg, reg, transcriptStore, agentLogWriter)
@@ -334,4 +334,14 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Shadow session monitoring: observes main session conversations in the
 	// background and injects continuity + error insights into system prompt.
 	s.initShadowMonitoring(hub)
+}
+
+// firstEnv returns the first non-empty environment variable value.
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }

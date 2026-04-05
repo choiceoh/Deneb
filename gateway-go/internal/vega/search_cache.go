@@ -1,7 +1,7 @@
 // search_cache.go — In-memory TTL cache for Vega search results.
 //
 // Caches the full search result set keyed by query+limit hash.
-// Avoids redundant SGLang embedding, query expansion, and Rust FTS calls
+// Avoids redundant local AI embedding, query expansion, and Rust FTS calls
 // when the same query is repeated within the TTL window.
 // Single-user deployment: sync.Mutex is sufficient.
 package vega

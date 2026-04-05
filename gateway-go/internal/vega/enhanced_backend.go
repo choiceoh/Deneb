@@ -26,8 +26,8 @@ type EnhancedBackend struct {
 // EnhancedBackendConfig configures the EnhancedBackend.
 type EnhancedBackendConfig struct {
 	Logger      *slog.Logger
-	SglangURL   string // e.g. "http://127.0.0.1:30000/v1" — used for chat/expansion
-	SglangModel string // e.g. "Qwen/Qwen3.5-35B-A3B" — chat model for expansion
+	LocalAIURL   string // e.g. "http://127.0.0.1:30000/v1" — used for chat/expansion
+	LocalAIModel string // e.g. "Qwen/Qwen3.5-35B-A3B" — chat model for expansion
 
 	// Embedder is the Gemini embedding client. If nil, search falls back to FTS-only.
 	Embedder *embedding.GeminiEmbedder
@@ -44,7 +44,7 @@ func NewEnhancedBackend(cfg EnhancedBackendConfig) *EnhancedBackend {
 	}
 
 	rust := NewRustBackend(RustBackendConfig{Logger: cfg.Logger})
-	expander := NewLLMExpander(cfg.SglangURL, cfg.SglangModel, cfg.Logger)
+	expander := NewLLMExpander(cfg.LocalAIURL, cfg.LocalAIModel, cfg.Logger)
 
 	// Cross-encoder reranker (local jina-reranker-v3 by default).
 	reranker := NewReranker(RerankConfig{
@@ -74,12 +74,12 @@ func (eb *EnhancedBackend) Execute(ctx context.Context, cmd string, args map[str
 // Search runs a Vega search with Gemini embedding, query expansion, and cross-encoder reranking.
 //
 // Pipeline:
-//  1. Parallel: Gemini query embedding + SGLang query expansion
+//  1. Parallel: Gemini query embedding + local AI query expansion
 //  2. If embedding succeeded, pass vector to Rust for cosine similarity search
 //  3. If expansion succeeded and FTS results are sparse, run supplemental FTS
 //  4. Cross-encoder reranking via Jina Reranker API if available
 func (eb *EnhancedBackend) Search(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
-	// Check cache first — avoids redundant SGLang + FFI calls.
+	// Check cache first — avoids redundant local AI + FFI calls.
 	cacheKey := searchCacheKey(query, opts)
 	if cached, ok := eb.cache.get(cacheKey); ok {
 		eb.logger.Debug("vega: cache hit", "query", query)
@@ -92,7 +92,7 @@ func (eb *EnhancedBackend) Search(ctx context.Context, query string, opts Search
 		mu       sync.Mutex
 	)
 
-	// Phase 1: Parallel SGLang calls (embedding + expansion).
+	// Phase 1: Parallel local AI calls (embedding + expansion).
 	// Both are best-effort — failures fall back to FTS-only.
 	var wg sync.WaitGroup
 
@@ -337,11 +337,11 @@ func (eb *EnhancedBackend) HealthCheck(ctx context.Context) HealthStatus {
 		mu.Unlock()
 	}()
 
-	// Check SGLang (query expansion).
+	// Check local AI (query expansion).
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ch := ComponentHealth{Name: "sglang"}
+		ch := ComponentHealth{Name: "localai"}
 		if eb.expander == nil || eb.expander.client == nil {
 			ch.Available = false
 			ch.Detail = "not configured"
@@ -386,7 +386,7 @@ func (eb *EnhancedBackend) SearchWithExpansion(ctx context.Context, query string
 		mu       sync.Mutex
 	)
 
-	// Phase 1: Parallel SGLang calls (embedding + expansion).
+	// Phase 1: Parallel local AI calls (embedding + expansion).
 	var wg sync.WaitGroup
 
 	if eb.embedder != nil {

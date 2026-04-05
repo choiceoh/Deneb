@@ -111,7 +111,7 @@ The sole user **does not read or write code**. All development is done through n
 | `internal/telegram/progress.go` | ProgressTracker: edits a single embed in-place for real-time tool status |
 | `internal/telegram/reply_analysis.go` | Reply outcome classifier + Korean error translation for vibe coders |
 | `internal/telegram/slash_commands.go` | Application command registration (vibe-coder commands only) |
-| `internal/telegram/thread_namer.go` | Auto thread naming via local sglang LLM |
+| `internal/telegram/thread_namer.go` | Auto thread naming via local AI LLM |
 | `internal/telegram/send.go` | SendText helper with auto-chunking |
 | `internal/server/inbound_telegram.go` | Inbound message processing, quick commands, workspace context injection |
 | `internal/server/server_chat.go` | Reply pipeline: formatting → buttons → error translation → auto-verify |

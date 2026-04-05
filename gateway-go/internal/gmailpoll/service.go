@@ -37,8 +37,8 @@ type Config struct {
 	LLMClient   *llm.Client // pre-configured LLM client from modelrole registry
 
 	// Multi-stage pipeline deps (all optional — nil = skip that stage).
-	LocalClient *llm.Client      // local SGLang for stage-1 extractors
-	LocalModel  string           // SGLang model name
+	LocalClient *llm.Client      // local AI for stage-1 extractors
+	LocalModel  string           // local AI model name
 	MemStore    *memory.Store    // for memory recall
 	MemEmbed    *memory.Embedder // for vector search query embedding
 }

@@ -18,15 +18,15 @@ func TestShouldEnableVega_FFIAvailable(t *testing.T) {
 	}
 }
 
-func TestIsSglangReachable_EmptyURL(t *testing.T) {
-	got := IsSglangReachable("")
+func TestIsLocalAIReachable_EmptyURL(t *testing.T) {
+	got := IsLocalAIReachable("")
 	if got {
 		t.Error("should return false for empty URL")
 	}
 }
 
-func TestIsSglangReachable_InvalidURL(t *testing.T) {
-	got := IsSglangReachable("http://127.0.0.1:99999/v1")
+func TestIsLocalAIReachable_InvalidURL(t *testing.T) {
+	got := IsLocalAIReachable("http://127.0.0.1:99999/v1")
 	if got {
 		t.Error("should return false for unreachable URL")
 	}

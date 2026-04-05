@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 )
 
 const (
@@ -208,9 +208,9 @@ func stripAnalysisScratchpad(s string) string {
 }
 
 // NewHubSummarizer creates a Summarizer that routes through the centralized
-// sglang hub for token budget management and priority queuing.
+// local AI hub for token budget management and priority queuing.
 // Falls back to deterministic truncation if the hub is nil.
-func NewHubSummarizer(hub *sglang.Hub) Summarizer {
+func NewHubSummarizer(hub *localai.Hub) Summarizer {
 	return func(text string, aggressive bool, opts *SummarizeOptions) (string, error) {
 		if hub == nil {
 			return deterministicFallback(text), nil
@@ -247,11 +247,11 @@ func NewHubSummarizer(hub *sglang.Hub) Summarizer {
 		ctx, cancel := context.WithTimeout(context.Background(), summarizeTimeout)
 		defer cancel()
 
-		resp, err := hub.Submit(ctx, sglang.Request{
+		resp, err := hub.Submit(ctx, localai.Request{
 			System:    system,
 			Messages:  []llm.Message{llm.NewTextMessage("user", userMsg.String())},
 			MaxTokens: 4096,
-			Priority:  sglang.PriorityBackground,
+			Priority:  localai.PriorityBackground,
 			CallerTag: "aurora_compaction",
 		})
 		if err != nil {

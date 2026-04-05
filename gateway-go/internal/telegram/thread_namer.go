@@ -30,10 +30,10 @@ const (
 )
 
 // ThreadNamer generates short topic names for Telegram forum threads using a local LLM.
-// It is designed for the single-user DGX Spark deployment where sglang provides fast
+// It is designed for the single-user DGX Spark deployment where local AI provides fast
 // local inference.
 type ThreadNamer struct {
-	// generateFn calls a local LLM (sglang) for fast inference.
+	// generateFn calls a local LLM (local AI) for fast inference.
 	// It receives a system+user prompt and returns the raw LLM output.
 	generateFn func(ctx context.Context, prompt string) (string, error)
 
@@ -45,7 +45,7 @@ type ThreadNamer struct {
 }
 
 // NewThreadNamer creates a namer backed by the given generation function.
-// The generateFn should call a local LLM (sglang) for fast inference.
+// The generateFn should call a local LLM (local AI) for fast inference.
 func NewThreadNamer(generateFn func(ctx context.Context, prompt string) (string, error)) *ThreadNamer {
 	return &ThreadNamer{
 		generateFn: generateFn,

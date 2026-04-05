@@ -263,7 +263,7 @@ func handleRunSuccess(
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
-	// Auto-memory: extract key learnings asynchronously via local sglang.
+	// Auto-memory: extract key learnings asynchronously via local AI.
 	// When structured memory store is available, use Honcho-style importance extraction.
 	// Falls back to legacy MEMORY.md append otherwise.
 	//
@@ -282,8 +282,8 @@ func handleRunSuccess(
 				base = context.Background()
 			}
 
-			// Concurrency for sglang calls is managed by the centralized
-			// sglang hub's token budget. Bail early on server shutdown.
+			// Concurrency for local AI calls is managed by the centralized
+			// local AI hub's token budget. Bail early on server shutdown.
 			select {
 			case <-base.Done():
 				logger.Debug("memory extraction skipped: context canceled")
@@ -298,8 +298,8 @@ func handleRunSuccess(
 				// Skip tool-only responses (file contents relay, command output)
 				// that rarely contain user-model-worthy information.
 				if result.Text != "" && !isToolOnlyResponse(result.Text) {
-					if !pilot.CheckSglangHealth() {
-						logger.Debug("structured memory extraction skipped: sglang unhealthy")
+					if !pilot.CheckLocalAIHealth() {
+						logger.Debug("structured memory extraction skipped: local AI unhealthy")
 					} else {
 						lwClient := pilot.GetLightweightClient()
 						facts, err := memory.ExtractFacts(memCtx, lwClient, pilot.GetLightweightModel(), params.Message, result.Text, logger)
@@ -335,7 +335,7 @@ func handleRunSuccess(
 			}
 
 			// Session memory: update structured session state.
-			// Use an independent context so prior SGLang calls in this
+			// Use an independent context so prior local AI calls in this
 			// goroutine don't eat into the session-memory deadline.
 			if deps.sessionMemory != nil {
 				smCtx, smCancel := context.WithTimeout(base, sessionMemoryUpdateTimeout)
@@ -613,8 +613,8 @@ func resolveDefaultBaseURL(providerID string) string {
 		return defaultZaiBaseURL
 	case "google":
 		return "https://generativelanguage.googleapis.com/v1beta/openai"
-	case "sglang":
-		return modelrole.DefaultSglangBaseURL
+	case "localai":
+		return modelrole.DefaultLocalAIBaseURL
 	case "vllm":
 		return modelrole.DefaultVllmBaseURL
 	default:

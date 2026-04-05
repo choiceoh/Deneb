@@ -1,4 +1,4 @@
-// sglang.go — Shared SGLang helpers for the memory package.
+// localai.go — Shared local AI helpers for the memory package.
 //
 // callLLMJSON is the single entry point for all dreaming LLM calls that expect
 // structured JSON output. It handles streaming collection, thinking-tag removal,
@@ -12,30 +12,30 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// pkgSglangHub is the centralized sglang hub for token budget management.
-// Set via SetSglangHub during server initialization. When set, callSglang
-// and callSglangJSON route through the hub instead of making direct calls.
-var pkgSglangHub *sglang.Hub
+// pkgLocalAIHub is the centralized local AI hub for token budget management.
+// Set via SetLocalAIHub during server initialization. When set, callLocalAI
+// and callLocalAIJSON route through the hub instead of making direct calls.
+var pkgLocalAIHub *localai.Hub
 
-// SetSglangHub sets the centralized sglang hub for the memory package.
-func SetSglangHub(h *sglang.Hub) {
-	pkgSglangHub = h
+// SetLocalAIHub sets the centralized local AI hub for the memory package.
+func SetLocalAIHub(h *localai.Hub) {
+	pkgLocalAIHub = h
 }
 
-// callSglang sends a streaming chat request to the local SGLang model and collects the full response.
-// When the centralized sglang hub is available, routes through it for token budget management.
-func callSglang(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
+// callLocalAI sends a streaming chat request to the local AI model and collects the full response.
+// When the centralized local AI hub is available, routes through it for token budget management.
+func callLocalAI(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
 	// Hub path: centralized token budget, priority queue, zombie prevention.
-	if h := pkgSglangHub; h != nil {
-		resp, err := h.Submit(ctx, sglang.Request{
+	if h := pkgLocalAIHub; h != nil {
+		resp, err := h.Submit(ctx, localai.Request{
 			System:    system,
 			Messages:  []llm.Message{llm.NewTextMessage("user", user)},
 			MaxTokens: maxTokens,
-			Priority:  sglang.PriorityBackground,
+			Priority:  localai.PriorityBackground,
 			CallerTag: "memory",
 		})
 		if err != nil {
@@ -51,27 +51,27 @@ func callSglang(ctx context.Context, client *llm.Client, model, system, user str
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
-		ExtraBody: sglang.NoThinking,
+		ExtraBody: localai.NoThinking,
 	})
 	if err != nil {
 		return "", err
 	}
 	if events == nil {
-		return "", fmt.Errorf("sglang: nil event channel")
+		return "", fmt.Errorf("localai: nil event channel")
 	}
 	return collectStream(ctx, events)
 }
 
-// callSglangJSON is like callSglang but requests JSON-formatted output
+// callLocalAIJSON is like callLocalAI but requests JSON-formatted output
 // via response_format. Use for endpoints that must return valid JSON.
-// An optional guidedSchema can be passed to enable SGLang's native
+// An optional guidedSchema can be passed to enable local AI's native
 // guided_json constrained decoding (xgrammar) for reliable structured output.
-// When the centralized sglang hub is available, routes through it.
-func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int, guidedSchema ...json.RawMessage) (string, error) {
+// When the centralized local AI hub is available, routes through it.
+func callLocalAIJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int, guidedSchema ...json.RawMessage) (string, error) {
 	rf := &llm.ResponseFormat{Type: "json_object"}
 
 	// Build extra body with guided_json if a schema is provided.
-	// guided_json is SGLang's native parameter for grammar-constrained
+	// guided_json is local AI's native parameter for grammar-constrained
 	// decoding, more reliable than response_format json_schema.
 	var extra map[string]any
 	if len(guidedSchema) > 0 && guidedSchema[0] != nil {
@@ -79,12 +79,12 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 	}
 
 	// Hub path.
-	if h := pkgSglangHub; h != nil {
-		resp, err := h.Submit(ctx, sglang.Request{
+	if h := pkgLocalAIHub; h != nil {
+		resp, err := h.Submit(ctx, localai.Request{
 			System:         system,
 			Messages:       []llm.Message{llm.NewTextMessage("user", user)},
 			MaxTokens:      maxTokens,
-			Priority:       sglang.PriorityBackground,
+			Priority:       localai.PriorityBackground,
 			CallerTag:      "memory_json", // covers fact extraction, dreaming phases
 			ResponseFormat: rf,
 			ExtraBody:      extra,
@@ -97,8 +97,8 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 	}
 
 	// Legacy direct path — merge guided_json with NoThinking.
-	merged := make(map[string]any, len(sglang.NoThinking)+len(extra))
-	for k, v := range sglang.NoThinking {
+	merged := make(map[string]any, len(localai.NoThinking)+len(extra))
+	for k, v := range localai.NoThinking {
 		merged[k] = v
 	}
 	for k, v := range extra {
@@ -117,13 +117,13 @@ func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user
 		return "", err
 	}
 	if events == nil {
-		return "", fmt.Errorf("sglang: nil event channel")
+		return "", fmt.Errorf("localai: nil event channel")
 	}
 	return collectStream(ctx, events)
 }
 
 // callLLMJSON is the single entry point for all dreaming-phase LLM calls.
-// It calls the local SGLang model with JSON mode, extracts the JSON object from
+// It calls the local AI model with JSON mode, extracts the JSON object from
 // potentially noisy output (thinking tags, prose, code fences, truncation), and
 // unmarshals into T. Retries once on parse failure.
 //
@@ -133,7 +133,7 @@ func callLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, 
 	var zero T
 
 	for attempt := range 2 {
-		raw, err := callSglangJSON(ctx, client, model, system, user, maxTokens)
+		raw, err := callLocalAIJSON(ctx, client, model, system, user, maxTokens)
 		if err != nil {
 			return zero, err
 		}
@@ -150,7 +150,7 @@ func callLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, 
 		}
 
 		// First attempt failed — retry once. The model may produce cleaner output
-		// on a second call since SGLang sampling is non-deterministic.
+		// on a second call since local AI sampling is non-deterministic.
 		if attempt == 0 {
 			continue
 		}
@@ -197,9 +197,9 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 					Type    string `json:"type"`
 				}
 				if json.Unmarshal(ev.Payload, &errBody) == nil && errBody.Message != "" {
-					return "", fmt.Errorf("sglang stream error: %s", errBody.Message)
+					return "", fmt.Errorf("localai stream error: %s", errBody.Message)
 				}
-				return "", fmt.Errorf("sglang stream error: %s", string(ev.Payload))
+				return "", fmt.Errorf("localai stream error: %s", string(ev.Payload))
 			}
 		}
 	}

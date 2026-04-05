@@ -34,7 +34,7 @@ type ChatRequest struct {
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
 
 	// ExtraBody holds additional top-level fields merged into the OpenAI-format
-	// request body. Used for provider-specific parameters like sglang's
+	// request body. Used for provider-specific parameters like local AI's
 	// "chat_template_kwargs": {"enable_thinking": false}.
 	ExtraBody map[string]any `json:"-"`
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 )
 
-// sglang_hooks.go — local sglang model hooks into the agent pipeline:
+// localai_hooks.go — local AI model hooks into the agent pipeline:
 //
 //  1. Proactive Context: before agent run, scan related files/memory to enrich system prompt
 //  2. Tool Output Compression: after tool execution, compress large outputs
@@ -23,7 +23,7 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout   = 15 * time.Second // local sglang: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
+	proactiveTimeout   = 15 * time.Second // local AI: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
 	proactiveMaxTokens = 1024
 	proactiveMinMsgLen = 20 // skip for very short messages
 )
@@ -36,12 +36,12 @@ Return a brief context note (max 5 lines) with:
 - Key technical context to keep in mind
 Reply in Korean. Be extremely concise. If no special context is needed, reply with just "N/A".`
 
-// buildProactiveContext uses the local sglang model to analyze the user's
+// buildProactiveContext uses the local AI model to analyze the user's
 // message and generate a context hint for the main agent.
 // Returns empty string if proactive context is not needed or fails.
 // isLowInfoMessage returns true for short follow-up messages that don't benefit
 // from proactive context (e.g., "응", "좋아 그렇게 해", "계속", "다음은?").
-// Uses rune count and simple keyword heuristics to avoid unnecessary sglang calls.
+// Uses rune count and simple keyword heuristics to avoid unnecessary local AI calls.
 func isLowInfoMessage(msg string) bool {
 	trimmed := strings.TrimSpace(msg)
 	runes := []rune(trimmed)
@@ -92,13 +92,13 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	if isLowInfoMessage(userMessage) {
 		return ""
 	}
-	// Check sglang health — skip proactive context when sglang is down,
+	// Check local AI health — skip proactive context when local AI is down,
 	// even if a model registry exists (avoids 15s timeout on dead server).
-	if pilot.SglangRecentlyDown() || !pilot.CheckSglangHealth() {
+	if pilot.LocalAIRecentlyDown() || !pilot.CheckLocalAIHealth() {
 		return ""
 	}
 
-	// Concurrency is managed by the centralized sglang hub's token budget.
+	// Concurrency is managed by the centralized local AI hub's token budget.
 	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
 	defer cancel()
 
@@ -168,7 +168,7 @@ func deferredProactiveHint(ch <-chan string, start time.Time, logger *slog.Logge
 // Called in the agent loop after tool execution, before feeding results back to LLM.
 
 const (
-	compressThreshold = 16000 // chars — only compress very large outputs (saves sglang calls)
+	compressThreshold = 16000 // chars — only compress very large outputs (saves local AI calls)
 	compressMaxTokens = 1024
 	compressTimeout   = 20 * time.Second
 	// Tools whose output should never be compressed (they're already structured/small).
@@ -204,7 +204,7 @@ Remove verbose boilerplate, repeated lines, and padding.
 Keep the same language. Be concise but don't lose critical details.
 Max 30 lines.`
 
-// compressToolOutput shrinks a large tool output using the local sglang model.
+// compressToolOutput shrinks a large tool output using the local AI model.
 // Returns the original output if compression is not needed or fails.
 func compressToolOutput(ctx context.Context, toolName, output string, logger *slog.Logger) string {
 	if len(output) < compressThreshold {
@@ -213,12 +213,12 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 	if toolCompressSkipSet[toolName] {
 		return output
 	}
-	// Skip if sglang was recently confirmed down (cached result only, no probe).
-	if pilot.SglangRecentlyDown() {
+	// Skip if local AI was recently confirmed down (cached result only, no probe).
+	if pilot.LocalAIRecentlyDown() {
 		return output
 	}
 
-	// Concurrency is managed by the centralized sglang hub's token budget.
+	// Concurrency is managed by the centralized local AI hub's token budget.
 	ctx, cancel := context.WithTimeout(ctx, compressTimeout)
 	defer cancel()
 
@@ -316,8 +316,8 @@ func extractAutoMemory(ctx context.Context, userMessage, agentResponse string, l
 	if isToolOnlyResponse(agentResponse) {
 		return ""
 	}
-	// Skip if sglang was recently confirmed down (cached result only, no probe).
-	if pilot.SglangRecentlyDown() {
+	// Skip if local AI was recently confirmed down (cached result only, no probe).
+	if pilot.LocalAIRecentlyDown() {
 		return ""
 	}
 
@@ -386,16 +386,16 @@ const activitySummarySystemPrompt = `에이전트의 최근 도구 사용 내역
 - 개별 동작(검색, 파일 읽기 등)이 아니라 전체 목적 관점에서 왜 그걸 하는지 요약
 - 나쁜 예: "코드 검색", "파일 읽는 중" / 좋은 예: "캐시 구조 이해하는 중", "빌드 오류 원인 추적 중"`
 
-// SummarizeToolActivity uses the local sglang model to summarize recent agent
+// SummarizeToolActivity uses the local AI model to summarize recent agent
 // tool activity into a short Korean phrase for the progress tracker status line.
 // The input is a slice of tool activity descriptions (e.g., "read: progress.go",
 // "grep: OnToolStart in gateway-go/"). Returns empty string on failure.
 func SummarizeToolActivity(ctx context.Context, activities []string) (string, error) {
-	if !pilot.CheckSglangHealth() {
-		return "", fmt.Errorf("sglang unavailable")
+	if !pilot.CheckLocalAIHealth() {
+		return "", fmt.Errorf("localai unavailable")
 	}
 
-	// Concurrency is managed by the centralized sglang hub's token budget.
+	// Concurrency is managed by the centralized local AI hub's token budget.
 	// Build user message from recent tool activity descriptions.
 	var b strings.Builder
 	b.WriteString("최근 에이전트 도구 사용 내역:\n\n")

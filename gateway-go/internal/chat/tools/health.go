@@ -12,17 +12,17 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// SglangProbe provides sglang health-check functions that live outside this
+// LocalAIProbe provides local AI health-check functions that live outside this
 // package (in chat/). Injected to avoid a circular import.
-type SglangProbe struct {
-	// CheckHealth returns true if the local sglang server is reachable.
+type LocalAIProbe struct {
+	// CheckHealth returns true if the local AI server is reachable.
 	CheckHealth func() bool
 	// BaseURL returns the base URL for the lightweight model.
 	BaseURL func() string
 }
 
 // ToolHealthCheck creates the health_check ToolFunc.
-func ToolHealthCheck(d *toolctx.VegaDeps, sglang SglangProbe) ToolFunc {
+func ToolHealthCheck(d *toolctx.VegaDeps, localAI LocalAIProbe) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Component string `json:"component"`
@@ -36,8 +36,8 @@ func ToolHealthCheck(d *toolctx.VegaDeps, sglang SglangProbe) ToolFunc {
 
 		// Single-component shortcuts that don't need vega backend.
 		switch p.Component {
-		case "sglang":
-			return formatSglangHealth(sglang), nil
+		case "localai":
+			return formatLocalAIHealth(localAI), nil
 		case "memory":
 			return formatMemoryHealth(ctx, d), nil
 		}
@@ -45,7 +45,7 @@ func ToolHealthCheck(d *toolctx.VegaDeps, sglang SglangProbe) ToolFunc {
 		// Collect all component rows for "all" or vega-related components.
 		var rows []vega.ComponentHealth
 
-		// Vega-backed components (embedding, reranker, sglang via expander).
+		// Vega-backed components (embedding, reranker, local AI via expander).
 		backend := d.Backend
 		if backend != nil {
 			if hc, ok := backend.(vega.HealthChecker); ok {
@@ -76,15 +76,15 @@ func ToolHealthCheck(d *toolctx.VegaDeps, sglang SglangProbe) ToolFunc {
 			return formatHealthStatus(vega.HealthStatus{Components: rows}), nil
 		}
 
-		// Append gateway-level sglang health.
-		sglangGw := vega.ComponentHealth{Name: "sglang (gateway)"}
-		if sglang.CheckHealth() {
-			sglangGw.Available = true
-			sglangGw.Detail = "chat hooks + compression operational"
+		// Append gateway-level local AI health.
+		localAIGw := vega.ComponentHealth{Name: "localai (gateway)"}
+		if localAI.CheckHealth() {
+			localAIGw.Available = true
+			localAIGw.Detail = "chat hooks + compression operational"
 		} else {
-			sglangGw.Detail = "unreachable at " + sglang.BaseURL()
+			localAIGw.Detail = "unreachable at " + localAI.BaseURL()
 		}
-		rows = append(rows, sglangGw)
+		rows = append(rows, localAIGw)
 
 		// Append aurora-memory health.
 		rows = append(rows, checkMemoryComponent(ctx, d))
@@ -150,8 +150,8 @@ func matchesComponent(name, filter string) bool {
 		return strings.Contains(name, "embedding") || strings.Contains(name, "Gemini")
 	case "reranker":
 		return strings.Contains(name, "reranker") || strings.Contains(name, "Jina")
-	case "sglang":
-		return strings.Contains(name, "sglang")
+	case "localai":
+		return strings.Contains(name, "localai")
 	case "memory":
 		return strings.Contains(name, "memory")
 	default:
@@ -185,15 +185,15 @@ func formatHealthStatus(status vega.HealthStatus) string {
 	return sb.String()
 }
 
-// formatSglangHealth returns a standalone sglang health report.
-func formatSglangHealth(sglang SglangProbe) string {
-	healthy := sglang.CheckHealth()
+// formatLocalAIHealth returns a standalone local AI health report.
+func formatLocalAIHealth(localAI LocalAIProbe) string {
+	healthy := localAI.CheckHealth()
 	icon := "✅"
-	baseURL := sglang.BaseURL()
+	baseURL := localAI.BaseURL()
 	detail := "operational at " + baseURL
 	if !healthy {
 		icon = "❌"
 		detail = "unreachable at " + baseURL
 	}
-	return fmt.Sprintf("## SGLang 상태\n\n%s %s\n%s", icon, "sglang", detail)
+	return fmt.Sprintf("## LocalAI 상태\n\n%s %s\n%s", icon, "localai", detail)
 }

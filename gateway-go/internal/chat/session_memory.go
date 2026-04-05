@@ -7,11 +7,11 @@
 //   - Markdown-based format (not JSON). LLMs generate freeform markdown far
 //     more reliably than nested JSON, and the output is directly injectable
 //     into system prompts without conversion.
-//   - Claude Code–inspired forked-agent pattern: the local sglang model receives
+//   - Claude Code–inspired forked-agent pattern: the local AI model receives
 //     the FULL recent transcript (not just truncated snippets) so it has complete
 //     visibility into what happened — tool calls, errors, reasoning, etc.
-//   - Updated per-run (not per-turn) to balance quality vs cost. One sglang
-//     call per user message, routed through the centralized sglang hub.
+//   - Updated per-run (not per-turn) to balance quality vs cost. One local AI
+//     call per user message, routed through the centralized local AI hub.
 package chat
 
 import (
@@ -28,7 +28,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 )
 
 // ---------------------------------------------------------------------------
@@ -74,15 +74,15 @@ const (
 	maxSectionTokens = 2000
 
 	// maxTranscriptMessages is the maximum number of recent transcript messages
-	// sent to the sglang model for session memory extraction.
+	// sent to the local AI model for session memory extraction.
 	maxTranscriptMessages = 30
 
-	// maxTranscriptChars caps the formatted transcript text sent to sglang.
+	// maxTranscriptChars caps the formatted transcript text sent to local AI.
 	// 32K chars ≈ 8K tokens — sufficient for recent context while preventing
 	// long conversations from exhausting KV cache on the local model.
 	maxTranscriptChars = 32_000
 
-	// sessionMemoryUpdateTimeout is the max time for a single sglang call.
+	// sessionMemoryUpdateTimeout is the max time for a single local AI call.
 	// Increased from 20s to 60s because the model now receives full transcript.
 	sessionMemoryUpdateTimeout = 60 * time.Second
 
@@ -247,10 +247,10 @@ func unsanitizeKey(key string) string {
 }
 
 // ---------------------------------------------------------------------------
-// LLM-based update (forked-agent pattern via local sglang)
+// LLM-based update (forked-agent pattern via local AI)
 // ---------------------------------------------------------------------------
 
-// sessionMemorySystemPrompt instructs the sglang model to update session memory.
+// sessionMemorySystemPrompt instructs the local AI model to update session memory.
 // The model receives the full conversation transcript and current notes, then
 // outputs the complete updated markdown.
 const sessionMemorySystemPrompt = `당신은 AI 에이전트의 세션 메모리 관리자입니다.
@@ -272,7 +272,7 @@ const sessionMemorySystemPrompt = `당신은 AI 에이전트의 세션 메모리
 
 전체 업데이트된 마크다운을 반환하세요. 구조를 유지하면서 내용만 업데이트합니다.`
 
-// UpdateSessionMemory calls the local sglang model with the full recent
+// UpdateSessionMemory calls the local AI model with the full recent
 // transcript to update the session memory markdown. Designed to be called
 // inside the existing post-run goroutine alongside memory extraction.
 //
@@ -295,7 +295,7 @@ func UpdateSessionMemory(
 		logger.Debug("session memory: debounced (too recent)")
 		return
 	}
-	if !pilot.CheckSglangHealth() {
+	if !pilot.CheckLocalAIHealth() {
 		return
 	}
 
@@ -336,7 +336,7 @@ func UpdateSessionMemory(
 			// Skip trivial deltas: short user message + short response
 			// (e.g., "응" + "네, 알겠습니다") — nothing meaningful to update.
 			if lastTotal > 0 && isTrivialDelta(msgs) {
-				logger.Debug("session memory: trivial delta, skipping sglang call",
+				logger.Debug("session memory: trivial delta, skipping local AI call",
 					"newMsgs", newCount)
 				store.SetLastTotal(sessionKey, total)
 				return
@@ -384,20 +384,20 @@ func UpdateSessionMemory(
 	// then the update instruction is the final user message.
 	messages := buildMemoryUpdateMessages(transcriptText, userPrompt.String())
 
-	// Submit through the centralized sglang hub for token budget management
+	// Submit through the centralized local AI hub for token budget management
 	// and zombie request prevention. The hub injects noThinking + server-side
 	// timeout automatically.
-	sHub := pilot.GetSglangHub()
+	sHub := pilot.GetLocalAIHub()
 	if sHub == nil {
-		logger.Debug("session memory: sglang hub not available")
+		logger.Debug("session memory: local AI hub not available")
 		return
 	}
 
-	hubResp, err := sHub.Submit(memCtx, sglang.Request{
+	hubResp, err := sHub.Submit(memCtx, localai.Request{
 		System:    sessionMemorySystemPrompt,
 		Messages:  messages,
 		MaxTokens: 2048,
-		Priority:  sglang.PriorityNormal,
+		Priority:  localai.PriorityNormal,
 		CallerTag: "session_memory",
 		NoCache:   true, // session memory is always unique
 	})
@@ -436,7 +436,7 @@ func UpdateSessionMemory(
 }
 
 // isTrivialDelta returns true when new messages are too short/simple to
-// warrant an sglang call. Checks total content length across user and
+// warrant an local AI call. Checks total content length across user and
 // assistant messages — if both are tiny, nothing meaningful changed.
 func isTrivialDelta(msgs []ChatMessage) bool {
 	var userChars, respChars int
@@ -457,7 +457,7 @@ func isTrivialDelta(msgs []ChatMessage) bool {
 // ---------------------------------------------------------------------------
 
 // formatTranscriptForMemory formats ChatMessages into a readable conversation
-// format for the sglang model. Includes role labels, timestamps, and rich
+// format for the local AI model. Includes role labels, timestamps, and rich
 // content blocks (tool_use, tool_result) when available.
 func formatTranscriptForMemory(msgs []ChatMessage) string {
 	if len(msgs) == 0 {
@@ -540,7 +540,7 @@ func formatRichContent(content json.RawMessage) string {
 	return b.String()
 }
 
-// buildMemoryUpdateMessages constructs the message array for the sglang call.
+// buildMemoryUpdateMessages constructs the message array for the local AI call.
 // The transcript is sent as a user message (context), followed by the update
 // instruction as another user message. This gives the model full visibility
 // into the conversation while keeping the instruction separate.

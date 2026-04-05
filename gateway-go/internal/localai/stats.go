@@ -1,4 +1,4 @@
-package sglang
+package localai
 
 import "sync/atomic"
 

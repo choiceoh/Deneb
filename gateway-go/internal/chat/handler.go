@@ -18,7 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/sglang"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -144,12 +144,12 @@ type HandlerConfig struct {
 	VegaBackend          vega.Backend              // optional; enables knowledge prefetch in chat
 	MemoryStore          *memory.Store             // optional; structured memory (Honcho-style)
 	SessionMemory        *SessionMemoryStore       // optional; structured session working state
-	MemoryEmbedder       *memory.Embedder          // optional; fact embedding via SGLang
+	MemoryEmbedder       *memory.Embedder          // optional; fact embedding via local AI
 	UnifiedStore         *unified.Store            // optional; unified memory (search + tier-1)
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
-	SglangHub            *sglang.Hub               // centralized sglang request hub
+	LocalAIHub            *localai.Hub               // centralized local AI request hub
 	ContextCfg           ContextConfig
 	CompactionCfg        aurora.SweepConfig
 	DefaultModel         string
@@ -231,13 +231,13 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		maxHistoryCount:      cfg.MaxHistoryCount,
 		maxMessageBytes:      cfg.MaxMessageBytes,
 	}
-	// Set the package-level model role registry for sglang hooks.
+	// Set the package-level model role registry for local AI hooks.
 	if h.registry != nil {
 		pilot.SetModelRoleRegistry(h.registry)
 	}
-	// Wire centralized sglang hub for token budget management and health checks.
-	if cfg.SglangHub != nil {
-		pilot.SetSglangHub(cfg.SglangHub)
+	// Wire centralized local AI hub for token budget management and health checks.
+	if cfg.LocalAIHub != nil {
+		pilot.SetLocalAIHub(cfg.LocalAIHub)
 	}
 	go h.abortGCLoop()
 	return h

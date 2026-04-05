@@ -277,7 +277,7 @@ func handleContextOverflowAurora(
 	lwClient := pilot.GetLightweightClient()
 	lwModel := pilot.GetLightweightModel()
 	var summarizer aurora.Summarizer
-	if sHub := pilot.GetSglangHub(); sHub != nil {
+	if sHub := pilot.GetLocalAIHub(); sHub != nil {
 		summarizer = aurora.NewHubSummarizer(sHub)
 	} else {
 		summarizer = aurora.NewLLMSummarizer(lwClient, lwModel)

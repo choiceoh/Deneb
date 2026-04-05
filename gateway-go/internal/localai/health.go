@@ -1,4 +1,4 @@
-package sglang
+package localai
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ const (
 	healthPingTimeout   = 3 * time.Second
 )
 
-// healthChecker runs periodic liveness pings against the sglang /models endpoint.
+// healthChecker runs periodic liveness pings against the local AI /models endpoint.
 type healthChecker struct {
 	hub     *Hub
 	baseURL string
@@ -69,8 +69,8 @@ func (hc *healthChecker) pingModels() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// tryAbort sends a best-effort abort request to the sglang server.
-// The /abort endpoint is sglang-specific and accepts {"rid": "..."}.
+// tryAbort sends a best-effort abort request to the local AI server.
+// The /abort endpoint is provider-specific and accepts {"rid": "..."}.
 func tryAbort(baseURL, rid string) {
 	if rid == "" {
 		return

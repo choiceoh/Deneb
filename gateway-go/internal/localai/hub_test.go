@@ -1,4 +1,4 @@
-package sglang
+package localai
 
 import (
 	"context"
@@ -158,7 +158,7 @@ func TestCacheKey_DifferentMaxTokens(t *testing.T) {
 }
 
 func TestSubmit_UnhealthyRejectsBackground(t *testing.T) {
-	// Create a hub with no actual sglang server.
+	// Create a hub with no actual local AI server.
 	cfg := Config{}
 	h := &Hub{
 		cfg:   cfg.withDefaults(),
