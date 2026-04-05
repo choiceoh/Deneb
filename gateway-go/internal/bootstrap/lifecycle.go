@@ -105,7 +105,7 @@ func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 }
 
 func buildBannerInfo(version, addr string, vegaEnabled bool) logging.BannerInfo {
-	localAIBannerURL := modelrole.DefaultLocalAIBaseURL
+	localAIBannerURL := modelrole.DefaultVllmBaseURL
 	localAIStatus := "offline"
 	if vega.IsLocalAIReachable(localAIBannerURL) {
 		localAIStatus = "online"

@@ -109,7 +109,7 @@ const (
 func NewLocalAIExtractor() *LocalAIExtractor {
 	baseURL := firstEnv("LOCAL_AI_BASE_URL", "SGLANG_BASE_URL")
 	if baseURL == "" {
-		baseURL = modelrole.DefaultLocalAIBaseURL
+		baseURL = modelrole.DefaultVllmBaseURL
 	}
 	apiKey := firstEnv("LOCAL_AI_API_KEY", "SGLANG_API_KEY")
 	if apiKey == "" {
@@ -117,7 +117,7 @@ func NewLocalAIExtractor() *LocalAIExtractor {
 	}
 	model := firstEnv("LOCAL_AI_MODEL", "SGLANG_MODEL")
 	if model == "" {
-		model = modelrole.DefaultLocalAIModel
+		model = modelrole.DefaultVllmModel
 	}
 	return &LocalAIExtractor{
 		client:  &http.Client{Timeout: 60 * time.Second},

@@ -46,3 +46,18 @@ func TestParseSlashCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestParseSlashCommand_Mail(t *testing.T) {
+	for _, input := range []string{"/mail", "/메일", "/mail@MyBot"} {
+		got := ParseSlashCommand(input)
+		if got == nil {
+			t.Fatalf("ParseSlashCommand(%q) = nil, want command", input)
+		}
+		if got.Command != "mail" {
+			t.Errorf("ParseSlashCommand(%q).Command = %q, want %q", input, got.Command, "mail")
+		}
+		if !got.Handled {
+			t.Errorf("ParseSlashCommand(%q).Handled = false, want true", input)
+		}
+	}
+}

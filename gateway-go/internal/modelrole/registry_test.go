@@ -16,7 +16,7 @@ func TestResolveModel(t *testing.T) {
 	}{
 		// Role names resolve to full model IDs.
 		{"main", "zai/test-model", RoleMain, true},
-		{"lightweight", "localai/" + DefaultLocalAIModel, RoleLightweight, true},
+		{"lightweight", "vllm/" + DefaultVllmModel, RoleLightweight, true},
 		{"fallback", "google/" + DefaultFallbackModel, RoleFallback, true},
 		// Actual model names pass through unchanged.
 		{"google/gemini-3.1-pro", "google/gemini-3.1-pro", "", false},
@@ -49,7 +49,7 @@ func TestRoleForModel(t *testing.T) {
 		wantFound   bool
 	}{
 		{"zai/test-model", RoleMain, true},
-		{"localai/" + DefaultLocalAIModel, RoleLightweight, true},
+		{"vllm/" + DefaultVllmModel, RoleLightweight, true},
 		{"google/" + DefaultFallbackModel, RoleFallback, true},
 		{"unknown/model", "", false},
 	}
