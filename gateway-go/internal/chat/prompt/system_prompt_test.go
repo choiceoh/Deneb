@@ -277,6 +277,44 @@ func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPromptConversationMode(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "web"},
+			{Name: "http"},
+			{Name: "memory"},
+		},
+		ToolPreset: "conversation",
+	}
+
+	prompt := BuildSystemPrompt(params)
+	if !strings.Contains(prompt, "현재 모드: 대화") {
+		t.Error("conversation mode block should appear when ToolPreset is 'conversation'")
+	}
+	if !strings.Contains(prompt, "코드, 파일, 실행 관련 도구는 사용할 수 없습니다") {
+		t.Error("conversation mode should state code/file tools are unavailable")
+	}
+}
+
+func TestBuildSystemPromptNormalModeNoConversationBlock(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "read"},
+			{Name: "write"},
+			{Name: "exec"},
+			{Name: "web"},
+			{Name: "memory"},
+		},
+	}
+
+	prompt := BuildSystemPrompt(params)
+	if strings.Contains(prompt, "현재 모드: 대화") {
+		t.Error("conversation mode block should NOT appear in normal mode")
+	}
+}
+
 func TestWriteCompactToolList_UncategorizedTools(t *testing.T) {
 	toolSet := map[string]bool{
 		"read":        true,
