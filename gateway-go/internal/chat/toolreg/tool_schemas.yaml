@@ -1317,3 +1317,19 @@
       type: string
       description: "Filter by skill category (e.g., coding, productivity, devops)"
   required: []
+
+# ---------------------------------------------------------------------------
+# Bridge (inter-agent communication)
+# ---------------------------------------------------------------------------
+
+- name: bridge
+  properties:
+    message:
+      type: string
+      description: "Message to send to the other agent"
+    source:
+      type: string
+      description: "Your identity (default: 'deneb')"
+      default: deneb
+  required:
+    - message

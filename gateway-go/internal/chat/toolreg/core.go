@@ -60,6 +60,21 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 // FetchToolsSchema returns the fetch_tools schema for external registration.
 func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 
+// RegisterBridgeTool registers the inter-agent bridge tool.
+// Called separately because Broadcaster is not part of CoreToolDeps.
+func RegisterBridgeTool(registry toolctx.ToolRegistrar, broadcaster tools.BroadcastFunc) {
+	if broadcaster == nil {
+		return
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "bridge",
+		Description:     "다른 AI 에이전트(Claude Code 등)에게 메시지를 보낸다. 같은 서버에서 작업 중인 에이전트와 실시간 통신.",
+		InputSchema:     bridgeToolSchema(),
+		Fn:              tools.ToolBridge(broadcaster),
+		ConcurrencySafe: true,
+	})
+}
+
 // RegisterAutoresearchTool registers the autoresearch tool with the given runner.
 // Called separately from RegisterCoreTools because the runner is created by the
 // server layer and not part of CoreToolDeps.
