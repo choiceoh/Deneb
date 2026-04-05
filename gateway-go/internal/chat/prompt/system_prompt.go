@@ -314,6 +314,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("\n")
 	}
 
+	// Bridge agent awareness.
+	d.WriteString("## Bridge Agent\n")
+	d.WriteString("`[bridge:SOURCE]` 태그가 붙은 system 메시지는 같은 서버에서 작업 중인 다른 AI 에이전트(예: Claude Code)가 보낸 것이다.\n")
+	d.WriteString("- 이것은 사용자(선택)가 보낸 메시지가 **아니다**. 동료 에이전트의 질문/요청이다.\n")
+	d.WriteString("- 에이전트끼리의 대화이므로 존댓말 불필요, 기술적으로 직접 답하라.\n")
+	d.WriteString("- 응답 시 `[bridge:reply]` 태그를 붙여라. 예: `[bridge:reply] 현재 프로덕션 임계값은 0.75이다.`\n\n")
+
 	// Context (merged: Workspace + Date/Time + Context Files + Runtime).
 	d.WriteString("## Context\n")
 	fmt.Fprintf(&d, "Workspace: %s\n", params.WorkspaceDir)

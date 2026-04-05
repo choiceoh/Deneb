@@ -108,6 +108,12 @@ func (el *EventListener) Run(ctx context.Context) error {
 func (el *EventListener) handleEvent(ctx context.Context, event *gatewayEvent) {
 	el.logger.Debug("gateway event", "event", event.Event)
 
+	// Forward bridge messages as MCP channel notifications.
+	if event.Event == "bridge.message" {
+		el.forwardBridgeMessage(event)
+		return
+	}
+
 	// Send resource update notifications for subscribed URIs.
 	if uri, ok := eventToResourceURI[event.Event]; ok {
 		if el.resources.IsSubscribed(uri) {
@@ -124,4 +130,45 @@ func (el *EventListener) handleEvent(ctx context.Context, event *gatewayEvent) {
 	if eventRequiresSampling[event.Event] && el.sampler != nil {
 		go el.sampler.HandleEvent(ctx, event.Event, event.Payload)
 	}
+}
+
+// forwardBridgeMessage converts a bridge.message gateway event into an MCP
+// channel notification (notifications/claude/channel). This is the push path
+// for Deneb main agent → Claude Code communication.
+func (el *EventListener) forwardBridgeMessage(event *gatewayEvent) {
+	// Parse the bridge payload.
+	var payload struct {
+		Message string `json:"message"`
+		Source  string `json:"source"`
+		TS      int64  `json:"ts"`
+	}
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		el.logger.Warn("bridge message parse error", "err", err)
+		return
+	}
+
+	channelParams := ChannelNotificationParams{
+		Content: payload.Message,
+		Meta: map[string]any{
+			"source": payload.Source,
+			"ts":     payload.TS,
+		},
+	}
+
+	params, err := json.Marshal(channelParams)
+	if err != nil {
+		el.logger.Warn("bridge channel notification marshal error", "err", err)
+		return
+	}
+
+	if err := el.transport.WriteNotification(&Notification{
+		JSONRPC: "2.0",
+		Method:  "notifications/claude/channel",
+		Params:  params,
+	}); err != nil {
+		el.logger.Warn("bridge channel notification write error", "err", err)
+		return
+	}
+
+	el.logger.Info("bridge message forwarded to channel", "source", payload.Source)
 }

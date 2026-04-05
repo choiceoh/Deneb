@@ -142,6 +142,9 @@ func (s *Server) handleInitialize(ctx context.Context, req *JSONRPCRequest) *JSO
 			Tools:     &ToolsCap{},
 			Resources: &ResourcesCap{Subscribe: true},
 			Prompts:   &PromptsCap{},
+			Experimental: map[string]any{
+				"claude/channel": map[string]any{},
+			},
 		},
 		ServerInfo: ServerInfo{
 			Name:    "deneb",

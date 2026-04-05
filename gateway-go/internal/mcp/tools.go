@@ -155,6 +155,19 @@ func allTools() []toolDef {
 			},
 		},
 
+		// --- Inter-agent bridge ---
+		{
+			rpcMethod: "bridge.send",
+			tool: Tool{
+				Name:        "deneb_bridge_send",
+				Description: "Send a message to the Deneb main agent via the inter-agent bridge. This is a lightweight path — no session or LLM inference involved.",
+				InputSchema: objectSchema(
+					requiredProp("message", "string", "The message to send"),
+					prop("source", "string", "Sender identity (default: 'claude-code')"),
+				),
+			},
+		},
+
 		// --- Meta / Escape hatch ---
 		{
 			rpcMethod: "tools.invoke",

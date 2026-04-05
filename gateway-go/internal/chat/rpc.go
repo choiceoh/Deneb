@@ -345,6 +345,26 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 	return resp
 }
 
+// InjectDirect injects a message into the transcript without going through RPC.
+// Used by the bridge injector for inter-agent communication.
+func (h *Handler) InjectDirect(sessionKey, role, content string) error {
+	if h.transcript == nil {
+		return fmt.Errorf("no transcript store available")
+	}
+	content = sanitizeInput(content)
+	msg := NewTextChatMessage(role, content, time.Now().UnixMilli())
+	if err := h.transcript.Append(sessionKey, msg); err != nil {
+		return err
+	}
+	if h.broadcast != nil {
+		h.broadcast("sessions.changed", map[string]any{
+			"sessionKey": sessionKey,
+			"reason":     "bridge-injected",
+		})
+	}
+	return nil
+}
+
 // Inject handles "chat.inject" — injects a message directly into the transcript.
 func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {

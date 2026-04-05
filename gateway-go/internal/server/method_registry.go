@@ -17,6 +17,7 @@ import (
 	handlerautoresearch "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/autoresearch"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
+	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertelegram"
@@ -28,6 +29,7 @@ import (
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
@@ -88,6 +90,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Skills:      hub.Skills(),
 			Broadcaster: hub.Broadcast,
 		}),
+
+		// --- Inter-agent bridge ---
+		handlerbridge.Methods(func() handlerbridge.Deps {
+			s.bridgeInjector = &handlerbridge.Injector{}
+			return handlerbridge.Deps{
+				Broadcaster: hub.Broadcast,
+				Injector:    s.bridgeInjector,
+			}
+		}()),
 
 		// --- Events (transport-agnostic) ---
 		handlerevents.BroadcastMethods(handlerevents.EventsDeps{
@@ -210,6 +221,23 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		if d != nil {
 			s.dispatcher.RegisterDomain(d)
 		}
+	}
+
+	// Wire bridge injector now that chatHandler is ready.
+	if s.bridgeInjector != nil && s.chatHandler != nil {
+		sessions := hub.Sessions()
+		s.bridgeInjector.SetInject(
+			s.chatHandler.InjectDirect,
+			func() []string {
+				var keys []string
+				for _, sess := range sessions.List() {
+					if sess.Kind == session.KindShadow {
+						keys = append(keys, sess.Key)
+					}
+				}
+				return keys
+			},
+		)
 	}
 
 	// Wire Telegram → chat pipeline now that both are ready.
