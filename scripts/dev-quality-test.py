@@ -452,7 +452,10 @@ class GatewayClient:
         self.seq = 0
 
     async def connect(self):
-        self.ws = await websockets.connect(self.uri, max_size=10 * 1024 * 1024)
+        self.ws = await websockets.connect(
+            self.uri, max_size=10 * 1024 * 1024,
+            ping_interval=30, ping_timeout=300,
+        )
         await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_CONNECT)
         connect = {
             "type": "req", "id": "quality-hs", "method": "connect",
@@ -1193,6 +1196,7 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
         turn_tokens = []  # Track per-turn token usage for compaction checks
         for turn in turns:
             repeat = turn.get("repeat", 1)
+            delay = turn.get("delay", 0)  # seconds between repeated turns
             for _ri in range(repeat):
                 if "gen" in turn:
                     msg = generate_message(turn["gen"])
@@ -1201,6 +1205,8 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
                 if msg:
                     last_capture = await client.chat(msg, session_key=session_key,
                                                      timeout=timeout)
+                    if delay > 0 and _ri < repeat - 1:
+                        await asyncio.sleep(delay)
                     usage = last_capture.token_usage
                     turn_tokens.append({
                         "turn": len(turn_tokens) + 1,
