@@ -249,29 +249,52 @@ func (s *Store) runFTSQuery(ctx context.Context, ftsQuery string, opts SearchOpt
 }
 
 // trigramSearch uses the trigram FTS5 index for CJK/Korean substring matching.
+// Searches individual tokens with OR instead of the full query as a phrase,
+// because short Korean tokens (< 3 chars) can't form trigrams as phrases.
 // minImportance filters out low-importance facts when > 0 (e.g. 0.7 for FTS-only mode).
 func (s *Store) trigramSearch(ctx context.Context, query string, minImportance float64) map[int64]float64 {
-	var rows_query string
+	// Split into individual tokens and keep only those long enough for trigram
+	// matching (>= 3 Unicode characters).
+	tokens := splitTokens(query)
+	var trigramTokens []string
+	for _, t := range tokens {
+		charCount := 0
+		for range t {
+			charCount++
+		}
+		if charCount >= 3 {
+			trigramTokens = append(trigramTokens, `"`+stripQuotes(t)+`"`)
+		}
+	}
+	if len(trigramTokens) == 0 {
+		return nil
+	}
+	trigramQuery := trigramTokens[0]
+	for _, t := range trigramTokens[1:] {
+		trigramQuery += " OR " + t
+	}
+
+	var rowsQuery string
 	var args []any
 	if minImportance > 0 {
-		rows_query = `SELECT f.id, fts.rank
+		rowsQuery = `SELECT f.id, fts.rank
 		 FROM facts_fts_trigram fts
 		 JOIN facts f ON f.id = fts.rowid
 		 WHERE facts_fts_trigram MATCH ? AND f.active = 1 AND f.importance >= ?
 		 ORDER BY fts.rank
 		 LIMIT 30`
-		args = []any{`"` + query + `"`, minImportance}
+		args = []any{trigramQuery, minImportance}
 	} else {
-		rows_query = `SELECT f.id, fts.rank
+		rowsQuery = `SELECT f.id, fts.rank
 		 FROM facts_fts_trigram fts
 		 JOIN facts f ON f.id = fts.rowid
 		 WHERE facts_fts_trigram MATCH ? AND f.active = 1
 		 ORDER BY fts.rank
 		 LIMIT 30`
-		args = []any{`"` + query + `"`}
+		args = []any{trigramQuery}
 	}
 
-	rows, err := s.db.QueryContext(ctx, rows_query, args...)
+	rows, err := s.db.QueryContext(ctx, rowsQuery, args...)
 	if err != nil {
 		return nil
 	}
@@ -453,6 +476,8 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 
 // buildFTSQuery constructs an FTS5 MATCH expression from tokens joined by op ("AND" or "OR").
 // Each token is double-quoted to escape FTS5 reserved words (AND, OR, NOT, NEAR).
+// Korean tokens use prefix matching (token*) to handle agglutinative particles:
+// "배포" matches "배포는", "배포를", etc. in the unicode61 FTS index.
 func buildFTSQuery(tokens []string, op string) string {
 	if len(tokens) == 0 {
 		return ""
@@ -460,7 +485,15 @@ func buildFTSQuery(tokens []string, op string) string {
 	var escaped []string
 	for _, t := range tokens {
 		t = stripQuotes(t)
-		if t != "" {
+		if t == "" {
+			continue
+		}
+		if containsHangul(t) {
+			// Korean prefix match: 배포* matches 배포는, 사용자* matches 사용자는.
+			// Korean is agglutinative — particles attach to stems at any length,
+			// so prefix matching is needed for all Korean tokens.
+			escaped = append(escaped, t+"*")
+		} else {
 			escaped = append(escaped, `"`+t+`"`)
 		}
 	}
