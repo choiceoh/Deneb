@@ -162,7 +162,7 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 // Shutdown stops the hub, draining all queued requests.
 func (h *Hub) Shutdown() {
 	h.cancel()
-	h.queue.cond.Broadcast()
+	h.queue.Close()
 	h.budgetCond.Broadcast()
 	h.queue.DrainAll(ErrHubShutdown)
 	h.wg.Wait()
