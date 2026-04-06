@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
@@ -72,6 +73,9 @@ type HubConfig struct {
 	Wizard    *wizard.Engine
 	Talk      *talk.State // optional
 
+	// RL self-learning (optional, nil when rl.enable=false).
+	RLService *rl.Service
+
 	// Metadata.
 	Logger  *slog.Logger
 	Version string // optional
@@ -112,6 +116,9 @@ type GatewayHub struct {
 	wizard    *wizard.Engine
 	talk      *talk.State
 
+	// RL self-learning pipeline (optional, nil when rl.enable=false).
+	rlService *rl.Service
+
 	// Metadata.
 	logger  *slog.Logger
 	version string
@@ -140,6 +147,7 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		skills:         cfg.Skills,
 		wizard:         cfg.Wizard,
 		talk:           cfg.Talk,
+		rlService:      cfg.RLService,
 		logger:         cfg.Logger,
 		version:        cfg.Version,
 		phase:          PhaseInit,
@@ -165,6 +173,7 @@ func (h *GatewayHub) Approvals() *approval.Store                     { return h.
 func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
 func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
 func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
+func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
 func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return h.localAIHub }
