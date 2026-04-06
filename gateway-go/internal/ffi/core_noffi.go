@@ -3,19 +3,11 @@
 package ffi
 
 import (
-	"encoding/json"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/coreprotocol"
 	"github.com/choiceoh/deneb/gateway-go/internal/coresecurity"
 )
 
 // Available reports whether the Rust FFI library is linked.
 const Available = false
-
-// ValidateFrame delegates to the pure-Go coreprotocol implementation.
-func ValidateFrame(jsonStr string) error {
-	return coreprotocol.ValidateFrame(jsonStr)
-}
 
 // ConstantTimeEq delegates to coresecurity.ConstantTimeEq.
 func ConstantTimeEq(a, b []byte) bool {
@@ -68,40 +60,4 @@ func SanitizeHTML(input string) string {
 // IsSafeURL delegates to coresecurity.IsSafeURL.
 func IsSafeURL(rawURL string) bool {
 	return coresecurity.IsSafeURL(rawURL)
-}
-
-// knownErrorCodes contains all valid gateway error codes.
-var knownErrorCodes = map[string]bool{
-	"NOT_LINKED": true, "NOT_PAIRED": true, "AGENT_TIMEOUT": true,
-	"INVALID_REQUEST": true, "UNAVAILABLE": true, "MISSING_PARAM": true,
-	"NOT_FOUND": true, "UNAUTHORIZED": true, "VALIDATION_FAILED": true,
-	"CONFLICT": true, "FORBIDDEN": true, "NODE_DISCONNECTED": true,
-	"DEPENDENCY_FAILED": true, "FEATURE_DISABLED": true,
-}
-
-// ValidateParams delegates to the pure-Go coreprotocol implementation.
-func ValidateParams(method, jsonStr string) (valid bool, errorsJSON []byte, err error) {
-	result, err := coreprotocol.ValidateParams(method, jsonStr)
-	if err != nil {
-		return false, nil, err
-	}
-	if result.Valid {
-		return true, nil, nil
-	}
-	// Serialize validation errors as JSON array for wire compatibility.
-	data, jsonErr := json.Marshal(result.Errors)
-	if jsonErr != nil {
-		return false, nil, jsonErr
-	}
-	return false, data, nil
-}
-
-// ValidateErrorCode is a pure-Go fallback for error code validation.
-func ValidateErrorCode(code string) bool {
-	return knownErrorCodes[code]
-}
-
-// getLastPanicMsg is a no-op in pure-Go builds (no Rust panic to retrieve).
-func getLastPanicMsg() string {
-	return ""
 }

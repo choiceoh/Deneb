@@ -30,10 +30,7 @@ func protocolValidate() rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("frame").Response(req.ID)
 		}
 		err := ffipkg.ValidateFrame(p.Frame)
-		backend := "go-fallback"
-		if ffipkg.Available {
-			backend = "rust"
-		}
+		backend := "go"
 		if err != nil {
 			return rpcutil.RespondOK(req.ID, map[string]any{
 				"valid": false, "error": err.Error(), "backend": backend,
@@ -64,10 +61,7 @@ func protocolValidateParams() rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
 		}
-		backend := "go-fallback"
-		if ffipkg.Available {
-			backend = "rust"
-		}
+		backend := "go"
 		result := map[string]any{"valid": valid, "backend": backend}
 		if errorsJSON != nil {
 			result["errors"] = json.RawMessage(errorsJSON)

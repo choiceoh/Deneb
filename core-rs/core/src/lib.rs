@@ -1,15 +1,13 @@
 //! Deneb Core — Rust implementation of performance-critical modules.
 //!
 //! This crate provides:
-//! - Protocol frame validation and schema validation
 //! - Memory search (SIMD cosine, BM25, FTS)
 //! - Context engine and compaction state machines
 //!
-//! It exposes both a Rust API and a C FFI surface for integration
-//! with Go (via `CGo`).
+//! It exposes a C FFI surface for integration with Go (via `CGo`).
 //!
 //! Modules ported to pure Go (no longer in this crate):
-//! markdown, parsing, media, security.
+//! protocol, markdown, parsing, media, security.
 
 // This crate uses unsafe for C FFI exports (#[no_mangle] extern "C" functions)
 // required by the Go gateway CGo integration.
@@ -34,5 +32,4 @@ pub use ffi::compaction::*;
 pub use ffi::context_engine::*;
 pub use ffi::memory_search::*;
 pub use ffi::ml::*;
-pub use ffi::protocol::*;
 pub use ffi::vega::*;
