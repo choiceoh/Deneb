@@ -31,6 +31,16 @@ else
 GO_ENV :=
 endif
 
+# Auto-detect GCC include path for bindgen (llama-cpp-sys-2 needs stdbool.h).
+# libclang used by bindgen may not find GCC-provided headers without explicit paths.
+ifndef BINDGEN_EXTRA_CLANG_ARGS
+_GCC_INCLUDE := $(shell gcc -print-file-name=include 2>/dev/null)
+_GCC_MACHINE := $(shell gcc -dumpmachine 2>/dev/null)
+ifneq ($(_GCC_INCLUDE),include)
+export BINDGEN_EXTRA_CLANG_ARGS := -I$(_GCC_INCLUDE) -I/usr/include/$(_GCC_MACHINE) -I/usr/include
+endif
+endif
+
 # Default: build Rust first (produces .a), then Go (links it via CGo), then CLI.
 all: rust go cli
 
