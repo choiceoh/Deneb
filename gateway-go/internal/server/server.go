@@ -28,6 +28,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
@@ -231,6 +232,13 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.registerSessionRPCMethods() // chat pipeline init + handler creation
 	if s.localAIHub != nil {
 		hub.SetLocalAIHub(s.localAIHub)
+
+		// RL training pipeline (optional, env-var gated).
+		if rlCfg := rl.ConfigFromEnv(); rlCfg.Enabled {
+			s.rlService = rl.NewService(rlCfg, s.processes, s.logger)
+			s.localAIHub.SetObserver(s.rlService.Collector().Observe)
+			hub.SetRLService(s.rlService)
+		}
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.registerLateMethods(hub)             // Chat-dependent domains

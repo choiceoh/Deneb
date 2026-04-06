@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
@@ -112,6 +113,9 @@ type GatewayHub struct {
 	wizard    *wizard.Engine
 	talk      *talk.State
 
+	// RL self-learning pipeline (optional, nil when rl is disabled).
+	rlService *rl.Service
+
 	// Metadata.
 	logger  *slog.Logger
 	version string
@@ -165,6 +169,7 @@ func (h *GatewayHub) Approvals() *approval.Store                     { return h.
 func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
 func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
 func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
+func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
 func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return h.localAIHub }
@@ -173,6 +178,9 @@ func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return 
 
 // SetLocalAIHub sets the centralized local AI hub (created early, before method registration).
 func (h *GatewayHub) SetLocalAIHub(sh *localai.Hub) { h.localAIHub = sh }
+
+// SetRLService sets the RL training service (optional, created during server init).
+func (h *GatewayHub) SetRLService(s *rl.Service) { h.rlService = s }
 
 // SetTelegram sets the Telegram plugin (created during early registration phase).
 func (h *GatewayHub) SetTelegram(p *telegram.Plugin) { h.telegram = p }

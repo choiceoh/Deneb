@@ -104,6 +104,10 @@ type Hub struct {
 	// Active request tracking for cancellation.
 	activeReqs sync.Map // requestID (string) → *activeRequest
 
+	// Optional observer for RL trajectory collection.
+	// Called after each successful request completion with the request/response.
+	observer func(Request, Response, error)
+
 	// Metrics.
 	Stats *HubStats
 
@@ -178,6 +182,10 @@ func (h *Hub) Model() string { return h.model }
 
 // Client returns the underlying LLM client (for callers that need streaming).
 func (h *Hub) Client() *llm.Client { return h.client }
+
+// SetObserver registers a callback invoked after each completed request.
+// Used by the RL collector to capture trajectories without modifying callers.
+func (h *Hub) SetObserver(fn func(Request, Response, error)) { h.observer = fn }
 
 // Submit sends a request through the hub and blocks until completion.
 // The request goes through cache check → priority queue → token budget
@@ -388,6 +396,11 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 	}
 
 	h.Stats.Completed.Add(1)
+
+	// Notify RL observer (trajectory collection).
+	if obs := h.observer; obs != nil {
+		obs(*req, Response{Text: text}, nil)
+	}
 
 	// Cache the response.
 	if !req.NoCache && text != "" {

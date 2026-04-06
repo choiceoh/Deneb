@@ -246,7 +246,12 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6b2. Stop local AI hub (drains queued requests, cancels in-flight).
+	// 6b2. Stop RL training pipeline (kills sglang/Tinker/Atropos processes).
+	if s.rlService != nil {
+		s.rlService.Stop()
+	}
+
+	// 6b3. Stop local AI hub (drains queued requests, cancels in-flight).
 	if s.localAIHub != nil {
 		s.localAIHub.Shutdown()
 	}
