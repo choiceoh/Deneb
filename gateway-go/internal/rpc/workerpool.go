@@ -4,6 +4,8 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 )
 
 // WorkerPool is a bounded goroutine pool for RPC handler execution.
@@ -24,10 +26,12 @@ func NewWorkerPool(maxWorkers int) *WorkerPool {
 	if maxWorkers <= 0 {
 		maxWorkers = defaultPoolSize()
 	}
-	return &WorkerPool{
+	wp := &WorkerPool{
 		sem:     make(chan struct{}, maxWorkers),
 		maxSize: maxWorkers,
 	}
+	metrics.WorkerPoolCapacity.Set(int64(maxWorkers))
+	return wp
 }
 
 // defaultPoolSize computes the pool size: 2× logical CPU cores, clamped to [4, 128].
@@ -49,13 +53,17 @@ func defaultPoolSize() int {
 // providing natural back-pressure to callers.
 func (wp *WorkerPool) Submit(task func()) {
 	wp.queued.Add(1)
+	metrics.WorkerPoolQueued.Inc()
 	wp.sem <- struct{}{} // blocks when pool is full
 	wp.queued.Add(-1)
+	metrics.WorkerPoolQueued.Dec()
 	wp.active.Add(1)
+	metrics.WorkerPoolActive.Inc()
 
 	go func() {
 		defer func() {
 			wp.active.Add(-1)
+			metrics.WorkerPoolActive.Dec()
 			wp.done.Add(1)
 			<-wp.sem
 		}()

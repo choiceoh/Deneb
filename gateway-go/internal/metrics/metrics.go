@@ -142,6 +142,7 @@ func (g *Gauge) writeTo(w io.Writer) {
 
 // Histogram tracks the distribution of observed values using fixed buckets.
 // Stores count and sum for Prometheus-compatible output.
+// Also computes approximate quantiles (p50, p95, p99) from bucket data.
 type Histogram struct {
 	mu      sync.RWMutex
 	series  map[string]*histogramData
@@ -157,6 +158,9 @@ type histogramData struct {
 	// sumMicros stores sum × 1e6 as int64 for atomic operations.
 	sumMicros atomic.Int64
 }
+
+// defaultQuantiles are the percentiles exposed alongside histogram output.
+var defaultQuantiles = []float64{0.50, 0.95, 0.99}
 
 // NewHistogram creates a new labeled histogram with the given buckets.
 func NewHistogram(name, help string, buckets []float64, labels ...string) *Histogram {
@@ -208,6 +212,56 @@ func (h *Histogram) ObserveDuration(start time.Time, labelValues ...string) {
 	h.Observe(time.Since(start).Seconds(), labelValues...)
 }
 
+// quantileFromBuckets approximates a quantile value from cumulative bucket counts.
+// Uses linear interpolation within the matching bucket, same as Prometheus histogram_quantile().
+func (h *Histogram) quantileFromBuckets(q float64, d *histogramData) float64 {
+	count := d.count.Load()
+	if count == 0 {
+		return 0
+	}
+	target := float64(count) * q
+
+	// Build cumulative counts.
+	cumulative := int64(0)
+	for i, bound := range h.buckets {
+		prev := cumulative
+		cumulative += d.bucketCounts[i].Load()
+		if float64(cumulative) >= target {
+			lowerBound := float64(0)
+			if i > 0 {
+				lowerBound = h.buckets[i-1]
+			}
+			bucketWidth := bound - lowerBound
+			bucketCount := cumulative - prev
+			if bucketCount == 0 {
+				return lowerBound
+			}
+			return lowerBound + bucketWidth*(target-float64(prev))/float64(bucketCount)
+		}
+	}
+	// All observations beyond the largest bucket.
+	if len(h.buckets) > 0 {
+		return h.buckets[len(h.buckets)-1]
+	}
+	return 0
+}
+
+// Quantiles returns approximate quantile values for the given label combination.
+func (h *Histogram) Quantiles(quantiles []float64, labelValues ...string) map[float64]float64 {
+	key := strings.Join(labelValues, "\x00")
+	h.mu.RLock()
+	d, ok := h.series[key]
+	h.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	result := make(map[float64]float64, len(quantiles))
+	for _, q := range quantiles {
+		result[q] = h.quantileFromBuckets(q, d)
+	}
+	return result
+}
+
 // writeTo writes the histogram in Prometheus text format.
 func (h *Histogram) writeTo(w io.Writer) {
 	h.mu.RLock()
@@ -248,6 +302,36 @@ func (h *Histogram) writeTo(w io.Writer) {
 	}
 }
 
+// writeQuantilesTo writes approximate quantile gauges derived from histogram bucket data.
+// Output format: <name>_p50{labels} <value>
+func (h *Histogram) writeQuantilesTo(w io.Writer) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if len(h.series) == 0 {
+		return
+	}
+
+	quantileNames := map[float64]string{0.50: "p50", 0.95: "p95", 0.99: "p99"}
+	for _, q := range defaultQuantiles {
+		suffix := quantileNames[q]
+		metricName := h.name + "_" + suffix
+		fmt.Fprintf(w, "# HELP %s Approximate %s from histogram buckets.\n", metricName, suffix)
+		fmt.Fprintf(w, "# TYPE %s gauge\n", metricName)
+
+		keys := make([]string, 0, len(h.series))
+		for k := range h.series {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			d := h.series[key]
+			val := h.quantileFromBuckets(q, d)
+			labelStr := formatLabels(h.labels, key)
+			fmt.Fprintf(w, "%s%s %g\n", metricName, labelStr, val)
+		}
+	}
+}
+
 // formatLabels builds a Prometheus label string like {method="foo",status="ok"}.
 func formatLabels(names []string, key string) string {
 	if len(names) == 0 {
@@ -274,7 +358,7 @@ func formatLabels(names []string, key string) string {
 
 // RPC metrics.
 var (
-	RPCRequestsTotal = NewCounter("deneb_rpc_requests_total", "Total RPC requests by method and status.", "method", "status")
+	RPCRequestsTotal = NewCounter("deneb_rpc_requests_total", "Total RPC requests by method, status, and error code.", "method", "status", "code")
 	RPCDuration      = NewHistogram("deneb_rpc_duration_seconds", "RPC request duration in seconds.",
 		[]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}, "method")
 )
@@ -292,6 +376,13 @@ var (
 	WebSocketClients = NewGauge("deneb_websocket_clients", "Number of connected WebSocket clients.")
 )
 
+// Worker pool metrics.
+var (
+	WorkerPoolActive   = NewGauge("deneb_worker_pool_active", "Number of workers currently executing tasks.")
+	WorkerPoolQueued   = NewGauge("deneb_worker_pool_queued", "Number of tasks waiting for a worker slot.")
+	WorkerPoolCapacity = NewGauge("deneb_worker_pool_capacity", "Maximum number of concurrent workers.")
+)
+
 // allMetrics is the ordered list of all metric writers for the /metrics handler.
 var allMetrics = []interface{ writeTo(io.Writer) }{
 	RPCRequestsTotal,
@@ -300,11 +391,24 @@ var allMetrics = []interface{ writeTo(io.Writer) }{
 	LLMTokensTotal,
 	ActiveSessions,
 	WebSocketClients,
+	WorkerPoolActive,
+	WorkerPoolQueued,
+	WorkerPoolCapacity,
+}
+
+// quantileHistograms are histograms that also emit approximate percentile gauges.
+var quantileHistograms = []*Histogram{
+	RPCDuration,
+	LLMRequestDuration,
 }
 
 // WriteMetrics writes all metrics in Prometheus text exposition format.
 func WriteMetrics(w io.Writer) {
 	for _, m := range allMetrics {
 		m.writeTo(w)
+	}
+	// Append approximate percentile gauges derived from histogram buckets.
+	for _, h := range quantileHistograms {
+		h.writeQuantilesTo(w)
 	}
 }
