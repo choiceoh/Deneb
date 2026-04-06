@@ -1355,11 +1355,47 @@
   properties:
     query:
       type: string
-      description: "Search filter to match skill name, description, or category"
+      description: "Search filter to match skill name, description, category, or tag"
     category:
       type: string
       description: "Filter by skill category (e.g., coding, productivity, devops)"
   required: []
+
+- name: skill_manage
+  properties:
+    action:
+      type: string
+      description: "Skill management action"
+      enum:
+        - create
+        - patch
+        - delete
+        - read
+        - list_files
+    name:
+      type: string
+      description: "Skill name (lowercase, hyphens). Must match directory name."
+    category:
+      type: string
+      description: "Skill category directory (coding, productivity, devops, integration). Required for create."
+    content:
+      type: string
+      description: "Full SKILL.md content for create, or patch content. Must include valid frontmatter."
+    old_text:
+      type: string
+      description: "Text to find in existing SKILL.md (for patch action)"
+    new_text:
+      type: string
+      description: "Replacement text (for patch action)"
+    file_path:
+      type: string
+      description: "Relative path within skill directory for auxiliary files (scripts/, references/)"
+    file_content:
+      type: string
+      description: "Content for auxiliary file writes"
+  required:
+    - action
+    - name
 
 # ---------------------------------------------------------------------------
 # Bridge (inter-agent communication)

@@ -356,9 +356,8 @@ func buildLocalAIProbe(localAI *LocalAIDeps) tools.LocalAIProbe {
 	return probe
 }
 
-// RegisterInfraTools registers infrastructure health-check tools.
-// RegisterSkillsTools registers skill discovery tools.
-func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider) {
+// RegisterSkillsTools registers skill discovery and management tools.
+func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider, workspaceDir string, invalidateCache tools.SkillManageInvalidateFn) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "skills_list",
 		Description:     "List available skills for specialized tasks. Use when the current task might match a skill not in the system prompt.",
@@ -367,7 +366,21 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 		Deferred:        true,
 		ConcurrencySafe: true,
 	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name: "skill_manage",
+		Description: "Create, patch, read, or delete skills. Use when: " +
+			"(1) complex task succeeded (5+ tool calls) and the workflow is reusable, " +
+			"(2) an existing skill has outdated/wrong instructions discovered during use, " +
+			"(3) user explicitly asks to remember a procedure or create a skill. " +
+			"Confirm with user before creating or deleting. Skip for simple one-offs.",
+		InputSchema:     skillManageToolSchema(),
+		Fn:              tools.ToolSkillManage(workspaceDir, invalidateCache),
+		Deferred:        true,
+		ConcurrencySafe: true,
+	})
 }
+
+// RegisterInfraTools registers infrastructure health-check tools.
 
 func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, localAI *LocalAIDeps) {
 	registry.RegisterTool(toolctx.ToolDef{

@@ -128,7 +128,7 @@ func entriesToPromptSkills(entries []SkillEntry) []PromptSkill {
 		if entry.Invocation != nil {
 			disableModel = entry.Invocation.DisableModelInvocation
 		}
-		result = append(result, PromptSkill{
+		ps := PromptSkill{
 			Name:                   entry.Skill.Name,
 			Description:            entry.Skill.Description,
 			FilePath:               entry.Skill.FilePath,
@@ -136,7 +136,12 @@ func entriesToPromptSkills(entries []SkillEntry) []PromptSkill {
 			Version:                entry.Skill.Version,
 			Type:                   entry.Skill.Type,
 			DisableModelInvocation: disableModel,
-		})
+		}
+		if entry.Metadata != nil {
+			ps.Tags = entry.Metadata.Tags
+			ps.RelatedSkills = entry.Metadata.RelatedSkills
+		}
+		result = append(result, ps)
 	}
 	return result
 }

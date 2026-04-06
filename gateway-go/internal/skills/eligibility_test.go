@@ -118,6 +118,54 @@ func TestShouldIncludeSkill_bundledAllowlist(t *testing.T) {
 	}
 }
 
+func TestShouldIncludeSkill_requiresTools(t *testing.T) {
+	entry := SkillEntry{
+		Skill: Skill{Name: "terminal-skill", Source: SourceWorkspace},
+		Metadata: &DenebSkillMetadata{
+			RequiresTools: []string{"exec", "terminal"},
+		},
+	}
+	// Tools available — should be included.
+	ctx := EligibilityContext{
+		EnvVars:        map[string]string{},
+		SkillConfigs:   map[string]SkillConfig{},
+		AvailableTools: map[string]bool{"exec": true, "terminal": true, "read": true},
+	}
+	if !ShouldIncludeSkill(entry, ctx) {
+		t.Error("expected skill to be included when required tools are available")
+	}
+
+	// Missing tool — should be excluded.
+	ctx.AvailableTools = map[string]bool{"exec": true, "read": true}
+	if ShouldIncludeSkill(entry, ctx) {
+		t.Error("expected skill to be excluded when required tool is missing")
+	}
+}
+
+func TestShouldIncludeSkill_fallbackForTools(t *testing.T) {
+	entry := SkillEntry{
+		Skill: Skill{Name: "curl-search", Source: SourceWorkspace},
+		Metadata: &DenebSkillMetadata{
+			FallbackForTools: []string{"web_search"},
+		},
+	}
+	// web_search available — fallback should be hidden.
+	ctx := EligibilityContext{
+		EnvVars:        map[string]string{},
+		SkillConfigs:   map[string]SkillConfig{},
+		AvailableTools: map[string]bool{"web_search": true, "read": true},
+	}
+	if ShouldIncludeSkill(entry, ctx) {
+		t.Error("expected fallback skill to be hidden when target tool is available")
+	}
+
+	// web_search NOT available — fallback should show.
+	ctx.AvailableTools = map[string]bool{"read": true, "exec": true}
+	if !ShouldIncludeSkill(entry, ctx) {
+		t.Error("expected fallback skill to show when target tool is unavailable")
+	}
+}
+
 func TestFilterBySkillFilter(t *testing.T) {
 	entries := []SkillEntry{
 		{Skill: Skill{Name: "github"}},

@@ -38,8 +38,11 @@ type DenebSkillMetadata struct {
 	PrimaryEnv    string             `json:"primaryEnv,omitempty"`
 	Emoji         string             `json:"emoji,omitempty"`
 	Homepage      string             `json:"homepage,omitempty"`
-	Tags          []string           `json:"tags,omitempty"`
-	Requires      *SkillRequires     `json:"requires,omitempty"`
+	Tags            []string           `json:"tags,omitempty"`
+	RelatedSkills   []string           `json:"related_skills,omitempty"`
+	RequiresTools   []string           `json:"requires_tools,omitempty"`
+	FallbackForTools []string          `json:"fallback_for_tools,omitempty"`
+	Requires        *SkillRequires     `json:"requires,omitempty"`
 	Install       []SkillInstallSpec `json:"install,omitempty"`
 	LocalExec     *SkillLocalExec    `json:"localExec,omitempty"`
 	SystemHandler string             `json:"systemHandler,omitempty"`
@@ -218,8 +221,11 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 	parseJSONString(obj, "primaryEnv", &meta.PrimaryEnv)
 	parseJSONString(obj, "emoji", &meta.Emoji)
 	parseJSONString(obj, "homepage", &meta.Homepage)
-	// Parse tags.
+	// Parse tags, related skills, and conditional activation.
 	meta.Tags = parseJSONStringList(obj, "tags")
+	meta.RelatedSkills = parseJSONStringList(obj, "related_skills")
+	meta.RequiresTools = parseJSONStringList(obj, "requires_tools")
+	meta.FallbackForTools = parseJSONStringList(obj, "fallback_for_tools")
 
 	// Parse requires.
 	if reqRaw, ok := obj["requires"]; ok {

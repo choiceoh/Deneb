@@ -53,8 +53,7 @@ mod inner {
                 if saved < 0 {
                     return None;
                 }
-                let devnull =
-                    libc::open(b"/dev/null\0".as_ptr().cast(), libc::O_WRONLY);
+                let devnull = libc::open(b"/dev/null\0".as_ptr().cast(), libc::O_WRONLY);
                 if devnull < 0 {
                     libc::close(saved);
                     return None;

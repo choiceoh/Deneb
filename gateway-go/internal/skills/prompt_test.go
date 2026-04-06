@@ -113,6 +113,49 @@ func TestBuildSkillsPrompt_categoryIncluded(t *testing.T) {
 	}
 }
 
+func TestBuildSkillsPrompt_tagsAndRelatedSkills(t *testing.T) {
+	skills := []PromptSkill{
+		{
+			Name:          "weather",
+			Description:   "Weather info",
+			FilePath:      "~/skills/integration/weather/SKILL.md",
+			Category:      "integration",
+			Tags:          []string{"weather", "forecast", "temperature"},
+			RelatedSkills: []string{"morning-letter"},
+		},
+	}
+	result := BuildSkillsPrompt(skills, DefaultSkillsLimits())
+
+	if !strings.Contains(result.Prompt, "<tags>weather, forecast, temperature</tags>") {
+		t.Error("expected <tags> in prompt")
+	}
+	if !strings.Contains(result.Prompt, "<related_skills>morning-letter</related_skills>") {
+		t.Error("expected <related_skills> in prompt")
+	}
+}
+
+func TestFormatSkillsListResponse_tagFilter(t *testing.T) {
+	skills := []PromptSkill{
+		{Name: "weather", Description: "Weather info", Category: "integration", Tags: []string{"forecast", "temperature"}},
+		{Name: "github", Description: "GitHub CLI", Category: "coding", Tags: []string{"git", "PR"}},
+	}
+
+	// Query "forecast" should match weather via tag.
+	result := FormatSkillsListResponse(skills, "forecast", "")
+	if !strings.Contains(result, "weather") {
+		t.Error("expected weather to match 'forecast' tag query")
+	}
+	if strings.Contains(result, "github") {
+		t.Error("expected github to NOT match 'forecast' tag query")
+	}
+
+	// Query "PR" should match github via tag.
+	result = FormatSkillsListResponse(skills, "PR", "")
+	if !strings.Contains(result, "github") {
+		t.Error("expected github to match 'PR' tag query")
+	}
+}
+
 func TestBuildTruncationNote(t *testing.T) {
 	// No truncation, no compact.
 	note := BuildTruncationNote(PromptResult{}, 10)
