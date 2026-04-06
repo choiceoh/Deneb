@@ -314,6 +314,10 @@ func TestExtractTextFinal(t *testing.T) {
 		{"inside code block ignored", "```starlark\nFINAL(\"inside\")\n```", ""},
 		{"outside code block", "text\n```starlark\ncode\n```\nFINAL(\"outside\")", "outside"},
 		{"with whitespace", `FINAL( "spaced" )`, "spaced"},
+		{"mixed quotes in double", `FINAL("he said 'hello'")`, "he said 'hello'"},
+		{"mixed quotes in single", `FINAL('she said "hi"')`, `she said "hi"`},
+		{"multiline double", "FINAL(\"line1\\nline2\")", "line1\\nline2"},
+		{"escaped quote", `FINAL("it\'s fine")`, `it\'s fine`},
 	}
 
 	for _, tt := range tests {
@@ -338,14 +342,14 @@ func TestEstimateTokens(t *testing.T) {
 
 func TestLoopSystemPrompt_ContainsFence(t *testing.T) {
 	cfg := Config{
-		MaxIterations: 25,
-		FreshTailCount:    48,
+		MaxIterations:  30,
+		FreshTailCount: 48,
 	}
 	prompt := LoopSystemPrompt(cfg)
 	if !strings.Contains(prompt, "```starlark") {
 		t.Error("prompt should contain code fence examples")
 	}
-	if !strings.Contains(prompt, "25") {
+	if !strings.Contains(prompt, "30") {
 		t.Error("prompt should contain max iterations")
 	}
 	if !strings.Contains(prompt, "48") {
@@ -357,21 +361,21 @@ func TestCompactHistory(t *testing.T) {
 	// Test that compaction preserves head and tail.
 	mock := &mockLLMClient{
 		responses: []string{
-			"Summary of iterations 1-3: explored context and found key data.",
+			"Summary of iterations 1-6: explored context and found key data.",
 		},
 	}
 
+	// Need >10 messages (keepTail) + 1 head for compaction to trigger.
 	messages := []llm.Message{
 		llm.NewTextMessage("user", "original prompt"),
-		llm.NewTextMessage("assistant", "iter 1 response"),
-		llm.NewTextMessage("user", "iter 1 result"),
-		llm.NewTextMessage("assistant", "iter 2 response"),
-		llm.NewTextMessage("user", "iter 2 result"),
-		llm.NewTextMessage("assistant", "iter 3 response"),
-		llm.NewTextMessage("user", "iter 3 result"),
-		llm.NewTextMessage("assistant", "iter 4 response"),
-		llm.NewTextMessage("user", "iter 4 result"),
 	}
+	for i := 1; i <= 7; i++ {
+		messages = append(messages,
+			llm.NewTextMessage("assistant", fmt.Sprintf("iter %d response", i)),
+			llm.NewTextMessage("user", fmt.Sprintf("iter %d result", i)),
+		)
+	}
+	// Total: 1 + 14 = 15 messages
 
 	cfg := LoopConfig{
 		Client: mock,
@@ -384,9 +388,9 @@ func TestCompactHistory(t *testing.T) {
 		t.Fatalf("compaction failed: %v", err)
 	}
 
-	// Should have: head(1) + summary(1) + tail(4) = 6
-	if len(compacted) != 6 {
-		t.Errorf("compacted length = %d, want 6", len(compacted))
+	// Should have: head(1) + summary(1) + tail(10) = 12
+	if len(compacted) != 12 {
+		t.Errorf("compacted length = %d, want 12", len(compacted))
 	}
 
 	// First message should be original prompt.
@@ -394,6 +398,28 @@ func TestCompactHistory(t *testing.T) {
 	json.Unmarshal(compacted[0].Content, &firstContent)
 	if firstContent != "original prompt" {
 		t.Errorf("first message = %q, want %q", firstContent, "original prompt")
+	}
+}
+
+func TestCompactHistory_TooShort(t *testing.T) {
+	// Messages <= keepTail should not be compacted.
+	messages := []llm.Message{
+		llm.NewTextMessage("user", "prompt"),
+		llm.NewTextMessage("assistant", "response"),
+	}
+
+	cfg := LoopConfig{
+		Client: &mockLLMClient{},
+		Model:  "test-model",
+		System: llm.SystemString("test"),
+	}
+
+	compacted, err := compactHistory(context.Background(), cfg, cfg.System, messages)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(compacted) != len(messages) {
+		t.Errorf("short history should not be compacted: got %d, want %d", len(compacted), len(messages))
 	}
 }
 
