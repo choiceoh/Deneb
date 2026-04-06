@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -222,6 +223,15 @@ func (s *Service) runDreamingAsync() {
 
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				buf := make([]byte, 4096)
+				n := runtime.Stack(buf, false)
+				s.logger.Error("aurora-dream: panic recovered",
+					"panic", r,
+					"stack", string(buf[:n]),
+				)
+				s.emit(CycleEvent{Type: "dreaming_failed"})
+			}
 			s.mu.Lock()
 			s.dreamRunning = false
 			s.mu.Unlock()
@@ -380,7 +390,14 @@ func (s *Service) emit(event CycleEvent) {
 	copy(listeners, s.listeners)
 	s.mu.Unlock()
 	for _, l := range listeners {
-		l(event)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Error("aurora-dream: event listener panic", "event", event.Type, "panic", r)
+				}
+			}()
+			l(event)
+		}()
 	}
 }
 
