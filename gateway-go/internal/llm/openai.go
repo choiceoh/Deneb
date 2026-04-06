@@ -24,6 +24,11 @@ import (
 func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
 	req.Stream = true
 
+	// Normalize messages: merge consecutive same-role messages that may
+	// arise from mid-loop compaction or post-compaction restoration.
+	// Applied right before the API call so callers' slices stay untouched.
+	req.Messages = NormalizeMessages(req.Messages)
+
 	// Build OpenAI-format request body.
 	oaiReq := openAIRequest{
 		Model:         req.Model,
@@ -145,6 +150,15 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 					Role:       "tool",
 					Content:    tr.Content,
 					ToolCallID: tr.ToolUseID,
+				})
+			}
+			// After normalization/merge, a message may contain both tool_results
+			// and text (e.g., tool results + restoration context). Emit any
+			// remaining text as a separate user message so it isn't silently dropped.
+			if textParts != "" {
+				oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
+					Role:    m.Role,
+					Content: textParts,
 				})
 			}
 			continue

@@ -11,7 +11,7 @@ package compaction
 
 import (
 	"encoding/json"
-	"fmt"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
@@ -92,14 +92,16 @@ func ExtractRecentFileReads(messages []llm.Message) []FileReadRecord {
 }
 
 // BuildRestorationMessages creates user messages that re-inject recently
-// accessed file contents into the context after compaction. Stays within
-// the token budget.
+// accessed file contents into the context after compaction. Returns a single
+// user message with all restored content to avoid creating consecutive
+// same-role messages (which some providers reject). Stays within the token
+// budget.
 func BuildRestorationMessages(records []FileReadRecord) []llm.Message {
 	if len(records) == 0 {
 		return nil
 	}
 
-	var messages []llm.Message
+	var parts []string
 	usedTokens := 0
 	count := 0
 
@@ -129,14 +131,20 @@ func BuildRestorationMessages(records []FileReadRecord) []llm.Message {
 			}
 		}
 
-		msg := llm.NewTextMessage("user", fmt.Sprintf(
-			"[Context restored after compaction \u2014 recently accessed content]\n%s", content))
-		messages = append(messages, msg)
+		parts = append(parts, content)
 		usedTokens += effectiveTokens
 		count++
 	}
 
-	return messages
+	if len(parts) == 0 {
+		return nil
+	}
+
+	// Consolidate into a single user message to prevent consecutive same-role
+	// messages after compaction (providers like Anthropic require alternation).
+	combined := "[Context restored after compaction \u2014 recently accessed content]\n" +
+		strings.Join(parts, "\n---\n")
+	return []llm.Message{llm.NewTextMessage("user", combined)}
 }
 
 // StripImageBlocks removes image and document blocks from messages before
