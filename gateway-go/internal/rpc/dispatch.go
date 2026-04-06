@@ -149,6 +149,15 @@ func (d *Dispatcher) endRegistryValidation() error {
 	return err
 }
 
+// PoolStats returns a snapshot of worker pool utilization, or a zero
+// value if no pool is attached.
+func (d *Dispatcher) PoolStats() WorkerPoolStats {
+	if pool := d.pool.Load(); pool != nil {
+		return pool.Stats()
+	}
+	return WorkerPoolStats{}
+}
+
 // Methods returns all registered method names.
 func (d *Dispatcher) Methods() []string {
 	snap := d.snap.Load().(handlerSnapshot)

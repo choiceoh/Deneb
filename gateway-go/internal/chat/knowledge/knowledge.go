@@ -109,7 +109,7 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 					queryVec = vec
 				}
 			}
-			searchOpts := memory.SearchOpts{Limit: knowledgeMaxMemory}
+			searchOpts := memory.SearchOpts{Limit: knowledgeMaxMemory, MinScore: 0.35}
 			if deps.MemoryEmbedder == nil {
 				// No semantic search available: restrict FTS scan to moderately important facts
 				// so hundreds of low-signal facts don't get scanned on every message.
