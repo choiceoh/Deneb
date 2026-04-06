@@ -104,8 +104,14 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 	}, nil
 }
 
+// maxBatchConcurrency limits how many sub-LLM calls run in parallel
+// within a single batch to avoid overwhelming LLM API rate limits
+// or local GPU resources on DGX Spark.
+const maxBatchConcurrency = 3
+
 // RunSubAgentBatch executes multiple sub-LLM calls in parallel.
 // All tasks share the same tools and token budget.
+// Concurrency is limited to maxBatchConcurrency.
 func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, error) {
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 500
@@ -119,11 +125,14 @@ func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, e
 
 	results := make([]SubAgentResult, len(cfg.Tasks))
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxBatchConcurrency)
 
 	for i, task := range cfg.Tasks {
 		wg.Add(1)
 		go func(idx int, t SubAgentTask) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
 			subCfg := SubAgentConfig{
 				Prompt:       t.Prompt,

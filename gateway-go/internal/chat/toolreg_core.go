@@ -65,8 +65,10 @@ var rlmDataToolNames = []string{
 
 // buildRLMSpawnFuncs creates the spawn/batch closures that capture the LLM
 // client, tool registry, and config needed by Phase 2 sub-LLM tools.
+// Each invocation creates a fresh TokenBudget so budgets are per-call,
+// not cumulative across the server's lifetime.
 func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Config) (tools.SpawnFunc, tools.SpawnBatchFunc) {
-	budget := rlm.NewTokenBudget(cfg.TotalTokenBudget)
+	budgetLimit := cfg.TotalTokenBudget
 
 	// Build the LLM tool list available to sub-LLMs (data tools only).
 	subTools := registry.FilteredLLMTools(filterMap(rlmDataToolNames))
@@ -76,6 +78,9 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 		if len(toolNames) > 0 {
 			selectedTools = registry.FilteredLLMTools(filterMap(toolNames))
 		}
+
+		// Fresh budget per call — prevents cumulative exhaustion across requests.
+		budget := rlm.NewTokenBudget(budgetLimit)
 
 		return rlm.RunSubAgent(ctx, rlm.SubAgentConfig{
 			Prompt:       prompt,
@@ -100,6 +105,9 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 		for i, p := range prompts {
 			tasks[i] = rlm.SubAgentTask{Index: i, Prompt: p}
 		}
+
+		// Fresh budget per batch — shared across tasks within this one call.
+		budget := rlm.NewTokenBudget(budgetLimit)
 
 		return rlm.RunSubAgentBatch(ctx, rlm.BatchConfig{
 			Tasks:        tasks,
