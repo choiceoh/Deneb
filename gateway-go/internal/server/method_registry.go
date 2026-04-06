@@ -74,7 +74,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			TelegramPlugin: hub.Telegram(),
 			GatewaySubs:    hub.GatewaySubs(),
 			Processes:      hub.Processes(),
-			Cron:           hub.Cron(),
+			CronService:    hub.CronService(),
 			InternalHooks:  hub.InternalHooks(),
 			Broadcaster:    hub.Broadcast,
 		}),
@@ -127,7 +127,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 
 		// --- Scheduling ---
 		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
-			Cron:        hub.Cron(),
+			Service:     hub.CronService(),
 			RunLog:      hub.CronPersistLog(),
 			Broadcaster: hub.Broadcast,
 		}),
@@ -264,8 +264,11 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		s.wireTelegramChatHandler()
 	}
 
-	// Wire agent runner to cron service.
+	// Wire agent runner and Telegram plugin to cron service.
 	if s.cronService != nil {
 		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler})
+		if s.telegramPlug != nil {
+			s.cronService.SetTelegramPlugin(s.telegramPlug)
+		}
 	}
 }

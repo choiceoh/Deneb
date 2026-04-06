@@ -44,9 +44,8 @@ type SessionDeps struct {
 
 // ChronoDeps holds dependencies for the cron scheduling tool.
 type ChronoDeps struct {
-	Scheduler *cron.Scheduler
-	Service   *cron.Service        // persistent cron service (preferred when available)
-	RunLog    *cron.PersistentRunLog // run history
+	Service *cron.Service          // persistent cron service
+	RunLog  *cron.PersistentRunLog // run history
 	// SendFn sends a message to a target session, triggering an agent run.
 	SendFn func(sessionKey, message string) error
 }
