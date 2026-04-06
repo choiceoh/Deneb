@@ -41,6 +41,7 @@ var toolApprovalPolicy = map[string]string{
 	"web_fetch":       "auto",
 	"image_describe":  "auto",
 	"memory":          "auto",
+	"wiki":            "auto",
 	"kv":              "auto",
 	"process":         "auto",
 	"edit":            "confirm",
@@ -73,6 +74,7 @@ var toolCompressSkipSet = map[string]bool{
 	"analyze":       true,
 	"diff":          true,
 	"memory":        true,
+	"wiki":          true,
 	"kv":            true,
 	"sessions_list": true,
 }

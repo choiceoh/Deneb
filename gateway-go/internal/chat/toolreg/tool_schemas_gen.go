@@ -1787,10 +1787,72 @@ func llmSpawnBatchToolSchema() map[string]any {
 	}
 }
 
+func wikiToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status"},
+				"description": "Action: search (ripgrep full-text search), read (read wiki page), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search query (search), page path (read/write), category name (index), or diary entry body (log)",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "Page title (write action)",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"enum":        []string{"사람", "프로젝트", "기술", "업무", "결정", "선호"},
+				"description": "Wiki category for write action or index filter",
+			},
+			"content": map[string]any{
+				"type":        "string",
+				"description": "Page body content in markdown (write action) or diary entry body (log action)",
+			},
+			"tags": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "Tags for the page (write action)",
+			},
+			"related": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "Related page topics (write action)",
+			},
+			"importance": map[string]any{
+				"type":        "number",
+				"description": "Page importance 0.0-1.0 (write action, default: 0.5)",
+				"minimum":     0,
+				"maximum":     1,
+			},
+			"section": map[string]any{
+				"type":        "string",
+				"description": "Read a specific section from the page (read action)",
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "Max results (search: default 10)",
+				"minimum":     1,
+				"maximum":     50,
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.yaml.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
 	return map[string]int{
 		"exec": 51200,
+		"wiki": 30000,
 	}
 }

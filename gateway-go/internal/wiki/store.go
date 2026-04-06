@@ -1,0 +1,186 @@
+package wiki
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+)
+
+// Categories are the top-level wiki directories.
+var Categories = []string{
+	"사람",
+	"프로젝트",
+	"기술",
+	"업무",
+	"결정",
+	"선호",
+}
+
+// Store manages a wiki directory on disk.
+type Store struct {
+	dir      string
+	diaryDir string
+
+	mu    sync.RWMutex
+	index *Index // cached master index
+}
+
+// NewStore creates a wiki store rooted at dir.
+// It ensures the directory structure exists.
+func NewStore(dir, diaryDir string) (*Store, error) {
+	if err := ensureDirs(dir); err != nil {
+		return nil, fmt.Errorf("wiki: ensure dirs: %w", err)
+	}
+	s := &Store{dir: dir, diaryDir: diaryDir}
+
+	// Load or create master index.
+	idx, err := s.loadOrCreateIndex()
+	if err != nil {
+		return nil, fmt.Errorf("wiki: load index: %w", err)
+	}
+	s.index = idx
+	return s, nil
+}
+
+// Dir returns the wiki root directory.
+func (s *Store) Dir() string { return s.dir }
+
+// DiaryDir returns the diary directory for raw daily logs.
+func (s *Store) DiaryDir() string { return s.diaryDir }
+
+// ReadPage reads a wiki page by relative path (e.g., "기술/dgx-spark.md").
+func (s *Store) ReadPage(relPath string) (*Page, error) {
+	abs := filepath.Join(s.dir, relPath)
+	return ParsePageFile(abs)
+}
+
+// WritePage writes a page to the wiki. Creates parent directories if needed.
+// Updates the master index entry for this page.
+func (s *Store) WritePage(relPath string, page *Page) error {
+	abs := filepath.Join(s.dir, relPath)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return fmt.Errorf("wiki: mkdir: %w", err)
+	}
+	if err := WritePageFile(abs, page); err != nil {
+		return err
+	}
+
+	// Update index.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.index.UpdateEntry(relPath, page)
+	return s.index.Save(filepath.Join(s.dir, "index.md"))
+}
+
+// DeletePage removes a page and its index entry.
+func (s *Store) DeletePage(relPath string) error {
+	abs := filepath.Join(s.dir, relPath)
+	if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("wiki: delete: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.index.RemoveEntry(relPath)
+	return s.index.Save(filepath.Join(s.dir, "index.md"))
+}
+
+// ListPages returns all page paths in a category (e.g., "기술").
+// If category is empty, returns all pages.
+func (s *Store) ListPages(category string) ([]string, error) {
+	var searchDir string
+	if category != "" {
+		searchDir = filepath.Join(s.dir, category)
+	} else {
+		searchDir = s.dir
+	}
+
+	var pages []string
+	err := filepath.Walk(searchDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip errors
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".md" {
+			return nil
+		}
+		// Skip index files.
+		base := filepath.Base(path)
+		if base == "index.md" || base == "_index.md" {
+			return nil
+		}
+		rel, _ := filepath.Rel(s.dir, path)
+		pages = append(pages, rel)
+		return nil
+	})
+	return pages, err
+}
+
+// GetIndex returns the cached master index.
+func (s *Store) GetIndex() *Index {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.index
+}
+
+// Stats returns wiki statistics.
+func (s *Store) Stats() StoreStats {
+	pages, _ := s.ListPages("")
+	var totalBytes int64
+	catCount := map[string]int{}
+	for _, p := range pages {
+		abs := filepath.Join(s.dir, p)
+		if info, err := os.Stat(abs); err == nil {
+			totalBytes += info.Size()
+		}
+		cat := filepath.Dir(p)
+		if cat == "." {
+			cat = "(root)"
+		}
+		catCount[cat]++
+	}
+
+	return StoreStats{
+		TotalPages:    len(pages),
+		TotalBytes:    totalBytes,
+		CategoryCount: catCount,
+	}
+}
+
+// StoreStats holds wiki statistics.
+type StoreStats struct {
+	TotalPages    int
+	TotalBytes    int64
+	CategoryCount map[string]int
+}
+
+// Close is a no-op for file-based wiki (satisfies lifecycle patterns).
+func (s *Store) Close() error { return nil }
+
+func (s *Store) loadOrCreateIndex() (*Index, error) {
+	indexPath := filepath.Join(s.dir, "index.md")
+	idx, err := ParseIndex(indexPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			idx = NewIndex()
+			return idx, idx.Save(indexPath)
+		}
+		return nil, err
+	}
+	return idx, nil
+}
+
+func ensureDirs(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, cat := range Categories {
+		if err := os.MkdirAll(filepath.Join(dir, cat), 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // initMemorySubsystem initializes unified store, Aurora compaction store,
@@ -130,6 +131,26 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	if loaded > 0 {
 		s.logger.Info("session memory restored", "count", loaded)
 	}
+
+	// Wiki knowledge base (feature-flagged).
+	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
+		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)
+		if err != nil {
+			s.logger.Warn("wiki store unavailable", "error", err)
+		} else {
+			s.wikiStore = wikiStore
+			chatCfg.WikiStore = wikiStore
+			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
+
+			// Wiki dreamer (replaces memory dreaming when wiki is active).
+			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
+			lwModel := (*regPtr).Model(modelrole.RoleLightweight)
+			if lwClient != nil && lwModel != "" {
+				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, s.logger)
+				s.logger.Info("wiki-dream: enabled")
+			}
+		}
+	}
 }
 
 // initToolsAndDeps builds CoreToolDeps, registers core/plugin/autoresearch
@@ -155,6 +176,9 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		Vega: chat.VegaDeps{
 			MemoryStore:    chatCfg.MemoryStore,
 			MemoryEmbedder: chatCfg.MemoryEmbedder,
+		},
+		Wiki: chat.WikiDeps{
+			Store: chatCfg.WikiStore,
 		},
 		LLMClient:    reg.Client(modelrole.RoleLightweight),
 		DefaultModel: reg.Model(modelrole.RoleLightweight),

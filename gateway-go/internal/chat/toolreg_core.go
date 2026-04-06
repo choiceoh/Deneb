@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -31,6 +32,11 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: toolreg.FetchToolsSchema(),
 		Fn:          tools.ToolFetchTools(registry),
 	})
+
+	// Wiki: LLM knowledge base (feature-flagged).
+	if cfg := wiki.ConfigFromEnv(); cfg.Enabled {
+		toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
+	}
 
 	// RLM: context externalization tools (feature-flagged).
 	if cfg := rlm.ConfigFromEnv(); cfg.Enabled {
