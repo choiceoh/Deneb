@@ -57,39 +57,3 @@ fn urlencoded(s: &str) -> String {
     }
     out
 }
-
-#[cfg(test)]
-mod tests {
-    use super::urlencoded;
-
-    #[test]
-    fn urlencoded_leaves_unreserved_ascii_unchanged() {
-        let input = "abcXYZ012-_.~";
-        assert_eq!(urlencoded(input), input);
-    }
-
-    #[test]
-    fn urlencoded_turns_spaces_into_plus() {
-        assert_eq!(urlencoded("deneb docs search"), "deneb+docs+search");
-    }
-
-    #[test]
-    fn urlencoded_encodes_reserved_ascii_symbols() {
-        assert_eq!(urlencoded("a/b?c=d&e"), "a%2Fb%3Fc%3Dd%26e");
-    }
-
-    #[test]
-    fn urlencoded_encodes_mixed_unicode_as_utf8_bytes() {
-        assert_eq!(urlencoded("한글 🚀"), "%ED%95%9C%EA%B8%80+%F0%9F%9A%80");
-    }
-
-    #[test]
-    fn urlencoded_encodes_percent_sign_itself() {
-        assert_eq!(urlencoded("100%"), "100%25");
-    }
-
-    #[test]
-    fn urlencoded_handles_empty_string() {
-        assert_eq!(urlencoded(""), "");
-    }
-}

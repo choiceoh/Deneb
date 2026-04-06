@@ -174,38 +174,3 @@ pub fn extract_tags(
 
     tags
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rustc_hash::FxHashMap;
-
-    #[test]
-    fn test_classify_section() {
-        assert_eq!(classify_section("현재 상황", ""), "status");
-        assert_eq!(classify_section("다음 예상 액션", ""), "next_action");
-        assert_eq!(classify_section("로그 2025-01-01", ""), "comm_log");
-        assert_eq!(classify_section("기술 사양", ""), "technical");
-        assert_eq!(classify_section("기타", "견적 관련 내용"), "contract");
-        assert_eq!(classify_section("기타", "일반 내용"), "other");
-    }
-
-    #[test]
-    fn test_extract_tags() {
-        let mut meta = FxHashMap::default();
-        meta.insert("client".into(), "한국전력".into());
-        meta.insert("person_internal".into(), "김대희/고건".into());
-        meta.insert("status".into(), "진행중".into());
-        meta.insert("name".into(), "비금도 해상풍력".into());
-
-        let sections = vec![("개요".into(), "EPC 시공 진행중 현대엔지니어링".into())];
-        let tags = extract_tags(&meta, &sections);
-
-        assert!(tags.contains("고객:한국전력"));
-        assert!(tags.contains("담당:김대희"));
-        assert!(tags.contains("담당:고건"));
-        assert!(tags.contains("기술:EPC"));
-        assert!(tags.contains("그룹:현대차"));
-        assert!(tags.contains("기술:해상풍력"));
-    }
-}

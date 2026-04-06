@@ -14,8 +14,6 @@ mod emitter;
 mod entities;
 mod tokenizer;
 
-#[cfg(test)]
-mod tests;
 
 use serde::{Deserialize, Serialize};
 

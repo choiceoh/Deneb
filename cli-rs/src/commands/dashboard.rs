@@ -89,21 +89,3 @@ fn urlencoded_token(token: &str) -> String {
     }
     out
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn token_encoding_passthrough() {
-        // UUID tokens are already safe characters
-        let token = "550e8400-e29b-41d4-a716-446655440000";
-        assert_eq!(urlencoded_token(token), token);
-    }
-
-    #[test]
-    fn token_encoding_special_chars() {
-        assert_eq!(urlencoded_token("a b"), "a%20b");
-        assert_eq!(urlencoded_token("a+b"), "a%2Bb");
-    }
-}

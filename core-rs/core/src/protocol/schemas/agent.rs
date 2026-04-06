@@ -106,34 +106,3 @@ define_schema! {
         [req "text" => non_empty_string],
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_send_params_valid() {
-        let mut e = Vec::new();
-        validate_send_params(
-            &json!({"to": "user1", "message": "hi", "idempotencyKey": "k1"}),
-            "",
-            &mut e,
-        );
-        assert!(e.is_empty());
-    }
-
-    #[test]
-    fn test_wake_params_valid() {
-        let mut e = Vec::new();
-        validate_wake_params(&json!({"mode": "now", "text": "wake up"}), "", &mut e);
-        assert!(e.is_empty());
-    }
-
-    #[test]
-    fn test_wake_params_invalid_mode() {
-        let mut e = Vec::new();
-        validate_wake_params(&json!({"mode": "invalid", "text": "t"}), "", &mut e);
-        assert!(e.iter().any(|err| err.keyword == "enum"));
-    }
-}

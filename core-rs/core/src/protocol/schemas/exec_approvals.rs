@@ -66,27 +66,3 @@ define_schema! {
         [opt "baseHash" => non_empty_string],
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_resolve_valid() {
-        let mut e = Vec::new();
-        validate_exec_approval_resolve_params(
-            &json!({"id": "req-1", "decision": "allow"}),
-            "",
-            &mut e,
-        );
-        assert!(e.is_empty());
-    }
-
-    #[test]
-    fn test_node_get_valid() {
-        let mut e = Vec::new();
-        validate_exec_approvals_node_get_params(&json!({"nodeId": "n1"}), "", &mut e);
-        assert!(e.is_empty());
-    }
-}

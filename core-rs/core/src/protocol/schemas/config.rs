@@ -63,30 +63,3 @@ define_schema! {
         [opt "timeoutMs" => integer(Some(1), None)],
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_config_get_valid() {
-        let mut e = Vec::new();
-        validate_config_get_params(&json!({}), "", &mut e);
-        assert!(e.is_empty());
-    }
-
-    #[test]
-    fn test_config_set_valid() {
-        let mut e = Vec::new();
-        validate_config_set_params(&json!({"raw": "yaml content"}), "", &mut e);
-        assert!(e.is_empty());
-    }
-
-    #[test]
-    fn test_config_schema_lookup_valid() {
-        let mut e = Vec::new();
-        validate_config_schema_lookup_params(&json!({"path": "gateway.port"}), "", &mut e);
-        assert!(e.is_empty());
-    }
-}

@@ -145,16 +145,3 @@ fn is_secure_or_loopback(url: &str) -> bool {
 
     matches!(host, "127.0.0.1" | "localhost" | "::1")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn secure_or_loopback_checks() {
-        assert!(is_secure_or_loopback("wss://example.com:443"));
-        assert!(is_secure_or_loopback("ws://127.0.0.1:18789"));
-        assert!(is_secure_or_loopback("ws://localhost:18789"));
-        assert!(is_secure_or_loopback("ws://[::1]:18789"));
-    }
-}

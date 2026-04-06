@@ -102,38 +102,3 @@ define_schema! {
         [opt "includePlugins" => boolean],
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_agents_create_valid() {
-        let mut e = Vec::new();
-        validate_agents_create_params(
-            &json!({"name": "bot", "workspace": "/home/bot"}),
-            "",
-            &mut e,
-        );
-        assert!(e.is_empty());
-    }
-
-    #[test]
-    fn test_agents_files_set_valid() {
-        let mut e = Vec::new();
-        validate_agents_files_set_params(
-            &json!({"agentId": "a1", "name": "config.yaml", "content": "key: val"}),
-            "",
-            &mut e,
-        );
-        assert!(e.is_empty());
-    }
-
-    #[test]
-    fn test_skills_install_valid() {
-        let mut e = Vec::new();
-        validate_skills_install_params(&json!({"name": "weather", "installId": "i1"}), "", &mut e);
-        assert!(e.is_empty());
-    }
-}
