@@ -9,15 +9,9 @@ import (
 	"sync"
 )
 
-// Config holds RLM feature configuration.
+// Config holds RLM configuration.
+// RLM is always active — there is no Enabled flag.
 type Config struct {
-	// Enabled activates RLM tools (projects_*, memory_recall).
-	Enabled bool
-	// SkipKnowledge disables the knowledge prefetch phase when RLM is active.
-	// Defaults to true when Enabled is true.
-	SkipKnowledge bool
-	// SubLLMEnabled activates Phase 2 sub-LLM spawning tools (llm_spawn, llm_spawn_batch).
-	SubLLMEnabled bool
 	// MaxSubSpawns is the maximum number of prompts in a single spawn_batch call.
 	MaxSubSpawns int
 	// SubMaxTokens is the default max_tokens for sub-LLM calls.
@@ -34,6 +28,18 @@ type Config struct {
 	RecursiveDepthLimit int
 	// REPLTimeoutSec is the per-execution timeout for Starlark code.
 	REPLTimeoutSec int
+
+	// ── Independent iteration loop (inspired by alexzhang13/rlm) ──
+
+	// MaxIterations is the max LLM→code→execute cycles before forced fallback.
+	MaxIterations int
+	// CompactionThreshold is the estimated token count at which
+	// older iterations are summarized to reclaim context space.
+	CompactionThreshold int
+	// MaxConsecutiveErrors is the consecutive REPL errors before termination.
+	MaxConsecutiveErrors int
+	// FallbackEnabled generates a best-effort answer when iterations exhaust.
+	FallbackEnabled bool
 }
 
 var (
@@ -46,11 +52,7 @@ var (
 // (startup) and per-request prompt injection always see the same config.
 func ConfigFromEnv() Config {
 	configOnce.Do(func() {
-		enabled := envBool("DENEB_RLM_ENABLED", false)
 		cachedConfig = Config{
-			Enabled:             enabled,
-			SkipKnowledge:       enabled && envBool("DENEB_RLM_SKIP_KNOWLEDGE", true),
-			SubLLMEnabled:       enabled && envBool("DENEB_RLM_SUB_LLM_ENABLED", false),
 			MaxSubSpawns:        envInt("DENEB_RLM_MAX_SUB_SPAWNS", 10),
 			SubMaxTokens:        envInt("DENEB_RLM_SUB_MAX_TOKENS", 500),
 			SubMaxToolCalls:     envInt("DENEB_RLM_SUB_MAX_TOOL_CALLS", 5),
@@ -58,6 +60,11 @@ func ConfigFromEnv() Config {
 			FreshTailCount:      envInt("DENEB_RLM_FRESH_TAIL", 48),
 			RecursiveDepthLimit: envInt("DENEB_RLM_MAX_DEPTH", 3),
 			REPLTimeoutSec:      envInt("DENEB_RLM_REPL_TIMEOUT", 30),
+
+			MaxIterations:       envInt("DENEB_RLM_MAX_ITERATIONS", 25),
+			CompactionThreshold: envInt("DENEB_RLM_COMPACTION_THRESHOLD", 30000),
+			MaxConsecutiveErrors: envInt("DENEB_RLM_MAX_ERRORS", 5),
+			FallbackEnabled:     envBool("DENEB_RLM_FALLBACK", true),
 		}
 	})
 	return cachedConfig

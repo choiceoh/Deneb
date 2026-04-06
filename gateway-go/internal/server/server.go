@@ -106,7 +106,7 @@ type Server struct {
 	rlService *rl.Service
 	rlHook    *rl.SessionHook
 
-	// RLM context externalization (optional, nil when DENEB_RLM_ENABLED=false).
+	// RLM context externalization (nil when wiki unavailable).
 	rlmService *rlm.Service
 
 	// bridgeInjector is late-bound: created in registerEarlyMethods,

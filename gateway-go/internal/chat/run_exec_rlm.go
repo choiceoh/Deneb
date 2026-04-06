@@ -1,14 +1,16 @@
 // run_exec_rlm.go provides helper functions for RLM REPL integration
-// in the agent execution pipeline.
+// in the agent execution pipeline, including the independent loop mode bridge.
 package chat
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 )
@@ -58,4 +60,64 @@ func buildREPLLLMQuery(deps runDeps, logger *slog.Logger) repl.LLMQueryFunc {
 		}
 		return result.AllText, nil
 	}
+}
+
+// executeRLMLoop bridges the chat pipeline with the independent RLM iteration loop.
+// It converts pipeline-level deps into an rlm.LoopConfig and runs rlm.RunLoop,
+// then wraps the result as an *agent.AgentResult for the existing pipeline to consume.
+func executeRLMLoop(
+	ctx context.Context,
+	rlmCfg rlm.Config,
+	replEnv *repl.Env,
+	client agent.LLMStreamer,
+	model string,
+	system json.RawMessage,
+	userPrompt string,
+	hooks agent.StreamHooks,
+	budget *rlm.TokenBudget,
+	logger *slog.Logger,
+) (*agent.AgentResult, error) {
+	loopCfg := rlm.LoopConfig{
+		Client:           client,
+		Model:            model,
+		System:           system,
+		MaxTokens:        8192,
+		MaxIter:          rlmCfg.MaxIterations,
+		CompactThreshold: rlmCfg.CompactionThreshold,
+		MaxConsecErrors:  rlmCfg.MaxConsecutiveErrors,
+		FallbackEnabled:  rlmCfg.FallbackEnabled,
+		REPLEnv:          replEnv,
+		Budget:           budget,
+		Logger:           logger,
+		OnTextDelta:      hooks.OnTextDelta,
+	}
+
+	logger.Info("RLM loop mode starting",
+		"max_iter", loopCfg.MaxIter,
+		"compact_threshold", loopCfg.CompactThreshold,
+		"max_errors", loopCfg.MaxConsecErrors)
+
+	loopResult, err := rlm.RunLoop(ctx, loopCfg, userPrompt)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("RLM loop completed",
+		"iterations", loopResult.Iterations,
+		"stop_reason", loopResult.StopReason,
+		"compactions", loopResult.CompactionCount,
+		"errors", loopResult.ErrorCount,
+		"fallback", loopResult.FallbackUsed,
+		"answer_len", len(loopResult.FinalAnswer))
+
+	return &agent.AgentResult{
+		Text:       loopResult.FinalAnswer,
+		AllText:    loopResult.FinalAnswer,
+		StopReason: loopResult.StopReason,
+		Usage: llm.TokenUsage{
+			InputTokens:  loopResult.TotalTokensIn,
+			OutputTokens: loopResult.TotalTokensOut,
+		},
+		Turns: loopResult.Iterations,
+	}, nil
 }
