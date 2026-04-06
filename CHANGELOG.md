@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.18.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.18.0...deneb-v4.18.1) (2026-04-06)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** remove user-facing tools from channelSilentTools ([a9663d5](https://github.com/choiceoh/Deneb/commit/a9663d56efcffa2ad83edd3243d73c74ad6ff4bd))
+* **chat:** remove user-facing tools from channelSilentTools ([e359750](https://github.com/choiceoh/Deneb/commit/e3597500c3625e872a4c1a3a965dabb00b70c06e))
+
 ## [4.18.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.17.0...deneb-v4.18.0) (2026-04-06)
 
 
