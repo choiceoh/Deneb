@@ -1,6 +1,6 @@
 // heartbeat_task.go — Periodic task that checks HEARTBEAT.md for autonomous work.
 //
-// Every 30 minutes, reads ~/.deneb/HEARTBEAT.md and executes its instructions
+// Every 15 minutes, reads ~/.deneb/HEARTBEAT.md and executes its instructions
 // as a full agent turn. Users write tasks into HEARTBEAT.md and the agent
 // picks them up autonomously. If no file exists or it's empty, the task is a no-op.
 //
@@ -21,7 +21,7 @@ import (
 )
 
 // heartbeatTask implements autonomous.PeriodicTask.
-// Every 30 minutes, checks HEARTBEAT.md and executes tasks found there.
+// Every 15 minutes, checks HEARTBEAT.md and executes tasks found there.
 type heartbeatTask struct {
 	chatHandler *chat.Handler
 	activity    *monitoring.ActivityTracker
@@ -30,12 +30,12 @@ type heartbeatTask struct {
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
-func (t *heartbeatTask) Interval() time.Duration { return 30 * time.Minute }
+func (t *heartbeatTask) Interval() time.Duration { return 15 * time.Minute }
 
 const heartbeatSessionKey = "system:heartbeat"
 
 // heartbeatSystemPrompt wraps HEARTBEAT.md content for the agent.
-const heartbeatSystemPrompt = `[시스템 하트비트 — 30분 주기 자율 작업 확인]
+const heartbeatSystemPrompt = `[시스템 하트비트 — 15분 주기 자율 작업 확인]
 
 아래는 HEARTBEAT.md의 내용입니다. 이 파일에 정의된 작업을 수행하세요.
 파일 내용을 엄격히 따르세요. 이전 대화에서 추론하거나 이전 작업을 반복하지 마세요.
