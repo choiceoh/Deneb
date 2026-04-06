@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
@@ -252,65 +251,9 @@ func extractSection(projectID, section string, data json.RawMessage) string {
 }
 
 // ToolMemoryRecall returns an RLM-specific memory search tool.
-// Lighter than the full memory tool — search-only with compact output.
-func ToolMemoryRecall(d *toolctx.VegaDeps) toolctx.ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if d.MemoryStore == nil {
-			return "메모리 스토어가 비활성 상태입니다.", nil
-		}
-
-		var p struct {
-			Query      string `json:"query"`
-			MaxResults int    `json:"max_results"`
-		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("parse input: %w", err)
-		}
-		if p.Query == "" {
-			return "query는 필수입니다.", nil
-		}
-		if p.MaxResults <= 0 {
-			p.MaxResults = 3
-		}
-
-		// Embed query for semantic search if embedder is available.
-		var queryVec []float32
-		if d.MemoryEmbedder != nil {
-			vec, err := d.MemoryEmbedder.EmbedQuery(ctx, p.Query)
-			if err == nil {
-				queryVec = vec
-			}
-		}
-
-		opts := memory.SearchOpts{
-			Limit: p.MaxResults,
-		}
-		if d.MemoryEmbedder == nil {
-			opts.MinImportance = 0.6
-		}
-
-		results, err := d.MemoryStore.SearchFacts(ctx, p.Query, queryVec, opts)
-		if err != nil {
-			return fmt.Sprintf("메모리 검색 실패: %v", err), nil
-		}
-
-		if len(results) == 0 {
-			return "관련 기억 없음.", nil
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("## 메모리 검색 결과 (%d건)\n\n", len(results)))
-		for _, sr := range results {
-			timeLabel := formatFactTime(sr.Fact)
-			if timeLabel != "" {
-				sb.WriteString(fmt.Sprintf("- [%.2f] {%s} (%s) %s\n",
-					sr.Score, sr.Fact.Category, timeLabel, sr.Fact.Content))
-			} else {
-				sb.WriteString(fmt.Sprintf("- [%.2f] {%s} %s\n",
-					sr.Score, sr.Fact.Category, sr.Fact.Content))
-			}
-		}
-
-		return sb.String(), nil
+// Memory store has been replaced by wiki; returns a static message.
+func ToolMemoryRecall(_ *toolctx.VegaDeps) toolctx.ToolFunc {
+	return func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "[memory store replaced by wiki]", nil
 	}
 }

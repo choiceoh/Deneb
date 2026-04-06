@@ -8,7 +8,6 @@ package toolreg
 
 import (
 	"fmt"
-	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
@@ -178,13 +177,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps,
 		Fn:          tools.ToolGit(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "memory",
-		Description:     "Unified memory: search facts + files, get/set/forget individual facts, deep recall, diary logging. Actions: search (default), get, set, forget, recall (deep), status, browse, log (append detailed narrative to diary), daily (read recent diary entries)",
-		InputSchema:     memoryToolSchema(),
-		Fn:              tools.ToolMemory(&deps.Vega, workspaceDir, slog.Default()),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gateway",
 		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
 		InputSchema: gatewayToolSchema(),
@@ -304,7 +296,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // RegisterRoutineTools registers tools for recurring/scheduled tasks —
 // things that sit between always-on core tools and on-demand skills.
 // Typical trigger: cron scheduler, daily routines, periodic checks.
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string, vega *toolctx.VegaDeps) {
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string, _ *toolctx.VegaDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
@@ -316,10 +308,6 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	gmailPipelineDeps := tools.GmailPipelineDeps{
 		LLMClient:    llmClient,
 		DefaultModel: defaultModel,
-	}
-	if vega != nil {
-		gmailPipelineDeps.MemStore = vega.MemoryStore
-		gmailPipelineDeps.MemEmbed = vega.MemoryEmbedder
 	}
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gmail",
@@ -534,13 +522,6 @@ func RegisterRLMTools(registry toolctx.ToolRegistrar, vegaDeps *toolctx.VegaDeps
 		Description:     "프로젝트 원본 문서 조회. 섹션 미지정 시 목차만 반환, 섹션 지정 시 해당 섹션 내용 반환",
 		InputSchema:     projectsGetDocumentToolSchema(),
 		Fn:              tools.ToolProjectsGetDocument(vegaDeps),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "memory_recall_rlm",
-		Description:     "과거 대화, 결정, 선호 등을 하이브리드 검색 (FTS+벡터). 컨텍스트에 없는 기억을 도구로 조회",
-		InputSchema:     memoryRecallRlmToolSchema(),
-		Fn:              tools.ToolMemoryRecall(vegaDeps),
 		ConcurrencySafe: true,
 	})
 }
