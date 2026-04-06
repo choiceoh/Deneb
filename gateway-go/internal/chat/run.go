@@ -314,6 +314,18 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			statusCtrl.CloseAfterDrain()
 		}
 		handleRunError(ctx, params, deps, broadcaster, logger, err, now, runLog)
+
+		// Drain pending queue even on error: if the user sent a message while
+		// this run was active, it must be processed regardless of whether the
+		// run succeeded or failed. Without this, queued messages are silently
+		// lost when the LLM stalls or the run errors out.
+		if deps.drainPendingFn != nil && deps.startRunFn != nil {
+			if pending := deps.drainPendingFn(params.SessionKey); pending != nil {
+				logger.Info("processing queued message after run error",
+					"sessionKey", params.SessionKey)
+				deps.startRunFn(*pending)
+			}
+		}
 		return
 	}
 
