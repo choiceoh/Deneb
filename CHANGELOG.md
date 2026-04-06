@@ -1,5 +1,28 @@
 # Changelog
 
+## [4.18.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.17.0...deneb-v4.18.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **heartbeat:** reduce heartbeat interval to 3 minutes ([3973f33](https://github.com/choiceoh/Deneb/commit/3973f3354662df6f219269cf0890fe1f38380d0e))
+* **heartbeat:** reduce heartbeat interval to 3 minutes ([d0704ac](https://github.com/choiceoh/Deneb/commit/d0704ac30098f21718d327a27a52de679c0bdba7))
+* **heartbeat:** tighten to 2min interval, 1min idle threshold ([d02e866](https://github.com/choiceoh/Deneb/commit/d02e866b3bb16c5352000c79b96364dc63491323))
+* **modelrole:** default main model to local vLLM (unify main/lightweight) ([8c52fbf](https://github.com/choiceoh/Deneb/commit/8c52fbf80c10c8e26ae17aa1f5fc11683402de30))
+* **modelrole:** unify main/lightweight to local vLLM ([f46ce6d](https://github.com/choiceoh/Deneb/commit/f46ce6d37d644a492fccf550bd565e5320604ae2))
+* **rlm:** implement independent iteration loop ([dd66888](https://github.com/choiceoh/Deneb/commit/dd66888140162acea1adf21edd3a07451551bc1e))
+* **rlm:** implement independent iteration loop (alexzhang13/rlm) ([8ccd038](https://github.com/choiceoh/Deneb/commit/8ccd038b0589190cb95878dba00380762b89a773))
+* **rlm:** tune defaults and prompts to match original RLM ([4e7f44a](https://github.com/choiceoh/Deneb/commit/4e7f44ae7fd153e80acaf488fb1a8f0f17610d94))
+* **rlm:** tune token limits, prompts, and defaults to match original RLM ([4f358e6](https://github.com/choiceoh/Deneb/commit/4f358e6478ddcd41826168597782c771e9599c72))
+* **rlm:** wire Phase 1 tools to wiki backend and add RPC layer ([9236c31](https://github.com/choiceoh/Deneb/commit/9236c3174e6d6ecb3f6a82f16826fa9657c2dc2e))
+* **rlm:** wire Phase 1 tools to wiki backend and add RPC layer ([876ed29](https://github.com/choiceoh/Deneb/commit/876ed293f6e511ef8acbce98604e590614cfc185))
+
+
+### 🔧 Internal
+
+* **rlm:** consolidate wiki access exclusively through RLM ([6edeefa](https://github.com/choiceoh/Deneb/commit/6edeefac001cbdbbd06c14f18177c262cbd8a5bc))
+* **rlm:** consolidate wiki access exclusively through RLM ([472bc52](https://github.com/choiceoh/Deneb/commit/472bc52d6e2124c18494968c4e9329ab5da7fb85))
+
 ## [4.17.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.16.1...deneb-v4.17.0) (2026-04-06)
 
 
