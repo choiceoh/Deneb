@@ -771,13 +771,14 @@ func executeAgentRun(
 	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
 	// producing low-quality facts. End-of-run extraction (below) has full response text.
 
-	// 10. Set up stream hooks: compose broadcaster (WS deltas) + typing + status reactions.
-	// (Numbered 10 to preserve the agent loop label below as 11.)
-	var hooks agent.StreamHooks
+	// 10. Set up stream hooks via compositor: fan-out dispatch for each hook type.
+	var hc agent.HookCompositor
+
+	// Broadcaster: WebSocket streaming deltas.
 	if broadcaster != nil {
-		hooks.OnTextDelta = broadcaster.EmitDelta
-		hooks.OnToolEmit = broadcaster.EmitToolStart
-		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+		hc.OnTextDelta(broadcaster.EmitDelta)
+		hc.OnToolEmit(broadcaster.EmitToolStart)
+		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
 			if deps.broadcast != nil {
 				deps.broadcast("session.tool", map[string]any{
@@ -788,98 +789,58 @@ func executeAgentRun(
 					"isError":    isErr,
 				})
 			}
-		}
-	}
-	if typingSignaler != nil {
-		prevOnDelta := hooks.OnTextDelta
-		hooks.OnTextDelta = func(text string) {
-			if prevOnDelta != nil {
-				prevOnDelta(text)
-			}
-			typingSignaler.SignalTextDelta(text)
-		}
-		hooks.OnThinking = func() {
-			typingSignaler.SignalReasoningDelta()
-		}
-		hooks.OnToolStart = func(_ string, _ string, _ []byte) {
-			typingSignaler.SignalToolStart()
-		}
-	}
-	if statusCtrl != nil {
-		prevOnThinking := hooks.OnThinking
-		hooks.OnThinking = func() {
-			if prevOnThinking != nil {
-				prevOnThinking()
-			}
-			statusCtrl.SetThinking()
-		}
-		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string, input []byte) {
-			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason, input)
-			}
-			statusCtrl.SetTool(name)
-		}
-		prevOnDelta := hooks.OnTextDelta
-		hooks.OnTextDelta = func(text string) {
-			if prevOnDelta != nil {
-				prevOnDelta(text)
-			}
-			// First text delta means we moved past thinking — set thinking
-			// emoji if not already in a tool phase.
-			statusCtrl.SetThinking()
-		}
+		})
 	}
 
-	// Tool progress tracking hook for channel integrations
-	// so the ProgressTracker can update the progress embed in real-time.
+	// Typing signaler: UI typing indicators.
+	if typingSignaler != nil {
+		hc.OnTextDelta(typingSignaler.SignalTextDelta)
+		hc.OnThinking(typingSignaler.SignalReasoningDelta)
+		hc.OnToolStart(func(_ string, _ string, _ []byte) {
+			typingSignaler.SignalToolStart()
+		})
+	}
+
+	// Status controller: Telegram emoji reactions.
+	if statusCtrl != nil {
+		hc.OnThinking(statusCtrl.SetThinking)
+		hc.OnToolStart(func(name, _ string, _ []byte) { statusCtrl.SetTool(name) })
+		// First text delta means we moved past thinking — set thinking
+		// emoji if not already in a tool phase.
+		hc.OnTextDelta(func(_ string) { statusCtrl.SetThinking() })
+	}
+
+	// Tool progress tracking for channel integrations.
 	if deps.toolProgressFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
-		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string, input []byte) {
-			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason, input)
-			}
+		hc.OnToolStart(func(name, reason string, input []byte) {
 			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "start", Name: name, Reason: reason, Input: input})
-		}
-		prevOnToolResult := hooks.OnToolResult
-		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
-			if prevOnToolResult != nil {
-				prevOnToolResult(name, toolUseID, result, isErr)
-			}
+		})
+		hc.OnToolResult(func(name, _, _ string, isErr bool) {
 			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "complete", Name: name, IsError: isErr})
-		}
+		})
 	}
 
-	// Gateway event subscription hooks: emit tool.start / tool.end so WebSocket
-	// clients receive real-time agent activity events via the event bus.
+	// Gateway event subscription: emit tool.start / tool.end for WebSocket clients.
 	if deps.emitAgentFn != nil {
-		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string, input []byte) {
-			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason, input)
-			}
+		hc.OnToolStart(func(name, _ string, _ []byte) {
 			deps.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
 				"tool": name,
 				"ts":   time.Now().UnixMilli(),
 			})
-		}
-		prevOnToolResult := hooks.OnToolResult
-		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
-			if prevOnToolResult != nil {
-				prevOnToolResult(name, toolUseID, result, isErr)
-			}
+		})
+		hc.OnToolResult(func(name, _, _ string, isErr bool) {
 			deps.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
 				"tool":    name,
 				"isError": isErr,
 				"ts":      time.Now().UnixMilli(),
 			})
-		}
+		})
 	}
 
-	// Plugin typed hook: allow blocking tool calls before execution.
+	// Plugin hooks: blocking before-tool-call + async after-tool-call.
 	if deps.pluginHookRunner != nil {
-		hooks.OnBeforeToolCall = func(name, toolCallID string, input []byte) (bool, string) {
+		hc.SetBeforeToolCall(func(name, toolCallID string, input []byte) (bool, string) {
 			result := deps.pluginHookRunner.RunBeforeToolCall(ctx, map[string]any{
 				"toolName":   name,
 				"toolCallId": toolCallID,
@@ -890,16 +851,8 @@ func executeAgentRun(
 				return true, result.CancelReason
 			}
 			return false, ""
-		}
-	}
-
-	// Plugin typed hook: fire after_tool_call event after each tool completes.
-	if deps.pluginHookRunner != nil {
-		prevOnToolResult := hooks.OnToolResult
-		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
-			if prevOnToolResult != nil {
-				prevOnToolResult(name, toolUseID, result, isErr)
-			}
+		})
+		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAfterToolCall, map[string]any{
 				"toolName":   name,
 				"toolCallId": toolUseID,
@@ -908,18 +861,12 @@ func executeAgentRun(
 				"isError":    isErr,
 				"result":     result,
 			})
-		}
+		})
 	}
 
-	// User-defined hook registry: fire tool.use event after each tool completes.
-	// Uses FireProgressive for real-time progress tracking (per-hook duration,
-	// started/completed/failed phases) instead of the blocking Fire().
+	// User-defined hook registries: fire tool.use event after each tool completes.
 	if deps.hookRegistry != nil || deps.internalHookRegistry != nil {
-		prevOnToolResult := hooks.OnToolResult
-		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
-			if prevOnToolResult != nil {
-				prevOnToolResult(name, toolUseID, result, isErr)
-			}
+		hc.OnToolResult(func(name, toolUseID, _ string, isErr bool) {
 			env := map[string]string{
 				"DENEB_TOOL":        name,
 				"DENEB_TOOL_USE_ID": toolUseID,
@@ -927,9 +874,6 @@ func executeAgentRun(
 				"DENEB_SESSION_KEY": params.SessionKey,
 			}
 			if deps.hookRegistry != nil {
-				// Use progressive emission: hook progress events are logged
-				// for observability. The channel is drained in a goroutine
-				// so tool execution is not blocked.
 				go func() {
 					ch := deps.hookRegistry.FireProgressive(deps.shutdownCtx, hookspkg.EventToolUse, env)
 					for p := range ch {
@@ -945,7 +889,7 @@ func executeAgentRun(
 			if deps.internalHookRegistry != nil {
 				go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
 			}
-		}
+		})
 	}
 
 	// Draft stream hook: real-time message editing during LLM streaming.
@@ -1002,29 +946,17 @@ func executeAgentRun(
 			return true, nil
 		})
 
-		// Section-based streaming display: instead of updating on every small
-		// delta (which causes constant flickering), accumulate text and only
-		// push an update when a meaningful section boundary is reached
-		// (paragraph break) or enough text has accumulated (500+ chars).
-		// This gives the user a calmer reading experience where completed
-		// sections appear at once rather than character-by-character.
+		// Section-based streaming: update on paragraph breaks or 500+ char accumulation.
 		var lastUpdateLen int
-		prevOnDelta := hooks.OnTextDelta
-		hooks.OnTextDelta = func(text string) {
-			if prevOnDelta != nil {
-				prevOnDelta(text)
-			}
+		hc.OnTextDelta(func(text string) {
 			accum.WriteString(text)
 			current := accum.String()
 			delta := len(current) - lastUpdateLen
 			if delta < 100 {
-				return // too small to bother updating
+				return
 			}
 			newContent := current[lastUpdateLen:]
 			if strings.Contains(newContent, "\n\n") || delta >= 500 {
-				// Sanitize draft text: strip leaked tool call markup and
-				// fenced code blocks so commands/code are never shown in
-				// the Telegram streaming draft (vibe coder constraint).
 				sanitized := current
 				if deps.sanitizeDraft != nil {
 					sanitized = deps.sanitizeDraft(current)
@@ -1035,21 +967,15 @@ func executeAgentRun(
 				draftCtrl.Update(sanitized)
 				lastUpdateLen = len(current)
 			}
-		}
+		})
 
-		// On tool start, stop the draft loop so no more edits are pushed.
-		// Keep the draft message alive — the deferred cleanup will store
-		// its ID on the delivery context so the final reply pipeline can
-		// edit it in-place. SanitizeDraftText already strips tool call
-		// markup and code blocks during streaming, so deletion is not needed.
-		prevOnToolStart := hooks.OnToolStart
-		hooks.OnToolStart = func(name, reason string, input []byte) {
+		// Stop draft loop on tool start so no more edits are pushed.
+		hc.OnToolStart(func(_ string, _ string, _ []byte) {
 			draftCtrl.StopForClear()
-			if prevOnToolStart != nil {
-				prevOnToolStart(name, reason, input)
-			}
-		}
+		})
 	}
+
+	hooks := hc.Build()
 
 	logger.Info("pipeline: prep complete, starting agent loop",
 		"prepMs", time.Since(runStart).Milliseconds(),
