@@ -11,7 +11,6 @@ import (
 type HookManager struct {
 	hooksHTTP     *HooksHTTPHandler
 	internalHooks *hooks.InternalRegistry
-	cron          *cron.Scheduler
 	cronRunLog    *cron.PersistentRunLog
 	cronService   *cron.Service
 }

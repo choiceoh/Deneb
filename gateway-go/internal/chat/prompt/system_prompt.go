@@ -248,6 +248,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString(params.SkillsPrompt)
 		ss.WriteString("\n")
 		ss.WriteString("Additional skills are available via the `skills_list` tool. Use it when a task might match a skill not listed above.\n\n")
+		// Skill Genesis: instruct the agent to identify reusable patterns.
+		ss.WriteString("### Skill Genesis (경험에서 스킬 자동 생성)\n")
+		ss.WriteString("복합 워크플로우(5+ 도구, 3+ 턴)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
+		ss.WriteString("재사용 가치가 높은 워크플로우를 발견하면:\n")
+		ss.WriteString("1. 반복 가능한 절차를 명확하게 구조화하세요 (When to Use → Procedure → Pitfalls → Verification).\n")
+		ss.WriteString("2. 스킬로 추출할 가치가 있다고 판단되면 skills.genesis RPC로 명시적 추출도 가능합니다.\n")
+		ss.WriteString("3. 기존 스킬이 부족하면 skills.evolve로 개선을 트리거할 수 있습니다.\n\n")
 	} else {
 		// No always-skills, but discoverable skills may still exist.
 		ss.WriteString("## Skills\n")

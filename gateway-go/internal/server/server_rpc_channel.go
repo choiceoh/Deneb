@@ -71,15 +71,6 @@ func (s *Server) propagateConfigReload(snap *config.ConfigSnapshot, deferralTime
 			s.logger.Info("config reload: telegram restarted")
 		})
 	}
-	// Restart cron scheduler. Reset() keeps the same instance (handlers hold
-	// pointers captured at registration time) but cancels all running tasks
-	// and clears the task map.
-	if s.cron != nil {
-		s.safeGo("config:restart-cron", func() {
-			s.cron.Reset()
-			s.logger.Info("config reload: cron scheduler restarted")
-		})
-	}
 	// Restart autonomous service so periodic tasks pick up config changes.
 	if s.autonomousSvc != nil {
 		s.safeGo("config:restart-autonomous", func() {

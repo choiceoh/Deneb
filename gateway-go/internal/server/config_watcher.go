@@ -7,7 +7,6 @@ package server
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 )
@@ -135,11 +134,3 @@ func (s *Server) applyChannelHealthConfig(newCfg *config.DenebConfig) {
 	}
 }
 
-// logConfigField logs a config field change at info level.
-func logConfigField(logger *slog.Logger, field string, old, new any) {
-	logger.Info("config hot-reload",
-		"field", field,
-		"old", old,
-		"new", new,
-	)
-}

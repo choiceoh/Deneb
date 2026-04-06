@@ -554,20 +554,6 @@ func (p *InboundProcessor) sendCommandReply(chatID string, result *handlers.Comm
 	}
 }
 
-// extractCommandKey pulls the command name from a slash-prefixed message.
-// "/model gpt-4" → "model", "/new" → "new".
-func extractCommandKey(text string) string {
-	trimmed := strings.TrimPrefix(strings.TrimSpace(text), "/")
-	if trimmed == "" {
-		return ""
-	}
-	// Take first word.
-	if idx := strings.IndexAny(trimmed, " \t\n"); idx > 0 {
-		trimmed = trimmed[:idx]
-	}
-	return strings.ToLower(trimmed)
-}
-
 // buildSenderName constructs a display name from a Telegram user.
 func buildSenderName(from *telegram.User) string {
 	if from == nil {

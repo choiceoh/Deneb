@@ -494,8 +494,3 @@ func truncateFileContent(content string, maxLines int) string {
 	return sb.String()
 }
 
-// estimateTokens estimates the token count of a string using a simple
-// chars/4 heuristic. This is not precise but sufficient as a safety cap.
-func estimateTokens(s string) int {
-	return len(s) / 4
-}

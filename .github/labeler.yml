@@ -22,7 +22,7 @@
       - any-glob-to-any-file:
           - "gateway-go/internal/chat/**"
           - "gateway-go/internal/llm/**"
-          - "gateway-go/internal/tools/**"
+          - "gateway-go/internal/chat/tools/**"
           - "gateway-go/internal/autonomous/**"
           - "gateway-go/internal/agent/**"
 
@@ -30,14 +30,11 @@
   - changed-files:
       - any-glob-to-any-file:
           - "gateway-go/internal/telegram/**"
-          - "extensions/telegram/**"
-          - "docs/channels/telegram.md"
 
 "gateway":
   - changed-files:
       - any-glob-to-any-file:
           - "gateway-go/**"
-          - "docs/gateway/**"
 
 "ffi":
   - changed-files:
@@ -60,18 +57,7 @@
       - any-glob-to-any-file:
           - "scripts/**"
 
-"docker":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "Dockerfile"
-          - "Dockerfile.*"
-          - "docker-compose.yml"
-          - ".dockerignore"
-          - "scripts/**/*docker*"
-
 "security":
   - changed-files:
       - any-glob-to-any-file:
-          - "docs/cli/security.md"
-          - "docs/gateway/security.md"
           - "gateway-go/internal/auth/**"

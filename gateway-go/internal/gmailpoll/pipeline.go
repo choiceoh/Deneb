@@ -297,11 +297,6 @@ func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageD
 		return AnalyzeEmailPipeline(ctx, deps, msgs[0])
 	}
 
-	logger := deps.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-
 	// Stage 1: extract context for each email in parallel.
 	enriched := make([]emailWithContext, len(msgs))
 	var wg sync.WaitGroup

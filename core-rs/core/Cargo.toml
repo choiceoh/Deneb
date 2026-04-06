@@ -39,9 +39,6 @@ rustc-hash.workspace = true
 # Regex (ReDoS-safe by design)
 regex.workspace = true
 
-# Compression (PNG encoding — uses miniz_oxide directly, already a transitive dep)
-miniz_oxide = "0.9"
-
 # Hashing (summary ID generation)
 sha2.workspace = true
 

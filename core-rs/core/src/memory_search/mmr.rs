@@ -110,13 +110,6 @@ fn jaccard_similarity(set_a: &HashSet<String>, set_b: &HashSet<String>) -> f64 {
     }
 }
 
-/// Text similarity using Jaccard on tokens.
-pub fn text_similarity(content_a: &str, content_b: &str) -> f64 {
-    let ts_a = TokenSet::new(content_a);
-    let ts_b = TokenSet::new(content_b);
-    jaccard_similarity_sets(&ts_a.as_set(), &ts_b.as_set())
-}
-
 /// Compute MMR score: lambda * relevance - (1-lambda) * `max_similarity`.
 pub fn compute_mmr_score(relevance: f64, max_similarity: f64, lambda: f64) -> f64 {
     lambda * relevance - (1.0 - lambda) * max_similarity

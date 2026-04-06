@@ -18,4 +18,16 @@ pub enum MlError {
     /// Invalid input (empty text, etc.).
     #[error("invalid input: {0}")]
     InvalidInput(String),
+
+    /// LoRA adapter file not found.
+    #[error("LoRA adapter not found: {0}")]
+    LoraAdapterNotFound(String),
+
+    /// LoRA adapter loading failed.
+    #[error("LoRA adapter load failed: {0}")]
+    LoraAdapterLoadFailed(String),
+
+    /// LoRA adapter context application failed.
+    #[error("LoRA adapter set failed: {0}")]
+    LoraAdapterSetFailed(String),
 }

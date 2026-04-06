@@ -233,12 +233,9 @@ func (s *Server) doShutdown() error {
 	// 5. Stop dedupe background GC.
 	s.dedupe.Close()
 
-	// 6. Stop cron scheduler and service.
+	// 6. Stop cron service.
 	if s.cronService != nil {
 		s.cronService.Stop()
-	}
-	if s.cron != nil {
-		s.cron.Close()
 	}
 
 	// 6b. Stop autonomous service (dreaming).
@@ -246,12 +243,23 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6b2. Stop RL training pipeline (kills sglang/Tinker/Atropos processes).
+	// 6b2. Cleanup genesis subsystem.
+	if s.genesisSvc != nil {
+		s.genesisSvc.Stop()
+	}
+	if s.genesisTracker != nil {
+		s.genesisTracker.Close()
+	}
+
+	// 6b3. Stop RL training pipeline (kills sglang/Tinker/Atropos processes).
+	if s.rlHook != nil {
+		s.rlHook.Stop()
+	}
 	if s.rlService != nil {
 		s.rlService.Stop()
 	}
 
-	// 6b3. Stop local AI hub (drains queued requests, cancels in-flight).
+	// 6b4. Stop local AI hub (drains queued requests, cancels in-flight).
 	if s.localAIHub != nil {
 		s.localAIHub.Shutdown()
 	}

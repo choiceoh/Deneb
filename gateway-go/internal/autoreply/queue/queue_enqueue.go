@@ -207,7 +207,3 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	return true
 }
 
-// ResetRecentQueuedMessageIDDedupe clears the dedup cache.
-func (c *RecentMessageIDCache) reset() {
-	c.clear()
-}

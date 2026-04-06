@@ -26,14 +26,8 @@ var mediaTokenRe = regexp.MustCompile(`(?i)\bMEDIA:\s*` + "`?" + `([^\n]+)` + "`
 // httpURLRe matches http/https URLs.
 var httpURLRe = regexp.MustCompile(`^https?://\S+`)
 
-// fenceRe matches code fence markers.
-var fenceRe = regexp.MustCompile("^\\s*(?:```|~~~)")
-
 // schemeRe matches URI schemes.
 var schemeRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
-
-// hasFileExt matches file extensions.
-var hasFileExtRe = regexp.MustCompile(`\.\w{1,10}$`)
 
 // isLikelyLocalPath checks if a candidate looks like a local file path.
 func isLikelyLocalPath(candidate string) bool {

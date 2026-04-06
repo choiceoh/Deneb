@@ -293,25 +293,6 @@ fn compute_content_hash(content: &str) -> String {
     format!("{:016x}", hasher.finish())
 }
 
-/// Generate embeddings for chunks.
-/// In sglang mode, embedding is handled by the Go gateway via `SGLang` HTTP API.
-pub fn cmd_memory_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
-    if config.has_sglang() {
-        return CommandResult::ok(
-            "memory-embed",
-            json!({
-                "message": "SGLang 모드: 임베딩은 Go 게이트웨이에서 SGLang HTTP API로 처리됩니다.",
-                "backend": "sglang",
-            }),
-        );
-    }
-
-    CommandResult::err(
-        "memory-embed",
-        "임베딩 백엔드가 설정되지 않았습니다 (VEGA_INFERENCE=sglang 권장)",
-    )
-}
-
 /// Return file/chunk/embedding counts and status.
 pub fn cmd_memory_status(_args: &Value, config: &VegaConfig) -> CommandResult {
     let conn = match open_db(config) {
@@ -360,22 +341,6 @@ pub fn cmd_memory_status(_args: &Value, config: &VegaConfig) -> CommandResult {
     )
 }
 
-/// Return version info for the memory backend.
-pub fn cmd_memory_version(_args: &Value, _config: &VegaConfig) -> CommandResult {
-    CommandResult::ok(
-        "memory-version",
-        json!({
-            "version": "2.0.0",
-            "backend": "rust",
-            "features": {
-                "fts5": true,
-                "vector_search": false,
-                "reranking": false,
-            },
-        }),
-    )
-}
-
 pub struct MemorySearchHandler;
 
 impl super::CommandHandler for MemorySearchHandler {
@@ -400,18 +365,6 @@ impl super::CommandHandler for MemoryUpdateHandler {
     }
 }
 
-pub struct MemoryEmbedHandler;
-
-impl super::CommandHandler for MemoryEmbedHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_memory_embed(args, config)
-    }
-}
-
 pub struct MemoryStatusHandler;
 
 impl super::CommandHandler for MemoryStatusHandler {
@@ -421,18 +374,6 @@ impl super::CommandHandler for MemoryStatusHandler {
         args: &serde_json::Value,
     ) -> super::CommandResult {
         cmd_memory_status(args, config)
-    }
-}
-
-pub struct MemoryVersionHandler;
-
-impl super::CommandHandler for MemoryVersionHandler {
-    fn execute(
-        &self,
-        config: &crate::config::VegaConfig,
-        args: &serde_json::Value,
-    ) -> super::CommandResult {
-        cmd_memory_version(args, config)
     }
 }
 

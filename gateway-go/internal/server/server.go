@@ -84,6 +84,7 @@ type Server struct {
 	*MemorySubsystem
 	*AutonomousSubsystem
 	*InfraSubsystem
+	*GenesisSubsystem
 
 	dedupe      *dedupe.Tracker
 	broadcaster *events.Broadcaster
@@ -101,6 +102,10 @@ type Server struct {
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
 	*ChatManager    // chatHandler, toolDeps, telegramPlug
 	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
+
+	// RL self-learning pipeline (optional, nil when rl.enable=false).
+	rlService *rl.Service
+	rlHook    *rl.SessionHook
 
 	// bridgeInjector is late-bound: created in registerEarlyMethods,
 	// populated in registerLateMethods after chatHandler is ready.
@@ -142,6 +147,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		ServerRuntime:       &ServerRuntime{},
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
+		GenesisSubsystem:    &GenesisSubsystem{},
 		rustFFI:             ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
@@ -172,7 +178,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotAdapter{sessions: s.sessions}, s.logger)
 	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
-	s.cron = cron.NewScheduler(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
@@ -213,6 +218,10 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.dispatcher.UseMiddleware(metrics.RPCInstrumentation(), middleware.Logging(s.logger))
 
+	// RL self-learning pipeline: create service before hub so
+	// hub.RLService() is non-nil during early method registration.
+	s.initRLService()
+
 	// Build GatewayHub — central service registry. Chat is nil until
 	// registerSessionRPCMethods() creates the chat handler.
 	hub := s.buildHub()
@@ -232,15 +241,9 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.registerSessionRPCMethods() // chat pipeline init + handler creation
 	if s.localAIHub != nil {
 		hub.SetLocalAIHub(s.localAIHub)
-
-		// RL training pipeline (optional, env-var gated).
-		if rlCfg := rl.ConfigFromEnv(); rlCfg.Enabled {
-			s.rlService = rl.NewService(rlCfg, s.processes, s.logger)
-			s.localAIHub.SetObserver(s.rlService.Collector().Observe)
-			hub.SetRLService(s.rlService)
-		}
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
+	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)
 	s.registerLateMethods(hub)             // Chat-dependent domains
 	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
 

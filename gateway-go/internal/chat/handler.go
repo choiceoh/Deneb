@@ -468,6 +468,11 @@ func (h *Handler) ModelRegistry() *modelrole.Registry {
 	return h.registry
 }
 
+// AuroraStore returns the Aurora hierarchical compaction store.
+func (h *Handler) AuroraStore() *aurora.Store {
+	return h.auroraStore
+}
+
 // Close stops background goroutines and cancels all active abort entries.
 func (h *Handler) Close() {
 	// Signal abortGCLoop to exit.

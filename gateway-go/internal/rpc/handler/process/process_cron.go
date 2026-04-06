@@ -13,16 +13,15 @@ import (
 
 // CronAdvancedDeps holds the dependencies for advanced cron RPC methods.
 type CronAdvancedDeps struct {
-	Cron        *cron.Scheduler
+	Service     *cron.Service
 	RunLog      *cron.PersistentRunLog
 	Broadcaster BroadcastFunc
 }
 
 // CronAdvancedMethods returns the advanced cron CRUD RPC handlers
 // (wake, cron.status, cron.add, cron.update, cron.remove, cron.run, cron.runs).
-// These complement the basic cron.list/get/unregister in the agent handler package.
 func CronAdvancedMethods(deps CronAdvancedDeps) map[string]rpcutil.HandlerFunc {
-	if deps.Cron == nil {
+	if deps.Service == nil {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
@@ -46,7 +45,9 @@ func cronWake(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			return errResp
 		}
 
-		nextHeartbeat := deps.Cron.NextRunAt()
+		deps.Service.Wake(context.Background(), p.Mode, p.Text)
+
+		status := deps.Service.Status()
 
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("wake", map[string]any{
@@ -56,38 +57,41 @@ func cronWake(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
-			"nextHeartbeatAtMs": nextHeartbeat,
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"nextHeartbeatAtMs": status.NextRunAtMs,
 			"mode":              p.Mode,
 		})
-		return resp
 	}
 }
 
 func cronStatus(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		running := deps.Cron.Running()
-		nextRun := deps.Cron.NextRunAt()
-		taskCount := len(deps.Cron.List())
-
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
-			"running":     running,
-			"nextRunAtMs": nextRun,
-			"taskCount":   taskCount,
+		status := deps.Service.Status()
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"running":     status.Running,
+			"nextRunAtMs": status.NextRunAtMs,
+			"taskCount":   status.TaskCount,
 		})
-		return resp
 	}
 }
 
 func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
-			Name       string `json:"name"`
-			Schedule   string `json:"schedule"`
-			Command    string `json:"command"`
-			AgentID    string `json:"agentId,omitempty"`
-			SessionKey string `json:"sessionKey,omitempty"`
-			Enabled    *bool  `json:"enabled,omitempty"`
+			ID       string `json:"id,omitempty"`
+			Name     string `json:"name"`
+			Schedule string `json:"schedule"`
+			Command  string `json:"command"`
+			AgentID  string `json:"agentId,omitempty"`
+			Enabled  *bool  `json:"enabled,omitempty"`
+
+			// Extended fields for persistent cron jobs.
+			Delivery     *cron.JobDeliveryConfig `json:"delivery,omitempty"`
+			FailureAlert *cron.CronFailureAlert  `json:"failureAlert,omitempty"`
+			Tz           string                  `json:"tz,omitempty"`
+			StaggerMs    int64                   `json:"staggerMs,omitempty"`
+			AnchorTime   string                  `json:"anchorTime,omitempty"`
+			RetryCount   int                     `json:"retryCount,omitempty"`
 		}](req)
 		if errResp != nil {
 			return errResp
@@ -100,36 +104,59 @@ func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrValidationFailed, "command exceeds maximum length of 4096 characters").Response(req.ID)
 		}
 
-		schedule, err := cron.ParseSchedule(p.Schedule)
+		schedule, err := cron.ParseSmartScheduleWithOpts(p.Schedule, cron.SmartScheduleOpts{
+			Tz:         p.Tz,
+			StaggerMs:  p.StaggerMs,
+			AnchorTime: p.AnchorTime,
+		})
 		if err != nil {
 			return rpcerr.Newf(protocol.ErrValidationFailed, "invalid schedule: %v", err).Response(req.ID)
 		}
 
-		// Use name as the task ID.
-		schedule.Label = p.Name
-		if regErr := deps.Cron.Register(ctx, p.Name, schedule, func(_ context.Context) error {
-			// The actual cron command execution is handled by the task runner.
-			return nil
-		}); regErr != nil {
-			return rpcerr.Wrap(protocol.ErrConflict, regErr).Response(req.ID)
+		id := p.ID
+		if id == "" {
+			id = p.Name
+		}
+		enabled := true
+		if p.Enabled != nil {
+			enabled = *p.Enabled
+		}
+
+		job := cron.StoreJob{
+			ID:       id,
+			Name:     p.Name,
+			AgentID:  p.AgentID,
+			Enabled:  enabled,
+			Schedule: schedule,
+			Payload: cron.StorePayload{
+				Kind:       "agentTurn",
+				Message:    p.Command,
+				RetryCount: p.RetryCount,
+			},
+			Delivery:     p.Delivery,
+			FailureAlert: p.FailureAlert,
+		}
+
+		if err := deps.Service.Add(ctx, job); err != nil {
+			return rpcerr.Wrap(protocol.ErrConflict, err).Response(req.ID)
 		}
 
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("cron.changed", map[string]any{"action": "added", "id": p.Name})
+			deps.Broadcaster("cron.changed", map[string]any{"action": "added", "id": id})
 		}
 
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
-			"id":       p.Name,
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"id":       id,
 			"name":     p.Name,
 			"schedule": p.Schedule,
 			"command":  p.Command,
+			"enabled":  enabled,
 		})
-		return resp
 	}
 }
 
 func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			ID    string         `json:"id,omitempty"`
 			JobID string         `json:"jobId,omitempty"`
@@ -147,7 +174,36 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
-		if err := deps.Cron.Update(id, p.Patch); err != nil {
+		err := deps.Service.Update(ctx, id, func(job *cron.StoreJob) {
+			if name, ok := p.Patch["name"]; ok {
+				if s, ok := name.(string); ok {
+					job.Name = s
+				}
+			}
+			if enabled, ok := p.Patch["enabled"]; ok {
+				if b, ok := enabled.(bool); ok {
+					job.Enabled = b
+				}
+			}
+			if command, ok := p.Patch["command"]; ok {
+				if s, ok := command.(string); ok {
+					job.Payload.Message = s
+				}
+			}
+			if schedule, ok := p.Patch["schedule"]; ok {
+				if s, ok := schedule.(string); ok {
+					if parsed, err := cron.ParseSmartSchedule(s); err == nil {
+						job.Schedule = parsed
+					}
+				}
+			}
+			if agentID, ok := p.Patch["agentId"]; ok {
+				if s, ok := agentID.(string); ok {
+					job.AgentID = s
+				}
+			}
+		})
+		if err != nil {
 			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
 		}
 
@@ -155,9 +211,8 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "updated", "id": id})
 		}
 
-		status := deps.Cron.Get(id)
-		resp := rpcutil.RespondOK(req.ID, status)
-		return resp
+		job := deps.Service.GetJob(id)
+		return rpcutil.RespondOK(req.ID, job)
 	}
 }
 
@@ -179,14 +234,14 @@ func cronRemove(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
-		removed := deps.Cron.Unregister(id)
+		err := deps.Service.Remove(id)
+		removed := err == nil
 
 		if deps.Broadcaster != nil && removed {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "removed", "id": id})
 		}
 
-		resp := rpcutil.RespondOK(req.ID, map[string]bool{"removed": removed})
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": removed})
 	}
 }
 
@@ -209,13 +264,16 @@ func cronRun(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
-		result, err := deps.Cron.RunNow(ctx, id)
+		outcome, err := deps.Service.Run(ctx, id, p.Mode)
 		if err != nil {
 			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
 		}
-
-		resp := rpcutil.RespondOK(req.ID, result)
-		return resp
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"id":         id,
+			"status":     outcome.Status,
+			"error":      outcome.Error,
+			"durationMs": outcome.DurationMs,
+		})
 	}
 }
 
@@ -250,7 +308,6 @@ func cronRuns(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			offset = 0
 		}
 
-		// Prefer persistent run log when available; fall back to in-memory.
 		if deps.RunLog != nil {
 			opts := cron.RunLogReadOpts{
 				Limit:   limit,
@@ -273,12 +330,10 @@ func cronRuns(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		runs := deps.Cron.Runs(id, limit, offset)
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
-			"runs":  runs,
-			"total": len(runs),
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"runs":  []any{},
+			"total": 0,
 		})
-		return resp
 	}
 }
 
@@ -288,8 +343,7 @@ type CronServiceDeps struct {
 }
 
 // CronServiceMethods returns RPC handlers backed by cron.Service
-// (cron.listPage, cron.get). These complement CronAdvancedMethods which
-// use cron.Scheduler.
+// (cron.listPage, cron.getJob).
 func CronServiceMethods(deps CronServiceDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Service == nil {
 		return nil

@@ -474,24 +474,6 @@ func gitRevParse(ctx context.Context, dir, ref string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func gitCheckoutNewBranch(ctx context.Context, dir, branch string) error {
-	cmd := exec.CommandContext(ctx, "git", "checkout", "-b", branch)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git checkout -b %s: %s", branch, string(out))
-	}
-	return nil
-}
-
-func gitCheckout(ctx context.Context, dir, branch string) error {
-	cmd := exec.CommandContext(ctx, "git", "checkout", branch)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git checkout %s: %s", branch, string(out))
-	}
-	return nil
-}
-
 // gitWorktreeAdd creates an isolated git worktree at wtPath on the given branch.
 // If createBranch is true, the branch is created from the current HEAD.
 func gitWorktreeAdd(ctx context.Context, repoDir, wtPath, branch string, createBranch bool) error {

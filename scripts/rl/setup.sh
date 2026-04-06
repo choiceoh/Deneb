@@ -1,44 +1,45 @@
-#!/usr/bin/env bash
-# Setup RL training environment for Deneb.
+#!/bin/bash
+# Install sglang + Tinker-Atropos in a managed Python venv.
+# Run once on DGX Spark setup.
 #
-# Creates a Python virtualenv and installs sglang + Tinker + Atropos.
-# Run once on DGX Spark before enabling DENEB_RL_ENABLED=true.
+# Prerequisites:
+#   - Python 3.10+ with venv support
+#   - CUDA toolkit (for GPU inference/training)
+#   - pip
 #
-# Usage: scripts/rl/setup.sh [--venv-dir DIR]
+# Usage:
+#   ./scripts/rl/setup.sh [VENV_DIR]
+#   Default: ~/.deneb/rl/venv
 set -euo pipefail
 
-VENV_DIR="${1:-$HOME/.deneb/rl/venv}"
+VENV_DIR="${1:-${HOME}/.deneb/rl/venv}"
 
-echo "=== Deneb RL Setup ==="
-echo "  venv: $VENV_DIR"
-
-# Create venv if needed.
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtualenv..."
-    python3 -m venv "$VENV_DIR"
-fi
-
-# Activate.
+echo "[rl-setup] Creating venv: ${VENV_DIR}"
+python3 -m venv "${VENV_DIR}"
 # shellcheck disable=SC1091
-source "$VENV_DIR/bin/activate"
+source "${VENV_DIR}/bin/activate"
 
-# Upgrade pip.
-pip install --upgrade pip setuptools wheel
+echo "[rl-setup] Upgrading pip"
+pip install --upgrade pip wheel setuptools
 
-# Install sglang (inference server).
-echo "Installing sglang..."
+echo "[rl-setup] Installing sglang (inference server)"
 pip install "sglang[all]"
 
-# Install Tinker (RL trainer with IS loss).
-echo "Installing tinker-rl..."
-pip install tinker-rl
+echo "[rl-setup] Installing Tinker (LoRA trainer)"
+pip install git+https://github.com/NousResearch/Tinker.git
 
-# Install Atropos (trajectory environment server).
-echo "Installing atropos..."
-pip install atropos-rl
+echo "[rl-setup] Installing Atropos (trajectory API)"
+pip install git+https://github.com/NousResearch/Atropos.git
+
+echo "[rl-setup] Installing PyTorch + PEFT (for adapter conversion)"
+pip install torch peft transformers
+
+echo "[rl-setup] Verifying installation"
+python3 -c "import sglang; print(f'  sglang {sglang.__version__}')" 2>/dev/null || echo "  sglang: FAILED"
+python3 -c "import tinker; print('  tinker: OK')" 2>/dev/null || echo "  tinker: FAILED"
+python3 -c "import atropos; print('  atropos: OK')" 2>/dev/null || echo "  atropos: FAILED"
+python3 -c "import peft; print(f'  peft {peft.__version__}')" 2>/dev/null || echo "  peft: FAILED"
 
 echo ""
-echo "=== Setup complete ==="
-echo "  Activate: source $VENV_DIR/bin/activate"
-echo "  Enable:   export DENEB_RL_ENABLED=true"
-echo "  Model:    export DENEB_RL_MODEL=<huggingface-model-path>"
+echo "[rl-setup] Done. Venv: ${VENV_DIR}"
+echo "[rl-setup] Add to deneb config: rl.venvDir = \"${VENV_DIR}\""

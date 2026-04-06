@@ -10,23 +10,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// registerAuthRPCMethods registers credential, provider-auth, web-login stub, and
-// channel-logout RPC methods.
+// registerAuthRPCMethods registers credential and channel-logout RPC methods.
 func (s *Server) registerAuthRPCMethods() {
 	// Secret resolution methods.
 	s.dispatcher.RegisterDomain(handlerplatform.SecretMethods(handlerplatform.SecretDeps{
 		Resolver: s.secrets,
 	}))
 
-	// Stub handlers for methods that required the removed Node.js bridge.
-	// Registered explicitly so callers receive ErrUnavailable instead of
-	// "unknown method", and RPC parity tests pass.
-	stubUnavailable := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcerr.Unavailable(req.Method + " not available (requires browser/web-login integration)").Response(req.ID)
-	}
-	s.dispatcher.Register("browser.request", stubUnavailable)
-	s.dispatcher.Register("web.login.start", stubUnavailable)
-	s.dispatcher.Register("web.login.wait", stubUnavailable)
 	s.dispatcher.Register("telegram.logout", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Channel string `json:"channel"`

@@ -59,6 +59,9 @@ type Config struct {
 
 	// Environments lists which local AI task types to collect trajectories for.
 	Environments []EnvConfig `json:"environments"`
+
+	// Collection controls session-level trajectory collection (fallback path).
+	Collection CollectionConfig `json:"collection"`
 }
 
 // SGLangConfig configures the training sglang server (separate from serving sglang).
@@ -89,6 +92,13 @@ type EnvConfig struct {
 	Weight float64 `json:"weight"`
 	// Enabled controls whether to collect trajectories for this task.
 	Enabled bool `json:"enabled"`
+}
+
+// CollectionConfig controls session-level trajectory collection (SessionHook).
+// This is the fallback path — the hub observer is the primary collection method.
+type CollectionConfig struct {
+	MinTurns     int `json:"minTurns"`
+	MinToolCalls int `json:"minToolCalls"`
 }
 
 // DefaultConfig returns sensible defaults for DGX Spark deployment.
@@ -123,6 +133,10 @@ func DefaultConfig() Config {
 			{TaskType: "memory_json", Weight: 1.0, Enabled: true},
 			{TaskType: "aurora_compaction", Weight: 1.0, Enabled: true},
 			{TaskType: "session_memory", Weight: 0.5, Enabled: true},
+		},
+		Collection: CollectionConfig{
+			MinTurns:     3,
+			MinToolCalls: 2,
 		},
 	}
 }

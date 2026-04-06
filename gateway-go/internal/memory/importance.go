@@ -215,6 +215,7 @@ You MUST correctly attribute WHO said or did what:
 **Right**: 네브가 "머지할까?" 질문 → "네브가 PR #702 머지를 제안, 선택님 응답 대기" ✅
 
 ## Anti-patterns (절대 저장하지 마)
+- ❌ 코드 블록/스니펫: 코드 자체를 fact content에 절대 포함하지 마라. 파일 경로와 함수명으로만 참조. 코드는 메모리 용량을 지나치게 빨리 소모한다.
 - ❌ 루틴 코드 작업 (맥락 없이): "X 파일 수정함", "Y 버그 수정" (단, 왜/어떤 결정으로 → decision/solution은 OK)
 - ❌ 일회성 디버깅 단계: "로그 확인해서 에러 찾음", "타입 오류 수정"
 - ❌ 표준 도구 사용: "git commit", "npm install", "make build"
@@ -234,6 +235,11 @@ You MUST correctly attribute WHO said or did what:
 func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMessage, agentResponse string, logger *slog.Logger) ([]ExtractedFact, error) {
 	ctx, cancel := context.WithTimeout(ctx, importanceTimeout)
 	defer cancel()
+
+	// Strip code blocks from input to prevent code from inflating memory
+	// and to reduce token usage on the local AI model.
+	userMessage = stripMemoryCodeBlocks(userMessage)
+	agentResponse = stripMemoryCodeBlocks(agentResponse)
 
 	prompt := fmt.Sprintf("%s (사용자):\n%s\n\n%s (AI):\n%s",
 		SpeakerNames.User, truncate(userMessage, 4000),
@@ -753,6 +759,58 @@ func StripRecalledMemoryFromResponse(response string) string {
 		}
 	}
 	return strings.TrimSpace(response)
+}
+
+// stripMemoryCodeBlocks replaces fenced code blocks (``` ... ```) with a brief
+// placeholder to prevent code from inflating memory storage. Code blocks consume
+// disproportionate space and fill up memory too quickly.
+func stripMemoryCodeBlocks(s string) string {
+	if !strings.Contains(s, "```") {
+		return s
+	}
+	var result strings.Builder
+	result.Grow(len(s))
+	for {
+		idx := strings.Index(s, "```")
+		if idx == -1 {
+			result.WriteString(s)
+			break
+		}
+		result.WriteString(s[:idx])
+		rest := s[idx+3:]
+
+		// Find end of opening fence line (language tag).
+		nl := strings.IndexByte(rest, '\n')
+		if nl == -1 {
+			result.WriteString("```")
+			s = rest
+			continue
+		}
+		lang := strings.TrimSpace(rest[:nl])
+		body := rest[nl+1:]
+
+		// Find closing fence.
+		closeIdx := strings.Index(body, "```")
+		if closeIdx == -1 {
+			result.WriteString("```")
+			s = rest
+			continue
+		}
+
+		code := body[:closeIdx]
+		lines := strings.Count(code, "\n")
+		if lines == 0 && len(strings.TrimSpace(code)) > 0 {
+			lines = 1
+		}
+
+		if lang != "" {
+			fmt.Fprintf(&result, "[코드 생략: %s, %d줄]", lang, lines)
+		} else {
+			fmt.Fprintf(&result, "[코드 생략: %d줄]", lines)
+		}
+		s = body[closeIdx+3:]
+	}
+	return result.String()
 }
 
 // truncate truncates s to at most maxRunes runes, appending "..." if truncated.

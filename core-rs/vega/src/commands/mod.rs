@@ -10,7 +10,6 @@ pub mod compare;
 pub mod contacts;
 pub mod cross;
 pub mod dashboard;
-pub mod embed;
 pub mod health;
 pub mod list;
 pub mod mail_append;
@@ -263,7 +262,6 @@ fn build_registry() -> FxHashMap<&'static str, Box<dyn CommandHandler>> {
     m.insert("list", Box::new(list::ListHandler));
     m.insert("tags", Box::new(tags::TagsHandler));
     m.insert("timeline", Box::new(timeline::TimelineHandler));
-    m.insert("embed", Box::new(embed::EmbedHandler));
     m.insert("ask", Box::new(AskHandler));
     m.insert("urgent", Box::new(urgent::UrgentHandler));
     m.insert("person", Box::new(person::PersonHandler));
@@ -284,9 +282,7 @@ fn build_registry() -> FxHashMap<&'static str, Box<dyn CommandHandler>> {
     m.insert("health", Box::new(health::HealthHandler));
     m.insert("memory-search", Box::new(memory::MemorySearchHandler));
     m.insert("memory-update", Box::new(memory::MemoryUpdateHandler));
-    m.insert("memory-embed", Box::new(memory::MemoryEmbedHandler));
     m.insert("memory-status", Box::new(memory::MemoryStatusHandler));
-    m.insert("memory-version", Box::new(memory::MemoryVersionHandler));
     m
 }
 
@@ -473,13 +469,6 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
     }
 
     result
-}
-
-/// Execute a NL query: route → command → execute.
-pub fn execute_query(query: &str, config: &VegaConfig) -> CommandResult {
-    let command = route_command(query);
-    let args = json!({"query": query});
-    execute(command, &args, config)
 }
 
 // -- Helpers --

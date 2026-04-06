@@ -3,8 +3,6 @@
 //! Provides constant-time comparison, input sanitization,
 //! and regex safety validation — ported from `src/security/`.
 
-use memchr::memmem;
-
 /// Constant-time byte comparison to prevent timing attacks.
 /// Both slices must be the same length for equality.
 ///
@@ -24,84 +22,10 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Pre-built case-insensitive finders for XSS/injection patterns.
-/// Uses the `memchr` crate's SIMD-accelerated substring search to detect
-/// dangerous patterns like `<script`, `javascript:`, `data:text/html`, etc.
-/// Patterns are matched against a lowercased copy of the input.
-struct DangerousPatterns {
-    finders: Vec<memmem::Finder<'static>>,
-}
-
-impl DangerousPatterns {
-    fn new() -> Self {
-        const PATTERNS: &[&[u8]] = &[
-            b"<script",
-            b"javascript:",
-            b"data:text/html",
-            b"onerror=",
-            b"onload=",
-        ];
-        Self {
-            finders: PATTERNS.iter().map(memmem::Finder::new).collect(),
-        }
-    }
-
-    fn matches(&self, haystack: &[u8]) -> bool {
-        // Fast reject: all patterns start with '<', 'j', 'd', or 'o'.
-        // If none of these bytes exist (case-insensitive), skip the expensive lowercase+search.
-        if !haystack
-            .iter()
-            .any(|&b| matches!(b.to_ascii_lowercase(), b'<' | b'j' | b'd' | b'o'))
-        {
-            return false;
-        }
-        // Pre-sized allocation for small inputs avoids excess capacity; both branches heap-allocate.
-        let lower: Vec<u8> = if haystack.len() <= 256 {
-            let mut buf = Vec::with_capacity(haystack.len());
-            buf.extend(haystack.iter().map(u8::to_ascii_lowercase));
-            buf
-        } else {
-            haystack.iter().map(u8::to_ascii_lowercase).collect()
-        };
-        self.finders.iter().any(|f| f.find(&lower).is_some())
-    }
-}
-
-/// Check if a string contains potential injection patterns.
-/// Returns true if the input appears safe.
-/// Uses SIMD-accelerated substring search via memchr crate.
-pub fn is_safe_input(input: &str) -> bool {
-    let bytes = input.as_bytes();
-    // Reject null bytes (SIMD-accelerated).
-    if memchr::memchr(0, bytes).is_some() {
-        return false;
-    }
-    // Reject common injection patterns (SIMD-accelerated case-insensitive search).
-    use std::sync::OnceLock;
-    static PATTERNS: OnceLock<DangerousPatterns> = OnceLock::new();
-    let patterns = PATTERNS.get_or_init(DangerousPatterns::new);
-    !patterns.matches(bytes)
-}
-
 /// Returns true if the character is a control char that should be stripped.
 #[inline]
 fn is_strippable_control(c: char) -> bool {
     c.is_control() && c != '\n' && c != '\t' && c != '\r'
-}
-
-/// Sanitize a string by removing control characters (except newline/tab/CR).
-/// Returns the input unchanged (zero-alloc via Cow) if no control characters are present.
-pub fn sanitize_control_chars(input: &str) -> std::borrow::Cow<'_, str> {
-    // Fast path: scan for any strippable control chars before allocating.
-    if !input.chars().any(is_strippable_control) {
-        return std::borrow::Cow::Borrowed(input);
-    }
-    std::borrow::Cow::Owned(
-        input
-            .chars()
-            .filter(|c| !is_strippable_control(*c))
-            .collect(),
-    )
 }
 
 /// Maximum session key length (matches TypeScript `ChatSendSessionKeyString`).
@@ -195,42 +119,6 @@ fn find_html_special(bytes: &[u8], start: usize) -> Option<usize> {
         (None, Some(b)) => Some(start + b),
         (Some(a), Some(b)) => Some(start + a.min(b)),
     }
-}
-
-/// Remove invisible Unicode characters that can be used for prompt injection.
-/// Strips: zero-width chars (U+200B-U+200F), bidi marks (U+202A-U+202E),
-/// word joiners (U+2060-U+2064), deprecated format chars (U+206A-U+206F),
-/// BOM (U+FEFF), and tag characters (U+E0000-U+E007F).
-/// Returns the input unchanged (zero-alloc via Cow) if no invisible characters are present.
-pub fn strip_invisible_unicode(input: &str) -> std::borrow::Cow<'_, str> {
-    if !input.chars().any(is_invisible_unicode) {
-        return std::borrow::Cow::Borrowed(input);
-    }
-    std::borrow::Cow::Owned(
-        input
-            .chars()
-            .filter(|c| !is_invisible_unicode(*c))
-            .collect(),
-    )
-}
-
-/// Returns true if the character is an invisible Unicode character that should be stripped.
-#[inline]
-fn is_invisible_unicode(c: char) -> bool {
-    matches!(c,
-        // Zero-width and joining chars
-        '\u{200B}'..='\u{200F}' |
-        // Bidi control characters
-        '\u{202A}'..='\u{202E}' |
-        // Word joiner and invisible operators
-        '\u{2060}'..='\u{2064}' |
-        // Deprecated format characters
-        '\u{206A}'..='\u{206F}' |
-        // Byte order mark
-        '\u{FEFF}' |
-        // Tag characters (U+E0000-U+E007F)
-        '\u{E0000}'..='\u{E007F}'
-    )
 }
 
 /// Basic SSRF protection: reject URLs targeting internal/private networks.
@@ -497,26 +385,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_safe_input() {
-        assert!(is_safe_input("normal text"));
-        assert!(is_safe_input("hello world 123"));
-        assert!(!is_safe_input("<script>alert(1)</script>"));
-        assert!(!is_safe_input("javascript:void(0)"));
-        assert!(!is_safe_input("has\0null"));
-    }
-
-    #[test]
-    fn test_sanitize_control_chars() {
-        assert_eq!(sanitize_control_chars("hello\x00world"), "helloworld");
-        assert_eq!(sanitize_control_chars("keep\nnewlines"), "keep\nnewlines");
-        assert_eq!(sanitize_control_chars("keep\ttabs"), "keep\ttabs");
-        assert_eq!(
-            sanitize_control_chars("remove\x07bell\x1Bescape"),
-            "removebellescape"
-        );
-    }
-
-    #[test]
     fn test_is_valid_session_key() {
         assert!(is_valid_session_key("my-session-123"));
         assert!(is_valid_session_key("a")); // min length 1
@@ -658,34 +526,6 @@ mod tests {
         assert!(!is_safe_url("\\\\?\\UNC\\server\\share"));
         assert!(!is_safe_url("//server/share"));
         assert!(!is_safe_url("//169.254.169.254/latest/meta-data"));
-    }
-
-    #[test]
-    fn test_strip_invisible_unicode() {
-        // No invisible chars — returns borrowed
-        assert_eq!(strip_invisible_unicode("hello world"), "hello world");
-        // Zero-width space
-        assert_eq!(strip_invisible_unicode("hello\u{200B}world"), "helloworld");
-        // BOM
-        assert_eq!(strip_invisible_unicode("\u{FEFF}hello"), "hello");
-        // Bidi marks
-        assert_eq!(
-            strip_invisible_unicode("hello\u{202A}\u{202C}world"),
-            "helloworld"
-        );
-        // Word joiner
-        assert_eq!(strip_invisible_unicode("a\u{2060}b"), "ab");
-        // Tag characters
-        assert_eq!(strip_invisible_unicode("a\u{E0001}b"), "ab");
-        // Mixed invisible chars
-        assert_eq!(
-            strip_invisible_unicode(
-                "\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}text\u{E0000}\u{E007F}"
-            ),
-            "text"
-        );
-        // Preserves normal Unicode (emoji, CJK, accents)
-        assert_eq!(strip_invisible_unicode("café 🎉 한글"), "café 🎉 한글");
     }
 
     #[test]
