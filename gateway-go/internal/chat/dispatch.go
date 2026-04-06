@@ -467,7 +467,8 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		sections = append(sections, "⚙️ **모드:** "+strings.Join(modes, " | "))
 	}
 
-	// Token usage from session.
+	// Token usage from session (live budget).
+	liveBudget := h.contextCfg.LiveTokenBudget
 	if sess.TotalTokens != nil && *sess.TotalTokens > 0 {
 		in, out := int64(0), int64(0)
 		if sess.InputTokens != nil {
@@ -476,27 +477,37 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		if sess.OutputTokens != nil {
 			out = *sess.OutputTokens
 		}
-		sections = append(sections, fmt.Sprintf("📊 **토큰:** %s (in: %s, out: %s)",
-			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(in), formatCompactTokens(out)))
+		livePct := float64(*sess.TotalTokens) / float64(liveBudget) * 100
+		if livePct > 100 {
+			livePct = 100
+		}
+		sections = append(sections, fmt.Sprintf("📊 **라이브:** %s / %s (%s %.0f%%) in: %s, out: %s",
+			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(liveBudget)),
+			buildUsageBar(livePct), livePct,
+			formatCompactTokens(in), formatCompactTokens(out)))
+	} else {
+		sections = append(sections, fmt.Sprintf("📊 **라이브:** 0 / %s", formatCompactTokens(int64(liveBudget))))
 	}
 
-	// Context window usage + compaction status.
+	// Aurora stored context usage + compaction status.
 	if h.auroraStore != nil {
+		memBudget := h.contextCfg.MemoryTokenBudget
 		if storedTokens, err := h.auroraStore.FetchTokenCount(1); err == nil && storedTokens > 0 {
-			budget := h.contextCfg.MemoryTokenBudget
-			pct := float64(storedTokens) / float64(budget) * 100
-			if pct > 100 {
-				pct = 100
+			memPct := float64(storedTokens) / float64(memBudget) * 100
+			if memPct > 100 {
+				memPct = 100
 			}
-			bar := buildUsageBar(pct)
-			sections = append(sections, fmt.Sprintf("🧠 **콘텍스트:** %s / %s (%s %.0f%%)",
-				formatCompactTokens(int64(storedTokens)), formatCompactTokens(int64(budget)), bar, pct))
+			sections = append(sections, fmt.Sprintf("🧠 **Aurora:** %s / %s (%s %.0f%%)",
+				formatCompactTokens(int64(storedTokens)), formatCompactTokens(int64(memBudget)),
+				buildUsageBar(memPct), memPct))
 
 			// Summary stats (compaction depth indicator).
 			if stats, err := h.auroraStore.FetchSummaryStats(1); err == nil && (stats.LeafCount > 0 || stats.CondensedCount > 0) {
 				sections = append(sections, fmt.Sprintf("📦 **컴팩션:** 요약 %d개 (leaf: %d, condensed: %d, depth: %d)",
 					stats.LeafCount+stats.CondensedCount, stats.LeafCount, stats.CondensedCount, stats.MaxDepth))
 			}
+		} else {
+			sections = append(sections, fmt.Sprintf("🧠 **Aurora:** 0 / %s", formatCompactTokens(int64(memBudget))))
 		}
 
 		// Compaction circuit breaker + last run.
