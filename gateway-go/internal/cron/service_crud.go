@@ -119,7 +119,9 @@ func (s *Service) Add(ctx context.Context, job StoreJob) error {
 	}
 
 	if job.Enabled && s.running {
-		s.scheduleJobLocked(ctx, job)
+		if job.Schedule.Kind == "at" {
+			s.scheduleJobLocked(ctx, job)
+		}
 		s.armTimerLocked(ctx)
 	}
 
@@ -146,10 +148,13 @@ func (s *Service) Update(ctx context.Context, id string, patch func(*StoreJob)) 
 		return err
 	}
 
-	// Reschedule.
+	// Reschedule: unregister from scheduler (in case it was an "at" job),
+	// then re-register only if the updated job is still one-shot.
 	s.scheduler.Unregister(id)
 	if job.Enabled && s.running {
-		s.scheduleJobLocked(ctx, *job)
+		if job.Schedule.Kind == "at" {
+			s.scheduleJobLocked(ctx, *job)
+		}
 		s.armTimerLocked(ctx)
 	}
 	return nil

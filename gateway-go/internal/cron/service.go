@@ -26,6 +26,10 @@ type Service struct {
 	running   bool
 	stopCh    chan struct{}
 
+	// Per-job execution guard: prevents concurrent execution of the same job.
+	// Key = job ID, value = true while executing. Uses LoadOrStore for atomicity.
+	runningJobs sync.Map
+
 	// Timer state (mirrors TS timer.ts).
 	timerMu      sync.Mutex
 	timerCancel  context.CancelFunc
