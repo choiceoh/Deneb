@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
@@ -203,6 +204,7 @@ func extractTableOfContents(projectID string, data json.RawMessage) string {
 				sections = append(sections, key)
 			}
 		}
+		sort.Strings(sections)
 	}
 
 	var sb strings.Builder
@@ -222,10 +224,19 @@ func extractSection(projectID, section string, data json.RawMessage) string {
 		return string(data)
 	}
 
-	// Look for exact key match or case-insensitive match.
+	// Exact match first.
+	if val, ok := doc[section]; ok {
+		b, err := json.MarshalIndent(val, "", "  ")
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return fmt.Sprintf("## %s — %s\n\n%s", projectID, section, string(b))
+	}
+
+	// Fall back to case-insensitive match.
 	sectionLower := strings.ToLower(section)
 	for key, val := range doc {
-		if key == section || strings.ToLower(key) == sectionLower {
+		if strings.ToLower(key) == sectionLower {
 			b, err := json.MarshalIndent(val, "", "  ")
 			if err != nil {
 				return fmt.Sprintf("%v", val)

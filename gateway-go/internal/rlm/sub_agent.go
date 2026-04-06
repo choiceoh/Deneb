@@ -66,10 +66,18 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 		cfg.Logger = slog.Default()
 	}
 
-	// Check token budget before starting.
-	if cfg.Budget != nil && cfg.Budget.Remaining() < 100 {
+	// Reserve tokens before starting. We reserve MaxTokens as a worst-case
+	// estimate; actual usage is tracked post-hoc via Consume.
+	if cfg.Budget != nil && !cfg.Budget.TryReserve(cfg.MaxTokens) {
 		return &SubAgentResult{Error: "token budget exhausted"}, nil
 	}
+
+	start := time.Now()
+	cfg.Logger.Info("sub-agent starting",
+		"prompt_len", len(cfg.Prompt),
+		"max_tokens", cfg.MaxTokens,
+		"max_turns", cfg.MaxTurns,
+		"budget_remaining", budgetRemaining(cfg.Budget))
 
 	agentCfg := agent.AgentConfig{
 		MaxTurns:  cfg.MaxTurns,
@@ -85,7 +93,11 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 	}
 
 	result, err := agent.RunAgent(ctx, agentCfg, messages, cfg.Client, cfg.ToolExecutor, agent.StreamHooks{}, cfg.Logger, nil)
+	elapsed := time.Since(start)
 	if err != nil {
+		cfg.Logger.Warn("sub-agent failed",
+			"error", err,
+			"elapsed_ms", elapsed.Milliseconds())
 		return &SubAgentResult{Error: fmt.Sprintf("sub-agent error: %v", err)}, nil
 	}
 
@@ -94,6 +106,13 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 	if cfg.Budget != nil {
 		cfg.Budget.Consume(totalTokens)
 	}
+
+	cfg.Logger.Info("sub-agent completed",
+		"tokens_in", result.Usage.InputTokens,
+		"tokens_out", result.Usage.OutputTokens,
+		"tool_calls", result.Turns,
+		"elapsed_ms", elapsed.Milliseconds(),
+		"budget_remaining", budgetRemaining(cfg.Budget))
 
 	return &SubAgentResult{
 		Text:      result.AllText,
@@ -104,6 +123,13 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 	}, nil
 }
 
+func budgetRemaining(b *TokenBudget) int {
+	if b == nil {
+		return -1
+	}
+	return b.Remaining()
+}
+
 // maxBatchConcurrency limits how many sub-LLM calls run in parallel
 // within a single batch to avoid overwhelming LLM API rate limits
 // or local GPU resources on DGX Spark.
@@ -112,6 +138,8 @@ const maxBatchConcurrency = 3
 // RunSubAgentBatch executes multiple sub-LLM calls in parallel.
 // All tasks share the same tools and token budget.
 // Concurrency is limited to maxBatchConcurrency.
+// If any task fails with an error (not a soft error in SubAgentResult.Error),
+// the remaining tasks are cancelled via context.
 func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, error) {
 	if cfg.MaxTokens <= 0 {
 		cfg.MaxTokens = 500
@@ -123,6 +151,9 @@ func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, e
 		cfg.Logger = slog.Default()
 	}
 
+	batchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	results := make([]SubAgentResult, len(cfg.Tasks))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, maxBatchConcurrency)
@@ -131,8 +162,13 @@ func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, e
 		wg.Add(1)
 		go func(idx int, t SubAgentTask) {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-batchCtx.Done():
+				results[idx] = SubAgentResult{Error: "batch cancelled"}
+				return
+			}
 
 			subCfg := SubAgentConfig{
 				Prompt:       t.Prompt,
@@ -146,10 +182,15 @@ func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, e
 				Logger:       cfg.Logger.With("sub_index", t.Index),
 			}
 
-			r, err := RunSubAgent(ctx, subCfg)
+			r, err := RunSubAgent(batchCtx, subCfg)
 			if err != nil {
 				results[idx] = SubAgentResult{Error: err.Error()}
+				cancel() // Cancel remaining tasks on hard error.
 				return
+			}
+			// Budget exhaustion: cancel remaining to avoid wasted calls.
+			if r.Error == "token budget exhausted" {
+				cancel()
 			}
 			results[idx] = *r
 		}(i, task)
