@@ -1,11 +1,9 @@
 # Deneb
 
-**Personal AI gateway for NVIDIA DGX Spark.** Telegram bot interface → Go gateway server → Rust core engine. Single-user, single-machine deployment. Korean-first.
+**Personal AI gateway for NVIDIA DGX Spark.** Telegram bot interface → Go gateway server. Single-user, single-machine deployment. Korean-first.
 
 - **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 130+ tool integrations, Telegram bot plugin.
-- **Rust core** (`core-rs/`): Protocol validation, security, media processing, memory search (SIMD cosine + BM25 + FTS5), context engine, compaction, Vega semantic search, GGUF inference.
-- **Protobuf schemas** (`proto/`): Cross-language type definitions (Go + Rust codegen).
-- **CLI** (`cli-rs/`): Rust CLI entry point, connects to gateway via WebSocket.
+- **Protobuf schemas** (`proto/`): Cross-language type definitions (Go codegen).
 
 ---
 
@@ -32,19 +30,18 @@
 | File | Scope | Globs |
 |---|---|---|
 | `architecture.md` | 프로젝트 구조/모듈맵 | `cmd/**`, `internal/**`, `pkg/**`, `src/**` |
-| `rust-core.md` | Rust 코어 빌드/구조 | `core-rs/**`, `cli-rs/**` |
 | `go-gateway.md` | Go 게이트웨이 구조 | `gateway-go/**` |
 | `proto.md` | Protobuf 스키마 | `proto/**`, `gateway-go/pkg/protocol/gen/**` |
 | `docs.md` | 문서 작성 표준 | `docs/**` |
 | `generated-code.md` | 생성 코드 수정 금지 | 생성 파일 직접 지정 |
-| `testing.md` | 테스트 가이드라인 | `**/*_test.go`, `**/*_test.rs` |
+| `testing.md` | 테스트 가이드라인 | `**/*_test.go` |
 | `release-and-deploy.md` | 릴리스/배포 워크플로우 | `scripts/release*`, `.github/workflows/release*` |
 | `git-pr.md` | Git/PR 상세 가이드 | `.github/**` |
 | `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
 | `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/server/method_registry.go`, `gateway-go/internal/rpc/rpcutil/gateway_hub.go` |
-| `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go`, `core-rs/**/*.rs`, `proto/**/*.proto` |
-| `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go`, `core-rs/**/*.rs` |
+| `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go`, `proto/**/*.proto` |
+| `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go` |
 
 ---
 
@@ -53,15 +50,12 @@
 > Run these when starting a new coding session.
 
 1. **Check environment:** `./scripts/check-dev-env.sh`
-2. **Build Rust core:** `make rust` (required before Go gateway)
-3. **Build Go gateway:** `make go`
-4. **Run tests:** `make test` (Rust + Go + CLI)
-5. **Fast iteration:** `make rust-debug` (debug mode, faster) + `make go-dev` (auto-restart)
-6. **Live test:** `scripts/dev-live-test.sh restart && scripts/dev-live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
+2. **Build Go gateway:** `make go`
+3. **Run tests:** `make test`
+4. **Fast iteration:** `make go-dev` (auto-restart)
+5. **Live test:** `scripts/dev-live-test.sh restart && scripts/dev-live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
 
-**Build order:** Proto schemas → Rust core (static lib) → Go gateway (links Rust via CGo)
-
-**Module guides:** Each module (`gateway-go/`, `core-rs/`, `proto/`, `skills/`) has its own `CLAUDE.md` with targeted build/test/contribution guidance.
+**Module guides:** Each module (`gateway-go/`, `proto/`, `skills/`) has its own `CLAUDE.md` with targeted build/test/contribution guidance.
 
 ---
 
@@ -106,8 +100,8 @@
 
 ## Code Style Essentials
 
-- Languages: Go (`gateway-go/`), Rust (`core-rs/`, `cli-rs/`).
-- Go: `gofmt`/`go vet`. Rust: `cargo fmt`/`cargo clippy`.
+- Language: Go (`gateway-go/`).
+- Go: `gofmt`/`go vet`.
 - Naming: **Deneb** for product/app/docs headings; `deneb` for CLI/package/binary/paths/config.
 - American English in code, comments, docs, UI strings.
 - Keep files under ~700 LOC; split/refactor when it improves clarity.
@@ -117,9 +111,9 @@
 
 ## Build Hard Gates
 
-- Before any commit touching `core-rs/`, `gateway-go/`, or `proto/`: run `make check` and it MUST pass.
+- Before any commit touching `gateway-go/` or `proto/`: run `make check` and it MUST pass.
 - Do not commit or push with failing build or test checks.
-- Toolchain: Rust (stable via rustup), Go (1.24+), buf (latest), protoc, protoc-gen-go.
+- Toolchain: Go (1.24+), buf (latest), protoc, protoc-gen-go.
 
 ---
 

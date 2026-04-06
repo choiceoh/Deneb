@@ -75,6 +75,6 @@ Example output:
 ## Version System
 
 - **Tag format**: `deneb-vX.Y.Z` (release-please managed)
-- **Version files**: `.release-please-manifest.json`, `package.json`, `core-rs/core/Cargo.toml`, `cli-rs/Cargo.toml`
+- **Version files**: `.release-please-manifest.json`, `package.json`
 - **Build injection**: Makefile extracts latest `deneb-v*` tag → Go ldflags `-X main.Version`
 - **Changelog**: `CHANGELOG.md` (grouped by conventional commit type)

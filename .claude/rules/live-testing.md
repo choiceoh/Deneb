@@ -1,6 +1,6 @@
 ---
 description: "코드 변경 후 라이브 테스트 + 품질 검증 필수 — 코드만 완성하고 실제 동작/품질을 검증하지 않으면 안 된다"
-globs: ["gateway-go/**/*.go", "core-rs/**/*.rs", "proto/**/*.proto"]
+globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 ---
 
 # Live Testing & Quality Verification (필수)
@@ -30,7 +30,6 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 | Providers/Auth | 로딩 | 로딩 | 없음 |
 | Hooks/Agents | 로딩 | 로딩 | 없음 |
 | Telegram | dev 봇 (DENEB_DEV_TELEGRAM_TOKEN) | 프로덕션 봇 | 별도 봇 (의도적) |
-| Rust features | `make rust` 의존 | `make rust-dgx` (Vega+ML+CUDA) | `make rust-dgx`로 해소 |
 | Bind | loopback | config-driven | 포트만 다름 (의도적) |
 
 **환경 차이 확인:**
@@ -47,12 +46,6 @@ DENEB_ITERATE_TELEGRAM_TOKEN=<iterate bot token>  # dev-iterate.sh (port 18791)
 - 각 토큰은 @BotFather에서 별도 봇을 만들어서 획득
 - 프로덕션 봇과 다른 봇이므로 409 충돌 없이 동시 실행 가능
 - 토큰 미설정 시 텔레그램 비활성 (그 외 모든 코드 경로는 동일하게 실행)
-
-**Rust 빌드 동등성:** dev에서도 full feature로 빌드하면 Vega/ML 경로 테스트 가능:
-```bash
-make rust-dgx    # Vega+ML+CUDA (프로덕션 동일)
-make rust-vega   # Vega FTS만 (CUDA 없는 환경)
-```
 
 ### Functional Testing
 
@@ -197,15 +190,6 @@ scripts/dev-live-test.sh logs-since 60
 ### Step 7: 정리
 ```bash
 scripts/dev-live-test.sh stop
-```
-
-## Rust 코어 변경 시
-
-```bash
-make rust          # 또는 make rust-debug
-scripts/dev-live-test.sh restart
-scripts/dev-live-test.sh smoke
-scripts/dev-live-test.sh quality
 ```
 
 ## 반복 테스트: `scripts/dev-iterate.sh`

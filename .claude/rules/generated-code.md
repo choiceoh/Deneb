@@ -1,6 +1,6 @@
 ---
 description: "기계 생성 코드 수정 금지 규칙"
-globs: ["gateway-go/internal/chat/toolreg/tool_schemas_gen.go", "gateway-go/internal/autoreply/thinking/model_caps_gen.go", "gateway-go/internal/ffi/ffi_error_codes_gen.go", "gateway-go/pkg/protocol/errors_gen.go", "core-rs/core/src/protocol/error_codes.rs", "gateway-go/pkg/protocol/gen/*.pb.go", "gateway-go/internal/chat/tool_classification_gen.go"]
+globs: ["gateway-go/internal/chat/toolreg/tool_schemas_gen.go", "gateway-go/internal/autoreply/thinking/model_caps_gen.go", "gateway-go/internal/ffi/ffi_error_codes_gen.go", "gateway-go/pkg/protocol/errors_gen.go", "gateway-go/pkg/protocol/gen/*.pb.go", "gateway-go/internal/chat/tool_classification_gen.go"]
 ---
 
 # Generated Code Boundary
@@ -13,7 +13,6 @@ Several Go files in this repo are **machine-generated** and carry a `// Code gen
 | `gateway-go/internal/autoreply/thinking/model_caps_gen.go` | `gateway-go/internal/autoreply/thinking/model_caps.yaml` | `make model-caps` |
 | `gateway-go/internal/ffi/ffi_error_codes_gen.go` | `proto/gateway.proto` (FfiErrorCode) | `make error-codes-gen` |
 | `gateway-go/pkg/protocol/errors_gen.go` | `proto/gateway.proto` (ErrorCode) | `make error-codes-gen` |
-| `core-rs/core/src/protocol/error_codes.rs` | `proto/gateway.proto` (ErrorCode + FfiErrorCode) | `make error-codes-gen` |
 | `gateway-go/pkg/protocol/gen/*.pb.go` | `proto/*.proto` | `make proto` |
 | `gateway-go/internal/chat/tool_classification_gen.go` | `gateway-go/internal/chat/tool_classification.yaml` | `make data-gen` |
 

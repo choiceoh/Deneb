@@ -13,8 +13,7 @@ globs: ["scripts/release*", "scripts/deploy*", ".github/workflows/release*"]
 
 ## DGX Spark Production Build
 
-- `make gateway-dgx` — Full production binary: Go gateway + Rust core (Vega FTS + semantic search + CUDA GGUF inference).
-- For environments without CUDA: `make rust-vega` (FTS-only mode).
+- `make gateway-dgx` — Full production binary.
 - Environment variables: `VEGA_MODEL_EMBEDDER`, `VEGA_MODEL_RERANKER`, `VEGA_MODEL_EXPANDER` (GGUF paths).
 - Model auto-detection: `~/.deneb/models/*.gguf` (see `gateway-go/internal/vega/autodetect.go`).
 

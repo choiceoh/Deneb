@@ -1,11 +1,10 @@
 ---
 description: "테스트 작성 및 실행 가이드라인"
-globs: ["**/*_test.go", "**/*_test.rs", "**/tests/**"]
+globs: ["**/*_test.go", "**/tests/**"]
 ---
 
 # Testing Guidelines
 
-- Rust tests: `cargo test --workspace` (or `make rust-test`). Tests are inline `#[cfg(test)]`.
 - Go tests: `go test ./...` (or `make go-test`). Tests are `*_test.go` colocated with source.
 - Run `make test` before pushing when you touch logic.
 - Agents MUST NOT modify baseline, inventory, ignore, snapshot, or expected-failure files to silence failing checks without explicit approval in this chat.
