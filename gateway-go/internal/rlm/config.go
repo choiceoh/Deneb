@@ -6,6 +6,7 @@ package rlm
 import (
 	"os"
 	"strconv"
+	"sync"
 )
 
 // Config holds RLM feature configuration.
@@ -27,19 +28,35 @@ type Config struct {
 	TotalTokenBudget int
 }
 
+var (
+	configOnce   sync.Once
+	cachedConfig Config
+)
+
 // ConfigFromEnv reads RLM configuration from environment variables.
-// All values have safe defaults; the feature is disabled by default.
+// The result is cached after the first call so that tool registration
+// (startup) and per-request prompt injection always see the same config.
 func ConfigFromEnv() Config {
-	enabled := envBool("DENEB_RLM_ENABLED", false)
-	return Config{
-		Enabled:          enabled,
-		SkipKnowledge:    enabled && envBool("DENEB_RLM_SKIP_KNOWLEDGE", true),
-		SubLLMEnabled:    enabled && envBool("DENEB_RLM_SUB_LLM_ENABLED", false),
-		MaxSubSpawns:     envInt("DENEB_RLM_MAX_SUB_SPAWNS", 10),
-		SubMaxTokens:     envInt("DENEB_RLM_SUB_MAX_TOKENS", 500),
-		SubMaxToolCalls:  envInt("DENEB_RLM_SUB_MAX_TOOL_CALLS", 5),
-		TotalTokenBudget: envInt("DENEB_RLM_TOTAL_TOKEN_BUDGET", 50000),
-	}
+	configOnce.Do(func() {
+		enabled := envBool("DENEB_RLM_ENABLED", false)
+		cachedConfig = Config{
+			Enabled:          enabled,
+			SkipKnowledge:    enabled && envBool("DENEB_RLM_SKIP_KNOWLEDGE", true),
+			SubLLMEnabled:    enabled && envBool("DENEB_RLM_SUB_LLM_ENABLED", false),
+			MaxSubSpawns:     envInt("DENEB_RLM_MAX_SUB_SPAWNS", 10),
+			SubMaxTokens:     envInt("DENEB_RLM_SUB_MAX_TOKENS", 500),
+			SubMaxToolCalls:  envInt("DENEB_RLM_SUB_MAX_TOOL_CALLS", 5),
+			TotalTokenBudget: envInt("DENEB_RLM_TOTAL_TOKEN_BUDGET", 50000),
+		}
+	})
+	return cachedConfig
+}
+
+// ResetConfigForTest resets the cached config so tests can set new env vars.
+// Must not be called in production code.
+func ResetConfigForTest() {
+	configOnce = sync.Once{}
+	cachedConfig = Config{}
 }
 
 func envBool(key string, def bool) bool {

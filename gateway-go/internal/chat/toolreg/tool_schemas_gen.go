@@ -1700,7 +1700,7 @@ func projectsGetDocumentToolSchema() map[string]any {
 			},
 			"section": map[string]any{
 				"type":        "string",
-				"description": "섹션�� (미지정 시 목차 반환)",
+				"description": "섹션명 (미지정 시 목차 반환)",
 			},
 		},
 		"required": []string{"project_id"},

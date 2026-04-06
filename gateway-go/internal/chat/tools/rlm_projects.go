@@ -211,7 +211,7 @@ func extractTableOfContents(projectID string, data json.RawMessage) string {
 		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, s))
 	}
 	sb.WriteString(fmt.Sprintf("\n총 문서 크기: %d자\n", totalChars))
-	sb.WriteString("특정 섹션을 조회하려면 section 파라��터를 지정하세요.")
+	sb.WriteString("특정 섹션을 조회하려면 section 파라미터를 지정하세요.")
 	return sb.String()
 }
 
