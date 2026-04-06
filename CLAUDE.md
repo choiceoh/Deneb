@@ -3,7 +3,6 @@
 **Personal AI gateway for NVIDIA DGX Spark.** Telegram bot interface → Go gateway server. Single-user, single-machine deployment. Korean-first.
 
 - **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 130+ tool integrations, Telegram bot plugin.
-- **Protobuf schemas** (`proto/`): Cross-language type definitions (Go codegen).
 
 ---
 
@@ -31,7 +30,6 @@
 |---|---|---|
 | `architecture.md` | 프로젝트 구조/모듈맵 | `cmd/**`, `internal/**`, `pkg/**`, `src/**` |
 | `go-gateway.md` | Go 게이트웨이 구조 | `gateway-go/**` |
-| `proto.md` | Protobuf 스키마 | `proto/**`, `gateway-go/pkg/protocol/gen/**` |
 | `docs.md` | 문서 작성 표준 | `docs/**` |
 | `generated-code.md` | 생성 코드 수정 금지 | 생성 파일 직접 지정 |
 | `testing.md` | 테스트 가이드라인 | `**/*_test.go` |
@@ -40,7 +38,7 @@
 | `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
 | `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/server/method_registry.go`, `gateway-go/internal/rpc/rpcutil/gateway_hub.go` |
-| `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go`, `proto/**/*.proto` |
+| `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go` |
 | `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go` |
 
 ---
@@ -55,7 +53,7 @@
 4. **Fast iteration:** `make go-dev` (auto-restart)
 5. **Live test:** `scripts/dev-live-test.sh restart && scripts/dev-live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
 
-**Module guides:** Each module (`gateway-go/`, `proto/`, `skills/`) has its own `CLAUDE.md` with targeted build/test/contribution guidance.
+**Module guides:** Each module (`gateway-go/`, `skills/`) has its own `CLAUDE.md` with targeted build/test/contribution guidance.
 
 ---
 
@@ -111,9 +109,9 @@
 
 ## Build Hard Gates
 
-- Before any commit touching `gateway-go/` or `proto/`: run `make check` and it MUST pass.
+- Before any commit touching `gateway-go/`: run `make check` and it MUST pass.
 - Do not commit or push with failing build or test checks.
-- Toolchain: Go (1.24+), buf (latest), protoc, protoc-gen-go.
+- Toolchain: Go (1.24+).
 
 ---
 

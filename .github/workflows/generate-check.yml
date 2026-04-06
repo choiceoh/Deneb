@@ -8,30 +8,21 @@ name: Generate Check
 on:
   pull_request:
     paths:
-      - "proto/**"
       - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
-      - "scripts/proto-gen.sh"
-      - "scripts/gen-error-codes.sh"
   push:
     branches: [main]
     paths:
-      - "proto/**"
       - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
-      - "scripts/proto-gen.sh"
-      - "scripts/gen-error-codes.sh"
 
 concurrency:
   group: generate-check-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
-env:
-  PROTOC_GEN_GO_VERSION: v1.36.11
 
 # ── Change detection ───────────────────────────────────────────────────────
 
@@ -40,7 +31,6 @@ jobs:
     name: detect changed domains
     runs-on: ubuntu-latest
     outputs:
-      proto: ${{ steps.filter.outputs.proto }}
       tool-schemas: ${{ steps.filter.outputs.tool-schemas }}
       model-caps: ${{ steps.filter.outputs.model-caps }}
     steps:
@@ -50,10 +40,6 @@ jobs:
         id: filter
         with:
           filters: |
-            proto:
-              - "proto/**"
-              - "scripts/proto-gen.sh"
-              - "scripts/gen-error-codes.sh"
             tool-schemas:
               - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
               - "gateway-go/cmd/tool-schema-gen/**"
@@ -62,35 +48,6 @@ jobs:
               - "gateway-go/cmd/model-caps-gen/**"
 
 # ── Domain check jobs ──────────────────────────────────────────────────────
-
-  # proto -> Go types + error codes (ErrorCode + FfiErrorCode)
-  proto:
-    name: proto types + error codes
-    needs: changes
-    if: needs.changes.outputs.proto == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: bufbuild/buf-setup-action@v1
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-          cache: true
-          cache-dependency-path: gateway-go/go.sum
-
-      - name: Install protoc + Go plugin
-        run: |
-          sudo apt-get install -y protobuf-compiler &
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@${{ env.PROTOC_GEN_GO_VERSION }} &
-          wait
-
-      - name: proto generate check (proto -> Go)
-        run: make proto-check
-
-      - name: error codes check (gateway.proto -> Go)
-        run: make error-codes-gen-check
 
   # tool_schemas.yaml -> tool_schemas_gen.go
   tool-schemas:

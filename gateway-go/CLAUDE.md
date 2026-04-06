@@ -25,13 +25,7 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | `internal/llm/` | LLM client, sampling parameters, multimodal types |
 | `internal/vega/` | Vega search integration, model auto-detection |
 | `internal/telegram/` | Telegram channel plugin (primary deployment target) |
-| `pkg/protocol/` | Hand-written JSON wire types + generated protobuf types in `gen/` |
-
-## Error Codes
-
-All error codes are defined in `proto/gateway.proto` and auto-generated via `make error-codes-gen`:
-- Protocol codes (`ErrorCode` enum) → `pkg/protocol/errors_gen.go`
-- FFI codes (`FfiErrorCode` enum) → `internal/ffi/ffi_error_codes_gen.go`
+| `pkg/protocol/` | Hand-written JSON wire types |
 
 ## Common Tasks
 
@@ -54,9 +48,6 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 |------|--------|---------|
 | `internal/chat/toolreg/tool_schemas_gen.go` | `internal/chat/toolreg/tool_schemas.yaml` | `make tool-schemas` |
 | `internal/autoreply/thinking/model_caps_gen.go` | `internal/autoreply/thinking/model_caps.yaml` | `make model-caps` |
-| `internal/ffi/ffi_error_codes_gen.go` | `proto/gateway.proto` (FfiErrorCode) | `make error-codes-gen` |
-| `pkg/protocol/errors_gen.go` | `proto/gateway.proto` (ErrorCode) | `make error-codes-gen` |
-| `pkg/protocol/gen/*.pb.go` | `proto/*.proto` | `make proto` |
 | `internal/chat/tool_classification_gen.go` | `internal/chat/tool_classification.yaml` | `make data-gen` |
 
 To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.
@@ -69,8 +60,6 @@ To modify a generated file: edit the source or generator, run the `make` target,
 
 ### Changing Wire Types
 - Hand-written types: `pkg/protocol/`
-- Generated types: `pkg/protocol/gen/` (from `make proto`)
-- **Must pass**: `pkg/protocol/consistency_test.go` (bidirectional sync check)
 
 ---
 
