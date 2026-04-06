@@ -1,5 +1,44 @@
 # Changelog
 
+## [4.14.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.13.0...deneb-v4.14.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **chat:** auto-silence management tools on Telegram ([711dfc1](https://github.com/choiceoh/Deneb/commit/711dfc1b6fede0a35f8690ff16bf177731e3c978))
+* **chat:** auto-silence management tools on Telegram channel ([3a85089](https://github.com/choiceoh/Deneb/commit/3a8508908cbba0d21268cba071dffb67c6722087))
+* Hermes-inspired skill genesis + RL self-learning pipeline ([c50553f](https://github.com/choiceoh/Deneb/commit/c50553f174895956f18935c8a1c6f6f2e2703e94))
+* **rl:** add RL self-learning pipeline with sglang+Tinker-Atropos ([a4ec11f](https://github.com/choiceoh/Deneb/commit/a4ec11fa16b39918750b390fa3c1928061835656))
+* **skills:** add skill genesis — auto-create skills from experience ([24ea353](https://github.com/choiceoh/Deneb/commit/24ea353ad7b4382d409511b0e63df831eace836d))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** drain pending queue on run error ([be378ba](https://github.com/choiceoh/Deneb/commit/be378ba4170daba36f92c9124792b82be7ec3f3a))
+* **chat:** drain pending queue on run error to prevent lost messages ([c5989f6](https://github.com/choiceoh/Deneb/commit/c5989f624f1bbdd0d31be2205df6f3c2e751b889))
+* **chat:** enable mid-loop compaction for all modes ([9880b91](https://github.com/choiceoh/Deneb/commit/9880b913102822655cac77eed213ca7d0203c122))
+* **chat:** enable mid-loop compaction for all modes, not just work mode ([d7c5394](https://github.com/choiceoh/Deneb/commit/d7c53945278a296481a7cf91ba3c46a647f8f136))
+* **cron:** route all cron RPC handlers through persistent Service ([0db5062](https://github.com/choiceoh/Deneb/commit/0db5062756bf7773ec53aedde37dd461b7455227))
+* **cron:** route all cron RPC handlers through persistent Service ([6afb541](https://github.com/choiceoh/Deneb/commit/6afb541b12df149e7a3bb3deed8b43070d4b72df))
+* **genesis:** use correct sqlite driver name and import ([7f631c9](https://github.com/choiceoh/Deneb/commit/7f631c9e760a5397b2324d91fb777303522d12be))
+* **genesis:** use correct sqlite driver name and import ([569fc25](https://github.com/choiceoh/Deneb/commit/569fc25838c2846eebec374fb9caa911fbb150d7))
+* **memory:** strip code blocks from live and session memory ([90697a8](https://github.com/choiceoh/Deneb/commit/90697a8471588eecd208e919488acb67af38f248))
+* **memory:** strip code blocks from live and session memory to prevent bloat ([f18453e](https://github.com/choiceoh/Deneb/commit/f18453e4ef9ccadd5f8aaf63eb4e85cd0fef3b79))
+* **rl:** adapter hot-swap, server context, health check fixes ([8e94e4f](https://github.com/choiceoh/Deneb/commit/8e94e4fbba423c3ba4644c7055673c5edf48b19d))
+* **rl:** wire RLService into buildHub and server lifecycle ([efd2fc8](https://github.com/choiceoh/Deneb/commit/efd2fc8305075c08af5caf05d34f86de3dd6f01b))
+* **rl:** wire RLService into buildHub and server lifecycle ([a6afc4d](https://github.com/choiceoh/Deneb/commit/a6afc4da8601b01e7b66c5f74bea35c1cee6f42a))
+* **server:** suppress spurious handshake-failed warnings for EOF disconnects ([c4a2c80](https://github.com/choiceoh/Deneb/commit/c4a2c80498e49d938f2bc26781dd19877d9b0916))
+* **server:** suppress spurious handshake-failed warnings for EOF disconnects ([521e141](https://github.com/choiceoh/Deneb/commit/521e14179d54520805f849431be70747c6509c45))
+
+
+### 🔧 Internal
+
+* remove ~6300 lines of unreferenced dead code ([779d5b0](https://github.com/choiceoh/Deneb/commit/779d5b0b2a9b2d02264b44555678540a0988c8e6))
+* remove skeleton stub code ([ec3c3c3](https://github.com/choiceoh/Deneb/commit/ec3c3c3acbecf0f166a5cb93d2bbbc4650623edc))
+* remove skeleton stub code (browser auth, Vega embed, transcript fallback) ([e9ecaf5](https://github.com/choiceoh/Deneb/commit/e9ecaf552dbfec3829c4e3dd9b7ff294da1c7f12))
+* remove unreferenced dead code across Go, Rust, and infra ([b0d186f](https://github.com/choiceoh/Deneb/commit/b0d186f773feb6425ccf44c193979c362ec78459))
+* **skills:** move genesis RPC registration to method_registry.go ([e2b0e09](https://github.com/choiceoh/Deneb/commit/e2b0e09e533eb795ea15323a395cfcab85ae82fd))
+
 ## [4.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.12.0...deneb-v4.13.0) (2026-04-06)
 
 
