@@ -25,6 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -43,7 +44,6 @@ var skillsCache struct {
 // skillsWatcher is the shared watcher that monitors SKILL.md file changes.
 // Initialized once by InitSkillsWatcher.
 var skillsWatcher *skills.Watcher
-
 
 // InitSkillsWatcher creates and starts the skills watcher for a workspace.
 // Call once at server startup. The watcher invalidates the skills prompt cache
@@ -112,7 +112,6 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	skillsCache.built = true
 	return skillsCache.prompt
 }
-
 
 // GetCachedSkillsSnapshot returns the last-built skills snapshot, or nil.
 func GetCachedSkillsSnapshot() *skills.FullSkillSnapshot {
@@ -312,9 +311,14 @@ func executeAgentRun(
 	// Knowledge prefetch (parallel).
 	// Load memory recall for incoming messages and
 	// don't benefit from conversational memory. Vega (project knowledge) still runs.
+	// RLM mode: skip entirely — the LLM fetches data via tools on demand.
+	rlmCfg := rlm.ConfigFromEnv()
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
+		if rlmCfg.SkipKnowledge {
+			return
+		}
 		if params.Message != "" {
 			// When recall engine is active (parallel goroutine), skip
 			// memory SearchFacts here to avoid duplicate DB queries.
@@ -542,6 +546,15 @@ func executeAgentRun(
 			"budgetTokens", remainingBudget)
 	}
 
+	// 7b. RLM: append data access principles to system prompt.
+	if rlmCfg.Enabled {
+		rlmText := rlm.DataAccessPrinciples()
+		if rlmCfg.SubLLMEnabled {
+			rlmText += "\n\n" + rlm.SubLLMPrinciples()
+		}
+		systemPrompt = llm.AppendSystemText(systemPrompt, rlmText)
+	}
+
 	// 7c. Auto-suggest coordinator mode if the message looks like a multi-file task
 	// and the session is not already in coordinator mode.
 	if sessionToolPreset == "" && params.Message != "" && coordinator.ShouldSuggestCoordinator(params.Message) {
@@ -628,7 +641,7 @@ func executeAgentRun(
 	maxTurns := 10
 	agentTimeout := 10 * time.Minute
 	if isWorkMode {
-		maxTurns = defaultMaxTurns      // 25
+		maxTurns = defaultMaxTurns         // 25
 		agentTimeout = defaultAgentTimeout // 60min
 	}
 	if params.DeepWork {

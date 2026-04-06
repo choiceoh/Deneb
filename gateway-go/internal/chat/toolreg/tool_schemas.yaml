@@ -1441,3 +1441,108 @@
       description: "Brief overall progress summary (shown to user as status update)"
   required:
     - steps
+
+# ---------------------------------------------------------------------------
+# RLM (Recursive Language Model) tools — context externalization + sub-LLM
+# ---------------------------------------------------------------------------
+
+- name: projects_list
+  properties:
+    filter:
+      type: string
+      description: "필터 키워드 (optional, e.g. 'solar')"
+
+- name: projects_get_field
+  properties:
+    project_id:
+      type: string
+      description: "프로젝트 ID"
+    fields:
+      type: array
+      items:
+        type: string
+      description: "조회할 필드명 배열"
+  required:
+    - project_id
+    - fields
+
+- name: projects_search
+  properties:
+    query:
+      type: string
+      description: "자연어 검색 쿼리"
+    max_results:
+      type: integer
+      description: "최대 결과 수 (default: 5)"
+      default: 5
+      minimum: 1
+      maximum: 20
+  required:
+    - query
+
+- name: projects_get_document
+  properties:
+    project_id:
+      type: string
+      description: "프로젝트 ID"
+    section:
+      type: string
+      description: "섹션�� (미지정 시 목차 반환)"
+  required:
+    - project_id
+
+- name: memory_recall_rlm
+  properties:
+    query:
+      type: string
+      description: "검색 쿼리 (과거 대화, 결정, 선호 등)"
+    max_results:
+      type: integer
+      description: "최대 결과 수 (default: 3)"
+      default: 3
+      minimum: 1
+      maximum: 10
+  required:
+    - query
+
+- name: llm_spawn
+  properties:
+    task:
+      type: string
+      description: "서브 LLM에게 줄 작업 설명"
+    tools:
+      type: array
+      items:
+        type: string
+      description: "서브 LLM이 사용할 도구 목록"
+    max_tokens:
+      type: integer
+      description: "서브 LLM 최대 응답 토큰 (default: 500)"
+      default: 500
+    max_turns:
+      type: integer
+      description: "서브 LLM 최대 도구 턴 (default: 3)"
+      default: 3
+  required:
+    - task
+
+- name: llm_spawn_batch
+  properties:
+    tasks:
+      type: array
+      items:
+        type: string
+      description: "병렬 실행할 작업 목록 (최대 10개)"
+      minItems: 1
+      maxItems: 10
+    tools:
+      type: array
+      items:
+        type: string
+      description: "모든 서브 LLM이 공유할 도구 목록"
+    max_tokens:
+      type: integer
+      description: "각 서브 LLM 최대 응답 토큰 (default: 500)"
+      default: 500
+  required:
+    - tasks

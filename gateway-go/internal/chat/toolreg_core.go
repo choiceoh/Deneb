@@ -1,9 +1,13 @@
 package chat
 
 import (
+	"context"
+	"log/slog"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -12,7 +16,7 @@ import (
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	localAI := &toolreg.LocalAIDeps{
 		CheckLocalAIHealth: pilot.CheckLocalAIHealth,
-		BaseURL:           pilot.LightweightBaseURL,
+		BaseURL:            pilot.LightweightBaseURL,
 	}
 	toolreg.RegisterCoreTools(registry, deps, localAI)
 
@@ -28,6 +32,16 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          tools.ToolFetchTools(registry),
 	})
 
+	// RLM: context externalization tools (feature-flagged).
+	if cfg := rlm.ConfigFromEnv(); cfg.Enabled {
+		toolreg.RegisterRLMTools(registry, &deps.Vega)
+
+		if cfg.SubLLMEnabled && deps.LLMClient != nil {
+			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg)
+			toolreg.RegisterRLMSpawnTools(registry, spawnFn, batchFn)
+		}
+	}
+
 	RegisterDefaultPostProcessors(registry)
 
 	// Wire spillover store for large tool result management.
@@ -37,4 +51,77 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 	// Apply per-tool output budgets from tool_schemas.yaml.
 	registry.ApplyMaxOutputs(toolreg.ToolMaxOutputs())
+}
+
+// rlmDataToolNames lists the Phase 1 tool names available to sub-LLMs.
+// llm_spawn/llm_spawn_batch are excluded to prevent recursion.
+var rlmDataToolNames = []string{
+	"projects_list",
+	"projects_get_field",
+	"projects_search",
+	"projects_get_document",
+	"memory_recall_rlm",
+}
+
+// buildRLMSpawnFuncs creates the spawn/batch closures that capture the LLM
+// client, tool registry, and config needed by Phase 2 sub-LLM tools.
+func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Config) (tools.SpawnFunc, tools.SpawnBatchFunc) {
+	budget := rlm.NewTokenBudget(cfg.TotalTokenBudget)
+
+	// Build the LLM tool list available to sub-LLMs (data tools only).
+	subTools := registry.FilteredLLMTools(filterMap(rlmDataToolNames))
+
+	spawnFn := func(ctx context.Context, prompt string, toolNames []string, maxTokens, maxTurns int) (*rlm.SubAgentResult, error) {
+		selectedTools := subTools
+		if len(toolNames) > 0 {
+			selectedTools = registry.FilteredLLMTools(filterMap(toolNames))
+		}
+
+		return rlm.RunSubAgent(ctx, rlm.SubAgentConfig{
+			Prompt:       prompt,
+			Tools:        selectedTools,
+			ToolExecutor: registry,
+			Client:       deps.LLMClient,
+			Model:        deps.DefaultModel,
+			MaxTokens:    maxTokens,
+			MaxTurns:     maxTurns,
+			Budget:       budget,
+			Logger:       slog.Default().With("component", "rlm_sub"),
+		})
+	}
+
+	batchFn := func(ctx context.Context, prompts []string, toolNames []string, maxTokens int) ([]rlm.SubAgentResult, error) {
+		selectedTools := subTools
+		if len(toolNames) > 0 {
+			selectedTools = registry.FilteredLLMTools(filterMap(toolNames))
+		}
+
+		tasks := make([]rlm.SubAgentTask, len(prompts))
+		for i, p := range prompts {
+			tasks[i] = rlm.SubAgentTask{Index: i, Prompt: p}
+		}
+
+		return rlm.RunSubAgentBatch(ctx, rlm.BatchConfig{
+			Tasks:        tasks,
+			Tools:        selectedTools,
+			ToolExecutor: registry,
+			Client:       deps.LLMClient,
+			Model:        deps.DefaultModel,
+			MaxTokens:    maxTokens,
+			MaxTurns:     cfg.SubMaxToolCalls,
+			Budget:       budget,
+			Logger:       slog.Default().With("component", "rlm_batch"),
+		})
+	}
+
+	return spawnFn, batchFn
+}
+
+// filterMap converts a name slice to an allowed-set map for FilteredLLMTools.
+func filterMap(names []string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
 }

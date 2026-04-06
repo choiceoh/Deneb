@@ -1638,6 +1638,155 @@ func updatePlanToolSchema() map[string]any {
 	}
 }
 
+func projectsListToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"filter": map[string]any{
+				"type":        "string",
+				"description": "필터 키워드 (optional, e.g. 'solar')",
+			},
+		},
+	}
+}
+
+func projectsGetFieldToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"project_id": map[string]any{
+				"type":        "string",
+				"description": "프로젝트 ID",
+			},
+			"fields": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "조회할 필드명 배열",
+			},
+		},
+		"required": []string{"project_id", "fields"},
+	}
+}
+
+func projectsSearchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "자연어 검색 쿼리",
+			},
+			"max_results": map[string]any{
+				"type":        "integer",
+				"description": "최대 결과 수 (default: 5)",
+				"default":     5,
+				"minimum":     1,
+				"maximum":     20,
+			},
+		},
+		"required": []string{"query"},
+	}
+}
+
+func projectsGetDocumentToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"project_id": map[string]any{
+				"type":        "string",
+				"description": "프로젝트 ID",
+			},
+			"section": map[string]any{
+				"type":        "string",
+				"description": "섹션�� (미지정 시 목차 반환)",
+			},
+		},
+		"required": []string{"project_id"},
+	}
+}
+
+func memoryRecallRlmToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "검색 쿼리 (과거 대화, 결정, 선호 등)",
+			},
+			"max_results": map[string]any{
+				"type":        "integer",
+				"description": "최대 결과 수 (default: 3)",
+				"default":     3,
+				"minimum":     1,
+				"maximum":     10,
+			},
+		},
+		"required": []string{"query"},
+	}
+}
+
+func llmSpawnToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"task": map[string]any{
+				"type":        "string",
+				"description": "서브 LLM에게 줄 작업 설명",
+			},
+			"tools": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "서브 LLM이 사용할 도구 목록",
+			},
+			"max_tokens": map[string]any{
+				"type":        "integer",
+				"description": "서브 LLM 최대 응답 토큰 (default: 500)",
+				"default":     500,
+			},
+			"max_turns": map[string]any{
+				"type":        "integer",
+				"description": "서브 LLM 최대 도구 턴 (default: 3)",
+				"default":     3,
+			},
+		},
+		"required": []string{"task"},
+	}
+}
+
+func llmSpawnBatchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"tasks": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "병렬 실행할 작업 목록 (최대 10개)",
+				"minItems":    1,
+				"maxItems":    10,
+			},
+			"tools": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "모든 서브 LLM이 공유할 도구 목록",
+			},
+			"max_tokens": map[string]any{
+				"type":        "integer",
+				"description": "각 서브 LLM 최대 응답 토큰 (default: 500)",
+				"default":     500,
+			},
+		},
+		"required": []string{"tasks"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.yaml.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
