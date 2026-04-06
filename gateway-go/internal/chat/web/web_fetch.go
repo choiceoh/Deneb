@@ -28,13 +28,12 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
-	"golang.org/x/sync/singleflight"
 )
 
 // fetchGroup collapses duplicate in-flight URL fetches into a single request.
 // When multiple goroutines (e.g. search+fetch, concurrent tool calls) request the
 // same URL simultaneously, only one fetch executes and the result is shared.
-var fetchGroup singleflight.Group
+var fetchGroup singleflight
 
 // Tool returns the unified web tool handler (fetch + search + search+fetch).
 func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, json.RawMessage) (string, error) {
@@ -98,7 +97,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 
 	// Singleflight: collapse concurrent fetches for the same URL into one request.
 	// The result is cached after the first fetch completes.
-	v, err, _ := fetchGroup.Do(targetURL, func() (any, error) {
+	v, err := fetchGroup.do(targetURL, func() (any, error) {
 		maxBytes := int64(maxChars * 2)
 		if maxBytes > 5*1024*1024 {
 			maxBytes = 5 * 1024 * 1024
