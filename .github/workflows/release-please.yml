@@ -55,7 +55,7 @@ jobs:
         run: cargo build --release
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           cache-dependency-path: gateway-go/go.sum
       - name: Detect pre-release
         id: prerelease
