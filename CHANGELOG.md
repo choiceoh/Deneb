@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.15.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.14.0...deneb-v4.15.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **rl:** task-specific RL training pipeline ([f6f2236](https://github.com/choiceoh/Deneb/commit/f6f2236d76e86088119e900f8810081cf345b885))
+
+
+### 🐛 Bug Fixes
+
+* **rl:** resolve merge conflicts with main (PR [#1274](https://github.com/choiceoh/Deneb/issues/1274)) ([1e8cb47](https://github.com/choiceoh/Deneb/commit/1e8cb47ac22883df5f3a9042e10852ff67266fc4))
+
 ## [4.14.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.13.0...deneb-v4.14.0) (2026-04-06)
 
 
