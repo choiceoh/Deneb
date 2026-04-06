@@ -1566,11 +1566,11 @@ func skillManageToolSchema() map[string]any {
 			},
 			"old_text": map[string]any{
 				"type":        "string",
-				"description": "Text to find in existing SKILL.md (for patch action)",
+				"description": "Text to find in existing SKILL.md (for patch action). Fuzzy: indentation and trailing whitespace differences are absorbed automatically.",
 			},
 			"new_text": map[string]any{
 				"type":        "string",
-				"description": "Replacement text (for patch action)",
+				"description": "Replacement text (for patch action). Written verbatim.",
 			},
 			"file_path": map[string]any{
 				"type":        "string",

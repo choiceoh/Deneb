@@ -126,29 +126,24 @@ func skillPatch(workspaceDir, name, oldText, newText string, invalidate SkillMan
 	}
 	content := string(data)
 
-	// Fuzzy matching: normalize whitespace for comparison.
-	if !strings.Contains(content, oldText) {
-		// Try whitespace-normalized match.
-		normalized := normalizeWhitespace(content)
-		normalizedOld := normalizeWhitespace(oldText)
-		if !strings.Contains(normalized, normalizedOld) {
-			return "", fmt.Errorf("old_text not found in SKILL.md (tried exact and whitespace-normalized match)")
-		}
-		// Find the actual text range using normalized positions.
-		idx := strings.Index(normalized, normalizedOld)
-		if idx < 0 {
-			return "", fmt.Errorf("internal: normalized match failed")
-		}
-		// Map normalized position back to original. This is approximate but
-		// handles the common case of indentation differences.
-		content = normalized[:idx] + newText + normalized[idx+len(normalizedOld):]
-	} else {
-		// Count occurrences for safety.
+	if strings.Contains(content, oldText) {
+		// Exact match — verify uniqueness.
 		count := strings.Count(content, oldText)
 		if count > 1 {
 			return "", fmt.Errorf("old_text matches %d locations; make it more specific", count)
 		}
 		content = strings.Replace(content, oldText, newText, 1)
+	} else {
+		// Fuzzy: line-based matching absorbs indentation and trailing-space
+		// differences. Each line is compared after TrimSpace so leading
+		// indent and trailing whitespace are ignored. The matched original
+		// lines are replaced with newText verbatim; the rest of the file is
+		// preserved exactly.
+		var err error
+		content, err = fuzzyLineReplace(content, oldText, newText)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// Validate the result still has valid frontmatter.
@@ -282,12 +277,55 @@ func sanitizeSkillName(name string) string {
 	return b.String()
 }
 
-func normalizeWhitespace(s string) string {
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " \t")
+// fuzzyLineReplace matches oldText against content line-by-line after
+// trimming whitespace, then replaces the matched original lines with newText.
+// This absorbs indentation and trailing-space differences that commonly occur
+// when an LLM regenerates text from memory.
+func fuzzyLineReplace(content, oldText, newText string) (string, error) {
+	contentLines := strings.Split(content, "\n")
+	oldLines := strings.Split(oldText, "\n")
+
+	// Trim trailing empty lines from oldLines — LLM-generated text often
+	// has a spurious trailing newline.
+	for len(oldLines) > 0 && strings.TrimSpace(oldLines[len(oldLines)-1]) == "" {
+		oldLines = oldLines[:len(oldLines)-1]
 	}
-	return strings.Join(lines, "\n")
+	if len(oldLines) == 0 {
+		return "", fmt.Errorf("old_text is empty after trimming")
+	}
+
+	matches := 0
+	matchStart := -1
+	for i := 0; i <= len(contentLines)-len(oldLines); i++ {
+		found := true
+		for j := 0; j < len(oldLines); j++ {
+			if strings.TrimSpace(contentLines[i+j]) != strings.TrimSpace(oldLines[j]) {
+				found = false
+				break
+			}
+		}
+		if found {
+			matches++
+			if matchStart < 0 {
+				matchStart = i
+			}
+		}
+	}
+
+	if matches == 0 {
+		return "", fmt.Errorf("old_text not found in SKILL.md (tried exact and fuzzy line matching)")
+	}
+	if matches > 1 {
+		return "", fmt.Errorf("old_text matches %d locations with fuzzy matching; make it more specific", matches)
+	}
+
+	// Build result: lines before match + newText + lines after match.
+	newLines := strings.Split(newText, "\n")
+	result := make([]string, 0, len(contentLines)-len(oldLines)+len(newLines))
+	result = append(result, contentLines[:matchStart]...)
+	result = append(result, newLines...)
+	result = append(result, contentLines[matchStart+len(oldLines):]...)
+	return strings.Join(result, "\n"), nil
 }
 
 func isWithinDir(path, dir string) bool {

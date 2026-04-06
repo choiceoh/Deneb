@@ -372,3 +372,34 @@ After testing the skill, users may request improvements. Often this happens righ
 2. Notice struggles or inefficiencies
 3. Identify how SKILL.md or bundled resources should be updated
 4. Implement changes and test again
+
+#### Prefer Patch Over Full Rewrite
+
+When modifying an existing skill, **always use `skill_manage(action="patch")` instead of rewriting the full SKILL.md with `create`**. A 200-line skill should not be rewritten to change 3 lines — this wastes tokens and risks unintended changes.
+
+**Patch uses fuzzy matching:** `old_text` is matched line-by-line after trimming whitespace, so minor indentation or trailing-space differences are absorbed automatically. You do not need the exact whitespace from the original file.
+
+```
+skill_manage(
+    action="patch",
+    name="my-skill",
+    old_text="line to find",    # fuzzy: whitespace differences are OK
+    new_text="replacement line"
+)
+```
+
+**When to use patch vs. create:**
+
+| Scenario | Action |
+|---|---|
+| Modify instructions, fix wording, add a section | `patch` |
+| Change frontmatter fields (description, version) | `patch` |
+| Remove a section | `patch` with `new_text` as empty or replacement |
+| Brand new skill from scratch | `create` |
+| Complete rewrite (fundamentally different skill) | `delete` then `create` |
+
+**Tips for reliable patches:**
+
+- Include 2-3 surrounding context lines in `old_text` to ensure unique matching
+- If `old_text` matches multiple locations, the patch fails with an error — add more context to disambiguate
+- For multi-line changes, include the full block of lines being replaced
