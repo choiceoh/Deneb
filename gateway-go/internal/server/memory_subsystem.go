@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // MemorySubsystem groups the memory/embedding pipeline: the embedder
@@ -15,4 +16,5 @@ type MemorySubsystem struct {
 	embedder    embedding.Embedder
 	jinaAPIKey  string
 	memoryStore *memory.Store // set during initMemorySubsystem()
+	wikiStore   *wiki.Store   // set when DENEB_WIKI_ENABLED=true
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // cachedWorkspaceDir caches the resolved workspace directory at startup
@@ -107,6 +108,7 @@ type runDeps struct {
 	memoryStore    *memory.Store             // optional; structured memory (Honcho-style)
 	memoryEmbedder *memory.Embedder          // optional; fact embedding
 	unifiedStore   *unified.Store            // optional; unified memory (search + tier-1)
+	wikiStore      *wiki.Store               // optional; wiki knowledge base
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
 	registry       *modelrole.Registry       // centralized model role registry

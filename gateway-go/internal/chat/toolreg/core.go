@@ -488,6 +488,21 @@ func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writ
 	})
 }
 
+// RegisterWikiTools registers the wiki knowledge base tool.
+// Called when DENEB_WIKI_ENABLED is true, alongside the existing memory tool.
+func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps, workspaceDir string) {
+	if wikiDeps.Store == nil {
+		return
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "wiki",
+		Description:     "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
+		InputSchema:     wikiToolSchema(),
+		Fn:              tools.ToolWiki(wikiDeps, workspaceDir),
+		ConcurrencySafe: true,
+	})
+}
+
 // RegisterRLMTools registers RLM (Recursive Language Model) Phase 1 tools
 // for context externalization. These let the LLM fetch project data and
 // memory on demand instead of relying on pre-injected context.

@@ -262,8 +262,10 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
 	s.autonomousSvc = autonomous.NewService(s.logger)
 
-	// Wire AuroraDream adapter if available (created during chat handler init).
-	if s.dreamingAdapter != nil {
+	// Wire dreamer: wiki dreamer takes priority over memory dreaming adapter.
+	if s.wikiDreamer != nil {
+		s.autonomousSvc.SetDreamer(s.wikiDreamer)
+	} else if s.dreamingAdapter != nil {
 		s.autonomousSvc.SetDreamer(s.dreamingAdapter)
 	}
 

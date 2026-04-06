@@ -1546,3 +1546,66 @@
       default: 500
   required:
     - tasks
+
+# ---------------------------------------------------------------------------
+# Wiki knowledge base
+# ---------------------------------------------------------------------------
+
+- name: wiki
+  max_output: 30000
+  properties:
+    action:
+      type: string
+      enum:
+        - search
+        - read
+        - index
+        - write
+        - log
+        - daily
+        - status
+      description: "Action: search (ripgrep full-text search), read (read wiki page), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)"
+    query:
+      type: string
+      description: "Search query (search), page path (read/write), category name (index), or diary entry body (log)"
+    title:
+      type: string
+      description: "Page title (write action)"
+    category:
+      type: string
+      enum:
+        - 사람
+        - 프로젝트
+        - 기술
+        - 업무
+        - 결정
+        - 선호
+      description: "Wiki category for write action or index filter"
+    content:
+      type: string
+      description: "Page body content in markdown (write action) or diary entry body (log action)"
+    tags:
+      type: array
+      items:
+        type: string
+      description: "Tags for the page (write action)"
+    related:
+      type: array
+      items:
+        type: string
+      description: "Related page topics (write action)"
+    importance:
+      type: number
+      description: "Page importance 0.0-1.0 (write action, default: 0.5)"
+      minimum: 0
+      maximum: 1
+    section:
+      type: string
+      description: "Read a specific section from the page (read action)"
+    limit:
+      type: integer
+      description: "Max results (search: default 10)"
+      minimum: 1
+      maximum: 50
+  required:
+    - action

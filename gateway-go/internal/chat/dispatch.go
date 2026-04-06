@@ -665,6 +665,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		auroraStore:          h.auroraStore,
 		vegaBackend:          h.vegaBackend,
 		memoryStore:          h.memoryStore,
+		wikiStore:            h.wikiStore,
 		sessionMemory:        h.sessionMemory,
 		memoryEmbedder:       h.memoryEmbedder,
 		unifiedStore:         h.unifiedStore,

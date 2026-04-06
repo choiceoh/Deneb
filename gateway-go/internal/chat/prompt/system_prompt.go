@@ -103,7 +103,7 @@ var toolCategories = []struct {
 	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory"}},
+	{"Memory", []string{"memory", "wiki"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
@@ -265,8 +265,20 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Dynamic block ---
 	var d strings.Builder
 
-	// Memory Recall.
-	if toolSet["memory"] {
+	// Wiki knowledge base (takes priority when enabled).
+	if toolSet["wiki"] {
+		d.WriteString("## 위키 (장기 지식)\n")
+		d.WriteString("과거 결정, 인물, 프로젝트, 기술 등 장기 지식은 위키에 마크다운으로 정리되어 있다.\n")
+		d.WriteString("- 과거 맥락 필요 → wiki index로 목차 확인 → wiki read로 페이지 읽기\n")
+		d.WriteString("- 키워드 검색 → wiki search\n")
+		d.WriteString("- 새 지식/결정 기록 → wiki write (제목, 카테고리, 태그 필수)\n")
+		d.WriteString("- 일상 활동 기록 → wiki log (일지에 추가, 위키 정리 전 단계)\n")
+		d.WriteString("- 최근 일지 확인 → wiki daily\n")
+		d.WriteString("위키는 정리된 지식만. 임시 메모나 대화 내용은 일지(log)에.\n\n")
+	}
+
+	// Memory Recall (legacy, when wiki is not enabled).
+	if toolSet["memory"] && !toolSet["wiki"] {
 		d.WriteString("## Memory\n")
 		d.WriteString("과거 맥락이 불확실할 때 memory 도구를 사용하라. 사용자가 이전 대화를 언급하면 반드시 recall부터.\n")
 		d.WriteString("- 과거 맥락 필요 → recall (깊은 회상, 우선 사용)\n")

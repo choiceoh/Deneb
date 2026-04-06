@@ -21,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // Handler manages chat RPC methods.
@@ -40,6 +41,7 @@ type Handler struct {
 	auroraStore     *aurora.Store                     // Aurora hierarchical compaction store
 	vegaBackend     vega.Backend                      // optional; knowledge prefetch
 	memoryStore     *memory.Store                     // optional; structured memory (Honcho-style)
+	wikiStore       *wiki.Store                      // optional; wiki knowledge base
 	sessionMemory   *SessionMemoryStore               // optional; structured session working state
 	memoryEmbedder  *memory.Embedder                  // optional; fact embedding
 	unifiedStore    *unified.Store                    // optional; unified memory (search + tier-1)
@@ -145,6 +147,7 @@ type HandlerConfig struct {
 	MemoryStore          *memory.Store             // optional; structured memory (Honcho-style)
 	SessionMemory        *SessionMemoryStore       // optional; structured session working state
 	MemoryEmbedder       *memory.Embedder          // optional; fact embedding via local AI
+	WikiStore            *wiki.Store               // optional; wiki knowledge base
 	UnifiedStore         *unified.Store            // optional; unified memory (search + tier-1)
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
@@ -202,6 +205,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		auroraStore:          cfg.AuroraStore,
 		vegaBackend:          cfg.VegaBackend,
 		memoryStore:          cfg.MemoryStore,
+		wikiStore:            cfg.WikiStore,
 		sessionMemory:        cfg.SessionMemory,
 		memoryEmbedder:       cfg.MemoryEmbedder,
 		unifiedStore:         cfg.UnifiedStore,

@@ -18,3 +18,6 @@ type ChronoDeps = toolctx.ChronoDeps
 
 // VegaDeps holds dependencies for vega search and health-check tools.
 type VegaDeps = toolctx.VegaDeps
+
+// WikiDeps holds dependencies for the wiki knowledge base tool.
+type WikiDeps = toolctx.WikiDeps
