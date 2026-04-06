@@ -56,10 +56,16 @@ func (s *Service) SetAgentRunner(agent AgentRunner) {
 
 // SetTelegramPlugin sets the Telegram plugin for cron output delivery.
 // Called after the Telegram plugin is created (late-bind pattern).
+// Also sets DefaultTo from the plugin's primary chat ID if not already set.
 func (s *Service) SetTelegramPlugin(plugin *telegram.Plugin) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cfg.TelegramPlugin = plugin
+	if s.cfg.DefaultTo == "" {
+		if chatID := plugin.PrimaryChatID(); chatID != "" {
+			s.cfg.DefaultTo = chatID
+		}
+	}
 }
 
 // SetTranscriptCloner sets the transcript cloner for subagent cron session support.

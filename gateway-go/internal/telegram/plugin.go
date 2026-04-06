@@ -216,6 +216,23 @@ func (p *Plugin) Config() *Config {
 	return p.config
 }
 
+// PrimaryChatID returns the first DM chat ID from config, for use as a
+// default delivery target (e.g. cron output). Returns "" if none configured.
+func (p *Plugin) PrimaryChatID() string {
+	if p.config == nil {
+		return ""
+	}
+	// Prefer explicit Direct map entries (DM chat IDs).
+	for chatID := range p.config.Direct {
+		return chatID
+	}
+	// Fall back to first numeric ID in AllowFrom.
+	if len(p.config.AllowFrom.IDs) > 0 {
+		return fmt.Sprintf("%d", p.config.AllowFrom.IDs[0])
+	}
+	return ""
+}
+
 // BotUserID returns the bot's user ID, or 0 if not yet verified.
 func (p *Plugin) BotUserID() int64 {
 	p.mu.Lock()
