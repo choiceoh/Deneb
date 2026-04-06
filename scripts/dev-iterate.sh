@@ -39,7 +39,6 @@ USE_VCHAT=false
 VCHAT_SCENARIO="all"
 USE_BASELINE=false
 SAVE_BASELINE=false
-PROD_PARITY="${DEV_PROD_PARITY:-false}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --metric) METRIC_CMD="$2"; shift 2 ;;
@@ -48,7 +47,7 @@ while [[ $# -gt 0 ]]; do
     --scenario) VCHAT_SCENARIO="$2"; shift 2 ;;
     --baseline) USE_BASELINE=true; shift ;;
     --save-baseline) SAVE_BASELINE=true; shift ;;
-    --prod-parity) PROD_PARITY=true; shift ;;
+    --prod-parity) shift ;; # Ignored (prod config is now the default).
     *) shift ;;
   esac
 done
@@ -86,7 +85,7 @@ data = {
     'version': 1,
     'commit': '$commit',
     'branch': '$branch',
-    'prod_parity': tobool('$PROD_PARITY'),
+    'prod_config': True,
     'phase': {
         'build':   {'ok': tobool('${PHASE_OK[build]:-false}'), 'ms': ${PHASE_MS[build]:-0}},
         'start':   {'ok': tobool('${PHASE_OK[start]:-false}'), 'ms': ${PHASE_MS[start]:-0}},
@@ -219,16 +218,11 @@ if [[ "$USE_VCHAT" == "true" ]]; then
   done
   WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
 else
-  # Start raw gateway; prod-parity uses real config (with dev Telegram bot), default uses {}.
+  # Start raw gateway with production config (iterate-specific Telegram token).
   echo -n "start... "
   DEV_CONFIG="/tmp/deneb-iterate-config.json"
-  if [[ "$PROD_PARITY" == "true" ]]; then
-    # Use iterate-specific token if available, fall back to dev token.
-    DENEB_DEV_TELEGRAM_TOKEN="${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}" \
-      "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
-  elif [[ ! -f "$DEV_CONFIG" ]]; then
-    echo '{}' > "$DEV_CONFIG"
-  fi
+  DENEB_DEV_TELEGRAM_TOKEN="${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}" \
+    "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
   DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
   GW_PID=$!
 

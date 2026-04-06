@@ -35,10 +35,9 @@
 #
 # The dev instance runs on port 18790 (separate from production on 18789).
 #
-# Prod-parity mode (--prod-parity):
-#   Uses production config with dev bot token instead of empty config {}.
-#   This exercises the same code paths as production (providers, auth, hooks,
-#   agents, sessions, logging) with a separate Telegram bot to avoid 409 conflicts.
+# Config: always uses production config with dev bot token (via dev-config-gen.sh).
+# This exercises the same code paths as production (providers, auth, hooks,
+# agents, sessions, logging) with a separate Telegram bot to avoid 409 conflicts.
 
 set -euo pipefail
 
@@ -50,7 +49,6 @@ DEV_BINARY="/tmp/deneb-gateway-live"
 DEV_PID_FILE="/tmp/deneb-gateway-live.pid"
 DEV_LOG="/tmp/deneb-gateway-live.log"
 DEV_HOST="127.0.0.1"
-PROD_PARITY="${DEV_PROD_PARITY:-false}"
 
 # Version from git tags.
 DENEB_VERSION=$(git -C "$REPO_DIR" tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
@@ -73,17 +71,13 @@ cmd_start() {
     cmd_build
   fi
 
-  # Config resolution: prod-parity uses real config (minus Telegram), default uses {}.
+  # Config: generate dev config from production (with dev bot token).
   local dev_config="/tmp/deneb-dev-config.json"
-  if [[ "$PROD_PARITY" == "true" ]]; then
-    "$SCRIPT_DIR/dev-config-gen.sh" --out "$dev_config" >/dev/null 2>&1
-    if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
-      echo "    Config: prod-parity (Telegram: dev bot active)"
-    else
-      echo "    Config: prod-parity (Telegram: disabled, no DENEB_DEV_TELEGRAM_TOKEN)"
-    fi
+  "$SCRIPT_DIR/dev-config-gen.sh" --out "$dev_config" >/dev/null 2>&1
+  if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
+    echo "    Config: production (Telegram: dev bot active)"
   else
-    [[ -f "$dev_config" ]] || echo '{}' > "$dev_config"
+    echo "    Config: production (Telegram: disabled, set DENEB_DEV_TELEGRAM_TOKEN)"
   fi
 
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT..."
@@ -206,16 +200,11 @@ cmd_smoke() {
   if (( failed )); then return 1; fi
   echo "==> All smoke tests passed"
 
-  # Brief parity note so agents know the test environment fidelity.
-  if [[ "$PROD_PARITY" == "true" ]]; then
-    echo "    (prod-parity: config from production, Telegram stripped)"
+  # Brief parity note.
+  if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
+    echo "    (config: production, Telegram: dev bot)"
   else
-    local dev_config="/tmp/deneb-dev-config.json"
-    local dev_size=0
-    [[ -f "$dev_config" ]] && dev_size=$(wc -c < "$dev_config" 2>/dev/null || echo 0)
-    if (( dev_size <= 4 )); then
-      echo "    (minimal config: providers/agents/hooks not loaded — use --prod-parity for full fidelity)"
-    fi
+    echo "    (config: production, Telegram: disabled)"
   fi
 }
 
@@ -225,28 +214,15 @@ cmd_parity() {
 
   local issues=0
 
-  # 1. Config parity.
-  local dev_config="/tmp/deneb-dev-config.json"
+  # 1. Config.
   local prod_config="${HOME}/.deneb/deneb.json"
   echo "--- Config ---"
   if [[ ! -f "$prod_config" ]]; then
-    echo "  [SKIP] No production config at $prod_config"
-  elif [[ "$PROD_PARITY" == "true" ]]; then
-    echo "  [OK]   prod-parity mode: using production config (Telegram stripped)"
-  elif [[ -f "$dev_config" ]]; then
-    local dev_size
-    dev_size=$(wc -c < "$dev_config" 2>/dev/null || echo 0)
-    if (( dev_size <= 4 )); then
-      echo "  [GAP]  Dev config is empty ({}), production has $(wc -c < "$prod_config") bytes"
-      echo "         Fix: use --prod-parity flag or run: scripts/dev-config-gen.sh"
-      issues=$((issues + 1))
-    else
-      echo "  [OK]   Dev config has content ($dev_size bytes)"
-    fi
-  else
-    echo "  [GAP]  No dev config file; will default to {}"
-    echo "         Fix: use --prod-parity flag"
+    echo "  [GAP]  No production config at $prod_config"
+    echo "         Dev config will be empty — providers/agents/hooks not loaded"
     issues=$((issues + 1))
+  else
+    echo "  [OK]   Production config: $prod_config ($(wc -c < "$prod_config") bytes)"
   fi
   echo ""
 
@@ -340,7 +316,6 @@ cmd_parity() {
     echo "==> No parity gaps detected"
   else
     echo "==> $issues parity gap(s) found"
-    echo "    Run with --prod-parity to close config gap automatically"
   fi
 }
 
@@ -892,7 +867,7 @@ asyncio.run(main())
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
-    --prod-parity) PROD_PARITY=true ;;
+    --prod-parity) ;; # Ignored (prod config is now the default).
     *) ARGS+=("$arg") ;;
   esac
 done
@@ -1041,7 +1016,7 @@ case "${1:-help}" in
     echo "Parity:"
     echo "  parity              Show dev vs production environment differences"
     echo ""
-    echo "Global flags:"
-    echo "  --prod-parity       Use production config (minus Telegram) instead of {}"
+    echo "Config: always uses production config (via dev-config-gen.sh)."
+    echo "Telegram: set DENEB_DEV_TELEGRAM_TOKEN in ~/.deneb/.env to enable dev bot."
     ;;
 esac
