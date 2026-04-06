@@ -8,19 +8,18 @@ package logging
 import (
 	"fmt"
 	"io"
-	"strings"
 	"time"
 )
 
 // BannerInfo holds the values displayed in the startup banner.
 type BannerInfo struct {
-	Version      string
-	Addr         string
-	RustFFI      bool
+	Version       string
+	Addr          string
+	RustFFI       bool   // deprecated: always false (Rust removed), kept for API compat
 	LocalAIStatus string // "online", "offline", or empty to hide
 	EmbedderInfo  string // "gemini", model name, or empty to hide
 	RerankerInfo  string // "jina-v3", "jina-api", or empty to hide
-	PID          int    // non-zero in daemon mode
+	PID           int    // non-zero in daemon mode
 }
 
 // PrintBanner writes a compact startup block to w.
@@ -45,12 +44,8 @@ func PrintBanner(w io.Writer, info BannerInfo, color bool) {
 	// Title line.
 	fmt.Fprintf(w, "\n  %s%s✦%s %sdeneb gateway%s\n", cyan, bold, reset, bold, reset)
 
-	// Version + capabilities line.
-	parts := []string{info.Version}
-	if info.RustFFI {
-		parts = append(parts, "rust-ffi")
-	}
-	fmt.Fprintf(w, "  %s%s%s\n", dim, strings.Join(parts, " · "), reset)
+	// Version line.
+	fmt.Fprintf(w, "  %s%s%s\n", dim, info.Version, reset)
 
 	// Blank line before key-value block.
 	fmt.Fprintln(w)

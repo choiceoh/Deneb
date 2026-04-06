@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -87,7 +86,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime":    formatUptimeHTTP(uptime),
 		"uptime_ms": uptime.Milliseconds(),
 		"subsystems": map[string]any{
-			"core": coreLabel(s.rustFFI),
+			"core": "go",
 			"auth": authMode,
 		},
 		"connections": s.clientCnt.Load(),
@@ -127,14 +126,6 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		s.logger.Error("json encode error", "error", err)
 	}
-}
-
-// coreLabel returns a human-readable label for the core backend.
-func coreLabel(rustFFI bool) string {
-	if rustFFI {
-		return "rust-ffi"
-	}
-	return "go"
 }
 
 // formatUptimeHTTP returns a human-readable uptime string for HTTP responses.

@@ -241,49 +241,9 @@ cmd_parity() {
   fi
   echo ""
 
-  # 2. Rust build features.
-  echo "--- Rust FFI & Features ---"
-  if _is_running; then
-    local health_json
-    health_json=$(curl -sf "http://$DEV_HOST:$DEV_PORT/health" 2>/dev/null || echo "{}")
-    local ffi_status
-    ffi_status=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('rustFfi','unknown'))" 2>/dev/null || echo "unknown")
-    local vega_status
-    vega_status=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('vegaEnabled','unknown'))" 2>/dev/null || echo "unknown")
-
-    if [[ "$ffi_status" == "True" || "$ffi_status" == "true" ]]; then
-      echo "  [OK]   Rust FFI: available"
-    else
-      echo "  [GAP]  Rust FFI: not available (production requires FFI)"
-      echo "         Fix: make rust && rebuild"
-      issues=$((issues + 1))
-    fi
-    if [[ "$vega_status" == "True" || "$vega_status" == "true" ]]; then
-      echo "  [OK]   Vega search: enabled"
-    else
-      echo "  [GAP]  Vega search: disabled (production has Vega+ML+CUDA)"
-      echo "         Fix: make rust-dgx && rebuild"
-      issues=$((issues + 1))
-    fi
-  else
-    # Check static lib feature from binary.
-    local lib_path="$REPO_DIR/core-rs/target/release/libdeneb_core.a"
-    if [[ -f "$lib_path" ]]; then
-      echo "  [OK]   Rust static lib exists ($(du -h "$lib_path" | cut -f1))"
-      # Larger lib likely has more features (core ~5MB, vega ~15MB, dgx ~30MB+).
-      local lib_kb
-      lib_kb=$(du -k "$lib_path" | cut -f1)
-      if (( lib_kb < 10000 )); then
-        echo "  [GAP]  Static lib is small (${lib_kb}KB) — likely core-only, no Vega/ML"
-        echo "         Production uses: make rust-dgx (Vega+ML+CUDA)"
-        issues=$((issues + 1))
-      fi
-    else
-      echo "  [GAP]  No Rust static lib found at $lib_path"
-      echo "         Fix: make rust (or make rust-dgx for full parity)"
-      issues=$((issues + 1))
-    fi
-  fi
+  # 2. Core backend.
+  echo "--- Core Backend ---"
+  echo "  [OK]   Pure Go (Rust core removed)"
   echo ""
 
   # 3. Telegram parity.

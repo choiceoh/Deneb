@@ -1,14 +1,11 @@
-# Deneb Multi-Language Build
+# Deneb Build
 #
-# Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
+# Pure Go gateway build (Rust core has been removed).
 
-.PHONY: all rust rust-ml rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-dgx go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod gateway-dgx \
-       cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
-       cli-cross-linux-arm64 \
-       deny machete \
-       test clean check check/fast check-rust check-cli check-go fmt generate generate-check \
-       proto proto-go proto-rust proto-check proto-lint proto-watch \
+.PHONY: all \
+       go go-run go-dev go-test go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod \
+       test clean check check-go fmt generate generate-check \
+       proto proto-go proto-check proto-lint proto-watch \
        tool-schemas tool-schemas-check \
        model-caps model-caps-check \
        error-codes-gen error-codes-gen-check \
@@ -31,75 +28,13 @@ else
 GO_ENV :=
 endif
 
-# Auto-detect GCC include path for bindgen (llama-cpp-sys-2 needs stdbool.h).
-# libclang used by bindgen may not find GCC-provided headers without explicit paths.
-ifndef BINDGEN_EXTRA_CLANG_ARGS
-_GCC_INCLUDE := $(shell gcc -print-file-name=include 2>/dev/null)
-_GCC_MACHINE := $(shell gcc -dumpmachine 2>/dev/null)
-ifneq ($(_GCC_INCLUDE),include)
-export BINDGEN_EXTRA_CLANG_ARGS := -I$(_GCC_INCLUDE) -I/usr/include/$(_GCC_MACHINE) -I/usr/include
-endif
-endif
-
-# Default: build Rust first (produces .a), then Go (links it via CGo), then CLI.
-all: rust go cli
-
-# --- Rust core library (workspace) ---
-
-# Build core crate for CGo static linking (minimal — no ml).
-# --no-default-features disables "napi_binding" (Node.js addon), producing
-# only the staticlib (.a) and rlib needed by the Go gateway via CGo.
-rust:
-	cd core-rs && cargo build --release -p deneb-core --no-default-features
-
-# Build core with local ML inference (CPU).
-rust-ml:
-	cd core-rs && cargo build --release -p deneb-core --no-default-features --features ml
-
-# Build core with ML + CUDA GPU acceleration (DGX Spark production).
-rust-dgx:
-	cd core-rs && cargo build --release -p deneb-core --no-default-features --features ml,cuda
-
-# Build all workspace crates.
-rust-all:
-	cd core-rs && cargo build --release --workspace
-
-rust-debug:
-	cd core-rs && cargo build --workspace
-
-rust-test:
-	cd core-rs && cargo test --workspace
-
-rust-bench:
-	cd core-rs && cargo bench --workspace
-
-rust-fmt:
-	cd core-rs && cargo fmt --all -- --check
-
-rust-clippy:
-	cd core-rs && cargo clippy --workspace --all-targets -- -D warnings
-
-rust-clean:
-	cd core-rs && cargo clean
+# Default: build Go gateway.
+all: go
 
 # --- Go gateway ---
 
-# Default go: CGo build linking Rust static lib (requires `make rust` first).
-go: go-ffi
-
-go-ffi:
-	cd gateway-go && $(GO_ENV) go build $(GO_LDFLAGS) ./...
-
-# CGo build with CUDA libraries (requires `make rust-dgx` first).
-# The "cuda" build tag pulls in LDFLAGS from core_cgo_cuda.go.
-# Set CUDA_LIBDIR to add a custom library search path for non-standard installs.
-CUDA_LIBDIR ?=
-go-dgx:
-	cd gateway-go && $(if $(CUDA_LIBDIR),CGO_LDFLAGS="-L$(CUDA_LIBDIR)",) $(GO_ENV) go build -tags cuda $(GO_LDFLAGS) ./...
-
-# Pure-Go build with fallback implementations (no Rust required).
-go-pure:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build $(GO_LDFLAGS) -tags no_ffi ./...
+go:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build $(GO_LDFLAGS) ./...
 
 go-run: go
 	cd gateway-go && $(GO_ENV) go run ./cmd/gateway/
@@ -109,7 +44,7 @@ go-run: go
 go-dev:
 	@echo "Starting Go gateway in dev mode (auto-restart on SIGUSR1)..."
 	@while true; do \
-		if ! $(GO_ENV) go build -C gateway-go $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/; then \
+		if ! $(GO_ENV) CGO_ENABLED=0 go build -C gateway-go $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/; then \
 			echo "[go-dev] Build failed, aborting."; \
 			exit 1; \
 		fi; \
@@ -125,10 +60,7 @@ go-dev:
 	done
 
 go-test:
-	cd gateway-go && $(GO_ENV) go test -race -count=1 ./...
-
-go-test-pure:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -tags no_ffi -count=1 ./...
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -count=1 ./...
 
 go-test-fuzz:
 	cd gateway-go && $(GO_ENV) go test ./internal/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
@@ -147,65 +79,19 @@ go-lint:
 go-lint-all:
 	cd gateway-go && golangci-lint run ./...
 
-go-binary: rust go
-	cd gateway-go && $(GO_ENV) go build -trimpath $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
+go-binary:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
 
-# Build MCP server binary (pure Go, no FFI — thin bridge to gateway HTTP RPC).
+# Build MCP server binary (pure Go, thin bridge to gateway HTTP RPC).
 mcp-server:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -tags no_ffi -o ../bin/deneb-mcp ./cmd/mcp-server/
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -o ../bin/deneb-mcp ./cmd/mcp-server/
 
-# Build full DGX Spark production: Rust (Vega+ML+CUDA) + Go (CUDA linked) + CLI.
-gateway-dgx: rust-dgx go-dgx cli
-	cp cli-rs/target/release/deneb dist/deneb-rs 2>/dev/null || true
-	@echo "DGX gateway ready: gateway-go/deneb-gateway (Vega+ML+CUDA)"
-
-# Build production gateway: Go binary + CLI, copies both to dist/.
-gateway-prod: go-binary cli
-	cp cli-rs/target/release/deneb dist/deneb-rs 2>/dev/null || true
-	@echo "Production gateway ready: dist/deneb-gateway + dist/deneb-rs"
+# Build production gateway binary to dist/.
+gateway-prod: go-binary
+	@echo "Production gateway ready: dist/deneb-gateway"
 
 go-clean:
 	cd gateway-go && go clean ./...
-
-# --- Rust CLI ---
-
-cli:
-	cd cli-rs && cargo build --release
-
-cli-debug:
-	cd cli-rs && cargo build
-
-cli-test:
-	cd cli-rs && cargo test
-
-cli-fmt:
-	cd cli-rs && cargo fmt -- --check
-
-cli-clippy:
-	cd cli-rs && cargo clippy --all-targets -- -D warnings
-
-cli-bench:
-	cd cli-rs && cargo test --test startup_bench -- --nocapture
-
-cli-clean:
-	cd cli-rs && cargo clean
-
-# Cross-compilation for DGX Spark (requires rustup target aarch64-unknown-linux-gnu)
-cli-cross-linux-arm64:
-	cd cli-rs && cargo build --release --target aarch64-unknown-linux-gnu
-
-cli-install: cli
-	./cli-rs/scripts/install.sh
-
-# --- Audit / quality tools ---
-
-# Run cargo-deny to check Rust dependencies for vulnerabilities, license issues, and bans.
-deny:
-	cargo deny check
-
-# Run cargo-machete to detect unused Rust dependencies.
-machete:
-	cd core-rs && cargo machete
 
 # Run Go benchmarks with memory allocation stats.
 go-bench:
@@ -213,24 +99,20 @@ go-bench:
 
 # --- Combined operations ---
 
-test: rust-test go-test cli-test
-	@echo "Rust, Go, and CLI tests passed"
+test: go-test
+	@echo "Go tests passed"
 
-clean: rust-clean go-clean cli-clean
-	@echo "Cleaned Rust, Go, and CLI build artifacts"
+clean: go-clean
+	@echo "Cleaned Go build artifacts"
 
-# Per-language check groups (used as parallel units).
-check-rust: rust-fmt rust-clippy rust-test
-check-cli: cli-fmt cli-clippy cli-test
 check-go: go-fmt go-vet go-test
 
-# Full check: generate-check first (sequential), then Rust/CLI/Go in parallel.
-check: generate-check
-	@$(MAKE) -j3 check-rust check-cli check-go
+# Full check: generate-check first (sequential), then Go checks.
+check: generate-check check-go
 	@echo "All checks passed"
 
 # Fast check: format + lint only (no tests). Good for pre-commit gate.
-check/fast: rust-fmt rust-clippy cli-fmt cli-clippy go-fmt go-vet
+check/fast: go-fmt go-vet
 	@echo "Fast checks passed (fmt + lint, no tests)"
 
 # Run all code generation pipelines in dependency order.
@@ -240,21 +122,17 @@ generate: proto tool-schemas model-caps error-codes-gen data-gen
 # Verify generated sources are up to date.
 # Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@echo "==> [1/5] proto types (proto → Go + Rust)"
+	@echo "==> [1/4] proto types (proto -> Go)"
 	@$(MAKE) proto-check
-	@echo "==> [2/5] error codes (gateway.proto → Rust + Go)"
-	@$(MAKE) error-codes-gen-check
-	@echo "==> [3/5] tool schemas (tool_schemas.yaml → tool_schemas_gen.go)"
+	@echo "==> [2/4] tool schemas (tool_schemas.yaml -> tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
-	@echo "==> [4/5] model capabilities (model_caps.yaml → model_caps_gen.go)"
+	@echo "==> [3/4] model capabilities (model_caps.yaml -> model_caps_gen.go)"
 	@$(MAKE) model-caps-check
-	@echo "==> [5/5] data tables (*.yaml → *_gen.go)"
+	@echo "==> [4/4] data tables (*.yaml -> *_gen.go)"
 	@$(MAKE) data-gen-check
 	@echo "All generation checks passed"
 
 fmt:
-	cd core-rs && cargo fmt --all
-	cd cli-rs && cargo fmt
 	cd gateway-go && gofmt -w .
 
 # --- Protobuf code generation ---
@@ -264,9 +142,6 @@ proto:
 
 proto-go:
 	./scripts/proto-gen.sh --go
-
-proto-rust:
-	./scripts/proto-gen.sh --rust
 
 proto-check:
 	./scripts/proto-gen.sh --check
@@ -307,18 +182,17 @@ model-caps-check:
 		-out  internal/autoreply/thinking/model_caps_gen.go
 	@git diff --exit-code -- gateway-go/internal/autoreply/thinking/model_caps_gen.go
 
-# --- Error code generation (unified) ---
+# --- Error code generation (Go only) ---
 #
-# proto/gateway.proto is the single source of truth for ALL error codes:
-#   - ErrorCode enum → protocol-level codes (Rust enum + Go string constants)
-#   - FfiErrorCode enum → C ABI return codes (Rust constants + Go int constants)
-# Generated files: error_codes.rs, errors_gen.go, ffi_error_codes_gen.go.
+# proto/gateway.proto is the single source of truth for error codes:
+#   - ErrorCode enum -> Go string constants (errors_gen.go)
+#   - FfiErrorCode enum -> Go int constants (ffi_error_codes_gen.go)
 
-# Regenerate all error code files from proto/gateway.proto.
+# Regenerate error code files from proto/gateway.proto.
 error-codes-gen:
 	./scripts/gen-error-codes.sh
 
-# Verify all error code files are up to date.
+# Verify error code files are up to date.
 error-codes-gen-check:
 	./scripts/gen-error-codes.sh --check
 
@@ -331,7 +205,7 @@ error-code-sync: error-codes-gen-check
 
 # --- Data table code generation ---
 #
-# Universal YAML → Go var generator for data tables (tool classification).
+# Universal YAML -> Go var generator for data tables (tool classification).
 # Source YAML files live next to their generated Go counterparts.
 
 DATA_GEN = go run cmd/data-gen/main.go
@@ -352,39 +226,22 @@ data-gen-check:
 # --- Info ---
 
 info:
-	@echo "Deneb Multi-Language Build"
+	@echo "Deneb Build (Pure Go)"
 	@echo ""
-	@echo "  make rust       - Build Rust core crate (release, CGo, minimal)"
-	@echo "  make  - Build Rust core + Vega search (FTS-only)"
-	@echo "  make rust-ml    - Build Rust core + Vega + ML inference (CPU)"
-	@echo "  make rust-dgx   - Build Rust core + Vega + ML + CUDA (DGX Spark)"
-	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
-	@echo "  make go-dgx     - Build Go gateway with CUDA linking (DGX Spark)"
 	@echo "  make go-dev     - Run Go gateway in dev mode (auto-restart on SIGUSR1)"
-	@echo "  make cli        - Build Rust CLI (release)"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
-	@echo "  make gateway-dgx - Full DGX Spark build (rust-dgx + go-dgx + cli)"
-	@echo "  make test       - Run Rust + Go + CLI tests"
+	@echo "  make gateway-prod - Production gateway build"
+	@echo "  make test       - Run Go tests"
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"
-	@echo "  make check      - Run all checks in parallel (Rust + Go + CLI)"
-	@echo "  make check/fast - Fast checks: fmt + lint only, no tests"
+	@echo "  make check      - Run all checks (generate + fmt + vet + test)"
+	@echo "  make check/fast - Fast checks: fmt + vet only, no tests"
 	@echo "  make generate         - Run all code generation pipelines"
-	@echo "  make generate-check   - Verify all generated files (per domain, names failing group)"
-	@echo "  make tool-schemas-check  - Verify tool_schemas_gen.go is up to date"
-	@echo "  make model-caps-check    - Verify model_caps_gen.go is up to date"
-	@echo "  make data-gen            - Regenerate all YAML-driven data tables"
-	@echo "  make data-gen-check      - Verify data table gen files are up to date"
-	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
+	@echo "  make generate-check   - Verify all generated files"
+	@echo "  make clean      - Clean Go build artifacts"
 	@echo "  make go-bench   - Run Go gateway benchmarks"
-	@echo "  make deny       - Check Rust deps (security, license, bans)"
-	@echo "  make machete    - Detect unused Rust dependencies"
-	@echo "  make cli-bench  - Run CLI startup benchmark"
-	@echo "  make cli-cross-linux-arm64 - Cross-compile CLI for Linux arm64"
-	@echo "  make proto      - Generate protobuf code (Go + Rust)"
-	@echo "  make proto-go   - Generate Go protobuf structs"
-	@echo "  make proto-rust - Generate Rust protobuf structs"
+	@echo "  make proto      - Generate protobuf code (Go)"
 	@echo "  make proto-check - Generate + verify no uncommitted diffs"
 	@echo "  make proto-lint  - Lint proto files only"
 	@echo "  make proto-watch - Watch proto files and regenerate on change"

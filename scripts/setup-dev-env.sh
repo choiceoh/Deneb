@@ -70,7 +70,7 @@ download_go_modules() {
 build_mcp_server() {
     local mcp_bin="$REPO_ROOT/bin/deneb-mcp"
     if [ -f "$mcp_bin" ]; then return 0; fi
-    (cd "$REPO_ROOT/gateway-go" && CGO_ENABLED=0 go build -trimpath -tags no_ffi -o "$mcp_bin" ./cmd/mcp-server/) 2>/dev/null \
+    (cd "$REPO_ROOT/gateway-go" && CGO_ENABLED=0 go build -trimpath -o "$mcp_bin" ./cmd/mcp-server/) 2>/dev/null \
         && touch "$SETUP_TMPDIR/installed_mcp"
 }
 
@@ -98,28 +98,6 @@ setup_mcp_json() {
 MCPEOF
 }
 
-# ---------- Rust core build ----------
-
-build_rust_core() {
-    local rust_lib="$REPO_ROOT/core-rs/target/release/libdeneb_core.a"
-
-    if [ -f "$rust_lib" ]; then
-        # Source-based staleness: compare lib mtime against newest source file
-        local lib_mtime
-        lib_mtime=$(stat -c %Y "$rust_lib" 2>/dev/null || echo "0")
-        local newest_src
-        newest_src=$(find "$REPO_ROOT/core-rs" \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' \) -newer "$rust_lib" -print -quit 2>/dev/null)
-        if [ -z "$newest_src" ]; then
-            # Lib is up-to-date
-            return 0
-        fi
-    fi
-
-    # Build in background so hook completes quickly
-    nohup make -C "$REPO_ROOT" rust >/tmp/deneb-rust-build.log 2>&1 &
-    touch "$SETUP_TMPDIR/rust_bg_build"
-}
-
 # ---------- Main ----------
 
 echo "Deneb dev environment setup"
@@ -139,16 +117,12 @@ build_mcp_server &
 setup_mcp_json
 wait
 
-# Build Rust core (may start background build)
-build_rust_core
-
 # ---------- Compact summary ----------
 
 installed_count=$(find "$SETUP_TMPDIR" -name 'installed_*' 2>/dev/null | wc -l)
 missing=0
 
 # Collect tool versions
-rust_ver=$(rustc --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' || echo "missing") ; [ "$rust_ver" = "missing" ] && missing=$((missing + 1))
 go_ver=$(go version 2>/dev/null | grep -oP 'go\d+\.\d+\.\d*' || echo "missing") ; [ "$go_ver" = "missing" ] && missing=$((missing + 1))
 protoc_ver=$(protoc --version 2>/dev/null | grep -oP '\d+\.\d+' || echo "missing") ; [ "$protoc_ver" = "missing" ] && missing=$((missing + 1))
 buf_ver=$(buf --version 2>/dev/null | head -1 || echo "missing") ; [ "$buf_ver" = "missing" ] && missing=$((missing + 1))
@@ -160,15 +134,7 @@ if ! (cd "$REPO_ROOT/gateway-go" && go mod verify) &>/dev/null 2>&1; then
     go_mod_status="missing"
 fi
 
-# Rust lib status
-rust_lib_status="fresh"
-if [ -f "$SETUP_TMPDIR/rust_bg_build" ]; then
-    rust_lib_status="building (background, ~60s)"
-elif [ ! -f "$REPO_ROOT/core-rs/target/release/libdeneb_core.a" ]; then
-    rust_lib_status="missing"
-fi
-
-echo "  [env] rust=$rust_ver $go_ver protoc=$protoc_ver buf=$buf_ver protoc-gen-go=$pgg_status"
+echo "  [env] $go_ver protoc=$protoc_ver buf=$buf_ver protoc-gen-go=$pgg_status"
 # MCP server status
 mcp_status="ready"
 if [ ! -f "$REPO_ROOT/bin/deneb-mcp" ]; then
@@ -179,7 +145,7 @@ if [ ! -f "$REPO_ROOT/.mcp.json" ]; then
     mcp_json_status="missing"
 fi
 
-echo "  [env] go-modules=$go_mod_status libdeneb_core.a=$rust_lib_status"
+echo "  [env] go-modules=$go_mod_status"
 echo "  [env] deneb-mcp=$mcp_status .mcp.json=$mcp_json_status"
 
 # Go version compatibility warning
@@ -197,7 +163,7 @@ else
 fi
 
 echo ""
-echo "Build order: make rust -> make go -> make test"
-echo "Fast iteration: make rust-debug -> make go-dev"
+echo "Build: make go -> make test"
+echo "Fast iteration: make go-dev"
 
 exit 0

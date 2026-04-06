@@ -37,143 +37,13 @@ jobs:
         id: check
         uses: ./.github/actions/detect-docs-changes
 
-  # ── Clippy (Rust lint, deny warnings, --release to share cache with core-rs) ─
-  clippy:
+  # ── Go gateway ──────────────────────────────────────────────────
+  go:
     needs: [docs-scope]
     if: needs.docs-scope.outputs.docs_only != 'true'
-    name: Clippy (Rust lint)
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: false
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core-rs
-          shared-key: rust-release-core-rs
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cli-rs
-          shared-key: rust-release-cli-rs
-
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
-      - name: Clippy (core-rs, release)
-        working-directory: core-rs
-        run: cargo clippy --workspace --all-targets --release -- -D warnings
-
-      - name: Clippy (cli-rs, release)
-        working-directory: cli-rs
-        run: cargo clippy --all-targets --release -- -D warnings
-
-  # ── Rust core-rs (reuses release cache from clippy) ───────────
-  core-rs:
-    needs: [docs-scope, clippy]
-    if: needs.docs-scope.outputs.docs_only != 'true'
-    name: Rust (core-rs)
+    name: Go
     runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: false
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core-rs
-          shared-key: rust-release-core-rs
-          save-if: false
-
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
-      - name: Check formatting
-        working-directory: core-rs
-        run: cargo fmt -- --check
-
-      - name: Build (release)
-        working-directory: core-rs
-        run: cargo build --release
-
-      - name: Test
-        working-directory: core-rs
-        run: cargo test
-
-      - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --locked
-
-      - name: Coverage (cargo-llvm-cov)
-        working-directory: core-rs
-        run: |
-          cargo llvm-cov --workspace --no-fail-fast 2>&1 | tee coverage.txt
-          TOTAL=$(grep '^TOTAL' coverage.txt | awk '{print $NF}' | tr -d '%')
-          echo "Rust coverage: ${TOTAL}%"
-          if [ -n "$TOTAL" ] && [ "$(echo "$TOTAL < 40" | bc -l)" -eq 1 ]; then
-            echo "::error::Rust coverage ${TOTAL}% is below 40% threshold"
-            exit 1
-          fi
-
-      - name: Upload Rust coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-coverage
-          path: core-rs/coverage.txt
-          retention-days: 7
-
-      - name: Upload static library
-        uses: actions/upload-artifact@v4
-        with:
-          name: libdeneb-core
-          path: core-rs/target/release/libdeneb_core.a
-          retention-days: 1
-
-  # ── Rust CLI (cli-rs, reuses release cache from clippy) ──────
-  cli-rs:
-    needs: [docs-scope, clippy]
-    if: needs.docs-scope.outputs.docs_only != 'true'
-    name: Rust (cli-rs)
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: false
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cli-rs
-          shared-key: rust-release-cli-rs
-          save-if: false
-
-      - name: Check formatting
-        working-directory: cli-rs
-        run: cargo fmt -- --check
-
-      - name: Build (release)
-        working-directory: cli-rs
-        run: cargo build --release
-
-      - name: Test
-        working-directory: cli-rs
-        run: cargo test
-
-  # ── Go gateway (pure, no FFI — build + lint only) ────────────
-  go-pure:
-    needs: [docs-scope]
-    if: needs.docs-scope.outputs.docs_only != 'true'
-    name: Go (pure, no FFI)
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 10
     defaults:
       run:
         working-directory: gateway-go
@@ -187,11 +57,11 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: gateway-go/go.sum
 
-      - name: Build (no FFI)
-        run: CGO_ENABLED=0 go build -tags no_ffi ./...
+      - name: Build
+        run: CGO_ENABLED=0 go build ./...
 
       - name: Vet
-        run: go vet -tags no_ffi ./...
+        run: go vet ./...
 
       - name: Check formatting
         run: test -z "$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
@@ -203,36 +73,8 @@ jobs:
           working-directory: gateway-go
           args: --new-from-rev=HEAD~1
 
-  # ── Go gateway (with Rust FFI) ───────────────────────────────
-  go-ffi:
-    needs: [docs-scope, core-rs]
-    if: needs.docs-scope.outputs.docs_only != 'true'
-    name: Go (with Rust FFI)
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: gateway-go
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: false
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-          cache-dependency-path: gateway-go/go.sum
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: libdeneb-core
-          path: core-rs/target/release/
-
-      - name: Build (CGo + Rust FFI)
-        run: go build ./...
-
-      - name: Test (CGo + Rust FFI, race detector)
-        run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Test (race detector)
+        run: CGO_ENABLED=0 go test -count=1 -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Coverage gate (threshold 50%)
         run: |
@@ -251,13 +93,13 @@ jobs:
           retention-days: 7
 
       - name: Test (integration)
-        run: go test -race -count=1 -tags=integration ./...
+        run: CGO_ENABLED=0 go test -count=1 -tags=integration ./...
 
       - name: Fuzz (bridge, smoke)
         run: go test ./internal/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
 
       - name: Build gateway binary
-        run: go build -o gateway ./cmd/gateway/
+        run: CGO_ENABLED=0 go build -o gateway ./cmd/gateway/
 
       - name: Gateway binary smoke test
         run: |
@@ -278,7 +120,7 @@ jobs:
 
   # ── Integration (end-to-end gateway test) ────────────────────
   integration:
-    needs: [go-ffi]
+    needs: [go]
     name: Integration (gateway e2e)
     runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 10
