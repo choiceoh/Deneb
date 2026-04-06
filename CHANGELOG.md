@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.12.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.11.0...deneb-v4.12.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **chat:** add context usage and compaction status to /status ([5a0c5b1](https://github.com/choiceoh/Deneb/commit/5a0c5b19fe125121d407800e7c581595ae2d92ae))
+* **chat:** add context usage and compaction status to /status slash command ([42e822d](https://github.com/choiceoh/Deneb/commit/42e822db127bc8768ac0f05c953a3c343b8bf11e))
+* **chat:** show live token budget usage in /status alongside Aurora ([4f0cd8a](https://github.com/choiceoh/Deneb/commit/4f0cd8a034be249c67b30fdbc01684707f7436ce))
+* **cron:** enhance cron tool with cron expression, persistent storage, and run history ([3af70ec](https://github.com/choiceoh/Deneb/commit/3af70ec33b7a0a3d9dc2a62ce686640654b3c03a))
+* **cron:** 크론 도구 기능 강화 ([6219541](https://github.com/choiceoh/Deneb/commit/621954165319439f367c70c28c298a85bdd1c3fa))
+* **gateway:** add observability metrics and WAL session persistence ([6ca1600](https://github.com/choiceoh/Deneb/commit/6ca16009eed77d67ea17246065d221fdfba82327))
+* **gateway:** add observability metrics and WAL-based session persistence ([3cb6aab](https://github.com/choiceoh/Deneb/commit/3cb6aab8a594dbd053c7fc79b3c92fafec2ee602))
+* **memory:** raise similarity threshold for session memory injection ([6e608be](https://github.com/choiceoh/Deneb/commit/6e608be307640745010e55dd7c262516ea448e01))
+* **memory:** raise similarity threshold for session memory injection ([a2f07c6](https://github.com/choiceoh/Deneb/commit/a2f07c6c677d67930f274fe8789b5fa36c84e2f6))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** stop emitting [tool_name] brackets in session memory transcripts ([eb615e7](https://github.com/choiceoh/Deneb/commit/eb615e7fe0075dd4d8a5b153e90e1ba7d80f596f))
+* **chat:** stop emitting [tool_name] brackets in session memory transcripts ([7df7663](https://github.com/choiceoh/Deneb/commit/7df7663deb4ef68d2c2bfc4ca6f7cf6b8be4fee7))
+
 ## [4.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.10.0...deneb-v4.11.0) (2026-04-06)
 
 
