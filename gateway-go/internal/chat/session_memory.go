@@ -377,7 +377,9 @@ func UpdateSessionMemory(
 	userPrompt.WriteString("위의 새로운 대화 기록을 바탕으로 세션 메모리를 업데이트하세요.\n(이전 대화는 현재 세션 메모리에 이미 반영되어 있습니다.)\n\n")
 
 	if toolSummary != "" {
+		// Strip legacy bracket format and current plain format.
 		clean := strings.TrimPrefix(toolSummary, "[Tools used: ")
+		clean = strings.TrimPrefix(clean, "Tools used: ")
 		clean = strings.TrimSuffix(clean, "]")
 		fmt.Fprintf(&userPrompt, "이번 실행에서 사용한 도구: %s\n\n", clean)
 	}

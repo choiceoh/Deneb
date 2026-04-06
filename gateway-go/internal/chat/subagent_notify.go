@@ -238,12 +238,12 @@ func formatBatchNotification(items []notifyItem) string {
 	var sb strings.Builder
 
 	if len(items) == 1 {
-		sb.WriteString("[System: subagent completed]\n")
+		sb.WriteString("**System:** subagent completed\n")
 		writeNotifyItem(&sb, items[0])
 		return sb.String()
 	}
 
-	sb.WriteString(fmt.Sprintf("[System: %d subagents completed]\n", len(items)))
+	sb.WriteString(fmt.Sprintf("**System:** %d subagents completed\n", len(items)))
 
 	// Render up to cap detailed items.
 	rendered := items
