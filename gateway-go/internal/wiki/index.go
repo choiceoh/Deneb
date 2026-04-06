@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -91,11 +92,19 @@ func (idx *Index) Render() string {
 			if len(e.entry.Tags) > 0 {
 				tags = " [" + strings.Join(e.entry.Tags, ", ") + "]"
 			}
-			imp := ""
-			if e.entry.Importance >= 0.8 {
-				imp = " *"
+			// Encode importance and updated date as parseable metadata.
+			var metaParts []string
+			if e.entry.Importance > 0 {
+				metaParts = append(metaParts, fmt.Sprintf("i:%.2f", e.entry.Importance))
 			}
-			sb.WriteString(fmt.Sprintf("- [[%s]] — %s%s%s\n", e.path, e.entry.Title, tags, imp))
+			if e.entry.Updated != "" {
+				metaParts = append(metaParts, "u:"+e.entry.Updated)
+			}
+			meta := ""
+			if len(metaParts) > 0 {
+				meta = " (" + strings.Join(metaParts, ", ") + ")"
+			}
+			sb.WriteString(fmt.Sprintf("- [[%s]] — %s%s%s\n", e.path, e.entry.Title, tags, meta))
 		}
 		sb.WriteString("\n")
 	}
@@ -163,7 +172,8 @@ type indexRenderEntry struct {
 }
 
 func parseIndexLine(line, category string) indexRenderEntry {
-	// Format: - [[path]] — title [tags] *
+	// Format: - [[path]] — title [tags] (i:0.90, u:2026-04-06)
+	// Legacy:  - [[path]] — title [tags] *
 	start := strings.Index(line, "[[")
 	end := strings.Index(line, "]]")
 	if start < 0 || end < 0 || end <= start {
@@ -175,8 +185,27 @@ func parseIndexLine(line, category string) indexRenderEntry {
 	rest = strings.TrimPrefix(rest, "—")
 	rest = strings.TrimSpace(rest)
 
-	importance := 0.0
-	if strings.HasSuffix(rest, " *") {
+	var importance float64
+	var updated string
+
+	// Parse metadata suffix: (i:0.90, u:2026-04-06)
+	if metaStart := strings.LastIndex(rest, "("); metaStart >= 0 {
+		if metaEnd := strings.LastIndex(rest, ")"); metaEnd > metaStart {
+			metaStr := rest[metaStart+1 : metaEnd]
+			rest = strings.TrimSpace(rest[:metaStart])
+			for _, part := range strings.Split(metaStr, ",") {
+				part = strings.TrimSpace(part)
+				if strings.HasPrefix(part, "i:") {
+					importance, _ = strconv.ParseFloat(strings.TrimPrefix(part, "i:"), 64)
+				} else if strings.HasPrefix(part, "u:") {
+					updated = strings.TrimPrefix(part, "u:")
+				}
+			}
+		}
+	}
+
+	// Legacy: trailing " *" means importance >= 0.8.
+	if importance == 0 && strings.HasSuffix(rest, " *") {
 		importance = 0.85
 		rest = strings.TrimSuffix(rest, " *")
 		rest = strings.TrimSpace(rest)
@@ -204,6 +233,7 @@ func parseIndexLine(line, category string) indexRenderEntry {
 			Category:   category,
 			Tags:       tags,
 			Importance: importance,
+			Updated:    updated,
 		},
 	}
 }

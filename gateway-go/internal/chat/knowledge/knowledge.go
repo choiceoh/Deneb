@@ -17,7 +17,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
-	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // Deps holds optional dependencies for knowledge prefetch.
@@ -26,9 +25,8 @@ type Deps struct {
 	WorkspaceDir     string           // empty → skip file-based Memory search
 	MemoryStore      *memory.Store    // nil → skip structured memory search
 	MemoryEmbedder   *memory.Embedder // nil → FTS-only structured search
-	UnifiedStore     *unified.Store   // nil → skip unified search + tier-1 injection
-	SkipMemorySearch bool             // true → skip memory SearchFacts (recall handles it)
-	WikiStore        *wiki.Store      // non-nil → add wiki search results
+	UnifiedStore     *unified.Store // nil → skip unified search + tier-1 injection
+	SkipMemorySearch bool           // true → skip memory SearchFacts (recall handles it)
 }
 
 // Knowledge prefetch limits.
@@ -161,19 +159,6 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 		}()
 	}
 
-	// Wiki search (LLM wiki knowledge base).
-	var wikiResults []wiki.SearchResult
-	if deps.WikiStore != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results, err := deps.WikiStore.Search(ctx, message, knowledgeMaxVega)
-			if err == nil {
-				wikiResults = results
-			}
-		}()
-	}
-
 	wg.Wait()
 
 	// Supplemental Memory FTS with Vega LLM expansion terms.
@@ -216,11 +201,6 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 	// Tier1-vs-structured dedup: remove structured facts already shown in tier1.
 	if tier1Section != "" && len(structFacts) > 0 {
 		structFacts = deduplicateFactsAgainstTier1(structFacts, tier1Section)
-	}
-
-	// Wiki knowledge section (LLM wiki pages).
-	if len(wikiResults) > 0 {
-		parts = append(parts, formatWikiResults(wikiResults))
 	}
 
 	// Knowledge section (Vega + memory facts). Skipped when recall already produced results.
@@ -713,24 +693,3 @@ func formatKeySection(byKey map[string]memory.UserModelEntry, keys []struct{ Key
 	return sb.String()
 }
 
-// formatWikiResults builds a wiki knowledge section from search results.
-// For each matching wiki page, reads the summary and key facts sections
-// for compact context injection.
-func formatWikiResults(results []wiki.SearchResult) string {
-	var sb strings.Builder
-	sb.WriteString("## 위키 지식\n\n")
-	sb.WriteString("_위키에서 자동 검색된 관련 페이지입니다._\n\n")
-
-	tokenCount := sb.Len() / charsPerToken
-	for _, r := range results {
-		before := sb.Len()
-		content := truncateRunes(r.Content, knowledgeMaxContentRunes)
-		fmt.Fprintf(&sb, "- **%s** (L%d): %s\n", r.Path, r.Line, content)
-		tokenCount += (sb.Len() - before) / charsPerToken
-		if tokenCount >= knowledgeMaxTokens/2 { // wiki gets half the budget
-			break
-		}
-	}
-
-	return sb.String()
-}

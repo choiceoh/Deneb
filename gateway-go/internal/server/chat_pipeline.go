@@ -146,7 +146,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
 			lwModel := (*regPtr).Model(modelrole.RoleLightweight)
 			if lwClient != nil && lwModel != "" {
-				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, s.logger)
+				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, wikiCfg, s.logger)
 				s.logger.Info("wiki-dream: enabled")
 			}
 		}

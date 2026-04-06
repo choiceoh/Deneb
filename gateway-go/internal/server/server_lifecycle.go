@@ -308,6 +308,11 @@ func (s *Server) doShutdown() error {
 		s.vegaBackend.Close()
 	}
 
+	// 11a. Close wiki store (FTS database).
+	if s.wikiStore != nil {
+		s.wikiStore.Close()
+	}
+
 	// 11b. Stop process manager background goroutine.
 	if s.processes != nil {
 		s.processes.Stop()
