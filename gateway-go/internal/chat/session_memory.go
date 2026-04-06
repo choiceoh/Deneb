@@ -482,10 +482,10 @@ func formatTranscriptForMemory(msgs []ChatMessage) string {
 }
 
 // formatRichContent converts a ChatMessage's json.RawMessage content into a
-// human-readable string that preserves tool call structure. For text-only
-// messages, returns the plain text. For rich messages (ContentBlock arrays),
-// formats each block with type annotations so the session memory LLM can
-// see the full action flow.
+// human-readable string. For text-only messages, returns the plain text.
+// For rich messages (ContentBlock arrays), extracts only text blocks.
+// Tool_use and tool_result blocks are intentionally excluded to prevent
+// the LLM from seeing and mimicking tool call syntax in its responses.
 func formatRichContent(content json.RawMessage) string {
 	if len(content) == 0 {
 		return ""
@@ -506,13 +506,10 @@ func formatRichContent(content json.RawMessage) string {
 	var b strings.Builder
 	for _, raw := range blocks {
 		var base struct {
-			Type      string          `json:"type"`
-			Text      string          `json:"text,omitempty"`
-			Name      string          `json:"name,omitempty"`
-			Input     json.RawMessage `json:"input,omitempty"`
-			ToolUseID string          `json:"tool_use_id,omitempty"`
-			Content   string          `json:"content,omitempty"`
-			IsError   bool            `json:"is_error,omitempty"`
+			Type    string `json:"type"`
+			Text    string `json:"text,omitempty"`
+			Name    string `json:"name,omitempty"`
+			IsError bool   `json:"is_error,omitempty"`
 		}
 		if json.Unmarshal(raw, &base) != nil {
 			continue
@@ -524,17 +521,14 @@ func formatRichContent(content json.RawMessage) string {
 				b.WriteByte('\n')
 			}
 		case "tool_use":
-			inputSummary := truncRunes(string(base.Input), 200)
-			fmt.Fprintf(&b, "— %s 사용: %s\n", base.Name, inputSummary)
+			// Name only — no JSON input to avoid LLM mimicking tool call syntax.
+			fmt.Fprintf(&b, "[%s]\n", base.Name)
 		case "tool_result":
-			output := truncRunes(base.Content, 500)
 			if base.IsError {
-				fmt.Fprintf(&b, "  ↳ 오류: %s\n", output)
-			} else {
-				fmt.Fprintf(&b, "  ↳ %s\n", output)
+				b.WriteString("[오류]\n")
 			}
-		default:
-			// Skip thinking blocks and other internal types.
+			// Successful results are omitted — the assistant's text block
+			// already summarizes what happened.
 		}
 	}
 	return b.String()

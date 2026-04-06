@@ -184,6 +184,21 @@ Done`,
 			in:   "[tool:exec({\"command\":\"python3 << 'EOF'\nimport json\nprint('hello')\nEOF\"})]",
 			want: "",
 		},
+		{
+			name: "removes Korean-style tool call from session memory format",
+			in:   "확인합니다.\n— web_fetch 사용: {\"query\":\"test\",\"fetch\":2}\n결과입니다.",
+			want: "확인합니다.\n\n결과입니다.",
+		},
+		{
+			name: "removes Korean tool call with result arrow",
+			in:   "— read_file 사용: {\"path\":\"config.yaml\"}\n  ↳ port: 8080\n완료.",
+			want: "완료.",
+		},
+		{
+			name: "removes Korean tool call only",
+			in:   "— web_fetch 사용: {\"query\":\"agentskills.io Hermes Agent skills quality review\",\"fetch\":2}",
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
