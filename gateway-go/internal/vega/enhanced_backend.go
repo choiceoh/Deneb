@@ -27,7 +27,7 @@ type EnhancedBackend struct {
 type EnhancedBackendConfig struct {
 	Logger       *slog.Logger
 	LocalAIURL   string // e.g. "http://127.0.0.1:30000/v1" — used for chat/expansion
-	LocalAIModel string // e.g. "Qwen/Qwen3.5-35B-A3B" — chat model for expansion
+	LocalAIModel string // e.g. "google/gemma-4-26B-A4B-it" — chat model for expansion
 
 	// Embedder is the embedding provider. If nil, search falls back to FTS-only.
 	Embedder embedding.Embedder

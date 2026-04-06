@@ -56,10 +56,10 @@ type Registry struct {
 // Default constants for known providers.
 const (
 	DefaultLocalAIBaseURL = "http://127.0.0.1:30000/v1"
-	DefaultLocalAIModel   = "Qwen/Qwen3.5-35B-A3B"
+	DefaultLocalAIModel   = "google/gemma-4-26B-A4B-it"
 
 	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
-	DefaultVllmModel   = "qwen3.5"
+	DefaultVllmModel   = "gemma4"
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 	DefaultZaiModel   = "glm-5-turbo"

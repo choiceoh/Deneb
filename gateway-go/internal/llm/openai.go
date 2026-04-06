@@ -229,8 +229,7 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 		return nil, fmt.Errorf("marshal openai request: %w", err)
 	}
 
-	// Merge ExtraBody fields into the serialized JSON (e.g., local AI's
-	// "chat_template_kwargs": {"enable_thinking": false}).
+	// Merge ExtraBody fields into the serialized JSON.
 	if len(req.ExtraBody) > 0 {
 		body, err = mergeJSONFields(body, req.ExtraBody)
 		if err != nil {

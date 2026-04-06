@@ -58,9 +58,6 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 		System:    llm.SystemString(expandSystemPrompt),
 		MaxTokens: expandMaxTokens,
 		Stream:    true,
-		ExtraBody: map[string]any{
-			"chat_template_kwargs": map[string]any{"enable_thinking": false},
-		},
 	}
 
 	events, err := e.client.StreamChat(ctx, req)

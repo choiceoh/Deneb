@@ -92,9 +92,6 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName string) (*EvolveRes
 		MaxTokens:      2048,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
-		ExtraBody: map[string]any{
-			"chat_template_kwargs": map[string]any{"enable_thinking": false},
-		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("evolver LLM call: %w", err)
