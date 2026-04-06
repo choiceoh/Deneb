@@ -122,6 +122,17 @@ func handleRunSuccess(
 			result.Text = stripped
 		}
 	}
+	// Channel-silent tools: when the agent used a management tool (e.g. cron)
+	// on a channel that marks it as silent, suppress chat delivery. The tool
+	// executed normally — only the chat output is suppressed.
+	if !isSilent && params.Delivery != nil {
+		if shouldSilenceForChannel(params.Delivery.Channel, result.ToolActivities) {
+			isSilent = true
+			logger.Info("suppressing delivery for channel-silent tool",
+				"channel", params.Delivery.Channel)
+		}
+	}
+
 	if isSilent {
 		result.Text = ""
 		logger.Info("suppressing silent reply (NO_REPLY)")
