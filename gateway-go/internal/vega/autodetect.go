@@ -45,6 +45,24 @@ func IsLocalAIReachable(baseURL string) bool {
 	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
 
+// IsRerankerReachable checks if the local reranker server is responsive.
+func IsRerankerReachable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, defaultRerankURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	// Any response (even 405) means the server is running.
+	return true
+}
+
 // GetJinaAPIKey reads the Jina AI API key from the JINA_API_KEY environment variable.
 // Returns empty string if not configured (reranking will be disabled).
 func GetJinaAPIKey() string {
