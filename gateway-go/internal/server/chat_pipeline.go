@@ -1,6 +1,6 @@
-// Chat pipeline initialization: memory subsystem, tool registration, and
-// handler construction. Extracted from registerSessionRPCMethods() to reduce
-// that 467-line function to a clear sequential flow.
+// Chat pipeline initialization: tool registration and handler construction.
+// Extracted from registerSessionRPCMethods() to reduce that function
+// to a clear sequential flow.
 package server
 
 import (
@@ -15,28 +15,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
-	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
-// initMemorySubsystem initializes unified store, Aurora compaction store,
-// structured memory store, Gemini embedder, Jina reranker, dreaming adapter,
-// and MEMORY.md auto-migration. All results are set on chatCfg and s.
+// initMemorySubsystem initializes model registry, session memory, wiki, and RLM.
+// All results are set on chatCfg and s.
 func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **modelrole.Registry) {
-	// Unified memory store (single DB for all tiers).
-	unifiedStore, err := unified.New(unified.DefaultConfig(), s.logger)
-	if err != nil {
-		s.logger.Warn("unified store unavailable", "error", err)
-	} else {
-		chatCfg.UnifiedStore = unifiedStore
-
-		if auroraStore, aErr := unifiedStore.NewAuroraStoreWithLogger(s.logger); aErr != nil {
-			s.logger.Warn("aurora store unavailable from unified db", "error", aErr)
-		} else {
-			chatCfg.AuroraStore = auroraStore
-		}
-	}
-
 	// Model role registry.
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
 	chatCfg.SubagentDefaultModel = resolveSubagentDefaultModel(s.logger)
@@ -45,35 +29,9 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
 
-	// Structured memory store (Honcho-style) — always from unified DB.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
-	}
-	memStore := chatCfg.MemoryStore
-	if memStore == nil && unifiedStore != nil {
-		unifiedMemStore, uErr := unifiedStore.NewMemoryStore()
-		if uErr != nil {
-			s.logger.Warn("memory store unavailable from unified db", "error", uErr)
-		} else {
-			memStore = unifiedMemStore
-			chatCfg.MemoryStore = memStore
-		}
-	}
-	if memStore == nil {
-		return
-	}
-
-	// Tier-1 cache invalidation.
-	memStore.SetFactMutateCallback(unified.InvalidateTier1Cache)
-
-	// Auto-migrate existing MEMORY.md on first run.
-	count, _ := memStore.ActiveFactCount(context.Background())
-	if count == 0 {
-		memoryMdPath := filepath.Join(home, ".deneb", "MEMORY.md")
-		if imported, err := memStore.ImportFromMarkdown(context.Background(), memoryMdPath); err == nil && imported > 0 {
-			s.logger.Info("aurora-memory: imported legacy MEMORY.md", "facts", imported)
-		}
 	}
 
 	// Session memory store (structured working state per session).
@@ -85,7 +43,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		s.logger.Info("session memory restored", "count", loaded)
 	}
 
-	// Wiki knowledge base (feature-flagged).
+	// Wiki knowledge base.
 	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
 		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)
 		if err != nil {
@@ -100,7 +58,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			s.rlmService = rlm.NewService(rlmCfg, wikiStore, s.logger)
 			s.logger.Info("rlm: service enabled (wiki-backed)")
 
-			// Wiki dreamer (replaces memory dreaming when wiki is active).
+			// Wiki dreamer.
 			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
 			lwModel := (*regPtr).Model(modelrole.RoleLightweight)
 			if lwClient != nil && lwModel != "" {
@@ -131,9 +89,6 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			Service: s.cronService,
 			RunLog:  s.cronRunLog,
 		},
-		Vega: chat.VegaDeps{
-			MemoryStore: chatCfg.MemoryStore,
-		},
 		Wiki: chat.WikiDeps{
 			Store: chatCfg.WikiStore,
 		},
@@ -154,10 +109,6 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
 	// Autoresearch runner + tool.
-	// Use the lightweight (local AI) model for autoresearch: it runs many
-	// iterations autonomously, so a local model avoids external API hangs and
-	// keeps latency low. The Qwen 35B model is more than capable for the
-	// hypothesis-and-tweak loop autoresearch performs.
 	s.autoresearchRunner = autoresearch.NewRunner(s.logger)
 	if lwClient := reg.Client(modelrole.RoleLightweight); lwClient != nil {
 		s.autoresearchRunner.SetLLMClient(lwClient)
@@ -165,8 +116,6 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	} else if mainClient := reg.Client(modelrole.RoleMain); mainClient != nil {
 		s.autoresearchRunner.SetLLMClient(mainClient)
 	}
-	// Inject autoresearch completion reports into the triggering session's
-	// transcript so the LLM sees results on its next turn.
 	if transcriptStore != nil {
 		s.autoresearchRunner.SetTranscriptAppendFn(func(sessionKey, text string) error {
 			msg := chat.NewTextChatMessage("system", text, 0)

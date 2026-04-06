@@ -9,7 +9,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 )
 
 const (
@@ -37,9 +36,8 @@ type Config struct {
 	LLMClient   *llm.Client // pre-configured LLM client from modelrole registry
 
 	// Multi-stage pipeline deps (all optional — nil = skip that stage).
-	LocalClient *llm.Client      // local AI for stage-1 extractors
-	LocalModel  string           // local AI model name
-	MemStore *memory.Store // for memory recall
+	LocalClient *llm.Client // local AI for stage-1 extractors
+	LocalModel  string      // local AI model name
 }
 
 // Service implements autonomous.PeriodicTask for Gmail polling.
@@ -247,7 +245,6 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 		LocalClient: s.cfg.LocalClient,
 		LocalModel:  s.cfg.LocalModel,
 		MainModel:   s.cfg.Model,
-		MemStore: s.cfg.MemStore,
 		Logger:      s.log,
 	}
 

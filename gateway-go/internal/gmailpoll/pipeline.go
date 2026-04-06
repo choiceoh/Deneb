@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -38,12 +37,11 @@ const (
 // PipelineDeps holds dependencies for the multi-stage analysis pipeline.
 type PipelineDeps struct {
 	GmailClient *gmail.Client
-	LLMClient   *llm.Client      // main LLM for final analysis (stage 2)
-	LocalClient *llm.Client      // local AI for extractors (stage 1)
-	LocalModel  string           // local AI model name
-	MainModel   string           // main LLM model name
-	MemStore *memory.Store // for memory recall (nil = skip stage 1b)
-	Logger      *slog.Logger     // optional; nil = slog.Default()
+	LLMClient   *llm.Client // main LLM for final analysis (stage 2)
+	LocalClient *llm.Client // local AI for extractors (stage 1)
+	LocalModel  string      // local AI model name
+	MainModel   string      // main LLM model name
+	Logger      *slog.Logger // optional; nil = slog.Default()
 }
 
 // canRunPipeline returns true if we have enough deps for the multi-stage pipeline.
@@ -209,16 +207,6 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		threadCtx, threadErr = extractThreadContext(stage1aCtx, deps, msg)
 	}()
 
-	if deps.MemStore != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			stage1bCtx, cancel := context.WithTimeout(ctx, stage1Timeout)
-			defer cancel()
-			memoryCtx, memoryErr = extractMemoryContext(stage1bCtx, deps, msg)
-		}()
-	}
-
 	wg.Wait()
 
 	// Log errors but don't fail — graceful degradation.
@@ -231,11 +219,6 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	analysis, err := synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, memoryCtx)
 	if err != nil {
 		return "", err
-	}
-
-	// Stage 3: extract facts from analysis and store in memory (fire-and-forget).
-	if deps.MemStore != nil && deps.LocalClient != nil {
-		go storeEmailFacts(deps, msg, analysis)
 	}
 
 	return analysis, nil
@@ -319,19 +302,6 @@ func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageD
 			}
 		}(i, msg)
 
-		// Memory context.
-		if deps.MemStore != nil {
-			wg.Add(1)
-			go func(idx int, m *gmail.MessageDetail) {
-				defer wg.Done()
-				s1Ctx, cancel := context.WithTimeout(ctx, stage1Timeout)
-				defer cancel()
-				mc, err := extractMemoryContext(s1Ctx, deps, m)
-				if err == nil {
-					enriched[idx].MemoryCtx = mc
-				}
-			}(i, msg)
-		}
 	}
 
 	wg.Wait()
@@ -342,11 +312,6 @@ func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageD
 	report, err := synthesizeBatchReport(stage2Ctx, deps, enriched)
 	if err != nil {
 		return "", err
-	}
-
-	// Stage 3: store facts from each email (fire-and-forget).
-	if deps.MemStore != nil && deps.LocalClient != nil {
-		go storeBatchFacts(deps, enriched, report)
 	}
 
 	return report, nil
@@ -404,66 +369,6 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, emails []emai
 	}
 
 	return collectStreamText(ctx, events)
-}
-
-// storeBatchFacts extracts and stores facts from a batch of analyzed emails.
-func storeBatchFacts(deps PipelineDeps, emails []emailWithContext, report string) {
-	logger := deps.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	// Store facts based on the full batch report for richer context.
-	ctx, cancel := context.WithTimeout(context.Background(), stage3Timeout)
-	defer cancel()
-
-	// Build a summary of all senders and subjects for the extraction prompt.
-	var emailSummary strings.Builder
-	for _, e := range emails {
-		fmt.Fprintf(&emailSummary, "- From: %s / Subject: %s\n", e.Msg.From, e.Msg.Subject)
-	}
-
-	userPrompt := fmt.Sprintf(emailFactExtractorPrompt,
-		emailSummary.String(), "(배치 분석)", time.Now().Format("2006-01-02"), report)
-
-	result, err := callLocalLLMJSON[emailFactsResponse](ctx, deps.LocalClient, deps.LocalModel, emailFactExtractorSystem, userPrompt, stage3MaxTokens)
-	if err != nil {
-		logger.Debug("batch fact extraction failed", "error", err)
-		return
-	}
-
-	if len(result.Facts) == 0 {
-		return
-	}
-
-	var extracted []memory.ExtractedFact
-	for _, ef := range result.Facts {
-		if ef.Content == "" {
-			continue
-		}
-		content := ef.Content
-		if ef.Project != "" {
-			content = fmt.Sprintf("[%s] %s", ef.Project, ef.Content)
-		}
-		imp := ef.Importance
-		if imp < 0 {
-			imp = 0
-		}
-		if imp > 1 {
-			imp = 1
-		}
-		extracted = append(extracted, memory.ExtractedFact{
-			Content:    content,
-			Category:   normalizeCategory(ef.Category),
-			Importance: imp,
-			ExpiryHint: ef.ExpiryHint,
-		})
-	}
-
-	if len(extracted) > 0 {
-		memory.InsertExtractedFactsAs(ctx, deps.MemStore, extracted, SourceEmailAnalysis, logger)
-		logger.Info("batch email facts stored", "count", len(extracted), "emails", len(emails))
-	}
 }
 
 // extractThreadContext fetches related emails and extracts thread context via local LLM.
@@ -543,52 +448,6 @@ func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	return result, nil
 }
 
-// extractMemoryContext searches memory and extracts relevant context via local LLM.
-func extractMemoryContext(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (MemoryContext, error) {
-	var zero MemoryContext
-
-	// Build search queries from email metadata.
-	senderName := extractDisplayName(msg.From)
-	queries := []string{msg.Subject}
-	if senderName != "" {
-		queries = append(queries, senderName)
-	}
-
-	// Search memory with each query and collect unique results.
-	var allFacts []string
-	seen := make(map[int64]bool)
-
-	for _, query := range queries {
-		results, err := deps.MemStore.SearchFacts(ctx, query, memory.SearchOpts{
-			Limit: 5,
-		})
-		if err != nil {
-			continue
-		}
-
-		for _, r := range results {
-			if seen[r.Fact.ID] {
-				continue
-			}
-			seen[r.Fact.ID] = true
-			allFacts = append(allFacts, fmt.Sprintf("[%s] %s", r.Fact.Category, r.Fact.Content))
-		}
-	}
-
-	if len(allFacts) == 0 {
-		return zero, nil
-	}
-
-	factsText := strings.Join(allFacts, "\n")
-	userPrompt := fmt.Sprintf(memoryExtractorPrompt, msg.From, msg.Subject, factsText)
-
-	result, err := callLocalLLMJSON[MemoryContext](ctx, deps.LocalClient, deps.LocalModel, memoryExtractorSystem, userPrompt, stage1MaxTokens)
-	if err != nil {
-		return zero, fmt.Errorf("memory context extraction failed: %w", err)
-	}
-	return result, nil
-}
-
 // synthesizeAnalysis combines the email with extracted contexts for final LLM analysis.
 func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail, tc ThreadContext, mc MemoryContext) (string, error) {
 	emailText := FormatEmailForAnalysis(msg)
@@ -645,62 +504,6 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	}
 
 	return collectStreamText(ctx, events)
-}
-
-// storeEmailFacts extracts facts from the email analysis and stores them in memory.
-// Runs as a fire-and-forget goroutine — errors are logged, not propagated.
-func storeEmailFacts(deps PipelineDeps, msg *gmail.MessageDetail, analysis string) {
-	logger := deps.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), stage3Timeout)
-	defer cancel()
-
-	userPrompt := fmt.Sprintf(emailFactExtractorPrompt, msg.From, msg.Subject, msg.Date, analysis)
-
-	result, err := callLocalLLMJSON[emailFactsResponse](ctx, deps.LocalClient, deps.LocalModel, emailFactExtractorSystem, userPrompt, stage3MaxTokens)
-	if err != nil {
-		logger.Debug("email fact extraction failed", "error", err, "subject", msg.Subject)
-		return
-	}
-
-	if len(result.Facts) == 0 {
-		return
-	}
-
-	// Convert to memory.ExtractedFact and store.
-	var extracted []memory.ExtractedFact
-	for _, ef := range result.Facts {
-		if ef.Content == "" {
-			continue
-		}
-		// Prepend project tag to content for searchability.
-		content := ef.Content
-		if ef.Project != "" {
-			content = fmt.Sprintf("[%s] %s", ef.Project, ef.Content)
-		}
-		// Clamp importance.
-		imp := ef.Importance
-		if imp < 0 {
-			imp = 0
-		}
-		if imp > 1 {
-			imp = 1
-		}
-		extracted = append(extracted, memory.ExtractedFact{
-			Content:    content,
-			Category:   normalizeCategory(ef.Category),
-			Importance: imp,
-			ExpiryHint: ef.ExpiryHint,
-		})
-	}
-
-	if len(extracted) > 0 {
-		memory.InsertExtractedFactsAs(ctx, deps.MemStore, extracted, SourceEmailAnalysis, logger)
-		logger.Info("email facts stored", "count", len(extracted), "subject", msg.Subject)
-	}
 }
 
 // normalizeCategory ensures the category is valid for the memory store.

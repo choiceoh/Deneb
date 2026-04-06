@@ -15,7 +15,6 @@ import (
 
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handlerautoresearch "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/autoresearch"
-	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
@@ -223,7 +222,6 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Agents:     hub.Agents(),
 			JobTracker: hub.JobTracker(),
 		}),
-		handleraurorachannel.Methods(handleraurorachannel.Deps{Chat: hub.Chat()}),
 		handlerautoresearch.Methods(handlerautoresearch.Deps{
 			Runner: s.autoresearchRunner,
 		}),

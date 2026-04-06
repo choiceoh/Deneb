@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -24,8 +22,8 @@ type LocalAIProbe struct {
 type ComponentHealth struct {
 	Name      string `json:"name"`
 	Available bool   `json:"available"`
-	Latency   string `json:"latency,omitempty"` // e.g. "123ms"
-	Detail    string `json:"detail,omitempty"`  // model name, endpoint, or error message
+	Latency   string `json:"latency,omitempty"`
+	Detail    string `json:"detail,omitempty"`
 }
 
 // HealthStatus is the aggregated health report.
@@ -34,7 +32,7 @@ type HealthStatus struct {
 }
 
 // ToolHealthCheck creates the health_check ToolFunc.
-func ToolHealthCheck(d *toolctx.VegaDeps, localAI LocalAIProbe) ToolFunc {
+func ToolHealthCheck(localAI LocalAIProbe) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Component string `json:"component"`
@@ -46,26 +44,20 @@ func ToolHealthCheck(d *toolctx.VegaDeps, localAI LocalAIProbe) ToolFunc {
 			p.Component = "all"
 		}
 
-		// Single-component shortcuts.
 		switch p.Component {
 		case "localai":
 			return formatLocalAIHealth(localAI), nil
 		case "memory":
-			return formatMemoryHealth(ctx, d), nil
+			return "memory store replaced by wiki", nil
 		}
 
 		var rows []ComponentHealth
 
 		if p.Component != "all" {
-			if p.Component == "memory" {
-				rows = append(rows, checkMemoryComponent(ctx, d))
-			} else {
-				return fmt.Sprintf("❌ component %q not found", p.Component), nil
-			}
-			return formatHealthStatus(HealthStatus{Components: rows}), nil
+			return fmt.Sprintf("❌ component %q not found", p.Component), nil
 		}
 
-		// Append gateway-level local AI health.
+		// Local AI health.
 		localAIGw := ComponentHealth{Name: "localai (gateway)"}
 		if localAI.CheckHealth() {
 			localAIGw.Available = true
@@ -75,53 +67,8 @@ func ToolHealthCheck(d *toolctx.VegaDeps, localAI LocalAIProbe) ToolFunc {
 		}
 		rows = append(rows, localAIGw)
 
-		// Append aurora-memory health.
-		rows = append(rows, checkMemoryComponent(ctx, d))
-
 		return formatHealthStatus(HealthStatus{Components: rows}), nil
 	}
-}
-
-// --- Memory health ---
-
-// checkMemoryComponent probes the aurora-memory store and returns a ComponentHealth.
-func checkMemoryComponent(ctx context.Context, d *toolctx.VegaDeps) ComponentHealth {
-	ch := ComponentHealth{Name: "aurora-memory"}
-	if d.MemoryStore == nil {
-		ch.Detail = "not configured"
-		return ch
-	}
-
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	start := time.Now()
-	count, err := d.MemoryStore.ActiveFactCount(probeCtx)
-	elapsed := time.Since(start)
-	ch.Latency = elapsed.Round(time.Millisecond).String()
-
-	if err != nil {
-		ch.Detail = "DB error: " + err.Error()
-		return ch
-	}
-
-	ch.Available = true
-
-	ch.Detail = fmt.Sprintf("facts=%d", count)
-	return ch
-}
-
-// formatMemoryHealth returns a standalone aurora-memory health report.
-func formatMemoryHealth(ctx context.Context, d *toolctx.VegaDeps) string {
-	ch := checkMemoryComponent(ctx, d)
-	icon := "✅"
-	if !ch.Available {
-		icon = "❌"
-	}
-	latency := ch.Latency
-	if latency == "" {
-		latency = "—"
-	}
-	return fmt.Sprintf("## Aurora-Memory 상태\n\n%s %s (latency: %s)\n%s", icon, ch.Name, latency, ch.Detail)
 }
 
 // --- Shared helpers ---
@@ -153,14 +100,13 @@ func formatHealthStatus(status HealthStatus) string {
 }
 
 // formatLocalAIHealth returns a standalone local AI health report.
-func formatLocalAIHealth(localAI LocalAIProbe) string {
-	healthy := localAI.CheckHealth()
-	icon := "✅"
-	baseURL := localAI.BaseURL()
-	detail := "operational at " + baseURL
-	if !healthy {
-		icon = "❌"
-		detail = "unreachable at " + baseURL
+func formatLocalAIHealth(probe LocalAIProbe) string {
+	icon := "❌"
+	detail := "unreachable"
+	if probe.CheckHealth() {
+		icon = "✅"
+		detail = "operational"
 	}
-	return fmt.Sprintf("## LocalAI 상태\n\n%s %s\n%s", icon, "localai", detail)
+	return fmt.Sprintf("## Local AI 상태\n\n%s localai (%s)\nBase URL: %s",
+		icon, detail, probe.BaseURL())
 }

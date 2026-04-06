@@ -11,7 +11,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -36,7 +35,6 @@ type GmailParams struct {
 type GmailPipelineDeps struct {
 	LLMClient    *llm.Client
 	DefaultModel string
-	MemStore *memory.Store // nil = no memory recall in pipeline
 }
 
 // ToolGmail implements the gmail tool for structured Gmail operations via native API.
@@ -303,9 +301,6 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineD
 		GmailClient: client,
 		LLMClient:   deps.LLMClient,
 		MainModel:   deps.DefaultModel,
-		MemStore: deps.MemStore,
-		// LocalClient/LocalModel not available in tool context — pipeline
-		// will fall back to single-LLM analysis (stage 1 skipped).
 	}
 
 	var sb strings.Builder

@@ -15,7 +15,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
@@ -91,7 +90,6 @@ func (s *Server) registerSessionRPCMethods() {
 		CJKBlockFile: firstEnv("LOCAL_AI_CJK_BLOCK_FILE", "SGLANG_CJK_BLOCK_FILE"),
 	}, reg, s.logger)
 	chatCfg.LocalAIHub = s.localAIHub
-	memory.SetLocalAIHub(s.localAIHub)
 
 	// Phase 2: Tool deps + registration (core, plugin, autoresearch).
 	s.initToolsAndDeps(&chatCfg, reg, transcriptStore, agentLogWriter)
@@ -320,16 +318,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			logger:      s.logger,
 		})
 
-		// Register diary SQL migration task: every 12 hours, matured diary
-		// entries (≥2 days old) are distilled into structured SQL facts.
-		workspaceDir := resolveWorkspaceDir()
-		if workspaceDir != "" {
-			s.autonomousSvc.RegisterTask(&diarySQLMigrationTask{
-				chatHandler:  s.chatHandler,
-				workspaceDir: workspaceDir,
-				logger:       s.logger,
-			})
-		}
 	}
 
 	// Skill Genesis: register autonomous tasks (services created in initGenesisServices).

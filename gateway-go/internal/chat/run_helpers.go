@@ -62,14 +62,6 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 			"turns", result.Turns)
 	}
 
-	// Sync to Aurora store for compaction awareness.
-	// Only main sessions write to Aurora to avoid contaminating the user's conversation.
-	if deps.auroraStore != nil && isMainSession(sessionKey) {
-		tokenCount := uint64(estimateTokens(sb.String()))
-		if _, err := deps.auroraStore.SyncMessage(1, "user", sb.String(), tokenCount); err != nil {
-			logger.Warn("aurora: failed to sync interrupted context", "error", err)
-		}
-	}
 }
 
 // cleanupDraftMessage deletes the draft streaming message from Telegram when
@@ -165,12 +157,6 @@ func handleRunSuccess(
 			}
 		}
 		// Sync Aurora summaries for channel replies when available.
-		if deps.auroraStore != nil && persistText != "" && isMainSession(params.SessionKey) {
-			tokenCount := uint64(estimateTokens(persistText))
-			if _, err := deps.auroraStore.SyncMessage(1, "assistant", persistText, tokenCount); err != nil {
-				logger.Warn("aurora: failed to sync assistant message", "error", err)
-			}
-		}
 	}
 
 	if broadcaster != nil {
