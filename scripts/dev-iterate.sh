@@ -219,11 +219,13 @@ if [[ "$USE_VCHAT" == "true" ]]; then
   done
   WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
 else
-  # Start raw gateway; prod-parity uses real config (minus Telegram), default uses {}.
+  # Start raw gateway; prod-parity uses real config (with dev Telegram bot), default uses {}.
   echo -n "start... "
   DEV_CONFIG="/tmp/deneb-iterate-config.json"
   if [[ "$PROD_PARITY" == "true" ]]; then
-    "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
+    # Use iterate-specific token if available, fall back to dev token.
+    DENEB_DEV_TELEGRAM_TOKEN="${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}" \
+      "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
   elif [[ ! -f "$DEV_CONFIG" ]]; then
     echo '{}' > "$DEV_CONFIG"
   fi

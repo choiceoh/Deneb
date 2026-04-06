@@ -1,18 +1,37 @@
 #!/usr/bin/env bash
 # Generate a dev-safe config from the production deneb.json.
 #
-# Copies ~/.deneb/deneb.json but strips the Telegram bot token to prevent
-# 409 conflicts with the production gateway's long-poll.  Everything else
-# (providers, agents, sessions, hooks, logging, auth, ...) is preserved so
-# the dev instance exercises the same code paths as production.
+# Copies ~/.deneb/deneb.json and replaces the Telegram bot token with a
+# dev-specific token (from DENEB_DEV_TELEGRAM_TOKEN env var) to prevent
+# 409 conflicts with the production gateway's long-poll.  If no dev token
+# is set, the token is stripped entirely (Telegram disabled).
+#
+# Everything else (providers, agents, sessions, hooks, logging, auth, ...)
+# is preserved so the dev instance exercises the same code paths as production.
 #
 # Usage:
 #   scripts/dev-config-gen.sh              # generate /tmp/deneb-dev-config.json
 #   scripts/dev-config-gen.sh --out FILE   # custom output path
-#   scripts/dev-config-gen.sh --diff       # show what was stripped
+#   scripts/dev-config-gen.sh --diff       # show what was stripped/replaced
 #   scripts/dev-config-gen.sh --check      # exit 0 if prod config exists, 1 if not
 
 set -euo pipefail
+
+# Source .env for dev token (DENEB_DEV_TELEGRAM_TOKEN etc.) if not already set.
+_dotenv="${HOME}/.deneb/.env"
+if [[ -f "$_dotenv" ]]; then
+  # Load KEY=VALUE lines without overriding existing env vars.
+  while IFS='=' read -r key val; do
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    key="${key## }"; key="${key%% }"
+    val="${val## }"; val="${val%% }"
+    val="${val#\"}"; val="${val%\"}"
+    val="${val#\'}"; val="${val%\'}"
+    if [[ -z "${!key:-}" ]]; then
+      export "$key=$val"
+    fi
+  done < "$_dotenv"
+fi
 
 PROD_CONFIG="${DENEB_CONFIG_PATH:-${HOME}/.deneb/deneb.json}"
 OUT="/tmp/deneb-dev-config.json"
@@ -46,47 +65,54 @@ case "$MODE" in
     ;;
 
   diff)
-    # Show what fields get stripped.
+    # Show what fields get stripped/replaced.
     python3 -c "
-import json, sys
+import json, os, sys
 
 with open('$PROD_CONFIG') as f:
     cfg = json.load(f)
 
-stripped = []
+changes = []
+dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN', '')
 
-# Strip Telegram bot token (prevents 409 long-poll conflict).
+# Telegram bot token: replace with dev token or strip.
 tg = cfg.get('channels', {}).get('telegram', {})
 if tg.get('botToken'):
-    stripped.append('channels.telegram.botToken')
-    tg['botToken'] = ''
+    if dev_token:
+        changes.append('channels.telegram.botToken (replaced with dev bot token)')
+    else:
+        changes.append('channels.telegram.botToken (stripped, no DENEB_DEV_TELEGRAM_TOKEN)')
 
 # Strip Gmail polling (avoid duplicate poll cycles).
 gp = cfg.get('gmailPoll', {})
 if gp.get('enabled'):
-    stripped.append('gmailPoll.enabled (set to false)')
+    changes.append('gmailPoll.enabled (set to false)')
 
-if stripped:
-    print('Stripped fields (dev safety):')
-    for s in stripped:
-        print(f'  - {s}')
+if changes:
+    print('Modified fields (dev safety):')
+    for c in changes:
+        print(f'  - {c}')
 else:
-    print('No fields stripped (config is dev-safe as-is)')
+    print('No fields modified (config is dev-safe as-is)')
 "
     ;;
 
   generate)
     python3 -c "
-import json, sys
+import json, os, sys
 
 with open('$PROD_CONFIG') as f:
     cfg = json.load(f)
 
-# Strip Telegram bot token to prevent 409 conflict with production's long-poll.
-# Keep the rest of channels.telegram so config validation paths run.
+dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN', '')
+
+# Telegram bot token: replace with dev token (full parity) or strip (safe fallback).
 tg = cfg.get('channels', {}).get('telegram')
 if tg and isinstance(tg, dict):
-    tg['botToken'] = ''
+    if dev_token:
+        tg['botToken'] = dev_token
+    else:
+        tg['botToken'] = ''
 
 # Disable Gmail polling to avoid duplicate poll cycles.
 gp = cfg.get('gmailPoll')

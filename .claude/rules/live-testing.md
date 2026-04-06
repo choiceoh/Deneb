@@ -26,10 +26,10 @@ globs: ["gateway-go/**/*.go", "core-rs/**/*.rs", "proto/**/*.proto"]
 
 | 항목 | Default dev | `--prod-parity` | Production |
 |---|---|---|---|
-| Config | `{}` (empty) | 프로덕션 config (Telegram 제외) | `~/.deneb/deneb.json` |
+| Config | `{}` (empty) | 프로덕션 config | `~/.deneb/deneb.json` |
 | Providers/Auth | 미로딩 | 로딩 | 로딩 |
 | Hooks/Agents | 미로딩 | 로딩 | 로딩 |
-| Telegram | 비활성 | 비활성 (409 방지) | 활성 |
+| Telegram | 비활성 | **dev 봇으로 활성** (DENEB_DEV_TELEGRAM_TOKEN) | 프로덕션 봇 |
 | Rust features | `make rust` 의존 | 동일 | `make rust-dgx` (Vega+ML+CUDA) |
 | Bind | loopback | loopback | config-driven |
 
@@ -55,9 +55,19 @@ scripts/dev-live-test.sh parity    # dev vs prod 환경 비교 리포트
 **dev config 생성:**
 ```bash
 scripts/dev-config-gen.sh              # /tmp/deneb-dev-config.json 생성
-scripts/dev-config-gen.sh --diff       # 무엇이 제거되는지 확인
+scripts/dev-config-gen.sh --diff       # 무엇이 교체/제거되는지 확인
 scripts/dev-config-gen.sh --check      # 프로덕션 config 존재 여부
 ```
+
+**Telegram 동등성:** `~/.deneb/.env`에 dev 전용 봇 토큰을 설정하면 prod-parity 모드에서 텔레그램 파이프라인이 실제로 활성화된다:
+```bash
+# ~/.deneb/.env
+DENEB_DEV_TELEGRAM_TOKEN=<dev bot token>         # dev-live-test.sh (port 18790)
+DENEB_ITERATE_TELEGRAM_TOKEN=<iterate bot token>  # dev-iterate.sh (port 18791)
+```
+- 각 토큰은 @BotFather에서 별도 봇을 만들어서 획득
+- 프로덕션 봇과 다른 봇이므로 409 충돌 없이 동시 실행 가능
+- 토큰 미설정 시 기존 동작 유지 (텔레그램 비활성)
 
 **Rust 빌드 동등성:** dev에서도 full feature로 빌드하면 Vega/ML 경로 테스트 가능:
 ```bash

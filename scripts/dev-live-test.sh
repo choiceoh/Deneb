@@ -29,12 +29,16 @@
 #   scripts/dev-live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
 #   scripts/dev-live-test.sh tool-check TOOL_NAME MSG
 #
+# Real Telegram E2E (Telethon — actual Telegram servers, not mock):
+#   scripts/dev-live-test.sh e2e-quality [SCENARIO]    Real e2e quality test
+#   scripts/dev-live-test.sh e2e-quality-custom MSG    Custom message e2e test
+#
 # The dev instance runs on port 18790 (separate from production on 18789).
 #
 # Prod-parity mode (--prod-parity):
-#   Uses production config with Telegram disabled instead of empty config {}.
+#   Uses production config with dev bot token instead of empty config {}.
 #   This exercises the same code paths as production (providers, auth, hooks,
-#   agents, sessions, logging) while staying safe from Telegram 409 conflicts.
+#   agents, sessions, logging) with a separate Telegram bot to avoid 409 conflicts.
 
 set -euo pipefail
 
@@ -73,7 +77,11 @@ cmd_start() {
   local dev_config="/tmp/deneb-dev-config.json"
   if [[ "$PROD_PARITY" == "true" ]]; then
     "$SCRIPT_DIR/dev-config-gen.sh" --out "$dev_config" >/dev/null 2>&1
-    echo "    Config: prod-parity (from ~/.deneb/deneb.json, Telegram disabled)"
+    if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
+      echo "    Config: prod-parity (Telegram: dev bot active)"
+    else
+      echo "    Config: prod-parity (Telegram: disabled, no DENEB_DEV_TELEGRAM_TOKEN)"
+    fi
   else
     [[ -f "$dev_config" ]] || echo '{}' > "$dev_config"
   fi
@@ -287,7 +295,23 @@ cmd_parity() {
   fi
   echo ""
 
-  # 3. Environment variables.
+  # 3. Telegram parity.
+  echo "--- Telegram ---"
+  if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
+    echo "  [OK]   DENEB_DEV_TELEGRAM_TOKEN: set (dev bot for port $DEV_PORT)"
+  else
+    echo "  [GAP]  DENEB_DEV_TELEGRAM_TOKEN: not set (Telegram pipeline disabled in dev)"
+    echo "         Fix: create a test bot via @BotFather and set DENEB_DEV_TELEGRAM_TOKEN in ~/.deneb/.env"
+    issues=$((issues + 1))
+  fi
+  if [[ -n "${DENEB_ITERATE_TELEGRAM_TOKEN:-}" ]]; then
+    echo "  [OK]   DENEB_ITERATE_TELEGRAM_TOKEN: set (iterate bot for port 18791)"
+  else
+    echo "  [INFO] DENEB_ITERATE_TELEGRAM_TOKEN: not set (iterate will share dev token or disable)"
+  fi
+  echo ""
+
+  # 4. Environment variables.
   echo "--- Key Environment Variables ---"
   local env_vars=("GEMINI_API_KEY" "DENEB_EMBED_MODEL" "GITHUB_WEBHOOK_SECRET")
   for var in "${env_vars[@]}"; do
@@ -305,13 +329,13 @@ cmd_parity() {
   fi
   echo ""
 
-  # 4. Port/binding.
+  # 5. Port/binding.
   echo "--- Network ---"
   echo "  [INFO] Dev port: $DEV_PORT (production: 18789)"
   echo "  [INFO] Dev bind: loopback (production: config-driven)"
   echo ""
 
-  # 5. Summary.
+  # 6. Summary.
   if (( issues == 0 )); then
     echo "==> No parity gaps detected"
   else
@@ -923,9 +947,13 @@ case "${1:-help}" in
   vchat-timeline) python3 "$SCRIPT_DIR/vchat.py" timeline ;;
   vchat-logs)    shift; python3 "$SCRIPT_DIR/vchat.py" logs "$@" ;;
 
-  # vchat quality testing (Telegram pipeline quality checks).
+  # vchat quality testing (Telegram pipeline quality checks — mock).
   vchat-quality)       shift; python3 "$SCRIPT_DIR/dev-vchat-quality.py" "$@" ;;
   vchat-quality-custom) shift; python3 "$SCRIPT_DIR/dev-vchat-quality.py" --custom "$@" ;;
+
+  # Real Telegram e2e quality testing (Telethon — actual Telegram servers).
+  e2e-quality)         shift; python3 "$SCRIPT_DIR/dev-e2e-quality.py" "$@" ;;
+  e2e-quality-custom)  shift; python3 "$SCRIPT_DIR/dev-e2e-quality.py" --custom "$@" ;;
 
   # Baseline tracking.
   baseline)      shift; "$SCRIPT_DIR/dev-baseline.sh" "$@" ;;
@@ -980,6 +1008,11 @@ case "${1:-help}" in
     echo "  vchat-logs [-n N]   게이트웨이 로그"
     echo "  vchat-quality [S]   텔레그램 파이프라인 품질 테스트 (korean|tool|format|multi|all)"
     echo "  vchat-quality-custom MSG  커스텀 메시지 품질 테스트"
+    echo ""
+    echo "Real Telegram E2E (실제 텔레그램 서버 경유, Telethon 기반):"
+    echo "  e2e-quality [S]     실제 텔레그램 e2e 품질 테스트 (korean|tool|format|multi|all)"
+    echo "  e2e-quality-custom MSG  커스텀 메시지 e2e 테스트"
+    echo "    Flags: --bot USERNAME (default: DENEB_DEV_BOT_USERNAME), --json"
     echo ""
     echo "Baseline (regression detection):"
     echo "  baseline save       현재 결과를 베이스라인으로 저장"
