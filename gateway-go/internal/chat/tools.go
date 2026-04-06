@@ -127,13 +127,17 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 
 	// Invalidate caches when mutation tools modify the file system.
 	if IsMutationTool(name) {
+		mutPath := extractFilePath(input)
 		if rc != nil {
-			rc.Invalidate()
+			if mutPath != "" {
+				rc.InvalidateByPath(mutPath)
+			} else {
+				rc.Invalidate()
+			}
 		}
-		// Invalidate the specific file in the file-read dedup cache.
 		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
-			if filePath := extractFilePath(input); filePath != "" {
-				fc.Invalidate(filePath)
+			if mutPath != "" {
+				fc.Invalidate(mutPath)
 			}
 		}
 	}
@@ -146,7 +150,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// Store in run cache (after post-processing, before compression).
 	if rc != nil && IsCacheableTool(name) {
 		cacheKey := BuildCacheKey(name, input)
-		rc.Set(cacheKey, output)
+		scope := extractPathScope(input)
+		rc.SetWithScope(cacheKey, output, scope)
 	}
 
 	// Apply compression if requested by the agent.
@@ -201,6 +206,26 @@ func extractFilePath(input json.RawMessage) string {
 	}
 	if json.Unmarshal(input, &meta) == nil {
 		return meta.FilePath
+	}
+	return ""
+}
+
+// extractPathScope extracts a path scope from cacheable tool input JSON.
+// Cacheable tools use "path" (find/tree/grep) or "file" (analyze) to indicate
+// the search scope. Returns "" when no scope is present (workspace-wide).
+func extractPathScope(input json.RawMessage) string {
+	if !bytes.Contains(input, []byte(`"path"`)) && !bytes.Contains(input, []byte(`"file"`)) {
+		return ""
+	}
+	var meta struct {
+		Path string `json:"path"`
+		File string `json:"file"`
+	}
+	if json.Unmarshal(input, &meta) == nil {
+		if meta.Path != "" {
+			return meta.Path
+		}
+		return meta.File
 	}
 	return ""
 }
