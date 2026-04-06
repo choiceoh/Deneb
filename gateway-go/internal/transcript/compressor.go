@@ -7,8 +7,10 @@ package transcript
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -231,15 +233,21 @@ func (c *Compressor) readMessages(path string) ([]TranscriptMessage, error) {
 			continue // Skip header.
 		}
 
-		raw := make([]byte, len(line))
-		copy(raw, line)
+		dec := json.NewDecoder(bytes.NewReader(line))
+		for {
+			raw := make([]byte, len(line))
+			copy(raw, line)
 
-		var msg TranscriptMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			continue // Skip malformed lines.
+			var msg TranscriptMessage
+			if err := dec.Decode(&msg); err != nil {
+				if err != io.EOF {
+					// skip malformed tail
+				}
+				break
+			}
+			msg.Raw = json.RawMessage(raw)
+			messages = append(messages, msg)
 		}
-		msg.Raw = json.RawMessage(raw)
-		messages = append(messages, msg)
 	}
 
 	return messages, scanner.Err()

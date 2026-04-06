@@ -2,7 +2,9 @@ package agentlog
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"strings"
 )
@@ -84,15 +86,21 @@ func readAllEntries(path string) []LogEntry {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+		line := scanner.Bytes()
+		if len(strings.TrimSpace(string(line))) == 0 {
 			continue
 		}
-		var entry LogEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
+		dec := json.NewDecoder(bytes.NewReader(line))
+		for {
+			var entry LogEntry
+			if err := dec.Decode(&entry); err != nil {
+				if err != io.EOF {
+					// skip malformed tail
+				}
+				break
+			}
+			entries = append(entries, entry)
 		}
-		entries = append(entries, entry)
 	}
 	return entries
 }
