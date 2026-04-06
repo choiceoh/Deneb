@@ -426,6 +426,84 @@ func TestSplitCaptionAndBody_Korean(t *testing.T) {
 	}
 }
 
+func TestUnclosedCodeBlock(t *testing.T) {
+	tests := []struct {
+		name    string
+		html    string
+		wantTag string
+		wantPos int
+	}{
+		{"no code block", "hello <b>world</b>", "", -1},
+		{"closed block", "<pre><code>x</code></pre> after", "", -1},
+		{"unclosed plain", "<pre><code>x", "<pre><code>", 0},
+		{"unclosed with lang", `<pre><code class="language-go">x`, `<pre><code class="language-go">`, 0},
+		{"unclosed after closed", `<pre><code>a</code></pre> <pre><code class="language-rs">b`, `<pre><code class="language-rs">`, 26},
+		{"all closed", `<pre><code>a</code></pre><pre><code>b</code></pre>`, "", -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tag, pos := unclosedCodeBlock(tt.html)
+			if tag != tt.wantTag {
+				t.Errorf("tag = %q, want %q", tag, tt.wantTag)
+			}
+			if pos != tt.wantPos {
+				t.Errorf("pos = %d, want %d", pos, tt.wantPos)
+			}
+		})
+	}
+}
+
+func TestChunkHTML_CodeFenceSafe(t *testing.T) {
+	// Code block that spans the chunk boundary should be closed and reopened.
+	code := strings.Repeat("x", 80)
+	html := "before " + `<pre><code class="language-go">` + code + "</code></pre> after"
+	// maxLen small enough to force a split inside the code block.
+	chunks := ChunkHTML(html, 60)
+
+	// Every chunk must have balanced <pre><code> tags.
+	for i, chunk := range chunks {
+		opens := strings.Count(chunk, "<pre><code")
+		closes := strings.Count(chunk, "</code></pre>")
+		if opens != closes {
+			t.Errorf("chunk %d: unbalanced tags (opens=%d, closes=%d): %q", i, opens, closes, chunk)
+		}
+	}
+}
+
+func TestChunkHTML_CodeFenceReopensWithLang(t *testing.T) {
+	// A large code block with a language tag must reopen with the same tag.
+	code := strings.Repeat("a", 200)
+	html := `<pre><code class="language-rust">` + code + "</code></pre>"
+	chunks := ChunkHTML(html, 100)
+
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks, got %d", len(chunks))
+	}
+	for i := 1; i < len(chunks); i++ {
+		if strings.Contains(chunks[i], "<pre><code") && !strings.Contains(chunks[i], `class="language-rust"`) {
+			t.Errorf("chunk %d: reopened code block missing language tag: %q", i, chunks[i])
+		}
+	}
+}
+
+func TestChunkHTML_PrefersSplitBeforeCodeBlock(t *testing.T) {
+	// When there's enough content before the code block, split there
+	// instead of inside the block.
+	before := strings.Repeat("w ", 40) // 80 chars of normal text
+	code := strings.Repeat("c", 30)
+	html := before + "<pre><code>" + code + "</code></pre>"
+	chunks := ChunkHTML(html, 100)
+
+	// The code block should land entirely in one chunk (not split).
+	for _, chunk := range chunks {
+		opens := strings.Count(chunk, "<pre><code")
+		closes := strings.Count(chunk, "</code></pre>")
+		if opens != closes {
+			t.Errorf("code block was split despite sufficient leading content: %q", chunk)
+		}
+	}
+}
+
 func TestChunkHTML_Korean(t *testing.T) {
 	// HTML with long Korean text.
 	html := "<b>" + strings.Repeat("다", 1500) + "</b>" // ~4507 bytes
