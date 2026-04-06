@@ -399,6 +399,24 @@ func TestRecoverTruncated(t *testing.T) {
 			input:     "",
 			wantValid: false,
 		},
+		{
+			name:      "brace inside string value skipped",
+			input:     `{"results": [{"id": 1, "reason": "test } value"}, {"id": 2, "rea`,
+			wantValid: true,
+			wantCount: 1,
+		},
+		{
+			name:      "Korean reason with brace",
+			input:     `{"results": [{"id": 1, "valid": true}, {"id": 2, "reason": "함수의 } 부분"}, {"id": 3, "trunc`,
+			wantValid: true,
+			wantCount: 2,
+		},
+		{
+			name:      "escaped quote before brace in string",
+			input:     `{"results": [{"id": 1, "reason": "say \"}\""}, {"id": 2, "trunc`,
+			wantValid: true,
+			wantCount: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -431,6 +449,28 @@ func TestRecoverTruncated(t *testing.T) {
 			}
 			if !tt.wantValid && result != "" {
 				t.Errorf("RecoverTruncated() unexpectedly recovered: %s", result)
+			}
+		})
+	}
+}
+
+func TestLastUnquotedBrace(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  int
+	}{
+		{"simple", `[{"a":1}]`, 7},
+		{"no brace", `[1, 2, 3]`, -1},
+		{"brace in string", `[{"reason": "test } val"}]`, 24},
+		{"only brace in string", `["test } val"`, -1},
+		{"escaped quote before brace", `[{"r": "say \"}\""}, {"trunc`, 18},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := lastUnquotedBrace(tt.input)
+			if got != tt.want {
+				t.Errorf("lastUnquotedBrace(%q) = %d, want %d", tt.input, got, tt.want)
 			}
 		})
 	}

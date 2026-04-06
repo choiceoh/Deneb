@@ -13,6 +13,7 @@ build/
 .idea/
 .vscode/
 .mcp.json
+.claude/settings.local.json
 *.swp
 *.swo
 *~
@@ -63,3 +64,9 @@ gateway-go/internal/memory/testdata/query_embedding_cache.json
 
 # Go build binaries
 gateway-go/dream-once
+
+# SQLite project databases (IDE/tool artifacts)
+projects.db
+
+# Local scripts
+scripts/deploy.sh
