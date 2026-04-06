@@ -95,6 +95,16 @@ type Handler struct {
 	pendingMu   sync.Mutex
 	pendingMsgs map[string]*pendingRunQueue // sessionKey -> queued messages
 
+	// subagentNotifyMu guards subagentNotifyChs and subagentNotifyQueues.
+	subagentNotifyMu sync.Mutex
+	// subagentNotifyChs maps parent sessionKey → buffered channel for receiving
+	// child completion notifications. Created lazily per parent session, consumed
+	// by DeferredSystemText during agent runs.
+	subagentNotifyChs map[string]chan string
+	// subagentNotifyQueues maps parent sessionKey → debounced notification queue.
+	// Batches concurrent child completions (1s debounce) before flushing.
+	subagentNotifyQueues map[string]*notifyQueue
+
 	// runStateMachine tracks active agent runs for status broadcasting.
 	// Protected by callbackMu.
 	runStateMachine *telegram.RunStateMachine
@@ -224,6 +234,8 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		emitTranscriptFn:     cfg.EmitTranscriptFn,
 		abortMap:             make(map[string]*AbortEntry),
 		pendingMsgs:          make(map[string]*pendingRunQueue),
+		subagentNotifyChs:    make(map[string]chan string),
+		subagentNotifyQueues: make(map[string]*notifyQueue),
 		uploadLimits:         make(map[string]int64),
 		done:                 make(chan struct{}),
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
@@ -239,6 +251,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		pilot.SetLocalAIHub(cfg.LocalAIHub)
 	}
 	go h.abortGCLoop()
+	h.startSubagentNotifier()
 	return h
 }
 
@@ -509,4 +522,9 @@ func (h *Handler) Close() {
 	h.pendingMu.Lock()
 	h.pendingMsgs = make(map[string]*pendingRunQueue)
 	h.pendingMu.Unlock()
+
+	h.subagentNotifyMu.Lock()
+	h.subagentNotifyChs = make(map[string]chan string)
+	h.subagentNotifyQueues = make(map[string]*notifyQueue)
+	h.subagentNotifyMu.Unlock()
 }

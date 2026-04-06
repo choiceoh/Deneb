@@ -147,6 +147,11 @@ type runDeps struct {
 	// context, so the tool returns "not available" instead of silently no-oping.
 	continuationEnabled bool
 
+	// subagentNotifyCh receives completion notifications for child sessions
+	// spawned by the current session. Consumed by DeferredSystemText to inject
+	// notifications mid-run without polling. nil if not applicable.
+	subagentNotifyCh <-chan string
+
 	// chatport boundary: injected implementations that decouple chat from autoreply.
 	// When nil, the corresponding functionality is simply skipped.
 	newTypingSignaler    func(onStart func()) chatport.TypingSignaler // optional; creates phase-aware typing signaler

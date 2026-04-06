@@ -88,12 +88,13 @@ func RunAgent(
 		}
 
 		// Deferred system text injection: from turn 1 onward, check if
-		// late-arriving context (e.g., proactive hints) is ready. Once
-		// injected, clear the hook so subsequent turns skip the check.
+		// late-arriving context (e.g., proactive hints, subagent completion
+		// notifications) is ready. The hook is kept alive so multiple sources
+		// can deliver text across different turns (e.g., proactive hint on
+		// turn 1, subagent notification on turn 5).
 		if turn > 0 && cfg.DeferredSystemText != nil {
 			if extra := cfg.DeferredSystemText(); extra != "" {
 				cfg.System = llm.AppendSystemText(cfg.System, extra)
-				cfg.DeferredSystemText = nil
 			}
 		}
 

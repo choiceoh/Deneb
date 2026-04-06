@@ -73,6 +73,10 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
 
+	// Wire subagent notification channel so the running agent receives
+	// child completion notifications via DeferredSystemText.
+	deps.subagentNotifyCh = h.subagentNotifyCh(params.SessionKey)
+
 	// Continuation (continue_run tool + autonomous multi-run) is active in
 	// Normal and Work modes. Chat mode (conversation-only) runs once and stops.
 	if sess.Mode == session.ModeChat && !params.DeepWork {

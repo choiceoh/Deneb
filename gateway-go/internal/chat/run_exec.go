@@ -717,9 +717,12 @@ func executeAgentRun(
 		// Each inline image is ~1600 tokens; stripping saves that cost per turn
 		// from turn 1 onward for multi-turn runs that start with an image.
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
-		// Deferred context injection on turn 1+: proactive hints only.
-		// Recall is now agent-driven via memory(action=recall) tool.
-		DeferredSystemText: deferredProactiveHint(proactiveCh, proactiveStart, logger),
+		// Deferred context injection on turn 1+: proactive hints and subagent
+		// completion notifications. Both are non-blocking channel reads.
+		DeferredSystemText: composeDeferredSources(
+			deferredProactiveHint(proactiveCh, proactiveStart, logger),
+			deps.subagentNotifyCh,
+		),
 		// Emit heartbeat at each turn so WS clients know the agent is alive.
 		OnTurn: func(turn int, accumulatedTokens int) {
 			if deps.emitAgentFn != nil {
