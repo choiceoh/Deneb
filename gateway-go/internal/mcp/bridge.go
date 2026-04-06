@@ -3,6 +3,8 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,8 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // Bridge is an HTTP client that forwards RPC calls to the Deneb gateway.
@@ -68,7 +68,9 @@ type gatewayError struct {
 
 // Call invokes a gateway RPC method and returns the raw payload.
 func (b *Bridge) Call(ctx context.Context, method string, params json.RawMessage) (json.RawMessage, error) {
-	reqID := uuid.New().String()
+	var rid [16]byte
+	rand.Read(rid[:])
+	reqID := hex.EncodeToString(rid[:])
 	gReq := gatewayRequest{
 		Type:   "req",
 		ID:     reqID,
