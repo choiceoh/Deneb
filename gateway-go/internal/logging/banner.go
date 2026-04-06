@@ -17,7 +17,6 @@ type BannerInfo struct {
 	Version      string
 	Addr         string
 	RustFFI      bool
-	VegaEnabled  bool
 	LocalAIStatus string // "online", "offline", or empty to hide
 	EmbedderInfo  string // "gemini", model name, or empty to hide
 	RerankerInfo  string // "jina-v3", "jina-api", or empty to hide
@@ -62,12 +61,6 @@ func PrintBanner(w io.Writer, info BannerInfo, color bool) {
 	}
 
 	kv("addr", info.Addr)
-
-	vegaStatus := "disabled"
-	if info.VegaEnabled {
-		vegaStatus = "enabled"
-	}
-	kv("vega", vegaStatus)
 
 	if info.LocalAIStatus != "" {
 		kv("localai", info.LocalAIStatus)

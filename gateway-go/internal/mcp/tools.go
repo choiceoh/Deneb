@@ -68,43 +68,6 @@ func allTools() []toolDef {
 			},
 		},
 
-		// --- Memory ---
-		{
-			rpcMethod: "vega.memory-search",
-			tool: Tool{
-				Name:        "deneb_memory_search",
-				Description: "Search Deneb's persistent memory using FTS5 full-text search. Returns relevant memories and diary entries.",
-				InputSchema: objectSchema(
-					requiredProp("query", "string", "Search query"),
-					prop("limit", "integer", "Maximum number of results (default: 20)"),
-					prop("project", "string", "Optional project name filter"),
-				),
-			},
-		},
-
-		// --- Vega Search ---
-		{
-			rpcMethod: "vega.ffi.search",
-			tool: Tool{
-				Name:        "deneb_vega_search",
-				Description: "Perform semantic search across Deneb's knowledge base using Vega (FTS5 + optional vector search).",
-				InputSchema: objectSchema(
-					requiredProp("query", "string", "Search query"),
-					prop("limit", "integer", "Maximum results (default: 10)"),
-				),
-			},
-		},
-		{
-			rpcMethod: "vega.ask",
-			tool: Tool{
-				Name:        "deneb_vega_ask",
-				Description: "Ask Vega a question with retrieval-augmented generation. Searches knowledge base and synthesizes an answer.",
-				InputSchema: objectSchema(
-					requiredProp("query", "string", "The question to ask"),
-				),
-			},
-		},
-
 		// --- System ---
 		{
 			rpcMethod: "gateway.identity.get",

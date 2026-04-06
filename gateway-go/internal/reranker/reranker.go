@@ -3,7 +3,7 @@
 // Calls a /v1/rerank endpoint to score query-document pairs using a
 // cross-encoder model. Supports both local (jina-reranker-v3) and remote
 // (Jina API) backends.
-package vega
+package reranker
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"sort"
 	"time"
 )
@@ -23,7 +24,7 @@ const (
 	// ~1000 chars is a safe limit for typical multilingual content.
 	maxRerankDocChars = 1000
 	// Default reranker endpoint (local jina-reranker-v3 server).
-	defaultRerankURL = "http://localhost:8090/v1/rerank"
+	DefaultRerankURL = "http://localhost:8090/v1/rerank"
 	// Default model.
 	defaultJinaRerankModel = "jinaai/jina-reranker-v3"
 )
@@ -63,7 +64,7 @@ func NewReranker(cfg RerankConfig) *Reranker {
 	}
 	url := cfg.URL
 	if url == "" {
-		url = defaultRerankURL
+		url = DefaultRerankURL
 	}
 	model := cfg.Model
 	if model == "" {
@@ -173,4 +174,50 @@ func truncateString(s string, maxChars int) string {
 		return s
 	}
 	return string(runes[:maxChars])
+}
+
+// IsReachable checks if the local reranker server is responsive.
+func IsReachable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, DefaultRerankURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	// Any response (even 405) means the server is running.
+	return true
+}
+
+// GetJinaAPIKey reads the Jina AI API key from the JINA_API_KEY environment variable.
+// Returns empty string if not configured (reranking will be disabled).
+func GetJinaAPIKey() string {
+	return os.Getenv("JINA_API_KEY")
+}
+
+// IsLocalAIReachable checks if the local AI server responds to /v1/models.
+func IsLocalAIReachable(baseURL string) bool {
+	if baseURL == "" {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
+	if err != nil {
+		return false
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }

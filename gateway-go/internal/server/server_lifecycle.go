@@ -303,12 +303,7 @@ func (s *Server) doShutdown() error {
 		s.authRateLimiter.Close()
 	}
 
-	// 11. Close Vega backend.
-	if s.vegaBackend != nil {
-		s.vegaBackend.Close()
-	}
-
-	// 11a. Close wiki store (FTS database).
+	// 11. Close wiki store (FTS database).
 	if s.wikiStore != nil {
 		s.wikiStore.Close()
 	}

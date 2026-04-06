@@ -2,7 +2,7 @@
 #
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
-.PHONY: all rust rust-vega rust-ml rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
+.PHONY: all rust rust-ml rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-dgx go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod gateway-dgx \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-arm64 \
@@ -46,23 +46,19 @@ all: rust go cli
 
 # --- Rust core library (workspace) ---
 
-# Build core crate for CGo static linking (minimal — no vega/ml).
+# Build core crate for CGo static linking (minimal — no ml).
 # --no-default-features disables "napi_binding" (Node.js addon), producing
 # only the staticlib (.a) and rlib needed by the Go gateway via CGo.
 rust:
 	cd core-rs && cargo build --release -p deneb-core --no-default-features
 
-# Build core with Vega search engine enabled (FTS-only, no ML).
-rust-vega:
-	cd core-rs && cargo build --release -p deneb-core --no-default-features --features vega
-
-# Build core with Vega + local ML inference (CPU).
+# Build core with local ML inference (CPU).
 rust-ml:
-	cd core-rs && cargo build --release -p deneb-core --no-default-features --features vega,ml
+	cd core-rs && cargo build --release -p deneb-core --no-default-features --features ml
 
-# Build core with Vega + ML + CUDA GPU acceleration (DGX Spark production).
+# Build core with ML + CUDA GPU acceleration (DGX Spark production).
 rust-dgx:
-	cd core-rs && cargo build --release -p deneb-core --no-default-features --features vega,ml,cuda
+	cd core-rs && cargo build --release -p deneb-core --no-default-features --features ml,cuda
 
 # Build all workspace crates.
 rust-all:
@@ -361,7 +357,7 @@ info:
 	@echo "Deneb Multi-Language Build"
 	@echo ""
 	@echo "  make rust       - Build Rust core crate (release, CGo, minimal)"
-	@echo "  make rust-vega  - Build Rust core + Vega search (FTS-only)"
+	@echo "  make  - Build Rust core + Vega search (FTS-only)"
 	@echo "  make rust-ml    - Build Rust core + Vega + ML inference (CPU)"
 	@echo "  make rust-dgx   - Build Rust core + Vega + ML + CUDA (DGX Spark)"
 	@echo "  make rust-all   - Build all Rust workspace crates"

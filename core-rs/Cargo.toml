@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "ml", "vega"]
+members = ["core", "ml"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -52,5 +52,4 @@ codegen-units = 1
 strip = "symbols"
 # LTO is intentionally omitted — for a staticlib consumed by CGo, LLVM bitcode
 # inflates the .a by ~5 MB without benefit (Go's system linker cannot use it).
-# Do NOT set panic = "abort" — FFI uses catch_unwind in
-# core/src/ffi/parsing.rs and core/src/ffi/memory_search.rs
+# Do NOT set panic = "abort" — FFI uses catch_unwind in core/src/ffi/parsing.rs

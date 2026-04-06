@@ -14,13 +14,7 @@ func allPrompts() []Prompt {
 			Name:        "deneb_system_check",
 			Description: "Deneb 시스템 전체 상태 점검 (게이트웨이, 런타임, 프로바이더, 모델, 스킬, 활동 메트릭)",
 		},
-		{
-			Name:        "deneb_memory_recall",
-			Description: "특정 주제에 대한 Deneb 메모리 검색 및 요약",
-			Arguments: []PromptArg{
-				{Name: "query", Description: "검색할 주제/키워드", Required: true},
-			},
-		},
+		// deneb_memory_recall removed (vega backend removed)
 		{
 			Name:        "deneb_session_review",
 			Description: "최근 또는 특정 세션의 대화 내역 리뷰",
@@ -32,13 +26,7 @@ func allPrompts() []Prompt {
 			Name:        "deneb_daily_summary",
 			Description: "오늘의 Deneb 활동 요약 (세션, 메모리 변경, 크론 작업)",
 		},
-		{
-			Name:        "deneb_vega_deep_search",
-			Description: "Vega 시맨틱 검색 + 관련 메모리를 결합한 심층 검색",
-			Arguments: []PromptArg{
-				{Name: "query", Description: "검색 쿼리", Required: true},
-			},
-		},
+		// deneb_vega_deep_search removed (vega backend removed)
 	}
 }
 
@@ -79,13 +67,13 @@ func (pm *PromptManager) Get(ctx context.Context, name string, args map[string]s
 	case "deneb_system_check":
 		return pm.systemCheck(ctx)
 	case "deneb_memory_recall":
-		return pm.memoryRecall(ctx, args["query"])
+		return nil, fmt.Errorf("prompt %s removed (vega backend removed)", name)
 	case "deneb_session_review":
 		return pm.sessionReview(ctx, args["session_key"])
 	case "deneb_daily_summary":
 		return pm.dailySummary(ctx)
 	case "deneb_vega_deep_search":
-		return pm.vegaDeepSearch(ctx, args["query"])
+		return nil, fmt.Errorf("prompt %s removed (vega backend removed)", name)
 	default:
 		return nil, fmt.Errorf("prompt %s not implemented", p.Name)
 	}
@@ -137,24 +125,6 @@ func (pm *PromptManager) systemCheck(ctx context.Context) (*PromptGetResult, err
 	}, nil
 }
 
-func (pm *PromptManager) memoryRecall(ctx context.Context, query string) (*PromptGetResult, error) {
-	if query == "" {
-		return nil, fmt.Errorf("query argument is required")
-	}
-	params, _ := json.Marshal(map[string]any{"query": query, "limit": 20})
-	results, err := pm.bridge.Call(ctx, "vega.memory-search", params)
-	if err != nil {
-		return nil, fmt.Errorf("memory search: %w", err)
-	}
-
-	data := fmt.Sprintf("## Memory Search: %q\n\n```json\n%s\n```", query, prettyJSON(results))
-	return &PromptGetResult{
-		Description: fmt.Sprintf("'%s'에 대한 메모리 검색 결과", query),
-		Messages: []PromptMessage{
-			{Role: "user", Content: TextContent(data + "\n\n위 메모리 검색 결과를 분석하고 핵심 내용을 요약해줘.")},
-		},
-	}, nil
-}
 
 func (pm *PromptManager) sessionReview(ctx context.Context, sessionKey string) (*PromptGetResult, error) {
 	var params json.RawMessage
@@ -203,27 +173,6 @@ func (pm *PromptManager) dailySummary(ctx context.Context) (*PromptGetResult, er
 	}, nil
 }
 
-func (pm *PromptManager) vegaDeepSearch(ctx context.Context, query string) (*PromptGetResult, error) {
-	if query == "" {
-		return nil, fmt.Errorf("query argument is required")
-	}
-
-	vegaParams, _ := json.Marshal(map[string]any{"query": query, "limit": 10})
-	memParams, _ := json.Marshal(map[string]any{"query": query, "limit": 10})
-
-	vegaResults, _ := pm.bridge.Call(ctx, "vega.ffi.search", vegaParams)
-	memResults, _ := pm.bridge.Call(ctx, "vega.memory-search", memParams)
-
-	data := fmt.Sprintf("## Deep Search: %q\n\n### Vega Semantic Search\n```json\n%s\n```\n\n### Memory Search\n```json\n%s\n```",
-		query, prettyJSON(vegaResults), prettyJSON(memResults))
-
-	return &PromptGetResult{
-		Description: fmt.Sprintf("'%s' 심층 검색 결과", query),
-		Messages: []PromptMessage{
-			{Role: "user", Content: TextContent(data + "\n\n위 검색 결과를 종합 분석하고, 핵심 정보를 구조화해서 정리해줘.")},
-		},
-	}, nil
-}
 
 // prettyJSON formats raw JSON for readability. Falls back to raw string.
 func prettyJSON(data json.RawMessage) string {

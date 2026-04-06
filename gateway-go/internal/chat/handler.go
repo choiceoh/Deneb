@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -37,8 +38,10 @@ type Handler struct {
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
 	auroraStore     *aurora.Store                     // Aurora hierarchical compaction store
+	memoryStore     *memory.Store                     // optional; structured memory (Honcho-style)
 	wikiStore       *wiki.Store                      // optional; wiki knowledge base
 	sessionMemory   *SessionMemoryStore               // optional; structured session working state
+	memoryEmbedder  *memory.Embedder                  // optional; fact embedding
 	unifiedStore    *unified.Store                    // optional; unified memory (search + tier-1)
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
@@ -138,7 +141,9 @@ type HandlerConfig struct {
 	JobTracker           *agent.JobTracker
 	ProviderConfigs      map[string]ProviderConfig // provider ID → config
 	AuroraStore          *aurora.Store             // Aurora hierarchical compaction store
+	MemoryStore          *memory.Store             // optional; structured memory (Honcho-style)
 	SessionMemory        *SessionMemoryStore       // optional; structured session working state
+	MemoryEmbedder       *memory.Embedder          // optional; fact embedding via local AI
 	WikiStore            *wiki.Store               // optional; wiki knowledge base
 	UnifiedStore         *unified.Store            // optional; unified memory (search + tier-1)
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
@@ -195,8 +200,10 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		jobTracker:           cfg.JobTracker,
 		providerConfigs:      cfg.ProviderConfigs,
 		auroraStore:          cfg.AuroraStore,
+		memoryStore:          cfg.MemoryStore,
 		wikiStore:            cfg.WikiStore,
 		sessionMemory:        cfg.SessionMemory,
+		memoryEmbedder:       cfg.MemoryEmbedder,
 		unifiedStore:         cfg.UnifiedStore,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,

@@ -5,9 +5,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
@@ -51,9 +51,11 @@ type ChronoDeps struct {
 	SendFn func(sessionKey, message string) error
 }
 
-// VegaDeps holds dependencies for vega search and health-check tools.
+// VegaDeps holds dependencies for memory search and health-check tools.
+// Named VegaDeps for historical reasons; the Vega backend has been removed.
 type VegaDeps struct {
-	Backend vega.Backend // may be nil until SetVega is called
+	MemoryStore    *memory.Store    // may be nil when aurora-memory is not configured
+	MemoryEmbedder *memory.Embedder // may be nil when embedding is not configured
 }
 
 // WikiDeps holds dependencies for the wiki knowledge base tool.

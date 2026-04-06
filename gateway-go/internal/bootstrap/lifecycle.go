@@ -17,7 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/internal/reranker"
 )
 
 // ExitCodeRestart signals that the gateway should be restarted (e.g., after
@@ -77,7 +77,7 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 
 	svc.Server.SetDaemon(d)
 
-	bannerInfo := buildBannerInfo(flags.Version, cfg.Addr, svc.VegaEnabled)
+	bannerInfo := buildBannerInfo(flags.Version, cfg.Addr)
 	bannerInfo.PID = os.Getpid()
 
 	svc.Server.OnListening = func(_ net.Addr) {
@@ -97,7 +97,7 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 
 // RunServer runs the gateway in non-daemon foreground mode.
 func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) int {
-	bannerInfo := buildBannerInfo(flags.Version, cfg.Addr, svc.VegaEnabled)
+	bannerInfo := buildBannerInfo(flags.Version, cfg.Addr)
 	svc.Server.OnListening = func(_ net.Addr) {
 		logging.PrintBanner(os.Stderr, bannerInfo, log.UseColor)
 	}
@@ -106,7 +106,7 @@ func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 	}, log.Logger)
 }
 
-func buildBannerInfo(version, addr string, vegaEnabled bool) logging.BannerInfo {
+func buildBannerInfo(version, addr string) logging.BannerInfo {
 	localAIBannerURL := modelrole.DefaultVllmBaseURL
 
 	// Probe local services concurrently (each has 3s timeout).
@@ -115,7 +115,7 @@ func buildBannerInfo(version, addr string, vegaEnabled bool) logging.BannerInfo 
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		if vega.IsLocalAIReachable(localAIBannerURL) {
+		if reranker.IsLocalAIReachable(localAIBannerURL) {
 			localAIStatus = "online"
 		} else {
 			localAIStatus = "offline"
@@ -131,7 +131,6 @@ func buildBannerInfo(version, addr string, vegaEnabled bool) logging.BannerInfo 
 		Version:       version,
 		Addr:          addr,
 		RustFFI:       ffi.Available,
-		VegaEnabled:   vegaEnabled,
 		LocalAIStatus: localAIStatus,
 		EmbedderInfo:  detectEmbedderInfo(),
 		RerankerInfo:  rerankerInfo,
@@ -151,7 +150,7 @@ func detectEmbedderInfo() string {
 }
 
 func detectRerankerInfo() string {
-	if vega.IsRerankerReachable() {
+	if reranker.IsReachable() {
 		return "jina-v3"
 	}
 	if os.Getenv("JINA_API_KEY") != "" {

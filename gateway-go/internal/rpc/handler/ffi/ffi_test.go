@@ -208,35 +208,6 @@ func TestParsingExtractLinks_invalidParams(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// MemoryMethods
-// ---------------------------------------------------------------------------
-
-func TestMemoryMethods_returnsHandlers(t *testing.T) {
-	m := MemoryMethods()
-	for _, name := range []string{
-		"memory.cosine_similarity",
-		"memory.bm25_rank_to_score",
-		"memory.build_fts_query",
-		"memory.merge_hybrid_results",
-		"memory.extract_keywords",
-	} {
-		if _, ok := m[name]; !ok {
-			t.Errorf("missing handler %q", name)
-		}
-	}
-}
-
-func TestMemoryCosineSimilarity_invalidParams(t *testing.T) {
-	raw := json.RawMessage(`not-json`)
-	req := &protocol.RequestFrame{ID: "1", Method: "memory.cosine_similarity", Params: raw}
-	m := MemoryMethods()
-	resp := m["memory.cosine_similarity"](context.Background(), req)
-	if resp == nil || resp.Error == nil {
-		t.Fatal("expected error for invalid JSON params")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // MarkdownMethods
 // ---------------------------------------------------------------------------
 

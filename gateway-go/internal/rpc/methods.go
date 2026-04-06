@@ -263,7 +263,6 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) error {
 	d.RegisterDomain(handlerffi.SecurityMethods())
 	d.RegisterDomain(handlerffi.MediaMethods())
 	d.RegisterDomain(handlerffi.ParsingMethods())
-	d.RegisterDomain(handlerffi.MemoryMethods())
 	d.RegisterDomain(handlerffi.MarkdownMethods())
 	d.RegisterDomain(handlerffi.CompactionMethods())
 	d.RegisterDomain(handlerffi.ContextEngineMethods())

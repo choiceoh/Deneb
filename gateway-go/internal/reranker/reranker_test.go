@@ -1,9 +1,8 @@
-package vega
+package reranker
 
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,11 +43,11 @@ func TestReranker_Rerank(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	reranker := NewReranker(RerankConfig{
+	rr := NewReranker(RerankConfig{
 		APIKey: "test-key",
 		URL:    srv.URL + "/v1/rerank",
 	})
-	results, err := reranker.Rerank(context.Background(), "test query", []string{"doc0", "doc1", "doc2"}, 3)
+	results, err := rr.Rerank(context.Background(), "test query", []string{"doc0", "doc1", "doc2"}, 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,8 +68,8 @@ func TestReranker_Rerank(t *testing.T) {
 }
 
 func TestReranker_EmptyDocs(t *testing.T) {
-	reranker := NewReranker(RerankConfig{APIKey: "test-key"})
-	results, err := reranker.Rerank(context.Background(), "query", nil, 0)
+	rr := NewReranker(RerankConfig{APIKey: "test-key"})
+	results, err := rr.Rerank(context.Background(), "query", nil, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,8 +79,8 @@ func TestReranker_EmptyDocs(t *testing.T) {
 }
 
 func TestReranker_ValidWithoutAPIKey(t *testing.T) {
-	reranker := NewReranker(RerankConfig{})
-	if reranker == nil {
+	rr := NewReranker(RerankConfig{})
+	if rr == nil {
 		t.Error("expected valid reranker without API key (local server mode)")
 	}
 }
@@ -98,8 +97,8 @@ func TestReranker_NoAuthHeaderWithoutAPIKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	reranker := NewReranker(RerankConfig{URL: srv.URL + "/v1/rerank"})
-	results, err := reranker.Rerank(context.Background(), "query", []string{"doc"}, 1)
+	rr := NewReranker(RerankConfig{URL: srv.URL + "/v1/rerank"})
+	results, err := rr.Rerank(context.Background(), "query", []string{"doc"}, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,11 +113,11 @@ func TestReranker_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	reranker := NewReranker(RerankConfig{
+	rr := NewReranker(RerankConfig{
 		APIKey: "test-key",
 		URL:    srv.URL + "/v1/rerank",
 	})
-	_, err := reranker.Rerank(context.Background(), "query", []string{"doc"}, 1)
+	_, err := rr.Rerank(context.Background(), "query", []string{"doc"}, 1)
 	if err == nil {
 		t.Fatal("expected error for server 500")
 	}
@@ -157,34 +156,5 @@ func TestTruncateString(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("truncateString(%q, %d) = %q, want %q", tt.input, tt.maxChars, got, tt.want)
 		}
-	}
-}
-
-func TestRerankResults_Fallback(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "broken", http.StatusServiceUnavailable)
-	}))
-	defer srv.Close()
-
-	eb := &EnhancedBackend{
-		reranker: NewReranker(RerankConfig{
-			APIKey: "test-key",
-			URL:    srv.URL + "/v1/rerank",
-		}),
-		logger: slog.Default(),
-	}
-
-	input := []SearchResult{
-		{ProjectID: 1, Content: "first"},
-		{ProjectID: 2, Content: "second"},
-	}
-
-	got := eb.rerankResults(context.Background(), "query", input)
-
-	if len(got) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(got))
-	}
-	if got[0].ProjectID != 1 || got[1].ProjectID != 2 {
-		t.Errorf("expected original order, got %+v", got)
 	}
 }

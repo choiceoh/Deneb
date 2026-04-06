@@ -7,8 +7,6 @@ import (
 	"math"
 	"sort"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
 // RerankFunc is a function that reranks documents by query relevance.
@@ -106,12 +104,7 @@ func (s *Store) ftsSearch(ctx context.Context, query string, opts SearchOpts) (m
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Use Rust keyword extraction for multilingual tokenization (stop-word removal,
-	// Korean particle stripping, CJK bigrams). Falls back to naive whitespace split.
-	tokens, err := ffi.MemoryExtractKeywords(query)
-	if err != nil || len(tokens) == 0 {
-		tokens = splitTokens(query)
-	}
+	tokens := splitTokens(query)
 
 	// Append caller-supplied extra keywords (e.g., from Vega LLM expansion).
 	if len(opts.ExtraKeywords) > 0 {

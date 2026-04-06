@@ -298,45 +298,6 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Vega FFI RPC tests
-// ---------------------------------------------------------------------------
-
-func TestVegaFFIExecute(t *testing.T) {
-	d := testDispatcher()
-	RegisterVegaMethods(d, VegaDeps{}) // register with nil backend
-	resp := dispatch(t, d, "vega.ffi.execute", map[string]string{"cmd": "test"})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
-	}
-}
-
-func TestVegaFFISearch(t *testing.T) {
-	d := testDispatcher()
-	RegisterVegaMethods(d, VegaDeps{})
-	resp := dispatch(t, d, "vega.ffi.search", map[string]string{"query": "test"})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
-	}
-}
-
-func TestVegaFFIExecute_MissingParams(t *testing.T) {
-	d := testDispatcher()
-	RegisterVegaMethods(d, VegaDeps{})
-	resp := dispatch(t, d, "vega.ffi.execute", nil)
-	if resp.OK {
-		t.Error("expected error for missing params")
-	}
-}
-
-func TestVegaFFISearch_MissingParams(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "vega.ffi.search", nil)
-	if resp.OK {
-		t.Error("expected error for missing params")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Protocol validate_params RPC tests
 // ---------------------------------------------------------------------------
 
@@ -601,30 +562,6 @@ func TestSecurityValidateErrorCode_KnownCode(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Memory method contract tests
-// ---------------------------------------------------------------------------
-
-func TestMemoryBuildFTSQuery_Valid(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "memory.build_fts_query", map[string]string{"raw": "hello world"})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
-	}
-}
-
-func TestMemoryBm25RankToScore_Valid(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "memory.bm25_rank_to_score", map[string]any{"rank": -3.5})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if _, ok := payload["score"]; !ok {
-		t.Error("expected score field in response")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Markdown method contract tests
 // ---------------------------------------------------------------------------
