@@ -29,9 +29,9 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	// Check required sections exist.
 	sections := []string{
 		"You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb).",
-		"## Communication",
-		"## Attitude",
-		"## How to Act",
+		"## 소통",
+		"## 태도",
+		"## 행동 원칙",
 		"## Trust and Respect",
 		"## Tooling",
 		"## Tool Usage",
