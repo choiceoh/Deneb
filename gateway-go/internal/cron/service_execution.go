@@ -14,6 +14,30 @@ import (
 // --- Job execution (mirrors execute-job.ts, job-result.ts) ---
 
 func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
+	// Per-job execution guard: skip if this job is already running.
+	if _, loaded := s.runningJobs.LoadOrStore(job.ID, true); loaded {
+		s.logger.Info("cron job already running, skipping", "id", job.ID)
+		s.runLog.Append(RunLogEntry{
+			Ts:     time.Now().UnixMilli(),
+			JobID:  job.ID,
+			Action: "skipped",
+			Status: "skipped",
+			Error:  "concurrent execution prevented",
+		})
+		return RunOutcome{
+			Status:    "skipped",
+			Error:     "job already running",
+			StartedAt: time.Now().UnixMilli(),
+			EndedAt:   time.Now().UnixMilli(),
+		}
+	}
+	defer s.runningJobs.Delete(job.ID)
+
+	// Re-load fresh job data from store to avoid stale state from scheduler closures.
+	if fresh := s.store.GetJob(job.ID); fresh != nil {
+		job = *fresh
+	}
+
 	startedAt := time.Now().UnixMilli()
 	s.emit(CronEvent{Type: "job_started", JobID: job.ID})
 

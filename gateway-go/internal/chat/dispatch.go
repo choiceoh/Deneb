@@ -73,9 +73,9 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
 
-	// Continuation (continue_run tool + autonomous multi-run) is only active
-	// in Work mode or explicit DeepWork. Normal/Chat sessions run once and stop.
-	if sess.Mode != session.ModeWork && !params.DeepWork {
+	// Continuation (continue_run tool + autonomous multi-run) is active in
+	// Normal and Work modes. Chat mode (conversation-only) runs once and stops.
+	if sess.Mode == session.ModeChat && !params.DeepWork {
 		deps.continuationEnabled = false
 		deps.maxContinuations = 0
 	}

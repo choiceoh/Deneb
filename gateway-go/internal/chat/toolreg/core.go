@@ -301,7 +301,6 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          tools.ToolCron(chrono),
-		Deferred:    true,
 	})
 
 	// Build gmail pipeline deps from available subsystems.
