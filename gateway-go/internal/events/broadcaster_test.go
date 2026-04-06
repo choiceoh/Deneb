@@ -8,8 +8,6 @@ import (
 type mockSubscriber struct {
 	id             string
 	authed         bool
-	role           string
-	scopes         []string
 	bufferedAmount int64
 	mu             sync.Mutex
 	received       [][]byte
@@ -18,18 +16,6 @@ type mockSubscriber struct {
 
 func (m *mockSubscriber) ID() string            { return m.id }
 func (m *mockSubscriber) IsAuthenticated() bool { return m.authed }
-func (m *mockSubscriber) Role() string {
-	if m.role == "" {
-		return "operator"
-	}
-	return m.role
-}
-func (m *mockSubscriber) Scopes() []string {
-	if m.scopes == nil {
-		return []string{"read", "write", "admin"}
-	}
-	return m.scopes
-}
 func (m *mockSubscriber) BufferedAmount() int64 { return m.bufferedAmount }
 func (m *mockSubscriber) SendEvent(data []byte) error {
 	if m.failSend {
@@ -161,51 +147,7 @@ func TestSequenceIncrement(t *testing.T) {
 	}
 }
 
-// --- Phase 2 tests: scope guards, targeted broadcast, session subscriptions ---
-
-func TestBroadcast_ScopeGuard(t *testing.T) {
-	b := NewBroadcaster()
-	viewer := &mockSubscriber{id: "viewer", authed: true, scopes: []string{"read"}}
-	noScope := &mockSubscriber{id: "none", authed: true, scopes: []string{}}
-
-	b.Subscribe(viewer, Filter{})
-	b.Subscribe(noScope, Filter{})
-
-	// "sessions.changed" requires "read" scope.
-	sent, _ := b.Broadcast("sessions.changed", nil)
-	if sent != 1 {
-		t.Errorf("expected 1 sent (only viewer), got %d", sent)
-	}
-	if len(viewer.received) != 1 {
-		t.Error("viewer should receive event")
-	}
-	if len(noScope.received) != 0 {
-		t.Error("no-scope subscriber should not receive scoped event")
-	}
-}
-
-func TestBroadcast_AdminBypassesScope(t *testing.T) {
-	b := NewBroadcaster()
-	admin := &mockSubscriber{id: "admin", authed: true, scopes: []string{"admin"}}
-	b.Subscribe(admin, Filter{})
-
-	sent, _ := b.Broadcast("config.changed", nil)
-	if sent != 1 {
-		t.Errorf("admin should receive config.changed, got %d", sent)
-	}
-}
-
-func TestBroadcast_UnguardedEvent(t *testing.T) {
-	b := NewBroadcaster()
-	s := &mockSubscriber{id: "s1", authed: true, scopes: []string{}}
-	b.Subscribe(s, Filter{})
-
-	// "tick" is not in scope guards — everyone receives it.
-	sent, _ := b.Broadcast("tick", nil)
-	if sent != 1 {
-		t.Errorf("unguarded event should reach all, got %d", sent)
-	}
-}
+// --- Phase 2 tests: targeted broadcast, session subscriptions ---
 
 func TestBroadcastToConnIDs(t *testing.T) {
 	b := NewBroadcaster()

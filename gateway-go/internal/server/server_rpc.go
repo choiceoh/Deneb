@@ -33,10 +33,8 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func (s *Server) registerBuiltinMethods() {
@@ -106,37 +104,6 @@ func (s *Server) registerBuiltinMethods() {
 			return ""
 		},
 	}))
-}
-
-// pluginRegistryAdapter bridges plugin.FullRegistry to the rpc.PluginRegistry interface.
-type pluginRegistryAdapter struct {
-	registry *plugin.FullRegistry
-}
-
-func (a *pluginRegistryAdapter) ListPlugins() []protocol.PluginMeta {
-	raw := a.registry.ListPlugins()
-	result := make([]protocol.PluginMeta, len(raw))
-	for i, p := range raw {
-		result[i] = protocol.PluginMeta{
-			ID:      p.ID,
-			Name:    p.Label,
-			Kind:    protocol.PluginKind(p.Kind),
-			Version: p.Version,
-			Enabled: p.Enabled,
-		}
-	}
-	return result
-}
-
-func (a *pluginRegistryAdapter) GetPluginHealth(id string) *protocol.PluginHealthStatus {
-	p := a.registry.GetPlugin(id)
-	if p != nil {
-		return &protocol.PluginHealthStatus{
-			PluginID: p.ID,
-			Healthy:  p.Enabled,
-		}
-	}
-	return nil
 }
 
 // truncateForDedup returns at most maxLen bytes of s for use as a dedup key.

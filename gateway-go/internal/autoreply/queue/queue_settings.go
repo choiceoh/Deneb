@@ -6,20 +6,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
-// ResolveFollowupQueueSettings resolves the effective queue settings from config,
-// session entry, inline overrides, and per-channel defaults.
+// ResolveFollowupQueueSettings resolves the effective queue settings.
+// The queue always operates in collect (auto-debounce) mode for the
+// single-user Telegram bot. Debounce/cap can still be overridden.
 func ResolveFollowupQueueSettings(params types.ResolveFollowupQueueSettingsParams) types.FollowupQueueSettings {
-	// Resolve mode: inline > session > config > channel default.
-	mode := params.InlineMode
-	if mode == "" {
-		mode = NormalizeFollowupQueueMode(params.SessionMode)
-	}
-	if mode == "" {
-		mode = NormalizeFollowupQueueMode(params.ConfigMode)
-	}
-	if mode == "" {
-		mode = defaultFollowupQueueModeForChannel(params.Channel)
-	}
+	// Always collect mode (auto-debounce).
+	mode := types.FollowupModeCollect
 
 	// Resolve debounce.
 	debounce := params.DebounceMs
@@ -33,21 +25,10 @@ func ResolveFollowupQueueSettings(params types.ResolveFollowupQueueSettingsParam
 		cap = DefaultFollowupCap
 	}
 
-	// Resolve drop policy.
-	drop := params.DropPolicy
-	if drop == "" {
-		drop = DefaultFollowupDrop
-	}
-
 	return types.FollowupQueueSettings{
 		Mode:       mode,
 		DebounceMs: debounce,
 		Cap:        cap,
-		DropPolicy: drop,
+		DropPolicy: DefaultFollowupDrop,
 	}
-}
-
-// defaultFollowupQueueModeForChannel returns the default queue mode per channel.
-func defaultFollowupQueueModeForChannel(_ string) types.FollowupQueueMode {
-	return types.FollowupModeCollect
 }

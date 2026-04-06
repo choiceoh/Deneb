@@ -13,7 +13,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -74,16 +73,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		s.chatHandler.SetShutdownCtx(ctx)
 	}
 
-	// Discover and load plugins.
-	if s.pluginDiscoverer != nil {
-		s.safeGo("plugin-discovery", func() {
-			result := s.pluginDiscoverer.DiscoverPlugins(plugin.NewDiscoverPluginsParams())
-			if len(result.Candidates) > 0 {
-				s.logger.Info("plugins discovered", "count", len(result.Candidates))
-			}
-		})
-	}
-
 	// Start the Telegram plugin synchronously so that RPC serving only
 	// becomes available after the channel is ready.
 	if s.telegramPlug != nil {
@@ -142,20 +131,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
 
-	// Fire gateway.start hooks (shell + internal).
-	{
+	// Fire gateway.start internal hook.
+	if s.internalHooks != nil {
 		addr := ln.Addr().String()
 		env := map[string]string{"DENEB_GATEWAY_ADDR": addr}
-		if s.hooks != nil {
-			s.safeGo("hooks:gateway.start", func() {
-				s.hooks.Fire(context.Background(), hooks.EventGatewayStart, env)
-			})
-		}
-		if s.internalHooks != nil {
-			s.safeGo("internal-hooks:gateway.start", func() {
-				s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStart, "", env)
-			})
-		}
+		s.safeGo("internal-hooks:gateway.start", func() {
+			s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStart, "", env)
+		})
 	}
 
 	return ln, nil
@@ -281,10 +263,7 @@ func (s *Server) doShutdown() error {
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
-	// 7. Fire gateway.stop hooks (shell + internal).
-	if s.hooks != nil {
-		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
-	}
+	// 7. Fire gateway.stop internal hook.
 	if s.internalHooks != nil {
 		s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStop, "", nil)
 	}

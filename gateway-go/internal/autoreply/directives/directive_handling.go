@@ -13,7 +13,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
@@ -52,12 +51,12 @@ type DirectiveModelResolution struct {
 }
 
 // DirectiveQueueChanges describes queue modifications from directives.
+// The queue always operates in auto-debounce mode; the only meaningful
+// directive is "reset" (clear pending items).
 type DirectiveQueueChanges struct {
-	Mode       queue.QueueMode
 	Reset      bool
 	DebounceMs int
 	Cap        int
-	DropPolicy queue.QueueDropPolicy
 }
 
 // HandleDirectives processes all inline directives in a message body.
@@ -308,17 +307,8 @@ func resolveQueueDirective(directives InlineDirectives) DirectiveQueueChanges {
 	if directives.QueueReset {
 		changes.Reset = true
 	}
-	if directives.RawQueueMode != "" {
-		mode := strings.ToLower(directives.RawQueueMode)
-		switch mode {
-		case "auto":
-			changes.Mode = queue.QueueModeAuto
-		case "manual":
-			changes.Mode = queue.QueueModeManual
-		case "off":
-			changes.Mode = queue.QueueModeOff
-		}
-	}
+	// Mode switching (off/auto/manual) removed: the queue always operates in
+	// auto-debounce mode for the single-user Telegram bot.
 	return changes
 }
 

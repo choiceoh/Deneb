@@ -22,10 +22,6 @@ type Subscriber interface {
 	SendEvent(data []byte) error
 	// IsAuthenticated returns true if the subscriber has completed the handshake.
 	IsAuthenticated() bool
-	// Role returns the client's RBAC role (e.g., "operator", "viewer", "agent").
-	Role() string
-	// Scopes returns the client's permission scopes.
-	Scopes() []string
 	// BufferedAmount returns bytes queued but not yet sent. Used for slow consumer detection.
 	BufferedAmount() int64
 }
@@ -53,15 +49,6 @@ type BroadcastOpts struct {
 	// TargetConnIDs restricts delivery to specific connection IDs (nil = all).
 	TargetConnIDs map[string]bool
 }
-
-// Scope constants for event RBAC guards.
-const (
-	ScopeRead      = "read"
-	ScopeWrite     = "write"
-	ScopeAdmin     = "admin"
-	ScopeExecute   = "execute"
-	ScopeApprovals = "approvals"
-)
 
 // maxBufferedBytes is the threshold for slow consumer detection.
 // Subscribers exceeding this are dropped when DropIfSlow is set.
@@ -189,10 +176,6 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 		if !entry.filter.Accepts(event) {
 			continue
 		}
-		// Scope guard check.
-		if !hasEventScope(entry.sub, event) {
-			continue
-		}
 		// Slow consumer detection.
 		if opts.DropIfSlow && entry.sub.BufferedAmount() > maxBufferedBytes {
 			if b.logger != nil {
@@ -229,9 +212,6 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 			continue
 		}
 		if !entry.filter.Accepts(event) {
-			continue
-		}
-		if !hasEventScope(entry.sub, event) {
 			continue
 		}
 		// Slow consumer detection: skip subscribers with excessive buffered data.
@@ -356,23 +336,6 @@ func (b *Broadcaster) MergedSessionRecipients(sessionKey string) map[string]bool
 }
 
 // --- Helpers ---
-
-// hasEventScope checks if a subscriber has the required scope for an event.
-func hasEventScope(sub Subscriber, event string) bool {
-	required, ok := eventScopeGuards[event]
-	if !ok {
-		return true // No scope guard — allow all authenticated.
-	}
-	scopes := sub.Scopes()
-	for _, req := range required {
-		for _, s := range scopes {
-			if s == req || s == ScopeAdmin {
-				return true
-			}
-		}
-	}
-	return false
-}
 
 // snapshotSubscribers returns a snapshot of all subscribers under read lock.
 func (b *Broadcaster) snapshotSubscribers() []subscriberEntry {

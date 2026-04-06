@@ -20,14 +20,13 @@ import (
 
 // ExtendedDeps holds the dependencies for extended RPC methods:
 // agent.status, sessions.create, sessions.lifecycle, plus
-// process, cron, and hooks management.
+// process and cron management.
 type ExtendedDeps struct {
 	Sessions       *session.Manager
 	TelegramPlugin *telegram.Plugin
 	GatewaySubs    *events.GatewayEventSubscriptions
 	Processes      *process.Manager
 	Cron           *cron.Scheduler
-	Hooks          *hooks.Registry
 	InternalHooks  *hooks.InternalRegistry
 	Broadcaster    rpcutil.BroadcastFunc
 }
@@ -55,14 +54,6 @@ func ExtendedMethods(deps ExtendedDeps) map[string]rpcutil.HandlerFunc {
 		m["cron.list"] = cronList(deps)
 		m["cron.get"] = cronGet(deps)
 		m["cron.unregister"] = cronUnregister(deps)
-	}
-
-	// Hook management.
-	if deps.Hooks != nil {
-		m["hooks.list"] = hooksList(deps)
-		m["hooks.register"] = hooksRegister(deps)
-		m["hooks.unregister"] = hooksUnregister(deps)
-		m["hooks.fire"] = hooksFire(deps)
 	}
 
 	// Agent methods.
@@ -203,60 +194,6 @@ func cronUnregister(deps ExtendedDeps) rpcutil.HandlerFunc {
 	}
 }
 
-// --- Hook methods ---
-
-func hooksList(deps ExtendedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.RespondOK(req.ID, deps.Hooks.List())
-	}
-}
-
-func hooksRegister(deps ExtendedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		hook, errResp := rpcutil.DecodeParams[hooks.Hook](req)
-		if errResp != nil {
-			return errResp
-		}
-		if err := deps.Hooks.Register(hook); err != nil {
-			return rpcerr.Conflict(err.Error()).Response(req.ID)
-		}
-		return rpcutil.RespondOK(req.ID, map[string]bool{"registered": true})
-	}
-}
-
-func hooksUnregister(deps ExtendedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID string `json:"id"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		if p.ID == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
-		}
-		found := deps.Hooks.Unregister(p.ID)
-		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": found})
-	}
-}
-
-func hooksFire(deps ExtendedDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Event hooks.Event       `json:"event"`
-			Env   map[string]string `json:"env,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		if p.Event == "" {
-			return rpcerr.MissingParam("event").Response(req.ID)
-		}
-		results := deps.Hooks.Fire(ctx, p.Event, p.Env)
-		return rpcutil.RespondOK(req.ID, results)
-	}
-}
-
 // --- Agent/session methods ---
 
 func agentStatus(deps ExtendedDeps) rpcutil.HandlerFunc {
@@ -366,7 +303,7 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		// Fire session lifecycle hooks with panic recovery (shell + internal).
+		// Fire session lifecycle internal hooks with panic recovery.
 		var hookEvent hooks.Event
 		switch session.LifecyclePhase(p.Phase) {
 		case session.PhaseStart:
@@ -374,7 +311,7 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 		case session.PhaseEnd, session.PhaseError:
 			hookEvent = hooks.EventSessionEnd
 		}
-		if hookEvent != "" {
+		if hookEvent != "" && deps.InternalHooks != nil {
 			evt := hookEvent
 			key := p.Key
 			phase := p.Phase
@@ -382,18 +319,10 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 				"DENEB_SESSION_KEY": key,
 				"DENEB_PHASE":       phase,
 			}
-			if deps.Hooks != nil {
-				go func() {
-					defer func() { recover() }()
-					deps.Hooks.Fire(context.Background(), evt, env)
-				}()
-			}
-			if deps.InternalHooks != nil {
-				go func() {
-					defer func() { recover() }()
-					deps.InternalHooks.TriggerFromEvent(context.Background(), evt, key, env)
-				}()
-			}
+			go func() {
+				defer func() { recover() }()
+				deps.InternalHooks.TriggerFromEvent(context.Background(), evt, key, env)
+			}()
 		}
 
 		return rpcutil.RespondOK(req.ID, s)

@@ -10,7 +10,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
@@ -118,7 +117,6 @@ func fullDispatcher() *Dispatcher {
 		GatewaySubs: deps.GatewaySubs,
 		Processes:   process.NewManager(testLogger()),
 		Cron:        cron.NewScheduler(testLogger()),
-		Hooks:       hooks.NewRegistry(testLogger()),
 	})
 
 	// Phase 3: Native workflow methods.
@@ -221,25 +219,6 @@ func TestTSBaseMethodParity(t *testing.T) {
 		sort.Strings(missing)
 		t.Errorf("TS BASE_METHODS not registered in Go dispatcher (%d missing):\n", len(missing))
 		for _, m := range missing {
-			t.Errorf("  - %s", m)
-		}
-	}
-}
-
-// TestScopeCoverage verifies every registered method has an entry in methodScopes.
-func TestScopeCoverage(t *testing.T) {
-	d := fullDispatcher()
-	var uncovered []string
-	for _, m := range d.Methods() {
-		if _, ok := methodScopes[m]; !ok {
-			uncovered = append(uncovered, m)
-		}
-	}
-
-	if len(uncovered) > 0 {
-		sort.Strings(uncovered)
-		t.Errorf("registered methods without scope mapping (%d):\n", len(uncovered))
-		for _, m := range uncovered {
 			t.Errorf("  - %s", m)
 		}
 	}

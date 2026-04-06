@@ -1,24 +1,19 @@
 package types
 
 // FollowupQueueMode defines how followup messages are processed.
-// This extends the simpler QueueMode used in the basic message queue.
+// The queue always operates in collect (auto-debounce) mode for the
+// single-user Telegram bot.
 type FollowupQueueMode string
 
 const (
-	FollowupModeSteer        FollowupQueueMode = "steer"
-	FollowupModeFollowup     FollowupQueueMode = "followup"
-	FollowupModeCollect      FollowupQueueMode = "collect"
-	FollowupModeSteerBacklog FollowupQueueMode = "steer-backlog"
-	FollowupModeInterrupt    FollowupQueueMode = "interrupt"
-	FollowupModeQueue        FollowupQueueMode = "queue"
+	FollowupModeCollect FollowupQueueMode = "collect"
 )
 
 // FollowupDropPolicy defines what happens when the followup queue overflows.
+// The queue always uses summarize policy (single-user bot).
 type FollowupDropPolicy string
 
 const (
-	FollowupDropOld       FollowupDropPolicy = "old"
-	FollowupDropNew       FollowupDropPolicy = "new"
 	FollowupDropSummarize FollowupDropPolicy = "summarize"
 )
 
@@ -32,12 +27,17 @@ const (
 )
 
 // FollowupQueueSettings configures the followup queue behavior.
+// Mode is always collect (auto-debounce), drop policy is always summarize.
 type FollowupQueueSettings struct {
 	Mode       FollowupQueueMode  `json:"mode"`
 	DebounceMs int                `json:"debounceMs,omitempty"`
 	Cap        int                `json:"cap,omitempty"`
 	DropPolicy FollowupDropPolicy `json:"dropPolicy,omitempty"`
 }
+
+// NOTE: Mode and DropPolicy fields are retained in the struct for serialization
+// compatibility, but they are always set to FollowupModeCollect and
+// FollowupDropSummarize respectively by ResolveFollowupQueueSettings.
 
 // FollowupRunContext holds the agent execution context for a queued followup run.
 type FollowupRunContext struct {
@@ -82,12 +82,8 @@ type FollowupRun struct {
 }
 
 // ResolveFollowupQueueSettingsParams holds the inputs for resolving queue settings.
+// Mode and drop policy fields removed: always collect + summarize.
 type ResolveFollowupQueueSettingsParams struct {
-	Channel     string
-	InlineMode  FollowupQueueMode
-	SessionMode string // from session entry
-	ConfigMode  string // from config
-	DebounceMs  int
-	Cap         int
-	DropPolicy  FollowupDropPolicy
+	DebounceMs int
+	Cap        int
 }

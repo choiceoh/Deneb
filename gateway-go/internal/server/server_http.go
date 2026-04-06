@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/auth"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -56,11 +56,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		cronTasks = len(s.cron.List())
 	}
 
-	// Count registered hooks.
 	hooksCount := 0
-	if s.hooks != nil {
-		hooksCount = len(s.hooks.List())
-	}
 
 	// Channel health summary.
 	channelHealthSummary := map[string]int{"healthy": 0, "unhealthy": 0}
@@ -193,7 +189,6 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	// Resolve auth from Bearer token.
 	role := ""
 	authenticated := false
-	var scopes []auth.Scope
 
 	if s.authValidator != nil {
 		token := extractBearerToken(r)
@@ -205,17 +200,15 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 			}
 			role = string(claims.Role)
 			authenticated = true
-			scopes = claims.Scopes
 		}
 	} else {
 		// No-auth mode: treat all HTTP requests as operator.
 		role = "operator"
 		authenticated = true
-		scopes = auth.DefaultScopes(auth.RoleOperator)
 	}
 
 	// Authorize method call.
-	if authErr := rpc.AuthorizeMethod(req.Method, role, authenticated, scopes); authErr != nil {
+	if authErr := rpc.AuthorizeMethod(req.Method, role, authenticated); authErr != nil {
 		status := http.StatusForbidden
 		if authErr.Code == protocol.ErrUnauthorized {
 			status = http.StatusUnauthorized

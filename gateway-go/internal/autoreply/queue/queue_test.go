@@ -14,7 +14,7 @@ func TestFollowupQueueRegistry_GetOrCreate(t *testing.T) {
 		Mode:       types.FollowupModeCollect,
 		DebounceMs: 500,
 		Cap:        10,
-		DropPolicy: types.FollowupDropOld,
+		DropPolicy: types.FollowupDropSummarize,
 	}
 
 	q := r.GetOrCreate("session:main", settings)
@@ -45,7 +45,7 @@ func TestFollowupQueueRegistry_GetOrCreate(t *testing.T) {
 
 func TestFollowupQueueRegistry_Clear(t *testing.T) {
 	r := NewFollowupQueueRegistry()
-	q := r.GetOrCreate("k", types.FollowupQueueSettings{Mode: types.FollowupModeSteer})
+	q := r.GetOrCreate("k", types.FollowupQueueSettings{Mode: types.FollowupModeCollect})
 	q.Items = append(q.Items, types.FollowupRun{Prompt: "hello"})
 	q.DroppedCount = 2
 
@@ -61,7 +61,7 @@ func TestFollowupQueueRegistry_Clear(t *testing.T) {
 func TestEnqueueFollowupRun_basic(t *testing.T) {
 	r := NewFollowupQueueRegistry()
 	cache := NewRecentMessageIDCache()
-	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 5}
+	settings := types.FollowupQueueSettings{Mode: types.FollowupModeCollect, Cap: 5}
 
 	ok := r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "hello", MessageID: "m1"}, settings, types.DedupeMessageID, cache)
 	if !ok {
@@ -81,42 +81,33 @@ func TestEnqueueFollowupRun_basic(t *testing.T) {
 	}
 }
 
-func TestEnqueueFollowupRun_dropPolicy(t *testing.T) {
+func TestEnqueueFollowupRun_summarizeDropPolicy(t *testing.T) {
 	r := NewFollowupQueueRegistry()
 	cache := NewRecentMessageIDCache()
-	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 2, DropPolicy: types.FollowupDropNew}
+	// Drop policy is always summarize.
+	settings := types.FollowupQueueSettings{Mode: types.FollowupModeCollect, Cap: 2, DropPolicy: types.FollowupDropSummarize}
 
 	r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "1"}, settings, types.DedupeNone, cache)
 	r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "2"}, settings, types.DedupeNone, cache)
 
-	// At capacity, new item should be dropped.
+	// At capacity, new item should be summarized and dropped.
 	ok := r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "3"}, settings, types.DedupeNone, cache)
 	if ok {
-		t.Error("expected drop-new to reject")
+		t.Error("expected summarize-drop to reject")
 	}
 	if r.Depth("k") != 2 {
 		t.Errorf("expected depth=2, got %d", r.Depth("k"))
 	}
-}
-
-func TestEnqueueFollowupRun_dropOld(t *testing.T) {
-	r := NewFollowupQueueRegistry()
-	cache := NewRecentMessageIDCache()
-	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 2, DropPolicy: types.FollowupDropOld}
-
-	r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "1"}, settings, types.DedupeNone, cache)
-	r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "2"}, settings, types.DedupeNone, cache)
-	ok := r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "3"}, settings, types.DedupeNone, cache)
-	if !ok {
-		t.Error("expected drop-old to accept new item")
-	}
+	// Check that the dropped item was summarized.
 	q := r.GetExisting("k")
-	if q == nil || len(q.Items) != 2 {
-		t.Fatalf("expected 2 items, got %v", q)
+	if q == nil {
+		t.Fatal("expected queue to exist")
 	}
-	// Oldest (prompt "1") should have been dropped; items should be "2" and "3".
-	if q.Items[0].Prompt != "2" || q.Items[1].Prompt != "3" {
-		t.Errorf("expected items [2,3], got [%s,%s]", q.Items[0].Prompt, q.Items[1].Prompt)
+	if q.DroppedCount != 1 {
+		t.Errorf("expected droppedCount=1, got %d", q.DroppedCount)
+	}
+	if len(q.SummaryLines) != 1 || q.SummaryLines[0] != "3" {
+		t.Errorf("expected summary line '3', got %v", q.SummaryLines)
 	}
 }
 
@@ -125,13 +116,14 @@ func TestNormalizeFollowupQueueMode(t *testing.T) {
 		input string
 		want  types.FollowupQueueMode
 	}{
-		{"steer", types.FollowupModeSteer},
-		{"Steer", types.FollowupModeSteer},
+		// All recognized inputs map to collect.
+		{"steer", types.FollowupModeCollect},
+		{"Steer", types.FollowupModeCollect},
 		{"collect", types.FollowupModeCollect},
-		{"followup", types.FollowupModeFollowup},
-		{"interrupt", types.FollowupModeInterrupt},
-		{"steer-backlog", types.FollowupModeSteerBacklog},
-		{"queue", types.FollowupModeSteer},
+		{"followup", types.FollowupModeCollect},
+		{"interrupt", types.FollowupModeCollect},
+		{"steer-backlog", types.FollowupModeCollect},
+		{"queue", types.FollowupModeCollect},
 		{"", ""},
 		{"unknown", ""},
 	}
@@ -148,9 +140,10 @@ func TestNormalizeFollowupDropPolicy(t *testing.T) {
 		input string
 		want  types.FollowupDropPolicy
 	}{
-		{"old", types.FollowupDropOld},
-		{"oldest", types.FollowupDropOld},
-		{"new", types.FollowupDropNew},
+		// All recognized inputs map to summarize.
+		{"old", types.FollowupDropSummarize},
+		{"oldest", types.FollowupDropSummarize},
+		{"new", types.FollowupDropSummarize},
 		{"summarize", types.FollowupDropSummarize},
 		{"", ""},
 		{"bad", ""},
@@ -167,23 +160,19 @@ func TestExtractQueueDirective(t *testing.T) {
 	tests := []struct {
 		input   string
 		hasDir  bool
-		mode    types.FollowupQueueMode
 		reset   bool
 		cleaned string
 	}{
-		{"hello /queue collect world", true, types.FollowupModeCollect, false, "hello world"},
-		{"/queue reset", true, "", true, ""},
-		{"/queue steer", true, types.FollowupModeSteer, false, ""},
-		{"no queue here", false, "", false, "no queue here"},
-		{"", false, "", false, ""},
+		{"hello /queue collect world", true, false, "hello world"},
+		{"/queue reset", true, true, ""},
+		{"/queue steer", true, false, ""},
+		{"no queue here", false, false, "no queue here"},
+		{"", false, false, ""},
 	}
 	for _, tt := range tests {
 		got := ExtractQueueDirective(tt.input)
 		if got.HasDirective != tt.hasDir {
 			t.Errorf("ExtractQueueDirective(%q): HasDirective=%v, want %v", tt.input, got.HasDirective, tt.hasDir)
-		}
-		if got.QueueMode != tt.mode {
-			t.Errorf("ExtractQueueDirective(%q): QueueMode=%q, want %q", tt.input, got.QueueMode, tt.mode)
 		}
 		if got.QueueReset != tt.reset {
 			t.Errorf("ExtractQueueDirective(%q): QueueReset=%v, want %v", tt.input, got.QueueReset, tt.reset)
@@ -196,7 +185,7 @@ func TestExtractQueueDirective(t *testing.T) {
 
 func TestClearSessionQueues(t *testing.T) {
 	r := NewFollowupQueueRegistry()
-	r.GetOrCreate("k1", types.FollowupQueueSettings{Mode: types.FollowupModeSteer})
+	r.GetOrCreate("k1", types.FollowupQueueSettings{Mode: types.FollowupModeCollect})
 	q := r.GetExisting("k1")
 	q.Items = append(q.Items, types.FollowupRun{Prompt: "a"}, types.FollowupRun{Prompt: "b"})
 
@@ -213,7 +202,7 @@ func TestFollowupQueue_ConcurrentEnqueue(t *testing.T) {
 	// Verify concurrent enqueue does not race or corrupt the queue.
 	r := NewFollowupQueueRegistry()
 	cache := NewRecentMessageIDCache()
-	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 200}
+	settings := types.FollowupQueueSettings{Mode: types.FollowupModeCollect, Cap: 200}
 
 	const numEnqueues = 100
 	var wg sync.WaitGroup
@@ -238,13 +227,16 @@ func TestFollowupQueue_ConcurrentEnqueue(t *testing.T) {
 func TestFollowupDrainService_basic(t *testing.T) {
 	r := NewFollowupQueueRegistry()
 	cache := NewRecentMessageIDCache()
-	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 100, DebounceMs: 1}
+	settings := types.FollowupQueueSettings{Mode: types.FollowupModeCollect, Cap: 100, DebounceMs: 1}
 
 	// Pre-enqueue items.
 	for i := 0; i < 5; i++ {
 		r.EnqueueFollowupRun("k", types.FollowupRun{
-			Prompt:    fmt.Sprintf("msg-%d", i),
-			MessageID: fmt.Sprintf("id-%d", i),
+			Prompt:             fmt.Sprintf("msg-%d", i),
+			MessageID:          fmt.Sprintf("id-%d", i),
+			OriginatingChannel: "telegram",
+			OriginatingTo:      "bot",
+			Run:                &types.FollowupRunContext{AgentID: "test"},
 		}, settings, types.DedupeMessageID, cache)
 	}
 
@@ -258,13 +250,13 @@ func TestFollowupDrainService_basic(t *testing.T) {
 		return nil
 	})
 
-	// Wait for drain.
+	// In collect mode, all 5 items are batched into a single callback.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		drainedMu.Lock()
 		n := drainedCount
 		drainedMu.Unlock()
-		if n >= 5 {
+		if n >= 1 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -273,15 +265,13 @@ func TestFollowupDrainService_basic(t *testing.T) {
 	drainedMu.Lock()
 	count := drainedCount
 	drainedMu.Unlock()
-	if count != 5 {
-		t.Errorf("expected 5 drained, got %d", count)
+	if count < 1 {
+		t.Errorf("expected at least 1 drain callback (collect batches items), got %d", count)
 	}
 }
 
 func TestResolveFollowupQueueSettings(t *testing.T) {
-	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		Channel: "telegram",
-	})
+	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{})
 	if s.Mode != types.FollowupModeCollect {
 		t.Errorf("expected default mode=collect, got %s", s.Mode)
 	}
@@ -290,12 +280,12 @@ func TestResolveFollowupQueueSettings(t *testing.T) {
 	}
 
 	s2 := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		InlineMode: types.FollowupModeSteer,
 		DebounceMs: 2000,
 		Cap:        50,
 	})
-	if s2.Mode != types.FollowupModeSteer {
-		t.Errorf("expected inline mode=steer, got %s", s2.Mode)
+	// Mode is always collect.
+	if s2.Mode != types.FollowupModeCollect {
+		t.Errorf("expected mode=collect, got %s", s2.Mode)
 	}
 	if s2.DebounceMs != 2000 {
 		t.Errorf("expected debounce=2000, got %d", s2.DebounceMs)

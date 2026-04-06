@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 )
@@ -153,47 +152,5 @@ func TestGetByNormalizedIDWithAliases(t *testing.T) {
 		if found != tt.wantFound {
 			t.Errorf("GetByNormalizedID(%q) found=%v, want %v", tt.providerID, found, tt.wantFound)
 		}
-	}
-}
-
-func TestProviderRuntimeResolverMissingAuth(t *testing.T) {
-	reg := NewRegistry()
-	tp := &testPlugin{id: "openai", label: "OpenAI"}
-	reg.Register(tp)
-
-	resolver := NewProviderRuntimeResolver(reg, slog.Default())
-
-	// Provider exists but doesn't implement MissingAuthMessageProvider.
-	msg := resolver.BuildMissingAuthMessage("openai")
-	if msg != "" {
-		t.Errorf("expected empty message, got %q", msg)
-	}
-}
-
-func TestProviderRuntimeResolverModelSuppression(t *testing.T) {
-	reg := NewRegistry()
-	tp := &testPlugin{id: "openai", label: "OpenAI"}
-	reg.Register(tp)
-
-	resolver := NewProviderRuntimeResolver(reg, slog.Default())
-
-	// No suppression provider → nil.
-	result := resolver.ResolveBuiltInModelSuppression("openai", "gpt-4")
-	if result != nil {
-		t.Errorf("expected nil suppression, got %v", result)
-	}
-}
-
-func TestProviderRuntimeResolverCatalogAugmentation(t *testing.T) {
-	reg := NewRegistry()
-	tp := &testPlugin{id: "openai", label: "OpenAI"}
-	reg.Register(tp)
-
-	resolver := NewProviderRuntimeResolver(reg, slog.Default())
-
-	entries := []CatalogEntry{{Provider: "openai", ModelID: "gpt-4"}}
-	extra := resolver.AugmentModelCatalog(context.Background(), entries)
-	if len(extra) != 0 {
-		t.Errorf("expected 0 augmented entries, got %d", len(extra))
 	}
 }

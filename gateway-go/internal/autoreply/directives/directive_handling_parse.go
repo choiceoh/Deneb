@@ -15,7 +15,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
 
@@ -41,14 +40,12 @@ type FullInlineDirectives struct {
 	InvalidExecNode  bool
 
 	// Queue options (full, from QueueDirective).
-	QueueModeResolved types.FollowupQueueMode
-	DebounceMs        int
-	Cap               int
-	DropPolicy        types.FollowupDropPolicy
-	RawDebounce       string
-	RawCap            string
-	RawDrop           string
-	HasQueueOpts      bool
+	// Mode and drop policy removed (always collect + summarize).
+	DebounceMs   int
+	Cap          int
+	RawDebounce  string
+	RawCap       string
+	HasQueueOpts bool
 }
 
 // FullDirectiveParseOptions configures the full directive parser.
@@ -104,20 +101,16 @@ func ParseFullInlineDirectives(body string, opts *FullDirectiveParseOptions) Ful
 	}
 
 	// Step 3: Re-extract /queue from the original body with full options.
-	// The basic parser only captured HasQueueDirective + RawQueueMode.
-	// Now extract debounce/cap/drop args using the token-based parser
-	// which returns QueueDirective with types.FollowupQueueMode/types.FollowupDropPolicy.
+	// Mode and drop policy are fixed (collect + summarize); only reset,
+	// debounce, and cap are extracted.
 	if result.HasQueueDirective {
 		qd := queue.ExtractQueueDirective(body)
 		if qd.HasDirective {
-			result.QueueModeResolved = qd.QueueMode
 			result.QueueReset = qd.QueueReset
 			result.DebounceMs = qd.DebounceMs
 			result.Cap = qd.Cap
-			result.DropPolicy = qd.DropPolicy
 			result.RawDebounce = qd.RawDebounce
 			result.RawCap = qd.RawCap
-			result.RawDrop = qd.RawDrop
 			result.HasQueueOpts = qd.HasOptions
 		}
 	}

@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 /// Schema version for the Vega `SQLite` database.
-/// v7: added source_file column to chunks table.
+/// v7: added `source_file` column to chunks table.
 pub const SCHEMA_VERSION: u32 = 7;
 
 /// Vega protocol version for Deneb compatibility.

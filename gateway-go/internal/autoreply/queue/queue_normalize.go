@@ -1,5 +1,6 @@
 // queue_normalize.go — Queue mode and drop policy normalization.
-// Mirrors src/auto-reply/reply/queue/normalize.ts (47 LOC).
+// Simplified: the queue always operates in collect (auto-debounce) mode
+// with summarize drop policy for the single-user Telegram bot.
 package queue
 
 import (
@@ -7,44 +8,38 @@ import (
 	"strings"
 )
 
-// NormalizeFollowupQueueMode parses a raw string into a types.FollowupQueueMode.
-// Returns empty string if the input is not recognized.
+// NormalizeFollowupQueueMode always returns FollowupModeCollect.
+// Other modes (steer, interrupt, followup, steer-backlog) have been removed
+// since the single-user Telegram bot only needs auto-debounce (collect).
 func NormalizeFollowupQueueMode(raw string) types.FollowupQueueMode {
 	if raw == "" {
 		return ""
 	}
 	cleaned := strings.TrimSpace(strings.ToLower(raw))
+	if cleaned == "" {
+		return ""
+	}
+	// All recognized inputs map to collect mode.
 	switch cleaned {
-	case "queue", "queued":
-		return types.FollowupModeSteer
-	case "interrupt", "interrupts", "abort":
-		return types.FollowupModeInterrupt
-	case "steer", "steering":
-		return types.FollowupModeSteer
-	case "followup", "follow-ups", "followups":
-		return types.FollowupModeFollowup
-	case "collect", "coalesce":
+	case "queue", "queued", "steer", "steering", "interrupt", "interrupts",
+		"abort", "followup", "follow-ups", "followups", "collect", "coalesce",
+		"steer+backlog", "steer-backlog", "steer_backlog":
 		return types.FollowupModeCollect
-	case "steer+backlog", "steer-backlog", "steer_backlog":
-		return types.FollowupModeSteerBacklog
 	default:
 		return ""
 	}
 }
 
-// NormalizeFollowupDropPolicy parses a raw string into a types.FollowupDropPolicy.
-// Returns empty string if the input is not recognized.
+// NormalizeFollowupDropPolicy always returns FollowupDropSummarize for any
+// recognized input. Drop policy choice has been removed (single-user bot
+// always uses summarize).
 func NormalizeFollowupDropPolicy(raw string) types.FollowupDropPolicy {
 	if raw == "" {
 		return ""
 	}
 	cleaned := strings.TrimSpace(strings.ToLower(raw))
 	switch cleaned {
-	case "old", "oldest":
-		return types.FollowupDropOld
-	case "new", "newest":
-		return types.FollowupDropNew
-	case "summarize", "summary":
+	case "old", "oldest", "new", "newest", "summarize", "summary":
 		return types.FollowupDropSummarize
 	default:
 		return ""

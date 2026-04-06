@@ -156,10 +156,10 @@ func normalizeOneStoredJob(raw map[string]any, issues *StoreMigrationIssues) boo
 		issues.LegacyTopLevelPayloadFields++
 	}
 
-	// Migrate legacy payload provider.
+	// Migrate legacy payload provider → channel (inlined from deleted payload_migration.go).
 	if payloadIsMap && payload != nil {
 		hadProvider := stringField(payload, "provider") != ""
-		if MigrateLegacyCronPayloadMap(payload) {
+		if migrateLegacyPayloadProvider(payload) {
 			mutated = true
 			if hadProvider {
 				issues.LegacyPayloadProvider++
@@ -558,4 +558,29 @@ func inferLegacyNameFromRaw(raw map[string]any) string {
 		}
 	}
 	return "Cron job"
+}
+
+// migrateLegacyPayloadProvider normalizes the channel/provider field in a payload map.
+// If a "provider" field exists, its value is moved to "channel" (lowercased) and "provider" is removed.
+func migrateLegacyPayloadProvider(payload map[string]any) bool {
+	mutated := false
+	channelValue, _ := payload["channel"].(string)
+	providerValue, _ := payload["provider"].(string)
+
+	nextChannel := ""
+	if ch := strings.TrimSpace(channelValue); ch != "" {
+		nextChannel = strings.ToLower(ch)
+	} else if pv := strings.TrimSpace(providerValue); pv != "" {
+		nextChannel = strings.ToLower(pv)
+	}
+
+	if nextChannel != "" && channelValue != nextChannel {
+		payload["channel"] = nextChannel
+		mutated = true
+	}
+	if _, has := payload["provider"]; has {
+		delete(payload, "provider")
+		mutated = true
+	}
+	return mutated
 }

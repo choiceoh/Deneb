@@ -21,7 +21,7 @@ func TestGatewaySubscriptions_EmitHeartbeat(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()
 
-	sub := &mockSubscriber{id: "s1", authed: true, role: "operator", scopes: []string{"read"}}
+	sub := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(sub, Filter{})
 
 	gs.EmitHeartbeat(HeartbeatEvent{Ts: time.Now().UnixMilli()})
@@ -39,7 +39,7 @@ func TestGatewaySubscriptions_EmitAgent(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()
 
-	sub := &mockSubscriber{id: "s1", authed: true, role: "operator", scopes: []string{"read"}}
+	sub := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(sub, Filter{})
 
 	gs.EmitAgent(AgentEvent{Kind: "tool.start", SessionKey: "s1"})
@@ -57,7 +57,7 @@ func TestGatewaySubscriptions_EmitLifecycle(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()
 
-	sub := &mockSubscriber{id: "s1", authed: true, role: "operator", scopes: []string{"read"}}
+	sub := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(sub, Filter{})
 	b.SubscribeSessionEvents("s1")
 
@@ -79,7 +79,7 @@ func TestGatewaySubscriptions_EmitLifecycle_NoSubscribers(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()
 
-	sub := &mockSubscriber{id: "s1", authed: true, role: "operator", scopes: []string{"read"}}
+	sub := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(sub, Filter{})
 	// Not subscribed to session events.
 
@@ -98,7 +98,7 @@ func TestGatewaySubscriptions_EmitTranscript(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()
 
-	sub := &mockSubscriber{id: "s1", authed: true, role: "operator", scopes: []string{"read"}}
+	sub := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(sub, Filter{})
 	b.SubscribeSessionMessageEvents("s1", "session-x")
 
@@ -121,7 +121,7 @@ func TestGatewaySubscriptions_EmitTranscript_WithSessionEventSub(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()
 
-	sub := &mockSubscriber{id: "s1", authed: true, role: "operator", scopes: []string{"read"}}
+	sub := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(sub, Filter{})
 	b.SubscribeSessionEvents("s1")
 	b.SubscribeSessionMessageEvents("s1", "session-x")

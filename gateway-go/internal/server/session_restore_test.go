@@ -29,7 +29,6 @@ func newTestServerForRestore(mgr *session.Manager) *Server {
 		ServerRPC:           &ServerRPC{},
 		ServerRuntime:       &ServerRuntime{},
 		WorkflowSubsystem:   &WorkflowSubsystem{},
-		PluginSubsystem:     &PluginSubsystem{},
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
 		InfraSubsystem:      &InfraSubsystem{},

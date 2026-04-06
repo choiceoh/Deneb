@@ -51,27 +51,6 @@ type PreparedAuth struct {
 	ExpiresAt int64  `json:"expiresAt,omitempty"`
 }
 
-// DynamicModelContext provides context for dynamic model resolution.
-type DynamicModelContext struct {
-	Provider string `json:"provider"`
-	ModelID  string `json:"modelId"`
-}
-
-// RuntimeModel represents a resolved model ready for inference.
-type RuntimeModel struct {
-	Provider string `json:"provider"`
-	ModelID  string `json:"modelId"`
-	BaseURL  string `json:"baseUrl,omitempty"`
-	APIType  string `json:"apiType,omitempty"`
-}
-
-// NormalizeContext provides context for model normalization.
-type NormalizeContext struct {
-	Provider string       `json:"provider"`
-	ModelID  string       `json:"modelId"`
-	Model    RuntimeModel `json:"model"`
-}
-
 // Capabilities describes provider-level feature flags.
 type Capabilities struct {
 	SupportsStreaming bool `json:"supportsStreaming,omitempty"`

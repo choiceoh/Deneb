@@ -17,7 +17,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
@@ -127,12 +126,8 @@ type runDeps struct {
 	// shutdownCtx is the server lifecycle context; used to bound background
 	// goroutines (e.g., auto-memory extraction) so they stop on server shutdown.
 	shutdownCtx context.Context
-	// hookRegistry fires user-defined shell hooks on message/tool events.
-	hookRegistry *hooks.Registry
 	// internalHookRegistry fires programmatic internal hooks.
 	internalHookRegistry *hooks.InternalRegistry
-	// pluginHookRunner runs typed plugin hooks at lifecycle points.
-	pluginHookRunner *plugin.TypedHookRunner
 	// drainPendingFn drains the next queued message for a session after the
 	// current run completes. Set by the Handler; nil disables pending queue.
 	drainPendingFn func(sessionKey string) *RunParams

@@ -99,12 +99,6 @@ var requiredMethods = []string{
 	"process.kill",
 	"process.list",
 
-	// Hooks.
-	"hooks.fire",
-	"hooks.list",
-	"hooks.register",
-	"hooks.unregister",
-
 	// Skills.
 	"skills.bins",
 	"skills.commands",

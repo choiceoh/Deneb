@@ -17,12 +17,6 @@ type GatewayRuntimeConfig struct {
 	ControlUIEnabled              bool
 	ControlUIBasePath             string
 	ControlUIRoot                 string
-	OpenAIChatCompletionsEnabled  bool
-	OpenAIChatCompletionsConfig   *GatewayHTTPChatCompletionsConfig
-	OpenResponsesEnabled          bool
-	OpenResponsesConfig           *GatewayHTTPResponsesConfig
-	AnthropicMessagesEnabled      bool
-	AnthropicMessagesConfig       *GatewayHTTPAnthropicMessagesConfig
 	StrictTransportSecurityHeader string
 	ResolvedAuth                  ResolvedGatewayAuth
 	AuthMode                      string
@@ -116,37 +110,6 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	controlUIRoot := ""
 	if gw.ControlUI != nil && strings.TrimSpace(gw.ControlUI.Root) != "" {
 		controlUIRoot = strings.TrimSpace(gw.ControlUI.Root)
-	}
-
-	// HTTP endpoints.
-	openAIChatCompletionsEnabled := false
-	var openAIChatCompletionsConfig *GatewayHTTPChatCompletionsConfig
-	if gw.HTTP != nil && gw.HTTP.Endpoints != nil && gw.HTTP.Endpoints.ChatCompletions != nil {
-		cc := gw.HTTP.Endpoints.ChatCompletions
-		openAIChatCompletionsConfig = cc
-		if cc.Enabled != nil && *cc.Enabled {
-			openAIChatCompletionsEnabled = true
-		}
-	}
-
-	openResponsesEnabled := false
-	var openResponsesConfig *GatewayHTTPResponsesConfig
-	if gw.HTTP != nil && gw.HTTP.Endpoints != nil && gw.HTTP.Endpoints.Responses != nil {
-		rc := gw.HTTP.Endpoints.Responses
-		openResponsesConfig = rc
-		if rc.Enabled != nil && *rc.Enabled {
-			openResponsesEnabled = true
-		}
-	}
-
-	anthropicMessagesEnabled := false
-	var anthropicMessagesConfig *GatewayHTTPAnthropicMessagesConfig
-	if gw.HTTP != nil && gw.HTTP.Endpoints != nil && gw.HTTP.Endpoints.AnthropicMessages != nil {
-		am := gw.HTTP.Endpoints.AnthropicMessages
-		anthropicMessagesConfig = am
-		if am.Enabled != nil && *am.Enabled {
-			anthropicMessagesEnabled = true
-		}
 	}
 
 	// Strict-Transport-Security header.
@@ -267,12 +230,6 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		ControlUIEnabled:              controlUIEnabled,
 		ControlUIBasePath:             controlUIBasePath,
 		ControlUIRoot:                 controlUIRoot,
-		OpenAIChatCompletionsEnabled:  openAIChatCompletionsEnabled,
-		OpenAIChatCompletionsConfig:   openAIChatCompletionsConfig,
-		OpenResponsesEnabled:          openResponsesEnabled,
-		OpenResponsesConfig:           openResponsesConfig,
-		AnthropicMessagesEnabled:      anthropicMessagesEnabled,
-		AnthropicMessagesConfig:       anthropicMessagesConfig,
 		StrictTransportSecurityHeader: stsHeader,
 		ResolvedAuth:                  resolvedAuth,
 		AuthMode:                      authMode,

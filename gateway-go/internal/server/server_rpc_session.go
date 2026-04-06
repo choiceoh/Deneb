@@ -106,7 +106,6 @@ func (s *Server) registerSessionRPCMethods() {
 	// Most are available now; PluginHookRunner is late-bound in server.go
 	// after plugin init (see SetPluginHookRunner call).
 	chatCfg.ProviderRuntime = s.providerRuntime
-	chatCfg.HookRegistry = s.hooks
 	chatCfg.InternalHookRegistry = s.internalHooks
 	chatCfg.BroadcastRaw = streaming.BroadcastRawFunc(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)

@@ -10,7 +10,6 @@ func (s *Server) buildHub() *rpcutil.GatewayHub {
 		GatewaySubs:    s.gatewaySubs,
 		Sessions:       s.sessions,
 		Processes:      s.processes,
-		Hooks:          s.hooks,
 		InternalHooks:  s.internalHooks,
 		Agents:         s.agents,
 		JobTracker:     s.jobTracker,

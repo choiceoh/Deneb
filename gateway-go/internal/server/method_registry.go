@@ -74,7 +74,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			GatewaySubs:    hub.GatewaySubs(),
 			Processes:      hub.Processes(),
 			Cron:           hub.Cron(),
-			Hooks:          hub.Hooks(),
 			InternalHooks:  hub.InternalHooks(),
 			Broadcaster:    hub.Broadcast,
 		}),
@@ -113,7 +112,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- Telegram lifecycle and messaging ---
 		handlertelegram.LifecycleMethods(handlertelegram.LifecycleDeps{
 			TelegramPlugin: hub.Telegram(),
-			Hooks:          hub.Hooks(),
 			InternalHooks:  hub.InternalHooks(),
 			Broadcaster:    hub.Broadcaster(),
 		}),

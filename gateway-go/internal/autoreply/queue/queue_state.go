@@ -10,7 +10,8 @@ import (
 const (
 	DefaultFollowupDebounceMs = 0
 	DefaultFollowupCap        = 20
-	DefaultFollowupDrop       = types.FollowupDropSummarize
+	// Drop policy is always summarize for the single-user Telegram bot.
+	DefaultFollowupDrop = types.FollowupDropSummarize
 )
 
 // FollowupQueueState tracks the runtime state of a single followup queue.
@@ -82,17 +83,13 @@ func (r *FollowupQueueRegistry) GetOrCreate(key string, settings types.FollowupQ
 	if settings.Cap > 0 {
 		cap = settings.Cap
 	}
-	drop := DefaultFollowupDrop
-	if settings.DropPolicy != "" {
-		drop = settings.DropPolicy
-	}
 
 	created := &FollowupQueueState{
 		Items:        make([]types.FollowupRun, 0),
-		Mode:         settings.Mode,
+		Mode:         types.FollowupModeCollect,
 		DebounceMs:   debounce,
 		Cap:          cap,
-		DropPolicy:   drop,
+		DropPolicy:   DefaultFollowupDrop,
 		SummaryLines: make([]string, 0),
 	}
 	r.queues[key] = created
@@ -147,18 +144,14 @@ func (r *FollowupQueueRegistry) Depth(key string) int {
 }
 
 // applyFollowupQueueSettings updates a queue's runtime settings.
+// Mode and drop policy are fixed (collect + summarize); only debounce
+// and cap are adjustable.
 // Caller must hold q.mu.
 func applyFollowupQueueSettings(state *FollowupQueueState, settings types.FollowupQueueSettings) {
-	if settings.Mode != "" {
-		state.Mode = settings.Mode
-	}
 	if settings.DebounceMs > 0 {
 		state.DebounceMs = settings.DebounceMs
 	}
 	if settings.Cap > 0 {
 		state.Cap = settings.Cap
-	}
-	if settings.DropPolicy != "" {
-		state.DropPolicy = settings.DropPolicy
 	}
 }

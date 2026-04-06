@@ -5,43 +5,11 @@ import (
 	"testing"
 )
 
-func TestResolveFollowupQueueSettings_InlinePriority(t *testing.T) {
-	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		InlineMode:  types.FollowupModeSteer,
-		SessionMode: "collect",
-		ConfigMode:  "followup",
-	})
-	if s.Mode != types.FollowupModeSteer {
-		t.Errorf("expected inline mode steer, got %q", s.Mode)
-	}
-}
-
-func TestResolveFollowupQueueSettings_SessionFallback(t *testing.T) {
-	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		SessionMode: "collect",
-		ConfigMode:  "followup",
-	})
+func TestResolveFollowupQueueSettings_AlwaysCollect(t *testing.T) {
+	// Mode is always collect regardless of input.
+	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{})
 	if s.Mode != types.FollowupModeCollect {
-		t.Errorf("expected session mode collect, got %q", s.Mode)
-	}
-}
-
-func TestResolveFollowupQueueSettings_ConfigFallback(t *testing.T) {
-	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		ConfigMode: "followup",
-	})
-	if s.Mode != types.FollowupModeFollowup {
-		t.Errorf("expected config mode followup, got %q", s.Mode)
-	}
-}
-
-func TestResolveFollowupQueueSettings_ChannelDefault(t *testing.T) {
-	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		Channel: "telegram",
-	})
-	// Default for any channel is collect.
-	if s.Mode != types.FollowupModeCollect {
-		t.Errorf("expected default mode collect, got %q", s.Mode)
+		t.Errorf("expected mode collect, got %q", s.Mode)
 	}
 }
 
@@ -61,10 +29,8 @@ func TestResolveFollowupQueueSettings_Defaults(t *testing.T) {
 
 func TestResolveFollowupQueueSettings_CustomValues(t *testing.T) {
 	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		InlineMode: types.FollowupModeInterrupt,
 		DebounceMs: 5000,
 		Cap:        50,
-		DropPolicy: types.FollowupDropNew,
 	})
 
 	if s.DebounceMs != 5000 {
@@ -73,7 +39,8 @@ func TestResolveFollowupQueueSettings_CustomValues(t *testing.T) {
 	if s.Cap != 50 {
 		t.Errorf("expected cap 50, got %d", s.Cap)
 	}
-	if s.DropPolicy != types.FollowupDropNew {
-		t.Errorf("expected drop new, got %q", s.DropPolicy)
+	// Drop policy is always summarize.
+	if s.DropPolicy != types.FollowupDropSummarize {
+		t.Errorf("expected drop summarize, got %q", s.DropPolicy)
 	}
 }

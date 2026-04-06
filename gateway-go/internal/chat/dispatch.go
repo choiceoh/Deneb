@@ -676,9 +676,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		defaultSystem:        h.defaultSystem,
 		maxTokens:            h.maxTokens,
 		shutdownCtx:          h.shutdownCtx,
-		hookRegistry:         h.hookRegistry,
 		internalHookRegistry: h.internalHookRegistry,
-		pluginHookRunner:     h.pluginHookRunner,
 		drainPendingFn:       h.drainPending,
 		startRunFn: func(params RunParams) {
 			// Re-use startAsyncRun for full lifecycle management (abort map,

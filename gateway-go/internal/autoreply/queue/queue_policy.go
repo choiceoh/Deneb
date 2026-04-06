@@ -13,15 +13,16 @@ const (
 )
 
 // ResolveActiveRunQueueAction decides the queue action based on
-// whether a run is active, is a heartbeat, should follow up, and the queue mode.
-func ResolveActiveRunQueueAction(isActive, isHeartbeat, shouldFollowup bool, queueMode QueueMode) ActiveRunQueueAction {
+// whether a run is active, is a heartbeat, and should follow up.
+// The queue always operates in auto-debounce mode (single-user bot).
+func ResolveActiveRunQueueAction(isActive, isHeartbeat, shouldFollowup bool) ActiveRunQueueAction {
 	if !isActive {
 		return QueueActionRunNow
 	}
 	if isHeartbeat {
 		return QueueActionDrop
 	}
-	if shouldFollowup || queueMode == "steer" {
+	if shouldFollowup {
 		return QueueActionEnqueueFollowup
 	}
 	return QueueActionRunNow

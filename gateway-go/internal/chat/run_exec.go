@@ -25,7 +25,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -246,24 +245,6 @@ func executeAgentRun(
 	providerID, modelName := parseModelID(model)
 	model = modelName
 
-	// Plugin hook: allow plugins to override model/provider selection.
-	if deps.pluginHookRunner != nil {
-		if mrResult := deps.pluginHookRunner.RunBeforeModelResolve(ctx, map[string]any{
-			"currentModel": model,
-			"provider":     providerID,
-			"sessionKey":   params.SessionKey,
-			"runId":        params.ClientRunID,
-		}); mrResult != nil {
-			if mrResult.ModelOverride != "" {
-				model = mrResult.ModelOverride
-			}
-			if mrResult.ProviderOverride != "" {
-				providerID = mrResult.ProviderOverride
-			}
-			logger.Info("plugin: model override applied", "model", model, "provider", providerID)
-		}
-	}
-
 	// Sub-agent provider remapping: if this session was spawned by another
 	// agent and a "<provider>-subagent" config exists, use the alternate
 	// API key. This allows main and sub-agents to use different accounts
@@ -292,12 +273,6 @@ func executeAgentRun(
 	// 3. Resolve LLM client (no IO — reads in-memory config/auth store).
 	client := resolveClient(deps, providerID, logger)
 	if client == nil {
-		// Use provider-specific missing-auth message when available.
-		if deps.providerRuntime != nil && providerID != "" {
-			if msg := deps.providerRuntime.BuildMissingAuthMessage(providerID); msg != "" {
-				return nil, fmt.Errorf("%s", msg)
-			}
-		}
 		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
@@ -495,22 +470,6 @@ func executeAgentRun(
 			logger.Info("microcompact: pruned old tool results",
 				"pruned", mcResult.PrunedCount,
 				"estimatedTokensSaved", mcResult.EstimatedSaved)
-		}
-	}
-
-	// Plugin hook: allow plugins to modify/extend the system prompt.
-	if deps.pluginHookRunner != nil {
-		if pbResult := deps.pluginHookRunner.RunBeforePromptBuild(ctx, map[string]any{
-			"sessionKey": params.SessionKey,
-			"channel":    deliveryChannel(params.Delivery),
-		}); pbResult != nil {
-			if pbResult.SystemPrompt != "" {
-				systemPrompt = llm.SystemString(pbResult.SystemPrompt)
-			}
-			additions := pbResult.PrependSystemContext + pbResult.AppendSystemContext
-			if additions != "" {
-				systemPrompt = llm.AppendSystemText(systemPrompt, additions)
-			}
 		}
 	}
 
@@ -838,34 +797,8 @@ func executeAgentRun(
 		})
 	}
 
-	// Plugin hooks: blocking before-tool-call + async after-tool-call.
-	if deps.pluginHookRunner != nil {
-		hc.SetBeforeToolCall(func(name, toolCallID string, input []byte) (bool, string) {
-			result := deps.pluginHookRunner.RunBeforeToolCall(ctx, map[string]any{
-				"toolName":   name,
-				"toolCallId": toolCallID,
-				"sessionKey": params.SessionKey,
-				"runId":      params.ClientRunID,
-			})
-			if result != nil && result.Cancel {
-				return true, result.CancelReason
-			}
-			return false, ""
-		})
-		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
-			go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAfterToolCall, map[string]any{
-				"toolName":   name,
-				"toolCallId": toolUseID,
-				"sessionKey": params.SessionKey,
-				"runId":      params.ClientRunID,
-				"isError":    isErr,
-				"result":     result,
-			})
-		})
-	}
-
-	// User-defined hook registries: fire tool.use event after each tool completes.
-	if deps.hookRegistry != nil || deps.internalHookRegistry != nil {
+	// Internal hook registry: fire tool.use event after each tool completes.
+	if deps.internalHookRegistry != nil {
 		hc.OnToolResult(func(name, toolUseID, _ string, isErr bool) {
 			env := map[string]string{
 				"DENEB_TOOL":        name,
@@ -873,22 +806,7 @@ func executeAgentRun(
 				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
 				"DENEB_SESSION_KEY": params.SessionKey,
 			}
-			if deps.hookRegistry != nil {
-				go func() {
-					ch := deps.hookRegistry.FireProgressive(deps.shutdownCtx, hookspkg.EventToolUse, env)
-					for p := range ch {
-						if p.Phase == "failed" {
-							logger.Warn("tool.use hook failed",
-								"hookId", p.HookID,
-								"error", p.Error,
-								"durationMs", p.DurationMs)
-						}
-					}
-				}()
-			}
-			if deps.internalHookRegistry != nil {
-				go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
-			}
+			go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
 		})
 	}
 
@@ -998,17 +916,6 @@ func executeAgentRun(
 			logger.Info("retrying agent run after compaction", "attempt", attempt)
 		}
 
-		// Fire llm_input hook (void, non-blocking): notify plugins of the LLM request.
-		if deps.pluginHookRunner != nil && attempt == 0 {
-			go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookLLMInput, map[string]any{
-				"sessionKey":   params.SessionKey,
-				"runId":        params.ClientRunID,
-				"model":        model,
-				"messageCount": len(messages),
-				"toolCount":    len(tools),
-			})
-		}
-
 		var runErr error
 		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
@@ -1017,15 +924,6 @@ func executeAgentRun(
 			// don't maintain Aurora state, so compaction would be a no-op.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
-
-				// Fire before_compaction hook.
-				if deps.pluginHookRunner != nil {
-					go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookBeforeCompaction, map[string]any{
-						"sessionKey":   params.SessionKey,
-						"messageCount": len(messages),
-						"trigger":      "context_overflow",
-					})
-				}
 
 				// Pre-compaction fact extraction: extract learnings from the
 				// conversation before compaction trims older messages.
@@ -1121,16 +1019,6 @@ func executeAgentRun(
 				getCompactionCircuitBreaker().RecordSuccess()
 				messages = compactedMsgs
 
-				// Fire after_compaction hook.
-				if deps.pluginHookRunner != nil {
-					go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAfterCompaction, map[string]any{
-						"sessionKey":       params.SessionKey,
-						"messageCount":     len(messages),
-						"compactedCount":   len(compactedMsgs),
-						"trigger":          "context_overflow",
-					})
-				}
-
 				// Post-compaction file restoration: re-inject recently accessed
 				// file contents so the agent retains working memory of files
 				// it was actively editing. Stays within token budget.
@@ -1220,37 +1108,6 @@ func executeAgentRun(
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
 		"transition", lastTransition.Reason())
-
-	// Fire llm_output hook (void, non-blocking): notify plugins of the LLM response.
-	if deps.pluginHookRunner != nil {
-		go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookLLMOutput, map[string]any{
-			"sessionKey":   params.SessionKey,
-			"runId":        params.ClientRunID,
-			"model":        model,
-			"turns":        agentResult.Turns,
-			"inputTokens":  agentResult.Usage.InputTokens,
-			"outputTokens": agentResult.Usage.OutputTokens,
-			"stopReason":   agentResult.StopReason,
-			"textLen":      len(agentResult.Text),
-		})
-	}
-
-	// Fire agent_end plugin hook (void, non-blocking).
-	if deps.pluginHookRunner != nil {
-		errMsg := ""
-		if agentResult.StopReason != "end_turn" && agentResult.StopReason != "" {
-			errMsg = "stop_reason: " + agentResult.StopReason
-		}
-		go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAgentEnd, map[string]any{
-			"sessionKey": params.SessionKey,
-			"runId":      params.ClientRunID,
-			"model":      model,
-			"turns":      agentResult.Turns,
-			"durationMs": totalMs,
-			"success":    agentResult.StopReason == "end_turn",
-			"error":      errMsg,
-		})
-	}
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.emitAgentFn != nil {

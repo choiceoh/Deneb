@@ -5,7 +5,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 
@@ -173,28 +172,6 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
-
-	// Plugin-provided tools.
-	if s.pluginFullRegistry != nil {
-		for _, t := range s.pluginFullRegistry.ListTools() {
-			pluginTool := t
-			chatCfg.Tools.RegisterTool(chat.ToolDef{
-				Name:        pluginTool.Definition.Name,
-				Description: pluginTool.Definition.Description,
-				InputSchema: pluginTool.Definition.InputSchema,
-				Fn: func(ctx context.Context, input json.RawMessage) (string, error) {
-					var m map[string]any
-					if err := json.Unmarshal(input, &m); err != nil {
-						return "", err
-					}
-					return pluginTool.Handler(ctx, m)
-				},
-			})
-		}
-		if count := len(s.pluginFullRegistry.ListTools()); count > 0 {
-			s.logger.Info("plugin tools registered", "count", count)
-		}
-	}
 
 	// Autoresearch runner + tool.
 	// Use the lightweight (local AI) model for autoresearch: it runs many

@@ -22,7 +22,6 @@ import (
 // (telegram.start, telegram.stop, telegram.restart).
 type LifecycleDeps struct {
 	TelegramPlugin *telegram.Plugin
-	Hooks          *hooks.Registry
 	InternalHooks  *hooks.InternalRegistry
 	Broadcaster    *events.Broadcaster
 }
@@ -63,17 +62,11 @@ func MessagingMethods(deps MessagingDeps) map[string]rpcutil.HandlerFunc {
 // Telegram lifecycle handlers
 // ---------------------------------------------------------------------------
 
-// emitTelegramLifecycleEvent fires the appropriate hook and broadcasts a
+// emitTelegramLifecycleEvent fires the internal hook and broadcasts a
 // telegram.changed event after a successful Telegram operation.
 func emitTelegramLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.Event, action string) {
-	env := map[string]string{"DENEB_CHANNEL_ID": id}
-	if deps.Hooks != nil {
-		go func() {
-			defer func() { recover() }()
-			deps.Hooks.Fire(context.Background(), hookEvent, env)
-		}()
-	}
 	if deps.InternalHooks != nil {
+		env := map[string]string{"DENEB_CHANNEL_ID": id}
 		go func() {
 			defer func() { recover() }()
 			deps.InternalHooks.TriggerFromEvent(context.Background(), hookEvent, "", env)
