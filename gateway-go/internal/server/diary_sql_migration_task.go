@@ -196,11 +196,15 @@ func (t *diarySQLMigrationTask) migrateOne(ctx context.Context, diaryDir, dateSt
 
 	prompt := fmt.Sprintf(diarySQLMigrationPromptTmpl, dateStr, trimmed)
 
-	sessionKey := "system:diary-sql-migration"
-	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	result, err := t.chatHandler.SendSync(runCtx, sessionKey, prompt, "", nil)
+	// Use SendLite: diary migration only needs the memory tool.
+	// Avoids the full pipeline (191 msgs, 20 tools, 504K tokens).
+	result, err := t.chatHandler.SendLite(runCtx, "", prompt,
+		[]string{"memory"},
+		&chat.LiteOptions{MaxTurns: 3},
+	)
 	if err != nil {
 		return fmt.Errorf("agent turn: %w", err)
 	}

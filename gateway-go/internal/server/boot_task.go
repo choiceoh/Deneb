@@ -34,9 +34,6 @@ type bootTask struct {
 func (t *bootTask) Name() string            { return "boot" }
 func (t *bootTask) Interval() time.Duration { return 24 * time.Hour }
 
-// bootSessionKey is the dedicated session for boot agent turns.
-const bootSessionKey = "system:boot"
-
 // defaultBootPrompt is used when no BOOT.md file exists.
 const defaultBootPrompt = `[시스템 부트 — 게이트웨이 시작됨]
 
@@ -69,10 +66,15 @@ func (t *bootTask) Run(ctx context.Context) error {
 	isFirstBoot := !t.firstRun.Load()
 	t.firstRun.Store(true)
 
-	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	result, err := t.chatHandler.SendSync(runCtx, bootSessionKey, prompt, "", nil)
+	// Use SendLite: boot only needs health + memory tools.
+	// Avoids the full pipeline (193 msgs, 20 tools, 32K sysprompt, 15K knowledge).
+	result, err := t.chatHandler.SendLite(runCtx, "", prompt,
+		[]string{"health_check", "memory"},
+		&chat.LiteOptions{MaxTurns: 3},
+	)
 	if err != nil {
 		return fmt.Errorf("boot: agent turn failed: %w", err)
 	}
@@ -84,7 +86,6 @@ func (t *bootTask) Run(ctx context.Context) error {
 	t.logger.Info("boot task completed",
 		"kind", kind,
 		"output_len", len(result.Text),
-		"session", bootSessionKey,
 	)
 	return nil
 }
