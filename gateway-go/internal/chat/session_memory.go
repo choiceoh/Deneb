@@ -267,6 +267,7 @@ const sessionMemorySystemPrompt = `당신은 AI 에이전트의 세션 메모리
 - "Current State"는 항상 최신 작업을 반영하도록 업데이트 (compaction 후 연속성에 중요)
 - "Worklog"는 시간순으로 주요 작업 기록, 도구 사용 내역 포함 (어떤 파일을 읽고/수정했는지, 시도→실패→성공 흐름)
 - 해결된 에러는 "Errors and Corrections"에서 제거하고 해결 기록만 남기기
+- 코드 블록을 세션 메모리에 포함하지 마세요. 코드를 인용하지 말고 파일 경로와 함수명으로만 참조하세요. 코드는 메모리 용량을 지나치게 빨리 소모합니다.
 - 변화가 없으면 정확히 NO_CHANGE 반환 (다른 텍스트 없이)
 - CLAUDE.md에 이미 있는 정보는 포함하지 마세요
 
@@ -356,6 +357,11 @@ func UpdateSessionMemory(
 		return
 	}
 
+	// Strip code blocks from transcript to reduce token usage on the local model.
+	// Code blocks consume disproportionate space and aren't needed verbatim —
+	// the LLM just needs to know code was present, not the actual content.
+	transcriptText = stripMemoryCodeBlocks(transcriptText)
+
 	// Truncate transcript to prevent KV cache exhaustion on the local model.
 	// Keep the most recent portion (tail) since it's the most relevant.
 	if len(transcriptText) > maxTranscriptChars {
@@ -415,6 +421,9 @@ func UpdateSessionMemory(
 
 	// Strip markdown code fences if the model wrapped the output.
 	resp = stripCodeFence(resp)
+
+	// Strip code blocks the model may have included despite instructions.
+	resp = stripMemoryCodeBlocks(resp)
 
 	// Validate: must contain at least one section header.
 	if !strings.Contains(resp, "# ") {
@@ -677,6 +686,55 @@ func truncRunes(s string, maxRunes int) string {
 	}
 	runes := []rune(s)
 	return string(runes[:maxRunes]) + "…"
+}
+
+// stripMemoryCodeBlocks replaces fenced code blocks (``` ... ```) with a brief
+// placeholder to prevent code from inflating memory storage.
+func stripMemoryCodeBlocks(s string) string {
+	if !strings.Contains(s, "```") {
+		return s
+	}
+	var result strings.Builder
+	result.Grow(len(s))
+	for {
+		idx := strings.Index(s, "```")
+		if idx == -1 {
+			result.WriteString(s)
+			break
+		}
+		result.WriteString(s[:idx])
+		rest := s[idx+3:]
+
+		nl := strings.IndexByte(rest, '\n')
+		if nl == -1 {
+			result.WriteString("```")
+			s = rest
+			continue
+		}
+		lang := strings.TrimSpace(rest[:nl])
+		body := rest[nl+1:]
+
+		closeIdx := strings.Index(body, "```")
+		if closeIdx == -1 {
+			result.WriteString("```")
+			s = rest
+			continue
+		}
+
+		code := body[:closeIdx]
+		lines := strings.Count(code, "\n")
+		if lines == 0 && len(strings.TrimSpace(code)) > 0 {
+			lines = 1
+		}
+
+		if lang != "" {
+			fmt.Fprintf(&result, "[코드 생략: %s, %d줄]", lang, lines)
+		} else {
+			fmt.Fprintf(&result, "[코드 생략: %d줄]", lines)
+		}
+		s = body[closeIdx+3:]
+	}
+	return result.String()
 }
 
 // stripCodeFence removes ```markdown ... ``` or ``` ... ``` wrapping.
