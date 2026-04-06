@@ -15,7 +15,7 @@ const runesPerToken = 2
 // DefaultSystemPromptBudget is the default token budget for system prompt
 // fragments (65536 tokens). The base system prompt (identity, tools, skills,
 // context files) is considered fixed; this budget governs variable additions
-// like knowledge, aurora summaries, recall, and proactive hints.
+// like knowledge, recall, and proactive hints.
 const DefaultSystemPromptBudget uint64 = 65_536
 
 // PromptFragment represents a named segment of the system prompt with
@@ -45,7 +45,6 @@ var DefaultPriorities = map[string]int{
 	"skills":          1,
 	"memory":          2,
 	"session_state":   2,
-	"aurora_summary":  2,
 	"proactive_hints": 3,
 }
 

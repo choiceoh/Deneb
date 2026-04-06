@@ -1,6 +1,5 @@
-// Package ffi provides the interface for functionality that was previously
-// backed by the Rust deneb-core library via CGo. All functions are now
-// implemented in pure Go; the Rust core has been fully removed.
+// Package ffi provides pure-Go implementations of functionality that was
+// previously backed by the Rust deneb-core library via CGo.
 //
 // Security & Protocol:
 //   - ValidateFrame: Gateway frame JSON validation
@@ -25,16 +24,6 @@
 //   - MarkdownDetectFences: Fenced code block detection
 //   - MarkdownToPlainText: Markdown stripping convenience
 //
-// Context Engine (stubs, being replaced by RLM):
-//   - ContextAssemblyNew/Start/Step: returns unavailable
-//   - ContextExpandNew/Start/Step: returns unavailable
-//   - ContextEngineDrop: no-op
-//
 // Compaction:
 //   - CompactionEvaluate: pure-Go threshold evaluation
-//   - CompactionSweepNew/Start/Step/Drop: returns unavailable
-//
-// ML (stubs):
-//   - MLEmbed/MLEmbedCtx: returns unavailable
-//   - MLAvailable: returns false
 package ffi

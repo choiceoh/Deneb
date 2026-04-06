@@ -36,7 +36,6 @@ type StatusReport struct {
 	// Server-level fields (populated from StatusDeps).
 	Version           string
 	StartedAt         time.Time
-	RustFFI           bool
 	SessionCount      int
 	WSConnections     int32
 	ProviderUsage     map[string]*ProviderUsageStats
@@ -110,12 +109,8 @@ func BuildStatusMessage(report StatusReport) string {
 
 	// System subsystem line.
 	if report.Version != "" || !report.StartedAt.IsZero() {
-		rustStatus := "❌"
-		if report.RustFFI {
-			rustStatus = "✅"
-		}
-		sections = append(sections, fmt.Sprintf("🔧 Rust Core: %s | Sessions: %d | WS: %d",
-			rustStatus, report.SessionCount, report.WSConnections))
+		sections = append(sections, fmt.Sprintf("🔧 Sessions: %d | WS: %d",
+			report.SessionCount, report.WSConnections))
 	}
 
 	// Per-provider API usage.

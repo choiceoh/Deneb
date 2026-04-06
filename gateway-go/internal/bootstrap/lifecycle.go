@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
@@ -118,7 +117,6 @@ func buildBannerInfo(version, addr string) logging.BannerInfo {
 	return logging.BannerInfo{
 		Version:       version,
 		Addr:          addr,
-		RustFFI:       ffi.Available,
 		LocalAIStatus: localAIStatus,
 	}
 }

@@ -10,12 +10,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
-	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -528,12 +528,8 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 			}
 			sections = append(sections, fmt.Sprintf("🖥️ **Gateway** v%s%s", sd.Version, uptime))
 		}
-		rustIcon := "❌"
-		if sd.RustFFI {
-			rustIcon = "✅"
-		}
-		sections = append(sections, fmt.Sprintf("🔧 Rust Core: %s | Sessions: %d | WS: %d",
-			rustIcon, sd.SessionCount, sd.WSConnections))
+		sections = append(sections, fmt.Sprintf("🔧 Sessions: %d | WS: %d",
+			sd.SessionCount, sd.WSConnections))
 		if sd.LastFailureReason != "" {
 			sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sd.LastFailureReason))
 		}

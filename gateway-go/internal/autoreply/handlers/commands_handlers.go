@@ -54,7 +54,6 @@ type CommandDeps struct {
 type StatusDeps struct {
 	Version           string
 	StartedAt         time.Time
-	RustFFI           bool
 	SessionCount      int
 	WSConnections     int32
 	ProviderUsage     map[string]*ProviderUsageStats
@@ -166,4 +165,3 @@ func argRaw(args *CommandArgs) string {
 	}
 	return strings.TrimSpace(args.Raw)
 }
-

@@ -15,7 +15,6 @@ import (
 type BannerInfo struct {
 	Version       string
 	Addr          string
-	RustFFI       bool   // deprecated: always false (Rust removed), kept for API compat
 	LocalAIStatus string // "online", "offline", or empty to hide
 	PID           int    // non-zero in daemon mode
 }

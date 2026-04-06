@@ -12,10 +12,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
@@ -34,7 +34,7 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
-	wikiStore       *wiki.Store                      // optional; wiki knowledge base
+	wikiStore       *wiki.Store                       // optional; wiki knowledge base
 	sessionMemory   *SessionMemoryStore               // optional; structured session working state
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
@@ -137,7 +137,7 @@ type HandlerConfig struct {
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
-	LocalAIHub            *localai.Hub               // centralized local AI request hub
+	LocalAIHub           *localai.Hub              // centralized local AI request hub
 	ContextCfg           ContextConfig
 	DefaultModel         string
 	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
@@ -422,7 +422,6 @@ type StatusDepsFunc func(sessionKey string) StatusDeps
 type StatusDeps struct {
 	Version           string
 	StartedAt         time.Time
-	RustFFI           bool
 	SessionCount      int
 	WSConnections     int32
 	ActiveRuns        int
@@ -448,7 +447,6 @@ func (h *Handler) DefaultModel() string {
 func (h *Handler) ModelRegistry() *modelrole.Registry {
 	return h.registry
 }
-
 
 // Close stops background goroutines and cancels all active abort entries.
 func (h *Handler) Close() {

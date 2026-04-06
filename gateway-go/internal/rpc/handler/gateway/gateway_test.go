@@ -93,7 +93,6 @@ func TestStatus_withDeps(t *testing.T) {
 func TestIdentity_fields(t *testing.T) {
 	deps := Deps{
 		Version:   "3.1.0",
-		RustFFI:   true,
 		StartedAt: time.Now().Add(-2 * time.Second),
 	}
 	m := RuntimeMethods(deps)
@@ -105,9 +104,6 @@ func TestIdentity_fields(t *testing.T) {
 	}
 	if result["runtime"] != "go" {
 		t.Errorf("expected runtime=go: %v", result)
-	}
-	if result["rustFFI"] != true {
-		t.Errorf("expected rustFFI=true: %v", result)
 	}
 }
 
