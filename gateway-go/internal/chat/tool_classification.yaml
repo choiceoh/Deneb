@@ -62,6 +62,15 @@ toolApprovalPolicy:
     exec: "confirm"
     git: "confirm"
     send_file: "confirm"
+    # RLM Phase 1: read-only data access tools.
+    projects_list: "auto"
+    projects_get_field: "auto"
+    projects_search: "auto"
+    projects_get_document: "auto"
+    memory_recall_rlm: "auto"
+    # RLM Phase 2: sub-LLM spawning (external LLM calls).
+    llm_spawn: "confirm"
+    llm_spawn_batch: "confirm"
     # Block: never auto-execute — too dangerous for unsupervised runs.
     bridge: "block"
 
