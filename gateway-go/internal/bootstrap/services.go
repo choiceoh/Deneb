@@ -50,10 +50,15 @@ func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.
 func newEmbedder(logger *slog.Logger) embedding.Embedder {
 	if modelPath := os.Getenv("DENEB_EMBED_MODEL"); modelPath != "" {
 		if _, err := os.Stat(modelPath); err == nil {
-			logger.Info("embedding: using local GGUF model", "path", modelPath)
-			return embedding.NewLocalEmbedder(modelPath, logger)
+			if !ffi.MLAvailable() {
+				logger.Info("embedding: DENEB_EMBED_MODEL set but ML feature not compiled, falling back", "path", modelPath)
+			} else {
+				logger.Info("embedding: using local GGUF model", "path", modelPath)
+				return embedding.NewLocalEmbedder(modelPath, logger)
+			}
+		} else {
+			logger.Warn("embedding: DENEB_EMBED_MODEL set but file not found, falling back", "path", modelPath)
 		}
-		logger.Warn("embedding: DENEB_EMBED_MODEL set but file not found, falling back", "path", modelPath)
 	}
 	if e := embedding.NewGeminiEmbedder(os.Getenv("GEMINI_API_KEY"), logger); e != nil {
 		return e
