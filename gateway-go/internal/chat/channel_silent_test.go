@@ -14,13 +14,13 @@ func TestShouldSilenceForChannel(t *testing.T) {
 		want       bool
 	}{
 		{
-			name:    "cron on telegram is silenced",
+			name:    "cron on telegram is NOT silenced (user-initiated queries must respond)",
 			channel: "telegram",
 			activities: []agent.ToolActivity{
 				{Name: "read"},
 				{Name: "cron"},
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name:    "cron on api is not silenced",
@@ -36,6 +36,30 @@ func TestShouldSilenceForChannel(t *testing.T) {
 			activities: []agent.ToolActivity{
 				{Name: "read"},
 				{Name: "exec"},
+			},
+			want: false,
+		},
+		{
+			name:    "internal tools on telegram are still silenced",
+			channel: "telegram",
+			activities: []agent.ToolActivity{
+				{Name: "sessions_list"},
+			},
+			want: true,
+		},
+		{
+			name:    "gmail on telegram is NOT silenced",
+			channel: "telegram",
+			activities: []agent.ToolActivity{
+				{Name: "gmail"},
+			},
+			want: false,
+		},
+		{
+			name:    "health_check on telegram is NOT silenced",
+			channel: "telegram",
+			activities: []agent.ToolActivity{
+				{Name: "health_check"},
 			},
 			want: false,
 		},
