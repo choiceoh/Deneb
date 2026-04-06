@@ -467,7 +467,8 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		sections = append(sections, "⚙️ **모드:** "+strings.Join(modes, " | "))
 	}
 
-	// Token usage from session.
+	// Token usage from session (live budget).
+	liveBudget := h.contextCfg.LiveTokenBudget
 	if sess.TotalTokens != nil && *sess.TotalTokens > 0 {
 		in, out := int64(0), int64(0)
 		if sess.InputTokens != nil {
@@ -476,8 +477,47 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		if sess.OutputTokens != nil {
 			out = *sess.OutputTokens
 		}
-		sections = append(sections, fmt.Sprintf("📊 **토큰:** %s (in: %s, out: %s)",
-			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(in), formatCompactTokens(out)))
+		livePct := float64(*sess.TotalTokens) / float64(liveBudget) * 100
+		if livePct > 100 {
+			livePct = 100
+		}
+		sections = append(sections, fmt.Sprintf("📊 **라이브:** %s / %s (%s %.0f%%) in: %s, out: %s",
+			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(liveBudget)),
+			buildUsageBar(livePct), livePct,
+			formatCompactTokens(in), formatCompactTokens(out)))
+	} else {
+		sections = append(sections, fmt.Sprintf("📊 **라이브:** 0 / %s", formatCompactTokens(int64(liveBudget))))
+	}
+
+	// Aurora stored context usage + compaction status.
+	if h.auroraStore != nil {
+		memBudget := h.contextCfg.MemoryTokenBudget
+		if storedTokens, err := h.auroraStore.FetchTokenCount(1); err == nil && storedTokens > 0 {
+			memPct := float64(storedTokens) / float64(memBudget) * 100
+			if memPct > 100 {
+				memPct = 100
+			}
+			sections = append(sections, fmt.Sprintf("🧠 **Aurora:** %s / %s (%s %.0f%%)",
+				formatCompactTokens(int64(storedTokens)), formatCompactTokens(int64(memBudget)),
+				buildUsageBar(memPct), memPct))
+
+			// Summary stats (compaction depth indicator).
+			if stats, err := h.auroraStore.FetchSummaryStats(1); err == nil && (stats.LeafCount > 0 || stats.CondensedCount > 0) {
+				sections = append(sections, fmt.Sprintf("📦 **컴팩션:** 요약 %d개 (leaf: %d, condensed: %d, depth: %d)",
+					stats.LeafCount+stats.CondensedCount, stats.LeafCount, stats.CondensedCount, stats.MaxDepth))
+			}
+		} else {
+			sections = append(sections, fmt.Sprintf("🧠 **Aurora:** 0 / %s", formatCompactTokens(int64(memBudget))))
+		}
+
+		// Compaction circuit breaker + last run.
+		cb := getCompactionCircuitBreaker()
+		if cb.IsTripped() {
+			sections = append(sections, fmt.Sprintf("🔴 **컴팩션 차단:** 연속 %d회 실패 (circuit breaker tripped)", cb.ConsecutiveFailures()))
+		} else if lastMs := proactiveCompaction.lastRun.Load(); lastMs > 0 {
+			ago := time.Since(time.UnixMilli(lastMs))
+			sections = append(sections, fmt.Sprintf("🟢 **마지막 컴팩션:** %s 전", formatUptime(ago)))
+		}
 	}
 
 	// Channel.
@@ -556,6 +596,24 @@ func formatCompactTokens(n int64) string {
 		return fmt.Sprintf("%.1fK", float64(n)/1_000)
 	}
 	return fmt.Sprintf("%d", n)
+}
+
+// buildUsageBar returns a simple text progress bar for percentage values.
+// Example: "████░░░░░░" for 40%.
+func buildUsageBar(pct float64) string {
+	const totalBlocks = 10
+	filled := int(pct / 100 * totalBlocks)
+	if filled > totalBlocks {
+		filled = totalBlocks
+	}
+	bar := ""
+	for i := 0; i < filled; i++ {
+		bar += "█"
+	}
+	for i := filled; i < totalBlocks; i++ {
+		bar += "░"
+	}
+	return bar
 }
 
 // formatUptime formats a duration as compact uptime (e.g. "2d 5h 32m").

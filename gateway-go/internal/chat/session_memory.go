@@ -521,8 +521,9 @@ func formatRichContent(content json.RawMessage) string {
 				b.WriteByte('\n')
 			}
 		case "tool_use":
-			// Name only — no JSON input to avoid LLM mimicking tool call syntax.
-			fmt.Fprintf(&b, "[%s]\n", base.Name)
+			// Omit entirely — even [name] bracket format causes the main LLM
+			// to mimic it as text instead of issuing real tool calls.
+			// The assistant's text block already summarizes what happened.
 		case "tool_result":
 			if base.IsError {
 				b.WriteString("[오류]\n")

@@ -151,6 +151,8 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		},
 		Chrono: chat.ChronoDeps{
 			Scheduler: s.cron,
+			Service:   s.cronService,
+			RunLog:    s.cronRunLog,
 		},
 		Vega: chat.VegaDeps{
 			MemoryStore:    chatCfg.MemoryStore,

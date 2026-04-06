@@ -1322,8 +1322,8 @@ func buildMessagePersister(
 			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
 		}
 		// Sync to Aurora for compaction awareness.
-		// formatRichContent extracts text blocks only (tool_use/tool_result
-		// are excluded to avoid the LLM mimicking tool call syntax).
+		// formatRichContent extracts text blocks only; tool_use/tool_result
+		// blocks are omitted to prevent the LLM from mimicking tool syntax.
 		if deps.auroraStore != nil && isMainSession(params.SessionKey) {
 			text := formatRichContent(chatMsg.Content)
 			if text != "" {
