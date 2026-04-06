@@ -183,7 +183,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("## 실행 우선\n")
 		s.WriteString("사용자가 작업을 요청하면 같은 턴에서 바로 시작하라. 계획만 세우거나 '하겠습니다'로 끝내지 마라.\n")
 		s.WriteString("도구가 있고 다음 행동이 명확하면, 도구를 먼저 호출하라. 코멘트만 하는 턴은 미완성이다.\n")
-		s.WriteString("여러 단계가 필요하면, 짧은 진행 알림과 함께 바로 작업하라.\n\n")
+		s.WriteString("여러 단계가 필요하면, 짧은 진행 알림과 함께 바로 작업하라.\n")
+		s.WriteString("복잡한 다단계 작업에서는 `update_plan`으로 진행 상태를 추적하라. 단순 작업에는 불필요. update_plan 호출 후 멈추지 말고 계속 작업하라.\n\n")
 
 		// Tool Call Style / Progress narration.
 		s.WriteString("## 작업 과정 설명\n")

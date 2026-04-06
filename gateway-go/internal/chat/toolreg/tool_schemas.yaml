@@ -1376,3 +1376,31 @@
       default: deneb
   required:
     - message
+
+# ---------------------------------------------------------------------------
+# Planning (progress tracking)
+# ---------------------------------------------------------------------------
+
+- name: update_plan
+  properties:
+    steps:
+      type: array
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+            description: "Short description of this step"
+          status:
+            type: string
+            enum: ["pending", "in_progress", "completed", "failed"]
+            description: "Current status of this step"
+          note:
+            type: string
+            description: "Optional note (what was tried, what failed, what to do next)"
+      description: "Plan steps with their current status. Keep exactly one step as in_progress"
+    summary:
+      type: string
+      description: "Brief overall progress summary (shown to user as status update)"
+  required:
+    - steps

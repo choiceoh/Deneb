@@ -133,6 +133,16 @@ type Session struct {
 	// sessions to prevent indefinitely hung agents. Zero means no timeout.
 	TimeoutAt *int64 `json:"timeoutAt,omitempty"`
 
+	// IdleTimeoutMs is the maximum duration (in milliseconds) a session can
+	// remain running without activity before being transitioned to StatusTimeout.
+	// Zero means no idle timeout. Used for subagent stall detection.
+	IdleTimeoutMs int64 `json:"idleTimeoutMs,omitempty"`
+
+	// LastActivityAt is the timestamp (UnixMilli) of the last meaningful
+	// activity in this session (tool execution, output produced, etc.).
+	// Updated via Manager.TouchActivity(). Used for idle stall detection.
+	LastActivityAt *int64 `json:"lastActivityAt,omitempty"`
+
 	// LastOutput stores the last assistant output text for the session.
 	// Used by cron runner to retrieve the agent's response after completion.
 	LastOutput string `json:"lastOutput,omitempty"`
@@ -238,6 +248,20 @@ func (m *Manager) evictStale() {
 			s.EndedAt = &endedAt
 			s.UpdatedAt = nowMs
 			timedOut = append(timedOut, key)
+		} else if s.Status == StatusRunning && s.IdleTimeoutMs > 0 {
+			// Idle stall detection: if no activity for IdleTimeoutMs, timeout.
+			activityAt := s.UpdatedAt
+			if s.LastActivityAt != nil {
+				activityAt = *s.LastActivityAt
+			}
+			if nowMs-activityAt > s.IdleTimeoutMs {
+				s.Status = StatusTimeout
+				endedAt := nowMs
+				s.EndedAt = &endedAt
+				s.UpdatedAt = nowMs
+				s.FailureReason = "idle timeout: no activity detected"
+				timedOut = append(timedOut, key)
+			}
 		}
 	}
 	m.mu.Unlock()
@@ -341,6 +365,19 @@ func (m *Manager) Delete(key string) bool {
 		m.eventBus.Emit(Event{Kind: EventDeleted, Key: key, OldStatus: oldStatus})
 	}
 	return ok
+}
+
+// TouchActivity updates the LastActivityAt timestamp for a session,
+// used for idle stall detection. No-op if the session doesn't exist or
+// is not running. This is a lightweight, lock-minimized operation.
+func (m *Manager) TouchActivity(key string) {
+	now := time.Now().UnixMilli()
+	m.mu.Lock()
+	s := m.sessions[key]
+	if s != nil && s.Status == StatusRunning {
+		s.LastActivityAt = &now
+	}
+	m.mu.Unlock()
 }
 
 // List returns snapshot copies of all sessions.

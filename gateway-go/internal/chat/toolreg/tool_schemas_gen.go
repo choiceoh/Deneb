@@ -1560,3 +1560,38 @@ func bridgeToolSchema() map[string]any {
 		"required": []string{"message"},
 	}
 }
+
+func updatePlanToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"steps": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"title": map[string]any{
+							"type":        "string",
+							"description": "Short description of this step",
+						},
+						"status": map[string]any{
+							"type":        "string",
+							"enum":        []string{"pending", "in_progress", "completed", "failed"},
+							"description": "Current status of this step",
+						},
+						"note": map[string]any{
+							"type":        "string",
+							"description": "Optional note (what was tried, what failed, what to do next)",
+						},
+					},
+				},
+				"description": "Plan steps with their current status. Keep exactly one step as in_progress",
+			},
+			"summary": map[string]any{
+				"type":        "string",
+				"description": "Brief overall progress summary (shown to user as status update)",
+			},
+		},
+		"required": []string{"steps"},
+	}
+}

@@ -362,16 +362,24 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	var contMessage string
 	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() {
 		contReason = chatResult.ContSignal.Reason()
-		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s. Continue your work.]"
+		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
+			"이전 실행의 컨텍스트:\n" +
+			"- 사용한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
+			"- 에러 발생 도구: " + summarizeErrorTools(chatResult.ToolActivities) + "\n" +
+			"Continue your work. 동일한 실패를 반복하지 마세요.]"
 	} else if chatResult.StopReason == "max_turns" || chatResult.StopReason == "timeout" {
-		// Agent was cut off by turn limit or timeout while actively working.
-		// Auto-continue so work isn't lost.
 		contReason = fmt.Sprintf("에이전트가 %s에 도달했지만 작업이 진행 중이었습니다", chatResult.StopReason)
-		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s. 이전 실행이 중단된 지점부터 이어서 작업하세요. 중단된 작업의 컨텍스트는 대화 히스토리에 있습니다.]"
+		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
+			"이전 실행 요약:\n" +
+			"- 실행 턴: " + fmt.Sprintf("%d", chatResult.Turns) + "\n" +
+			"- 사용한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
+			"- 에러 발생 도구: " + summarizeErrorTools(chatResult.ToolActivities) + "\n" +
+			"이전 실행이 중단된 지점부터 이어서 작업하세요. 동일한 접근법으로 같은 에러가 반복되면 다른 전략을 시도하세요.]"
 	} else if params.ContinuationIndex == 0 && hadMutatingToolActivity(chatResult.ToolActivities) {
-		// First run had code changes — auto-start verification pass.
 		contReason = "코드 변경 후 검증"
-		contMessage = "[System: Autonomous continuation %d/%d. 이전 실행에서 코드를 변경했습니다. 변경 사항을 검증하세요: 빌드가 되는지, 테스트가 통과하는지, 추가 작업이 필요한지 확인하고 이어서 진행하세요. 모든 것이 정상이면 최종 요약으로 마무리하세요.]"
+		contMessage = "[System: Autonomous continuation %d/%d. 이전 실행에서 코드를 변경했습니다.\n" +
+			"변경한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
+			"검증 사항: 빌드, 테스트 통과, 추가 작업 필요 여부. 모든 것이 정상이면 최종 요약으로 마무리하세요.]"
 	}
 
 	if contReason != "" && params.ContinuationIndex < maxConts && deps.startRunFn != nil {
@@ -415,4 +423,44 @@ func hadMutatingToolActivity(activities []agent.ToolActivity) bool {
 		}
 	}
 	return false
+}
+
+// summarizeToolActivity returns a compact summary of tools used in a run.
+func summarizeToolActivity(activities []agent.ToolActivity) string {
+	if len(activities) == 0 {
+		return "없음"
+	}
+	counts := make(map[string]int)
+	for _, a := range activities {
+		counts[a.Name]++
+	}
+	var parts []string
+	for name, count := range counts {
+		if count > 1 {
+			parts = append(parts, fmt.Sprintf("%s×%d", name, count))
+		} else {
+			parts = append(parts, name)
+		}
+	}
+	if len(parts) > 8 {
+		parts = parts[:8]
+		parts = append(parts, "...")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// summarizeErrorTools returns names of tools that had errors.
+func summarizeErrorTools(activities []agent.ToolActivity) string {
+	var errs []string
+	seen := make(map[string]bool)
+	for _, a := range activities {
+		if a.IsError && !seen[a.Name] {
+			errs = append(errs, a.Name)
+			seen[a.Name] = true
+		}
+	}
+	if len(errs) == 0 {
+		return "없음"
+	}
+	return strings.Join(errs, ", ")
 }

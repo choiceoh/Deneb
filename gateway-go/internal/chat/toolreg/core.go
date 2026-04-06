@@ -51,6 +51,14 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Deferred:    true,
 	})
 
+	// Progress tracking: structured plan for multi-step work.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "update_plan",
+		Description: "Update your work plan with step statuses. For non-trivial multi-step tasks, keep a plan updated so the user sees progress. Skip for simple 1-2 step tasks. Keep exactly one step in_progress. After calling, continue working — do not stop to describe the plan.",
+		InputSchema: updatePlanToolSchema(),
+		Fn:          tools.ToolUpdatePlan(nil), // Plan store is in-memory only for now.
+	})
+
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
