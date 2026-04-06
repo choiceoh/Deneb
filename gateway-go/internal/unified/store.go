@@ -142,6 +142,82 @@ func isSQLiteBusy(err error) bool {
 		strings.Contains(msg, "SQLITE_BUSY")
 }
 
+// MessageRecord is a single row from the messages table.
+type MessageRecord struct {
+	MessageID      int64
+	ConversationID int64
+	Seq            int64
+	Role           string
+	Content        string
+	TokenCount     int64
+	CreatedAt      int64 // epoch ms
+}
+
+// RecentMessages returns the most recent `limit` messages for a conversation,
+// ordered oldest-first (chronological). Used by RLM for fresh-tail loading.
+func (s *Store) RecentMessages(convID uint64, limit int) ([]MessageRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+		SELECT message_id, conversation_id, seq, role, content, token_count, created_at
+		FROM messages
+		WHERE conversation_id = ?
+		ORDER BY seq DESC
+		LIMIT ?
+	`
+	rows, err := s.db.Query(query, convID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("recent messages: %w", err)
+	}
+	defer rows.Close()
+
+	var msgs []MessageRecord
+	for rows.Next() {
+		var m MessageRecord
+		if err := rows.Scan(&m.MessageID, &m.ConversationID, &m.Seq, &m.Role,
+			&m.Content, &m.TokenCount, &m.CreatedAt); err != nil {
+			continue
+		}
+		msgs = append(msgs, m)
+	}
+	// Reverse to chronological order (oldest first).
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	return msgs, nil
+}
+
+// AllMessages returns all messages for a conversation in chronological order.
+// Used by RLM to populate the Starlark REPL's context variable.
+func (s *Store) AllMessages(convID uint64) ([]MessageRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+		SELECT message_id, conversation_id, seq, role, content, token_count, created_at
+		FROM messages
+		WHERE conversation_id = ?
+		ORDER BY seq ASC
+	`
+	rows, err := s.db.Query(query, convID)
+	if err != nil {
+		return nil, fmt.Errorf("all messages: %w", err)
+	}
+	defer rows.Close()
+
+	var msgs []MessageRecord
+	for rows.Next() {
+		var m MessageRecord
+		if err := rows.Scan(&m.MessageID, &m.ConversationID, &m.Seq, &m.Role,
+			&m.Content, &m.TokenCount, &m.CreatedAt); err != nil {
+			continue
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, nil
+}
+
 func (s *Store) logStats() {
 	var msgCount, sumCount, factCount, activeFactCount, indexCount int
 	s.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&msgCount)

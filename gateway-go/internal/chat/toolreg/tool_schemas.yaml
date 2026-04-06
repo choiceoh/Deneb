@@ -1608,3 +1608,15 @@
       maximum: 50
   required:
     - action
+
+# ---------------------------------------------------------------------------
+# RLM REPL tool
+# ---------------------------------------------------------------------------
+
+- name: repl
+  properties:
+    code:
+      type: string
+      description: "Starlark (Python-like) code to execute. Variables persist across calls. Use context to access conversation history, llm_query() for sub-LLM calls, FINAL() for final answer."
+  required:
+    - code
