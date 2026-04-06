@@ -64,6 +64,43 @@ toolApprovalPolicy:
     # Block: never auto-execute — too dangerous for unsupervised runs.
     bridge: "block"
 
+channelSilentTools:
+  _type: "map[string][]string"
+  _doc: |-
+    channelSilentTools lists tools that suppress chat delivery on specific
+    channels. When the agent calls one of these tools, the response is not
+    delivered as a chat message — the tool executes normally but the chat
+    output is silenced. Management tools (cron, etc.) execute in the
+    background; results are accessible via MCP/API.
+  _values:
+    telegram:
+      # Routine / scheduling
+      - cron
+      - gmail
+      - morning_letter
+      # System / gateway control
+      - gateway
+      - health_check
+      - message
+      - process
+      # Session management
+      - sessions_list
+      - sessions_history
+      - sessions_search
+      - sessions_send
+      - sessions_spawn
+      - subagents
+      # Logs / diagnostics
+      - agent_logs
+      - gateway_logs
+      # Data / internal
+      - kv
+      - bridge
+      - autoresearch
+      # Skill management
+      - skills_list
+      - skill_manage
+
 toolCompressSkipSet:
   _type: "map[string]bool"
   _doc: |-

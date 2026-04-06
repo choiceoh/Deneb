@@ -53,6 +53,15 @@ var toolApprovalPolicy = map[string]string{
 	"bridge":          "block",
 }
 
+// channelSilentTools lists tools that suppress chat delivery on specific
+// channels. When the agent calls one of these tools, the response is not
+// delivered as a chat message — the tool executes normally but the chat
+// output is silenced. Management tools (cron, etc.) execute in the
+// background; results are accessible via MCP/API.
+var channelSilentTools = map[string][]string{
+	"telegram": []string{"cron", "gmail", "morning_letter", "gateway", "health_check", "message", "process", "sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents", "agent_logs", "gateway_logs", "kv", "bridge", "autoresearch", "skills_list", "skill_manage"},
+}
+
 // toolCompressSkipSet contains tools whose output should not be compressed.
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.
