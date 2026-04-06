@@ -5,8 +5,8 @@
 use std::path::PathBuf;
 
 /// Schema version for the Vega `SQLite` database.
-/// Matches Python `SCHEMA_VERSION` = 6.
-pub const SCHEMA_VERSION: u32 = 6;
+/// v7: added source_file column to chunks table.
+pub const SCHEMA_VERSION: u32 = 7;
 
 /// Vega protocol version for Deneb compatibility.
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_constants() {
-        assert_eq!(SCHEMA_VERSION, 6);
+        assert_eq!(SCHEMA_VERSION, 7);
         assert_eq!(PROTOCOL_VERSION, 1);
         assert_eq!(VERSION, "2.0.0");
     }

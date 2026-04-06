@@ -72,12 +72,12 @@ fn fetch_recent_comms(
 ) -> Result<Vec<Value>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT cl.id, cl.date, cl.channel, cl.sender, cl.summary,
+            "SELECT cl.id, cl.log_date, cl.sender, cl.subject, cl.summary,
                     p.name as project_name
              FROM comm_log cl
              LEFT JOIN projects p ON cl.project_id = p.id
-             WHERE cl.date >= ?1
-             ORDER BY cl.date DESC
+             WHERE cl.log_date >= ?1
+             ORDER BY cl.log_date DESC
              LIMIT ?2",
         )
         .map_err(|e| format!("커뮤니케이션 조회 실패: {e}"))?;
@@ -87,8 +87,8 @@ fn fetch_recent_comms(
             Ok(json!({
                 "id": row.get::<_, i64>(0)?,
                 "date": row.get::<_, String>(1)?,
-                "channel": row.get::<_, Option<String>>(2)?,
-                "sender": row.get::<_, Option<String>>(3)?,
+                "sender": row.get::<_, Option<String>>(2)?,
+                "subject": row.get::<_, Option<String>>(3)?,
                 "summary": row.get::<_, Option<String>>(4)?,
                 "project": row.get::<_, Option<String>>(5)?,
             }))
@@ -108,12 +108,12 @@ fn fetch_recent_comms_filtered(
 ) -> Result<Vec<Value>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT cl.id, cl.date, cl.channel, cl.sender, cl.summary,
+            "SELECT cl.id, cl.log_date, cl.sender, cl.subject, cl.summary,
                     p.name as project_name
              FROM comm_log cl
              LEFT JOIN projects p ON cl.project_id = p.id
-             WHERE cl.date >= ?1 AND p.name = ?3
-             ORDER BY cl.date DESC
+             WHERE cl.log_date >= ?1 AND p.name = ?3
+             ORDER BY cl.log_date DESC
              LIMIT ?2",
         )
         .map_err(|e| format!("커뮤니케이션 조회 실패: {e}"))?;
@@ -123,8 +123,8 @@ fn fetch_recent_comms_filtered(
             Ok(json!({
                 "id": row.get::<_, i64>(0)?,
                 "date": row.get::<_, String>(1)?,
-                "channel": row.get::<_, Option<String>>(2)?,
-                "sender": row.get::<_, Option<String>>(3)?,
+                "sender": row.get::<_, Option<String>>(2)?,
+                "subject": row.get::<_, Option<String>>(3)?,
                 "summary": row.get::<_, Option<String>>(4)?,
                 "project": row.get::<_, Option<String>>(5)?,
             }))
@@ -143,12 +143,12 @@ fn fetch_recent_chunks(
 ) -> Result<Vec<Value>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT c.id, c.section, c.content, c.source_file,
+            "SELECT c.id, c.section_heading, c.content, c.source_file,
                     p.name as project_name
              FROM chunks c
              LEFT JOIN projects p ON c.project_id = p.id
-             WHERE c.created_at >= ?1
-             ORDER BY c.created_at DESC
+             WHERE c.entry_date >= ?1
+             ORDER BY c.entry_date DESC
              LIMIT ?2",
         )
         .map_err(|e| format!("청크 조회 실패: {e}"))?;
@@ -178,12 +178,12 @@ fn fetch_recent_chunks_filtered(
 ) -> Result<Vec<Value>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT c.id, c.section, c.content, c.source_file,
+            "SELECT c.id, c.section_heading, c.content, c.source_file,
                     p.name as project_name
              FROM chunks c
              LEFT JOIN projects p ON c.project_id = p.id
-             WHERE c.created_at >= ?1 AND p.name = ?3
-             ORDER BY c.created_at DESC
+             WHERE c.entry_date >= ?1 AND p.name = ?3
+             ORDER BY c.entry_date DESC
              LIMIT ?2",
         )
         .map_err(|e| format!("청크 조회 실패: {e}"))?;
