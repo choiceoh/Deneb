@@ -254,7 +254,15 @@ func (s *Server) doShutdown() error {
 		s.genesisTracker.Close()
 	}
 
-	// 6b3. Stop local AI hub (drains queued requests, cancels in-flight).
+	// 6b3. Cleanup RL subsystem.
+	if s.rlHook != nil {
+		s.rlHook.Stop()
+	}
+	if s.rlService != nil {
+		s.rlService.Stop()
+	}
+
+	// 6b4. Stop local AI hub (drains queued requests, cancels in-flight).
 	if s.localAIHub != nil {
 		s.localAIHub.Shutdown()
 	}
