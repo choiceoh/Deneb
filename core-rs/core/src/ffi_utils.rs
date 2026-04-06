@@ -86,6 +86,8 @@ macro_rules! ffi_string_to_int {
         ) $body:block
     ) => {
         $(#[$meta])*
+        /// # Safety
+        /// `$in_ptr` must point to `$in_len` valid bytes (or be null, which returns an error).
         #[no_mangle]
         pub unsafe extern "C" fn $name($in_ptr: *const u8, $in_len: usize) -> i32 {
             if $in_ptr.is_null() {
@@ -134,6 +136,10 @@ macro_rules! ffi_string_to_buffer {
         ) $body:block
     ) => {
         $(#[$meta])*
+        /// # Safety
+        /// `$in_ptr` must point to `$in_len` valid bytes and `$out_ptr` must
+        /// point to a writable buffer of `$out_len` bytes (or be null, which
+        /// returns an error).
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             $in_ptr: *const u8,

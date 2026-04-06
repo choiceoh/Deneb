@@ -591,15 +591,14 @@ impl ExpandEngine {
             return self.done_result();
         }
 
-        if let Some((_summary_id, remaining_depth)) = self.expand_stack.pop() {
+        while let Some((summary_id, remaining_depth)) = self.expand_stack.pop() {
             if remaining_depth > 0 {
                 self.phase = ExpandPhase::ExpandingChild {
                     child_index: self.child_index,
                 };
-                return RetrievalCommand::FetchChildren {
-                    summary_id: _summary_id,
-                };
+                return RetrievalCommand::FetchChildren { summary_id };
             }
+            // remaining_depth == 0: skip this item, keep draining stack
         }
 
         // Stack empty — check if we should fetch messages for leaf children
