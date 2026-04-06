@@ -22,7 +22,7 @@ import (
 // from toolreg/.
 type LocalAIDeps struct {
 	CheckLocalAIHealth func() bool   // may be nil
-	BaseURL           func() string // returns local AI base URL; may be nil
+	BaseURL            func() string // returns local AI base URL; may be nil
 }
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
@@ -485,5 +485,62 @@ func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writ
 		Fn:              tools.ToolGatewayLogs(),
 		Hidden:          true,
 		ConcurrencySafe: true,
+	})
+}
+
+// RegisterRLMTools registers RLM (Recursive Language Model) Phase 1 tools
+// for context externalization. These let the LLM fetch project data and
+// memory on demand instead of relying on pre-injected context.
+func RegisterRLMTools(registry toolctx.ToolRegistrar, vegaDeps *toolctx.VegaDeps) {
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "projects_list",
+		Description:     "프로젝트 목록과 메타데이터 조회. 본문 데이터 없음, ID/이름/상태/지역 등 목록만 반환",
+		InputSchema:     projectsListToolSchema(),
+		Fn:              tools.ToolProjectsList(vegaDeps),
+		ConcurrencySafe: true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "projects_get_field",
+		Description:     "특정 프로젝트의 특정 필드만 조회. 전체 문서를 가져오지 않고 필요한 값만 반환",
+		InputSchema:     projectsGetFieldToolSchema(),
+		Fn:              tools.ToolProjectsGetField(vegaDeps),
+		ConcurrencySafe: true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "projects_search",
+		Description:     "자연어 쿼리로 프로젝트 데이터 검색. 관련 프로젝트와 스니펫 반환",
+		InputSchema:     projectsSearchToolSchema(),
+		Fn:              tools.ToolProjectsSearch(vegaDeps),
+		ConcurrencySafe: true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "projects_get_document",
+		Description:     "프로젝트 원본 문서 조회. 섹션 미지정 시 목차만 반환, 섹션 지정 시 해당 섹션 내용 반환",
+		InputSchema:     projectsGetDocumentToolSchema(),
+		Fn:              tools.ToolProjectsGetDocument(vegaDeps),
+		ConcurrencySafe: true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "memory_recall_rlm",
+		Description:     "과거 대화, 결정, 선호 등을 하이브리드 검색 (FTS+벡터). 컨텍스트에 없는 기억을 도구로 조회",
+		InputSchema:     memoryRecallRlmToolSchema(),
+		Fn:              tools.ToolMemoryRecall(vegaDeps),
+		ConcurrencySafe: true,
+	})
+}
+
+// RegisterRLMSpawnTools registers RLM Phase 2 sub-LLM spawning tools.
+func RegisterRLMSpawnTools(registry toolctx.ToolRegistrar, spawnFn tools.SpawnFunc, batchFn tools.SpawnBatchFunc) {
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "llm_spawn",
+		Description: "서브 LLM을 동기 실행. 독립 컨텍스트에서 데이터 조회+분석 후 결과만 반환",
+		InputSchema: llmSpawnToolSchema(),
+		Fn:          tools.ToolLLMSpawn(spawnFn),
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "llm_spawn_batch",
+		Description: "복수 서브 LLM을 병렬 실행 (최대 10개). 각각 독립 컨텍스트에서 처리 후 결과 배열 반환",
+		InputSchema: llmSpawnBatchToolSchema(),
+		Fn:          tools.ToolLLMSpawnBatch(batchFn),
 	})
 }
