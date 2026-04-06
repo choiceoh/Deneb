@@ -21,3 +21,6 @@ func MLEmbed(inputJSON string) ([]byte, error) {
 	}
 	return nil, errMLUnavailable
 }
+
+// MLAvailable returns false when Rust FFI is not linked.
+func MLAvailable() bool { return false }

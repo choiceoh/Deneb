@@ -59,3 +59,13 @@ fn ml_embed_impl(input_json: &str) -> String {
 fn ml_embed_impl(_input_json: &str) -> String {
     r#"{"error":"ml_not_available"}"#.to_string()
 }
+
+/// Returns 1 if the `ml` feature is compiled in, 0 otherwise.
+/// Allows Go to skip local embedder initialization when ML is unavailable.
+///
+/// # Safety
+/// No pointer arguments — always safe to call.
+#[no_mangle]
+pub extern "C" fn deneb_ml_available() -> i32 {
+    if cfg!(feature = "ml") { 1 } else { 0 }
+}

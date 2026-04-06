@@ -7,6 +7,7 @@ package ffi
 extern int deneb_ml_embed(
 	const unsigned char *input_ptr, unsigned long input_len,
 	unsigned char *out_ptr, unsigned long out_len);
+extern int deneb_ml_available();
 */
 import "C"
 import (
@@ -36,4 +37,9 @@ func MLEmbedCtx(ctx context.Context, inputJSON string) ([]byte, error) {
 // MLEmbed embeds texts using a local GGUF model via Rust FFI.
 func MLEmbed(inputJSON string) ([]byte, error) {
 	return MLEmbedCtx(context.Background(), inputJSON)
+}
+
+// MLAvailable returns whether the Rust ML feature is compiled in.
+func MLAvailable() bool {
+	return C.deneb_ml_available() == 1
 }
