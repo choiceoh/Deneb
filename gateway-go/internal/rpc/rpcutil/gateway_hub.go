@@ -114,7 +114,7 @@ type GatewayHub struct {
 	wizard    *wizard.Engine
 	talk      *talk.State
 
-	// RL self-learning pipeline (optional, nil when rl.enable=false).
+	// RL self-learning pipeline (optional, nil when rl is disabled).
 	rlService *rl.Service
 
 	// Metadata.
@@ -178,6 +178,9 @@ func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return 
 
 // SetLocalAIHub sets the centralized local AI hub (created early, before method registration).
 func (h *GatewayHub) SetLocalAIHub(sh *localai.Hub) { h.localAIHub = sh }
+
+// SetRLService sets the RL training service (optional, created during server init).
+func (h *GatewayHub) SetRLService(s *rl.Service) { h.rlService = s }
 
 // SetTelegram sets the Telegram plugin (created during early registration phase).
 func (h *GatewayHub) SetTelegram(p *telegram.Plugin) { h.telegram = p }

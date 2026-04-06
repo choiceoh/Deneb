@@ -251,7 +251,7 @@ func (s *Server) doShutdown() error {
 		s.genesisTracker.Close()
 	}
 
-	// 6b3. Cleanup RL subsystem.
+	// 6b3. Stop RL training pipeline (kills sglang/Tinker/Atropos processes).
 	if s.rlHook != nil {
 		s.rlHook.Stop()
 	}

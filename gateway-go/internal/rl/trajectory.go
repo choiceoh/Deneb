@@ -1,154 +1,153 @@
 package rl
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
-const maxRetries = 3 // drop trajectories after this many failed sends
-
-// Trajectory is a collected session outcome in Atropos-compatible format.
+// Trajectory captures a single local AI call for RL training.
 type Trajectory struct {
-	// ID uniquely identifies this trajectory (session key).
-	ID string `json:"id"`
-	// Prompt is the initial user message.
-	Prompt string `json:"prompt"`
-	// Response is the final assistant output.
-	Response string `json:"response"`
-	// ToolCalls records tool invocations and their outcomes.
-	ToolCalls []ToolCallRecord `json:"tool_calls,omitempty"`
-	// Turns is the number of agent turns in the session.
-	Turns int `json:"turns"`
-	// Environment identifies the scoring environment.
-	Environment string `json:"environment"`
-	// CollectedAt is the timestamp of collection (unix ms).
-	CollectedAt int64 `json:"collected_at"`
-	// retries tracks how many times this trajectory failed to send.
-	retries int
+	ID          string         `json:"id"`
+	TaskType    string         `json:"task_type"`
+	System      string         `json:"system"`
+	UserMessage string         `json:"user_message"`
+	Response    string         `json:"response"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	CapturedAt  int64          `json:"captured_at"` // unix millis
 }
 
-// ToolCallRecord is a single tool invocation record.
-type ToolCallRecord struct {
-	Name    string `json:"name"`
-	Success bool   `json:"success"`
+// TrajectoryStats summarizes the store state.
+type TrajectoryStats struct {
+	Total    int            `json:"total"`
+	ByTask   map[string]int `json:"by_task"`
+	Exported int64          `json:"exported"`
 }
 
-// TrajectoryStore collects session trajectories and feeds them to Atropos.
-type TrajectoryStore struct {
-	mu      sync.Mutex
-	pending []*Trajectory
-	dataDir string
+// Store is an in-memory ring buffer for trajectories.
+// Thread-safe. When full, oldest entries are overwritten.
+type Store struct {
+	mu       sync.RWMutex
+	ring     []Trajectory
+	head     int // next write position
+	count    int
+	capacity int
+	exported int64
 }
 
-// NewTrajectoryStore creates a new trajectory store.
-func NewTrajectoryStore() *TrajectoryStore {
-	dataDir := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		dataDir = filepath.Join(home, ".deneb", "rl", "trajectories")
+// NewStore creates a trajectory store with the given capacity.
+func NewStore(capacity int) *Store {
+	if capacity <= 0 {
+		capacity = 10000
 	}
-	return &TrajectoryStore{dataDir: dataDir}
+	return &Store{
+		ring:     make([]Trajectory, capacity),
+		capacity: capacity,
+	}
 }
 
-// Collect adds a trajectory.
-func (s *TrajectoryStore) Collect(t *Trajectory) {
-	if t == nil {
-		return
+// Add appends a trajectory. If the buffer is full, the oldest entry is overwritten.
+func (s *Store) Add(t Trajectory) {
+	if t.ID == "" {
+		t.ID = shortid.New("traj")
 	}
-	if t.CollectedAt == 0 {
-		t.CollectedAt = time.Now().UnixMilli()
-	}
-	if t.Environment == "" {
-		t.Environment = "korean_quality"
+	if t.CapturedAt == 0 {
+		t.CapturedAt = time.Now().UnixMilli()
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.pending = append(s.pending, t)
-}
-
-// PendingCount returns the number of unflushed trajectories.
-func (s *TrajectoryStore) PendingCount() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.pending)
-}
-
-// FeedToAtropos sends pending trajectories to the Atropos HTTP API.
-func (s *TrajectoryStore) FeedToAtropos(ctx context.Context, atroposURL string) (int, error) {
-	s.mu.Lock()
-	batch := s.pending
-	s.pending = nil
+	s.ring[s.head] = t
+	s.head = (s.head + 1) % s.capacity
+	if s.count < s.capacity {
+		s.count++
+	}
 	s.mu.Unlock()
-
-	if len(batch) == 0 {
-		return 0, nil
-	}
-
-	sent := 0
-	client := &http.Client{Timeout: 10 * time.Second}
-	for _, t := range batch {
-		body, err := json.Marshal(t)
-		if err != nil {
-			continue
-		}
-		req, err := http.NewRequestWithContext(ctx, "POST", atroposURL+"/trajectory", bytes.NewReader(body))
-		if err != nil {
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			// Re-queue with retry limit.
-			t.retries++
-			if t.retries < maxRetries {
-				s.mu.Lock()
-				s.pending = append(s.pending, t)
-				s.mu.Unlock()
-			}
-			continue
-		}
-		resp.Body.Close()
-		sent++
-	}
-	return sent, nil
 }
 
-// BackupToDisk writes pending trajectories to a JSONL file and clears them.
-func (s *TrajectoryStore) BackupToDisk() error {
-	s.mu.Lock()
-	if len(s.pending) == 0 {
-		s.mu.Unlock()
-		return nil
-	}
-	batch := s.pending
-	s.pending = nil
-	s.mu.Unlock()
+// List returns trajectories, optionally filtered by task type.
+// Returns newest first, up to limit entries.
+func (s *Store) List(taskType string, limit int) []Trajectory {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	if s.dataDir == "" {
-		return nil
-	}
-	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
-		return err
+	if limit <= 0 || limit > s.count {
+		limit = s.count
 	}
 
-	filename := fmt.Sprintf("backup_%d.jsonl", time.Now().UnixMilli())
-	path := filepath.Join(s.dataDir, filename)
+	result := make([]Trajectory, 0, limit)
+	// Walk backward from head to get newest first.
+	for i := 0; i < s.count && len(result) < limit; i++ {
+		idx := (s.head - 1 - i + s.capacity) % s.capacity
+		t := s.ring[idx]
+		if taskType != "" && t.TaskType != taskType {
+			continue
+		}
+		result = append(result, t)
+	}
+	return result
+}
+
+// Stats returns summary statistics.
+func (s *Store) Stats() TrajectoryStats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	byTask := make(map[string]int)
+	for i := 0; i < s.count; i++ {
+		idx := (s.head - 1 - i + s.capacity) % s.capacity
+		byTask[s.ring[idx].TaskType]++
+	}
+	return TrajectoryStats{
+		Total:    s.count,
+		ByTask:   byTask,
+		Exported: s.exported,
+	}
+}
+
+// ExportJSONL writes trajectories to a JSONL file, optionally filtered by task type.
+// Returns the file path and count of written entries.
+func (s *Store) ExportJSONL(dir string, taskType string) (string, int, error) {
+	if dir == "" {
+		return "", 0, fmt.Errorf("rl: export directory not set")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", 0, fmt.Errorf("rl: mkdir %s: %w", dir, err)
+	}
+
+	items := s.List(taskType, 0) // all matching
+	if len(items) == 0 {
+		return "", 0, nil
+	}
+
+	suffix := "all"
+	if taskType != "" {
+		suffix = taskType
+	}
+	filename := fmt.Sprintf("trajectories_%s_%d.jsonl", suffix, time.Now().UnixMilli())
+	path := filepath.Join(dir, filename)
+
 	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return "", 0, fmt.Errorf("rl: create %s: %w", path, err)
 	}
 	defer f.Close()
 
 	enc := json.NewEncoder(f)
-	for _, t := range batch {
-		enc.Encode(t)
+	written := 0
+	for i := len(items) - 1; i >= 0; i-- { // oldest first for training
+		if err := enc.Encode(items[i]); err != nil {
+			continue
+		}
+		written++
 	}
-	return nil
+
+	s.mu.Lock()
+	s.exported += int64(written)
+	s.mu.Unlock()
+
+	return path, written, nil
 }

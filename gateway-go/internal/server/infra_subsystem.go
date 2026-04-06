@@ -5,6 +5,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/thinking"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
+	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
@@ -20,6 +21,7 @@ type InfraSubsystem struct {
 	taskStore       *tasks.Store
 	thinkingRuntime *thinking.ThinkingRuntime
 	maintRunner     *maintenance.Runner
+	rlService       *rl.Service // optional: task-specific RL training pipeline
 }
 
 // NewInfraSubsystem creates infrastructure services that can be eagerly initialized.

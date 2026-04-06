@@ -8,9 +8,9 @@ import (
 )
 
 // SessionHook subscribes to session lifecycle events and collects
-// completed sessions as training trajectories.
+// completed sessions as training trajectories (fallback collection path).
 type SessionHook struct {
-	store    *TrajectoryStore
+	store    *Store
 	sessions *session.Manager
 	cfg      CollectionConfig
 	logger   *slog.Logger
@@ -19,7 +19,7 @@ type SessionHook struct {
 
 // NewSessionHook creates and subscribes a hook to the session event bus.
 func NewSessionHook(
-	store *TrajectoryStore,
+	store *Store,
 	sessions *session.Manager,
 	cfg CollectionConfig,
 	logger *slog.Logger,
@@ -60,35 +60,29 @@ func (h *SessionHook) collectSession(sessionKey string) {
 	if sess == nil {
 		return
 	}
-
-	// Only collect direct (user-initiated) sessions.
 	if sess.Kind != session.KindDirect {
 		return
 	}
-
-	// LastOutput contains the assistant's final response text.
 	if sess.LastOutput == "" {
 		return
 	}
 
-	h.store.Collect(&Trajectory{
+	h.store.Add(Trajectory{
 		ID:          sessionKey,
+		TaskType:    "session",
 		Response:    sess.LastOutput,
-		Environment: "korean_quality",
+		UserMessage: "",
 	})
 
-	h.logger.Debug("rl: collected trajectory", "session", sessionKey)
+	h.logger.Debug("rl: collected session trajectory", "session", sessionKey)
 }
 
 // CollectFromAgentResult is called directly from the chat pipeline when
 // the full AgentResult is available (richer data than the session event).
-// This is the preferred collection path — the EventBus hook is a fallback.
 func (h *SessionHook) CollectFromAgentResult(sessionKey string, result *agent.AgentResult, userMessage string) {
 	if result == nil {
 		return
 	}
-
-	// Apply collection filters.
 	if result.Turns < h.cfg.MinTurns {
 		return
 	}
@@ -96,22 +90,15 @@ func (h *SessionHook) CollectFromAgentResult(sessionKey string, result *agent.Ag
 		return
 	}
 
-	// Build tool call records.
-	var toolCalls []ToolCallRecord
-	for _, ta := range result.ToolActivities {
-		toolCalls = append(toolCalls, ToolCallRecord{
-			Name:    ta.Name,
-			Success: !ta.IsError,
-		})
-	}
-
-	h.store.Collect(&Trajectory{
+	h.store.Add(Trajectory{
 		ID:          sessionKey,
-		Prompt:      userMessage,
+		TaskType:    "session",
+		UserMessage: userMessage,
 		Response:    result.AllText,
-		ToolCalls:   toolCalls,
-		Turns:       result.Turns,
-		Environment: "korean_quality",
+		Metadata: map[string]any{
+			"turns":      result.Turns,
+			"tool_count": len(result.ToolActivities),
+		},
 	})
 
 	h.logger.Debug("rl: collected trajectory from agent result",

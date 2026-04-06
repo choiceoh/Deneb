@@ -1,93 +1,123 @@
-// Package rl provides the RL self-learning pipeline for Deneb.
+// Package rl provides a task-specific RL training pipeline for Deneb.
 //
 // Architecture: Go gateway orchestrates external Python processes (sglang +
-// Tinker-Atropos) rather than reimplementing training. The Go side handles
-// lifecycle management, session trajectory collection, and LoRA adapter loading.
+// Tinker-Atropos) rather than implementing training. The Go side handles
+// process lifecycle, trajectory collection from the local AI hub, and
+// LoRA adapter hot-reload on the serving sglang instance.
+//
+// Unlike generic RL, this targets the specific narrow tasks the local AI
+// already performs (fact extraction, compaction, verification, etc.) with
+// measurable per-task reward functions.
 //
 // Process topology on DGX Spark:
 //
 //	Go Gateway (orchestrator)
 //	  ├── sglang server (inference + logprobs for rollouts)
 //	  ├── Tinker trainer (IS loss + LoRA + Adam)
-//	  └── Atropos server (trajectory API + environment scoring)
+//	  └── Atropos server (multi-environment trajectory scoring)
 package rl
 
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 )
 
 // Config configures the RL training pipeline.
 type Config struct {
-	// Enable toggles the entire RL pipeline. Default: false.
-	Enable bool `json:"enable" yaml:"enable"`
+	// Enabled toggles the entire RL pipeline. Default: false.
+	Enabled bool `json:"enabled"`
 
-	// BaseModelPath is the HuggingFace model path for sglang.
-	BaseModelPath string `json:"baseModelPath" yaml:"baseModelPath"`
+	// BaseModelPath is the HuggingFace model path for the training sglang.
+	BaseModelPath string `json:"baseModelPath"`
 
-	// AdapterDir is where trained LoRA adapters are saved.
-	AdapterDir string `json:"adapterDir" yaml:"adapterDir"`
+	// AdapterDir is where Tinker saves trained LoRA adapter checkpoints.
+	AdapterDir string `json:"adapterDir"`
+
+	// TrajectoryDir is the JSONL trajectory export directory.
+	TrajectoryDir string `json:"trajectoryDir"`
 
 	// VenvDir is the Python virtualenv containing sglang/Tinker/Atropos.
-	VenvDir string `json:"venvDir" yaml:"venvDir"`
+	VenvDir string `json:"venvDir"`
 
-	// SGLang configuration.
-	SGLang SGLangConfig `json:"sglang" yaml:"sglang"`
+	// MaxTrajectories is the in-memory ring buffer capacity. Default: 10000.
+	MaxTrajectories int `json:"maxTrajectories"`
 
-	// Tinker trainer configuration.
-	Tinker TinkerConfig `json:"tinker" yaml:"tinker"`
+	// WatchdogInterval is how often to check process health + scan for
+	// new adapters. Default: 30 seconds.
+	WatchdogInterval time.Duration `json:"watchdogInterval"`
 
-	// Atropos environment configuration.
-	Atropos AtroposConfig `json:"atropos" yaml:"atropos"`
+	// SGLang configures the training sglang inference server.
+	SGLang SGLangConfig `json:"sglang"`
 
-	// Collection controls which sessions are collected for training.
-	Collection CollectionConfig `json:"collection" yaml:"collection"`
+	// Tinker configures the LoRA trainer.
+	Tinker TinkerConfig `json:"tinker"`
+
+	// Atropos configures the multi-environment trajectory scorer.
+	Atropos AtroposConfig `json:"atropos"`
+
+	// Environments lists which local AI task types to collect trajectories for.
+	Environments []EnvConfig `json:"environments"`
+
+	// Collection controls session-level trajectory collection (fallback path).
+	Collection CollectionConfig `json:"collection"`
 }
 
-// SGLangConfig configures the sglang inference server.
+// SGLangConfig configures the training sglang server (separate from serving sglang).
 type SGLangConfig struct {
-	Port       int     `json:"port" yaml:"port"`             // default: 30000
-	GPUMemFrac float64 `json:"gpuMemFrac" yaml:"gpuMemFrac"` // default: 0.85
-	TPSize     int     `json:"tpSize" yaml:"tpSize"`         // tensor parallel, default: 1
+	Port       int     `json:"port"`       // default: 30100
+	GPUMemFrac float64 `json:"gpuMemFrac"` // default: 0.4
+	TPSize     int     `json:"tpSize"`     // tensor parallel, default: 1
 }
 
 // TinkerConfig configures the Tinker LoRA trainer.
 type TinkerConfig struct {
-	LoraRank     int     `json:"loraRank" yaml:"loraRank"`         // default: 32
-	LearningRate float64 `json:"learningRate" yaml:"learningRate"` // default: 3e-5
-	BatchSize    int     `json:"batchSize" yaml:"batchSize"`       // default: 4
-	GroupSize    int     `json:"groupSize" yaml:"groupSize"`       // default: 16
+	LoraRank     int     `json:"loraRank"`     // default: 32
+	LearningRate float64 `json:"learningRate"` // default: 3e-5
+	BatchSize    int     `json:"batchSize"`    // default: 4
+	GroupSize    int     `json:"groupSize"`    // default: 16
 }
 
-// AtroposConfig configures the Atropos trajectory API.
+// AtroposConfig configures the Atropos multi-environment server.
 type AtroposConfig struct {
-	Port int `json:"port" yaml:"port"` // default: 30001
+	Port int `json:"port"` // default: 30101
 }
 
-// CollectionConfig controls session trajectory collection.
+// EnvConfig configures a single task-type environment for trajectory collection.
+type EnvConfig struct {
+	// TaskType matches the CallerTag from local AI hub requests.
+	TaskType string `json:"taskType"`
+	// Weight controls sampling weight for training. Default: 1.0.
+	Weight float64 `json:"weight"`
+	// Enabled controls whether to collect trajectories for this task.
+	Enabled bool `json:"enabled"`
+}
+
+// CollectionConfig controls session-level trajectory collection (SessionHook).
+// This is the fallback path — the hub observer is the primary collection method.
 type CollectionConfig struct {
-	// MinTurns is the minimum agent turns to collect a session. Default: 3.
-	MinTurns int `json:"minTurns" yaml:"minTurns"`
-	// MinToolCalls is the minimum tool calls. Default: 2.
-	MinToolCalls int `json:"minToolCalls" yaml:"minToolCalls"`
+	MinTurns     int `json:"minTurns"`
+	MinToolCalls int `json:"minToolCalls"`
 }
 
 // DefaultConfig returns sensible defaults for DGX Spark deployment.
 func DefaultConfig() Config {
 	home, _ := os.UserHomeDir()
-	adapterDir := ""
-	venvDir := ""
+	rlDir := ""
 	if home != "" {
-		adapterDir = filepath.Join(home, ".deneb", "rl", "adapters")
-		venvDir = filepath.Join(home, ".deneb", "rl", "venv")
+		rlDir = filepath.Join(home, ".deneb", "rl")
 	}
 	return Config{
-		Enable:     false,
-		AdapterDir: adapterDir,
-		VenvDir:    venvDir,
+		Enabled:          false,
+		AdapterDir:       filepath.Join(rlDir, "adapters"),
+		TrajectoryDir:    filepath.Join(rlDir, "trajectories"),
+		VenvDir:          filepath.Join(rlDir, "venv"),
+		MaxTrajectories:  10000,
+		WatchdogInterval: 30 * time.Second,
 		SGLang: SGLangConfig{
-			Port:       30000,
-			GPUMemFrac: 0.85,
+			Port:       30100,
+			GPUMemFrac: 0.4,
 			TPSize:     1,
 		},
 		Tinker: TinkerConfig{
@@ -97,11 +127,41 @@ func DefaultConfig() Config {
 			GroupSize:    16,
 		},
 		Atropos: AtroposConfig{
-			Port: 30001,
+			Port: 30101,
+		},
+		Environments: []EnvConfig{
+			{TaskType: "memory_json", Weight: 1.0, Enabled: true},
+			{TaskType: "aurora_compaction", Weight: 1.0, Enabled: true},
+			{TaskType: "session_memory", Weight: 0.5, Enabled: true},
 		},
 		Collection: CollectionConfig{
 			MinTurns:     3,
 			MinToolCalls: 2,
 		},
 	}
+}
+
+// ConfigFromEnv builds a Config from environment variables.
+// DENEB_RL_ENABLED=true enables the pipeline.
+// DENEB_RL_MODEL overrides BaseModelPath.
+func ConfigFromEnv() Config {
+	cfg := DefaultConfig()
+	if v := os.Getenv("DENEB_RL_ENABLED"); v == "true" || v == "1" {
+		cfg.Enabled = true
+	}
+	if v := os.Getenv("DENEB_RL_MODEL"); v != "" {
+		cfg.BaseModelPath = v
+	}
+	if v := os.Getenv("DENEB_RL_ADAPTER_DIR"); v != "" {
+		cfg.AdapterDir = v
+	}
+	if v := os.Getenv("DENEB_RL_VENV_DIR"); v != "" {
+		cfg.VenvDir = v
+	}
+	if v := os.Getenv("DENEB_RL_SGLANG_PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
+			cfg.SGLang.Port = p
+		}
+	}
+	return cfg
 }

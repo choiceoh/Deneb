@@ -25,8 +25,8 @@ import (
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
-	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	handlerrl "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/rl"
+	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
@@ -91,7 +91,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Broadcaster: hub.Broadcast,
 		}),
 
-		// --- RL self-learning ---
+		// --- RL training pipeline ---
 		handlerrl.Methods(handlerrl.Deps{
 			Service: hub.RLService(),
 		}),

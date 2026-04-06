@@ -1,14 +1,14 @@
-// Package rl provides RPC handlers for the RL self-learning pipeline.
+// Package rl provides RPC handlers for the task-specific RL training pipeline.
 //
 // Methods manage the lifecycle of the external sglang + Tinker-Atropos
-// process trio rather than implementing training directly.
+// process trio and expose trajectory collection status.
 package rl
 
 import (
 	"context"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	rlpkg "github.com/choiceoh/deneb/gateway-go/internal/rl"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -37,17 +37,15 @@ func rlStatus(deps Deps) rpcutil.HandlerFunc {
 	})
 }
 
-// rlStart uses the request context (which inherits from server lifetime)
-// so subprocesses are cancelled on server shutdown.
+// rlStart uses context.WithoutCancel so training processes outlive the RPC call
+// but still inherit the server's shutdown context via the parent chain.
 func rlStart(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		// Use context.WithoutCancel so the training processes outlive the RPC call
-		// but still inherit the server's shutdown context via the parent chain.
 		bgCtx := context.WithoutCancel(ctx)
 		if err := deps.Service.Start(bgCtx); err != nil {
 			return rpcutil.RespondOK(req.ID, map[string]any{"ok": false, "error": err.Error()})
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "state": deps.Service.Status()})
+		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "status": deps.Service.Status()})
 	}
 }
 
@@ -56,17 +54,25 @@ func rlStop(deps Deps) rpcutil.HandlerFunc {
 		if err := deps.Service.Stop(); err != nil {
 			return map[string]any{"ok": false, "error": err.Error()}, nil
 		}
-		return map[string]any{"ok": true, "state": deps.Service.Status()}, nil
+		return map[string]any{"ok": true, "status": deps.Service.Status()}, nil
 	})
 }
 
 func rlTrajectories(deps Deps) rpcutil.HandlerFunc {
-	return rpcutil.BindHandler[struct{}](func(_ struct{}) (any, error) {
-		store := deps.Service.Store()
-		pending := 0
-		if store != nil {
-			pending = store.PendingCount()
+	type params struct {
+		TaskType string `json:"taskType,omitempty"`
+		Limit    int    `json:"limit,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		limit := p.Limit
+		if limit <= 0 {
+			limit = 50
 		}
-		return map[string]any{"pending": pending}, nil
+		items := deps.Service.Store().List(p.TaskType, limit)
+		stats := deps.Service.Store().Stats()
+		return map[string]any{
+			"items": items,
+			"stats": stats,
+		}, nil
 	})
 }
