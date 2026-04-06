@@ -24,13 +24,12 @@ func NewService(cfg Config, wikiStore *wiki.Store, logger *slog.Logger) *Service
 
 // ServiceStatus is the RPC response for rlm.status.
 type ServiceStatus struct {
-	Enabled       bool `json:"enabled"`
-	SubLLMEnabled bool `json:"sub_llm_enabled"`
 	WikiConnected bool `json:"wiki_connected"`
 
 	FreshTailCount   int `json:"fresh_tail_count"`
 	TotalTokenBudget int `json:"total_token_budget"`
 	MaxSubSpawns     int `json:"max_sub_spawns"`
+	MaxIterations    int `json:"max_iterations"`
 	REPLTimeoutSec   int `json:"repl_timeout_sec"`
 
 	// Wiki stats (nil when wiki is not connected).
@@ -40,12 +39,11 @@ type ServiceStatus struct {
 // Status returns the current RLM service status.
 func (s *Service) Status() ServiceStatus {
 	st := ServiceStatus{
-		Enabled:          s.cfg.Enabled,
-		SubLLMEnabled:    s.cfg.SubLLMEnabled,
 		WikiConnected:    s.wiki != nil,
 		FreshTailCount:   s.cfg.FreshTailCount,
 		TotalTokenBudget: s.cfg.TotalTokenBudget,
 		MaxSubSpawns:     s.cfg.MaxSubSpawns,
+		MaxIterations:    s.cfg.MaxIterations,
 		REPLTimeoutSec:   s.cfg.REPLTimeoutSec,
 	}
 	if s.wiki != nil {

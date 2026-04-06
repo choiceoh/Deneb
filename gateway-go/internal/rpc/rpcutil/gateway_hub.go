@@ -77,7 +77,7 @@ type HubConfig struct {
 	// RL self-learning (optional, nil when rl.enable=false).
 	RLService *rl.Service
 
-	// RLM context externalization (optional, nil when DENEB_RLM_ENABLED=false).
+	// RLM context externalization (nil when wiki unavailable).
 	RLMService *rlm.Service
 
 	// Metadata.

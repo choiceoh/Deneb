@@ -16,7 +16,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
@@ -317,23 +316,7 @@ func executeAgentRun(
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
-		if rlmCfg.SkipKnowledge {
-			return
-		}
-		if params.Message != "" {
-			// When recall engine is active (parallel goroutine), skip
-			// memory SearchFacts here to avoid duplicate DB queries.
-			recallActive := deps.registry != nil && deps.memoryStore != nil
-			kDeps := knowledge.Deps{
-				WorkspaceDir:     workspaceDir,
-				SkipMemorySearch: recallActive,
-			}
-			{
-				kDeps.MemoryStore = deps.memoryStore
-				kDeps.UnifiedStore = deps.unifiedStore
-			}
-			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
-		}
+		// RLM: knowledge prefetch skipped — the loop fetches data on demand.
 	}()
 
 	// Context assembly (parallel).
@@ -344,8 +327,8 @@ func executeAgentRun(
 	go func() {
 		defer prepWg.Done()
 
-		// RLM REPL mode: skip Aurora, load fresh tail + build REPL environment.
-		if rlmCfg.Enabled && deps.unifiedStore != nil && isMainSession(params.SessionKey) {
+		// RLM: load fresh tail + build REPL environment.
+		if deps.unifiedStore != nil && isMainSession(params.SessionKey) {
 			recentMsgs, err := deps.unifiedStore.RecentMessages(1, rlmCfg.FreshTailCount)
 			if err != nil {
 				logger.Warn("RLM fresh tail load failed, falling back", "error", err)
@@ -564,16 +547,7 @@ func executeAgentRun(
 			"budgetTokens", remainingBudget)
 	}
 
-	// 7b. RLM: append data access principles to system prompt.
-	if rlmCfg.Enabled {
-		rlmText := rlm.DataAccessPrinciples()
-		if rlmCfg.SubLLMEnabled {
-			rlmText += "\n\n" + rlm.SubLLMPrinciples()
-		}
-		systemPrompt = llm.AppendSystemText(systemPrompt, rlmText)
-	}
-
-	// 7c. Auto-suggest coordinator mode if the message looks like a multi-file task
+	// 7b. Auto-suggest coordinator mode if the message looks like a multi-file task
 	// and the session is not already in coordinator mode.
 	if sessionToolPreset == "" && params.Message != "" && coordinator.ShouldSuggestCoordinator(params.Message) {
 		hint := "\n\n[System hint: this request appears to involve multiple files. " +
@@ -942,6 +916,25 @@ func executeAgentRun(
 	if replEnv != nil {
 		ctx = repl.WithEnv(ctx, replEnv)
 		logger.Info("RLM REPL environment attached to context")
+	}
+
+	// 10.6. RLM independent loop mode: bypass the tool-call agent loop entirely.
+	// The loop manages its own LLM→code→execute→FINAL cycle with compaction
+	// and error tracking, inspired by alexzhang13/rlm.
+	if replEnv != nil {
+		logger.Info("RLM loop starting")
+		var budget *rlm.TokenBudget
+		if rlmCfg.TotalTokenBudget > 0 {
+			budget = rlm.NewTokenBudget(rlmCfg.TotalTokenBudget)
+		}
+		loopResult, loopErr := executeRLMLoop(
+			ctx, rlmCfg, replEnv, client, model, cfg.System,
+			params.Message, hooks, budget, logger,
+		)
+		if loopErr != nil {
+			return nil, loopErr
+		}
+		return &chatRunResult{AgentResult: loopResult}, nil
 	}
 
 	// 11. Execute agent loop with compaction retry and model fallback chain.

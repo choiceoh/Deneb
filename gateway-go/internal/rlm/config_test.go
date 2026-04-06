@@ -6,71 +6,45 @@ import (
 
 func TestConfigFromEnv_Defaults(t *testing.T) {
 	ResetConfigForTest()
-	t.Setenv("DENEB_RLM_ENABLED", "")
 
 	cfg := ConfigFromEnv()
-	if cfg.Enabled {
-		t.Error("expected Enabled=false by default")
-	}
-	if cfg.SkipKnowledge {
-		t.Error("expected SkipKnowledge=false when disabled")
-	}
-	if cfg.SubLLMEnabled {
-		t.Error("expected SubLLMEnabled=false by default")
-	}
 	if cfg.TotalTokenBudget != 50000 {
 		t.Errorf("expected TotalTokenBudget=50000, got %d", cfg.TotalTokenBudget)
 	}
-}
-
-func TestConfigFromEnv_Enabled(t *testing.T) {
-	ResetConfigForTest()
-	t.Setenv("DENEB_RLM_ENABLED", "true")
-
-	cfg := ConfigFromEnv()
-	if !cfg.Enabled {
-		t.Error("expected Enabled=true")
+	if cfg.MaxIterations != 25 {
+		t.Errorf("expected MaxIterations=25, got %d", cfg.MaxIterations)
 	}
-	if !cfg.SkipKnowledge {
-		t.Error("expected SkipKnowledge=true when enabled (default)")
+	if cfg.FreshTailCount != 48 {
+		t.Errorf("expected FreshTailCount=48, got %d", cfg.FreshTailCount)
+	}
+	if !cfg.FallbackEnabled {
+		t.Error("expected FallbackEnabled=true by default")
 	}
 }
 
-func TestConfigFromEnv_SubLLM(t *testing.T) {
+func TestConfigFromEnv_CustomValues(t *testing.T) {
 	ResetConfigForTest()
-	t.Setenv("DENEB_RLM_ENABLED", "true")
-	t.Setenv("DENEB_RLM_SUB_LLM_ENABLED", "true")
 	t.Setenv("DENEB_RLM_TOTAL_TOKEN_BUDGET", "100000")
+	t.Setenv("DENEB_RLM_MAX_ITERATIONS", "50")
+	t.Setenv("DENEB_RLM_COMPACTION_THRESHOLD", "60000")
 
 	cfg := ConfigFromEnv()
-	if !cfg.SubLLMEnabled {
-		t.Error("expected SubLLMEnabled=true")
-	}
 	if cfg.TotalTokenBudget != 100000 {
 		t.Errorf("expected TotalTokenBudget=100000, got %d", cfg.TotalTokenBudget)
 	}
-}
-
-func TestConfigFromEnv_SkipKnowledgeOverride(t *testing.T) {
-	ResetConfigForTest()
-	t.Setenv("DENEB_RLM_ENABLED", "true")
-	t.Setenv("DENEB_RLM_SKIP_KNOWLEDGE", "false")
-
-	cfg := ConfigFromEnv()
-	if cfg.SkipKnowledge {
-		t.Error("expected SkipKnowledge=false with explicit override")
+	if cfg.MaxIterations != 50 {
+		t.Errorf("expected MaxIterations=50, got %d", cfg.MaxIterations)
+	}
+	if cfg.CompactionThreshold != 60000 {
+		t.Errorf("expected CompactionThreshold=60000, got %d", cfg.CompactionThreshold)
 	}
 }
 
 func TestConfigFromEnv_InvalidValues(t *testing.T) {
 	ResetConfigForTest()
-	t.Setenv("DENEB_RLM_ENABLED", "notabool")
 	t.Setenv("DENEB_RLM_TOTAL_TOKEN_BUDGET", "notanint")
 
 	cfg := ConfigFromEnv()
-	if cfg.Enabled {
-		t.Error("expected Enabled=false for invalid bool")
-	}
 	if cfg.TotalTokenBudget != 50000 {
 		t.Errorf("expected default TotalTokenBudget=50000 for invalid int, got %d", cfg.TotalTokenBudget)
 	}
@@ -78,7 +52,6 @@ func TestConfigFromEnv_InvalidValues(t *testing.T) {
 
 func TestConfigFromEnv_NegativeValues(t *testing.T) {
 	ResetConfigForTest()
-	t.Setenv("DENEB_RLM_ENABLED", "true")
 	t.Setenv("DENEB_RLM_TOTAL_TOKEN_BUDGET", "-1000")
 	t.Setenv("DENEB_RLM_MAX_SUB_SPAWNS", "-5")
 

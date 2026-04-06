@@ -32,19 +32,17 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          tools.ToolFetchTools(registry),
 	})
 
-	// RLM: context externalization + wiki knowledge base (feature-flagged).
-	// Wiki access is exclusively through RLM — all long-term knowledge tools
-	// (search, read, write, log) are registered here.
-	if cfg := rlm.ConfigFromEnv(); cfg.Enabled {
+	// RLM: context externalization + wiki knowledge base (always active).
+	{
+		cfg := rlm.ConfigFromEnv()
 		toolreg.RegisterRLMTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
-		if cfg.SubLLMEnabled && deps.LLMClient != nil {
+		if deps.LLMClient != nil {
 			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg)
 			toolreg.RegisterRLMSpawnTools(registry, spawnFn, batchFn, cfg.MaxSubSpawns)
 		}
 
 		// REPL tool: Starlark-based context exploration.
-		// The REPL env is injected per-request via repl.WithEnv(ctx) in run_exec.go.
 		toolreg.RegisterREPLTools(registry)
 	}
 

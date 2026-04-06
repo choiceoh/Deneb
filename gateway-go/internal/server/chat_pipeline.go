@@ -95,11 +95,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			chatCfg.WikiStore = wikiStore
 			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
 
-			// RLM service backed by wiki (feature-flagged).
-			if rlmCfg := rlm.ConfigFromEnv(); rlmCfg.Enabled {
-				s.rlmService = rlm.NewService(rlmCfg, wikiStore, s.logger)
-				s.logger.Info("rlm: service enabled (wiki-backed)")
-			}
+			// RLM service backed by wiki (always active).
+			rlmCfg := rlm.ConfigFromEnv()
+			s.rlmService = rlm.NewService(rlmCfg, wikiStore, s.logger)
+			s.logger.Info("rlm: service enabled (wiki-backed)")
 
 			// Wiki dreamer (replaces memory dreaming when wiki is active).
 			lwClient := (*regPtr).Client(modelrole.RoleLightweight)

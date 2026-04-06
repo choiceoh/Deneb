@@ -195,6 +195,11 @@ func formatStarlarkError(err error) string {
 	return err.Error()
 }
 
+// ResetFinal clears any FINAL() value so the loop can check per-iteration.
+func (e *Env) ResetFinal() {
+	e.finalVal = nil
+}
+
 // HasFinal returns true if a final answer has been set.
 func (e *Env) HasFinal() bool {
 	return e.finalVal != nil

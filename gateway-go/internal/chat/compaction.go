@@ -14,7 +14,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 )
 
 // Compaction defaults.
@@ -55,12 +54,8 @@ func triggerProactiveCompaction(
 	client *llm.Client,
 	logger *slog.Logger,
 ) {
-	// RLM mode: no compaction needed — context is not pre-loaded.
-	if rlm.ConfigFromEnv().Enabled {
-		return
-	}
-
-	if deps.auroraStore == nil {
+	// RLM always active: no Aurora compaction — the loop manages its own context.
+	if true {
 		return
 	}
 
@@ -178,138 +173,10 @@ func buildMidLoopCompactor(
 	params RunParams,
 	logger *slog.Logger,
 ) func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error) {
-	// RLM mode: only microcompaction (free tool-result pruning), no Aurora sweep.
-	if rlm.ConfigFromEnv().Enabled {
-		return func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error) {
-			compacted, _ := compact.MicrocompactMessages(messages, time.Now())
-			return compacted, "", nil
-		}
-	}
-
-	budget := deps.contextCfg.LiveTokenBudget
-
-	// Track last compaction turn to avoid compacting on consecutive turns.
-	var lastCompactTurn int = -10
-	// Track the number of messages already synced to Aurora to avoid duplicates.
-	var auroraSyncedCount int
-
+	// RLM: only microcompaction (free tool-result pruning), no Aurora sweep.
 	return func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error) {
-		// Skip if we just compacted recently (within 2 turns).
-		if turn-lastCompactTurn < 2 {
-			return nil, "", nil
-		}
-
-		// Estimate current context size and compute adaptive threshold.
-		// Tool-heavy sessions (large avg message) trigger earlier; conversational
-		// sessions preserve more context at the default 0.60 ratio.
-		liveTokens := estimateMessagesTokens(messages)
-		ratio := adaptiveMidLoopThreshold(liveTokens, len(messages), budget)
-		threshold := uint64(ratio * float64(budget))
-		if uint64(liveTokens) < threshold {
-			return nil, "", nil
-		}
-
-		logger.Info("mid-loop compaction: token threshold exceeded",
-			"turn", turn,
-			"liveTokens", liveTokens,
-			"threshold", threshold,
-			"budget", budget,
-		)
-
-		// Step 1: Microcompact (prune old tool results — zero cost).
-		mcMessages, mcResult := compact.MicrocompactMessages(messages, time.Now())
-		if mcResult.PrunedCount > 0 {
-			messages = mcMessages
-			liveTokens -= mcResult.EstimatedSaved
-			logger.Info("mid-loop compaction: microcompact applied",
-				"pruned", mcResult.PrunedCount,
-				"savedTokens", mcResult.EstimatedSaved,
-				"remainingTokens", liveTokens,
-			)
-			if uint64(liveTokens) < threshold {
-				lastCompactTurn = turn
-				return messages, "", nil
-			}
-		}
-
-		// Step 2: Strip base64 image blocks from all but the last 2 messages.
-		messages = compact.StripImageBlocks(messages)
-		liveTokens = estimateMessagesTokens(messages)
-		if uint64(liveTokens) < threshold {
-			lastCompactTurn = turn
-			return messages, "", nil
-		}
-
-		// Step 2.5: Emergency drop — if context is way over budget (>2x threshold),
-		// messages are arriving faster than compaction can process. Drop the oldest
-		// messages (keeping the first 2 + fresh tail) to bring context under control.
-		// This prevents the scenario where rapid filler messages fill context before
-		// the LLM-based compaction sweep can run.
-		emergencyThreshold := threshold * 2
-		if uint64(liveTokens) > emergencyThreshold && len(messages) > 10 {
-			// Keep first 2 messages (initial context/facts) + last 8 (fresh tail).
-			const keepHead = 2
-			const keepTail = 8
-			if len(messages) > keepHead+keepTail {
-				dropped := len(messages) - keepHead - keepTail
-				kept := make([]llm.Message, 0, keepHead+keepTail)
-				kept = append(kept, messages[:keepHead]...)
-				kept = append(kept, messages[len(messages)-keepTail:]...)
-				messages = kept
-				liveTokens = estimateMessagesTokens(messages)
-				logger.Info("mid-loop compaction: emergency drop applied",
-					"dropped", dropped,
-					"remainingMsgs", len(messages),
-					"remainingTokens", liveTokens,
-				)
-				if uint64(liveTokens) < threshold {
-					lastCompactTurn = turn
-					return messages, "", nil
-				}
-			}
-		}
-
-		// Step 2.75: Pre-compaction memory flush was removed (memory store replaced by wiki).
-
-		// Step 3: Aurora compaction sweep (uses lightweight local LLM for summaries).
-		// Only main sessions may use Aurora sweep; others get microcompact only.
-		if deps.auroraStore == nil || !isMainSession(params.SessionKey) {
-			// No Aurora store — return microcompacted messages as best effort.
-			lastCompactTurn = turn
-			if mcResult.PrunedCount > 0 {
-				return messages, "", nil
-			}
-			return nil, "", nil
-		}
-
-		// Sync only new messages to Aurora (avoid duplicates).
-		if len(messages) > auroraSyncedCount {
-			syncMessagesToAurora(deps.auroraStore, messages[auroraSyncedCount:], logger)
-			auroraSyncedCount = len(messages)
-		}
-
-		compactedMsgs, sysAddition, err := handleContextOverflowAurora(
-			ctx, deps, params, deps.llmClient, logger,
-		)
-		if err != nil {
-			logger.Warn("mid-loop compaction: aurora sweep failed, using microcompact result",
-				"error", err)
-			lastCompactTurn = turn
-			// Return microcompacted messages as fallback.
-			if mcResult.PrunedCount > 0 {
-				return messages, "", nil
-			}
-			return nil, "", nil
-		}
-
-		lastCompactTurn = turn
-		auroraSyncedCount = 0 // Reset: compaction may have changed Aurora state.
-		logger.Info("mid-loop compaction: aurora sweep completed",
-			"turn", turn,
-			"beforeTokens", liveTokens,
-			"afterMsgs", len(compactedMsgs),
-		)
-		return compactedMsgs, sysAddition, nil
+		compacted, _ := compact.MicrocompactMessages(messages, time.Now())
+		return compacted, "", nil
 	}
 }
 
