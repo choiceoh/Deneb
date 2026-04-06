@@ -235,6 +235,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		hub.SetLocalAIHub(s.localAIHub)
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
+	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)
 	s.registerLateMethods(hub)             // Chat-dependent domains
 	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
 

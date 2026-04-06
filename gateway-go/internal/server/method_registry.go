@@ -219,6 +219,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		handlerautoresearch.Methods(handlerautoresearch.Deps{
 			Runner: s.autoresearchRunner,
 		}),
+
+		// --- Skill genesis (depends on chatHandler for LLM client) ---
+		handlerskill.GenesisMethods(handlerskill.GenesisDeps{
+			Genesis: s.genesisSvc,
+			Evolver: s.genesisEvolver,
+			Tracker: s.genesisTracker,
+		}),
 	}
 
 	for _, d := range domains {
