@@ -9,6 +9,18 @@ globs: ["**"]
 - When answering questions, respond with high-confidence answers only: verify in code; do not guess.
 - Patching dependencies requires explicit approval; do not do this by default.
 
+## Repository Layout (Production / Development Split)
+
+```
+~/deneb/        ← Production ONLY. main branch only. Do NOT create branches or worktrees here.
+~/deneb-dev/    ← Development. Agents work here. Branches, worktrees, experiments all go here.
+```
+
+- **Agents MUST use `~/deneb-dev/`** for all development work (coding, branches, worktrees, PRs).
+- **`~/deneb/` is production-only.** It auto-syncs with GitHub main every 5 minutes (cron). Never modify directly.
+- **Deploy flow:** PR merged on GitHub → `~/deneb` auto-pulls → operator runs `~/deneb/scripts/deploy.sh` to build + restart.
+- **Do NOT run builds, create worktrees, or switch branches in `~/deneb/`.**
+
 ## Multi-Agent Safety
 
 - **Do not create/apply/drop `git stash` entries** unless explicitly requested (this includes `git pull --rebase --autostash`). Assume other agents may be working; keep unrelated WIP untouched and avoid cross-cutting state changes.
