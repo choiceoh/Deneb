@@ -195,43 +195,4 @@ func ToolProjectsGetDocument(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 	}
 }
 
-// ToolMemoryRecall returns an RLM-specific memory search tool backed by wiki FTS.
-// Searches across all wiki categories (not just projects).
-func ToolMemoryRecall(deps *toolctx.WikiDeps) toolctx.ToolFunc {
-	type params struct {
-		Query string `json:"query"`
-		Limit int    `json:"limit,omitempty"`
-	}
-	return func(ctx context.Context, raw json.RawMessage) (string, error) {
-		if deps.Store == nil {
-			return "메모리 검색 기능이 비활성 상태입니다 (위키 미설정).", nil
-		}
-		var p params
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return "잘못된 파라미터입니다.", nil
-		}
-		if p.Query == "" {
-			return "query는 필수입니다.", nil
-		}
-		limit := p.Limit
-		if limit <= 0 {
-			limit = 10
-		}
-
-		results, err := deps.Store.Search(ctx, p.Query, limit)
-		if err != nil {
-			return fmt.Sprintf("검색 실패: %v", err), nil
-		}
-		if len(results) == 0 {
-			return fmt.Sprintf("'%s' 관련 기억을 찾을 수 없습니다.", p.Query), nil
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("검색 결과 %d건:\n\n", len(results)))
-		for _, r := range results {
-			sb.WriteString(fmt.Sprintf("- **%s** (score: %.2f)\n  %s\n", r.Path, r.Score, r.Content))
-		}
-		return sb.String(), nil
-	}
-}
 

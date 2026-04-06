@@ -51,7 +51,6 @@ toolApprovalPolicy:
     web_fetch: "auto"
     image_describe: "auto"
     memory: "auto"
-    wiki: "auto"
     kv: "auto"
     process: "auto"
     # Confirm: mutating tools — confirm in autonomous contexts.
@@ -62,12 +61,12 @@ toolApprovalPolicy:
     exec: "confirm"
     git: "confirm"
     send_file: "confirm"
-    # RLM Phase 1: read-only data access tools.
+    # RLM: wiki + project data access + sub-LLM spawning.
+    wiki: "auto"
     projects_list: "auto"
     projects_get_field: "auto"
     projects_search: "auto"
     projects_get_document: "auto"
-    memory_recall_rlm: "auto"
     # RLM Phase 2: sub-LLM spawning (external LLM calls).
     llm_spawn: "confirm"
     llm_spawn_batch: "confirm"

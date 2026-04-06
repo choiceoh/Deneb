@@ -1707,26 +1707,6 @@ func projectsGetDocumentToolSchema() map[string]any {
 	}
 }
 
-func memoryRecallRlmToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "검색 쿼리 (과거 대화, 결정, 선호 등)",
-			},
-			"max_results": map[string]any{
-				"type":        "integer",
-				"description": "최대 결과 수 (default: 3)",
-				"default":     3,
-				"minimum":     1,
-				"maximum":     10,
-			},
-		},
-		"required": []string{"query"},
-	}
-}
-
 func llmSpawnToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

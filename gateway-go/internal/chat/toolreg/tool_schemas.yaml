@@ -1491,20 +1491,6 @@
   required:
     - project_id
 
-- name: memory_recall_rlm
-  properties:
-    query:
-      type: string
-      description: "검색 쿼리 (과거 대화, 결정, 선호 등)"
-    max_results:
-      type: integer
-      description: "최대 결과 수 (default: 3)"
-      default: 3
-      minimum: 1
-      maximum: 10
-  required:
-    - query
-
 - name: llm_spawn
   properties:
     task:
