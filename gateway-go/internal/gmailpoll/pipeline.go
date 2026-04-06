@@ -728,12 +728,6 @@ func normalizeCategory(cat string) string {
 func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (T, error) {
 	var zero T
 
-	// Disable reasoning for all local AI calls — reduces latency and
-	// prevents "Thinking Process:" preambles from leaking into JSON output.
-	noThinking := map[string]any{
-		"chat_template_kwargs": map[string]any{"enable_thinking": false},
-	}
-
 	for attempt := range 2 {
 		events, err := client.StreamChat(ctx, llm.ChatRequest{
 			Model:          model,
@@ -742,7 +736,6 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 			MaxTokens:      maxTokens,
 			Stream:         true,
 			ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
-			ExtraBody:      noThinking,
 		})
 		if err != nil {
 			return zero, err

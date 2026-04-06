@@ -22,12 +22,11 @@ var (
 	ErrUnhealthy   = errors.New("localai hub: model unhealthy")
 )
 
-// NoThinking is the default ExtraBody that disables Qwen3.5 reasoning mode.
-// Exported so pilot and memory packages can use it for legacy direct paths
-// without duplicating the definition.
-var NoThinking = map[string]any{
-	"chat_template_kwargs": map[string]any{"enable_thinking": false},
-}
+// NoThinking is the default ExtraBody merged into every hub request.
+// Previously disabled Qwen3.5 reasoning mode; currently empty (gemma4
+// does not require extra template kwargs).
+// Exported so pilot and memory packages can reference it without duplicating.
+var NoThinking = map[string]any{}
 
 // Config controls hub behavior.
 type Config struct {

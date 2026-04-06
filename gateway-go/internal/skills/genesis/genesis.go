@@ -214,9 +214,6 @@ func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*Generated
 		MaxTokens:      2048,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
-		ExtraBody: map[string]any{
-			"chat_template_kwargs": map[string]any{"enable_thinking": false},
-		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("genesis LLM call: %w", err)
@@ -265,9 +262,6 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 		MaxTokens:      2048,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
-		ExtraBody: map[string]any{
-			"chat_template_kwargs": map[string]any{"enable_thinking": false},
-		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("genesis-dream LLM call: %w", err)

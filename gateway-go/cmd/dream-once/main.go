@@ -53,7 +53,7 @@ func main() {
 	}
 	model := os.Getenv("VLLM_MODEL")
 	if model == "" {
-		model = "qwen3.5"
+		model = "gemma4"
 	}
 
 	client := llm.NewClient(baseURL, apiKey)

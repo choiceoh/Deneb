@@ -137,8 +137,8 @@ func TestLogModelAlias(t *testing.T) {
 		},
 		{
 			name: "nested model path",
-			cfg:  ModelConfig{ProviderID: "localai", Model: "Qwen/Qwen3.5-35B-A3B"},
-			want: "Qwen3.5-35B-A3B",
+			cfg:  ModelConfig{ProviderID: "localai", Model: "google/gemma-4-26B-A4B-it"},
+			want: "gemma-4-26B-A4B-it",
 		},
 		{
 			name: "empty model falls back to provider",

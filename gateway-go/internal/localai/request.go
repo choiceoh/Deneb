@@ -47,8 +47,8 @@ type Request struct {
 	CallerTag string
 
 	// ExtraBody is merged into the OpenAI-compatible request body.
-	// The hub always injects {"chat_template_kwargs":{"enable_thinking":false}}
-	// and a server-side "timeout" field; caller entries are merged on top.
+	// The hub merges NoThinking defaults (currently empty) and a server-side
+	// "timeout" field; caller entries are merged on top.
 	ExtraBody map[string]any
 
 	// ResponseFormat requests structured output (e.g., json_object mode).

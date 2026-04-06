@@ -150,9 +150,6 @@ func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 			Messages:  []llm.Message{llm.NewTextMessage("user", userMsg.String())},
 			MaxTokens: 4096,
 			Stream:    true,
-			ExtraBody: map[string]any{
-				"chat_template_kwargs": map[string]any{"enable_thinking": false},
-			},
 		}
 
 		ch, streamErr := client.StreamChat(ctx, req)
