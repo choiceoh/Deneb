@@ -67,20 +67,21 @@ func (t *diaryHeartbeatTask) Run(ctx context.Context) error {
 		}
 	}
 
-	sessionKey := "system:diary-heartbeat"
-
-	// Run a synchronous agent turn with the diary prompt.
-	runCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	// Use SendLite: diary heartbeat only needs the memory tool.
+	// Avoids the full pipeline (history, knowledge, context files, 20 tools).
+	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	result, err := t.chatHandler.SendSync(runCtx, sessionKey, diaryHeartbeatPrompt, "", nil)
+	result, err := t.chatHandler.SendLite(runCtx, "", diaryHeartbeatPrompt,
+		[]string{"memory"},
+		&chat.LiteOptions{MaxTurns: 5},
+	)
 	if err != nil {
 		return fmt.Errorf("diary-heartbeat: agent turn failed: %w", err)
 	}
 
 	t.logger.Info("diary-heartbeat completed",
 		"output_len", len(result.Text),
-		"session", sessionKey,
 	)
 	return nil
 }
