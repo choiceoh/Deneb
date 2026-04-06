@@ -776,16 +776,36 @@ func cronToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Cron action",
-				"enum":        []string{"status", "list", "add", "update", "remove", "run", "wake"},
+				"description": "Cron action: status, list, add, update, remove, run, get, runs, wake",
+				"enum":        []string{"status", "list", "add", "update", "remove", "run", "get", "runs", "wake"},
+			},
+			"name": map[string]any{
+				"type":        "string",
+				"description": "Job name (required for add)",
+			},
+			"schedule": map[string]any{
+				"type":        "string",
+				"description": "Schedule specification. Formats: interval (1h, 30m, every 5m), cron expression (0 8 * * *, @daily, @hourly), or ISO timestamp (2026-04-06T08:00:00) for one-shot",
+			},
+			"command": map[string]any{
+				"type":        "string",
+				"description": "Agent message/command to execute on schedule (required for add)",
 			},
 			"jobId": map[string]any{
 				"type":        "string",
-				"description": "Job ID for update/remove/run actions",
+				"description": "Job ID for get/update/remove/run/runs actions",
+			},
+			"enabled": map[string]any{
+				"type":        "boolean",
+				"description": "Enable or disable a job (for add/update)",
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "Max entries to return (for runs action, default 10)",
 			},
 			"job": map[string]any{
 				"type":                 "object",
-				"description":          "Job definition for add/update",
+				"description":          "Job definition object (alternative to top-level name/schedule/command)",
 				"additionalProperties": true,
 			},
 			"text": map[string]any{

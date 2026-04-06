@@ -8,6 +8,73 @@ import (
 	"time"
 )
 
+// ParseSmartSchedule parses a schedule spec into a StoreSchedule, auto-detecting the kind:
+//   - Interval: "1h", "30m", "every 5m", raw milliseconds → kind="every"
+//   - Cron expression: "0 8 * * *", "@daily", "@hourly" → kind="cron"
+//   - Timestamp: ISO 8601 ("2026-04-06T08:00:00") → kind="at"
+func ParseSmartSchedule(spec string) (StoreSchedule, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return StoreSchedule{}, fmt.Errorf("empty schedule specification")
+	}
+
+	// 1. Cron shorthand aliases (@daily, @hourly, etc.)
+	lower := strings.ToLower(spec)
+	switch lower {
+	case "@yearly", "@annually", "@monthly", "@weekly", "@daily", "@midnight", "@hourly":
+		return StoreSchedule{Kind: "cron", Expr: lower}, nil
+	}
+
+	// 2. Looks like a cron expression (5 space-separated fields starting with digit or *)
+	fields := strings.Fields(spec)
+	if len(fields) == 5 && looksLikeCronExpr(fields) {
+		// Validate by attempting to evaluate.
+		now := time.Now()
+		next := evaluateCronExpr(spec, now, time.Local)
+		if next.IsZero() {
+			return StoreSchedule{}, fmt.Errorf("invalid cron expression %q: no matching time found in next 366 days", spec)
+		}
+		return StoreSchedule{Kind: "cron", Expr: spec}, nil
+	}
+
+	// 3. ISO 8601 timestamp → kind="at"
+	if ts := parseAbsoluteTimeMs(spec); ts > 0 {
+		// Only treat as "at" if it looks like a timestamp (contains T or -)
+		if strings.Contains(spec, "T") || strings.Contains(spec, "-") {
+			return StoreSchedule{Kind: "at", At: spec}, nil
+		}
+	}
+
+	// 4. Interval: "every Xunit", Go duration, raw ms — delegate to ParseSchedule.
+	sched, err := ParseSchedule(spec)
+	if err != nil {
+		return StoreSchedule{}, err
+	}
+	return StoreSchedule{Kind: "every", EveryMs: sched.IntervalMs}, nil
+}
+
+// looksLikeCronExpr returns true if the 5 fields look like a cron expression.
+func looksLikeCronExpr(fields []string) bool {
+	for _, f := range fields {
+		f = strings.ToLower(f)
+		for _, ch := range f {
+			if ch >= '0' && ch <= '9' {
+				continue
+			}
+			switch ch {
+			case '*', ',', '-', '/':
+				continue
+			}
+			// Allow month/day names (a-z).
+			if ch >= 'a' && ch <= 'z' {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
 // ParseSchedule parses a cron schedule string into a Schedule.
 // Supports formats: "every 5m", "every 1h", "every 30s", or raw milliseconds.
 func ParseSchedule(spec string) (Schedule, error) {

@@ -26,6 +26,8 @@ func Truncate(s string, maxLen int) string {
 // --- cron tool ---
 
 // ToolCron returns a tool function that manages cron jobs.
+// When Service is available, uses persistent storage with full cron expression support.
+// Falls back to basic Scheduler for in-memory operation.
 func ToolCron(d *toolctx.ChronoDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -36,121 +38,367 @@ func ToolCron(d *toolctx.ChronoDeps) ToolFunc {
 			Schedule string         `json:"schedule"`
 			Command  string         `json:"command"`
 			Text     string         `json:"text"`
+			Enabled  *bool          `json:"enabled"`
+			Limit    int            `json:"limit"`
 		}
 		if err := jsonutil.UnmarshalInto("cron params", input, &p); err != nil {
 			return "", err
 		}
 
+		svc := d.Service
 		cronSched := d.Scheduler
-		if cronSched == nil {
+
+		if svc == nil && cronSched == nil {
 			return "Cron scheduler not available.", nil
 		}
 
 		switch p.Action {
 		case "status":
-			running := cronSched.Running()
-			nextRun := cronSched.NextRunAt()
-			taskCount := len(cronSched.List())
-			return fmt.Sprintf("Cron status: %d jobs, running=%v, nextRunAtMs=%d", taskCount, running, nextRun), nil
+			return cronStatus(svc, cronSched)
 
 		case "list":
-			jobs := cronSched.List()
-			if len(jobs) == 0 {
-				return "No cron jobs configured.", nil
-			}
-			data, _ := json.MarshalIndent(jobs, "", "  ")
-			return string(data), nil
+			return cronList(svc, cronSched)
 
 		case "add":
-			name := p.Name
-			schedule := p.Schedule
-			command := p.Command
-			// Support nested job object as well.
-			if p.Job != nil {
-				if v, ok := p.Job["name"].(string); ok && name == "" {
-					name = v
-				}
-				if v, ok := p.Job["schedule"].(string); ok && schedule == "" {
-					schedule = v
-				}
-				if v, ok := p.Job["command"].(string); ok && command == "" {
-					command = v
-				}
-			}
-			if name == "" || schedule == "" || command == "" {
-				return "", fmt.Errorf("name, schedule, and command are required for add")
-			}
-			sched, err := cron.ParseSchedule(schedule)
-			if err != nil {
-				return "", fmt.Errorf("invalid schedule: %w", err)
-			}
-			sched.Label = name
-			// Build real execution callback that sends the command to a session
-			// or falls back to direct shell execution.
-			cronCommand := command
-			cronName := name
-			cronCallback := func(runCtx context.Context) error {
-				if d != nil && d.SendFn != nil {
-					return d.SendFn("cron:"+cronName, cronCommand)
-				}
-				// Fallback: execute as shell command directly.
-				cmd := exec.CommandContext(runCtx, "bash", "-c", cronCommand)
-				out, err := cmd.CombinedOutput()
-				if err != nil {
-					return fmt.Errorf("cron exec failed: %w\n%s", err, string(out))
-				}
-				return nil
-			}
-			if regErr := cronSched.Register(ctx, name, sched, cronCallback); regErr != nil {
-				return "", fmt.Errorf("failed to register cron job: %w", regErr)
-			}
-			return fmt.Sprintf("Cron job %q added (schedule: %s).", name, schedule), nil
+			return cronAdd(ctx, d, p.Name, p.Schedule, p.Command, p.Enabled, p.Job)
 
 		case "update":
-			id := p.JobID
-			if id == "" {
-				return "", fmt.Errorf("jobId is required for update")
-			}
-			patch := p.Job
-			if patch == nil {
-				return "", fmt.Errorf("job patch object is required for update")
-			}
-			if err := cronSched.Update(id, patch); err != nil {
-				return "", fmt.Errorf("update failed: %w", err)
-			}
-			st := cronSched.Get(id)
-			data, _ := json.MarshalIndent(st, "", "  ")
-			return fmt.Sprintf("Cron job %q updated.\n%s", id, string(data)), nil
+			return cronUpdate(ctx, d, p.JobID, p.Name, p.Schedule, p.Command, p.Enabled)
 
 		case "remove":
-			id := p.JobID
-			if id == "" {
-				return "", fmt.Errorf("jobId is required for remove")
-			}
-			removed := cronSched.Unregister(id)
-			if !removed {
-				return fmt.Sprintf("Cron job %q not found.", id), nil
-			}
-			return fmt.Sprintf("Cron job %q removed.", id), nil
+			return cronRemove(d, p.JobID)
 
 		case "run":
-			id := p.JobID
-			if id == "" {
-				return "", fmt.Errorf("jobId is required for run")
-			}
-			result, err := cronSched.RunNow(ctx, id)
-			if err != nil {
-				return "", fmt.Errorf("run failed: %w", err)
-			}
-			data, _ := json.MarshalIndent(result, "", "  ")
-			return string(data), nil
+			return cronRun(ctx, d, p.JobID)
+
+		case "get":
+			return cronGet(d, p.JobID)
+
+		case "runs":
+			return cronRuns(d, p.JobID, p.Limit)
 
 		case "wake":
+			if svc != nil {
+				svc.Wake(ctx, "now", p.Text)
+			}
 			return fmt.Sprintf("Wake event: %s", p.Text), nil
 
 		default:
-			return fmt.Sprintf("Unknown cron action: %q. Supported: status, list, add, update, remove, run, wake", p.Action), nil
+			return fmt.Sprintf("Unknown cron action: %q. Supported: status, list, add, update, remove, run, get, runs, wake", p.Action), nil
 		}
+	}
+}
+
+func cronStatus(svc *cron.Service, cronSched *cron.Scheduler) (string, error) {
+	if svc != nil {
+		st := svc.Status()
+		return fmt.Sprintf("Cron service: %d jobs, running=%v, nextRunAtMs=%d",
+			st.TaskCount, st.Running, st.NextRunAtMs), nil
+	}
+	running := cronSched.Running()
+	nextRun := cronSched.NextRunAt()
+	taskCount := len(cronSched.List())
+	return fmt.Sprintf("Cron status: %d jobs, running=%v, nextRunAtMs=%d", taskCount, running, nextRun), nil
+}
+
+func cronList(svc *cron.Service, cronSched *cron.Scheduler) (string, error) {
+	if svc != nil {
+		jobs, err := svc.List(&cron.ListOptions{IncludeDisabled: true})
+		if err != nil {
+			return "", fmt.Errorf("list failed: %w", err)
+		}
+		if len(jobs) == 0 {
+			return "No cron jobs configured.", nil
+		}
+		// Build a concise summary.
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "%d cron job(s):\n", len(jobs))
+		for _, j := range jobs {
+			enabled := "enabled"
+			if !j.Enabled {
+				enabled = "disabled"
+			}
+			schedDesc := formatScheduleDesc(j.Schedule)
+			nextRun := ""
+			if j.State.NextRunAtMs > 0 {
+				nextRun = fmt.Sprintf(", next=%s", time.UnixMilli(j.State.NextRunAtMs).Format("2006-01-02 15:04"))
+			}
+			sb.WriteString(fmt.Sprintf("\n- **%s** (id=%s, %s, %s%s)", j.Name, j.ID, enabled, schedDesc, nextRun))
+			cmd := j.Payload.Message
+			if cmd == "" {
+				cmd = j.Payload.Text
+			}
+			if cmd != "" {
+				if len(cmd) > 80 {
+					cmd = cmd[:77] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("\n  command: %s", cmd))
+			}
+		}
+		return sb.String(), nil
+	}
+	// Fallback: basic scheduler.
+	jobs := cronSched.List()
+	if len(jobs) == 0 {
+		return "No cron jobs configured.", nil
+	}
+	data, _ := json.MarshalIndent(jobs, "", "  ")
+	return string(data), nil
+}
+
+func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command string, enabled *bool, jobObj map[string]any) (string, error) {
+	// Support nested job object.
+	if jobObj != nil {
+		if v, ok := jobObj["name"].(string); ok && name == "" {
+			name = v
+		}
+		if v, ok := jobObj["schedule"].(string); ok && schedule == "" {
+			schedule = v
+		}
+		if v, ok := jobObj["command"].(string); ok && command == "" {
+			command = v
+		}
+	}
+	if name == "" || schedule == "" || command == "" {
+		return "", fmt.Errorf("name, schedule, and command are required for add")
+	}
+	const maxCommandLen = 4096
+	if len(command) > maxCommandLen {
+		return "", fmt.Errorf("command exceeds maximum length of %d characters", maxCommandLen)
+	}
+
+	if d.Service != nil {
+		storeSched, err := cron.ParseSmartSchedule(schedule)
+		if err != nil {
+			return "", fmt.Errorf("invalid schedule: %w", err)
+		}
+		isEnabled := true
+		if enabled != nil {
+			isEnabled = *enabled
+		}
+		job := cron.StoreJob{
+			ID:      name,
+			Name:    name,
+			Enabled: isEnabled,
+			Schedule: storeSched,
+			Payload: cron.StorePayload{
+				Kind:    "agentTurn",
+				Message: command,
+			},
+		}
+		if err := d.Service.Add(ctx, job); err != nil {
+			return "", fmt.Errorf("failed to add cron job: %w", err)
+		}
+		schedDesc := formatScheduleDesc(storeSched)
+		nextMs := cron.ComputeNextRunAtMs(storeSched, time.Now().UnixMilli())
+		nextInfo := ""
+		if nextMs > 0 {
+			nextInfo = fmt.Sprintf(" Next run: %s.", time.UnixMilli(nextMs).Format("2006-01-02 15:04"))
+		}
+		return fmt.Sprintf("Cron job %q added (%s).%s", name, schedDesc, nextInfo), nil
+	}
+
+	// Fallback: basic scheduler (interval only).
+	sched, err := cron.ParseSchedule(schedule)
+	if err != nil {
+		return "", fmt.Errorf("invalid schedule: %w", err)
+	}
+	sched.Label = name
+	cronCommand := command
+	cronName := name
+	cronCallback := func(runCtx context.Context) error {
+		if d != nil && d.SendFn != nil {
+			return d.SendFn("cron:"+cronName, cronCommand)
+		}
+		cmd := exec.CommandContext(runCtx, "bash", "-c", cronCommand)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("cron exec failed: %w\n%s", err, string(out))
+		}
+		return nil
+	}
+	if regErr := d.Scheduler.Register(ctx, name, sched, cronCallback); regErr != nil {
+		return "", fmt.Errorf("failed to register cron job: %w", regErr)
+	}
+	return fmt.Sprintf("Cron job %q added (schedule: %s).", name, schedule), nil
+}
+
+func cronUpdate(ctx context.Context, d *toolctx.ChronoDeps, jobID, name, schedule, command string, enabled *bool) (string, error) {
+	if jobID == "" {
+		return "", fmt.Errorf("jobId is required for update")
+	}
+	if d.Service != nil {
+		err := d.Service.Update(ctx, jobID, func(j *cron.StoreJob) {
+			if name != "" {
+				j.Name = name
+			}
+			if schedule != "" {
+				if storeSched, err := cron.ParseSmartSchedule(schedule); err == nil {
+					j.Schedule = storeSched
+				}
+			}
+			if command != "" {
+				j.Payload.Message = command
+				j.Payload.Kind = "agentTurn"
+			}
+			if enabled != nil {
+				j.Enabled = *enabled
+			}
+		})
+		if err != nil {
+			return "", fmt.Errorf("update failed: %w", err)
+		}
+		job := d.Service.GetJob(jobID)
+		if job == nil {
+			return fmt.Sprintf("Cron job %q updated.", jobID), nil
+		}
+		schedDesc := formatScheduleDesc(job.Schedule)
+		nextInfo := ""
+		if job.State.NextRunAtMs > 0 {
+			nextInfo = fmt.Sprintf(" Next run: %s.", time.UnixMilli(job.State.NextRunAtMs).Format("2006-01-02 15:04"))
+		}
+		return fmt.Sprintf("Cron job %q updated (%s, enabled=%v).%s", jobID, schedDesc, job.Enabled, nextInfo), nil
+	}
+	// Fallback.
+	return "", fmt.Errorf("update requires persistent cron service (not available)")
+}
+
+func cronRemove(d *toolctx.ChronoDeps, jobID string) (string, error) {
+	if jobID == "" {
+		return "", fmt.Errorf("jobId is required for remove")
+	}
+	if d.Service != nil {
+		if err := d.Service.Remove(jobID); err != nil {
+			return "", fmt.Errorf("remove failed: %w", err)
+		}
+		return fmt.Sprintf("Cron job %q removed.", jobID), nil
+	}
+	removed := d.Scheduler.Unregister(jobID)
+	if !removed {
+		return fmt.Sprintf("Cron job %q not found.", jobID), nil
+	}
+	return fmt.Sprintf("Cron job %q removed.", jobID), nil
+}
+
+func cronRun(ctx context.Context, d *toolctx.ChronoDeps, jobID string) (string, error) {
+	if jobID == "" {
+		return "", fmt.Errorf("jobId is required for run")
+	}
+	if d.Service != nil {
+		outcome, err := d.Service.Run(ctx, jobID, "force")
+		if err != nil {
+			return "", fmt.Errorf("run failed: %w", err)
+		}
+		status := outcome.Status
+		if outcome.Error != "" {
+			return fmt.Sprintf("Cron job %q run: status=%s, error=%s, duration=%dms", jobID, status, outcome.Error, outcome.DurationMs), nil
+		}
+		return fmt.Sprintf("Cron job %q run: status=%s, duration=%dms", jobID, status, outcome.DurationMs), nil
+	}
+	result, err := d.Scheduler.RunNow(ctx, jobID)
+	if err != nil {
+		return "", fmt.Errorf("run failed: %w", err)
+	}
+	data, _ := json.MarshalIndent(result, "", "  ")
+	return string(data), nil
+}
+
+func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
+	if jobID == "" {
+		return "", fmt.Errorf("jobId is required for get")
+	}
+	if d.Service != nil {
+		job := d.Service.GetJob(jobID)
+		if job == nil {
+			return fmt.Sprintf("Cron job %q not found.", jobID), nil
+		}
+		data, _ := json.MarshalIndent(job, "", "  ")
+		return string(data), nil
+	}
+	st := d.Scheduler.Get(jobID)
+	if st == nil {
+		return fmt.Sprintf("Cron job %q not found.", jobID), nil
+	}
+	data, _ := json.MarshalIndent(st, "", "  ")
+	return string(data), nil
+}
+
+func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	if d.RunLog != nil {
+		var page cron.RunLogPageResult
+		if jobID != "" {
+			page = d.RunLog.ReadPage(jobID, cron.RunLogReadOpts{Limit: limit, SortDir: "desc"})
+		} else {
+			page = d.RunLog.ReadPageAll(cron.RunLogReadOpts{Limit: limit, SortDir: "desc"})
+		}
+		if len(page.Entries) == 0 {
+			if jobID != "" {
+				return fmt.Sprintf("No run history for job %q.", jobID), nil
+			}
+			return "No cron run history.", nil
+		}
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "Run history (%d of %d):\n", len(page.Entries), page.Total)
+		for _, e := range page.Entries {
+			ts := time.UnixMilli(e.Ts).Format("01-02 15:04")
+			dur := ""
+			if e.DurationMs > 0 {
+				dur = fmt.Sprintf(" %dms", e.DurationMs)
+			}
+			errStr := ""
+			if e.Error != "" {
+				errStr = fmt.Sprintf(" err=%s", e.Error)
+			}
+			summary := ""
+			if e.Summary != "" {
+				s := e.Summary
+				if len(s) > 60 {
+					s = s[:57] + "..."
+				}
+				summary = fmt.Sprintf(" — %s", s)
+			}
+			sb.WriteString(fmt.Sprintf("\n- [%s] %s: %s%s%s%s", ts, e.JobID, e.Status, dur, errStr, summary))
+		}
+		return sb.String(), nil
+	}
+	// Fallback: in-memory run log.
+	if d.Scheduler != nil {
+		logs := d.Scheduler.Runs(jobID, limit, 0)
+		if len(logs) == 0 {
+			return "No cron run history.", nil
+		}
+		data, _ := json.MarshalIndent(logs, "", "  ")
+		return string(data), nil
+	}
+	return "Run history not available.", nil
+}
+
+func formatScheduleDesc(s cron.StoreSchedule) string {
+	switch s.Kind {
+	case "cron":
+		if s.Expr != "" {
+			return fmt.Sprintf("cron: %s", s.Expr)
+		}
+		return "cron"
+	case "every":
+		if s.EveryMs > 0 {
+			d := time.Duration(s.EveryMs) * time.Millisecond
+			return fmt.Sprintf("every %s", d)
+		}
+		return "every"
+	case "at":
+		if s.At != "" {
+			return fmt.Sprintf("at: %s", s.At)
+		}
+		return "one-shot"
+	default:
+		return s.Kind
 	}
 }
 
