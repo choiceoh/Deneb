@@ -290,7 +290,7 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 	}
 	last := msgs[len(msgs)-1]
 	// The persisted assistant message includes a tool activity summary prefix
-	// (e.g., "[Tools used: greet]\n\n") followed by the actual response text.
+	// (e.g., "Tools used: greet\n\n") followed by the actual response text.
 	wantSuffix := "Hello Peter!"
 	if last.Role != "assistant" || !strings.HasSuffix(last.TextContent(), wantSuffix) {
 		t.Errorf("last msg = {%s, %q}, want suffix %q", last.Role, last.TextContent(), wantSuffix)
