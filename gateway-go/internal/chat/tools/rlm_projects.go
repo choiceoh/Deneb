@@ -90,7 +90,10 @@ func ToolProjectsGetField(d *toolctx.VegaDeps) toolctx.ToolFunc {
 			}
 		}
 
-		b, _ := json.MarshalIndent(filtered, "", "  ")
+		b, err := json.MarshalIndent(filtered, "", "  ")
+		if err != nil {
+			return fmt.Sprintf("필드 직렬화 실패: %v", err), nil
+		}
 		return string(b), nil
 	}
 }
@@ -228,7 +231,7 @@ func extractSection(projectID, section string, data json.RawMessage) string {
 	if val, ok := doc[section]; ok {
 		b, err := json.MarshalIndent(val, "", "  ")
 		if err != nil {
-			return fmt.Sprintf("%v", val)
+			return fmt.Sprintf("섹션 '%s' 직렬화 실패: %v", section, err)
 		}
 		return fmt.Sprintf("## %s — %s\n\n%s", projectID, section, string(b))
 	}
@@ -239,7 +242,7 @@ func extractSection(projectID, section string, data json.RawMessage) string {
 		if strings.ToLower(key) == sectionLower {
 			b, err := json.MarshalIndent(val, "", "  ")
 			if err != nil {
-				return fmt.Sprintf("%v", val)
+				return fmt.Sprintf("섹션 '%s' 직렬화 실패: %v", key, err)
 			}
 			return fmt.Sprintf("## %s — %s\n\n%s", projectID, key, string(b))
 		}

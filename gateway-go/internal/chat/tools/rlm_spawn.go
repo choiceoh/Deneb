@@ -48,7 +48,8 @@ func ToolLLMSpawn(spawnFn SpawnFunc) toolctx.ToolFunc {
 }
 
 // ToolLLMSpawnBatch returns a tool for parallel multi-sub-LLM execution.
-func ToolLLMSpawnBatch(batchFn SpawnBatchFunc) toolctx.ToolFunc {
+// maxTasks caps the number of tasks per batch (from config).
+func ToolLLMSpawnBatch(batchFn SpawnBatchFunc, maxTasks int) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Tasks     []string `json:"tasks"`
@@ -61,8 +62,8 @@ func ToolLLMSpawnBatch(batchFn SpawnBatchFunc) toolctx.ToolFunc {
 		if len(p.Tasks) == 0 {
 			return "tasks 배열이 비어있습니다.", nil
 		}
-		if len(p.Tasks) > 10 {
-			return "tasks는 최대 10개까지 가능합니다.", nil
+		if len(p.Tasks) > maxTasks {
+			return fmt.Sprintf("tasks는 최대 %d개까지 가능합니다.", maxTasks), nil
 		}
 		if p.MaxTokens <= 0 {
 			p.MaxTokens = 500

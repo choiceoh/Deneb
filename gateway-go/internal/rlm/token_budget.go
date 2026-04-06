@@ -30,6 +30,14 @@ func (b *TokenBudget) TryReserve(reserve int) bool {
 	}
 }
 
+// Settle adjusts the budget after a call completes. reserved is the amount
+// previously claimed via TryReserve; actual is the real token usage.
+// If actual < reserved, the surplus is returned to the pool.
+func (b *TokenBudget) Settle(reserved, actual int) {
+	diff := int64(actual) - int64(reserved)
+	b.consumed.Add(diff)
+}
+
 // Consume unconditionally adds tokens to the consumed total (e.g. for
 // post-hoc tracking after an LLM call completes).
 // Returns true if the budget has not been exceeded after consumption.

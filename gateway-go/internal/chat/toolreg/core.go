@@ -7,6 +7,7 @@
 package toolreg
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
@@ -530,7 +531,8 @@ func RegisterRLMTools(registry toolctx.ToolRegistrar, vegaDeps *toolctx.VegaDeps
 }
 
 // RegisterRLMSpawnTools registers RLM Phase 2 sub-LLM spawning tools.
-func RegisterRLMSpawnTools(registry toolctx.ToolRegistrar, spawnFn tools.SpawnFunc, batchFn tools.SpawnBatchFunc) {
+// maxTasks caps the number of tasks in a single batch call.
+func RegisterRLMSpawnTools(registry toolctx.ToolRegistrar, spawnFn tools.SpawnFunc, batchFn tools.SpawnBatchFunc, maxTasks int) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "llm_spawn",
 		Description: "서브 LLM을 동기 실행. 독립 컨텍스트에서 데이터 조회+분석 후 결과만 반환",
@@ -539,8 +541,8 @@ func RegisterRLMSpawnTools(registry toolctx.ToolRegistrar, spawnFn tools.SpawnFu
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "llm_spawn_batch",
-		Description: "복수 서브 LLM을 병렬 실행 (최대 10개). 각각 독립 컨텍스트에서 처리 후 결과 배열 반환",
+		Description: fmt.Sprintf("복수 서브 LLM을 병렬 실행 (최대 %d개). 각각 독립 컨텍스트에서 처리 후 결과 배열 반환", maxTasks),
 		InputSchema: llmSpawnBatchToolSchema(),
-		Fn:          tools.ToolLLMSpawnBatch(batchFn),
+		Fn:          tools.ToolLLMSpawnBatch(batchFn, maxTasks),
 	})
 }

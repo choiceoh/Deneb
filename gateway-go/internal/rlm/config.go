@@ -77,7 +77,7 @@ func envInt(key string, def int) int {
 		return def
 	}
 	n, err := strconv.Atoi(v)
-	if err != nil {
+	if err != nil || n < 0 {
 		return def
 	}
 	return n
