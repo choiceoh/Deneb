@@ -473,11 +473,13 @@ func executeAgentRun(
 			workerAddition = prompt.WorkerPromptAddition(sessionToolPreset, scratchpadDir)
 		}
 
-		sp := prompt.BuildSystemPrompt(spp)
+		blocks := prompt.BuildSystemPromptBlocks(spp)
 		if workerAddition != "" {
-			sp += "\n" + workerAddition
+			// Append worker instructions to the last (dynamic) block.
+			last := &blocks[len(blocks)-1]
+			last.Text += "\n" + workerAddition
 		}
-		systemPrompt = llm.SystemString(sp)
+		systemPrompt = llm.SystemBlocks(blocks)
 	}()
 
 	prepWg.Wait()
