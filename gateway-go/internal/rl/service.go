@@ -53,6 +53,10 @@ type Service struct {
 	cancel    context.CancelFunc
 	store     *TrajectoryStore
 	logger    *slog.Logger
+
+	// latestAdapter is the path to the most recently detected LoRA adapter.
+	// Updated by watchdog; read by callers that load the adapter into inference.
+	latestAdapter string
 }
 
 // NewService creates an RL service. Does not start any processes.
@@ -144,7 +148,8 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.setProcess("tinker", tinkerID, 0)
-	s.markHealthy("tinker")
+	// Tinker has no HTTP health endpoint; process start is the best we can verify.
+	// The watchdog will detect if it dies later.
 
 	// 3. Start Atropos environment server.
 	atroposArgs := []string{
@@ -160,7 +165,15 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.setProcess("atropos", atroposID, s.cfg.Atropos.Port)
-	s.markHealthy("atropos")
+
+	// Wait for Atropos health.
+	atroposURL := fmt.Sprintf("http://localhost:%d/health", s.cfg.Atropos.Port)
+	if err := s.waitForHealth(runCtx, atroposURL, 30*time.Second); err != nil {
+		s.logger.Warn("rl: atropos health check failed, continuing", "error", err)
+		// Non-fatal: Atropos may not have a /health endpoint in all versions.
+	} else {
+		s.markHealthy("atropos")
+	}
 
 	s.mu.Lock()
 	s.state = StateRunning
@@ -255,9 +268,29 @@ func (s *Service) checkNewAdapter() {
 			newest = filepath.Join(s.cfg.AdapterDir, e.Name())
 		}
 	}
-	if newest != "" && time.Since(newestTime) < 10*time.Minute {
-		s.logger.Info("rl: new adapter detected", "path", newest, "age", time.Since(newestTime).Round(time.Second))
+	if newest == "" {
+		return
 	}
+	s.mu.Lock()
+	changed := newest != s.latestAdapter
+	if changed {
+		s.latestAdapter = newest
+	}
+	s.mu.Unlock()
+
+	if changed {
+		s.logger.Info("rl: new adapter detected — call LatestAdapter() to load",
+			"path", newest, "age", time.Since(newestTime).Round(time.Second))
+	}
+}
+
+// LatestAdapter returns the path to the most recently detected LoRA adapter.
+// Returns "" if no adapter has been found. Callers should pass this to
+// deneb_ml_lora_load FFI to apply the adapter to inference.
+func (s *Service) LatestAdapter() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.latestAdapter
 }
 
 // Stop gracefully shuts down the pipeline in reverse order.
