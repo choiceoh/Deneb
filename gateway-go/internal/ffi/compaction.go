@@ -2,7 +2,6 @@ package ffi
 
 import (
 	"encoding/json"
-	"errors"
 	"math"
 )
 
@@ -12,7 +11,7 @@ func CompactionEvaluate(configJSON string, storedTokens, liveTokens, tokenBudget
 		ContextThreshold float64 `json:"contextThreshold"`
 	}
 	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
-		return nil, errors.New("ffi: invalid config JSON")
+		return nil, err
 	}
 	if config.ContextThreshold <= 0 {
 		config.ContextThreshold = 0.75
@@ -44,21 +43,3 @@ func CompactionEvaluate(configJSON string, storedTokens, liveTokens, tokenBudget
 
 	return json.Marshal(d)
 }
-
-// CompactionSweepNew is not available (Rust FFI removed).
-func CompactionSweepNew(_ string, _, _ uint64, _, _ bool, _ int64) (uint32, error) {
-	return 0, errors.New("ffi: compaction sweep not available (Rust FFI removed)")
-}
-
-// CompactionSweepStart is not available (Rust FFI removed).
-func CompactionSweepStart(_ uint32) (json.RawMessage, error) {
-	return nil, errors.New("ffi: compaction sweep not available (Rust FFI removed)")
-}
-
-// CompactionSweepStep is not available (Rust FFI removed).
-func CompactionSweepStep(_ uint32, _ []byte) (json.RawMessage, error) {
-	return nil, errors.New("ffi: compaction sweep not available (Rust FFI removed)")
-}
-
-// CompactionSweepDrop is a no-op (Rust FFI removed).
-func CompactionSweepDrop(_ uint32) {}

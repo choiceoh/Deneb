@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
@@ -96,7 +95,6 @@ func healthCheck(deps Deps) HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"status":   "ok",
 			"runtime":  "go",
-			"ffi":      ffi.Available,
 			"sessions": deps.Sessions.Count(),
 			"channels": channels,
 		})
@@ -218,19 +216,15 @@ func systemInfo(deps Deps) HandlerFunc {
 			version = "unknown"
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"runtime":      "go",
-			"version":      version,
-			"goVersion":    runtime.Version(),
-			"os":           "linux",
-			"arch":         runtime.GOARCH,
-			"numCPU":       runtime.NumCPU(),
-			"ffiAvailable": ffi.Available,
+			"runtime":   "go",
+			"version":   version,
+			"goVersion": runtime.Version(),
+			"os":        "linux",
+			"arch":      runtime.GOARCH,
+			"numCPU":    runtime.NumCPU(),
 		})
 	}
 }
-
-// FFI-backed methods (protocol, security, media, parsing, memory, markdown,
-// compaction, context engine, vega, ml) have been moved to handler/ffi/.
 
 func telegramHealth(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -257,15 +251,12 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) error {
 		return err
 	}
 
-	// FFI-backed methods: protocol, security, media, parsing, memory, markdown,
-	// compaction, context engine, ML.
+	// Pure-Go methods: protocol, security, media, parsing, markdown.
 	d.RegisterDomain(handlerffi.ProtocolMethods())
 	d.RegisterDomain(handlerffi.SecurityMethods())
 	d.RegisterDomain(handlerffi.MediaMethods())
 	d.RegisterDomain(handlerffi.ParsingMethods())
 	d.RegisterDomain(handlerffi.MarkdownMethods())
-	d.RegisterDomain(handlerffi.CompactionMethods())
-	d.RegisterDomain(handlerffi.ContextEngineMethods())
 
 	// Tools catalog (static core tool definitions).
 	d.RegisterDomain(handlerskill.CatalogMethods())

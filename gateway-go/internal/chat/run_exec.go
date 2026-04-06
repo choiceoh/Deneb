@@ -312,7 +312,7 @@ func executeAgentRun(
 		defer prepWg.Done()
 
 		if deps.transcript != nil {
-			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger, AssemblyHints{})
+			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
 			if err != nil {
 				contextErr = err
 			} else {

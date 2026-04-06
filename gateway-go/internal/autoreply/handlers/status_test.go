@@ -36,7 +36,6 @@ func TestBuildStatusMessage_ServerLevel(t *testing.T) {
 		Channel:       "telegram",
 		Version:       "3.11.4",
 		StartedAt:     time.Now().Add(-2*time.Hour - 30*time.Minute),
-		RustFFI:       true,
 		SessionCount:  1,
 		WSConnections: 0,
 		ProviderUsage: map[string]*ProviderUsageStats{
@@ -54,7 +53,6 @@ func TestBuildStatusMessage_ServerLevel(t *testing.T) {
 	}{
 		{"version", "Gateway v3.11.4"},
 		{"uptime", "2h 30m"},
-		{"rust core", "Rust Core: ✅"},
 		{"sessions", "Sessions: 1"},
 		{"ws", "WS: 0"},
 		{"usage header", "API 사용량"},

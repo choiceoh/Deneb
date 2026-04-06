@@ -103,8 +103,6 @@ func MonitoringMethods(deps MonitoringDeps) map[string]rpcutil.HandlerFunc {
 type DoctorDeps struct {
 	// DefaultAgentID is the default agent identifier from config.
 	DefaultAgentID string
-	// EmbeddingProvider is the name of the configured embedding provider.
-	EmbeddingProvider string
 }
 
 // DoctorMethods returns the doctor.memory.status handler.
@@ -123,14 +121,8 @@ func doctorMemoryStatus(deps DoctorDeps) rpcutil.HandlerFunc {
 		// Read system memory from /proc/meminfo (Linux).
 		sysMemTotal, sysMemAvail := readProcMeminfo()
 
-		embeddingOK := deps.EmbeddingProvider != ""
-
 		result := map[string]any{
-			"agentId":  deps.DefaultAgentID,
-			"provider": deps.EmbeddingProvider,
-			"embedding": map[string]any{
-				"ok": embeddingOK,
-			},
+			"agentId": deps.DefaultAgentID,
 			"system": map[string]any{
 				"totalMB":     sysMemTotal / (1024 * 1024),
 				"availableMB": sysMemAvail / (1024 * 1024),
@@ -140,13 +132,6 @@ func doctorMemoryStatus(deps DoctorDeps) rpcutil.HandlerFunc {
 				"sysAllocMB": memStats.Sys / (1024 * 1024),
 				"numGC":      memStats.NumGC,
 			},
-		}
-
-		if !embeddingOK {
-			result["embedding"] = map[string]any{
-				"ok":    false,
-				"error": "no embedding provider configured",
-			}
 		}
 
 		resp, _ := protocol.NewResponseOK(req.ID, result)

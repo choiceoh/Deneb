@@ -178,10 +178,6 @@ func TestValidateErrorCode(t *testing.T) {
 	}
 }
 
-func TestAvailable(t *testing.T) {
-	t.Logf("FFI available: %v", Available)
-}
-
 func TestValidateFrame_RequestMissingMethod(t *testing.T) {
 	if err := ValidateFrame(`{"type":"req","id":"1"}`); err == nil {
 		t.Error("expected error for request missing method")

@@ -683,11 +683,8 @@
       type: string
       enum:
         - all
-        - embedding
-        - reranker
         - localai
-        - memory
-      description: "Component to check (default: all). embedding=Gemini API, reranker=Jina API, localai=local LLM, memory=aurora-memory DB"
+      description: "Component to check (default: all). localai=local LLM"
 
 - name: cron
   description: |

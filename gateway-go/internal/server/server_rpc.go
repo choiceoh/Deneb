@@ -41,7 +41,6 @@ func (s *Server) registerBuiltinMethods() {
 	s.dispatcher.RegisterDomain(handlergateway.RuntimeMethods(handlergateway.Deps{
 		Version:   s.version,
 		StartedAt: s.startedAt,
-		RustFFI:   false,
 		ChannelsStatus: func() any {
 			if s.telegramPlug != nil {
 				return map[string]telegram.Status{"telegram": s.telegramPlug.Status()}

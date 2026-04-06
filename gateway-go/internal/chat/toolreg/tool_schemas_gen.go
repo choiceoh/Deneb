@@ -763,8 +763,8 @@ func healthCheckToolSchema() map[string]any {
 		"properties": map[string]any{
 			"component": map[string]any{
 				"type":        "string",
-				"enum":        []string{"all", "embedding", "reranker", "localai", "memory"},
-				"description": "Component to check (default: all). embedding=Gemini API, reranker=Jina API, localai=local LLM, memory=aurora-memory DB",
+				"enum":        []string{"all", "localai"},
+				"description": "Component to check (default: all). localai=local LLM",
 			},
 		},
 	}

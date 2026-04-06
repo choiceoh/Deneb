@@ -16,7 +16,6 @@ import (
 type Deps struct {
 	Version         string
 	StartedAt       time.Time
-	RustFFI         bool
 	ChannelsStatus  func() any
 	SessionCount    func() int
 	ConnectionCount func() int64
@@ -104,7 +103,6 @@ func identity(deps Deps) rpcutil.HandlerFunc {
 			"version": deps.Version,
 			"runtime": "go",
 			"uptime":  time.Since(deps.StartedAt).Milliseconds(),
-			"rustFFI": deps.RustFFI,
 		})
 	}
 }

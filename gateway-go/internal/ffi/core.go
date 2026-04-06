@@ -5,11 +5,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/coresecurity"
 )
 
-// Available reports whether the Rust FFI library is linked.
-// Always false since the Rust core was removed; kept for API compatibility
-// so callers can check and degrade gracefully.
-const Available = false
-
 // ConstantTimeEq delegates to coresecurity.ConstantTimeEq (pure Go, crypto/subtle).
 func ConstantTimeEq(a, b []byte) bool {
 	return coresecurity.ConstantTimeEq(a, b)

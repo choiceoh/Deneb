@@ -137,7 +137,6 @@ func (s *Server) registerSessionRPCMethods() {
 		sd := chat.StatusDeps{
 			Version:       s.version,
 			StartedAt:     s.startedAt,
-			RustFFI:       false,
 			WSConnections: s.clientCnt.Load(),
 		}
 		if s.sessions != nil {

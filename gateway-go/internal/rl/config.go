@@ -130,8 +130,6 @@ func DefaultConfig() Config {
 			Port: 30101,
 		},
 		Environments: []EnvConfig{
-			{TaskType: "memory_json", Weight: 1.0, Enabled: true},
-			{TaskType: "aurora_compaction", Weight: 1.0, Enabled: true},
 			{TaskType: "session_memory", Weight: 0.5, Enabled: true},
 		},
 		Collection: CollectionConfig{

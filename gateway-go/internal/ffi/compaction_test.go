@@ -49,15 +49,3 @@ func TestCompactionEvaluate_EmptyConfig(t *testing.T) {
 		t.Error("expected error for empty config")
 	}
 }
-
-func TestCompactionSweepNew_Unavailable(t *testing.T) {
-	_, err := CompactionSweepNew(`{"contextThreshold":0.75}`, 1, 10000, false, false, 1700000000000)
-	if err == nil {
-		t.Error("expected error since Rust FFI is removed")
-	}
-}
-
-func TestCompactionSweepDrop_ZeroHandle(t *testing.T) {
-	// Dropping handle 0 should be a safe no-op.
-	CompactionSweepDrop(0)
-}

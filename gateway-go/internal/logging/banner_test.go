@@ -41,7 +41,6 @@ func TestPrintBanner_WithColor(t *testing.T) {
 	info := BannerInfo{
 		Version:       "3.25.0",
 		Addr:          "127.0.0.1:18789",
-		RustFFI:       false,
 		LocalAIStatus: "offline",
 	}
 	PrintBanner(&buf, info, true)

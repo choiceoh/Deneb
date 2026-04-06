@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -47,59 +46,6 @@ func TestEstimateTokens(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSelectMessagesByIDs(t *testing.T) {
-	msgs := []ChatMessage{
-		NewTextChatMessage("user", "msg0", 0),
-		NewTextChatMessage("assistant", "msg1", 0),
-		NewTextChatMessage("user", "msg2", 0),
-		NewTextChatMessage("assistant", "msg3", 0),
-	}
-
-	t.Run("empty IDs returns all", func(t *testing.T) {
-		got := selectMessagesByIDs(msgs, nil)
-		if len(got) != len(msgs) {
-			t.Errorf("got %d messages, want %d", len(got), len(msgs))
-		}
-	})
-
-	t.Run("empty slice returns all", func(t *testing.T) {
-		got := selectMessagesByIDs(msgs, []string{})
-		if len(got) != len(msgs) {
-			t.Errorf("got %d messages, want %d", len(got), len(msgs))
-		}
-	})
-
-	t.Run("valid IDs filter correctly", func(t *testing.T) {
-		got := selectMessagesByIDs(msgs, []string{"msg_0", "msg_2"})
-		if len(got) != 2 {
-			t.Fatalf("got %d messages, want 2", len(got))
-		}
-		if got[0].TextContent() != "msg0" {
-			t.Errorf("got[0].TextContent() = %q, want %q", got[0].TextContent(), "msg0")
-		}
-		if got[1].TextContent() != "msg2" {
-			t.Errorf("got[1].TextContent() = %q, want %q", got[1].TextContent(), "msg2")
-		}
-	})
-
-	t.Run("invalid IDs returns all messages", func(t *testing.T) {
-		got := selectMessagesByIDs(msgs, []string{"invalid", "bad_id"})
-		if len(got) != len(msgs) {
-			t.Errorf("got %d messages, want %d (all)", len(got), len(msgs))
-		}
-	})
-
-	t.Run("out of range IDs skipped", func(t *testing.T) {
-		got := selectMessagesByIDs(msgs, []string{"msg_0", "msg_99"})
-		if len(got) != 1 {
-			t.Fatalf("got %d messages, want 1", len(got))
-		}
-		if got[0].TextContent() != "msg0" {
-			t.Errorf("got[0].TextContent() = %q, want %q", got[0].TextContent(), "msg0")
-		}
-	})
 }
 
 func TestTranscriptToMessages(t *testing.T) {
@@ -150,7 +96,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("returns tail N messages", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 3
-		result, err := assembleContextFallback(store, "test", cfg, AssemblyHints{}, slog.Default())
+		result, err := assembleContext(store, "test", cfg, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -165,7 +111,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("returns all when MaxMessages is larger", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 100
-		result, err := assembleContextFallback(store, "test", cfg, AssemblyHints{}, slog.Default())
+		result, err := assembleContext(store, "test", cfg, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -176,7 +122,7 @@ func TestAssembleContextFallback(t *testing.T) {
 
 	t.Run("empty session returns empty result", func(t *testing.T) {
 		cfg := DefaultContextConfig()
-		result, err := assembleContextFallback(store, "nonexistent", cfg, AssemblyHints{}, slog.Default())
+		result, err := assembleContext(store, "nonexistent", cfg, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -188,7 +134,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("zero MaxMessages uses default", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 0
-		result, err := assembleContextFallback(store, "test", cfg, AssemblyHints{}, slog.Default())
+		result, err := assembleContext(store, "test", cfg, slog.Default())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -241,52 +187,4 @@ func (s *memTranscriptStore) Search(_ string, _ int) ([]SearchResult, error) {
 
 func (s *memTranscriptStore) CloneRecent(_, _ string, _ int) error {
 	return nil
-}
-
-func TestHandleAssemblyCommand(t *testing.T) {
-	msgs := []ChatMessage{
-		NewTextChatMessage("user", "hello world", 0),
-		NewTextChatMessage("assistant", "hi", 0),
-	}
-
-	t.Run("fetchContextItems", func(t *testing.T) {
-		cmd := `{"type":"fetchContextItems"}`
-		result, err := handleAssemblyCommand(json.RawMessage(cmd), msgs)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		m, ok := result.(map[string]any)
-		if !ok {
-			t.Fatalf("expected map, got %T", result)
-		}
-		if m["type"] != "contextItems" {
-			t.Errorf("type = %v, want %q", m["type"], "contextItems")
-		}
-		items, ok := m["items"].([]map[string]any)
-		if !ok {
-			t.Fatalf("expected []map[string]any items, got %T", m["items"])
-		}
-		if len(items) != 2 {
-			t.Fatalf("got %d items, want 2", len(items))
-		}
-		// Verify first item structure.
-		if items[0]["ordinal"] != 0 {
-			t.Errorf("items[0].ordinal = %v, want 0", items[0]["ordinal"])
-		}
-		if items[0]["itemType"] != "message" {
-			t.Errorf("items[0].itemType = %v, want %q", items[0]["itemType"], "message")
-		}
-	})
-
-	t.Run("unknown type returns empty", func(t *testing.T) {
-		cmd := `{"type":"unknown"}`
-		result, err := handleAssemblyCommand(json.RawMessage(cmd), msgs)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		m := result.(map[string]any)
-		if m["type"] != "empty" {
-			t.Errorf("type = %v, want %q", m["type"], "empty")
-		}
-	})
 }
