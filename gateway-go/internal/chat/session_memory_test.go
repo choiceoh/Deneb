@@ -229,11 +229,15 @@ func TestFormatRichContent(t *testing.T) {
 	if !strings.Contains(got, "Let me read that file.") {
 		t.Error("should contain text block")
 	}
-	// Tool name is kept as a minimal annotation.
-	if !strings.Contains(got, "[read_file]") {
-		t.Error("should contain tool name annotation")
+	// Tool_use blocks must be fully omitted — even [name] bracket format
+	// causes the main LLM to mimic it as text instead of real tool calls.
+	if strings.Contains(got, "[read_file]") {
+		t.Error("should NOT contain tool name bracket — causes LLM to mimic tool syntax as text")
 	}
-	// Raw JSON input must NOT appear — prevents LLM from mimicking tool call syntax.
+	if strings.Contains(got, "read_file") {
+		t.Error("should NOT contain tool name at all")
+	}
+	// Raw JSON input must NOT appear.
 	if strings.Contains(got, "config.yaml") {
 		t.Error("should NOT contain raw tool input")
 	}
@@ -246,8 +250,9 @@ func TestFormatRichContent(t *testing.T) {
 func TestFormatRichContent_ToolError(t *testing.T) {
 	rich := `[{"type":"text","text":"Reading..."},{"type":"tool_use","name":"read_file","input":{"path":"missing.txt"}},{"type":"tool_result","tool_use_id":"1","content":"file not found","is_error":true}]`
 	got := formatRichContent([]byte(rich))
-	if !strings.Contains(got, "[read_file]") {
-		t.Error("should contain tool name")
+	// Tool_use name must NOT appear.
+	if strings.Contains(got, "read_file") {
+		t.Error("should NOT contain tool name")
 	}
 	if !strings.Contains(got, "[오류]") {
 		t.Error("should contain error annotation for failed tool result")
