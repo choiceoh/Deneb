@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -60,25 +59,15 @@ func TestProtocolValidateParams_schemaValidationPath(t *testing.T) {
 		"method": "sessions.resolve",
 		"params": `{"key":"abc"}`,
 	})
-	if ffipkg.Available {
-		if resp == nil || resp.Error != nil {
-			t.Fatalf("expected success with FFI available, got %+v", resp)
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
-			t.Fatalf("unmarshal payload: %v", err)
-		}
-		if _, ok := payload["valid"]; !ok {
-			t.Fatalf("expected valid flag, got %#v", payload)
-		}
-		return
+	if resp == nil || resp.Error != nil {
+		t.Fatalf("expected success, got %+v", resp)
 	}
-
-	if resp == nil || resp.Error == nil {
-		t.Fatal("expected dependency error without FFI")
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
 	}
-	if resp.Error.Code != protocol.ErrDependencyFailed {
-		t.Fatalf("got error code %q, want %q", resp.Error.Code, protocol.ErrDependencyFailed)
+	if _, ok := payload["valid"]; !ok {
+		t.Fatalf("expected valid flag, got %#v", payload)
 	}
 }
 

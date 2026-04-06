@@ -335,15 +335,59 @@ func TestSanitizeHTML_AllSpecialChars(t *testing.T) {
 	}
 }
 
-func TestValidateParams_NoFFI(t *testing.T) {
-	valid, errJSON, err := ValidateParams("any.method", `{"key":"value"}`)
-	if valid {
-		t.Error("expected valid=false in no_ffi build")
+func TestValidateParams_Valid(t *testing.T) {
+	valid, errJSON, err := ValidateParams("sessions.resolve", `{"key":"abc"}`)
+	if !valid {
+		t.Error("expected valid=true for well-formed params")
 	}
 	if errJSON != nil {
-		t.Error("expected nil errorsJSON in no_ffi build")
+		t.Error("expected nil errorsJSON")
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateParams_InvalidJSON(t *testing.T) {
+	valid, _, err := ValidateParams("sessions.resolve", `{not json}`)
+	if valid {
+		t.Error("expected valid=false for invalid JSON")
 	}
 	if err == nil {
-		t.Error("expected error in no_ffi build")
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestValidateParams_UnknownMethod(t *testing.T) {
+	_, _, err := ValidateParams("nonexistent.method", `{"key":"value"}`)
+	if err == nil {
+		t.Error("expected error for unknown method")
+	}
+}
+
+func TestValidateParams_SchemaErrors(t *testing.T) {
+	valid, errJSON, err := ValidateParams("sessions.send", `{}`)
+	if valid {
+		t.Error("expected valid=false for missing required field")
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if errJSON == nil {
+		t.Error("expected non-nil errorsJSON for schema violations")
+	}
+}
+
+func TestValidateParams_EmptyMethod(t *testing.T) {
+	_, _, err := ValidateParams("", `{"key":"value"}`)
+	if err == nil {
+		t.Error("expected error for empty method")
+	}
+}
+
+func TestValidateParams_EmptyJSON(t *testing.T) {
+	_, _, err := ValidateParams("any.method", "")
+	if err == nil {
+		t.Error("expected error for empty JSON")
 	}
 }
