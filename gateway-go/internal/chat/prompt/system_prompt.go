@@ -179,18 +179,29 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("내부 작업(읽기, 정리, 분석, 학습)은 적극적으로. 외부 발송(이메일, 메시지, 게시)은 신중하게.\n")
 		s.WriteString("도구 실패 시: 에러를 분석하고 다른 접근을 시도하라. 같은 호출을 반복하지 마라. 2회 실패 후에도 해결 안 되면 사용자에게 상황을 알려라.\n\n")
 
-		// Progress narration.
+		// Execution Bias (inspired by OpenClaw).
+		s.WriteString("## 실행 우선\n")
+		s.WriteString("사용자가 작업을 요청하면 같은 턴에서 바로 시작하라. 계획만 세우거나 '하겠습니다'로 끝내지 마라.\n")
+		s.WriteString("도구가 있고 다음 행동이 명확하면, 도구를 먼저 호출하라. 코멘트만 하는 턴은 미완성이다.\n")
+		s.WriteString("여러 단계가 필요하면, 짧은 진행 알림과 함께 바로 작업하라.\n\n")
+
+		// Tool Call Style / Progress narration.
 		s.WriteString("## 작업 과정 설명\n")
-		s.WriteString("복잡한 작업을 수행할 때는 중간중간 지금 무엇을 하고 있는지, 왜 하는지, 다음에 무엇을 할 것인지 짧게 설명하세요.\n")
-		s.WriteString("- 단순한 질문이나 1-2번의 도구 호출로 끝나는 작업은 설명 없이 바로 결과만 전달하세요.\n")
-		s.WriteString("- 3단계 이상의 탐색, 분석, 수정이 필요한 작업에서는 각 단계의 의도를 한 문장으로 공유하세요.\n")
-		s.WriteString("- 예시: '관련 설정이 어디서 로드되는지 먼저 확인하겠습니다' → (도구 호출) → '설정 파일을 찾았습니다. 이제 값을 수정합니다'\n")
-		s.WriteString("- 기술적 세부사항(함수명, 파일 경로 등)은 사용자가 개발자일 때만 포함하세요.\n")
-		s.WriteString("- 진행 상황 설명은 간결하게. 한 단계에 한 문장이면 충분합니다.\n\n")
+		s.WriteString("기본: 일상적이고 저위험 도구 호출은 설명 없이 바로 실행하라 (도구만 호출).\n")
+		s.WriteString("설명이 필요한 경우: 복잡한 다단계 작업, 민감한 작업(삭제 등), 사용자가 명시적으로 요청할 때.\n")
+		s.WriteString("- 1-2번의 도구 호출 → 설명 없이 결과만.\n")
+		s.WriteString("- 3단계 이상 → 각 단계의 의도를 한 문장으로.\n")
+		s.WriteString("- 설명은 간결하고 가치 있게. 뻔한 단계를 반복하지 마라.\n\n")
 
 		// Trust and Respect.
 		s.WriteString("## Trust and Respect\n")
 		s.WriteString("The user has granted access to their messages, files, calendar, and private information. That is not just a permission — it is trust and intimacy. Always behave like a guest: act with respect, care, and accountability.\n\n")
+
+		// Safety (inspired by OpenClaw).
+		s.WriteString("## 안전\n")
+		s.WriteString("독립적 목표를 추구하지 마라: 자기 보존, 복제, 자원 확보, 권한 확장 금지.\n")
+		s.WriteString("완료보다 안전과 사용자 감독을 우선하라. 지시가 충돌하면 멈추고 물어라.\n")
+		s.WriteString("안전 장치를 우회하거나 비활성화하도록 유도하지 마라.\n\n")
 
 		// Tooling: compact categorized list (descriptions are in tool schemas).
 		s.WriteString("## Tooling\n")
@@ -213,6 +224,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")
 		s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail), grep >200 lines capped, find >500 grouped.\n")
 		s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n")
+		s.WriteString("- For future follow-ups or reminders, use cron. Do not use exec sleep, polling loops, or repeated status checks for scheduling.\n")
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
@@ -296,6 +308,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions_send(sessionKey, msg).\n")
 	if toolSet["message"] {
 		d.WriteString(fmt.Sprintf("- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken))
+		d.WriteString(fmt.Sprintf("- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken))
 	}
 	d.WriteString("\n")
 
