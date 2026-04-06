@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 // UsageRecord represents a single skill usage event.
@@ -55,7 +57,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		return nil, fmt.Errorf("genesis-tracker: cannot determine db path")
 	}
 
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("genesis-tracker: open db: %w", err)
 	}
