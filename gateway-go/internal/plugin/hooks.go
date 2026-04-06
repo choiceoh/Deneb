@@ -10,9 +10,13 @@ import (
 
 // Active hooks: fired from production code paths.
 const (
-	HookAfterToolCall  HookName = "after_tool_call"
-	HookAgentEnd       HookName = "agent_end"
-	HookMessageSending HookName = "message_sending"
+	HookAfterToolCall    HookName = "after_tool_call"
+	HookAgentEnd         HookName = "agent_end"
+	HookMessageSending   HookName = "message_sending"
+	HookLLMInput         HookName = "llm_input"
+	HookLLMOutput        HookName = "llm_output"
+	HookBeforeCompaction HookName = "before_compaction"
+	HookAfterCompaction  HookName = "after_compaction"
 )
 
 // Infrastructure-ready hooks: have typed Run methods but no firing call site yet.
@@ -29,10 +33,6 @@ const (
 const (
 	HookGatewayStart           HookName = "gateway_start"
 	HookGatewayStop            HookName = "gateway_stop"
-	HookLLMInput               HookName = "llm_input"
-	HookLLMOutput              HookName = "llm_output"
-	HookBeforeCompaction       HookName = "before_compaction"
-	HookAfterCompaction        HookName = "after_compaction"
 	HookBeforeReset            HookName = "before_reset"
 	HookMessageSent            HookName = "message_sent"
 	HookToolResultPersist      HookName = "tool_result_persist"

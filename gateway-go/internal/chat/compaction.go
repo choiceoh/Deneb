@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,7 +14,9 @@ import (
 	compaction2 "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 )
 
 // Compaction defaults.
@@ -232,6 +235,13 @@ func buildMidLoopCompactor(
 			}
 		}
 
+		// Step 2.75: Pre-compaction memory flush — extract facts from messages that
+		// are about to be dropped (inspired by OpenClaw's memoryFlush). This ensures
+		// important context survives compaction by persisting to long-term memory.
+		if deps.memoryStore != nil && pilot.CheckLocalAIHealth() {
+			flushPreCompactionMemory(ctx, deps, messages, logger)
+		}
+
 		// Step 3: Aurora compaction sweep (uses lightweight local LLM for summaries).
 		// Only main sessions may use Aurora sweep; others get microcompact only.
 		if deps.auroraStore == nil || !isMainSession(params.SessionKey) {
@@ -241,6 +251,16 @@ func buildMidLoopCompactor(
 				return messages, "", nil
 			}
 			return nil, "", nil
+		}
+
+		// Fire before_compaction hook for mid-loop sweep.
+		if deps.pluginHookRunner != nil {
+			go deps.pluginHookRunner.RunVoidHook(ctx, plugin.HookBeforeCompaction, map[string]any{
+				"messageCount": len(messages),
+				"liveTokens":   liveTokens,
+				"trigger":      "mid_loop",
+				"turn":         turn,
+			})
 		}
 
 		// Sync only new messages to Aurora (avoid duplicates).
@@ -261,6 +281,16 @@ func buildMidLoopCompactor(
 				return messages, "", nil
 			}
 			return nil, "", nil
+		}
+
+		// Fire after_compaction hook for mid-loop sweep.
+		if deps.pluginHookRunner != nil {
+			go deps.pluginHookRunner.RunVoidHook(ctx, plugin.HookAfterCompaction, map[string]any{
+				"messageCount":   len(compactedMsgs),
+				"compactedCount": len(compactedMsgs),
+				"trigger":        "mid_loop",
+				"turn":           turn,
+			})
 		}
 
 		lastCompactTurn = turn
@@ -396,4 +426,76 @@ func handleContextOverflowAurora(
 		return nil, "", fmt.Errorf("aurora reassemble after compaction: %w", err)
 	}
 	return asmResult.Messages, asmResult.SystemPromptAddition, nil
+}
+
+// flushPreCompactionMemory extracts facts from older messages that are about to
+// be dropped by compaction. This preserves important context in long-term memory
+// before the conversation history is truncated.
+//
+// Strategy: scan messages from the middle (likely-to-be-dropped zone), build a
+// condensed text of user+assistant exchanges, and run fact extraction.
+func flushPreCompactionMemory(ctx context.Context, deps runDeps, messages []llm.Message, logger *slog.Logger) {
+	if deps.memoryStore == nil || len(messages) < 6 {
+		return
+	}
+
+	// Focus on messages in the middle — the first 2 (system/initial) and last 4
+	// (recent context) are either preserved or already extracted from.
+	const keepHead = 2
+	const keepTail = 4
+	if len(messages) <= keepHead+keepTail {
+		return
+	}
+
+	dropZone := messages[keepHead : len(messages)-keepTail]
+
+	// Build a condensed conversation summary from the drop zone.
+	var sb strings.Builder
+	const maxFlushChars = 8000
+	for _, msg := range dropZone {
+		if sb.Len() >= maxFlushChars {
+			break
+		}
+		content := string(msg.Content)
+		if len(content) == 0 {
+			continue
+		}
+		// Only process user and assistant messages (skip tool results — they're
+		// mostly raw data that doesn't contain memory-worthy information).
+		if msg.Role != "user" && msg.Role != "assistant" {
+			continue
+		}
+		// Truncate individual messages to keep the flush lightweight.
+		if len(content) > 2000 {
+			content = content[:2000]
+		}
+		sb.WriteString(msg.Role)
+		sb.WriteString(": ")
+		sb.WriteString(content)
+		sb.WriteString("\n\n")
+	}
+
+	conversationText := sb.String()
+	if len(conversationText) < 50 {
+		return
+	}
+
+	// Extract using the lightweight model (same path as end-of-run extraction).
+	flushCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	lwClient := pilot.GetLightweightClient()
+	lwModel := pilot.GetLightweightModel()
+	facts, err := memory.ExtractFacts(flushCtx, lwClient, lwModel,
+		"[pre-compaction flush]", conversationText, logger)
+	if err != nil {
+		logger.Debug("pre-compaction memory flush: extraction failed", "error", err)
+		return
+	}
+	if len(facts) > 0 {
+		memory.InsertExtractedFactsAs(flushCtx, deps.memoryStore, deps.memoryEmbedder,
+			facts, "compaction_flush", logger)
+		logger.Info("pre-compaction memory flush: saved facts before compaction",
+			"count", len(facts))
+	}
 }
