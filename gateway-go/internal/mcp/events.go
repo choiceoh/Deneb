@@ -12,25 +12,6 @@ import (
 	"nhooyr.io/websocket/wsjson"
 )
 
-// eventToResourceURI maps gateway event names to affected resource URIs.
-var eventToResourceURI = map[string]string{
-	"session.created":   "deneb://sessions",
-	"session.completed": "deneb://sessions",
-	"session.failed":    "deneb://sessions",
-	"session.killed":    "deneb://sessions",
-	"agent.completed":   "deneb://sessions",
-	"config.changed":    "deneb://config",
-	"skills.changed":    "deneb://skills",
-	"memory.updated":    "deneb://memory",
-}
-
-// eventRequiresSampling lists events that should trigger Claude analysis.
-var eventRequiresSampling = map[string]bool{
-	"session.failed":  true,
-	"agent.completed": true,
-	"cron.fired":      true,
-}
-
 // EventListener connects to the gateway WebSocket and forwards relevant
 // events as MCP notifications. It also triggers sampling requests for
 // events that need Claude analysis.

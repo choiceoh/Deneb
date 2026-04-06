@@ -1,0 +1,39 @@
+# tool_concurrency.yaml — Read-only tool concurrency classification.
+#
+# Tools listed here are safe for concurrent execution in a single batch.
+# Used as fallback when ToolExecutor does not implement ConcurrencyChecker.
+#
+# Regenerate Go code: make data-gen
+
+_gen:
+  package: agent
+
+readOnlyToolFallback:
+  _type: "map[string]bool"
+  _doc: |-
+    readOnlyToolFallback is used when ToolExecutor does not implement
+    ConcurrencyChecker. Prefer declaring ConcurrencySafe on ToolDef instead.
+  _values:
+    read: true
+    grep: true
+    find: true
+    tree: true
+    diff: true
+    analyze: true
+    batch_read: true
+    search_and_read: true
+    inspect: true
+    read_spillover: true
+    process: true
+    kv: true
+    memory: true
+    web: true
+    http: true
+    health_check: true
+    image: true
+    sessions_list: true
+    sessions_history: true
+    sessions_search: true
+    skills_list: true
+    agent_logs: true
+    gateway_logs: true

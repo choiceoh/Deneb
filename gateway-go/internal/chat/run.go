@@ -405,13 +405,6 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 }
 
-// mutatingTools are tools that change the filesystem or run commands.
-// When a run uses these, it likely needs a verification follow-up.
-var mutatingTools = map[string]bool{
-	"edit": true, "write": true, "exec": true,
-	"git": true, "multi_edit": true, "notebook_edit": true,
-}
-
 // hadMutatingToolActivity reports whether any tool call in the run was a
 // code-changing operation (edit, write, exec, etc.). Used to decide if an
 // automatic verification continuation is warranted.

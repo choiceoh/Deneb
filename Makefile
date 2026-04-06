@@ -12,6 +12,7 @@
        tool-schemas tool-schemas-check \
        model-caps model-caps-check \
        error-codes-gen error-codes-gen-check \
+       data-gen data-gen-check \
        ffi-gen ffi-gen-check proto-error-codes-gen proto-error-codes-gen-check error-code-sync \
        info
 
@@ -227,20 +228,22 @@ check/fast: rust-fmt rust-clippy cli-fmt cli-clippy go-fmt go-vet
 	@echo "Fast checks passed (fmt + lint, no tests)"
 
 # Run all code generation pipelines in dependency order.
-generate: proto tool-schemas model-caps error-codes-gen
+generate: proto tool-schemas model-caps error-codes-gen data-gen
 	@echo "All code generation pipelines completed"
 
 # Verify generated sources are up to date.
 # Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@echo "==> [1/4] proto types (proto → Go + Rust)"
+	@echo "==> [1/5] proto types (proto → Go + Rust)"
 	@$(MAKE) proto-check
-	@echo "==> [2/4] error codes (gateway.proto → Rust + Go)"
+	@echo "==> [2/5] error codes (gateway.proto → Rust + Go)"
 	@$(MAKE) error-codes-gen-check
-	@echo "==> [3/4] tool schemas (tool_schemas.yaml → tool_schemas_gen.go)"
+	@echo "==> [3/5] tool schemas (tool_schemas.yaml → tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
-	@echo "==> [4/4] model capabilities (model_caps.yaml → model_caps_gen.go)"
+	@echo "==> [4/5] model capabilities (model_caps.yaml → model_caps_gen.go)"
 	@$(MAKE) model-caps-check
+	@echo "==> [5/5] data tables (*.yaml → *_gen.go)"
+	@$(MAKE) data-gen-check
 	@echo "All generation checks passed"
 
 fmt:
@@ -322,6 +325,35 @@ proto-error-codes-gen: error-codes-gen
 proto-error-codes-gen-check: error-codes-gen-check
 error-code-sync: error-codes-gen-check
 
+# --- Data table code generation ---
+#
+# Universal YAML → Go var generator for data tables (method scopes, event
+# registries, memory tuning, tool classification, security blocklists).
+# Source YAML files live next to their generated Go counterparts.
+
+DATA_GEN = python3 cmd/data-gen/gen.py
+DATA_GEN_TARGETS = \
+	internal/rpc/method_scopes \
+	internal/auth/role_permissions \
+	internal/events/event_scope_guards \
+	internal/mcp/event_mappings \
+	internal/memory/memory_tuning \
+	internal/chat/tool_classification \
+	internal/agent/tool_concurrency \
+	internal/process/env_blocklist \
+	internal/ffi/ssrf_blocklist
+
+data-gen:
+	@cd gateway-go && for t in $(DATA_GEN_TARGETS); do \
+		$(DATA_GEN) -yaml $${t}.yaml -out $${t}_gen.go; \
+	done
+
+data-gen-check:
+	@cd gateway-go && for t in $(DATA_GEN_TARGETS); do \
+		$(DATA_GEN) -yaml $${t}.yaml -out $${t}_gen.go; \
+	done
+	@git diff --exit-code -- $(addprefix gateway-go/,$(addsuffix _gen.go,$(DATA_GEN_TARGETS)))
+
 # --- Info ---
 
 info:
@@ -347,6 +379,8 @@ info:
 	@echo "  make generate-check   - Verify all generated files (per domain, names failing group)"
 	@echo "  make tool-schemas-check  - Verify tool_schemas_gen.go is up to date"
 	@echo "  make model-caps-check    - Verify model_caps_gen.go is up to date"
+	@echo "  make data-gen            - Regenerate all YAML-driven data tables"
+	@echo "  make data-gen-check      - Verify data table gen files are up to date"
 	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
 	@echo "  make go-bench   - Run Go gateway benchmarks"
 	@echo "  make deny       - Check Rust deps (security, license, bans)"

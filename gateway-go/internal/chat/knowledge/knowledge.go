@@ -219,19 +219,6 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 	return strings.Join(parts, "\n")
 }
 
-// categoryVolatileDays defines "shelf life" per fact category.
-// Facts older than this threshold (relative to UpdatedAt) get a staleness hint.
-// Aligned with categorySteepnessDays in search.go: shelfLife ≈ steepness × 3,
-// so the staleness warning appears when the inverse-square score drops to ~10%.
-var categoryVolatileDays = map[string]int{
-	"context":    45,  // half-life 30d × 1.5 — project state persists across sessions
-	"decision":   135, // half-life 90d × 1.5 — decisions are long-lived
-	"solution":   90,  // half-life 60d × 1.5 — solutions stay relevant longer
-	"preference": 90,  // half-life 60d × 1.5 — preferences are relatively stable
-	"user_model": 135, // half-life 90d × 1.5 — user traits re-observed by dreaming
-	"mutual":     68,  // half-life 45d × 1.5 — relationship dynamics evolve
-}
-
 // volatileHint returns a staleness hint based on how far past the category shelf life:
 //   - past 50% of shelf life → "확인 필요" (should verify)
 //   - past 100% of shelf life → "⚠변경 가능" (likely stale)
@@ -240,7 +227,7 @@ func volatileHint(category string, updatedAt time.Time, now time.Time) string {
 	if updatedAt.IsZero() {
 		return ""
 	}
-	shelfDays, ok := categoryVolatileDays[category]
+	shelfDays, ok := memory.CategoryVolatileDays[category]
 	if !ok {
 		shelfDays = 60 // conservative default
 	}

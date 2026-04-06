@@ -1,0 +1,263 @@
+# method_scopes.yaml — RPC method authorization scopes.
+#
+# Each entry maps an RPC method name to its minimum required auth scope.
+# Methods not listed default to admin scope (fail-closed).
+# Public methods require no authentication at all.
+#
+# Regenerate Go code: make data-gen
+
+_gen:
+  package: rpc
+  imports:
+    - github.com/choiceoh/deneb/gateway-go/internal/auth
+
+methodScopes:
+  _type: "map[string]auth.Scope"
+  _doc: |-
+    methodScopes maps each registered RPC method to the minimum scope required.
+    Methods not listed here are assumed to require admin scope.
+    Public methods (no auth required) are listed in publicMethods.
+  _value_map:
+    read: auth.ScopeRead
+    write: auth.ScopeWrite
+    admin: auth.ScopeAdmin
+    approvals: auth.ScopeApprovals
+  _values:
+    # --- Health & Status (read) ---
+    health: read
+    health.check: read
+    status: read
+    system.info: read
+
+    # --- System / Diagnostics ---
+    gateway.identity.get: read
+    last-heartbeat: read
+    set-heartbeats: write
+    system-presence: admin
+    system-event: admin
+    logs.tail: read
+    doctor.memory.status: read
+    models.list: read
+    update.run: admin
+    maintenance.run: admin
+    maintenance.status: read
+    maintenance.summary: read
+
+    # --- Sessions (read/write) ---
+    sessions.list: read
+    sessions.get: read
+    sessions.preview: read
+    sessions.resolve: read
+    sessions.subscribe: read
+    sessions.unsubscribe: read
+    sessions.messages.subscribe: read
+    sessions.messages.unsubscribe: read
+    sessions.tools.subscribe: read
+    sessions.tools.unsubscribe: read
+    sessions.create: write
+    sessions.send: write
+    sessions.steer: write
+    sessions.abort: write
+    sessions.patch: write
+    sessions.reset: write
+    sessions.delete: write
+    sessions.compact: write
+    sessions.repair: write
+    sessions.overflow_check: read
+    sessions.lifecycle: write
+
+    # --- Telegram (read/write/admin) ---
+    telegram.list: read
+    telegram.get: read
+    telegram.status: read
+    telegram.health: read
+    telegram.start: admin
+    telegram.stop: admin
+    telegram.restart: admin
+    telegram.logout: write
+
+    # --- Messaging ---
+    send: write
+    poll: write
+    talk.config: read
+    talk.mode: write
+
+    # --- Agent (read/write) ---
+    agent: write
+    agent.identity.get: read
+    agent.wait: read
+    agent.status: read
+
+    # --- Agents CRUD ---
+    agents.list: read
+    agents.create: write
+    agents.update: write
+    agents.delete: write
+    agents.files.list: read
+    agents.files.get: read
+    agents.files.set: write
+
+    # --- Skills ---
+    skills.status: read
+    skills.bins: read
+    skills.install: write
+    skills.update: write
+    skills.snapshot: read
+    skills.commands: read
+    skills.discover: read
+    skills.workspace_status: read
+    skills.entries: read
+    tools.catalog: read
+
+    # --- Process (write) ---
+    process.exec: approvals
+    process.kill: write
+    process.get: read
+    process.list: read
+
+    # --- Cron (read/write) ---
+    wake: write
+    cron.list: read
+    cron.listPage: read
+    cron.get: read
+    cron.getJob: read
+    cron.status: read
+    cron.runs: read
+    cron.add: write
+    cron.update: write
+    cron.remove: write
+    cron.run: write
+    cron.unregister: write
+
+    # --- Hooks (read/admin) ---
+    hooks.list: read
+    hooks.register: admin
+    hooks.unregister: admin
+    hooks.fire: write
+
+    # --- Chat (write) ---
+    chat.send: write
+    chat.history: read
+    chat.abort: write
+    chat.inject: write
+    chat.btw: write
+
+    # --- Monitoring (read) ---
+    monitoring.channel_health: read
+    monitoring.activity: read
+
+    # --- Event subscriptions (read) ---
+    subscribe.session: read
+    unsubscribe.session: read
+    subscribe.session.messages: read
+    unsubscribe.session.messages: read
+
+    # --- Wizard ---
+    wizard.start: write
+    wizard.next: write
+    wizard.cancel: write
+    wizard.status: read
+
+    # --- Media ---
+    browser.request: write
+
+    # --- Web Login ---
+    web.login.start: write
+    web.login.wait: read
+
+    # --- Exec Approvals ---
+    exec.approvals.get: read
+    exec.approvals.set: admin
+    exec.approval.request: approvals
+    exec.approval.waitDecision: approvals
+    exec.approval.resolve: approvals
+
+    # --- Secrets ---
+    secrets.reload: admin
+    secrets.resolve: admin
+
+    # --- Usage ---
+    usage.status: read
+    usage.cost: read
+
+    # --- Security & Media (read) ---
+    protocol.validate: read
+    security.validate_session_key: read
+    security.sanitize_html: read
+    security.is_safe_url: read
+    security.validate_error_code: read
+    media.detect_mime: read
+    parsing.extract_links: read
+    parsing.html_to_markdown: read
+    parsing.base64_estimate: read
+    parsing.base64_canonicalize: read
+    parsing.media_tokens: read
+
+    # --- Memory search (read) ---
+    memory.cosine_similarity: read
+    memory.bm25_rank_to_score: read
+    memory.build_fts_query: read
+    memory.merge_hybrid_results: read
+    memory.extract_keywords: read
+
+    # --- Markdown (read) ---
+    markdown.to_ir: read
+    markdown.detect_fences: read
+
+    # --- Protocol validation (read) ---
+    protocol.validate_params: read
+
+    # --- Compaction (write) ---
+    compaction.evaluate: write
+    compaction.sweep.new: write
+    compaction.sweep.start: write
+    compaction.sweep.step: write
+    compaction.sweep.drop: write
+
+    # --- Context engine (write) ---
+    context.assembly.new: write
+    context.assembly.start: write
+    context.assembly.step: write
+    context.expand.new: write
+    context.expand.start: write
+    context.expand.step: write
+    context.engine.drop: write
+
+    # --- ML (read) ---
+    ml.embed: read
+    ml.rerank: read
+
+    # --- Providers (read) ---
+    providers.list: read
+    providers.catalog: read
+
+    # --- Vega (write) ---
+    vega.ask: write
+    vega.update: write
+    vega.add-action: write
+    vega.mail-append: write
+    vega.version: read
+    vega.ffi.execute: write
+    vega.ffi.search: read
+
+    # --- Config (admin) ---
+    config.get: admin
+    config.set: admin
+    config.patch: admin
+    config.apply: admin
+    config.reload: admin
+    config.schema: read
+    config.schema.lookup: read
+
+    # --- Daemon (admin) ---
+    daemon.status: admin
+
+    # --- Events (admin) ---
+    events.broadcast: admin
+
+publicMethods:
+  _type: "map[string]bool"
+  _doc: "publicMethods are accessible without authentication."
+  _values:
+    health: true
+    health.check: true

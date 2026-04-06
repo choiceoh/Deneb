@@ -63,30 +63,6 @@ const (
 	ScopeApprovals = "approvals"
 )
 
-// eventScopeGuards maps event names to required scopes.
-// Events not listed here are delivered to all authenticated subscribers.
-// Mirrors EVENT_SCOPE_GUARDS from src/gateway/server-broadcast.ts.
-var eventScopeGuards = map[string][]string{
-	"exec.approval.requested": {ScopeApprovals, ScopeAdmin},
-	"exec.approval.resolved":  {ScopeApprovals, ScopeAdmin},
-	"device.pair.requested":   {ScopeApprovals, ScopeAdmin},
-	"device.pair.resolved":    {ScopeApprovals, ScopeAdmin},
-	"node.pair.requested":     {ScopeApprovals, ScopeAdmin},
-	"node.pair.resolved":      {ScopeApprovals, ScopeAdmin},
-	"sessions.changed":        {ScopeRead},
-	"session.message":         {ScopeRead},
-	"session.tool":            {ScopeRead},
-	"agent":                   {ScopeRead},
-	"agent.event":             {ScopeRead},
-	"telegram.changed":        {ScopeRead},
-	"config.changed":          {ScopeAdmin},
-	"process.completed":       {ScopeWrite, ScopeAdmin},
-	"heartbeat":               {ScopeRead},
-	"dreaming.cycle":          {ScopeRead},
-	"shadow.event":            {ScopeRead},
-	"bridge.message":          {ScopeRead},
-}
-
 // maxBufferedBytes is the threshold for slow consumer detection.
 // Subscribers exceeding this are dropped when DropIfSlow is set.
 const maxBufferedBytes int64 = 50 * 1024 * 1024 // 50 MB
