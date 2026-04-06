@@ -146,35 +146,6 @@ fn match_fence_line(line: &str) -> Option<(&str, &str, &str)> {
 }
 
 // ---------------------------------------------------------------------------
-// Lookup
-// ---------------------------------------------------------------------------
-
-/// Binary search for a fence span containing `index`.
-/// Returns the span if `index` is strictly inside it (start < index < end).
-pub fn find_fence_span_at(spans: &[FenceSpan], index: usize) -> Option<&FenceSpan> {
-    let mut low: usize = 0;
-    let mut high = spans.len();
-
-    while low < high {
-        let mid = low + (high - low) / 2;
-        let span = &spans[mid];
-        if index <= span.start {
-            high = mid;
-        } else if index >= span.end {
-            low = mid + 1;
-        } else {
-            return Some(span);
-        }
-    }
-    None
-}
-
-/// Check if splitting at `index` would not break a fenced code block.
-pub fn is_safe_fence_break(spans: &[FenceSpan], index: usize) -> bool {
-    find_fence_span_at(spans, index).is_none()
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -243,33 +214,5 @@ mod tests {
         let spans = parse_fence_spans(input);
         assert_eq!(spans.len(), 1);
         // The ``` inside is not a valid close (only 3 < 4).
-    }
-
-    #[test]
-    fn find_span_at_inside() {
-        let spans = vec![FenceSpan {
-            start: 5,
-            end: 20,
-            open_line: "```".into(),
-            marker: "```".into(),
-            indent: String::new(),
-        }];
-        assert!(find_fence_span_at(&spans, 10).is_some());
-        assert!(find_fence_span_at(&spans, 5).is_none()); // at start boundary
-        assert!(find_fence_span_at(&spans, 20).is_none()); // at end boundary
-        assert!(find_fence_span_at(&spans, 3).is_none()); // before
-    }
-
-    #[test]
-    fn safe_fence_break() {
-        let spans = vec![FenceSpan {
-            start: 5,
-            end: 20,
-            open_line: "```".into(),
-            marker: "```".into(),
-            indent: String::new(),
-        }];
-        assert!(is_safe_fence_break(&spans, 3));
-        assert!(!is_safe_fence_break(&spans, 10));
     }
 }

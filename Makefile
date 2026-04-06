@@ -337,21 +337,12 @@ error-code-sync: error-codes-gen-check
 
 # --- Data table code generation ---
 #
-# Universal YAML → Go var generator for data tables (method scopes, event
-# registries, memory tuning, tool classification, security blocklists).
+# Universal YAML → Go var generator for data tables (tool classification).
 # Source YAML files live next to their generated Go counterparts.
 
 DATA_GEN = python3 cmd/data-gen/gen.py
 DATA_GEN_TARGETS = \
-	internal/rpc/method_scopes \
-	internal/auth/role_permissions \
-	internal/events/event_scope_guards \
-	internal/mcp/event_mappings \
-	internal/memory/memory_tuning \
-	internal/chat/tool_classification \
-	internal/agent/tool_concurrency \
-	internal/process/env_blocklist \
-	internal/ffi/ssrf_blocklist
+	internal/chat/tool_classification
 
 data-gen:
 	@cd gateway-go && for t in $(DATA_GEN_TARGETS); do \

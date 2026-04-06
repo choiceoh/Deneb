@@ -13,7 +13,7 @@ static DATED_MEMORY_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Compute the decay constant lambda from a half-life in days.
-pub fn to_decay_lambda(half_life_days: f64) -> f64 {
+fn to_decay_lambda(half_life_days: f64) -> f64 {
     if !half_life_days.is_finite() || half_life_days <= 0.0 {
         return 0.0;
     }
@@ -22,7 +22,7 @@ pub fn to_decay_lambda(half_life_days: f64) -> f64 {
 
 /// Compute the temporal decay multiplier: exp(-lambda * age).
 /// Returns 1.0 if decay is disabled (lambda <= 0 or invalid age).
-pub fn calculate_temporal_decay_multiplier(age_in_days: f64, half_life_days: f64) -> f64 {
+fn calculate_temporal_decay_multiplier(age_in_days: f64, half_life_days: f64) -> f64 {
     let lambda = to_decay_lambda(half_life_days);
     let clamped_age = age_in_days.max(0.0);
     if lambda <= 0.0 || !clamped_age.is_finite() {

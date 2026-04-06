@@ -471,13 +471,6 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
     result
 }
 
-/// Execute a NL query: route → command → execute.
-pub fn execute_query(query: &str, config: &VegaConfig) -> CommandResult {
-    let command = route_command(query);
-    let args = json!({"query": query});
-    execute(command, &args, config)
-}
-
 // -- Helpers --
 
 pub(super) fn open_db(config: &VegaConfig) -> Result<Connection, String> {

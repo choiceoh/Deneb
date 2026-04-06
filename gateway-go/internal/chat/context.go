@@ -25,12 +25,6 @@ const (
 	// runesPerToken re-exports the shared constant for local callers
 	// (compaction, sweep, etc.) that use it directly in math expressions.
 	runesPerToken = tokenutil.RunesPerToken
-	// charsPerToken is the byte-based divisor used by knowledge.go for
-	// incremental budget tracking on strings.Builder output (sb.Len() bytes).
-	// English: ~4 bytes/token (1 byte/char × 4 chars/token) — accurate.
-	// Korean: ~6 bytes/token (3 bytes/rune × 2 runes/token) — underestimates,
-	// so knowledge budget fills faster; acceptable conservative margin.
-	charsPerToken = 4
 )
 
 // AssemblyResult holds the output of context assembly.

@@ -118,7 +118,7 @@ func (r *CommandRegistry) rebuild() {
 	// Build alias map.
 	aliasMap := make(map[string]*textAliasSpec, len(r.commands)*3)
 	for _, cmd := range r.commands {
-		canonical := cmd.Key
+		var canonical string
 		if len(cmd.TextAliases) > 0 {
 			c := strings.TrimSpace(cmd.TextAliases[0])
 			if c != "" {

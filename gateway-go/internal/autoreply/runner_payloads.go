@@ -102,15 +102,6 @@ func BuildAgentPayload(cfg AgentTurnConfig, history []AgentMessage, tools []Agen
 	return payload
 }
 
-func buildToolResultMessage(toolUseID, output string, isError bool) AgentMessage {
-	return AgentMessage{
-		Role:      "user",
-		ToolUseID: toolUseID,
-		Content:   output,
-		IsError:   isError,
-	}
-}
-
 func IsToolUseContent(text string) bool {
 	trimmed := strings.TrimSpace(text)
 	return strings.HasPrefix(trimmed, "{\"tool_use\"") || strings.HasPrefix(trimmed, "<tool_use>")

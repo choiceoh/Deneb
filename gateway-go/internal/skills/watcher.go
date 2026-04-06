@@ -31,8 +31,6 @@ var defaultSkillsWatchIgnored = map[string]bool{
 
 // Watcher manages file system watching and version tracking for skills.
 type Watcher struct {
-	mu sync.RWMutex
-
 	listeners   map[uint64]ChangeListener
 	listenerSeq atomic.Uint64
 	listenersMu sync.RWMutex
@@ -48,12 +46,9 @@ type Watcher struct {
 }
 
 type watchState struct {
-	stop        chan struct{}
-	debounceMs  int
-	pathsKey    string
-	pendingPath string
-	timer       *time.Timer
-	mu          sync.Mutex
+	stop       chan struct{}
+	debounceMs int
+	pathsKey   string
 }
 
 // NewWatcher creates a new skills watcher.

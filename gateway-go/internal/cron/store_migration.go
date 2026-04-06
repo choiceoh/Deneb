@@ -263,18 +263,6 @@ func stringField(m map[string]any, key string) string {
 	return strings.TrimSpace(s)
 }
 
-func mapOrNil(m map[string]any, key string) map[string]any {
-	v, ok := m[key]
-	if !ok {
-		return nil
-	}
-	result, ok := v.(map[string]any)
-	if !ok {
-		return nil
-	}
-	return result
-}
-
 func inferPayloadFromTopLevel(raw map[string]any) bool {
 	if msg := stringField(raw, "message"); msg != "" {
 		raw["payload"] = map[string]any{"kind": "agentTurn", "message": msg}
