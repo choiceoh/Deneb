@@ -636,11 +636,16 @@ func executeAgentRun(
 		agentTimeout = 30 * time.Minute
 	}
 
-	// Work-only features: nudge budget, output recovery, mid-loop compaction.
+	// Mid-loop compaction is enabled for ALL modes: long chat sessions
+	// (200+ messages) can overflow context without proactive compaction,
+	// especially with smaller models (glm-5-turbo) that hang instead of
+	// returning context_length_exceeded errors.
+	midLoopCompactFn := buildMidLoopCompactor(deps, params, logger)
+
+	// Work-only features: nudge budget, output recovery.
 	var nudgeBudget *agent.NudgeBudgetConfig
 	maxOutputRecovery := 1 // minimal recovery for all modes
 	maxOutputScaleFactors := []float64{1.5}
-	var midLoopCompactFn func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error)
 	if isWorkMode {
 		nudgeConts := 5
 		if params.DeepWork {
@@ -653,7 +658,6 @@ func executeAgentRun(
 		}
 		maxOutputRecovery = 3
 		maxOutputScaleFactors = []float64{1.5, 2.0, 2.0}
-		midLoopCompactFn = buildMidLoopCompactor(deps, params, logger)
 	}
 
 	cfg := agent.AgentConfig{
