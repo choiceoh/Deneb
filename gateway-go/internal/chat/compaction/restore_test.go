@@ -57,14 +57,18 @@ func TestBuildRestorationMessages(t *testing.T) {
 		}
 	})
 
-	t.Run("builds messages within budget", func(t *testing.T) {
+	t.Run("consolidates into single message", func(t *testing.T) {
 		records := []FileReadRecord{
 			{Path: "a.go", Content: "package a", TokenCount: 100, TurnIndex: 2},
 			{Path: "b.go", Content: "package b", TokenCount: 100, TurnIndex: 1},
 		}
 		msgs := BuildRestorationMessages(records)
-		if len(msgs) != 2 {
-			t.Fatalf("expected 2 messages, got %d", len(msgs))
+		if len(msgs) != 1 {
+			t.Fatalf("expected 1 consolidated message, got %d", len(msgs))
+		}
+		content := string(msgs[0].Content)
+		if !strings.Contains(content, "package a") || !strings.Contains(content, "package b") {
+			t.Errorf("consolidated message should contain both files: %s", content)
 		}
 	})
 
@@ -76,8 +80,9 @@ func TestBuildRestorationMessages(t *testing.T) {
 			}
 		}
 		msgs := BuildRestorationMessages(records)
-		if len(msgs) > postCompactMaxFiles {
-			t.Errorf("expected <= %d messages, got %d", postCompactMaxFiles, len(msgs))
+		// Always consolidated into a single message.
+		if len(msgs) != 1 {
+			t.Errorf("expected 1 message, got %d", len(msgs))
 		}
 	})
 }
