@@ -118,11 +118,21 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		return output, err
 	}
 
-	// Spill large results to disk before post-processing truncates them.
-	// The preview (~2K) replaces the full output in the context window.
-	if r.spillStore != nil && len(output) > agent.MaxResultChars {
-		sessionKey := toolctx.SessionKeyFromContext(ctx)
-		output = r.spillStore.SpillAndPreview(sessionKey, name, output)
+	// Head/tail truncation — preserve both ends for LLM comprehension.
+	// Build errors and test failures are typically at the end of output,
+	// while context (paths, invocations) is at the start.  Keep both visible.
+	maxOutput := agent.DefaultMaxOutput
+	if def.MaxOutput > 0 {
+		maxOutput = def.MaxOutput
+	}
+	if len(output) > maxOutput {
+		var spillID string
+		// Spill full content to disk so the LLM can retrieve it via read_spillover.
+		if r.spillStore != nil {
+			sessionKey := toolctx.SessionKeyFromContext(ctx)
+			spillID, _ = r.spillStore.Store(sessionKey, name, output)
+		}
+		output = agent.TruncateHeadTail(output, maxOutput, spillID)
 	}
 
 	// Invalidate caches when mutation tools modify the file system.
@@ -181,6 +191,19 @@ func (r *ToolRegistry) SpilloverStore() *agent.SpilloverStore {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.spillStore
+}
+
+// ApplyMaxOutputs sets per-tool max output budgets from a name→chars map.
+// Tools not in the map keep their current MaxOutput (zero = default).
+func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, max := range budgets {
+		if def, ok := r.tools[name]; ok {
+			def.MaxOutput = max
+			r.tools[name] = def
+		}
+	}
 }
 
 // IsConcurrencySafe returns true if the named tool declared ConcurrencySafe

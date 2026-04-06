@@ -34,4 +34,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	if deps.SpilloverStore != nil {
 		registry.SetSpilloverStore(deps.SpilloverStore)
 	}
+
+	// Apply per-tool output budgets from tool_schemas.yaml.
+	registry.ApplyMaxOutputs(toolreg.ToolMaxOutputs())
 }

@@ -133,6 +133,19 @@ def generate(tools: list, pkg: str = "toolreg", source: str = "") -> str:
         lines.append("}")
         lines.append("")
 
+    # Generate ToolMaxOutputs for per-tool output character budgets.
+    max_outputs = {t["name"]: int(t["max_output"]) for t in tools if "max_output" in t}
+    if max_outputs:
+        lines.append("// ToolMaxOutputs returns per-tool output character budgets from tool_schemas.yaml.")
+        lines.append("// Tools not in this map use agent.DefaultMaxOutput.")
+        lines.append("func ToolMaxOutputs() map[string]int {")
+        lines.append("\treturn map[string]int{")
+        for name, val in sorted(max_outputs.items()):
+            lines.append(f'\t\t{go_str(name)}: {val},')
+        lines.append("\t}")
+        lines.append("}")
+        lines.append("")
+
     return "\n".join(lines) + "\n"
 
 

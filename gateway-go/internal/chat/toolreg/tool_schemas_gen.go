@@ -1637,3 +1637,11 @@ func updatePlanToolSchema() map[string]any {
 		"required": []string{"steps"},
 	}
 }
+
+// ToolMaxOutputs returns per-tool output character budgets from tool_schemas.yaml.
+// Tools not in this map use agent.DefaultMaxOutput.
+func ToolMaxOutputs() map[string]int {
+	return map[string]int{
+		"exec": 51200,
+	}
+}
