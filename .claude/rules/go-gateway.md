@@ -14,8 +14,7 @@ Primary runtime — HTTP/WS gateway server.
 - `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe). 130+ methods.
 - `internal/session/` — Session management with lifecycle state machine (`IDLE -> RUNNING -> DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
 - `internal/auth/` — Token auth, allowlists, security paths, credentials, probe auth.
-- `pkg/protocol/` — Hand-written JSON wire types + generated protobuf types in `gen/`.
-- `pkg/protocol/consistency_test.go` — Bidirectional reflection tests ensuring hand-written and generated types stay in sync.
+- `pkg/protocol/` — Hand-written JSON wire types.
 - `internal/chat/toolctx/` — Leaf package: shared types (ToolFunc, ToolDef, ToolRegistrar, ToolExecutor), context helpers (WithDeliveryContext, etc.), TurnContext, RunCache, dependency structs (CoreToolDeps, ProcessDeps, SessionDeps, etc.). Zero intra-chat imports.
 - `internal/chat/toolreg/` — Tool registration hub: wires tool implementations (from tools/) with JSON schemas (from tool_schemas_gen.go) into a ToolRegistrar. Contains tool_schemas.yaml (codegen source) and tool_schemas_gen.go (generated). Never imports chat/.
 - `internal/chat/tools/` — Pure tool implementations (fs, exec, git, health, vega, message, kv, gmail, etc.). Depends only on toolctx/ for types.

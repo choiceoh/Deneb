@@ -83,10 +83,6 @@ linters:
           - gocritic
           - unparam
           - gosec
-      # Generated protobuf code.
-      - path: "pkg/protocol/gen/"
-        linters:
-          - all
     paths:
       - third_party$
       - builtin$

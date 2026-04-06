@@ -29,35 +29,6 @@ fi
 
 # ---------- Tool installers (each writes a marker file on success) ----------
 
-install_protoc() {
-    if command -v protoc &>/dev/null; then return 0; fi
-    local version="25.1"
-    local arch
-    arch=$(uname -m)
-    case "$arch" in
-        aarch64|arm64) arch="linux-aarch_64" ;;
-        x86_64)        arch="linux-x86_64" ;;
-        *) return 1 ;;
-    esac
-    curl -sSL "https://github.com/protocolbuffers/protobuf/releases/download/v${version}/protoc-${version}-${arch}.zip" -o /tmp/protoc.zip \
-        && unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' >/dev/null 2>&1 \
-        && rm -f /tmp/protoc.zip \
-        && touch "$SETUP_TMPDIR/installed_protoc"
-}
-
-install_buf() {
-    if command -v buf &>/dev/null; then return 0; fi
-    curl -sSL "https://github.com/bufbuild/buf/releases/latest/download/buf-$(uname -s)-$(uname -m)" -o /usr/local/bin/buf \
-        && chmod +x /usr/local/bin/buf \
-        && touch "$SETUP_TMPDIR/installed_buf"
-}
-
-install_protoc_gen_go() {
-    if command -v protoc-gen-go &>/dev/null; then return 0; fi
-    GOFLAGS="-modcacherw" go install google.golang.org/protobuf/cmd/protoc-gen-go@latest 2>/dev/null \
-        && touch "$SETUP_TMPDIR/installed_protoc_gen_go"
-}
-
 download_go_modules() {
     # Skip download if cache is already valid
     if (cd "$REPO_ROOT/gateway-go" && go mod verify) &>/dev/null 2>&1; then return 0; fi
@@ -106,9 +77,6 @@ echo "  [context] Claude agent running on Deneb gateway server (DGX Spark)"
 echo ""
 
 # Run independent installs in parallel
-install_protoc &
-install_buf &
-install_protoc_gen_go &
 download_go_modules &
 wait
 
@@ -124,9 +92,6 @@ missing=0
 
 # Collect tool versions
 go_ver=$(go version 2>/dev/null | grep -oP 'go\d+\.\d+\.\d*' || echo "missing") ; [ "$go_ver" = "missing" ] && missing=$((missing + 1))
-protoc_ver=$(protoc --version 2>/dev/null | grep -oP '\d+\.\d+' || echo "missing") ; [ "$protoc_ver" = "missing" ] && missing=$((missing + 1))
-buf_ver=$(buf --version 2>/dev/null | head -1 || echo "missing") ; [ "$buf_ver" = "missing" ] && missing=$((missing + 1))
-pgg_status="ok" ; command -v protoc-gen-go &>/dev/null || { pgg_status="missing"; missing=$((missing + 1)); }
 
 # Go modules status
 go_mod_status="cached"
@@ -134,7 +99,7 @@ if ! (cd "$REPO_ROOT/gateway-go" && go mod verify) &>/dev/null 2>&1; then
     go_mod_status="missing"
 fi
 
-echo "  [env] $go_ver protoc=$protoc_ver buf=$buf_ver protoc-gen-go=$pgg_status"
+echo "  [env] $go_ver"
 # MCP server status
 mcp_status="ready"
 if [ ! -f "$REPO_ROOT/bin/deneb-mcp" ]; then

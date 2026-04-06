@@ -5,12 +5,9 @@
 .PHONY: all \
        go go-run go-dev go-test go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod \
        test clean check check-go fmt generate generate-check \
-       proto proto-go proto-check proto-lint proto-watch \
        tool-schemas tool-schemas-check \
        model-caps model-caps-check \
-       error-codes-gen error-codes-gen-check \
        data-gen data-gen-check \
-       ffi-gen ffi-gen-check proto-error-codes-gen proto-error-codes-gen-check error-code-sync \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -116,41 +113,22 @@ check/fast: go-fmt go-vet
 	@echo "Fast checks passed (fmt + lint, no tests)"
 
 # Run all code generation pipelines in dependency order.
-generate: proto tool-schemas model-caps error-codes-gen data-gen
+generate: tool-schemas model-caps data-gen
 	@echo "All code generation pipelines completed"
 
 # Verify generated sources are up to date.
 # Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@echo "==> [1/4] proto types (proto -> Go)"
-	@$(MAKE) proto-check
-	@echo "==> [2/4] tool schemas (tool_schemas.yaml -> tool_schemas_gen.go)"
+	@echo "==> [1/3] tool schemas (tool_schemas.yaml -> tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
-	@echo "==> [3/4] model capabilities (model_caps.yaml -> model_caps_gen.go)"
+	@echo "==> [2/3] model capabilities (model_caps.yaml -> model_caps_gen.go)"
 	@$(MAKE) model-caps-check
-	@echo "==> [4/4] data tables (*.yaml -> *_gen.go)"
+	@echo "==> [3/3] data tables (*.yaml -> *_gen.go)"
 	@$(MAKE) data-gen-check
 	@echo "All generation checks passed"
 
 fmt:
 	cd gateway-go && gofmt -w .
-
-# --- Protobuf code generation ---
-
-proto:
-	./scripts/proto-gen.sh
-
-proto-go:
-	./scripts/proto-gen.sh --go
-
-proto-check:
-	./scripts/proto-gen.sh --check
-
-proto-lint:
-	./scripts/proto-gen.sh --lint
-
-proto-watch:
-	./scripts/proto-gen.sh --watch
 
 # --- Tool schema code generation ---
 
@@ -181,27 +159,6 @@ model-caps-check:
 		-yaml internal/autoreply/thinking/model_caps.yaml \
 		-out  internal/autoreply/thinking/model_caps_gen.go
 	@git diff --exit-code -- gateway-go/internal/autoreply/thinking/model_caps_gen.go
-
-# --- Error code generation (Go only) ---
-#
-# proto/gateway.proto is the single source of truth for error codes:
-#   - ErrorCode enum -> Go string constants (errors_gen.go)
-#   - FfiErrorCode enum -> Go int constants (ffi_error_codes_gen.go)
-
-# Regenerate error code files from proto/gateway.proto.
-error-codes-gen:
-	./scripts/gen-error-codes.sh
-
-# Verify error code files are up to date.
-error-codes-gen-check:
-	./scripts/gen-error-codes.sh --check
-
-# Legacy aliases — kept for backward compatibility.
-ffi-gen: error-codes-gen
-ffi-gen-check: error-codes-gen-check
-proto-error-codes-gen: error-codes-gen
-proto-error-codes-gen-check: error-codes-gen-check
-error-code-sync: error-codes-gen-check
 
 # --- Data table code generation ---
 #
@@ -241,7 +198,3 @@ info:
 	@echo "  make generate-check   - Verify all generated files"
 	@echo "  make clean      - Clean Go build artifacts"
 	@echo "  make go-bench   - Run Go gateway benchmarks"
-	@echo "  make proto      - Generate protobuf code (Go)"
-	@echo "  make proto-check - Generate + verify no uncommitted diffs"
-	@echo "  make proto-lint  - Lint proto files only"
-	@echo "  make proto-watch - Watch proto files and regenerate on change"
