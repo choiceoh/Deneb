@@ -336,11 +336,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		}
 	}
 
-	// Autonomous continuation is only active in Work mode (or DeepWork).
-	// Normal and Chat modes complete after a single run.
+	// Autonomous continuation is active in Normal and Work modes (or DeepWork).
+	// Chat mode (conversation-only) completes after a single run.
 	if !params.DeepWork {
 		sess := deps.sessions.Get(params.SessionKey)
-		if sess == nil || sess.Mode != session.ModeWork {
+		if sess == nil || sess.Mode == session.ModeChat {
 			return
 		}
 	}
