@@ -2,8 +2,10 @@ package cron
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -232,15 +234,21 @@ func readJSONLEntries(path string) []RunLogEntry {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+		line := scanner.Bytes()
+		if len(strings.TrimSpace(string(line))) == 0 {
 			continue
 		}
-		var entry RunLogEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue // skip malformed lines
+		dec := json.NewDecoder(bytes.NewReader(line))
+		for {
+			var entry RunLogEntry
+			if err := dec.Decode(&entry); err != nil {
+				if err != io.EOF {
+					// skip malformed tail
+				}
+				break
+			}
+			entries = append(entries, entry)
 		}
-		entries = append(entries, entry)
 	}
 	return entries
 }

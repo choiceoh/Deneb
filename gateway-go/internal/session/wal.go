@@ -7,8 +7,10 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -182,22 +184,33 @@ func (w *WAL) replayFile(path string) int {
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	for scanner.Scan() {
-		var entry walEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-			w.logger.Warn("wal: skipping corrupt entry", "error", err)
+		line := scanner.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
-		switch entry.Op {
-		case walOpSet:
-			if entry.Session == nil {
-				continue
+		// Use Decoder instead of Unmarshal to recover entries from
+		// concatenated lines (e.g. "{...}{...}" after a partial write).
+		dec := json.NewDecoder(bytes.NewReader(line))
+		for {
+			var entry walEntry
+			if err := dec.Decode(&entry); err != nil {
+				if err != io.EOF {
+					w.logger.Warn("wal: skipping corrupt entry", "error", err)
+				}
+				break
 			}
-			// Direct set bypasses state machine validation during replay
-			// since entries were already validated when originally written.
-			w.mgr.replaySet(entry.Session)
-			restored++
-		case walOpDelete:
-			w.mgr.Delete(entry.Key)
+			switch entry.Op {
+			case walOpSet:
+				if entry.Session == nil {
+					continue
+				}
+				// Direct set bypasses state machine validation during replay
+				// since entries were already validated when originally written.
+				w.mgr.replaySet(entry.Session)
+				restored++
+			case walOpDelete:
+				w.mgr.Delete(entry.Key)
+			}
 		}
 	}
 

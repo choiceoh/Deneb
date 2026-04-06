@@ -2,8 +2,10 @@ package chat
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,11 +57,17 @@ func (s *FileTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage,
 		if len(line) == 0 {
 			continue
 		}
-		var msg ChatMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			continue // Skip malformed lines.
+		dec := json.NewDecoder(bytes.NewReader(line))
+		for {
+			var msg ChatMessage
+			if err := dec.Decode(&msg); err != nil {
+				if err != io.EOF {
+					// skip malformed tail
+				}
+				break
+			}
+			all = append(all, msg)
 		}
-		all = append(all, msg)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, 0, fmt.Errorf("read transcript: %w", err)

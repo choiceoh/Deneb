@@ -7,8 +7,10 @@ package transcript
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -214,30 +216,35 @@ func (w *Writer) ReadPreview(sessionKey string, maxItems int) ([]PreviewItem, er
 			continue // Skip header.
 		}
 
-		var msg struct {
-			Role      string `json:"role"`
-			Content   string `json:"content"`
-			Type      string `json:"type"`
-			Timestamp int64  `json:"timestamp"`
-		}
-		if err := json.Unmarshal(line, &msg); err != nil {
-			continue // Skip malformed lines.
-		}
+		dec := json.NewDecoder(bytes.NewReader(line))
+		for {
+			var msg struct {
+				Role      string `json:"role"`
+				Content   string `json:"content"`
+				Type      string `json:"type"`
+				Timestamp int64  `json:"timestamp"`
+			}
+			if err := dec.Decode(&msg); err != nil {
+				if err != io.EOF {
+					// skip malformed tail
+				}
+				break
+			}
 
-		item := PreviewItem{
-			Role:      msg.Role,
-			Content:   msg.Content,
-			Type:      msg.Type,
-			Timestamp: msg.Timestamp,
-		}
-		// Truncate long content for preview.
-		if len(item.Content) > 500 {
-			item.Content = item.Content[:497] + "..."
-		}
+			item := PreviewItem{
+				Role:      msg.Role,
+				Content:   msg.Content,
+				Type:      msg.Type,
+				Timestamp: msg.Timestamp,
+			}
+			if len(item.Content) > 500 {
+				item.Content = item.Content[:497] + "..."
+			}
 
-		ring = append(ring, item)
-		if len(ring) > maxItems {
-			ring = ring[1:]
+			ring = append(ring, item)
+			if len(ring) > maxItems {
+				ring = ring[1:]
+			}
 		}
 	}
 
