@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 
@@ -106,17 +108,56 @@ func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 
 func buildBannerInfo(version, addr string, vegaEnabled bool) logging.BannerInfo {
 	localAIBannerURL := modelrole.DefaultVllmBaseURL
-	localAIStatus := "offline"
-	if vega.IsLocalAIReachable(localAIBannerURL) {
-		localAIStatus = "online"
-	}
+
+	// Probe local services concurrently (each has 3s timeout).
+	var localAIStatus, rerankerInfo string
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if vega.IsLocalAIReachable(localAIBannerURL) {
+			localAIStatus = "online"
+		} else {
+			localAIStatus = "offline"
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		rerankerInfo = detectRerankerInfo()
+	}()
+	wg.Wait()
+
 	return logging.BannerInfo{
-		Version:      version,
-		Addr:         addr,
-		RustFFI:      ffi.Available,
-		VegaEnabled:  vegaEnabled,
+		Version:       version,
+		Addr:          addr,
+		RustFFI:       ffi.Available,
+		VegaEnabled:   vegaEnabled,
 		LocalAIStatus: localAIStatus,
+		EmbedderInfo:  detectEmbedderInfo(),
+		RerankerInfo:  rerankerInfo,
 	}
+}
+
+func detectEmbedderInfo() string {
+	if modelPath := os.Getenv("DENEB_EMBED_MODEL"); modelPath != "" {
+		if _, err := os.Stat(modelPath); err == nil {
+			return strings.TrimSuffix(filepath.Base(modelPath), filepath.Ext(modelPath))
+		}
+	}
+	if os.Getenv("GEMINI_API_KEY") != "" {
+		return "gemini"
+	}
+	return ""
+}
+
+func detectRerankerInfo() string {
+	if vega.IsRerankerReachable() {
+		return "jina-v3"
+	}
+	if os.Getenv("JINA_API_KEY") != "" {
+		return "jina-api"
+	}
+	return ""
 }
 
 func resolvePIDPath(pidFile, cfgDir string) string {
