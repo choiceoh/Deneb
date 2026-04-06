@@ -26,6 +26,7 @@ import (
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
+	handlerrl "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/rl"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
@@ -88,6 +89,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerskill.Methods(handlerskill.Deps{
 			Skills:      hub.Skills(),
 			Broadcaster: hub.Broadcast,
+		}),
+
+		// --- RL self-learning ---
+		handlerrl.Methods(handlerrl.Deps{
+			Service: hub.RLService(),
 		}),
 
 		// --- Inter-agent bridge ---
@@ -212,6 +218,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		handleraurorachannel.Methods(handleraurorachannel.Deps{Chat: hub.Chat()}),
 		handlerautoresearch.Methods(handlerautoresearch.Deps{
 			Runner: s.autoresearchRunner,
+		}),
+
+		// --- Skill genesis (depends on chatHandler for LLM client) ---
+		handlerskill.GenesisMethods(handlerskill.GenesisDeps{
+			Genesis: s.genesisSvc,
+			Evolver: s.genesisEvolver,
+			Tracker: s.genesisTracker,
 		}),
 	}
 

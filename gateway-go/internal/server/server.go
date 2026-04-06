@@ -83,6 +83,7 @@ type Server struct {
 	*MemorySubsystem
 	*AutonomousSubsystem
 	*InfraSubsystem
+	*GenesisSubsystem
 
 	dedupe      *dedupe.Tracker
 	broadcaster *events.Broadcaster
@@ -141,6 +142,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		ServerRuntime:       &ServerRuntime{},
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
+		GenesisSubsystem:    &GenesisSubsystem{},
 		rustFFI:             ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
@@ -233,6 +235,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		hub.SetLocalAIHub(s.localAIHub)
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
+	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)
 	s.registerLateMethods(hub)             // Chat-dependent domains
 	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
 

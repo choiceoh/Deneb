@@ -246,7 +246,15 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6b2. Stop local AI hub (drains queued requests, cancels in-flight).
+	// 6b2. Cleanup genesis subsystem.
+	if s.genesisSvc != nil {
+		s.genesisSvc.Stop()
+	}
+	if s.genesisTracker != nil {
+		s.genesisTracker.Close()
+	}
+
+	// 6b3. Stop local AI hub (drains queued requests, cancels in-flight).
 	if s.localAIHub != nil {
 		s.localAIHub.Shutdown()
 	}
