@@ -109,7 +109,6 @@ func BenchmarkDetectMIME_JSON(b *testing.B) {
 	}
 }
 
-
 // --- Link extraction (hot path: per-message) ---
 
 func BenchmarkExtractLinks(b *testing.B) {
@@ -172,4 +171,3 @@ func BenchmarkHtmlToMarkdown(b *testing.B) {
 		_, _, _ = HtmlToMarkdown(html)
 	}
 }
-

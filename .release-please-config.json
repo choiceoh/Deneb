@@ -13,14 +13,6 @@
           "type": "json",
           "path": "package.json",
           "jsonpath": "$.version"
-        },
-        {
-          "type": "generic",
-          "path": "core-rs/core/Cargo.toml"
-        },
-        {
-          "type": "generic",
-          "path": "cli-rs/Cargo.toml"
         }
       ]
     }

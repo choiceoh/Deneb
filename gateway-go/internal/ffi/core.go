@@ -1,13 +1,4 @@
-//go:build !no_ffi && cgo
-
 package ffi
-
-/*
-// Static linking avoids LD_LIBRARY_PATH issues at runtime.
-#cgo LDFLAGS: ${SRCDIR}/../../../core-rs/target/release/libdeneb_core.a -lm -ldl -lpthread -lstdc++ -lgomp
-#cgo CFLAGS: -I${SRCDIR}
-*/
-import "C"
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/coremedia"
@@ -15,7 +6,9 @@ import (
 )
 
 // Available reports whether the Rust FFI library is linked.
-const Available = true
+// Always false since the Rust core was removed; kept for API compatibility
+// so callers can check and degrade gracefully.
+const Available = false
 
 // ConstantTimeEq delegates to coresecurity.ConstantTimeEq (pure Go, crypto/subtle).
 func ConstantTimeEq(a, b []byte) bool {

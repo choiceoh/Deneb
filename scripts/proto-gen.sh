@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 # Protobuf code generation pipeline.
 #
-# Generates Go and Rust types from proto/ definitions.
+# Generates Go types from proto/ definitions.
 #
 # Prerequisites:
 #   - buf (https://buf.build/docs/installation)
 #   - protoc (apt install protobuf-compiler / brew install protobuf)
 #   - protoc-gen-go (go install google.golang.org/protobuf/cmd/protoc-gen-go@latest)
-#   - Rust toolchain (for prost-build via cargo build)
 #
 # Usage:
-#   ./scripts/proto-gen.sh          # generate all (parallel)
-#   ./scripts/proto-gen.sh --go     # Go only
-#   ./scripts/proto-gen.sh --rust   # Rust only
+#   ./scripts/proto-gen.sh          # generate all
+#   ./scripts/proto-gen.sh --go     # Go only (same as default)
 #   ./scripts/proto-gen.sh --check  # generate + verify no uncommitted diffs
 #   ./scripts/proto-gen.sh --lint   # lint proto files only
 #   ./scripts/proto-gen.sh --watch  # watch proto files and regenerate on change
@@ -65,20 +63,11 @@ cleanup_on_signal() {
 # --- Prerequisite checks (run once) ---
 
 check_prereqs() {
-  local need_buf="${1:-}" need_rust="${2:-}"
-
   [ -d "$PROTO_DIR" ] || fail "Proto directory not found: $PROTO_DIR"
   local count
   count=$(find "$PROTO_DIR" -maxdepth 1 -name "*.proto" -type f | wc -l)
   [ "$count" -gt 0 ] || fail "No .proto files found in $PROTO_DIR"
-
-  if [ "$need_buf" = "buf" ]; then
-    command -v buf &>/dev/null || fail "buf not found. Install: https://buf.build/docs/installation"
-  fi
-  if [ "$need_rust" = "rust" ]; then
-    command -v cargo &>/dev/null || fail "cargo not found. Install: https://rustup.rs"
-    command -v protoc &>/dev/null || fail "protoc not found. Install: apt install protobuf-compiler / brew install protobuf"
-  fi
+  command -v buf &>/dev/null || fail "buf not found. Install: https://buf.build/docs/installation"
 }
 
 # --- Proto hash for skip optimization ---
@@ -87,7 +76,6 @@ compute_proto_hash() {
   # Hash proto files + gen configs to detect changes.
   cat "$PROTO_DIR"/*.proto \
     "$PROTO_DIR"/buf.gen.go.yaml \
-    "$REPO_ROOT/core-rs/core/build.rs" \
     2>/dev/null | sha256sum | cut -d' ' -f1
 }
 
@@ -166,47 +154,11 @@ gen_go() {
   verify_output "$GO_OUT" "*.pb.go" "Go"
 }
 
-gen_rust() {
-  info "Generating Rust via prost-build (output in cargo OUT_DIR)"
-  local output
-  if ! output=$(cd "$REPO_ROOT/core-rs" && cargo check 2>&1); then
-    echo "$output" >&2
-    fail "Rust protobuf generation failed (see cargo output above)"
-  fi
-  info "Rust generation complete"
-}
-
-# Run Go and Rust generation in parallel.
-gen_all_parallel() {
-  check_prereqs buf rust
+gen_all() {
+  check_prereqs
   info "Linting proto files..."
   (cd "$PROTO_DIR" && buf lint) || fail "buf lint failed — fix proto errors before generating"
-
-  local go_log rust_log
-  go_log=$(mktemp) rust_log=$(mktemp)
-
-  # Launch both in parallel.
-  gen_go   > "$go_log"   2>&1 &
-  local go_pid=$!
-  gen_rust > "$rust_log"  2>&1 &
-  local rust_pid=$!
-
-  local failures=()
-
-  wait "$go_pid"   || failures+=("Go")
-  wait "$rust_pid"  || failures+=("Rust")
-
-  # Print output (success and failure both).
-  cat "$go_log" "$rust_log"
-  rm -f "$go_log" "$rust_log"
-
-  if [ ${#failures[@]} -gt 0 ]; then
-    fail "Generation failed for: ${failures[*]}"
-  fi
-
-  # Only save the hash after both generators succeeded. Guarded explicitly here
-  # (fail() already exits the script) to make the success invariant clear and
-  # resistant to future refactors that might change the error-handling path.
+  gen_go
   save_hash
 }
 
@@ -249,7 +201,7 @@ check_diffs() {
 # --- Standalone commands (no lock needed) ---
 
 lint_only() {
-  check_prereqs buf
+  check_prereqs
   info "Linting proto files..."
   (cd "$PROTO_DIR" && buf lint) || fail "buf lint failed"
   info "Lint passed"
@@ -266,18 +218,18 @@ watch_protos() {
   fi
 
   info "Watching $PROTO_DIR for changes (Ctrl+C to stop)..."
-  (gen_all_parallel) || warn "Initial generation failed — watching for changes anyway"
+  (gen_all) || warn "Initial generation failed — watching for changes anyway"
 
   if [ "$watch_cmd" = "fswatch" ]; then
     fswatch -0 --event Updated --include '\.proto$' --exclude '.*' "$PROTO_DIR" | while read -r -d '' _; do
       info "Change detected — regenerating..."
-      (gen_all_parallel) 2>&1 || warn "Generation failed (will retry on next change)"
+      (gen_all) 2>&1 || warn "Generation failed (will retry on next change)"
     done
   else
     while true; do
       inotifywait -q -e modify,create,delete "$PROTO_DIR" --include '\.proto$' >/dev/null 2>&1
       info "Change detected — regenerating..."
-      (gen_all_parallel) 2>&1 || warn "Generation failed (will retry on next change)"
+      (gen_all) 2>&1 || warn "Generation failed (will retry on next change)"
     done
   fi
 }
@@ -302,25 +254,21 @@ trap 'release_lock' EXIT
 
 case "${1:-all}" in
   --go)
-    check_prereqs buf
+    check_prereqs
     gen_go
-    ;;
-  --rust)
-    check_prereqs "" rust
-    gen_rust
     ;;
   --check)
     if is_up_to_date; then
       info "Proto hash unchanged — skipping regeneration"
     else
-      gen_all_parallel
+      gen_all
     fi
     check_diffs
     ;;
   all|"")
-    gen_all_parallel
+    gen_all
     ;;
   *)
-    fail "Unknown option: $1. Use --go, --rust, --check, --lint, --watch, or no args."
+    fail "Unknown option: $1. Use --go, --check, --lint, --watch, or no args."
     ;;
 esac

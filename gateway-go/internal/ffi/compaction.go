@@ -1,5 +1,3 @@
-//go:build no_ffi || !cgo
-
 package ffi
 
 import (
@@ -8,7 +6,7 @@ import (
 	"math"
 )
 
-// CompactionEvaluate is a pure-Go fallback for compaction threshold evaluation.
+// CompactionEvaluate evaluates whether compaction is needed (pure Go).
 func CompactionEvaluate(configJSON string, storedTokens, liveTokens, tokenBudget uint64) ([]byte, error) {
 	var config struct {
 		ContextThreshold float64 `json:"contextThreshold"`
@@ -47,20 +45,20 @@ func CompactionEvaluate(configJSON string, storedTokens, liveTokens, tokenBudget
 	return json.Marshal(d)
 }
 
-// CompactionSweepNew is not available without FFI.
+// CompactionSweepNew is not available (Rust FFI removed).
 func CompactionSweepNew(_ string, _, _ uint64, _, _ bool, _ int64) (uint32, error) {
-	return 0, errors.New("ffi: compaction sweep not available without native FFI")
+	return 0, errors.New("ffi: compaction sweep not available (Rust FFI removed)")
 }
 
-// CompactionSweepStart is not available without FFI.
+// CompactionSweepStart is not available (Rust FFI removed).
 func CompactionSweepStart(_ uint32) (json.RawMessage, error) {
-	return nil, errors.New("ffi: compaction sweep not available without native FFI")
+	return nil, errors.New("ffi: compaction sweep not available (Rust FFI removed)")
 }
 
-// CompactionSweepStep is not available without FFI.
+// CompactionSweepStep is not available (Rust FFI removed).
 func CompactionSweepStep(_ uint32, _ []byte) (json.RawMessage, error) {
-	return nil, errors.New("ffi: compaction sweep not available without native FFI")
+	return nil, errors.New("ffi: compaction sweep not available (Rust FFI removed)")
 }
 
-// CompactionSweepDrop is a no-op without FFI.
+// CompactionSweepDrop is a no-op (Rust FFI removed).
 func CompactionSweepDrop(_ uint32) {}

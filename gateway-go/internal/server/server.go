@@ -22,7 +22,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
@@ -87,17 +86,16 @@ type Server struct {
 	*InfraSubsystem
 	*GenesisSubsystem
 
-	dedupe      *dedupe.Tracker
-	broadcaster *events.Broadcaster
-	publisher   *events.Publisher
-	processes   *process.Manager
-	daemon      *daemon.Daemon
+	dedupe        *dedupe.Tracker
+	broadcaster   *events.Broadcaster
+	publisher     *events.Publisher
+	processes     *process.Manager
+	daemon        *daemon.Daemon
 	runtimeCfg    *config.GatewayRuntimeConfig
 	configWatcher *config.Watcher
 	version       string
-	rustFFI     bool // true when Rust FFI is available
-	logColor    bool // true when ANSI color output is enabled
-	logger      *slog.Logger
+	logColor      bool // true when ANSI color output is enabled
+	logger        *slog.Logger
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
@@ -152,7 +150,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
 		GenesisSubsystem:    &GenesisSubsystem{},
-		rustFFI:             ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
 			protocol.DedupeMax,

@@ -1,9 +1,6 @@
-// Package ffi provides Go bindings to the Rust deneb-core library via CGo.
-//
-// The Rust library (core-rs/) is compiled to a C-compatible static library
-// (libdeneb_core.a) and linked here via CGo.
-//
-// Exported function groups:
+// Package ffi provides the interface for functionality that was previously
+// backed by the Rust deneb-core library via CGo. All functions are now
+// implemented in pure Go; the Rust core has been fully removed.
 //
 // Security & Protocol:
 //   - ValidateFrame: Gateway frame JSON validation
@@ -17,43 +14,27 @@
 // Media:
 //   - DetectMIME: Magic-byte MIME type detection
 //
-// Parsing (pre-LLM):
+// Parsing:
 //   - ExtractLinks: URL extraction with SSRF checks
 //   - HtmlToMarkdown: HTML to Markdown conversion
 //   - Base64Estimate / Base64Canonicalize: Base64 utilities
 //   - ParseMediaTokens: MEDIA: token extraction
 //
-// Memory Search (SIMD-accelerated):
-//   - MemoryCosineSimilarity: Vector cosine similarity
-//   - MemoryBm25RankToScore: BM25 rank normalization
-//   - MemoryBuildFtsQuery: Full-text search query builder
-//   - MemoryMergeHybridResults: Hybrid search merge pipeline
-//   - MemoryExtractKeywords: Multilingual keyword extraction
-//
 // Markdown:
-//   - MarkdownToIR: Markdown to IR parser (pulldown-cmark)
+//   - MarkdownToIR: Markdown to IR parser (goldmark-based)
 //   - MarkdownDetectFences: Fenced code block detection
 //   - MarkdownToPlainText: Markdown stripping convenience
 //
-// Context Engine:
-//   - ContextAssemblyNew/Start/Step: Aurora context assembly
-//   - ContextExpandNew/Start/Step: Memory retrieval expansion
-//   - ContextEngineDrop: Handle cleanup
+// Context Engine (stubs, being replaced by RLM):
+//   - ContextAssemblyNew/Start/Step: returns unavailable
+//   - ContextExpandNew/Start/Step: returns unavailable
+//   - ContextEngineDrop: no-op
 //
 // Compaction:
-//   - CompactionEvaluate: Compaction threshold evaluation
-//   - CompactionSweepNew/Start/Step/Drop: Sweep state machine
+//   - CompactionEvaluate: pure-Go threshold evaluation
+//   - CompactionSweepNew/Start/Step/Drop: returns unavailable
 //
-// Vega FFI (requires "vega" feature in deneb-core):
-//   - VegaExecute: Execute a Vega command
-//   - VegaSearch: Execute a Vega search query
-//
-// Build requirements:
-//   - Rust toolchain with cargo
-//   - Run `make rust` first to produce the static library
-//   - CGO_ENABLED=1 (default) when building Go
-//
-// When the Rust library is not available (e.g. CI without Rust, pure-Go
-// development), use the `no_ffi` build tag to compile with pure-Go
-// fallbacks instead: `go build -tags no_ffi ./...`
+// ML (stubs):
+//   - MLEmbed/MLEmbedCtx: returns unavailable
+//   - MLAvailable: returns false
 package ffi

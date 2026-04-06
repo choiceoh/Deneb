@@ -9,9 +9,6 @@ on:
   pull_request:
     paths:
       - "proto/**"
-      - "core-rs/core/build.rs"
-      - "core-rs/core/Cargo.toml"
-      - "core-rs/Cargo.toml"
       - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
@@ -22,9 +19,6 @@ on:
     branches: [main]
     paths:
       - "proto/**"
-      - "core-rs/core/build.rs"
-      - "core-rs/core/Cargo.toml"
-      - "core-rs/Cargo.toml"
       - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
@@ -58,9 +52,6 @@ jobs:
           filters: |
             proto:
               - "proto/**"
-              - "core-rs/core/build.rs"
-              - "core-rs/core/Cargo.toml"
-              - "core-rs/Cargo.toml"
               - "scripts/proto-gen.sh"
               - "scripts/gen-error-codes.sh"
             tool-schemas:
@@ -72,7 +63,7 @@ jobs:
 
 # ── Domain check jobs ──────────────────────────────────────────────────────
 
-  # proto → Go types + Rust types + error codes (ErrorCode + FfiErrorCode)
+  # proto -> Go types + error codes (ErrorCode + FfiErrorCode)
   proto:
     name: proto types + error codes
     needs: changes
@@ -89,25 +80,19 @@ jobs:
           cache: true
           cache-dependency-path: gateway-go/go.sum
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core-rs
-
       - name: Install protoc + Go plugin
         run: |
           sudo apt-get install -y protobuf-compiler &
           go install google.golang.org/protobuf/cmd/protoc-gen-go@${{ env.PROTOC_GEN_GO_VERSION }} &
           wait
 
-      - name: proto generate check (proto → Go + Rust)
+      - name: proto generate check (proto -> Go)
         run: make proto-check
 
-      - name: error codes check (gateway.proto → Rust + Go)
+      - name: error codes check (gateway.proto -> Go)
         run: make error-codes-gen-check
 
-  # tool_schemas.yaml → tool_schemas_gen.go
+  # tool_schemas.yaml -> tool_schemas_gen.go
   tool-schemas:
     name: tool schemas
     needs: changes
@@ -125,10 +110,10 @@ jobs:
       - name: Install pyyaml
         run: pip install pyyaml
 
-      - name: tool schemas check (tool_schemas.yaml → tool_schemas_gen.go)
+      - name: tool schemas check (tool_schemas.yaml -> tool_schemas_gen.go)
         run: make tool-schemas-check
 
-  # model_caps.yaml → model_caps_gen.go
+  # model_caps.yaml -> model_caps_gen.go
   model-caps:
     name: model capabilities
     needs: changes
@@ -146,5 +131,5 @@ jobs:
       - name: Install pyyaml
         run: pip install pyyaml
 
-      - name: model caps check (model_caps.yaml → model_caps_gen.go)
+      - name: model caps check (model_caps.yaml -> model_caps_gen.go)
         run: make model-caps-check

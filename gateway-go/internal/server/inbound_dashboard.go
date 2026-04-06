@@ -42,13 +42,7 @@ func (p *InboundProcessor) handleStatusDashboardCommand(chatID, sessionKey strin
 		b.WriteByte('\n')
 	}
 
-	// Rust FFI status.
-	rustIcon := "❌"
-	if p.server.rustFFI {
-		rustIcon = "✅"
-	}
-	b.WriteString("🔧 <b>Rust Core:</b> ")
-	b.WriteString(rustIcon)
+	b.WriteString("🔧 <b>Core:</b> pure Go")
 
 	// Session count.
 	if p.server.sessions != nil {

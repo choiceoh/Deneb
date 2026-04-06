@@ -10,9 +10,8 @@ import (
 func TestPrintBanner_NoColor(t *testing.T) {
 	var buf bytes.Buffer
 	info := BannerInfo{
-		Version:      "3.25.0",
-		Addr:         "127.0.0.1:18789",
-		RustFFI:      true,
+		Version:       "3.25.0",
+		Addr:          "127.0.0.1:18789",
 		LocalAIStatus: "online",
 	}
 	PrintBanner(&buf, info, false)
@@ -21,7 +20,6 @@ func TestPrintBanner_NoColor(t *testing.T) {
 	for _, want := range []string{
 		"deneb gateway",
 		"3.25.0",
-		"rust-ffi",
 		"127.0.0.1:18789",
 		"localai",
 		"online",
@@ -41,9 +39,9 @@ func TestPrintBanner_NoColor(t *testing.T) {
 func TestPrintBanner_WithColor(t *testing.T) {
 	var buf bytes.Buffer
 	info := BannerInfo{
-		Version:      "3.25.0",
-		Addr:         "127.0.0.1:18789",
-		RustFFI:      false,
+		Version:       "3.25.0",
+		Addr:          "127.0.0.1:18789",
+		RustFFI:       false,
 		LocalAIStatus: "offline",
 	}
 	PrintBanner(&buf, info, true)

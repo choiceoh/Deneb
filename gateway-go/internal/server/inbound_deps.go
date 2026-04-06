@@ -32,7 +32,7 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 	sd := &handlers.StatusDeps{
 		Version:   p.server.version,
 		StartedAt: p.server.startedAt,
-		RustFFI:   p.server.rustFFI,
+		RustFFI:   false,
 	}
 	if p.server.sessions != nil {
 		sd.SessionCount = p.server.sessions.Count()
