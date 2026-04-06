@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
@@ -93,6 +94,12 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			s.wikiStore = wikiStore
 			chatCfg.WikiStore = wikiStore
 			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
+
+			// RLM service backed by wiki (feature-flagged).
+			if rlmCfg := rlm.ConfigFromEnv(); rlmCfg.Enabled {
+				s.rlmService = rlm.NewService(rlmCfg, wikiStore, s.logger)
+				s.logger.Info("rlm: service enabled (wiki-backed)")
+			}
 
 			// Wiki dreamer (replaces memory dreaming when wiki is active).
 			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
