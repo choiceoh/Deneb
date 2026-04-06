@@ -52,9 +52,9 @@ context 구조: [struct(seq=1, role="user", content="...", created_at=1712000000
 ## 데이터 접근 원칙
 
 프로젝트 데이터에는 반드시 도구를 통해 접근하세요:
-1. 과거 결정/인물/기술 지식 → wiki
-2. 프로젝트 데이터 → projects_list, projects_get_field, projects_search
-3. 과거 대화 기억 → memory_recall_rlm 또는 repl로 context 검색
+1. 과거 결정/인물/기술 지식 → wiki 또는 memory_recall_rlm
+2. 프로젝트 데이터 → projects_list, projects_get_field, projects_search, projects_get_document
+3. 과거 대화 기억 → repl로 context 검색 또는 memory_recall_rlm
 4. 단순 인사나 일반 질문에는 도구를 사용하지 말 것`, cfg.FreshTailCount)
 }
 

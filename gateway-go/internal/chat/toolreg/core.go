@@ -494,34 +494,41 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 
 // RegisterRLMTools registers RLM (Recursive Language Model) Phase 1 tools
 // for context externalization. These let the LLM fetch project data and
-// memory on demand instead of relying on pre-injected context.
-func RegisterRLMTools(registry toolctx.ToolRegistrar, vegaDeps *toolctx.VegaDeps) {
+// memory on demand via wiki instead of relying on pre-injected context.
+func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "projects_list",
 		Description:     "프로젝트 목록과 메타데이터 조회. 본문 데이터 없음, ID/이름/상태/지역 등 목록만 반환",
 		InputSchema:     projectsListToolSchema(),
-		Fn:              tools.ToolProjectsList(vegaDeps),
+		Fn:              tools.ToolProjectsList(wikiDeps),
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "projects_get_field",
 		Description:     "특정 프로젝트의 특정 필드만 조회. 전체 문서를 가져오지 않고 필요한 값만 반환",
 		InputSchema:     projectsGetFieldToolSchema(),
-		Fn:              tools.ToolProjectsGetField(vegaDeps),
+		Fn:              tools.ToolProjectsGetField(wikiDeps),
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "projects_search",
 		Description:     "자연어 쿼리로 프로젝트 데이터 검색. 관련 프로젝트와 스니펫 반환",
 		InputSchema:     projectsSearchToolSchema(),
-		Fn:              tools.ToolProjectsSearch(vegaDeps),
+		Fn:              tools.ToolProjectsSearch(wikiDeps),
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "projects_get_document",
 		Description:     "프로젝트 원본 문서 조회. 섹션 미지정 시 목차만 반환, 섹션 지정 시 해당 섹션 내용 반환",
 		InputSchema:     projectsGetDocumentToolSchema(),
-		Fn:              tools.ToolProjectsGetDocument(vegaDeps),
+		Fn:              tools.ToolProjectsGetDocument(wikiDeps),
+		ConcurrencySafe: true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "memory_recall_rlm",
+		Description:     "위키 전체에서 과거 결정/인물/기술/프로젝트 등 장기 기억 검색. 카테고리 무관 전문 검색",
+		InputSchema:     memoryRecallRlmToolSchema(),
+		Fn:              tools.ToolMemoryRecall(wikiDeps),
 		ConcurrencySafe: true,
 	})
 }

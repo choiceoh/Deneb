@@ -37,7 +37,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 	// RLM: context externalization tools (feature-flagged).
 	if cfg := rlm.ConfigFromEnv(); cfg.Enabled {
-		toolreg.RegisterRLMTools(registry, &deps.Vega)
+		toolreg.RegisterRLMTools(registry, &deps.Wiki)
 
 		if cfg.SubLLMEnabled && deps.LLMClient != nil {
 			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg)

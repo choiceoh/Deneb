@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rl"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
@@ -76,6 +77,9 @@ type HubConfig struct {
 	// RL self-learning (optional, nil when rl.enable=false).
 	RLService *rl.Service
 
+	// RLM context externalization (optional, nil when DENEB_RLM_ENABLED=false).
+	RLMService *rlm.Service
+
 	// Metadata.
 	Logger  *slog.Logger
 	Version string // optional
@@ -118,6 +122,9 @@ type GatewayHub struct {
 	// RL self-learning pipeline (optional, nil when rl is disabled).
 	rlService *rl.Service
 
+	// RLM context externalization (optional, nil when RLM is disabled).
+	rlmService *rlm.Service
+
 	// Wiki knowledge base (optional, nil when wiki is disabled).
 	wikiStore *wiki.Store
 
@@ -149,6 +156,7 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		wizard:         cfg.Wizard,
 		talk:           cfg.Talk,
 		rlService:      cfg.RLService,
+		rlmService:     cfg.RLMService,
 		logger:         cfg.Logger,
 		version:        cfg.Version,
 		phase:          PhaseInit,
@@ -174,6 +182,7 @@ func (h *GatewayHub) Skills() *skill.Manager                         { return h.
 func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
 func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
 func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
+func (h *GatewayHub) RLMService() *rlm.Service                      { return h.rlmService }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
