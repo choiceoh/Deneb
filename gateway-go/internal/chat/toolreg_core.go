@@ -63,6 +63,13 @@ var rlmDataToolNames = []string{
 	"memory_recall_rlm",
 }
 
+// rlmSpawnToolNames are tools that must never be given to sub-LLMs
+// (unbounded recursion).
+var rlmSpawnToolNames = map[string]bool{
+	"llm_spawn":       true,
+	"llm_spawn_batch": true,
+}
+
 // buildRLMSpawnFuncs creates the spawn/batch closures that capture the LLM
 // client, tool registry, and config needed by Phase 2 sub-LLM tools.
 // Each invocation creates a fresh TokenBudget so budgets are per-call,
@@ -76,7 +83,7 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 	spawnFn := func(ctx context.Context, prompt string, toolNames []string, maxTokens, maxTurns int) (*rlm.SubAgentResult, error) {
 		selectedTools := subTools
 		if len(toolNames) > 0 {
-			selectedTools = registry.FilteredLLMTools(filterMap(toolNames))
+			selectedTools = registry.FilteredLLMTools(filterMap(stripSpawnTools(toolNames)))
 		}
 
 		// Fresh budget per call — prevents cumulative exhaustion across requests.
@@ -98,7 +105,7 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 	batchFn := func(ctx context.Context, prompts []string, toolNames []string, maxTokens int) ([]rlm.SubAgentResult, error) {
 		selectedTools := subTools
 		if len(toolNames) > 0 {
-			selectedTools = registry.FilteredLLMTools(filterMap(toolNames))
+			selectedTools = registry.FilteredLLMTools(filterMap(stripSpawnTools(toolNames)))
 		}
 
 		tasks := make([]rlm.SubAgentTask, len(prompts))
@@ -123,6 +130,18 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 	}
 
 	return spawnFn, batchFn
+}
+
+// stripSpawnTools removes spawn tool names from the list to prevent
+// sub-LLM recursion, even if the LLM explicitly requests them.
+func stripSpawnTools(names []string) []string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if !rlmSpawnToolNames[n] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // filterMap converts a name slice to an allowed-set map for FilteredLLMTools.

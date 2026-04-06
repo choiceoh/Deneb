@@ -14,14 +14,31 @@ func NewTokenBudget(limit int) *TokenBudget {
 	return &TokenBudget{limit: int64(limit)}
 }
 
-// Consume attempts to consume tokens from the budget.
+// TryReserve atomically checks whether reserve tokens are available and
+// consumes them in a single CAS loop. Returns true only if the budget
+// had enough room; on false the budget is unchanged.
+func (b *TokenBudget) TryReserve(reserve int) bool {
+	r := int64(reserve)
+	for {
+		cur := b.consumed.Load()
+		if cur+r > b.limit {
+			return false
+		}
+		if b.consumed.CompareAndSwap(cur, cur+r) {
+			return true
+		}
+	}
+}
+
+// Consume unconditionally adds tokens to the consumed total (e.g. for
+// post-hoc tracking after an LLM call completes).
 // Returns true if the budget has not been exceeded after consumption.
 func (b *TokenBudget) Consume(tokens int) bool {
 	newTotal := b.consumed.Add(int64(tokens))
 	return newTotal <= b.limit
 }
 
-// Remaining returns the number of tokens left in the budget.
+// Remaining returns the approximate number of tokens left in the budget.
 func (b *TokenBudget) Remaining() int {
 	r := b.limit - b.consumed.Load()
 	if r < 0 {
