@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.16.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.16.0...deneb-v4.16.1) (2026-04-06)
+
+
+### 🔧 Internal
+
+* **chat:** wire wiki as default knowledge base, disconnect memory+vega ([2fe5869](https://github.com/choiceoh/Deneb/commit/2fe5869e55520bb7ad0c88eaceada25d2c041230))
+* **chat:** wire wiki as default knowledge base, disconnect memory+vega ([40848f8](https://github.com/choiceoh/Deneb/commit/40848f8fe0852638db9986a5c6457e33859d1999))
+* **ffi:** replace Rust FFI with pure Go for 4 modules ([edfcb48](https://github.com/choiceoh/Deneb/commit/edfcb483b9032e1a3cce7bf14ca93af46253f7cc))
+* **ffi:** replace Rust FFI with pure Go for markdown, parsing, media, security ([cec2132](https://github.com/choiceoh/Deneb/commit/cec2132bea0204845979f1015dcb6e82e84798bd))
+
 ## [4.16.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.15.1...deneb-v4.16.0) (2026-04-06)
 
 
