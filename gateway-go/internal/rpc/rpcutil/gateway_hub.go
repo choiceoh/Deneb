@@ -29,6 +29,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 )
 
@@ -117,6 +118,9 @@ type GatewayHub struct {
 	// RL self-learning pipeline (optional, nil when rl is disabled).
 	rlService *rl.Service
 
+	// Wiki knowledge base (optional, nil when wiki is disabled).
+	wikiStore *wiki.Store
+
 	// Metadata.
 	logger  *slog.Logger
 	version string
@@ -170,6 +174,7 @@ func (h *GatewayHub) Skills() *skill.Manager                         { return h.
 func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
 func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
 func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
+func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
 func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return h.localAIHub }
@@ -181,6 +186,9 @@ func (h *GatewayHub) SetLocalAIHub(sh *localai.Hub) { h.localAIHub = sh }
 
 // SetRLService sets the RL training service (optional, created during server init).
 func (h *GatewayHub) SetRLService(s *rl.Service) { h.rlService = s }
+
+// SetWikiStore sets the wiki knowledge base (optional, created during session phase).
+func (h *GatewayHub) SetWikiStore(s *wiki.Store) { h.wikiStore = s }
 
 // SetTelegram sets the Telegram plugin (created during early registration phase).
 func (h *GatewayHub) SetTelegram(p *telegram.Plugin) { h.telegram = p }
