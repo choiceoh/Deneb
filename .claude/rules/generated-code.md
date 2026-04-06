@@ -20,6 +20,6 @@ Several Go files in this repo are **machine-generated** and carry a `// Code gen
 ## Rules
 
 - To change a generated file, modify its source of truth, then run the corresponding `make` target.
-- To change what a generator produces, modify the generator itself (`gateway-go/cmd/tool-schema-gen/gen.py`, `gateway-go/cmd/model-caps-gen/gen.py`, `gateway-go/cmd/data-gen/gen.py`, `scripts/gen-error-codes.sh`).
+- To change what a generator produces, modify the generator itself (`gateway-go/cmd/tool-schema-gen/main.go`, `gateway-go/cmd/model-caps-gen/main.go`, `gateway-go/cmd/data-gen/main.go`, `scripts/gen-error-codes.sh`).
 - CI enforces no-drift via `generate-check.yml` (non-proto generators) and `proto-check.yml` (proto generators). Any PR that manually edits a generated file will fail CI.
 - Do not mix hand-written and generated changes in the same commit.
