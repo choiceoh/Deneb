@@ -1,6 +1,6 @@
 [package]
 name = "deneb-core"
-version = "4.12.0" # x-release-please-version
+version = "4.13.0" # x-release-please-version
 edition = "2021"
 description = "Deneb core library — protocol validation, security, and media processing"
 

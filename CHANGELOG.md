@@ -1,5 +1,60 @@
 # Changelog
 
+## [4.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.12.0...deneb-v4.13.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **agent:** adaptive tool concurrency for exec commands ([8120ca3](https://github.com/choiceoh/Deneb/commit/8120ca362fdaa3a63219248b15b2423f3f548431))
+* **agent:** add adaptive tool concurrency for exec commands ([edd6905](https://github.com/choiceoh/Deneb/commit/edd6905f2e34fff8710524e2351fbf6d77e9ba35))
+* **agent:** add autonomous agent capabilities inspired by OpenClaw ([50bbba5](https://github.com/choiceoh/Deneb/commit/50bbba5761af262474234469bc04b12840190a0e))
+* **agent:** add autonomous agent capabilities inspired by OpenClaw ([8c21208](https://github.com/choiceoh/Deneb/commit/8c21208cec5b7306f84e7429b6a80ee4e7e705a2))
+* **agent:** add tool loop detection, memory safety, and hook activation ([297a900](https://github.com/choiceoh/Deneb/commit/297a9009daa3e43c020fd38b4f8ea0f5b8cbb7a2))
+* **agent:** tool loop detection, memory safety, hook activation ([a408b1e](https://github.com/choiceoh/Deneb/commit/a408b1e47106f85c939991add8a8e1f4b785cfd4))
+* **chat:** add OpenClaw-inspired prompt improvements — execution bias, safety, narration, cron, silent reply ([2bff59a](https://github.com/choiceoh/Deneb/commit/2bff59ac73cca7dea833fe487fb7b7a3355eb547))
+* **chat:** add SendLite for lightweight system background tasks ([f7d32d2](https://github.com/choiceoh/Deneb/commit/f7d32d2f86ac184933f3b92765158278119e5e90))
+* **chat:** add SendLite for lightweight system background tasks ([86dd9c4](https://github.com/choiceoh/Deneb/commit/86dd9c44d863b7528154e62e51e3b818e849c641))
+* **chat:** add subagent completion notification with debounced batching ([8cc6912](https://github.com/choiceoh/Deneb/commit/8cc69121ca046d97e596e3eaf9f301c0aeff22fa))
+* **chat:** subagent completion notification with debounced batching ([68a80b6](https://github.com/choiceoh/Deneb/commit/68a80b6d85301526322ece13ce3ee86552a11b9b))
+* **memory:** add timestamp and length scaling to fact extraction ([1eb42dc](https://github.com/choiceoh/Deneb/commit/1eb42dc7aefa6de50549b8ba22b09afbb7afb421))
+* **memory:** add timestamp requirement and length scaling to fact extraction prompt ([d6a6d6e](https://github.com/choiceoh/Deneb/commit/d6a6d6e967c5c8aade7e6acc880f1835ab0f0355))
+* **skills:** restructure skills with hermes-agent patterns ([ebabae2](https://github.com/choiceoh/Deneb/commit/ebabae268f23236c7887f3f75998f879ab68a086))
+* **skills:** restructure skills with hermes-agent patterns ([038bce1](https://github.com/choiceoh/Deneb/commit/038bce195d5545efa86ab2879f4925821d0242f1))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** add defensive merge for consecutive same-role messages ([70dc22c](https://github.com/choiceoh/Deneb/commit/70dc22ce67145708145596dd1f7b5fbd4de6e759))
+* **chat:** add defensive merge for consecutive same-role messages ([fdacaca](https://github.com/choiceoh/Deneb/commit/fdacacab688553f8009e6bd08ca70711bed76d82))
+* **skills:** improve skill_manage patch with line-based fuzzy matching ([166f078](https://github.com/choiceoh/Deneb/commit/166f0783035b6682dfde9540e7d2c8feb980ee86))
+* **skills:** improve skill_manage patch with line-based fuzzy matching ([8a61efb](https://github.com/choiceoh/Deneb/commit/8a61efb480630af9add257e3d825873270b0f6a0))
+* **telegram:** add code fence safe chunking for HTML splits ([899e1a9](https://github.com/choiceoh/Deneb/commit/899e1a927b87cf7ee2a2615c6e95292eee188b70))
+* **telegram:** add code fence safe chunking for HTML splits ([8859e7b](https://github.com/choiceoh/Deneb/commit/8859e7becc1d8f8ef4844eebfbabe3da0c9b524a))
+
+
+### ⚡ Performance
+
+* **chat:** activate 3-tier prompt cache boundaries ([314fbc6](https://github.com/choiceoh/Deneb/commit/314fbc6b68ed360d28cc2418befae802010c6eca))
+* **chat:** activate 3-tier prompt cache boundaries ([fef847c](https://github.com/choiceoh/Deneb/commit/fef847c1b0817a1481669a14b29c1d210d8a894d))
+* **chat:** adaptive mid-loop compaction threshold ([e86d38d](https://github.com/choiceoh/Deneb/commit/e86d38df7ab36d4aa69b6a67ab9660269d92702f))
+* **chat:** adaptive mid-loop compaction threshold based on message size ([6939dec](https://github.com/choiceoh/Deneb/commit/6939dec856f83222ff6825d25a23854ca0634b56))
+* **chat:** head/tail truncation for large tool results ([511c903](https://github.com/choiceoh/Deneb/commit/511c9039b8440046d4143c1ccc2b5047c72ce03b))
+* **chat:** head/tail truncation for large tool results ([56c5d2b](https://github.com/choiceoh/Deneb/commit/56c5d2bb743234fc4d80b72fc40010cc98b0cfdc))
+* **chat:** scope RunCache invalidation by path ([0759fb0](https://github.com/choiceoh/Deneb/commit/0759fb059149f8c79096cb96547e28067d7d521e))
+* **chat:** scope RunCache invalidation to mutated file's directory ([58e3bec](https://github.com/choiceoh/Deneb/commit/58e3bec77bedb9379806d746f12720fa1de5d1b7))
+
+
+### 🔧 Internal
+
+* **agent:** extract HookCompositor for stream hook fan-out ([05536db](https://github.com/choiceoh/Deneb/commit/05536dbf28a2af5685b694ff9b271417d6641d48))
+* **agent:** extract HookCompositor for stream hook fan-out ([23b9128](https://github.com/choiceoh/Deneb/commit/23b912899539d3f7ccde5c7127a0a717c558ba1d))
+* **chat:** improve system prompt — Korean core instructions, cache fix, token savings ([f0f05b4](https://github.com/choiceoh/Deneb/commit/f0f05b4409ae3e57b4b259004c499dfd813c0f19))
+* **chat:** improve system prompt — Korean core instructions, cache fix, token savings ([07026cb](https://github.com/choiceoh/Deneb/commit/07026cb5785813c15ddd7bebdf6df23039320bd9))
+* remove over-engineered subsystems (-11.2K LOC) ([a69006a](https://github.com/choiceoh/Deneb/commit/a69006a2bfd0bb38ec9b911e78151fb284792fe0))
+* remove over-engineered subsystems for single-user deployment ([dbb1af0](https://github.com/choiceoh/Deneb/commit/dbb1af0a971a1c423869ce1d82d23bdd9b0f07ad))
+* **shadow:** remove shadow session monitoring system ([5ccbdd1](https://github.com/choiceoh/Deneb/commit/5ccbdd156ceb9345997d7420c93b50ddc04153d1))
+* **shadow:** remove shadow session monitoring system ([798ad01](https://github.com/choiceoh/Deneb/commit/798ad01012e481bd031737d4a18d3456de1a4cfc))
+
 ## [4.12.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.11.0...deneb-v4.12.0) (2026-04-06)
 
 
