@@ -2,7 +2,6 @@ package ffi
 
 import (
 	"encoding/json"
-	"math/rand/v2"
 	"strings"
 	"testing"
 )
@@ -110,63 +109,6 @@ func BenchmarkDetectMIME_JSON(b *testing.B) {
 	}
 }
 
-// --- Memory search: cosine similarity (hot path: vector search scoring) ---
-
-func BenchmarkMemoryCosineSimilarity_768d(b *testing.B) {
-	// 768-dimensional embeddings (common for embedding models)
-	a := make([]float64, 768)
-	bVec := make([]float64, 768)
-	for i := range a {
-		a[i] = rand.Float64()
-		bVec[i] = rand.Float64()
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		MemoryCosineSimilarity(a, bVec)
-	}
-}
-
-func BenchmarkMemoryCosineSimilarity_1536d(b *testing.B) {
-	// 1536-dimensional (OpenAI ada-002 size)
-	a := make([]float64, 1536)
-	bVec := make([]float64, 1536)
-	for i := range a {
-		a[i] = rand.Float64()
-		bVec[i] = rand.Float64()
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		MemoryCosineSimilarity(a, bVec)
-	}
-}
-
-// --- BM25 score normalization (hot path: search ranking) ---
-
-func BenchmarkMemoryBm25RankToScore(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		MemoryBm25RankToScore(float64(i % 100))
-	}
-}
-
-// --- FTS query building (hot path: every memory search) ---
-
-func BenchmarkMemoryBuildFtsQuery(b *testing.B) {
-	query := "Deneb 게이트웨이 세션 관리 방법"
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = MemoryBuildFtsQuery(query)
-	}
-}
-
-// --- Keyword extraction ---
-
-func BenchmarkMemoryExtractKeywords(b *testing.B) {
-	query := "how does the session manager handle concurrent access and timeout enforcement"
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = MemoryExtractKeywords(query)
-	}
-}
 
 // --- Link extraction (hot path: per-message) ---
 
@@ -231,26 +173,3 @@ func BenchmarkHtmlToMarkdown(b *testing.B) {
 	}
 }
 
-// --- Hybrid result merge (hot path: search result ranking) ---
-
-func BenchmarkMemoryMergeHybridResults(b *testing.B) {
-	params := `{
-		"vector_results": [
-			{"id": "1", "score": 0.95},
-			{"id": "2", "score": 0.85},
-			{"id": "3", "score": 0.75}
-		],
-		"keyword_results": [
-			{"id": "2", "rank": 1},
-			{"id": "4", "rank": 2},
-			{"id": "1", "rank": 3}
-		],
-		"vector_weight": 0.7,
-		"keyword_weight": 0.3,
-		"limit": 5
-	}`
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = MemoryMergeHybridResults(params)
-	}
-}

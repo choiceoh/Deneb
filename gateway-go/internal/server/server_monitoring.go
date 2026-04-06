@@ -9,22 +9,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
-	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 func (s *Server) SetDaemon(d *daemon.Daemon) {
 	s.daemon = d
-}
-
-// SetVega sets the Vega backend and registers its RPC methods.
-func (s *Server) SetVega(backend vega.Backend) {
-	s.vegaBackend = backend
-	s.dispatcher.RegisterDomain(handlerffi.VegaMethods(handlerffi.VegaDeps{Backend: backend}))
-	// Late-bind Vega backend into core tool deps so the vega chat tool works.
-	if s.toolDeps != nil {
-		s.toolDeps.Vega.Backend = backend
-	}
 }
 
 // Broadcaster returns the event broadcaster for external use.

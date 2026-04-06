@@ -3,257 +3,46 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"sort"
-	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // ToolProjectsList returns a tool that lists projects with metadata only.
-// No document content is returned — just identifiers and key properties.
-func ToolProjectsList(d *toolctx.VegaDeps) toolctx.ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if d.Backend == nil {
-			return "Vega 백엔드가 비활성 상태입니다.", nil
-		}
-
-		var p struct {
-			Filter string `json:"filter"`
-		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("parse input: %w", err)
-		}
-
-		args := map[string]any{}
-		if p.Filter != "" {
-			args["filter"] = p.Filter
-		}
-
-		result, err := d.Backend.Execute(ctx, "list", args)
-		if err != nil {
-			return fmt.Sprintf("프로젝트 목록 조회 실패: %v", err), nil
-		}
-
-		return string(result), nil
+// Vega backend removed — returns unavailable message.
+func ToolProjectsList(_ *toolctx.VegaDeps) toolctx.ToolFunc {
+	return func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "프로젝트 검색 기능이 비활성 상태입니다 (Vega 백엔드 제거됨).", nil
 	}
 }
 
 // ToolProjectsGetField returns a tool that retrieves specific fields from a project.
-func ToolProjectsGetField(d *toolctx.VegaDeps) toolctx.ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if d.Backend == nil {
-			return "Vega 백엔드가 비활성 상태입니다.", nil
-		}
-
-		var p struct {
-			ProjectID string   `json:"project_id"`
-			Fields    []string `json:"fields"`
-		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("parse input: %w", err)
-		}
-		if p.ProjectID == "" {
-			return "project_id는 필수입니다.", nil
-		}
-		if len(p.Fields) == 0 {
-			return "fields 배열이 비어있습니다.", nil
-		}
-
-		result, err := d.Backend.Execute(ctx, "show", map[string]any{
-			"id": p.ProjectID,
-		})
-		if err != nil {
-			return fmt.Sprintf("프로젝트 조회 실패: %v", err), nil
-		}
-
-		// Parse result and filter to requested fields only.
-		var full map[string]any
-		if err := json.Unmarshal(result, &full); err != nil {
-			// If the result isn't a JSON object, return it as-is.
-			return string(result), nil
-		}
-
-		filtered := map[string]any{
-			"project_id": p.ProjectID,
-		}
-		if name, ok := full["name"]; ok {
-			filtered["name"] = name
-		}
-		for _, f := range p.Fields {
-			if val, ok := full[f]; ok {
-				filtered[f] = val
-			} else {
-				filtered[f] = nil
-			}
-		}
-
-		b, err := json.MarshalIndent(filtered, "", "  ")
-		if err != nil {
-			return fmt.Sprintf("필드 직렬화 실패: %v", err), nil
-		}
-		return string(b), nil
+// Vega backend removed — returns unavailable message.
+func ToolProjectsGetField(_ *toolctx.VegaDeps) toolctx.ToolFunc {
+	return func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "프로젝트 필드 조회 기능이 비활성 상태입니다 (Vega 백엔드 제거됨).", nil
 	}
 }
 
 // ToolProjectsSearch returns a tool that performs natural-language search across projects.
-func ToolProjectsSearch(d *toolctx.VegaDeps) toolctx.ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if d.Backend == nil {
-			return "Vega 백엔드가 비활성 상태입니다.", nil
-		}
-
-		var p struct {
-			Query      string `json:"query"`
-			MaxResults int    `json:"max_results"`
-		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("parse input: %w", err)
-		}
-		if p.Query == "" {
-			return "query는 필수입니다.", nil
-		}
-		if p.MaxResults <= 0 {
-			p.MaxResults = 5
-		}
-
-		results, err := d.Backend.Search(ctx, p.Query, vega.SearchOpts{
-			Limit: p.MaxResults,
-		})
-		if err != nil {
-			return fmt.Sprintf("검색 실패: %v", err), nil
-		}
-
-		if len(results) == 0 {
-			return "검색 결과 없음.", nil
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("## 검색 결과 (%d건)\n\n", len(results)))
-		for _, r := range results {
-			snippet := r.Content
-			if len([]rune(snippet)) > 200 {
-				snippet = string([]rune(snippet)[:200]) + "..."
-			}
-			sb.WriteString(fmt.Sprintf("- **%s** (ID: %d, 섹션: %s, 관련도: %.2f)\n  %s\n\n",
-				r.ProjectName, r.ProjectID, r.Section, r.Score, snippet))
-		}
-
-		return sb.String(), nil
+// Vega backend removed — returns unavailable message.
+func ToolProjectsSearch(_ *toolctx.VegaDeps) toolctx.ToolFunc {
+	return func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "프로젝트 검색 기능이 비활성 상태입니다 (Vega 백엔드 제거됨).", nil
 	}
 }
 
 // ToolProjectsGetDocument returns a tool that retrieves project documents.
-// Without a section parameter, returns the table of contents.
-// With a section, returns that section's content.
-func ToolProjectsGetDocument(d *toolctx.VegaDeps) toolctx.ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if d.Backend == nil {
-			return "Vega 백엔드가 비활성 상태입니다.", nil
-		}
-
-		var p struct {
-			ProjectID string `json:"project_id"`
-			Section   string `json:"section"`
-		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("parse input: %w", err)
-		}
-		if p.ProjectID == "" {
-			return "project_id는 필수입니다.", nil
-		}
-
-		result, err := d.Backend.Execute(ctx, "show", map[string]any{
-			"id": p.ProjectID,
-		})
-		if err != nil {
-			return fmt.Sprintf("프로젝트 문서 조회 실패: %v", err), nil
-		}
-
-		// If no section requested, extract and return table of contents.
-		if p.Section == "" {
-			return extractTableOfContents(p.ProjectID, result), nil
-		}
-
-		// Section requested: try to extract that section.
-		return extractSection(p.ProjectID, p.Section, result), nil
+// Vega backend removed — returns unavailable message.
+func ToolProjectsGetDocument(_ *toolctx.VegaDeps) toolctx.ToolFunc {
+	return func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "프로젝트 문서 조회 기능이 비활성 상태입니다 (Vega 백엔드 제거됨).", nil
 	}
-}
-
-// extractTableOfContents parses the document result and returns section names.
-func extractTableOfContents(projectID string, data json.RawMessage) string {
-	// Try to parse as object with sections.
-	var doc map[string]any
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return fmt.Sprintf("프로젝트 %s 문서 구조를 파싱할 수 없습니다.", projectID)
-	}
-
-	var sections []string
-	totalChars := len(data)
-
-	// Look for "sections" key or iterate top-level keys.
-	if secs, ok := doc["sections"].([]any); ok {
-		for _, s := range secs {
-			if name, ok := s.(string); ok {
-				sections = append(sections, name)
-			}
-		}
-	} else {
-		// Use top-level keys as section names.
-		for key := range doc {
-			if key != "id" && key != "name" && key != "project_id" {
-				sections = append(sections, key)
-			}
-		}
-		sort.Strings(sections)
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## 프로젝트 %s 문서 목차\n\n", projectID))
-	for i, s := range sections {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, s))
-	}
-	sb.WriteString(fmt.Sprintf("\n총 문서 크기: %d자\n", totalChars))
-	sb.WriteString("특정 섹션을 조회하려면 section 파라미터를 지정하세요.")
-	return sb.String()
-}
-
-// extractSection pulls a named section from the document data.
-func extractSection(projectID, section string, data json.RawMessage) string {
-	var doc map[string]any
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return string(data)
-	}
-
-	// Exact match first.
-	if val, ok := doc[section]; ok {
-		b, err := json.MarshalIndent(val, "", "  ")
-		if err != nil {
-			return fmt.Sprintf("섹션 '%s' 직렬화 실패: %v", section, err)
-		}
-		return fmt.Sprintf("## %s — %s\n\n%s", projectID, section, string(b))
-	}
-
-	// Fall back to case-insensitive match.
-	sectionLower := strings.ToLower(section)
-	for key, val := range doc {
-		if strings.ToLower(key) == sectionLower {
-			b, err := json.MarshalIndent(val, "", "  ")
-			if err != nil {
-				return fmt.Sprintf("섹션 '%s' 직렬화 실패: %v", key, err)
-			}
-			return fmt.Sprintf("## %s — %s\n\n%s", projectID, key, string(b))
-		}
-	}
-
-	return fmt.Sprintf("섹션 '%s'을(를) 찾을 수 없습니다. projects_get_document에서 section 없이 목차를 먼저 확인하세요.", section)
 }
 
 // ToolMemoryRecall returns an RLM-specific memory search tool.
-// Memory store has been replaced by wiki; returns a static message.
+// Memory/Vega backend removed — returns unavailable message.
 func ToolMemoryRecall(_ *toolctx.VegaDeps) toolctx.ToolFunc {
 	return func(_ context.Context, _ json.RawMessage) (string, error) {
-		return "[memory store replaced by wiki]", nil
+		return "메모리 검색 기능이 비활성 상태입니다 (위키로 대체됨).", nil
 	}
 }

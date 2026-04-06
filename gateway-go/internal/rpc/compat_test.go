@@ -8,7 +8,6 @@ import (
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
-	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertelegram"
@@ -55,7 +54,6 @@ type SessionDeps = handlersession.Deps
 type GatewayRuntimeDeps = handlergateway.Deps
 type HeartbeatDeps = handlerpresence.HeartbeatDeps
 type PresenceDeps = handlerpresence.Deps
-type VegaDeps = handlerffi.VegaDeps
 type AuroraChannelDeps = handleraurorachannel.Deps
 
 // --- Registration wrappers ---
@@ -154,9 +152,6 @@ func RegisterHeartbeatMethods(d *Dispatcher, deps HeartbeatDeps) {
 }
 func RegisterPresenceMethods(d *Dispatcher, deps PresenceDeps) {
 	d.RegisterDomain(handlerpresence.Methods(deps))
-}
-func RegisterVegaMethods(d *Dispatcher, deps VegaDeps) {
-	d.RegisterDomain(handlerffi.VegaMethods(deps))
 }
 func RegisterAuroraChannelMethods(d *Dispatcher, deps AuroraChannelDeps) {
 	d.RegisterDomain(handleraurorachannel.Methods(deps))

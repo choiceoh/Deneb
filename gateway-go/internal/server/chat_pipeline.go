@@ -1,4 +1,4 @@
-// Chat pipeline initialization: wiki knowledge base, tool registration, and
+// Chat pipeline initialization: memory subsystem, tool registration, and
 // handler construction. Extracted from registerSessionRPCMethods() to reduce
 // that 467-line function to a clear sequential flow.
 package server
@@ -19,8 +19,8 @@ import (
 )
 
 // initMemorySubsystem initializes unified store, Aurora compaction store,
-// model registry, session memory, and wiki knowledge base.
-// All results are set on chatCfg and s.
+// structured memory store, Gemini embedder, Jina reranker, dreaming adapter,
+// and MEMORY.md auto-migration. All results are set on chatCfg and s.
 func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **modelrole.Registry) {
 	// Unified memory store (single DB for all tiers).
 	unifiedStore, err := unified.New(unified.DefaultConfig(), s.logger)
@@ -44,15 +44,34 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
 
+	// Structured memory store (Honcho-style) — always from unified DB.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
+	memStore := chatCfg.MemoryStore
+	if memStore == nil && unifiedStore != nil {
+		unifiedMemStore, uErr := unifiedStore.NewMemoryStore()
+		if uErr != nil {
+			s.logger.Warn("memory store unavailable from unified db", "error", uErr)
+		} else {
+			memStore = unifiedMemStore
+			chatCfg.MemoryStore = memStore
+		}
+	}
+	if memStore == nil {
+		return
+	}
 
-	// DreamTurnFn: wiki dreamer uses the autonomous service's turn counter.
-	chatCfg.DreamTurnFn = func(ctx context.Context) {
-		if svc := s.autonomousSvc; svc != nil {
-			svc.IncrementDreamTurn(ctx)
+	// Tier-1 cache invalidation.
+	memStore.SetFactMutateCallback(unified.InvalidateTier1Cache)
+
+	// Auto-migrate existing MEMORY.md on first run.
+	count, _ := memStore.ActiveFactCount(context.Background())
+	if count == 0 {
+		memoryMdPath := filepath.Join(home, ".deneb", "MEMORY.md")
+		if imported, err := memStore.ImportFromMarkdown(context.Background(), memoryMdPath); err == nil && imported > 0 {
+			s.logger.Info("aurora-memory: imported legacy MEMORY.md", "facts", imported)
 		}
 	}
 
@@ -65,22 +84,23 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		s.logger.Info("session memory restored", "count", loaded)
 	}
 
-	// Wiki knowledge base (always enabled).
-	wikiCfg := wiki.ConfigFromEnv()
-	wikiStore, wErr := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)
-	if wErr != nil {
-		s.logger.Warn("wiki store unavailable", "error", wErr)
-	} else {
-		s.wikiStore = wikiStore
-		chatCfg.WikiStore = wikiStore
-		s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
+	// Wiki knowledge base (feature-flagged).
+	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
+		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)
+		if err != nil {
+			s.logger.Warn("wiki store unavailable", "error", err)
+		} else {
+			s.wikiStore = wikiStore
+			chatCfg.WikiStore = wikiStore
+			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
 
-		// Wiki dreamer: autonomous diary → wiki consolidation.
-		lwClient := (*regPtr).Client(modelrole.RoleLightweight)
-		lwModel := (*regPtr).Model(modelrole.RoleLightweight)
-		if lwClient != nil && lwModel != "" {
-			s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, wikiCfg, s.logger)
-			s.logger.Info("wiki-dream: enabled")
+			// Wiki dreamer (replaces memory dreaming when wiki is active).
+			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
+			lwModel := (*regPtr).Model(modelrole.RoleLightweight)
+			if lwClient != nil && lwModel != "" {
+				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, wikiCfg, s.logger)
+				s.logger.Info("wiki-dream: enabled")
+			}
 		}
 	}
 }
@@ -105,7 +125,10 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			Service: s.cronService,
 			RunLog:  s.cronRunLog,
 		},
-		Vega: chat.VegaDeps{},
+		Vega: chat.VegaDeps{
+			MemoryStore:    chatCfg.MemoryStore,
+			MemoryEmbedder: chatCfg.MemoryEmbedder,
+		},
 		Wiki: chat.WikiDeps{
 			Store: chatCfg.WikiStore,
 		},

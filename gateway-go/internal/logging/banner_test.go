@@ -13,7 +13,6 @@ func TestPrintBanner_NoColor(t *testing.T) {
 		Version:      "3.25.0",
 		Addr:         "127.0.0.1:18789",
 		RustFFI:      true,
-		VegaEnabled:  true,
 		LocalAIStatus: "online",
 	}
 	PrintBanner(&buf, info, false)
@@ -24,7 +23,6 @@ func TestPrintBanner_NoColor(t *testing.T) {
 		"3.25.0",
 		"rust-ffi",
 		"127.0.0.1:18789",
-		"enabled",
 		"localai",
 		"online",
 		"ready.",
@@ -46,7 +44,6 @@ func TestPrintBanner_WithColor(t *testing.T) {
 		Version:      "3.25.0",
 		Addr:         "127.0.0.1:18789",
 		RustFFI:      false,
-		VegaEnabled:  false,
 		LocalAIStatus: "offline",
 	}
 	PrintBanner(&buf, info, true)
@@ -54,9 +51,6 @@ func TestPrintBanner_WithColor(t *testing.T) {
 	got := buf.String()
 	if !strings.Contains(got, "\033[") {
 		t.Errorf("color banner should contain ANSI sequences:\n%s", got)
-	}
-	if !strings.Contains(got, "disabled") {
-		t.Errorf("vega should show disabled:\n%s", got)
 	}
 	if !strings.Contains(got, "offline") {
 		t.Errorf("localai should show offline:\n%s", got)

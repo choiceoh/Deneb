@@ -7,16 +7,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // InfraSubsystem groups infrastructure services with independent lifecycles:
-// Vega search backend, background task control plane, thinking runtime,
-// and maintenance runner.
-// vegaBackend is late-bound; other fields are eagerly initialized.
+// background task control plane, thinking runtime, and maintenance runner.
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type InfraSubsystem struct {
-	vegaBackend     vega.Backend
 	taskRegistry    *tasks.Registry
 	taskStore       *tasks.Store
 	thinkingRuntime *thinking.ThinkingRuntime
@@ -25,7 +21,6 @@ type InfraSubsystem struct {
 }
 
 // NewInfraSubsystem creates infrastructure services that can be eagerly initialized.
-// vegaBackend remains nil until late-bound by its respective setup code.
 func NewInfraSubsystem(logger *slog.Logger, denebDir string) *InfraSubsystem {
 	sub := &InfraSubsystem{
 		thinkingRuntime: thinking.NewThinkingRuntime(),

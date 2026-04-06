@@ -8,22 +8,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
-	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/reranker"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // Services holds the wired server and supporting service state.
 type Services struct {
-	Server      *server.Server
-	VegaEnabled bool
+	Server *server.Server
 }
 
 // WireServices assembles the gateway server with all backing services:
-// embedding provider, Vega search backend, and Jina reranker.
+// embedding provider and Jina reranker.
 func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.Logger, version string, useColor bool) (Services, error) {
 	embedder := newEmbedder(logger)
-	jinaKey := vega.GetJinaAPIKey()
+	jinaKey := reranker.GetJinaAPIKey()
 
 	srv, err := server.New(addr,
 		server.WithLogger(logger),
@@ -37,11 +35,8 @@ func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.
 		return Services{}, fmt.Errorf("server init: %w", err)
 	}
 
-	vegaEnabled := initVega(srv, logger, embedder)
-
 	return Services{
-		Server:      srv,
-		VegaEnabled: vegaEnabled,
+		Server: srv,
 	}, nil
 }
 
@@ -64,28 +59,4 @@ func newEmbedder(logger *slog.Logger) embedding.Embedder {
 		return e
 	}
 	return nil
-}
-
-// initVega configures the Vega search backend with embedding,
-// lightweight model query expansion, and Jina reranking. Returns false if unavailable.
-func initVega(srv *server.Server, logger *slog.Logger, embedder embedding.Embedder) bool {
-	lwURL := modelrole.DefaultVllmBaseURL
-	lwModel := modelrole.DefaultVllmModel
-
-	if !vega.ShouldEnableVega(ffi.Available, lwURL, logger) {
-		logger.Info("vega: disabled (FFI not available)")
-		return false
-	}
-
-	cfg := vega.EnhancedBackendConfig{
-		Logger:       logger,
-		LocalAIURL:   lwURL,
-		LocalAIModel: lwModel,
-		Embedder:     embedder,
-		JinaAPIKey:   vega.GetJinaAPIKey(),
-	}
-
-	backend := vega.NewEnhancedBackend(cfg)
-	srv.SetVega(backend)
-	return true
 }

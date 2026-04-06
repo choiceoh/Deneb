@@ -5,6 +5,4 @@
 
 pub mod compaction;
 pub mod context_engine;
-pub mod memory_search;
 pub mod ml;
-pub mod vega;

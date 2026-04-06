@@ -88,7 +88,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime_ms": uptime.Milliseconds(),
 		"subsystems": map[string]any{
 			"core": coreLabel(s.rustFFI),
-			"vega": s.vegaBackend != nil,
 			"auth": authMode,
 		},
 		"connections": s.clientCnt.Load(),

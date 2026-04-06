@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -102,6 +103,8 @@ type runDeps struct {
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
 	auroraStore    *aurora.Store             // optional; enables Aurora compaction
+	memoryStore    *memory.Store             // optional; structured memory (Honcho-style)
+	memoryEmbedder *memory.Embedder          // optional; fact embedding
 	unifiedStore   *unified.Store            // optional; unified memory (search + tier-1)
 	wikiStore      *wiki.Store               // optional; wiki knowledge base
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
