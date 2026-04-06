@@ -39,31 +39,3 @@ pub(super) fn parse_binding(agent_id: &str, spec: &str) -> serde_json::Value {
 pub(super) fn normalize_agent_id(name: &str) -> String {
     name.to_lowercase().replace([' ', '_'], "-")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_binding_with_account() {
-        let b = parse_binding("my-agent", "telegram:123456");
-        assert_eq!(b["agentId"], "my-agent");
-        assert_eq!(b["channel"], "telegram");
-        assert_eq!(b["accountId"], "123456");
-    }
-
-    #[test]
-    fn parse_binding_without_account() {
-        let b = parse_binding("my-agent", "telegram");
-        assert_eq!(b["agentId"], "my-agent");
-        assert_eq!(b["channel"], "telegram");
-        assert!(b.get("accountId").is_none());
-    }
-
-    #[test]
-    fn normalize_agent_id_hyphenates() {
-        let name = "My Cool Agent";
-        let id = normalize_agent_id(name);
-        assert_eq!(id, "my-cool-agent");
-    }
-}

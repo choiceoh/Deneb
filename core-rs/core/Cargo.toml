@@ -53,10 +53,6 @@ deneb-vega = { path = "../vega", optional = true }
 deneb-ml = { path = "../ml", optional = true }
 
 
-[dev-dependencies]
-proptest = "1.5"
-tempfile = "3"
-
 [lints]
 workspace = true
 
