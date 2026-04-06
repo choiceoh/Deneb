@@ -7,77 +7,12 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/coreparsing/htmlmd"
 )
 
 var bareURLRe = regexp.MustCompile(`https?://\S+`)
 var markdownLinkRe = regexp.MustCompile(`\[[^\]]*\]\(https?://\S+?\)`)
-var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
-var multiSpaceRe = regexp.MustCompile(`[ \t]{2,}`)
-var multiNewlineRe = regexp.MustCompile(`\n{3,}`)
-
-// htmlEntityReplacements mirrors the Rust core entity set for the Go fallback.
-// Order matters: &amp; must come last to avoid double-decoding.
-var htmlEntityReplacements = [][2]string{
-	{"&nbsp;", "\u00A0"},
-	{"&quot;", "\""},
-	{"&lt;", "<"},
-	{"&gt;", ">"},
-	{"&#39;", "'"},
-	{"&apos;", "'"},
-	// Typography
-	{"&mdash;", "\u2014"},
-	{"&ndash;", "\u2013"},
-	{"&hellip;", "\u2026"},
-	{"&laquo;", "\u00AB"},
-	{"&raquo;", "\u00BB"},
-	{"&lsquo;", "\u2018"},
-	{"&rsquo;", "\u2019"},
-	{"&ldquo;", "\u201C"},
-	{"&rdquo;", "\u201D"},
-	{"&bull;", "\u2022"},
-	{"&middot;", "\u00B7"},
-	// Symbols
-	{"&copy;", "\u00A9"},
-	{"&reg;", "\u00AE"},
-	{"&trade;", "\u2122"},
-	{"&deg;", "\u00B0"},
-	{"&plusmn;", "\u00B1"},
-	{"&times;", "\u00D7"},
-	{"&divide;", "\u00F7"},
-	{"&micro;", "\u00B5"},
-	// Currency
-	{"&euro;", "\u20AC"},
-	{"&pound;", "\u00A3"},
-	{"&yen;", "\u00A5"},
-	{"&cent;", "\u00A2"},
-	// Arrows
-	{"&larr;", "\u2190"},
-	{"&rarr;", "\u2192"},
-	{"&uarr;", "\u2191"},
-	{"&darr;", "\u2193"},
-	// Misc
-	{"&para;", "\u00B6"},
-	{"&sect;", "\u00A7"},
-	// &amp; must be last to avoid double-decoding
-	{"&amp;", "&"},
-}
-
-// Structural HTML conversion regexps (Go fallback only).
-var (
-	strongRe = regexp.MustCompile(`(?is)<(?:strong)(?:\s[^>]*)?>(.+?)</(?:strong)>`)
-	boldRe   = regexp.MustCompile(`(?is)<b(?:\s[^>]*)?>((?s).+?)</b>`)
-	emRe     = regexp.MustCompile(`(?is)<(?:em)(?:\s[^>]*)?>(.+?)</(?:em)>`)
-	italicRe = regexp.MustCompile(`(?is)<i(?:\s[^>]*)?>((?s).+?)</i>`)
-	codeRe   = regexp.MustCompile(`(?is)<code(?:\s[^>]*)?>(.+?)</code>`)
-	linkRe   = regexp.MustCompile(`(?is)<a\s[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>`)
-	h1Re     = regexp.MustCompile(`(?is)<h1(?:\s[^>]*)?>(.+?)</h1>`)
-	h2Re     = regexp.MustCompile(`(?is)<h2(?:\s[^>]*)?>(.+?)</h2>`)
-	h3Re     = regexp.MustCompile(`(?is)<h3(?:\s[^>]*)?>(.+?)</h3>`)
-	h4Re     = regexp.MustCompile(`(?is)<h4(?:\s[^>]*)?>(.+?)</h4>`)
-	h5Re     = regexp.MustCompile(`(?is)<h5(?:\s[^>]*)?>(.+?)</h5>`)
-	h6Re     = regexp.MustCompile(`(?is)<h6(?:\s[^>]*)?>(.+?)</h6>`)
-	liRe     = regexp.MustCompile(`(?is)<li(?:\s[^>]*)?>(.+?)</li>`)
-)
 
 // ExtractLinks is a pure-Go fallback for URL extraction.
 func ExtractLinks(text string, maxLinks int) ([]string, error) {
@@ -111,80 +46,13 @@ func ExtractLinks(text string, maxLinks int) ([]string, error) {
 }
 
 // HtmlToMarkdown is a pure-Go fallback for HTML to Markdown conversion.
+// Delegates to the coreparsing/htmlmd tokenizer+emitter (ported from Rust core).
 func HtmlToMarkdown(html string) (text string, title string, err error) {
 	if len(html) == 0 {
 		return "", "", nil
 	}
-
-	// Extract title.
-	titleStart := strings.Index(strings.ToLower(html), "<title")
-	if titleStart >= 0 {
-		gtIdx := strings.Index(html[titleStart:], ">")
-		if gtIdx >= 0 {
-			afterTag := titleStart + gtIdx + 1
-			endIdx := strings.Index(strings.ToLower(html[afterTag:]), "</title>")
-			if endIdx >= 0 {
-				raw := html[afterTag : afterTag+endIdx]
-				title = strings.TrimSpace(htmlTagRe.ReplaceAllString(raw, ""))
-			}
-		}
-	}
-
-	// Strip script/style/noscript.
-	result := html
-	for _, tag := range []string{"script", "style", "noscript"} {
-		open := "<" + tag
-		close := "</" + tag + ">"
-		for {
-			lower := strings.ToLower(result)
-			start := strings.Index(lower, open)
-			if start < 0 {
-				break
-			}
-			end := strings.Index(lower[start:], close)
-			if end < 0 {
-				result = result[:start]
-				break
-			}
-			result = result[:start] + result[start+end+len(close):]
-		}
-	}
-
-	// Convert structural elements to markdown before stripping all tags.
-	// Links: <a href="X">Y</a> → [Y](X)
-	result = linkRe.ReplaceAllString(result, "[$2]($1)")
-	// Bold: <strong>/<b> → **...**
-	result = strongRe.ReplaceAllString(result, "**$1**")
-	result = boldRe.ReplaceAllString(result, "**$1**")
-	// Italic: <em>/<i> → *...*
-	result = emRe.ReplaceAllString(result, "*$1*")
-	result = italicRe.ReplaceAllString(result, "*$1*")
-	// Inline code: <code> → `...`
-	result = codeRe.ReplaceAllString(result, "`$1`")
-	// Headings: <h1-6> → # prefix
-	result = h1Re.ReplaceAllString(result, "\n# $1\n")
-	result = h2Re.ReplaceAllString(result, "\n## $1\n")
-	result = h3Re.ReplaceAllString(result, "\n### $1\n")
-	result = h4Re.ReplaceAllString(result, "\n#### $1\n")
-	result = h5Re.ReplaceAllString(result, "\n##### $1\n")
-	result = h6Re.ReplaceAllString(result, "\n###### $1\n")
-	// List items: <li> → "- "
-	result = liRe.ReplaceAllString(result, "\n- $1")
-
-	// Strip remaining tags.
-	result = htmlTagRe.ReplaceAllString(result, " ")
-
-	// Decode HTML entities (matches the Rust core entity set).
-	for _, pair := range htmlEntityReplacements {
-		result = strings.ReplaceAll(result, pair[0], pair[1])
-	}
-
-	// Normalize whitespace.
-	result = multiSpaceRe.ReplaceAllString(result, " ")
-	result = multiNewlineRe.ReplaceAllString(result, "\n\n")
-	result = strings.TrimSpace(result)
-
-	return result, title, nil
+	r := htmlmd.Convert(html)
+	return r.Text, r.Title, nil
 }
 
 // Base64Estimate is a pure-Go fallback for base64 decoded size estimation.
@@ -258,11 +126,14 @@ func Base64Canonicalize(input string) (string, error) {
 	return cleaned, nil
 }
 
-// HtmlToMarkdownStripNoise is a pure-Go fallback.
-// In no-FFI mode, noise stripping is not applied (the Go caller should
-// pre-strip noise elements via StripNoiseElements before calling).
+// HtmlToMarkdownStripNoise is a pure-Go fallback with noise element stripping.
+// Suppresses nav, aside, svg, iframe, form in addition to script/style/noscript.
 func HtmlToMarkdownStripNoise(html string) (text string, title string, err error) {
-	return HtmlToMarkdown(html)
+	if len(html) == 0 {
+		return "", "", nil
+	}
+	r := htmlmd.ConvertWithOpts(html, htmlmd.Options{StripNoise: true})
+	return r.Text, r.Title, nil
 }
 
 // ParseMediaTokens is a pure-Go fallback for MEDIA: token extraction.
