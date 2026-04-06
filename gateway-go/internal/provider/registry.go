@@ -25,16 +25,6 @@ type RuntimeAuthProvider interface {
 	PrepareRuntimeAuth(ctx context.Context, cctx RuntimeAuthContext) (*PreparedAuth, error)
 }
 
-// DynamicModelResolver resolves model IDs not in the static catalog.
-type DynamicModelResolver interface {
-	ResolveDynamicModel(ctx context.Context, cctx DynamicModelContext) (*RuntimeModel, error)
-}
-
-// ModelNormalizer rewrites resolved models before inference.
-type ModelNormalizer interface {
-	NormalizeResolvedModel(ctx context.Context, cctx NormalizeContext) (*RuntimeModel, error)
-}
-
 // CapabilitiesProvider reports provider-level feature flags.
 type CapabilitiesProvider interface {
 	Capabilities() Capabilities

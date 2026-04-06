@@ -195,41 +195,12 @@ type GatewayTLSConfig struct {
 
 // GatewayHTTPConfig for HTTP endpoint settings.
 type GatewayHTTPConfig struct {
-	Endpoints       *GatewayHTTPEndpointsConfig       `json:"endpoints,omitempty"`
 	SecurityHeaders *GatewayHTTPSecurityHeadersConfig `json:"securityHeaders,omitempty"`
-}
-
-// GatewayHTTPEndpointsConfig for HTTP API endpoints.
-type GatewayHTTPEndpointsConfig struct {
-	ChatCompletions   *GatewayHTTPChatCompletionsConfig   `json:"chatCompletions,omitempty"`
-	Responses         *GatewayHTTPResponsesConfig         `json:"responses,omitempty"`
-	AnthropicMessages *GatewayHTTPAnthropicMessagesConfig `json:"anthropicMessages,omitempty"`
-}
-
-// GatewayHTTPAnthropicMessagesConfig for /v1/messages endpoint (Anthropic Messages API proxy).
-type GatewayHTTPAnthropicMessagesConfig struct {
-	Enabled      *bool `json:"enabled,omitempty"`
-	MaxBodyBytes *int  `json:"maxBodyBytes,omitempty"`
 }
 
 // GatewayHTTPSecurityHeadersConfig for HTTP security headers.
 type GatewayHTTPSecurityHeadersConfig struct {
 	StrictTransportSecurity *string `json:"strictTransportSecurity,omitempty"`
-}
-
-// GatewayHTTPChatCompletionsConfig for /v1/chat/completions endpoint.
-type GatewayHTTPChatCompletionsConfig struct {
-	Enabled            *bool `json:"enabled,omitempty"`
-	MaxBodyBytes       *int  `json:"maxBodyBytes,omitempty"`
-	MaxImageParts      *int  `json:"maxImageParts,omitempty"`
-	MaxTotalImageBytes *int  `json:"maxTotalImageBytes,omitempty"`
-}
-
-// GatewayHTTPResponsesConfig for /v1/responses endpoint.
-type GatewayHTTPResponsesConfig struct {
-	Enabled      *bool `json:"enabled,omitempty"`
-	MaxBodyBytes *int  `json:"maxBodyBytes,omitempty"`
-	MaxURLParts  *int  `json:"maxUrlParts,omitempty"`
 }
 
 // GatewayPushConfig for push notification settings.

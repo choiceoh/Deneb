@@ -52,7 +52,6 @@ type HubConfig struct {
 	Processes *process.Manager
 
 	// Channel plugins (Telegram is late-bound via SetTelegram).
-	Hooks         *hooks.Registry
 	InternalHooks *hooks.InternalRegistry // nil-safe
 
 	// Agent pipeline (Chat is late-bound via SetChat).
@@ -89,7 +88,6 @@ type GatewayHub struct {
 
 	// Channel plugins.
 	telegram      *telegram.Plugin // nil until SetTelegram (early phase).
-	hooks         *hooks.Registry
 	internalHooks *hooks.InternalRegistry // nil-safe
 
 	// Agent pipeline.
@@ -131,7 +129,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		gatewaySubs:    cfg.GatewaySubs,
 		sessions:       cfg.Sessions,
 		processes:      cfg.Processes,
-		hooks:          cfg.Hooks,
 		internalHooks:  cfg.InternalHooks,
 		agents:         cfg.Agents,
 		jobTracker:     cfg.JobTracker,
@@ -156,7 +153,6 @@ func (h *GatewayHub) GatewaySubs() *events.GatewayEventSubscriptions { return h.
 func (h *GatewayHub) Sessions() *session.Manager                     { return h.sessions }
 func (h *GatewayHub) Processes() *process.Manager                    { return h.processes }
 func (h *GatewayHub) Telegram() *telegram.Plugin                     { return h.telegram }
-func (h *GatewayHub) Hooks() *hooks.Registry                         { return h.hooks }
 func (h *GatewayHub) InternalHooks() *hooks.InternalRegistry         { return h.internalHooks }
 func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
 func (h *GatewayHub) Agents() *agent.Store                           { return h.agents }
@@ -233,9 +229,6 @@ func (h *GatewayHub) Validate() error {
 	}
 	if h.processes == nil {
 		missing = append(missing, "Processes")
-	}
-	if h.hooks == nil {
-		missing = append(missing, "Hooks")
 	}
 	if h.agents == nil {
 		missing = append(missing, "Agents")

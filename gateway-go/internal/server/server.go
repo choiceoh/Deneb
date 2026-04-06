@@ -80,7 +80,6 @@ type Server struct {
 
 	// Decomposed from ServerIntegrations — each independently constructable/testable.
 	*WorkflowSubsystem
-	*PluginSubsystem
 	*MemorySubsystem
 	*AutonomousSubsystem
 	*InfraSubsystem
@@ -140,7 +139,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 		ServerTransport:     &ServerTransport{addr: addr},
 		ServerRPC:           &ServerRPC{},
 		ServerRuntime:       &ServerRuntime{},
-		PluginSubsystem:     &PluginSubsystem{},
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
 		rustFFI:             ffi.Available,
@@ -237,9 +235,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.registerLateMethods(hub)             // Chat-dependent domains
 	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
-
-	// Plugin system (must run after RPC registration for late-binding).
-	s.initPluginSubsystem()
 
 	return s, nil
 }

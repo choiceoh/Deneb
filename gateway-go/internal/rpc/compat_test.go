@@ -36,7 +36,6 @@ type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
 type CronServiceDeps = handlerprocess.CronServiceDeps
 type ProviderDeps = handlerprovider.Deps
 type ModelsDeps = handlerprovider.ModelsDeps
-type PluginDeps = handlerskill.PluginDeps
 type ToolDeps = handlerskill.ToolDeps
 type SkillDeps = handlerskill.Deps
 type MonitoringDeps = handlersystem.MonitoringDeps
@@ -107,9 +106,6 @@ func RegisterProviderMethods(d *Dispatcher, deps ProviderDeps) {
 }
 func RegisterModelsMethods(d *Dispatcher, deps ModelsDeps) {
 	d.RegisterDomain(handlerprovider.ModelsMethods(deps))
-}
-func RegisterPluginMethods(d *Dispatcher, deps PluginDeps) {
-	d.RegisterDomain(handlerskill.PluginMethods(deps))
 }
 func RegisterToolMethods(d *Dispatcher, deps ToolDeps) {
 	d.RegisterDomain(handlerskill.ToolMethods(deps))

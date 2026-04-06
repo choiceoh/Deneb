@@ -187,28 +187,17 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	queue.LastEnqueuedAt = time.Now().UnixMilli()
 	queue.LastRun = run.Run
 
-	// Apply drop policy if at capacity.
+	// At capacity: summarize and drop (single-user bot, always summarize policy).
 	if len(queue.Items) >= queue.Cap {
-		switch queue.DropPolicy {
-		case types.FollowupDropNew:
-			queue.DroppedCount++
-			return false
-		case types.FollowupDropOld:
-			if len(queue.Items) > 0 {
-				queue.Items = queue.Items[1:]
-			}
-			queue.DroppedCount++
-		case types.FollowupDropSummarize:
-			summary := strings.TrimSpace(run.SummaryLine)
-			if summary == "" {
-				summary = strings.TrimSpace(run.Prompt)
-			}
-			if summary != "" {
-				queue.SummaryLines = append(queue.SummaryLines, summary)
-			}
-			queue.DroppedCount++
-			return false
+		summary := strings.TrimSpace(run.SummaryLine)
+		if summary == "" {
+			summary = strings.TrimSpace(run.Prompt)
 		}
+		if summary != "" {
+			queue.SummaryLines = append(queue.SummaryLines, summary)
+		}
+		queue.DroppedCount++
+		return false
 	}
 
 	queue.Items = append(queue.Items, run)

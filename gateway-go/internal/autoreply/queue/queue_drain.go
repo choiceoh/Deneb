@@ -168,36 +168,31 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 			time.Sleep(backoffDelays[idx])
 		}
 
-		// --- Collect mode ---
-		queue.Lock()
-		mode := queue.Mode
-		queue.Unlock()
-
-		if mode == types.FollowupModeCollect {
-			if !collectForceIndividual {
-				queue.Lock()
-				isCross := hasCrossChannelItems(queue.Items)
-				queue.Unlock()
-				if isCross {
-					collectForceIndividual = true
-				}
+		// --- Collect (auto-debounce) mode ---
+		// Always collect mode for single-user bot. Cross-channel items
+		// fall through to individual drain.
+		if !collectForceIndividual {
+			queue.Lock()
+			isCross := hasCrossChannelItems(queue.Items)
+			queue.Unlock()
+			if isCross {
+				collectForceIndividual = true
 			}
+		}
 
-			if !collectForceIndividual {
-				ok := s.drainCollect(queue, runFollowup)
-				if !ok {
-					consecutiveFailures++
-					if consecutiveFailures >= maxConsecutiveFailures {
-						s.logError(fmt.Sprintf("followup queue drain giving up for %s after %d failures", key, consecutiveFailures))
-						reschedule = false
-						break
-					}
-					continue
+		if !collectForceIndividual {
+			ok := s.drainCollect(queue, runFollowup)
+			if !ok {
+				consecutiveFailures++
+				if consecutiveFailures >= maxConsecutiveFailures {
+					s.logError(fmt.Sprintf("followup queue drain giving up for %s after %d failures", key, consecutiveFailures))
+					reschedule = false
+					break
 				}
-				consecutiveFailures = 0
 				continue
 			}
-			// Fall through to individual drain for cross-channel items.
+			consecutiveFailures = 0
+			continue
 		}
 
 		// --- Summary drain ---

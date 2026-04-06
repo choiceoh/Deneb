@@ -61,8 +61,8 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 			continue
 		}
 
-		// Authorize: check scope-based permissions.
-		if authErr := rpc.AuthorizeMethod(req.Method, client.role, client.authed, client.scopes); authErr != nil {
+		// Authorize: role-based permissions.
+		if authErr := rpc.AuthorizeMethod(req.Method, client.role, client.authed); authErr != nil {
 			if err := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, authErr)); err != nil {
 				return
 			}

@@ -29,14 +29,6 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /sessions/{key}/kill", s.handleSessionKill)
 	mux.HandleFunc("GET /sessions/{key}/history", s.handleSessionHistory)
 
-	// OpenAI-compatible HTTP API endpoints.
-	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
-	mux.HandleFunc("GET /v1/models", s.handleModels)
-	mux.HandleFunc("POST /v1/responses", s.handleResponses)
-
-	// Anthropic Messages API endpoint (Claude Desktop integration).
-	mux.HandleFunc("POST /v1/messages", s.handleMessages)
-
 	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
 	if s.hooksHTTP != nil {
 		hooksHandler := s.hooksHTTP
@@ -64,12 +56,8 @@ func (s *Server) buildMux() *http.ServeMux {
 		}
 	})
 
-	// Catch-all handler: plugin HTTP routes → root fallback.
+	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Plugin HTTP routes.
-		if s.pluginRouter != nil && s.pluginRouter.Handle(w, r) {
-			return
-		}
 		// Root fallback for exact "/" GET.
 		if r.Method == http.MethodGet && r.URL.Path == "/" {
 			s.handleRoot(w, r)

@@ -25,7 +25,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -170,24 +169,17 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
 	inbound.FinalizeInboundContext(msgCtx)
 
-	// Fire message.receive hook after parsing, before dispatch (shell + internal).
-	{
+	// Fire message.receive internal hook after parsing, before dispatch.
+	if p.server.internalHooks != nil {
 		env := map[string]string{
 			"DENEB_CHANNEL":     "telegram",
 			"DENEB_CHAT_ID":     chatID,
 			"DENEB_MESSAGE":     msgText,
 			"DENEB_SESSION_KEY": sessionKey,
 		}
-		if p.server.hooks != nil {
-			p.server.safeGo("hooks:message.receive", func() {
-				p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, env)
-			})
-		}
-		if p.server.internalHooks != nil {
-			p.server.safeGo("internal-hooks:message.receive", func() {
-				p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
-			})
-		}
+		p.server.safeGo("internal-hooks:message.receive", func() {
+			p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
+		})
 	}
 
 	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
@@ -367,18 +359,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 				},
 			}
 		},
-		OnSessionEvent: func(eventType, sessKey, reason string) {
-			if p.server.pluginTypedHookRunner != nil {
-				go p.server.pluginTypedHookRunner.RunVoidHook(
-					context.Background(), plugin.HookBeforeReset, map[string]any{
-						"type":       eventType,
-						"sessionKey": sessKey,
-						"reason":     reason,
-						"channel":    "telegram",
-						"ts":         time.Now().UnixMilli(),
-					})
-			}
-		},
+		OnSessionEvent: func(eventType, sessKey, reason string) {},
 		ThinkingRuntime: p.server.thinkingRuntime,
 	}
 
@@ -465,8 +446,8 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 	chatID := fmt.Sprintf("%d", first.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
-	// Fire message.receive hook for the media group (shell + internal).
-	{
+	// Fire message.receive internal hook for the media group.
+	if p.server.internalHooks != nil {
 		caption := media.MessageText(first)
 		env := map[string]string{
 			"DENEB_CHANNEL":     "telegram",
@@ -474,16 +455,9 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 			"DENEB_MESSAGE":     caption,
 			"DENEB_SESSION_KEY": sessionKey,
 		}
-		if p.server.hooks != nil {
-			p.server.safeGo("hooks:message.receive", func() {
-				p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, env)
-			})
-		}
-		if p.server.internalHooks != nil {
-			p.server.safeGo("internal-hooks:message.receive", func() {
-				p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
-			})
-		}
+		p.server.safeGo("internal-hooks:message.receive", func() {
+			p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
+		})
 	}
 
 	// Collect caption from whichever message has one (Telegram puts the caption
@@ -622,24 +596,17 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 	chatID := fmt.Sprintf("%d", cb.Message.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
-	// Fire message.receive hook for callback query (shell + internal).
-	{
+	// Fire message.receive internal hook for callback query.
+	if p.server.internalHooks != nil {
 		env := map[string]string{
 			"DENEB_CHANNEL":     "telegram",
 			"DENEB_CHAT_ID":     chatID,
 			"DENEB_MESSAGE":     cb.Data,
 			"DENEB_SESSION_KEY": sessionKey,
 		}
-		if p.server.hooks != nil {
-			p.server.safeGo("hooks:message.receive", func() {
-				p.server.hooks.Fire(context.Background(), hooks.EventMessageReceive, env)
-			})
-		}
-		if p.server.internalHooks != nil {
-			p.server.safeGo("internal-hooks:message.receive", func() {
-				p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
-			})
-		}
+		p.server.safeGo("internal-hooks:message.receive", func() {
+			p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
+		})
 	}
 
 	// Intercept model quick-change callbacks — handle immediately without agent.

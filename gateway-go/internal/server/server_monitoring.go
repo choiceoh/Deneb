@@ -104,15 +104,10 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
 }
 
-// emitChannelEvent fires the appropriate hook and broadcasts a telegram.changed event.
+// emitChannelEvent fires the internal hook and broadcasts a telegram.changed event.
 func (s *Server) emitChannelEvent(channelID string, hookEvent hooks.Event, action string) {
-	env := map[string]string{"DENEB_CHANNEL_ID": channelID}
-	if s.hooks != nil {
-		s.safeGo("hooks:"+string(hookEvent), func() {
-			s.hooks.Fire(context.Background(), hookEvent, env)
-		})
-	}
 	if s.internalHooks != nil {
+		env := map[string]string{"DENEB_CHANNEL_ID": channelID}
 		s.safeGo("internal-hooks:"+string(hookEvent), func() {
 			s.internalHooks.TriggerFromEvent(context.Background(), hookEvent, "", env)
 		})

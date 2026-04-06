@@ -1,7 +1,6 @@
 package queue
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"testing"
 )
 
@@ -22,26 +21,19 @@ func TestExtractQueueDirective_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestExtractQueueDirective_ModeOnly(t *testing.T) {
+func TestExtractQueueDirective_ModeIgnored(t *testing.T) {
+	// Mode tokens are silently ignored (always collect).
 	d := ExtractQueueDirective("/queue steer")
 	if !d.HasDirective {
 		t.Fatal("expected directive")
 	}
-	if d.QueueMode != types.FollowupModeSteer {
-		t.Errorf("expected mode steer, got %q", d.QueueMode)
-	}
-	if d.RawMode != "steer" {
-		t.Errorf("expected rawMode 'steer', got %q", d.RawMode)
-	}
+	// Mode is not captured since it's always collect.
 }
 
 func TestExtractQueueDirective_WithMessage(t *testing.T) {
 	d := ExtractQueueDirective("Please do this /queue collect and then this")
 	if !d.HasDirective {
 		t.Fatal("expected directive")
-	}
-	if d.QueueMode != types.FollowupModeCollect {
-		t.Errorf("expected mode collect, got %q", d.QueueMode)
 	}
 	if d.Cleaned == "" {
 		t.Error("expected non-empty cleaned text")
@@ -59,21 +51,16 @@ func TestExtractQueueDirective_Reset(t *testing.T) {
 }
 
 func TestExtractQueueDirective_WithOptions(t *testing.T) {
+	// drop:old is silently ignored (always summarize).
 	d := ExtractQueueDirective("/queue collect debounce:2000 cap:5 drop:old")
 	if !d.HasDirective {
 		t.Fatal("expected directive")
-	}
-	if d.QueueMode != types.FollowupModeCollect {
-		t.Errorf("expected mode collect, got %q", d.QueueMode)
 	}
 	if d.DebounceMs != 2000 {
 		t.Errorf("expected debounce 2000, got %d", d.DebounceMs)
 	}
 	if d.Cap != 5 {
 		t.Errorf("expected cap 5, got %d", d.Cap)
-	}
-	if d.DropPolicy != types.FollowupDropOld {
-		t.Errorf("expected drop policy old, got %q", d.DropPolicy)
 	}
 	if !d.HasOptions {
 		t.Error("expected HasOptions=true")

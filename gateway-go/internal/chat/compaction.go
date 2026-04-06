@@ -17,7 +17,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 )
 
 // Compaction defaults.
@@ -277,16 +276,6 @@ func buildMidLoopCompactor(
 			return nil, "", nil
 		}
 
-		// Fire before_compaction hook for mid-loop sweep.
-		if deps.pluginHookRunner != nil {
-			go deps.pluginHookRunner.RunVoidHook(ctx, plugin.HookBeforeCompaction, map[string]any{
-				"messageCount": len(messages),
-				"liveTokens":   liveTokens,
-				"trigger":      "mid_loop",
-				"turn":         turn,
-			})
-		}
-
 		// Sync only new messages to Aurora (avoid duplicates).
 		if len(messages) > auroraSyncedCount {
 			syncMessagesToAurora(deps.auroraStore, messages[auroraSyncedCount:], logger)
@@ -305,16 +294,6 @@ func buildMidLoopCompactor(
 				return messages, "", nil
 			}
 			return nil, "", nil
-		}
-
-		// Fire after_compaction hook for mid-loop sweep.
-		if deps.pluginHookRunner != nil {
-			go deps.pluginHookRunner.RunVoidHook(ctx, plugin.HookAfterCompaction, map[string]any{
-				"messageCount":   len(compactedMsgs),
-				"compactedCount": len(compactedMsgs),
-				"trigger":        "mid_loop",
-				"turn":           turn,
-			})
 		}
 
 		lastCompactTurn = turn

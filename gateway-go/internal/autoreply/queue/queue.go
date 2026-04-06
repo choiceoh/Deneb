@@ -5,37 +5,19 @@ import (
 	"time"
 )
 
-// QueueMode defines how messages are queued.
-type QueueMode string
-
-const (
-	QueueModeOff    QueueMode = "off"
-	QueueModeAuto   QueueMode = "auto"
-	QueueModeManual QueueMode = "manual"
-)
-
-// QueueDropPolicy defines what happens when the queue is full.
-type QueueDropPolicy string
-
-const (
-	QueueDropOldest QueueDropPolicy = "oldest"
-	QueueDropNewest QueueDropPolicy = "newest"
-)
-
 // QueueSettings configures the message queue behavior.
+// The queue always operates in auto-debounce mode: incoming messages are
+// coalesced during a debounce window and then drained. When the queue is
+// full the newest message is dropped (single-user Telegram bot).
 type QueueSettings struct {
-	Mode       QueueMode       `json:"mode"`
-	DebounceMs int             `json:"debounceMs,omitempty"`
-	Cap        int             `json:"cap,omitempty"`
-	DropPolicy QueueDropPolicy `json:"dropPolicy,omitempty"`
+	DebounceMs int `json:"debounceMs,omitempty"`
+	Cap        int `json:"cap,omitempty"`
 }
 
 // DefaultQueueSettings returns sensible defaults.
 func DefaultQueueSettings() QueueSettings {
 	return QueueSettings{
-		Mode:       QueueModeOff,
-		Cap:        50,
-		DropPolicy: QueueDropOldest,
+		Cap: 50,
 	}
 }
 
@@ -72,15 +54,9 @@ func (q *MessageQueue) Enqueue(item QueueItem) bool {
 
 	item.QueuedAt = time.Now().UnixMilli()
 
+	// Drop newest when at capacity (single-user bot: reject the new message).
 	if len(q.items) >= q.settings.Cap {
-		switch q.settings.DropPolicy {
-		case QueueDropOldest:
-			q.items = q.items[1:]
-		case QueueDropNewest:
-			return false
-		default:
-			q.items = q.items[1:]
-		}
+		return false
 	}
 
 	q.items = append(q.items, item)

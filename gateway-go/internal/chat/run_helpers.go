@@ -205,25 +205,6 @@ func handleRunSuccess(
 			}
 
 			if replyText != "" {
-				// Plugin hook: allow plugins to mutate or cancel the outbound message.
-				if deps.pluginHookRunner != nil {
-					msResult := deps.pluginHookRunner.RunMessageSending(ctx, map[string]any{
-						"to":         params.Delivery.To,
-						"content":    replyText,
-						"channel":    params.Delivery.Channel,
-						"sessionKey": params.SessionKey,
-					})
-					if msResult != nil {
-						if msResult.Cancel {
-							logger.Info("message delivery cancelled by plugin hook")
-							replyText = ""
-						} else if msResult.ModifiedText != "" {
-							replyText = msResult.ModifiedText
-						}
-					}
-				}
-			}
-			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
 				if deps.replyFunc == nil {
@@ -238,16 +219,13 @@ func handleRunSuccess(
 					if err := deps.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
 						logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
 					} else {
-						// Fire message.send hooks after successful delivery (shell + internal).
-						env := map[string]string{
-							"DENEB_CHANNEL":     params.Delivery.Channel,
-							"DENEB_TO":          params.Delivery.To,
-							"DENEB_SESSION_KEY": params.SessionKey,
-						}
-						if deps.hookRegistry != nil {
-							go deps.hookRegistry.Fire(deps.shutdownCtx, hooks.EventMessageSend, env)
-						}
+						// Fire message.send internal hook after successful delivery.
 						if deps.internalHookRegistry != nil {
+							env := map[string]string{
+								"DENEB_CHANNEL":     params.Delivery.Channel,
+								"DENEB_TO":          params.Delivery.To,
+								"DENEB_SESSION_KEY": params.SessionKey,
+							}
 							go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hooks.EventMessageSend, params.SessionKey, env)
 						}
 					}

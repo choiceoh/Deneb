@@ -1,9 +1,10 @@
 // queue_directive.go — Parsing /queue directive from message text.
-// Mirrors src/auto-reply/reply/queue/directive.ts (177 LOC).
+// Simplified: mode and drop policy options removed (single-user bot
+// always uses collect + summarize). Only reset, debounce, and cap
+// are supported.
 package queue
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,15 +15,11 @@ import (
 type QueueDirective struct {
 	Cleaned      string
 	HasDirective bool
-	QueueMode    types.FollowupQueueMode
 	QueueReset   bool
-	RawMode      string
 	DebounceMs   int
 	Cap          int
-	DropPolicy   types.FollowupDropPolicy
 	RawDebounce  string
 	RawCap       string
-	RawDrop      string
 	HasOptions   bool
 }
 
@@ -56,30 +53,22 @@ func ExtractQueueDirective(body string) QueueDirective {
 	return QueueDirective{
 		Cleaned:      cleaned,
 		HasDirective: true,
-		QueueMode:    parsed.queueMode,
 		QueueReset:   parsed.queueReset,
-		RawMode:      parsed.rawMode,
 		DebounceMs:   parsed.debounceMs,
 		Cap:          parsed.cap,
-		DropPolicy:   parsed.dropPolicy,
 		RawDebounce:  parsed.rawDebounce,
 		RawCap:       parsed.rawCap,
-		RawDrop:      parsed.rawDrop,
 		HasOptions:   parsed.hasOptions,
 	}
 }
 
 type queueDirectiveParseResult struct {
 	consumed    int
-	queueMode   types.FollowupQueueMode
 	queueReset  bool
-	rawMode     string
 	debounceMs  int
 	cap         int
-	dropPolicy  types.FollowupDropPolicy
 	rawDebounce string
 	rawCap      string
-	rawDrop     string
 	hasOptions  bool
 }
 
@@ -127,23 +116,9 @@ func parseQueueDirectiveArgs(raw string) queueDirectiveParseResult {
 			continue
 		}
 
-		// drop:VALUE
-		if strings.HasPrefix(lowered, "drop:") || strings.HasPrefix(lowered, "drop=") {
-			parts := strings.SplitN(token, string(token[4]), 2)
-			if len(parts) > 1 {
-				result.rawDrop = parts[1]
-				result.dropPolicy = NormalizeFollowupDropPolicy(parts[1])
-			}
-			result.hasOptions = true
-			result.consumed = i
-			continue
-		}
-
-		// Try as mode.
-		mode := NormalizeFollowupQueueMode(token)
-		if mode != "" {
-			result.queueMode = mode
-			result.rawMode = token
+		// Mode and drop policy tokens are silently ignored (single-user bot,
+		// always collect + summarize).
+		if isKnownQueueToken(lowered) {
 			result.consumed = i
 			continue
 		}
@@ -152,6 +127,21 @@ func parseQueueDirectiveArgs(raw string) queueDirectiveParseResult {
 		break
 	}
 	return result
+}
+
+// isKnownQueueToken returns true for formerly-valid mode/drop tokens so that
+// old /queue directives don't break (they're just ignored).
+func isKnownQueueToken(lowered string) bool {
+	switch lowered {
+	case "queue", "queued", "steer", "steering", "interrupt", "interrupts",
+		"abort", "followup", "follow-ups", "followups", "collect", "coalesce",
+		"steer+backlog", "steer-backlog", "steer_backlog":
+		return true
+	}
+	if strings.HasPrefix(lowered, "drop:") || strings.HasPrefix(lowered, "drop=") {
+		return true
+	}
+	return false
 }
 
 // parseQueueDebounce parses a duration string into milliseconds.

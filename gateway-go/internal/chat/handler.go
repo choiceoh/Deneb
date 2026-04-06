@@ -15,7 +15,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
@@ -109,19 +108,11 @@ type Handler struct {
 	// Protected by callbackMu.
 	runStateMachine *telegram.RunStateMachine
 
-	// pluginHookRunner runs typed plugin hooks (before_model_resolve,
-	// before_prompt_build, message_sending, etc.) during chat execution.
-	// Protected by callbackMu.
-	pluginHookRunner *plugin.TypedHookRunner
-
 	// autoresearchWorkdirFn returns the most recently used autoresearch workdir.
 	// Protected by callbackMu.
 	autoresearchWorkdirFn func() string
 
-	// hookRegistry fires user-defined shell hooks on message/tool events.
-	// Protected by callbackMu.
-	hookRegistry *hooks.Registry
-	// internalHookRegistry fires programmatic internal hooks on the same events.
+	// internalHookRegistry fires programmatic internal hooks on message/tool events.
 	internalHookRegistry *hooks.InternalRegistry
 
 	// statusDepsFunc returns server-level status data for /status command.
@@ -169,8 +160,6 @@ type HandlerConfig struct {
 	// Fields below were previously Set*() after construction. They are all
 	// available at handler creation time and passed here to reduce late-binding.
 	ProviderRuntime      *provider.ProviderRuntimeResolver // optional; runtime auth
-	PluginHookRunner     *plugin.TypedHookRunner           // optional; typed plugin hooks
-	HookRegistry         *hooks.Registry                   // optional; user-defined shell hooks
 	InternalHookRegistry *hooks.InternalRegistry           // optional; programmatic internal hooks
 	BroadcastRaw         streaming.BroadcastRawFunc        // optional; raw event relay
 	EmitAgentFn          func(kind, sessionKey, runID string, payload map[string]any)
@@ -226,8 +215,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		defaultSystem:        cfg.DefaultSystem,
 		maxTokens:            cfg.MaxTokens,
 		providerRuntime:      cfg.ProviderRuntime,
-		pluginHookRunner:     cfg.PluginHookRunner,
-		hookRegistry:         cfg.HookRegistry,
 		internalHookRegistry: cfg.InternalHookRegistry,
 		broadcastRaw:         cfg.BroadcastRaw,
 		emitAgentFn:          cfg.EmitAgentFn,
@@ -443,28 +430,6 @@ func (h *Handler) SetAutoresearchWorkdirFn(fn func() string) {
 func (h *Handler) SetRunStateMachine(sm *telegram.RunStateMachine) {
 	h.callbackMu.Lock()
 	h.runStateMachine = sm
-	h.callbackMu.Unlock()
-}
-
-// SetPluginHookRunner sets the typed hook runner for plugin lifecycle events.
-func (h *Handler) SetPluginHookRunner(r *plugin.TypedHookRunner) {
-	h.callbackMu.Lock()
-	h.pluginHookRunner = r
-	h.callbackMu.Unlock()
-}
-
-// PluginHookRunner returns the typed hook runner (may be nil).
-func (h *Handler) PluginHookRunner() *plugin.TypedHookRunner {
-	h.callbackMu.RLock()
-	r := h.pluginHookRunner
-	h.callbackMu.RUnlock()
-	return r
-}
-
-// SetHookRegistry sets the user-defined hook registry for message/tool events.
-func (h *Handler) SetHookRegistry(r *hooks.Registry) {
-	h.callbackMu.Lock()
-	h.hookRegistry = r
 	h.callbackMu.Unlock()
 }
 

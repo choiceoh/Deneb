@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -72,7 +71,6 @@ type WsClient struct {
 	role          string
 	authed        bool
 	deviceID      string
-	scopes        []auth.Scope
 	writeMu       sync.Mutex
 	inflightBytes atomic.Int64 // bytes currently being written (not yet flushed)
 	lastActivity  atomic.Int64 // unix nano of last inbound message
@@ -86,23 +84,6 @@ func (c *WsClient) ID() string { return c.connID }
 
 // IsAuthenticated returns true if the client has completed the handshake.
 func (c *WsClient) IsAuthenticated() bool { return c.authed }
-
-// Role returns the client's RBAC role.
-func (c *WsClient) Role() string {
-	if c.role == "" {
-		return "operator"
-	}
-	return c.role
-}
-
-// Scopes returns the client's permission scopes as strings.
-func (c *WsClient) Scopes() []string {
-	result := make([]string, len(c.scopes))
-	for i, s := range c.scopes {
-		result[i] = string(s)
-	}
-	return result
-}
 
 // eventWriteTimeout is the deadline for writing a single event frame.
 // Generous to handle bursts during LLM streaming on loaded DGX Spark.
@@ -301,21 +282,18 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 		client.authed = true
 		client.role = string(claims.Role)
 		client.deviceID = claims.DeviceID
-		client.scopes = claims.Scopes
 		s.authValidator.TouchDevice(claims.DeviceID)
 	} else if s.authValidator == nil {
 		// No-auth mode: trust all connections as operator.
 		client.authed = true
 		client.role = "operator"
-		client.scopes = auth.DefaultScopes(auth.RoleOperator)
 	} else {
-		// Auth configured but no token provided: allow connection with limited access.
+		// Auth configured but no token provided: limited access (probe role).
 		client.authed = false
 		client.role = params.Role
 		if client.role == "" {
-			client.role = "viewer"
+			client.role = "probe"
 		}
-		client.scopes = auth.DefaultScopes(auth.Role(client.role))
 	}
 
 	// Register with broadcaster.
