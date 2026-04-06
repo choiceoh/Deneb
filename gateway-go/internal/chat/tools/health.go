@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -39,7 +38,7 @@ func ToolHealthCheck(d *toolctx.VegaDeps, localAI LocalAIProbe) ToolFunc {
 		case "localai":
 			return formatLocalAIHealth(localAI), nil
 		case "memory":
-			return formatMemoryHealth(ctx, d), nil
+			return "## Aurora-Memory 상태\n\nmemory: replaced by wiki", nil
 		}
 
 		// Collect all component rows for "all" or vega-related components.
@@ -86,59 +85,14 @@ func ToolHealthCheck(d *toolctx.VegaDeps, localAI LocalAIProbe) ToolFunc {
 		}
 		rows = append(rows, localAIGw)
 
-		// Append aurora-memory health.
-		rows = append(rows, checkMemoryComponent(ctx, d))
+		// Memory was replaced by wiki; report a static status row.
+		rows = append(rows, vega.ComponentHealth{
+			Name:   "aurora-memory",
+			Detail: "replaced by wiki",
+		})
 
 		return formatHealthStatus(vega.HealthStatus{Components: rows}), nil
 	}
-}
-
-// --- Memory health ---
-
-// checkMemoryComponent probes the aurora-memory store and returns a ComponentHealth.
-func checkMemoryComponent(ctx context.Context, d *toolctx.VegaDeps) vega.ComponentHealth {
-	ch := vega.ComponentHealth{Name: "aurora-memory"}
-	if d.MemoryStore == nil {
-		ch.Detail = "not configured"
-		return ch
-	}
-
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	start := time.Now()
-	count, err := d.MemoryStore.ActiveFactCount(probeCtx)
-	elapsed := time.Since(start)
-	ch.Latency = elapsed.Round(time.Millisecond).String()
-
-	if err != nil {
-		ch.Detail = "DB error: " + err.Error()
-		return ch
-	}
-
-	ch.Available = true
-
-	// Load embeddings count for richer status.
-	embCount := 0
-	if embeddings, err := d.MemoryStore.LoadEmbeddings(probeCtx); err == nil {
-		embCount = len(embeddings)
-	}
-
-	ch.Detail = fmt.Sprintf("facts=%d, embeddings=%d", count, embCount)
-	return ch
-}
-
-// formatMemoryHealth returns a standalone aurora-memory health report.
-func formatMemoryHealth(ctx context.Context, d *toolctx.VegaDeps) string {
-	ch := checkMemoryComponent(ctx, d)
-	icon := "✅"
-	if !ch.Available {
-		icon = "❌"
-	}
-	latency := ch.Latency
-	if latency == "" {
-		latency = "—"
-	}
-	return fmt.Sprintf("## Aurora-Memory 상태\n\n%s %s (latency: %s)\n%s", icon, ch.Name, latency, ch.Detail)
 }
 
 // --- Shared helpers ---

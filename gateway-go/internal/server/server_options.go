@@ -84,16 +84,14 @@ func WithHooksHTTP(h *HooksHTTPHandler) Option {
 	}
 }
 
-// WithEmbedder sets the embedding provider for the memory subsystem.
-func WithEmbedder(e embedding.Embedder) Option {
-	return func(s *Server) {
-		s.embedder = e
-	}
+// WithEmbedder is a no-op kept for caller compatibility.
+// Memory embedding was replaced by wiki knowledge base.
+func WithEmbedder(_ embedding.Embedder) Option {
+	return func(_ *Server) {}
 }
 
-// WithJinaAPIKey sets the Jina API key for cross-encoder reranking.
-func WithJinaAPIKey(key string) Option {
-	return func(s *Server) {
-		s.jinaAPIKey = key
-	}
+// WithJinaAPIKey is a no-op kept for caller compatibility.
+// Jina reranking was replaced by wiki FTS.
+func WithJinaAPIKey(_ string) Option {
+	return func(_ *Server) {}
 }

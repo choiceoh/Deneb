@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
@@ -262,11 +261,9 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
 	s.autonomousSvc = autonomous.NewService(s.logger)
 
-	// Wire dreamer: wiki dreamer takes priority over memory dreaming adapter.
+	// Wire wiki dreamer for autonomous diary → wiki consolidation.
 	if s.wikiDreamer != nil {
 		s.autonomousSvc.SetDreamer(s.wikiDreamer)
-	} else if s.dreamingAdapter != nil {
-		s.autonomousSvc.SetDreamer(s.dreamingAdapter)
 	}
 
 	// Broadcast dreaming events to WebSocket clients.
@@ -287,23 +284,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			if s.autoresearchRunner != nil {
 				s.autoresearchRunner.SetNotifier(notifier)
 			}
-		}
-	}
-
-	// Register periodic memory flush task: appends high-importance facts
-	// to date-stamped markdown files (~/.deneb/memory/YYYY-MM-DD.md).
-	if s.memoryStore != nil {
-		denebDir := ""
-		if home, err := os.UserHomeDir(); err == nil {
-			denebDir = filepath.Join(home, ".deneb")
-		}
-		if denebDir != "" {
-			s.autonomousSvc.RegisterTask(&memoryFlushTask{
-				store:    s.memoryStore,
-				dir:      denebDir,
-				timezone: "Asia/Seoul",
-				logger:   s.logger,
-			})
 		}
 	}
 

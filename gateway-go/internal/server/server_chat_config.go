@@ -11,7 +11,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
 
@@ -36,14 +35,6 @@ func (s *Server) initGmailPoll() {
 		LocalModel:  s.modelRegistry.Model(modelrole.RoleLightweight),
 	}
 
-	// Wire memory store for pipeline context recall (reuse unified store).
-	if s.memoryStore != nil {
-		cfg.MemStore = s.memoryStore
-		if s.embedder != nil {
-			cfg.MemEmbed = memory.NewEmbedder(s.embedder, s.memoryStore, s.logger)
-		}
-		s.logger.Info("gmailpoll: memory pipeline enabled")
-	}
 	if pollCfg.IntervalMin != nil {
 		cfg.IntervalMin = *pollCfg.IntervalMin
 	}
