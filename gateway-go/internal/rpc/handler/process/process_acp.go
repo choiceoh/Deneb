@@ -27,8 +27,9 @@ type ACPDeps struct {
 	Infra        *acp.SubagentInfraDeps
 	Sessions     *session.Manager
 	GatewaySubs  *events.GatewayEventSubscriptions
-	BindingStore *acp.BindingStore
-	Translator   *acp.ACPTranslator
+	BindingStore   *acp.BindingStore
+	RegistryStore  *acp.RegistryStore
+	Translator     *acp.ACPTranslator
 
 	// SessionSendFn sends a message to a session, triggering an agent run.
 	SessionSendFn func(sessionKey, message string) error

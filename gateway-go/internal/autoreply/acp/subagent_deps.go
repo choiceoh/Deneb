@@ -100,12 +100,15 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 	}
 
 	// Create KindSubagent session in session.Manager for lifecycle tracking and GC.
-	// Set a 30-minute timeout to prevent indefinitely hung subagents.
+	// Set a 30-minute absolute timeout and 10-minute idle timeout for stall detection.
 	if d.Sessions != nil {
 		sess := d.Sessions.Create(sessionKey, session.KindSubagent)
 		if sess != nil {
 			timeoutAt := time.Now().Add(30 * time.Minute).UnixMilli()
 			sess.TimeoutAt = &timeoutAt
+			sess.IdleTimeoutMs = 10 * 60 * 1000 // 10 minutes idle → stall
+			now := time.Now().UnixMilli()
+			sess.LastActivityAt = &now
 			if err := d.Sessions.Set(sess); err != nil {
 				d.logger().Warn("failed to persist subagent session timeout",
 					"agentId", agentID, "sessionKey", sessionKey, "error", err)

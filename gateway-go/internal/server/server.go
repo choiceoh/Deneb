@@ -90,8 +90,9 @@ type Server struct {
 	publisher   *events.Publisher
 	processes   *process.Manager
 	daemon      *daemon.Daemon
-	runtimeCfg  *config.GatewayRuntimeConfig
-	version     string
+	runtimeCfg    *config.GatewayRuntimeConfig
+	configWatcher *config.Watcher
+	version       string
 	rustFFI     bool // true when Rust FFI is available
 	logColor    bool // true when ANSI color output is enabled
 	logger      *slog.Logger
