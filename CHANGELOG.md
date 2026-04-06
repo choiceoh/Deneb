@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.15.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.15.0...deneb-v4.15.1) (2026-04-06)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** strip bare [toolname] text leaked by GLM models ([ba47bf7](https://github.com/choiceoh/Deneb/commit/ba47bf71209d48a9e51a4c45467d3c7e4a50ec83))
+* **chat:** strip bare [toolname] text leaked by GLM models ([ee2d5ec](https://github.com/choiceoh/Deneb/commit/ee2d5ec05a64732a012a63ef0a9f3889d8c7c428))
+
 ## [4.15.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.14.0...deneb-v4.15.0) (2026-04-06)
 
 
