@@ -4,161 +4,133 @@ package ffi
 
 import (
 	"encoding/json"
-	"regexp"
-	"strings"
+	"fmt"
+	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/coremarkdown"
 )
 
-var mdBoldRe = regexp.MustCompile(`\*\*(.+?)\*\*|__(.+?)__`)
-var mdItalicRe = regexp.MustCompile(`\*(.+?)\*|_(.+?)_`)
-var mdCodeRe = regexp.MustCompile("`([^`]+)`")
-var mdLinkRe = regexp.MustCompile(`\[([^\]]*)\]\([^)]+\)`)
-var mdHeadingRe = regexp.MustCompile(`(?m)^#{1,6}\s+`)
-var mdFenceOpenRe = regexp.MustCompile("(?m)^\\s{0,3}(`{3,}|~{3,})")
-
-// MarkdownToIR is a pure-Go fallback that strips markdown to plain text.
-// Returns a minimal IR structure. Full parsing requires the Rust implementation.
-func MarkdownToIR(markdown string, _ string) (json.RawMessage, error) {
+// MarkdownToIR parses markdown text into an intermediate representation using
+// the pure-Go goldmark-based parser. Returns JSON-encoded IR with text, styles,
+// links, and code block detection.
+func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) {
 	if len(markdown) == 0 {
 		return json.RawMessage(`{"text":"","styles":[],"links":[],"has_code_blocks":false}`), nil
 	}
 
-	// Strip common markdown syntax.
-	text := markdown
-	text = mdBoldRe.ReplaceAllString(text, "$1$2")
-	text = mdItalicRe.ReplaceAllString(text, "$1$2")
-	text = mdCodeRe.ReplaceAllString(text, "$1")
-	text = mdLinkRe.ReplaceAllString(text, "$1")
-	text = mdHeadingRe.ReplaceAllString(text, "")
+	// Check cache (shared with cgo path pattern).
+	cacheKey := fnv1a64noffi(markdown + "|" + optionsJSON)
+	if cached, ok := noffiCache.get(cacheKey); ok {
+		return cached, nil
+	}
 
-	hasCodeBlocks := mdFenceOpenRe.MatchString(markdown)
+	opts := coremarkdown.DefaultParseOptions()
+	if len(optionsJSON) > 0 {
+		if err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {
+			return nil, fmt.Errorf("markdown_to_ir: invalid options: %w", err)
+		}
+	}
 
-	result := struct {
-		Text          string `json:"text"`
-		Styles        []any  `json:"styles"`
-		Links         []any  `json:"links"`
-		HasCodeBlocks bool   `json:"has_code_blocks"`
-	}{
-		Text:          strings.TrimSpace(text),
-		Styles:        []any{},
-		Links:         []any{},
+	ir, hasTables := coremarkdown.MarkdownToIRWithMeta(markdown, &opts)
+	hasCodeBlocks := false
+	for _, s := range ir.Styles {
+		if s.Style == coremarkdown.StyleCodeBlock {
+			hasCodeBlocks = true
+			break
+		}
+	}
+
+	out := &coremarkdown.IROutput{
+		Text:          ir.Text,
+		Styles:        ir.Styles,
+		Links:         ir.Links,
 		HasCodeBlocks: hasCodeBlocks,
+		HasTables:     hasTables,
 	}
-	data, err := json.Marshal(result)
+	result, err := coremarkdown.MarshalIROutput(out)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("markdown_to_ir: marshal: %w", err)
 	}
-	return json.RawMessage(data), nil
+	noffiCache.put(cacheKey, result)
+	return result, nil
 }
 
-// MarkdownDetectFences is a pure-Go fallback for fence detection.
+// MarkdownDetectFences detects fenced code blocks in markdown text.
+// Returns JSON array of fence span objects.
 func MarkdownDetectFences(text string) (json.RawMessage, error) {
 	if len(text) == 0 {
 		return json.RawMessage("[]"), nil
 	}
-
-	type fenceSpan struct {
-		Start    int    `json:"start"`
-		End      int    `json:"end"`
-		OpenLine string `json:"openLine"`
-		Marker   string `json:"marker"`
-		Indent   string `json:"indent"`
+	spans := coremarkdown.DetectFences(text)
+	if spans == nil {
+		return json.RawMessage("[]"), nil
 	}
-
-	var spans []fenceSpan
-	lines := strings.Split(text, "\n")
-	pos := 0
-	type openFence struct {
-		start      int
-		markerChar byte
-		markerLen  int
-		openLine   string
-		indent     string
-	}
-	var current *openFence
-
-	for _, line := range lines {
-		lineEnd := pos + len(line)
-
-		if current == nil {
-			// Look for opening fence.
-			trimmed := strings.TrimLeft(line, " ")
-			indent := line[:len(line)-len(trimmed)]
-			if len(indent) <= 3 && len(trimmed) >= 3 {
-				ch := trimmed[0]
-				if ch == '`' || ch == '~' {
-					count := 0
-					for count < len(trimmed) && trimmed[count] == ch {
-						count++
-					}
-					if count >= 3 {
-						current = &openFence{
-							start:      pos,
-							markerChar: ch,
-							markerLen:  count,
-							openLine:   line,
-							indent:     indent,
-						}
-					}
-				}
-			}
-		} else {
-			// Look for closing fence.
-			trimmed := strings.TrimLeft(line, " ")
-			closingIndent := line[:len(line)-len(trimmed)]
-			if len(closingIndent) <= 3 && len(trimmed) >= current.markerLen {
-				ch := trimmed[0]
-				if ch == current.markerChar {
-					count := 0
-					for count < len(trimmed) && trimmed[count] == ch {
-						count++
-					}
-					// Closing fence: same char, >= marker length, nothing else.
-					rest := strings.TrimSpace(trimmed[count:])
-					if count >= current.markerLen && rest == "" {
-						spans = append(spans, fenceSpan{
-							Start:    current.start,
-							End:      lineEnd,
-							OpenLine: current.openLine,
-							Marker:   string(make([]byte, current.markerLen, current.markerLen)),
-							Indent:   current.indent,
-						})
-						current = nil
-					}
-				}
-			}
-		}
-		pos = lineEnd + 1 // +1 for newline
-	}
-
-	// Unclosed fence extends to end of buffer.
-	if current != nil {
-		spans = append(spans, fenceSpan{
-			Start:    current.start,
-			End:      len(text),
-			OpenLine: current.openLine,
-			Marker:   string(make([]byte, current.markerLen, current.markerLen)),
-			Indent:   current.indent,
-		})
-	}
-
 	data, err := json.Marshal(spans)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("markdown_detect_fences: marshal: %w", err)
 	}
 	return json.RawMessage(data), nil
 }
 
-// MarkdownToPlainText is a convenience wrapper that strips markdown formatting.
+// MarkdownToPlainText is a convenience wrapper that parses markdown and returns
+// only the plain text content (stripping all formatting).
 func MarkdownToPlainText(markdown string) (string, error) {
-	raw, err := MarkdownToIR(markdown, "")
-	if err != nil {
-		return "", err
+	return coremarkdown.ToPlainText(markdown), nil
+}
+
+// noffi-only LRU cache (same pattern as cgo cache in markdown_cgo.go).
+var noffiCache = &noffiMarkdownCache{entries: make(map[uint64]*noffiCacheEntry)}
+
+const noffiCacheMaxEntries = 128
+
+type noffiCacheEntry struct {
+	value      json.RawMessage
+	lastAccess int64
+}
+
+type noffiMarkdownCache struct {
+	mu        sync.Mutex
+	entries   map[uint64]*noffiCacheEntry
+	accessCtr int64
+}
+
+func fnv1a64noffi(s string) uint64 {
+	const offset64 = 14695981039346656037
+	const prime64 = 1099511628211
+	h := uint64(offset64)
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= prime64
 	}
-	var result struct {
-		Text string `json:"text"`
+	return h
+}
+
+func (c *noffiMarkdownCache) get(key uint64) (json.RawMessage, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[key]
+	if !ok {
+		return nil, false
 	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return "", err
+	c.accessCtr++
+	e.lastAccess = c.accessCtr
+	return e.value, true
+}
+
+func (c *noffiMarkdownCache) put(key uint64, val json.RawMessage) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.accessCtr++
+	if len(c.entries) >= noffiCacheMaxEntries {
+		var lruKey uint64
+		lruAccess := c.accessCtr + 1
+		for k, e := range c.entries {
+			if e.lastAccess < lruAccess {
+				lruAccess = e.lastAccess
+				lruKey = k
+			}
+		}
+		delete(c.entries, lruKey)
 	}
-	return result.Text, nil
+	c.entries[key] = &noffiCacheEntry{value: val, lastAccess: c.accessCtr}
 }
