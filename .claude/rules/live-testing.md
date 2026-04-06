@@ -20,44 +20,33 @@ globs: ["gateway-go/**/*.go", "core-rs/**/*.rs", "proto/**/*.proto"]
 | `start` / `stop` | dev 인스턴스 시작/종료 |
 | `status` | 상태 + /health 응답 |
 
-### Prod-Parity Mode (프로덕션 환경 동등성)
+### Dev 환경 (프로덕션 동등)
 
-기본 dev 인스턴스는 빈 설정(`{}`)으로 시작하여 프로덕션과 차이가 있다:
+dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈 config 모드 없음):
 
-| 항목 | Default dev | `--prod-parity` | Production |
+| 항목 | Dev | Production | 남은 차이 |
 |---|---|---|---|
-| Config | `{}` (empty) | 프로덕션 config (Telegram 제외) | `~/.deneb/deneb.json` |
-| Providers/Auth | 미로딩 | 로딩 | 로딩 |
-| Hooks/Agents | 미로딩 | 로딩 | 로딩 |
-| Telegram | 비활성 | 비활성 (409 방지) | 활성 |
-| Rust features | `make rust` 의존 | 동일 | `make rust-dgx` (Vega+ML+CUDA) |
-| Bind | loopback | loopback | config-driven |
-
-**`--prod-parity` 사용법:**
-```bash
-# 프로덕션에 가까운 환경으로 테스트
-scripts/dev-live-test.sh --prod-parity restart
-scripts/dev-live-test.sh --prod-parity smoke
-scripts/dev-live-test.sh --prod-parity quality
-
-# 반복 테스트도 동일
-scripts/dev-iterate.sh --prod-parity
-
-# 환경변수로 기본값 설정 가능
-export DEV_PROD_PARITY=true
-```
+| Config | 프로덕션 config (dev-config-gen.sh) | `~/.deneb/deneb.json` | 없음 |
+| Providers/Auth | 로딩 | 로딩 | 없음 |
+| Hooks/Agents | 로딩 | 로딩 | 없음 |
+| Telegram | dev 봇 (DENEB_DEV_TELEGRAM_TOKEN) | 프로덕션 봇 | 별도 봇 (의도적) |
+| Rust features | `make rust` 의존 | `make rust-dgx` (Vega+ML+CUDA) | `make rust-dgx`로 해소 |
+| Bind | loopback | config-driven | 포트만 다름 (의도적) |
 
 **환경 차이 확인:**
 ```bash
 scripts/dev-live-test.sh parity    # dev vs prod 환경 비교 리포트
 ```
 
-**dev config 생성:**
+**Telegram 설정:** `~/.deneb/.env`에 dev 전용 봇 토큰 필수:
 ```bash
-scripts/dev-config-gen.sh              # /tmp/deneb-dev-config.json 생성
-scripts/dev-config-gen.sh --diff       # 무엇이 제거되는지 확인
-scripts/dev-config-gen.sh --check      # 프로덕션 config 존재 여부
+# ~/.deneb/.env
+DENEB_DEV_TELEGRAM_TOKEN=<dev bot token>         # dev-live-test.sh (port 18790)
+DENEB_ITERATE_TELEGRAM_TOKEN=<iterate bot token>  # dev-iterate.sh (port 18791)
 ```
+- 각 토큰은 @BotFather에서 별도 봇을 만들어서 획득
+- 프로덕션 봇과 다른 봇이므로 409 충돌 없이 동시 실행 가능
+- 토큰 미설정 시 텔레그램 비활성 (그 외 모든 코드 경로는 동일하게 실행)
 
 **Rust 빌드 동등성:** dev에서도 full feature로 빌드하면 Vega/ML 경로 테스트 가능:
 ```bash
