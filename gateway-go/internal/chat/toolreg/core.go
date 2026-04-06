@@ -534,15 +534,17 @@ func RegisterRLMTools(registry toolctx.ToolRegistrar, vegaDeps *toolctx.VegaDeps
 // maxTasks caps the number of tasks in a single batch call.
 func RegisterRLMSpawnTools(registry toolctx.ToolRegistrar, spawnFn tools.SpawnFunc, batchFn tools.SpawnBatchFunc, maxTasks int) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "llm_spawn",
-		Description: "서브 LLM을 동기 실행. 독립 컨텍스트에서 데이터 조회+분석 후 결과만 반환",
-		InputSchema: llmSpawnToolSchema(),
-		Fn:          tools.ToolLLMSpawn(spawnFn),
+		Name:            "llm_spawn",
+		Description:     "서브 LLM을 동기 실행. 독립 컨텍스트에서 데이터 조회+분석 후 결과만 반환",
+		InputSchema:     llmSpawnToolSchema(),
+		Fn:              tools.ToolLLMSpawn(spawnFn),
+		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "llm_spawn_batch",
-		Description: fmt.Sprintf("복수 서브 LLM을 병렬 실행 (최대 %d개). 각각 독립 컨텍스트에서 처리 후 결과 배열 반환", maxTasks),
-		InputSchema: llmSpawnBatchToolSchema(),
-		Fn:          tools.ToolLLMSpawnBatch(batchFn, maxTasks),
+		Name:            "llm_spawn_batch",
+		Description:     fmt.Sprintf("복수 서브 LLM을 병렬 실행 (최대 %d개). 각각 독립 컨텍스트에서 처리 후 결과 배열 반환", maxTasks),
+		InputSchema:     llmSpawnBatchToolSchema(),
+		Fn:              tools.ToolLLMSpawnBatch(batchFn, maxTasks),
+		ConcurrencySafe: true,
 	})
 }
