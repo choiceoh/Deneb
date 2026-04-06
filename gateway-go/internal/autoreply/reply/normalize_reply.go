@@ -31,6 +31,14 @@ var bracketResultRe = regexp.MustCompile(`(?m)^\[result → .*\]\s*$`)
 // closing )].  Everything from the [tool: prefix to end-of-text is removed.
 var bracketToolCallUnterminatedRe = regexp.MustCompile(`(?s)\[tool:[a-z_]+\(.*`)
 
+// koreanToolCallRe matches Korean-formatted tool call lines leaked from
+// session memory transcripts: "— tool_name 사용: {args}".
+var koreanToolCallRe = regexp.MustCompile(`(?m)^—\s+[a-z][a-z0-9_.]*\s+사용:.*$`)
+
+// koreanToolResultRe matches tool result arrow lines that follow Korean-style
+// tool calls: "  ↳ result" or "  ↳ 오류: error".
+var koreanToolResultRe = regexp.MustCompile(`(?m)^\s+↳\s+.*$`)
+
 // StripLeakedToolCallMarkup removes leaked tool-call envelope text that should
 // stay internal. Handles multiple model-specific formats:
 //   - Llama-style: <function=name>...<arg_key>...<arg_value>...</tool_call>
@@ -71,6 +79,11 @@ func StripLeakedToolCallMarkup(text string) string {
 	// Strip unterminated [tool: patterns (LLM output truncated before
 	// the closing bracket, e.g. long exec commands).
 	trimmed = bracketToolCallUnterminatedRe.ReplaceAllString(trimmed, "")
+
+	// Strip Korean-style tool call lines from session memory transcripts
+	// (e.g. "— web_fetch 사용: {"query":"..."}") and their result arrows.
+	trimmed = koreanToolCallRe.ReplaceAllString(trimmed, "")
+	trimmed = koreanToolResultRe.ReplaceAllString(trimmed, "")
 
 	return strings.TrimSpace(trimmed)
 }
