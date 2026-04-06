@@ -199,6 +199,21 @@ Done`,
 			in:   "— web_fetch 사용: {\"query\":\"agentskills.io Hermes Agent skills quality review\",\"fetch\":2}",
 			want: "",
 		},
+		{
+			name: "removes bare tool name in brackets",
+			in:   "[cron]",
+			want: "",
+		},
+		{
+			name: "removes bare tool name preserving surrounding text",
+			in:   "확인해볼게요.\n[cron]\n완료.",
+			want: "확인해볼게요.\n\n완료.",
+		},
+		{
+			name: "removes bare tool name with underscores",
+			in:   "[read_file]",
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -287,6 +302,11 @@ func TestSanitizeDraftText(t *testing.T) {
 			name: "strips bare tool prefix during streaming",
 			in:   "[tool:",
 			want: "",
+		},
+		{
+			name: "strips bare tool name during streaming",
+			in:   "확인해볼게\n[cron]",
+			want: "확인해볼게",
 		},
 	}
 

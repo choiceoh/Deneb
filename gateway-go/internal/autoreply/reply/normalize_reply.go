@@ -31,6 +31,11 @@ var bracketResultRe = regexp.MustCompile(`(?m)^\[result → .*\]\s*$`)
 // closing )].  Everything from the [tool: prefix to end-of-text is removed.
 var bracketToolCallUnterminatedRe = regexp.MustCompile(`(?s)\[tool:[a-z_]+\(.*`)
 
+// bareToolNameRe matches bare [toolname] patterns on their own line — a minimal
+// leaked tool call where the LLM outputs just the tool name in brackets instead
+// of making a structured tool call (e.g. "[cron]", "[exec]", "[read_file]").
+var bareToolNameRe = regexp.MustCompile(`(?m)^\[([a-z][a-z0-9_]*)\]\s*$`)
+
 // koreanToolCallRe matches Korean-formatted tool call lines leaked from
 // session memory transcripts: "— tool_name 사용: {args}".
 var koreanToolCallRe = regexp.MustCompile(`(?m)^—\s+[a-z][a-z0-9_.]*\s+사용:.*$`)
@@ -80,6 +85,10 @@ func StripLeakedToolCallMarkup(text string) string {
 	// the closing bracket, e.g. long exec commands).
 	trimmed = bracketToolCallUnterminatedRe.ReplaceAllString(trimmed, "")
 
+	// Strip bare [toolname] lines (e.g. "[cron]") where the LLM outputs a
+	// tool name in brackets as text instead of making a structured tool call.
+	trimmed = bareToolNameRe.ReplaceAllString(trimmed, "")
+
 	// Strip Korean-style tool call lines from session memory transcripts
 	// (e.g. "— web_fetch 사용: {"query":"..."}") and their result arrows.
 	trimmed = koreanToolCallRe.ReplaceAllString(trimmed, "")
@@ -111,6 +120,8 @@ func SanitizeDraftText(text string) string {
 	if idx := strings.LastIndex(text, "[tool:"); idx >= 0 {
 		text = text[:idx]
 	}
+	// Also strip bare [toolname] during streaming (e.g. "[cron]").
+	text = bareToolNameRe.ReplaceAllString(text, "")
 	text = StripFencedCodeBlocks(text)
 	return strings.TrimSpace(text)
 }
