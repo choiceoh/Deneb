@@ -492,6 +492,7 @@
 # ---------------------------------------------------------------------------
 
 - name: exec
+  max_output: 51200  # 50K chars — matches exec's internal TruncateForLLM budget
   properties:
     command:
       type: string
