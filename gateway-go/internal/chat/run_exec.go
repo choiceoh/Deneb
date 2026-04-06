@@ -744,6 +744,7 @@ func executeAgentRun(
 		},
 		StreamingToolExecution: true,
 		OnMidLoopCompact:       midLoopCompactFn,
+		ToolLoopDetector:       agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
 		// across runs (fixes the "short-term memory loss" bug).
@@ -1054,6 +1055,17 @@ func executeAgentRun(
 			logger.Info("retrying agent run after compaction", "attempt", attempt)
 		}
 
+		// Fire llm_input hook (void, non-blocking): notify plugins of the LLM request.
+		if deps.pluginHookRunner != nil && attempt == 0 {
+			go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookLLMInput, map[string]any{
+				"sessionKey":   params.SessionKey,
+				"runId":        params.ClientRunID,
+				"model":        model,
+				"messageCount": len(messages),
+				"toolCount":    len(tools),
+			})
+		}
+
 		var runErr error
 		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
@@ -1062,6 +1074,15 @@ func executeAgentRun(
 			// don't maintain Aurora state, so compaction would be a no-op.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
+
+				// Fire before_compaction hook.
+				if deps.pluginHookRunner != nil {
+					go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookBeforeCompaction, map[string]any{
+						"sessionKey":   params.SessionKey,
+						"messageCount": len(messages),
+						"trigger":      "context_overflow",
+					})
+				}
 
 				// Pre-compaction fact extraction: extract learnings from the
 				// conversation before compaction trims older messages.
@@ -1157,6 +1178,16 @@ func executeAgentRun(
 				getCompactionCircuitBreaker().RecordSuccess()
 				messages = compactedMsgs
 
+				// Fire after_compaction hook.
+				if deps.pluginHookRunner != nil {
+					go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookAfterCompaction, map[string]any{
+						"sessionKey":       params.SessionKey,
+						"messageCount":     len(messages),
+						"compactedCount":   len(compactedMsgs),
+						"trigger":          "context_overflow",
+					})
+				}
+
 				// Post-compaction file restoration: re-inject recently accessed
 				// file contents so the agent retains working memory of files
 				// it was actively editing. Stays within token budget.
@@ -1246,6 +1277,20 @@ func executeAgentRun(
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
 		"transition", lastTransition.Reason())
+
+	// Fire llm_output hook (void, non-blocking): notify plugins of the LLM response.
+	if deps.pluginHookRunner != nil {
+		go deps.pluginHookRunner.RunVoidHook(deps.shutdownCtx, plugin.HookLLMOutput, map[string]any{
+			"sessionKey":   params.SessionKey,
+			"runId":        params.ClientRunID,
+			"model":        model,
+			"turns":        agentResult.Turns,
+			"inputTokens":  agentResult.Usage.InputTokens,
+			"outputTokens": agentResult.Usage.OutputTokens,
+			"stopReason":   agentResult.StopReason,
+			"textLen":      len(agentResult.Text),
+		})
+	}
 
 	// Fire agent_end plugin hook (void, non-blocking).
 	if deps.pluginHookRunner != nil {

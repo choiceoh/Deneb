@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -261,7 +262,7 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 		return nil, nil
 	}
 
-	// Validate, clamp values, and enforce max count.
+	// Validate, clamp values, filter self-poisoning/injection, enforce max count.
 	const maxFacts = 7
 	var valid []ExtractedFact
 	for _, f := range facts {
@@ -270,6 +271,16 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 		}
 		if len(valid) >= maxFacts {
 			break
+		}
+		// Self-poisoning prevention: skip facts that echo recalled memory content.
+		if isRecalledMemoryContent(f.Content) {
+			logger.Debug("importance: skipping self-poisoned fact", "content", truncate(f.Content, 80))
+			continue
+		}
+		// Prompt injection prevention: skip facts containing injection patterns.
+		if containsPromptInjection(f.Content) {
+			logger.Debug("importance: skipping injection-suspect fact", "content", truncate(f.Content, 80))
+			continue
 		}
 		f.Importance = clamp(f.Importance, 0, 1)
 		if !isValidCategory(f.Category) {
@@ -666,6 +677,77 @@ func clamp(v, min, max float64) float64 {
 		return max
 	}
 	return v
+}
+
+// --- Self-poisoning & prompt injection prevention ---
+
+// recalledMemoryMarkers are phrases that appear in recalled memory sections
+// injected into the system prompt. If an extracted fact echoes these markers,
+// it's a self-poisoning loop (recalled → response → re-extracted → stored).
+var recalledMemoryMarkers = []string{
+	"## 관련 지식",
+	"### 메모리",
+	"### 프로젝트:",
+	"### 대화 기억",
+	"확인 필요",
+	"⚠변경 가능",
+}
+
+// isRecalledMemoryContent returns true when content looks like it was copied
+// from the recalled knowledge section rather than genuinely new information.
+func isRecalledMemoryContent(content string) bool {
+	for _, marker := range recalledMemoryMarkers {
+		if strings.Contains(content, marker) {
+			return true
+		}
+	}
+	// Detect "[importance] {category} (annotation) content" format used by recall.
+	if recalledFactPattern.MatchString(content) {
+		return true
+	}
+	return false
+}
+
+// recalledFactPattern matches the formatted recall output like "[0.8] {context} (3일 전) ...".
+var recalledFactPattern = regexp.MustCompile(`^\[[\d.]+\]\s*\{[a-z_]+\}\s*\(`)
+
+// promptInjectionPatterns are regex patterns that indicate the content contains
+// prompt injection attempts that should not be stored in memory.
+var promptInjectionPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)`),
+	regexp.MustCompile(`(?i)system\s*:\s*(ignore|forget|override|disregard)`),
+	regexp.MustCompile(`(?i)(forget|disregard|override)\s+(all\s+)?instructions`),
+	regexp.MustCompile(`(?i)you\s+are\s+now\s+(a|an)\s+`), // role injection
+	regexp.MustCompile(`(?i)new\s+system\s+prompt`),
+	regexp.MustCompile(`(?i)<\s*system\s*>`),               // XML system tag injection
+	regexp.MustCompile(`(?i)<\s*/?\s*relevant-memories\s*>`), // self-reference to recall tags
+}
+
+// containsPromptInjection returns true if the content matches known injection patterns.
+func containsPromptInjection(content string) bool {
+	for _, pat := range promptInjectionPatterns {
+		if pat.MatchString(content) {
+			return true
+		}
+	}
+	return false
+}
+
+// StripRecalledMemoryFromResponse removes recalled knowledge sections from agent
+// responses before passing them to fact extraction. This prevents the extraction
+// LLM from re-extracting facts that were merely echoed from recall.
+func StripRecalledMemoryFromResponse(response string) string {
+	// Remove "## 관련 지식" sections (and everything until next ## heading or end).
+	idx := strings.Index(response, "## 관련 지식")
+	if idx >= 0 {
+		end := strings.Index(response[idx+len("## 관련 지식"):], "\n## ")
+		if end >= 0 {
+			response = response[:idx] + response[idx+len("## 관련 지식")+end:]
+		} else {
+			response = response[:idx]
+		}
+	}
+	return strings.TrimSpace(response)
 }
 
 // truncate truncates s to at most maxRunes runes, appending "..." if truncated.
