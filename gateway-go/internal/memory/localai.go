@@ -61,6 +61,9 @@ func callLocalAIJSON(ctx context.Context, client *llm.Client, model, system, use
 	}
 
 	// Legacy direct path — merge guided_json with NoThinking.
+	if client == nil {
+		return "", fmt.Errorf("localai: client not initialized")
+	}
 	merged := make(map[string]any, len(localai.NoThinking)+len(extra))
 	for k, v := range localai.NoThinking {
 		merged[k] = v
