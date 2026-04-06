@@ -1,25 +1,61 @@
 package rlm
 
-// DataAccessPrinciples returns the system prompt addition that instructs
-// the LLM to use tools for data access instead of relying on pre-injected context.
+import "fmt"
+
+// DataAccessPrinciples returns the system prompt addition for RLM mode.
+// It instructs the LLM to use the REPL tool for conversation history exploration
+// and data-on-demand access instead of relying on pre-injected context.
 func DataAccessPrinciples() string {
-	return `## 데이터 접근 원칙
+	cfg := ConfigFromEnv()
+	return fmt.Sprintf(`## REPL 환경
 
-당신은 프로젝트 데이터에 직접 접근할 수 없습니다. 반드시 도구를 통해 접근하세요.
+대화 기록은 repl 도구의 context 변수에 저장되어 있습니다.
+프롬프트에는 최근 %d개 메시지만 포함됩니다. 이전 대화는 repl로 탐색하세요.
 
-작업 절차:
-1. 사용자 질문을 분석하여 필요한 데이터가 무엇인지 파악
-2. 과거 결정/인물/기술 지식 → wiki index로 목차 확인 → wiki read로 페이지 읽기 → wiki search로 키워드 검색
-3. projects_list로 관련 프로젝트 확인
-4. 필요한 필드만 projects_get_field로 조회하거나, projects_search로 검색
-5. 상세 내용이 필요하면 projects_get_document로 해당 섹션만 조회
-6. 과거 대화나 결정이 필요하면 memory_recall로 검색
-7. 수집한 데이터를 종합하여 답변
+context 구조: [struct(seq=1, role="user", content="...", created_at=1712000000000), ...]
+
+사용 가능한 함수:
+- llm_query(prompt) → 서브 LLM 호출 (요약, 분석, Q&A)
+- llm_query_batch(prompts) → 병렬 서브 LLM
+- regex_search(pattern, text) → 정규식 매치 (첫 번째)
+- regex_findall(pattern, text) → 모든 정규식 매치
+- FINAL(answer) → 최종 답변
+- FINAL_VAR(var_name) → 변수값을 최종 답변으로
+- SHOW_VARS() → 현재 변수 목록
+
+탐색 패턴:
+  # 전체 길이 확인
+  print(len(context))
+
+  # 키워드 검색
+  matches = [m for m in context if "키워드" in m.content]
+
+  # 유저 메시지만 필터
+  user_msgs = [m for m in context if m.role == "user"]
+
+  # 시간대 필터 (epoch ms)
+  recent = [m for m in context if m.created_at > 1712000000000]
+
+  # 청크 분석 (서브 LLM 활용)
+  chunk = str([m.content for m in context[100:200]])
+  result = llm_query("이 대화에서 핵심 결정사항: " + chunk)
+
+  # 정규식 패턴 매칭
+  nums = regex_findall("[0-9]+", context[0].content)
 
 주의:
-- 단순 인사나 일반 질문에는 도구를 사용하지 말 것
-- 한 번에 모든 데이터를 가져오지 말 것. 필요한 것만 단계적으로 조회
-- projects_get_document는 섹션 없이 호출하면 목차만 리턴됨. 목차를 먼저 확인한 후 필요한 섹션만 요청할 것`
+- 단순 인사나 최근 대화 질문에는 repl 불필요 (프롬프트에 최근 대화 포함)
+- "전에", "지난번", "아까" 같은 과거 참조 → repl로 context 검색
+- 변수는 repl 호출 간 유지됨 (같은 요청 내)
+- f-string 사용 가능: print(f"총 {len(context)}개")
+
+## 데이터 접근 원칙
+
+프로젝트 데이터에는 반드시 도구를 통해 접근하세요:
+1. 과거 결정/인물/기술 지식 → wiki
+2. 프로젝트 데이터 → projects_list, projects_get_field, projects_search
+3. 과거 대화 기억 → memory_recall_rlm 또는 repl로 context 검색
+4. 단순 인사나 일반 질문에는 도구를 사용하지 말 것`, cfg.FreshTailCount)
 }
 
 // SubLLMPrinciples returns the system prompt addition for Phase 2 sub-LLM usage.

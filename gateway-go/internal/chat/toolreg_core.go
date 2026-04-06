@@ -46,6 +46,10 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg)
 			toolreg.RegisterRLMSpawnTools(registry, spawnFn, batchFn, cfg.MaxSubSpawns)
 		}
+
+		// REPL tool: Starlark-based context exploration.
+		// The REPL env is injected per-request via repl.WithEnv(ctx) in run_exec.go.
+		toolreg.RegisterREPLTools(registry)
 	}
 
 	RegisterDefaultPostProcessors(registry)

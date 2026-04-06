@@ -563,3 +563,14 @@ func RegisterRLMSpawnTools(registry toolctx.ToolRegistrar, spawnFn tools.SpawnFu
 		ConcurrencySafe: true,
 	})
 }
+
+// RegisterREPLTools registers the Starlark REPL tool for RLM context exploration.
+// The REPL environment is injected per-request via repl.WithEnv(ctx) in run_exec.go.
+func RegisterREPLTools(registry toolctx.ToolRegistrar) {
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "repl",
+		Description: "Starlark(Python호환) REPL 실행. 대화 기록(context 변수)을 코드로 탐색·분석. 변수는 호출 간 유지. llm_query()로 서브 LLM 호출, FINAL()로 최종 답변",
+		InputSchema: replToolSchema(),
+		Fn:          tools.ToolREPL(),
+	})
+}

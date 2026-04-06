@@ -1848,6 +1848,19 @@ func wikiToolSchema() map[string]any {
 	}
 }
 
+func replToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"code": map[string]any{
+				"type":        "string",
+				"description": "Starlark (Python-like) code to execute. Variables persist across calls. Use context to access conversation history, llm_query() for sub-LLM calls, FINAL() for final answer.",
+			},
+		},
+		"required": []string{"code"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.yaml.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {

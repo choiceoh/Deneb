@@ -26,6 +26,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -338,11 +339,38 @@ func executeAgentRun(
 	}()
 
 	// Context assembly (parallel).
-	// Primary: Aurora store (includes summaries from compaction) — main sessions only.
-	// Fallback: file transcript (no compaction awareness).
+	// RLM mode: load only fresh tail from unified store; full history goes to REPL context.
+	// Legacy mode: Aurora store (summaries from compaction) or file transcript fallback.
+	var replEnv *repl.Env
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
+
+		// RLM REPL mode: skip Aurora, load fresh tail + build REPL environment.
+		if rlmCfg.Enabled && deps.unifiedStore != nil && isMainSession(params.SessionKey) {
+			recentMsgs, err := deps.unifiedStore.RecentMessages(1, rlmCfg.FreshTailCount)
+			if err != nil {
+				logger.Warn("RLM fresh tail load failed, falling back", "error", err)
+			} else if len(recentMsgs) > 0 {
+				messages = unifiedToLLMMessages(recentMsgs)
+
+				// Build REPL context from all messages (async-safe: read-only).
+				allMsgs, allErr := deps.unifiedStore.AllMessages(1)
+				if allErr != nil {
+					logger.Warn("RLM all messages load failed", "error", allErr)
+				} else {
+					entries := unifiedToREPLEntries(allMsgs)
+					replEnv = repl.NewEnv(ctx, repl.EnvConfig{
+						Messages:   entries,
+						LLMQueryFn: buildREPLLLMQuery(deps, logger),
+						Timeout:    time.Duration(rlmCfg.REPLTimeoutSec) * time.Second,
+					})
+				}
+				return
+			}
+		}
+
+		// Legacy: Aurora assembly (main sessions with aurora store).
 		if deps.auroraStore != nil && isMainSession(params.SessionKey) {
 			asmCfg := aurora.AssemblyConfig{
 				TokenBudget:    deps.contextCfg.MemoryTokenBudget,
@@ -919,6 +947,12 @@ func executeAgentRun(
 		"prepMs", time.Since(runStart).Milliseconds(),
 		"model", model, "provider", providerID,
 		"messages", len(messages), "tools", len(tools))
+
+	// 10.5. Inject RLM REPL environment into context (if created during assembly).
+	if replEnv != nil {
+		ctx = repl.WithEnv(ctx, replEnv)
+		logger.Info("RLM REPL environment attached to context")
+	}
 
 	// 11. Execute agent loop with compaction retry and model fallback chain.
 	agentStart := time.Now()

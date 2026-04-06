@@ -12,11 +12,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	compaction2 "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 )
 
 // Compaction defaults.
@@ -34,14 +35,14 @@ var proactiveCompaction struct {
 	lastRun        atomic.Int64 // epoch millis of last completed sweep
 	running        atomic.Bool  // prevents concurrent sweeps
 	cbOnce         sync.Once
-	circuitBreaker *compaction2.CompactionCircuitBreaker
+	circuitBreaker *compact.CompactionCircuitBreaker
 }
 
 // getCompactionCircuitBreaker returns the lazily-initialized circuit breaker.
 // Uses sync.Once to ensure thread-safe single initialization.
-func getCompactionCircuitBreaker() *compaction2.CompactionCircuitBreaker {
+func getCompactionCircuitBreaker() *compact.CompactionCircuitBreaker {
 	proactiveCompaction.cbOnce.Do(func() {
-		proactiveCompaction.circuitBreaker = compaction2.NewCompactionCircuitBreaker()
+		proactiveCompaction.circuitBreaker = compact.NewCompactionCircuitBreaker()
 	})
 	return proactiveCompaction.circuitBreaker
 }
@@ -57,6 +58,11 @@ func triggerProactiveCompaction(
 	client *llm.Client,
 	logger *slog.Logger,
 ) {
+	// RLM mode: no compaction needed — context is not pre-loaded.
+	if rlm.ConfigFromEnv().Enabled {
+		return
+	}
+
 	if deps.auroraStore == nil {
 		return
 	}
@@ -175,6 +181,14 @@ func buildMidLoopCompactor(
 	params RunParams,
 	logger *slog.Logger,
 ) func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error) {
+	// RLM mode: only microcompaction (free tool-result pruning), no Aurora sweep.
+	if rlm.ConfigFromEnv().Enabled {
+		return func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error) {
+			compacted, _ := compact.MicrocompactMessages(messages, time.Now())
+			return compacted, "", nil
+		}
+	}
+
 	budget := deps.contextCfg.LiveTokenBudget
 
 	// Track last compaction turn to avoid compacting on consecutive turns.
@@ -206,7 +220,7 @@ func buildMidLoopCompactor(
 		)
 
 		// Step 1: Microcompact (prune old tool results — zero cost).
-		mcMessages, mcResult := compaction2.MicrocompactMessages(messages, time.Now())
+		mcMessages, mcResult := compact.MicrocompactMessages(messages, time.Now())
 		if mcResult.PrunedCount > 0 {
 			messages = mcMessages
 			liveTokens -= mcResult.EstimatedSaved
@@ -222,7 +236,7 @@ func buildMidLoopCompactor(
 		}
 
 		// Step 2: Strip base64 image blocks from all but the last 2 messages.
-		messages = compaction2.StripImageBlocks(messages)
+		messages = compact.StripImageBlocks(messages)
 		liveTokens = estimateMessagesTokens(messages)
 		if uint64(liveTokens) < threshold {
 			lastCompactTurn = turn

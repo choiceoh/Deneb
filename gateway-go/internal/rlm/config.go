@@ -26,6 +26,14 @@ type Config struct {
 	SubMaxToolCalls int
 	// TotalTokenBudget is the per-request token budget across main + all sub-LLM calls.
 	TotalTokenBudget int
+
+	// FreshTailCount is the number of recent messages included in the prompt.
+	// Older messages are accessible via the REPL's context variable.
+	FreshTailCount int
+	// RecursiveDepthLimit caps how deep rlm_query() recursion can go.
+	RecursiveDepthLimit int
+	// REPLTimeoutSec is the per-execution timeout for Starlark code.
+	REPLTimeoutSec int
 }
 
 var (
@@ -40,13 +48,16 @@ func ConfigFromEnv() Config {
 	configOnce.Do(func() {
 		enabled := envBool("DENEB_RLM_ENABLED", false)
 		cachedConfig = Config{
-			Enabled:          enabled,
-			SkipKnowledge:    enabled && envBool("DENEB_RLM_SKIP_KNOWLEDGE", true),
-			SubLLMEnabled:    enabled && envBool("DENEB_RLM_SUB_LLM_ENABLED", false),
-			MaxSubSpawns:     envInt("DENEB_RLM_MAX_SUB_SPAWNS", 10),
-			SubMaxTokens:     envInt("DENEB_RLM_SUB_MAX_TOKENS", 500),
-			SubMaxToolCalls:  envInt("DENEB_RLM_SUB_MAX_TOOL_CALLS", 5),
-			TotalTokenBudget: envInt("DENEB_RLM_TOTAL_TOKEN_BUDGET", 50000),
+			Enabled:             enabled,
+			SkipKnowledge:       enabled && envBool("DENEB_RLM_SKIP_KNOWLEDGE", true),
+			SubLLMEnabled:       enabled && envBool("DENEB_RLM_SUB_LLM_ENABLED", false),
+			MaxSubSpawns:        envInt("DENEB_RLM_MAX_SUB_SPAWNS", 10),
+			SubMaxTokens:        envInt("DENEB_RLM_SUB_MAX_TOKENS", 500),
+			SubMaxToolCalls:     envInt("DENEB_RLM_SUB_MAX_TOOL_CALLS", 5),
+			TotalTokenBudget:    envInt("DENEB_RLM_TOTAL_TOKEN_BUDGET", 50000),
+			FreshTailCount:      envInt("DENEB_RLM_FRESH_TAIL", 48),
+			RecursiveDepthLimit: envInt("DENEB_RLM_MAX_DEPTH", 3),
+			REPLTimeoutSec:      envInt("DENEB_RLM_REPL_TIMEOUT", 30),
 		}
 	})
 	return cachedConfig
