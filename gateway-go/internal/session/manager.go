@@ -40,11 +40,11 @@ const (
 type SessionMode string
 
 const (
-	// ModeNormal is the default mode — full tools, no autonomous continuation.
+	// ModeNormal is the default mode — full tools, autonomous continuation enabled.
 	ModeNormal SessionMode = ""
-	// ModeChat restricts tools to conversation-only (web search, etc.).
+	// ModeChat restricts tools to conversation-only (web search, etc.), no continuation.
 	ModeChat SessionMode = "chat"
-	// ModeWork enables autonomous continuation and extended agent behavior.
+	// ModeWork enables extended agent behavior (higher continuation limits).
 	ModeWork SessionMode = "work"
 )
 
