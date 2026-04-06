@@ -22,10 +22,11 @@ type SkillConfig struct {
 
 // EligibilityContext holds all external state needed for eligibility evaluation.
 type EligibilityContext struct {
-	EnvVars      map[string]string // relevant environment variables snapshot
-	SkillConfigs map[string]SkillConfig
-	AllowBundled []string // config.skills.allowBundled
-	ConfigValues map[string]bool
+	EnvVars        map[string]string // relevant environment variables snapshot
+	SkillConfigs   map[string]SkillConfig
+	AllowBundled   []string // config.skills.allowBundled
+	ConfigValues   map[string]bool
+	AvailableTools map[string]bool // tools currently registered in the agent
 }
 
 // DefaultEligibilityContext creates a context using the current runtime environment.
@@ -35,6 +36,11 @@ func DefaultEligibilityContext() EligibilityContext {
 		SkillConfigs: make(map[string]SkillConfig),
 		ConfigValues: make(map[string]bool),
 	}
+}
+
+// EnvSnapshotFromOS returns a snapshot of all current environment variables.
+func EnvSnapshotFromOS() map[string]string {
+	return envSnapshot()
 }
 
 func envSnapshot() map[string]string {
@@ -96,7 +102,35 @@ func evaluateRuntimeEligibility(entry SkillEntry, skillCfg SkillConfig, ctx Elig
 		return true
 	}
 
-	if meta == nil || meta.Requires == nil {
+	if meta == nil {
+		return true
+	}
+
+	// Conditional activation based on available tools (hermes-agent pattern).
+	// requires_tools: show only when ALL listed tools are available.
+	if len(meta.RequiresTools) > 0 && len(ctx.AvailableTools) > 0 {
+		for _, tool := range meta.RequiresTools {
+			if !ctx.AvailableTools[tool] {
+				return false
+			}
+		}
+	}
+	// fallback_for_tools: show only when ANY listed tool is UNavailable.
+	// If all listed tools are available, this fallback skill is hidden.
+	if len(meta.FallbackForTools) > 0 && len(ctx.AvailableTools) > 0 {
+		allPresent := true
+		for _, tool := range meta.FallbackForTools {
+			if !ctx.AvailableTools[tool] {
+				allPresent = false
+				break
+			}
+		}
+		if allPresent {
+			return false
+		}
+	}
+
+	if meta.Requires == nil {
 		return true
 	}
 	requires := meta.Requires

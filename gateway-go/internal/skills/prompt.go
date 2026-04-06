@@ -21,6 +21,8 @@ type PromptSkill struct {
 	Category               string    `json:"category,omitempty"`
 	Version                string    `json:"version,omitempty"`
 	Type                   SkillType `json:"type,omitempty"`
+	Tags                   []string  `json:"tags,omitempty"`
+	RelatedSkills          []string  `json:"relatedSkills,omitempty"`
 	DisableModelInvocation bool      `json:"disableModelInvocation,omitempty"`
 }
 
@@ -38,6 +40,11 @@ const compactWarningOverhead = 150
 // BuildSkillsPrompt builds the formatted skills prompt with budget enforcement.
 // Returns full format if it fits, compact format as fallback, with binary search
 // for largest fitting subset if compact also exceeds the budget.
+//
+// Prompt cache design: skills are rendered in the semi-static block of the system
+// prompt with Anthropic ephemeral cache control. Stable ordering (sorted by name
+// from discovery) ensures cache hits across turns. Only SKILL.md file changes
+// invalidate the skills cache — not conversation state or tool results.
 func BuildSkillsPrompt(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	// Filter out model-invocation-disabled skills.
 	var visible []PromptSkill
@@ -136,6 +143,16 @@ func formatSkillsFull(skills []PromptSkill) string {
 			b.WriteString(escapeXml(s.Description))
 			b.WriteString("</description>")
 		}
+		if len(s.Tags) > 0 {
+			b.WriteString("\n    <tags>")
+			b.WriteString(escapeXml(strings.Join(s.Tags, ", ")))
+			b.WriteString("</tags>")
+		}
+		if len(s.RelatedSkills) > 0 {
+			b.WriteString("\n    <related_skills>")
+			b.WriteString(escapeXml(strings.Join(s.RelatedSkills, ", ")))
+			b.WriteString("</related_skills>")
+		}
 		b.WriteString("\n    <location>")
 		b.WriteString(escapeXml(s.FilePath))
 		b.WriteString("</location>")
@@ -219,7 +236,8 @@ func FormatSkillsListResponse(skills []PromptSkill, query, category string) stri
 			nameMatch := strings.Contains(strings.ToLower(s.Name), query)
 			descMatch := strings.Contains(strings.ToLower(s.Description), query)
 			catMatch := strings.Contains(strings.ToLower(s.Category), query)
-			if !nameMatch && !descMatch && !catMatch {
+			tagMatch := matchAnyTag(s.Tags, query)
+			if !nameMatch && !descMatch && !catMatch && !tagMatch {
 				continue
 			}
 		}
@@ -248,11 +266,29 @@ func FormatSkillsListResponse(skills []PromptSkill, query, category string) stri
 			b.WriteString(": ")
 			b.WriteString(s.Description)
 		}
+		if len(s.Tags) > 0 {
+			b.WriteString("\n  tags: ")
+			b.WriteString(strings.Join(s.Tags, ", "))
+		}
+		if len(s.RelatedSkills) > 0 {
+			b.WriteString("\n  related: ")
+			b.WriteString(strings.Join(s.RelatedSkills, ", "))
+		}
 		b.WriteString("\n  → ")
 		b.WriteString(s.FilePath)
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// matchAnyTag checks if any tag contains the query string (case-insensitive).
+func matchAnyTag(tags []string, query string) bool {
+	for _, tag := range tags {
+		if strings.Contains(strings.ToLower(tag), query) {
+			return true
+		}
+	}
+	return false
 }
 
 // BuildTruncationNote generates the truncation/compact warning message.

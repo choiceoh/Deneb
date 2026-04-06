@@ -337,6 +337,25 @@ func TestResolveDenebMetadata_WithTags(t *testing.T) {
 	}
 }
 
+func TestResolveDenebMetadata_WithRelatedSkills(t *testing.T) {
+	fm := ParsedFrontmatter{
+		"metadata": `{"deneb": {"tags": ["weather", "forecast"], "related_skills": ["morning-letter", "gog"]}}`,
+	}
+	meta := ResolveDenebMetadata(fm)
+	if meta == nil {
+		t.Fatal("expected non-nil metadata")
+	}
+	if len(meta.Tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(meta.Tags))
+	}
+	if len(meta.RelatedSkills) != 2 {
+		t.Fatalf("expected 2 related_skills, got %d", len(meta.RelatedSkills))
+	}
+	if meta.RelatedSkills[0] != "morning-letter" || meta.RelatedSkills[1] != "gog" {
+		t.Errorf("unexpected related_skills: %v", meta.RelatedSkills)
+	}
+}
+
 func TestExtractFrontmatterBlock_Valid(t *testing.T) {
 	content := "---\nname: test\ndescription: A test\n---\n# Body\n\nSome content here."
 	header, offset := ExtractFrontmatterBlock(content)

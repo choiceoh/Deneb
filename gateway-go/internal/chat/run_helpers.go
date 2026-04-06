@@ -368,6 +368,7 @@ func handleRunSuccess(
 					params.SessionKey, smToolSummary, logger)
 				smCancel()
 			}
+
 		}()
 	}
 
@@ -907,3 +908,4 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 	}
 	return out
 }
+

@@ -307,6 +307,30 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		}
 	}
 
+	// Register boot task: on startup (and daily thereafter), runs a full
+	// agent turn using ~/.deneb/BOOT.md content for proactive initialization.
+	if s.chatHandler != nil {
+		homeDir := ""
+		if h, err := os.UserHomeDir(); err == nil {
+			homeDir = h
+		}
+		s.autonomousSvc.RegisterTask(&bootTask{
+			chatHandler: s.chatHandler,
+			activity:    s.activity,
+			logger:      s.logger,
+			homeDir:     homeDir,
+		})
+
+		// Register heartbeat task: every 30 minutes, checks ~/.deneb/HEARTBEAT.md
+		// for user-defined tasks and executes them autonomously.
+		s.autonomousSvc.RegisterTask(&heartbeatTask{
+			chatHandler: s.chatHandler,
+			activity:    s.activity,
+			logger:      s.logger,
+			homeDir:     homeDir,
+		})
+	}
+
 	// Register diary heartbeat task: every 2 hours, the main LLM writes
 	// a detailed narrative diary entry (memory/diary/diary-YYYY-MM-DD.md).
 	if s.chatHandler != nil {

@@ -1533,13 +1533,55 @@ func skillsListToolSchema() map[string]any {
 		"properties": map[string]any{
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search filter to match skill name, description, or category",
+				"description": "Search filter to match skill name, description, category, or tag",
 			},
 			"category": map[string]any{
 				"type":        "string",
 				"description": "Filter by skill category (e.g., coding, productivity, devops)",
 			},
 		},
+	}
+}
+
+func skillManageToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Skill management action",
+				"enum":        []string{"create", "patch", "delete", "read", "list_files"},
+			},
+			"name": map[string]any{
+				"type":        "string",
+				"description": "Skill name (lowercase, hyphens). Must match directory name.",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"description": "Skill category directory (coding, productivity, devops, integration). Required for create.",
+			},
+			"content": map[string]any{
+				"type":        "string",
+				"description": "Full SKILL.md content for create, or patch content. Must include valid frontmatter.",
+			},
+			"old_text": map[string]any{
+				"type":        "string",
+				"description": "Text to find in existing SKILL.md (for patch action)",
+			},
+			"new_text": map[string]any{
+				"type":        "string",
+				"description": "Replacement text (for patch action)",
+			},
+			"file_path": map[string]any{
+				"type":        "string",
+				"description": "Relative path within skill directory for auxiliary files (scripts/, references/)",
+			},
+			"file_content": map[string]any{
+				"type":        "string",
+				"description": "Content for auxiliary file writes",
+			},
+		},
+		"required": []string{"action", "name"},
 	}
 }
 
@@ -1558,5 +1600,40 @@ func bridgeToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"message"},
+	}
+}
+
+func updatePlanToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"steps": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"title": map[string]any{
+							"type":        "string",
+							"description": "Short description of this step",
+						},
+						"status": map[string]any{
+							"type":        "string",
+							"enum":        []string{"pending", "in_progress", "completed", "failed"},
+							"description": "Current status of this step",
+						},
+						"note": map[string]any{
+							"type":        "string",
+							"description": "Optional note (what was tried, what failed, what to do next)",
+						},
+					},
+				},
+				"description": "Plan steps with their current status. Keep exactly one step as in_progress",
+			},
+			"summary": map[string]any{
+				"type":        "string",
+				"description": "Brief overall progress summary (shown to user as status update)",
+			},
+		},
+		"required": []string{"steps"},
 	}
 }

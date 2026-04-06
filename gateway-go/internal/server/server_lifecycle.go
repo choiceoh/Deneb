@@ -63,6 +63,7 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	s.startedAt = time.Now()
 	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)
+	s.startConfigWatcher(ctx)
 	s.startProcessPruner(ctx)
 	s.sessions.StartGC(ctx)
 	s.startSessionWAL()
@@ -320,10 +321,15 @@ func (s *Server) doShutdown() error {
 		s.processes.Stop()
 	}
 
-	// 12. ACP cleanup: persist bindings and unsubscribe lifecycle sync.
+	// 12. ACP cleanup: persist bindings, registry, and unsubscribe lifecycle sync.
 	if s.acpDeps != nil && s.acpDeps.BindingStore != nil && s.acpDeps.Bindings != nil {
 		if err := s.acpDeps.BindingStore.SyncFromService(s.acpDeps.Bindings); err != nil {
 			s.logger.Warn("failed to persist ACP bindings on shutdown", "error", err)
+		}
+	}
+	if s.acpDeps != nil && s.acpDeps.RegistryStore != nil && s.acpDeps.Registry != nil {
+		if err := s.acpDeps.RegistryStore.SyncFromRegistry(s.acpDeps.Registry); err != nil {
+			s.logger.Warn("failed to persist ACP registry on shutdown", "error", err)
 		}
 	}
 	if s.acpLifecycleUnsub != nil {

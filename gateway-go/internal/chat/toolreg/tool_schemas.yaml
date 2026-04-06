@@ -1355,11 +1355,47 @@
   properties:
     query:
       type: string
-      description: "Search filter to match skill name, description, or category"
+      description: "Search filter to match skill name, description, category, or tag"
     category:
       type: string
       description: "Filter by skill category (e.g., coding, productivity, devops)"
   required: []
+
+- name: skill_manage
+  properties:
+    action:
+      type: string
+      description: "Skill management action"
+      enum:
+        - create
+        - patch
+        - delete
+        - read
+        - list_files
+    name:
+      type: string
+      description: "Skill name (lowercase, hyphens). Must match directory name."
+    category:
+      type: string
+      description: "Skill category directory (coding, productivity, devops, integration). Required for create."
+    content:
+      type: string
+      description: "Full SKILL.md content for create, or patch content. Must include valid frontmatter."
+    old_text:
+      type: string
+      description: "Text to find in existing SKILL.md (for patch action)"
+    new_text:
+      type: string
+      description: "Replacement text (for patch action)"
+    file_path:
+      type: string
+      description: "Relative path within skill directory for auxiliary files (scripts/, references/)"
+    file_content:
+      type: string
+      description: "Content for auxiliary file writes"
+  required:
+    - action
+    - name
 
 # ---------------------------------------------------------------------------
 # Bridge (inter-agent communication)
@@ -1376,3 +1412,31 @@
       default: deneb
   required:
     - message
+
+# ---------------------------------------------------------------------------
+# Planning (progress tracking)
+# ---------------------------------------------------------------------------
+
+- name: update_plan
+  properties:
+    steps:
+      type: array
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+            description: "Short description of this step"
+          status:
+            type: string
+            enum: ["pending", "in_progress", "completed", "failed"]
+            description: "Current status of this step"
+          note:
+            type: string
+            description: "Optional note (what was tried, what failed, what to do next)"
+      description: "Plan steps with their current status. Keep exactly one step as in_progress"
+    summary:
+      type: string
+      description: "Brief overall progress summary (shown to user as status update)"
+  required:
+    - steps

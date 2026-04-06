@@ -45,6 +45,7 @@ var skillsCache struct {
 // Initialized once by InitSkillsWatcher.
 var skillsWatcher *skills.Watcher
 
+
 // InitSkillsWatcher creates and starts the skills watcher for a workspace.
 // Call once at server startup. The watcher invalidates the skills prompt cache
 // when SKILL.md files change on disk.
@@ -63,7 +64,8 @@ func InitSkillsWatcher(workspaceDir string) {
 
 // loadCachedSkillsPrompt returns the cached skills prompt, rebuilding it when
 // the watcher version changes or on first call.
-func loadCachedSkillsPrompt(workspaceDir string) string {
+// availableToolNames is used for conditional activation (requires_tools/fallback_for_tools).
+func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) string {
 	skillsCache.mu.RLock()
 	if skillsCache.built {
 		prompt := skillsCache.prompt
@@ -80,9 +82,20 @@ func loadCachedSkillsPrompt(workspaceDir string) string {
 		return skillsCache.prompt
 	}
 
+	// Build available tools map for conditional activation.
+	availableTools := make(map[string]bool, len(availableToolNames))
+	for _, name := range availableToolNames {
+		availableTools[name] = true
+	}
+
 	cfg := skills.SnapshotConfig{
 		DiscoverConfig: skills.DiscoverConfig{
 			WorkspaceDir: workspaceDir,
+		},
+		Eligibility: skills.EligibilityContext{
+			EnvVars:        skills.EnvSnapshotFromOS(),
+			SkillConfigs:   make(map[string]skills.SkillConfig),
+			AvailableTools: availableTools,
 		},
 	}
 	// Discover entries first so we can cache them for slash command routing.
@@ -101,6 +114,7 @@ func loadCachedSkillsPrompt(workspaceDir string) string {
 	return skillsCache.prompt
 }
 
+
 // GetCachedSkillsSnapshot returns the last-built skills snapshot, or nil.
 func GetCachedSkillsSnapshot() *skills.FullSkillSnapshot {
 	skillsCache.mu.RLock()
@@ -113,6 +127,14 @@ func InvalidateSkillsCache() {
 	skillsCache.mu.Lock()
 	skillsCache.built = false
 	skillsCache.mu.Unlock()
+}
+
+// availableToolNames returns sorted tool names from the registry, or nil if nil.
+func availableToolNames(tools *ToolRegistry) []string {
+	if tools == nil {
+		return nil
+	}
+	return tools.SortedNames()
 }
 
 // chatRunResult wraps the agent result with chat-layer continuation info.
@@ -440,7 +462,7 @@ func executeAgentRun(
 			Channel:       ch,
 			SessionMemory: sessionMemoryText,
 			ShadowContext: shadowContext,
-			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir),
+			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
 			ToolPreset:    sessionToolPreset,
 		}
 
