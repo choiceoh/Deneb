@@ -55,7 +55,7 @@ fn fts_search(
     let fts_query = sanitize_fts_query(query);
 
     let sql = if project_filter.is_some() {
-        "SELECT c.id, c.project_id, c.section, c.content, c.source_file,
+        "SELECT c.id, c.project_id, c.section_heading, c.content, c.source_file,
                 p.name as project_name,
                 rank
          FROM chunks_fts
@@ -65,7 +65,7 @@ fn fts_search(
          ORDER BY rank
          LIMIT ?2"
     } else {
-        "SELECT c.id, c.project_id, c.section, c.content, c.source_file,
+        "SELECT c.id, c.project_id, c.section_heading, c.content, c.source_file,
                 p.name as project_name,
                 rank
          FROM chunks_fts
@@ -223,7 +223,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
                 continue;
             }
             let _ = conn.execute(
-                "INSERT INTO chunks (project_id, section, content, source_file)
+                "INSERT INTO chunks (project_id, section_heading, content, source_file)
                  VALUES (?1, ?2, ?3, ?4)",
                 params![project_id, section, chunk_content, filename],
             );

@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS chunks (
     chunk_type TEXT,
     entry_date TEXT,
     start_line INTEGER,
-    end_line INTEGER
+    end_line INTEGER,
+    source_file TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tags (
@@ -185,6 +186,10 @@ pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
         ] {
             let _ = conn.execute_batch(stmt);
         }
+    }
+    if user_ver < 7 {
+        // v7: add source_file to chunks for per-file tracking in memory-update
+        let _ = conn.execute_batch("ALTER TABLE chunks ADD COLUMN source_file TEXT");
     }
 
     set_schema_version(conn)?;
