@@ -219,7 +219,7 @@ func RecoverTruncated(s string) string {
 	prefix := strings.TrimSpace(s[:arrStart])
 
 	sub := s[arrStart:]
-	lastBrace := strings.LastIndex(sub, "}")
+	lastBrace := lastUnquotedBrace(sub)
 	if lastBrace == -1 {
 		return ""
 	}
@@ -243,6 +243,37 @@ func RecoverTruncated(s string) string {
 	}
 
 	return ""
+}
+
+// lastUnquotedBrace returns the index of the last '}' in s that is outside
+// a JSON string literal. Returns -1 if no such '}' exists.
+// Unlike strings.LastIndex(s, "}"), this correctly skips '}' inside quoted
+// strings, preventing false matches on Korean/CJK text containing braces.
+func lastUnquotedBrace(s string) int {
+	inString := false
+	escaped := false
+	last := -1
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			continue
+		}
+		if !inString && c == '}' {
+			last = i
+		}
+	}
+
+	return last
 }
 
 // ---------- Double-encoded JSON ----------
