@@ -1085,7 +1085,6 @@ func executeAgentRun(
 				}
 			}
 
-			lastTransition = NewTerminal(TerminalModelError, runErr)
 			return nil, runErr
 		}
 		// Check budget tracker for diminishing returns across turns.

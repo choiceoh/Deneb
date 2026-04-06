@@ -167,13 +167,3 @@ func argRaw(args *CommandArgs) string {
 	return strings.TrimSpace(args.Raw)
 }
 
-func boolToOnOff(b bool) string {
-	if b {
-		return "on"
-	}
-	return "off"
-}
-
-func strPtr(s string) *string {
-	return &s
-}

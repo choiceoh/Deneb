@@ -26,42 +26,6 @@ func SetLocalAIHub(h *localai.Hub) {
 	pkgLocalAIHub = h
 }
 
-// callLocalAI sends a streaming chat request to the local AI model and collects the full response.
-// When the centralized local AI hub is available, routes through it for token budget management.
-func callLocalAI(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
-	// Hub path: centralized token budget, priority queue, zombie prevention.
-	if h := pkgLocalAIHub; h != nil {
-		resp, err := h.Submit(ctx, localai.Request{
-			System:    system,
-			Messages:  []llm.Message{llm.NewTextMessage("user", user)},
-			MaxTokens: maxTokens,
-			Priority:  localai.PriorityBackground,
-			CallerTag: "memory",
-		})
-		if err != nil {
-			return "", err
-		}
-		return resp.Text, nil
-	}
-
-	// Legacy direct path.
-	events, err := client.StreamChat(ctx, llm.ChatRequest{
-		Model:     model,
-		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
-		System:    llm.SystemString(system),
-		MaxTokens: maxTokens,
-		Stream:    true,
-		ExtraBody: localai.NoThinking,
-	})
-	if err != nil {
-		return "", err
-	}
-	if events == nil {
-		return "", fmt.Errorf("localai: nil event channel")
-	}
-	return collectStream(ctx, events)
-}
-
 // callLocalAIJSON is like callLocalAI but requests JSON-formatted output
 // via response_format. Use for endpoints that must return valid JSON.
 // An optional guidedSchema can be passed to enable local AI's native

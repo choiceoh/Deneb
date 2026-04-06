@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
@@ -17,7 +16,6 @@ type WorkerPool struct {
 	active  atomic.Int64
 	queued  atomic.Int64
 	done    atomic.Int64
-	mu      sync.Mutex // protects resize
 }
 
 // NewWorkerPool creates a worker pool sized to the current hardware.

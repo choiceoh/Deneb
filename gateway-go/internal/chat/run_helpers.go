@@ -196,14 +196,6 @@ func handleRunSuccess(
 			replyText := jsonutil.StripThinkingTags(directives.Text)
 			replyText = strings.TrimSpace(replyText)
 
-			// Use reply-to ID from directives ([[reply_to_current]],
-			// [[reply_to:<id>]]) when available; fall back to the
-			// triggering message ID for thread continuity.
-			replyToID := directives.ReplyToID
-			if replyToID == "" {
-				replyToID = params.Delivery.MessageID
-			}
-
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()

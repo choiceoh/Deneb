@@ -12,13 +12,12 @@ on:
       - "core-rs/core/build.rs"
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
-      - "gateway-go/internal/chat/tool_schemas.yaml"
+      - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
       - "scripts/proto-gen.sh"
       - "scripts/gen-error-codes.sh"
-      - "scripts/error-code-sync-check.sh"
   push:
     branches: [main]
     paths:
@@ -26,13 +25,12 @@ on:
       - "core-rs/core/build.rs"
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
-      - "gateway-go/internal/chat/tool_schemas.yaml"
+      - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
       - "scripts/proto-gen.sh"
       - "scripts/gen-error-codes.sh"
-      - "scripts/error-code-sync-check.sh"
 
 concurrency:
   group: generate-check-${{ github.event.pull_request.number || github.ref }}
@@ -65,9 +63,8 @@ jobs:
               - "core-rs/Cargo.toml"
               - "scripts/proto-gen.sh"
               - "scripts/gen-error-codes.sh"
-              - "scripts/error-code-sync-check.sh"
             tool-schemas:
-              - "gateway-go/internal/chat/tool_schemas.yaml"
+              - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
               - "gateway-go/cmd/tool-schema-gen/**"
             model-caps:
               - "gateway-go/internal/autoreply/thinking/model_caps.yaml"

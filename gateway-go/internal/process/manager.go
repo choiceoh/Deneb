@@ -512,16 +512,6 @@ func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int6
 	return result
 }
 
-// drainBounded reads up to limit bytes into a pre-allocated buffer, then
-// discards the rest to prevent the subprocess from blocking on a full pipe.
-func drainBounded(r io.Reader, limit int) []byte {
-	buf := make([]byte, limit)
-	n, _ := io.ReadFull(r, buf) //nolint:errcheck // partial reads expected; remainder is drained below
-	// Drain any remaining bytes so the writer doesn't block.
-	io.Copy(io.Discard, r)
-	return buf[:n]
-}
-
 // Prune removes completed/failed processes older than the given duration.
 func (m *Manager) Prune(maxAge time.Duration) int {
 	m.mu.Lock()

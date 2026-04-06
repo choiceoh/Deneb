@@ -4,32 +4,6 @@
 //! A CI check (`scripts/check-protocol-constants.ts`) validates consistency.
 
 // ---------------------------------------------------------------------------
-// Gateway client IDs — src/gateway/protocol/client-info.ts
-// ---------------------------------------------------------------------------
-
-pub const GATEWAY_CLIENT_IDS: &[&str] = &[
-    "deneb-control-ui",
-    "cli",
-    "gateway-client",
-    "node-host",
-    "test",
-    "fingerprint",
-    "deneb-probe",
-];
-
-// ---------------------------------------------------------------------------
-// Gateway client modes — src/gateway/protocol/client-info.ts
-// ---------------------------------------------------------------------------
-
-pub const GATEWAY_CLIENT_MODES: &[&str] = &["cli", "ui", "backend", "node", "probe", "test"];
-
-// ---------------------------------------------------------------------------
-// Input provenance kinds — src/sessions/input-provenance.ts
-// ---------------------------------------------------------------------------
-
-pub const INPUT_PROVENANCE_KINDS: &[&str] = &["external_user", "inter_session", "internal_system"];
-
-// ---------------------------------------------------------------------------
 // Session label — src/sessions/session-label.ts
 // ---------------------------------------------------------------------------
 
@@ -45,23 +19,42 @@ pub const CHAT_SEND_SESSION_KEY_MAX_LENGTH: usize = 512;
 // Secret ref patterns — src/secrets/ref-contract.ts, src/config/types.secrets.ts
 // ---------------------------------------------------------------------------
 
-/// `SECRET_PROVIDER_ALIAS_PATTERN` — src/secrets/ref-contract.ts
-pub const SECRET_PROVIDER_ALIAS_PATTERN: &str = r"^[a-z][a-z0-9_-]{0,63}$";
-
-/// `ENV_SECRET_REF_ID_RE` — src/config/types.secrets.ts
-pub const ENV_SECRET_REF_ID_PATTERN: &str = r"^[A-Z][A-Z0-9_]{0,127}$";
-
-/// `FILE_SECRET_REF_ID_PATTERN` — src/secrets/ref-contract.ts
-pub const FILE_SECRET_REF_ID_PATTERN: &str = r"^(?:value|/(?:[^~]|~0|~1)*(?:/(?:[^~]|~0|~1)*)*)$";
-
 /// `EXEC_SECRET_REF_ID_JSON_SCHEMA_PATTERN` — src/secrets/ref-contract.ts
 pub const EXEC_SECRET_REF_ID_PATTERN: &str =
     r"^(?!.*(?:^|/)\.{1,2}(?:/|$))[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$";
 
 // ---------------------------------------------------------------------------
-// Protocol version — src/gateway/protocol/schema/protocol-schemas.ts
+// Test-only constants: TypeScript parity checking
+// These are only used in tests to verify sync with TypeScript counterparts.
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
+pub const GATEWAY_CLIENT_IDS: &[&str] = &[
+    "deneb-control-ui",
+    "cli",
+    "gateway-client",
+    "node-host",
+    "test",
+    "fingerprint",
+    "deneb-probe",
+];
+
+#[cfg(test)]
+pub const GATEWAY_CLIENT_MODES: &[&str] = &["cli", "ui", "backend", "node", "probe", "test"];
+
+#[cfg(test)]
+pub const INPUT_PROVENANCE_KINDS: &[&str] = &["external_user", "inter_session", "internal_system"];
+
+#[cfg(test)]
+pub const SECRET_PROVIDER_ALIAS_PATTERN: &str = r"^[a-z][a-z0-9_-]{0,63}$";
+
+#[cfg(test)]
+pub const ENV_SECRET_REF_ID_PATTERN: &str = r"^[A-Z][A-Z0-9_]{0,127}$";
+
+#[cfg(test)]
+pub const FILE_SECRET_REF_ID_PATTERN: &str = r"^(?:value|/(?:[^~]|~0|~1)*(?:/(?:[^~]|~0|~1)*)*)$";
+
+#[cfg(test)]
 pub const PROTOCOL_VERSION: u32 = 3;
 
 #[cfg(test)]

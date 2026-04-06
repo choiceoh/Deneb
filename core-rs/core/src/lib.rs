@@ -2,8 +2,8 @@
 //!
 //! This crate provides:
 //! - Protocol frame validation (replacing AJV)
-//! - Security verification primitives + `ReDoS` detection
-//! - Media MIME detection, EXIF parsing, PNG encoding
+//! - Security verification primitives
+//! - Media MIME detection
 //!
 //! It exposes both a Rust API and a C FFI surface for integration
 //! with Go (via `CGo`).
@@ -24,13 +24,6 @@ pub mod memory_search;
 pub mod parsing;
 pub mod protocol;
 pub mod security;
-
-// Utility modules
-pub mod exif;
-pub mod external_content;
-pub mod mime_utils;
-pub mod png;
-pub mod safe_regex;
 
 // C FFI exports organised by domain (used by Go via CGo).
 // Each submodule in ffi/ owns the `deneb_*` functions for its domain.

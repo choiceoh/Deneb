@@ -14,9 +14,6 @@ const (
 	// Keeps LLM input tokens reasonable while providing good coverage.
 	maxFrames = 6
 
-	// minFrames is the minimum number of frames for short videos.
-	minFrames = 1
-
 	// jpegQuality is the ffmpeg JPEG output quality (2 = high quality, 31 = low).
 	jpegQuality = 5
 

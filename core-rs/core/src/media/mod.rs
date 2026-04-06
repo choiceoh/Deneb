@@ -2,8 +2,6 @@
 //!
 //! Detects MIME types from file magic bytes — ported from `src/media/`.
 
-pub mod extensions;
-
 /// Detect OOXML document type by scanning ZIP contents for known path markers.
 /// Scans the first 8KB of the ZIP file for internal path signatures.
 fn detect_ooxml(data: &[u8]) -> Option<&'static str> {

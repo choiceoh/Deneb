@@ -1,9 +1,7 @@
 package localai
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 )
@@ -69,25 +67,3 @@ func (hc *healthChecker) pingModels() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// tryAbort sends a best-effort abort request to the local AI server.
-// The /abort endpoint is provider-specific and accepts {"rid": "..."}.
-func tryAbort(baseURL, rid string) {
-	if rid == "" {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	body := fmt.Sprintf(`{"rid":"%s"}`, rid)
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/abort",
-		bytes.NewReader([]byte(body)))
-	if err != nil {
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	resp.Body.Close()
-}
