@@ -121,10 +121,13 @@ CREATE TABLE IF NOT EXISTS summaries (
 	content                    TEXT NOT NULL,        -- full summary text (backward compat)
 	-- Structured sections (populated when compaction uses structured prompts).
 	-- NULL for legacy plain-text summaries.
-	narrative                  TEXT,                 -- concise narrative
-	decisions                  TEXT,                 -- JSON array: [{"decision":"...","reason":"..."}]
-	pending                    TEXT,                 -- JSON array: [{"type":"todo|blocked","detail":"..."}]
-	refs                       TEXT,                 -- JSON array: ["file:line", "tool:name -> result"]
+	narrative                  TEXT,                 -- concise narrative (from <progress> or legacy <summary>)
+	decisions                  TEXT,                 -- JSON array: decision strings (from <key_decisions>)
+	pending                    TEXT,                 -- JSON array: pending items (legacy <pending>)
+	refs                       TEXT,                 -- JSON array: file paths (from <relevant_files>)
+	goal                       TEXT,                 -- user's overarching objective (from <goal>)
+	next_steps                 TEXT,                 -- JSON array: next actions (from <next_steps>)
+	critical_context           TEXT,                 -- verbatim values that must survive compression
 	importance                 REAL NOT NULL DEFAULT 0.3,  -- 0.0-1.0 compaction-assessed
 	token_count                INTEGER NOT NULL,
 	file_ids                   TEXT NOT NULL DEFAULT '[]',

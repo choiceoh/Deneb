@@ -99,6 +99,10 @@ func New(cfg Config, logger *slog.Logger) (*Store, error) {
 	// for databases that predate these columns.
 	migrateDreamingLogColumns(db)
 
+	// Add goal, next_steps, critical_context columns to summaries
+	// for the structured compression template.
+	migrateSummaryStructuredColumns(db)
+
 	s := &Store{
 		db:     db,
 		dbPath: cfg.DatabasePath,

@@ -272,8 +272,9 @@ const MINIMAL_AURORA_GUIDANCE: &str = "\
 ## Context Recall (Aurora)
 
 Some earlier conversation has been summarized with structured sections \
-(Summary, Decisions, Pending, References). Check Pending for unresolved \
-items from earlier context.
+(Goal, Progress, Key Decisions, Next Steps, Critical Context). \
+Check **Goal** for the overarching objective and **Next Steps** for \
+unresolved items from earlier context.
 
 If you need details from summarized sections, use recall tools:
 
@@ -311,10 +312,12 @@ Condensed summaries compress multiple layers of earlier context.
 
 ### Structured Sections
 
-Summaries contain structured sections: Summary, Decisions, Pending, References.
-- Check **Decisions** before re-discussing topics that were already resolved
-- Check **Pending** for items that may still need attention
-- **References** contain exact file paths and tool outcomes from that segment
+Summaries contain structured sections: Goal, Progress, Key Decisions, \
+Relevant Files, Next Steps, Critical Context.
+- Check **Goal** for the user's overarching objective — this anchors all work
+- Check **Key Decisions** before re-discussing topics that were already resolved
+- Check **Next Steps** for items that still need attention
+- **Critical Context** contains verbatim values (errors, configs, versions) that must not be paraphrased
 
 ### Precision Rules
 
