@@ -3,6 +3,7 @@ package cron
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // Start loads jobs from the store and begins scheduling.
@@ -19,15 +20,30 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("load cron store: %w", err)
 	}
 
-	// Schedule all enabled jobs.
+	// Initialize scheduling for all enabled jobs.
+	// One-shot "at" jobs use the scheduler for immediate execution.
+	// Recurring "every"/"cron" jobs rely on the timer via NextRunAtMs.
 	scheduled := 0
-	for _, job := range storeData.Jobs {
+	nowMs := time.Now().UnixMilli()
+	for i := range storeData.Jobs {
+		job := &storeData.Jobs[i]
 		if !job.Enabled {
 			continue
 		}
-		if err := s.scheduleJobLocked(ctx, job); err != nil {
-			s.logger.Warn("failed to schedule cron job", "id", job.ID, "error", err)
-			continue
+		if job.Schedule.Kind == "at" {
+			// One-shot jobs: register with scheduler for immediate execution.
+			if err := s.scheduleJobLocked(ctx, *job); err != nil {
+				s.logger.Warn("failed to schedule cron job", "id", job.ID, "error", err)
+				continue
+			}
+		} else {
+			// Recurring jobs: ensure NextRunAtMs is set so the timer can fire them.
+			if job.State.NextRunAtMs <= 0 {
+				job.State.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
+				if job.State.NextRunAtMs > 0 {
+					s.store.UpdateJobState(job.ID, job.State)
+				}
+			}
 		}
 		scheduled++
 	}
@@ -35,7 +51,7 @@ func (s *Service) Start(ctx context.Context) error {
 	// Check for missed jobs (jobs that should have fired during downtime).
 	s.recoverMissedJobsLocked(ctx, storeData)
 
-	// Arm the next-wake timer.
+	// Arm the next-wake timer for recurring jobs.
 	s.armTimerLocked(ctx)
 
 	s.running = true
