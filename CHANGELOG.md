@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.17.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.16.1...deneb-v4.17.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **rlm:** add Starlark REPL for RLM context exploration ([0f68b9e](https://github.com/choiceoh/Deneb/commit/0f68b9eb821ad3742eaf2cfbd355ce9fb9887a39))
+* **rlm:** Starlark REPL for RLM context exploration ([1845f56](https://github.com/choiceoh/Deneb/commit/1845f56c1033b9bb1ef9a90060df30d2bfd385de))
+
+
+### 🔧 Internal
+
+* **codegen:** port Python code generators to Go ([a2e0637](https://github.com/choiceoh/Deneb/commit/a2e0637f5cac77e4f54c64a6af17f98ba1c561fb))
+* **codegen:** port Python code generators to Go ([1d06b51](https://github.com/choiceoh/Deneb/commit/1d06b513a737055439704e8825ddb21fad21c7e8))
+* **vega:** remove memory_search + vega systems replaced by wiki ([c9ec0a0](https://github.com/choiceoh/Deneb/commit/c9ec0a0c7ab1946e313fb270817761031aa7b11b))
+
 ## [4.16.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.16.0...deneb-v4.16.1) (2026-04-06)
 
 
