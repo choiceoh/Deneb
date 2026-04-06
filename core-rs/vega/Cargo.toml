@@ -26,6 +26,3 @@ chrono = { workspace = true, features = ["serde"] }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-tempfile = "3"

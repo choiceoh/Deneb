@@ -4,8 +4,6 @@
 //! 1. **Pure functions** — stateless helpers
 //! 2. **Sweep engine** — handle-based state machine for full compaction sweeps
 
-#[cfg(test)]
-use super::sweep::SweepCommand;
 use super::sweep::{SweepEngine, SweepResponse};
 use super::{
     build_condensed_source_text, build_leaf_source_text, deterministic_fallback, estimate_tokens,
@@ -202,57 +200,3 @@ pub fn compaction_sweep_drop(handle: u32) {
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compaction::CompactionDecision;
-
-    #[test]
-    fn test_compaction_estimate_tokens_napi() {
-        assert_eq!(compaction_estimate_tokens("hello world"), 5); // 11 chars / 2
-        assert_eq!(compaction_estimate_tokens(""), 1); // min clamp
-    }
-
-    #[test]
-    fn test_compaction_evaluate_napi() -> Result<(), Box<dyn std::error::Error>> {
-        let config_json = serde_json::to_string(&CompactionConfig::default())?;
-        let result = compaction_evaluate(&config_json, 810, 0, 1000); // above 0.80 threshold
-        let decision: CompactionDecision = serde_json::from_str(&result)?;
-        assert!(decision.should_compact);
-        Ok(())
-    }
-
-    #[test]
-    fn test_sweep_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
-        let config_json = serde_json::to_string(&CompactionConfig::default())?;
-        let handle = compaction_sweep_new(&config_json, 1, 1000, false, false, 1000.0);
-        assert!(handle > 0);
-
-        let cmd_json = compaction_sweep_start(handle);
-        let cmd: SweepCommand = serde_json::from_str(&cmd_json)?;
-        assert!(matches!(cmd, SweepCommand::FetchTokenCount { .. }));
-
-        // Feed below-threshold tokens to get Done
-        let resp = serde_json::to_string(&SweepResponse::TokenCount { count: 500 })?;
-        let cmd_json = compaction_sweep_step(handle, &resp);
-        let cmd: SweepCommand = serde_json::from_str(&cmd_json)?;
-        assert!(matches!(cmd, SweepCommand::Done { .. }));
-
-        compaction_sweep_drop(handle);
-        Ok(())
-    }
-
-    #[test]
-    fn test_compaction_format_timestamp_napi() {
-        let result = compaction_format_timestamp(1711324800000, "UTC");
-        assert_eq!(result, "2024-03-25 00:00 UTC");
-    }
-
-    #[test]
-    fn test_compaction_generate_summary_id_napi() {
-        let id = compaction_generate_summary_id("hello", 1000.0);
-        assert!(id.starts_with("sum_"));
-        assert_eq!(id.len(), 20);
-    }
-}

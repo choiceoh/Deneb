@@ -11,9 +11,8 @@ Primary runtime — HTTP/WS gateway server.
 
 - `cmd/gateway/main.go` — Entry point with `--port`/`--bind` flags, graceful shutdown.
 - `internal/server/` — HTTP server: `/health`, `/api/v1/rpc`, OpenAI/Responses APIs, hooks, session endpoints. Connection tracking.
-- `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe). 130+ methods including FFI-backed security/media/memory/context/compaction.
+- `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe). 130+ methods.
 - `internal/session/` — Session management with lifecycle state machine (`IDLE -> RUNNING -> DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
-- `internal/ffi/` — CGo bindings to Rust core (8 `*_cgo.go` files + `*_noffi.go` fallbacks). Build tag: `!no_ffi && cgo`.
 - `internal/auth/` — Token auth, allowlists, security paths, credentials, probe auth.
 - `pkg/protocol/` — Hand-written JSON wire types + generated protobuf types in `gen/`.
 - `pkg/protocol/consistency_test.go` — Bidirectional reflection tests ensuring hand-written and generated types stay in sync.

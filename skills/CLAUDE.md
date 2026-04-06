@@ -41,7 +41,7 @@ Adapted from hermes-agent's framework:
 **Make it a Skill when:**
 - The capability can be expressed as instructions + shell commands + existing tools
 - It wraps external CLIs or APIs callable via terminal
-- No custom Go/Rust integration or persistent state management needed
+- No custom Go integration or persistent state management needed
 - Examples: arXiv search, git workflows, Docker management, PDF processing
 
 **Make it a Tool when:**

@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 )
@@ -272,12 +269,7 @@ func buildMidLoopCompactor(
 			}
 		}
 
-		// Step 2.75: Pre-compaction memory flush — extract facts from messages that
-		// are about to be dropped (inspired by OpenClaw's memoryFlush). This ensures
-		// important context survives compaction by persisting to long-term memory.
-		if deps.memoryStore != nil && pilot.CheckLocalAIHealth() {
-			flushPreCompactionMemory(ctx, deps, messages, logger)
-		}
+		// Step 2.75: Pre-compaction memory flush was removed (memory store replaced by wiki).
 
 		// Step 3: Aurora compaction sweep (uses lightweight local LLM for summaries).
 		// Only main sessions may use Aurora sweep; others get microcompact only.
@@ -380,38 +372,8 @@ func handleContextOverflowAurora(
 		}
 	}
 
-	// Build inline fact extractor: replaces the async flushMemory/transferSummary
-	// bridge with synchronous extraction during the sweep persist step.
-	// Facts are extracted from condensed summaries (depth >= 1) and stored
-	// directly in the memory store. Extraction failure is non-fatal.
+	// Fact extractor disabled: memory store replaced by wiki.
 	var factExtractor aurora.FactExtractor
-	if deps.memoryStore != nil {
-		factExtractor = func(summaryContent string, depth uint32) error {
-			// Estimate token count using rune-based divisor consistent with
-			// estimateTokens() (runesPerToken=2, calibrated for Korean).
-			estimatedTokens := uint64(utf8.RuneCountInString(summaryContent) / runesPerToken)
-			summary := aurora.SummaryRecord{
-				Content:    summaryContent,
-				Depth:      depth,
-				Kind:       "condensed",
-				TokenCount: estimatedTokens,
-			}
-			if !aurora.ShouldTransfer(summary, aurora.DefaultMemoryTransferConfig()) {
-				logger.Debug("aurora-transfer: summary below transfer threshold",
-					"depth", depth, "tokens", estimatedTokens)
-				return nil
-			}
-			return aurora.TransferSummaryToMemory(
-				ctx,
-				summary,
-				deps.auroraStore,
-				deps.memoryStore,
-				deps.memoryEmbedder,
-				lwClient, lwModel,
-				logger,
-			)
-		}
-	}
 
 	result, err := aurora.RunSweep(
 		deps.auroraStore,
@@ -445,74 +407,3 @@ func handleContextOverflowAurora(
 	return asmResult.Messages, asmResult.SystemPromptAddition, nil
 }
 
-// flushPreCompactionMemory extracts facts from older messages that are about to
-// be dropped by compaction. This preserves important context in long-term memory
-// before the conversation history is truncated.
-//
-// Strategy: scan messages from the middle (likely-to-be-dropped zone), build a
-// condensed text of user+assistant exchanges, and run fact extraction.
-func flushPreCompactionMemory(ctx context.Context, deps runDeps, messages []llm.Message, logger *slog.Logger) {
-	if deps.memoryStore == nil || len(messages) < 6 {
-		return
-	}
-
-	// Focus on messages in the middle — the first 2 (system/initial) and last 4
-	// (recent context) are either preserved or already extracted from.
-	const keepHead = 2
-	const keepTail = 4
-	if len(messages) <= keepHead+keepTail {
-		return
-	}
-
-	dropZone := messages[keepHead : len(messages)-keepTail]
-
-	// Build a condensed conversation summary from the drop zone.
-	var sb strings.Builder
-	const maxFlushChars = 8000
-	for _, msg := range dropZone {
-		if sb.Len() >= maxFlushChars {
-			break
-		}
-		content := string(msg.Content)
-		if len(content) == 0 {
-			continue
-		}
-		// Only process user and assistant messages (skip tool results — they're
-		// mostly raw data that doesn't contain memory-worthy information).
-		if msg.Role != "user" && msg.Role != "assistant" {
-			continue
-		}
-		// Truncate individual messages to keep the flush lightweight.
-		if len(content) > 2000 {
-			content = content[:2000]
-		}
-		sb.WriteString(msg.Role)
-		sb.WriteString(": ")
-		sb.WriteString(content)
-		sb.WriteString("\n\n")
-	}
-
-	conversationText := sb.String()
-	if len(conversationText) < 50 {
-		return
-	}
-
-	// Extract using the lightweight model (same path as end-of-run extraction).
-	flushCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-
-	lwClient := pilot.GetLightweightClient()
-	lwModel := pilot.GetLightweightModel()
-	facts, err := memory.ExtractFacts(flushCtx, lwClient, lwModel,
-		"[pre-compaction flush]", conversationText, logger)
-	if err != nil {
-		logger.Debug("pre-compaction memory flush: extraction failed", "error", err)
-		return
-	}
-	if len(facts) > 0 {
-		memory.InsertExtractedFactsAs(flushCtx, deps.memoryStore, deps.memoryEmbedder,
-			facts, "compaction_flush", logger)
-		logger.Info("pre-compaction memory flush: saved facts before compaction",
-			"count", len(facts))
-	}
-}

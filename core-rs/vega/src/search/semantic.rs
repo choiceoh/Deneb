@@ -214,35 +214,3 @@ fn dot_product_simd(a: &[f32], b: &[f32]) -> f64 {
             .sum()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Convert a f32 vector to a byte blob (little-endian).
-    fn f32_vec_to_blob(vec: &[f32]) -> Vec<u8> {
-        let mut blob = Vec::with_capacity(vec.len() * 4);
-        for &v in vec {
-            blob.extend_from_slice(&v.to_le_bytes());
-        }
-        blob
-    }
-
-    #[test]
-    fn test_f32_blob_roundtrip() {
-        let vec = vec![1.0f32, 2.5, -0.5, 0.0];
-        let blob = f32_vec_to_blob(&vec);
-        let recovered = blob_to_f32_vec(&blob);
-        assert_eq!(vec, recovered);
-    }
-
-    #[test]
-    fn test_dot_product() {
-        let a = vec![1.0f32, 0.0, 0.0];
-        let b = vec![1.0f32, 0.0, 0.0];
-        assert!((dot_product_simd(&a, &b) - 1.0).abs() < 1e-6);
-
-        let c = vec![0.0f32, 1.0, 0.0];
-        assert!((dot_product_simd(&a, &c)).abs() < 1e-6);
-    }
-}

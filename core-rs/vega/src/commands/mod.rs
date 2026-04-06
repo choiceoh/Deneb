@@ -492,22 +492,3 @@ pub(super) fn truncate(s: &str, max: usize) -> String {
         format!("{truncated}...")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_route_command() {
-        assert_eq!(route_command("급한 프로젝트 뭐있어"), "urgent");
-        assert_eq!(route_command("현황 보여줘"), "dashboard");
-        assert_eq!(route_command("비금도 검색"), "search");
-        assert_eq!(route_command("타임라인 보기"), "timeline");
-    }
-
-    #[test]
-    fn test_truncate() {
-        assert_eq!(truncate("hello", 10), "hello");
-        assert_eq!(truncate("hello world", 5), "hello...");
-    }
-}

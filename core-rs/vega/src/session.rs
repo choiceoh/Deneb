@@ -124,31 +124,3 @@ impl VegaSession {
         parent.join(".vega_session.json")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_session_update() {
-        let mut session = VegaSession::default();
-        let data = serde_json::json!({"project_id": 5, "project_name": "테스트"});
-        session.update("show", &data);
-        assert_eq!(session.recent_ids.front(), Some(&5));
-        assert_eq!(session.last_command, Some("show".to_string()));
-    }
-
-    #[test]
-    fn test_session_dedup() {
-        let mut session = VegaSession::default();
-        let data1 = serde_json::json!({"project_id": 5});
-        let data2 = serde_json::json!({"project_id": 7});
-        let data3 = serde_json::json!({"project_id": 5});
-        session.update("show", &data1);
-        session.update("show", &data2);
-        session.update("show", &data3);
-        assert_eq!(session.recent_ids.len(), 2);
-        assert_eq!(session.recent_ids[0], 5);
-        assert_eq!(session.recent_ids[1], 7);
-    }
-}

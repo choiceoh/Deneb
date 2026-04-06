@@ -6,11 +6,9 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 
 | Command | Description |
 |---------|-------------|
-| `make go` | Build (CGo, requires `make rust` first) |
-| `make go-pure` | Build without Rust (`CGO_ENABLED=0 -tags no_ffi`) |
+| `make go` | Build |
 | `make go-dev` | Dev mode with auto-restart on SIGUSR1 |
 | `make go-test` | Run tests with `-race` |
-| `make go-test-pure` | Run tests without FFI |
 | `make go-vet` | Run `go vet` |
 | `make go-fmt` | Check formatting |
 
@@ -23,25 +21,17 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | `internal/rpc/` | Registry-based RPC dispatcher, 130+ methods |
 | `internal/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/chat/` | System prompt, tool registration, context files, slash commands |
-| `internal/ffi/` | CGo bindings to Rust core (8 modules) |
 | `internal/auth/` | Token auth, allowlists, credentials |
 | `internal/llm/` | LLM client, sampling parameters, multimodal types |
 | `internal/vega/` | Vega search integration, model auto-detection |
 | `internal/telegram/` | Telegram channel plugin (primary deployment target) |
 | `pkg/protocol/` | Hand-written JSON wire types + generated protobuf types in `gen/` |
 
-## FFI Pattern
-
-Rust core is linked as a static library via CGo. Each FFI module has two files:
-
-- `*_cgo.go` — CGo implementation (build tag: `!no_ffi && cgo`)
-- `*_noffi.go` — Pure-Go fallback (build tag: `no_ffi || !cgo`)
-
-Modules: `core`, `memory`, `markdown`, `parsing`, `context_engine`, `compaction`, `vega`
+## Error Codes
 
 All error codes are defined in `proto/gateway.proto` and auto-generated via `make error-codes-gen`:
-- Protocol codes (`ErrorCode` enum) → `pkg/protocol/errors_gen.go` + `core-rs/core/src/protocol/error_codes.rs`
-- FFI codes (`FfiErrorCode` enum) → `internal/ffi/ffi_error_codes_gen.go` + same Rust file
+- Protocol codes (`ErrorCode` enum) → `pkg/protocol/errors_gen.go`
+- FFI codes (`FfiErrorCode` enum) → `internal/ffi/ffi_error_codes_gen.go`
 
 ## Common Tasks
 

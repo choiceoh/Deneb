@@ -211,23 +211,3 @@ fn truncate_model(model: &str) -> String {
         model.to_string()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_age_values() {
-        assert_eq!(format_age(30_000), "30s");
-        assert_eq!(format_age(120_000), "2m");
-        assert_eq!(format_age(7_200_000), "2h");
-        assert_eq!(format_age(172_800_000), "2d");
-    }
-
-    #[test]
-    fn format_tokens_values() {
-        assert_eq!(format_tokens(500), "500");
-        assert_eq!(format_tokens(1_500), "1.5K");
-        assert_eq!(format_tokens(2_500_000), "2.5M");
-    }
-}

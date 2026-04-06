@@ -8,7 +8,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
-	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -33,10 +32,8 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          tools.ToolFetchTools(registry),
 	})
 
-	// Wiki: LLM knowledge base (feature-flagged).
-	if cfg := wiki.ConfigFromEnv(); cfg.Enabled {
-		toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
-	}
+	// Wiki: LLM knowledge base (always enabled).
+	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
 	// RLM: context externalization tools (feature-flagged).
 	if cfg := rlm.ConfigFromEnv(); cfg.Enabled {
@@ -65,13 +62,12 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 // rlmDataToolNames lists the Phase 1 tool names available to sub-LLMs.
 // llm_spawn/llm_spawn_batch are excluded to prevent recursion.
-// wiki is included so sub-LLMs can search/read the knowledge base.
+// wiki replaces memory_recall_rlm — sub-LLMs use wiki search/read for knowledge retrieval.
 var rlmDataToolNames = []string{
 	"projects_list",
 	"projects_get_field",
 	"projects_search",
 	"projects_get_document",
-	"memory_recall_rlm",
 	"wiki",
 }
 

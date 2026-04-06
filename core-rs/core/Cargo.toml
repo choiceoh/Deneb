@@ -1,6 +1,6 @@
 [package]
 name = "deneb-core"
-version = "4.15.1" # x-release-please-version
+version = "4.16.1" # x-release-please-version
 edition = "2021"
 description = "Deneb core library — protocol validation, security, and media processing"
 
@@ -23,7 +23,6 @@ parallel = ["dep:rayon"]
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
-memchr = "2"
 
 # Protobuf runtime
 prost.workspace = true
@@ -45,17 +44,10 @@ sha2.workspace = true
 # Timezone-aware timestamps (compaction)
 chrono.workspace = true
 
-# Markdown parsing
-pulldown-cmark = { version = "0.12", default-features = false }
-
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
 deneb-ml = { path = "../ml", optional = true }
 
-
-[dev-dependencies]
-proptest = "1.5"
-tempfile = "3"
 
 [lints]
 workspace = true

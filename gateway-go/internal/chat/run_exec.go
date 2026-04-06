@@ -23,7 +23,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
@@ -321,18 +320,9 @@ func executeAgentRun(
 			return
 		}
 		if params.Message != "" {
-			// When recall engine is active (parallel goroutine), skip
-			// memory SearchFacts here to avoid duplicate DB queries.
-			recallActive := deps.registry != nil && deps.memoryStore != nil
 			kDeps := knowledge.Deps{
-				VegaBackend:      deps.vegaBackend,
-				WorkspaceDir:     workspaceDir,
-				SkipMemorySearch: recallActive,
-			}
-			{
-				kDeps.MemoryStore = deps.memoryStore
-				kDeps.MemoryEmbedder = deps.memoryEmbedder
-				kDeps.UnifiedStore = deps.unifiedStore
+				UnifiedStore: deps.unifiedStore,
+				WikiStore:    deps.wikiStore,
 			}
 			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
 		}
@@ -386,14 +376,8 @@ func executeAgentRun(
 			}
 		}
 		if len(messages) == 0 && deps.transcript != nil {
-			// Build assembly hints for semantic ranking when an embedder is available.
+			// Memory embedder removed (replaced by wiki); assemble without semantic hints.
 			var hints AssemblyHints
-			if deps.memoryEmbedder != nil && params.Message != "" {
-				hints = AssemblyHints{
-					QueryText: params.Message,
-					Embedder:  deps.memoryEmbedder.Inner(),
-				}
-			}
 			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger, hints)
 			if err != nil {
 				contextErr = err
@@ -979,63 +963,7 @@ func executeAgentRun(
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
 
-				// Pre-compaction fact extraction: extract learnings from the
-				// conversation before compaction trims older messages.
-				if deps.memoryStore != nil && deps.registry != nil {
-					lwClient := deps.registry.Client(modelrole.RoleLightweight)
-					lwModel := deps.registry.Model(modelrole.RoleLightweight)
-					if lwClient != nil && lwModel != "" {
-						snapshot := messages // capture before compaction
-						go func() {
-							extractCtx, extractCancel := context.WithTimeout(deps.shutdownCtx, 30*time.Second)
-							defer extractCancel()
-							var userParts, assistantParts []string
-							for _, m := range snapshot {
-								// Extract text content from the message (may be
-								// a JSON string or a []ContentBlock array).
-								var text string
-								if len(m.Content) > 0 && m.Content[0] == '"' {
-									_ = json.Unmarshal(m.Content, &text)
-								} else {
-									var blocks []llm.ContentBlock
-									if json.Unmarshal(m.Content, &blocks) == nil {
-										for _, b := range blocks {
-											if b.Type == "text" && b.Text != "" {
-												text += b.Text + "\n"
-											}
-										}
-									}
-								}
-								if text == "" {
-									continue
-								}
-								switch m.Role {
-								case "user":
-									userParts = append(userParts, text)
-								case "assistant":
-									assistantParts = append(assistantParts, text)
-								}
-							}
-							if len(userParts) == 0 && len(assistantParts) == 0 {
-								return
-							}
-							facts, err := memory.ExtractFacts(
-								extractCtx, lwClient, lwModel,
-								strings.Join(userParts, "\n"),
-								strings.Join(assistantParts, "\n"),
-								logger,
-							)
-							if err != nil {
-								logger.Warn("pre-compaction fact extraction failed", "error", err)
-								return
-							}
-							if len(facts) > 0 {
-								memory.InsertExtractedFacts(extractCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
-								logger.Info("pre-compaction facts extracted", "count", len(facts))
-							}
-						}()
-					}
-				}
+				// Pre-compaction fact extraction removed (memory store replaced by wiki).
 
 				// Emergency drop: if messages are extremely large, drop oldest
 				// (keep first 2 + last 8) before expensive LLM compaction.

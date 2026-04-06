@@ -284,31 +284,29 @@ proto-watch:
 # --- Tool schema code generation ---
 
 # Regenerate gateway-go/internal/chat/toolreg/tool_schemas_gen.go from tool_schemas.yaml.
-# Requires: python3, pyyaml, gofmt
 tool-schemas:
-	cd gateway-go && python3 cmd/tool-schema-gen/gen.py \
+	cd gateway-go && go run cmd/tool-schema-gen/main.go \
 		-yaml internal/chat/toolreg/tool_schemas.yaml \
 		-out  internal/chat/toolreg/tool_schemas_gen.go \
 		-pkg  toolreg
 
 # Verify tool_schemas_gen.go is up to date (fails if yaml and Go are out of sync).
 tool-schemas-check:
-	cd gateway-go && python3 cmd/tool-schema-gen/gen.py \
+	cd gateway-go && go run cmd/tool-schema-gen/main.go \
 		-yaml internal/chat/toolreg/tool_schemas.yaml \
 		-out  internal/chat/toolreg/tool_schemas_gen.go \
 		-pkg  toolreg
 	@git diff --exit-code -- gateway-go/internal/chat/toolreg/tool_schemas_gen.go
 
 # Regenerate gateway-go/internal/autoreply/model_caps_gen.go from model_caps.yaml.
-# Requires: python3, pyyaml, gofmt
 model-caps:
-	cd gateway-go && python3 cmd/model-caps-gen/gen.py \
+	cd gateway-go && go run cmd/model-caps-gen/main.go \
 		-yaml internal/autoreply/thinking/model_caps.yaml \
 		-out  internal/autoreply/thinking/model_caps_gen.go
 
 # Verify model_caps_gen.go is up to date (fails if yaml and Go are out of sync).
 model-caps-check:
-	cd gateway-go && python3 cmd/model-caps-gen/gen.py \
+	cd gateway-go && go run cmd/model-caps-gen/main.go \
 		-yaml internal/autoreply/thinking/model_caps.yaml \
 		-out  internal/autoreply/thinking/model_caps_gen.go
 	@git diff --exit-code -- gateway-go/internal/autoreply/thinking/model_caps_gen.go
@@ -340,7 +338,7 @@ error-code-sync: error-codes-gen-check
 # Universal YAML → Go var generator for data tables (tool classification).
 # Source YAML files live next to their generated Go counterparts.
 
-DATA_GEN = python3 cmd/data-gen/gen.py
+DATA_GEN = go run cmd/data-gen/main.go
 DATA_GEN_TARGETS = \
 	internal/chat/tool_classification
 

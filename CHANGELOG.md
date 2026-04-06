@@ -1,5 +1,69 @@
 # Changelog
 
+## [4.16.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.16.0...deneb-v4.16.1) (2026-04-06)
+
+
+### 🔧 Internal
+
+* **chat:** wire wiki as default knowledge base, disconnect memory+vega ([2fe5869](https://github.com/choiceoh/Deneb/commit/2fe5869e55520bb7ad0c88eaceada25d2c041230))
+* **chat:** wire wiki as default knowledge base, disconnect memory+vega ([40848f8](https://github.com/choiceoh/Deneb/commit/40848f8fe0852638db9986a5c6457e33859d1999))
+* **ffi:** replace Rust FFI with pure Go for 4 modules ([edfcb48](https://github.com/choiceoh/Deneb/commit/edfcb483b9032e1a3cce7bf14ca93af46253f7cc))
+* **ffi:** replace Rust FFI with pure Go for markdown, parsing, media, security ([cec2132](https://github.com/choiceoh/Deneb/commit/cec2132bea0204845979f1015dcb6e82e84798bd))
+
+## [4.16.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.15.1...deneb-v4.16.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **chat:** add RLM context externalization and sub-LLM spawning ([ac459e1](https://github.com/choiceoh/Deneb/commit/ac459e116bf5c1163eeb07db140a9c68449f2738))
+* **chat:** RLM context externalization + sub-LLM spawning ([a13ca55](https://github.com/choiceoh/Deneb/commit/a13ca5515b8440d9c2536c2c1f8cf5a9a864d038))
+* **markdown:** add pure-Go markdown-to-IR parser ([26e4316](https://github.com/choiceoh/Deneb/commit/26e43161d2fe15497fb9b302d02a49254bbd4be1))
+* **markdown:** add pure-Go markdown-to-IR parser (coremarkdown package) ([64cae94](https://github.com/choiceoh/Deneb/commit/64cae9433477e3346ea9d10345802c12d9bd4516))
+* **media:** add pure-Go MIME detection (coremedia package) ([cd09029](https://github.com/choiceoh/Deneb/commit/cd09029b73e850cabddcc6747c91aaad29b9bc9b))
+* **media:** add pure-Go MIME detection (coremedia) ([a554729](https://github.com/choiceoh/Deneb/commit/a554729304c31dd9a708672661fcbdacaf958ecf))
+* **parsing:** port HTML-to-Markdown from Rust to pure Go ([22677e0](https://github.com/choiceoh/Deneb/commit/22677e0cbc739ddd394d092d34a694fcc08821a7))
+* **parsing:** port HTML-to-Markdown from Rust to pure Go ([b53dd6e](https://github.com/choiceoh/Deneb/commit/b53dd6ef7e03affedf7f22bcd0e73f9708fdf8c3))
+* **parsing:** port URL extract, media tokens, base64 from Rust to pure Go ([f1a1257](https://github.com/choiceoh/Deneb/commit/f1a1257b763641d2d46b469ab520718a83c4387e))
+* **parsing:** port URL extract, media tokens, base64 from Rust to pure Go ([4a7b459](https://github.com/choiceoh/Deneb/commit/4a7b459518abf79bfb8dde057fe9af0b499e9420))
+* **protocol:** port protocol validation from Rust to pure Go ([a885fdb](https://github.com/choiceoh/Deneb/commit/a885fdb991f663a761d6ef556afbb8b43de54725))
+* **protocol:** port protocol validation from Rust to pure Go ([a46ae71](https://github.com/choiceoh/Deneb/commit/a46ae71174c96524d5cbea35e16b1e83653a3e35))
+* **testing:** add real Telegram e2e testing via Telethon ([7d9e09d](https://github.com/choiceoh/Deneb/commit/7d9e09db74ee21fd90eec7e358ebdf4a553ff058))
+* **testing:** real Telegram e2e testing + always prod config ([1902819](https://github.com/choiceoh/Deneb/commit/19028198debc913fbc4a07ea862b8b310089650a))
+* **wiki:** add LLM wiki knowledge base (Karpathy pattern) ([315244d](https://github.com/choiceoh/Deneb/commit/315244df1ca688ac17726e6b5e767b814588a548))
+* **wiki:** add LLM wiki knowledge base (Karpathy pattern) ([4867e07](https://github.com/choiceoh/Deneb/commit/4867e0711d90174a062a6e9ea990c749b78f6203))
+
+
+### 🐛 Bug Fixes
+
+* **context:** drain expand_stack fully when depth reaches zero ([b11c67c](https://github.com/choiceoh/Deneb/commit/b11c67cc2f2ea170ca4612aac8497e084418a94d))
+* **context:** drain expand_stack fully when depth reaches zero ([4670a20](https://github.com/choiceoh/Deneb/commit/4670a208faa0a48661628494e98b85d96b83c793))
+* **cron:** resolve delivery target for cron job output ([1d0ee9f](https://github.com/choiceoh/Deneb/commit/1d0ee9f76f68c9c670d6c9aed8f879912f629125))
+* **cron:** resolve delivery target from Telegram config for cron job output ([1145ea7](https://github.com/choiceoh/Deneb/commit/1145ea73cc26108ec07e51cc2dea83ed6bfe45f5))
+* **memory:** prevent aurora-dream panic from crashing gateway ([14225f2](https://github.com/choiceoh/Deneb/commit/14225f2db977599d0585cd9a0df85da5acff36ac))
+* **memory:** prevent aurora-dream panic from crashing gateway ([5b11800](https://github.com/choiceoh/Deneb/commit/5b1180069ae1b058e849d0cffa699ea03cf9ac76))
+* **rlm:** add RLM tool approval policies, remove spawn batch maxItems hardcode ([ff3c25b](https://github.com/choiceoh/Deneb/commit/ff3c25ba221dcef1a82d4024cddb06673783b274))
+* **rlm:** add tool approval policies, remove maxItems hardcode ([add0df4](https://github.com/choiceoh/Deneb/commit/add0df451e861f2c1d69ea4faab8304fc89be58b))
+* **rlm:** atomic budget reservation, deterministic TOC, batch cancellation ([bc991f4](https://github.com/choiceoh/Deneb/commit/bc991f4655c2301d9f681be77e4e376803d5d777))
+* **rlm:** atomic budget reservation, deterministic TOC, batch cancellation ([256ddf1](https://github.com/choiceoh/Deneb/commit/256ddf104cebb4ba5af8eec7019cc02ae2ce7616))
+* **rlm:** per-call token budget, batch concurrency limit, encoding fixes ([a3d89b8](https://github.com/choiceoh/Deneb/commit/a3d89b8e43c40420c0d4f5a223348ae68febc0cb))
+* **rlm:** per-call token budget, batch concurrency, encoding fixes ([82a920d](https://github.com/choiceoh/Deneb/commit/82a920dae8c7834843f8fad02d267c7716f6e715))
+* **rlm:** remove dead Consume method, harden token budget and spawn tools ([c9b4927](https://github.com/choiceoh/Deneb/commit/c9b4927a15ba2fcafb38f7dd5dfb6aead9b3527c))
+* **rlm:** remove dead Consume method, harden token budget and spawn tools ([a2c85a5](https://github.com/choiceoh/Deneb/commit/a2c85a5354ee3cbf6bc977ecb5ac906803306a39))
+* **rlm:** settle token budget double-counting, wire MaxSubSpawns config ([7bba0a1](https://github.com/choiceoh/Deneb/commit/7bba0a12cd8367d089e1d94bee9c4f2414a83a78))
+* **rlm:** settle token budget double-counting, wire MaxSubSpawns config, handle marshal errors ([b686013](https://github.com/choiceoh/Deneb/commit/b6860138dfeabb13a3a6f3601a48f9099ad79138))
+* **testing:** load .env in dev-live-test.sh for status messages ([b00d97d](https://github.com/choiceoh/Deneb/commit/b00d97d21f4eb61c9c061d3336d1cde943fcea62))
+
+
+### 🔧 Internal
+
+* **localai:** replace qwen3.5 with gemma4 ([878e780](https://github.com/choiceoh/Deneb/commit/878e78004bdb5ebd70aea64988fb41941caf2711))
+* **localai:** replace qwen3.5 with gemma4 as default lightweight model ([71be220](https://github.com/choiceoh/Deneb/commit/71be2206f4a4edbc37baba6a4d50dc7e718f369d))
+* **security:** extract coresecurity package from ffi noffi ([aebdf9d](https://github.com/choiceoh/Deneb/commit/aebdf9d04541c3b8c3aeb74f4e32fc671acd6abb))
+* **security:** extract coresecurity package from ffi noffi fallbacks ([14de7f9](https://github.com/choiceoh/Deneb/commit/14de7f997a2ef26464e5cf6c3eb525706dfe2625))
+* **testing:** remove --prod-parity mode, always use production config ([96fe1a4](https://github.com/choiceoh/Deneb/commit/96fe1a4a57fdcdf26d02d2b1b92a78e859578980))
+* **wiki:** Go-native FTS5, remove auto-injection, wire RLM ([32a3812](https://github.com/choiceoh/Deneb/commit/32a3812ce20700a455e9972b694e5a35e28b1a83))
+* **wiki:** replace ripgrep with Go-native FTS5, remove auto-injection, wire RLM ([8c58efe](https://github.com/choiceoh/Deneb/commit/8c58efeb28e3442e2bb8edc0bf9f85462362c57a))
+
 ## [4.15.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.15.0...deneb-v4.15.1) (2026-04-06)
 
 

@@ -11,13 +11,11 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -295,43 +293,8 @@ func handleRunSuccess(
 			memCtx, memCancel := context.WithTimeout(base, autoMemoryTimeout)
 			defer memCancel()
 
-			if deps.memoryStore != nil {
-				// Structured extraction: extract facts with importance scoring.
-				// Skip tool-only responses (file contents relay, command output)
-				// that rarely contain user-model-worthy information.
-				if result.Text != "" && !isToolOnlyResponse(result.Text) {
-					if !pilot.CheckLocalAIHealth() {
-						logger.Debug("structured memory extraction skipped: local AI unhealthy")
-					} else {
-						lwClient := pilot.GetLightweightClient()
-						// Strip recalled memory sections from response before extraction
-						// to prevent self-poisoning (recalled facts being re-extracted).
-						cleanResponse := memory.StripRecalledMemoryFromResponse(result.Text)
-						facts, err := memory.ExtractFacts(memCtx, lwClient, pilot.GetLightweightModel(), params.Message, cleanResponse, logger)
-						if err != nil {
-							if shouldLogStructuredMemoryExtractionError(err) {
-								logger.Debug("structured memory extraction failed, falling back", "error", err)
-							}
-						}
-						if len(facts) > 0 {
-							memory.InsertExtractedFacts(memCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
-							// Debounced MEMORY.md export (export every 10 facts).
-							if count, _ := deps.memoryStore.ActiveFactCount(memCtx); count%10 == 0 {
-								workspaceDir := resolveWorkspaceDirForPrompt()
-								if err := deps.memoryStore.ExportToFile(memCtx, workspaceDir); err != nil {
-									logger.Debug("memory export failed", "error", err)
-								}
-							}
-						}
-					}
-				}
-
-				// Increment dream turn on every run (not just when response is non-empty).
-				if deps.dreamTurnFn != nil {
-					deps.dreamTurnFn(memCtx)
-				}
-			} else if result.Text != "" {
-				// Legacy: append bullet points to MEMORY.md.
+			// Structured memory store replaced by wiki; use file-based fallback.
+			if result.Text != "" {
 				notes := extractAutoMemory(memCtx, params.Message, result.Text, logger)
 				if notes != "" {
 					workspaceDir := resolveWorkspaceDirForPrompt()
@@ -799,14 +762,9 @@ func resolveWorkspaceDirForPrompt() string {
 	return cachedWorkspaceDir
 }
 
-// memoryContextOpts returns LoadContextOptions based on whether the structured
-// memory store is active. When active, MEMORY.md is skipped from context files
-// because PrefetchKnowledge already provides the same information with
-// importance-weighted scoring via the structured memory store.
-func memoryContextOpts(deps runDeps) []prompt.LoadContextOption {
-	if deps.memoryStore != nil {
-		return []prompt.LoadContextOption{prompt.WithSkipMemory()}
-	}
+// memoryContextOpts returns LoadContextOptions for context file loading.
+// Memory store was replaced by wiki; MEMORY.md is always loaded.
+func memoryContextOpts(_ runDeps) []prompt.LoadContextOption {
 	return nil
 }
 

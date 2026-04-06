@@ -1766,9 +1766,8 @@ func llmSpawnBatchToolSchema() map[string]any {
 				"items": map[string]any{
 					"type": "string",
 				},
-				"description": "병렬 실행할 작업 목록 (최대 10개)",
+				"description": "병렬 실행할 작업 목록 (기본 최대 10개, 서버 설정에 따라 변경)",
 				"minItems":    1,
-				"maxItems":    10,
 			},
 			"tools": map[string]any{
 				"type": "array",
