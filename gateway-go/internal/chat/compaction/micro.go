@@ -25,7 +25,7 @@ const (
 	microcompactKeepRecent = 8
 
 	// microcompactStubText is the replacement text for pruned tool results.
-	microcompactStubText = "[tool result pruned to save context tokens]"
+	microcompactStubText = "_(tool result pruned to save context tokens)_"
 )
 
 // MicrocompactResult describes what microcompact did.

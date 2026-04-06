@@ -211,7 +211,7 @@ func TestSanitizeKey(t *testing.T) {
 func TestFormatTranscriptForMemory(t *testing.T) {
 	msgs := []ChatMessage{
 		NewTextChatMessage("user", "Fix the bug", 1711324800000),
-		NewTextChatMessage("assistant", "[Tools used: edit x1]\n\nFixed.", 1711324860000),
+		NewTextChatMessage("assistant", "Tools used: edit x1\n\nFixed.", 1711324860000),
 	}
 	got := formatTranscriptForMemory(msgs)
 	if !strings.Contains(got, "user]") || !strings.Contains(got, "assistant]") {

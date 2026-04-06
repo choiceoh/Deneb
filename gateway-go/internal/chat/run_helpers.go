@@ -36,7 +36,7 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 	// Build a concise note listing the tools that were running and any
 	// partial text the assistant had produced before interruption.
 	var sb strings.Builder
-	sb.WriteString("[System: the previous assistant turn was interrupted by the user while executing tools: ")
+	sb.WriteString("**System:** the previous assistant turn was interrupted by the user while executing tools: ")
 	for i, name := range result.InterruptedToolNames {
 		if i > 0 {
 			sb.WriteString(", ")
@@ -53,7 +53,7 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 		}
 		sb.WriteString(partial)
 	}
-	sb.WriteString(" Continue or adjust based on the user's new message.]")
+	sb.WriteString(" Continue or adjust based on the user's new message.")
 
 	msg := NewTextChatMessage("user", sb.String(), time.Now().UnixMilli())
 	if err := deps.transcript.Append(sessionKey, msg); err != nil {
@@ -832,10 +832,13 @@ func (r *ToolRegistry) Definitions() []ToolDef {
 // formatToolActivitySummary builds a compact, context-friendly summary of tool
 // invocations from an agent run. Returns "" when there are no activities.
 //
-// The output is a bracketed metadata line that lists each unique tool with its
-// call count, e.g.:
+// The output is a plain metadata line (no brackets) that lists each unique tool
+// with its call count, e.g.:
 //
-//	[Tools used: read_file ×3, edit ×2, exec ×1]
+//	Tools used: read_file ×3, edit ×2, exec ×1
+//
+// IMPORTANT: Do NOT use bracket syntax here — models (especially GLM) mimic
+// bracketed patterns as text output instead of making structured tool calls.
 //
 // This is prepended to the assistant's text before persisting to the transcript
 // and Aurora store, so subsequent context assemblies include what the agent
@@ -862,7 +865,7 @@ func formatToolActivitySummary(activities []agent.ToolActivity) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("[Tools used: ")
+	sb.WriteString("Tools used: ")
 	for i, e := range ordered {
 		if i > 0 {
 			sb.WriteString(", ")
@@ -872,7 +875,6 @@ func formatToolActivitySummary(activities []agent.ToolActivity) string {
 			fmt.Fprintf(&sb, " ×%d", e.count)
 		}
 	}
-	sb.WriteString("]")
 	return sb.String()
 }
 

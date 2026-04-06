@@ -123,7 +123,7 @@ func TestFormatBatchNotification_Single(t *testing.T) {
 	}
 	text := formatBatchNotification(items)
 
-	if !strings.Contains(text, "[System: subagent completed]") {
+	if !strings.Contains(text, "**System:** subagent completed") {
 		t.Error("single item should use singular header")
 	}
 	if !strings.Contains(text, "worker-1") {

@@ -406,7 +406,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		contMsg := fmt.Sprintf(contMessage, nextIndex, maxConts, contReason)
 		if params.DeepWork && deps.sessionMemory != nil {
 			if sm := deps.sessionMemory.Get(params.SessionKey); sm != "" {
-				contMsg += "\n\n[Session Memory — your task state:]\n" + sm
+				contMsg += "\n\n## Session Memory — your task state\n" + sm
 			}
 		}
 

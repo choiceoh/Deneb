@@ -20,7 +20,7 @@ func TestFormatToolActivitySummary(t *testing.T) {
 		{
 			name:       "single tool",
 			activities: []agent.ToolActivity{{Name: "read_file"}},
-			want:       "[Tools used: read_file]",
+			want:       "Tools used: read_file",
 		},
 		{
 			name: "multiple distinct",
@@ -29,7 +29,7 @@ func TestFormatToolActivitySummary(t *testing.T) {
 				{Name: "edit"},
 				{Name: "exec"},
 			},
-			want: "[Tools used: read_file, edit, exec]",
+			want: "Tools used: read_file, edit, exec",
 		},
 		{
 			name: "repeated tools with counts",
@@ -40,7 +40,7 @@ func TestFormatToolActivitySummary(t *testing.T) {
 				{Name: "exec"},
 				{Name: "read_file"},
 			},
-			want: "[Tools used: read_file ×3, edit, exec]",
+			want: "Tools used: read_file ×3, edit, exec",
 		},
 		{
 			name: "preserves first-seen order",
@@ -49,7 +49,7 @@ func TestFormatToolActivitySummary(t *testing.T) {
 				{Name: "read_file"},
 				{Name: "exec"},
 			},
-			want: "[Tools used: exec ×2, read_file]",
+			want: "Tools used: exec ×2, read_file",
 		},
 	}
 
