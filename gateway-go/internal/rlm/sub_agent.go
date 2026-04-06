@@ -235,12 +235,25 @@ func FormatBatchResults(results []SubAgentResult) string {
 		}
 	}
 
+	var succeeded, failed int
+	for _, e := range entries {
+		if e.Error != "" {
+			failed++
+		} else {
+			succeeded++
+		}
+	}
+
 	out := struct {
 		Results     []resultEntry `json:"results"`
 		TotalTokens int           `json:"total_tokens"`
+		Succeeded   int           `json:"succeeded"`
+		Failed      int           `json:"failed"`
 	}{
 		Results:     entries,
 		TotalTokens: totalTokens,
+		Succeeded:   succeeded,
+		Failed:      failed,
 	}
 
 	b, err := json.Marshal(out)

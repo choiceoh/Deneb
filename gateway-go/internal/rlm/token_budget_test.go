@@ -16,9 +16,8 @@ func TestTokenBudget_Basic(t *testing.T) {
 		t.Errorf("expected used=0, got %d", u)
 	}
 
-	ok := b.Consume(400)
-	if !ok {
-		t.Error("expected Consume(400) to return true")
+	if !b.TryReserve(400) {
+		t.Error("expected TryReserve(400) to succeed")
 	}
 	if r := b.Remaining(); r != 600 {
 		t.Errorf("expected remaining=600, got %d", r)
@@ -28,21 +27,22 @@ func TestTokenBudget_Basic(t *testing.T) {
 func TestTokenBudget_Exhaustion(t *testing.T) {
 	b := NewTokenBudget(100)
 
-	b.Consume(90)
+	if !b.TryReserve(90) {
+		t.Fatal("expected TryReserve(90) to succeed")
+	}
 	if r := b.Remaining(); r != 10 {
 		t.Errorf("expected remaining=10, got %d", r)
 	}
 
-	// Consume beyond limit.
-	ok := b.Consume(50)
-	if ok {
-		t.Error("expected Consume to return false when exceeding budget")
+	// Reserve beyond limit — must fail without changing budget.
+	if b.TryReserve(50) {
+		t.Error("expected TryReserve(50) to fail when only 10 remain")
 	}
-	if r := b.Remaining(); r != 0 {
-		t.Errorf("expected remaining=0 when overdrawn, got %d", r)
+	if r := b.Remaining(); r != 10 {
+		t.Errorf("expected remaining=10 (unchanged after failed reserve), got %d", r)
 	}
-	if u := b.Used(); u != 140 {
-		t.Errorf("expected used=140, got %d", u)
+	if u := b.Used(); u != 90 {
+		t.Errorf("expected used=90, got %d", u)
 	}
 }
 
@@ -137,24 +137,49 @@ func TestTokenBudget_Settle(t *testing.T) {
 	}
 }
 
-func TestTokenBudget_ConcurrentConsume(t *testing.T) {
+func TestTokenBudget_SettleNegativeGuard(t *testing.T) {
+	b := NewTokenBudget(1000)
+
+	// Settle without prior TryReserve — consumed would go negative.
+	// Guard should clamp to 0.
+	b.Settle(500, 0)
+	if u := b.Used(); u != 0 {
+		t.Errorf("expected used=0 (clamped), got %d", u)
+	}
+	if r := b.Remaining(); r != 1000 {
+		t.Errorf("expected remaining=1000 after clamp, got %d", r)
+	}
+
+	// Normal flow should still work after the guard triggered.
+	if !b.TryReserve(300) {
+		t.Fatal("expected TryReserve(300) to succeed after clamp")
+	}
+	b.Settle(300, 200)
+	if u := b.Used(); u != 200 {
+		t.Errorf("expected used=200, got %d", u)
+	}
+}
+
+func TestTokenBudget_ConcurrentSettle(t *testing.T) {
 	b := NewTokenBudget(10000)
 	var wg sync.WaitGroup
 
-	// 100 goroutines each consuming 100 tokens.
+	// 100 goroutines each reserving 100 and settling with 50 actual.
 	for range 100 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			b.Consume(100)
+			if b.TryReserve(100) {
+				b.Settle(100, 50)
+			}
 		}()
 	}
 	wg.Wait()
 
-	if u := b.Used(); u != 10000 {
-		t.Errorf("expected used=10000, got %d", u)
+	if u := b.Used(); u != 5000 {
+		t.Errorf("expected used=5000, got %d", u)
 	}
-	if r := b.Remaining(); r != 0 {
-		t.Errorf("expected remaining=0, got %d", r)
+	if r := b.Remaining(); r != 5000 {
+		t.Errorf("expected remaining=5000, got %d", r)
 	}
 }

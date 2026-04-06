@@ -31,6 +31,9 @@ func ToolLLMSpawn(spawnFn SpawnFunc) toolctx.ToolFunc {
 		if p.Task == "" {
 			return "task는 필수입니다.", nil
 		}
+		if len([]rune(p.Task)) > 5000 {
+			return "task가 너무 깁니다 (최대 5000자).", nil
+		}
 		if p.MaxTokens <= 0 {
 			p.MaxTokens = 500
 		}
