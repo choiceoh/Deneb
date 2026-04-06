@@ -3,6 +3,7 @@ package cron
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -311,4 +312,206 @@ func stableJobOffset(expr string, staggerMs int64) int64 {
 	h := sha256.Sum256([]byte(expr))
 	val := binary.BigEndian.Uint64(h[:8])
 	return int64(val % uint64(staggerMs))
+}
+
+// FormatHumanSchedule converts a StoreSchedule to a Korean-friendly display string.
+func FormatHumanSchedule(s StoreSchedule) string {
+	switch s.Kind {
+	case "at":
+		if s.At == "" {
+			return "일회성"
+		}
+		if t := parseAbsoluteTimeMs(s.At); t > 0 {
+			return time.UnixMilli(t).Format("2006-01-02 15:04") + " (일회성)"
+		}
+		return s.At + " (일회성)"
+
+	case "every":
+		if s.EveryMs <= 0 {
+			return "반복"
+		}
+		desc := FormatDurationKorean(s.EveryMs)
+		if s.AnchorMs > 0 {
+			anchor := time.UnixMilli(s.AnchorMs).Format("15:04")
+			return desc + "마다 (" + anchor + " 기준)"
+		}
+		return desc + "마다"
+
+	case "cron":
+		desc := formatCronExprKorean(s.Expr)
+		tz := s.Tz
+		if tz == "" {
+			tz = "local"
+		}
+		if tz != "local" && tz != time.Local.String() {
+			return desc + " (" + shortTzName(tz) + ")"
+		}
+		return desc
+
+	default:
+		return s.Kind
+	}
+}
+
+// formatCronExprKorean converts common cron expressions to Korean descriptions.
+func formatCronExprKorean(expr string) string {
+	lower := strings.ToLower(strings.TrimSpace(expr))
+
+	// Shorthand aliases.
+	switch lower {
+	case "@yearly", "@annually":
+		return "매년 1월 1일 00:00"
+	case "@monthly":
+		return "매월 1일 00:00"
+	case "@weekly":
+		return "매주 일요일 00:00"
+	case "@daily", "@midnight":
+		return "매일 00:00"
+	case "@hourly":
+		return "매시 정각"
+	}
+
+	fields := strings.Fields(lower)
+	if len(fields) < 5 {
+		return "cron: " + expr
+	}
+
+	min, hour, dom, mon, dow := fields[0], fields[1], fields[2], fields[3], fields[4]
+
+	// "every N minutes": */N * * * *
+	if strings.HasPrefix(min, "*/") && hour == "*" && dom == "*" && mon == "*" && dow == "*" {
+		if n, err := strconv.Atoi(min[2:]); err == nil {
+			return fmt.Sprintf("%d분마다", n)
+		}
+	}
+
+	// "every N hours": 0 */N * * *
+	if min == "0" && strings.HasPrefix(hour, "*/") && dom == "*" && mon == "*" && dow == "*" {
+		if n, err := strconv.Atoi(hour[2:]); err == nil {
+			return fmt.Sprintf("%d시간마다", n)
+		}
+	}
+
+	// Fixed minute + hour patterns.
+	minVal, minErr := strconv.Atoi(min)
+	hourVal, hourErr := strconv.Atoi(hour)
+	fixedTime := minErr == nil && hourErr == nil
+
+	if fixedTime {
+		timeStr := fmt.Sprintf("%02d:%02d", hourVal, minVal)
+
+		// "daily at HH:MM": M H * * *
+		if dom == "*" && mon == "*" && dow == "*" {
+			return "매일 " + timeStr
+		}
+
+		// "weekdays at HH:MM": M H * * 1-5
+		if dom == "*" && mon == "*" && (dow == "1-5" || dow == "mon-fri") {
+			return "평일 " + timeStr
+		}
+
+		// "weekends": M H * * 0,6 or 6,0
+		if dom == "*" && mon == "*" && (dow == "0,6" || dow == "6,0" || dow == "sat,sun" || dow == "sun,sat") {
+			return "주말 " + timeStr
+		}
+
+		// "weekly on specific day": M H * * D
+		if dom == "*" && mon == "*" {
+			if dayName := dowKorean(dow); dayName != "" {
+				return "매주 " + dayName + " " + timeStr
+			}
+		}
+
+		// "monthly on Nth": M H N * *
+		if _, domErr := strconv.Atoi(dom); domErr == nil && mon == "*" && dow == "*" {
+			return fmt.Sprintf("매월 %s일 %s", dom, timeStr)
+		}
+	}
+
+	// "hourly at minute M": M * * * *
+	if minErr == nil && hour == "*" && dom == "*" && mon == "*" && dow == "*" {
+		if minVal == 0 {
+			return "매시 정각"
+		}
+		return fmt.Sprintf("매시 %d분", minVal)
+	}
+
+	return "cron: " + expr
+}
+
+// dowKorean maps a single day-of-week value to Korean.
+func dowKorean(dow string) string {
+	switch strings.ToLower(dow) {
+	case "0", "sun":
+		return "일요일"
+	case "1", "mon":
+		return "월요일"
+	case "2", "tue":
+		return "화요일"
+	case "3", "wed":
+		return "수요일"
+	case "4", "thu":
+		return "목요일"
+	case "5", "fri":
+		return "금요일"
+	case "6", "sat":
+		return "토요일"
+	default:
+		return ""
+	}
+}
+
+// shortTzName returns a short display name for a timezone.
+func shortTzName(tz string) string {
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return tz
+	}
+	name, _ := time.Now().In(loc).Zone()
+	return name
+}
+
+// FormatDurationKorean formats milliseconds as a Korean duration string.
+func FormatDurationKorean(ms int64) string {
+	if ms <= 0 {
+		return "0초"
+	}
+	d := time.Duration(ms) * time.Millisecond
+
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	mins := int(d.Minutes()) % 60
+	secs := int(d.Seconds()) % 60
+
+	var parts []string
+	if days > 0 {
+		parts = append(parts, fmt.Sprintf("%d일", days))
+	}
+	if hours > 0 {
+		parts = append(parts, fmt.Sprintf("%d시간", hours))
+	}
+	if mins > 0 {
+		parts = append(parts, fmt.Sprintf("%d분", mins))
+	}
+	if secs > 0 && days == 0 && hours == 0 {
+		parts = append(parts, fmt.Sprintf("%d초", secs))
+	}
+	if len(parts) == 0 {
+		return "0초"
+	}
+	return strings.Join(parts, " ")
+}
+
+// FormatRelativeTime formats a timestamp relative to now in Korean.
+func FormatRelativeTime(targetMs int64) string {
+	now := time.Now().UnixMilli()
+	diff := targetMs - now
+
+	if diff > 0 {
+		return FormatDurationKorean(diff) + " 후"
+	}
+	if diff < 0 {
+		return FormatDurationKorean(-diff) + " 전"
+	}
+	return "지금"
 }

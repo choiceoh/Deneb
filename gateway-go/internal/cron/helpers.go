@@ -8,38 +8,62 @@ import (
 	"time"
 )
 
+// SmartScheduleOpts holds optional parameters for ParseSmartScheduleWithOpts.
+type SmartScheduleOpts struct {
+	Tz         string // timezone (e.g. "Asia/Seoul") — applied to cron kind
+	StaggerMs  int64  // stagger window in ms — applied to cron kind
+	AnchorTime string // anchor time (ISO 8601) — applied to every kind
+}
+
 // ParseSmartSchedule parses a schedule spec into a StoreSchedule, auto-detecting the kind:
 //   - Interval: "1h", "30m", "every 5m", raw milliseconds → kind="every"
 //   - Cron expression: "0 8 * * *", "@daily", "@hourly" → kind="cron"
 //   - Timestamp: ISO 8601 ("2026-04-06T08:00:00") → kind="at"
 func ParseSmartSchedule(spec string) (StoreSchedule, error) {
+	return ParseSmartScheduleWithOpts(spec, SmartScheduleOpts{})
+}
+
+// ParseSmartScheduleWithOpts is like ParseSmartSchedule but accepts additional options
+// for timezone, stagger, and anchor time.
+func ParseSmartScheduleWithOpts(spec string, opts SmartScheduleOpts) (StoreSchedule, error) {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
 		return StoreSchedule{}, fmt.Errorf("empty schedule specification")
+	}
+
+	// Validate timezone upfront if provided.
+	if opts.Tz != "" {
+		if _, err := time.LoadLocation(opts.Tz); err != nil {
+			return StoreSchedule{}, fmt.Errorf("invalid timezone %q: %w", opts.Tz, err)
+		}
 	}
 
 	// 1. Cron shorthand aliases (@daily, @hourly, etc.)
 	lower := strings.ToLower(spec)
 	switch lower {
 	case "@yearly", "@annually", "@monthly", "@weekly", "@daily", "@midnight", "@hourly":
-		return StoreSchedule{Kind: "cron", Expr: lower}, nil
+		s := StoreSchedule{Kind: "cron", Expr: lower, Tz: opts.Tz, StaggerMs: opts.StaggerMs}
+		return s, nil
 	}
 
 	// 2. Looks like a cron expression (5 space-separated fields starting with digit or *)
 	fields := strings.Fields(spec)
 	if len(fields) == 5 && looksLikeCronExpr(fields) {
-		// Validate by attempting to evaluate.
+		loc := time.Local
+		if opts.Tz != "" {
+			loc, _ = time.LoadLocation(opts.Tz)
+		}
 		now := time.Now()
-		next := evaluateCronExpr(spec, now, time.Local)
+		next := evaluateCronExpr(spec, now, loc)
 		if next.IsZero() {
 			return StoreSchedule{}, fmt.Errorf("invalid cron expression %q: no matching time found in next 366 days", spec)
 		}
-		return StoreSchedule{Kind: "cron", Expr: spec}, nil
+		s := StoreSchedule{Kind: "cron", Expr: spec, Tz: opts.Tz, StaggerMs: opts.StaggerMs}
+		return s, nil
 	}
 
 	// 3. ISO 8601 timestamp → kind="at"
 	if ts := parseAbsoluteTimeMs(spec); ts > 0 {
-		// Only treat as "at" if it looks like a timestamp (contains T or -)
 		if strings.Contains(spec, "T") || strings.Contains(spec, "-") {
 			return StoreSchedule{Kind: "at", At: spec}, nil
 		}
@@ -50,7 +74,16 @@ func ParseSmartSchedule(spec string) (StoreSchedule, error) {
 	if err != nil {
 		return StoreSchedule{}, err
 	}
-	return StoreSchedule{Kind: "every", EveryMs: sched.IntervalMs}, nil
+	s := StoreSchedule{Kind: "every", EveryMs: sched.IntervalMs}
+	// Apply anchor time for intervals.
+	if opts.AnchorTime != "" {
+		anchorMs := parseAbsoluteTimeMs(opts.AnchorTime)
+		if anchorMs <= 0 {
+			return StoreSchedule{}, fmt.Errorf("invalid anchor time %q", opts.AnchorTime)
+		}
+		s.AnchorMs = anchorMs
+	}
+	return s, nil
 }
 
 // looksLikeCronExpr returns true if the 5 fields look like a cron expression.

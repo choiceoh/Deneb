@@ -776,16 +776,16 @@ func cronToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Cron action: status, list, add, update, remove, run, get, runs, wake",
+				"description": "Cron action",
 				"enum":        []string{"status", "list", "add", "update", "remove", "run", "get", "runs", "wake"},
 			},
 			"name": map[string]any{
 				"type":        "string",
-				"description": "Job name (required for add)",
+				"description": "Job name (required for add, used as job ID)",
 			},
 			"schedule": map[string]any{
 				"type":        "string",
-				"description": "Schedule specification. Formats: interval (1h, 30m, every 5m), cron expression (0 8 * * *, @daily, @hourly), or ISO timestamp (2026-04-06T08:00:00) for one-shot",
+				"description": "Schedule specification. Formats: cron (0 9 * * *), interval (1h, 30m, every 5m), timestamp (2026-04-06T08:00:00), shorthand (@daily, @hourly, @weekly)",
 			},
 			"command": map[string]any{
 				"type":        "string",
@@ -802,6 +802,31 @@ func cronToolSchema() map[string]any {
 			"limit": map[string]any{
 				"type":        "integer",
 				"description": "Max entries to return (for runs action, default 10)",
+			},
+			"tz": map[string]any{
+				"type":        "string",
+				"description": "Timezone for cron schedules (e.g. Asia/Seoul, UTC). Defaults to system local timezone",
+			},
+			"staggerMs": map[string]any{
+				"type":        "integer",
+				"description": "Random delay window in ms to distribute cron jobs (cron kind only, default: auto for top-of-hour)",
+			},
+			"anchorTime": map[string]any{
+				"type":        "string",
+				"description": "Anchor time for interval schedules (ISO 8601). Intervals count from this time instead of registration time",
+			},
+			"retryCount": map[string]any{
+				"type":        "integer",
+				"description": "Number of retry attempts on failure (0-3, default 0 = no retry)",
+			},
+			"retryBackoffMs": map[string]any{
+				"type":        "integer",
+				"description": "Initial backoff delay between retries in ms (default 5000). Doubles each retry, capped at 60s",
+			},
+			"deliveryMode": map[string]any{
+				"type":        "string",
+				"description": "How to deliver output: announce (send to Telegram, default) or none (run silently)",
+				"enum":        []string{"announce", "none"},
 			},
 			"job": map[string]any{
 				"type":                 "object",

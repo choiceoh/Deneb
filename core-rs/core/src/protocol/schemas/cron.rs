@@ -64,7 +64,12 @@ fn validate_cron_schedule(
             }
         }
         Some("every") => {
-            check_no_additional_properties(obj, &["kind", "everyMs", "anchorMs"], path, errors);
+            check_no_additional_properties(
+                obj,
+                &["kind", "everyMs", "anchorMs", "anchorTime"],
+                path,
+                errors,
+            );
             if check_required(obj, "everyMs", path, errors) {
                 check_integer(
                     &obj["everyMs"],
@@ -76,6 +81,9 @@ fn validate_cron_schedule(
             }
             check_optional(obj, "anchorMs", path, errors, |v, p, e| {
                 check_integer(v, p, Some(0), None, e);
+            });
+            check_optional(obj, "anchorTime", path, errors, |v, p, e| {
+                check_non_empty_string(v, p, e);
             });
         }
         Some("cron") => {
@@ -160,6 +168,8 @@ fn validate_cron_payload(value: &serde_json::Value, path: &str, errors: &mut Vec
                 "channel",
                 "to",
                 "bestEffortDeliver",
+                "retryCount",
+                "retryBackoffMs",
             ];
             check_no_additional_properties(obj, allowed, path, errors);
             if check_required(obj, "message", path, errors) {

@@ -19,6 +19,7 @@ type RunOutcome struct {
 	Output     string          `json:"output,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	Delivery   *DeliveryResult `json:"delivery,omitempty"`
+	Retries    int             `json:"retries,omitempty"`
 	StartedAt  int64           `json:"startedAt"`
 	EndedAt    int64           `json:"endedAt"`
 	DurationMs int64           `json:"durationMs"`

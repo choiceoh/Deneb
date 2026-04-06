@@ -78,23 +78,70 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 			s.cfg.Sessions.Create(sessionKey, sessionKind)
 		}
 
-		output, runErr := s.agent.RunAgentTurn(runCtx, AgentTurnParams{
-			SessionKey: sessionKey,
-			AgentID:    job.AgentID,
-			Command:    command,
-			Channel:    safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
-			To:         safeStr(target, func(t *DeliveryTarget) string { return t.To }),
-			AccountID:  safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
-		})
+		// Retry loop: attempt up to retryCount+1 times with exponential backoff.
+		maxRetries := job.Payload.RetryCount
+		if maxRetries < 0 {
+			maxRetries = 0
+		}
+		if maxRetries > 3 {
+			maxRetries = 3
+		}
+		retryBackoff := job.Payload.RetryBackoffMs
+		if retryBackoff <= 0 {
+			retryBackoff = 5000
+		}
+
+		var output string
+		var runErr error
+		retriesUsed := 0
+
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			output, runErr = s.agent.RunAgentTurn(runCtx, AgentTurnParams{
+				SessionKey: sessionKey,
+				AgentID:    job.AgentID,
+				Command:    command,
+				Channel:    safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
+				To:         safeStr(target, func(t *DeliveryTarget) string { return t.To }),
+				AccountID:  safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
+			})
+			if runErr == nil {
+				break
+			}
+			// Don't retry on context cancellation/timeout.
+			if runCtx.Err() != nil {
+				break
+			}
+			if attempt < maxRetries {
+				retriesUsed++
+				backoff := time.Duration(retryBackoff<<uint(attempt)) * time.Millisecond
+				if backoff > 60*time.Second {
+					backoff = 60 * time.Second
+				}
+				s.logger.Info("cron job retrying", "id", job.ID, "attempt", attempt+2, "of", maxRetries+1, "backoff", backoff)
+				select {
+				case <-runCtx.Done():
+					runErr = runCtx.Err()
+				case <-time.After(backoff):
+				}
+				if runCtx.Err() != nil {
+					break
+				}
+			}
+		}
 
 		if runErr != nil {
 			status := "error"
+			errMsg := runErr.Error()
 			if runCtx.Err() == context.DeadlineExceeded {
 				status = "timeout"
+				elapsed := time.Duration(time.Now().UnixMilli()-startedAt) * time.Millisecond
+				timeoutDur := time.Duration(timeoutMs) * time.Millisecond
+				errMsg = fmt.Sprintf("timeout after %s (limit: %s)", elapsed.Round(time.Second), timeoutDur.Round(time.Second))
 			}
 			outcome = RunOutcome{
 				Status:     status,
-				Error:      runErr.Error(),
+				Error:      errMsg,
+				Retries:    retriesUsed,
 				StartedAt:  startedAt,
 				EndedAt:    time.Now().UnixMilli(),
 				DurationMs: time.Now().UnixMilli() - startedAt,
@@ -125,6 +172,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 				Status:     "ok",
 				Output:     output,
 				Delivery:   deliveryResult,
+				Retries:    retriesUsed,
 				StartedAt:  startedAt,
 				EndedAt:    time.Now().UnixMilli(),
 				DurationMs: time.Now().UnixMilli() - startedAt,
@@ -148,8 +196,8 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 		s.sendFailureAlert(ctx, job, outcome)
 	}
 
-	// Log run.
-	s.runLog.Append(RunLogEntry{
+	// Log run with delivery status and retry count.
+	logEntry := RunLogEntry{
 		Ts:          time.Now().UnixMilli(),
 		JobID:       job.ID,
 		Action:      "finished",
@@ -158,7 +206,18 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 		Summary:     PickSummaryFromOutput(outcome.Output),
 		DurationMs:  outcome.DurationMs,
 		NextRunAtMs: ComputeNextRunAtMs(job.Schedule, time.Now().UnixMilli()),
-	})
+		Retries:     outcome.Retries,
+	}
+	if outcome.Delivery != nil {
+		logEntry.Delivered = outcome.Delivery.Delivered
+		if outcome.Delivery.Delivered {
+			logEntry.DeliveryStatus = "delivered"
+		} else {
+			logEntry.DeliveryStatus = "not-delivered"
+			logEntry.DeliveryError = outcome.Delivery.Error
+		}
+	}
+	s.runLog.Append(logEntry)
 
 	s.emit(CronEvent{Type: "job_finished", JobID: job.ID, Status: outcome.Status})
 	return outcome
@@ -175,9 +234,14 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 		state.ConsecutiveErrors = 0
 	} else {
 		state.ConsecutiveErrors++
-		// Auto-disable after 10 consecutive schedule errors.
 		if state.ConsecutiveErrors >= 10 {
 			state.ScheduleErrorCount++
+			// Auto-disable after 10 consecutive errors.
+			s.store.SetJobEnabled(job.ID, false)
+			state.AutoDisabledAtMs = time.Now().UnixMilli()
+			s.logger.Warn("cron job auto-disabled after consecutive errors",
+				"id", job.ID, "consecutiveErrors", state.ConsecutiveErrors)
+			s.emit(CronEvent{Type: "job_auto_disabled", JobID: job.ID})
 		}
 	}
 
@@ -235,7 +299,7 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 		return
 	}
 
-	text := fmt.Sprintf("⚠️ Cron job %q failed: %s", job.Name, outcome.Error)
+	text := fmt.Sprintf("⚠️ 크론 작업 '%s' 실행 실패 (연속 %d회): %s", job.Name, job.State.ConsecutiveErrors, outcome.Error)
 	target := DeliveryTarget{Channel: ch, To: to, AccountID: alert.AccountID}
 	payloads := []types.ReplyPayload{{Text: text}}
 
