@@ -149,6 +149,8 @@ var requiredMethods = []string{
 	"wizard.start",
 	"wizard.status",
 
+	// Wiki: feature-flagged (DENEB_WIKI_ENABLED), not in required list.
+
 	// Autoresearch.
 	"autoresearch.config",
 	"autoresearch.results",

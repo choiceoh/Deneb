@@ -131,6 +131,45 @@ func allTools() []toolDef {
 			},
 		},
 
+		// --- Wiki knowledge base ---
+		{
+			rpcMethod: "wiki.search",
+			tool: Tool{
+				Name:        "deneb_wiki_search",
+				Description: "Search wiki knowledge base pages by full-text query. Returns ranked results with snippets.",
+				InputSchema: objectSchema(
+					requiredProp("query", "string", "Search query string"),
+					prop("limit", "integer", "Max results to return (default: 10)"),
+				),
+			},
+		},
+		{
+			rpcMethod: "wiki.read",
+			tool: Tool{
+				Name:        "deneb_wiki_read",
+				Description: "Read a wiki page by relative path (e.g. '기술/dgx-spark.md'). Optionally extract a specific section.",
+				InputSchema: objectSchema(
+					requiredProp("path", "string", "Relative path to wiki page"),
+					prop("section", "string", "Optional section heading to extract"),
+				),
+			},
+		},
+		{
+			rpcMethod: "wiki.write",
+			tool: Tool{
+				Name:        "deneb_wiki_write",
+				Description: "Create or update a wiki page with title, category, body, and optional tags/importance.",
+				InputSchema: objectSchema(
+					requiredProp("path", "string", "Relative path for the wiki page"),
+					requiredProp("title", "string", "Page title"),
+					requiredProp("body", "string", "Markdown body content"),
+					prop("category", "string", "Category: 사람, 프로젝트, 기술, 업무, 결정, 선호"),
+					prop("tags", "array", "Tag list for the page"),
+					prop("importance", "number", "Importance score 0.0-1.0"),
+				),
+			},
+		},
+
 		// --- Meta / Escape hatch ---
 		{
 			rpcMethod: "tools.invoke",
