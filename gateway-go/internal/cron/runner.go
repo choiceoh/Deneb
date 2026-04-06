@@ -47,7 +47,7 @@ type AgentRunner interface {
 // AgentTurnParams holds parameters for a single cron agent turn.
 type AgentTurnParams struct {
 	SessionKey  string
-	SessionKind session.Kind // session kind (KindCron, KindShadow, etc.)
+	SessionKind session.Kind // session kind (KindCron, etc.)
 	AgentID     string
 	Command     string
 	Channel     string

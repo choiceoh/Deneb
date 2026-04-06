@@ -665,7 +665,6 @@ func (h *Handler) buildRunDeps() runDeps {
 		memoryEmbedder:       h.memoryEmbedder,
 		unifiedStore:         h.unifiedStore,
 		dreamTurnFn:          h.dreamTurnFn,
-		shadowPromptFn:       h.shadowPromptFn,
 		agentLog:             h.agentLog,
 		registry:             h.registry,
 		emitAgentFn:          h.emitAgentFn,

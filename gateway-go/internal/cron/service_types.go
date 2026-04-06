@@ -33,8 +33,8 @@ type ServiceConfig struct {
 	TelegramPlugin *telegram.Plugin
 	Sessions       *session.Manager // session manager for cron run sessions
 
-	// Shadow session support: when MainSessionKey and TranscriptCloner are set,
-	// cron runs can inherit recent conversation context via KindShadow sessions.
+	// When MainSessionKey and TranscriptCloner are set,
+	// subagent cron runs can inherit recent conversation context.
 	MainSessionKey   string           // primary user session key for cloning context
 	TranscriptCloner TranscriptCloner // clones transcript messages between sessions
 }

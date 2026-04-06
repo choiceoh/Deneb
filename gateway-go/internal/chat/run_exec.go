@@ -445,12 +445,6 @@ func executeAgentRun(
 			})
 		}
 
-		// Shadow monitoring context (session continuity + recurring error patterns).
-		var shadowContext string
-		if deps.shadowPromptFn != nil {
-			shadowContext = deps.shadowPromptFn()
-		}
-
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir:  workspaceDir,
 			ToolDefs:      toolDefs,
@@ -461,7 +455,6 @@ func executeAgentRun(
 			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:       ch,
 			SessionMemory: sessionMemoryText,
-			ShadowContext: shadowContext,
 			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
 			ToolPreset:    sessionToolPreset,
 		}

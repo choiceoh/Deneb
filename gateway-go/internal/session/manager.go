@@ -32,7 +32,6 @@ const (
 	KindUnknown  Kind = "unknown"
 	KindCron     Kind = "cron"
 	KindSubagent Kind = "subagent"
-	KindShadow   Kind = "shadow"
 )
 
 // SessionMode controls the behavioral mode of a session.
@@ -49,10 +48,10 @@ const (
 )
 
 // IsInternal returns true for session kinds that are system-internal
-// (cron, subagent, shadow) and should be excluded from user-facing listings.
+// (cron, subagent) and should be excluded from user-facing listings.
 func (k Kind) IsInternal() bool {
 	switch k {
-	case KindCron, KindSubagent, KindShadow:
+	case KindCron, KindSubagent:
 		return true
 	default:
 		return false
@@ -166,10 +165,10 @@ const (
 )
 
 // gcMaxAgeForKind returns the retention period for terminal sessions of a given kind.
-// Cron and shadow sessions are retained longer since they serve as audit trail.
+// Cron sessions are retained longer since they serve as audit trail.
 func gcMaxAgeForKind(k Kind) time.Duration {
 	switch k {
-	case KindCron, KindShadow:
+	case KindCron:
 		return 24 * time.Hour
 	case KindSubagent:
 		return 2 * time.Hour
