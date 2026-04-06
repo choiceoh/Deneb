@@ -101,7 +101,7 @@ func DefaultSearchParams() SearchParams {
 		ORPenalty:        0.85,
 		TrigramPenalty:   0.80,
 
-		VectorMinThreshold: 0.52,
+		VectorMinThreshold: 0.60,
 		HybridFTSWeight:    1.00,
 		HybridVecWeight:    0.00,
 

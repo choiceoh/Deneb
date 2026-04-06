@@ -66,6 +66,7 @@ func Recall(ctx context.Context, store *Store, embedder *Embedder, reranker Rera
 	}
 	candidates, err := store.SearchFacts(ctx, message, queryVec, SearchOpts{
 		Limit:      maxFacts,
+		MinScore:   0.35,
 		SkipRerank: true, // we rerank the full pool (including expansions) in Phase 4
 	})
 	if err != nil || len(candidates) == 0 {
