@@ -75,34 +75,6 @@ func TestMergeSearchResults(t *testing.T) {
 	}
 }
 
-func TestRerankCandidates(t *testing.T) {
-	candidates := []SearchResult{
-		{Fact: Fact{ID: 1, Content: "저관련 팩트"}, Score: 0.3},
-		{Fact: Fact{ID: 2, Content: "고관련 팩트"}, Score: 0.5},
-		{Fact: Fact{ID: 3, Content: "중관련 팩트"}, Score: 0.4},
-	}
-
-	// Mock reranker: returns reversed order (ID=3 highest, ID=1 lowest).
-	mockReranker := func(ctx context.Context, query string, docs []string, topN int) ([]RerankResult, error) {
-		return []RerankResult{
-			{Index: 1, RelevanceScore: 0.95}, // ID=2
-			{Index: 2, RelevanceScore: 0.80}, // ID=3
-			{Index: 0, RelevanceScore: 0.30}, // ID=1
-		}, nil
-	}
-
-	ctx := context.Background()
-	result := rerankCandidates(ctx, mockReranker, "테스트 쿼리", candidates, nil)
-
-	if len(result) != 3 {
-		t.Fatalf("expected 3 results, got %d", len(result))
-	}
-	// First result should be ID=2 (highest reranker score).
-	if result[0].Fact.ID != 2 {
-		t.Errorf("expected first result ID=2, got %d", result[0].Fact.ID)
-	}
-}
-
 func TestBuildTimeline(t *testing.T) {
 	now := time.Now()
 	candidates := []SearchResult{

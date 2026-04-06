@@ -1,10 +1,8 @@
-// recall.go — Reranker-based memory recall with relation chain traversal
+// recall.go — FTS-based memory recall with relation chain traversal
 // and entity expansion.
 //
-// The recall engine gathers candidate facts via hybrid search, expands them
-// through entity links and relation chains, then uses a cross-encoder reranker
-// to select the most relevant facts. Falls back to standard SearchFacts scoring
-// when the reranker is unavailable.
+// The recall engine gathers candidate facts via FTS search, expands them
+// through entity links and relation chains, then ranks by score.
 package memory
 
 import (
@@ -34,13 +32,12 @@ func DefaultRecallConfig() RecallConfig {
 	}
 }
 
-// Recall performs reranker-based memory recall for the given user message.
-// It searches facts, expands via entities and relation chains, then uses the
-// cross-encoder reranker to select the most relevant facts.
+// Recall performs FTS-based memory recall for the given user message.
+// It searches facts, expands via entities and relation chains, then ranks by score.
 //
 // Returns formatted knowledge text ready for system prompt injection, or ""
-// if recall produces no results. Falls back to score-based ranking on any error.
-func Recall(ctx context.Context, store *Store, embedder *Embedder, reranker RerankFunc, message string, cfg RecallConfig, logger *slog.Logger) string {
+// if recall produces no results.
+func Recall(ctx context.Context, store *Store, message string, cfg RecallConfig, logger *slog.Logger) string {
 	if !cfg.Enabled || store == nil {
 		return ""
 	}
@@ -57,25 +54,16 @@ func Recall(ctx context.Context, store *Store, embedder *Embedder, reranker Rera
 		maxFacts = 20
 	}
 
-	// Phase 1: Gather candidate facts via standard search.
-	var queryVec []float32
-	if embedder != nil {
-		if vec, err := embedder.EmbedQuery(ctx, message); err == nil {
-			queryVec = vec
-		}
-	}
-	candidates, err := store.SearchFacts(ctx, message, queryVec, SearchOpts{
-		Limit:      maxFacts,
-		MinScore:   0.35,
-		SkipRerank: true, // we rerank the full pool (including expansions) in Phase 4
+	// Phase 1: Gather candidate facts via FTS search.
+	candidates, err := store.SearchFacts(ctx, message, SearchOpts{
+		Limit:    maxFacts,
+		MinScore: 0.35,
 	})
 	if err != nil || len(candidates) == 0 {
 		return ""
 	}
 
 	// Phase 2: Expand via entity matching.
-	// entityNameCache maps fact ID → entity names, reused in Phase 5 formatting
-	// to avoid N+1 queries.
 	entityNameCache := make(map[int64][]string)
 	entityFacts := expandViaEntitiesCached(ctx, store, candidates, maxFacts, entityNameCache)
 	candidates = mergeSearchResults(candidates, entityFacts)
@@ -93,55 +81,13 @@ func Recall(ctx context.Context, store *Store, embedder *Embedder, reranker Rera
 		candidates = candidates[:maxFacts]
 	}
 
-	// Phase 4: Rerank candidates using cross-encoder.
-	if reranker != nil && len(candidates) > 1 {
-		candidates = rerankCandidates(ctx, reranker, message, candidates, logger)
-	}
-
-	// Phase 5: Format recall result with code-based timeline and entity summary.
-	// Load entity names for any candidates not yet in the cache (relation-expanded facts).
+	// Phase 4: Format recall result with timeline and entity summary.
 	for _, sr := range candidates {
 		if _, ok := entityNameCache[sr.Fact.ID]; !ok {
 			entityNameCache[sr.Fact.ID] = store.getFactEntityNames(ctx, sr.Fact.ID)
 		}
 	}
 	return formatRecallKnowledge(candidates, entityNameCache)
-}
-
-// rerankCandidates uses the cross-encoder to reorder candidates by query relevance.
-// On failure, returns candidates unchanged (graceful fallback).
-func rerankCandidates(ctx context.Context, reranker RerankFunc, query string, candidates []SearchResult, logger *slog.Logger) []SearchResult {
-	docs := make([]string, len(candidates))
-	for i, sr := range candidates {
-		docs[i] = sr.Fact.Content
-	}
-
-	ranked, err := reranker(ctx, query, docs, len(candidates))
-	if err != nil {
-		if logger != nil {
-			logger.Debug("recall: reranking failed, using hybrid order", "error", err)
-		}
-		return candidates
-	}
-
-	// Blend reranker score (70%) with existing hybrid score (30%) to preserve
-	// importance/recency signal from Phase 1.
-	const rerankWeight = 0.7
-	const hybridWeight = 0.3
-
-	reranked := make([]SearchResult, 0, len(ranked))
-	for _, r := range ranked {
-		if r.Index >= 0 && r.Index < len(candidates) {
-			res := candidates[r.Index]
-			res.Score = rerankWeight*r.RelevanceScore + hybridWeight*res.Score
-			reranked = append(reranked, res)
-		}
-	}
-
-	if len(reranked) == 0 {
-		return candidates
-	}
-	return reranked
 }
 
 // formatRecallKnowledge produces the final knowledge text with facts, timeline,

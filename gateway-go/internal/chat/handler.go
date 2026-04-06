@@ -41,7 +41,6 @@ type Handler struct {
 	memoryStore     *memory.Store                     // optional; structured memory (Honcho-style)
 	wikiStore       *wiki.Store                      // optional; wiki knowledge base
 	sessionMemory   *SessionMemoryStore               // optional; structured session working state
-	memoryEmbedder  *memory.Embedder                  // optional; fact embedding
 	unifiedStore    *unified.Store                    // optional; unified memory (search + tier-1)
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
@@ -143,7 +142,6 @@ type HandlerConfig struct {
 	AuroraStore          *aurora.Store             // Aurora hierarchical compaction store
 	MemoryStore          *memory.Store             // optional; structured memory (Honcho-style)
 	SessionMemory        *SessionMemoryStore       // optional; structured session working state
-	MemoryEmbedder       *memory.Embedder          // optional; fact embedding via local AI
 	WikiStore            *wiki.Store               // optional; wiki knowledge base
 	UnifiedStore         *unified.Store            // optional; unified memory (search + tier-1)
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
@@ -203,7 +201,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		memoryStore:          cfg.MemoryStore,
 		wikiStore:            cfg.WikiStore,
 		sessionMemory:        cfg.SessionMemory,
-		memoryEmbedder:       cfg.MemoryEmbedder,
 		unifiedStore:         cfg.UnifiedStore,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,

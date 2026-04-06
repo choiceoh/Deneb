@@ -82,7 +82,7 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.JobTracker = s.jobTracker
 	chatCfg.AgentLog = agentLogWriter
 
-	// Phase 1: Memory subsystem (unified store, Aurora, memory, embedder, reranker).
+	// Phase 1: Memory subsystem (unified store, Aurora, memory, wiki).
 	var reg *modelrole.Registry
 	s.initMemorySubsystem(&chatCfg, &reg)
 

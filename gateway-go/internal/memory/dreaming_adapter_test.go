@@ -27,7 +27,7 @@ func tempStoreForDreaming(t *testing.T) *Store {
 func TestDreamingAdapter_IncrementTurn(t *testing.T) {
 	s := tempStoreForDreaming(t)
 	ctx := context.Background()
-	da := NewDreamingAdapter(s, nil, nil, "", discardLogger())
+	da := NewDreamingAdapter(s, nil, "", discardLogger())
 
 	// Initial count should be 0 (empty string parses as 0).
 	da.IncrementTurn(ctx)
@@ -48,7 +48,7 @@ func TestDreamingAdapter_IncrementTurn(t *testing.T) {
 func TestDreamingAdapter_ShouldDream_underThreshold(t *testing.T) {
 	s := tempStoreForDreaming(t)
 	ctx := context.Background()
-	da := NewDreamingAdapter(s, nil, nil, "", discardLogger())
+	da := NewDreamingAdapter(s, nil, "", discardLogger())
 
 	// Set turn count well below threshold.
 	s.SetMeta(ctx, metaTurnCount, "10")
@@ -63,7 +63,7 @@ func TestDreamingAdapter_ShouldDream_underThreshold(t *testing.T) {
 func TestDreamingAdapter_ShouldDream_turnThreshold(t *testing.T) {
 	s := tempStoreForDreaming(t)
 	ctx := context.Background()
-	da := NewDreamingAdapter(s, nil, nil, "", discardLogger())
+	da := NewDreamingAdapter(s, nil, "", discardLogger())
 
 	// Set turn count at threshold.
 	s.SetMeta(ctx, metaTurnCount, "50")
@@ -77,7 +77,7 @@ func TestDreamingAdapter_ShouldDream_turnThreshold(t *testing.T) {
 func TestDreamingAdapter_ShouldDream_timeThreshold(t *testing.T) {
 	s := tempStoreForDreaming(t)
 	ctx := context.Background()
-	da := NewDreamingAdapter(s, nil, nil, "", discardLogger())
+	da := NewDreamingAdapter(s, nil, "", discardLogger())
 
 	// Low turn count.
 	s.SetMeta(ctx, metaTurnCount, "5")
@@ -93,7 +93,7 @@ func TestDreamingAdapter_ShouldDream_timeThreshold(t *testing.T) {
 func TestDreamingAdapter_ShouldDream_firstRun(t *testing.T) {
 	s := tempStoreForDreaming(t)
 	ctx := context.Background()
-	da := NewDreamingAdapter(s, nil, nil, "", discardLogger())
+	da := NewDreamingAdapter(s, nil, "", discardLogger())
 
 	// No prior turn count or last-run timestamp.
 	// First call should initialize and return false.
@@ -120,7 +120,7 @@ func TestDreamingAdapter_ShouldDream_firstRun(t *testing.T) {
 func TestDreamingAdapter_ShouldDream_corruptedTimestamp(t *testing.T) {
 	s := tempStoreForDreaming(t)
 	ctx := context.Background()
-	da := NewDreamingAdapter(s, nil, nil, "", discardLogger())
+	da := NewDreamingAdapter(s, nil, "", discardLogger())
 
 	s.SetMeta(ctx, metaTurnCount, "5")
 	s.SetMeta(ctx, metaLastDreaming, "not-a-timestamp")
@@ -134,7 +134,7 @@ func TestDreamingAdapter_ShouldDream_corruptedTimestamp(t *testing.T) {
 func TestDreamingAdapter_ShouldDream_justBelowTimeThreshold(t *testing.T) {
 	s := tempStoreForDreaming(t)
 	ctx := context.Background()
-	da := NewDreamingAdapter(s, nil, nil, "", discardLogger())
+	da := NewDreamingAdapter(s, nil, "", discardLogger())
 
 	s.SetMeta(ctx, metaTurnCount, "0")
 	// 7 hours ago — below the 8-hour threshold.

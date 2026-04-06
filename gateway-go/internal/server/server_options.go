@@ -6,7 +6,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -84,14 +83,3 @@ func WithHooksHTTP(h *HooksHTTPHandler) Option {
 	}
 }
 
-// WithEmbedder is a no-op kept for caller compatibility.
-// Memory embedding was replaced by wiki knowledge base.
-func WithEmbedder(_ embedding.Embedder) Option {
-	return func(_ *Server) {}
-}
-
-// WithJinaAPIKey is a no-op kept for caller compatibility.
-// Jina reranking was replaced by wiki FTS.
-func WithJinaAPIKey(_ string) Option {
-	return func(_ *Server) {}
-}

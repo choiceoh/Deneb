@@ -18,21 +18,19 @@ const metaLastDreaming = "dreaming_last_run"
 // DreamingAdapter implements autonomous.Dreamer by wrapping the memory store's
 // dreaming cycle. The autonomous service owns scheduling and event emission.
 type DreamingAdapter struct {
-	store    *Store
-	embedder *Embedder
-	client   *llm.Client
-	model    string
-	logger   *slog.Logger
+	store  *Store
+	client *llm.Client
+	model  string
+	logger *slog.Logger
 }
 
 // NewDreamingAdapter creates a new adapter bridging memory dreaming to autonomous.
-func NewDreamingAdapter(store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) *DreamingAdapter {
+func NewDreamingAdapter(store *Store, client *llm.Client, model string, logger *slog.Logger) *DreamingAdapter {
 	return &DreamingAdapter{
-		store:    store,
-		embedder: embedder,
-		client:   client,
-		model:    model,
-		logger:   logger,
+		store:  store,
+		client: client,
+		model:  model,
+		logger: logger,
 	}
 }
 
@@ -93,7 +91,7 @@ func (da *DreamingAdapter) ShouldDream(ctx context.Context) bool {
 
 // RunDream executes a full dreaming cycle and returns the report.
 func (da *DreamingAdapter) RunDream(ctx context.Context) (*autonomous.DreamReport, error) {
-	report, err := RunDreamingCycle(ctx, da.store, da.embedder, da.client, da.model, da.logger)
+	report, err := RunDreamingCycle(ctx, da.store, da.client, da.model, da.logger)
 	if err != nil {
 		return nil, err
 	}

@@ -36,8 +36,7 @@ type GmailParams struct {
 type GmailPipelineDeps struct {
 	LLMClient    *llm.Client
 	DefaultModel string
-	MemStore     *memory.Store    // nil = no memory recall in pipeline
-	MemEmbed     *memory.Embedder // nil = FTS-only memory search
+	MemStore *memory.Store // nil = no memory recall in pipeline
 }
 
 // ToolGmail implements the gmail tool for structured Gmail operations via native API.
@@ -304,8 +303,7 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineD
 		GmailClient: client,
 		LLMClient:   deps.LLMClient,
 		MainModel:   deps.DefaultModel,
-		MemStore:    deps.MemStore,
-		MemEmbed:    deps.MemEmbed,
+		MemStore: deps.MemStore,
 		// LocalClient/LocalModel not available in tool context — pipeline
 		// will fall back to single-LLM analysis (stage 1 skipped).
 	}

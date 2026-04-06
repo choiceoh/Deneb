@@ -1,16 +1,11 @@
 package chat
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
-	"sort"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/tokenutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
@@ -55,20 +50,9 @@ func DefaultContextConfig() ContextConfig {
 	}
 }
 
-// AssemblyHints provides optional hints for smarter context assembly.
-// When both QueryText and Embedder are set, the fallback path uses
-// semantic ranking instead of simple tail-N truncation.
-type AssemblyHints struct {
-	QueryText string             // current user message for semantic ranking
-	Embedder  embedding.Embedder // optional; enables semantic ranking
-}
-
-// Semantic ranking weights and limits.
-const (
-	semanticWeight    = 0.6              // cosine similarity contribution to final score
-	recencyWeight     = 0.4              // linear recency decay contribution
-	embedBatchTimeout = 3 * time.Second  // timeout for batch embedding call
-)
+// AssemblyHints provides optional hints for context assembly.
+// Currently a placeholder for future ranking strategies.
+type AssemblyHints struct{}
 
 // estimateTokens returns a rough token count for a string.
 // Delegates to tokenutil.EstimateTokens (shared across chat subsystem).
@@ -248,39 +232,12 @@ func assembleContextFallback(
 		limit = defaultMaxMessages
 	}
 
-	canRank := hints.Embedder != nil && hints.QueryText != ""
-
-	// When semantic ranking is available, load all messages so we can rank
-	// beyond the tail-N window. Otherwise, load only the tail for efficiency.
-	loadLimit := limit
-	if canRank {
-		loadLimit = 0 // load entire transcript
-	}
-	msgs, total, err := store.Load(sessionKey, loadLimit)
+	msgs, total, err := store.Load(sessionKey, limit)
 	if err != nil {
 		return nil, fmt.Errorf("load transcript: %w", err)
 	}
 
-	// If the transcript exceeds the budget and semantic ranking is available,
-	// rank older messages by relevance instead of discarding them.
-	freshTail := int(cfg.FreshTailCount)
-	if freshTail <= 0 {
-		freshTail = defaultFreshTailCount
-	}
-	if canRank && len(msgs) > limit {
-		ranked, err := semanticRankMessages(msgs, limit, freshTail, hints, logger)
-		if err != nil {
-			// Graceful fallback: log and use tail-N.
-			if logger != nil {
-				logger.Debug("semantic ranking failed, using tail-N fallback", "error", err)
-			}
-		} else {
-			msgs = ranked
-		}
-	}
-
-	// Standard tail-N truncation for messages still exceeding the limit
-	// (either semantic ranking was not available, or it already trimmed).
+	// Tail-N truncation.
 	if len(msgs) > limit {
 		msgs = msgs[len(msgs)-limit:]
 	}
@@ -289,139 +246,6 @@ func assembleContextFallback(
 		Messages:      transcriptToMessages(msgs),
 		TotalMessages: total,
 	}, nil
-}
-
-// semanticRankMessages selects the most relevant messages using embedding similarity.
-// It protects the freshTail most recent messages and ranks older messages by a
-// weighted combination of cosine similarity (0.6) and linear recency (0.4).
-func semanticRankMessages(
-	msgs []ChatMessage,
-	budget int,
-	freshTail int,
-	hints AssemblyHints,
-	logger *slog.Logger,
-) ([]ChatMessage, error) {
-	if freshTail >= budget {
-		freshTail = budget
-	}
-	if freshTail >= len(msgs) {
-		// All messages fit in the fresh tail — nothing to rank.
-		return msgs, nil
-	}
-
-	// Split: older candidates vs protected fresh tail.
-	olderCount := len(msgs) - freshTail
-	olderMsgs := msgs[:olderCount]
-	freshMsgs := msgs[olderCount:]
-
-	// How many older messages can we keep?
-	olderBudget := budget - freshTail
-	if olderBudget <= 0 {
-		return freshMsgs, nil
-	}
-	if olderBudget >= len(olderMsgs) {
-		// All older messages fit — no ranking needed.
-		return msgs, nil
-	}
-
-	// Collect text from older messages for batch embedding.
-	texts := make([]string, len(olderMsgs))
-	for i, m := range olderMsgs {
-		texts[i] = m.TextContent()
-	}
-
-	// Build the batch: query + all older message texts.
-	batchTexts := make([]string, 0, 1+len(texts))
-	batchTexts = append(batchTexts, hints.QueryText)
-	batchTexts = append(batchTexts, texts...)
-
-	// Embed with a 3-second timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), embedBatchTimeout)
-	defer cancel()
-
-	vectors, err := hints.Embedder.EmbedBatch(ctx, batchTexts)
-	if err != nil {
-		return nil, fmt.Errorf("batch embed for semantic ranking: %w", err)
-	}
-	if len(vectors) != len(batchTexts) {
-		return nil, fmt.Errorf("embed batch returned %d vectors, expected %d", len(vectors), len(batchTexts))
-	}
-
-	queryVec := vectors[0]
-	msgVecs := vectors[1:]
-
-	// Score each older message: 0.6 * cosine_similarity + 0.4 * recency_weight.
-	// Recency decays linearly from 1.0 (most recent older message) to 0.0 (oldest).
-	type scored struct {
-		index int
-		score float64
-	}
-	scores := make([]scored, len(olderMsgs))
-	for i := range olderMsgs {
-		sim := vecCosineSimilarity(queryVec, msgVecs[i])
-		// Linear recency: index 0 is oldest (weight ~0), index olderCount-1 is
-		// the most recent older message (weight ~1).
-		recency := 0.0
-		if olderCount > 1 {
-			recency = float64(i) / float64(olderCount-1)
-		} else {
-			recency = 1.0
-		}
-		scores[i] = scored{
-			index: i,
-			score: semanticWeight*sim + recencyWeight*recency,
-		}
-	}
-
-	// Sort descending by score to pick top-K.
-	sort.Slice(scores, func(a, b int) bool {
-		return scores[a].score > scores[b].score
-	})
-
-	// Select top olderBudget indices, then re-sort by original index
-	// to preserve chronological order.
-	selected := scores[:olderBudget]
-	sort.Slice(selected, func(a, b int) bool {
-		return selected[a].index < selected[b].index
-	})
-
-	// Merge: selected older messages (chronological) + fresh tail (in order).
-	result := make([]ChatMessage, 0, olderBudget+freshTail)
-	for _, s := range selected {
-		result = append(result, olderMsgs[s.index])
-	}
-	result = append(result, freshMsgs...)
-
-	if logger != nil {
-		logger.Debug("semantic ranking applied",
-			"total_older", len(olderMsgs),
-			"selected_older", olderBudget,
-			"fresh_tail", len(freshMsgs),
-			"top_score", scores[0].score,
-		)
-	}
-
-	return result, nil
-}
-
-// vecCosineSimilarity computes cosine similarity between two float32 vectors.
-// Duplicated from memory/store.go since that function is unexported.
-func vecCosineSimilarity(a, b []float32) float64 {
-	if len(a) != len(b) || len(a) == 0 {
-		return 0
-	}
-	var dot, normA, normB float64
-	for i := range a {
-		ai, bi := float64(a[i]), float64(b[i])
-		dot += ai * bi
-		normA += ai * ai
-		normB += bi * bi
-	}
-	denom := math.Sqrt(normA) * math.Sqrt(normB)
-	if denom == 0 {
-		return 0
-	}
-	return dot / denom
 }
 
 // transcriptToMessages converts ChatMessage transcript entries to LLM messages.

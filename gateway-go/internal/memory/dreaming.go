@@ -26,14 +26,8 @@ const (
 	DreamingTimeIntervalH    = 8
 	dreamingTimeout          = 18 * time.Minute
 	dreamingBatchSize        = 50
-	dreamingMaxTokens        = 4096
-	similarityMergeThreshold = 0.78
-	maxMergeDepth            = 2 // cascade prevention: facts at this depth are ineligible for merging
-
-	// Looser than consolidation (0.62) — we want related facts grouped for better
-	// LLM context, not exact duplicates. 0.50 catches topically related facts that
-	// benefit from being verified together.
-	verifyClusterThreshold = 0.50
+	dreamingMaxTokens = 4096
+	maxMergeDepth    = 2 // cascade prevention: facts at this depth are ineligible for merging
 
 	// Per-phase timeouts prevent earlier phases from starving later ones.
 	// If a phase exceeds its budget, it's cut short but subsequent phases still run.
@@ -63,12 +57,11 @@ type DreamingReport struct {
 // single dreaming cycle. Phases receive the full state rather than individual
 // parameters, avoiding repetitive function signatures.
 type dreamState struct {
-	store    *Store
-	embedder *Embedder
-	client   *llm.Client
-	model    string
-	logger   *slog.Logger
-	report   *DreamingReport
+	store  *Store
+	client *llm.Client
+	model  string
+	logger *slog.Logger
+	report *DreamingReport
 }
 
 // dreamPhase is the interface implemented by every dreaming phase.
@@ -91,17 +84,16 @@ func runPhase(ctx context.Context, budget time.Duration, phase dreamPhase, state
 }
 
 // RunDreamingCycle executes a full dreaming cycle: verify → merge → extract → resolve → update.
-func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (*DreamingReport, error) {
+func RunDreamingCycle(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (*DreamingReport, error) {
 	ctx, cancel := context.WithTimeout(ctx, dreamingTimeout)
 	defer cancel()
 
 	start := time.Now()
 	state := &dreamState{
-		store:    store,
-		embedder: embedder,
-		client:   client,
-		model:    model,
-		logger:   logger,
+		store:  store,
+		client: client,
+		model:  model,
+		logger: logger,
 		report:   &DreamingReport{},
 	}
 
@@ -120,14 +112,6 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	if pruned, err := store.PruneNoiseFacts(ctx, 0.45, 14*24*time.Hour); err == nil && pruned > 0 {
 		logger.Info("aurora-dream: pruned noise facts", "count", pruned)
 		state.report.FactsPruned = int(pruned)
-	}
-
-	// Phase 0.75: Retry pending embeddings (facts that failed async embedding).
-	// Uses batch embedding API to process all pending facts in a single call.
-	if embedder != nil {
-		if n, err := store.RetryPendingEmbeddings(ctx, embedder.EmbedBatchAndStore); err == nil && n > 0 {
-			logger.Info("aurora-dream: retried pending embeddings", "count", n)
-		}
 	}
 
 	// Early exit: skip LLM-heavy phases when there's no work to do.
@@ -275,23 +259,14 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 	}
 	logger.Info("aurora-dream: verify phase input", "facts_to_verify", len(facts))
 
-	// Build semantic batches: cluster related facts so the LLM sees topically
-	// coherent groups, improving conflict detection within each batch.
-	// Falls back to sequential batching when no embeddings are available.
+	// Sequential batching.
 	var batches [][]Fact
-	embeddings, embErr := store.LoadEmbeddings(ctx)
-	if embErr == nil && len(embeddings) > 0 {
-		batches = clusterFactsForVerify(facts, embeddings, dreamingBatchSize)
-		logger.Info("aurora-dream: verify using semantic batches", "batches", len(batches))
-	} else {
-		// Fallback: sequential batching (original behavior).
-		for i := 0; i < len(facts); i += dreamingBatchSize {
-			end := i + dreamingBatchSize
-			if end > len(facts) {
-				end = len(facts)
-			}
-			batches = append(batches, facts[i:end])
+	for i := 0; i < len(facts); i += dreamingBatchSize {
+		end := i + dreamingBatchSize
+		if end > len(facts) {
+			end = len(facts)
 		}
+		batches = append(batches, facts[i:end])
 	}
 
 	removed := map[int64]bool{} // track removed IDs across batches
@@ -312,120 +287,6 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 	}
 
 	return verified, expired, conflictsResolved, nil
-}
-
-// clusterFactsForVerify groups facts into semantically coherent batches using
-// union-find clustering on BGE-M3 embeddings. Related facts land in the same
-// LLM batch, improving the model's ability to detect contradictions and overlaps.
-//
-// Facts without embeddings are collected into a separate trailing batch.
-// Clusters larger than batchSize are split into sub-batches.
-func clusterFactsForVerify(facts []Fact, embeddings map[int64][]float32, batchSize int) [][]Fact {
-	// Separate facts with and without embeddings.
-	var withEmb []Fact
-	var withoutEmb []Fact
-	for _, f := range facts {
-		if _, ok := embeddings[f.ID]; ok {
-			withEmb = append(withEmb, f)
-		} else {
-			withoutEmb = append(withoutEmb, f)
-		}
-	}
-
-	if len(withEmb) == 0 {
-		// No embeddings at all — return sequential batches of all facts.
-		var batches [][]Fact
-		for i := 0; i < len(facts); i += batchSize {
-			end := i + batchSize
-			if end > len(facts) {
-				end = len(facts)
-			}
-			batches = append(batches, facts[i:end])
-		}
-		return batches
-	}
-
-	// Union-find clustering at verifyClusterThreshold.
-	parent := make(map[int64]int64, len(withEmb))
-	var find func(int64) int64
-	find = func(x int64) int64 {
-		if p, ok := parent[x]; ok && p != x {
-			parent[x] = find(p)
-			return parent[x]
-		}
-		return x
-	}
-	union := func(a, b int64) {
-		ra, rb := find(a), find(b)
-		if ra != rb {
-			parent[rb] = ra
-		}
-	}
-
-	for _, f := range withEmb {
-		parent[f.ID] = f.ID
-	}
-
-	for i := 0; i < len(withEmb); i++ {
-		for j := i + 1; j < len(withEmb); j++ {
-			sim := cosineSimilarity(embeddings[withEmb[i].ID], embeddings[withEmb[j].ID])
-			if sim >= verifyClusterThreshold {
-				union(withEmb[i].ID, withEmb[j].ID)
-			}
-		}
-	}
-
-	// Collect clusters. Use a fact-ID-indexed map for quick lookup.
-	factByID := make(map[int64]Fact, len(withEmb))
-	for _, f := range withEmb {
-		factByID[f.ID] = f
-	}
-
-	clusterMap := make(map[int64][]int64)
-	for _, f := range withEmb {
-		root := find(f.ID)
-		clusterMap[root] = append(clusterMap[root], f.ID)
-	}
-
-	// Sort clusters by size descending (largest first) for deterministic ordering.
-	type cluster struct {
-		ids []int64
-	}
-	clusters := make([]cluster, 0, len(clusterMap))
-	for _, ids := range clusterMap {
-		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-		clusters = append(clusters, cluster{ids: ids})
-	}
-	sort.Slice(clusters, func(i, j int) bool {
-		return len(clusters[i].ids) > len(clusters[j].ids)
-	})
-
-	// Build batches: split large clusters into sub-batches of batchSize.
-	var batches [][]Fact
-	for _, cl := range clusters {
-		var clFacts []Fact
-		for _, id := range cl.ids {
-			clFacts = append(clFacts, factByID[id])
-		}
-		for i := 0; i < len(clFacts); i += batchSize {
-			end := i + batchSize
-			if end > len(clFacts) {
-				end = len(clFacts)
-			}
-			batches = append(batches, clFacts[i:end])
-		}
-	}
-
-	// Append facts without embeddings as trailing batch(es).
-	for i := 0; i < len(withoutEmb); i += batchSize {
-		end := i + batchSize
-		if end > len(withoutEmb) {
-			end = len(withoutEmb)
-		}
-		batches = append(batches, withoutEmb[i:end])
-	}
-
-	return batches
 }
 
 func shouldStopVerifyBatches(err error) bool {
@@ -492,14 +353,7 @@ type mergePhase struct{}
 
 func (mergePhase) Name() string { return "merge" }
 func (mergePhase) Run(ctx context.Context, s *dreamState) error {
-	var merged int
-	var err error
-	if s.embedder != nil {
-		merged, err = mergeDuplicates(ctx, s.store, s.embedder, s.client, s.model, s.logger)
-	} else {
-		// P11/P14: text-only fallback when embedder is unavailable.
-		merged, err = mergeDuplicatesTextOnly(ctx, s.store, s.logger)
-	}
+	merged, err := mergeDuplicatesTextOnly(ctx, s.store, s.logger)
 	if err != nil {
 		return err
 	}
@@ -529,165 +383,7 @@ type mergeResponse struct {
 // facts are compared — low-importance duplicates are not worth the O(n²) cost.
 const mergeMaxPerCategory = 100
 
-func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
-	embeddings, depths, categories, err := store.LoadEmbeddingsForMerge(ctx, maxMergeDepth)
-	if err != nil {
-		return 0, err
-	}
-	logger.Info("aurora-dream: merge phase input", "embeddings_loaded", len(embeddings))
-
-	// Group IDs by category so we only compare within the same category.
-	// This reduces O(n²) across all facts to O(n²/k) where k is the number
-	// of categories (~6), since duplicates only make sense within a category.
-	catGroups := map[string][]int64{}
-	for id := range embeddings {
-		cat := categories[id]
-		catGroups[cat] = append(catGroups[cat], id)
-	}
-
-	// P12: Cap per-category comparison set. When a category has many facts,
-	// sort by embedding vector length as a proxy for content richness and
-	// limit to mergeMaxPerCategory to reduce O(n²) cost.
-	for cat, ids := range catGroups {
-		if len(ids) > mergeMaxPerCategory {
-			// Keep first mergeMaxPerCategory IDs (already in insertion order;
-			// LoadEmbeddingsForMerge returns all eligible — trim to cap).
-			catGroups[cat] = ids[:mergeMaxPerCategory]
-		}
-	}
-
-	// Find similar pairs above threshold (within same category and depth).
-	type pair struct {
-		a, b int64
-		sim  float64
-	}
-	var pairs []pair
-
-	for _, ids := range catGroups {
-		for i := 0; i < len(ids); i++ {
-			for j := i + 1; j < len(ids); j++ {
-				// Only merge facts at the same depth level to prevent
-				// abstraction-level mismatch that degrades similarity.
-				if depths[ids[i]] != depths[ids[j]] {
-					continue
-				}
-				// P12: Skip pairs with vastly different vector lengths (proxy for
-				// content length mismatch). Facts with 3x+ length ratio are unlikely
-				// duplicates.
-				vecA, vecB := embeddings[ids[i]], embeddings[ids[j]]
-				if lenA, lenB := len(vecA), len(vecB); lenA > 0 && lenB > 0 {
-					ratio := float64(lenA) / float64(lenB)
-					if ratio > 3.0 || ratio < 1.0/3.0 {
-						continue
-					}
-				}
-				sim := cosineSimilarity(vecA, vecB)
-				if sim >= similarityMergeThreshold {
-					pairs = append(pairs, pair{ids[i], ids[j], sim})
-				}
-			}
-		}
-	}
-
-	if len(pairs) == 0 {
-		return 0, nil
-	}
-
-	// Process most similar pairs first so the obvious duplicates are merged
-	// before hitting the per-cycle limit.
-	sort.Slice(pairs, func(i, j int) bool {
-		return pairs[i].sim > pairs[j].sim
-	})
-
-	merged := 0
-	consecutiveRejects := 0
-	var pendingEmbeds []struct {
-		ID      int64
-		Content string
-	}
-	// Limit merges per cycle to avoid excessive LLM calls.
-	maxMerges := 25
-	for _, p := range pairs {
-		if merged >= maxMerges {
-			break
-		}
-
-		factA, err := store.GetFactReadOnly(ctx, p.a)
-		if err != nil || !factA.Active {
-			continue
-		}
-		factB, err := store.GetFactReadOnly(ctx, p.b)
-		if err != nil || !factB.Active {
-			continue
-		}
-
-		prompt := fmt.Sprintf("Fact A: %s\nFact B: %s", factA.Content, factB.Content)
-		result, err := callLLMJSON[mergeResponse](ctx, client, model, mergeSystemPrompt, prompt, 256)
-		if err != nil {
-			continue
-		}
-
-		if !result.ShouldMerge || result.MergedContent == "" {
-			logger.Info("aurora-dream: merge rejected by LLM", "a", p.a, "b", p.b, "sim", fmt.Sprintf("%.3f", p.sim))
-			consecutiveRejects++
-			if consecutiveRejects >= 3 {
-				logger.Info("aurora-dream: stopping merges after consecutive rejections", "rejects", consecutiveRejects)
-				break
-			}
-			continue
-		}
-		consecutiveRejects = 0
-		if !isValidCategory(result.Category) {
-			result.Category = factA.Category
-		}
-
-		// Compute merge depth: max of parents + 1.
-		depth := factA.MergeDepth
-		if factB.MergeDepth > depth {
-			depth = factB.MergeDepth
-		}
-		depth++
-
-		// Insert merged fact.
-		newID, err := store.InsertFact(ctx, Fact{
-			Content:    result.MergedContent,
-			Category:   result.Category,
-			Importance: clamp(result.Importance, 0, 1),
-			Source:     SourceDreaming,
-			MergeDepth: depth,
-		})
-		if err != nil {
-			continue
-		}
-
-		// Supersede old facts.
-		_ = store.SupersedeFact(ctx, p.a, newID)
-		_ = store.SupersedeFact(ctx, p.b, newID)
-
-		// Collect for batch embedding after the loop.
-		pendingEmbeds = append(pendingEmbeds, struct {
-			ID      int64
-			Content string
-		}{ID: newID, Content: result.MergedContent})
-
-		merged++
-		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID, "sim", fmt.Sprintf("%.3f", p.sim))
-	}
-
-	// Batch-embed all merged facts in a single API call.
-	if embedder != nil && len(pendingEmbeds) > 0 {
-		if n, err := embedder.EmbedBatchAndStore(ctx, pendingEmbeds); err != nil {
-			logger.Warn("aurora-dream: batch embed merged facts failed", "error", err)
-		} else {
-			logger.Info("aurora-dream: batch-embedded merged facts", "count", n)
-		}
-	}
-
-	return merged, nil
-}
-
-// mergeDuplicatesTextOnly is a deterministic fallback for environments without
-// an embedder. Uses Jaccard text similarity instead of cosine on embeddings.
+// mergeDuplicatesTextOnly uses Jaccard text similarity to find and merge duplicates.
 // Only auto-merges at a very high threshold (0.90) since there's no LLM to
 // validate the merge — the higher threshold prevents false positives.
 const textOnlyMergeThreshold = 0.90
@@ -780,7 +476,7 @@ type patternPhase struct{}
 
 func (patternPhase) Name() string { return "patterns" }
 func (patternPhase) Run(ctx context.Context, s *dreamState) error {
-	patterns, err := extractPatterns(ctx, s.store, s.embedder, s.client, s.model, s.logger)
+	patterns, err := extractPatterns(ctx, s.store, s.client, s.model, s.logger)
 	if err != nil {
 		return err
 	}
@@ -813,7 +509,7 @@ type patternResponse struct {
 	Patterns []ExtractedFact `json:"patterns"`
 }
 
-func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
+func extractPatterns(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
 	if err != nil {
 		return 0, err
@@ -852,43 +548,25 @@ func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, clie
 	}
 
 	count := 0
-	var pendingEmbeds []struct {
-		ID      int64
-		Content string
-	}
 	for _, p := range wrapper.Patterns {
 		if p.Content == "" {
 			continue
 		}
-		// Accept user_model or mutual category from the LLM; default to user_model.
 		cat := CategoryUserModel
 		if p.Category == CategoryMutual {
 			cat = CategoryMutual
 		}
-		id, err := store.InsertFact(ctx, Fact{
+		_, err := store.InsertFact(ctx, Fact{
 			Content:    p.Content,
 			Category:   cat,
 			Importance: clamp(p.Importance, 0.7, 1.0),
 			Source:     SourceDreaming,
-			MergeDepth: 1, // patterns are already abstractions; prevent cross-depth merging
+			MergeDepth: 1,
 		})
 		if err != nil {
 			continue
 		}
 		count++
-		pendingEmbeds = append(pendingEmbeds, struct {
-			ID      int64
-			Content string
-		}{ID: id, Content: p.Content})
-	}
-
-	// Batch-embed all patterns in a single API call.
-	if embedder != nil && len(pendingEmbeds) > 0 {
-		if n, err := embedder.EmbedBatchAndStore(ctx, pendingEmbeds); err != nil {
-			logger.Warn("aurora-dream: batch embed patterns failed", "error", err)
-		} else {
-			logger.Info("aurora-dream: batch-embedded patterns", "count", n)
-		}
 	}
 
 	return count, nil

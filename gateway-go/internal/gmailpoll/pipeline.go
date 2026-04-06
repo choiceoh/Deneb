@@ -42,8 +42,7 @@ type PipelineDeps struct {
 	LocalClient *llm.Client      // local AI for extractors (stage 1)
 	LocalModel  string           // local AI model name
 	MainModel   string           // main LLM model name
-	MemStore    *memory.Store    // for memory recall (nil = skip stage 1b)
-	MemEmbed    *memory.Embedder // for vector search query embedding (nil = FTS only)
+	MemStore *memory.Store // for memory recall (nil = skip stage 1b)
 	Logger      *slog.Logger     // optional; nil = slog.Default()
 }
 
@@ -462,7 +461,7 @@ func storeBatchFacts(deps PipelineDeps, emails []emailWithContext, report string
 	}
 
 	if len(extracted) > 0 {
-		memory.InsertExtractedFactsAs(ctx, deps.MemStore, deps.MemEmbed, extracted, SourceEmailAnalysis, logger)
+		memory.InsertExtractedFactsAs(ctx, deps.MemStore, extracted, SourceEmailAnalysis, logger)
 		logger.Info("batch email facts stored", "count", len(extracted), "emails", len(emails))
 	}
 }
@@ -560,15 +559,7 @@ func extractMemoryContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	seen := make(map[int64]bool)
 
 	for _, query := range queries {
-		var queryVec []float32
-		if deps.MemEmbed != nil {
-			vec, err := deps.MemEmbed.EmbedQuery(ctx, query)
-			if err == nil {
-				queryVec = vec
-			}
-		}
-
-		results, err := deps.MemStore.SearchFacts(ctx, query, queryVec, memory.SearchOpts{
+		results, err := deps.MemStore.SearchFacts(ctx, query, memory.SearchOpts{
 			Limit: 5,
 		})
 		if err != nil {
@@ -707,7 +698,7 @@ func storeEmailFacts(deps PipelineDeps, msg *gmail.MessageDetail, analysis strin
 	}
 
 	if len(extracted) > 0 {
-		memory.InsertExtractedFactsAs(ctx, deps.MemStore, deps.MemEmbed, extracted, SourceEmailAnalysis, logger)
+		memory.InsertExtractedFactsAs(ctx, deps.MemStore, extracted, SourceEmailAnalysis, logger)
 		logger.Info("email facts stored", "count", len(extracted), "subject", msg.Subject)
 	}
 }

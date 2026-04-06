@@ -97,7 +97,7 @@ func TestFrequencyScoring(t *testing.T) {
 	}
 }
 
-func TestMergeAndRankWithNewWeights(t *testing.T) {
+func TestScoreAndRankWithNewWeights(t *testing.T) {
 	s := tempStore(t)
 	ctx := context.Background()
 
@@ -126,11 +126,10 @@ func TestMergeAndRankWithNewWeights(t *testing.T) {
 	s.db.Exec(`UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?`,
 		past30.Format(time.RFC3339), past30.Format(time.RFC3339), idCtx)
 
-	// Build fake search scores (equal hybrid scores).
+	// Build fake FTS scores (equal scores).
 	ftsResults := map[int64]float64{idDec: 0.7, idCtx: 0.7}
-	vecResults := map[int64]float64{idDec: 0.7, idCtx: 0.7}
 
-	results := s.mergeAndRank(ftsResults, vecResults, SearchOpts{Limit: 10})
+	results := s.scoreAndRank(ftsResults, SearchOpts{Limit: 10})
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
@@ -185,11 +184,10 @@ func TestRecencyUsesUpdatedAt(t *testing.T) {
 	s.db.Exec(`UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?`,
 		past1.Format(time.RFC3339), past1.Format(time.RFC3339), idFresh)
 
-	// Give both equal hybrid search scores.
+	// Give both equal FTS scores.
 	ftsResults := map[int64]float64{idStale: 0.7, idFresh: 0.7}
-	vecResults := map[int64]float64{idStale: 0.7, idFresh: 0.7}
 
-	results := s.mergeAndRank(ftsResults, vecResults, SearchOpts{Limit: 10})
+	results := s.scoreAndRank(ftsResults, SearchOpts{Limit: 10})
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))

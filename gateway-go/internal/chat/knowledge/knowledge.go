@@ -20,9 +20,8 @@ import (
 
 // Deps holds optional dependencies for knowledge prefetch.
 type Deps struct {
-	WorkspaceDir     string           // empty → skip file-based Memory search
-	MemoryStore      *memory.Store    // nil → skip structured memory search
-	MemoryEmbedder   *memory.Embedder // nil → FTS-only structured search
+	WorkspaceDir     string         // empty → skip file-based Memory search
+	MemoryStore      *memory.Store  // nil → skip structured memory search
 	UnifiedStore     *unified.Store // nil → skip unified search + tier-1 injection
 	SkipMemorySearch bool           // true → skip memory SearchFacts (recall handles it)
 }
@@ -72,23 +71,12 @@ func Prefetch(ctx context.Context, message string, deps Deps) string {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Optionally embed query for semantic search.
-			var queryVec []float32
-			if deps.MemoryEmbedder != nil {
-				vec, err := deps.MemoryEmbedder.EmbedQuery(ctx, message)
-				if err == nil {
-					queryVec = vec
-				}
+			searchOpts := memory.SearchOpts{
+				Limit:         knowledgeMaxMemory,
+				MinScore:      0.35,
+				MinImportance: 0.6,
 			}
-			searchOpts := memory.SearchOpts{Limit: knowledgeMaxMemory, MinScore: 0.35}
-			if deps.MemoryEmbedder == nil {
-				// No semantic search available: restrict FTS scan to moderately important facts
-				// so hundreds of low-signal facts don't get scanned on every message.
-				// Lowered from 0.7 to 0.6 to avoid missing solution/preference facts
-				// in the 0.6–0.7 range.
-				searchOpts.MinImportance = 0.6
-			}
-			results, err := deps.MemoryStore.SearchFacts(ctx, message, queryVec, searchOpts)
+			results, err := deps.MemoryStore.SearchFacts(ctx, message, searchOpts)
 			if err == nil {
 				structFacts = results
 			}

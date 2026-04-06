@@ -63,7 +63,7 @@ func main() {
 
 	// Run without embedder — clustering uses existing DB embeddings,
 	// new consolidated facts just won't get embeddings until next cycle.
-	report, err := memory.RunDreamingCycle(ctx, store, nil, client, model, logger)
+	report, err := memory.RunDreamingCycle(ctx, store, client, model, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "dreaming failed: %v\n", err)
 		os.Exit(1)

@@ -202,7 +202,7 @@ func TestDedupResults_IntegrationWithSearch(t *testing.T) {
 	// Insert a distinct fact.
 	s.InsertFact(ctx, Fact{Content: "Telegram 봇 API 메시지 길이 제한 4096자", Category: CategorySolution, Importance: 0.7})
 
-	results, err := s.SearchFacts(ctx, "Dreaming 자가개선", nil, SearchOpts{Limit: 10})
+	results, err := s.SearchFacts(ctx, "Dreaming 자가개선", SearchOpts{Limit: 10})
 	if err != nil {
 		t.Fatalf("SearchFacts: %v", err)
 	}
