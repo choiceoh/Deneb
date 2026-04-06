@@ -30,12 +30,12 @@ type heartbeatTask struct {
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
-func (t *heartbeatTask) Interval() time.Duration { return 3 * time.Minute }
+func (t *heartbeatTask) Interval() time.Duration { return 2 * time.Minute }
 
 const heartbeatSessionKey = "system:heartbeat"
 
 // heartbeatSystemPrompt wraps HEARTBEAT.md content for the agent.
-const heartbeatSystemPrompt = `[시스템 하트비트 — 3분 주기 자율 작업 확인]
+const heartbeatSystemPrompt = `[시스템 하트비트 — 2분 주기 자율 작업 확인]
 
 아래는 HEARTBEAT.md의 내용입니다. 이 파일에 정의된 작업을 수행하세요.
 파일 내용을 엄격히 따르세요. 이전 대화에서 추론하거나 이전 작업을 반복하지 마세요.
@@ -59,7 +59,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	if t.activity != nil {
 		idleMs := time.Now().UnixMilli() - t.activity.LastActivityAt()
 		idle := time.Duration(idleMs) * time.Millisecond
-		if idle < 2*time.Minute {
+		if idle < 1*time.Minute {
 			t.logger.Debug("heartbeat: skipped, user active", "idle", idle.Round(time.Second))
 			return nil
 		}
