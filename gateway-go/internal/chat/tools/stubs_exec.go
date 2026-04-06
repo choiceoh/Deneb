@@ -260,7 +260,14 @@ func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command
 		if opts.DeliveryMode == "none" {
 			// Explicit no-delivery: leave Delivery nil (agent runs silently).
 		} else if opts.DeliveryMode == "announce" || opts.DeliveryMode == "" {
-			// Default: announce to Telegram (handled by service defaults).
+			// Default: capture delivery context from the creating session so the
+			// cron job knows where to send output (e.g. Telegram chat ID).
+			if delivery := toolctx.DeliveryFromContext(ctx); delivery != nil && delivery.To != "" {
+				job.Delivery = &cron.JobDeliveryConfig{
+					Channel: delivery.Channel,
+					To:      delivery.To,
+				}
+			}
 		}
 
 		if err := d.Service.Add(ctx, job); err != nil {
