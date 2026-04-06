@@ -11,7 +11,7 @@ globs: ["cmd/**", "internal/**", "pkg/**", "src/**"]
 - `gateway-go/` — Go gateway server (HTTP/WS server, RPC dispatch, session management, channel registry, chat/LLM, tools, auth). The primary runtime.
 - `cli-rs/` — Rust CLI entry point.
 - `proto/` — shared Protobuf schemas (gateway frames, channel types, session models). Source of truth for cross-language types.
-- `skills/` — user-facing skill plugins (github, weather, summarize, coding-agent, etc.).
+- `skills/` — user-facing skill plugins organized by category (coding/, productivity/, devops/, integration/).
 - `docs/` — Mintlify documentation site.
 - `scripts/` — build, dev, CI, audit, and release scripts.
 - `.agents/skills/` — maintainer agent skills (release, GHSA, PR, Parallels smoke).

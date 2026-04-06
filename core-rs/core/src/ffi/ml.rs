@@ -67,5 +67,9 @@ fn ml_embed_impl(_input_json: &str) -> String {
 /// No pointer arguments — always safe to call.
 #[no_mangle]
 pub extern "C" fn deneb_ml_available() -> i32 {
-    if cfg!(feature = "ml") { 1 } else { 0 }
+    if cfg!(feature = "ml") {
+        1
+    } else {
+        0
+    }
 }

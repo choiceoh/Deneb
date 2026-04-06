@@ -16,8 +16,9 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	}
 	toolreg.RegisterCoreTools(registry, deps, localAI)
 
-	// Skills discovery: lists non-always skills on demand (lightweight prompt strategy).
-	toolreg.RegisterSkillsTools(registry, GetCachedSkillsSnapshot)
+	// Skills discovery + management: list, create, patch, delete skills at runtime.
+	toolreg.RegisterSkillsTools(registry, GetCachedSkillsSnapshot,
+		resolveWorkspaceDirForPrompt(), InvalidateSkillsCache)
 
 	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.
 	registry.RegisterTool(ToolDef{
