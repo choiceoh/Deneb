@@ -5,36 +5,11 @@
 # If you add overlapping rules below the secops block, include @deneb/secops
 # on those entries too or you can silently remove required secops review.
 # Security-sensitive code, config, and docs require secops review.
-/SECURITY.md @deneb/secops
 /.github/dependabot.yml @deneb/secops
-/.github/codeql/ @deneb/secops
 /.github/workflows/codeql.yml @deneb/secops
 /gateway-go/internal/auth/ @deneb/secops
-/gateway-go/internal/security/ @deneb/secops
-/core-rs/core/src/security/ @deneb/secops
-/docs/security/ @deneb/secops
-/docs/gateway/authentication.md @deneb/secops
-/docs/gateway/sandbox-vs-tool-policy-vs-elevated.md @deneb/secops
-/docs/gateway/sandboxing.md @deneb/secops
-/docs/gateway/secrets-plan-contract.md @deneb/secops
-/docs/gateway/secrets.md @deneb/secops
-/docs/gateway/security/ @deneb/secops
-/docs/cli/approvals.md @deneb/secops
-/docs/cli/sandbox.md @deneb/secops
-/docs/cli/security.md @deneb/secops
-/docs/cli/secrets.md @deneb/secops
-/docs/reference/secretref-credential-surface.md @deneb/secops
 /docs/reference/secretref-user-supplied-credentials-matrix.json @deneb/secops
 
-# Release workflow and its supporting release-path checks.
-# Multi-language core: Rust, Go, Protobuf schemas.
-/core-rs/ @deneb/secops
-/core-rs/src/security/ @deneb/secops
+# Go gateway and build infrastructure.
 /gateway-go/ @steipete
-/proto/ @steipete
-/cli-rs/ @steipete
-/scripts/proto-gen.sh @steipete
 /Makefile @steipete
-
-# Release workflow and its supporting release-path checks.
-/docs/reference/RELEASING.md @deneb/deneb-release-managers
