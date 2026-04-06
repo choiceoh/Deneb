@@ -6,7 +6,6 @@ package rpc
 import (
 	"encoding/json"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
-	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
@@ -54,8 +53,6 @@ type SessionDeps = handlersession.Deps
 type GatewayRuntimeDeps = handlergateway.Deps
 type HeartbeatDeps = handlerpresence.HeartbeatDeps
 type PresenceDeps = handlerpresence.Deps
-type AuroraChannelDeps = handleraurorachannel.Deps
-
 // --- Registration wrappers ---
 
 func RegisterChatMethods(d *Dispatcher, deps ChatDeps) { d.RegisterDomain(handlerchat.Methods(deps)) }
@@ -152,9 +149,6 @@ func RegisterHeartbeatMethods(d *Dispatcher, deps HeartbeatDeps) {
 }
 func RegisterPresenceMethods(d *Dispatcher, deps PresenceDeps) {
 	d.RegisterDomain(handlerpresence.Methods(deps))
-}
-func RegisterAuroraChannelMethods(d *Dispatcher, deps AuroraChannelDeps) {
-	d.RegisterDomain(handleraurorachannel.Methods(deps))
 }
 func RegisterGatewayRuntimeMethods(d *Dispatcher, deps GatewayRuntimeDeps) {
 	d.RegisterDomain(handlergateway.RuntimeMethods(deps))

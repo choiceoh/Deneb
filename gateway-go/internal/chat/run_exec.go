@@ -13,19 +13,16 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -175,17 +172,6 @@ func executeAgentRun(
 			deps.emitTranscriptFn(params.SessionKey, userMsg, "")
 		}
 	}
-	// Sync to Aurora store for compaction tracking.
-	// Only main sessions (e.g. "telegram:123") write to Aurora — dev-test,
-	// sub-task, cron, and system sessions must not enter the shared Aurora
-	// context or they contaminate the user's conversation.
-	if deps.auroraStore != nil && params.Message != "" && isMainSession(params.SessionKey) {
-		tokenCount := uint64(estimateTokens(params.Message))
-		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
-			logger.Warn("aurora: failed to sync user message", "error", err)
-		}
-	}
-
 	workspaceDir := params.WorkspaceDir
 	if workspaceDir == "" {
 		workspaceDir = resolveWorkspaceDirForPrompt()
@@ -301,7 +287,6 @@ func executeAgentRun(
 	prepStart := time.Now()
 	// 5. Run knowledge prefetch, context assembly, and system prompt build in parallel.
 	var knowledgeAddition string
-	var auroraSystemAddition string
 	var messages []llm.Message
 	var contextErr error
 	var systemPrompt json.RawMessage
@@ -309,64 +294,24 @@ func executeAgentRun(
 	var prepWg sync.WaitGroup
 
 	// Knowledge prefetch (parallel).
-	// Load memory recall for incoming messages and
-	// don't benefit from conversational memory. Vega (project knowledge) still runs.
-	// RLM mode: skip entirely — the LLM fetches data via tools on demand.
-	rlmCfg := rlm.ConfigFromEnv()
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
-		// RLM: knowledge prefetch skipped — the loop fetches data on demand.
+		if params.Message != "" {
+			kDeps := knowledge.Deps{
+				WorkspaceDir: workspaceDir,
+			}
+			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
+		}
 	}()
 
 	// Context assembly (parallel).
-	// RLM mode: load only fresh tail from unified store; full history goes to REPL context.
-	// Legacy mode: Aurora store (summaries from compaction) or file transcript fallback.
-	var replEnv *repl.Env
+	// Transcript-only fallback (Aurora removed).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
 
-		// RLM: load fresh tail + build REPL environment.
-		if deps.unifiedStore != nil && isMainSession(params.SessionKey) {
-			recentMsgs, err := deps.unifiedStore.RecentMessages(1, rlmCfg.FreshTailCount)
-			if err != nil {
-				logger.Warn("RLM fresh tail load failed, falling back", "error", err)
-			} else if len(recentMsgs) > 0 {
-				messages = unifiedToLLMMessages(recentMsgs)
-
-				// Build REPL context from all messages (async-safe: read-only).
-				allMsgs, allErr := deps.unifiedStore.AllMessages(1)
-				if allErr != nil {
-					logger.Warn("RLM all messages load failed", "error", allErr)
-				} else {
-					entries := unifiedToREPLEntries(allMsgs)
-					replEnv = repl.NewEnv(ctx, repl.EnvConfig{
-						Messages:   entries,
-						LLMQueryFn: buildREPLLLMQuery(deps, logger),
-						Timeout:    time.Duration(rlmCfg.REPLTimeoutSec) * time.Second,
-					})
-				}
-				return
-			}
-		}
-
-		// Legacy: Aurora assembly (main sessions with aurora store).
-		if deps.auroraStore != nil && isMainSession(params.SessionKey) {
-			asmCfg := aurora.AssemblyConfig{
-				TokenBudget:    deps.contextCfg.MemoryTokenBudget,
-				FreshTailCount: deps.contextCfg.FreshTailCount,
-				MaxMessages:    deps.contextCfg.MaxMessages,
-			}
-			asmResult, err := aurora.Assemble(ctx, deps.auroraStore, 1, asmCfg, logger)
-			if err != nil {
-				logger.Warn("aurora context assembly failed, falling back to transcript", "error", err)
-			} else if len(asmResult.Messages) > 0 {
-				messages = asmResult.Messages
-				auroraSystemAddition = asmResult.SystemPromptAddition
-			}
-		}
-		if len(messages) == 0 && deps.transcript != nil {
+		if deps.transcript != nil {
 			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger, AssemblyHints{})
 			if err != nil {
 				contextErr = err
@@ -483,12 +428,6 @@ func executeAgentRun(
 			"sessionKey", params.SessionKey, "error", contextErr)
 	}
 
-	// Proactive compaction: if stored tokens exceed the threshold, fire a
-	// background sweep. The sweep writes summaries into the Aurora DB; the NEXT
-	// request's normal assembly will include them. The current request proceeds
-	// with its already-assembled context (no blocking, no stale cache).
-	triggerProactiveCompaction(deps.shutdownCtx, deps, params, client, logger)
-
 	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
 	// with full conversation history), use those instead of transcript context.
 	if len(params.PrebuiltMessages) > 0 {
@@ -530,9 +469,6 @@ func executeAgentRun(
 	var additionFragments []prompt.PromptFragment
 	if knowledgeAddition != "" {
 		additionFragments = append(additionFragments, prompt.NewFragment("memory", knowledgeAddition))
-	}
-	if auroraSystemAddition != "" {
-		additionFragments = append(additionFragments, prompt.NewFragment("aurora_summary", auroraSystemAddition))
 	}
 
 	// Optimize and append surviving fragments.
@@ -641,12 +577,6 @@ func executeAgentRun(
 		agentTimeout = 30 * time.Minute
 	}
 
-	// Mid-loop compaction is enabled for ALL modes: long chat sessions
-	// (200+ messages) can overflow context without proactive compaction,
-	// especially with smaller models (glm-5-turbo) that hang instead of
-	// returning context_length_exceeded errors.
-	midLoopCompactFn := buildMidLoopCompactor(deps, params, logger)
-
 	// Work-only features: nudge budget, output recovery.
 	var nudgeBudget *agent.NudgeBudgetConfig
 	maxOutputRecovery := 1 // minimal recovery for all modes
@@ -731,7 +661,6 @@ func executeAgentRun(
 			return contSignal != nil && contSignal.Requested()
 		},
 		StreamingToolExecution: true,
-		OnMidLoopCompact:       midLoopCompactFn,
 		ToolLoopDetector:       agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
@@ -912,35 +841,9 @@ func executeAgentRun(
 		"model", model, "provider", providerID,
 		"messages", len(messages), "tools", len(tools))
 
-	// 10.5. Inject RLM REPL environment into context (if created during assembly).
-	if replEnv != nil {
-		ctx = repl.WithEnv(ctx, replEnv)
-		logger.Info("RLM REPL environment attached to context")
-	}
-
-	// 10.6. RLM independent loop mode: bypass the tool-call agent loop entirely.
-	// The loop manages its own LLM→code→execute→FINAL cycle with compaction
-	// and error tracking, inspired by alexzhang13/rlm.
-	if replEnv != nil {
-		logger.Info("RLM loop starting")
-		var budget *rlm.TokenBudget
-		if rlmCfg.TotalTokenBudget > 0 {
-			budget = rlm.NewTokenBudget(rlmCfg.TotalTokenBudget)
-		}
-		loopResult, loopErr := executeRLMLoop(
-			ctx, rlmCfg, replEnv, client, model, cfg.System,
-			params.Message, hooks, budget, logger,
-		)
-		if loopErr != nil {
-			return nil, loopErr
-		}
-		return &chatRunResult{AgentResult: loopResult}, nil
-	}
-
 	// 11. Execute agent loop with compaction retry and model fallback chain.
 	agentStart := time.Now()
 	var agentResult *agent.AgentResult
-	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
 
 	// Budget tracker: detect diminishing returns across compaction retries.
 	budgetTracker := NewBudgetTracker()
@@ -956,118 +859,22 @@ func executeAgentRun(
 		var runErr error
 		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
-			// Check for context overflow error.
-			// Retry with context compaction when provider reports overflow
-			// don't maintain Aurora state, so compaction would be a no-op.
+			// Context overflow: drop oldest messages and retry.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
-				logger.Info("context overflow, attempting compaction", "error", runErr)
-
-				// Pre-compaction fact extraction: extract learnings from the
-				// conversation before compaction trims older messages.
-				if deps.memoryStore != nil && deps.registry != nil {
-					lwClient := deps.registry.Client(modelrole.RoleLightweight)
-					lwModel := deps.registry.Model(modelrole.RoleLightweight)
-					if lwClient != nil && lwModel != "" {
-						snapshot := messages // capture before compaction
-						go func() {
-							extractCtx, extractCancel := context.WithTimeout(deps.shutdownCtx, 30*time.Second)
-							defer extractCancel()
-							var userParts, assistantParts []string
-							for _, m := range snapshot {
-								// Extract text content from the message (may be
-								// a JSON string or a []ContentBlock array).
-								var text string
-								if len(m.Content) > 0 && m.Content[0] == '"' {
-									_ = json.Unmarshal(m.Content, &text)
-								} else {
-									var blocks []llm.ContentBlock
-									if json.Unmarshal(m.Content, &blocks) == nil {
-										for _, b := range blocks {
-											if b.Type == "text" && b.Text != "" {
-												text += b.Text + "\n"
-											}
-										}
-									}
-								}
-								if text == "" {
-									continue
-								}
-								switch m.Role {
-								case "user":
-									userParts = append(userParts, text)
-								case "assistant":
-									assistantParts = append(assistantParts, text)
-								}
-							}
-							if len(userParts) == 0 && len(assistantParts) == 0 {
-								return
-							}
-							facts, err := memory.ExtractFacts(
-								extractCtx, lwClient, lwModel,
-								strings.Join(userParts, "\n"),
-								strings.Join(assistantParts, "\n"),
-								logger,
-							)
-							if err != nil {
-								logger.Warn("pre-compaction fact extraction failed", "error", err)
-								return
-							}
-							if len(facts) > 0 {
-								memory.InsertExtractedFacts(extractCtx, deps.memoryStore, facts, logger)
-								logger.Info("pre-compaction facts extracted", "count", len(facts))
-							}
-						}()
+				logger.Info("context overflow, dropping oldest messages", "error", runErr)
+				if len(messages) > 10 {
+					const keepHead, keepTail = 2, 8
+					if len(messages) > keepHead+keepTail {
+						dropped := len(messages) - keepHead - keepTail
+						kept := make([]llm.Message, 0, keepHead+keepTail)
+						kept = append(kept, messages[:keepHead]...)
+						kept = append(kept, messages[len(messages)-keepTail:]...)
+						messages = kept
+						logger.Info("context overflow: emergency drop",
+							"dropped", dropped, "remaining", len(messages))
 					}
 				}
-
-				// Emergency drop: if messages are extremely large, drop oldest
-				// (keep first 2 + last 8) before expensive LLM compaction.
-				if len(messages) > 20 {
-					estTokens := estimateMessagesTokens(messages)
-					if estTokens > int(deps.contextCfg.LiveTokenBudget) {
-						const keepHead, keepTail = 2, 8
-						if len(messages) > keepHead+keepTail {
-							dropped := len(messages) - keepHead - keepTail
-							kept := make([]llm.Message, 0, keepHead+keepTail)
-							kept = append(kept, messages[:keepHead]...)
-							kept = append(kept, messages[len(messages)-keepTail:]...)
-							messages = kept
-							logger.Info("context overflow: emergency drop before compaction",
-								"dropped", dropped, "remaining", len(messages))
-						}
-					}
-				}
-
-				// Strip images before compaction — they waste tokens in the
-				// summarization call and can cause prompt-too-long errors.
-				preCompactMsgs := compact.StripImageBlocks(messages)
-
-				// Extract recent file reads before compaction destroys them.
-				recentFiles := compact.ExtractRecentFileReads(preCompactMsgs)
-
-				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
-					ctx, deps, params, client, logger,
-				)
-				if compErr != nil {
-					// Record compaction failure for circuit breaker.
-					getCompactionCircuitBreaker().RecordFailure()
-					return nil, fmt.Errorf("compaction failed: %w (original: %w)", compErr, runErr)
-				}
-				getCompactionCircuitBreaker().RecordSuccess()
-				messages = compactedMsgs
-
-				// Post-compaction file restoration: re-inject recently accessed
-				// file contents so the agent retains working memory of files
-				// it was actively editing. Stays within token budget.
-				if restored := compact.BuildRestorationMessages(recentFiles); len(restored) > 0 {
-					messages = append(messages, restored...)
-					logger.Info("compaction: restored recent file reads",
-						"count", len(restored))
-				}
-
-				if sysAddition != "" {
-					cfg.System = llm.AppendSystemText(origSystem, sysAddition)
-				}
+				messages = compact.StripImageBlocks(messages)
 				lastTransition = NewContinue(ContinueCompactRetry)
 				continue
 			}
@@ -1201,18 +1008,6 @@ func buildMessagePersister(
 		}
 		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
 			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
-		}
-		// Sync to Aurora for compaction awareness.
-		// formatRichContent extracts text blocks only; tool_use/tool_result
-		// blocks are omitted to prevent the LLM from mimicking tool syntax.
-		if deps.auroraStore != nil && isMainSession(params.SessionKey) {
-			text := formatRichContent(chatMsg.Content)
-			if text != "" {
-				tokenCount := uint64(estimateTokens(text))
-				if _, err := deps.auroraStore.SyncMessage(1, msg.Role, text, tokenCount); err != nil {
-					logger.Warn("per-turn aurora sync failed", "role", msg.Role, "error", err)
-				}
-			}
 		}
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
@@ -18,7 +17,6 @@ type CoreToolDeps struct {
 	Process        ProcessDeps
 	Sessions       SessionDeps
 	Chrono         ChronoDeps
-	Vega           VegaDeps
 	Wiki           WikiDeps
 	LLMClient      *llm.Client
 	DefaultModel   string
@@ -49,12 +47,6 @@ type ChronoDeps struct {
 	RunLog  *cron.PersistentRunLog // run history
 	// SendFn sends a message to a target session, triggering an agent run.
 	SendFn func(sessionKey, message string) error
-}
-
-// VegaDeps holds dependencies for memory search and health-check tools.
-// Named VegaDeps for historical reasons; the Vega backend has been removed.
-type VegaDeps struct {
-	MemoryStore *memory.Store // may be nil when aurora-memory is not configured
 }
 
 // WikiDeps holds dependencies for the wiki knowledge base tool.

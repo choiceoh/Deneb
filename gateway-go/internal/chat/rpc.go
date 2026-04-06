@@ -394,15 +394,6 @@ func (h *Handler) InjectDirect(sessionKey, role, content string) error {
 		return err
 	}
 
-	// Sync to Aurora store so the message is visible in the LLM context.
-	// Aurora is the primary context source for main sessions.
-	if h.auroraStore != nil && isMainSession(sessionKey) {
-		tokenCount := uint64(estimateTokens(content))
-		if _, err := h.auroraStore.SyncMessage(1, role, content, tokenCount); err != nil {
-			h.logger.Warn("bridge inject: aurora sync failed", "error", err)
-		}
-	}
-
 	if h.broadcast != nil {
 		h.broadcast("sessions.changed", map[string]any{
 			"sessionKey": sessionKey,

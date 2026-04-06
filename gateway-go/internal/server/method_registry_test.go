@@ -158,11 +158,6 @@ var requiredMethods = []string{
 	"autoresearch.status",
 	"autoresearch.stop",
 
-	// Aurora.
-	"aurora.chat",
-	"aurora.memory",
-	"aurora.ping",
-
 	// Gateway builtins.
 	"status",
 }

@@ -10,18 +10,15 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
@@ -102,9 +99,6 @@ type runDeps struct {
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
-	auroraStore  *aurora.Store  // optional; enables Aurora compaction
-	memoryStore  *memory.Store // optional; structured memory (Honcho-style)
-	unifiedStore *unified.Store // optional; unified memory (search + tier-1)
 	wikiStore      *wiki.Store               // optional; wiki knowledge base
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
@@ -117,7 +111,6 @@ type runDeps struct {
 	emitTranscriptFn     func(sessionKey string, message any, messageID string)
 	sessionMemory        *SessionMemoryStore // optional; structured session state
 	contextCfg           ContextConfig
-	compactionCfg        aurora.SweepConfig
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string

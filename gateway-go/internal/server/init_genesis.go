@@ -53,10 +53,4 @@ func (s *Server) registerGenesisAutonomousTasks(hub *rpcutil.GatewayHub) {
 		})
 	}
 
-	auroraStore := s.chatHandler.AuroraStore()
-	if auroraStore != nil {
-		s.autonomousSvc.RegisterTask(
-			genesis.NewDreamToSkillTask(s.genesisSvc, auroraStore, s.logger),
-		)
-	}
 }

@@ -35,10 +35,10 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterWebTools(registry)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	RegisterInfraTools(registry, &deps.Vega, localAI)
+	RegisterInfraTools(registry, localAI)
 	RegisterMediaTools(registry, deps.LLMClient, deps.DefaultModel)
 	RegisterDataTools(registry)
-	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, &deps.Vega)
+	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel)
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
 	RegisterHiddenTools(registry, deps.AgentLog)
 
@@ -296,7 +296,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // RegisterRoutineTools registers tools for recurring/scheduled tasks —
 // things that sit between always-on core tools and on-demand skills.
 // Typical trigger: cron scheduler, daily routines, periodic checks.
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string, _ *toolctx.VegaDeps) {
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
@@ -371,12 +371,12 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 
 // RegisterInfraTools registers infrastructure health-check tools.
 
-func RegisterInfraTools(registry toolctx.ToolRegistrar, d *toolctx.VegaDeps, localAI *LocalAIDeps) {
+func RegisterInfraTools(registry toolctx.ToolRegistrar, localAI *LocalAIDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "health_check",
-		Description:     "인프라 상태 점검: embedding (Gemini), reranker (Jina), local AI (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, localai, memory",
+		Description:     "인프라 상태 점검: local AI (로컬 LLM). component: all (기본), localai",
 		InputSchema:     healthCheckToolSchema(),
-		Fn:              tools.ToolHealthCheck(d, buildLocalAIProbe(localAI)),
+		Fn:              tools.ToolHealthCheck(buildLocalAIProbe(localAI)),
 		Deferred:        true,
 		ConcurrencySafe: true,
 	})

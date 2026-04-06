@@ -8,18 +8,15 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/unified"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
@@ -37,11 +34,8 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
-	auroraStore     *aurora.Store                     // Aurora hierarchical compaction store
-	memoryStore     *memory.Store                     // optional; structured memory (Honcho-style)
 	wikiStore       *wiki.Store                      // optional; wiki knowledge base
 	sessionMemory   *SessionMemoryStore               // optional; structured session working state
-	unifiedStore    *unified.Store                    // optional; unified memory (search + tier-1)
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
 	registry        *modelrole.Registry               // centralized model role registry
@@ -49,7 +43,6 @@ type Handler struct {
 
 	// Agent run configuration.
 	contextCfg           ContextConfig
-	compactionCfg        aurora.SweepConfig
 	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string
@@ -139,17 +132,13 @@ type HandlerConfig struct {
 	AuthManager          *provider.AuthManager
 	JobTracker           *agent.JobTracker
 	ProviderConfigs      map[string]ProviderConfig // provider ID → config
-	AuroraStore          *aurora.Store             // Aurora hierarchical compaction store
-	MemoryStore          *memory.Store             // optional; structured memory (Honcho-style)
 	SessionMemory        *SessionMemoryStore       // optional; structured session working state
 	WikiStore            *wiki.Store               // optional; wiki knowledge base
-	UnifiedStore         *unified.Store            // optional; unified memory (search + tier-1)
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
 	LocalAIHub            *localai.Hub               // centralized local AI request hub
 	ContextCfg           ContextConfig
-	CompactionCfg        aurora.SweepConfig
 	DefaultModel         string
 	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
 	DefaultSystem        string
@@ -171,7 +160,6 @@ func DefaultHandlerConfig() HandlerConfig {
 		MaxHistoryCount: 200,
 		MaxMessageBytes: 128 * 1024, // 128 KB
 		ContextCfg:      DefaultContextConfig(),
-		CompactionCfg:   aurora.DefaultSweepConfig(),
 		MaxTokens:       defaultMaxTokens,
 	}
 }
@@ -197,16 +185,12 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
 		providerConfigs:      cfg.ProviderConfigs,
-		auroraStore:          cfg.AuroraStore,
-		memoryStore:          cfg.MemoryStore,
 		wikiStore:            cfg.WikiStore,
 		sessionMemory:        cfg.SessionMemory,
-		unifiedStore:         cfg.UnifiedStore,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,
 		registry:             cfg.Registry,
 		contextCfg:           cfg.ContextCfg,
-		compactionCfg:        cfg.CompactionCfg,
 		defaultModel:         cfg.DefaultModel,
 		subagentDefaultModel: cfg.SubagentDefaultModel,
 		defaultSystem:        cfg.DefaultSystem,
@@ -465,10 +449,6 @@ func (h *Handler) ModelRegistry() *modelrole.Registry {
 	return h.registry
 }
 
-// AuroraStore returns the Aurora hierarchical compaction store.
-func (h *Handler) AuroraStore() *aurora.Store {
-	return h.auroraStore
-}
 
 // Close stops background goroutines and cancels all active abort entries.
 func (h *Handler) Close() {
