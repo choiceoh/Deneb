@@ -457,9 +457,11 @@ func (s *Store) PersistLeafSummary(input PersistLeafInput) error {
 	// Best-effort: columns may not exist in legacy aurora.db.
 	parsed := ParseStructuredSummary(input.Content)
 	tx.Exec(
-		`UPDATE summaries SET narrative = ?, decisions = ?, pending = ?, refs = ?
+		`UPDATE summaries SET narrative = ?, decisions = ?, pending = ?, refs = ?,
+		 goal = ?, next_steps = ?, critical_context = ?
 		 WHERE summary_id = ?`,
-		parsed.Narrative, parsed.Decisions, parsed.Pending, parsed.Refs, input.SummaryID)
+		parsed.Narrative, parsed.Decisions, parsed.Pending, parsed.Refs,
+		parsed.Goal, parsed.NextSteps, parsed.CriticalContext, input.SummaryID)
 
 	// Link messages to summary.
 	smStmt, _ := tx.Prepare(`INSERT OR IGNORE INTO summary_messages (summary_id, message_id) VALUES (?, ?)`)

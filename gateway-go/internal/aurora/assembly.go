@@ -359,6 +359,8 @@ func assembleFallback(
 
 // formatSummaryForLLM renders a SummaryRecord for inclusion in the LLM context.
 // Includes kind, depth, time range, and strips XML tags for clean reading.
+// Supports both the new structured template (Goal, Progress, Next Steps) and
+// legacy format (Summary, Decisions, Pending).
 func formatSummaryForLLM(s SummaryRecord) string {
 	var b strings.Builder
 	b.WriteString("[Aurora Summary")
@@ -372,23 +374,44 @@ func formatSummaryForLLM(s SummaryRecord) string {
 	b.WriteString("]\n")
 
 	// If content has XML tags, strip them for cleaner LLM reading.
-	// The structured sections are already stored in separate columns;
-	// here we present the content in a readable format.
 	parsed := ParseStructuredSummary(s.Content)
+
+	// Goal section — anchors what the user is trying to achieve.
+	if parsed.Goal != "" {
+		b.WriteString("Goal: ")
+		b.WriteString(parsed.Goal)
+		b.WriteString("\n\n")
+	}
+
+	// Progress / narrative body.
 	if parsed.Narrative != "" {
 		b.WriteString(parsed.Narrative)
 	} else {
 		b.WriteString(s.Content)
 	}
 
-	// Append decisions and pending if available.
+	// Key decisions.
 	if parsed.Decisions != "" {
-		b.WriteString("\n\nDecisions:\n")
+		b.WriteString("\n\nKey Decisions:\n")
 		b.WriteString(jsonArrayToBullets(parsed.Decisions))
 	}
-	if parsed.Pending != "" {
+
+	// Next steps — anchors what should happen next.
+	if parsed.NextSteps != "" {
+		b.WriteString("\n\nNext Steps:\n")
+		b.WriteString(jsonArrayToBullets(parsed.NextSteps))
+	}
+
+	// Legacy pending (for old summaries without next_steps).
+	if parsed.Pending != "" && parsed.NextSteps == "" {
 		b.WriteString("\n\nPending:\n")
 		b.WriteString(jsonArrayToBullets(parsed.Pending))
+	}
+
+	// Critical context — verbatim values.
+	if parsed.CriticalContext != "" {
+		b.WriteString("\n\nCritical Context:\n")
+		b.WriteString(parsed.CriticalContext)
 	}
 
 	return b.String()

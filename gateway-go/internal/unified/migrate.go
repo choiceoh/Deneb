@@ -60,6 +60,15 @@ func migrateEntityConstraint(db *sql.DB) {
 	_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
 }
 
+// migrateSummaryStructuredColumns adds goal, next_steps, and critical_context
+// columns to the summaries table for the structured compression template.
+// Idempotent — SQLite returns "duplicate column name" for existing columns.
+func migrateSummaryStructuredColumns(db *sql.DB) {
+	db.Exec(`ALTER TABLE summaries ADD COLUMN goal TEXT`)
+	db.Exec(`ALTER TABLE summaries ADD COLUMN next_steps TEXT`)
+	db.Exec(`ALTER TABLE summaries ADD COLUMN critical_context TEXT`)
+}
+
 func (s *Store) repairMemoryIndex() error {
 	tx, err := s.db.Begin()
 	if err != nil {
