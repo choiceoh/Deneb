@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -52,10 +51,9 @@ func ToolCron(d *toolctx.ChronoDeps) ToolFunc {
 		}
 
 		svc := d.Service
-		cronSched := d.Scheduler
 
-		if svc == nil && cronSched == nil {
-			return "Cron scheduler not available.", nil
+		if svc == nil {
+			return "Cron service not available.", nil
 		}
 
 		opts := cronToolOpts{
@@ -69,10 +67,10 @@ func ToolCron(d *toolctx.ChronoDeps) ToolFunc {
 
 		switch p.Action {
 		case "status":
-			return cronStatus(svc, cronSched)
+			return cronStatus(svc)
 
 		case "list":
-			return cronList(svc, cronSched)
+			return cronList(svc)
 
 		case "add":
 			return cronAdd(ctx, d, p.Name, p.Schedule, p.Command, p.Enabled, p.Job, opts)
@@ -114,110 +112,90 @@ type cronToolOpts struct {
 	DeliveryMode string
 }
 
-func cronStatus(svc *cron.Service, cronSched *cron.Scheduler) (string, error) {
-	if svc != nil {
-		st := svc.Status()
-		var sb strings.Builder
-		sb.WriteString("**Cron 서비스 상태**\n")
+func cronStatus(svc *cron.Service) (string, error) {
+	st := svc.Status()
+	var sb strings.Builder
+	sb.WriteString("**Cron 서비스 상태**\n")
 
-		// Count enabled/disabled.
-		jobs, _ := svc.List(&cron.ListOptions{IncludeDisabled: true})
-		enabled := 0
+	// Count enabled/disabled.
+	jobs, _ := svc.List(&cron.ListOptions{IncludeDisabled: true})
+	enabled := 0
+	for _, j := range jobs {
+		if j.Enabled {
+			enabled++
+		}
+	}
+	disabled := len(jobs) - enabled
+	fmt.Fprintf(&sb, "- 작업: %d개 (활성 %d, 비활성 %d)\n", len(jobs), enabled, disabled)
+
+	if st.Running {
+		sb.WriteString("- 상태: 실행 중\n")
+	} else {
+		sb.WriteString("- 상태: 정지\n")
+	}
+
+	// Show next due job.
+	if st.NextRunAtMs > 0 {
+		nextTime := time.UnixMilli(st.NextRunAtMs).Format("2006-01-02 15:04")
+		rel := cron.FormatRelativeTime(st.NextRunAtMs)
+		// Find which job is next.
+		nextJobName := ""
 		for _, j := range jobs {
-			if j.Enabled {
-				enabled++
+			if j.Enabled && j.State.NextRunAtMs == st.NextRunAtMs {
+				nextJobName = j.Name
+				break
 			}
 		}
-		disabled := len(jobs) - enabled
-		fmt.Fprintf(&sb, "- 작업: %d개 (활성 %d, 비활성 %d)\n", len(jobs), enabled, disabled)
-
-		if st.Running {
-			sb.WriteString("- 상태: 실행 중\n")
+		if nextJobName != "" {
+			fmt.Fprintf(&sb, "- 다음 실행: %s — %s (%s)", nextJobName, nextTime, rel)
 		} else {
-			sb.WriteString("- 상태: 정지\n")
+			fmt.Fprintf(&sb, "- 다음 실행: %s (%s)", nextTime, rel)
 		}
-
-		// Show next due job.
-		if st.NextRunAtMs > 0 {
-			nextTime := time.UnixMilli(st.NextRunAtMs).Format("2006-01-02 15:04")
-			rel := cron.FormatRelativeTime(st.NextRunAtMs)
-			// Find which job is next.
-			nextJobName := ""
-			for _, j := range jobs {
-				if j.Enabled && j.State.NextRunAtMs == st.NextRunAtMs {
-					nextJobName = j.Name
-					break
-				}
-			}
-			if nextJobName != "" {
-				fmt.Fprintf(&sb, "- 다음 실행: %s — %s (%s)", nextJobName, nextTime, rel)
-			} else {
-				fmt.Fprintf(&sb, "- 다음 실행: %s (%s)", nextTime, rel)
-			}
-		}
-		return sb.String(), nil
 	}
-
-	// Fallback: basic scheduler.
-	running := cronSched.Running()
-	taskCount := len(cronSched.List())
-	status := "정지"
-	if running {
-		status = "실행 중"
-	}
-	return fmt.Sprintf("**Cron 상태**: %d개 작업, %s", taskCount, status), nil
+	return sb.String(), nil
 }
 
-func cronList(svc *cron.Service, cronSched *cron.Scheduler) (string, error) {
-	if svc != nil {
-		jobs, err := svc.List(&cron.ListOptions{IncludeDisabled: true})
-		if err != nil {
-			return "", fmt.Errorf("작업 목록 조회 실패: %w", err)
-		}
-		if len(jobs) == 0 {
-			return "등록된 크론 작업이 없습니다.", nil
-		}
-		var sb strings.Builder
-		fmt.Fprintf(&sb, "**크론 작업 %d개:**\n", len(jobs))
-		for _, j := range jobs {
-			status := "✅"
-			if !j.Enabled {
-				status = "⏸️"
-			}
-			schedDesc := cron.FormatHumanSchedule(j.Schedule)
-			nextRun := ""
-			if j.Enabled && j.State.NextRunAtMs > 0 {
-				rel := cron.FormatRelativeTime(j.State.NextRunAtMs)
-				nextRun = fmt.Sprintf(" → %s (%s)",
-					time.UnixMilli(j.State.NextRunAtMs).Format("01-02 15:04"), rel)
-			}
-			fmt.Fprintf(&sb, "\n%s **%s** `%s`\n", status, j.Name, schedDesc)
-			if nextRun != "" {
-				fmt.Fprintf(&sb, "  다음 실행%s\n", nextRun)
-			}
-			cmd := j.Payload.Message
-			if cmd == "" {
-				cmd = j.Payload.Text
-			}
-			if cmd != "" {
-				if len(cmd) > 80 {
-					cmd = cmd[:77] + "..."
-				}
-				fmt.Fprintf(&sb, "  명령: %s\n", cmd)
-			}
-			if j.State.ConsecutiveErrors > 0 {
-				fmt.Fprintf(&sb, "  ⚠️ 연속 오류: %d회\n", j.State.ConsecutiveErrors)
-			}
-		}
-		return sb.String(), nil
+func cronList(svc *cron.Service) (string, error) {
+	jobs, err := svc.List(&cron.ListOptions{IncludeDisabled: true})
+	if err != nil {
+		return "", fmt.Errorf("작업 목록 조회 실패: %w", err)
 	}
-	// Fallback: basic scheduler.
-	jobs := cronSched.List()
 	if len(jobs) == 0 {
 		return "등록된 크론 작업이 없습니다.", nil
 	}
-	data, _ := json.MarshalIndent(jobs, "", "  ")
-	return string(data), nil
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "**크론 작업 %d개:**\n", len(jobs))
+	for _, j := range jobs {
+		status := "✅"
+		if !j.Enabled {
+			status = "⏸️"
+		}
+		schedDesc := cron.FormatHumanSchedule(j.Schedule)
+		nextRun := ""
+		if j.Enabled && j.State.NextRunAtMs > 0 {
+			rel := cron.FormatRelativeTime(j.State.NextRunAtMs)
+			nextRun = fmt.Sprintf(" → %s (%s)",
+				time.UnixMilli(j.State.NextRunAtMs).Format("01-02 15:04"), rel)
+		}
+		fmt.Fprintf(&sb, "\n%s **%s** `%s`\n", status, j.Name, schedDesc)
+		if nextRun != "" {
+			fmt.Fprintf(&sb, "  다음 실행%s\n", nextRun)
+		}
+		cmd := j.Payload.Message
+		if cmd == "" {
+			cmd = j.Payload.Text
+		}
+		if cmd != "" {
+			if len(cmd) > 80 {
+				cmd = cmd[:77] + "..."
+			}
+			fmt.Fprintf(&sb, "  명령: %s\n", cmd)
+		}
+		if j.State.ConsecutiveErrors > 0 {
+			fmt.Fprintf(&sb, "  ⚠️ 연속 오류: %d회\n", j.State.ConsecutiveErrors)
+		}
+	}
+	return sb.String(), nil
 }
 
 func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command string, enabled *bool, jobObj map[string]any, opts cronToolOpts) (string, error) {
@@ -306,29 +284,7 @@ func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command
 		return sb.String(), nil
 	}
 
-	// Fallback: basic scheduler (interval only).
-	sched, err := cron.ParseSchedule(schedule)
-	if err != nil {
-		return "", fmt.Errorf("잘못된 스케줄: %w", err)
-	}
-	sched.Label = name
-	cronCommand := command
-	cronName := name
-	cronCallback := func(runCtx context.Context) error {
-		if d != nil && d.SendFn != nil {
-			return d.SendFn("cron:"+cronName, cronCommand)
-		}
-		cmd := exec.CommandContext(runCtx, "bash", "-c", cronCommand)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("cron exec failed: %w\n%s", err, string(out))
-		}
-		return nil
-	}
-	if regErr := d.Scheduler.Register(ctx, name, sched, cronCallback); regErr != nil {
-		return "", fmt.Errorf("크론 작업 등록 실패: %w", regErr)
-	}
-	return fmt.Sprintf("✅ 크론 작업 **%s** 추가 완료 (스케줄: %s)", name, schedule), nil
+	return "", fmt.Errorf("크론 서비스를 사용할 수 없습니다")
 }
 
 func cronUpdate(ctx context.Context, d *toolctx.ChronoDeps, jobID, name, schedule, command string, enabled *bool, opts cronToolOpts) (string, error) {
@@ -398,15 +354,8 @@ func cronRemove(d *toolctx.ChronoDeps, jobID string) (string, error) {
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
-	if d.Service != nil {
-		if err := d.Service.Remove(jobID); err != nil {
-			return "", fmt.Errorf("삭제 실패: %w", err)
-		}
-		return fmt.Sprintf("✅ 크론 작업 **%s** 삭제 완료.", jobID), nil
-	}
-	removed := d.Scheduler.Unregister(jobID)
-	if !removed {
-		return fmt.Sprintf("크론 작업 %q을(를) 찾을 수 없습니다.", jobID), nil
+	if err := d.Service.Remove(jobID); err != nil {
+		return "", fmt.Errorf("삭제 실패: %w", err)
 	}
 	return fmt.Sprintf("✅ 크론 작업 **%s** 삭제 완료.", jobID), nil
 }
@@ -415,41 +364,31 @@ func cronRun(ctx context.Context, d *toolctx.ChronoDeps, jobID string) (string, 
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
-	if d.Service != nil {
-		outcome, err := d.Service.Run(ctx, jobID, "force")
-		if err != nil {
-			return "", fmt.Errorf("실행 실패: %w", err)
-		}
-		dur := cron.FormatDurationKorean(outcome.DurationMs)
-		if outcome.Error != "" {
-			return fmt.Sprintf("❌ **%s** 실행 실패 (%s): %s", jobID, dur, outcome.Error), nil
-		}
-		var sb strings.Builder
-		fmt.Fprintf(&sb, "✅ **%s** 실행 완료 (%s)", jobID, dur)
-		if outcome.Retries > 0 {
-			fmt.Fprintf(&sb, " [재시도 %d회]", outcome.Retries)
-		}
-		return sb.String(), nil
-	}
-	result, err := d.Scheduler.RunNow(ctx, jobID)
+	outcome, err := d.Service.Run(ctx, jobID, "force")
 	if err != nil {
 		return "", fmt.Errorf("실행 실패: %w", err)
 	}
-	if result.Error != "" {
-		return fmt.Sprintf("❌ **%s** 실행 실패: %s", jobID, result.Error), nil
+	dur := cron.FormatDurationKorean(outcome.DurationMs)
+	if outcome.Error != "" {
+		return fmt.Sprintf("❌ **%s** 실행 실패 (%s): %s", jobID, dur, outcome.Error), nil
 	}
-	return fmt.Sprintf("✅ **%s** 실행 완료 (%dms)", jobID, result.RuntimeMs), nil
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "✅ **%s** 실행 완료 (%s)", jobID, dur)
+	if outcome.Retries > 0 {
+		fmt.Fprintf(&sb, " [재시도 %d회]", outcome.Retries)
+	}
+	return sb.String(), nil
 }
 
 func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
-	if d.Service != nil {
-		job := d.Service.GetJob(jobID)
-		if job == nil {
-			return fmt.Sprintf("크론 작업 %q을(를) 찾을 수 없습니다.", jobID), nil
-		}
+	job := d.Service.GetJob(jobID)
+	if job == nil {
+		return fmt.Sprintf("크론 작업 %q을(를) 찾을 수 없습니다.", jobID), nil
+	}
+	{
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "**크론 작업: %s** (id=%s)\n", job.Name, job.ID)
 
@@ -516,12 +455,6 @@ func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
 		}
 		return sb.String(), nil
 	}
-	st := d.Scheduler.Get(jobID)
-	if st == nil {
-		return fmt.Sprintf("크론 작업 %q을(를) 찾을 수 없습니다.", jobID), nil
-	}
-	data, _ := json.MarshalIndent(st, "", "  ")
-	return string(data), nil
 }
 
 func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
@@ -604,15 +537,6 @@ func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
 				icon, ts, e.JobID, e.Status, dur, deliveryStr, retryStr, errStr, summary)
 		}
 		return sb.String(), nil
-	}
-	// Fallback: in-memory run log.
-	if d.Scheduler != nil {
-		logs := d.Scheduler.Runs(jobID, limit, 0)
-		if len(logs) == 0 {
-			return "크론 실행 이력이 없습니다.", nil
-		}
-		data, _ := json.MarshalIndent(logs, "", "  ")
-		return string(data), nil
 	}
 	return "실행 이력을 사용할 수 없습니다.", nil
 }

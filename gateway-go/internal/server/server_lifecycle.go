@@ -233,12 +233,9 @@ func (s *Server) doShutdown() error {
 	// 5. Stop dedupe background GC.
 	s.dedupe.Close()
 
-	// 6. Stop cron scheduler and service.
+	// 6. Stop cron service.
 	if s.cronService != nil {
 		s.cronService.Stop()
-	}
-	if s.cron != nil {
-		s.cron.Close()
 	}
 
 	// 6b. Stop autonomous service (dreaming).

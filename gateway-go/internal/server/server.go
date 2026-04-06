@@ -171,7 +171,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotAdapter{sessions: s.sessions}, s.logger)
 	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
-	s.cron = cron.NewScheduler(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)

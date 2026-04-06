@@ -111,17 +111,18 @@ func fullDispatcher() *Dispatcher {
 
 	deps := testDeps()
 	RegisterBuiltinMethods(d, deps)
+	testCronService := cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-ext"}, nil, testLogger())
 	RegisterExtendedMethods(d, ExtendedDeps{
 		Sessions:    deps.Sessions,
 		GatewaySubs: deps.GatewaySubs,
 		Processes:   process.NewManager(testLogger()),
-		Cron:        cron.NewScheduler(testLogger()),
+		CronService: testCronService,
 	})
 
 	// Phase 3: Native workflow methods.
 	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
 	RegisterApprovalMethods(d, ApprovalDeps{Store: approval.NewStore(), Broadcaster: broadcastFn})
-	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Cron: cron.NewScheduler(testLogger()), Broadcaster: broadcastFn})
+	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-adv"}, nil, testLogger()), Broadcaster: broadcastFn})
 	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
 	RegisterAgentsMethods(d, AgentsDeps{Agents: agent.NewStore(), Broadcaster: broadcastFn})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})

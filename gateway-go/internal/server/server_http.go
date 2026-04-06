@@ -52,8 +52,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 	// Count cron tasks.
 	cronTasks := 0
-	if s.cron != nil {
-		cronTasks = len(s.cron.List())
+	if s.cronService != nil {
+		cronTasks = s.cronService.Status().TaskCount
 	}
 
 	hooksCount := 0

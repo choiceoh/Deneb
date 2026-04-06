@@ -26,7 +26,7 @@ type ExtendedDeps struct {
 	TelegramPlugin *telegram.Plugin
 	GatewaySubs    *events.GatewayEventSubscriptions
 	Processes      *process.Manager
-	Cron           *cron.Scheduler
+	CronService    *cron.Service
 	InternalHooks  *hooks.InternalRegistry
 	Broadcaster    rpcutil.BroadcastFunc
 }
@@ -49,8 +49,8 @@ func ExtendedMethods(deps ExtendedDeps) map[string]rpcutil.HandlerFunc {
 		m["process.list"] = processList(deps)
 	}
 
-	// Cron scheduling.
-	if deps.Cron != nil {
+	// Cron scheduling (routed through cron.Service).
+	if deps.CronService != nil {
 		m["cron.list"] = cronList(deps)
 		m["cron.get"] = cronGet(deps)
 		m["cron.unregister"] = cronUnregister(deps)
@@ -151,11 +151,15 @@ func processList(deps ExtendedDeps) rpcutil.HandlerFunc {
 	}
 }
 
-// --- Cron methods ---
+// --- Cron methods (routed through cron.Service) ---
 
 func cronList(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.RespondOK(req.ID, deps.Cron.List())
+		jobs, err := deps.CronService.List(&cron.ListOptions{IncludeDisabled: true})
+		if err != nil {
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, jobs)
 	}
 }
 
@@ -170,11 +174,11 @@ func cronGet(deps ExtendedDeps) rpcutil.HandlerFunc {
 		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		status := deps.Cron.Get(p.ID)
-		if status == nil {
-			return rpcerr.NotFound("cron task").Response(req.ID)
+		job := deps.CronService.GetJob(p.ID)
+		if job == nil {
+			return rpcerr.NotFound("cron job").Response(req.ID)
 		}
-		return rpcutil.RespondOK(req.ID, status)
+		return rpcutil.RespondOK(req.ID, job)
 	}
 }
 
@@ -189,8 +193,8 @@ func cronUnregister(deps ExtendedDeps) rpcutil.HandlerFunc {
 		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		found := deps.Cron.Unregister(p.ID)
-		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": found})
+		err := deps.CronService.Remove(p.ID)
+		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": err == nil})
 	}
 }
 
@@ -226,8 +230,8 @@ func agentStatus(deps ExtendedDeps) rpcutil.HandlerFunc {
 			result["activeProcesses"] = running
 		}
 
-		if deps.Cron != nil {
-			result["cronTasks"] = len(deps.Cron.List())
+		if deps.CronService != nil {
+			result["cronTasks"] = deps.CronService.Status().TaskCount
 		}
 
 		return rpcutil.RespondOK(req.ID, result)

@@ -59,7 +59,6 @@ type HubConfig struct {
 	JobTracker *agent.JobTracker
 
 	// Scheduling.
-	Cron           *cron.Scheduler
 	CronService    *cron.Service
 	CronPersistLog *cron.PersistentRunLog // optional
 
@@ -99,7 +98,6 @@ type GatewayHub struct {
 	localAIHub *localai.Hub
 
 	// Scheduling.
-	cronScheduler  *cron.Scheduler
 	cronService    *cron.Service
 	cronPersistLog *cron.PersistentRunLog
 
@@ -132,7 +130,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		internalHooks:  cfg.InternalHooks,
 		agents:         cfg.Agents,
 		jobTracker:     cfg.JobTracker,
-		cronScheduler:  cfg.Cron,
 		cronService:    cfg.CronService,
 		cronPersistLog: cfg.CronPersistLog,
 		tasks:          cfg.Tasks,
@@ -157,7 +154,6 @@ func (h *GatewayHub) InternalHooks() *hooks.InternalRegistry         { return h.
 func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
 func (h *GatewayHub) Agents() *agent.Store                           { return h.agents }
 func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
-func (h *GatewayHub) Cron() *cron.Scheduler                          { return h.cronScheduler }
 func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
 func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }
 func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
@@ -235,9 +231,6 @@ func (h *GatewayHub) Validate() error {
 	}
 	if h.jobTracker == nil {
 		missing = append(missing, "JobTracker")
-	}
-	if h.cronScheduler == nil {
-		missing = append(missing, "Cron")
 	}
 	if h.cronService == nil {
 		missing = append(missing, "CronService")
