@@ -50,6 +50,21 @@ DEV_PID_FILE="/tmp/deneb-gateway-live.pid"
 DEV_LOG="/tmp/deneb-gateway-live.log"
 DEV_HOST="127.0.0.1"
 
+# Source .env for status messages (config gen does its own loading).
+_dotenv="${HOME}/.deneb/.env"
+if [[ -f "$_dotenv" ]]; then
+  while IFS='=' read -r key val; do
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    key="${key## }"; key="${key%% }"
+    val="${val## }"; val="${val%% }"
+    val="${val#\"}"; val="${val%\"}"
+    val="${val#\'}"; val="${val%\'}"
+    if [[ -z "${!key:-}" ]]; then
+      export "$key=$val"
+    fi
+  done < "$_dotenv"
+fi
+
 # Version from git tags.
 DENEB_VERSION=$(git -C "$REPO_DIR" tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
 
