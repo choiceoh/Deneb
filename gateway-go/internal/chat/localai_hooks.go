@@ -164,6 +164,43 @@ func deferredProactiveHint(ch <-chan string, start time.Time, logger *slog.Logge
 	}
 }
 
+// composeDeferredSources combines a proactive hint function with a subagent
+// notification channel into a single DeferredSystemText function. On each turn,
+// it drains all available notifications and returns them joined with the
+// proactive hint (if any). Returns nil if both sources are nil/empty.
+func composeDeferredSources(proactiveFn func() string, subagentCh <-chan string) func() string {
+	if proactiveFn == nil && subagentCh == nil {
+		return nil
+	}
+	return func() string {
+		var parts []string
+
+		// Check proactive hint (single-shot).
+		if proactiveFn != nil {
+			if hint := proactiveFn(); hint != "" {
+				parts = append(parts, hint)
+			}
+		}
+
+		// Drain all available subagent notifications (multi-shot).
+		if subagentCh != nil {
+			for {
+				select {
+				case notif := <-subagentCh:
+					if notif != "" {
+						parts = append(parts, notif)
+					}
+				default:
+					goto done
+				}
+			}
+		done:
+		}
+
+		return strings.Join(parts, "\n\n")
+	}
+}
+
 // --- 2. Tool Output Compression ---
 // Called in the agent loop after tool execution, before feeding results back to LLM.
 
