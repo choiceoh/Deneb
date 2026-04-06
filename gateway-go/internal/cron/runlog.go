@@ -22,6 +22,7 @@ type RunLogEntry struct {
 	Delivered      bool   `json:"delivered,omitempty"`
 	DeliveryStatus string `json:"deliveryStatus,omitempty"`
 	DeliveryError  string `json:"deliveryError,omitempty"`
+	Retries        int    `json:"retries,omitempty"`
 	SessionID      string `json:"sessionId,omitempty"`
 	SessionKey     string `json:"sessionKey,omitempty"`
 	RunAtMs        int64  `json:"runAtMs,omitempty"`

@@ -61,6 +61,8 @@ type StorePayload struct {
 	Thinking       string `json:"thinking,omitempty"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
 	LightContext   bool   `json:"lightContext,omitempty"`
+	RetryCount     int    `json:"retryCount,omitempty"`     // max retries on failure (0=no retry, max 3)
+	RetryBackoffMs int64  `json:"retryBackoffMs,omitempty"` // initial backoff between retries (default 5000ms, doubles each retry)
 }
 
 // JobState tracks runtime state for a cron job.
@@ -74,6 +76,7 @@ type JobState struct {
 	LastDeliveryError    string `json:"lastDeliveryError,omitempty"`
 	LastFailureAlertAtMs int64  `json:"lastFailureAlertAtMs,omitempty"`
 	ScheduleErrorCount   int    `json:"scheduleErrorCount,omitempty"`
+	AutoDisabledAtMs     int64  `json:"autoDisabledAtMs,omitempty"` // timestamp when auto-disabled due to consecutive errors
 }
 
 // Store manages cron job persistence with atomic writes and caching.
@@ -206,6 +209,21 @@ func (s *Store) RemoveJob(id string) error {
 	}
 	store.Jobs = filtered
 	return s.Save(store)
+}
+
+// SetJobEnabled sets the enabled flag for a job by ID and saves.
+func (s *Store) SetJobEnabled(id string, enabled bool) error {
+	store, err := s.Load()
+	if err != nil {
+		return err
+	}
+	for i := range store.Jobs {
+		if store.Jobs[i].ID == id {
+			store.Jobs[i].Enabled = enabled
+			return s.Save(store)
+		}
+	}
+	return fmt.Errorf("job %q not found", id)
 }
 
 // UpdateJobState updates only the state of a job by ID and saves.
