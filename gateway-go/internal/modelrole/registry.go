@@ -76,9 +76,9 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 		logger = slog.Default()
 	}
 
-	// Fall back to default Z.AI model when no model is configured.
+	// Fall back to local vLLM model when no model is configured.
 	if mainModel == "" {
-		mainModel = "zai/" + DefaultZaiModel
+		mainModel = "vllm/" + DefaultVllmModel
 	}
 
 	// Parse main model provider/name.
