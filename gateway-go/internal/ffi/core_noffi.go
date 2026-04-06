@@ -4,45 +4,17 @@ package ffi
 
 import (
 	"encoding/json"
-	"errors"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/coreprotocol"
 	"github.com/choiceoh/deneb/gateway-go/internal/coresecurity"
 )
 
 // Available reports whether the Rust FFI library is linked.
 const Available = false
 
-// ValidateFrame is a pure-Go fallback for basic frame validation.
+// ValidateFrame delegates to the pure-Go coreprotocol implementation.
 func ValidateFrame(jsonStr string) error {
-	if len(jsonStr) == 0 {
-		return errors.New("ffi: empty JSON input")
-	}
-	var raw struct {
-		Type   string `json:"type"`
-		ID     string `json:"id"`
-		Method string `json:"method"`
-		Event  string `json:"event"`
-	}
-	if err := json.Unmarshal([]byte(jsonStr), &raw); err != nil {
-		return errors.New("ffi: invalid JSON")
-	}
-	switch raw.Type {
-	case "req":
-		if raw.ID == "" || raw.Method == "" {
-			return errors.New("ffi: request frame missing id or method")
-		}
-	case "res":
-		if raw.ID == "" {
-			return errors.New("ffi: response frame missing id")
-		}
-	case "event":
-		if raw.Event == "" {
-			return errors.New("ffi: event frame missing event name")
-		}
-	default:
-		return errors.New("ffi: unknown frame type")
-	}
-	return nil
+	return coreprotocol.ValidateFrame(jsonStr)
 }
 
 // ConstantTimeEq delegates to coresecurity.ConstantTimeEq.
@@ -107,12 +79,21 @@ var knownErrorCodes = map[string]bool{
 	"DEPENDENCY_FAILED": true, "FEATURE_DISABLED": true,
 }
 
-// ValidateParams is a pure-Go fallback that always returns an error.
-// Schema validation requires the Rust FFI library (jsonschema crate).
-// In no_ffi builds, callers should treat all params as unvalidated and
-// rely on application-level validation instead.
+// ValidateParams delegates to the pure-Go coreprotocol implementation.
 func ValidateParams(method, jsonStr string) (valid bool, errorsJSON []byte, err error) {
-	return false, nil, errors.New("ffi: schema validation requires Rust FFI (not available in no_ffi build)")
+	result, err := coreprotocol.ValidateParams(method, jsonStr)
+	if err != nil {
+		return false, nil, err
+	}
+	if result.Valid {
+		return true, nil, nil
+	}
+	// Serialize validation errors as JSON array for wire compatibility.
+	data, jsonErr := json.Marshal(result.Errors)
+	if jsonErr != nil {
+		return false, nil, jsonErr
+	}
+	return false, data, nil
 }
 
 // ValidateErrorCode is a pure-Go fallback for error code validation.
