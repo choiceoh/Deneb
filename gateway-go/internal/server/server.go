@@ -83,6 +83,7 @@ type Server struct {
 	*MemorySubsystem
 	*AutonomousSubsystem
 	*InfraSubsystem
+	*GenesisSubsystem
 
 	dedupe      *dedupe.Tracker
 	broadcaster *events.Broadcaster
@@ -141,6 +142,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		ServerRuntime:       &ServerRuntime{},
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
+		GenesisSubsystem:    &GenesisSubsystem{},
 		rustFFI:             ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,

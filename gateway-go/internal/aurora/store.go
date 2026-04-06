@@ -378,6 +378,53 @@ func (s *Store) FetchSummaries(summaryIDs []string) (map[string]SummaryRecord, e
 	return result, rows.Err()
 }
 
+// FetchRecentSummaries returns the N most recent condensed summaries
+// (depth >= 1) ordered by created_at descending.
+func (s *Store) FetchRecentSummaries(limit int) ([]SummaryRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 10
+	}
+
+	rows, err := s.db.Query(
+		`SELECT summary_id, conversation_id, kind, depth, content, token_count,
+		        file_ids, earliest_at, latest_at, descendant_count,
+		        descendant_token_count, source_message_token_count, created_at
+		 FROM summaries WHERE depth >= 1
+		 ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []SummaryRecord
+	for rows.Next() {
+		var sr SummaryRecord
+		var fileIDsJSON string
+		var earliestAt, latestAt sql.NullInt64
+		if err := rows.Scan(&sr.SummaryID, &sr.ConversationID, &sr.Kind, &sr.Depth,
+			&sr.Content, &sr.TokenCount, &fileIDsJSON, &earliestAt, &latestAt,
+			&sr.DescendantCount, &sr.DescendantTokenCount, &sr.SourceMessageTokenCount,
+			&sr.CreatedAt); err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(fileIDsJSON), &sr.FileIDs)
+		if sr.FileIDs == nil {
+			sr.FileIDs = []string{}
+		}
+		if earliestAt.Valid {
+			sr.EarliestAt = &earliestAt.Int64
+		}
+		if latestAt.Valid {
+			sr.LatestAt = &latestAt.Int64
+		}
+		result = append(result, sr)
+	}
+	return result, rows.Err()
+}
+
 // FetchDistinctDepths returns distinct summary depths for context items
 // with ordinal <= maxOrdinal.
 func (s *Store) FetchDistinctDepths(conversationID uint64, maxOrdinal uint64) ([]uint32, error) {

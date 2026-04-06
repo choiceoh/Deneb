@@ -350,6 +350,9 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		}
 	}
 
+	// Skill Genesis: auto-create skills from session experience and dreams.
+	s.initGenesisSubsystem(hub)
+
 	// Gmail polling service: periodic new-email analysis via LLM.
 	s.initGmailPoll()
 
