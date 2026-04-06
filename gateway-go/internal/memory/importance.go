@@ -158,14 +158,19 @@ What can be INFERRED about the user as a person?
 ### Step 4: Output
 Return a JSON object with a "facts" key containing an array of fact objects.
 Each fact object has:
-- "content": Korean, 2-4 sentences. MUST include:
-    1. WHAT was observed or decided
-    2. WHY — the reasoning, motivation, or situation that led to it
-    3. CONTEXT — what was being discussed, what alternatives were considered
-    4. CONNECTION — how this relates to past observations if applicable (e.g., "동일 패턴", "이전과 반대")
+- "content": Korean. MUST include:
+    1. WHEN — approximate time (e.g., "04-06 14:30경", "04-06 오후"). ALWAYS include a time reference so the fact is self-contained when recalled later.
+    2. WHAT was observed or decided
+    3. WHY — the reasoning, motivation, or situation that led to it
+    4. CONTEXT — what was being discussed, what alternatives were considered
+    5. CONNECTION — how this relates to past observations if applicable (e.g., "동일 패턴", "이전과 반대")
 
-    ❌ "선택님은 SQLite를 선호한다" (결론만, 맥락 없음)
-    ✅ "SGLang 설정 논의 중 PostgreSQL 도입을 검토했으나, 선택님이 조직화 복잡성 부담을 이유로 SQLite 유지를 명확히 선호. 이전 memory migration 논의에서도 동일한 패턴으로 단순 구조를 선택했음."
+    **Length guideline**:
+    - importance < 0.8: 2-4 sentences (concise)
+    - importance >= 0.8: up to ~300 chars. Major events, architectural decisions, and multi-step incidents deserve richer context in a single fact rather than fragmented across multiple small facts.
+
+    ❌ "선택님은 SQLite를 선호한다" (결론만, 맥락/시점 없음)
+    ✅ "04-06 14:30경 SGLang 설정 논의 중 PostgreSQL 도입을 검토했으나, 선택님이 조직화 복잡성 부담을 이유로 SQLite 유지를 명확히 선호. 이전 memory migration 논의에서도 동일한 패턴으로 단순 구조를 선택했음."
 - "category": one of:
   - "decision": architectural/design choices, technology selections, trade-offs with reasoning. USE THIS for events where a choice was made.
   - "context": project state, implementation status, environment changes, milestones. USE THIS for recording what happened and current state.
@@ -189,7 +194,7 @@ Each fact object has:
     - "causes": this observation caused another outcome
     Omit if no clear relation to past observations exists.
 
-Example: {"facts": [{"content": "SGLang 설정 논의 중 PostgreSQL 도입을 검토했으나, 선택님이 조직화 복잡성 부담을 이유로 SQLite 유지를 명확히 선호. 이전 memory migration 논의에서도 동일한 패턴.", "category": "preference", "importance": 0.8, "expiry_hint": null, "entities": ["SGLang", "PostgreSQL", "SQLite"], "relation_type": "supports"}]}
+Example: {"facts": [{"content": "04-06 14:30경 SGLang 설정 논의 중 PostgreSQL 도입을 검토했으나, 선택님이 조직화 복잡성 부담을 이유로 SQLite 유지를 명확히 선호. 이전 memory migration 논의에서도 동일한 패턴.", "category": "preference", "importance": 0.8, "expiry_hint": null, "entities": ["SGLang", "PostgreSQL", "SQLite"], "relation_type": "supports"}]}
 
 ## Speaker Attribution (화자 귀속) — CRITICAL
 The input has two clearly labeled speakers by their NICKNAMES:
