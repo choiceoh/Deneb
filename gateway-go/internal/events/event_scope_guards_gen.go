@@ -23,6 +23,5 @@ var eventScopeGuards = map[string][]string{
 	"process.completed":       []string{"write", "admin"},
 	"heartbeat":               []string{"read"},
 	"dreaming.cycle":          []string{"read"},
-	"shadow.event":            []string{"read"},
 	"bridge.message":          []string{"read"},
 }

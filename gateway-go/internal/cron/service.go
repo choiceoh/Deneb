@@ -53,7 +53,7 @@ func (s *Service) SetAgentRunner(agent AgentRunner) {
 	s.agent = agent
 }
 
-// SetTranscriptCloner sets the transcript cloner for shadow session support.
+// SetTranscriptCloner sets the transcript cloner for subagent cron session support.
 // Called after the chat handler's transcript store is available.
 func (s *Service) SetTranscriptCloner(cloner TranscriptCloner, mainSessionKey string) {
 	s.mu.Lock()

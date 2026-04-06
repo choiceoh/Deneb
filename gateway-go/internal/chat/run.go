@@ -109,7 +109,6 @@ type runDeps struct {
 	memoryEmbedder *memory.Embedder          // optional; fact embedding
 	unifiedStore   *unified.Store            // optional; unified memory (search + tier-1)
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
-	shadowPromptFn func() string             // optional; returns shadow context for system prompt
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging
 	registry       *modelrole.Registry       // centralized model role registry
 	// emitAgentFn sends agent lifecycle events (run.start, tool.start, tool.end)

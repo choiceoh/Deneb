@@ -79,7 +79,6 @@ type SystemPromptParams struct {
 	Channel       string
 	DocsPath      string
 	SessionMemory string // pre-formatted session state block (empty = omit)
-	ShadowContext string // pre-formatted shadow monitoring context (empty = omit)
 	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
 }
 
@@ -316,12 +315,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// Session State (structured session memory from previous runs).
 	if params.SessionMemory != "" {
 		d.WriteString(params.SessionMemory)
-		d.WriteString("\n")
-	}
-
-	// Shadow monitoring context (continuity + recurring error patterns).
-	if params.ShadowContext != "" {
-		d.WriteString(params.ShadowContext)
 		d.WriteString("\n")
 	}
 

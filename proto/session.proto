@@ -29,7 +29,6 @@ enum SessionKind {
   SESSION_KIND_UNKNOWN = 4;
   SESSION_KIND_CRON = 5;
   SESSION_KIND_SUBAGENT = 6;
-  SESSION_KIND_SHADOW = 7;
 }
 
 // `GatewaySessionRow` — full session state.

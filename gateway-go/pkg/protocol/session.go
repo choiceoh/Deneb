@@ -27,7 +27,6 @@ const (
 	SessionKindUnknown  SessionKind = "unknown"
 	SessionKindCron     SessionKind = "cron"
 	SessionKindSubagent SessionKind = "subagent"
-	SessionKindShadow   SessionKind = "shadow"
 )
 
 // ParseSessionKind converts a string to SessionKind, defaulting to direct.
@@ -43,8 +42,6 @@ func ParseSessionKind(s string) SessionKind {
 		return SessionKindCron
 	case "subagent":
 		return SessionKindSubagent
-	case "shadow":
-		return SessionKindShadow
 	default:
 		return SessionKindDirect
 	}

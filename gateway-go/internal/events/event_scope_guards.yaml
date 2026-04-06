@@ -31,5 +31,4 @@ eventScopeGuards:
     process.completed: [write, admin]
     heartbeat: [read]
     dreaming.cycle: [read]
-    shadow.event: [read]
     bridge.message: [read]

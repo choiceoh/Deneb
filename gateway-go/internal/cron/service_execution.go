@@ -66,12 +66,10 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 		}
 	} else if s.agent != nil {
 		// Create cron run session in session.Manager if available.
-		// Shadow sessions clone recent transcript from the main session for context.
 		sessionKind := session.KindCron
 		if job.SessionTarget == SessionTargetSubagent && s.cfg.TranscriptCloner != nil && s.cfg.MainSessionKey != "" {
-			sessionKind = session.KindShadow
 			if err := s.cfg.TranscriptCloner.CloneRecent(s.cfg.MainSessionKey, sessionKey, 20); err != nil {
-				s.logger.Warn("shadow session transcript clone failed", "jobId", job.ID, "error", err)
+				s.logger.Warn("cron session transcript clone failed", "jobId", job.ID, "error", err)
 			}
 		}
 		if s.cfg.Sessions != nil {
