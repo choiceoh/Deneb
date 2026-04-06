@@ -84,9 +84,11 @@ go-ffi:
 	cd gateway-go && $(GO_ENV) go build $(GO_LDFLAGS) ./...
 
 # CGo build with CUDA libraries (requires `make rust-dgx` first).
-CUDA_LIBDIR ?= /usr/local/cuda/targets/sbsa-linux/lib
+# The "cuda" build tag pulls in LDFLAGS from core_cgo_cuda.go.
+# Set CUDA_LIBDIR to add a custom library search path for non-standard installs.
+CUDA_LIBDIR ?=
 go-dgx:
-	cd gateway-go && CGO_LDFLAGS="-L$(CUDA_LIBDIR) -lcuda -lcudart -lcublas -lcublasLt" $(GO_ENV) go build $(GO_LDFLAGS) ./...
+	cd gateway-go && $(if $(CUDA_LIBDIR),CGO_LDFLAGS="-L$(CUDA_LIBDIR)",) $(GO_ENV) go build -tags cuda $(GO_LDFLAGS) ./...
 
 # Pure-Go build with fallback implementations (no Rust required).
 go-pure:
