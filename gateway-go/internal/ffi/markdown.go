@@ -1,5 +1,3 @@
-//go:build no_ffi || !cgo
-
 package ffi
 
 import (
@@ -18,9 +16,8 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 		return json.RawMessage(`{"text":"","styles":[],"links":[],"has_code_blocks":false}`), nil
 	}
 
-	// Check cache (shared with cgo path pattern).
-	cacheKey := fnv1a64noffi(markdown + "|" + optionsJSON)
-	if cached, ok := noffiCache.get(cacheKey); ok {
+	cacheKey := mdFnv1a64(markdown + "|" + optionsJSON)
+	if cached, ok := mdCache.get(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -51,7 +48,7 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 	if err != nil {
 		return nil, fmt.Errorf("markdown_to_ir: marshal: %w", err)
 	}
-	noffiCache.put(cacheKey, result)
+	mdCache.put(cacheKey, result)
 	return result, nil
 }
 
@@ -78,23 +75,23 @@ func MarkdownToPlainText(markdown string) (string, error) {
 	return coremarkdown.ToPlainText(markdown), nil
 }
 
-// noffi-only LRU cache (same pattern as cgo cache in markdown_cgo.go).
-var noffiCache = &noffiMarkdownCache{entries: make(map[uint64]*noffiCacheEntry)}
+// LRU cache for MarkdownToIR results (avoids redundant parsing during streaming).
+var mdCache = &markdownCache{entries: make(map[uint64]*mdCacheEntry)}
 
-const noffiCacheMaxEntries = 128
+const mdCacheMaxEntries = 128
 
-type noffiCacheEntry struct {
+type mdCacheEntry struct {
 	value      json.RawMessage
 	lastAccess int64
 }
 
-type noffiMarkdownCache struct {
+type markdownCache struct {
 	mu        sync.Mutex
-	entries   map[uint64]*noffiCacheEntry
+	entries   map[uint64]*mdCacheEntry
 	accessCtr int64
 }
 
-func fnv1a64noffi(s string) uint64 {
+func mdFnv1a64(s string) uint64 {
 	const offset64 = 14695981039346656037
 	const prime64 = 1099511628211
 	h := uint64(offset64)
@@ -105,7 +102,7 @@ func fnv1a64noffi(s string) uint64 {
 	return h
 }
 
-func (c *noffiMarkdownCache) get(key uint64) (json.RawMessage, bool) {
+func (c *markdownCache) get(key uint64) (json.RawMessage, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[key]
@@ -117,11 +114,11 @@ func (c *noffiMarkdownCache) get(key uint64) (json.RawMessage, bool) {
 	return e.value, true
 }
 
-func (c *noffiMarkdownCache) put(key uint64, val json.RawMessage) {
+func (c *markdownCache) put(key uint64, val json.RawMessage) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.accessCtr++
-	if len(c.entries) >= noffiCacheMaxEntries {
+	if len(c.entries) >= mdCacheMaxEntries {
 		var lruKey uint64
 		lruAccess := c.accessCtr + 1
 		for k, e := range c.entries {
@@ -132,5 +129,5 @@ func (c *noffiMarkdownCache) put(key uint64, val json.RawMessage) {
 		}
 		delete(c.entries, lruKey)
 	}
-	c.entries[key] = &noffiCacheEntry{value: val, lastAccess: c.accessCtr}
+	c.entries[key] = &mdCacheEntry{value: val, lastAccess: c.accessCtr}
 }

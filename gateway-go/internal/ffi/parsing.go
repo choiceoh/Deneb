@@ -1,5 +1,3 @@
-//go:build no_ffi || !cgo
-
 package ffi
 
 import (

@@ -5,11 +5,7 @@
 
 pub mod compaction;
 pub mod context_engine;
-pub mod markdown;
-pub mod media;
 pub mod memory_search;
 pub mod ml;
-pub mod parsing;
 pub mod protocol;
-pub mod security;
 pub mod vega;
