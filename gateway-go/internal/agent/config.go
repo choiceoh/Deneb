@@ -124,6 +124,12 @@ type AgentConfig struct {
 	// indefinite hangs when the LLM API stops sending events but keeps the TCP
 	// connection alive. Default: 90s. Zero disables the watchdog.
 	StreamIdleTimeout time.Duration
+
+	// ToolLoopDetector detects stuck tool-call patterns (repeated calls, polling
+	// with no progress, ping-pong oscillation). When set, the executor checks
+	// each tool call against the detector and blocks execution on critical loops.
+	// Nil = disabled (default).
+	ToolLoopDetector *ToolLoopDetector
 }
 
 // NudgeBudgetConfig configures token-budget continuation (Claude Code pattern).

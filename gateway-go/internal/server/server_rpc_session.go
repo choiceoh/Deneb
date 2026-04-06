@@ -175,8 +175,7 @@ func (s *Server) registerSessionRPCMethods() {
 		s.chatHandler.SetAutoresearchWorkdirFn(s.autoresearchRunner.Workdir)
 	}
 
-	// Wire transcript cloner for cron shadow session support.
-	// Shadow sessions clone recent transcript from the main session for context.
+	// Wire transcript cloner for subagent cron session support.
 	// The cached store satisfies cron.TranscriptCloner (CloneRecent), avoiding
 	// a second uncached FileTranscriptStore that would bypass the TTL cache.
 	if s.cronService != nil && transcriptStore != nil {
@@ -355,9 +354,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Gmail polling service: periodic new-email analysis via LLM.
 	s.initGmailPoll()
 
-	// Shadow session monitoring: observes main session conversations in the
-	// background and injects continuity + error insights into system prompt.
-	s.initShadowMonitoring(hub)
 }
 
 // firstEnv returns the first non-empty environment variable value.

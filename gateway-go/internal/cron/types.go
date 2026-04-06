@@ -17,7 +17,7 @@ const (
 	SessionTargetMain     CronSessionTarget = "main"
 	SessionTargetIsolated CronSessionTarget = "isolated"
 	SessionTargetCurrent  CronSessionTarget = "current"
-	SessionTargetSubagent CronSessionTarget = "subagent" // clone main session transcript, run as shadow
+	SessionTargetSubagent CronSessionTarget = "subagent" // clone main session transcript
 )
 
 // CronWakeMode controls post-execution wake behavior.

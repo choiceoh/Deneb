@@ -169,7 +169,7 @@ func RunAgent(
 				streamWg.Add(1)
 				go func() {
 					defer streamWg.Done()
-					ch <- executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog)
+					ch <- executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
 				}()
 			}
 		}
@@ -409,7 +409,7 @@ func RunAgent(
 						if ctx.Err() != nil {
 							break
 						}
-						toolResults[idx] = executeOneTool(ctx, turnRes.toolCalls[idx], tools, hooks, turnReason, turn, logger, runLog)
+						toolResults[idx] = executeOneTool(ctx, turnRes.toolCalls[idx], tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
 					}
 				} else {
 					var batchWg sync.WaitGroup
@@ -430,7 +430,7 @@ func RunAgent(
 								}
 								return
 							}
-							toolResults[i] = executeOneTool(ctx, turnRes.toolCalls[i], tools, hooks, turnReason, turn, logger, runLog)
+							toolResults[i] = executeOneTool(ctx, turnRes.toolCalls[i], tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
 							if toolResults[i].IsError {
 								atomic.StoreInt32(&firstErr, 1)
 							}
@@ -756,6 +756,7 @@ func executeOneTool(
 	turn int,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
+	loopDetector *ToolLoopDetector,
 ) llm.ContentBlock {
 	if hooks.OnToolStart != nil {
 		hooks.OnToolStart(tc.Name, turnReason, tc.Input)
@@ -764,6 +765,30 @@ func executeOneTool(
 		hooks.OnToolEmit(tc.Name, tc.ID)
 	}
 	logger.Info("exec", "name", tc.Name, "turn", turn)
+
+	// Tool loop detection: check for stuck patterns before executing.
+	if loopDetector != nil {
+		loopResult := loopDetector.RecordAndCheck(tc.Name, tc.Input)
+		if loopResult.Stuck {
+			if loopResult.Level == ToolLoopCritical {
+				logger.Warn("tool loop blocked",
+					"name", tc.Name, "detector", loopResult.Detector, "count", loopResult.Count)
+				result := llm.ContentBlock{
+					Type:      "tool_result",
+					ToolUseID: tc.ID,
+					Content:   loopResult.Message,
+					IsError:   true,
+				}
+				if hooks.OnToolResult != nil {
+					hooks.OnToolResult(tc.Name, tc.ID, loopResult.Message, true)
+				}
+				return result
+			}
+			// Warning level: inject the warning as a prefix but allow execution.
+			logger.Warn("tool loop warning",
+				"name", tc.Name, "detector", loopResult.Detector, "count", loopResult.Count)
+		}
+	}
 
 	// Plugin hook: allow blocking tool execution before it starts.
 	if hooks.OnBeforeToolCall != nil {
@@ -809,6 +834,11 @@ func executeOneTool(
 		block.IsError = true
 	} else {
 		block.Content = toolOutput
+	}
+
+	// Record result hash for no-progress detection.
+	if loopDetector != nil {
+		loopDetector.RecordResult(tc.Name, block.Content, block.IsError)
 	}
 
 	// Broadcast tool result to streaming clients.

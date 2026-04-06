@@ -323,7 +323,10 @@ func handleRunSuccess(
 						logger.Debug("structured memory extraction skipped: local AI unhealthy")
 					} else {
 						lwClient := pilot.GetLightweightClient()
-						facts, err := memory.ExtractFacts(memCtx, lwClient, pilot.GetLightweightModel(), params.Message, result.Text, logger)
+						// Strip recalled memory sections from response before extraction
+						// to prevent self-poisoning (recalled facts being re-extracted).
+						cleanResponse := memory.StripRecalledMemoryFromResponse(result.Text)
+						facts, err := memory.ExtractFacts(memCtx, lwClient, pilot.GetLightweightModel(), params.Message, cleanResponse, logger)
 						if err != nil {
 							if shouldLogStructuredMemoryExtractionError(err) {
 								logger.Debug("structured memory extraction failed, falling back", "error", err)

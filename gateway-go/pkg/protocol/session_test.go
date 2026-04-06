@@ -17,7 +17,7 @@ func TestParseSessionKind(t *testing.T) {
 		{"unknown", protocol.SessionKindUnknown},
 		{"cron", protocol.SessionKindCron},
 		{"subagent", protocol.SessionKindSubagent},
-		{"shadow", protocol.SessionKindShadow},
+		{"shadow", protocol.SessionKindDirect}, // shadow removed; falls through to default
 		{"", protocol.SessionKindDirect},
 		{"bogus", protocol.SessionKindDirect},
 	}

@@ -220,6 +220,6 @@ type TranscriptStore interface {
 	ListKeys() ([]string, error)
 	Search(query string, maxResults int) ([]SearchResult, error)
 	// CloneRecent copies the most recent `limit` messages from srcKey to dstKey.
-	// Used for shadow sessions (KindShadow) that inherit conversation context.
+	// Used for subagent cron sessions that inherit conversation context.
 	CloneRecent(srcKey, dstKey string, limit int) error
 }
