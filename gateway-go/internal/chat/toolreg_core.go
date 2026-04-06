@@ -61,12 +61,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 // rlmDataToolNames lists the Phase 1 tool names available to sub-LLMs.
 // llm_spawn/llm_spawn_batch are excluded to prevent recursion.
+// wiki is included so sub-LLMs can search/read the knowledge base.
 var rlmDataToolNames = []string{
 	"projects_list",
 	"projects_get_field",
 	"projects_search",
 	"projects_get_document",
 	"memory_recall_rlm",
+	"wiki",
 }
 
 // rlmSpawnToolNames are tools that must never be given to sub-LLMs

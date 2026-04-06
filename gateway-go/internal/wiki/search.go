@@ -1,207 +1,255 @@
+// search.go — SQLite FTS5-based full-text search for wiki pages.
+// Replaces ripgrep with a Go-native solution using modernc.org/sqlite.
 package wiki
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
+	"database/sql"
 	"fmt"
-	"os/exec"
+	"math"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+
+	_ "modernc.org/sqlite"
 )
 
-// SearchResult is a single search hit from ripgrep.
+// SearchResult is a single search hit.
 type SearchResult struct {
 	Path    string  // relative path within wiki dir
-	Line    int     // 1-based line number
-	Content string  // matching line content
-	Score   float64 // relevance score (0-1, based on match density)
+	Line    int     // always 0 for FTS (line-level matching not available)
+	Content string  // matching snippet
+	Score   float64 // relevance score (0-1)
 }
 
-// Search runs a ripgrep-based full-text search across wiki pages.
-// Returns matching results sorted by relevance.
+// searchDB manages the FTS5 index for wiki pages.
+type searchDB struct {
+	db *sql.DB
+	mu sync.RWMutex
+}
+
+const ftsSchema = `
+CREATE TABLE IF NOT EXISTS wiki_pages (
+	path    TEXT PRIMARY KEY,
+	title   TEXT NOT NULL DEFAULT '',
+	content TEXT NOT NULL DEFAULT ''
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5(
+	path, title, content,
+	content='wiki_pages',
+	content_rowid='rowid',
+	tokenize='unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS wiki_pages_ai AFTER INSERT ON wiki_pages BEGIN
+	INSERT INTO wiki_fts(rowid, path, title, content) VALUES (new.rowid, new.path, new.title, new.content);
+END;
+CREATE TRIGGER IF NOT EXISTS wiki_pages_ad AFTER DELETE ON wiki_pages BEGIN
+	INSERT INTO wiki_fts(wiki_fts, rowid, path, title, content) VALUES('delete', old.rowid, old.path, old.title, old.content);
+END;
+CREATE TRIGGER IF NOT EXISTS wiki_pages_au AFTER UPDATE ON wiki_pages BEGIN
+	INSERT INTO wiki_fts(wiki_fts, rowid, path, title, content) VALUES('delete', old.rowid, old.path, old.title, old.content);
+	INSERT INTO wiki_fts(rowid, path, title, content) VALUES (new.rowid, new.path, new.title, new.content);
+END;
+`
+
+func newSearchDB(dir string) (*searchDB, error) {
+	dbPath := filepath.Join(dir, ".wiki.db")
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, fmt.Errorf("wiki: open search db: %w", err)
+	}
+	if _, err := db.Exec(ftsSchema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("wiki: init fts schema: %w", err)
+	}
+	return &searchDB{db: db}, nil
+}
+
+// indexPage upserts a page into the FTS index.
+func (s *searchDB) indexPage(relPath string, page *Page) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(
+		`INSERT INTO wiki_pages (path, title, content) VALUES (?, ?, ?)
+		 ON CONFLICT(path) DO UPDATE SET title=excluded.title, content=excluded.content`,
+		relPath, page.Meta.Title, page.Body,
+	)
+	return err
+}
+
+// removePage removes a page from the FTS index.
+func (s *searchDB) removePage(relPath string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`DELETE FROM wiki_pages WHERE path = ?`, relPath)
+	return err
+}
+
+// search runs an FTS5 query and returns scored results.
+func (s *searchDB) search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	tokens := splitTokens(query)
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+
+	// Try AND first for precision, fall back to OR for recall.
+	ftsQuery := buildFTSQuery(tokens, "AND")
+	results, err := s.runQuery(ctx, ftsQuery, limit)
+	if err != nil || len(results) == 0 {
+		ftsQuery = buildFTSQuery(tokens, "OR")
+		results, err = s.runQuery(ctx, ftsQuery, limit)
+	}
+	return results, err
+}
+
+func (s *searchDB) runQuery(ctx context.Context, ftsQuery string, limit int) ([]SearchResult, error) {
+	if ftsQuery == "" {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT path, snippet(wiki_fts, 2, '', '', '...', 40), rank
+		 FROM wiki_fts WHERE wiki_fts MATCH ?
+		 ORDER BY rank LIMIT ?`,
+		ftsQuery, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		var rank float64
+		if err := rows.Scan(&r.Path, &r.Content, &rank); err != nil {
+			continue
+		}
+		r.Score = rankToScore(rank)
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+func (s *searchDB) close() error {
+	return s.db.Close()
+}
+
+// rebuildIndex scans all wiki pages and rebuilds the FTS index from scratch.
+func (s *searchDB) rebuildIndex(dir string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Clear existing data.
+	if _, err := s.db.Exec(`DELETE FROM wiki_pages`); err != nil {
+		return err
+	}
+
+	// Walk all .md files.
+	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".md" {
+			return nil
+		}
+		base := filepath.Base(path)
+		if base == "index.md" || base == "_index.md" || base == ".wiki.db" {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		page, err := ParsePageFile(path)
+		if err != nil {
+			return nil // skip unparseable files
+		}
+		_, err = s.db.Exec(
+			`INSERT INTO wiki_pages (path, title, content) VALUES (?, ?, ?)
+			 ON CONFLICT(path) DO UPDATE SET title=excluded.title, content=excluded.content`,
+			rel, page.Meta.Title, page.Body,
+		)
+		return err
+	})
+}
+
+// Search runs a full-text search across wiki pages.
 func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
+	if s.fts == nil {
+		return nil, fmt.Errorf("wiki: search not available")
+	}
 	if query == "" {
 		return nil, nil
 	}
 	if limit <= 0 {
 		limit = 10
 	}
-
-	// Build ripgrep command.
-	args := []string{
-		"--json",
-		"--ignore-case",
-		"--max-count", "3", // max matches per file
-		"--type", "md",
-		"--no-heading",
-		query,
-		s.dir,
-	}
-
-	cmd := exec.CommandContext(ctx, "rg", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if err != nil {
-		// ripgrep returns exit code 1 for no matches.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("wiki: rg: %w: %s", err, stderr.String())
-	}
-
-	results := parseRipgrepJSON(stdout.Bytes(), s.dir)
-
-	// Score by match count per file.
-	results = scoreAndDedup(results)
-
-	if len(results) > limit {
-		results = results[:limit]
-	}
-
-	return results, nil
+	return s.fts.search(ctx, query, limit)
 }
 
-// SearchFiles returns wiki file paths matching a query (fast, no content).
+// SearchFiles returns wiki file paths matching a query.
 func (s *Store) SearchFiles(ctx context.Context, query string, limit int) ([]string, error) {
-	if query == "" {
-		return nil, nil
+	results, err := s.Search(ctx, query, limit)
+	if err != nil {
+		return nil, err
 	}
-	if limit <= 0 {
-		limit = 20
+	paths := make([]string, len(results))
+	for i, r := range results {
+		paths[i] = r.Path
 	}
-
-	args := []string{
-		"--files-with-matches",
-		"--ignore-case",
-		"--type", "md",
-		query,
-		s.dir,
-	}
-
-	cmd := exec.CommandContext(ctx, "rg", args...)
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("wiki: rg files: %w", err)
-	}
-
-	var files []string
-	scanner := bufio.NewScanner(&stdout)
-	for scanner.Scan() {
-		path := scanner.Text()
-		if rel, err := relPath(s.dir, path); err == nil {
-			files = append(files, rel)
-		}
-		if len(files) >= limit {
-			break
-		}
-	}
-
-	return files, nil
+	return paths, nil
 }
 
-// ripgrepMatch is a subset of ripgrep's JSON output.
-type ripgrepMatch struct {
-	Type string          `json:"type"`
-	Data json.RawMessage `json:"data"`
-}
+// FTS5 query building (adapted from memory/search.go).
 
-type ripgrepMatchData struct {
-	Path struct {
-		Text string `json:"text"`
-	} `json:"path"`
-	LineNumber int `json:"line_number"`
-	Lines      struct {
-		Text string `json:"text"`
-	} `json:"lines"`
-}
-
-func parseRipgrepJSON(data []byte, baseDir string) []SearchResult {
-	var results []SearchResult
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	// ripgrep JSON lines can be long.
-	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
-
-	for scanner.Scan() {
-		var msg ripgrepMatch
-		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
+func buildFTSQuery(tokens []string, op string) string {
+	if len(tokens) == 0 {
+		return ""
+	}
+	var escaped []string
+	for _, t := range tokens {
+		t = strings.TrimSpace(t)
+		if t == "" {
 			continue
 		}
-		if msg.Type != "match" {
-			continue
+		if containsHangul(t) {
+			escaped = append(escaped, t+"*")
+		} else {
+			escaped = append(escaped, `"`+t+`"`)
 		}
-
-		var d ripgrepMatchData
-		if err := json.Unmarshal(msg.Data, &d); err != nil {
-			continue
-		}
-
-		rel, err := relPath(baseDir, d.Path.Text)
-		if err != nil {
-			continue
-		}
-
-		results = append(results, SearchResult{
-			Path:    rel,
-			Line:    d.LineNumber,
-			Content: strings.TrimSpace(d.Lines.Text),
-		})
 	}
-
-	return results
+	if len(escaped) == 0 {
+		return ""
+	}
+	return strings.Join(escaped, " "+op+" ")
 }
 
-// scoreAndDedup groups results by file and scores by match density.
-// Returns one result per file (best match), sorted by score descending.
-func scoreAndDedup(results []SearchResult) []SearchResult {
-	type fileGroup struct {
-		best  SearchResult
-		count int
-	}
-	groups := map[string]*fileGroup{}
-	for _, r := range results {
-		g, ok := groups[r.Path]
-		if !ok {
-			groups[r.Path] = &fileGroup{best: r, count: 1}
-			continue
-		}
-		g.count++
-	}
-
-	var deduped []SearchResult
-	for _, g := range groups {
-		g.best.Score = float64(g.count) / 3.0 // normalize to 0-1 (max 3 matches per file)
-		if g.best.Score > 1 {
-			g.best.Score = 1
-		}
-		deduped = append(deduped, g.best)
-	}
-
-	// Sort by score descending.
-	for i := 0; i < len(deduped); i++ {
-		for j := i + 1; j < len(deduped); j++ {
-			if deduped[j].Score > deduped[i].Score {
-				deduped[i], deduped[j] = deduped[j], deduped[i]
-			}
+func splitTokens(s string) []string {
+	fields := strings.Fields(s)
+	var tokens []string
+	for _, f := range fields {
+		f = strings.TrimSpace(f)
+		if f != "" {
+			tokens = append(tokens, f)
 		}
 	}
-
-	return deduped
+	return tokens
 }
 
-func relPath(base, abs string) (string, error) {
-	if !strings.HasPrefix(abs, base) {
-		return abs, nil
+func containsHangul(s string) bool {
+	for _, r := range s {
+		if r >= 0xAC00 && r <= 0xD7A3 {
+			return true
+		}
 	}
-	rel := strings.TrimPrefix(abs, base)
-	rel = strings.TrimPrefix(rel, "/")
-	return rel, nil
+	return false
 }
+
+func rankToScore(rank float64) float64 {
+	if rank >= 0 {
+		return 0
+	}
+	return 1.0 / (1.0 + math.Exp(rank))
+}
+

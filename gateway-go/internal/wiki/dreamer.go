@@ -24,10 +24,6 @@ const (
 	wikiDreamTimeIntervalH = 8
 	wikiDreamTimeout       = 10 * time.Minute
 	wikiDreamMaxTokens     = 4096
-
-	// State tracking keys stored in index.md metadata.
-	stateLastDream  = "last_dream"
-	stateTurnCount  = "turn_count"
 )
 
 // WikiDreamer implements autonomous.Dreamer for wiki-based knowledge consolidation.
@@ -38,6 +34,7 @@ const (
 //  4. Rebuild index
 type WikiDreamer struct {
 	store  *Store
+	config Config
 	client *llm.Client
 	model  string
 	logger *slog.Logger
@@ -47,9 +44,10 @@ type WikiDreamer struct {
 }
 
 // NewWikiDreamer creates a new wiki dreamer.
-func NewWikiDreamer(store *Store, client *llm.Client, model string, logger *slog.Logger) *WikiDreamer {
+func NewWikiDreamer(store *Store, client *llm.Client, model string, cfg Config, logger *slog.Logger) *WikiDreamer {
 	return &WikiDreamer{
 		store:  store,
+		config: cfg,
 		client: client,
 		model:  model,
 		logger: logger,
@@ -113,9 +111,12 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	// Phase 3: Apply page updates.
-	created, updated := wd.applyUpdates(ctx, updates)
-	report.PatternsExtracted = created
-	report.FactsMerged = updated
+	created, updated, oversized := wd.applyUpdates(ctx, updates)
+	report.WikiPagesCreated = created
+	report.WikiPagesUpdated = updated
+	if len(oversized) > 0 {
+		phaseErrors = append(phaseErrors, fmt.Sprintf("oversized pages: %s", strings.Join(oversized, ", ")))
+	}
 
 	// Phase 4: Rebuild index.
 	if err := wd.rebuildIndex(); err != nil {
@@ -270,9 +271,11 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryCo
 }
 
 // applyUpdates creates or updates wiki pages based on LLM instructions.
-// Returns (created, updated) counts.
-func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (int, int) {
+// Returns (created, updated) counts and paths of oversized pages.
+func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (int, int, []string) {
 	var created, updated int
+	var oversized []string
+	maxBytes := wd.config.MaxPageBytes
 
 	for _, u := range updates {
 		if u.Path == "" || u.Title == "" {
@@ -335,9 +338,19 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 			}
 			updated++
 		}
+
+		// Check page size after write.
+		if maxBytes > 0 {
+			abs := filepath.Join(wd.store.Dir(), u.Path)
+			if info, err := os.Stat(abs); err == nil && info.Size() > int64(maxBytes) {
+				wd.logger.Warn("wiki-dream: page exceeds MaxPageBytes",
+					"path", u.Path, "size", info.Size(), "max", maxBytes)
+				oversized = append(oversized, u.Path)
+			}
+		}
 	}
 
-	return created, updated
+	return created, updated, oversized
 }
 
 // rebuildIndex scans all wiki pages and rebuilds the master index.

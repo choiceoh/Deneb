@@ -43,9 +43,12 @@ func TestIndex_RenderAndParse(t *testing.T) {
 		t.Error("missing last processed date")
 	}
 
-	// High-importance marker.
-	if !strings.Contains(rendered, " *") {
-		t.Error("missing importance marker for dgx-spark")
+	// Importance and updated date in new format.
+	if !strings.Contains(rendered, "i:0.90") {
+		t.Error("missing importance value for dgx-spark")
+	}
+	if !strings.Contains(rendered, "u:2026-04-06") {
+		t.Error("missing updated date for dgx-spark")
 	}
 }
 
@@ -93,6 +96,17 @@ func TestIndex_SaveAndReload(t *testing.T) {
 	if goEntry.Category != "기술" {
 		t.Errorf("go category = %q", goEntry.Category)
 	}
+	if goEntry.Importance != 0.7 {
+		t.Errorf("go importance = %f, want 0.7", goEntry.Importance)
+	}
+
+	wikiEntry, ok := reloaded.Entries["결정/wiki.md"]
+	if !ok {
+		t.Fatal("missing wiki.md entry")
+	}
+	if wikiEntry.Importance != 0.9 {
+		t.Errorf("wiki importance = %f, want 0.9", wikiEntry.Importance)
+	}
 }
 
 func TestIndex_RemoveEntry(t *testing.T) {
@@ -112,11 +126,28 @@ func TestIndex_RemoveEntry(t *testing.T) {
 
 func TestParseIndexLine(t *testing.T) {
 	tests := []struct {
+		name string
 		line string
 		cat  string
 		want indexRenderEntry
 	}{
 		{
+			name: "new format with importance and updated",
+			line: "- [[기술/dgx-spark.md]] — DGX Spark [하드웨어, NVIDIA] (i:0.90, u:2026-04-06)",
+			cat:  "기술",
+			want: indexRenderEntry{
+				path: "기술/dgx-spark.md",
+				entry: IndexEntry{
+					Title:      "DGX Spark",
+					Category:   "기술",
+					Tags:       []string{"하드웨어", "NVIDIA"},
+					Importance: 0.9,
+					Updated:    "2026-04-06",
+				},
+			},
+		},
+		{
+			name: "legacy format with star marker",
 			line: "- [[기술/dgx-spark.md]] — DGX Spark [하드웨어, NVIDIA] *",
 			cat:  "기술",
 			want: indexRenderEntry{
@@ -130,6 +161,7 @@ func TestParseIndexLine(t *testing.T) {
 			},
 		},
 		{
+			name: "no importance",
 			line: "- [[사람/alice.md]] — Alice",
 			cat:  "사람",
 			want: indexRenderEntry{
@@ -143,15 +175,20 @@ func TestParseIndexLine(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := parseIndexLine(tc.line, tc.cat)
-		if got.path != tc.want.path {
-			t.Errorf("path = %q, want %q", got.path, tc.want.path)
-		}
-		if got.entry.Title != tc.want.entry.Title {
-			t.Errorf("title = %q, want %q", got.entry.Title, tc.want.entry.Title)
-		}
-		if got.entry.Importance != tc.want.entry.Importance {
-			t.Errorf("importance = %f, want %f", got.entry.Importance, tc.want.entry.Importance)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseIndexLine(tc.line, tc.cat)
+			if got.path != tc.want.path {
+				t.Errorf("path = %q, want %q", got.path, tc.want.path)
+			}
+			if got.entry.Title != tc.want.entry.Title {
+				t.Errorf("title = %q, want %q", got.entry.Title, tc.want.entry.Title)
+			}
+			if got.entry.Importance != tc.want.entry.Importance {
+				t.Errorf("importance = %f, want %f", got.entry.Importance, tc.want.entry.Importance)
+			}
+			if got.entry.Updated != tc.want.entry.Updated {
+				t.Errorf("updated = %q, want %q", got.entry.Updated, tc.want.entry.Updated)
+			}
+		})
 	}
 }

@@ -9,11 +9,12 @@ func DataAccessPrinciples() string {
 
 작업 절차:
 1. 사용자 질문을 분석하여 필요한 데이터가 무엇인지 파악
-2. projects_list로 관련 프로젝트 확인
-3. 필요한 필드만 projects_get_field로 조회하거나, projects_search로 검색
-4. 상세 내용이 필요하면 projects_get_document로 해당 섹션만 조회
-5. 과거 대화나 결정이 필요하면 memory_recall로 검색
-6. 수집한 데이터를 종합하여 답변
+2. 과거 결정/인물/기술 지식 → wiki index로 목차 확인 → wiki read로 페이지 읽기 → wiki search로 키워드 검색
+3. projects_list로 관련 프로젝트 확인
+4. 필요한 필드만 projects_get_field로 조회하거나, projects_search로 검색
+5. 상세 내용이 필요하면 projects_get_document로 해당 섹션만 조회
+6. 과거 대화나 결정이 필요하면 memory_recall로 검색
+7. 수집한 데이터를 종합하여 답변
 
 주의:
 - 단순 인사나 일반 질문에는 도구를 사용하지 말 것

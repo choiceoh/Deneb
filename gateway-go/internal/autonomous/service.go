@@ -280,9 +280,15 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 	} else if report != nil {
 		total := report.FactsVerified + report.FactsMerged + report.FactsExpired +
 			report.FactsPruned + report.PatternsExtracted +
-			report.UserModelUpdated + report.MutualUpdated
+			report.UserModelUpdated + report.MutualUpdated +
+			report.WikiPagesCreated + report.WikiPagesUpdated
 		if total == 0 {
 			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 변경 없음 (%.1fs)", float64(report.DurationMs)/1000)
+		} else if report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0 {
+			// Wiki dreaming report.
+			msg = fmt.Sprintf("📖 Wiki Dream 완료: 생성 %d, 수정 %d (%.1fs)",
+				report.WikiPagesCreated, report.WikiPagesUpdated,
+				float64(report.DurationMs)/1000)
 		} else {
 			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 정리 %d, 패턴 %d, 프로필 %d, 관계 %d (%.1fs)",
 				report.FactsVerified, report.FactsMerged, report.FactsExpired,

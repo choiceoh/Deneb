@@ -24,6 +24,7 @@ type Store struct {
 
 	mu    sync.RWMutex
 	index *Index // cached master index
+	fts   *searchDB
 }
 
 // NewStore creates a wiki store rooted at dir.
@@ -40,6 +41,20 @@ func NewStore(dir, diaryDir string) (*Store, error) {
 		return nil, fmt.Errorf("wiki: load index: %w", err)
 	}
 	s.index = idx
+
+	// Initialize FTS search index.
+	fts, err := newSearchDB(dir)
+	if err != nil {
+		return nil, fmt.Errorf("wiki: init search: %w", err)
+	}
+	s.fts = fts
+
+	// Rebuild FTS from disk on startup.
+	if err := fts.rebuildIndex(dir); err != nil {
+		fts.close()
+		return nil, fmt.Errorf("wiki: rebuild search index: %w", err)
+	}
+
 	return s, nil
 }
 
@@ -66,7 +81,12 @@ func (s *Store) WritePage(relPath string, page *Page) error {
 		return err
 	}
 
-	// Update index.
+	// Update FTS index.
+	if s.fts != nil {
+		_ = s.fts.indexPage(relPath, page)
+	}
+
+	// Update master index.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.index.UpdateEntry(relPath, page)
@@ -78,6 +98,11 @@ func (s *Store) DeletePage(relPath string) error {
 	abs := filepath.Join(s.dir, relPath)
 	if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("wiki: delete: %w", err)
+	}
+
+	// Update FTS index.
+	if s.fts != nil {
+		_ = s.fts.removePage(relPath)
 	}
 
 	s.mu.Lock()
@@ -157,8 +182,13 @@ type StoreStats struct {
 	CategoryCount map[string]int
 }
 
-// Close is a no-op for file-based wiki (satisfies lifecycle patterns).
-func (s *Store) Close() error { return nil }
+// Close releases the FTS search database.
+func (s *Store) Close() error {
+	if s.fts != nil {
+		return s.fts.close()
+	}
+	return nil
+}
 
 func (s *Store) loadOrCreateIndex() (*Index, error) {
 	indexPath := filepath.Join(s.dir, "index.md")

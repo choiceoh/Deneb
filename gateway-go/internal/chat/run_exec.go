@@ -332,7 +332,6 @@ func executeAgentRun(
 				kDeps.MemoryStore = deps.memoryStore
 				kDeps.MemoryEmbedder = deps.memoryEmbedder
 				kDeps.UnifiedStore = deps.unifiedStore
-				kDeps.WikiStore = deps.wikiStore
 			}
 			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
 		}

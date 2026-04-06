@@ -23,6 +23,8 @@ type DreamReport struct {
 	PatternsExtracted int      `json:"patternsExtracted"`
 	UserModelUpdated  int      `json:"userModelUpdated"`
 	MutualUpdated     int      `json:"mutualUpdated"`
+	WikiPagesCreated  int      `json:"wikiPagesCreated,omitempty"`
+	WikiPagesUpdated  int      `json:"wikiPagesUpdated,omitempty"`
 	DurationMs        int64    `json:"durationMs"`
 	PhaseErrors       []string `json:"phaseErrors,omitempty"`
 }
