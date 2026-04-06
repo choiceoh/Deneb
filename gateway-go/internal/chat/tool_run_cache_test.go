@@ -44,18 +44,82 @@ func TestRunCache_Invalidate(t *testing.T) {
 	}
 }
 
+func TestRunCache_InvalidateByPath(t *testing.T) {
+	rc := NewRunCache()
+
+	// Scoped entries in different subtrees.
+	rc.SetWithScope("grep:a", "match in src", "src")
+	rc.SetWithScope("find:b", "files in core", "core-rs/core")
+	rc.SetWithScope("tree:c", "tree of src/chat", "src/chat")
+
+	// Mutate a file under src/chat — should invalidate src and src/chat scopes.
+	rc.InvalidateByPath("src/chat/tools.go")
+
+	if _, ok := rc.Get("grep:a"); ok {
+		t.Fatal("grep:a (scope=src) should be invalidated — mutated file is under src/")
+	}
+	if _, ok := rc.Get("tree:c"); ok {
+		t.Fatal("tree:c (scope=src/chat) should be invalidated — mutated file is in src/chat/")
+	}
+	// core-rs is a different subtree — should survive.
+	if _, ok := rc.Get("find:b"); !ok {
+		t.Fatal("find:b (scope=core-rs/core) should survive — different subtree")
+	}
+	if rc.Len() != 1 {
+		t.Fatalf("expected 1 surviving entry, got %d", rc.Len())
+	}
+}
+
+func TestRunCache_InvalidateByPath_NoScope(t *testing.T) {
+	rc := NewRunCache()
+
+	// Entry without scope is conservatively removed.
+	rc.Set("grep:x", "unscoped result")
+	rc.SetWithScope("find:y", "scoped in other", "other")
+
+	rc.InvalidateByPath("src/foo.go")
+
+	if _, ok := rc.Get("grep:x"); ok {
+		t.Fatal("unscoped entry should be conservatively removed")
+	}
+	if _, ok := rc.Get("find:y"); !ok {
+		t.Fatal("scoped entry in different subtree should survive")
+	}
+}
+
+func TestRunCache_InvalidateByPath_WorkspaceScope(t *testing.T) {
+	rc := NewRunCache()
+
+	// "." scope means workspace-wide — always affected.
+	rc.SetWithScope("grep:ws", "workspace grep", ".")
+	rc.SetWithScope("find:sub", "sub dir find", "sub/dir")
+
+	rc.InvalidateByPath("anywhere/file.go")
+
+	if _, ok := rc.Get("grep:ws"); ok {
+		t.Fatal("workspace-scoped entry should always be invalidated")
+	}
+	if _, ok := rc.Get("find:sub"); !ok {
+		t.Fatal("sub/dir scoped entry should survive — different subtree")
+	}
+}
+
 func TestRunCache_ConcurrentAccess(t *testing.T) {
 	rc := NewRunCache()
 	var wg sync.WaitGroup
 	const n = 100
 
-	// Concurrent writes.
+	// Concurrent writes (mixed Set and SetWithScope).
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			key := "find:" + string(rune('a'+i%26))
-			rc.Set(key, "result")
+			if i%2 == 0 {
+				rc.SetWithScope(key, "result", "src")
+			} else {
+				rc.Set(key, "result")
+			}
 		}(i)
 	}
 
@@ -69,11 +133,16 @@ func TestRunCache_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	// Concurrent invalidate.
+	// Concurrent invalidations (full and path-scoped).
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		rc.Invalidate()
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		rc.InvalidateByPath("src/foo.go")
 	}()
 
 	wg.Wait()

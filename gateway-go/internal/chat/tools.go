@@ -127,13 +127,17 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 
 	// Invalidate caches when mutation tools modify the file system.
 	if IsMutationTool(name) {
+		mutPath := extractFilePath(input)
 		if rc != nil {
-			rc.Invalidate()
+			if mutPath != "" {
+				rc.InvalidateByPath(mutPath)
+			} else {
+				rc.Invalidate()
+			}
 		}
-		// Invalidate the specific file in the file-read dedup cache.
 		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
-			if filePath := extractFilePath(input); filePath != "" {
-				fc.Invalidate(filePath)
+			if mutPath != "" {
+				fc.Invalidate(mutPath)
 			}
 		}
 	}
@@ -146,7 +150,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// Store in run cache (after post-processing, before compression).
 	if rc != nil && IsCacheableTool(name) {
 		cacheKey := BuildCacheKey(name, input)
-		rc.Set(cacheKey, output)
+		scope := extractPathScope(input)
+		rc.SetWithScope(cacheKey, output, scope)
 	}
 
 	// Apply compression if requested by the agent.
@@ -190,6 +195,27 @@ func (r *ToolRegistry) IsConcurrencySafe(name string) bool {
 	return false
 }
 
+// IsConcurrencySafeWithInput extends IsConcurrencySafe with input-aware
+// classification. For most tools, this delegates to the static ConcurrencySafe
+// flag. For "exec", it parses the command and checks whether it is read-only
+// (e.g., "go test", "git status", "ls") to allow concurrent execution.
+func (r *ToolRegistry) IsConcurrencySafeWithInput(name string, input json.RawMessage) bool {
+	r.mu.RLock()
+	def, ok := r.tools[name]
+	r.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	if def.ConcurrencySafe {
+		return true
+	}
+	// Input-aware override: exec commands that are read-only can run concurrently.
+	if name == "exec" {
+		return agent.IsReadOnlyExecCommand(input)
+	}
+	return false
+}
+
 // extractFilePath extracts a "file_path" string from tool input JSON.
 // Used to invalidate specific file-read cache entries on mutations.
 func extractFilePath(input json.RawMessage) string {
@@ -201,6 +227,26 @@ func extractFilePath(input json.RawMessage) string {
 	}
 	if json.Unmarshal(input, &meta) == nil {
 		return meta.FilePath
+	}
+	return ""
+}
+
+// extractPathScope extracts a path scope from cacheable tool input JSON.
+// Cacheable tools use "path" (find/tree/grep) or "file" (analyze) to indicate
+// the search scope. Returns "" when no scope is present (workspace-wide).
+func extractPathScope(input json.RawMessage) string {
+	if !bytes.Contains(input, []byte(`"path"`)) && !bytes.Contains(input, []byte(`"file"`)) {
+		return ""
+	}
+	var meta struct {
+		Path string `json:"path"`
+		File string `json:"file"`
+	}
+	if json.Unmarshal(input, &meta) == nil {
+		if meta.Path != "" {
+			return meta.Path
+		}
+		return meta.File
 	}
 	return ""
 }

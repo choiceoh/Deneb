@@ -20,3 +20,13 @@ type ToolExecutor interface {
 type ConcurrencyChecker interface {
 	IsConcurrencySafe(name string) bool
 }
+
+// InputAwareConcurrencyChecker extends ConcurrencyChecker to consider the
+// tool's input when determining concurrency safety. For example, an "exec"
+// tool running "go test" is read-only and safe for concurrent execution,
+// while "rm -rf" is not. When the executor finds this interface, it uses
+// IsConcurrencySafeWithInput for batching decisions.
+type InputAwareConcurrencyChecker interface {
+	ConcurrencyChecker
+	IsConcurrencySafeWithInput(name string, input json.RawMessage) bool
+}

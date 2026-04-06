@@ -352,12 +352,15 @@ func ChunkByNewline(text string, maxLen int) []string {
 }
 
 // ChunkHTML splits HTML text into chunks, respecting tag boundaries.
-// This is a simplified version that avoids splitting inside HTML tags.
+// It tracks <pre><code> blocks so code fences are never left unclosed.
+// When a code block must be split, it closes the block in the current
+// chunk and reopens it (with the original language tag) in the next.
 func ChunkHTML(html string, maxLen int) []string {
 	if len(html) <= maxLen {
 		return []string{html}
 	}
 
+	const closeTag = "</code></pre>"
 	var chunks []string
 	remaining := html
 
@@ -368,8 +371,23 @@ func ChunkHTML(html string, maxLen int) []string {
 		}
 
 		splitAt := findHTMLSplitPoint(remaining, maxLen)
-		chunks = append(chunks, remaining[:splitAt])
+		chunk := remaining[:splitAt]
 		remaining = remaining[splitAt:]
+
+		// Check if we split inside a <pre><code> block.
+		if tag, tagPos := unclosedCodeBlock(chunk); tag != "" {
+			if tagPos > maxLen/4 {
+				// Enough content before the code block — split there instead.
+				remaining = chunk[tagPos:] + remaining
+				chunk = chunk[:tagPos]
+			} else {
+				// Code block is too large to avoid — close and reopen.
+				chunk += closeTag
+				remaining = tag + remaining
+			}
+		}
+
+		chunks = append(chunks, chunk)
 	}
 
 	return chunks
@@ -472,6 +490,44 @@ func isLangTag(s string) bool {
 		}
 	}
 	return true
+}
+
+// unclosedCodeBlock scans html for an unmatched <pre><code...> tag.
+// Returns the opening tag (e.g. `<pre><code class="language-go">`) and its
+// byte offset, or ("", -1) when all code blocks are properly closed.
+func unclosedCodeBlock(html string) (tag string, pos int) {
+	const opener = "<pre><code"
+	const closer = "</code></pre>"
+	openTag := ""
+	openPos := -1
+	i := 0
+	for {
+		idx := strings.Index(html[i:], opener)
+		if idx < 0 {
+			break
+		}
+		abs := i + idx
+		// Find closing '>' of the opening tag.
+		closeAngle := strings.IndexByte(html[abs+len(opener):], '>')
+		if closeAngle < 0 {
+			break
+		}
+		tagEnd := abs + len(opener) + closeAngle + 1
+		openTag = html[abs:tagEnd]
+		openPos = abs
+		i = tagEnd
+
+		// Look for the matching </code></pre>.
+		closeIdx := strings.Index(html[i:], closer)
+		if closeIdx >= 0 {
+			i += closeIdx + len(closer)
+			openTag = ""
+			openPos = -1
+		} else {
+			break // unclosed
+		}
+	}
+	return openTag, openPos
 }
 
 func findHTMLSplitPoint(html string, maxLen int) int {

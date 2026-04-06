@@ -3,6 +3,8 @@ package toolctx
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -10,11 +12,15 @@ import (
 type RunCache struct {
 	mu      sync.RWMutex
 	entries map[string]string
+	scopes  map[string]string // cacheKey → path scope for selective invalidation
 }
 
 // NewRunCache creates an empty run cache.
 func NewRunCache() *RunCache {
-	return &RunCache{entries: make(map[string]string)}
+	return &RunCache{
+		entries: make(map[string]string),
+		scopes:  make(map[string]string),
+	}
 }
 
 // Get returns the cached output for the given key, if present.
@@ -32,11 +38,57 @@ func (rc *RunCache) Set(key, output string) {
 	rc.entries[key] = output
 }
 
-// Invalidate clears all cached entries. Called when a mutation tool executes.
+// SetWithScope stores a tool output and associates it with a path scope.
+// When a mutation affects a specific file, only entries whose scope overlaps
+// that file's directory are invalidated instead of the entire cache.
+func (rc *RunCache) SetWithScope(key, output, scope string) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.entries[key] = output
+	if scope != "" {
+		rc.scopes[key] = filepath.Clean(scope)
+	}
+}
+
+// Invalidate clears all cached entries. Called when a mutation tool executes
+// without a known file path (e.g., git operations).
 func (rc *RunCache) Invalidate() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 	rc.entries = make(map[string]string)
+	rc.scopes = make(map[string]string)
+}
+
+// InvalidateByPath removes cached entries whose scope overlaps with path.
+// Entries without a recorded scope are conservatively removed.
+func (rc *RunCache) InvalidateByPath(path string) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	dir := filepath.Dir(filepath.Clean(path))
+	for key := range rc.entries {
+		scope, ok := rc.scopes[key]
+		if !ok {
+			// No scope recorded — conservatively invalidate.
+			delete(rc.entries, key)
+			continue
+		}
+		if scopeOverlaps(dir, scope) {
+			delete(rc.entries, key)
+			delete(rc.scopes, key)
+		}
+	}
+}
+
+// scopeOverlaps reports whether a file in dir could affect cached results
+// scoped to scope. Returns true when the file is inside the scope's subtree.
+func scopeOverlaps(dir, scope string) bool {
+	if scope == "." || scope == "" {
+		return true // workspace-wide search — always affected
+	}
+	if dir == scope {
+		return true
+	}
+	return strings.HasPrefix(dir+"/", scope+"/")
 }
 
 // Len returns the number of cached entries (used in tests).

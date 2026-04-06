@@ -385,7 +385,7 @@ func RunAgent(
 					}
 				}
 				for i, tc := range turnRes.toolCalls {
-					if isConcurrencySafe(tc.Name) {
+					if isConcurrencySafe(tc.Name, tc.Input) {
 						if !curBatch.concurrent && len(curBatch.indices) > 0 {
 							flush()
 						}
@@ -554,13 +554,18 @@ func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
 const maxToolConcurrency = 10
 
 // buildConcurrencyCheck returns a function that checks whether a tool is safe
-// for concurrent execution. If the ToolExecutor implements ConcurrencyChecker,
-// its IsConcurrencySafe method is used; otherwise falls back to the hardcoded set.
-func buildConcurrencyCheck(tools ToolExecutor) func(string) bool {
-	if cc, ok := tools.(ConcurrencyChecker); ok {
-		return cc.IsConcurrencySafe
+// for concurrent execution. Checks for InputAwareConcurrencyChecker first
+// (considers tool input, e.g., exec command text), then ConcurrencyChecker
+// (name-only), then falls back to the hardcoded set.
+func buildConcurrencyCheck(tools ToolExecutor) func(string, json.RawMessage) bool {
+	if iac, ok := tools.(InputAwareConcurrencyChecker); ok {
+		return iac.IsConcurrencySafeWithInput
 	}
-	return func(name string) bool { return readOnlyToolFallback[name] }
+	if cc, ok := tools.(ConcurrencyChecker); ok {
+		check := cc.IsConcurrencySafe
+		return func(name string, _ json.RawMessage) bool { return check(name) }
+	}
+	return func(name string, _ json.RawMessage) bool { return readOnlyToolFallback[name] }
 }
 
 // appendUniqueTools appends extra tools to base, skipping any whose name
