@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -38,7 +39,9 @@ var jsonBufPool = sync.Pool{
 func isRoutineConnError(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) ||
 		errors.Is(err, context.Canceled) ||
-		errors.Is(err, net.ErrClosed) {
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
 	// net/internal poll wraps "use of closed network connection" without a
