@@ -29,11 +29,11 @@ type Env struct {
 
 // EnvConfig configures a new REPL environment.
 type EnvConfig struct {
-	Messages     []MessageEntry
-	LLMQueryFn   LLMQueryFunc
-	LLMBatchFn   LLMBatchFunc
-	RLMQueryFn   RLMQueryFunc
-	Timeout      time.Duration // per-execution timeout (default: 30s)
+	Messages   []MessageEntry
+	LLMQueryFn LLMQueryFunc
+	LLMBatchFn LLMBatchFunc
+	RLMQueryFn RLMQueryFunc
+	Timeout    time.Duration // per-execution timeout (default: 30s)
 }
 
 // NewEnv creates a new Starlark REPL environment with conversation context

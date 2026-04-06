@@ -56,9 +56,6 @@ type BatchConfig struct {
 // RunSubAgent executes a single synchronous sub-LLM call.
 // The sub-LLM gets its own independent context and can use the provided tools.
 func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, error) {
-	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 500
-	}
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 3
 	}
@@ -136,9 +133,9 @@ func budgetRemaining(b *TokenBudget) int {
 }
 
 // maxBatchConcurrency limits how many sub-LLM calls run in parallel
-// within a single batch to avoid overwhelming LLM API rate limits
-// or local GPU resources on DGX Spark.
-const maxBatchConcurrency = 3
+// within a single batch. DGX Spark local inference supports up to 16
+// concurrent batches; 12 leaves headroom for the main loop.
+const maxBatchConcurrency = 12
 
 // RunSubAgentBatch executes multiple sub-LLM calls in parallel.
 // All tasks share the same tools and token budget.
@@ -146,9 +143,6 @@ const maxBatchConcurrency = 3
 // If any task fails with an error (not a soft error in SubAgentResult.Error),
 // the remaining tasks are cancelled via context.
 func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, error) {
-	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 500
-	}
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 3
 	}

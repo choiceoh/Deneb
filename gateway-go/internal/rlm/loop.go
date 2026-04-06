@@ -20,11 +20,11 @@ type LoopConfig struct {
 	Model  string
 	System json.RawMessage // base system prompt (loop prompt is appended)
 
-	MaxTokens       int // max output tokens per LLM call
-	MaxIter         int
-	CompactThreshold int // estimated token count triggering compaction
-	MaxConsecErrors int
-	FallbackEnabled bool
+	MaxTokens        int // max output tokens per LLM call
+	MaxIter          int
+	CompactThreshold int // explicit override; 0 = use percentage from Config
+	MaxConsecErrors  int
+	FallbackEnabled  bool
 
 	REPLEnv *repl.Env
 	Budget  *TokenBudget
@@ -38,14 +38,14 @@ type LoopConfig struct {
 
 // LoopResult holds the outcome of a RunLoop invocation.
 type LoopResult struct {
-	FinalAnswer    string
-	Iterations     int
-	TotalTokensIn  int
-	TotalTokensOut int
+	FinalAnswer     string
+	Iterations      int
+	TotalTokensIn   int
+	TotalTokensOut  int
 	CompactionCount int
-	ErrorCount     int
-	StopReason     string // "final", "max_iterations", "max_errors", "budget", "cancelled"
-	FallbackUsed   bool
+	ErrorCount      int
+	StopReason      string // "final", "max_iterations", "max_errors", "budget", "cancelled"
+	FallbackUsed    bool
 }
 
 // RunLoop executes the independent RLM iteration loop.
@@ -54,10 +54,10 @@ type LoopResult struct {
 // execute in Starlark REPL → check FINAL() → append results → repeat.
 func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResult, error) {
 	if cfg.MaxIter <= 0 {
-		cfg.MaxIter = 25
+		cfg.MaxIter = 30
 	}
 	if cfg.MaxTokens <= 0 {
-		cfg.MaxTokens = 8192
+		cfg.MaxTokens = 16384
 	}
 	if cfg.MaxConsecErrors <= 0 {
 		cfg.MaxConsecErrors = 5
@@ -72,6 +72,12 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 	rlmCfg := ConfigFromEnv()
 	loopPrompt := LoopSystemPrompt(rlmCfg)
 	system := llm.AppendSystemText(cfg.System, loopPrompt)
+
+	// Compute compaction threshold: explicit override or percentage of model context.
+	compactThreshold := cfg.CompactThreshold
+	if compactThreshold <= 0 {
+		compactThreshold = int(float64(rlmCfg.ModelContextLimit) * rlmCfg.CompactionThresholdPct)
+	}
 
 	// Internal message history for the loop.
 	messages := []llm.Message{
@@ -101,7 +107,7 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 		}
 
 		// Compaction check: estimate token count and summarize if needed.
-		if cfg.CompactThreshold > 0 && estimateTokens(messages) > cfg.CompactThreshold {
+		if compactThreshold > 0 && estimateTokens(messages) > compactThreshold {
 			compacted, err := compactHistory(ctx, cfg, system, messages)
 			if err != nil {
 				cfg.Logger.Warn("loop compaction failed, continuing", "error", err)
@@ -276,7 +282,10 @@ func extractCodeBlocks(text string) []string {
 }
 
 // textFinalRe matches FINAL("answer") or FINAL('answer') outside code blocks.
-var textFinalRe = regexp.MustCompile(`(?s)FINAL\s*\(\s*["'](.+?)["']\s*\)`)
+// Uses proper quote-matching to avoid mismatches with embedded quotes
+// (e.g. FINAL("he said 'hello'") won't stop at the inner single quote).
+// (?s) enables dot-matches-newline for multiline answers.
+var textFinalRe = regexp.MustCompile(`(?s)FINAL\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')\s*\)`)
 
 // extractTextFinal finds a FINAL("...") call in plain text (outside code blocks).
 // Returns empty string if not found.
@@ -284,10 +293,14 @@ func extractTextFinal(text string) string {
 	// Strip code blocks first so we don't match FINAL inside code.
 	stripped := codeBlockRe.ReplaceAllString(text, "")
 	m := textFinalRe.FindStringSubmatch(stripped)
-	if len(m) < 2 {
+	if m == nil {
 		return ""
 	}
-	return m[1]
+	// m[1] is the double-quote capture group, m[2] is the single-quote group.
+	if m[1] != "" {
+		return m[1]
+	}
+	return m[2]
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -307,18 +320,20 @@ func formatExecResults(outputs []string) string {
 	return b.String()
 }
 
-// estimateTokens provides a rough token estimate for messages (runes/2).
+// estimateTokens provides a rough token estimate for messages.
+// Uses bytes/4 which better approximates token count for Korean-heavy content
+// (Korean UTF-8: 3 bytes per char ≈ 0.7 tokens; English: 1 byte ≈ 0.25 tokens).
 func estimateTokens(msgs []llm.Message) int {
 	total := 0
 	for _, m := range msgs {
-		total += len(m.Content) / 2
+		total += len(m.Content) / 4
 	}
 	return total
 }
 
 // estimateSystemTokens estimates token count for the system prompt.
 func estimateSystemTokens(system json.RawMessage) int {
-	return len(system) / 2
+	return len(system) / 4
 }
 
 // compactHistory summarizes older messages to reduce context size.
@@ -327,8 +342,8 @@ func compactHistory(ctx context.Context, cfg LoopConfig, system json.RawMessage,
 		return messages, nil // too short to compact
 	}
 
-	// Keep first message (original user prompt) + last 4 messages.
-	const keepTail = 4
+	// Keep first message (original user prompt) + last 10 messages (5 turns).
+	const keepTail = 10
 	head := messages[:1]
 	tail := messages[len(messages)-keepTail:]
 	middle := messages[1 : len(messages)-keepTail]
@@ -342,7 +357,7 @@ func compactHistory(ctx context.Context, cfg LoopConfig, system json.RawMessage,
 		Model:     cfg.Model,
 		Messages:  summaryMsgs,
 		System:    system,
-		MaxTokens: 2048,
+		MaxTokens: 4096,
 	}
 
 	summary, err := cfg.Client.Complete(ctx, req)
