@@ -133,8 +133,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			RunLog:  s.cronRunLog,
 		},
 		Vega: chat.VegaDeps{
-			MemoryStore:    chatCfg.MemoryStore,
-			MemoryEmbedder: chatCfg.MemoryEmbedder,
+			MemoryStore: chatCfg.MemoryStore,
 		},
 		Wiki: chat.WikiDeps{
 			Store: chatCfg.WikiStore,

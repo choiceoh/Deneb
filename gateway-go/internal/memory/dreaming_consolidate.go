@@ -1,6 +1,6 @@
-// dreaming_consolidate.go — Cluster-based semantic consolidation phase for Aurora Dreaming.
-// Runs after pairwise merge to catch semantic paraphrases that cosine ≥0.78 misses.
-// Groups facts into clusters at a lower similarity threshold, then asks the LLM
+// dreaming_consolidate.go — Cluster-based text consolidation phase for Aurora Dreaming.
+// Runs after pairwise merge to catch semantic paraphrases that Jaccard misses.
+// Groups facts into clusters by Jaccard text similarity, then asks the LLM
 // to consolidate each cluster into 1-2 canonical facts.
 package memory
 
@@ -16,8 +16,8 @@ import (
 
 // Consolidation tuning constants.
 const (
-	// Lower than merge threshold (0.78) to catch paraphrases.
-	consolidateSimThreshold = 0.62
+	// Jaccard threshold for clustering (lower than merge threshold).
+	consolidateJaccardThreshold = 0.45
 
 	// Only consolidate clusters with 3+ facts (pairs are handled by merge phase).
 	consolidateMinClusterSize = 3
@@ -28,7 +28,7 @@ const (
 	// Max facts sent to LLM per cluster.
 	consolidateMaxClusterFacts = 40
 
-	// Cap per-category embedding load (higher than merge's 100).
+	// Cap per-category fact load.
 	consolidateMaxPerCategory = 200
 )
 
@@ -37,9 +37,7 @@ type consolidatePhase struct{}
 func (consolidatePhase) Name() string { return "consolidate" }
 
 func (consolidatePhase) Run(ctx context.Context, s *dreamState) error {
-	// Clustering uses existing DB embeddings (no embedder required).
-	// Embedder is only needed to embed new consolidated facts (optional).
-	consolidated, err := consolidateClusters(ctx, s.store, s.embedder, s.client, s.model, s.logger)
+	consolidated, err := consolidateClusters(ctx, s.store, s.client, s.model, s.logger)
 	if err != nil {
 		return err
 	}
@@ -68,85 +66,90 @@ type consolidateResponse struct {
 	} `json:"facts"`
 }
 
-func consolidateClusters(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
-	// Load all embeddings (no depth restriction — semantic dupes span depths).
-	embeddings, _, categories, err := store.LoadEmbeddingsForMerge(ctx, 99)
+func consolidateClusters(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
+	facts, err := store.GetActiveFacts(ctx)
 	if err != nil {
 		return 0, err
 	}
 
 	// Group by category.
-	catGroups := map[string][]int64{}
-	for id := range embeddings {
-		cat := categories[id]
-		catGroups[cat] = append(catGroups[cat], id)
+	catFacts := map[string][]Fact{}
+	for _, f := range facts {
+		catFacts[f.Category] = append(catFacts[f.Category], f)
 	}
 
-	// Cap per category.
-	for cat, ids := range catGroups {
-		if len(ids) > consolidateMaxPerCategory {
-			// Keep highest IDs (most recent).
-			sort.Slice(ids, func(i, j int) bool { return ids[i] > ids[j] })
-			catGroups[cat] = ids[:consolidateMaxPerCategory]
+	// Cap per category (keep most important — GetActiveFacts returns sorted by importance DESC).
+	for cat, fs := range catFacts {
+		if len(fs) > consolidateMaxPerCategory {
+			catFacts[cat] = fs[:consolidateMaxPerCategory]
 		}
 	}
 
-	// Build clusters using union-find within each category.
-	parent := map[int64]int64{}
-	var find func(int64) int64
-	find = func(x int64) int64 {
-		if p, ok := parent[x]; ok && p != x {
-			parent[x] = find(p)
-			return parent[x]
-		}
-		return x
+	// Build clusters using union-find within each category via Jaccard similarity.
+	type factEntry struct {
+		fact Fact
+		idx  int // position in flat list
 	}
-	union := func(a, b int64) {
+	var allFacts []factEntry
+	for _, fs := range catFacts {
+		for _, f := range fs {
+			allFacts = append(allFacts, factEntry{fact: f, idx: len(allFacts)})
+		}
+	}
+
+	parent := make([]int, len(allFacts))
+	for i := range parent {
+		parent[i] = i
+	}
+	var find func(int) int
+	find = func(x int) int {
+		if parent[x] != x {
+			parent[x] = find(parent[x])
+		}
+		return parent[x]
+	}
+	union := func(a, b int) {
 		ra, rb := find(a), find(b)
 		if ra != rb {
 			parent[rb] = ra
 		}
 	}
 
-	// Initialize union-find.
-	for _, ids := range catGroups {
-		for _, id := range ids {
-			parent[id] = id
-		}
-	}
-
 	// Connect pairs above threshold within same category.
-	for _, ids := range catGroups {
-		for i := 0; i < len(ids); i++ {
-			for j := i + 1; j < len(ids); j++ {
-				sim := cosineSimilarity(embeddings[ids[i]], embeddings[ids[j]])
-				if sim >= consolidateSimThreshold {
-					union(ids[i], ids[j])
+	catStart := 0
+	for _, fs := range catFacts {
+		catEnd := catStart + len(fs)
+		for i := catStart; i < catEnd; i++ {
+			for j := i + 1; j < catEnd; j++ {
+				sim := JaccardTextSimilarity(allFacts[i].fact.Content, allFacts[j].fact.Content)
+				if sim >= consolidateJaccardThreshold {
+					union(i, j)
 				}
 			}
 		}
+		catStart = catEnd
 	}
 
 	// Collect clusters.
-	clusterMap := map[int64][]int64{}
-	for id := range parent {
-		root := find(id)
-		clusterMap[root] = append(clusterMap[root], id)
+	clusterMap := map[int][]int{}
+	for i := range allFacts {
+		root := find(i)
+		clusterMap[root] = append(clusterMap[root], i)
 	}
 
 	// Filter to clusters above minimum size, sort by size descending.
 	type cluster struct {
-		ids []int64
+		indices []int
 	}
 	var clusters []cluster
-	for _, ids := range clusterMap {
-		if len(ids) >= consolidateMinClusterSize {
-			sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-			clusters = append(clusters, cluster{ids: ids})
+	for _, indices := range clusterMap {
+		if len(indices) >= consolidateMinClusterSize {
+			sort.Ints(indices)
+			clusters = append(clusters, cluster{indices: indices})
 		}
 	}
 	sort.Slice(clusters, func(i, j int) bool {
-		return len(clusters[i].ids) > len(clusters[j].ids)
+		return len(clusters[i].indices) > len(clusters[j].indices)
 	})
 
 	if len(clusters) == 0 {
@@ -158,27 +161,27 @@ func consolidateClusters(ctx context.Context, store *Store, embedder *Embedder, 
 
 	logger.Info("aurora-dream: consolidate phase",
 		"clusters", len(clusters),
-		"largest", len(clusters[0].ids),
+		"largest", len(clusters[0].indices),
 	)
 
 	totalConsolidated := 0
 
 	for ci, cl := range clusters {
-		ids := cl.ids
-		if len(ids) > consolidateMaxClusterFacts {
-			ids = ids[:consolidateMaxClusterFacts]
+		indices := cl.indices
+		if len(indices) > consolidateMaxClusterFacts {
+			indices = indices[:consolidateMaxClusterFacts]
 		}
 
 		// Load fact contents.
 		var lines []string
 		var activeFacts []Fact
-		for _, id := range ids {
-			fact, err := store.GetFactReadOnly(ctx, id)
-			if err != nil || !fact.Active {
+		for _, idx := range indices {
+			f := allFacts[idx].fact
+			if !f.Active {
 				continue
 			}
-			activeFacts = append(activeFacts, *fact)
-			lines = append(lines, fmt.Sprintf("[#%d] {%s} %.2f: %s", fact.ID, fact.Category, fact.Importance, fact.Content))
+			activeFacts = append(activeFacts, f)
+			lines = append(lines, fmt.Sprintf("[#%d] {%s} %.2f: %s", f.ID, f.Category, f.Importance, f.Content))
 		}
 		if len(activeFacts) < consolidateMinClusterSize {
 			continue
@@ -196,11 +199,6 @@ func consolidateClusters(ctx context.Context, store *Store, embedder *Embedder, 
 
 		// Insert consolidated facts and supersede originals.
 		var newIDs []int64
-		var pendingEmbeds []struct {
-			ID      int64
-			Content string
-		}
-
 		for _, cf := range result.Facts {
 			if cf.Content == "" {
 				continue
@@ -220,10 +218,6 @@ func consolidateClusters(ctx context.Context, store *Store, embedder *Embedder, 
 				continue
 			}
 			newIDs = append(newIDs, newID)
-			pendingEmbeds = append(pendingEmbeds, struct {
-				ID      int64
-				Content string
-			}{ID: newID, Content: cf.Content})
 		}
 
 		if len(newIDs) == 0 {
@@ -235,15 +229,6 @@ func consolidateClusters(ctx context.Context, store *Store, embedder *Embedder, 
 		for _, fact := range activeFacts {
 			if err := store.SupersedeFact(ctx, fact.ID, newIDs[0]); err == nil {
 				supersededCount++
-			}
-		}
-
-		// Batch-embed consolidated facts (skip if no embedder).
-		if embedder != nil && len(pendingEmbeds) > 0 {
-			if n, err := embedder.EmbedBatchAndStore(ctx, pendingEmbeds); err != nil {
-				logger.Warn("aurora-dream: consolidate embed failed", "error", err)
-			} else {
-				logger.Info("aurora-dream: consolidate embedded", "count", n)
 			}
 		}
 

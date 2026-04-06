@@ -303,19 +303,19 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 	return valid, nil
 }
 
-// InsertExtractedFacts stores extracted facts in the memory store and embeds them.
+// InsertExtractedFacts stores extracted facts in the memory store.
 // Uses SourceAutoExtract as the fact source.
-func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder, facts []ExtractedFact, logger *slog.Logger) {
-	insertExtractedFactsWithSource(ctx, store, embedder, facts, SourceAutoExtract, logger)
+func InsertExtractedFacts(ctx context.Context, store *Store, facts []ExtractedFact, logger *slog.Logger) {
+	insertExtractedFactsWithSource(ctx, store, facts, SourceAutoExtract, logger)
 }
 
 // InsertExtractedFactsAs stores extracted facts with a custom source identifier.
 // Use this when facts come from a non-standard extraction path (e.g., Aurora transfer).
-func InsertExtractedFactsAs(ctx context.Context, store *Store, embedder *Embedder, facts []ExtractedFact, source string, logger *slog.Logger) {
-	insertExtractedFactsWithSource(ctx, store, embedder, facts, source, logger)
+func InsertExtractedFactsAs(ctx context.Context, store *Store, facts []ExtractedFact, source string, logger *slog.Logger) {
+	insertExtractedFactsWithSource(ctx, store, facts, source, logger)
 }
 
-func insertExtractedFactsWithSource(ctx context.Context, store *Store, embedder *Embedder, facts []ExtractedFact, source string, logger *slog.Logger) {
+func insertExtractedFactsWithSource(ctx context.Context, store *Store, facts []ExtractedFact, source string, logger *slog.Logger) {
 	for _, ef := range facts {
 		var expiresAt *time.Time
 		if ef.ExpiryHint != "" {
@@ -338,17 +338,6 @@ func insertExtractedFactsWithSource(ctx context.Context, store *Store, embedder 
 		if err != nil {
 			logger.Warn("aurora-memory: failed to insert fact", "error", err, "content", truncate(ef.Content, 50))
 			continue
-		}
-
-		// Embed asynchronously (best-effort).
-		if embedder != nil {
-			go func(factID int64, content string) {
-				embedCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-				defer cancel()
-				if err := embedder.EmbedAndStore(embedCtx, factID, content); err != nil {
-					logger.Debug("aurora-memory: embedding failed", "fact_id", factID, "error", err)
-				}
-			}(id, ef.Content)
 		}
 
 		// Process entities and relations (best-effort).

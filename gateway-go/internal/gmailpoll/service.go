@@ -39,8 +39,7 @@ type Config struct {
 	// Multi-stage pipeline deps (all optional — nil = skip that stage).
 	LocalClient *llm.Client      // local AI for stage-1 extractors
 	LocalModel  string           // local AI model name
-	MemStore    *memory.Store    // for memory recall
-	MemEmbed    *memory.Embedder // for vector search query embedding
+	MemStore *memory.Store // for memory recall
 }
 
 // Service implements autonomous.PeriodicTask for Gmail polling.
@@ -248,8 +247,7 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 		LocalClient: s.cfg.LocalClient,
 		LocalModel:  s.cfg.LocalModel,
 		MainModel:   s.cfg.Model,
-		MemStore:    s.cfg.MemStore,
-		MemEmbed:    s.cfg.MemEmbed,
+		MemStore: s.cfg.MemStore,
 		Logger:      s.log,
 	}
 

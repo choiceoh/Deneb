@@ -102,10 +102,9 @@ type runDeps struct {
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
-	auroraStore    *aurora.Store             // optional; enables Aurora compaction
-	memoryStore    *memory.Store             // optional; structured memory (Honcho-style)
-	memoryEmbedder *memory.Embedder          // optional; fact embedding
-	unifiedStore   *unified.Store            // optional; unified memory (search + tier-1)
+	auroraStore  *aurora.Store  // optional; enables Aurora compaction
+	memoryStore  *memory.Store // optional; structured memory (Honcho-style)
+	unifiedStore *unified.Store // optional; unified memory (search + tier-1)
 	wikiStore      *wiki.Store               // optional; wiki knowledge base
 	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog       *agentlog.Writer          // optional; enables agent detail logging

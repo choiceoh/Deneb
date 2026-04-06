@@ -104,7 +104,6 @@ func TransferSummaryToMemory(
 	summary SummaryRecord,
 	store *Store,
 	memStore *memory.Store,
-	memEmbedder *memory.Embedder,
 	llmClient *llm.Client,
 	model string,
 	logger *slog.Logger,
@@ -138,7 +137,7 @@ func TransferSummaryToMemory(
 		}
 	}
 
-	memory.InsertExtractedFactsAs(ctx, memStore, memEmbedder, facts, memory.SourceAuroraTransfer, logger)
+	memory.InsertExtractedFactsAs(ctx, memStore, facts, memory.SourceAuroraTransfer, logger)
 
 	logger.Info("aurora-transfer: transferred summary to memory",
 		"summaryId", summary.SummaryID,

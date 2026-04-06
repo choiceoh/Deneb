@@ -330,7 +330,6 @@ func executeAgentRun(
 			}
 			{
 				kDeps.MemoryStore = deps.memoryStore
-				kDeps.MemoryEmbedder = deps.memoryEmbedder
 				kDeps.UnifiedStore = deps.unifiedStore
 			}
 			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
@@ -385,15 +384,7 @@ func executeAgentRun(
 			}
 		}
 		if len(messages) == 0 && deps.transcript != nil {
-			// Build assembly hints for semantic ranking when an embedder is available.
-			var hints AssemblyHints
-			if deps.memoryEmbedder != nil && params.Message != "" {
-				hints = AssemblyHints{
-					QueryText: params.Message,
-					Embedder:  deps.memoryEmbedder.Inner(),
-				}
-			}
-			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger, hints)
+			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger, AssemblyHints{})
 			if err != nil {
 				contextErr = err
 			} else {
@@ -1029,7 +1020,7 @@ func executeAgentRun(
 								return
 							}
 							if len(facts) > 0 {
-								memory.InsertExtractedFacts(extractCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
+								memory.InsertExtractedFacts(extractCtx, deps.memoryStore, facts, logger)
 								logger.Info("pre-compaction facts extracted", "count", len(facts))
 							}
 						}()

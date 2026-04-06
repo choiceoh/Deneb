@@ -65,7 +65,7 @@ func TestFTSSearch(t *testing.T) {
 	_, _ = s.InsertFact(ctx, Fact{Content: "SGLang 서버 포트 30000 사용", Category: CategoryDecision, Importance: 0.8})
 	_, _ = s.InsertFact(ctx, Fact{Content: "한국어를 기본 언어로 사용", Category: CategoryPreference, Importance: 0.9})
 
-	results, err := s.SearchFacts(ctx, "SGLang", nil, SearchOpts{Limit: 5})
+	results, err := s.SearchFacts(ctx, "SGLang", SearchOpts{Limit: 5})
 	if err != nil {
 		t.Fatalf("SearchFacts: %v", err)
 	}
@@ -279,48 +279,6 @@ func TestMetadata(t *testing.T) {
 	v, _ := s.GetMeta(ctx, "turn_count")
 	if v != "42" {
 		t.Errorf("expected '42', got %q", v)
-	}
-}
-
-func TestEmbeddingStorage(t *testing.T) {
-	s := tempStore(t)
-	ctx := context.Background()
-
-	id, _ := s.InsertFact(ctx, Fact{Content: "embed test", Category: CategoryContext, Importance: 0.5})
-
-	vec := []float32{0.1, 0.2, 0.3, 0.4}
-	if err := s.StoreEmbedding(ctx, id, vec, "test-model"); err != nil {
-		t.Fatalf("StoreEmbedding: %v", err)
-	}
-
-	embeddings, err := s.LoadEmbeddings(ctx)
-	if err != nil {
-		t.Fatalf("LoadEmbeddings: %v", err)
-	}
-	if len(embeddings) != 1 {
-		t.Fatalf("expected 1 embedding, got %d", len(embeddings))
-	}
-	loaded := embeddings[id]
-	if len(loaded) != 4 {
-		t.Fatalf("expected 4-dim vector, got %d", len(loaded))
-	}
-	for i, v := range vec {
-		if loaded[i] != v {
-			t.Errorf("embedding[%d]: expected %f, got %f", i, v, loaded[i])
-		}
-	}
-}
-
-func TestCosineSimilarity(t *testing.T) {
-	a := []float32{1, 0, 0}
-	b := []float32{1, 0, 0}
-	if sim := cosineSimilarity(a, b); sim < 0.99 {
-		t.Errorf("identical vectors should have similarity ~1, got %f", sim)
-	}
-
-	c := []float32{0, 1, 0}
-	if sim := cosineSimilarity(a, c); sim > 0.01 {
-		t.Errorf("orthogonal vectors should have similarity ~0, got %f", sim)
 	}
 }
 

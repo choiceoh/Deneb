@@ -1,5 +1,5 @@
-// search.go — Importance-weighted hybrid search over the structured memory store.
-// Combines FTS5 keyword search + cosine similarity with importance and recency scoring.
+// search.go — Importance-weighted FTS search over the structured memory store.
+// Combines FTS5 keyword search with importance and recency scoring.
 package memory
 
 import (
@@ -9,16 +9,6 @@ import (
 	"time"
 )
 
-// RerankFunc is a function that reranks documents by query relevance.
-// Returns (index, score) pairs sorted by descending relevance.
-type RerankFunc func(ctx context.Context, query string, docs []string, topN int) ([]RerankResult, error)
-
-// RerankResult holds a reranked document's original index and relevance score.
-type RerankResult struct {
-	Index          int
-	RelevanceScore float64
-}
-
 // SearchOpts configures a memory search.
 type SearchOpts struct {
 	Limit         int      // max results (default 10)
@@ -27,7 +17,6 @@ type SearchOpts struct {
 	MinImportance float64  // minimum importance to include (0 = all; use 0.7 for FTS-only mode)
 	EntityFilter  string   // filter by entity name (empty = all)
 	ExtraKeywords []string // additional keywords to include in FTS (e.g., from LLM expansion)
-	SkipRerank    bool     // skip cross-encoder reranking (caller will rerank separately)
 }
 
 // SearchResult is a scored fact from a search query.
@@ -35,13 +24,11 @@ type SearchResult struct {
 	Fact         Fact          `json:"fact"`
 	Score        float64       `json:"score"`
 	FTSScore     float64       `json:"fts_score,omitempty"`
-	VecScore     float64       `json:"vec_score,omitempty"`
 	RelatedFacts []RelatedFact `json:"related_facts,omitempty"`
 }
 
-// SearchFacts performs a hybrid FTS + semantic search over active facts,
-// then applies importance and recency weighting.
-func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float32, opts SearchOpts) ([]SearchResult, error) {
+// SearchFacts performs FTS search over active facts with importance and recency weighting.
+func (s *Store) SearchFacts(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
 	if opts.Limit <= 0 {
 		opts.Limit = 10
 	}
@@ -53,8 +40,6 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 	}
 
 	// Phase 1.5: Entity-based search enrichment.
-	// If EntityFilter is set, add matching facts. Otherwise, try to find
-	// entity matches from the query to enrich the candidate pool.
 	if opts.EntityFilter != "" {
 		entityFacts := s.entitySearch(ctx, opts.EntityFilter)
 		for id, score := range entityFacts {
@@ -64,32 +49,15 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 		}
 	}
 
-	// Phase 2: Vector search (if embedding provided).
-	var vecResults map[int64]float64
-	if len(queryVec) > 0 {
-		vecResults, err = s.vectorSearch(ctx, queryVec)
-		if err != nil {
-			// Non-fatal: fall back to FTS-only.
-			vecResults = nil
-		}
-	}
-
-	// Phase 3: Merge and score (fetches extra candidates for dedup headroom).
+	// Phase 2: Score and rank.
 	mergeOpts := opts
 	mergeOpts.Limit = opts.Limit * 3
-	results := s.mergeAndRank(ftsResults, vecResults, mergeOpts)
+	results := s.scoreAndRank(ftsResults, mergeOpts)
 
-	// Phase 3.5: Content deduplication — remove near-duplicate facts so the
-	// LLM context isn't wasted on 3-5 copies of the same information.
+	// Phase 2.5: Content deduplication.
 	results = dedupResults(results, s.searchParams().DedupJaccardThreshold)
 
-	// Phase 4: Cross-encoder reranking (optional).
-	// Skipped when caller will rerank separately (e.g., Recall after entity/relation expansion).
-	if s.reranker != nil && len(results) > 1 && !opts.SkipRerank {
-		results = s.rerankFacts(ctx, query, results)
-	}
-
-	// Final truncation after all post-processing.
+	// Final truncation.
 	if len(results) > opts.Limit {
 		results = results[:opts.Limit]
 	}
@@ -307,42 +275,14 @@ func (s *Store) entitySearch(ctx context.Context, entityName string) map[int64]f
 	return results
 }
 
-// vectorSearch computes cosine similarity against all active fact embeddings.
-func (s *Store) vectorSearch(ctx context.Context, queryVec []float32) (map[int64]float64, error) {
-	embeddings, err := s.LoadEmbeddings(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	results := make(map[int64]float64, len(embeddings))
-	for factID, vec := range embeddings {
-		sim := cosineSimilarity(queryVec, vec)
-		if sim > s.searchParams().VectorMinThreshold {
-			results[factID] = sim
-		}
-	}
-	return results, nil
-}
-
-// mergeAndRank combines FTS and vector scores with importance and recency.
-func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]float64, opts SearchOpts) []SearchResult {
-	// Collect all candidate fact IDs.
-	ids := make([]int64, 0, len(ftsResults)+len(vecResults))
-	seen := make(map[int64]bool)
+// scoreAndRank scores FTS results with importance and recency weighting.
+func (s *Store) scoreAndRank(ftsResults map[int64]float64, opts SearchOpts) []SearchResult {
+	ids := make([]int64, 0, len(ftsResults))
 	for id := range ftsResults {
-		if !seen[id] {
-			ids = append(ids, id)
-			seen[id] = true
-		}
-	}
-	for id := range vecResults {
-		if !seen[id] {
-			ids = append(ids, id)
-			seen[id] = true
-		}
+		ids = append(ids, id)
 	}
 
-	// Load all candidate facts in one pass (lock held briefly).
+	// Load all candidate facts in one pass.
 	factMap := make(map[int64]*Fact, len(ids))
 	s.mu.RLock()
 	for _, id := range ids {
@@ -364,37 +304,19 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 		}
 
 		ftsScore := ftsResults[id]
-		vecScore := 0.0
-		if vecResults != nil {
-			vecScore = vecResults[id]
-		}
 
-		// Hybrid score: max of FTS and vector (or weighted combination if both present).
-		var hybridScore float64
-		if vecScore > 0 && ftsScore > 0 {
-			hybridScore = p.HybridFTSWeight*ftsScore + p.HybridVecWeight*vecScore
-		} else {
-			hybridScore = math.Max(ftsScore, vecScore)
-		}
-
-		// Category-adjusted importance: boost decisions/preferences, attenuate context.
+		// Category-adjusted importance.
 		adjustedImportance := fact.Importance
 		if mult, ok := p.CategoryImportanceMultiplier[fact.Category]; ok {
 			adjustedImportance = math.Min(1.0, adjustedImportance*mult)
 		}
 
-		// Content freshness: use UpdatedAt (last verified/corrected) rather than
-		// LastAccessedAt. Access time ≠ content staleness — a stale decision
-		// accessed yesterday is still stale.
+		// Recency scoring via inverse-power decay.
 		refTime := fact.UpdatedAt
 		if refTime.IsZero() {
 			refTime = fact.CreatedAt
 		}
 		daysSince := now.Sub(refTime).Hours() / 24
-
-		// Recency scoring: steep initial drop → gradual long tail.
-		// Uses inverse-square decay: score = 1 / (1 + (days/steepness)²)
-		// For context (steepness=5): day 0→1.0, day 2→0.86, day 5→0.5, day 10→0.2
 		steepness := p.DefaultSteepnessDays
 		if st, ok := p.CategorySteepnessDays[fact.Category]; ok {
 			steepness = st
@@ -402,13 +324,13 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 		ratio := daysSince / steepness
 		recencyScore := 1.0 / (1.0 + math.Pow(ratio, p.DecayPower))
 
-		// Verification score: dreaming-verified facts are more trustworthy.
+		// Verification score.
 		verificationScore := p.VerificationUnverified
 		if fact.VerifiedAt != nil && !fact.VerifiedAt.IsZero() {
 			verificationScore = p.VerificationVerified
 		}
 
-		finalScore := p.WeightHybrid*hybridScore +
+		finalScore := p.WeightFTS*ftsScore +
 			p.WeightImportance*adjustedImportance +
 			p.WeightRecency*recencyScore +
 			p.WeightVerification*verificationScore
@@ -421,11 +343,9 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 			Fact:     *fact,
 			Score:    finalScore,
 			FTSScore: ftsScore,
-			VecScore: vecScore,
 		})
 	}
 
-	// Sort by final score descending.
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
@@ -511,39 +431,6 @@ func stripQuotes(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
-}
-
-// rerankFacts reorders memory search results using the cross-encoder reranker.
-// On failure, returns the original results unchanged (graceful fallback).
-func (s *Store) rerankFacts(ctx context.Context, query string, results []SearchResult) []SearchResult {
-	docs := make([]string, len(results))
-	for i, r := range results {
-		docs[i] = r.Fact.Content
-	}
-
-	ranked, err := s.reranker(ctx, query, docs, len(results))
-	if err != nil {
-		if s.logger != nil {
-			s.logger.Debug("memory: reranking failed, using hybrid order", "error", err)
-		}
-		return results
-	}
-
-	p := s.searchParams()
-	reranked := make([]SearchResult, 0, len(ranked))
-	for _, r := range ranked {
-		if r.Index >= 0 && r.Index < len(results) {
-			res := results[r.Index]
-			// Blend reranker score with existing score to preserve importance/recency signal.
-			res.Score = p.RerankBlendReranker*r.RelevanceScore + p.RerankBlendHybrid*res.Score
-			reranked = append(reranked, res)
-		}
-	}
-
-	if len(reranked) == 0 {
-		return results
-	}
-	return reranked
 }
 
 // rankToScore converts FTS5 rank (negative, lower = better) to 0-1 score.

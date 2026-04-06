@@ -106,13 +106,7 @@ func checkMemoryComponent(ctx context.Context, d *toolctx.VegaDeps) ComponentHea
 
 	ch.Available = true
 
-	// Load embeddings count for richer status.
-	embCount := 0
-	if embeddings, err := d.MemoryStore.LoadEmbeddings(probeCtx); err == nil {
-		embCount = len(embeddings)
-	}
-
-	ch.Detail = fmt.Sprintf("facts=%d, embeddings=%d", count, embCount)
+	ch.Detail = fmt.Sprintf("facts=%d", count)
 	return ch
 }
 

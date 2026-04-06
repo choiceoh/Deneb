@@ -29,7 +29,7 @@ const (
 // When set on Store via SetSearchParams, these override the hardcoded constants.
 type SearchParams struct {
 	// Scoring weights (should sum to ~1.0).
-	WeightHybrid       float64 `json:"weight_hybrid"`
+	WeightFTS          float64 `json:"weight_fts"`
 	WeightImportance   float64 `json:"weight_importance"`
 	WeightRecency      float64 `json:"weight_recency"`
 	WeightVerification float64 `json:"weight_verification"`
@@ -46,17 +46,8 @@ type SearchParams struct {
 	ORPenalty        float64 `json:"or_penalty"`
 	TrigramPenalty   float64 `json:"trigram_penalty"`
 
-	// Vector search.
-	VectorMinThreshold float64 `json:"vector_min_threshold"`
-	HybridFTSWeight    float64 `json:"hybrid_fts_weight"`
-	HybridVecWeight    float64 `json:"hybrid_vec_weight"`
-
 	// Entity search.
 	EntityMatchBaseline float64 `json:"entity_match_baseline"`
-
-	// Reranker blend.
-	RerankBlendReranker float64 `json:"rerank_blend_reranker"`
-	RerankBlendHybrid   float64 `json:"rerank_blend_hybrid"`
 
 	// Dedup.
 	DedupJaccardThreshold float64 `json:"dedup_jaccard_threshold"`
@@ -73,7 +64,7 @@ type SearchParams struct {
 // hardcoded constant values. Used as fallback when no config file is loaded.
 func DefaultSearchParams() SearchParams {
 	return SearchParams{
-		WeightHybrid:       weightHybrid,
+		WeightFTS:          weightHybrid,
 		WeightImportance:   weightImportance,
 		WeightRecency:      weightRecency,
 		WeightVerification: weightVerification,
@@ -101,14 +92,7 @@ func DefaultSearchParams() SearchParams {
 		ORPenalty:        0.85,
 		TrigramPenalty:   0.80,
 
-		VectorMinThreshold: 0.60,
-		HybridFTSWeight:    1.00,
-		HybridVecWeight:    0.00,
-
 		EntityMatchBaseline: 0.60,
-
-		RerankBlendReranker: 0.70,
-		RerankBlendHybrid:   0.30,
 
 		DedupJaccardThreshold: dedupJaccardThreshold,
 
@@ -139,7 +123,7 @@ func LoadSearchParams(path string) (*SearchParams, error) {
 // Validate checks parameter constraints.
 func (p *SearchParams) Validate() error {
 	// Scoring weights must sum to ~1.0.
-	weightSum := p.WeightHybrid + p.WeightImportance + p.WeightRecency + p.WeightVerification
+	weightSum := p.WeightFTS + p.WeightImportance + p.WeightRecency + p.WeightVerification
 	if math.Abs(weightSum-1.0) > 0.02 {
 		return fmt.Errorf("scoring weights must sum to ~1.0, got %.4f", weightSum)
 	}
@@ -170,9 +154,6 @@ func (p *SearchParams) Validate() error {
 	}
 
 	// Thresholds must be in [0, 1].
-	if p.VectorMinThreshold < 0 || p.VectorMinThreshold > 1 {
-		return fmt.Errorf("vector_min_threshold must be in [0, 1], got %.2f", p.VectorMinThreshold)
-	}
 	if p.DedupJaccardThreshold < 0 || p.DedupJaccardThreshold > 1 {
 		return fmt.Errorf("dedup_jaccard_threshold must be in [0, 1], got %.2f", p.DedupJaccardThreshold)
 	}

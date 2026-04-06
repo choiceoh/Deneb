@@ -7,20 +7,15 @@
 //
 //	store_facts.go      — fact CRUD (InsertFact … ActiveFactCount)
 //	store_meta.go       — user model, dreaming log, metadata
-//	store_embeddings.go — embedding storage and loading
 //	store_export.go     — ExportToMarkdown, ExportToFile, ImportFromMarkdown
 package memory
 
 import (
 	"context"
 	"database/sql"
-	"encoding/binary"
 	"log/slog"
-	"math"
 	"sync"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 )
 
 // Fact categories matching Honcho's structured memory model.
@@ -86,17 +81,10 @@ type DreamingLogEntry struct {
 
 // Store is the structured memory database.
 type Store struct {
-	db       *sql.DB
-	mu       sync.RWMutex
-	reranker RerankFunc         // optional cross-encoder reranker (nil = disabled)
-	embedder embedding.Embedder // optional embedder for semantic dedup at insert time (nil = disabled)
-	logger   *slog.Logger
-	shared   bool // true when DB is owned by unified store (don't close)
-
-	// In-memory embedding cache: avoids full table scan on every search.
-	// Populated on first LoadEmbeddings call, invalidated on mutations.
-	embCache      map[int64][]float32
-	embCacheReady bool
+	db     *sql.DB
+	mu     sync.RWMutex
+	logger *slog.Logger
+	shared bool // true when DB is owned by unified store (don't close)
 
 	// onFactMutate is called when high-importance facts are inserted/updated/deleted.
 	// Used to invalidate the Tier-1 cache so new facts appear in the system prompt
@@ -210,24 +198,6 @@ func NewStoreFromDB(db *sql.DB) (*Store, error) {
 		shared: true,
 	}
 	return store, nil
-}
-
-// SetReranker configures an optional cross-encoder reranker for search results.
-// When set, SearchFacts and Recall will rerank results after hybrid scoring.
-func (s *Store) SetReranker(fn RerankFunc) {
-	s.reranker = fn
-}
-
-// Reranker returns the configured reranker function, or nil if not set.
-func (s *Store) Reranker() RerankFunc {
-	return s.reranker
-}
-
-// SetEmbedder configures an optional raw embedder for semantic dedup at insert time.
-// When set, findSemanticDuplicate will use cosine similarity as a Stage 3 check
-// after FTS+Jaccard. Safe to call before any concurrent operations.
-func (s *Store) SetEmbedder(e embedding.Embedder) {
-	s.embedder = e
 }
 
 // SetFactMutateCallback registers a function called when facts are mutated
@@ -367,41 +337,3 @@ func nullTimeStr(t *time.Time) sql.NullString {
 	return sql.NullString{String: t.UTC().Format(time.RFC3339), Valid: true}
 }
 
-// float32sToBlob converts a float32 slice to little-endian bytes.
-// Matches the pattern in core-rs/vega/src/db/schema.rs for chunk_embeddings.
-func float32sToBlob(vec []float32) []byte {
-	buf := make([]byte, len(vec)*4)
-	for i, v := range vec {
-		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
-	}
-	return buf
-}
-
-// blobToFloat32s converts little-endian bytes back to float32 slice.
-func blobToFloat32s(blob []byte) []float32 {
-	n := len(blob) / 4
-	vec := make([]float32, n)
-	for i := range n {
-		vec[i] = math.Float32frombits(binary.LittleEndian.Uint32(blob[i*4:]))
-	}
-	return vec
-}
-
-// cosineSimilarity computes cosine similarity between two float32 vectors.
-func cosineSimilarity(a, b []float32) float64 {
-	if len(a) != len(b) || len(a) == 0 {
-		return 0
-	}
-	var dot, normA, normB float64
-	for i := range a {
-		ai, bi := float64(a[i]), float64(b[i])
-		dot += ai * bi
-		normA += ai * ai
-		normB += bi * bi
-	}
-	denom := math.Sqrt(normA) * math.Sqrt(normB)
-	if denom == 0 {
-		return 0
-	}
-	return dot / denom
-}
