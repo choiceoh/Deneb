@@ -145,16 +145,11 @@ func NewSubagentCommandDepsFromACP(registry *acp.ACPRegistry, cfg ...ACPCommandD
 		}
 	}
 
-	// Wire Log/GetHistory.
+	// Wire Log/GetHistory (nil when TranscriptLoader is not configured;
+	// HandleSubagentsLogAction already checks for nil deps).
 	if config.TranscriptLoader != nil {
 		deps.Log = &SubagentLogDeps{
 			GetHistory: config.TranscriptLoader,
-		}
-	} else {
-		deps.Log = &SubagentLogDeps{
-			GetHistory: func(sessionKey string, limit int) ([]ChatLogMessage, error) {
-				return nil, fmt.Errorf("transcript loading not available")
-			},
 		}
 	}
 
