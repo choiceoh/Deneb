@@ -30,6 +30,7 @@ import (
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
+	handlerwiki "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -209,6 +210,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.AdvancePhase(rpcutil.PhaseLate)
 	hub.SetChat(s.chatHandler)
+	hub.SetWikiStore(s.wikiStore) // late-bound: created during session phase
 
 	domains := []map[string]rpcutil.HandlerFunc{
 		handlerchat.Methods(handlerchat.Deps{Chat: hub.Chat()}),
@@ -224,6 +226,11 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		handleraurorachannel.Methods(handleraurorachannel.Deps{Chat: hub.Chat()}),
 		handlerautoresearch.Methods(handlerautoresearch.Deps{
 			Runner: s.autoresearchRunner,
+		}),
+
+		// --- Wiki knowledge base (feature-flagged, late-bound) ---
+		handlerwiki.Methods(handlerwiki.Deps{
+			Store: hub.WikiStore(),
 		}),
 
 		// --- Skill genesis (depends on chatHandler for LLM client) ---
