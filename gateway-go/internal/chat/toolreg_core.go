@@ -38,7 +38,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 		if cfg.SubLLMEnabled && deps.LLMClient != nil {
 			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg)
-			toolreg.RegisterRLMSpawnTools(registry, spawnFn, batchFn)
+			toolreg.RegisterRLMSpawnTools(registry, spawnFn, batchFn, cfg.MaxSubSpawns)
 		}
 	}
 

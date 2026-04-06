@@ -66,9 +66,10 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 		cfg.Logger = slog.Default()
 	}
 
-	// Reserve tokens before starting. We reserve MaxTokens as a worst-case
-	// estimate; actual usage is tracked post-hoc via Consume.
-	if cfg.Budget != nil && !cfg.Budget.TryReserve(cfg.MaxTokens) {
+	// Reserve tokens before starting (pessimistic). After the call we settle
+	// with actual usage via Settle, returning any surplus to the pool.
+	reserved := cfg.MaxTokens
+	if cfg.Budget != nil && !cfg.Budget.TryReserve(reserved) {
 		return &SubAgentResult{Error: "token budget exhausted"}, nil
 	}
 
@@ -95,16 +96,20 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 	result, err := agent.RunAgent(ctx, agentCfg, messages, cfg.Client, cfg.ToolExecutor, agent.StreamHooks{}, cfg.Logger, nil)
 	elapsed := time.Since(start)
 	if err != nil {
+		// Release the full reservation on failure — no tokens were actually used.
+		if cfg.Budget != nil {
+			cfg.Budget.Settle(reserved, 0)
+		}
 		cfg.Logger.Warn("sub-agent failed",
 			"error", err,
 			"elapsed_ms", elapsed.Milliseconds())
 		return &SubAgentResult{Error: fmt.Sprintf("sub-agent error: %v", err)}, nil
 	}
 
-	// Track token usage in shared budget.
+	// Settle: replace pessimistic reservation with actual usage.
 	totalTokens := result.Usage.InputTokens + result.Usage.OutputTokens
 	if cfg.Budget != nil {
-		cfg.Budget.Consume(totalTokens)
+		cfg.Budget.Settle(reserved, totalTokens)
 	}
 
 	cfg.Logger.Info("sub-agent completed",
@@ -238,6 +243,9 @@ func FormatBatchResults(results []SubAgentResult) string {
 		TotalTokens: totalTokens,
 	}
 
-	b, _ := json.Marshal(out)
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Sprintf("배치 결과 직렬화 실패: %v", err)
+	}
 	return string(b)
 }

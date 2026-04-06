@@ -99,6 +99,44 @@ func TestTokenBudget_TryReserveConcurrent(t *testing.T) {
 	}
 }
 
+func TestTokenBudget_Settle(t *testing.T) {
+	b := NewTokenBudget(1000)
+
+	// Reserve 500, actually use 300 → 200 returned to pool.
+	if !b.TryReserve(500) {
+		t.Fatal("expected TryReserve(500) to succeed")
+	}
+	if r := b.Remaining(); r != 500 {
+		t.Errorf("after reserve: expected remaining=500, got %d", r)
+	}
+
+	b.Settle(500, 300)
+	if r := b.Remaining(); r != 700 {
+		t.Errorf("after settle: expected remaining=700, got %d", r)
+	}
+	if u := b.Used(); u != 300 {
+		t.Errorf("after settle: expected used=300, got %d", u)
+	}
+
+	// Reserve 400, fail (error) → all 400 returned.
+	if !b.TryReserve(400) {
+		t.Fatal("expected TryReserve(400) to succeed")
+	}
+	b.Settle(400, 0)
+	if r := b.Remaining(); r != 700 {
+		t.Errorf("after error settle: expected remaining=700, got %d", r)
+	}
+
+	// Reserve 200, use more than reserved (350).
+	if !b.TryReserve(200) {
+		t.Fatal("expected TryReserve(200) to succeed")
+	}
+	b.Settle(200, 350)
+	if u := b.Used(); u != 650 {
+		t.Errorf("after over-use settle: expected used=650, got %d", u)
+	}
+}
+
 func TestTokenBudget_ConcurrentConsume(t *testing.T) {
 	b := NewTokenBudget(10000)
 	var wg sync.WaitGroup

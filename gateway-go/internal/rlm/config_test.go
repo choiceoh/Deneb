@@ -75,3 +75,18 @@ func TestConfigFromEnv_InvalidValues(t *testing.T) {
 		t.Errorf("expected default TotalTokenBudget=50000 for invalid int, got %d", cfg.TotalTokenBudget)
 	}
 }
+
+func TestConfigFromEnv_NegativeValues(t *testing.T) {
+	ResetConfigForTest()
+	t.Setenv("DENEB_RLM_ENABLED", "true")
+	t.Setenv("DENEB_RLM_TOTAL_TOKEN_BUDGET", "-1000")
+	t.Setenv("DENEB_RLM_MAX_SUB_SPAWNS", "-5")
+
+	cfg := ConfigFromEnv()
+	if cfg.TotalTokenBudget != 50000 {
+		t.Errorf("expected default TotalTokenBudget=50000 for negative, got %d", cfg.TotalTokenBudget)
+	}
+	if cfg.MaxSubSpawns != 10 {
+		t.Errorf("expected default MaxSubSpawns=10 for negative, got %d", cfg.MaxSubSpawns)
+	}
+}
