@@ -67,6 +67,15 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 | `internal/ffi/ffi_error_codes_gen.go` | `proto/gateway.proto` (FfiErrorCode) | `make error-codes-gen` |
 | `pkg/protocol/errors_gen.go` | `proto/gateway.proto` (ErrorCode) | `make error-codes-gen` |
 | `pkg/protocol/gen/*.pb.go` | `proto/*.proto` | `make proto` |
+| `internal/rpc/method_scopes_gen.go` | `internal/rpc/method_scopes.yaml` | `make data-gen` |
+| `internal/auth/role_permissions_gen.go` | `internal/auth/role_permissions.yaml` | `make data-gen` |
+| `internal/events/event_scope_guards_gen.go` | `internal/events/event_scope_guards.yaml` | `make data-gen` |
+| `internal/mcp/event_mappings_gen.go` | `internal/mcp/event_mappings.yaml` | `make data-gen` |
+| `internal/memory/memory_tuning_gen.go` | `internal/memory/memory_tuning.yaml` | `make data-gen` |
+| `internal/chat/tool_classification_gen.go` | `internal/chat/tool_classification.yaml` | `make data-gen` |
+| `internal/agent/tool_concurrency_gen.go` | `internal/agent/tool_concurrency.yaml` | `make data-gen` |
+| `internal/process/env_blocklist_gen.go` | `internal/process/env_blocklist.yaml` | `make data-gen` |
+| `internal/ffi/ssrf_blocklist_gen.go` | `internal/ffi/ssrf_blocklist.yaml` | `make data-gen` |
 
 To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.
 

@@ -235,15 +235,6 @@ func joinScopes(scopes []Scope) string {
 	return strings.Join(strs, ",")
 }
 
-// rolePermissions defines the default scopes for each role.
-// Matches CLI_DEFAULT_OPERATOR_SCOPES in src/gateway/method-scopes.ts.
-var rolePermissions = map[Role][]Scope{
-	RoleOperator: {ScopeAdmin, ScopeRead, ScopeWrite, ScopeApprovals, ScopePairing},
-	RoleViewer:   {ScopeRead},
-	RoleAgent:    {ScopeRead, ScopeWrite},
-	RoleProbe:    {ScopeRead},
-}
-
 // DefaultScopes returns the default scopes for the given role.
 func DefaultScopes(role Role) []Scope {
 	return rolePermissions[role]

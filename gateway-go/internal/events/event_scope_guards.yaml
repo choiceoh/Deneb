@@ -1,0 +1,35 @@
+# event_scope_guards.yaml — Event RBAC scope guards.
+#
+# Maps event names to required permission scopes for broadcast delivery.
+# Events not listed here are delivered to all authenticated subscribers.
+# Mirrors EVENT_SCOPE_GUARDS from src/gateway/server-broadcast.ts.
+#
+# Regenerate Go code: make data-gen
+
+_gen:
+  package: events
+
+eventScopeGuards:
+  _type: "map[string][]string"
+  _doc: |-
+    eventScopeGuards maps event names to required scopes.
+    Events not listed here are delivered to all authenticated subscribers.
+  _values:
+    exec.approval.requested: [approvals, admin]
+    exec.approval.resolved: [approvals, admin]
+    device.pair.requested: [approvals, admin]
+    device.pair.resolved: [approvals, admin]
+    node.pair.requested: [approvals, admin]
+    node.pair.resolved: [approvals, admin]
+    sessions.changed: [read]
+    session.message: [read]
+    session.tool: [read]
+    agent: [read]
+    agent.event: [read]
+    telegram.changed: [read]
+    config.changed: [admin]
+    process.completed: [write, admin]
+    heartbeat: [read]
+    dreaming.cycle: [read]
+    shadow.event: [read]
+    bridge.message: [read]

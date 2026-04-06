@@ -41,36 +41,6 @@ type SearchResult struct {
 	RelatedFacts []RelatedFact `json:"related_facts,omitempty"`
 }
 
-// categoryImportanceMultiplier adjusts the importance weight by fact category.
-// Decisions, context, and solutions are factual records of what happened → boost.
-// User model and mutual are relational/personality data → keep but don't over-boost.
-var categoryImportanceMultiplier = map[string]float64{
-	CategoryDecision:   1.20,
-	CategoryPreference: 1.05,
-	CategorySolution:   1.10,
-	CategoryContext:    0.95,
-	CategoryUserModel:  1.00,
-	CategoryMutual:     0.85,
-}
-
-// categorySteepnessDays controls the inverse-square recency decay per category.
-// The steepness value is the number of days at which score drops to 0.5.
-// Curve: score = 1 / (1 + (days/steepness)²)
-//   - At steepness days:  0.5
-//   - At 2×steepness:     0.2
-//   - At 3×steepness:     0.1
-//
-// Lower values = faster decay. Factual records (decision, context, solution)
-// get higher steepness so recent project history persists across sessions.
-var categorySteepnessDays = map[string]float64{
-	CategoryDecision:   14.0, // important decisions persist ~2 weeks at high score
-	CategoryPreference: 10.0,
-	CategorySolution:   10.0,
-	CategoryContext:    5.0,  // project state: very fresh-biased (1-2 days dominant)
-	CategoryUserModel:  14.0, // user traits: moderate persistence
-	CategoryMutual:     7.0,  // relationship signals: 1-week window
-}
-
 // SearchFacts performs a hybrid FTS + semantic search over active facts,
 // then applies importance and recency weighting.
 func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float32, opts SearchOpts) ([]SearchResult, error) {

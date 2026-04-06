@@ -174,26 +174,6 @@ const (
 	// Tools whose output should never be compressed (they're already structured/small).
 )
 
-// toolCompressSkipSet contains tools whose output should not be compressed.
-// Two categories:
-//   - Already-structured outputs (grep, find, tree, git, analyze, diff): file:line:match
-//     or directory-tree format; LLM compression loses structure and is slower than
-//     the existing GrepResultSummarizer / OutputTrimmer pipeline.
-//   - Tools that return small JSON (kv, sessions_list) where compression adds no value.
-var toolCompressSkipSet = map[string]bool{
-	// Structured-output tools — already handled by post-processors.
-	"grep":    true,
-	"find":    true,
-	"tree":    true,
-	"git":     true,
-	"analyze": true,
-	"diff":    true,
-	// Internal / already-small tools.
-	"memory":        true,
-	"kv":            true,
-	"sessions_list": true,
-}
-
 const compressSystemPrompt = `You are a tool output compressor.
 Condense the tool output to its essential information. Preserve:
 - Error messages and exit codes

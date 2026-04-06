@@ -1,0 +1,54 @@
+# memory_tuning.yaml — Memory search tuning parameters by fact category.
+#
+# Three parameter groups control how facts are scored and aged:
+#   - importance: weight multiplier for category relevance
+#   - steepness:  inverse-square recency decay half-life (days at score 0.5)
+#   - volatile:   shelf life before staleness hints (days)
+#
+# Regenerate Go code: make data-gen
+
+_gen:
+  package: memory
+
+categoryImportanceMultiplier:
+  _type: "map[string]float64"
+  _doc: |-
+    categoryImportanceMultiplier adjusts the importance weight by fact category.
+    Decisions, context, and solutions are factual records of what happened -> boost.
+    User model and mutual are relational/personality data -> keep but don't over-boost.
+  _values:
+    decision: 1.20
+    preference: 1.05
+    solution: 1.10
+    context: 0.95
+    user_model: 1.00
+    mutual: 0.85
+
+categorySteepnessDays:
+  _type: "map[string]float64"
+  _doc: |-
+    categorySteepnessDays controls the inverse-square recency decay per category.
+    The steepness value is the number of days at which score drops to 0.5.
+    Curve: score = 1 / (1 + (days/steepness)^2)
+    Lower values = faster decay.
+  _values:
+    decision: 14.0
+    preference: 10.0
+    solution: 10.0
+    context: 5.0
+    user_model: 14.0
+    mutual: 7.0
+
+CategoryVolatileDays:
+  _type: "map[string]int"
+  _doc: |-
+    CategoryVolatileDays defines "shelf life" per fact category.
+    Facts older than this threshold (relative to UpdatedAt) get a staleness hint.
+    Aligned with categorySteepnessDays: shelfLife ~ steepness x 3.
+  _values:
+    context: 45
+    decision: 135
+    solution: 90
+    preference: 90
+    user_model: 135
+    mutual: 68

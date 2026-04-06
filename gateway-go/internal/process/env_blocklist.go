@@ -2,43 +2,6 @@ package process
 
 import "strings"
 
-// blockedEnvKeys lists environment variable names that must be stripped from
-// subprocess environments. These variables can be exploited to inject code
-// into child processes via build-tool hooks, dynamic linker manipulation,
-// or language runtime startup hooks.
-//
-// Categories:
-//   - Dynamic linker: LD_PRELOAD, LD_LIBRARY_PATH, DYLD_*
-//   - Shell injection: BASH_ENV, ENV, ZDOTDIR
-//   - JVM injection: MAVEN_OPTS, SBT_OPTS, GRADLE_OPTS, _JAVA_OPTIONS, JAVA_TOOL_OPTIONS
-//   - Language runtimes: PYTHONSTARTUP, PERL5OPT, RUBYOPT
-//   - .NET: DOTNET_STARTUP_HOOKS, DOTNET_ROOT
-//   - glibc tunables: GLIBC_TUNABLES
-var blockedEnvKeys = map[string]bool{
-	"LD_PRELOAD":           true,
-	"LD_LIBRARY_PATH":      true,
-	"BASH_ENV":             true,
-	"ENV":                  true,
-	"ZDOTDIR":              true,
-	"MAVEN_OPTS":           true,
-	"SBT_OPTS":             true,
-	"GRADLE_OPTS":          true,
-	"_JAVA_OPTIONS":        true,
-	"JAVA_TOOL_OPTIONS":    true,
-	"PYTHONSTARTUP":        true,
-	"PERL5OPT":             true,
-	"RUBYOPT":              true,
-	"DOTNET_STARTUP_HOOKS": true,
-	"DOTNET_ROOT":          true,
-	"GLIBC_TUNABLES":       true,
-}
-
-// blockedEnvPrefixes lists environment variable prefixes that should be blocked.
-var blockedEnvPrefixes = []string{
-	"DYLD_",    // macOS dynamic linker
-	"LD_AUDIT", // glibc audit module
-}
-
 // isBlockedEnvKey returns true if the given environment variable key
 // should be stripped from subprocess environments.
 func isBlockedEnvKey(key string) bool {

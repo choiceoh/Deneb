@@ -7,10 +7,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// publicMethods are accessible without authentication.
-var publicMethods = map[string]bool{
-	"health":       true,
-	"health.check": true,
+// RequiredScope returns the scope needed to call the given method.
+// Returns ScopeAdmin for unknown methods (fail-closed). When adding new RPC
+// methods, register them in method_scopes.yaml to avoid unintentional admin-only access.
+func RequiredScope(method string) auth.Scope {
+	if scope, ok := methodScopes[method]; ok {
+		return scope
+	}
+	return auth.ScopeAdmin
 }
 
 // AuthorizeMethod checks whether the given role and scopes allow calling the method.
