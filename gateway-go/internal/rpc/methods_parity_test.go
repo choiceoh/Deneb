@@ -100,7 +100,6 @@ var tsBaseMethods = []string{
 	"agent",
 	"agent.identity.get",
 	"agent.wait",
-	"browser.request",
 	"chat.history",
 	"chat.abort",
 	"chat.send",
@@ -151,14 +150,6 @@ func fullDispatcher() *Dispatcher {
 		JobTracker: agent.NewJobTracker(testLogger()),
 	})
 
-	// Stub handlers for formerly bridge-forwarded methods.
-	stubUnavailable := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrUnavailable, req.Method+" not available in standalone mode"))
-	}
-	d.Register("browser.request", stubUnavailable)
-	d.Register("web.login.start", stubUnavailable)
-	d.Register("web.login.wait", stubUnavailable)
 	d.Register("telegram.logout", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp := protocol.MustResponseOK(req.ID, map[string]any{"ok": true})
 		return resp
