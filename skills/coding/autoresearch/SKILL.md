@@ -112,9 +112,9 @@ go test -cover ./... 2>&1 | grep 'coverage:' | grep -oP '[\d.]+'
 make build && du -b ./build/output | cut -f1
 
 # Benchmark score with pattern
-# metric_cmd: "cargo bench"
+# metric_cmd: "go test -bench=."
 # metric_pattern: "time:\s*(\d+\.?\d*)"
-cargo bench
+go test -bench=.
 ```
 
 The `TIME_BUDGET` environment variable is set to the configured seconds,

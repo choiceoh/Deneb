@@ -1,6 +1,6 @@
 ---
 description: "상수/파라미터 반복 최적화 전략 — 오토리서치 프롬프트 기반, 라이브 테스트 연동"
-globs: ["gateway-go/**/*.go", "core-rs/**/*.rs"]
+globs: ["gateway-go/**/*.go"]
 ---
 
 # Iterative Optimization (Autoresearch Methodology)
