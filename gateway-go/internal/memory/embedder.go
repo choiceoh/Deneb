@@ -80,6 +80,10 @@ func (e *Embedder) EmbedBatchAndStore(ctx context.Context, facts []struct {
 		return 0, fmt.Errorf("batch embed %d facts: %w", len(facts), err)
 	}
 
+	if len(vecs) != len(facts) {
+		return 0, fmt.Errorf("batch embed: expected %d vectors, got %d", len(facts), len(vecs))
+	}
+
 	stored := 0
 	for i, vec := range vecs {
 		if err := e.store.StoreEmbedding(ctx, facts[i].ID, vec, e.modelName); err != nil {

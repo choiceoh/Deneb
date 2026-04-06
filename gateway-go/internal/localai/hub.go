@@ -378,6 +378,12 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 		ResponseFormat: req.ResponseFormat,
 	}
 
+	if h.client == nil {
+		h.Stats.Failed.Add(1)
+		entry.resultCh <- submitResult{err: errors.New("localai hub: client not initialized")}
+		return
+	}
+
 	events, err := h.client.StreamChat(reqCtx, chatReq)
 	if err != nil {
 		h.Stats.Failed.Add(1)
