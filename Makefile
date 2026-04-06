@@ -3,7 +3,7 @@
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
 .PHONY: all rust rust-vega rust-ml rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod \
+       go go-ffi go-dgx go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod gateway-dgx \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-arm64 \
        deny machete \
@@ -83,6 +83,11 @@ go: go-ffi
 go-ffi:
 	cd gateway-go && $(GO_ENV) go build $(GO_LDFLAGS) ./...
 
+# CGo build with CUDA libraries (requires `make rust-dgx` first).
+CUDA_LIBDIR ?= /usr/local/cuda/targets/sbsa-linux/lib
+go-dgx:
+	cd gateway-go && CGO_LDFLAGS="-L$(CUDA_LIBDIR) -lcuda -lcudart -lcublas -lcublasLt" $(GO_ENV) go build $(GO_LDFLAGS) ./...
+
 # Pure-Go build with fallback implementations (no Rust required).
 go-pure:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build $(GO_LDFLAGS) -tags no_ffi ./...
@@ -139,6 +144,11 @@ go-binary: rust go
 # Build MCP server binary (pure Go, no FFI — thin bridge to gateway HTTP RPC).
 mcp-server:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -tags no_ffi -o ../bin/deneb-mcp ./cmd/mcp-server/
+
+# Build full DGX Spark production: Rust (Vega+ML+CUDA) + Go (CUDA linked) + CLI.
+gateway-dgx: rust-dgx go-dgx cli
+	cp cli-rs/target/release/deneb dist/deneb-rs 2>/dev/null || true
+	@echo "DGX gateway ready: gateway-go/deneb-gateway (Vega+ML+CUDA)"
 
 # Build production gateway: Go binary + CLI, copies both to dist/.
 gateway-prod: go-binary cli
@@ -321,9 +331,11 @@ info:
 	@echo "  make rust-dgx   - Build Rust core + Vega + ML + CUDA (DGX Spark)"
 	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
+	@echo "  make go-dgx     - Build Go gateway with CUDA linking (DGX Spark)"
 	@echo "  make go-dev     - Run Go gateway in dev mode (auto-restart on SIGUSR1)"
 	@echo "  make cli        - Build Rust CLI (release)"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
+	@echo "  make gateway-dgx - Full DGX Spark build (rust-dgx + go-dgx + cli)"
 	@echo "  make test       - Run Rust + Go + CLI tests"
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"
