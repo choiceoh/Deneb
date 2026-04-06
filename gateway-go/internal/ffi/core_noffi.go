@@ -3,14 +3,10 @@
 package ffi
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"net"
-	"net/url"
-	"strconv"
-	"strings"
-	"unicode"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/coresecurity"
 )
 
 // Available reports whether the Rust FFI library is linked.
@@ -49,11 +45,9 @@ func ValidateFrame(jsonStr string) error {
 	return nil
 }
 
-// ConstantTimeEq is a pure-Go fallback using crypto/subtle.
-// Unlike a naive XOR loop, subtle.ConstantTimeCompare handles length
-// mismatches in constant time, preventing timing side-channel leaks.
+// ConstantTimeEq delegates to coresecurity.ConstantTimeEq.
 func ConstantTimeEq(a, b []byte) bool {
-	return subtle.ConstantTimeCompare(a, b) == 1
+	return coresecurity.ConstantTimeEq(a, b)
 }
 
 // DetectMIME is a pure-Go fallback for common MIME types.
@@ -89,120 +83,19 @@ func DetectMIME(data []byte) string {
 	return "application/octet-stream"
 }
 
-// ValidateSessionKey is a pure-Go fallback for session key validation.
-// Single-pass: counts runes and checks for control chars simultaneously.
+// ValidateSessionKey delegates to coresecurity.ValidateSessionKey.
 func ValidateSessionKey(key string) error {
-	if len(key) == 0 {
-		return errors.New("ffi: empty session key")
-	}
-	count := 0
-	for _, r := range key {
-		count++
-		if count > 512 {
-			return errors.New("ffi: session key too long")
-		}
-		if unicode.IsControl(r) && r != '\n' && r != '\t' && r != '\r' {
-			return errors.New("ffi: invalid session key")
-		}
-	}
-	return nil
+	return coresecurity.ValidateSessionKey(key)
 }
 
-// SanitizeHTML is a pure-Go fallback for HTML sanitization.
+// SanitizeHTML delegates to coresecurity.SanitizeHTML.
 func SanitizeHTML(input string) string {
-	// Fast path: no special chars — return as-is (zero alloc).
-	if !strings.ContainsAny(input, "<>&\"'") {
-		return input
-	}
-	var b strings.Builder
-	b.Grow(len(input) + len(input)/4)
-	for _, r := range input {
-		switch r {
-		case '<':
-			b.WriteString("&lt;")
-		case '>':
-			b.WriteString("&gt;")
-		case '&':
-			b.WriteString("&amp;")
-		case '"':
-			b.WriteString("&quot;")
-		case '\'':
-			b.WriteString("&#x27;")
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return coresecurity.SanitizeHTML(input)
 }
 
-// IsSafeURL is a pure-Go fallback for SSRF URL validation.
-// Blocks private/loopback IPs, cloud metadata endpoints, and dangerous schemes.
+// IsSafeURL delegates to coresecurity.IsSafeURL.
 func IsSafeURL(rawURL string) bool {
-	// Explicit UNC path blocking (defense-in-depth).
-	if strings.HasPrefix(rawURL, "\\\\") || (strings.HasPrefix(rawURL, "//") && !strings.Contains(rawURL, "://")) {
-		return false
-	}
-
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	scheme := strings.ToLower(u.Scheme)
-	if blockedSchemes[scheme] {
-		return false
-	}
-	if scheme != "http" && scheme != "https" {
-		return false
-	}
-	// url.Hostname() already strips userinfo and port.
-	host := strings.ToLower(u.Hostname())
-	if host == "" {
-		return false
-	}
-	if blockedHosts[host] {
-		return false
-	}
-
-	// Parse as IP to check private/reserved ranges.
-	ip := net.ParseIP(host)
-	if ip != nil {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-			ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-			return false
-		}
-		// Block CGNAT range 100.64.0.0/10.
-		if ip4 := ip.To4(); ip4 != nil && ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
-			return false
-		}
-		return true
-	}
-
-	// Host is a hostname — check common private IP prefixes as strings.
-	if strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.168.") {
-		return false
-	}
-	if strings.HasPrefix(host, "172.") {
-		parts := strings.SplitN(host, ".", 3)
-		if len(parts) >= 2 {
-			if n, err := strconv.Atoi(parts[1]); err == nil && n >= 16 && n <= 31 {
-				return false
-			}
-		}
-	}
-	// Block link-local range 169.254.x.x.
-	if strings.HasPrefix(host, "169.254.") {
-		return false
-	}
-	// Block CGNAT range 100.64-127.x.x.
-	if strings.HasPrefix(host, "100.") {
-		parts := strings.SplitN(host, ".", 3)
-		if len(parts) >= 2 {
-			if n, err := strconv.Atoi(parts[1]); err == nil && n >= 64 && n <= 127 {
-				return false
-			}
-		}
-	}
-	return true
+	return coresecurity.IsSafeURL(rawURL)
 }
 
 // knownErrorCodes contains all valid gateway error codes.
