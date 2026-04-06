@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.10.0...deneb-v4.11.0) (2026-04-06)
+
+
+### ✨ Features
+
+* **chat:** enable continue_run in normal mode ([e1d4d03](https://github.com/choiceoh/Deneb/commit/e1d4d03d430063dcf5043b520a090f9c93de0b26))
+* **chat:** enable continue_run in normal mode ([3082889](https://github.com/choiceoh/Deneb/commit/308288915a1592385f47838ef6eb086a52ba04c7))
+
+
+### 🐛 Bug Fixes
+
+* **build:** add cuda build tag for reliable CUDA linking ([fa460e7](https://github.com/choiceoh/Deneb/commit/fa460e76666ab5084247ed66e7c4ea95b7fbf228))
+* **chat:** make cron tool eager instead of deferred ([f7a1946](https://github.com/choiceoh/Deneb/commit/f7a1946a5f6d3086b329e7cba63afbcf895286e3))
+* **chat:** make cron tool eager instead of deferred ([c619f4d](https://github.com/choiceoh/Deneb/commit/c619f4d3340566336aecf3939fbc041049affd9a))
+* **cron:** prevent duplicate execution and stale job data ([07208cc](https://github.com/choiceoh/Deneb/commit/07208cc2cc880b595dbf034e2cb4ad4393c0803a))
+* **cron:** prevent duplicate execution and stale job data ([1b24764](https://github.com/choiceoh/Deneb/commit/1b247647d17927f3cd2e38c1a7940b4b61daf10d))
+
 ## [4.10.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.9.0...deneb-v4.10.0) (2026-04-06)
 
 
