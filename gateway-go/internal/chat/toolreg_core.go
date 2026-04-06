@@ -32,12 +32,11 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          tools.ToolFetchTools(registry),
 	})
 
-	// Wiki: LLM knowledge base (always enabled).
-	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
-
-	// RLM: context externalization tools (feature-flagged).
+	// RLM: context externalization + wiki knowledge base (feature-flagged).
+	// Wiki access is exclusively through RLM — all long-term knowledge tools
+	// (search, read, write, log) are registered here.
 	if cfg := rlm.ConfigFromEnv(); cfg.Enabled {
-		toolreg.RegisterRLMTools(registry, &deps.Wiki)
+		toolreg.RegisterRLMTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
 		if cfg.SubLLMEnabled && deps.LLMClient != nil {
 			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg)
@@ -62,7 +61,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 // rlmDataToolNames lists the Phase 1 tool names available to sub-LLMs.
 // llm_spawn/llm_spawn_batch are excluded to prevent recursion.
-// wiki replaces memory_recall_rlm — sub-LLMs use wiki search/read for knowledge retrieval.
 var rlmDataToolNames = []string{
 	"projects_list",
 	"projects_get_field",

@@ -477,25 +477,21 @@ func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writ
 	})
 }
 
-// RegisterWikiTools registers the wiki knowledge base tool.
-// Called when DENEB_WIKI_ENABLED is true, alongside the existing memory tool.
-func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps, workspaceDir string) {
-	if wikiDeps.Store == nil {
-		return
+// RegisterRLMTools registers RLM (Recursive Language Model) tools for context
+// externalization. Wiki is the unified knowledge base — all long-term knowledge
+// access (search, read, write, log) goes through RLM. Project-specific tools
+// provide structured access to the "프로젝트" wiki category.
+func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps, workspaceDir string) {
+	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
+	if wikiDeps.Store != nil {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:            "wiki",
+			Description:     "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
+			InputSchema:     wikiToolSchema(),
+			Fn:              tools.ToolWiki(wikiDeps, workspaceDir),
+			ConcurrencySafe: true,
+		})
 	}
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "wiki",
-		Description:     "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
-		InputSchema:     wikiToolSchema(),
-		Fn:              tools.ToolWiki(wikiDeps, workspaceDir),
-		ConcurrencySafe: true,
-	})
-}
-
-// RegisterRLMTools registers RLM (Recursive Language Model) Phase 1 tools
-// for context externalization. These let the LLM fetch project data and
-// memory on demand via wiki instead of relying on pre-injected context.
-func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "projects_list",
 		Description:     "프로젝트 목록과 메타데이터 조회. 본문 데이터 없음, ID/이름/상태/지역 등 목록만 반환",
@@ -522,13 +518,6 @@ func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps
 		Description:     "프로젝트 원본 문서 조회. 섹션 미지정 시 목차만 반환, 섹션 지정 시 해당 섹션 내용 반환",
 		InputSchema:     projectsGetDocumentToolSchema(),
 		Fn:              tools.ToolProjectsGetDocument(wikiDeps),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "memory_recall_rlm",
-		Description:     "위키 전체에서 과거 결정/인물/기술/프로젝트 등 장기 기억 검색. 카테고리 무관 전문 검색",
-		InputSchema:     memoryRecallRlmToolSchema(),
-		Fn:              tools.ToolMemoryRecall(wikiDeps),
 		ConcurrencySafe: true,
 	})
 }
