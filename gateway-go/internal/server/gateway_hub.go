@@ -21,6 +21,7 @@ func (s *Server) buildHub() *rpcutil.GatewayHub {
 		Skills:         s.skills,
 		Wizard:         s.wizardEng,
 		Talk:           s.talkState,
+		RLService:      s.rlService,
 		Logger:         s.logger,
 		Version:        s.version,
 	})
