@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -126,9 +127,29 @@ func triggerProactiveCompaction(
 	}()
 }
 
-// midLoopCompactionThreshold is the fraction of the token budget at which
-// mid-loop compaction triggers (0.60 = 60% of live token budget).
-const midLoopCompactionThreshold = 0.60
+// midLoopCompactionDefault is the baseline compaction threshold ratio when
+// messages are small/uniform (0.60 = trigger at 60% of live token budget).
+const midLoopCompactionDefault = 0.60
+
+// adaptiveMidLoopThreshold adjusts the compaction trigger ratio based on
+// average message size. Tool-heavy sessions (code analysis, large results)
+// get a lower threshold to compress earlier; short conversational sessions
+// preserve more context at the default ratio.
+//
+// Inspired by OpenClaw's adaptive chunk ratio:
+//   - avgRatio > 0.1 (each msg ~10%+ of budget) → compress earlier (0.15–0.40)
+//   - avgRatio ≤ 0.1 (small messages)            → keep default (0.60)
+func adaptiveMidLoopThreshold(liveTokens int, msgCount int, budget uint64) float64 {
+	if msgCount == 0 || budget == 0 {
+		return midLoopCompactionDefault
+	}
+	avgRatio := (float64(liveTokens) / float64(msgCount)) * 1.2 / float64(budget)
+	if avgRatio > 0.1 {
+		reduction := math.Min(avgRatio*2, 0.25)
+		return math.Max(0.15, 0.4-reduction)
+	}
+	return midLoopCompactionDefault
+}
 
 // estimateMessagesTokens returns a rough token count for an entire message history.
 func estimateMessagesTokens(messages []llm.Message) int {
@@ -156,7 +177,6 @@ func buildMidLoopCompactor(
 	logger *slog.Logger,
 ) func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error) {
 	budget := deps.contextCfg.LiveTokenBudget
-	threshold := uint64(midLoopCompactionThreshold * float64(budget))
 
 	// Track last compaction turn to avoid compacting on consecutive turns.
 	var lastCompactTurn int = -10
@@ -169,8 +189,12 @@ func buildMidLoopCompactor(
 			return nil, "", nil
 		}
 
-		// Estimate current context size.
+		// Estimate current context size and compute adaptive threshold.
+		// Tool-heavy sessions (large avg message) trigger earlier; conversational
+		// sessions preserve more context at the default 0.60 ratio.
 		liveTokens := estimateMessagesTokens(messages)
+		ratio := adaptiveMidLoopThreshold(liveTokens, len(messages), budget)
+		threshold := uint64(ratio * float64(budget))
 		if uint64(liveTokens) < threshold {
 			return nil, "", nil
 		}
