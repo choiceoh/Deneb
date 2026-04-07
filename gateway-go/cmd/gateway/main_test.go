@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/server"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )

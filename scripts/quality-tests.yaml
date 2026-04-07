@@ -9,11 +9,11 @@
 # 엣지 난이도 상향: 인젝션/멀티턴/도구악용/컨텍스트 생존 중심.
 #
 # Run:
-#   python3 scripts/dev-quality-test.py --scenario all        # 전체 134개
-#   python3 scripts/dev-quality-test.py --scenario daily       # 일상 대화
-#   python3 scripts/dev-quality-test.py --scenario system      # 시스템 관리
-#   python3 scripts/dev-quality-test.py --scenario core        # 코어 퀵 테스트
-#   python3 scripts/dev-quality-test.py --list                 # 테스트 목록
+#   python3 scripts/dev/quality-test.py --scenario all        # 전체 134개
+#   python3 scripts/dev/quality-test.py --scenario daily       # 일상 대화
+#   python3 scripts/dev/quality-test.py --scenario system      # 시스템 관리
+#   python3 scripts/dev/quality-test.py --scenario core        # 코어 퀵 테스트
+#   python3 scripts/dev/quality-test.py --list                 # 테스트 목록
 #
 # ================================================================
 

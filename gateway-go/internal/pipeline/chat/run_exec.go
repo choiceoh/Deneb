@@ -1,0 +1,845 @@
+// run_exec.go contains the core agent execution loop: user message persistence,
+// context assembly, LLM invocation with model fallback.
+package chat
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/compaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/coordinator"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+)
+
+// chatRunResult wraps the agent result with chat-layer continuation info.
+type chatRunResult struct {
+	*agent.AgentResult
+	// ContSignal is non-nil when the continue_run tool was available.
+	// Check ContSignal.Requested() to see if the LLM requested a continuation.
+	ContSignal *ContinuationSignal
+	// SpawnFlag is non-nil; IsSet() returns true when sessions_spawn was called.
+	SpawnFlag *SpawnFlag
+}
+
+// executeAgentRun performs the core agent execution: persist user msg, assemble context,
+// run agent loop, persist result.
+func executeAgentRun(
+	ctx context.Context,
+	params RunParams,
+	deps runDeps,
+	broadcaster *streaming.Broadcaster,
+	typingSignaler chatport.TypingSignaler,
+	statusCtrl *telegram.StatusReactionController,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+) (*chatRunResult, error) {
+	runStart := time.Now()
+
+	// Emit agent run.start event to gateway subscriptions.
+	if deps.emitAgentFn != nil {
+		deps.emitAgentFn("run.start", params.SessionKey, params.ClientRunID, map[string]any{
+			"model": params.Model,
+			"ts":    runStart.UnixMilli(),
+		})
+	}
+
+	// 1. Persist user message to transcript + Aurora store.
+	if deps.transcript != nil && params.Message != "" {
+		userMsg := NewTextChatMessage("user", params.Message, time.Now().UnixMilli())
+		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
+			logger.Error("failed to persist user message", "error", err)
+		}
+		if deps.emitTranscriptFn != nil {
+			deps.emitTranscriptFn(params.SessionKey, userMsg, "")
+		}
+	}
+	workspaceDir := params.WorkspaceDir
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDirForPrompt()
+	}
+
+	// Pre-warm context file snapshot for this session so disk I/O happens
+	// before the parallel prep phase (no-op if already cached from a prior turn).
+	prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+
+	// Cache session lookup: fetched once and reused throughout this function
+	// to avoid repeated map lookups + lock acquisitions.
+	var cachedSession *session.Session
+	if deps.sessions != nil {
+		cachedSession = deps.sessions.Get(params.SessionKey)
+	}
+
+	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
+	// Agent tools pass role names ("main", "lightweight", "fallback").
+	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
+	// are treated as direct overrides (no fallback chain).
+	model := params.Model
+	initialRole := modelrole.RoleMain
+
+	if deps.registry != nil && model != "" {
+		// Role name → resolve to actual model ID with fallback chain.
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		}
+		// Raw model ID → no role mapping, no fallback chain (direct override).
+	}
+	if model == "" && cachedSession != nil && cachedSession.SpawnedBy != "" {
+		// Sub-agent: use explicit session model if set at spawn time,
+		// otherwise fall back to the configured subagent default model.
+		if cachedSession.Model != "" {
+			model = cachedSession.Model
+		} else if deps.subagentDefaultModel != "" {
+			model = deps.subagentDefaultModel
+		}
+	}
+	if model == "" {
+		model = deps.defaultModel
+	}
+	if model == "" && deps.registry != nil {
+		model = deps.registry.FullModelID(modelrole.RoleMain)
+	}
+	// Second-pass role resolution: fallback values (defaultModel, subagentDefaultModel,
+	// sess.Model) may contain role names like "main" that need registry resolution.
+	if deps.registry != nil && model != "" {
+		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
+			model = resolved
+			initialRole = role
+		}
+	}
+	// Parse provider prefix (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
+	providerID, modelName := parseModelID(model)
+	model = modelName
+
+	// Sub-agent provider remapping: if this session was spawned by another
+	// agent and a "<provider>-subagent" config exists, use the alternate
+	// API key. This allows main and sub-agents to use different accounts
+	// on the same provider (separate rate limits).
+	if cachedSession != nil && cachedSession.SpawnedBy != "" && providerID != "" {
+		alt := providerID + "-subagent"
+		if deps.providerConfigs != nil {
+			if _, ok := deps.providerConfigs[alt]; ok {
+				logger.Info("subagent provider remap", "from", providerID, "to", alt)
+				providerID = alt
+			}
+		}
+	}
+
+	runLog.LogStart(agentlog.RunStartData{
+		Model:    model,
+		Provider: providerID,
+		Message:  params.Message,
+		Channel:  deliveryChannel(params.Delivery),
+	})
+
+	// 3. Resolve LLM client (no IO — reads in-memory config/auth store).
+	client := resolveClient(deps, providerID, logger)
+	if client == nil {
+		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
+	}
+
+	// Memory recall is now agent-driven: the agent calls memory(action=recall)
+	// as a tool when it needs past context. No parallel goroutine needed.
+
+	prepStart := time.Now()
+	// 5. Run tier-1 wiki injection, context assembly, and system prompt build in parallel.
+	var tier1Addition string
+	var messages []llm.Message
+	var contextErr error
+	var systemPrompt json.RawMessage
+
+	var prepWg sync.WaitGroup
+
+	// Tier-1 wiki auto-injection (parallel).
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+		if deps.wikiStore != nil {
+			cfg := wiki.ConfigFromEnv()
+			tier1Addition = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
+		}
+	}()
+
+	// Context assembly (parallel).
+	// Transcript-only fallback (Aurora removed).
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+
+		if deps.transcript != nil {
+			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
+			if err != nil {
+				contextErr = err
+			} else {
+				messages = result.Messages
+			}
+		}
+	}()
+
+	// Resolve session tool preset early (needed for both system prompt and tool list).
+	var sessionToolPreset string
+	if cachedSession != nil {
+		sessionToolPreset = cachedSession.ToolPreset
+	}
+
+	// System prompt build (parallel).
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+		if params.System != "" {
+			systemPrompt = llm.SystemString(params.System)
+			return
+		}
+		if deps.defaultSystem != "" {
+			systemPrompt = llm.SystemString(deps.defaultSystem)
+			return
+		}
+		if deps.tools == nil {
+			return
+		}
+		tz, _ := prompt.LoadCachedTimezone()
+		ch := deliveryChannel(params.Delivery)
+		// Build tool defs — filtered if a preset is active.
+		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
+
+		// Deferred tool summaries for system prompt listing.
+		deferredSummaries := deps.tools.DeferredSummaries()
+		var deferredToolInfos []prompt.DeferredToolInfo
+		for _, ds := range deferredSummaries {
+			// Skip deferred tools not in the allowed preset (if preset is active).
+			if len(allowed) > 0 && !allowed[ds.Name] {
+				continue
+			}
+			deferredToolInfos = append(deferredToolInfos, prompt.DeferredToolInfo{
+				Name:        ds.Name,
+				Description: ds.Description,
+			})
+		}
+
+		spp := prompt.SystemPromptParams{
+			WorkspaceDir:  workspaceDir,
+			ToolDefs:      toolDefs,
+			DeferredTools: deferredToolInfos,
+			UserTimezone:  tz,
+			ContextFiles: prompt.LoadContextFiles(workspaceDir,
+				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
+			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:      ch,
+			SkillsPrompt: loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
+			ToolPreset:   sessionToolPreset,
+		}
+
+		// Coordinator mode: use the coordinator-specific system prompt.
+		if sessionToolPreset == string(toolpreset.PresetCoordinator) {
+			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
+			systemPrompt = llm.SystemString(prompt.BuildCoordinatorSystemPrompt(spp, scratchpadDir))
+			return
+		}
+
+		// Worker sessions with a tool preset: append role-specific instructions.
+		workerAddition := ""
+		if sessionToolPreset != "" {
+			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
+			workerAddition = prompt.WorkerPromptAddition(sessionToolPreset, scratchpadDir)
+		}
+
+		blocks := prompt.BuildSystemPromptBlocks(spp)
+		if workerAddition != "" {
+			// Append worker instructions to the last (dynamic) block.
+			last := &blocks[len(blocks)-1]
+			last.Text += "\n" + workerAddition
+		}
+		systemPrompt = llm.SystemBlocks(blocks)
+	}()
+
+	prepWg.Wait()
+	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
+
+	if contextErr != nil {
+		logger.Error("context assembly failed, proceeding with degraded context",
+			"sessionKey", params.SessionKey, "error", contextErr)
+	}
+
+	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
+	// with full conversation history), use those instead of transcript context.
+	if len(params.PrebuiltMessages) > 0 {
+		messages = params.PrebuiltMessages
+	}
+
+	// Build or augment user message with attachments.
+	if len(messages) == 0 && params.Message != "" {
+		// No history — build the user message from scratch.
+		if len(params.Attachments) > 0 {
+			blocks := buildAttachmentBlocks(params.Message, params.Attachments)
+			messages = []llm.Message{llm.NewBlockMessage("user", blocks)}
+		} else {
+			messages = []llm.Message{llm.NewTextMessage("user", params.Message)}
+		}
+	} else if len(messages) > 0 && len(params.Attachments) > 0 {
+		// History exists but current message has attachments — replace the
+		// last user message (which was persisted as text-only) with a
+		// multimodal version that includes the image/video content blocks.
+		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
+	}
+
+	// 5b. Polaris compaction: tiered context compression.
+	// Applied after message assembly, before prompt finalization.
+	// When Polaris bridge is active, summaries are persisted to the DAG
+	// and proactive condensation is triggered in the background.
+	if len(messages) > 0 {
+		polarisCtx, polarisCancel := context.WithTimeout(ctx, 30*time.Second)
+		var summarizer compact.Summarizer
+		if pilotHub := pilot.GetLocalAIHub(); pilotHub != nil {
+			summarizer = &localAISummarizer{}
+		}
+		var polarisResult compact.Result
+		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
+			engine := bridge.Engine()
+			messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer)
+
+			// Proactive condensation: when a new leaf summary was persisted,
+			// trigger background condensation to merge leaves into higher-level nodes.
+			if polarisResult.LLMCompacted && summarizer != nil {
+				condSummarizer := summarizer // capture for goroutine
+				go engine.Condense(context.Background(), params.SessionKey, condSummarizer)
+			}
+		} else {
+			messages, polarisResult = compact.Compact(polarisCtx, compact.DefaultConfig(), messages, summarizer, logger)
+		}
+		polarisCancel()
+		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmergencyEvicted > 0 {
+			logger.Info("polaris compaction",
+				"microPruned", polarisResult.MicroPruned,
+				"llmCompacted", polarisResult.LLMCompacted,
+				"emergencyEvicted", polarisResult.EmergencyEvicted,
+				"tokensBefore", polarisResult.TokensBefore,
+				"tokensAfter", polarisResult.TokensAfter)
+		}
+	}
+
+	// 6. Proactive context: no blocking wait. The hint is injected via
+	// DeferredSystemText on turn 1+. By then the goroutine has had the full
+	// duration of turn 0 (LLM response + tool execution) to complete — typically
+	// several seconds — giving effectively 100% hit rate with zero user wait.
+
+	// 7. Budget-optimize variable prompt additions before appending.
+	// The base system prompt (identity, tools, skills, context files) is fixed;
+	// variable additions (tier-1 wiki) are optimized by priority.
+	if tier1Addition != "" {
+		promptBudget := prompt.PromptBudget{Total: deps.contextCfg.SystemPromptBudget}
+		baseTokens := uint64(tokenest.Estimate(string(systemPrompt)))
+		var remainingBudget uint64
+		if promptBudget.Total > baseTokens {
+			remainingBudget = promptBudget.Total - baseTokens
+		}
+		additionBudget := prompt.PromptBudget{Total: remainingBudget}
+
+		additionFragments := []prompt.PromptFragment{
+			prompt.NewFragment("tier1", tier1Addition),
+		}
+		optimized := additionBudget.Optimize(additionFragments)
+		for _, f := range optimized {
+			systemPrompt = llm.AppendSystemText(systemPrompt, f.Content)
+		}
+	}
+
+	// 7b. Auto-suggest coordinator mode if the message looks like a multi-file task
+	// and the session is not already in coordinator mode.
+	if sessionToolPreset == "" && params.Message != "" && coordinator.ShouldSuggestCoordinator(params.Message) {
+		hint := "\n\n[System hint: this request appears to involve multiple files. " +
+			"Consider suggesting coordinator mode (/coordinator) for structured multi-agent orchestration.]\n"
+		systemPrompt = llm.AppendSystemText(systemPrompt, hint)
+	}
+
+	logger.Info("pipeline: system prompt finalized",
+		"chars", len(systemPrompt))
+
+	runLog.LogPrep(agentlog.RunPrepData{
+		SystemPromptChars: len(systemPrompt),
+		ContextMessages:   len(messages),
+		PrepMs:            time.Since(runStart).Milliseconds(),
+	})
+
+	// 8. Build tool list from registry (uses stored descriptions and schemas).
+	// If a tool preset is active, filter the tool list to only include allowed tools.
+	// Then partition into builtin prefix + dynamic suffix for prompt cache stability.
+	var tools []llm.Tool
+	if deps.tools != nil {
+		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+		rawTools := deps.tools.FilteredLLMTools(allowed)
+
+		// Cache-stable ordering: built-in tools form a sorted prefix,
+		// dynamic tools (plugins, MCP) are sorted separately and appended.
+		// Changes to dynamic tools only invalidate cache from the boundary onward.
+		builtinNames := make(map[string]bool, len(deps.tools.Names()))
+		for _, name := range deps.tools.Names() {
+			builtinNames[name] = true
+		}
+		partition := PartitionTools(rawTools, builtinNames)
+		tools = partition.MergedTools()
+	}
+
+	// 9. Build agent config.
+	maxTokens := deps.maxTokens
+	if maxTokens <= 0 {
+		maxTokens = defaultMaxTokens
+	}
+
+	// RunCache lives for the entire agent run (across all turns) and caches
+	// idempotent tool results (find, tree). Invalidated on mutation tools.
+	runCache := NewRunCache()
+
+	// FileCache lives for the entire agent run and deduplicates repeated file reads.
+	// When the same file is read again (unchanged mtime/size), a compact "already read"
+	// message is returned instead of the full content, saving context tokens.
+	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
+
+	// ContinuationSignal: shared across turns so continue_run tool can set it.
+	// Read by runAgentAsync after the agent loop returns.
+	// Only created for async paths where continuation is actually supported;
+	// sync paths (OpenAI HTTP) leave it nil so the continue_run tool returns
+	// "not available" instead of silently accepting and never following up.
+	var contSignal *ContinuationSignal
+	if deps.continuationEnabled {
+		contSignal = NewContinuationSignal()
+	}
+
+	// SpawnFlag: tracks whether sessions_spawn was called during this run.
+	// Read by the executor (turn budget warning) and run orchestrator (continuation).
+	spawnFlag := NewSpawnFlag()
+
+	// DeferredActivation: tracks which deferred tools have been activated via
+	// fetch_tools during this run. The executor reads it each turn to inject
+	// newly activated tool schemas into the ChatRequest.
+	deferredActivation := NewDeferredActivation()
+
+	// Resolve thinking config from the session's ThinkingLevel setting.
+	var thinkingCfg *llm.ThinkingConfig
+	if cachedSession != nil && cachedSession.ThinkingLevel != "" {
+		thinkingCfg = resolveThinkingConfig(cachedSession.ThinkingLevel)
+	}
+
+	// Override max tokens if the caller (e.g., OpenAI HTTP endpoint) specified one.
+	if params.MaxTokens != nil && *params.MaxTokens > 0 {
+		maxTokens = *params.MaxTokens
+	}
+
+	// Mode-aware agent config: Work mode gets full agent capabilities;
+	// Normal/Chat modes get reduced limits for quick interactions.
+	isWorkMode := (cachedSession != nil && cachedSession.Mode == session.ModeWork) || params.DeepWork
+
+	maxTurns := 10
+	agentTimeout := 10 * time.Minute
+	if isWorkMode {
+		maxTurns = defaultMaxTurns         // 25
+		agentTimeout = defaultAgentTimeout // 60min
+	}
+	if params.DeepWork {
+		maxTurns = 50
+		agentTimeout = 30 * time.Minute
+	}
+
+	// Work-only features: nudge budget, output recovery.
+	var nudgeBudget *agent.NudgeBudgetConfig
+	maxOutputRecovery := 1 // minimal recovery for all modes
+	maxOutputScaleFactors := []float64{1.5}
+	if isWorkMode {
+		nudgeConts := 5
+		if params.DeepWork {
+			nudgeConts = 7
+		}
+		nudgeBudget = &agent.NudgeBudgetConfig{
+			MaxContinuations: nudgeConts,
+			BudgetThreshold:  0.9,
+			MinDeltaTokens:   300,
+		}
+		maxOutputRecovery = 3
+		maxOutputScaleFactors = []float64{1.5, 2.0, 2.0}
+	}
+
+	cfg := agent.AgentConfig{
+		MaxTurns:         maxTurns,
+		Timeout:          agentTimeout,
+		Model:            model,
+		System:           systemPrompt,
+		Tools:            tools,
+		MaxTokens:        maxTokens,
+		Thinking:         thinkingCfg,
+		Temperature:      params.Temperature,
+		TopP:             params.TopP,
+		FrequencyPenalty: params.FrequencyPenalty,
+		PresencePenalty:  params.PresencePenalty,
+		StopSequences:    params.Stop,
+		ResponseFormat:   params.ResponseFormat,
+		ToolChoice:       params.ToolChoice,
+		// Drop base64 image bytes from the message history after turn 0 so that
+		// subsequent tool-call turns don't retransmit the full image payload.
+		// Each inline image is ~1600 tokens; stripping saves that cost per turn
+		// from turn 1 onward for multi-turn runs that start with an image.
+		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
+		// Deferred context injection on turn 1+: subagent completion
+		// notifications via non-blocking channel reads.
+		DeferredSystemText: deferredSubagentNotifications(deps.subagentNotifyCh),
+		// Emit heartbeat at each turn so WS clients know the agent is alive.
+		OnTurn: func(turn int, accumulatedTokens int) {
+			if deps.emitAgentFn != nil {
+				deps.emitAgentFn("heartbeat", params.SessionKey, params.ClientRunID, map[string]any{
+					"turn":   turn,
+					"tokens": accumulatedTokens,
+					"ts":     time.Now().UnixMilli(),
+				})
+			}
+		},
+		// Inject a fresh TurnContext at the start of each turn so that tools
+		// executing in parallel within the same turn can share results via $ref.
+		// RunCache is injected once and persists across turns.
+		OnTurnInit: func(ctx context.Context) context.Context {
+			ctx = WithTurnContext(ctx, NewTurnContext())
+			ctx = WithRunCache(ctx, runCache)
+			ctx = WithFileCache(ctx, fileCache)
+			ctx = WithToolPreset(ctx, sessionToolPreset)
+			ctx = WithDeferredActivation(ctx, deferredActivation)
+			if contSignal != nil {
+				ctx = WithContinuationSignal(ctx, contSignal)
+			}
+			ctx = WithSpawnFlag(ctx, spawnFlag)
+			return ctx
+		},
+		DynamicToolsProvider: func() []llm.Tool {
+			names := deferredActivation.ActivatedNames()
+			if len(names) == 0 {
+				return nil
+			}
+			return deps.tools.DeferredLLMTools(names)
+		},
+		NudgeBudget:                 nudgeBudget,
+		MaxOutputTokensRecovery:     maxOutputRecovery,
+		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
+		// Suppress nudge when continue_run was already called — the explicit
+		// continuation will start a fresh run, so nudging wastes turns.
+		ContinuationRequested: func() bool {
+			return contSignal != nil && contSignal.Requested()
+		},
+		SpawnDetected:          spawnFlag.IsSet,
+		StreamingToolExecution: true,
+		ToolLoopDetector:       agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
+		// Per-turn message persistence: persist each assistant and tool_result
+		// message immediately to transcript so intermediate findings survive
+		// across runs (fixes the "short-term memory loss" bug).
+		OnMessagePersist: buildMessagePersister(deps, params, logger),
+	}
+
+	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
+	// producing low-quality facts. End-of-run extraction (below) has full response text.
+
+	// 10. Set up stream hooks via compositor: fan-out dispatch for each hook type.
+	var hc agent.HookCompositor
+
+	// Broadcaster: WebSocket streaming deltas.
+	if broadcaster != nil {
+		hc.OnTextDelta(broadcaster.EmitDelta)
+		hc.OnToolEmit(broadcaster.EmitToolStart)
+		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
+			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
+			if deps.broadcast != nil {
+				deps.broadcast("session.tool", map[string]any{
+					"sessionKey": params.SessionKey,
+					"runId":      params.ClientRunID,
+					"tool":       name,
+					"toolUseId":  toolUseID,
+					"isError":    isErr,
+				})
+			}
+		})
+	}
+
+	// Typing signaler: UI typing indicators.
+	if typingSignaler != nil {
+		hc.OnTextDelta(typingSignaler.SignalTextDelta)
+		hc.OnThinking(typingSignaler.SignalReasoningDelta)
+		hc.OnToolStart(func(_ string, _ string, _ []byte) {
+			typingSignaler.SignalToolStart()
+		})
+	}
+
+	// Status controller: Telegram emoji reactions.
+	if statusCtrl != nil {
+		hc.OnThinking(statusCtrl.SetThinking)
+		hc.OnToolStart(func(name, _ string, _ []byte) { statusCtrl.SetTool(name) })
+		// First text delta means we moved past thinking — set thinking
+		// emoji if not already in a tool phase.
+		hc.OnTextDelta(func(_ string) { statusCtrl.SetThinking() })
+	}
+
+	// Gateway event subscription: emit tool.start / tool.end for WebSocket clients.
+	if deps.emitAgentFn != nil {
+		hc.OnToolStart(func(name, _ string, _ []byte) {
+			deps.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
+				"tool": name,
+				"ts":   time.Now().UnixMilli(),
+			})
+		})
+		hc.OnToolResult(func(name, _, _ string, isErr bool) {
+			deps.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
+				"tool":    name,
+				"isError": isErr,
+				"ts":      time.Now().UnixMilli(),
+			})
+		})
+	}
+
+	// Internal hook registry: fire tool.use event after each tool completes.
+	if deps.internalHookRegistry != nil {
+		hc.OnToolResult(func(name, toolUseID, _ string, isErr bool) {
+			env := map[string]string{
+				"DENEB_TOOL":        name,
+				"DENEB_TOOL_USE_ID": toolUseID,
+				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
+				"DENEB_SESSION_KEY": params.SessionKey,
+			}
+			go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
+		})
+	}
+
+	// Draft stream hook: real-time message editing during LLM streaming.
+	// Creates a throttled draft loop that sends/edits a Telegram message as
+	// text deltas arrive, giving the user immediate visual feedback.
+	var draftCtrl *telegram.DraftStreamLoop
+	if deps.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
+		delivery := params.Delivery
+		var draftMu sync.Mutex
+		var draftMsgID string // tracks the sent message ID across edits
+		var accum strings.Builder
+
+		// Defer cleanup so the draft is stopped on all exit paths (success, error, fallback).
+		// Finalize flushes any pending text (so the user sees the complete streamed output),
+		// then stores the draft message ID on the delivery context. The reply pipeline
+		// will edit this message in-place instead of deleting it and sending a new one,
+		// preventing the "disappear then reappear" flicker on completion.
+		defer func() {
+			if draftCtrl != nil {
+				// Stop the draft loop without flushing. The reply pipeline will
+				// edit the draft message in-place with the final processed text.
+				// Flushing here would cause a double-edit: first with SanitizeDraftText
+				// (code blocks stripped), then immediately after with the final reply
+				// text (differently processed), producing a visible content flash
+				// or "clear and resend" flicker on Telegram.
+				draftCtrl.StopForClear()
+			}
+			// Store the draft message ID on the delivery context so the reply
+			// pipeline can edit the existing message instead of sending a new one.
+			draftMu.Lock()
+			msgID := draftMsgID
+			draftMu.Unlock()
+			if msgID != "" && delivery != nil {
+				delivery.DraftMsgID = msgID
+			}
+		}()
+
+		draftCtrl = telegram.NewDraftStreamLoop(800, func(text string) (bool, error) {
+			draftMu.Lock()
+			currentID := draftMsgID
+			draftMu.Unlock()
+
+			editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+
+			newID, err := deps.draftEditFn(editCtx, delivery, currentID, text)
+			if err != nil {
+				logger.Warn("draft stream send/edit failed", "error", err)
+				return false, err
+			}
+			draftMu.Lock()
+			draftMsgID = newID
+			draftMu.Unlock()
+			return true, nil
+		})
+
+		// Section-based streaming: update on paragraph breaks or 500+ char accumulation.
+		var lastUpdateLen int
+		hc.OnTextDelta(func(text string) {
+			accum.WriteString(text)
+			current := accum.String()
+			delta := len(current) - lastUpdateLen
+			if delta < 100 {
+				return
+			}
+			newContent := current[lastUpdateLen:]
+			if strings.Contains(newContent, "\n\n") || delta >= 500 {
+				sanitized := current
+				if deps.sanitizeDraft != nil {
+					sanitized = deps.sanitizeDraft(current)
+				}
+				if sanitized == "" {
+					return
+				}
+				draftCtrl.Update(sanitized)
+				lastUpdateLen = len(current)
+			}
+		})
+
+		// Stop draft loop on tool start so no more edits are pushed.
+		hc.OnToolStart(func(_ string, _ string, _ []byte) {
+			draftCtrl.StopForClear()
+		})
+	}
+
+	hooks := hc.Build()
+
+	logger.Info("pipeline: prep complete, starting agent loop",
+		"prepMs", time.Since(runStart).Milliseconds(),
+		"model", model, "provider", providerID,
+		"messages", len(messages), "tools", len(tools))
+
+	// 11. Execute agent loop with model fallback chain.
+	agentStart := time.Now()
+	var agentResult *agent.AgentResult
+	var lastTransition QueryTransition
+
+	var runErr error
+	agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+	if runErr != nil {
+		// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
+		if deps.isTransientError != nil && deps.isTransientError(runErr.Error()) && ctx.Err() == nil {
+			logger.Warn("transient HTTP error, retrying once", "error", runErr)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2500 * time.Millisecond):
+			}
+			agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+			if runErr != nil {
+				logger.Warn("transient retry also failed", "error", runErr)
+			}
+		}
+
+		// Model fallback chain: try each subsequent role in the chain.
+		// e.g., Main → Lightweight → Fallback
+		if runErr != nil && deps.registry != nil && ctx.Err() == nil {
+			chain := deps.registry.FallbackChain(initialRole)
+			for i := 1; i < len(chain); i++ {
+				fbRole := chain[i]
+				fbCfg := deps.registry.Config(fbRole)
+				fbClient := deps.registry.Client(fbRole)
+				if fbClient == nil {
+					continue
+				}
+				logger.Warn("model failed, trying fallback",
+					"failedRole", string(chain[i-1]),
+					"nextRole", string(fbRole),
+					"nextModel", fbCfg.Model,
+					"error", runErr)
+				agentCfg := cfg
+				agentCfg.Model = fbCfg.Model
+				agentResult, runErr = agent.RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
+				if runErr == nil {
+					break
+				}
+				logger.Error("fallback also failed",
+					"role", string(fbRole), "model", fbCfg.Model, "error", runErr)
+			}
+		}
+
+		if runErr != nil {
+			return nil, runErr
+		}
+	}
+	lastTransition = NewTerminal(TerminalCompleted, nil)
+
+	agentMs := time.Since(agentStart).Milliseconds()
+	totalMs := time.Since(runStart).Milliseconds()
+	logger.Info("pipeline: agent loop complete",
+		"agentMs", agentMs,
+		"totalMs", totalMs,
+		"turns", agentResult.Turns,
+		"inputTokens", agentResult.Usage.InputTokens,
+		"outputTokens", agentResult.Usage.OutputTokens,
+		"transition", lastTransition.Reason())
+
+	// Emit agent run.end event to gateway subscriptions.
+	if deps.emitAgentFn != nil {
+		deps.emitAgentFn("run.end", params.SessionKey, params.ClientRunID, map[string]any{
+			"model":        model,
+			"turns":        agentResult.Turns,
+			"durationMs":   totalMs,
+			"inputTokens":  agentResult.Usage.InputTokens,
+			"outputTokens": agentResult.Usage.OutputTokens,
+			"stopReason":   agentResult.StopReason,
+		})
+	}
+
+	return &chatRunResult{AgentResult: agentResult, ContSignal: contSignal, SpawnFlag: spawnFlag}, nil
+}
+
+// resolveThinkingConfig maps a session ThinkingLevel string to an llm.ThinkingConfig.
+// Returns nil for "off", empty, or unrecognized levels (disables extended thinking).
+func resolveThinkingConfig(level string) *llm.ThinkingConfig {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "minimal":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 1024}
+	case "low":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
+	case "medium":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 10240}
+	case "high":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
+	case "xhigh":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 65536}
+	case "adaptive":
+		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
+	default:
+		return nil
+	}
+}
+
+// buildMessagePersister returns a callback that persists each message to the
+// transcript store immediately. This ensures intermediate assistant text and
+// tool results survive across runs — fixing the "short-term memory loss" bug
+// where the agent forgot discoveries made in earlier turns.
+func buildMessagePersister(
+	deps runDeps,
+	params RunParams,
+	logger *slog.Logger,
+) func(msg llm.Message) {
+	if deps.transcript == nil {
+		return nil
+	}
+	return func(msg llm.Message) {
+		chatMsg := ChatMessage{
+			Role:      msg.Role,
+			Content:   msg.Content, // json.RawMessage — rich blocks preserved
+			Timestamp: time.Now().UnixMilli(),
+		}
+		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
+			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
+		}
+	}
+}
+
+// localAISummarizer adapts pilot.CallLocalLLM to the compaction.Summarizer interface.
+type localAISummarizer struct{}
+
+func (s *localAISummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
+	return pilot.CallLocalLLM(ctx, system, conversation, maxOutputTokens)
+}

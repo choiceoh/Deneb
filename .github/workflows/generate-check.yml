@@ -8,16 +8,16 @@ name: Generate Check
 on:
   pull_request:
     paths:
-      - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
+      - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
-      - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
+      - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
   push:
     branches: [main]
     paths:
-      - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
+      - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.yaml"
       - "gateway-go/cmd/tool-schema-gen/**"
-      - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
+      - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
 
 concurrency:
@@ -41,10 +41,10 @@ jobs:
         with:
           filters: |
             tool-schemas:
-              - "gateway-go/internal/chat/toolreg/tool_schemas.yaml"
+              - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.yaml"
               - "gateway-go/cmd/tool-schema-gen/**"
             model-caps:
-              - "gateway-go/internal/autoreply/thinking/model_caps.yaml"
+              - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
               - "gateway-go/cmd/model-caps-gen/**"
 
 # ── Domain check jobs ──────────────────────────────────────────────────────

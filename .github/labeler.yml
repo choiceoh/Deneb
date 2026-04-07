@@ -20,16 +20,16 @@
 "ai":
   - changed-files:
       - any-glob-to-any-file:
-          - "gateway-go/internal/chat/**"
-          - "gateway-go/internal/llm/**"
-          - "gateway-go/internal/chat/tools/**"
-          - "gateway-go/internal/autonomous/**"
-          - "gateway-go/internal/agent/**"
+          - "gateway-go/internal/pipeline/chat/**"
+          - "gateway-go/internal/ai/llm/**"
+          - "gateway-go/internal/pipeline/chat/tools/**"
+          - "gateway-go/internal/agentsys/autonomous/**"
+          - "gateway-go/internal/agentsys/agent/**"
 
 "channel: telegram":
   - changed-files:
       - any-glob-to-any-file:
-          - "gateway-go/internal/telegram/**"
+          - "gateway-go/internal/platform/telegram/**"
 
 "gateway":
   - changed-files:
@@ -40,7 +40,7 @@
   - changed-files:
       - any-glob-to-any-file:
           - "core-rs/**"
-          - "gateway-go/internal/ffi/**"
+          - "gateway-go/internal/ai/ffi/**"
 
 "docs":
   - changed-files:
@@ -60,4 +60,4 @@
 "security":
   - changed-files:
       - any-glob-to-any-file:
-          - "gateway-go/internal/auth/**"
+          - "gateway-go/internal/infra/auth/**"

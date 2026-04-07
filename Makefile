@@ -60,7 +60,7 @@ go-test:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -count=1 ./...
 
 go-test-fuzz:
-	cd gateway-go && $(GO_ENV) go test ./internal/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
+	cd gateway-go && $(GO_ENV) go test ./internal/runtime/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
 
 go-vet:
 	cd gateway-go && $(GO_ENV) go vet ./...
@@ -132,33 +132,33 @@ fmt:
 
 # --- Tool schema code generation ---
 
-# Regenerate gateway-go/internal/chat/toolreg/tool_schemas_gen.go from tool_schemas.yaml.
+# Regenerate gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go from tool_schemas.yaml.
 tool-schemas:
 	cd gateway-go && go run cmd/tool-schema-gen/main.go \
-		-yaml internal/chat/toolreg/tool_schemas.yaml \
-		-out  internal/chat/toolreg/tool_schemas_gen.go \
+		-yaml internal/pipeline/chat/toolreg/tool_schemas.yaml \
+		-out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
 		-pkg  toolreg
 
 # Verify tool_schemas_gen.go is up to date (fails if yaml and Go are out of sync).
 tool-schemas-check:
 	cd gateway-go && go run cmd/tool-schema-gen/main.go \
-		-yaml internal/chat/toolreg/tool_schemas.yaml \
-		-out  internal/chat/toolreg/tool_schemas_gen.go \
+		-yaml internal/pipeline/chat/toolreg/tool_schemas.yaml \
+		-out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
 		-pkg  toolreg
-	@git diff --exit-code -- gateway-go/internal/chat/toolreg/tool_schemas_gen.go
+	@git diff --exit-code -- gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go
 
-# Regenerate gateway-go/internal/autoreply/model_caps_gen.go from model_caps.yaml.
+# Regenerate gateway-go/internal/pipeline/autoreply/model_caps_gen.go from model_caps.yaml.
 model-caps:
 	cd gateway-go && go run cmd/model-caps-gen/main.go \
-		-yaml internal/autoreply/thinking/model_caps.yaml \
-		-out  internal/autoreply/thinking/model_caps_gen.go
+		-yaml internal/pipeline/autoreply/thinking/model_caps.yaml \
+		-out  internal/pipeline/autoreply/thinking/model_caps_gen.go
 
 # Verify model_caps_gen.go is up to date (fails if yaml and Go are out of sync).
 model-caps-check:
 	cd gateway-go && go run cmd/model-caps-gen/main.go \
-		-yaml internal/autoreply/thinking/model_caps.yaml \
-		-out  internal/autoreply/thinking/model_caps_gen.go
-	@git diff --exit-code -- gateway-go/internal/autoreply/thinking/model_caps_gen.go
+		-yaml internal/pipeline/autoreply/thinking/model_caps.yaml \
+		-out  internal/pipeline/autoreply/thinking/model_caps_gen.go
+	@git diff --exit-code -- gateway-go/internal/pipeline/autoreply/thinking/model_caps_gen.go
 
 # --- Data table code generation ---
 #
@@ -167,7 +167,7 @@ model-caps-check:
 
 DATA_GEN = go run cmd/data-gen/main.go
 DATA_GEN_TARGETS = \
-	internal/chat/tool_classification
+	internal/pipeline/chat/tool_classification
 
 data-gen:
 	@cd gateway-go && for t in $(DATA_GEN_TARGETS); do \

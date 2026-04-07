@@ -58,7 +58,7 @@ Single-machine deployment on DGX Spark:
 ```bash
 git pull
 make gateway-dgx
-scripts/deploy.sh
+scripts/deploy/deploy.sh
 ```
 
 ## Documentation

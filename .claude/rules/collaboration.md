@@ -18,7 +18,7 @@ globs: ["**"]
 
 - **Agents MUST use `~/deneb-dev/`** for all development work (coding, branches, worktrees, PRs).
 - **`~/deneb/` is production-only.** It auto-syncs with GitHub main every 5 minutes (cron). Never modify directly.
-- **Deploy flow:** PR merged on GitHub → `~/deneb` auto-pulls → operator runs `~/deneb/scripts/deploy.sh` to build + restart.
+- **Deploy flow:** PR merged on GitHub → `~/deneb` auto-pulls → operator runs `~/deneb/scripts/deploy/deploy.sh` to build + restart.
 - **Do NOT run builds, create worktrees, or switch branches in `~/deneb/`.**
 
 ## Multi-Agent Safety

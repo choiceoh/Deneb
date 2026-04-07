@@ -5,29 +5,29 @@ globs: ["gateway-go/**/*.go"]
 
 # Iterative Optimization (Autoresearch Methodology)
 
-> 원본: `gateway-go/internal/autoresearch/runner.go` buildPrompt(), buildConstantsPrompt()
+> 원본: `gateway-go/internal/agentsys/autoresearch/runner.go` buildPrompt(), buildConstantsPrompt()
 > 클로드 코드가 직접 반복 최적화를 수행할 때 이 전략을 따른다.
 
 ## 도구
 
 | Command | What |
 |---|---|
-| `scripts/dev-iterate.sh` | 빌드→서버→smoke 2체크→결과 (~2초) |
-| `scripts/dev-iterate.sh --metric CMD` | 커스텀 metric |
-| `scripts/dev-quality-metric.sh [MSG]` | 텔레그램 채팅 품질 점수 0-100 (15~60초) |
+| `scripts/dev/iterate.sh` | 빌드→서버→smoke 2체크→결과 (~2초) |
+| `scripts/dev/iterate.sh --metric CMD` | 커스텀 metric |
+| `scripts/dev/quality-metric.sh [MSG]` | 텔레그램 채팅 품질 점수 0-100 (15~60초) |
 
 ### 오토리서치 (자율 최적화 루프)
 
 | Command | What |
 |---|---|
-| `scripts/dev-metric-gen.sh list` | metric 프리셋 목록 |
-| `scripts/dev-metric-gen.sh PRESET` | metric 스크립트 생성 (smoke\|quality\|combined) |
-| `scripts/dev-autoresearch.sh start --target FILE --metric PRESET` | 오토리서치 시작 |
-| `scripts/dev-autoresearch.sh status` | 상태 확인 |
-| `scripts/dev-autoresearch.sh results --json` | 결과 JSON |
-| `scripts/dev-autoresearch.sh stop` | 정지 |
-| `scripts/dev-ar-results.sh --json` | 구조화된 결과 (게이트웨이 불필요) |
-| `scripts/dev-ar-results.sh --suggest` | 다음 행동 제안 |
+| `scripts/dev/metric-gen.sh list` | metric 프리셋 목록 |
+| `scripts/dev/metric-gen.sh PRESET` | metric 스크립트 생성 (smoke\|quality\|combined) |
+| `scripts/dev/autoresearch.sh start --target FILE --metric PRESET` | 오토리서치 시작 |
+| `scripts/dev/autoresearch.sh status` | 상태 확인 |
+| `scripts/dev/autoresearch.sh results --json` | 결과 JSON |
+| `scripts/dev/autoresearch.sh stop` | 정지 |
+| `scripts/dev/ar-results.sh --json` | 구조화된 결과 (게이트웨이 불필요) |
+| `scripts/dev/ar-results.sh --suggest` | 다음 행동 제안 |
 
 ### metric 프리셋 선택 가이드
 
@@ -41,10 +41,10 @@ globs: ["gateway-go/**/*.go"]
 ### 오토리서치 사용 절차
 
 1. **metric 선택**: 수정 대상에 맞는 preset 선택
-2. **시작**: `scripts/dev-autoresearch.sh start --target FILE --metric PRESET`
-3. **모니터링**: `scripts/dev-autoresearch.sh status` (진행 확인)
-4. **결과 해석**: `scripts/dev-ar-results.sh --json` → `DENEB_AR_RESULTS` 파싱
-5. **다음 행동**: `scripts/dev-ar-results.sh --suggest` → 계속/전환/멈춤 판단
+2. **시작**: `scripts/dev/autoresearch.sh start --target FILE --metric PRESET`
+3. **모니터링**: `scripts/dev/autoresearch.sh status` (진행 확인)
+4. **결과 해석**: `scripts/dev/ar-results.sh --json` → `DENEB_AR_RESULTS` 파싱
+5. **다음 행동**: `scripts/dev/ar-results.sh --suggest` → 계속/전환/멈춤 판단
 6. **적용**: 오토리서치가 찾은 최적값을 소스에 반영, `make check` 확인
 
 ### 결과 해석 (DENEB_AR_RESULTS JSON)
@@ -141,7 +141,7 @@ globs: ["gateway-go/**/*.go"]
 ### 1. Baseline
 
 ```bash
-scripts/dev-iterate.sh
+scripts/dev/iterate.sh
 # 결과 기록: metric=N, latency=Nms
 ```
 
@@ -166,7 +166,7 @@ scripts/dev-iterate.sh
 
 ## 품질 metric 상세
 
-`scripts/dev-quality-metric.sh`가 측정하는 항목 (총 100점):
+`scripts/dev/quality-metric.sh`가 측정하는 항목 (총 100점):
 
 | 항목 | 배점 | 기준 |
 |---|---|---|

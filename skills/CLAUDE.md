@@ -130,7 +130,7 @@ The gateway uses 3-stage progressive disclosure to minimize token usage:
 3. Add standard frontmatter with name, version, category, description
 4. Add `tags` and `related_skills` in metadata for discoverability
 5. Write body following the recommended section structure
-6. The gateway discovers and loads skills automatically via `gateway-go/internal/skills/`
+6. The gateway discovers and loads skills automatically via `gateway-go/internal/domain/skills/`
 
 ## Adding a New Category
 
@@ -190,7 +190,7 @@ Skills improve over time via the autoresearch loop:
 1. Diagnose failure patterns in skill usage
 2. Form a single hypothesis for improvement
 3. Mutate the SKILL.md (one atomic change)
-4. Evaluate via `scripts/dev-iterate.sh`
+4. Evaluate via `scripts/dev/iterate.sh`
 5. Keep improvements, revert failures
 
 ## Prompt Cache Design

@@ -1,0 +1,304 @@
+// reply_directives.go — Reply directive processing (media splitting, threading, silent).
+// Mirrors src/auto-reply/reply/reply-directives.ts (49 LOC) and
+// src/media/parse.ts splitMediaFromOutput (170 LOC).
+//
+// Key behaviors:
+// - Extracts MEDIA: tokens from reply text (with fence protection)
+// - Detects [[audio_as_voice]] and [[voice]] tags
+// - Extracts [[reply_to_current]] and [[reply_to:<id>]] threading tags
+// - Detects silent reply tokens (NO_REPLY)
+package reply
+
+import (
+	"regexp"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+)
+
+// --- MEDIA: token parsing (mirrors src/media/parse.ts) ---
+
+// mediaTokenRe matches MEDIA: tokens in text.
+var mediaTokenRe = regexp.MustCompile(`(?i)\bMEDIA:\s*` + "`?" + `([^\n]+)` + "`?")
+
+// httpURLRe matches http/https URLs.
+var httpURLRe = regexp.MustCompile(`^https?://\S+`)
+
+// schemeRe matches URI schemes.
+var schemeRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
+
+// isLikelyLocalPath checks if a candidate looks like a local file path.
+func isLikelyLocalPath(candidate string) bool {
+	return strings.HasPrefix(candidate, "/") ||
+		strings.HasPrefix(candidate, "./") ||
+		strings.HasPrefix(candidate, "../") ||
+		strings.HasPrefix(candidate, "~") ||
+		(!schemeRe.MatchString(candidate) && (strings.Contains(candidate, "/") || strings.Contains(candidate, `\`)))
+}
+
+// isValidMedia checks if a candidate is a valid media reference.
+func isValidMedia(candidate string, allowSpaces bool) bool {
+	if candidate == "" || len(candidate) > 4096 {
+		return false
+	}
+	if !allowSpaces && strings.ContainsAny(candidate, " \t\r\n") {
+		return false
+	}
+	if httpURLRe.MatchString(candidate) {
+		return true
+	}
+	return isLikelyLocalPath(candidate)
+}
+
+// cleanCandidate strips surrounding quotes/brackets from a media candidate.
+func cleanCandidate(raw string) string {
+	s := strings.TrimLeft(raw, "`\"'[{(")
+	return strings.TrimRight(s, "`\"'\\})],")
+}
+
+// normalizeMediaSource strips file:// prefix.
+func normalizeMediaSource(src string) string {
+	if strings.HasPrefix(src, "file://") {
+		return src[7:]
+	}
+	return src
+}
+
+// fenceSpan tracks a fenced code block region.
+type fenceSpan struct {
+	start, end int
+}
+
+// parseFenceSpans finds all fenced code block regions in text.
+func parseFenceSpans(text string) []fenceSpan {
+	var spans []fenceSpan
+	lines := strings.Split(text, "\n")
+	offset := 0
+	inFence := false
+	fenceStart := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			if inFence {
+				spans = append(spans, fenceSpan{start: fenceStart, end: offset + len(line)})
+				inFence = false
+			} else {
+				inFence = true
+				fenceStart = offset
+			}
+		}
+		offset += len(line) + 1 // +1 for newline
+	}
+	// Unclosed fence extends to end.
+	if inFence {
+		spans = append(spans, fenceSpan{start: fenceStart, end: len(text)})
+	}
+	return spans
+}
+
+func isInsideFence(spans []fenceSpan, offset int) bool {
+	for _, s := range spans {
+		if offset >= s.start && offset < s.end {
+			return true
+		}
+	}
+	return false
+}
+
+// audioAsVoiceTagRe matches [[audio_as_voice]] and [[voice]] tags.
+var audioAsVoiceTagRe = regexp.MustCompile(`(?i)\[\[\s*(?:audio_as_voice|voice)\s*\]\]`)
+
+// splitMediaFromOutput extracts MEDIA: tokens from output text.
+// Delegates to the Rust FFI implementation for single-source-of-truth parsing.
+// Falls back to the Go implementation if FFI is unavailable.
+func splitMediaFromOutput(raw string) (text string, mediaURLs []string, mediaURL string, audioAsVoice bool) {
+	cleanText, urls, voice, err := ffi.ParseMediaTokens(raw)
+	if err == nil {
+		var primary string
+		if len(urls) > 0 {
+			primary = urls[0]
+		}
+		return cleanText, urls, primary, voice
+	}
+	// FFI unavailable or failed — fall back to Go implementation.
+	return splitMediaFromOutputFallback(raw)
+}
+
+// splitMediaFromOutputFallback is the pure-Go fallback for MEDIA token extraction.
+// Used when the Rust FFI is unavailable (no_ffi build or FFI error).
+func splitMediaFromOutputFallback(raw string) (text string, mediaURLs []string, mediaURL string, audioAsVoice bool) {
+	trimmedRaw := strings.TrimRight(raw, " \t\r\n")
+	if strings.TrimSpace(trimmedRaw) == "" {
+		return "", nil, "", false
+	}
+
+	hasMediaToken := strings.Contains(strings.ToLower(trimmedRaw), "media:")
+	hasAudioTag := strings.Contains(trimmedRaw, "[[")
+
+	if !hasMediaToken && !hasAudioTag {
+		return trimmedRaw, nil, "", false
+	}
+
+	var media []string
+	hasFenceMarkers := strings.Contains(trimmedRaw, "```") || strings.Contains(trimmedRaw, "~~~")
+	var fSpans []fenceSpan
+	if hasFenceMarkers {
+		fSpans = parseFenceSpans(trimmedRaw)
+	}
+
+	// Use IndexByte scanning + strings.Builder to avoid allocating a []string
+	// (from Split) and a second string (from Join) for every invocation.
+	var out strings.Builder
+	out.Grow(len(trimmedRaw))
+	lineOffset := 0
+	remaining := trimmedRaw
+
+	for len(remaining) > 0 {
+		var line string
+		if idx := strings.IndexByte(remaining, '\n'); idx >= 0 {
+			line = remaining[:idx]
+			remaining = remaining[idx+1:]
+		} else {
+			line = remaining
+			remaining = ""
+		}
+
+		keepLine := func(l string) {
+			if out.Len() > 0 {
+				out.WriteByte('\n')
+			}
+			out.WriteString(l)
+		}
+
+		// Skip MEDIA extraction inside fenced code blocks.
+		if hasFenceMarkers && isInsideFence(fSpans, lineOffset) {
+			keepLine(line)
+			lineOffset += len(line) + 1
+			continue
+		}
+
+		trimmedStart := strings.TrimLeft(line, " \t")
+		if !strings.HasPrefix(strings.ToUpper(trimmedStart), "MEDIA:") {
+			keepLine(line)
+			lineOffset += len(line) + 1
+			continue
+		}
+
+		matches := mediaTokenRe.FindAllStringSubmatch(line, -1)
+		if len(matches) == 0 {
+			keepLine(line)
+			lineOffset += len(line) + 1
+			continue
+		}
+
+		foundMediaOnLine := false
+		for _, m := range matches {
+			payload := m[1]
+			// Try each whitespace-separated part.
+			parts := strings.Fields(payload)
+			hasValid := false
+			for _, part := range parts {
+				candidate := normalizeMediaSource(cleanCandidate(part))
+				if isValidMedia(candidate, false) {
+					media = append(media, candidate)
+					hasValid = true
+				}
+			}
+			// Fallback: try entire payload as one path (with spaces).
+			if !hasValid {
+				candidate := normalizeMediaSource(cleanCandidate(strings.TrimSpace(payload)))
+				if isValidMedia(candidate, true) {
+					media = append(media, candidate)
+					hasValid = true
+				}
+			}
+			if hasValid {
+				foundMediaOnLine = true
+			}
+		}
+
+		if foundMediaOnLine {
+			// Strip the MEDIA: line entirely if we extracted media from it.
+			cleanedLine := mediaTokenRe.ReplaceAllString(line, "")
+			cleanedLine = strings.TrimSpace(cleanedLine)
+			if cleanedLine != "" {
+				keepLine(cleanedLine)
+			}
+		} else if isLikelyLocalPath(strings.TrimSpace(strings.SplitN(trimmedStart, ":", 2)[1])) {
+			// Strip MEDIA: lines with local paths even when invalid.
+			// They should never leak as visible text.
+		} else {
+			keepLine(line)
+		}
+		lineOffset += len(line) + 1
+	}
+
+	cleanedText := out.String()
+	cleanedText = strings.TrimSpace(cleanedText)
+	// Collapse multiple newlines.
+	for strings.Contains(cleanedText, "\n\n\n") {
+		cleanedText = strings.ReplaceAll(cleanedText, "\n\n\n", "\n\n")
+	}
+
+	// Detect and strip [[audio_as_voice]] tag.
+	if audioAsVoiceTagRe.MatchString(cleanedText) {
+		audioAsVoice = true
+		cleanedText = audioAsVoiceTagRe.ReplaceAllString(cleanedText, "")
+		cleanedText = strings.TrimSpace(cleanedText)
+	}
+
+	if len(media) == 0 {
+		if audioAsVoice {
+			return cleanedText, nil, "", true
+		}
+		return trimmedRaw, nil, "", false
+	}
+
+	return cleanedText, media, media[0], audioAsVoice
+}
+
+// ParseReplyDirectives parses reply directives from raw agent output text.
+// Extracts MEDIA: tokens, threading tags, and silent tokens.
+func ParseReplyDirectives(raw string, currentMessageID string, silentToken string) chatport.ReplyDirectives {
+	text, mediaURLs, mediaURL, audioAsVoice := splitMediaFromOutput(raw)
+
+	// Strip leaked tool-call markup (e.g. "<function=read>...</tool_call>")
+	// that some models emit as text before or instead of structured tool_use blocks.
+	text = StripLeakedToolCallMarkup(text)
+
+	// Extract reply threading tags.
+	replyToID, replyToCurrent := tokens.ApplyReplyThreading(text, "")
+	hasReplyTag := replyToCurrent || replyToID != ""
+
+	if hasReplyTag {
+		text = tokens.StripReplyTags(text)
+	}
+
+	// Apply current message ID for reply_to_current.
+	if replyToCurrent && currentMessageID != "" {
+		replyToID = currentMessageID
+	}
+
+	// Check for silent reply token.
+	if silentToken == "" {
+		silentToken = tokens.SilentReplyToken
+	}
+	isSilent := tokens.IsSilentReplyText(text, silentToken)
+	if isSilent {
+		text = ""
+	}
+
+	return chatport.ReplyDirectives{
+		Text:           text,
+		MediaURLs:      mediaURLs,
+		MediaURL:       mediaURL,
+		ReplyToID:      replyToID,
+		ReplyToCurrent: replyToCurrent,
+		ReplyToTag:     hasReplyTag,
+		AudioAsVoice:   audioAsVoice,
+		IsSilent:       isSilent,
+	}
+}
