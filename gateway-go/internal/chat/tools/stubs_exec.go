@@ -797,6 +797,11 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 			return fmt.Sprintf("Sub-agent session %q created but failed to send task: %s", childKey, err.Error()), nil
 		}
 
+		// Signal the executor that a sub-agent was spawned in this run.
+		if flag := toolctx.SpawnFlagFromContext(ctx); flag != nil {
+			flag.Set()
+		}
+
 		result := fmt.Sprintf("Sub-agent spawned.\nSession: %s\nTask: %s", childKey, p.Task)
 		if p.ToolPreset != "" {
 			result += fmt.Sprintf("\nTool preset: %s", p.ToolPreset)

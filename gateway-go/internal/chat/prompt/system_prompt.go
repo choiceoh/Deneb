@@ -306,7 +306,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- **Verification**: after changes, spawn a verifier to check results.\n")
 		d.WriteString("For coding tasks: set `tool_preset` (researcher/implementer/verifier) to scope tools.\n")
 		d.WriteString("For non-coding tasks (research, writing, analysis): spawn without tool_preset so the worker has full tool access.\n")
-		d.WriteString("Monitor with `subagents(action:'list')`. Depth limit: 5, breadth limit: 10. Prefer fewer focused agents over many trivial ones.\n\n")
+		d.WriteString("Depth limit: 5, breadth limit: 10. Prefer fewer focused agents over many trivial ones.\n")
+		d.WriteString("After spawning: end your turn. Do NOT poll `subagents` or repeat the delegated work. You will be notified automatically when each agent completes with its result.\n\n")
 	}
 
 	// Conversation mode (conditional).

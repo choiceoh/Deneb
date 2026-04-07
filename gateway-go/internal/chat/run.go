@@ -369,13 +369,22 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			"- 에러 발생 도구: " + summarizeErrorTools(chatResult.ToolActivities) + "\n" +
 			"Continue your work. 동일한 실패를 반복하지 마세요.]"
 	} else if chatResult.StopReason == "max_turns" || chatResult.StopReason == "timeout" {
-		contReason = fmt.Sprintf("에이전트가 %s에 도달했지만 작업이 진행 중이었습니다", chatResult.StopReason)
-		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
-			"이전 실행 요약:\n" +
-			"- 실행 턴: " + fmt.Sprintf("%d", chatResult.Turns) + "\n" +
-			"- 사용한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
-			"- 에러 발생 도구: " + summarizeErrorTools(chatResult.ToolActivities) + "\n" +
-			"이전 실행이 중단된 지점부터 이어서 작업하세요. 동일한 접근법으로 같은 에러가 반복되면 다른 전략을 시도하세요.]"
+		if chatResult.SpawnFlag != nil && chatResult.SpawnFlag.IsSet() {
+			// Spawn run: guide the continuation to synthesize results, not redo work.
+			contReason = "서브에이전트 결과 확인"
+			contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
+				"이전 실행에서 서브에이전트를 생성했습니다. 서브에이전트가 작업을 수행 중이거나 완료했습니다.\n" +
+				"subagents 도구로 상태를 한 번 확인하고, 완료된 결과가 있으면 합성하여 응답하세요.\n" +
+				"서브에이전트가 이미 한 작업을 직접 반복하지 마세요.]"
+		} else {
+			contReason = fmt.Sprintf("에이전트가 %s에 도달했지만 작업이 진행 중이었습니다", chatResult.StopReason)
+			contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
+				"이전 실행 요약:\n" +
+				"- 실행 턴: " + fmt.Sprintf("%d", chatResult.Turns) + "\n" +
+				"- 사용한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
+				"- 에러 발생 도구: " + summarizeErrorTools(chatResult.ToolActivities) + "\n" +
+				"이전 실행이 중단된 지점부터 이어서 작업하세요. 동일한 접근법으로 같은 에러가 반복되면 다른 전략을 시도하세요.]"
+		}
 	} else if params.ContinuationIndex == 0 && hadMutatingToolActivity(chatResult.ToolActivities) {
 		contReason = "코드 변경 후 검증"
 		contMessage = "[System: Autonomous continuation %d/%d. 이전 실행에서 코드를 변경했습니다.\n" +

@@ -483,7 +483,8 @@ func RunAgent(
 
 		// Inject turn budget warning when approaching the limit so the LLM
 		// can call continue_run proactively (it has no other way to know).
-		turnBudgetWarning := buildTurnBudgetWarning(turn, cfg.MaxTurns)
+		spawnActive := cfg.SpawnDetected != nil && cfg.SpawnDetected()
+		turnBudgetWarning := buildTurnBudgetWarning(turn, cfg.MaxTurns, spawnActive)
 		if turnBudgetWarning != "" {
 			toolResults = append(toolResults, llm.ContentBlock{
 				Type: "text",
@@ -528,7 +529,7 @@ func RunAgent(
 // approaching the turn limit. This gives the LLM visibility into its
 // remaining budget so it can call continue_run proactively.
 // Returns "" when no warning is needed.
-func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
+func buildTurnBudgetWarning(currentTurn, maxTurns int, spawnActive bool) string {
 	remaining := maxTurns - currentTurn - 1 // -1 because turn is 0-based and we just finished it
 	if remaining <= 0 {
 		return ""
@@ -540,6 +541,12 @@ func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
 	}
 	if remaining > threshold {
 		return ""
+	}
+	// When sub-agents are running, suppress the continue_run inducement.
+	// Instead, tell the agent to wrap up and yield to the notification system.
+	if spawnActive {
+		return fmt.Sprintf("[System: 턴 예산 정보 — 남은 턴 %d/%d. 서브에이전트가 작업 중입니다. 추가 작업이 없으면 턴을 종료하세요.]",
+			remaining, maxTurns)
 	}
 	if remaining <= 2 {
 		return fmt.Sprintf("[System: ⚠️ 턴 한도 임박 — 남은 턴 %d/%d. 작업이 남아있으면 지금 continue_run을 호출하세요.]",
