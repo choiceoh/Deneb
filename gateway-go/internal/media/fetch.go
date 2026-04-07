@@ -71,6 +71,7 @@ var ssrfTransport = &http.Transport{
 	MaxIdleConns:        32,
 	MaxIdleConnsPerHost: 4,
 	IdleConnTimeout:     90 * time.Second,
+	TLSHandshakeTimeout: 5 * time.Second,
 	ForceAttemptHTTP2:   true,
 }
 
