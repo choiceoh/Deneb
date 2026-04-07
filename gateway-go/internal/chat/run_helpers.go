@@ -258,9 +258,19 @@ func handleRunSuccess(
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
-	// Dream turn increment for successful runs with user input.
-	// Auto-memory and session memory removed — RLM wiki handles long-term
-	// memory, RLM compaction handles session context preservation.
+	// Wiki recording: spawn 2 parallel RLM loops to record the conversation turn.
+	// Runs in background — never blocks the response path.
+	if deps.wikiStore != nil && deps.registry != nil && params.Message != "" {
+		toolNames := make([]string, 0, len(result.ToolActivities))
+		for _, ta := range result.ToolActivities {
+			toolNames = append(toolNames, ta.Name)
+		}
+		go spawnWikiRecorders(deps.shutdownCtx, wikiRecorderDeps{
+			store:    deps.wikiStore,
+			registry: deps.registry,
+			logger:   logger,
+		}, params.Message, result.AllText, toolNames)
+	}
 
 	logger.Info("agent run completed",
 		"stopReason", result.StopReason,
