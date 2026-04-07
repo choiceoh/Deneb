@@ -95,6 +95,12 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		LLMClient:    reg.Client(modelrole.RoleLightweight),
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
+		SessionMemoryFn: func(sessionKey string) string {
+			if chatCfg.SessionMemory != nil {
+				return chatCfg.SessionMemory.Get(sessionKey)
+			}
+			return ""
+		},
 	}
 
 	// Spillover store: saves large tool results to disk, replaces with preview.

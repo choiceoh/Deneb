@@ -18,6 +18,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -836,3 +838,81 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 	return out
 }
 
+// buildREPLEnv creates a Starlark REPL environment for the repl tool.
+// Conversation history is injected as `context`, and llm_query() calls
+// go through the sub-agent path with session memory inheritance.
+func buildREPLEnv(
+	ctx context.Context,
+	messages []llm.Message,
+	client agent.LLMStreamer,
+	model string,
+	deps runDeps,
+	params RunParams,
+) *repl.Env {
+	// Convert LLM messages to REPL MessageEntry format.
+	entries := messagesToREPLEntries(messages)
+
+	// Build llm_query callback: sub-agent with session memory.
+	queryFn := func(ctx context.Context, prompt string) (string, error) {
+		var sessionMemory string
+		if deps.sessionMemory != nil {
+			sessionMemory = deps.sessionMemory.Get(params.SessionKey)
+		}
+		system := rlm.BuildSubAgentSystem(sessionMemory)
+
+		text, err := client.Complete(ctx, llm.ChatRequest{
+			Model:     model,
+			System:    system,
+			Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
+			MaxTokens: 4096,
+		})
+		if err != nil {
+			return "", err
+		}
+		return text, nil
+	}
+
+	return repl.NewEnv(ctx, repl.EnvConfig{
+		Messages:   entries,
+		LLMQueryFn: queryFn,
+	})
+}
+
+// messagesToREPLEntries converts LLM messages to REPL MessageEntry format.
+// Extracts text content from content blocks for Starlark access.
+func messagesToREPLEntries(messages []llm.Message) []repl.MessageEntry {
+	entries := make([]repl.MessageEntry, 0, len(messages))
+	for i, msg := range messages {
+		content := extractTextContent(msg.Content)
+		entries = append(entries, repl.MessageEntry{
+			Seq:     i,
+			Role:    msg.Role,
+			Content: content,
+		})
+	}
+	return entries
+}
+
+// extractTextContent pulls plain text from a message's content field.
+// Handles both plain string and content block array formats.
+func extractTextContent(raw json.RawMessage) string {
+	// Try plain string first.
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+
+	// Try content blocks.
+	var blocks []llm.ContentBlock
+	if err := json.Unmarshal(raw, &blocks); err == nil {
+		var parts []string
+		for _, b := range blocks {
+			if b.Type == "text" && b.Text != "" {
+				parts = append(parts, b.Text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+
+	return string(raw)
+}

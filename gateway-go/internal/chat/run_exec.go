@@ -23,6 +23,7 @@ import (
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -536,6 +537,12 @@ func executeAgentRun(
 	// message is returned instead of the full content, saving context tokens.
 	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
 
+	// REPL environment: Starlark execution context for the repl tool.
+	// Created once per run so variables persist across tool calls.
+	// Conversation history is injected as the `context` variable, and
+	// llm_query() calls go through the sub-agent path with session memory.
+	replEnv := buildREPLEnv(ctx, messages, client, model, deps, params)
+
 	// ContinuationSignal: shared across turns so continue_run tool can set it.
 	// Read by runAgentAsync after the agent loop returns.
 	// Only created for async paths where continuation is actually supported;
@@ -642,6 +649,9 @@ func executeAgentRun(
 			ctx = WithDeferredActivation(ctx, deferredActivation)
 			if contSignal != nil {
 				ctx = WithContinuationSignal(ctx, contSignal)
+			}
+			if replEnv != nil {
+				ctx = repl.WithEnv(ctx, replEnv)
 			}
 			return ctx
 		},
@@ -859,19 +869,29 @@ func executeAgentRun(
 		var runErr error
 		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
-			// Context overflow: drop oldest messages and retry.
+			// Context overflow: summarize middle messages and retry.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
-				logger.Info("context overflow, dropping oldest messages", "error", runErr)
+				logger.Info("context overflow, compacting messages", "error", runErr)
 				if len(messages) > 10 {
 					const keepHead, keepTail = 2, 8
 					if len(messages) > keepHead+keepTail {
 						dropped := len(messages) - keepHead - keepTail
-						kept := make([]llm.Message, 0, keepHead+keepTail)
+						middle := messages[keepHead : len(messages)-keepTail]
+
+						// Try to summarize the middle before dropping.
+						summary := emergencySummarize(ctx, client, model, middle, logger)
+
+						kept := make([]llm.Message, 0, keepHead+1+keepTail)
 						kept = append(kept, messages[:keepHead]...)
+						if summary != "" {
+							kept = append(kept, llm.NewTextMessage("user",
+								"[Compacted conversation summary]\n"+summary))
+						}
 						kept = append(kept, messages[len(messages)-keepTail:]...)
 						messages = kept
-						logger.Info("context overflow: emergency drop",
-							"dropped", dropped, "remaining", len(messages))
+						logger.Info("context overflow: emergency compaction",
+							"dropped", dropped, "summarized", summary != "",
+							"remaining", len(messages))
 					}
 				}
 				messages = compact.StripImageBlocks(messages)
