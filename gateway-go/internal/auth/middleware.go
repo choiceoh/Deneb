@@ -1,43 +1,12 @@
-// Package auth middleware wires token/password auth into HTTP routes and WebSocket handshakes.
-//
-// This mirrors src/gateway/server/http-auth.ts and src/gateway/auth/auth.ts.
+// Package auth rate limiting for token auth attempts.
 package auth
 
 import (
-	"crypto/subtle"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 )
-
-// AuthMode determines how the gateway authenticates clients.
-type AuthMode string
-
-const (
-	AuthModeNone     AuthMode = "none"
-	AuthModeToken    AuthMode = "token"
-	AuthModePassword AuthMode = "password"
-)
-
-// ResolvedAuth holds the resolved authentication configuration for the gateway.
-type ResolvedAuth struct {
-	Mode           AuthMode `json:"mode"`
-	Token          string   `json:"-"` // never serialized
-	Password       string   `json:"-"`
-	AllowTailscale bool     `json:"allowTailscale"`
-}
-
-// AuthResult describes the outcome of an authentication attempt.
-type AuthResult struct {
-	OK           bool   `json:"ok"`
-	Method       string `json:"method,omitempty"` // "none", "token", "password", "local"
-	User         string `json:"user,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-	RateLimited  bool   `json:"rateLimited,omitempty"`
-	RetryAfterMs int64  `json:"retryAfterMs,omitempty"`
-}
 
 // AuthRateLimiter tracks failed auth attempts per IP with a sliding window.
 type AuthRateLimiter struct {
@@ -114,11 +83,9 @@ func (rl *AuthRateLimiter) Check(ip string) (allowed bool, retryAfterMs int64) {
 		if remaining > 0 {
 			return false, remaining
 		}
-		// Lockout expired.
 		delete(rl.failures, ip)
 		return true, 0
 	}
-	// Window expired, reset.
 	if now-f.firstAt > rl.windowMs {
 		delete(rl.failures, ip)
 		return true, 0
@@ -136,10 +103,9 @@ func (rl *AuthRateLimiter) RecordFailure(ip string) {
 	defer rl.mu.Unlock()
 	now := time.Now().UnixMilli()
 
-	// Prevent unbounded map growth under DDoS.
 	if len(rl.failures) >= maxRateLimitEntries {
 		if _, exists := rl.failures[ip]; !exists {
-			return // silently drop new entries when at capacity
+			return
 		}
 	}
 
@@ -148,7 +114,6 @@ func (rl *AuthRateLimiter) RecordFailure(ip string) {
 		rl.failures[ip] = &ipFailures{count: 1, firstAt: now}
 		return
 	}
-	// Reset if window expired.
 	if now-f.firstAt > rl.windowMs {
 		f.count = 1
 		f.firstAt = now
@@ -168,55 +133,6 @@ func (rl *AuthRateLimiter) Reset(ip string) {
 	delete(rl.failures, ip)
 }
 
-// Authorize performs the authentication check against resolved auth config.
-// bearerToken is extracted from the Authorization header or connect params.
-// password is from connect params (WS) or basic auth (HTTP).
-func Authorize(resolved *ResolvedAuth, bearerToken, password, remoteIP string, rateLimiter *AuthRateLimiter) AuthResult {
-	// Mode: none — allow all.
-	if resolved.Mode == AuthModeNone {
-		return AuthResult{OK: true, Method: "none"}
-	}
-
-	// Local direct requests always pass.
-	if isLoopback(remoteIP) {
-		return AuthResult{OK: true, Method: "local"}
-	}
-
-	// Rate limit check.
-	if rateLimiter != nil {
-		allowed, retryMs := rateLimiter.Check(remoteIP)
-		if !allowed {
-			return AuthResult{OK: false, Reason: "rate limited", RateLimited: true, RetryAfterMs: retryMs}
-		}
-	}
-
-	// Token auth.
-	if resolved.Mode == AuthModeToken && resolved.Token != "" {
-		if bearerToken != "" && constantTimeEqual(bearerToken, resolved.Token) {
-			if rateLimiter != nil {
-				rateLimiter.Reset(remoteIP)
-			}
-			return AuthResult{OK: true, Method: "token"}
-		}
-	}
-
-	// Password auth.
-	if resolved.Mode == AuthModePassword && resolved.Password != "" {
-		if password != "" && constantTimeEqual(password, resolved.Password) {
-			if rateLimiter != nil {
-				rateLimiter.Reset(remoteIP)
-			}
-			return AuthResult{OK: true, Method: "password"}
-		}
-	}
-
-	// Failure.
-	if rateLimiter != nil {
-		rateLimiter.RecordFailure(remoteIP)
-	}
-	return AuthResult{OK: false, Reason: "invalid credentials"}
-}
-
 // GetBearerToken extracts a Bearer token from an HTTP request.
 func GetBearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
@@ -228,35 +144,4 @@ func GetBearerToken(r *http.Request) string {
 		return auth[len(prefix):]
 	}
 	return ""
-}
-
-// RemoteIP extracts the client IP from an HTTP request.
-// Checks X-Forwarded-For first (first entry), then RemoteAddr.
-func RemoteIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
-// isLoopback returns true if the IP is a loopback address.
-func isLoopback(ip string) bool {
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return false
-	}
-	return parsed.IsLoopback()
-}
-
-// constantTimeEqual compares two strings in constant time using crypto/subtle.
-func constantTimeEqual(a, b string) bool {
-	// subtle.ConstantTimeCompare handles length differences in constant time.
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
