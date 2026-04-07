@@ -50,7 +50,6 @@ toolApprovalPolicy:
     web_search: "auto"
     web_fetch: "auto"
     image_describe: "auto"
-    memory: "auto"
     kv: "auto"
     process: "auto"
     # Confirm: mutating tools — confirm in autonomous contexts.
@@ -115,7 +114,6 @@ toolCompressSkipSet:
     analyze: true
     diff: true
     # Internal / already-small tools
-    memory: true
     wiki: true
     kv: true
     sessions_list: true

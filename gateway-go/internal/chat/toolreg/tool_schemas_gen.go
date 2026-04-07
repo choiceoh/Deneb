@@ -698,65 +698,6 @@ func httpToolSchema() map[string]any {
 	}
 }
 
-func memoryToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"enum":        []string{"search", "get", "set", "forget", "recall", "status", "browse", "log", "daily"},
-				"description": "Action: search (hybrid FTS+vector search), get (fetch fact by ID), set (create fact), forget (deactivate fact), recall (deep recall with entity expansion and relation chains), status (memory stats + top fact previews), browse (list/explore facts by category with pagination and sorting), log (append detailed narrative entry to diary file — memory/diary/diary-YYYY-MM-DD.md), daily (read recent diary entries)",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search query (for search), fact content (for set), or diary entry body (for log)",
-			},
-			"fact_id": map[string]any{
-				"type":        "integer",
-				"description": "Fact ID (for get/forget actions)",
-			},
-			"category": map[string]any{
-				"type":        "string",
-				"enum":        []string{"decision", "preference", "solution", "context", "user_model", "mutual"},
-				"description": "Category filter (search/browse) or category assignment (set)",
-			},
-			"importance": map[string]any{
-				"type":        "number",
-				"description": "Importance score 0.0-1.0 (for set action, default: 0.5)",
-				"minimum":     0,
-				"maximum":     1,
-			},
-			"limit": map[string]any{
-				"type":        "integer",
-				"description": "Max results to return (search: default 10, browse: default 20)",
-				"minimum":     1,
-				"maximum":     50,
-			},
-			"sort": map[string]any{
-				"type":        "string",
-				"enum":        []string{"importance", "recent", "created"},
-				"description": "Sort order for browse action: importance (default), recent (updated_at desc), created (created_at desc)",
-			},
-			"offset": map[string]any{
-				"type":        "integer",
-				"description": "Pagination offset for browse action (default: 0)",
-				"minimum":     0,
-			},
-			"title": map[string]any{
-				"type":        "string",
-				"description": "Short heading for a diary entry (log action). Optional — omit for untitled entries",
-			},
-			"days": map[string]any{
-				"type":        "integer",
-				"description": "How many days of diary to read (daily action, default: 2 = today + yesterday, max: 7)",
-				"minimum":     1,
-				"maximum":     7,
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func healthCheckToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

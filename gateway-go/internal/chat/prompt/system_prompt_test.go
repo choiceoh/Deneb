@@ -11,7 +11,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 		ToolDefs: []ToolDef{
 			{Name: "read"},
 			{Name: "exec"},
-			{Name: "memory"},
+			{Name: "wiki"},
 		},
 		UserTimezone: "Asia/Seoul",
 		RuntimeInfo: &RuntimeInfo{
@@ -37,7 +37,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 		"## 안전",
 		"## Tooling",
 		"## Tool Usage",
-		"## Memory",
+		"## 위키 (장기 지식)",
 		"## Messaging",
 		"## Context",
 		"/home/user/project",
@@ -285,7 +285,7 @@ func TestBuildSystemPromptConversationMode(t *testing.T) {
 		ToolDefs: []ToolDef{
 			{Name: "web"},
 			{Name: "http"},
-			{Name: "memory"},
+			{Name: "wiki"},
 		},
 		ToolPreset: "conversation",
 	}
@@ -307,7 +307,7 @@ func TestBuildSystemPromptNormalModeNoConversationBlock(t *testing.T) {
 			{Name: "write"},
 			{Name: "exec"},
 			{Name: "web"},
-			{Name: "memory"},
+			{Name: "wiki"},
 		},
 	}
 

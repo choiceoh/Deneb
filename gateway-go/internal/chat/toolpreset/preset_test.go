@@ -80,7 +80,7 @@ func TestAllowedTools_Conversation(t *testing.T) {
 	if allowed == nil {
 		t.Fatal("conversation preset should return non-nil allowed set")
 	}
-	for _, name := range []string{"web", "http", "memory", "fetch_tools"} {
+	for _, name := range []string{"web", "http", "wiki", "fetch_tools"} {
 		if !allowed[name] {
 			t.Errorf("conversation preset should include %q", name)
 		}
