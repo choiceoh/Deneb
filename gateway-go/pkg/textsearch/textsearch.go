@@ -330,16 +330,15 @@ func extractSnippet(fields []string, queryTokens []string, windowTokens int) str
 		return ""
 	}
 
-	lower := strings.ToLower(text)
-	querySet := make(map[string]bool, len(queryTokens))
-	for _, qt := range queryTokens {
-		querySet[qt] = true
-	}
+	runes := []rune(text)
+	lower := []rune(strings.ToLower(text))
+	windowChars := windowTokens * 5 // approximate chars per token
 
-	// Find the position of the first query token match.
+	// Find the rune position of the first query token match.
 	bestPos := -1
 	for _, qt := range queryTokens {
-		pos := strings.Index(lower, qt)
+		qtRunes := []rune(qt)
+		pos := runeIndex(lower, qtRunes)
 		if pos >= 0 && (bestPos < 0 || pos < bestPos) {
 			bestPos = pos
 		}
@@ -347,15 +346,13 @@ func extractSnippet(fields []string, queryTokens []string, windowTokens int) str
 
 	if bestPos < 0 {
 		// No exact substring match; return the beginning.
-		if len([]rune(text)) > windowTokens*5 {
-			return string([]rune(text)[:windowTokens*5]) + "..."
+		if len(runes) > windowChars {
+			return string(runes[:windowChars]) + "..."
 		}
 		return text
 	}
 
 	// Expand window around the match.
-	runes := []rune(text)
-	windowChars := windowTokens * 5 // approximate chars per token
 	start := bestPos - windowChars/2
 	if start < 0 {
 		start = 0
@@ -373,4 +370,25 @@ func extractSnippet(fields []string, queryTokens []string, windowTokens int) str
 		snippet = snippet + "..."
 	}
 	return snippet
+}
+
+// runeIndex returns the index of the first occurrence of needle in haystack,
+// operating on rune slices (not byte offsets).
+func runeIndex(haystack, needle []rune) int {
+	if len(needle) == 0 {
+		return 0
+	}
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		match := true
+		for j := range needle {
+			if haystack[i+j] != needle[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
 }
