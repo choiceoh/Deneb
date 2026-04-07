@@ -41,7 +41,7 @@ func TestIndex_RenderAndParse(t *testing.T) {
 		t.Error("missing last processed date")
 	}
 	// TSV header row.
-	if !strings.Contains(rendered, "id\tpath\ttitle\tsummary\ttags\timportance\tupdated\tbacklinks") {
+	if !strings.Contains(rendered, "id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks") {
 		t.Error("missing TSV header row")
 	}
 	// TSV data should contain the entry fields.

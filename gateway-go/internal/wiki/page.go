@@ -28,6 +28,8 @@ type Frontmatter struct {
 	Updated    string  // YYYY-MM-DD
 	Importance float64 // 0.0-1.0
 	Archived   bool
+	Type       string // concept, entity, source, comparison, log
+	Confidence string // high, medium, low
 }
 
 // ParsePage parses a wiki page from raw bytes.
@@ -83,6 +85,12 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Archived {
 		buf.WriteString("archived: true\n")
+	}
+	if p.Meta.Type != "" {
+		buf.WriteString("type: " + p.Meta.Type + "\n")
+	}
+	if p.Meta.Confidence != "" {
+		buf.WriteString("confidence: " + p.Meta.Confidence + "\n")
 	}
 	buf.WriteString("---\n\n")
 
@@ -224,6 +232,10 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Importance, _ = strconv.ParseFloat(val, 64)
 		case "archived":
 			fm.Archived = val == "true"
+		case "type":
+			fm.Type = val
+		case "confidence":
+			fm.Confidence = val
 		}
 	}
 	return fm

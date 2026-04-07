@@ -27,6 +27,8 @@ type IndexEntry struct {
 	Related    []string
 	Importance float64
 	Updated    string // YYYY-MM-DD
+	Type       string // concept, entity, source, comparison, log
+	Confidence string // high, medium, low
 }
 
 // NewIndex creates an empty index.
@@ -47,6 +49,8 @@ func (idx *Index) UpdateEntry(relPath string, page *Page) {
 		Related:    page.Meta.Related,
 		Importance: page.Meta.Importance,
 		Updated:    page.Meta.Updated,
+		Type:       page.Meta.Type,
+		Confidence: page.Meta.Confidence,
 	}
 }
 
@@ -100,7 +104,7 @@ func (idx *Index) Render() string {
 		})
 
 		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
-		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\tbacklinks\n")
+		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\n")
 		for _, e := range entries {
 			tags := strings.Join(e.entry.Tags, ",")
 			imp := ""
@@ -108,7 +112,7 @@ func (idx *Index) Render() string {
 				imp = fmt.Sprintf("%.2f", e.entry.Importance)
 			}
 			bl := backlinkCount[e.path]
-			sb.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
+			sb.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
 				sanitizeTSV(e.entry.ID),
 				e.path,
 				sanitizeTSV(e.entry.Title),
@@ -116,6 +120,8 @@ func (idx *Index) Render() string {
 				sanitizeTSV(tags),
 				imp,
 				e.entry.Updated,
+				sanitizeTSV(e.entry.Type),
+				sanitizeTSV(e.entry.Confidence),
 				bl,
 			))
 		}
@@ -202,7 +208,8 @@ func ParseIndex(path string) (*Index, error) {
 }
 
 // parseTSVLine parses a TSV data row:
-// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\tbacklinks
+// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks
+// Backward-compatible: old 8-field format (without type/confidence) still parses correctly.
 func parseTSVLine(line, category string) indexRenderEntry {
 	fields := strings.Split(line, "\t")
 	if len(fields) < 2 {
@@ -239,9 +246,37 @@ func parseTSVLine(line, category string) indexRenderEntry {
 	if len(fields) > 6 {
 		e.Updated = fields[6]
 	}
-	// backlinks (field 7) is computed at render time, not stored.
+	// New format: type (field 7), confidence (field 8), backlinks (field 9).
+	// Old format: backlinks (field 7) — numeric, so won't match valid type values.
+	if len(fields) > 7 {
+		if isValidPageType(fields[7]) {
+			e.Type = fields[7]
+		}
+	}
+	if len(fields) > 8 {
+		if isValidConfidence(fields[8]) {
+			e.Confidence = fields[8]
+		}
+	}
+	// backlinks (last field) is computed at render time, not stored.
 
 	return indexRenderEntry{path: path, entry: e}
+}
+
+func isValidPageType(s string) bool {
+	switch s {
+	case "concept", "entity", "source", "comparison", "log":
+		return true
+	}
+	return false
+}
+
+func isValidConfidence(s string) bool {
+	switch s {
+	case "high", "medium", "low":
+		return true
+	}
+	return false
 }
 
 type indexRenderEntry struct {

@@ -157,7 +157,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 			return nil
 		}
 		base := filepath.Base(path)
-		if base == "index.md" || base == "_index.md" || base == ".wiki.db" {
+		if base == "index.md" || base == "_index.md" || base == ".wiki.db" || base == "log.md" {
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, path)
