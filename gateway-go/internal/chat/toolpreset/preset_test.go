@@ -118,7 +118,7 @@ func TestIsValid(t *testing.T) {
 
 func TestKnownPresets(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 5 {
-		t.Errorf("expected 5 known presets, got %d", len(presets))
+	if len(presets) != 6 {
+		t.Errorf("expected 6 known presets, got %d", len(presets))
 	}
 }
