@@ -178,10 +178,12 @@ func gcMaxAgeForKind(k Kind) time.Duration {
 }
 
 // Manager tracks active sessions in memory.
+// The zero value is ready to use; NewManager is a convenience constructor.
 type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
 	eventBus *EventBus
+	initOnce sync.Once // lazy initialization for sessions map and eventBus
 	gcOnce   sync.Once // ensures StartGC spawns at most one GC goroutine
 
 	// emitMu serializes state-mutation + event-emission as an atomic unit.
@@ -196,12 +198,20 @@ type Manager struct {
 	emitMu sync.Mutex
 }
 
+// lazyInit ensures sessions map and eventBus are initialized.
+// Safe to call concurrently; at most one goroutine performs initialization.
+func (m *Manager) lazyInit() {
+	m.initOnce.Do(func() {
+		m.sessions = make(map[string]*Session)
+		m.eventBus = NewEventBus()
+	})
+}
+
 // NewManager creates an empty session manager with an integrated event bus.
 func NewManager() *Manager {
-	return &Manager{
-		sessions: make(map[string]*Session),
-		eventBus: NewEventBus(),
-	}
+	m := &Manager{}
+	m.lazyInit()
+	return m
 }
 
 // StartGC starts a background goroutine that periodically evicts terminal
@@ -209,6 +219,7 @@ func NewManager() *Manager {
 // Stops when ctx is canceled. Safe to call multiple times — only the first
 // call starts a goroutine; subsequent calls are no-ops.
 func (m *Manager) StartGC(ctx context.Context) {
+	m.lazyInit()
 	m.gcOnce.Do(func() {
 		go func() {
 			ticker := time.NewTicker(gcInterval)
@@ -293,12 +304,14 @@ func isTerminal(s RunStatus) bool {
 
 // EventBusRef returns the session event bus for subscribing to lifecycle events.
 func (m *Manager) EventBusRef() *EventBus {
+	m.lazyInit()
 	return m.eventBus
 }
 
 // Get returns a snapshot copy of a session by key, or nil if not found.
 // The returned Session is safe to read without holding the manager lock.
 func (m *Manager) Get(key string) *Session {
+	m.lazyInit()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	s := m.sessions[key]
@@ -317,6 +330,7 @@ func (m *Manager) Set(s *Session) error {
 	if s == nil || s.Key == "" {
 		return nil
 	}
+	m.lazyInit()
 	m.emitMu.Lock()
 	defer m.emitMu.Unlock()
 
@@ -347,6 +361,7 @@ func (m *Manager) Set(s *Session) error {
 
 // Delete removes a session by key. Returns true if the session existed.
 func (m *Manager) Delete(key string) bool {
+	m.lazyInit()
 	m.emitMu.Lock()
 	defer m.emitMu.Unlock()
 
@@ -370,6 +385,7 @@ func (m *Manager) Delete(key string) bool {
 // used for idle stall detection. No-op if the session doesn't exist or
 // is not running. This is a lightweight, lock-minimized operation.
 func (m *Manager) TouchActivity(key string) {
+	m.lazyInit()
 	now := time.Now().UnixMilli()
 	m.mu.Lock()
 	s := m.sessions[key]
@@ -381,6 +397,7 @@ func (m *Manager) TouchActivity(key string) {
 
 // List returns snapshot copies of all sessions.
 func (m *Manager) List() []*Session {
+	m.lazyInit()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	result := make([]*Session, 0, len(m.sessions))
@@ -397,6 +414,7 @@ func (m *Manager) replaySet(s *Session) {
 	if s == nil || s.Key == "" {
 		return
 	}
+	m.lazyInit()
 	m.mu.Lock()
 	m.sessions[s.Key] = s
 	m.mu.Unlock()
@@ -404,6 +422,7 @@ func (m *Manager) replaySet(s *Session) {
 
 // Count returns the number of active sessions.
 func (m *Manager) Count() int {
+	m.lazyInit()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.sessions)
@@ -416,6 +435,7 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 	if key == "" {
 		return nil
 	}
+	m.lazyInit()
 	m.emitMu.Lock()
 	defer m.emitMu.Unlock()
 
@@ -444,6 +464,7 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 //   - Unknown phase: no-op — returns existing session or a KindUnknown stub so
 //     callers can always dereference the result safely without nil checks.
 func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session {
+	m.lazyInit()
 	m.emitMu.Lock()
 	defer m.emitMu.Unlock()
 
