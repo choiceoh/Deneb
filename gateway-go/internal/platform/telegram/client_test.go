@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 )
 
@@ -37,11 +39,9 @@ func TestGetMe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMe failed: %v", err)
 	}
-	if user.ID != 123 {
-		t.Errorf("expected user ID 123, got %d", user.ID)
-	}
-	if user.Username != "test_bot" {
-		t.Errorf("expected username test_bot, got %s", user.Username)
+	want := User{ID: 123, IsBot: true, FirstName: "TestBot", Username: "test_bot"}
+	if diff := cmp.Diff(want, *user); diff != "" {
+		t.Errorf("GetMe mismatch (-want +got):\n%s", diff)
 	}
 }
 

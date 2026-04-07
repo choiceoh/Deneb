@@ -3,16 +3,24 @@ package session
 import (
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
+
+// sessionCmpOpts ignores time-dependent fields that are set internally by Manager.
+var sessionCmpOpts = cmp.Options{
+	cmpopts.IgnoreFields(Session{}, "CreatedAt", "UpdatedAt"),
+	cmpopts.EquateEmpty(),
+}
 
 func TestCreateAndGet(t *testing.T) {
 	m := NewManager()
 	s := m.Create("session-1", KindDirect)
-	if s.Key != "session-1" {
-		t.Errorf("Key = %q, want %q", s.Key, "session-1")
-	}
-	if s.Kind != KindDirect {
-		t.Errorf("Kind = %q, want %q", s.Kind, KindDirect)
+
+	want := Session{Key: "session-1", Kind: KindDirect}
+	if diff := cmp.Diff(want, *s, sessionCmpOpts); diff != "" {
+		t.Errorf("Create mismatch (-want +got):\n%s", diff)
 	}
 
 	got := m.Get("session-1")
