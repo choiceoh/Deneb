@@ -36,7 +36,11 @@ func FormatTier1(store *wiki.Store, minImportance float64) string {
 
 	for _, r := range pages {
 		body := truncateRunes(r.Page.Body, tier1MaxBodyRunes)
-		entry := fmt.Sprintf("### %s (%s)\n%s\n\n", r.Page.Meta.Title, r.Path, body)
+		header := fmt.Sprintf("### %s (%s)\n", r.Page.Meta.Title, r.Path)
+		if r.Page.Meta.Summary != "" {
+			header += fmt.Sprintf("_%s_\n", r.Page.Meta.Summary)
+		}
+		entry := header + body + "\n\n"
 
 		if sb.Len()+len(entry) > tier1MaxTotalChar {
 			break

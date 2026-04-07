@@ -186,6 +186,76 @@ func TestStore_Search(t *testing.T) {
 	}
 }
 
+func TestStore_BacklinkMaintenance(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer store.Close()
+
+	// Write page B first (target of backlink).
+	pageB := NewPage("Page B", "기술", nil)
+	pageB.Body = "# Page B"
+	if err := store.WritePage("기술/b.md", pageB); err != nil {
+		t.Fatalf("WritePage(B): %v", err)
+	}
+
+	// Write page A with related pointing to B.
+	pageA := NewPage("Page A", "기술", nil)
+	pageA.Meta.Related = []string{"기술/b.md"}
+	pageA.Body = "# Page A"
+	if err := store.WritePage("기술/a.md", pageA); err != nil {
+		t.Fatalf("WritePage(A): %v", err)
+	}
+
+	// Verify B now has a backlink to A.
+	gotB, err := store.ReadPage("기술/b.md")
+	if err != nil {
+		t.Fatalf("ReadPage(B): %v", err)
+	}
+	found := false
+	for _, r := range gotB.Meta.Related {
+		if r == "기술/a.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("B.Related = %v, want to contain 기술/a.md", gotB.Meta.Related)
+	}
+}
+
+func TestStore_BacklinkCleanupOnDelete(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer store.Close()
+
+	// Write B, then A referencing B.
+	pageB := NewPage("B", "기술", nil)
+	pageB.Body = "# B"
+	_ = store.WritePage("기술/b.md", pageB)
+
+	pageA := NewPage("A", "기술", nil)
+	pageA.Meta.Related = []string{"기술/b.md"}
+	pageA.Body = "# A"
+	_ = store.WritePage("기술/a.md", pageA)
+
+	// Delete A — B should lose the backlink.
+	if err := store.DeletePage("기술/a.md"); err != nil {
+		t.Fatalf("DeletePage: %v", err)
+	}
+
+	gotB, _ := store.ReadPage("기술/b.md")
+	for _, r := range gotB.Meta.Related {
+		if r == "기술/a.md" {
+			t.Errorf("B still has backlink to deleted A: %v", gotB.Meta.Related)
+		}
+	}
+}
+
 func TestStore_Stats(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))

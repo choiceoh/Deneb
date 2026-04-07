@@ -205,8 +205,11 @@ type wikiUpdate struct {
 	Action     string   `json:"action"` // "create" or "update"
 	Path       string   `json:"path"`   // e.g., "기술/dgx-spark.md"
 	Title      string   `json:"title"`
+	ID         string   `json:"id"`      // short kebab-case identifier (e.g., "dgx-spark")
+	Summary    string   `json:"summary"` // one-line description (~80 chars)
 	Category   string   `json:"category"`
 	Tags       []string `json:"tags"`
+	Related    []string `json:"related"` // existing page paths semantically related
 	Content    string   `json:"content"` // markdown body or section to append
 	Importance float64  `json:"importance"`
 }
@@ -232,6 +235,9 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string) ([]w
 - 카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호
 - content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용
 - importance: 0.5(일반) ~ 0.9(핵심 결정)
+- id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
+- summary: 한 줄 요약 (~80자, 한국어)
+- related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
 - 업데이트가 불필요하면 빈 배열 [] 반환
 
 JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryContent)
@@ -291,11 +297,27 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 			if u.Importance > 0 {
 				page.Meta.Importance = u.Importance
 			}
+			if u.ID != "" {
+				page.Meta.ID = u.ID
+			}
+			if u.Summary != "" {
+				page.Meta.Summary = u.Summary
+			}
+			if len(u.Related) > 0 {
+				page.Meta.Related = u.Related
+			}
 			if u.Content != "" {
 				page.Body = u.Content
 			} else {
 				page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성 (dreaming)\n",
 					u.Title, time.Now().Format("2006-01-02"))
+			}
+			// Append a related-docs section if related pages are provided.
+			if len(u.Related) > 0 {
+				page.Body += "\n\n## 관련 문서\n"
+				for _, r := range u.Related {
+					page.Body += fmt.Sprintf("- [[%s]]\n", r)
+				}
 			}
 			if err := wd.store.WritePage(u.Path, page); err != nil {
 				wd.logger.Warn("wiki-dream: create page failed", "path", u.Path, "error", err)
@@ -310,6 +332,15 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 				page := NewPage(u.Title, u.Category, u.Tags)
 				if u.Importance > 0 {
 					page.Meta.Importance = u.Importance
+				}
+				if u.ID != "" {
+					page.Meta.ID = u.ID
+				}
+				if u.Summary != "" {
+					page.Meta.Summary = u.Summary
+				}
+				if len(u.Related) > 0 {
+					page.Meta.Related = u.Related
 				}
 				page.Body = u.Content
 				if err := wd.store.WritePage(u.Path, page); err != nil {
@@ -329,6 +360,15 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 			}
 			if u.Importance > existing.Meta.Importance {
 				existing.Meta.Importance = u.Importance
+			}
+			if u.ID != "" {
+				existing.Meta.ID = u.ID
+			}
+			if u.Summary != "" {
+				existing.Meta.Summary = u.Summary
+			}
+			if len(u.Related) > 0 {
+				existing.Meta.Related = mergeRelated(existing.Meta.Related, u.Related)
 			}
 			existing.Meta.Updated = time.Now().Format("2006-01-02")
 
@@ -398,6 +438,22 @@ func mergeTags(existing, new []string) []string {
 		if !seen[t] {
 			result = append(result, t)
 			seen[t] = true
+		}
+	}
+	return result
+}
+
+// mergeRelated merges two related-page lists, deduplicating (union).
+func mergeRelated(existing, new []string) []string {
+	seen := map[string]bool{}
+	for _, r := range existing {
+		seen[r] = true
+	}
+	result := append([]string{}, existing...)
+	for _, r := range new {
+		if !seen[r] {
+			result = append(result, r)
+			seen[r] = true
 		}
 	}
 	return result

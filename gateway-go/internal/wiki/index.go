@@ -19,9 +19,12 @@ type Index struct {
 
 // IndexEntry is a single entry in the master index.
 type IndexEntry struct {
+	ID         string
 	Title      string
+	Summary    string
 	Category   string
 	Tags       []string
+	Related    []string
 	Importance float64
 	Updated    string // YYYY-MM-DD
 }
@@ -36,9 +39,12 @@ func NewIndex() *Index {
 // UpdateEntry adds or updates an index entry from a page.
 func (idx *Index) UpdateEntry(relPath string, page *Page) {
 	idx.Entries[relPath] = IndexEntry{
+		ID:         page.Meta.ID,
 		Title:      page.Meta.Title,
+		Summary:    page.Meta.Summary,
 		Category:   page.Meta.Category,
 		Tags:       page.Meta.Tags,
+		Related:    page.Meta.Related,
 		Importance: page.Meta.Importance,
 		Updated:    page.Meta.Updated,
 	}
@@ -49,7 +55,7 @@ func (idx *Index) RemoveEntry(relPath string) {
 	delete(idx.Entries, relPath)
 }
 
-// Render produces the index.md content.
+// Render produces the index.md content in TSV format for machine parsing.
 func (idx *Index) Render() string {
 	var sb strings.Builder
 	sb.WriteString("# 위키 인덱스\n\n")
@@ -57,6 +63,14 @@ func (idx *Index) Render() string {
 
 	if idx.LastProcessed != "" {
 		sb.WriteString(fmt.Sprintf("마지막 일지 처리: %s\n\n", idx.LastProcessed))
+	}
+
+	// Build backlink counts: for each path, count how many entries reference it.
+	backlinkCount := map[string]int{}
+	for _, entry := range idx.Entries {
+		for _, rel := range entry.Related {
+			backlinkCount[rel]++
+		}
 	}
 
 	// Group entries by category.
@@ -79,7 +93,6 @@ func (idx *Index) Render() string {
 	for _, cat := range cats {
 		entries := byCategory[cat]
 		sort.Slice(entries, func(i, j int) bool {
-			// High importance first, then alphabetical.
 			if entries[i].entry.Importance != entries[j].entry.Importance {
 				return entries[i].entry.Importance > entries[j].entry.Importance
 			}
@@ -87,29 +100,37 @@ func (idx *Index) Render() string {
 		})
 
 		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
+		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\tbacklinks\n")
 		for _, e := range entries {
-			tags := ""
-			if len(e.entry.Tags) > 0 {
-				tags = " [" + strings.Join(e.entry.Tags, ", ") + "]"
-			}
-			// Encode importance and updated date as parseable metadata.
-			var metaParts []string
+			tags := strings.Join(e.entry.Tags, ",")
+			imp := ""
 			if e.entry.Importance > 0 {
-				metaParts = append(metaParts, fmt.Sprintf("i:%.2f", e.entry.Importance))
+				imp = fmt.Sprintf("%.2f", e.entry.Importance)
 			}
-			if e.entry.Updated != "" {
-				metaParts = append(metaParts, "u:"+e.entry.Updated)
-			}
-			meta := ""
-			if len(metaParts) > 0 {
-				meta = " (" + strings.Join(metaParts, ", ") + ")"
-			}
-			sb.WriteString(fmt.Sprintf("- [[%s]] — %s%s%s\n", e.path, e.entry.Title, tags, meta))
+			bl := backlinkCount[e.path]
+			sb.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
+				sanitizeTSV(e.entry.ID),
+				e.path,
+				sanitizeTSV(e.entry.Title),
+				sanitizeTSV(e.entry.Summary),
+				sanitizeTSV(tags),
+				imp,
+				e.entry.Updated,
+				bl,
+			))
 		}
 		sb.WriteString("\n")
 	}
 
 	return sb.String()
+}
+
+// sanitizeTSV replaces tabs and newlines with spaces to keep TSV rows intact.
+func sanitizeTSV(s string) string {
+	s = strings.ReplaceAll(s, "\t", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return s
 }
 
 // Save writes the index to disk.
@@ -128,8 +149,7 @@ func (idx *Index) Save(path string) error {
 }
 
 // ParseIndex reads and parses an existing index.md.
-// The index file is primarily for LLM consumption, but we parse
-// the [[path]] links to reconstruct the entry map.
+// Supports both TSV format (new) and markdown list format (legacy).
 func ParseIndex(path string) (*Index, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -141,29 +161,87 @@ func ParseIndex(path string) (*Index, error) {
 	currentCategory := ""
 
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(line)
 
 		// Parse category headers.
-		if strings.HasPrefix(line, "## ") {
-			currentCategory = strings.TrimPrefix(line, "## ")
+		if strings.HasPrefix(trimmed, "## ") {
+			currentCategory = strings.TrimPrefix(trimmed, "## ")
 			continue
 		}
 
-		// Parse entries: - [[path]] — title [tags] *
-		if strings.HasPrefix(line, "- [[") {
-			entry := parseIndexLine(line, currentCategory)
+		// Skip TSV header rows.
+		if strings.HasPrefix(trimmed, "id\t") {
+			continue
+		}
+
+		// TSV data row: contains tabs and doesn't start with "- [[".
+		if strings.Contains(trimmed, "\t") && !strings.HasPrefix(trimmed, "- [[") {
+			entry := parseTSVLine(trimmed, currentCategory)
 			if entry.path != "" {
 				idx.Entries[entry.path] = entry.entry
 			}
+			continue
+		}
+
+		// Legacy format: - [[path]] — title [tags] (i:0.90, u:2026-04-06)
+		if strings.HasPrefix(trimmed, "- [[") {
+			entry := parseIndexLine(trimmed, currentCategory)
+			if entry.path != "" {
+				idx.Entries[entry.path] = entry.entry
+			}
+			continue
 		}
 
 		// Parse last processed diary date.
-		if strings.HasPrefix(line, "마지막 일지 처리:") {
-			idx.LastProcessed = strings.TrimSpace(strings.TrimPrefix(line, "마지막 일지 처리:"))
+		if strings.HasPrefix(trimmed, "마지막 일지 처리:") {
+			idx.LastProcessed = strings.TrimSpace(strings.TrimPrefix(trimmed, "마지막 일지 처리:"))
 		}
 	}
 
 	return idx, nil
+}
+
+// parseTSVLine parses a TSV data row:
+// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\tbacklinks
+func parseTSVLine(line, category string) indexRenderEntry {
+	fields := strings.Split(line, "\t")
+	if len(fields) < 2 {
+		return indexRenderEntry{}
+	}
+
+	var e IndexEntry
+	e.Category = category
+
+	if len(fields) > 0 {
+		e.ID = fields[0]
+	}
+	path := ""
+	if len(fields) > 1 {
+		path = fields[1]
+	}
+	if len(fields) > 2 {
+		e.Title = fields[2]
+	}
+	if len(fields) > 3 {
+		e.Summary = fields[3]
+	}
+	if len(fields) > 4 && fields[4] != "" {
+		for _, t := range strings.Split(fields[4], ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				e.Tags = append(e.Tags, t)
+			}
+		}
+	}
+	if len(fields) > 5 {
+		e.Importance, _ = strconv.ParseFloat(fields[5], 64)
+	}
+	if len(fields) > 6 {
+		e.Updated = fields[6]
+	}
+	// backlinks (field 7) is computed at render time, not stored.
+
+	return indexRenderEntry{path: path, entry: e}
 }
 
 type indexRenderEntry struct {

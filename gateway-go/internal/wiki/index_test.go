@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,9 +11,12 @@ func TestIndex_RenderAndParse(t *testing.T) {
 	idx := NewIndex()
 	idx.UpdateEntry("기술/dgx-spark.md", &Page{
 		Meta: Frontmatter{
+			ID:         "dgx-spark",
 			Title:      "DGX Spark",
+			Summary:    "128GB 로컬 AI 서버",
 			Category:   "기술",
 			Tags:       []string{"하드웨어", "NVIDIA"},
+			Related:    []string{"기술/go.md"},
 			Importance: 0.9,
 			Updated:    "2026-04-06",
 		},
@@ -29,26 +33,23 @@ func TestIndex_RenderAndParse(t *testing.T) {
 
 	rendered := idx.Render()
 
-	// Verify structure.
+	// Verify TSV structure.
 	if !strings.Contains(rendered, "# 위키 인덱스") {
 		t.Error("missing header")
-	}
-	if !strings.Contains(rendered, "[[기술/dgx-spark.md]]") {
-		t.Error("missing dgx-spark entry")
-	}
-	if !strings.Contains(rendered, "[[사람/alice.md]]") {
-		t.Error("missing alice entry")
 	}
 	if !strings.Contains(rendered, "마지막 일지 처리: 2026-04-05") {
 		t.Error("missing last processed date")
 	}
-
-	// Importance and updated date in new format.
-	if !strings.Contains(rendered, "i:0.90") {
-		t.Error("missing importance value for dgx-spark")
+	// TSV header row.
+	if !strings.Contains(rendered, "id\tpath\ttitle\tsummary\ttags\timportance\tupdated\tbacklinks") {
+		t.Error("missing TSV header row")
 	}
-	if !strings.Contains(rendered, "u:2026-04-06") {
-		t.Error("missing updated date for dgx-spark")
+	// TSV data should contain the entry fields.
+	if !strings.Contains(rendered, "dgx-spark\t기술/dgx-spark.md\tDGX Spark\t128GB 로컬 AI 서버") {
+		t.Errorf("missing TSV data for dgx-spark in:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "0.90") {
+		t.Error("missing importance value")
 	}
 }
 
@@ -59,7 +60,9 @@ func TestIndex_SaveAndReload(t *testing.T) {
 	idx := NewIndex()
 	idx.UpdateEntry("기술/go.md", &Page{
 		Meta: Frontmatter{
+			ID:         "go-lang",
 			Title:      "Go",
+			Summary:    "Deneb 주 개발 언어",
 			Category:   "기술",
 			Tags:       []string{"언어"},
 			Importance: 0.7,
@@ -67,7 +70,9 @@ func TestIndex_SaveAndReload(t *testing.T) {
 	})
 	idx.UpdateEntry("결정/wiki.md", &Page{
 		Meta: Frontmatter{
+			ID:         "wiki-switch",
 			Title:      "위키 전환",
+			Summary:    "Karpathy 위키 스타일로 전환",
 			Category:   "결정",
 			Importance: 0.9,
 		},
@@ -90,8 +95,14 @@ func TestIndex_SaveAndReload(t *testing.T) {
 	if !ok {
 		t.Fatal("missing go.md entry")
 	}
+	if goEntry.ID != "go-lang" {
+		t.Errorf("go id = %q", goEntry.ID)
+	}
 	if goEntry.Title != "Go" {
 		t.Errorf("go title = %q", goEntry.Title)
+	}
+	if goEntry.Summary != "Deneb 주 개발 언어" {
+		t.Errorf("go summary = %q", goEntry.Summary)
 	}
 	if goEntry.Category != "기술" {
 		t.Errorf("go category = %q", goEntry.Category)
@@ -104,8 +115,54 @@ func TestIndex_SaveAndReload(t *testing.T) {
 	if !ok {
 		t.Fatal("missing wiki.md entry")
 	}
+	if wikiEntry.ID != "wiki-switch" {
+		t.Errorf("wiki id = %q", wikiEntry.ID)
+	}
 	if wikiEntry.Importance != 0.9 {
 		t.Errorf("wiki importance = %f, want 0.9", wikiEntry.Importance)
+	}
+}
+
+func TestParseIndex_LegacyFormat(t *testing.T) {
+	// Verify backward compatibility with old markdown list format.
+	legacy := `# 위키 인덱스
+
+_자동 생성: 2026-04-07 14:30_
+
+마지막 일지 처리: 2026-04-05
+
+## 기술
+
+- [[기술/dgx-spark.md]] — DGX Spark [하드웨어, NVIDIA] (i:0.90, u:2026-04-06)
+- [[기술/go.md]] — Go [언어] (i:0.70)
+`
+	dir := t.TempDir()
+	indexPath := filepath.Join(dir, "index.md")
+	if err := os.WriteFile(indexPath, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err := ParseIndex(indexPath)
+	if err != nil {
+		t.Fatalf("ParseIndex: %v", err)
+	}
+
+	if idx.LastProcessed != "2026-04-05" {
+		t.Errorf("LastProcessed = %q", idx.LastProcessed)
+	}
+	if len(idx.Entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(idx.Entries))
+	}
+
+	spark, ok := idx.Entries["기술/dgx-spark.md"]
+	if !ok {
+		t.Fatal("missing dgx-spark entry")
+	}
+	if spark.Title != "DGX Spark" {
+		t.Errorf("title = %q", spark.Title)
+	}
+	if spark.Importance != 0.9 {
+		t.Errorf("importance = %f", spark.Importance)
 	}
 }
 

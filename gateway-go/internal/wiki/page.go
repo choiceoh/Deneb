@@ -18,7 +18,9 @@ type Page struct {
 
 // Frontmatter is the YAML metadata at the top of a wiki page.
 type Frontmatter struct {
+	ID         string  // short identifier (e.g., "dgx-spark", "gemma4-switch")
 	Title      string
+	Summary    string // one-line description for index-level filtering (~80 chars)
 	Category   string
 	Tags       []string
 	Related    []string
@@ -54,7 +56,13 @@ func (p *Page) Render() []byte {
 	var buf bytes.Buffer
 
 	buf.WriteString("---\n")
+	if p.Meta.ID != "" {
+		buf.WriteString("id: " + p.Meta.ID + "\n")
+	}
 	buf.WriteString("title: " + p.Meta.Title + "\n")
+	if p.Meta.Summary != "" {
+		buf.WriteString("summary: " + p.Meta.Summary + "\n")
+	}
 	if p.Meta.Category != "" {
 		buf.WriteString("category: " + p.Meta.Category + "\n")
 	}
@@ -196,8 +204,12 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		}
 
 		switch key {
+		case "id":
+			fm.ID = val
 		case "title":
 			fm.Title = val
+		case "summary":
+			fm.Summary = val
 		case "category":
 			fm.Category = val
 		case "tags":

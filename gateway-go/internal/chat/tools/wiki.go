@@ -21,6 +21,8 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Action     string   `json:"action"`
 			Query      string   `json:"query"`
 			Title      string   `json:"title"`
+			ID         string   `json:"id"`
+			Summary    string   `json:"summary"`
 			Category   string   `json:"category"`
 			Content    string   `json:"content"`
 			Tags       []string `json:"tags"`
@@ -45,7 +47,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(d.Store, p.Query, p.Title, p.Category, p.Content, p.Tags, p.Related, p.Importance)
+			return wikiWrite(d.Store, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Importance)
 		case "log":
 			return wikiLog(workspaceDir, d.Store.DiaryDir(), p.Content)
 		case "daily":
@@ -149,7 +151,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(store *wiki.Store, path, title, category, content string, tags, related []string, importance float64) (string, error) {
+func wikiWrite(store *wiki.Store, path, title, id, summary, category, content string, tags, related []string, importance float64) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -174,6 +176,12 @@ func wikiWrite(store *wiki.Store, path, title, category, content string, tags, r
 		// Update existing page.
 		page = existing
 		page.Meta.Title = title
+		if id != "" {
+			page.Meta.ID = id
+		}
+		if summary != "" {
+			page.Meta.Summary = summary
+		}
 		if len(tags) > 0 {
 			page.Meta.Tags = tags
 		}
@@ -190,6 +198,8 @@ func wikiWrite(store *wiki.Store, path, title, category, content string, tags, r
 	} else {
 		// Create new page.
 		page = wiki.NewPage(title, category, tags)
+		page.Meta.ID = id
+		page.Meta.Summary = summary
 		page.Meta.Related = related
 		if importance > 0 {
 			page.Meta.Importance = importance

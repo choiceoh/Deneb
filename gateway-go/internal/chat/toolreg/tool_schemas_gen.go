@@ -1842,6 +1842,14 @@ func wikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Page title (write action)",
 			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "Short identifier (kebab-case, e.g. 'dgx-spark')",
+			},
+			"summary": map[string]any{
+				"type":        "string",
+				"description": "한 줄 요약 (~80자)",
+			},
 			"category": map[string]any{
 				"type":        "string",
 				"enum":        []string{"사람", "프로젝트", "기술", "업무", "결정", "선호"},
