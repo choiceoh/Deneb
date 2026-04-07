@@ -39,6 +39,10 @@ type SyncOptions struct {
 	// SystemPrompt provides a system prompt extracted from the messages array.
 	// Used when Messages is set and system messages were present.
 	SystemPrompt string
+
+	// ToolPreset restricts available tools for this run (e.g. "boot", "conversation").
+	// Empty means no restriction.
+	ToolPreset string
 }
 
 // StreamDelta is emitted for each text chunk during a streaming synchronous run.
@@ -54,8 +58,9 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		return nil, fmt.Errorf("chat handler not initialized")
 	}
 
-	if h.sessions.Get(sessionKey) == nil {
-		h.sessions.Create(sessionKey, "direct")
+	sess := h.sessions.Get(sessionKey)
+	if sess == nil {
+		sess = h.sessions.Create(sessionKey, "direct")
 	}
 
 	params := RunParams{
@@ -79,6 +84,9 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		}
 		if opts.SystemPrompt != "" {
 			params.System = opts.SystemPrompt
+		}
+		if opts.ToolPreset != "" {
+			sess.ToolPreset = opts.ToolPreset
 		}
 	}
 
@@ -119,8 +127,9 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		return nil, fmt.Errorf("chat handler not initialized")
 	}
 
-	if h.sessions.Get(sessionKey) == nil {
-		h.sessions.Create(sessionKey, "direct")
+	sess := h.sessions.Get(sessionKey)
+	if sess == nil {
+		sess = h.sessions.Create(sessionKey, "direct")
 	}
 
 	params := RunParams{
@@ -144,6 +153,9 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		}
 		if opts.SystemPrompt != "" {
 			params.System = opts.SystemPrompt
+		}
+		if opts.ToolPreset != "" {
+			sess.ToolPreset = opts.ToolPreset
 		}
 	}
 

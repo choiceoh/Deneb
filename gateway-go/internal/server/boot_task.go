@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 )
 
@@ -69,7 +70,9 @@ func (t *bootTask) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	result, err := t.chatHandler.SendSync(runCtx, "boot", prompt, "", nil)
+	result, err := t.chatHandler.SendSync(runCtx, "boot", prompt, "", &chat.SyncOptions{
+		ToolPreset: string(toolpreset.PresetBoot),
+	})
 	if err != nil {
 		return fmt.Errorf("boot: agent turn failed: %w", err)
 	}
