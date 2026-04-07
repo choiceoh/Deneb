@@ -92,6 +92,7 @@ type DenebConfig struct {
 	Session    *SessionConfig    `json:"session,omitempty"`
 	Agents     *AgentsConfig     `json:"agents,omitempty"`
 	GmailPoll  *GmailPollConfig  `json:"gmailPoll,omitempty"`
+	Cron       *CronConfig       `json:"cron,omitempty"`
 }
 
 // MetaConfig tracks config version metadata.
@@ -322,6 +323,12 @@ type AgentEntryConfig struct {
 	ID        string `json:"id,omitempty"`
 	Default   *bool  `json:"default,omitempty"`
 	Workspace string `json:"workspace,omitempty"`
+}
+
+// CronConfig configures the cron scheduler service.
+// When nil or Enabled is nil, the cron service defaults to enabled.
+type CronConfig struct {
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // GmailPollConfig configures the periodic Gmail polling and analysis service.

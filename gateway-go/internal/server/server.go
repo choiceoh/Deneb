@@ -180,14 +180,24 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
+		cronEnabled := true
+		if snap, err := config.LoadConfigFromDefaultPath(); err == nil && snap != nil {
+			if snap.Config.Cron != nil && snap.Config.Cron.Enabled != nil && !*snap.Config.Cron.Enabled {
+				cronEnabled = false
+			}
+		}
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
-		s.cronService = cron.NewService(cron.ServiceConfig{
-			StorePath:      storePath,
-			DefaultChannel: "telegram",
-			Enabled:        true,
-			Sessions:       s.sessions,
-		}, nil, s.logger) // agent runner wired later during chat handler setup
+		if cronEnabled {
+			s.cronService = cron.NewService(cron.ServiceConfig{
+				StorePath:      storePath,
+				DefaultChannel: "telegram",
+				Enabled:        true,
+				Sessions:       s.sessions,
+			}, nil, s.logger) // agent runner wired later during chat handler setup
+		} else {
+			s.logger.Info("cron service disabled by config")
+		}
 	}
 	s.initHooksFromConfig()
 
