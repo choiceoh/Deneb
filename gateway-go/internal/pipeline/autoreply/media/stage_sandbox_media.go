@@ -49,7 +49,7 @@ func StageSandboxMedia(params StageSandboxMediaParams) error {
 		return fmt.Errorf("failed to create staging directory: %w", err)
 	}
 
-	usedNames := make(map[string]bool)
+	usedNames := make(map[string]struct{})
 	staged := make(map[string]string) // absolute source → staged path
 
 	for _, raw := range rawPaths {
@@ -173,7 +173,7 @@ func isAllowedLocalPath(filePath, mediaDir string) bool {
 		cleanFile == cleanMedia
 }
 
-func allocateStagedFileName(source string, usedNames map[string]bool) string {
+func allocateStagedFileName(source string, usedNames map[string]struct{}) string {
 	baseName := filepath.Base(source)
 	if baseName == "" || baseName == "." {
 		return ""
@@ -184,11 +184,11 @@ func allocateStagedFileName(source string, usedNames map[string]bool) string {
 
 	fileName := baseName
 	suffix := 1
-	for usedNames[fileName] {
+	for _, ok := usedNames[fileName]; ok; _, ok = usedNames[fileName] {
 		fileName = fmt.Sprintf("%s-%d%s", nameOnly, suffix, ext)
 		suffix++
 	}
-	usedNames[fileName] = true
+	usedNames[fileName] = struct{}{}
 	return fileName
 }
 
@@ -256,16 +256,16 @@ func rewriteStagedMediaPaths(ctx *types.MsgContext, rawPaths []string, staged ma
 	}
 
 	// Rewrite MediaUrls array.
-	if len(ctx.MediaUrls) > 0 {
-		nextUrls := make([]string, len(ctx.MediaUrls))
-		for i, u := range ctx.MediaUrls {
+	if len(ctx.MediaURLs) > 0 {
+		nextUrls := make([]string, len(ctx.MediaURLs))
+		for i, u := range ctx.MediaURLs {
 			nextUrls[i] = rewriteIfStaged(u)
 		}
-		ctx.MediaUrls = nextUrls
+		ctx.MediaURLs = nextUrls
 	}
 	// Rewrite single MediaUrl.
-	rewrittenUrl := rewriteIfStaged(ctx.MediaUrl)
-	if rewrittenUrl != ctx.MediaUrl {
-		ctx.MediaUrl = rewrittenUrl
+	rewrittenUrl := rewriteIfStaged(ctx.MediaURL)
+	if rewrittenUrl != ctx.MediaURL {
+		ctx.MediaURL = rewrittenUrl
 	}
 }

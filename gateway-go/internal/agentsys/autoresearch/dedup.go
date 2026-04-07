@@ -101,14 +101,13 @@ func SaveHypothesisTracker(workdir string, ht *HypothesisTracker) error {
 	if err != nil {
 		return fmt.Errorf("marshal dedup hashes: %w", err)
 	}
-	return os.WriteFile(dedupPath(workdir), data, 0o644)
+	return os.WriteFile(dedupPath(workdir), data, 0o600) //nolint:gosec // G306
 }
 
 // FilterDuplicateHypotheses removes hypotheses from a batch that have
 // already been tried. Returns the filtered list and a dedup hint string
 // for the next prompt (empty if no duplicates found).
-func FilterDuplicateHypotheses(hypotheses []hypothesisResult, tracker *HypothesisTracker, isConstantsMode bool) ([]hypothesisResult, string) {
-	var filtered []hypothesisResult
+func FilterDuplicateHypotheses(hypotheses []hypothesisResult, tracker *HypothesisTracker, isConstantsMode bool) (filtered []hypothesisResult, hint string) { //nolint:revive // unexported return type is internal
 	var dupIterations []int
 
 	for _, hyp := range hypotheses {
@@ -126,7 +125,6 @@ func FilterDuplicateHypotheses(hypotheses []hypothesisResult, tracker *Hypothesi
 		}
 	}
 
-	var hint string
 	if len(dupIterations) > 0 {
 		parts := make([]string, len(dupIterations))
 		for i, iter := range dupIterations {

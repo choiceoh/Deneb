@@ -165,7 +165,7 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 
 	// Validate hooks.
 	if cfg.Hooks != nil {
-		seenIDs := make(map[string]bool)
+		seenIDs := make(map[string]struct{})
 		for i, hook := range cfg.Hooks.Entries {
 			prefix := fmt.Sprintf("hooks.entries[%d]", i)
 
@@ -197,13 +197,13 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 			}
 
 			if hook.ID != "" {
-				if seenIDs[hook.ID] {
+				if _, ok := seenIDs[hook.ID]; ok {
 					issues = append(issues, ConfigIssue{
 						Path:    prefix + ".id",
 						Message: fmt.Sprintf("duplicate hook ID %q", hook.ID),
 					})
 				}
-				seenIDs[hook.ID] = true
+				seenIDs[hook.ID] = struct{}{}
 			}
 		}
 	}
@@ -326,7 +326,7 @@ func applyDefaults(cfg *DenebConfig) {
 func ValidateRawConfig(raw []byte) (issues []ConfigIssue, warnings []string, err error) {
 	var cfg DenebConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return []ConfigIssue{{Message: "JSON parse failed: " + err.Error()}}, nil, nil
+		return []ConfigIssue{{Message: "JSON parse failed: " + err.Error()}}, nil, nil //nolint:nilerr // parse error reported as config issue, not Go error
 	}
 	issues, warnings = validateConfig(&cfg)
 	return issues, warnings, nil

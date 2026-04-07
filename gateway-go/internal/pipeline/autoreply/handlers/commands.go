@@ -67,7 +67,7 @@ type CommandArgs struct {
 
 // CommandDetection holds precomputed structures for fast command detection.
 type CommandDetection struct {
-	Exact map[string]bool
+	Exact map[string]struct{}
 	Regex *regexp.Regexp
 }
 
@@ -146,7 +146,7 @@ func (r *CommandRegistry) rebuild() {
 	r.aliasMap = aliasMap
 
 	// Build detection.
-	exact := make(map[string]bool, len(aliasMap))
+	exact := make(map[string]struct{}, len(aliasMap))
 	var patterns []string
 	for _, cmd := range r.commands {
 		for _, alias := range cmd.TextAliases {
@@ -154,7 +154,7 @@ func (r *CommandRegistry) rebuild() {
 			if normalized == "" {
 				continue
 			}
-			exact[normalized] = true
+			exact[normalized] = struct{}{}
 			escaped := regexp.QuoteMeta(normalized)
 			if cmd.AcceptsArgs {
 				patterns = append(patterns, escaped+`(?:\s+.+|\s*:\s*.*)?`)
@@ -168,14 +168,14 @@ func (r *CommandRegistry) rebuild() {
 	if len(patterns) > 0 {
 		re = regexp.MustCompile(`(?i)^(?:` + strings.Join(patterns, "|") + `)$`)
 	} else {
-		re = regexp.MustCompile(`$^`) // never matches
+		re = regexp.MustCompile(`\A\z`) // never matches
 	}
 	r.detection = &CommandDetection{Exact: exact, Regex: re}
 }
 
 // NormalizeCommandBody normalizes a command string: strips bot mentions,
 // handles colon syntax, and resolves text aliases.
-func (r *CommandRegistry) NormalizeCommandBody(raw string, botUsername string) string {
+func (r *CommandRegistry) NormalizeCommandBody(raw, botUsername string) string {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "/") {
 		return trimmed
@@ -246,8 +246,8 @@ func (r *CommandRegistry) NormalizeCommandBody(raw string, botUsername string) s
 	return spec.canonical
 }
 
-// GetDetection returns the precomputed command detection data.
-func (r *CommandRegistry) GetDetection() *CommandDetection {
+// Detection returns the precomputed command detection data.
+func (r *CommandRegistry) Detection() *CommandDetection {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.detection
@@ -308,7 +308,7 @@ func (r *CommandRegistry) MaybeResolveTextAlias(raw string) string {
 	r.mu.RUnlock()
 
 	normalized := strings.ToLower(trimmed)
-	if det.Exact[normalized] {
+	if _, ok := det.Exact[normalized]; ok {
 		return normalized
 	}
 	if !det.Regex.MatchString(normalized) {
@@ -428,8 +428,8 @@ func resolveNativeName(cmd ChatCommandDefinition) string {
 // Precompiled regexes for command normalization.
 var (
 	colonCmdRe     = regexp.MustCompile(`^/([^\s:]+)\s*:(.*)$`)
-	mentionCmdRe   = regexp.MustCompile(`^/([^\s@]+)@([^\s]+)(.*)$`)
-	tokenCmdRe     = regexp.MustCompile(`^/([^\s]+)(?:\s+([\s\S]+))?$`)
+	mentionCmdRe   = regexp.MustCompile(`^/([^\s@]+)@(\S+)(.*)$`)
+	tokenCmdRe     = regexp.MustCompile(`^/(\S+)(?:\s+([\s\S]+))?$`)
 	tokenResolveRe = regexp.MustCompile(`^/([^\s:]+)(?:\s|$)`)
 	inlineCmdRe    = regexp.MustCompile(`(?:^|\s)[/!][a-zA-Z]`)
 )

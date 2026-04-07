@@ -11,7 +11,7 @@ import (
 func BenchmarkValidateFrame(b *testing.B) {
 	frame := `{"type":"req","id":"r-1","method":"session.list","params":{}}`
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = ValidateFrame(frame)
 	}
 }
@@ -19,7 +19,7 @@ func BenchmarkValidateFrame(b *testing.B) {
 func BenchmarkValidateFrame_Invalid(b *testing.B) {
 	frame := `{"type":"req","id":"","method":""}`
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = ValidateFrame(frame)
 	}
 }
@@ -29,7 +29,7 @@ func BenchmarkValidateFrame_Invalid(b *testing.B) {
 func BenchmarkValidateSessionKey(b *testing.B) {
 	key := "direct:telegram:123456789"
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = ValidateSessionKey(key)
 	}
 }
@@ -40,7 +40,7 @@ func BenchmarkConstantTimeEq_Match(b *testing.B) {
 	a := []byte("sk-deneb-abcdefghijklmnopqrstuvwx")
 	bSlice := []byte("sk-deneb-abcdefghijklmnopqrstuvwx")
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		ConstantTimeEq(a, bSlice)
 	}
 }
@@ -49,7 +49,7 @@ func BenchmarkConstantTimeEq_Mismatch(b *testing.B) {
 	a := []byte("sk-deneb-abcdefghijklmnopqrstuvwx")
 	bSlice := []byte("sk-deneb-xxxxxxxxxxxxxxxxxxxxxxxx")
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		ConstantTimeEq(a, bSlice)
 	}
 }
@@ -59,7 +59,7 @@ func BenchmarkConstantTimeEq_Mismatch(b *testing.B) {
 func BenchmarkSanitizeHTML_Short(b *testing.B) {
 	input := `Hello <b>world</b> & "friends"`
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		SanitizeHTML(input)
 	}
 }
@@ -67,7 +67,7 @@ func BenchmarkSanitizeHTML_Short(b *testing.B) {
 func BenchmarkSanitizeHTML_LongMessage(b *testing.B) {
 	input := strings.Repeat(`<p>안녕하세요 "세계" & 'friends'</p>`, 100)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		SanitizeHTML(input)
 	}
 }
@@ -77,7 +77,7 @@ func BenchmarkSanitizeHTML_LongMessage(b *testing.B) {
 func BenchmarkIsSafeURL_Safe(b *testing.B) {
 	url := "https://api.example.com/v1/data"
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		IsSafeURL(url)
 	}
 }
@@ -85,7 +85,7 @@ func BenchmarkIsSafeURL_Safe(b *testing.B) {
 func BenchmarkIsSafeURL_Blocked(b *testing.B) {
 	url := "http://169.254.169.254/latest/meta-data/"
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		IsSafeURL(url)
 	}
 }
@@ -96,7 +96,7 @@ func BenchmarkDetectMIME_PNG(b *testing.B) {
 	// PNG magic bytes
 	data := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		DetectMIME(data)
 	}
 }
@@ -104,7 +104,7 @@ func BenchmarkDetectMIME_PNG(b *testing.B) {
 func BenchmarkDetectMIME_JSON(b *testing.B) {
 	data := []byte(`{"key":"value","nested":{"array":[1,2,3]}}`)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		DetectMIME(data)
 	}
 }
@@ -115,7 +115,7 @@ func BenchmarkExtractLinks(b *testing.B) {
 	text := `Check out https://example.com/page and [this link](https://docs.deneb.ai/getting-started).
 Also see http://api.example.com/v2/endpoint for more details.`
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = ExtractLinks(text, 5)
 	}
 }
@@ -125,7 +125,7 @@ Also see http://api.example.com/v2/endpoint for more details.`
 func BenchmarkParseMediaTokens(b *testing.B) {
 	text := "Here is the result.\nMEDIA: https://example.com/image.png\nAnd some more text."
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _, _, _ = ParseMediaTokens(text)
 	}
 }
@@ -139,14 +139,14 @@ func BenchmarkMarkdownToIR_Short(b *testing.B) {
 	// Warm the cache.
 	_, _ = MarkdownToIR(md, optsStr)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = MarkdownToIR(md, optsStr)
 	}
 }
 
 func BenchmarkMarkdownToIR_Long(b *testing.B) {
 	var sb strings.Builder
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		sb.WriteString("## Section ")
 		sb.WriteString(strings.Repeat("x", 5))
 		sb.WriteString("\n\nParagraph with **bold** and [link](https://example.com).\n\n")
@@ -156,7 +156,7 @@ func BenchmarkMarkdownToIR_Long(b *testing.B) {
 	opts, _ := json.Marshal(map[string]any{})
 	optsStr := string(opts)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		// Use unique markdown per iteration to bypass cache.
 		_, _ = MarkdownToIR(md+strings.Repeat(" ", i%64), optsStr)
 	}
@@ -164,10 +164,10 @@ func BenchmarkMarkdownToIR_Long(b *testing.B) {
 
 // --- HTML to Markdown (used in web scraping) ---
 
-func BenchmarkHtmlToMarkdown(b *testing.B) {
+func BenchmarkHTMLToMarkdown(b *testing.B) {
 	html := "<h1>Title</h1><p>Hello <strong>world</strong>. Visit <a href=\"https://example.com\">here</a>.</p>"
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, _ = HtmlToMarkdown(html)
+	for range b.N {
+		_, _, _ = HTMLToMarkdown(html)
 	}
 }

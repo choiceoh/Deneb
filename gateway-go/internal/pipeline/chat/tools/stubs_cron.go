@@ -324,7 +324,7 @@ func cronUpdate(ctx context.Context, d *toolctx.ChronoDeps, jobID, name, schedul
 		if err != nil {
 			return "", fmt.Errorf("업데이트 실패: %w", err)
 		}
-		job := d.Service.GetJob(jobID)
+		job := d.Service.Job(jobID)
 		if job == nil {
 			return fmt.Sprintf("✅ 크론 작업 **%s** 업데이트 완료.", jobID), nil
 		}
@@ -381,7 +381,7 @@ func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
-	job := d.Service.GetJob(jobID)
+	job := d.Service.Job(jobID)
 	if job == nil {
 		return fmt.Sprintf("크론 작업 %q을(를) 찾을 수 없습니다.", jobID), nil
 	}

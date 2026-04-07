@@ -131,30 +131,30 @@ func formatSkillsFull(skills []PromptSkill) string {
 	for _, s := range skills {
 		b.WriteString("\n  <skill>")
 		b.WriteString("\n    <name>")
-		b.WriteString(escapeXml(s.Name))
+		b.WriteString(escapeXML(s.Name))
 		b.WriteString("</name>")
 		if s.Category != "" {
 			b.WriteString("\n    <category>")
-			b.WriteString(escapeXml(s.Category))
+			b.WriteString(escapeXML(s.Category))
 			b.WriteString("</category>")
 		}
 		if s.Description != "" {
 			b.WriteString("\n    <description>")
-			b.WriteString(escapeXml(s.Description))
+			b.WriteString(escapeXML(s.Description))
 			b.WriteString("</description>")
 		}
 		if len(s.Tags) > 0 {
 			b.WriteString("\n    <tags>")
-			b.WriteString(escapeXml(strings.Join(s.Tags, ", ")))
+			b.WriteString(escapeXML(strings.Join(s.Tags, ", ")))
 			b.WriteString("</tags>")
 		}
 		if len(s.RelatedSkills) > 0 {
 			b.WriteString("\n    <related_skills>")
-			b.WriteString(escapeXml(strings.Join(s.RelatedSkills, ", ")))
+			b.WriteString(escapeXML(strings.Join(s.RelatedSkills, ", ")))
 			b.WriteString("</related_skills>")
 		}
 		b.WriteString("\n    <location>")
-		b.WriteString(escapeXml(s.FilePath))
+		b.WriteString(escapeXML(s.FilePath))
 		b.WriteString("</location>")
 		b.WriteString("\n  </skill>")
 	}
@@ -179,10 +179,10 @@ func formatSkillsCompact(skills []PromptSkill) string {
 	for _, s := range skills {
 		b.WriteString("\n  <skill>")
 		b.WriteString("\n    <name>")
-		b.WriteString(escapeXml(s.Name))
+		b.WriteString(escapeXML(s.Name))
 		b.WriteString("</name>")
 		b.WriteString("\n    <location>")
-		b.WriteString(escapeXml(s.FilePath))
+		b.WriteString(escapeXML(s.FilePath))
 		b.WriteString("</location>")
 		b.WriteString("\n  </skill>")
 	}
@@ -191,7 +191,7 @@ func formatSkillsCompact(skills []PromptSkill) string {
 	return b.String()
 }
 
-func escapeXml(s string) string {
+func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
@@ -252,7 +252,7 @@ func FormatSkillsListResponse(skills []PromptSkill, query, category string) stri
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%d skills available. Use `read` to load a skill's SKILL.md when needed.\n\n", len(filtered)))
+	fmt.Fprintf(&b, "%d skills available. Use `read` to load a skill's SKILL.md when needed.\n\n", len(filtered))
 	for _, s := range filtered {
 		b.WriteString("- **")
 		b.WriteString(s.Name)

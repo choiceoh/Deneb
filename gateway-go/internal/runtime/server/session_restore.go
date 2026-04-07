@@ -14,7 +14,7 @@ import (
 // sessions and restores them to the in-memory session manager.
 //
 // Called once at startup after all channel plugins have had a chance to start.
-func (s *Server) restoreAndWakeSessions(ctx context.Context) {
+func (s *Server) restoreAndWakeSessions(_ context.Context) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		s.logger.Warn("session restore: cannot determine home dir", "error", err)

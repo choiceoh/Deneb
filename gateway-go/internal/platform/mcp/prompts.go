@@ -103,11 +103,11 @@ func (pm *PromptManager) systemCheck(ctx context.Context) (*PromptGetResult, err
 	var sb strings.Builder
 	sb.WriteString("## Deneb System Status\n")
 	for _, r := range results {
-		sb.WriteString(fmt.Sprintf("\n### %s\n", r.name))
+		fmt.Fprintf(&sb, "\n### %s\n", r.name)
 		if r.err != nil {
-			sb.WriteString(fmt.Sprintf("⚠️ RPC `%s` failed: %v\n", r.method, r.err))
+			fmt.Fprintf(&sb, "⚠️ RPC `%s` failed: %v\n", r.method, r.err)
 		} else {
-			sb.WriteString(fmt.Sprintf("```json\n%s\n```\n", prettyJSON(r.data)))
+			fmt.Fprintf(&sb, "```json\n%s\n```\n", prettyJSON(r.data))
 		}
 	}
 

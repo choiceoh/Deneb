@@ -70,13 +70,13 @@ func (s *stateStore) Save(state *PollState) error {
 	}
 
 	// Ensure directory exists.
-	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return fmt.Errorf("create state dir: %w", err)
 	}
 
 	// Atomic write via temp file + rename.
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write temp state: %w", err)
 	}
 	return os.Rename(tmp, s.path)

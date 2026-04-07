@@ -191,7 +191,7 @@ func execApprovalResolve(deps ApprovalDeps) rpcutil.HandlerFunc {
 
 func execApprovalsGet(deps ApprovalDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		snapshot := deps.Store.GetGlobalSnapshot()
+		snapshot := deps.Store.GlobalSnapshot()
 		if snapshot == nil {
 			snapshot = &approval.Snapshot{
 				File:     approval.ApprovalsFile{Version: 1},

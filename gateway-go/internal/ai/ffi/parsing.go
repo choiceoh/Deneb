@@ -15,10 +15,10 @@ func ExtractLinks(text string, maxLinks int) ([]string, error) {
 	return urlextract.ExtractLinks(text, maxLinks), nil
 }
 
-// HtmlToMarkdown is a pure-Go fallback for HTML to Markdown conversion.
+// HTMLToMarkdown is a pure-Go fallback for HTML to Markdown conversion.
 // Delegates to the coreparsing/htmlmd tokenizer+emitter (ported from Rust core).
-func HtmlToMarkdown(html string) (text string, title string, err error) {
-	if len(html) == 0 {
+func HTMLToMarkdown(html string) (text, title string, err error) {
+	if html == "" {
 		return "", "", nil
 	}
 	r := htmlmd.Convert(html)
@@ -41,10 +41,10 @@ func Base64Canonicalize(input string) (string, error) {
 	return result, nil
 }
 
-// HtmlToMarkdownStripNoise is a pure-Go fallback with noise element stripping.
+// HTMLToMarkdownStripNoise is a pure-Go fallback with noise element stripping.
 // Suppresses nav, aside, svg, iframe, form in addition to script/style/noscript.
-func HtmlToMarkdownStripNoise(html string) (text string, title string, err error) {
-	if len(html) == 0 {
+func HTMLToMarkdownStripNoise(html string) (text, title string, err error) {
+	if html == "" {
 		return "", "", nil
 	}
 	r := htmlmd.ConvertWithOpts(html, htmlmd.Options{StripNoise: true})

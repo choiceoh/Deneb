@@ -184,7 +184,7 @@ func SaveChart(workdir string, rows []ResultRow, cfg *Config) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create chart dir: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil { //nolint:gosec // G306
 		return "", fmt.Errorf("write chart: %w", err)
 	}
 	return path, nil
@@ -362,10 +362,10 @@ func drawLegend(img *image.RGBA) {
 
 // --- Tick computation ---
 
-func niceTicksFloat(min, max float64, maxTicks int) []float64 {
-	rang := max - min
+func niceTicksFloat(lo, hi float64, maxTicks int) []float64 {
+	rang := hi - lo
 	if rang <= 0 {
-		return []float64{min}
+		return []float64{lo}
 	}
 	rawStep := rang / float64(maxTicks)
 	// Round step to a nice value.
@@ -383,12 +383,12 @@ func niceTicksFloat(min, max float64, maxTicks int) []float64 {
 		niceStep = 10 * mag
 	}
 
-	start := math.Ceil(min/niceStep) * niceStep
+	start := math.Ceil(lo/niceStep) * niceStep
 	var ticks []float64
 	// Use index-based iteration to avoid floating-point accumulation errors.
-	for i := 0; i <= 1000; i++ {
+	for i := range 1001 {
 		v := start + float64(i)*niceStep
-		if v > max+niceStep*1e-9 {
+		if v > hi+niceStep*1e-9 {
 			break
 		}
 		ticks = append(ticks, v)
@@ -396,10 +396,10 @@ func niceTicksFloat(min, max float64, maxTicks int) []float64 {
 	return ticks
 }
 
-func niceTicksInt(min, max, maxTicks int) []int {
-	rang := max - min
+func niceTicksInt(lo, hi, maxTicks int) []int {
+	rang := hi - lo
 	if rang <= 0 {
-		return []int{min}
+		return []int{lo}
 	}
 	rawStep := float64(rang) / float64(maxTicks)
 	step := int(math.Max(1, math.Round(rawStep)))
@@ -413,12 +413,12 @@ func niceTicksInt(min, max, maxTicks int) []int {
 			}
 		}
 	}
-	start := ((min + step - 1) / step) * step
-	if start > min+step/2 {
-		start = min
+	start := ((lo + step - 1) / step) * step
+	if start > lo+step/2 {
+		start = lo
 	}
 	var ticks []int
-	for v := start; v <= max; v += step {
+	for v := start; v <= hi; v += step {
 		ticks = append(ticks, v)
 	}
 	return ticks
@@ -452,15 +452,15 @@ func abs(x int) int {
 
 // drawString renders ASCII text using a simple 5x7 bitmap font.
 // scale multiplies the pixel size (1 = normal, 2 = double).
-func drawString(img *image.RGBA, x, y int, s string, c color.RGBA, scale int) {
+func drawString(img *image.RGBA, x, y int, s string, c color.RGBA, scale int) { //nolint:unparam // scale is constant now but may vary
 	cx := x
 	for _, ch := range s {
-		glyph := bitmapGlyph(byte(ch))
-		for row := 0; row < 7; row++ {
-			for col := 0; col < 5; col++ {
+		glyph := bitmapGlyph(byte(ch)) //nolint:gosec // G115 — ASCII-only input, safe truncation
+		for row := range 7 {
+			for col := range 5 {
 				if glyph[row]&(1<<(4-col)) != 0 {
-					for dy := 0; dy < scale; dy++ {
-						for dx := 0; dx < scale; dx++ {
+					for dy := range scale {
+						for dx := range scale {
 							px := cx + col*scale + dx
 							py := y + row*scale + dy
 							if px >= 0 && px < chartWidth && py >= 0 && py < chartHeight {

@@ -79,10 +79,10 @@ func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int)
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## 위키 검색 결과 (%d건)\n\n", len(results)))
+	fmt.Fprintf(&sb, "## 위키 검색 결과 (%d건)\n\n", len(results))
 	for _, r := range results {
-		sb.WriteString(fmt.Sprintf("- **%s** (L%d, 관련도: %.2f)\n  %s\n\n",
-			r.Path, r.Line, r.Score, truncate(r.Content, 200)))
+		fmt.Fprintf(&sb, "- **%s** (L%d, 관련도: %.2f)\n  %s\n\n",
+			r.Path, r.Line, r.Score, truncate(r.Content, 200))
 	}
 	return sb.String(), nil
 }
@@ -123,7 +123,7 @@ func wikiRead(store *wiki.Store, path, section string) (string, error) {
 func wikiIndex(store *wiki.Store, category string) (string, error) {
 	if category == "" {
 		// Return master index.
-		idx := store.GetIndex()
+		idx := store.Index()
 		return idx.Render(), nil
 	}
 
@@ -137,18 +137,18 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## %s 카테고리 (%d 페이지)\n\n", category, len(pages)))
+	fmt.Fprintf(&sb, "## %s 카테고리 (%d 페이지)\n\n", category, len(pages))
 	for _, p := range pages {
 		page, err := store.ReadPage(p)
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("- %s (읽기 실패)\n", p))
+			fmt.Fprintf(&sb, "- %s (읽기 실패)\n", p)
 			continue
 		}
 		tags := ""
 		if len(page.Meta.Tags) > 0 {
 			tags = " [" + strings.Join(page.Meta.Tags, ", ") + "]"
 		}
-		sb.WriteString(fmt.Sprintf("- [[%s]] — %s%s\n", p, page.Meta.Title, tags))
+		fmt.Fprintf(&sb, "- [[%s]] — %s%s\n", p, page.Meta.Title, tags)
 	}
 	return sb.String(), nil
 }
@@ -236,7 +236,7 @@ func wikiWrite(store *wiki.Store, path, title, id, summary, category, content st
 	return fmt.Sprintf("위키 페이지 %s: %s (%s)", action, path, title), nil
 }
 
-func wikiLog(workspaceDir, diaryDir, content string) (string, error) {
+func wikiLog(_, diaryDir, content string) (string, error) {
 	if content == "" {
 		return "content에 일지 내용을 입력하세요.", nil
 	}
@@ -299,19 +299,19 @@ func wikiDaily(diaryDir string, limit int) (string, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## 최근 일지 (%d일)\n\n", len(diaryFiles)))
+	fmt.Fprintf(&sb, "## 최근 일지 (%d일)\n\n", len(diaryFiles))
 	for _, name := range diaryFiles {
 		path := filepath.Join(diaryDir, name)
 		data, err := os.ReadFile(path)
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("### %s\n(읽기 실패)\n\n", name))
+			fmt.Fprintf(&sb, "### %s\n(읽기 실패)\n\n", name)
 			continue
 		}
 		content := string(data)
 		if len([]rune(content)) > 2000 {
 			content = string([]rune(content)[:2000]) + "\n...(잘림)"
 		}
-		sb.WriteString(fmt.Sprintf("### %s\n%s\n\n", name, content))
+		fmt.Fprintf(&sb, "### %s\n%s\n\n", name, content)
 	}
 
 	return sb.String(), nil
@@ -322,12 +322,12 @@ func wikiStatus(store *wiki.Store) string {
 
 	var sb strings.Builder
 	sb.WriteString("## 위키 상태\n\n")
-	sb.WriteString(fmt.Sprintf("- 총 페이지: %d\n", stats.TotalPages))
-	sb.WriteString(fmt.Sprintf("- 총 크기: %s\n", formatBytes(stats.TotalBytes)))
+	fmt.Fprintf(&sb, "- 총 페이지: %d\n", stats.TotalPages)
+	fmt.Fprintf(&sb, "- 총 크기: %s\n", formatBytes(stats.TotalBytes))
 	sb.WriteString("\n### 카테고리별\n\n")
 
 	for cat, count := range stats.CategoryCount {
-		sb.WriteString(fmt.Sprintf("- %s: %d 페이지\n", cat, count))
+		fmt.Fprintf(&sb, "- %s: %d 페이지\n", cat, count)
 	}
 
 	return sb.String()

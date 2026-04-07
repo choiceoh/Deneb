@@ -12,7 +12,7 @@ func validateCronListParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"includeDisabled", "limit", "offset", "query", "enabled", "sortBy", "sortDir",
 	}, path, errors)
@@ -45,7 +45,7 @@ func validateCronStatusParams(value any, path string, errors *[]ValidationError)
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -55,7 +55,7 @@ func validateCronAddParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"name", "agentId", "sessionKey", "description", "enabled", "deleteAfterRun",
 		"schedule", "sessionTarget", "wakeMode", "payload", "delivery", "failureAlert",
@@ -99,8 +99,8 @@ func validateCronSchedule(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
-	kindVal, _ := obj["kind"]
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
+	kindVal := obj["kind"]
 	kind, _ := kindVal.(string)
 	switch kind {
 	case "at":
@@ -170,8 +170,8 @@ func validateCronPayload(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
-	kindVal, _ := obj["kind"]
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
+	kindVal := obj["kind"]
 	kind, _ := kindVal.(string)
 	switch kind {
 	case "systemEvent":
@@ -203,7 +203,7 @@ func validateCronIDOrJobID(value any, path string, extraAllowed []string, errors
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	_, hasID := obj["id"]
 	_, hasJobID := obj["jobId"]
 
@@ -258,7 +258,7 @@ func checkCronRunJobID(v any, p string, e *[]ValidationError) {
 func checkStatusesArray(v any, p string, e *[]ValidationError) {
 	if CheckArray(v, p, e) {
 		CheckMinItems(v, p, 1, e)
-		arr := v.([]any)
+		arr := v.([]any) //nolint:errcheck // type guaranteed by CheckArray above
 		if len(arr) > 3 {
 			*e = append(*e, ValidationError{
 				Path: p, Message: "must NOT have more than 3 items", Keyword: "maxItems",
@@ -273,7 +273,7 @@ func checkStatusesArray(v any, p string, e *[]ValidationError) {
 func checkDeliveryStatusesArray(v any, p string, e *[]ValidationError) {
 	if CheckArray(v, p, e) {
 		CheckMinItems(v, p, 1, e)
-		arr := v.([]any)
+		arr := v.([]any) //nolint:errcheck // type guaranteed by CheckArray above
 		if len(arr) > 4 {
 			*e = append(*e, ValidationError{
 				Path: p, Message: "must NOT have more than 4 items", Keyword: "maxItems",
@@ -290,7 +290,7 @@ func validateCronRunsParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"scope", "id", "jobId", "limit", "offset", "statuses", "status",
 		"deliveryStatuses", "deliveryStatus", "query", "sortDir",

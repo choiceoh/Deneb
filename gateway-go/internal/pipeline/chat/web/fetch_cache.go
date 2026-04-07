@@ -73,7 +73,7 @@ func (c *FetchCache) Get(url string) (string, bool) {
 }
 
 // Put stores content for the URL. Evicts the oldest entry if at capacity.
-func (c *FetchCache) Put(url string, content string) {
+func (c *FetchCache) Put(url, content string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -92,7 +92,7 @@ func (c *FetchCache) Put(url string, content string) {
 		if front == nil {
 			break
 		}
-		oldest := front.Value.(string)
+		oldest, _ := front.Value.(string) //nolint:errcheck // best-effort
 		c.order.Remove(front)
 		delete(c.items, oldest)
 	}

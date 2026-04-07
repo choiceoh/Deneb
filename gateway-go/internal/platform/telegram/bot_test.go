@@ -26,15 +26,15 @@ func TestBot_StartAndStop(t *testing.T) {
 	getUpdatesCalled := 0
 
 	bot, _, srv := newTestBotSetup(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/bottest-token/getMe":
+		switch r.URL.Path {
+		case "/bottest-token/getMe":
 			getMeCalled++
 			resp := APIResponse{
 				OK:     true,
 				Result: json.RawMessage(`{"id":123,"is_bot":true,"first_name":"TestBot"}`),
 			}
 			json.NewEncoder(w).Encode(resp)
-		case r.URL.Path == "/bottest-token/getUpdates":
+		case "/bottest-token/getUpdates":
 			getUpdatesCalled++
 			resp := APIResponse{OK: true, Result: json.RawMessage(`[]`)}
 			json.NewEncoder(w).Encode(resp)
@@ -72,8 +72,8 @@ func TestBot_InboundMessageCallback(t *testing.T) {
 	receivedCh := make(chan *Update, 1)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/bottest-token/getUpdates":
+		switch r.URL.Path {
+		case "/bottest-token/getUpdates":
 			var req map[string]any
 			json.NewDecoder(r.Body).Decode(&req)
 			offset := int64(0)

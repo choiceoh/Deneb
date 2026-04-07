@@ -73,7 +73,7 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			s.logger.Info("restarting telegram via watchdog")
 			restartCtx, restartCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer restartCancel()
-			s.telegramPlug.Stop(restartCtx)
+			s.telegramPlug.Stop(restartCtx) //nolint:errcheck // best-effort cleanup before restart
 			err := s.telegramPlug.Start(restartCtx)
 			if err != nil {
 				s.logger.Error("telegram restart failed", "error", err)

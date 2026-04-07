@@ -163,7 +163,7 @@ func (c *FileCache) CheckStaleness(path string) error {
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return nil // can't stat → allow the write (will fail later if path is bad)
+		return nil //nolint:nilerr // can't stat → allow the write (will fail later if path is bad)
 	}
 
 	// Fast path: mtime unchanged.

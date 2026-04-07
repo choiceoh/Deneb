@@ -125,7 +125,7 @@ func ParseSlashCommand(text string) *SlashResult {
 
 // trySkillCommand checks the cached skills snapshot for local/system skill matches.
 func trySkillCommand(cmd, args string) *SlashResult {
-	snapshot := GetCachedSkillsSnapshot()
+	snapshot := CachedSkillsSnapshot()
 	if snapshot == nil {
 		return nil
 	}
@@ -197,7 +197,7 @@ func trySkillCommand(cmd, args string) *SlashResult {
 // findSkillEntryByName finds a skill entry from the snapshot by matching the full
 // discovery data. Since FullSkillSnapshot only stores PromptSkill (lightweight),
 // we re-discover via the cached snapshot's metadata.
-func findSkillEntryByName(snapshot *skills.FullSkillSnapshot, name string) *skills.SkillEntry {
+func findSkillEntryByName(_ *skills.FullSkillSnapshot, name string) *skills.SkillEntry {
 	// The snapshot stores resolved skills but not full entries with Type.
 	// We need to look up from the cached discovery. Use a simple re-discovery
 	// approach keyed by the snapshot version.

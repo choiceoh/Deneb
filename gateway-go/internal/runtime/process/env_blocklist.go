@@ -5,7 +5,7 @@ import "strings"
 // isBlockedEnvKey returns true if the given environment variable key
 // should be stripped from subprocess environments.
 func isBlockedEnvKey(key string) bool {
-	if blockedEnvKeys[key] {
+	if _, ok := blockedEnvKeys[key]; ok {
 		return true
 	}
 	upper := strings.ToUpper(key)

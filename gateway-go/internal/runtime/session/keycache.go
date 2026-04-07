@@ -144,7 +144,7 @@ func (c *KeyCache) evictIfNeeded(newKey string) {
 	if len(c.items) >= KeyCacheLimit {
 		front := c.order.Front()
 		if front != nil {
-			oldest := front.Value.(string)
+			oldest, _ := front.Value.(string) //nolint:errcheck // type is always string in this list
 			c.order.Remove(front)
 			delete(c.items, oldest)
 		}

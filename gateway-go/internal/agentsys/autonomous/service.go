@@ -23,7 +23,7 @@ type EventListener func(event CycleEvent)
 type CycleEvent struct {
 	Type        string       `json:"type"` // "dreaming_started", "dreaming_completed", "dreaming_failed"
 	DreamReport *DreamReport `json:"dreamReport,omitempty"`
-	Ts          int64        `json:"ts"`
+	Ts          int64        `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 }
 
 // Service manages the AuroraDream memory consolidation lifecycle
@@ -73,8 +73,8 @@ func (s *Service) RegisterTask(task PeriodicTask) {
 	s.taskStatus[task.Name()] = &TaskStatus{Name: task.Name()}
 }
 
-// GetTaskStatus returns the status of a registered task, or nil if not found.
-func (s *Service) GetTaskStatus(name string) *TaskStatus {
+// TaskStatus returns the status of a registered task, or nil if not found.
+func (s *Service) TaskStatus(name string) *TaskStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, ok := s.taskStatus[name]
@@ -96,7 +96,7 @@ func (s *Service) Start() {
 	s.mu.Unlock()
 
 	for _, task := range tasks {
-		ctx, cancel := context.WithCancel(s.svcCtx)
+		ctx, cancel := context.WithCancel(s.svcCtx) //nolint:gosec // G118 — cancel stored in s.taskCancels
 		s.mu.Lock()
 		s.taskCancels = append(s.taskCancels, cancel)
 		s.mu.Unlock()
@@ -282,14 +282,15 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 			report.FactsPruned + report.PatternsExtracted +
 			report.UserModelUpdated + report.MutualUpdated +
 			report.WikiPagesCreated + report.WikiPagesUpdated
-		if total == 0 {
+		switch {
+		case total == 0:
 			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 변경 없음 (%.1fs)", float64(report.DurationMs)/1000)
-		} else if report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0 {
+		case report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0:
 			// Wiki dreaming report.
 			msg = fmt.Sprintf("📖 Wiki Dream 완료: 생성 %d, 수정 %d (%.1fs)",
 				report.WikiPagesCreated, report.WikiPagesUpdated,
 				float64(report.DurationMs)/1000)
-		} else {
+		default:
 			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 정리 %d, 패턴 %d, 프로필 %d, 관계 %d (%.1fs)",
 				report.FactsVerified, report.FactsMerged, report.FactsExpired,
 				report.FactsPruned, report.PatternsExtracted,

@@ -16,7 +16,7 @@ func TestHealthEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
 	srv.handleHealth(w, req)
@@ -43,7 +43,7 @@ func TestReadyEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 	srv.handleReady(w, req)
 	if w.Code != http.StatusServiceUnavailable {
@@ -64,7 +64,7 @@ func TestRPCEndpoint_ValidRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := `{"method":"health","id":"test-1"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
 	w := httptest.NewRecorder()
 
 	srv.handleRPC(w, req)
@@ -88,7 +88,7 @@ func TestRPCEndpoint_MissingMethod(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := `{"id":"test-1"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
 	w := httptest.NewRecorder()
 
 	srv.handleRPC(w, req)
@@ -127,7 +127,11 @@ func TestServerHealthEndpointLive(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	url := fmt.Sprintf("http://%s/health", addr.String())
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
@@ -163,8 +167,13 @@ func TestRPCEndpointLive(t *testing.T) {
 	url := fmt.Sprintf("http://%s/api/v1/rpc", addr.String())
 
 	// Valid health request.
-	resp, err := http.Post(url, "application/json",
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
 		strings.NewReader(`{"method":"health","id":"live-1"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -183,8 +192,13 @@ func TestRPCEndpointLive(t *testing.T) {
 	}
 
 	// Unknown method returns NOT_FOUND.
-	resp2, err := http.Post(url, "application/json",
+	req2, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
 		strings.NewReader(`{"method":"nonexistent","id":"live-2"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req2.Header.Set("Content-Type", "application/json")
+	resp2, err := http.DefaultClient.Do(req2)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -199,8 +213,13 @@ func TestRPCEndpointLive(t *testing.T) {
 	}
 
 	// Malformed JSON returns 400.
-	resp3, err := http.Post(url, "application/json",
+	req3, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
 		strings.NewReader(`{invalid`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req3.Header.Set("Content-Type", "application/json")
+	resp3, err := http.DefaultClient.Do(req3)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -245,7 +264,12 @@ func TestPhase1MethodsReachableViaRPC(t *testing.T) {
 
 	for _, tc := range methods {
 		t.Run(tc.method, func(t *testing.T) {
-			resp, err := http.Post(url, "application/json", strings.NewReader(tc.body))
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatalf("new request %s: %v", tc.method, err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("POST %s: %v", tc.method, err)
 			}

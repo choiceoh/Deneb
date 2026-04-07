@@ -3,26 +3,26 @@ package ffi
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/corecache"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremarkdown"
 )
 
 // MarkdownToIR parses markdown text into an intermediate representation using
 // the pure-Go goldmark-based parser. Returns JSON-encoded IR with text, styles,
 // links, and code block detection.
-func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) {
-	if len(markdown) == 0 {
+func MarkdownToIR(markdown, optionsJSON string) (json.RawMessage, error) {
+	if markdown == "" {
 		return json.RawMessage(`{"text":"","styles":[],"links":[],"has_code_blocks":false}`), nil
 	}
 
 	cacheKey := mdFnv1a64(markdown + "|" + optionsJSON)
-	if cached, ok := mdCache.get(cacheKey); ok {
+	if cached, ok := mdCache.Get(cacheKey); ok {
 		return cached, nil
 	}
 
 	opts := coremarkdown.DefaultParseOptions()
-	if len(optionsJSON) > 0 {
+	if optionsJSON != "" {
 		if err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {
 			return nil, fmt.Errorf("markdown_to_ir: invalid options: %w", err)
 		}
@@ -48,14 +48,14 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 	if err != nil {
 		return nil, fmt.Errorf("markdown_to_ir: marshal: %w", err)
 	}
-	mdCache.put(cacheKey, result)
+	mdCache.Put(cacheKey, result)
 	return result, nil
 }
 
 // MarkdownDetectFences detects fenced code blocks in markdown text.
 // Returns JSON array of fence span objects.
 func MarkdownDetectFences(text string) (json.RawMessage, error) {
-	if len(text) == 0 {
+	if text == "" {
 		return json.RawMessage("[]"), nil
 	}
 	spans := coremarkdown.DetectFences(text)
@@ -76,58 +76,15 @@ func MarkdownToPlainText(markdown string) (string, error) {
 }
 
 // LRU cache for MarkdownToIR results (avoids redundant parsing during streaming).
-var mdCache = &markdownCache{entries: make(map[uint64]*mdCacheEntry)}
-
-const mdCacheMaxEntries = 128
-
-type mdCacheEntry struct {
-	value      json.RawMessage
-	lastAccess int64
-}
-
-type markdownCache struct {
-	mu        sync.Mutex
-	entries   map[uint64]*mdCacheEntry
-	accessCtr int64
-}
+var mdCache = corecache.NewLRU[uint64, json.RawMessage](128, 0)
 
 func mdFnv1a64(s string) uint64 {
 	const offset64 = 14695981039346656037
 	const prime64 = 1099511628211
 	h := uint64(offset64)
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		h ^= uint64(s[i])
 		h *= prime64
 	}
 	return h
-}
-
-func (c *markdownCache) get(key uint64) (json.RawMessage, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.entries[key]
-	if !ok {
-		return nil, false
-	}
-	c.accessCtr++
-	e.lastAccess = c.accessCtr
-	return e.value, true
-}
-
-func (c *markdownCache) put(key uint64, val json.RawMessage) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.accessCtr++
-	if len(c.entries) >= mdCacheMaxEntries {
-		var lruKey uint64
-		lruAccess := c.accessCtr + 1
-		for k, e := range c.entries {
-			if e.lastAccess < lruAccess {
-				lruAccess = e.lastAccess
-				lruKey = k
-			}
-		}
-		delete(c.entries, lruKey)
-	}
-	c.entries[key] = &mdCacheEntry{value: val, lastAccess: c.accessCtr}
 }

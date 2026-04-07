@@ -23,7 +23,7 @@ func BenchmarkDispatchHit(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		d.Dispatch(ctx, req)
 	}
 }
@@ -37,7 +37,7 @@ func BenchmarkDispatchMiss(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		d.Dispatch(ctx, req)
 	}
 }
@@ -50,7 +50,7 @@ func BenchmarkRegister(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		d.Register("bench.method", handler)
 	}
 }
@@ -61,12 +61,10 @@ func BenchmarkDispatchConcurrent(b *testing.B) {
 	d := NewDispatcher(slog.Default())
 	methods := []string{"session.list", "session.get", "chat.send", "health", "memory.search"}
 	for _, m := range methods {
-		m := m
 		d.Register(m, func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 			resp, _ := protocol.NewResponseOK(req.ID, nil)
 			return resp
 		})
-		_ = m
 	}
 
 	ctx := context.Background()
@@ -93,7 +91,7 @@ func BenchmarkDispatchHighFanout(b *testing.B) {
 		return resp
 	}
 	// Simulate production: 130 registered methods.
-	for i := 0; i < 130; i++ {
+	for i := range 130 {
 		d.Register(fmt.Sprintf("domain%d.method%d", i/10, i%10), handler)
 	}
 	d.Register("session.list", handler)
@@ -102,7 +100,7 @@ func BenchmarkDispatchHighFanout(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		d.Dispatch(ctx, req)
 	}
 }

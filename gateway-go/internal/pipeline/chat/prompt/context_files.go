@@ -198,12 +198,12 @@ func ClearSessionSnapshot(sessionKey string) {
 }
 
 // loadContextFilesFromDisk performs the actual filesystem scan.
-func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]time.Time) {
+func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]time.Time) { //nolint:gocritic // unnamedResult — naming would shadow local vars
 	searchDirs := collectSearchDirs(workspaceDir)
 
 	var files []ContextFile
 	totalChars := 0
-	seen := make(map[string]bool)                // track resolved paths for dedup
+	seen := make(map[string]struct{})            // track resolved paths for dedup
 	resolvedMtimes := make(map[string]time.Time) // for cache validation
 
 	for _, name := range contextFileNames {
@@ -217,7 +217,7 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 			}
 
 			// Skip if we already loaded this resolved path.
-			if seen[resolved] {
+			if _, ok := seen[resolved]; ok {
 				break
 			}
 
@@ -232,7 +232,7 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 			}
 
 			content := string(data)
-			if len(content) == 0 {
+			if content == "" {
 				continue
 			}
 
@@ -262,7 +262,7 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 				}
 			}
 			if isDup {
-				seen[resolved] = true
+				seen[resolved] = struct{}{}
 				break
 			}
 
@@ -281,7 +281,7 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 				Content: content,
 			})
 			totalChars += len(content)
-			seen[resolved] = true
+			seen[resolved] = struct{}{}
 			break // Found for this filename, don't search further up
 		}
 	}
@@ -296,7 +296,7 @@ func collectSearchDirs(workspaceDir string) []string {
 
 	home, _ := os.UserHomeDir()
 	current := workspaceDir
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		parent := filepath.Dir(current)
 		if parent == current {
 			break // reached filesystem root

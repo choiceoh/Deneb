@@ -48,6 +48,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 			Count    int      `json:"count"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
+			//nolint:nilerr // tool returns user-facing error in result string
 			return formatFetchError(webFetchErr{
 				Code: "invalid_params", Message: err.Error(), Retryable: false,
 			}), nil
@@ -155,7 +156,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		return "", err
 	}
 
-	return applyTruncation(v.(string), maxChars), nil
+	return applyTruncation(v.(string), maxChars), nil //nolint:errcheck // type guaranteed by preceding switch
 }
 
 // webParallelSearch runs multiple search queries concurrently and returns
@@ -242,7 +243,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	perResultChars := maxChars / fetchTop
 	results := make([]fetchResult, fetchTop)
 	var wg sync.WaitGroup
-	for i := 0; i < fetchTop; i++ {
+	for i := range fetchTop {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -252,7 +253,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	}
 	wg.Wait()
 
-	for i := 0; i < fetchTop; i++ {
+	for i := range fetchTop {
 		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, fetchURLs[i])
 		if results[i].err != nil {
 			fmt.Fprintf(&sb, "Fetch failed: %s\n", results[i].err.Error())

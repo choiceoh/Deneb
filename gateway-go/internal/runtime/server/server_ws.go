@@ -19,7 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 const (
@@ -179,7 +179,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(protocol.MaxPayloadBytes)
 
 	// Start ping/pong + idle timeout goroutine for connection health monitoring.
-	pingCtx, pingCancel := context.WithCancel(r.Context())
+	pingCtx, pingCancel := context.WithCancel(r.Context()) //nolint:gosec // G118 — cancel stored in client.cancelPing, called on disconnect
 	client.cancelPing = pingCancel
 	go s.runPingLoop(pingCtx, client)
 
@@ -221,7 +221,7 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 		return fmt.Errorf("parse connect frame: %w", err)
 	}
 
-	if req.Type != protocol.FrameTypeRequest || req.Method != "connect" {
+	if req.Type != protocol.FrameTypeRequest || req.Method != "connect" { //nolint:usestdlibvars // protocol uses lowercase "connect", not HTTP CONNECT
 		return fmt.Errorf("expected connect request, got type=%q method=%q", req.Type, req.Method)
 	}
 
@@ -268,7 +268,7 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 	}
 
 	// Authenticate: validate token if auth validator is configured.
-	if s.authValidator != nil && params.Auth != nil && params.Auth.Token != "" {
+	if s.authValidator != nil && params.Auth != nil && params.Auth.Token != "" { //nolint:gocritic // ifElseChain — auth flow branching
 		claims, err := s.authValidator.ValidateToken(params.Auth.Token)
 		if err != nil {
 			// Record auth failure for rate limiting.
@@ -330,7 +330,7 @@ func (s *Server) writeFrame(ctx context.Context, client *WsClient, v any) error 
 		return fmt.Errorf("connection closed")
 	}
 
-	buf := jsonBufPool.Get().(*bytes.Buffer)
+	buf := jsonBufPool.Get().(*bytes.Buffer) //nolint:errcheck // type guaranteed by pool construction
 	buf.Reset()
 
 	enc := json.NewEncoder(buf)

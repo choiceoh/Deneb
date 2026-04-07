@@ -62,7 +62,7 @@ func NewDebouncer[T any](ctx context.Context, cfg DebouncerConfig[T]) *Debouncer
 	if debounceMs < 0 {
 		debounceMs = 0
 	}
-	dCtx, cancel := context.WithCancel(ctx)
+	dCtx, cancel := context.WithCancel(ctx) //nolint:gosec // G118 — cancel stored in Debouncer.cancel
 	return &Debouncer[T]{
 		buffers:   make(map[string]*debounceBuffer[T]),
 		defaultMs: debounceMs,

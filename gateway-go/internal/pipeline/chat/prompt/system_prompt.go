@@ -130,17 +130,17 @@ func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo) s
 // Dynamic: memory, workspace, context files, runtime (changes per request).
 func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText, dynamicText string) {
 	// eagerSet: only eager tools (for compact tool list display).
-	eagerSet := make(map[string]bool, len(params.ToolDefs))
+	eagerSet := make(map[string]struct{}, len(params.ToolDefs))
 	for _, def := range params.ToolDefs {
-		eagerSet[def.Name] = true
+		eagerSet[def.Name] = struct{}{}
 	}
 	// toolSet: eager + deferred (for conditional prompt sections like pilot, sessions_spawn).
-	toolSet := make(map[string]bool, len(params.ToolDefs)+len(params.DeferredTools))
-	for k, v := range eagerSet {
-		toolSet[k] = v
+	toolSet := make(map[string]struct{}, len(params.ToolDefs)+len(params.DeferredTools))
+	for k := range eagerSet {
+		toolSet[k] = struct{}{}
 	}
 	for _, dt := range params.DeferredTools {
-		toolSet[dt.Name] = true
+		toolSet[dt.Name] = struct{}{}
 	}
 
 	// --- Static block (cached) ---
@@ -265,7 +265,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	var d strings.Builder
 
 	// Wiki knowledge base (takes priority when enabled).
-	if toolSet["wiki"] {
+	if _, ok := toolSet["wiki"]; ok {
 		d.WriteString("## 위키 — 너의 외부 메모리\n")
 		d.WriteString("위키에 없으면 다음 대화에서 모른다. 위키가 너의 장기 기억이다.\n\n")
 
@@ -311,7 +311,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	}
 
 	// Web tool guidance (conditional).
-	if toolSet["web"] || toolSet["http"] {
+	_, hasWeb := toolSet["web"]
+	_, hasHTTP := toolSet["http"]
+	if hasWeb || hasHTTP {
 		d.WriteString("## Web\n")
 		d.WriteString("- `web(query=...)`: web search. Returns AI answer (Perplexity) or link list (Brave/DDG).\n")
 		d.WriteString("- `web(query=..., fetch=N)`: search + auto-fetch top N pages in one call. Use when you need page content, not just snippets.\n")
@@ -321,7 +323,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	}
 
 	// Sub-agent delegation guidance (conditional).
-	if toolSet["sessions_spawn"] {
+	if _, ok := toolSet["sessions_spawn"]; ok {
 		d.WriteString("## Sub-Agents\n")
 		d.WriteString("Use `sessions_spawn` to delegate work in parallel instead of doing everything sequentially.\n")
 		d.WriteString("**When to spawn:**\n")
@@ -350,14 +352,14 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("- Telegram 4096 char limit. Split with message tool if needed.\n")
 	d.WriteString("- Reply tags: [[reply_to_current]] replies to triggering message (stripped before sending).\n")
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions_send(sessionKey, msg).\n")
-	if toolSet["message"] {
-		d.WriteString(fmt.Sprintf("- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken))
-		d.WriteString(fmt.Sprintf("- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken))
+	if _, ok := toolSet["message"]; ok {
+		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
+		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken)
 	}
 	d.WriteString("\n")
 
 	// Inter-agent bridge.
-	if toolSet["bridge"] {
+	if _, ok := toolSet["bridge"]; ok {
 		d.WriteString("## 에이전트 간 통신 (Bridge)\n")
 		d.WriteString("같은 서버에서 작업 중인 다른 AI 에이전트(Claude Code 등)와 실시간 통신할 수 있다.\n\n")
 		d.WriteString("**수신**: 대화 기록에 `[bridge:SOURCE]`로 시작하는 메시지는 다른 에이전트가 보낸 것이다.\n")
@@ -430,11 +432,11 @@ func truncateDescription(s string, maxLen int) string {
 }
 
 // writeCompactToolList writes a categorized tool name list (no descriptions).
-func writeCompactToolList(sb *strings.Builder, toolSet map[string]bool) {
+func writeCompactToolList(sb *strings.Builder, toolSet map[string]struct{}) {
 	for _, cat := range toolCategories {
 		var present []string
 		for _, name := range cat.Names {
-			if toolSet[name] {
+			if _, ok := toolSet[name]; ok {
 				present = append(present, name)
 			}
 		}
@@ -444,15 +446,15 @@ func writeCompactToolList(sb *strings.Builder, toolSet map[string]bool) {
 	}
 
 	// Append any tools not covered by categories.
-	categorized := make(map[string]bool)
+	categorized := make(map[string]struct{})
 	for _, cat := range toolCategories {
 		for _, name := range cat.Names {
-			categorized[name] = true
+			categorized[name] = struct{}{}
 		}
 	}
 	var extra []string
 	for name := range toolSet {
-		if !categorized[name] {
+		if _, ok := categorized[name]; !ok {
 			extra = append(extra, name)
 		}
 	}

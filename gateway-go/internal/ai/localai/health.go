@@ -55,7 +55,7 @@ func (hc *healthChecker) pingModels() bool {
 	defer cancel()
 
 	url := hc.baseURL + "/models"
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return false
 	}

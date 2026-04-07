@@ -65,7 +65,7 @@ func main() {
 		formatted = []byte(src)
 	}
 
-	if err := os.WriteFile(*outFile, formatted, 0o644); err != nil {
+	if err := os.WriteFile(*outFile, formatted, 0o600); err != nil { //nolint:gosec // G306 — generated source file, needs read access
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -115,7 +115,7 @@ func generate(seq *yaml.Node, pkg, source string) string {
 
 		if mo := nodeGet(toolNode, "max_output"); mo != nil {
 			val := 0
-			fmt.Sscanf(mo.Value, "%d", &val)
+			fmt.Sscanf(mo.Value, "%d", &val) //nolint:errcheck // partial parse ok
 			maxOutputs = append(maxOutputs, maxOutputEntry{name, val})
 		}
 	}
@@ -244,7 +244,7 @@ func scalarField(mapping *yaml.Node, key string) string {
 func camelCase(name string) string {
 	parts := strings.Split(name, "_")
 	for i := 1; i < len(parts); i++ {
-		if len(parts[i]) > 0 {
+		if parts[i] != "" {
 			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
 		}
 	}

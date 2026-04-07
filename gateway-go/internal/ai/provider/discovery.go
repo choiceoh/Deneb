@@ -40,9 +40,9 @@ func NormalizeProviderIDForAuth(id string) string {
 	return normalized
 }
 
-// GetByNormalizedID looks up a provider plugin by normalized ID, checking
+// ByNormalizedID looks up a provider plugin by normalized ID, checking
 // both direct ID match and plugin aliases.
-func (r *Registry) GetByNormalizedID(id string) Plugin {
+func (r *Registry) ByNormalizedID(id string) Plugin {
 	normalized := NormalizeProviderID(id)
 
 	r.mu.RLock()

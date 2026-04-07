@@ -88,7 +88,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// but if it hallucinates a tool call, this blocks execution.
 	if preset := toolctx.ToolPresetFromContext(ctx); preset != "" {
 		if allowed := toolpreset.AllowedTools(toolpreset.Preset(preset)); allowed != nil {
-			if !allowed[name] {
+			if _, ok := allowed[name]; !ok {
 				return "", fmt.Errorf("tool %q is not allowed for preset %q", name, preset)
 			}
 		}
@@ -106,7 +106,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	if rc != nil && IsCacheableTool(name) {
 		cacheKey := BuildCacheKey(name, input)
 		if cached, ok := rc.Get(cacheKey); ok {
-			if wantCompress && len(cached) > 0 {
+			if wantCompress && cached != "" {
 				return compressToolOutput(ctx, name, cached, slog.Default()), nil
 			}
 			return cached, nil
@@ -165,7 +165,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	}
 
 	// Apply compression if requested by the agent.
-	if wantCompress && len(output) > 0 {
+	if wantCompress && output != "" {
 		output = compressToolOutput(ctx, name, output, slog.Default())
 	}
 
@@ -415,7 +415,7 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 // FilteredLLMTools returns tool definitions filtered to only include tools in
 // the allowed set. If allowed is nil or empty, returns all tools (no filtering).
 // Unlike LLMTools(), the result is not cached since the filter varies per call.
-func (r *ToolRegistry) FilteredLLMTools(allowed map[string]bool) []llm.Tool {
+func (r *ToolRegistry) FilteredLLMTools(allowed map[string]struct{}) []llm.Tool {
 	if len(allowed) == 0 {
 		return r.LLMTools()
 	}
@@ -423,7 +423,7 @@ func (r *ToolRegistry) FilteredLLMTools(allowed map[string]bool) []llm.Tool {
 	defer r.mu.RUnlock()
 	tools := make([]llm.Tool, 0, len(allowed))
 	for _, name := range r.order {
-		if !allowed[name] {
+		if _, ok := allowed[name]; !ok {
 			continue
 		}
 		def := r.tools[name]
@@ -447,7 +447,7 @@ func (r *ToolRegistry) FilteredLLMTools(allowed map[string]bool) []llm.Tool {
 
 // FilteredDefinitions returns tool definitions filtered to only include tools
 // in the allowed set. If allowed is nil or empty, returns all definitions.
-func (r *ToolRegistry) FilteredDefinitions(allowed map[string]bool) []ToolDef {
+func (r *ToolRegistry) FilteredDefinitions(allowed map[string]struct{}) []ToolDef {
 	if len(allowed) == 0 {
 		return r.Definitions()
 	}
@@ -455,7 +455,7 @@ func (r *ToolRegistry) FilteredDefinitions(allowed map[string]bool) []ToolDef {
 	defer r.mu.RUnlock()
 	defs := make([]ToolDef, 0, len(allowed))
 	for _, name := range r.order {
-		if allowed[name] {
+		if _, ok := allowed[name]; ok {
 			defs = append(defs, r.tools[name])
 		}
 	}

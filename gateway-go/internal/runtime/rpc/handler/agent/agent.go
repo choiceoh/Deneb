@@ -174,7 +174,7 @@ func cronGet(deps ExtendedDeps) rpcutil.HandlerFunc {
 		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		job := deps.CronService.GetJob(p.ID)
+		job := deps.CronService.Job(p.ID)
 		if job == nil {
 			return rpcerr.NotFound("cron job").Response(req.ID)
 		}
@@ -273,7 +273,7 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Key        string `json:"key"`
 			Phase      string `json:"phase"`
-			Ts         int64  `json:"ts"`
+			Ts         int64  `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 			StopReason string `json:"stopReason,omitempty"`
 			Aborted    bool   `json:"aborted,omitempty"`
 			StartedAt  *int64 `json:"startedAt,omitempty"`
@@ -323,8 +323,8 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 				"DENEB_SESSION_KEY": key,
 				"DENEB_PHASE":       phase,
 			}
-			go func() {
-				defer func() { recover() }()
+			go func() { //nolint:gosec // G118 — intentionally detached from request context for fire-and-forget hook
+				defer func() { recover() }() //nolint:errcheck // fire-and-forget panic recovery
 				deps.InternalHooks.TriggerFromEvent(context.Background(), evt, key, env)
 			}()
 		}
@@ -475,7 +475,7 @@ func agentsFilesGet(deps AgentsDeps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("agentId and name").Response(req.ID)
 		}
 
-		file, err := deps.Agents.GetFile(p.AgentID, p.Name)
+		file, err := deps.Agents.File(p.AgentID, p.Name)
 		if err != nil {
 			return rpcerr.NotFound("agent file").WithAgent(p.AgentID).Response(req.ID)
 		}

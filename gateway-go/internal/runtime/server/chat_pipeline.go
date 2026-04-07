@@ -113,7 +113,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// Polaris: retrieval tools for compressed conversation history.
 	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {
 		var localAI tools.LocalAIFunc
-		if pilot.GetLocalAIHub() != nil {
+		if pilot.LocalAIHub() != nil {
 			localAI = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
 				return pilot.CallLocalLLM(ctx, system, user, maxTokens)
 			}

@@ -166,15 +166,11 @@ func (s *Service) Evaluate(sctx SessionContext) bool {
 	}
 
 	// Require diverse tool usage — at least 2 distinct tools.
-	toolSet := make(map[string]bool)
+	toolSet := make(map[string]struct{})
 	for _, ta := range sctx.ToolActivities {
-		toolSet[ta.Name] = true
+		toolSet[ta.Name] = struct{}{}
 	}
-	if len(toolSet) < 2 {
-		return false
-	}
-
-	return true
+	return len(toolSet) >= 2
 }
 
 // Generate calls the LLM to synthesize a skill from the session context.
@@ -321,7 +317,7 @@ func (s *Service) Persist(skill *GeneratedSkill) error {
 	content := buildSkillMD(name, skill)
 
 	skillPath := filepath.Join(skillDir, "SKILL.md")
-	if err := os.WriteFile(skillPath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(skillPath, []byte(content), 0o644); err != nil { //nolint:gosec // G306 — world-readable skill file is intentional
 		return fmt.Errorf("genesis: write %s: %w", skillPath, err)
 	}
 
@@ -433,10 +429,10 @@ func parseGenesisResponse(text string) (*GeneratedSkill, error) {
 func buildSkillMD(name string, skill *GeneratedSkill) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("name: %s\n", name))
+	fmt.Fprintf(&sb, "name: %s\n", name)
 	sb.WriteString("version: \"0.1.0\"\n")
-	sb.WriteString(fmt.Sprintf("category: %s\n", skill.Category))
-	sb.WriteString(fmt.Sprintf("description: \"%s\"\n", strings.ReplaceAll(skill.Description, `"`, `\"`)))
+	fmt.Fprintf(&sb, "category: %s\n", skill.Category)
+	fmt.Fprintf(&sb, "description: %q\n", skill.Description)
 
 	// Build metadata block.
 	meta := map[string]any{}
@@ -450,7 +446,7 @@ func buildSkillMD(name string, skill *GeneratedSkill) string {
 	deneb["origin"] = "genesis"
 	meta["deneb"] = deneb
 	if metaJSON, err := json.Marshal(meta); err == nil {
-		sb.WriteString(fmt.Sprintf("metadata: %s\n", string(metaJSON)))
+		fmt.Fprintf(&sb, "metadata: %s\n", string(metaJSON))
 	}
 	sb.WriteString("---\n\n")
 	sb.WriteString(skill.Body)
@@ -482,17 +478,10 @@ func sanitizeSkillName(name string) string {
 	return result
 }
 
-func truncateRunes(s string, max int) string {
+func truncateRunes(s string, maxLen int) string {
 	runes := []rune(s)
-	if len(runes) <= max {
+	if len(runes) <= maxLen {
 		return s
 	}
-	return string(runes[:max]) + "..."
-}
-
-func ptrInt64(p *int64) int64 {
-	if p == nil {
-		return 0
-	}
-	return *p
+	return string(runes[:maxLen]) + "..."
 }

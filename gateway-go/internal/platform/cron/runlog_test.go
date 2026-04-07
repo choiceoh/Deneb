@@ -12,7 +12,7 @@ func TestRunLogAppendAndRead(t *testing.T) {
 	rl := NewPersistentRunLog(storePath)
 
 	// Append entries.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err := rl.Append(RunLogEntry{
 			Ts:     time.Now().UnixMilli() + int64(i),
 			JobID:  "job-1",
@@ -54,7 +54,7 @@ func TestRunLogPagination(t *testing.T) {
 	storePath := filepath.Join(dir, "jobs.json")
 	rl := NewPersistentRunLog(storePath)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		rl.Append(RunLogEntry{Ts: int64(i), JobID: "j", Action: "finished", Status: "ok"})
 	}
 

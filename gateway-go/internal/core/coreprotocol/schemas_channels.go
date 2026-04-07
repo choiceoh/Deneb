@@ -6,7 +6,7 @@ func validateChannelsStatusParams(value any, path string, errors *[]ValidationEr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"probe", "timeoutMs"}, path, errors)
 	CheckOptional(obj, "probe", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckBoolean(v, p, e)
@@ -22,7 +22,7 @@ func validateChannelsLogoutParams(value any, path string, errors *[]ValidationEr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"channel", "accountId"}, path, errors)
 	if CheckRequired(obj, "channel", path, errors) {
 		CheckNonEmptyString(obj["channel"], path+"/channel", errors)
@@ -38,7 +38,7 @@ func validateWebLoginStartParams(value any, path string, errors *[]ValidationErr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"force", "timeoutMs", "verbose", "accountId"}, path, errors)
 	CheckOptional(obj, "force", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckBoolean(v, p, e)
@@ -60,7 +60,7 @@ func validateWebLoginWaitParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"timeoutMs", "accountId"}, path, errors)
 	CheckOptional(obj, "timeoutMs", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckInteger(v, p, intPtr(0), nil, e)

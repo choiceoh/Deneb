@@ -56,11 +56,12 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 	}
 
 	var chunks []string
-	if opts.ChunkMode == string(ChunkModeNewline) {
+	switch {
+	case opts.ChunkMode == string(ChunkModeNewline):
 		chunks = ChunkByNewline(text, maxLen)
-	} else if opts.ParseMode == "HTML" {
+	case opts.ParseMode == "HTML":
 		chunks = ChunkHTML(text, maxLen)
-	} else {
+	default:
 		chunks = ChunkText(text, maxLen)
 	}
 
@@ -123,7 +124,7 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 }
 
 // SendPhoto sends a photo by file_id or URL.
-func SendPhoto(ctx context.Context, c *Client, chatID int64, photo string, caption string, opts SendOptions) (*SendResult, error) {
+func SendPhoto(ctx context.Context, c *Client, chatID int64, photo, caption string, opts SendOptions) (*SendResult, error) {
 	params := map[string]any{
 		"chat_id": chatID,
 		"photo":   photo,
@@ -138,7 +139,7 @@ func SendPhoto(ctx context.Context, c *Client, chatID int64, photo string, capti
 }
 
 // SendDocument sends a document by file_id or URL.
-func SendDocument(ctx context.Context, c *Client, chatID int64, document string, caption string, opts SendOptions) (*SendResult, error) {
+func SendDocument(ctx context.Context, c *Client, chatID int64, document, caption string, opts SendOptions) (*SendResult, error) {
 	params := map[string]any{
 		"chat_id":  chatID,
 		"document": document,
@@ -153,7 +154,7 @@ func SendDocument(ctx context.Context, c *Client, chatID int64, document string,
 }
 
 // SendVideo sends a video by file_id or URL.
-func SendVideo(ctx context.Context, c *Client, chatID int64, video string, caption string, opts SendOptions) (*SendResult, error) {
+func SendVideo(ctx context.Context, c *Client, chatID int64, video, caption string, opts SendOptions) (*SendResult, error) {
 	params := map[string]any{
 		"chat_id": chatID,
 		"video":   video,
@@ -168,7 +169,7 @@ func SendVideo(ctx context.Context, c *Client, chatID int64, video string, capti
 }
 
 // SendAudio sends an audio file by file_id or URL.
-func SendAudio(ctx context.Context, c *Client, chatID int64, audio string, caption string, opts SendOptions) (*SendResult, error) {
+func SendAudio(ctx context.Context, c *Client, chatID int64, audio, caption string, opts SendOptions) (*SendResult, error) {
 	params := map[string]any{
 		"chat_id": chatID,
 		"audio":   audio,
@@ -183,7 +184,7 @@ func SendAudio(ctx context.Context, c *Client, chatID int64, audio string, capti
 }
 
 // SendVoice sends a voice note by file_id or URL.
-func SendVoice(ctx context.Context, c *Client, chatID int64, voice string, caption string, opts SendOptions) (*SendResult, error) {
+func SendVoice(ctx context.Context, c *Client, chatID int64, voice, caption string, opts SendOptions) (*SendResult, error) {
 	params := map[string]any{
 		"chat_id": chatID,
 		"voice":   voice,
@@ -250,7 +251,7 @@ func UploadPhoto(ctx context.Context, c *Client, chatID int64, fileName string, 
 // EditMessageText edits the text of an existing message.
 // An optional keyboard can be attached (pass nil to omit).
 // Returns the edited message result.
-func EditMessageText(ctx context.Context, c *Client, chatID int64, messageID int64, text string, parseMode string, keyboard *InlineKeyboardMarkup) (*SendResult, error) {
+func EditMessageText(ctx context.Context, c *Client, chatID, messageID int64, text, parseMode string, keyboard *InlineKeyboardMarkup) (*SendResult, error) {
 	params := map[string]any{
 		"chat_id":    chatID,
 		"message_id": messageID,
@@ -279,7 +280,7 @@ func EditMessageText(ctx context.Context, c *Client, chatID int64, messageID int
 }
 
 // AnswerCallbackQuery acknowledges a callback query.
-func AnswerCallbackQuery(ctx context.Context, c *Client, queryID string, text string) error {
+func AnswerCallbackQuery(ctx context.Context, c *Client, queryID, text string) error {
 	params := map[string]any{
 		"callback_query_id": queryID,
 	}

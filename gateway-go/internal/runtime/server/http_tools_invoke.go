@@ -16,12 +16,12 @@ const (
 
 // gatewayHTTPToolDeny is the deny list for tools invoked via the HTTP endpoint.
 // These tools are too dangerous to expose over HTTP (matches TS DEFAULT_GATEWAY_HTTP_TOOL_DENY).
-var gatewayHTTPToolDeny = map[string]bool{
-	"browser":            true,
-	"computer":           true,
-	"file_editor":        true,
-	"text_editor":        true,
-	"str_replace_editor": true,
+var gatewayHTTPToolDeny = map[string]struct{}{
+	"browser":            {},
+	"computer":           {},
+	"file_editor":        {},
+	"text_editor":        {},
+	"str_replace_editor": {},
 }
 
 // handleToolsInvoke handles POST /tools/invoke — executes a tool via HTTP.
@@ -63,7 +63,7 @@ func (s *Server) handleToolsInvoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check deny list.
-	if gatewayHTTPToolDeny[body.Tool] {
+	if _, ok := gatewayHTTPToolDeny[body.Tool]; ok {
 		s.writeJSON(w, http.StatusForbidden, map[string]any{
 			"ok": false, "error": map[string]string{"type": "forbidden", "message": "tool " + body.Tool + " is not allowed via HTTP"},
 		})
@@ -103,13 +103,14 @@ func (s *Server) handleToolsInvoke(w http.ResponseWriter, r *http.Request) {
 	if resp.Error != nil {
 		status := http.StatusInternalServerError
 		errType := "tool_error"
-		if resp.Error.Code == protocol.ErrNotFound {
+		switch resp.Error.Code {
+		case protocol.ErrNotFound:
 			status = http.StatusNotFound
 			errType = "not_found"
-		} else if resp.Error.Code == protocol.ErrForbidden {
+		case protocol.ErrForbidden:
 			status = http.StatusForbidden
 			errType = "forbidden"
-		} else if resp.Error.Code == protocol.ErrMissingParam || resp.Error.Code == protocol.ErrInvalidRequest {
+		case protocol.ErrMissingParam, protocol.ErrInvalidRequest:
 			status = http.StatusBadRequest
 			errType = "invalid_request"
 		}
@@ -132,7 +133,7 @@ func (s *Server) authorizeHTTP(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 
-	token := auth.GetBearerToken(r)
+	token := auth.BearerToken(r)
 	if token == "" {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
 			"ok": false, "error": map[string]string{"type": "unauthorized", "message": "Bearer token required"},

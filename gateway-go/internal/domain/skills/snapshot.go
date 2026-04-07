@@ -102,7 +102,9 @@ func BuildWorkspaceSkillSnapshot(cfg SnapshotConfig) *FullSkillSnapshot {
 	}
 
 	// Build resolved skills (canonical paths, not compacted) — includes both always and discoverable.
-	allPromptEntries := append(alwaysEntries, discoverableEntries...)
+	allPromptEntries := make([]SkillEntry, 0, len(alwaysEntries)+len(discoverableEntries))
+	allPromptEntries = append(allPromptEntries, alwaysEntries...)
+	allPromptEntries = append(allPromptEntries, discoverableEntries...)
 	resolvedSkills := entriesToPromptSkills(allPromptEntries)
 
 	// Build discoverable skills list (compacted paths for tool responses).

@@ -41,14 +41,14 @@ func SyncSkillsToWorkspace(sourceDir, targetDir string, cfg DiscoverConfig) erro
 		return fmt.Errorf("failed to create target skills dir: %w", err)
 	}
 
-	usedNames := make(map[string]bool)
+	usedNames := make(map[string]struct{})
 	for _, entry := range entries {
 		dirName := filepath.Base(entry.Skill.Dir)
 		if dirName == "" || dirName == "." || dirName == ".." {
 			continue
 		}
 		uniqueName := resolveUniqueDirName(dirName, usedNames)
-		usedNames[uniqueName] = true
+		usedNames[uniqueName] = struct{}{}
 
 		dest := filepath.Join(targetSkillsDir, uniqueName)
 		if err := copyDir(entry.Skill.Dir, dest); err != nil {
@@ -61,13 +61,13 @@ func SyncSkillsToWorkspace(sourceDir, targetDir string, cfg DiscoverConfig) erro
 	return nil
 }
 
-func resolveUniqueDirName(base string, used map[string]bool) string {
-	if !used[base] {
+func resolveUniqueDirName(base string, used map[string]struct{}) string {
+	if _, ok := used[base]; !ok {
 		return base
 	}
 	for i := 2; i < 10000; i++ {
 		candidate := fmt.Sprintf("%s-%d", base, i)
-		if !used[candidate] {
+		if _, ok := used[candidate]; !ok {
 			return candidate
 		}
 	}
@@ -90,7 +90,7 @@ func copyDir(src, dst string) error {
 			return os.MkdirAll(destPath, 0o755)
 		}
 
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) //nolint:gosec // G122 — path comes from WalkDir, safe in this context
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(destPath, data, info.Mode())
+		return os.WriteFile(destPath, data, info.Mode()) //nolint:gosec // G703 — destPath is constructed from trusted src/dst paths
 	})
 }
 
@@ -127,7 +127,7 @@ func BuildWorkspaceSkillStatus(cfg DiscoverConfig, eligCtx EligibilityContext) *
 
 	allEntries := DiscoverWorkspaceSkills(cfg)
 
-	binsSet := make(map[string]bool)
+	binsSet := make(map[string]struct{})
 	var statusEntries []SkillStatusEntry
 	eligibleCount := 0
 
@@ -148,10 +148,10 @@ func BuildWorkspaceSkillStatus(cfg DiscoverConfig, eligCtx EligibilityContext) *
 			se.PrimaryEnv = entry.Metadata.PrimaryEnv
 			if entry.Metadata.Requires != nil {
 				for _, bin := range entry.Metadata.Requires.Bins {
-					binsSet[bin] = true
+					binsSet[bin] = struct{}{}
 				}
 				for _, bin := range entry.Metadata.Requires.AnyBins {
-					binsSet[bin] = true
+					binsSet[bin] = struct{}{}
 				}
 			}
 		}

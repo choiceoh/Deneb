@@ -2,8 +2,9 @@ package localai
 
 import (
 	"crypto/sha256"
-	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/corecache"
 )
 
 const (
@@ -12,18 +13,14 @@ const (
 	cacheJanitorInterval   = 1 * time.Minute
 )
 
-type cacheEntry struct {
+type cachedResponse struct {
 	text      string
 	createdAt time.Time
-	lastHit   time.Time
 }
 
-// responseCache is a TTL + LRU bounded cache keyed by request content hash.
 type responseCache struct {
-	mu         sync.RWMutex
-	entries    map[[32]byte]*cacheEntry
+	lru        *corecache.LRU[[32]byte, cachedResponse]
 	defaultTTL time.Duration
-	maxEntries int
 }
 
 func newResponseCache(ttl time.Duration, maxEntries int) *responseCache {
@@ -34,9 +31,8 @@ func newResponseCache(ttl time.Duration, maxEntries int) *responseCache {
 		maxEntries = defaultCacheMaxEntries
 	}
 	return &responseCache{
-		entries:    make(map[[32]byte]*cacheEntry),
+		lru:        corecache.NewLRU[[32]byte, cachedResponse](maxEntries, 0),
 		defaultTTL: ttl,
-		maxEntries: maxEntries,
 	}
 }
 
@@ -51,7 +47,7 @@ func cacheKey(req *Request) [32]byte {
 	}
 	// Include maxTokens and response format in the key so requests with
 	// different generation parameters don't collide.
-	b := [4]byte{byte(req.MaxTokens >> 24), byte(req.MaxTokens >> 16), byte(req.MaxTokens >> 8), byte(req.MaxTokens)}
+	b := [4]byte{byte(req.MaxTokens >> 24), byte(req.MaxTokens >> 16), byte(req.MaxTokens >> 8), byte(req.MaxTokens)} //nolint:gosec // G115 — extracting individual bytes from int for hashing
 	h.Write(b[:])
 	if req.ResponseFormat != nil {
 		h.Write([]byte(req.ResponseFormat.Type))
@@ -67,60 +63,27 @@ func (c *responseCache) Get(req *Request, ttl time.Duration) (string, bool) {
 		ttl = c.defaultTTL
 	}
 	key := cacheKey(req)
-	c.mu.RLock()
-	e, ok := c.entries[key]
-	c.mu.RUnlock()
-	if !ok || time.Since(e.createdAt) > ttl {
+	entry, ok := c.lru.Get(key)
+	if !ok || time.Since(entry.createdAt) > ttl {
 		return "", false
 	}
-	c.mu.Lock()
-	e.lastHit = time.Now()
-	c.mu.Unlock()
-	return e.text, true
+	return entry.text, true
 }
 
-// Put stores a response. If at capacity, evicts the least-recently-hit entry.
+// Put stores a response.
 func (c *responseCache) Put(req *Request, text string) {
 	key := cacheKey(req)
-	now := time.Now()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries[key] = &cacheEntry{text: text, createdAt: now, lastHit: now}
-	c.evictLocked()
-}
-
-// evictLocked removes entries beyond maxEntries (LRU) while holding the lock.
-func (c *responseCache) evictLocked() {
-	for len(c.entries) > c.maxEntries {
-		var oldestKey [32]byte
-		var oldestHit time.Time
-		first := true
-		for k, e := range c.entries {
-			if first || e.lastHit.Before(oldestHit) {
-				oldestKey = k
-				oldestHit = e.lastHit
-				first = false
-			}
-		}
-		delete(c.entries, oldestKey)
-	}
+	c.lru.Put(key, cachedResponse{text: text, createdAt: time.Now()})
 }
 
 // Cleanup removes expired entries. Called periodically by the janitor goroutine.
 func (c *responseCache) Cleanup() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := time.Now()
-	for k, e := range c.entries {
-		if now.Sub(e.createdAt) > c.defaultTTL {
-			delete(c.entries, k)
-		}
-	}
+	c.lru.PruneFunc(func(_ [32]byte, v cachedResponse) bool {
+		return time.Since(v.createdAt) > c.defaultTTL
+	})
 }
 
 // Len returns the current number of cached entries.
 func (c *responseCache) Len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.entries)
+	return c.lru.Len()
 }

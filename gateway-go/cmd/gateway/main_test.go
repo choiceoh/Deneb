@@ -10,7 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 func TestSmokeHealthEndpoint(t *testing.T) {
@@ -28,13 +28,17 @@ func TestSmokeHealthEndpoint(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	url := fmt.Sprintf("http://%s/health", addr.String())
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
 
@@ -62,7 +66,10 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	conn, wsResp, err := websocket.Dial(ctx, wsURL, nil)
+	if wsResp != nil && wsResp.Body != nil {
+		wsResp.Body.Close()
+	}
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}

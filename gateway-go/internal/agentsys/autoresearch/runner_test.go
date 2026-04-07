@@ -76,19 +76,19 @@ func TestConfigValidate(t *testing.T) {
 }
 
 func TestIsBetter(t *testing.T) {
-	min := &Config{MetricDirection: "minimize"}
-	max := &Config{MetricDirection: "maximize"}
+	minCfg := &Config{MetricDirection: "minimize"}
+	maxCfg := &Config{MetricDirection: "maximize"}
 
-	if !min.IsBetter(0.9, 1.0) {
+	if !minCfg.IsBetter(0.9, 1.0) {
 		t.Error("minimize: 0.9 should be better than 1.0")
 	}
-	if min.IsBetter(1.1, 1.0) {
+	if minCfg.IsBetter(1.1, 1.0) {
 		t.Error("minimize: 1.1 should not be better than 1.0")
 	}
-	if !max.IsBetter(1.1, 1.0) {
+	if !maxCfg.IsBetter(1.1, 1.0) {
 		t.Error("maximize: 1.1 should be better than 1.0")
 	}
-	if max.IsBetter(0.9, 1.0) {
+	if maxCfg.IsBetter(0.9, 1.0) {
 		t.Error("maximize: 0.9 should not be better than 1.0")
 	}
 }
@@ -838,7 +838,7 @@ func splitNonEmpty(s string) []string {
 func splitLines(s string) []string {
 	var result []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == '\n' {
 			result = append(result, s[start:i])
 			start = i + 1

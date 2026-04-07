@@ -14,12 +14,12 @@ func shouldSilenceForChannel(channel string, activities []agent.ToolActivity) bo
 	if !ok || len(names) == 0 {
 		return false
 	}
-	set := make(map[string]bool, len(names))
+	set := make(map[string]struct{}, len(names))
 	for _, n := range names {
-		set[n] = true
+		set[n] = struct{}{}
 	}
 	for _, a := range activities {
-		if set[a.Name] {
+		if _, ok := set[a.Name]; ok {
 			return true
 		}
 	}

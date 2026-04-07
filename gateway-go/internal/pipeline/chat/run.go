@@ -360,7 +360,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	var contReason string
 	var contMessage string
-	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() {
+	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() { //nolint:gocritic // ifElseChain — conditions are not comparable values
 		contReason = chatResult.ContSignal.Reason()
 		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
 			"이전 실행의 컨텍스트:\n" +
@@ -421,7 +421,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 // automatic verification continuation is warranted.
 func hadMutatingToolActivity(activities []agent.ToolActivity) bool {
 	for _, a := range activities {
-		if mutatingTools[a.Name] {
+		if _, ok := mutatingTools[a.Name]; ok {
 			return true
 		}
 	}
@@ -455,11 +455,11 @@ func summarizeToolActivity(activities []agent.ToolActivity) string {
 // summarizeErrorTools returns names of tools that had errors.
 func summarizeErrorTools(activities []agent.ToolActivity) string {
 	var errs []string
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	for _, a := range activities {
-		if a.IsError && !seen[a.Name] {
+		if _, ok := seen[a.Name]; a.IsError && !ok {
 			errs = append(errs, a.Name)
-			seen[a.Name] = true
+			seen[a.Name] = struct{}{}
 		}
 	}
 	if len(errs) == 0 {

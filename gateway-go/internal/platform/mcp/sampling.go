@@ -80,14 +80,14 @@ func (s *Sampler) buildSamplingRequest(ctx context.Context, eventName string, pa
 	}
 }
 
-func (s *Sampler) buildSessionFailedRequest(ctx context.Context, payload json.RawMessage) (*SamplingRequest, error) {
-	context := fmt.Sprintf("Deneb 세션이 실패했습니다.\n\n이벤트 데이터:\n```json\n%s\n```", prettyJSON(payload))
+func (s *Sampler) buildSessionFailedRequest(_ context.Context, payload json.RawMessage) (*SamplingRequest, error) {
+	eventContext := fmt.Sprintf("Deneb 세션이 실패했습니다.\n\n이벤트 데이터:\n```json\n%s\n```", prettyJSON(payload))
 
 	return &SamplingRequest{
 		Messages: []SamplingMessage{
 			{
 				Role:    "user",
-				Content: TextContent(context + "\n\n이 에러를 분석하고 원인과 해결 방법을 한국어로 설명해주세요."),
+				Content: TextContent(eventContext + "\n\n이 에러를 분석하고 원인과 해결 방법을 한국어로 설명해주세요."),
 			},
 		},
 		SystemPrompt:   "당신은 Deneb AI 시스템 관리 도우미입니다. 시스템 이벤트를 분석하고 한국어로 명확하게 설명합니다.",
@@ -100,14 +100,14 @@ func (s *Sampler) buildSessionFailedRequest(ctx context.Context, payload json.Ra
 	}, nil
 }
 
-func (s *Sampler) buildAgentCompletedRequest(ctx context.Context, payload json.RawMessage) (*SamplingRequest, error) {
-	context := fmt.Sprintf("Deneb 에이전트 작업이 완료되었습니다.\n\n이벤트 데이터:\n```json\n%s\n```", prettyJSON(payload))
+func (s *Sampler) buildAgentCompletedRequest(_ context.Context, payload json.RawMessage) (*SamplingRequest, error) {
+	eventContext := fmt.Sprintf("Deneb 에이전트 작업이 완료되었습니다.\n\n이벤트 데이터:\n```json\n%s\n```", prettyJSON(payload))
 
 	return &SamplingRequest{
 		Messages: []SamplingMessage{
 			{
 				Role:    "user",
-				Content: TextContent(context + "\n\n이 작업 결과를 간략히 요약해주세요."),
+				Content: TextContent(eventContext + "\n\n이 작업 결과를 간략히 요약해주세요."),
 			},
 		},
 		SystemPrompt:   "당신은 Deneb AI 시스템 관리 도우미입니다. 에이전트 작업 결과를 간결하게 요약합니다.",
@@ -120,14 +120,14 @@ func (s *Sampler) buildAgentCompletedRequest(ctx context.Context, payload json.R
 	}, nil
 }
 
-func (s *Sampler) buildCronFiredRequest(ctx context.Context, payload json.RawMessage) (*SamplingRequest, error) {
-	context := fmt.Sprintf("Deneb 크론 작업이 실행되었습니다.\n\n이벤트 데이터:\n```json\n%s\n```", prettyJSON(payload))
+func (s *Sampler) buildCronFiredRequest(_ context.Context, payload json.RawMessage) (*SamplingRequest, error) {
+	eventContext := fmt.Sprintf("Deneb 크론 작업이 실행되었습니다.\n\n이벤트 데이터:\n```json\n%s\n```", prettyJSON(payload))
 
 	return &SamplingRequest{
 		Messages: []SamplingMessage{
 			{
 				Role:    "user",
-				Content: TextContent(context + "\n\n실행 결과에 이상 징후가 있는지 확인해주세요."),
+				Content: TextContent(eventContext + "\n\n실행 결과에 이상 징후가 있는지 확인해주세요."),
 			},
 		},
 		SystemPrompt:   "당신은 Deneb AI 시스템 모니터링 도우미입니다. 크론 작업 결과에서 이상 징후를 감지합니다.",

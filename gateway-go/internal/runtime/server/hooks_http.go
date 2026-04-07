@@ -38,10 +38,10 @@ const (
 var templateExprRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
 // blockedTemplateKeys prevents prototype pollution via template traversal.
-var blockedTemplateKeys = map[string]bool{
-	"__proto__":   true,
-	"prototype":   true,
-	"constructor": true,
+var blockedTemplateKeys = map[string]struct{}{
+	"__proto__":   {},
+	"prototype":   {},
+	"constructor": {},
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ type HooksHTTPConfig struct {
 	DefaultSessionKey         string
 	AllowRequestSessionKey    bool
 	AllowedSessionKeyPrefixes []string
-	AllowedAgentIds           []string // nil = allow all
+	AllowedAgentIDs           []string // nil = allow all
 	Mappings                  []HookMapping
 }
 

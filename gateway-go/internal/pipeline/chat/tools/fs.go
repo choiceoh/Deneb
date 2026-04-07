@@ -220,10 +220,11 @@ func findBlockEnd(lines []string, startIdx int) int {
 
 	for i := startIdx; i < len(lines); i++ {
 		for _, ch := range lines[i] {
-			if ch == '{' || ch == '(' {
+			switch ch {
+			case '{', '(':
 				depth++
 				started = true
-			} else if ch == '}' || ch == ')' {
+			case '}', ')':
 				depth--
 			}
 		}

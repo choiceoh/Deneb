@@ -42,11 +42,12 @@ func normalizeSchedule(s *StoreSchedule) {
 		s.Kind = kind
 	default:
 		// Infer kind from fields.
-		if s.At != "" {
+		switch {
+		case s.At != "":
 			s.Kind = "at"
-		} else if s.EveryMs > 0 {
+		case s.EveryMs > 0:
 			s.Kind = "every"
-		} else if s.Expr != "" {
+		case s.Expr != "":
 			s.Kind = "cron"
 		}
 	}
@@ -73,11 +74,12 @@ func normalizePayload(p *StorePayload) {
 		p.Kind = "systemEvent"
 	default:
 		// Infer kind.
-		if p.Message != "" {
+		switch {
+		case p.Message != "":
 			p.Kind = "agentTurn"
-		} else if p.Text != "" {
+		case p.Text != "":
 			p.Kind = "systemEvent"
-		} else if p.Model != "" || p.Thinking != "" {
+		case p.Model != "" || p.Thinking != "":
 			p.Kind = "agentTurn"
 		}
 	}
@@ -142,9 +144,10 @@ func NormalizeOptionalSessionKey(raw string) string {
 func InferLegacyName(job StoreJob) string {
 	// Try payload text/message.
 	var text string
-	if job.Payload.Kind == "systemEvent" {
+	switch job.Payload.Kind {
+	case "systemEvent":
 		text = job.Payload.Text
-	} else if job.Payload.Kind == "agentTurn" {
+	case "agentTurn":
 		text = job.Payload.Message
 	}
 	if text != "" {

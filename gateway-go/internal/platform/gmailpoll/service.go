@@ -137,9 +137,9 @@ func (s *Service) Run(ctx context.Context) error {
 	s.mu.Unlock()
 
 	if client == nil {
-		c, err := gmail.GetClient()
+		c, err := gmail.DefaultClient()
 		if err != nil {
-			return fmt.Errorf("Gmail 클라이언트 초기화 실패: %w", err)
+			return fmt.Errorf("gmail 클라이언트 초기화 실패: %w", err)
 		}
 		s.mu.Lock()
 		s.gmailClient = c
@@ -182,7 +182,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		}
 	}
 	if err != nil {
-		return fmt.Errorf("Gmail 검색 실패 (%d회 시도): %w", searchMaxRetries+1, err)
+		return fmt.Errorf("Gmail 검색 실패 (%d회 시도): %w", searchMaxRetries+1, err) //nolint:staticcheck // ST1005 — Korean error message
 	}
 
 	// Filter out already-seen messages.
@@ -196,7 +196,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	if len(newMessages) == 0 {
 		s.log.Debug("새 메일 없음")
 		pollState.LastPollAt = time.Now().UnixMilli()
-		s.state.Save(pollState)
+		s.state.Save(pollState) //nolint:errcheck // best-effort
 		return nil
 	}
 

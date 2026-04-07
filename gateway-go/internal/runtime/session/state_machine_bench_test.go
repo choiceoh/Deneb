@@ -3,7 +3,7 @@ package session
 import "testing"
 
 func BenchmarkIsValidTransition(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		IsValidTransition(StatusRunning, StatusDone)
 	}
 }
@@ -11,13 +11,13 @@ func BenchmarkIsValidTransition(b *testing.B) {
 func BenchmarkIsTerminal(b *testing.B) {
 	statuses := []RunStatus{StatusRunning, StatusDone, StatusFailed, StatusKilled, StatusTimeout}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		IsTerminal(statuses[i%len(statuses)])
 	}
 }
 
 func BenchmarkValidateTransition(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = ValidateTransition(StatusRunning, StatusDone)
 	}
 }

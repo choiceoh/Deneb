@@ -117,7 +117,7 @@ func taskGet(deps Deps) rpcutil.HandlerFunc {
 		case p.TaskID != "":
 			t = deps.Registry.Get(p.TaskID)
 		case p.RunID != "":
-			t = deps.Registry.GetByRunID(p.RunID)
+			t = deps.Registry.ByRunID(p.RunID)
 		default:
 			return rpcerr.New(protocol.ErrMissingParam, "taskId or runId required").Response(req.ID)
 		}
@@ -237,7 +237,7 @@ func flowShow(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrMissingParam, "flowId required").Response(req.ID)
 		}
 
-		flow := deps.Registry.GetFlow(p.FlowID)
+		flow := deps.Registry.Flow(p.FlowID)
 		if flow == nil {
 			return rpcerr.NotFound("flow").Response(req.ID)
 		}

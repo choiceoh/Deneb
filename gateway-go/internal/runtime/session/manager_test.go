@@ -94,7 +94,7 @@ func TestConcurrentLifecycleEvents(t *testing.T) {
 	const n = 100
 
 	done := make(chan struct{})
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) {
 			key := "concurrent-session"
 			m.ApplyLifecycleEvent(key, LifecycleEvent{Phase: PhaseStart, Ts: int64(i * 1000)})
@@ -102,7 +102,7 @@ func TestConcurrentLifecycleEvents(t *testing.T) {
 			done <- struct{}{}
 		}(i)
 	}
-	for i := 0; i < n; i++ {
+	for range n {
 		<-done
 	}
 

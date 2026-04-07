@@ -9,8 +9,8 @@ import (
 // AuthorizeMethod checks whether the given role allows calling the method.
 // Public methods (health, health.check) are open to all.
 // All other methods require authentication and the operator role.
-func AuthorizeMethod(method string, role string, authenticated bool) *protocol.ErrorShape {
-	if publicMethods[method] {
+func AuthorizeMethod(method, role string, authenticated bool) *protocol.ErrorShape {
+	if _, ok := publicMethods[method]; ok {
 		return nil
 	}
 	if !authenticated {

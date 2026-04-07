@@ -228,16 +228,16 @@ func (h *HooksHTTPHandler) handleMapping(w http.ResponseWriter, r *http.Request,
 // ───────────────────────────────────────────────────────────────────────
 
 // isAgentAllowed checks whether the given agentID passes the allowedAgentIds policy.
-// nil AllowedAgentIds means all agents are allowed.
+// nil AllowedAgentIDs means all agents are allowed.
 func (h *HooksHTTPHandler) isAgentAllowed(agentID string) bool {
-	if h.config.AllowedAgentIds == nil {
+	if h.config.AllowedAgentIDs == nil {
 		return true
 	}
 	if agentID == "" {
 		// Empty = default agent; always allowed.
 		return true
 	}
-	for _, id := range h.config.AllowedAgentIds {
+	for _, id := range h.config.AllowedAgentIDs {
 		if id == agentID {
 			return true
 		}
@@ -379,7 +379,7 @@ func resolveTemplateExpr(expr string, ctx templateContext) string {
 	// {{headers.<key>}}
 	if strings.HasPrefix(expr, "headers.") {
 		key := strings.ToLower(strings.TrimPrefix(expr, "headers."))
-		if key != "" && !blockedTemplateKeys[key] {
+		if _, blocked := blockedTemplateKeys[key]; key != "" && !blocked {
 			if v, ok := ctx.Headers[key]; ok {
 				return v
 			}
@@ -390,7 +390,7 @@ func resolveTemplateExpr(expr string, ctx templateContext) string {
 	// {{query.<key>}}
 	if strings.HasPrefix(expr, "query.") {
 		key := strings.TrimPrefix(expr, "query.")
-		if key != "" && !blockedTemplateKeys[key] {
+		if _, blocked := blockedTemplateKeys[key]; key != "" && !blocked {
 			if v, ok := ctx.Query[key]; ok {
 				return v
 			}
@@ -405,7 +405,7 @@ func resolveTemplateExpr(expr string, ctx templateContext) string {
 	}
 
 	// Direct key lookup in payload for backward compatibility.
-	if !blockedTemplateKeys[expr] {
+	if _, blocked := blockedTemplateKeys[expr]; !blocked {
 		if v, ok := ctx.Payload[expr]; ok {
 			return fmt.Sprintf("%v", v)
 		}
@@ -423,7 +423,7 @@ func resolvePayloadDotPath(payload map[string]any, dotPath string) string {
 	parts := strings.Split(dotPath, ".")
 	var current any = payload
 	for _, part := range parts {
-		if blockedTemplateKeys[part] {
+		if _, blocked := blockedTemplateKeys[part]; blocked {
 			return ""
 		}
 		m, ok := current.(map[string]any)
@@ -545,7 +545,7 @@ func generateUUID() string {
 		// Fallback: timestamp-based pseudo-UUID.
 		t := time.Now().UnixNano()
 		for i := range buf {
-			buf[i] = byte(t >> (i * 4))
+			buf[i] = byte(t >> (i * 4)) //nolint:gosec // G115 — extracting individual bytes from int64 timestamp
 		}
 	}
 	buf[6] = (buf[6] & 0x0f) | 0x40 // version 4

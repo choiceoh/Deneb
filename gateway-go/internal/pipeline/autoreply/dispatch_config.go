@@ -113,7 +113,7 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 	}
 
 	// 3. Generate reply via agent.
-	payloads, err := GetReplyFromConfig(ctx, msg, cfg.ReplyOptions, deps)
+	payloads, err := ReplyFromConfig(ctx, msg, cfg.ReplyOptions, deps)
 	if err != nil {
 		return DispatchResult{Error: err}
 	}
@@ -127,7 +127,7 @@ func extractCommandArgs(normalized, cmdKey string) *handlers.CommandArgs {
 		return nil
 	}
 	rest := normalized[len(prefix):]
-	if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+	if rest != "" && (rest[0] == ' ' || rest[0] == '\t') {
 		raw := rest[1:]
 		return &handlers.CommandArgs{Raw: raw}
 	}

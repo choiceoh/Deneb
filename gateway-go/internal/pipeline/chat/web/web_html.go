@@ -29,7 +29,7 @@ import (
 // 2. Detect quality signals
 // 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
 // 4. Convert to Markdown (local AI or FFI fallback)
-func processHTML(ctx context.Context, html string, url string, localAI *LocalAIExtractor, meta *webFetchMeta) string {
+func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtractor, meta *webFetchMeta) string {
 	// Step 1: Extract metadata from raw HTML (before any stripping).
 	extractHTMLMeta(html, meta)
 
@@ -68,7 +68,7 @@ func processHTML(ctx context.Context, html string, url string, localAI *LocalAIE
 
 // ffiConvert performs FFI-backed HTML -> Markdown conversion.
 func ffiConvert(html string) string {
-	text, _, err := ffi.HtmlToMarkdown(html)
+	text, _, err := ffi.HTMLToMarkdown(html)
 	if err != nil {
 		slog.Warn("ffi html-to-markdown failed", "error", err)
 		return html
@@ -79,7 +79,7 @@ func ffiConvert(html string) string {
 // ffiConvertStripNoise performs FFI-backed HTML -> Markdown with noise stripping.
 // Suppresses nav, aside, svg, iframe, form elements at the Rust level.
 func ffiConvertStripNoise(html string) string {
-	text, _, err := ffi.HtmlToMarkdownStripNoise(html)
+	text, _, err := ffi.HTMLToMarkdownStripNoise(html)
 	if err != nil {
 		slog.Warn("ffi html-to-markdown-strip-noise failed", "error", err)
 		return ffiConvert(html)
@@ -145,7 +145,7 @@ func (s *LocalAIExtractor) available() bool {
 	s.probeAt = time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+"/models", http.NoBody)
 	if err != nil {
 		s.state = localAIUnavailable
 		return false
@@ -197,7 +197,7 @@ RULES:
 - Empty extraction is better than including noise`
 
 // extract calls local AI for intelligent content extraction from pre-cleaned HTML.
-func (s *LocalAIExtractor) extract(ctx context.Context, html string, url string, language string) (string, error) {
+func (s *LocalAIExtractor) extract(ctx context.Context, html, url, language string) (string, error) {
 	// Convert HTML to markdown via FFI first to reduce token count.
 	mdContent := ffiConvert(html)
 
@@ -238,7 +238,7 @@ func (s *LocalAIExtractor) extract(ctx context.Context, html string, url string,
 	reqCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, "POST", s.baseURL+"/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, s.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create local AI request: %w", err)
 	}

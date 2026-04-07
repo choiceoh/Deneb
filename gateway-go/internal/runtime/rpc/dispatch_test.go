@@ -208,7 +208,7 @@ func TestDispatchWithWorkerPool(t *testing.T) {
 	})
 
 	// Fire 6 concurrent requests through a pool of size 2.
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		wg.Add(1)
 		go func(id int) {
 			req := &protocol.RequestFrame{ID: "wp-" + string(rune('0'+id)), Method: "slow.work"}
@@ -226,10 +226,7 @@ func TestDispatchWithWorkerPool(t *testing.T) {
 	// so it may lag slightly behind wg.Done() which fires inside the handler.
 	// Poll briefly to let the last goroutine's defer complete.
 	deadline := time.After(2 * time.Second)
-	for {
-		if pool.Stats().Done == 6 {
-			break
-		}
+	for pool.Stats().Done != 6 {
 		select {
 		case <-deadline:
 			t.Fatalf("expected 6 done, got %d", pool.Stats().Done)

@@ -156,7 +156,7 @@ func containsIgnoreCase(s, substr string) bool {
 	}
 	for i := 0; i <= sLen-subLen; i++ {
 		match := true
-		for j := 0; j < subLen; j++ {
+		for j := range subLen {
 			sc := s[i+j]
 			tc := substr[j]
 			if sc >= 'A' && sc <= 'Z' {
@@ -214,7 +214,7 @@ func parseFenceSpans(text string) []fenceSpan {
 	return spans
 }
 
-func detectFenceOpen(trimmed string) (byte, int) {
+func detectFenceOpen(trimmed string) (fenceChar byte, count int) {
 	if len(trimmed) < 3 {
 		return 0, 0
 	}
@@ -222,8 +222,8 @@ func detectFenceOpen(trimmed string) (byte, int) {
 	if ch != '`' && ch != '~' {
 		return 0, 0
 	}
-	count := 0
-	for i := 0; i < len(trimmed); i++ {
+	count = 0
+	for i := range len(trimmed) {
 		if trimmed[i] == ch {
 			count++
 		} else {
@@ -241,8 +241,8 @@ func isFenceClose(trimmed string, fenceChar byte, fenceLen int) bool {
 		return false
 	}
 	count := 0
-	for i := 0; i < len(trimmed); i++ {
-		if trimmed[i] == fenceChar {
+	for i := range len(trimmed) {
+		if trimmed[i] == fenceChar { //nolint:gocritic // ifElseChain — switch would change break semantics
 			count++
 		} else if trimmed[i] == ' ' || trimmed[i] == '\t' {
 			break
@@ -344,7 +344,7 @@ func tryUnwrapQuoted(payload string) (string, bool) {
 // cleanCandidate strips leading/trailing wrapping chars.
 func cleanCandidate(raw string) string {
 	s := raw
-	for len(s) > 0 {
+	for s != "" {
 		switch s[0] {
 		case '`', '"', '\'', '[', '{', '(':
 			s = s[1:]
@@ -353,7 +353,7 @@ func cleanCandidate(raw string) string {
 		}
 	}
 doneLeading:
-	for len(s) > 0 {
+	for s != "" {
 		switch s[len(s)-1] {
 		case '`', '"', '\'', '\\', '}', ')', ']', ',':
 			s = s[:len(s)-1]
@@ -395,7 +395,7 @@ func stripAudioTag(text string) (string, bool) {
 
 // stripInlineDirectives parses and strips all [[...]] inline directives.
 // Returns cleaned text and a list of directive keys.
-func stripInlineDirectives(text string) (string, []string) {
+func stripInlineDirectives(text string) (cleaned string, directives []string) {
 	var keys []string
 	var result strings.Builder
 	result.Grow(len(text))

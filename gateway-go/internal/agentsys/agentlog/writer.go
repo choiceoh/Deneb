@@ -90,5 +90,5 @@ func (w *Writer) pruneIfNeeded(path string) {
 	if err := os.WriteFile(tmp, []byte(buf.String()), 0o600); err != nil {
 		return
 	}
-	os.Rename(tmp, path)
+	os.Rename(tmp, path) //nolint:errcheck // best-effort
 }

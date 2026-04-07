@@ -41,7 +41,7 @@ func (s *Service) Start(ctx context.Context) error {
 			if job.State.NextRunAtMs <= 0 {
 				job.State.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
 				if job.State.NextRunAtMs > 0 {
-					s.store.UpdateJobState(job.ID, job.State)
+					s.store.UpdateJobState(job.ID, job.State) //nolint:errcheck // best-effort
 				}
 			}
 		}

@@ -259,7 +259,7 @@ func outlineGeneric(path, displayPath string) (string, error) {
 
 // --- Symbols ---
 
-func analyzeSymbols(ctx context.Context, p analyzeParams, defaultDir string) (string, error) {
+func analyzeSymbols(_ context.Context, p analyzeParams, defaultDir string) (string, error) {
 	if p.Query == "" {
 		return "", fmt.Errorf("query is required for symbols action")
 	}

@@ -160,7 +160,7 @@ func (d *Dispatcher) PoolStats() WorkerPoolStats {
 
 // Methods returns all registered method names.
 func (d *Dispatcher) Methods() []string {
-	snap := d.snap.Load().(handlerSnapshot)
+	snap, _ := d.snap.Load().(handlerSnapshot) //nolint:errcheck // type guaranteed by atomic.Value usage
 	methods := make([]string, 0, len(snap))
 	for m := range snap {
 		methods = append(methods, m)
@@ -175,7 +175,7 @@ func (d *Dispatcher) Methods() []string {
 // The handler lookup is lock-free: it loads an immutable snapshot from
 // atomic.Value, avoiding RWMutex contention on every RPC call.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-	snap := d.snap.Load().(handlerSnapshot)
+	snap, _ := d.snap.Load().(handlerSnapshot) //nolint:errcheck // type guaranteed by atomic.Value usage
 	handler, ok := snap[req.Method]
 
 	if !ok {

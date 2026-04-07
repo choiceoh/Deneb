@@ -55,9 +55,9 @@ func ShouldSuggestCoordinator(message string) bool {
 
 	// Count distinct file paths mentioned in the message.
 	matches := filePathPattern.FindAllString(message, -1)
-	uniquePaths := make(map[string]bool)
+	uniquePaths := make(map[string]struct{})
 	for _, m := range matches {
-		uniquePaths[strings.TrimSpace(m)] = true
+		uniquePaths[strings.TrimSpace(m)] = struct{}{}
 	}
 	return len(uniquePaths) >= 2
 }

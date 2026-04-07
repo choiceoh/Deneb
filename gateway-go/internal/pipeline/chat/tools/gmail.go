@@ -45,7 +45,7 @@ func ToolGmail(deps GmailPipelineDeps) ToolFunc {
 			return "", err
 		}
 
-		client, err := gmail.GetClient()
+		client, err := gmail.DefaultClient()
 		if err != nil {
 			return fmt.Sprintf("Gmail 인증 정보를 찾을 수 없습니다: %s\n~/.deneb/credentials/에 gmail_client.json과 gmail_token.json을 설정하세요.", err), nil
 		}
@@ -74,7 +74,7 @@ func ToolGmail(deps GmailPipelineDeps) ToolFunc {
 // --- inbox: structured inbox summary ---
 
 func gmailInbox(ctx context.Context, client *gmail.Client, p GmailParams) (string, error) {
-	max := clampGmailMax(p.Max, 10)
+	maxResults := clampGmailMax(p.Max, 10)
 
 	type result struct {
 		msgs []gmail.MessageSummary
@@ -87,7 +87,7 @@ func gmailInbox(ctx context.Context, client *gmail.Client, p GmailParams) (strin
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		msgs, err := client.Search(ctx, "is:unread", max)
+		msgs, err := client.Search(ctx, "is:unread", maxResults)
 		unreadCh <- result{msgs, err}
 	}()
 	go func() {
@@ -133,9 +133,9 @@ func gmailSearch(ctx context.Context, client *gmail.Client, p GmailParams) (stri
 	if p.Query == "" {
 		return "", fmt.Errorf("query는 search 액션에 필수입니다")
 	}
-	max := clampGmailMax(p.Max, 10)
+	maxResults := clampGmailMax(p.Max, 10)
 
-	msgs, err := client.Search(ctx, p.Query, max)
+	msgs, err := client.Search(ctx, p.Query, maxResults)
 	if err != nil {
 		return "", err
 	}
@@ -285,9 +285,9 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineD
 		if query == "" {
 			query = "is:unread newer_than:1h"
 		}
-		max := clampGmailMax(p.Max, 5)
+		maxResults := clampGmailMax(p.Max, 5)
 		var err error
-		messages, err = client.Search(ctx, query, max)
+		messages, err = client.Search(ctx, query, maxResults)
 		if err != nil {
 			return "", fmt.Errorf("메일 검색 실패: %w", err)
 		}
@@ -375,12 +375,12 @@ func learnContact(email string) {
 }
 
 // clampGmailMax returns the max value clamped to [1, 50] with a given default.
-func clampGmailMax(max, defaultMax int) int {
-	if max <= 0 {
+func clampGmailMax(n, defaultMax int) int {
+	if n <= 0 {
 		return defaultMax
 	}
-	if max > 50 {
+	if n > 50 {
 		return 50
 	}
-	return max
+	return n
 }

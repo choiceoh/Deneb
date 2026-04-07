@@ -30,12 +30,12 @@ type InboundMetaContext struct {
 	AccountID      string
 	MessageSid     string
 	MessageSidFull string
-	SenderId       string
+	SenderID       string
 	SenderName     string
 	SenderUsername string
 	SenderTag      string
 	SenderE164     string
-	ReplyToId      string
+	ReplyToID      string
 
 	// Message context.
 	ConversationLabel string
@@ -49,7 +49,7 @@ type InboundMetaContext struct {
 
 	// Thread context.
 	ThreadLabel     string
-	MessageThreadId *int64
+	MessageThreadID *int64
 	IsForum         bool
 
 	// Reply/forward context.
@@ -144,8 +144,8 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 	convInfo := newOrderedMap()
 	if shouldIncludeConversationInfo {
 		convInfo.Set("message_id", resolvedMessageID)
-		convInfo.Set("reply_to_id", safeTrim(ctx.ReplyToId))
-		convInfo.Set("sender_id", safeTrim(ctx.SenderId))
+		convInfo.Set("reply_to_id", safeTrim(ctx.ReplyToID))
+		convInfo.Set("sender_id", safeTrim(ctx.SenderID))
 	}
 	if !isDirect {
 		convInfo.Set("conversation_label", safeTrim(ctx.ConversationLabel))
@@ -154,7 +154,7 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 		sender := firstNonEmpty(
 			safeTrim(ctx.SenderName),
 			safeTrim(ctx.SenderE164),
-			safeTrim(ctx.SenderId),
+			safeTrim(ctx.SenderID),
 			safeTrim(ctx.SenderUsername),
 		)
 		convInfo.Set("sender", sender)
@@ -169,8 +169,8 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 	convInfo.Set("group_channel", safeTrim(ctx.GroupChannel))
 	convInfo.Set("group_space", safeTrim(ctx.GroupSpace))
 	convInfo.Set("thread_label", safeTrim(ctx.ThreadLabel))
-	if ctx.MessageThreadId != nil {
-		convInfo.Set("topic_id", fmt.Sprintf("%d", *ctx.MessageThreadId))
+	if ctx.MessageThreadID != nil {
+		convInfo.Set("topic_id", fmt.Sprintf("%d", *ctx.MessageThreadID))
 	}
 	if ctx.IsForum {
 		convInfo.Set("is_forum", true)
@@ -202,7 +202,7 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 	if senderLabel != "" {
 		senderInfo := map[string]any{
 			"label":    senderLabel,
-			"id":       nilIfEmpty(safeTrim(ctx.SenderId)),
+			"id":       nilIfEmpty(safeTrim(ctx.SenderID)),
 			"name":     nilIfEmpty(safeTrim(ctx.SenderName)),
 			"username": nilIfEmpty(safeTrim(ctx.SenderUsername)),
 			"tag":      nilIfEmpty(safeTrim(ctx.SenderTag)),
@@ -294,7 +294,7 @@ func resolveSenderLabel(ctx *InboundMetaContext) string {
 	username := safeTrim(ctx.SenderUsername)
 	tag := safeTrim(ctx.SenderTag)
 	e164 := safeTrim(ctx.SenderE164)
-	id := safeTrim(ctx.SenderId)
+	id := safeTrim(ctx.SenderID)
 
 	// Determine display name (human-readable).
 	display := firstNonEmpty(name, username, tag)

@@ -37,10 +37,10 @@ type SkillCommandDispatchSpec struct {
 }
 
 // BuildSkillCommandSpecs builds slash command specs from eligible skill entries.
-func BuildSkillCommandSpecs(entries []SkillEntry, reserved map[string]bool) []SkillCommandSpec {
-	used := make(map[string]bool)
+func BuildSkillCommandSpecs(entries []SkillEntry, reserved map[string]struct{}) []SkillCommandSpec {
+	used := make(map[string]struct{})
 	for name := range reserved {
-		used[strings.ToLower(name)] = true
+		used[strings.ToLower(name)] = struct{}{}
 	}
 
 	var specs []SkillCommandSpec
@@ -53,7 +53,7 @@ func BuildSkillCommandSpecs(entries []SkillEntry, reserved map[string]bool) []Sk
 		rawName := entry.Skill.Name
 		base := sanitizeSkillCommandName(rawName)
 		unique := resolveUniqueSkillCommandName(base, used)
-		used[strings.ToLower(unique)] = true
+		used[strings.ToLower(unique)] = struct{}{}
 
 		rawDesc := entry.Skill.Description
 		if rawDesc == "" {
@@ -95,9 +95,9 @@ func sanitizeSkillCommandName(raw string) string {
 	return normalized
 }
 
-func resolveUniqueSkillCommandName(base string, used map[string]bool) string {
+func resolveUniqueSkillCommandName(base string, used map[string]struct{}) string {
 	normalizedBase := strings.ToLower(base)
-	if !used[normalizedBase] {
+	if _, ok := used[normalizedBase]; !ok {
 		return base
 	}
 	for i := 2; i < 1000; i++ {
@@ -111,7 +111,7 @@ func resolveUniqueSkillCommandName(base string, used map[string]bool) string {
 			trimmedBase = trimmedBase[:maxBase]
 		}
 		candidate := trimmedBase + suffix
-		if !used[strings.ToLower(candidate)] {
+		if _, ok := used[strings.ToLower(candidate)]; !ok {
 			return candidate
 		}
 	}

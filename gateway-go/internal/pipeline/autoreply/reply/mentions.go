@@ -28,11 +28,11 @@ func ExtractMentions(text string) []string {
 		return nil
 	}
 	var mentions []string
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	for _, m := range matches {
 		username := m[1]
-		if !seen[username] {
-			seen[username] = true
+		if _, ok := seen[username]; !ok {
+			seen[username] = struct{}{}
 			mentions = append(mentions, username)
 		}
 	}
@@ -134,12 +134,13 @@ func ResolveReplyThreading(payload types.ReplyPayload, msg *types.MsgContext) Re
 
 	// Check for explicit reply-to tag.
 	replyTo, current := tokens.ApplyReplyThreading(payload.Text, "")
-	if current {
+	switch {
+	case current:
 		threading.ReplyToCurrent = true
 		threading.ReplyToID = msg.MessageSid
-	} else if replyTo != "" {
+	case replyTo != "":
 		threading.ReplyToID = replyTo
-	} else if payload.ReplyToID != "" {
+	case payload.ReplyToID != "":
 		threading.ReplyToID = payload.ReplyToID
 	}
 

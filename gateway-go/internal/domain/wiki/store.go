@@ -176,7 +176,7 @@ func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []strin
 
 	// Add relPath to newly-related pages.
 	for _, target := range newRelated {
-		if oldSet[target] {
+		if _, ok := oldSet[target]; ok {
 			continue // already linked
 		}
 		s.addBacklink(target, relPath)
@@ -184,7 +184,7 @@ func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []strin
 
 	// Remove relPath from no-longer-related pages.
 	for _, target := range oldRelated {
-		if newSet[target] {
+		if _, ok := newSet[target]; ok {
 			continue // still linked
 		}
 		s.removeBacklink(target, relPath)
@@ -225,10 +225,10 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 	_ = s.writePageInternal(targetPath, page, true) // best-effort: related page update is non-critical
 }
 
-func toSet(ss []string) map[string]bool {
-	m := make(map[string]bool, len(ss))
+func toSet(ss []string) map[string]struct{} {
+	m := make(map[string]struct{}, len(ss))
 	for _, s := range ss {
-		m[s] = true
+		m[s] = struct{}{}
 	}
 	return m
 }
@@ -246,7 +246,7 @@ func (s *Store) ListPages(category string) ([]string, error) {
 	var pages []string
 	err := filepath.Walk(searchDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // skip errors
+			return nil //nolint:nilerr // skip inaccessible entries in walk
 		}
 		if info.IsDir() {
 			return nil
@@ -266,8 +266,8 @@ func (s *Store) ListPages(category string) ([]string, error) {
 	return pages, err
 }
 
-// GetIndex returns the cached master index.
-func (s *Store) GetIndex() *Index {
+// Index returns the cached master index.
+func (s *Store) Index() *Index {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.index
@@ -397,7 +397,8 @@ func (s *Store) loadOrCreateIndex() (*Index, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			idx = NewIndex()
-			return idx, idx.Save(indexPath)
+			err = idx.Save(indexPath)
+			return idx, err
 		}
 		return nil, err
 	}

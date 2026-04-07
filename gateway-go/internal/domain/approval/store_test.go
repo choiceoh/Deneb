@@ -145,7 +145,7 @@ func TestWaitForDecisionAlreadyResolved(t *testing.T) {
 func TestGlobalSnapshot(t *testing.T) {
 	s := NewStore()
 
-	snap := s.GetGlobalSnapshot()
+	snap := s.GlobalSnapshot()
 	if snap == nil {
 		t.Fatal("expected default global snapshot")
 	}
@@ -154,7 +154,7 @@ func TestGlobalSnapshot(t *testing.T) {
 	}
 
 	s.SetGlobalSnapshot(ApprovalsFile{Version: 2, GlobalDeny: []string{"rm"}}, "hash123")
-	snap = s.GetGlobalSnapshot()
+	snap = s.GlobalSnapshot()
 	if snap.File.Version != 2 {
 		t.Fatalf("expected version 2, got %d", snap.File.Version)
 	}

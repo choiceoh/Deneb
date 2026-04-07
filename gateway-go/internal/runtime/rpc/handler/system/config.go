@@ -130,7 +130,7 @@ func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 		// Write config to the default path.
 		cfgPath := config.ResolveConfigPath()
-		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0644); err != nil {
+		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
 			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
 		}
 
@@ -183,7 +183,7 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		}
 
 		cfgPath := config.ResolveConfigPath()
-		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0644); err != nil {
+		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
 			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
 		}
 
@@ -265,7 +265,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		}
 
 		cfgPath := config.ResolveConfigPath()
-		if err := os.WriteFile(cfgPath, merged, 0644); err != nil {
+		if err := os.WriteFile(cfgPath, merged, 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
 			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
 		}
 
@@ -290,7 +290,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 func configSchema(_ ConfigAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		schema := config.GetSchema()
+		schema := config.Schema()
 		resp := rpcutil.RespondOK(req.ID, schema)
 		return resp
 	}

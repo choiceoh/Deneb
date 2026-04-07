@@ -211,7 +211,7 @@ func skillListFiles(workspaceDir, name string) (string, error) {
 	var files []string
 	err = filepath.WalkDir(skillDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip errors
+			return nil //nolint:nilerr // skip inaccessible entries in walk
 		}
 		rel, _ := filepath.Rel(skillDir, path)
 		if rel == "." {
@@ -298,7 +298,7 @@ func fuzzyLineReplace(content, oldText, newText string) (string, error) {
 	matchStart := -1
 	for i := 0; i <= len(contentLines)-len(oldLines); i++ {
 		found := true
-		for j := 0; j < len(oldLines); j++ {
+		for j := range oldLines {
 			if strings.TrimSpace(contentLines[i+j]) != strings.TrimSpace(oldLines[j]) {
 				found = false
 				break

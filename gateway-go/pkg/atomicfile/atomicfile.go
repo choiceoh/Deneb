@@ -59,10 +59,10 @@ func WriteFile(path string, data []byte, opts *Options) error {
 	}
 	defer lockFd.Close()
 
-	if err := syscall.Flock(int(lockFd.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(lockFd.Fd()), syscall.LOCK_EX); err != nil { //nolint:gosec // G115 — Fd() returns a valid file descriptor, safe for syscall
 		return fmt.Errorf("atomicfile: flock %s: %w", lockPath, err)
 	}
-	defer syscall.Flock(int(lockFd.Fd()), syscall.LOCK_UN) //nolint:errcheck
+	defer syscall.Flock(int(lockFd.Fd()), syscall.LOCK_UN) //nolint:gosec,errcheck // G115 — Fd() returns a valid file descriptor //nolint:errcheck
 
 	// Write to a temp file in the same directory (same filesystem → atomic rename).
 	randBytes := make([]byte, 8)
@@ -117,5 +117,5 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0o644)
+	return os.WriteFile(dst, data, 0o600) //nolint:gosec // G306 — atomic file write, owner-only
 }

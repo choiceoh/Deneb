@@ -67,6 +67,8 @@ func (p *InboundProcessor) handleStatusDashboardCommand(chatID, sessionKey strin
 			statusIcon = "⛔"
 		case session.StatusTimeout:
 			statusIcon = "⏰"
+		default:
+			// StatusDone, StatusIdle, etc.
 		}
 		fmt.Fprintf(&b, "%s <b>상태:</b> %s\n", statusIcon, string(sess.Status))
 	}

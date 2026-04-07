@@ -156,8 +156,8 @@ func (s *Store) Save(store *CronStoreFile) error {
 	return nil
 }
 
-// GetJob returns a job by ID from the cached store, or nil if not found.
-func (s *Store) GetJob(id string) *StoreJob {
+// Job returns a job by ID from the cached store, or nil if not found.
+func (s *Store) Job(id string) *StoreJob {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cached == nil {

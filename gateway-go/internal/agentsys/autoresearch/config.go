@@ -347,9 +347,9 @@ func (c *Config) Validate() error {
 
 	// Validate constants definitions when override mode is active.
 	if c.IsConstantsMode() {
-		targetSet := make(map[string]bool, len(c.TargetFiles))
+		targetSet := make(map[string]struct{}, len(c.TargetFiles))
 		for _, tf := range c.TargetFiles {
-			targetSet[tf] = true
+			targetSet[tf] = struct{}{}
 		}
 		for i := range c.Constants {
 			cd := &c.Constants[i]
@@ -359,7 +359,7 @@ func (c *Config) Validate() error {
 			if cd.File == "" {
 				return fmt.Errorf("constants[%d] (%s): file is required", i, cd.Name)
 			}
-			if !targetSet[cd.File] {
+			if _, ok := targetSet[cd.File]; !ok {
 				return fmt.Errorf("constants[%d] (%s): file %q not in target_files", i, cd.Name, cd.File)
 			}
 			// Default type to "float" when empty — most constants are floats.
@@ -436,5 +436,5 @@ func SaveConfig(workdir string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	return os.WriteFile(configPath(workdir), data, 0o644)
+	return os.WriteFile(configPath(workdir), data, 0o600) //nolint:gosec // G306
 }

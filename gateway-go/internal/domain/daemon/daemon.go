@@ -203,7 +203,7 @@ func (d *Daemon) writePIDFile(info PIDInfo) error {
 		return err
 	}
 
-	return os.WriteFile(d.pidFile, data, 0o644)
+	return os.WriteFile(d.pidFile, data, 0o644) //nolint:gosec // G306 — world-readable PID file is intentional
 }
 
 func (d *Daemon) removePIDFile() error {

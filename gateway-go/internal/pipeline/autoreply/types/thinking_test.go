@@ -240,7 +240,7 @@ func TestNormalizeUsageDisplay(t *testing.T) {
 	}
 }
 
-func TestNormalizeProviderId(t *testing.T) {
+func TestNormalizeProviderID(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -256,9 +256,9 @@ func TestNormalizeProviderId(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			got := NormalizeProviderId(tc.input)
+			got := NormalizeProviderID(tc.input)
 			if got != tc.want {
-				t.Errorf("NormalizeProviderId(%q) = %q, want %q", tc.input, got, tc.want)
+				t.Errorf("NormalizeProviderID(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
 	}

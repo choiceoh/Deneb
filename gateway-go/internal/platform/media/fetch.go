@@ -107,7 +107,7 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", opts.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {
 		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: err.Error()}
 	}

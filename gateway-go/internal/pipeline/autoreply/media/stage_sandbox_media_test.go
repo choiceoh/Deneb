@@ -51,7 +51,7 @@ func TestIsAllowedLocalPath(t *testing.T) {
 }
 
 func TestAllocateStagedFileName(t *testing.T) {
-	usedNames := make(map[string]bool)
+	usedNames := make(map[string]struct{})
 
 	// First allocation.
 	name := allocateStagedFileName("/tmp/photo.jpg", usedNames)
@@ -79,7 +79,7 @@ func TestAllocateStagedFileName(t *testing.T) {
 }
 
 func TestAllocateStagedFileName_NoExtension(t *testing.T) {
-	usedNames := make(map[string]bool)
+	usedNames := make(map[string]struct{})
 	name := allocateStagedFileName("/tmp/README", usedNames)
 	if name != "README" {
 		t.Errorf("name = %q, want 'README'", name)

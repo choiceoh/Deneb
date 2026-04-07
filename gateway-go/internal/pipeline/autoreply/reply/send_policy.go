@@ -25,7 +25,7 @@ func NormalizeSendPolicy(raw string) (SendPolicy, bool) {
 }
 
 // IsSendAllowed returns true if the effective send policy allows sending.
-func IsSendAllowed(policy SendPolicy, parentPolicy SendPolicy) bool {
+func IsSendAllowed(policy, parentPolicy SendPolicy) bool {
 	switch policy {
 	case SendPolicyOff:
 		return false

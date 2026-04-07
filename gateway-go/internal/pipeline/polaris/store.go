@@ -320,8 +320,8 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 	return hits, rows.Err()
 }
 
-// GetSummaryByID loads a single summary node by its ID.
-func (s *Store) GetSummaryByID(id int64) (*SummaryNode, error) {
+// SummaryByID loads a single summary node by its ID.
+func (s *Store) SummaryByID(id int64) (*SummaryNode, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

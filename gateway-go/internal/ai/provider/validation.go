@@ -35,7 +35,7 @@ type RegisteredProviderDef struct {
 	DocsPath             string                  `json:"docsPath,omitempty"`
 	Aliases              []string                `json:"aliases,omitempty"`
 	EnvVars              []string                `json:"envVars,omitempty"`
-	DeprecatedProfileIds []string                `json:"deprecatedProfileIds,omitempty"`
+	DeprecatedProfileIDs []string                `json:"deprecatedProfileIds,omitempty"`
 	Auth                 []ProviderAuthMethodDef `json:"auth"`
 	HasCatalog           bool                    `json:"hasCatalog,omitempty"`
 	HasDiscovery         bool                    `json:"hasDiscovery,omitempty"`
@@ -54,14 +54,14 @@ func normalizeTextList(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var result []string
 	for _, v := range values {
 		trimmed := strings.TrimSpace(v)
-		if trimmed == "" || seen[trimmed] {
+		if _, ok := seen[trimmed]; trimmed == "" || ok {
 			continue
 		}
-		seen[trimmed] = true
+		seen[trimmed] = struct{}{}
 		result = append(result, trimmed)
 	}
 	if len(result) == 0 {
@@ -75,7 +75,7 @@ func normalizeTextList(values []string) []string {
 // NormalizeProviderAuthMethods validates and normalizes auth method definitions.
 func NormalizeProviderAuthMethods(params NormalizeAuthParams) ([]ProviderAuthMethodDef, []ProviderDiagnostic) {
 	var diagnostics []ProviderDiagnostic
-	seenIDs := make(map[string]bool)
+	seenIDs := make(map[string]struct{})
 	var normalized []ProviderAuthMethodDef
 
 	for _, method := range params.Auth {
@@ -89,7 +89,7 @@ func NormalizeProviderAuthMethods(params NormalizeAuthParams) ([]ProviderAuthMet
 			})
 			continue
 		}
-		if seenIDs[methodID] {
+		if _, ok := seenIDs[methodID]; ok {
 			diagnostics = append(diagnostics, ProviderDiagnostic{
 				Level:    "error",
 				PluginID: params.PluginID,
@@ -98,7 +98,7 @@ func NormalizeProviderAuthMethods(params NormalizeAuthParams) ([]ProviderAuthMet
 			})
 			continue
 		}
-		seenIDs[methodID] = true
+		seenIDs[methodID] = struct{}{}
 
 		label := normalizeText(method.Label)
 		if label == "" {
@@ -181,8 +181,8 @@ func NormalizeRegisteredProvider(params NormalizeProviderParams) (*RegisteredPro
 	if v := normalizeTextList(params.Provider.Aliases); v != nil {
 		result.Aliases = v
 	}
-	if v := normalizeTextList(params.Provider.DeprecatedProfileIds); v != nil {
-		result.DeprecatedProfileIds = v
+	if v := normalizeTextList(params.Provider.DeprecatedProfileIDs); v != nil {
+		result.DeprecatedProfileIDs = v
 	}
 	if v := normalizeTextList(params.Provider.EnvVars); v != nil {
 		result.EnvVars = v
@@ -198,15 +198,4 @@ type NormalizeProviderParams struct {
 	PluginID string
 	Source   string
 	Provider RegisteredProviderDef
-}
-
-// --- Utility ---
-
-func hasAuthMethod(auth []ProviderAuthMethodDef, methodID string) bool {
-	for _, m := range auth {
-		if m.ID == methodID {
-			return true
-		}
-	}
-	return false
 }

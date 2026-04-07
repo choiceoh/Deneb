@@ -68,7 +68,7 @@ func emitTelegramLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.E
 	if deps.InternalHooks != nil {
 		env := map[string]string{"DENEB_CHANNEL_ID": id}
 		go func() {
-			defer func() { recover() }()
+			defer func() { recover() }() //nolint:errcheck // fire-and-forget panic recovery
 			deps.InternalHooks.TriggerFromEvent(context.Background(), hookEvent, "", env)
 		}()
 	}
@@ -139,7 +139,7 @@ func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if p.ID != "telegram" {
 			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
 		}
-		deps.TelegramPlugin.Stop(ctx)
+		deps.TelegramPlugin.Stop(ctx) //nolint:errcheck // best-effort cleanup before restart
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
 			return rpcerr.Unavailable("channel restart failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
 		}

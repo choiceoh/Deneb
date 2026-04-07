@@ -103,6 +103,9 @@ func RunAudit(reg *Registry, opts AuditOptions) *AuditSummary {
 				Detail:   "task lost (backing session disappeared)",
 				AgeMs:    age,
 			})
+
+		default:
+			// Terminal statuses: no audit action needed.
 		}
 
 		// Check delivery failures on non-silent tasks.

@@ -95,14 +95,15 @@ func NewToolLoopDetector(cfg ToolLoopConfig, logger *slog.Logger) *ToolLoopDetec
 
 // knownPollingTools are tools that naturally repeat but should only be flagged
 // when their results don't change (no progress).
-var knownPollingTools = map[string]bool{
-	"process": true,
-	"exec":    true,
+var knownPollingTools = map[string]struct{}{
+	"process": {},
+	"exec":    {},
 }
 
 // isPollingInvocation checks if a tool call is a polling/status check.
 func isPollingInvocation(name string, _ []byte) bool {
-	return knownPollingTools[name]
+	_, ok := knownPollingTools[name]
+	return ok
 }
 
 // RecordAndCheck adds a tool call to history and checks for loops.
@@ -199,7 +200,7 @@ func (d *ToolLoopDetector) RecordAndCheck(name string, argsJSON []byte) ToolLoop
 
 // RecordResult updates the last history entry with the tool's result hash.
 // Call this AFTER executing the tool.
-func (d *ToolLoopDetector) RecordResult(name string, result string, isError bool) {
+func (d *ToolLoopDetector) RecordResult(name, result string, isError bool) {
 	if !d.cfg.Enabled {
 		return
 	}

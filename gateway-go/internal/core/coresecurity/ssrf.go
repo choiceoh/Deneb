@@ -8,22 +8,22 @@ import (
 )
 
 // blockedSchemes are URL schemes that should never be followed.
-var blockedSchemes = map[string]bool{
-	"file": true, "ftp": true, "gopher": true, "dict": true,
-	"data": true, "ldap": true, "ldaps": true, "tftp": true, "telnet": true,
+var blockedSchemes = map[string]struct{}{
+	"file": {}, "ftp": {}, "gopher": {}, "dict": {},
+	"data": {}, "ldap": {}, "ldaps": {}, "tftp": {}, "telnet": {},
 }
 
 // blockedHosts are hostnames that should not be accessed (SSRF protection).
-var blockedHosts = map[string]bool{
-	"localhost": true,
-	"127.0.0.1": true,
-	"0.0.0.0":   true,
-	"[::1]":     true,
-	"::1":       true,
-	"::0":       true,
-	"0000:0000:0000:0000:0000:0000:0000:0001": true,
-	"metadata.google.internal":                true,
-	"169.254.169.254":                         true,
+var blockedHosts = map[string]struct{}{
+	"localhost": {},
+	"127.0.0.1": {},
+	"0.0.0.0":   {},
+	"[::1]":     {},
+	"::1":       {},
+	"::0":       {},
+	"0000:0000:0000:0000:0000:0000:0000:0001": {},
+	"metadata.google.internal":                {},
+	"169.254.169.254":                         {},
 }
 
 // IsSafeURL validates a URL for SSRF safety. Blocks private/loopback IPs,
@@ -41,7 +41,7 @@ func IsSafeURL(rawURL string) bool {
 		return false
 	}
 	scheme := strings.ToLower(u.Scheme)
-	if blockedSchemes[scheme] {
+	if _, ok := blockedSchemes[scheme]; ok {
 		return false
 	}
 	if scheme != "http" && scheme != "https" {
@@ -52,7 +52,7 @@ func IsSafeURL(rawURL string) bool {
 	if host == "" {
 		return false
 	}
-	if blockedHosts[host] {
+	if _, ok := blockedHosts[host]; ok {
 		return false
 	}
 
@@ -61,7 +61,7 @@ func IsSafeURL(rawURL string) bool {
 	hostNormalized := stripIPv6ZoneID(hostNoBrackets)
 
 	// Re-check after normalization (catches [::1] → ::1, zone-id variants).
-	if blockedHosts[hostNormalized] {
+	if _, ok := blockedHosts[hostNormalized]; ok {
 		return false
 	}
 
@@ -198,7 +198,7 @@ func isNumericPrivateIPv4(host string) bool {
 // parseOctetMixedRadix parses a single octet that may be decimal, octal
 // (0-prefix), or hex (0x-prefix). Matches Rust parse_octet_mixed_radix.
 func parseOctetMixedRadix(s string) (byte, bool) {
-	if len(s) == 0 {
+	if s == "" {
 		return 0, false
 	}
 	// Hex: 0x or 0X prefix.
@@ -228,8 +228,8 @@ func parseOctetMixedRadix(s string) (byte, bool) {
 // isPrivateIPv4U32 checks if a 32-bit IPv4 address falls in private/loopback/
 // link-local ranges. Matches Rust is_private_ipv4_u32.
 func isPrivateIPv4U32(ip uint32) bool {
-	a := byte(ip >> 24)
-	b := byte(ip >> 16)
+	a := byte(ip >> 24) //nolint:gosec // G115 — extracting individual bytes from uint32 IPv4 address
+	b := byte(ip >> 16) //nolint:gosec // G115 — extracting individual bytes from uint32 IPv4 address
 
 	switch {
 	case a == 127: // 127.0.0.0/8 (loopback)
@@ -251,10 +251,10 @@ func isPrivateIPv4U32(ip uint32) bool {
 }
 
 func isAllDigits(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] < '0' || s[i] > '9' {
 			return false
 		}
 	}
-	return len(s) > 0
+	return s != ""
 }

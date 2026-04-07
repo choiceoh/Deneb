@@ -92,7 +92,7 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 		return svc.Server.Run(ctx)
 	}, log.Logger)
 
-	d.Stop()
+	d.Stop() //nolint:errcheck // best-effort cleanup
 	return exitCode
 }
 
@@ -131,7 +131,7 @@ func isLocalAIReachable(baseURL string) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", http.NoBody)
 	if err != nil {
 		return false
 	}

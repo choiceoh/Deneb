@@ -62,12 +62,12 @@ func dedupeAndSort(input []string) []string {
 	if len(input) == 0 {
 		return input
 	}
-	seen := make(map[string]bool, len(input))
+	seen := make(map[string]struct{}, len(input))
 	var unique []string
 	for _, s := range input {
-		if !seen[s] {
+		if _, ok := seen[s]; !ok {
 			unique = append(unique, s)
-			seen[s] = true
+			seen[s] = struct{}{}
 		}
 	}
 	sort.Strings(unique)

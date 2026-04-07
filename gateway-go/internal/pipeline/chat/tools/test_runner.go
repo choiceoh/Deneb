@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -481,7 +482,8 @@ func skipIcon() string {
 }
 
 func exitCodeFromError(err error) string {
-	if exitErr, ok := err.(*exec.ExitError); ok {
+	exitErr := &exec.ExitError{}
+	if errors.As(err, &exitErr) {
 		return fmt.Sprintf("%d", exitErr.ExitCode())
 	}
 	return err.Error()

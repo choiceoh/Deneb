@@ -74,7 +74,7 @@ func ToolGateway(repoDir string) ToolFunc {
 				return "Failed to serialize patched config: " + err.Error(), nil
 			}
 			cfgPath := config.ResolveConfigPath()
-			if err := os.WriteFile(cfgPath, merged, 0644); err != nil {
+			if err := os.WriteFile(cfgPath, merged, 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
 				return "Failed to write config: " + err.Error(), nil
 			}
 			return fmt.Sprintf("Config patched successfully. Written to %s", cfgPath), nil
@@ -88,7 +88,7 @@ func ToolGateway(repoDir string) ToolFunc {
 				return "Failed to serialize config: " + err.Error(), nil
 			}
 			cfgPath := config.ResolveConfigPath()
-			if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+			if err := os.WriteFile(cfgPath, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
 				return "Failed to write config: " + err.Error(), nil
 			}
 			return fmt.Sprintf("Config applied successfully. Written to %s", cfgPath), nil
@@ -141,7 +141,7 @@ func ToolGateway(repoDir string) ToolFunc {
 				"updatedAt": time.Now().Format(time.RFC3339),
 			}
 			sentinelData, _ := json.Marshal(sentinel)
-			if err := os.WriteFile(sentinelPath, sentinelData, 0644); err != nil {
+			if err := os.WriteFile(sentinelPath, sentinelData, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 				slog.Warn("gateway: failed to write update sentinel", "path", sentinelPath, "err", err)
 			}
 

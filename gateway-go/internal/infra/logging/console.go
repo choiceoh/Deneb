@@ -91,7 +91,7 @@ func (h *ConsoleHandler) Enabled(_ context.Context, level slog.Level) bool {
 
 // Handle formats and writes a log record.
 func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
-	bp := bufPool.Get().(*[]byte)
+	bp := bufPool.Get().(*[]byte) //nolint:errcheck // type is guaranteed by pool
 	buf := (*bp)[:0]
 
 	t := r.Time
@@ -242,14 +242,14 @@ const continuationIndent = "           " // 11 spaces: 8 (time) + 1 + 1 (│) + 
 // If the key starts with "\n", the attr is rendered on a new indented line
 // (the "\n" prefix is stripped from the displayed key).
 // The "error" key gets special red highlighting for quick scanning.
-func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr, isErr bool) []byte {
+func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr, _ bool) []byte {
 	a.Value = a.Value.Resolve()
 	if a.Equal(slog.Attr{}) {
 		return buf
 	}
 
 	// Continuation-line attrs: start a new line aligned past the timestamp+bar.
-	if len(a.Key) > 0 && a.Key[0] == '\n' {
+	if a.Key != "" && a.Key[0] == '\n' {
 		a.Key = a.Key[1:]
 		buf = append(buf, '\n')
 		buf = append(buf, continuationIndent...)
@@ -340,10 +340,10 @@ func needsQuote(s string) bool {
 
 // appendTimestamp writes "HH:MM:SS" to buf.
 func appendTimestamp(buf []byte, t time.Time) []byte {
-	hour, min, sec := t.Clock()
+	hour, minute, sec := t.Clock()
 	buf = appendTwoDigits(buf, hour)
 	buf = append(buf, ':')
-	buf = appendTwoDigits(buf, min)
+	buf = appendTwoDigits(buf, minute)
 	buf = append(buf, ':')
 	buf = appendTwoDigits(buf, sec)
 	return buf
@@ -378,8 +378,8 @@ func levelBarStyle(l slog.Level) string {
 }
 
 func appendTwoDigits(buf []byte, n int) []byte {
-	buf = append(buf, byte('0'+n/10))
-	buf = append(buf, byte('0'+n%10))
+	buf = append(buf, byte('0'+n/10)) //nolint:gosec // G115 — n is 0-59 (time digit), safe
+	buf = append(buf, byte('0'+n%10)) //nolint:gosec // G115 — n is 0-59 (time digit), safe
 	return buf
 }
 

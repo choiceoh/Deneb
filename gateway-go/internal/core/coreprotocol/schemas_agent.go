@@ -8,7 +8,7 @@ func validateSendParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj, _ := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"to", "message", "mediaUrl", "mediaUrls", "channel", "accountId",
 		"agentId", "threadId", "sessionKey", "idempotencyKey",
@@ -50,7 +50,7 @@ func validateSendParams(value any, path string, errors *[]ValidationError) {
 func checkPollOptions(v any, p string, e *[]ValidationError) {
 	if CheckArray(v, p, e) {
 		CheckMinItems(v, p, 2, e)
-		arr := v.([]any)
+		arr, _ := v.([]any) //nolint:errcheck // type guaranteed by CheckArray above
 		if len(arr) > 12 {
 			*e = append(*e, ValidationError{
 				Path: p, Message: "must NOT have more than 12 items", Keyword: "maxItems",
@@ -66,7 +66,7 @@ func validatePollParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj, _ := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"to", "question", "options", "maxSelections", "durationSeconds",
 		"durationHours", "silent", "isAnonymous", "threadId", "channel",
@@ -116,7 +116,7 @@ func validateAgentParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj, _ := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"message", "agentId", "provider", "model", "to", "replyTo",
 		"sessionId", "sessionKey", "thinking", "deliver", "attachments",
@@ -213,7 +213,7 @@ func validateAgentIdentityParams(value any, path string, errors *[]ValidationErr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj, _ := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId", "sessionKey"}, path, errors)
 	CheckOptional(obj, "agentId", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckNonEmptyString(v, p, e)
@@ -229,7 +229,7 @@ func validateAgentWaitParams(value any, path string, errors *[]ValidationError) 
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj, _ := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"runId", "timeoutMs"}, path, errors)
 	if CheckRequired(obj, "runId", path, errors) {
 		CheckNonEmptyString(obj["runId"], path+"/runId", errors)
@@ -245,7 +245,7 @@ func validateWakeParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj, _ := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"mode", "text"}, path, errors)
 	if CheckRequired(obj, "mode", path, errors) {
 		CheckStringEnum(obj["mode"], path+"/mode", []string{"now", "next-heartbeat"}, errors)

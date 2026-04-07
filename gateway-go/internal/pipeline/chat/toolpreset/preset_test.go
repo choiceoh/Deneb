@@ -9,13 +9,13 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	}
 	// Researcher should have read-only tools.
 	for _, name := range []string{"read", "grep", "find", "tree", "diff", "analyze", "web"} {
-		if !allowed[name] {
+		if _, ok := allowed[name]; !ok {
 			t.Errorf("researcher preset should include %q", name)
 		}
 	}
 	// Researcher should NOT have write tools.
 	for _, name := range []string{"write", "edit", "exec", "git", "multi_edit"} {
-		if allowed[name] {
+		if _, ok := allowed[name]; ok {
 			t.Errorf("researcher preset should NOT include %q", name)
 		}
 	}
@@ -27,13 +27,13 @@ func TestAllowedTools_Implementer(t *testing.T) {
 		t.Fatal("implementer preset should return non-nil allowed set")
 	}
 	for _, name := range []string{"read", "write", "edit", "multi_edit", "exec", "test", "git", "apply_patch"} {
-		if !allowed[name] {
+		if _, ok := allowed[name]; !ok {
 			t.Errorf("implementer preset should include %q", name)
 		}
 	}
 	// Implementer should NOT have session/orchestration tools.
 	for _, name := range []string{"sessions_spawn", "subagents"} {
-		if allowed[name] {
+		if _, ok := allowed[name]; ok {
 			t.Errorf("implementer preset should NOT include %q", name)
 		}
 	}
@@ -45,13 +45,13 @@ func TestAllowedTools_Verifier(t *testing.T) {
 		t.Fatal("verifier preset should return non-nil allowed set")
 	}
 	for _, name := range []string{"read", "test", "exec", "diff", "analyze"} {
-		if !allowed[name] {
+		if _, ok := allowed[name]; !ok {
 			t.Errorf("verifier preset should include %q", name)
 		}
 	}
 	// Verifier should NOT have write tools.
 	for _, name := range []string{"write", "edit", "git"} {
-		if allowed[name] {
+		if _, ok := allowed[name]; ok {
 			t.Errorf("verifier preset should NOT include %q", name)
 		}
 	}
@@ -63,13 +63,13 @@ func TestAllowedTools_Coordinator(t *testing.T) {
 		t.Fatal("coordinator preset should return non-nil allowed set")
 	}
 	for _, name := range []string{"sessions_spawn", "subagents", "sessions_list", "read", "grep", "find"} {
-		if !allowed[name] {
+		if _, ok := allowed[name]; !ok {
 			t.Errorf("coordinator preset should include %q", name)
 		}
 	}
 	// Coordinator should NOT have write/exec tools.
 	for _, name := range []string{"write", "edit", "exec", "git", "test"} {
-		if allowed[name] {
+		if _, ok := allowed[name]; ok {
 			t.Errorf("coordinator preset should NOT include %q", name)
 		}
 	}
@@ -81,13 +81,13 @@ func TestAllowedTools_Conversation(t *testing.T) {
 		t.Fatal("conversation preset should return non-nil allowed set")
 	}
 	for _, name := range []string{"read", "web", "http", "wiki", "fetch_tools"} {
-		if !allowed[name] {
+		if _, ok := allowed[name]; !ok {
 			t.Errorf("conversation preset should include %q", name)
 		}
 	}
 	// Conversation should NOT have write/exec/code tools.
 	for _, name := range []string{"write", "edit", "exec", "git", "grep", "find"} {
-		if allowed[name] {
+		if _, ok := allowed[name]; ok {
 			t.Errorf("conversation preset should NOT include %q", name)
 		}
 	}

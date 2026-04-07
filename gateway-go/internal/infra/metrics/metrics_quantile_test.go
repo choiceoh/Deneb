@@ -10,7 +10,7 @@ func TestHistogramQuantiles(t *testing.T) {
 	h := NewHistogram("test_duration", "test", []float64{0.1, 0.5, 1, 5, 10}, "method")
 
 	// Record observations: 10 values centered around 0.3s.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		h.Observe(0.3, "foo")
 	}
 	// Add 1 slow outlier at 8s.

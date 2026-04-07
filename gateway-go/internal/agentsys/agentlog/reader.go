@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"io"
 	"os"
 	"strings"
 )
@@ -87,17 +86,14 @@ func readAllEntries(path string) []LogEntry {
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		if len(strings.TrimSpace(string(line))) == 0 {
+		if strings.TrimSpace(string(line)) == "" {
 			continue
 		}
 		dec := json.NewDecoder(bytes.NewReader(line))
 		for {
 			var entry LogEntry
 			if err := dec.Decode(&entry); err != nil {
-				if err != io.EOF {
-					// skip malformed tail
-				}
-				break
+				break // skip malformed tail (or EOF)
 			}
 			entries = append(entries, entry)
 		}

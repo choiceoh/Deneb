@@ -46,11 +46,11 @@ func IsYouTubeURL(text string) bool {
 func ExtractYouTubeURLs(text string) []string {
 	matches := youtubeURLPattern.FindAllString(text, 5)
 	// Deduplicate.
-	seen := make(map[string]bool, len(matches))
+	seen := make(map[string]struct{}, len(matches))
 	var urls []string
 	for _, u := range matches {
-		if !seen[u] {
-			seen[u] = true
+		if _, ok := seen[u]; !ok {
+			seen[u] = struct{}{}
 			urls = append(urls, u)
 		}
 	}
@@ -184,7 +184,7 @@ func fetchYouTubeMetadata(ctx context.Context, ytdlpPath, videoURL string) (*ytM
 // downloadSubtitles downloads subtitles in preferred language order and returns
 // the transcript text and language code.
 // Preference: ko manual → en manual → ko auto → en auto → any auto.
-func downloadSubtitles(ctx context.Context, ytdlpPath, videoURL, tmpDir string) (string, string, error) {
+func downloadSubtitles(ctx context.Context, ytdlpPath, videoURL, tmpDir string) (string, string, error) { //nolint:gocritic // unnamedResult — naming would shadow local vars
 	// Try manual subtitles first (ko, then en).
 	for _, lang := range []string{"ko", "en"} {
 		text, err := tryDownloadSubs(ctx, ytdlpPath, videoURL, tmpDir, lang, false)
@@ -274,7 +274,7 @@ func cleanSubtitleText(raw string) string {
 	var prevLine string
 
 	// Patterns to skip.
-	timestampRe := regexp.MustCompile(`^\d{2}:\d{2}[:\.]`)
+	timestampRe := regexp.MustCompile(`^\d{2}:\d{2}[:.]`)
 	tagRe := regexp.MustCompile(`<[^>]+>`)
 	positionRe := regexp.MustCompile(`(?i)^(WEBVTT|Kind:|Language:|NOTE\b)`)
 
@@ -323,7 +323,7 @@ func isNumericLine(s string) bool {
 			return false
 		}
 	}
-	return len(s) > 0
+	return s != ""
 }
 
 // formatDuration converts seconds to "HH:MM:SS" or "MM:SS".

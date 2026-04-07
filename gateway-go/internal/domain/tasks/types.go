@@ -36,8 +36,9 @@ func (s TaskStatus) IsTerminal() bool {
 	switch s {
 	case StatusSucceeded, StatusFailed, StatusTimedOut, StatusCancelled, StatusLost:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 // IsActive returns true if the task is still in progress.

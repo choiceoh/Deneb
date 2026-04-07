@@ -128,6 +128,8 @@ func IsFallbackTrigger(err error) bool {
 		switch errno {
 		case syscall.ETIMEDOUT, syscall.ENETUNREACH, syscall.EHOSTUNREACH, syscall.ECONNREFUSED:
 			return true
+		default:
+			// Other errno values are not transient network errors.
 		}
 	}
 

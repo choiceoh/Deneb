@@ -15,7 +15,7 @@ func TestToolLoopDetector_GenericRepeat(t *testing.T) {
 	args := []byte(`{"path": "/foo/bar"}`)
 
 	// First 2 calls: no detection.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		r := d.RecordAndCheck("read", args)
 		if r.Stuck {
 			t.Fatalf("unexpected stuck at call %d", i+1)
@@ -47,7 +47,7 @@ func TestToolLoopDetector_DifferentArgs(t *testing.T) {
 	d := NewToolLoopDetector(cfg, slog.Default())
 
 	// Different args should not trigger.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		args := []byte(`{"path": "` + string(rune('a'+i)) + `"}`)
 		r := d.RecordAndCheck("read", args)
 		if r.Stuck {
@@ -66,7 +66,7 @@ func TestToolLoopDetector_PollNoProgress(t *testing.T) {
 	args := []byte(`{"action": "poll", "pid": 123}`)
 
 	// Simulate polling with identical results.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		r := d.RecordAndCheck("process", args)
 		if r.Stuck {
 			t.Fatalf("unexpected stuck at poll %d", i+1)
@@ -89,7 +89,7 @@ func TestToolLoopDetector_PollWithProgress(t *testing.T) {
 	args := []byte(`{"action": "poll", "pid": 123}`)
 
 	// Polling with different results should not trigger.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		r := d.RecordAndCheck("process", args)
 		if r.Stuck {
 			t.Fatalf("unexpected stuck at poll %d", i+1)
@@ -109,7 +109,7 @@ func TestToolLoopDetector_PingPong(t *testing.T) {
 	argsB := []byte(`{"file": "b.go"}`)
 
 	// Alternate A and B (2 pairs = 4 calls, below threshold).
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		r := d.RecordAndCheck("read", argsA)
 		if r.Stuck {
 			t.Fatalf("unexpected stuck at A call %d", i+1)
@@ -145,7 +145,7 @@ func TestToolLoopDetector_GlobalCircuitBreaker(t *testing.T) {
 
 	args := []byte(`{"path": "/status"}`)
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		r := d.RecordAndCheck("read", args)
 		if r.Stuck {
 			t.Fatalf("unexpected stuck at call %d", i+1)
@@ -165,7 +165,7 @@ func TestToolLoopDetector_Disabled(t *testing.T) {
 	d := NewToolLoopDetector(cfg, slog.Default())
 
 	args := []byte(`{"x": 1}`)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		r := d.RecordAndCheck("read", args)
 		if r.Stuck {
 			t.Fatal("detector should be disabled")
@@ -184,12 +184,12 @@ func TestToolLoopDetector_HistoryWindowSlides(t *testing.T) {
 	args := []byte(`{"x": 1}`)
 
 	// Fill history with 3 identical calls.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		d.RecordAndCheck("read", args)
 	}
 
 	// Add 3 different calls to push old ones out.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		d.RecordAndCheck("write", []byte(`{"y": `+string(rune('0'+i))+`}`))
 	}
 

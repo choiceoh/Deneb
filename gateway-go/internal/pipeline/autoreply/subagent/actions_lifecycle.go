@@ -237,16 +237,17 @@ func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpaw
 	var model, thinking, toolPreset string
 
 	for i := 1; i < len(restTokens); i++ {
-		if restTokens[i] == "--model" && i+1 < len(restTokens) {
+		switch {
+		case restTokens[i] == "--model" && i+1 < len(restTokens):
 			i++
 			model = restTokens[i]
-		} else if restTokens[i] == "--thinking" && i+1 < len(restTokens) {
+		case restTokens[i] == "--thinking" && i+1 < len(restTokens):
 			i++
 			thinking = restTokens[i]
-		} else if restTokens[i] == "--tool-preset" && i+1 < len(restTokens) {
+		case restTokens[i] == "--tool-preset" && i+1 < len(restTokens):
 			i++
 			toolPreset = restTokens[i]
-		} else {
+		default:
 			taskParts = append(taskParts, restTokens[i])
 		}
 	}

@@ -58,26 +58,25 @@ type ResponsePrefixParams struct {
 
 func formatFloat(f float64, prec int) string {
 	s := strings.TrimRight(strings.TrimRight(
-		strings.Replace(
-			strings.Replace(
-				strings.Replace(
-					formatFloatRaw(f, prec), ".", ".", 1),
-				",", "", -1),
-			" ", "", -1),
+		strings.ReplaceAll(
+			strings.ReplaceAll(
+				formatFloatRaw(f, prec),
+				",", ""),
+			" ", ""),
 		"0"), ".")
 	return s
 }
 
 func formatFloatRaw(f float64, prec int) string {
 	if prec <= 0 {
-		return strings.Split(strings.Replace(
-			strings.Replace(
+		return strings.Split(strings.ReplaceAll(
+			strings.ReplaceAll(
 				strings.TrimRight(
 					strings.TrimRight(
 						formatFloatSimple(f), "0"),
 					"."),
-				",", "", -1),
-			" ", "", -1), ".")[0]
+				",", ""),
+			" ", ""), ".")[0]
 	}
 	return formatFloatSimple(f)
 }

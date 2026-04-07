@@ -38,7 +38,7 @@ func LinkTaskToFlow(reg *Registry, taskID, flowID string) error {
 	if t == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
-	f := reg.GetFlow(flowID)
+	f := reg.Flow(flowID)
 	if f == nil {
 		return fmt.Errorf("flow not found: %s", flowID)
 	}
@@ -53,7 +53,7 @@ func LinkTaskToFlow(reg *Registry, taskID, flowID string) error {
 
 // CancelFlow cancels a flow and all its active tasks, recording audit events.
 func CancelFlow(reg *Registry, flowID string) (int, error) {
-	f := reg.GetFlow(flowID)
+	f := reg.Flow(flowID)
 	if f == nil {
 		return 0, fmt.Errorf("flow not found: %s", flowID)
 	}
@@ -81,7 +81,7 @@ func CancelFlow(reg *Registry, flowID string) (int, error) {
 
 // ResumeBlockedFlow unblocks a flow by resuming all blocked tasks in it.
 func ResumeBlockedFlow(reg *Registry, flowID string) (int, error) {
-	f := reg.GetFlow(flowID)
+	f := reg.Flow(flowID)
 	if f == nil {
 		return 0, fmt.Errorf("flow not found: %s", flowID)
 	}

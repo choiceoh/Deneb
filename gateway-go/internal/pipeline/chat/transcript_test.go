@@ -44,7 +44,7 @@ func TestFileTranscriptStore_LoadWithLimit(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFileTranscriptStore(dir)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		store.Append("session", NewTextChatMessage("user", "msg", 0))
 	}
 

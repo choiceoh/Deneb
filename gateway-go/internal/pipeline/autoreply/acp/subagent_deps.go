@@ -118,7 +118,7 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 
 	// Create session state if SaveSession is available.
 	if d.SaveSession != nil {
-		session := &types.SessionState{
+		sess := &types.SessionState{
 			SessionOrigin: types.SessionOrigin{
 				SessionKey: sessionKey,
 				Channel:    "acp",
@@ -130,7 +130,7 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 			ToolPreset:      params.ToolPreset,
 			GroupActivation: types.ActivationAlways,
 		}
-		if err := d.SaveSession(session); err != nil {
+		if err := d.SaveSession(sess); err != nil {
 			d.logger().Warn("failed to save subagent session",
 				"agentId", agentID,
 				"error", err,

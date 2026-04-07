@@ -20,7 +20,7 @@ const maxShortFieldLen = 256
 // ValidateFrame validates a JSON string as a gateway frame.
 // Returns nil on success, or a FrameError describing the problem.
 func ValidateFrame(jsonStr string) error {
-	if len(jsonStr) == 0 {
+	if jsonStr == "" {
 		return &FrameError{Kind: "invalid_json", Message: "invalid JSON: unexpected end of input"}
 	}
 

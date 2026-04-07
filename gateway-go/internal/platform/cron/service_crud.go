@@ -95,9 +95,9 @@ func (s *Service) ListPage(opts ListPageOptions) ListPageResult {
 	}
 }
 
-// GetJob returns a single job by ID.
-func (s *Service) GetJob(id string) *StoreJob {
-	return s.store.GetJob(id)
+// Job returns a single job by ID.
+func (s *Service) Job(id string) *StoreJob {
+	return s.store.Job(id)
 }
 
 // Add creates a new cron job, saves it, and schedules it.
@@ -134,7 +134,7 @@ func (s *Service) Update(ctx context.Context, id string, patch func(*StoreJob)) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	job := s.store.GetJob(id)
+	job := s.store.Job(id)
 	if job == nil {
 		return fmt.Errorf("job %q not found", id)
 	}
@@ -175,7 +175,7 @@ func (s *Service) Remove(id string) error {
 
 // Run executes a job immediately (or only if due, depending on mode).
 func (s *Service) Run(ctx context.Context, id string, mode string) (*RunOutcome, error) {
-	job := s.store.GetJob(id)
+	job := s.store.Job(id)
 	if job == nil {
 		return nil, fmt.Errorf("job %q not found", id)
 	}

@@ -89,7 +89,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	store := newMemTranscriptStore()
 
 	// Populate with messages.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		msg := NewTextChatMessage("user", fmt.Sprintf("message %d", i), int64(i*1000))
 		store.Append("test", msg)
 	}

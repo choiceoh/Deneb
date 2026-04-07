@@ -14,15 +14,15 @@ func ClearSessionQueues(
 	drainCallbacks *FollowupDrainCallbacks,
 	keys []string,
 ) ClearSessionQueueResult {
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	followupCleared := 0
 	var clearedKeys []string
 
 	for _, key := range keys {
-		if key == "" || seen[key] {
+		if _, ok := seen[key]; key == "" || ok {
 			continue
 		}
-		seen[key] = true
+		seen[key] = struct{}{}
 		clearedKeys = append(clearedKeys, key)
 		followupCleared += registry.Clear(key)
 		if drainCallbacks != nil {

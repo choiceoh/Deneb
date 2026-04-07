@@ -40,7 +40,7 @@ func TestStoreAddAndGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := s.GetJob("test-1")
+	got := s.Job("test-1")
 	if got == nil {
 		t.Fatal("expected job")
 	}
@@ -66,10 +66,10 @@ func TestStoreRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if s.GetJob("a") != nil {
+	if s.Job("a") != nil {
 		t.Error("job 'a' should be removed")
 	}
-	if s.GetJob("b") == nil {
+	if s.Job("b") == nil {
 		t.Error("job 'b' should still exist")
 	}
 }
@@ -89,7 +89,7 @@ func TestStoreUpdateState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := s.GetJob("x")
+	got := s.Job("x")
 	if got.State.LastSessionKey != "cron:x:1000" {
 		t.Errorf("state.lastSessionKey = %q, want 'cron:x:1000'", got.State.LastSessionKey)
 	}
@@ -123,16 +123,13 @@ func TestStoreSkipUnchangedWrite(t *testing.T) {
 	job := StoreJob{ID: "same", Enabled: true, Payload: StorePayload{Kind: "agentTurn"}}
 	s.AddJob(job)
 
-	// Get file mod time.
-	stat1, _ := os.Stat(storePath)
-
 	// Save again with same content — should skip write.
 	store, _ := s.Load()
 	s.Save(store)
 
-	stat2, _ := os.Stat(storePath)
-	if stat2.ModTime() != stat1.ModTime() {
-		// Note: This test may be flaky on fast filesystems.
-		// The important thing is that Save() doesn't error.
+	// Verify the store file still exists after save.
+	_, err := os.Stat(storePath)
+	if err != nil {
+		t.Fatalf("stat after save: %v", err)
 	}
 }

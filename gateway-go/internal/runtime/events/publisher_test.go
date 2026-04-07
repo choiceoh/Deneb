@@ -9,7 +9,7 @@ type mockSnapshotProvider struct {
 	snapshots map[string]*SessionSnapshot
 }
 
-func (m *mockSnapshotProvider) GetSessionSnapshot(key string) *SessionSnapshot {
+func (m *mockSnapshotProvider) SessionSnapshot(key string) *SessionSnapshot {
 	if m.snapshots == nil {
 		return nil
 	}

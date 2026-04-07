@@ -65,7 +65,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName string) (*EvolveRes
 	// Get usage stats.
 	var stats *UsageStats
 	if e.tracker != nil {
-		stats, _ = e.tracker.GetStats(skillName)
+		stats, _ = e.tracker.Stats(skillName)
 	}
 	if stats == nil {
 		stats = &UsageStats{SkillName: skillName}
@@ -149,7 +149,7 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 			results = append(results, *result)
 		}
 	}
-	return results, nil
+	return results, nil //nolint:nilerr // individual skill errors collected in results, not propagated
 }
 
 func (e *Evolver) parseAndApply(text string, entry *skills.SkillEntry, originalContent string) (*EvolveResult, error) {
@@ -195,7 +195,7 @@ func (e *Evolver) parseAndApply(text string, entry *skills.SkillEntry, originalC
 	newContent := newHeader + "\n" + resp.Changes.Body + "\n"
 
 	// Write back.
-	if err := os.WriteFile(entry.Skill.FilePath, []byte(newContent), 0o644); err != nil {
+	if err := os.WriteFile(entry.Skill.FilePath, []byte(newContent), 0o644); err != nil { //nolint:gosec // G306 — world-readable skill file is intentional
 		return nil, fmt.Errorf("evolver: write file: %w", err)
 	}
 
@@ -227,7 +227,7 @@ func bumpPatchVersion(version string) string {
 		return "0.1.1"
 	}
 	var patch int
-	fmt.Sscanf(parts[2], "%d", &patch)
+	fmt.Sscanf(parts[2], "%d", &patch) //nolint:errcheck // partial parse ok
 	return fmt.Sprintf("%s.%s.%d", parts[0], parts[1], patch+1)
 }
 

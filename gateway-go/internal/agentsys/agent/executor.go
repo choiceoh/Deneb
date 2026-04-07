@@ -78,7 +78,7 @@ func RunAgent(
 	loopDetector := NewLoopDetector()
 	loopThresholds := DefaultLoopThresholds()
 
-	for turn := 0; turn < cfg.MaxTurns; turn++ {
+	for turn := range cfg.MaxTurns {
 		result.Turns = turn + 1
 
 		// Per-turn context initialization (e.g., injecting a TurnContext for
@@ -583,20 +583,20 @@ func buildConcurrencyCheck(tools ToolExecutor) func(string, json.RawMessage) boo
 		check := cc.IsConcurrencySafe
 		return func(name string, _ json.RawMessage) bool { return check(name) }
 	}
-	return func(name string, _ json.RawMessage) bool { return readOnlyToolFallback[name] }
+	return func(name string, _ json.RawMessage) bool { _, ok := readOnlyToolFallback[name]; return ok }
 }
 
 // appendUniqueTools appends extra tools to base, skipping any whose name
 // already exists in base. Used for dynamic tool injection (deferred tools).
 func appendUniqueTools(base, extra []llm.Tool) []llm.Tool {
-	existing := make(map[string]bool, len(base))
+	existing := make(map[string]struct{}, len(base))
 	for _, t := range base {
-		existing[t.Name] = true
+		existing[t.Name] = struct{}{}
 	}
 	for _, t := range extra {
-		if !existing[t.Name] {
+		if _, ok := existing[t.Name]; !ok {
 			base = append(base, t)
-			existing[t.Name] = true
+			existing[t.Name] = struct{}{}
 		}
 	}
 	return base
@@ -644,7 +644,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 		jsonBuf []byte // accumulator for input_json_delta
 	}
 	var currentBlock *blockBuilder
-	var blockIndex int = -1
+	var blockIndex = -1
 
 	// Idle watchdog: detects LLM stream stalls where the TCP connection stays
 	// alive but no SSE events arrive. Without this, stalled streams hang
@@ -701,7 +701,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 				var cbd llm.ContentBlockDelta
 				if err := json.Unmarshal(ev.Payload, &cbd); err != nil {
 					logger.Warn("unmarshal content_block_delta failed", "error", err)
-				} else if currentBlock == nil {
+				} else if currentBlock == nil { //nolint:gocritic // ifElseChain — first branch uses :=, cannot be switch
 					logger.Warn("content_block_delta without active block", "index", cbd.Index)
 				} else if cbd.Index != blockIndex {
 					logger.Warn("content_block_delta index mismatch",

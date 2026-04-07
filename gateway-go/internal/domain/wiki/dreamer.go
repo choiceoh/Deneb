@@ -136,7 +136,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	// Update last-processed diary date in index.
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	idx.LastProcessed = time.Now().Format("2006-01-02")
 	indexPath := filepath.Join(wd.store.Dir(), "index.md")
 	if err := idx.Save(indexPath); err != nil {
@@ -170,7 +170,7 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (string, error) {
 	}
 
 	// Determine cutoff date from index.
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	cutoff := idx.LastProcessed
 
 	var diaryFiles []string
@@ -201,7 +201,7 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (string, error) {
 		if err != nil {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("--- %s ---\n", name))
+		fmt.Fprintf(&sb, "--- %s ---\n", name)
 		sb.Write(data)
 		sb.WriteByte('\n')
 		if sb.Len() > maxChars {
@@ -231,7 +231,7 @@ type wikiUpdate struct {
 // synthesize calls the LLM to determine which wiki pages should be updated.
 func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string) ([]wikiUpdate, error) {
 	// Build existing wiki context.
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	indexContent := idx.Render()
 
 	prompt := fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
@@ -278,9 +278,7 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryCo
 		if idx := strings.Index(text[3:], "\n"); idx >= 0 {
 			text = text[3+idx+1:]
 		}
-		if strings.HasSuffix(text, "```") {
-			text = text[:len(text)-3]
-		}
+		text = strings.TrimSuffix(text, "```")
 		text = strings.TrimSpace(text)
 	}
 
@@ -294,9 +292,7 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryCo
 
 // applyUpdates creates or updates wiki pages based on LLM instructions.
 // Returns (created, updated) counts and paths of oversized pages.
-func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (int, int, []string) {
-	var created, updated int
-	var oversized []string
+func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated int, oversized []string) {
 	maxBytes := wd.config.MaxPageBytes
 
 	for _, u := range updates {
@@ -466,7 +462,7 @@ func (wd *WikiDreamer) rebuildIndex() error {
 		return fmt.Errorf("list pages: %w", err)
 	}
 
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	// Preserve LastProcessed from the old index.
 	lastProcessed := idx.LastProcessed
 
@@ -492,7 +488,7 @@ func (wd *WikiDreamer) rebuildIndex() error {
 // findExistingPage checks if a similar page already exists by ID match,
 // slug prefix match, or FTS title search. Returns the existing path or "".
 func (wd *WikiDreamer) findExistingPage(u wikiUpdate) string {
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 
 	// 1. Exact ID match in the same category.
 	if u.ID != "" {
@@ -554,32 +550,32 @@ func (wd *WikiDreamer) resetCounters() {
 }
 
 // mergeTags merges two tag lists, deduplicating.
-func mergeTags(existing, new []string) []string {
-	seen := map[string]bool{}
+func mergeTags(existing, added []string) []string {
+	seen := map[string]struct{}{}
 	for _, t := range existing {
-		seen[t] = true
+		seen[t] = struct{}{}
 	}
 	result := append([]string{}, existing...)
-	for _, t := range new {
-		if !seen[t] {
+	for _, t := range added {
+		if _, ok := seen[t]; !ok {
 			result = append(result, t)
-			seen[t] = true
+			seen[t] = struct{}{}
 		}
 	}
 	return result
 }
 
 // mergeRelated merges two related-page lists, deduplicating (union).
-func mergeRelated(existing, new []string) []string {
-	seen := map[string]bool{}
+func mergeRelated(existing, added []string) []string {
+	seen := map[string]struct{}{}
 	for _, r := range existing {
-		seen[r] = true
+		seen[r] = struct{}{}
 	}
 	result := append([]string{}, existing...)
-	for _, r := range new {
-		if !seen[r] {
+	for _, r := range added {
+		if _, ok := seen[r]; !ok {
 			result = append(result, r)
-			seen[r] = true
+			seen[r] = struct{}{}
 		}
 	}
 	return result

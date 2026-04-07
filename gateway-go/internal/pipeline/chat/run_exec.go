@@ -228,7 +228,7 @@ func executeAgentRun(
 		var deferredToolInfos []prompt.DeferredToolInfo
 		for _, ds := range deferredSummaries {
 			// Skip deferred tools not in the allowed preset (if preset is active).
-			if len(allowed) > 0 && !allowed[ds.Name] {
+			if _, ok := allowed[ds.Name]; len(allowed) > 0 && !ok {
 				continue
 			}
 			deferredToolInfos = append(deferredToolInfos, prompt.DeferredToolInfo{
@@ -310,7 +310,7 @@ func executeAgentRun(
 	if len(messages) > 0 {
 		polarisCtx, polarisCancel := context.WithTimeout(ctx, 30*time.Second)
 		var summarizer compact.Summarizer
-		if pilotHub := pilot.GetLocalAIHub(); pilotHub != nil {
+		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
 		}
 		var polarisResult compact.Result
@@ -392,9 +392,9 @@ func executeAgentRun(
 		// Cache-stable ordering: built-in tools form a sorted prefix,
 		// dynamic tools (plugins, MCP) are sorted separately and appended.
 		// Changes to dynamic tools only invalidate cache from the boundary onward.
-		builtinNames := make(map[string]bool, len(deps.tools.Names()))
+		builtinNames := make(map[string]struct{}, len(deps.tools.Names()))
 		for _, name := range deps.tools.Names() {
-			builtinNames[name] = true
+			builtinNames[name] = struct{}{}
 		}
 		partition := PartitionTools(rawTools, builtinNames)
 		tools = partition.MergedTools()

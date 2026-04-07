@@ -238,7 +238,7 @@ func (r *Registry) ConfiguredModels() map[Role]ModelConfig {
 // parseModelID splits "provider/model" into provider and model name.
 // If no "/" prefix, returns empty provider and the original string.
 func parseModelID(model string) (providerID, modelName string) {
-	for i := 0; i < len(model); i++ {
+	for i := range len(model) {
 		if model[i] == '/' {
 			return model[:i], model[i+1:]
 		}

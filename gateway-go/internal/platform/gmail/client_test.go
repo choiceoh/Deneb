@@ -181,11 +181,11 @@ func TestValidToken_RefreshesExpired(t *testing.T) {
 	// Mock OAuth2 token endpoint.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.FormValue("grant_type") != "refresh_token" {
-			http.Error(w, "bad grant_type", 400)
+			http.Error(w, "bad grant_type", http.StatusBadRequest)
 			return
 		}
 		if r.FormValue("refresh_token") != "1//test-refresh" {
-			http.Error(w, "bad refresh_token", 400)
+			http.Error(w, "bad refresh_token", http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -283,13 +283,13 @@ func TestGetClient_RetriableOnFailure(t *testing.T) {
 	}()
 
 	// First call should fail (no credentials).
-	_, err := GetClient()
+	_, err := DefaultClient()
 	if err == nil {
 		t.Fatal("expected error for missing credentials")
 	}
 
 	// Second call should also try again (not permanently failed like sync.Once).
-	_, err2 := GetClient()
+	_, err2 := DefaultClient()
 	if err2 == nil {
 		t.Fatal("expected error again for missing credentials")
 	}

@@ -282,17 +282,17 @@ type CronSkillsSnapshot struct {
 }
 
 // ResolveCronSkillsSnapshot builds the skills snapshot for filtering.
-func ResolveCronSkillsSnapshot(allSkills []string, filter []string) CronSkillsSnapshot {
+func ResolveCronSkillsSnapshot(allSkills, filter []string) CronSkillsSnapshot {
 	if len(filter) == 0 {
 		return CronSkillsSnapshot{Skills: allSkills}
 	}
-	filterSet := make(map[string]bool, len(filter))
+	filterSet := make(map[string]struct{}, len(filter))
 	for _, f := range filter {
-		filterSet[strings.ToLower(f)] = true
+		filterSet[strings.ToLower(f)] = struct{}{}
 	}
 	var filtered []string
 	for _, s := range allSkills {
-		if filterSet[strings.ToLower(s)] {
+		if _, ok := filterSet[strings.ToLower(s)]; ok {
 			filtered = append(filtered, s)
 		}
 	}

@@ -30,7 +30,7 @@ type BuildSubagentListResult struct {
 }
 
 // BuildSubagentList categorizes runs into active and recent lists.
-func BuildSubagentList(runs []SubagentRunRecord, recentMinutes int, taskMaxChars int) BuildSubagentListResult {
+func BuildSubagentList(runs []SubagentRunRecord, recentMinutes, taskMaxChars int) BuildSubagentListResult {
 	if taskMaxChars <= 0 {
 		taskMaxChars = 110
 	}

@@ -8,12 +8,12 @@ import (
 )
 
 // Abort trigger words (English + Korean).
-var abortTriggers = map[string]bool{
+var abortTriggers = map[string]struct{}{
 	// English
-	"stop": true, "esc": true, "abort": true, "cancel": true, "halt": true,
-	"quit": true, "exit": true, "end": true, "kill": true, "break": true,
+	"stop": {}, "esc": {}, "abort": {}, "cancel": {}, "halt": {},
+	"quit": {}, "exit": {}, "end": {}, "kill": {}, "break": {},
 	// Korean
-	"중지": true, "취소": true, "멈춰": true, "그만": true, "정지": true, "끝": true,
+	"중지": {}, "취소": {}, "멈춰": {}, "그만": {}, "정지": {}, "끝": {},
 }
 
 // IsAbortTrigger returns true if the text is a recognized abort trigger word.
@@ -22,7 +22,8 @@ func IsAbortTrigger(text string) bool {
 	if normalized == "" {
 		return false
 	}
-	return abortTriggers[normalized]
+	_, ok := abortTriggers[normalized]
+	return ok
 }
 
 // IsAbortRequestText returns true if the text is a /stop command or abort trigger.
@@ -78,11 +79,11 @@ func (m *AbortMemory) Record(sessionKey string, ts int64) {
 	// Evict oldest if at capacity.
 	if len(m.entries) >= m.maxSize {
 		var oldestKey string
-		var oldestTs int64
+		var oldestTS int64
 		for k, v := range m.entries {
-			if oldestTs == 0 || v < oldestTs {
+			if oldestTS == 0 || v < oldestTS {
 				oldestKey = k
-				oldestTs = v
+				oldestTS = v
 			}
 		}
 		if oldestKey != "" {

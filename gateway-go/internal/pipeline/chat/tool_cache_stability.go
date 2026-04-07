@@ -35,10 +35,10 @@ type ToolPartition struct {
 // PartitionTools separates tools into builtin (registered in the core
 // registry) and dynamic (everything else, e.g., MCP, plugin tools).
 // Both groups are sorted alphabetically by name within their partition.
-func PartitionTools(allTools []llm.Tool, builtinNames map[string]bool) ToolPartition {
+func PartitionTools(allTools []llm.Tool, builtinNames map[string]struct{}) ToolPartition {
 	var builtin, dynamic []llm.Tool
 	for _, t := range allTools {
-		if builtinNames[t.Name] {
+		if _, ok := builtinNames[t.Name]; ok {
 			builtin = append(builtin, t)
 		} else {
 			dynamic = append(dynamic, t)
@@ -76,13 +76,13 @@ func computeToolCacheKey(tools []llm.Tool) string {
 // FilterDeniedTools removes tools whose names appear in the deny set.
 // This prevents the model from seeing (and attempting to call) denied tools,
 // avoiding wasted generation tokens.
-func FilterDeniedTools(tools []llm.Tool, denySet map[string]bool) []llm.Tool {
+func FilterDeniedTools(tools []llm.Tool, denySet map[string]struct{}) []llm.Tool {
 	if len(denySet) == 0 {
 		return tools
 	}
 	filtered := make([]llm.Tool, 0, len(tools))
 	for _, t := range tools {
-		if !denySet[t.Name] {
+		if _, ok := denySet[t.Name]; !ok {
 			filtered = append(filtered, t)
 		}
 	}

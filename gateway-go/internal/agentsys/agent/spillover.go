@@ -73,7 +73,7 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 	filename := fmt.Sprintf("%s_%d_%s_%s.txt", safeSess, now.UnixMilli(), safeTool, spillID)
 	path := filepath.Join(s.baseDir, filename)
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 		return "", fmt.Errorf("spillover write: %w", err)
 	}
 
@@ -112,7 +112,7 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 }
 
 // FormatPreview builds the compact preview string inserted into the LLM context.
-func FormatPreview(spillID, toolName string, content string) string {
+func FormatPreview(spillID, toolName, content string) string {
 	origLen := len(content)
 
 	head := content

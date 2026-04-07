@@ -69,9 +69,9 @@ var namedEntities = [...]struct {
 
 // tryDecodeEntity attempts to decode an HTML entity at input[pos].
 // Returns the decoded rune and bytes consumed, or (-1, 0) on failure.
-func tryDecodeEntity(input string, pos int) (rune, int) {
+func tryDecodeEntity(input string, pos int) (ch rune, consumed int) {
 	rest := input[pos:]
-	if len(rest) == 0 {
+	if rest == "" {
 		return -1, 0
 	}
 
@@ -101,7 +101,7 @@ func tryDecodeEntity(input string, pos int) (rune, int) {
 		if semi > 0 {
 			code, err := strconv.ParseUint(after[:semi], 16, 32)
 			if err == nil {
-				if r := rune(code); r >= 0 && isValidCodePoint(r) {
+				if r := rune(code); r >= 0 && isValidCodePoint(r) { //nolint:gosec // G115 — code is bounded by ParseUint with bitSize 32
 					return r, 3 + semi + 1
 				}
 			}
@@ -120,7 +120,7 @@ func tryDecodeEntity(input string, pos int) (rune, int) {
 		if semi > 0 {
 			code, err := strconv.ParseUint(after[:semi], 10, 32)
 			if err == nil {
-				if r := rune(code); r >= 0 && isValidCodePoint(r) {
+				if r := rune(code); r >= 0 && isValidCodePoint(r) { //nolint:gosec // G115 — code is bounded by ParseUint with bitSize 32
 					return r, 2 + semi + 1
 				}
 			}
@@ -133,5 +133,5 @@ func tryDecodeEntity(input string, pos int) (rune, int) {
 // isValidCodePoint checks if a rune is a valid Unicode code point
 // that can be encoded (excludes surrogates and out-of-range values).
 func isValidCodePoint(r rune) bool {
-	return r >= 0 && r <= 0x10FFFF && !(r >= 0xD800 && r <= 0xDFFF)
+	return r >= 0 && r <= 0x10FFFF && (r < 0xD800 || r > 0xDFFF)
 }

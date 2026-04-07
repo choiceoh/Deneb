@@ -103,7 +103,7 @@ func (am *AuthManager) Resolve(providerID, profileID string) *ManagedCredential 
 func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*PreparedAuth, error) {
 	// Try local provider plugin first.
 	if am.registry != nil {
-		plugin := am.registry.GetByNormalizedID(req.Provider)
+		plugin := am.registry.ByNormalizedID(req.Provider)
 		if rap, ok := plugin.(RuntimeAuthProvider); ok {
 			prepared, err := rap.PrepareRuntimeAuth(ctx, req)
 			if err != nil {

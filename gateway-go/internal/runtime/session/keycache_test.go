@@ -66,7 +66,7 @@ func TestKeyCacheLRUEviction(t *testing.T) {
 	c := NewKeyCache()
 
 	// Fill cache to limit.
-	for i := 0; i < KeyCacheLimit; i++ {
+	for i := range KeyCacheLimit {
 		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("key-%d", i))
 	}
 	if c.Len() != KeyCacheLimit {

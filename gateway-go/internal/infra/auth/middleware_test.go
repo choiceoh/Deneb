@@ -69,9 +69,9 @@ func TestGetBearerToken(t *testing.T) {
 		if tt.header != "" {
 			r.Header.Set("Authorization", tt.header)
 		}
-		got := GetBearerToken(r)
+		got := BearerToken(r)
 		if got != tt.want {
-			t.Errorf("GetBearerToken(%q) = %q, want %q", tt.header, got, tt.want)
+			t.Errorf("BearerToken(%q) = %q, want %q", tt.header, got, tt.want)
 		}
 	}
 }

@@ -145,7 +145,7 @@ func wikiIndex(deps Deps) rpcutil.HandlerFunc {
 		Category string `json:"category,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		idx := deps.Store.GetIndex()
+		idx := deps.Store.Index()
 		if p.Category == "" {
 			return map[string]any{
 				"entries":       idx.Entries,

@@ -102,15 +102,15 @@ test: go-test
 clean: go-clean
 	@echo "Cleaned Go build artifacts"
 
-check-go: go-fmt go-vet go-test
+check-go: go-fmt go-vet go-lint go-test
 
 # Full check: generate-check first (sequential), then Go checks.
 check: generate-check check-go
 	@echo "All checks passed"
 
-# Fast check: format + lint only (no tests). Good for pre-commit gate.
-check/fast: go-fmt go-vet
-	@echo "Fast checks passed (fmt + lint, no tests)"
+# Fast check: format + vet + lint only (no tests). Good for pre-commit gate.
+check/fast: go-fmt go-vet go-lint
+	@echo "Fast checks passed (fmt + vet + lint, no tests)"
 
 # Run all code generation pipelines in dependency order.
 generate: tool-schemas model-caps data-gen

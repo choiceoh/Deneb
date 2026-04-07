@@ -24,7 +24,7 @@ func handleModelCommand(ctx CommandContext) (*CommandResult, error) {
 	resolved := model.ResolveModelFromDirective(raw, nil)
 
 	provider := ""
-	modelStr := raw
+	modelStr := raw //nolint:ineffassign // overwritten below; keeps default visible
 	if resolved != nil {
 		provider = resolved.Provider
 		modelStr = resolved.Model

@@ -227,7 +227,7 @@ func FormatBuildResult(r BuildResult) string {
 			if len(r.Errors) < maxErrors {
 				maxErrors = len(r.Errors)
 			}
-			for i := 0; i < maxErrors; i++ {
+			for i := range maxErrors {
 				errText := r.Errors[i]
 				// Truncate individual error lines for mobile display.
 				if len(errText) > 200 {

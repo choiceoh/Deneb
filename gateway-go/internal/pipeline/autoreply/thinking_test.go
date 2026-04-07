@@ -122,7 +122,7 @@ func TestNormalizeFastMode(t *testing.T) {
 	}
 }
 
-func TestNormalizeProviderId(t *testing.T) {
+func TestNormalizeProviderID(t *testing.T) {
 	tests := []struct{ raw, want string }{
 		{"anthropic", "anthropic"},
 		{"z.ai", "zai"},
@@ -133,9 +133,9 @@ func TestNormalizeProviderId(t *testing.T) {
 		{"", ""},
 	}
 	for _, tt := range tests {
-		got := types.NormalizeProviderId(tt.raw)
+		got := types.NormalizeProviderID(tt.raw)
 		if got != tt.want {
-			t.Errorf("types.NormalizeProviderId(%q) = %q, want %q", tt.raw, got, tt.want)
+			t.Errorf("types.NormalizeProviderID(%q) = %q, want %q", tt.raw, got, tt.want)
 		}
 	}
 }
