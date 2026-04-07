@@ -191,7 +191,6 @@ func TestDoStream_DefaultMaxRetries(t *testing.T) {
 	}
 }
 
-
 func TestDoStream_504_Retries(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

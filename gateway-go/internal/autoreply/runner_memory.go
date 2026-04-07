@@ -13,6 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 )
 
 // AgentRunnerMemory manages conversation context for agent execution.
@@ -37,7 +38,7 @@ func (m *AgentRunnerMemory) Append(msg AgentMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.history = append(m.history, msg)
-	m.usedTokens += model.EstimateTokens(msg.Content)
+	m.usedTokens += tokenest.Estimate(msg.Content)
 }
 
 func (m *AgentRunnerMemory) History() []AgentMessage {
@@ -66,7 +67,7 @@ func (m *AgentRunnerMemory) Compact() int {
 	removeCount := 0
 	tokenSavings := 0
 	for removeCount+1 < len(m.history) && len(m.history)-removeCount > minKeep && m.usedTokens-tokenSavings > m.maxTokens {
-		tokenSavings += model.EstimateTokens(m.history[1+removeCount].Content)
+		tokenSavings += tokenest.Estimate(m.history[1+removeCount].Content)
 		removeCount++
 	}
 	if removeCount == 0 {
@@ -97,7 +98,7 @@ func (m *AgentRunnerMemory) CompactWithSummary(summary string) int {
 
 	removedTokens := 0
 	for i := 1; i <= removeCount; i++ {
-		removedTokens += model.EstimateTokens(m.history[i].Content)
+		removedTokens += tokenest.Estimate(m.history[i].Content)
 	}
 
 	summaryMsg := AgentMessage{
@@ -112,7 +113,7 @@ func (m *AgentRunnerMemory) CompactWithSummary(summary string) int {
 
 	m.history = newHistory
 	m.usedTokens -= removedTokens
-	m.usedTokens += model.EstimateTokens(summary)
+	m.usedTokens += tokenest.Estimate(summary)
 	m.compactionCount++
 	m.totalCompacted += removeCount
 	return removeCount

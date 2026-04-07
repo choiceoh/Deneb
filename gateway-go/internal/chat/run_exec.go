@@ -26,6 +26,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
@@ -333,7 +334,7 @@ func executeAgentRun(
 	// variable additions (tier-1 wiki) are optimized by priority.
 	if tier1Addition != "" {
 		promptBudget := prompt.PromptBudget{Total: deps.contextCfg.SystemPromptBudget}
-		baseTokens := prompt.EstimateTokens(string(systemPrompt))
+		baseTokens := uint64(tokenest.Estimate(string(systemPrompt)))
 		var remainingBudget uint64
 		if promptBudget.Total > baseTokens {
 			remainingBudget = promptBudget.Total - baseTokens

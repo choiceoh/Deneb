@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
 
 // Errors returned by Hub.Submit.
@@ -528,14 +527,13 @@ func (h *Hub) cacheJanitor() {
 
 // --- token estimation ---
 
-const runesPerToken = 2 // Korean-calibrated, matches prompt.EstimateTokens.
-
 func estimateInputTokens(req *Request) int {
-	total := utf8.RuneCountInString(req.System)
+	// System prompt: full script-aware estimation.
+	est := tokenest.Estimate(req.System)
+	// Message content: byte-level heuristic (raw JSON bytes).
 	for _, m := range req.Messages {
-		total += len(m.Content) / 2 // raw JSON bytes, rough estimate
+		est += tokenest.EstimateBytes([]byte(m.Content))
 	}
-	est := total / runesPerToken
 	if est < 1 {
 		return 1
 	}

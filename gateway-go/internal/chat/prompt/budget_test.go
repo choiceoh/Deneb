@@ -3,25 +3,30 @@ package prompt
 import (
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 )
 
-func TestEstimateTokens(t *testing.T) {
+func TestTokenestIntegration(t *testing.T) {
+	// Verify tokenest.Estimate produces reasonable values for content
+	// used in budget optimization.
 	tests := []struct {
-		name  string
-		input string
-		want  uint64
+		name      string
+		input     string
+		minTokens int
+		maxTokens int
 	}{
-		{"empty", "", 0},
-		{"single char", "a", 1},
-		{"short ascii", "hello", 2},
-		{"korean text", "안녕하세요 반갑습니다", 5}, // 10 runes / 2
-		{"mixed", "hello 세계", 4},          // 8 runes / 2
+		{"empty", "", 0, 0},
+		{"single char", "a", 1, 1},
+		{"short ascii", "hello", 1, 3},
+		{"korean text", "안녕하세요 반갑습니다", 4, 12},
+		{"mixed", "hello 세계", 2, 8},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := EstimateTokens(tt.input)
-			if got != tt.want {
-				t.Errorf("EstimateTokens(%q) = %d, want %d", tt.input, got, tt.want)
+			got := tokenest.Estimate(tt.input)
+			if got < tt.minTokens || got > tt.maxTokens {
+				t.Errorf("tokenest.Estimate(%q) = %d, want %d-%d", tt.input, got, tt.minTokens, tt.maxTokens)
 			}
 		})
 	}
@@ -57,11 +62,24 @@ func TestNewFragment(t *testing.T) {
 }
 
 // makeContent creates a string with approximately the given token count.
-// Uses Korean characters (1 rune = 0.5 tokens with runesPerToken=2).
+// Uses ASCII 'a' characters for predictable estimation under the
+// script-aware tokenest engine (Latin ratio ~3.5 runes/token for default family).
 func makeContent(tokens uint64) string {
-	// tokens * runesPerToken runes needed
-	runes := int(tokens * runesPerToken)
-	return strings.Repeat("가", runes)
+	if tokens == 0 {
+		return ""
+	}
+	// Start with a rough estimate and fine-tune.
+	n := int(float64(tokens)*3.5 + 1)
+	s := strings.Repeat("a", n)
+	// Trim if over-estimated.
+	for uint64(tokenest.Estimate(s)) > tokens && len(s) > 1 {
+		s = s[:len(s)-1]
+	}
+	// Extend if under-estimated.
+	for uint64(tokenest.Estimate(s)) < tokens {
+		s += "a"
+	}
+	return s
 }
 
 func TestOptimize_WithinBudget(t *testing.T) {
@@ -122,7 +140,7 @@ func TestOptimize_ShrinkPriority2(t *testing.T) {
 	}
 	for _, f := range result {
 		if f.Name == "memory" {
-			memTokens := EstimateTokens(f.Content)
+			memTokens := uint64(tokenest.Estimate(f.Content))
 			origTokens := uint64(400)
 			if memTokens >= origTokens {
 				t.Errorf("memory should be shrunk, got %d tokens (orig %d)", memTokens, origTokens)
