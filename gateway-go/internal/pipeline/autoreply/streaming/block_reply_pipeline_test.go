@@ -9,11 +9,12 @@ import (
 	"time"
 )
 
-func TestBlockReplyPipelineFull_BasicSend(t *testing.T) {
+// newCollectingPipeline creates a pipeline that collects sent payloads for assertion.
+func newCollectingPipeline(t *testing.T) (*BlockReplyPipelineFull, func() []types.ReplyPayload) {
+	t.Helper()
 	var mu sync.Mutex
 	var sent []types.ReplyPayload
-	ctx := context.Background()
-	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
+	p := NewBlockReplyPipelineFull(context.Background(), BlockReplyPipelineConfig{
 		OnBlockReply: func(_ context.Context, payload types.ReplyPayload) error {
 			mu.Lock()
 			sent = append(sent, payload)
@@ -22,10 +23,20 @@ func TestBlockReplyPipelineFull_BasicSend(t *testing.T) {
 		},
 		TimeoutMs: 5000,
 	})
+	return p, func() []types.ReplyPayload {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]types.ReplyPayload(nil), sent...)
+	}
+}
+
+func TestBlockReplyPipelineFull_BasicSend(t *testing.T) {
+	p, getSent := newCollectingPipeline(t)
 
 	p.Enqueue(types.ReplyPayload{Text: "hello"})
 	p.FlushAndWait(true)
 
+	sent := getSent()
 	if len(sent) != 1 {
 		t.Fatalf("expected 1 sent payload, got %d", len(sent))
 	}
@@ -74,23 +85,13 @@ func TestBlockReplyPipelineFull_SequentialDelivery(t *testing.T) {
 }
 
 func TestBlockReplyPipelineFull_Dedup(t *testing.T) {
-	var mu sync.Mutex
-	var sent []types.ReplyPayload
-	ctx := context.Background()
-	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
-		OnBlockReply: func(_ context.Context, payload types.ReplyPayload) error {
-			mu.Lock()
-			sent = append(sent, payload)
-			mu.Unlock()
-			return nil
-		},
-		TimeoutMs: 5000,
-	})
+	p, getSent := newCollectingPipeline(t)
 
 	p.Enqueue(types.ReplyPayload{Text: "hello"})
 	p.Enqueue(types.ReplyPayload{Text: "hello"}) // duplicate
 	p.FlushAndWait(true)
 
+	sent := getSent()
 	if len(sent) != 1 {
 		t.Fatalf("expected 1 sent payload (dedup), got %d", len(sent))
 	}
@@ -98,23 +99,13 @@ func TestBlockReplyPipelineFull_Dedup(t *testing.T) {
 
 func TestBlockReplyPipelineFull_DifferentThreadingNotDeduped(t *testing.T) {
 	// Same text with different replyToId should be sent separately.
-	var mu sync.Mutex
-	var sent []types.ReplyPayload
-	ctx := context.Background()
-	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
-		OnBlockReply: func(_ context.Context, payload types.ReplyPayload) error {
-			mu.Lock()
-			sent = append(sent, payload)
-			mu.Unlock()
-			return nil
-		},
-		TimeoutMs: 5000,
-	})
+	p, getSent := newCollectingPipeline(t)
 
 	p.Enqueue(types.ReplyPayload{Text: "response text", ReplyToID: "thread-root-1"})
 	p.Enqueue(types.ReplyPayload{Text: "response text"})
 	p.FlushAndWait(true)
 
+	sent := getSent()
 	if len(sent) != 2 {
 		t.Fatalf("expected 2 sent payloads (different threading), got %d", len(sent))
 	}
