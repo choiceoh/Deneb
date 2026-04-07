@@ -40,7 +40,7 @@ func TestStoreAddAndGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := s.GetJob("test-1")
+	got := s.Job("test-1")
 	if got == nil {
 		t.Fatal("expected job")
 	}
@@ -66,10 +66,10 @@ func TestStoreRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if s.GetJob("a") != nil {
+	if s.Job("a") != nil {
 		t.Error("job 'a' should be removed")
 	}
-	if s.GetJob("b") == nil {
+	if s.Job("b") == nil {
 		t.Error("job 'b' should still exist")
 	}
 }
@@ -89,7 +89,7 @@ func TestStoreUpdateState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := s.GetJob("x")
+	got := s.Job("x")
 	if got.State.LastSessionKey != "cron:x:1000" {
 		t.Errorf("state.lastSessionKey = %q, want 'cron:x:1000'", got.State.LastSessionKey)
 	}

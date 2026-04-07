@@ -24,7 +24,7 @@ type VerifyFinding struct {
 //  1. Duplicate detection via Levenshtein distance on titles/IDs (no LLM)
 //  2. Misclassification detection via single LLM call
 func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	if len(idx.Entries) < 2 {
 		return nil
 	}

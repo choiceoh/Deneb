@@ -60,7 +60,7 @@ func skillsStatus(deps Deps) rpcutil.HandlerFunc {
 			return errResp
 		}
 
-		status := deps.Skills.GetStatus(p.AgentID)
+		status := deps.Skills.Status(p.AgentID)
 		return rpcutil.RespondOK(req.ID, status)
 	}
 }

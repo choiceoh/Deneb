@@ -391,7 +391,7 @@ func fetchCalendar(ctx context.Context) any {
 }
 
 func fetchEmail(ctx context.Context) any {
-	client, err := gmail.GetClient()
+	client, err := gmail.DefaultClient()
 	if err != nil {
 		return emailData{Error: "no credentials"}
 	}

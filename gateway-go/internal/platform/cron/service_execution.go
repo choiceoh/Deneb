@@ -34,7 +34,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	defer s.runningJobs.Delete(job.ID)
 
 	// Re-load fresh job data from store to avoid stale state from scheduler closures.
-	if fresh := s.store.GetJob(job.ID); fresh != nil {
+	if fresh := s.store.Job(job.ID); fresh != nil {
 		job = *fresh
 	}
 

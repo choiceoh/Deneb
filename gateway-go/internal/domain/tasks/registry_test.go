@@ -67,7 +67,7 @@ func TestStore_UpsertAndGetTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := store.GetTask("task-1")
+	got, err := store.Task("task-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestStore_DeleteTerminalBefore(t *testing.T) {
 		t.Errorf("pruned = %d, want 1", pruned)
 	}
 
-	got, err := store.GetTask("old-task")
+	got, err := store.Task("old-task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,15 +256,15 @@ func TestRegistry_PutAndGet(t *testing.T) {
 	}
 
 	// Lookup by RunID.
-	got = reg.GetByRunID("run-123")
+	got = reg.ByRunID("run-123")
 	if got == nil || got.TaskID != "task-1" {
-		t.Fatal("GetByRunID failed")
+		t.Fatal("ByRunID failed")
 	}
 
 	// Lookup by ChildSessionKey.
-	got = reg.GetByChildSessionKey("child-sess")
+	got = reg.ByChildSessionKey("child-sess")
 	if got == nil || got.TaskID != "task-1" {
-		t.Fatal("GetByChildSessionKey failed")
+		t.Fatal("ByChildSessionKey failed")
 	}
 
 	// Lookup by owner.
@@ -300,7 +300,7 @@ func TestRegistry_Delete(t *testing.T) {
 	if got := reg.Get("task-del"); got != nil {
 		t.Error("expected nil after delete")
 	}
-	if got := reg.GetByRunID("run-del"); got != nil {
+	if got := reg.ByRunID("run-del"); got != nil {
 		t.Error("expected nil in RunID index after delete")
 	}
 }
@@ -573,7 +573,7 @@ func TestFlow_CreateAndLink(t *testing.T) {
 	if err := CompleteTask(reg, t1.TaskID, "done"); err != nil {
 		t.Fatal(err)
 	}
-	f := reg.GetFlow(flow.FlowID)
+	f := reg.Flow(flow.FlowID)
 	if f.CompletedCount != 1 {
 		t.Errorf("CompletedCount = %d, want 1", f.CompletedCount)
 	}
@@ -585,7 +585,7 @@ func TestFlow_CreateAndLink(t *testing.T) {
 	if err := CompleteTask(reg, t2.TaskID, "done"); err != nil {
 		t.Fatal(err)
 	}
-	f = reg.GetFlow(flow.FlowID)
+	f = reg.Flow(flow.FlowID)
 	if f.Status != FlowCompleted {
 		t.Errorf("Flow Status = %q, want completed", f.Status)
 	}
@@ -615,7 +615,7 @@ func TestFlow_BlockedAndResume(t *testing.T) {
 	if err := BlockTask(reg, task.TaskID, "waiting"); err != nil {
 		t.Fatal(err)
 	}
-	f := reg.GetFlow(flow.FlowID)
+	f := reg.Flow(flow.FlowID)
 	if f.Status != FlowBlocked {
 		t.Errorf("Flow Status = %q, want blocked", f.Status)
 	}
@@ -629,7 +629,7 @@ func TestFlow_BlockedAndResume(t *testing.T) {
 		t.Errorf("resumed = %d, want 1", resumed)
 	}
 
-	f = reg.GetFlow(flow.FlowID)
+	f = reg.Flow(flow.FlowID)
 	if f.Status != FlowActive {
 		t.Errorf("Flow Status = %q, want active after resume", f.Status)
 	}

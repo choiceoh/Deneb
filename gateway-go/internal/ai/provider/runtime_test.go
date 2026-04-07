@@ -147,10 +147,10 @@ func TestGetByNormalizedIDWithAliases(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := reg.GetByNormalizedID(tt.providerID)
+		got := reg.ByNormalizedID(tt.providerID)
 		found := got != nil
 		if found != tt.wantFound {
-			t.Errorf("GetByNormalizedID(%q) found=%v, want %v", tt.providerID, found, tt.wantFound)
+			t.Errorf("ByNormalizedID(%q) found=%v, want %v", tt.providerID, found, tt.wantFound)
 		}
 	}
 }

@@ -60,9 +60,9 @@ var (
 	globalClient *Client
 )
 
-// GetClient returns the singleton Gmail client, initializing on first call.
+// DefaultClient returns the singleton Gmail client, initializing on first call.
 // Unlike sync.Once, a failed initialization can be retried on the next call.
-func GetClient() (*Client, error) {
+func DefaultClient() (*Client, error) {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 

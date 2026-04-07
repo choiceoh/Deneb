@@ -290,7 +290,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 func configSchema(_ ConfigAdvancedDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		schema := config.GetSchema()
+		schema := config.Schema()
 		resp := rpcutil.RespondOK(req.ID, schema)
 		return resp
 	}

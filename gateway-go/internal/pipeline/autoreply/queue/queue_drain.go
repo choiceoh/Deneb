@@ -92,7 +92,7 @@ func (s *FollowupDrainService) KickIfIdle(key string) {
 // Interrupted drain coroutines leave draining=true, permanently blocking new drains.
 func (s *FollowupDrainService) ResetDrainState() {
 	for _, key := range s.registry.Keys() {
-		q := s.registry.GetExisting(key)
+		q := s.registry.Existing(key)
 		if q == nil {
 			continue
 		}
@@ -109,7 +109,7 @@ func (s *FollowupDrainService) ResetDrainState() {
 // ScheduleDrain starts a drain goroutine for the given queue key.
 // If the queue is already draining, this is a no-op.
 func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDrainCallback) {
-	queue := s.registry.GetExisting(key)
+	queue := s.registry.Existing(key)
 	if queue == nil {
 		return
 	}

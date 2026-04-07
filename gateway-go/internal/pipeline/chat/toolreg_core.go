@@ -17,7 +17,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	toolreg.RegisterCoreTools(registry, deps, localAI)
 
 	// Skills discovery + management: list, create, patch, delete skills at runtime.
-	toolreg.RegisterSkillsTools(registry, GetCachedSkillsSnapshot,
+	toolreg.RegisterSkillsTools(registry, CachedSkillsSnapshot,
 		resolveWorkspaceDirForPrompt(), InvalidateSkillsCache)
 
 	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.

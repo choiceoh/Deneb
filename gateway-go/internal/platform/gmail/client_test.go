@@ -283,13 +283,13 @@ func TestGetClient_RetriableOnFailure(t *testing.T) {
 	}()
 
 	// First call should fail (no credentials).
-	_, err := GetClient()
+	_, err := DefaultClient()
 	if err == nil {
 		t.Fatal("expected error for missing credentials")
 	}
 
 	// Second call should also try again (not permanently failed like sync.Once).
-	_, err2 := GetClient()
+	_, err2 := DefaultClient()
 	if err2 == nil {
 		t.Fatal("expected error again for missing credentials")
 	}

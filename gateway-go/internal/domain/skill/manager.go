@@ -48,8 +48,8 @@ func NewManager() *Manager {
 	}
 }
 
-// GetStatus returns the full skill status report, optionally filtered by agentID.
-func (m *Manager) GetStatus(_ string) *Status {
+// Status returns the full skill status report, optionally filtered by agentID.
+func (m *Manager) Status(_ string) *Status {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

@@ -50,9 +50,9 @@ func NewFollowupQueueRegistry() *FollowupQueueRegistry {
 	}
 }
 
-// GetExisting returns an existing queue state or nil.
+// Existing returns an existing queue state or nil.
 // Callers must lock the returned queue before accessing fields.
-func (r *FollowupQueueRegistry) GetExisting(key string) *FollowupQueueState {
+func (r *FollowupQueueRegistry) Existing(key string) *FollowupQueueState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if key == "" {

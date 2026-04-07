@@ -192,8 +192,8 @@ func (s *Store) ListFiles(agentID string) ([]*FileEntry, error) {
 	return result, nil
 }
 
-// GetFile returns a specific file for an agent.
-func (s *Store) GetFile(agentID, name string) (*FileEntry, error) {
+// File returns a specific file for an agent.
+func (s *Store) File(agentID, name string) (*FileEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

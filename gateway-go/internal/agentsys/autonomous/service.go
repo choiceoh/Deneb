@@ -73,8 +73,8 @@ func (s *Service) RegisterTask(task PeriodicTask) {
 	s.taskStatus[task.Name()] = &TaskStatus{Name: task.Name()}
 }
 
-// GetTaskStatus returns the status of a registered task, or nil if not found.
-func (s *Service) GetTaskStatus(name string) *TaskStatus {
+// TaskStatus returns the status of a registered task, or nil if not found.
+func (s *Service) TaskStatus(name string) *TaskStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, ok := s.taskStatus[name]

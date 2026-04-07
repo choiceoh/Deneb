@@ -62,8 +62,8 @@ func (h *HistoryTracker) Get(sessionKey string) []HistoryEntry {
 	return result
 }
 
-// GetRecent returns the last N entries for a session key.
-func (h *HistoryTracker) GetRecent(sessionKey string, n int) []HistoryEntry {
+// Recent returns the last N entries for a session key.
+func (h *HistoryTracker) Recent(sessionKey string, n int) []HistoryEntry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	entries := h.entries[sessionKey]

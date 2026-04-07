@@ -271,8 +271,8 @@ func (b *Broadcaster) UnsubscribeSessionMessageEvents(connID, sessionKey string)
 	}
 }
 
-// GetSessionEventSubscriberConnIDs returns the set of connIDs subscribed to session events.
-func (b *Broadcaster) GetSessionEventSubscriberConnIDs() map[string]bool {
+// SessionEventSubscriberConnIDs returns the set of connIDs subscribed to session events.
+func (b *Broadcaster) SessionEventSubscriberConnIDs() map[string]bool {
 	b.sessionSubMu.RLock()
 	defer b.sessionSubMu.RUnlock()
 	result := make(map[string]bool, len(b.sessionSubs))
@@ -282,8 +282,8 @@ func (b *Broadcaster) GetSessionEventSubscriberConnIDs() map[string]bool {
 	return result
 }
 
-// GetSessionMessageSubscriberConnIDs returns connIDs subscribed to a specific session's messages.
-func (b *Broadcaster) GetSessionMessageSubscriberConnIDs(sessionKey string) map[string]bool {
+// SessionMessageSubscriberConnIDs returns connIDs subscribed to a specific session's messages.
+func (b *Broadcaster) SessionMessageSubscriberConnIDs(sessionKey string) map[string]bool {
 	b.sessionSubMu.RLock()
 	defer b.sessionSubMu.RUnlock()
 	subs, ok := b.sessionMsgSubs[sessionKey]
@@ -313,8 +313,8 @@ func (b *Broadcaster) UnregisterToolEventRecipient(runID string) {
 	delete(b.toolRecipients, runID)
 }
 
-// GetToolEventRecipient returns the connID for a given tool run.
-func (b *Broadcaster) GetToolEventRecipient(runID string) string {
+// ToolEventRecipient returns the connID for a given tool run.
+func (b *Broadcaster) ToolEventRecipient(runID string) string {
 	b.toolRecipientMu.RLock()
 	defer b.toolRecipientMu.RUnlock()
 	return b.toolRecipients[runID]

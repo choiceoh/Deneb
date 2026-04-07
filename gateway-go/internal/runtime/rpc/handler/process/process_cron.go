@@ -211,7 +211,7 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "updated", "id": id})
 		}
 
-		job := deps.Service.GetJob(id)
+		job := deps.Service.Job(id)
 		return rpcutil.RespondOK(req.ID, job)
 	}
 }
@@ -399,7 +399,7 @@ func cronGetJob(deps CronServiceDeps) rpcutil.HandlerFunc {
 			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
 		}
 
-		job := deps.Service.GetJob(id)
+		job := deps.Service.Job(id)
 		if job == nil {
 			return rpcerr.Newf(protocol.ErrNotFound, "job not found: %s", id).Response(req.ID)
 		}

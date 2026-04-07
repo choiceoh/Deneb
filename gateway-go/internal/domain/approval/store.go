@@ -211,8 +211,8 @@ func (s *Store) WaitForDecision(id string) <-chan struct{} {
 	return ch
 }
 
-// GetGlobalSnapshot returns the global exec approvals snapshot.
-func (s *Store) GetGlobalSnapshot() *Snapshot {
+// GlobalSnapshot returns the global exec approvals snapshot.
+func (s *Store) GlobalSnapshot() *Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.globalSnapshot == nil {

@@ -20,11 +20,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/typing"
 )
 
-// GetReplyFromConfig is the main entry point for generating a reply.
+// ReplyFromConfig is the main entry point for generating a reply.
 // It orchestrates the full pipeline: session init → preprocess hooks →
 // directives (parse + handle) → model selection → agent execution →
 // fallback tracking → reply normalization.
-func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetReplyOptions, deps ReplyDeps) ([]types.ReplyPayload, error) {
+func ReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetReplyOptions, deps ReplyDeps) ([]types.ReplyPayload, error) {
 	// 1. Initialize session state.
 	sess := InitSessionForReply(msg, deps)
 

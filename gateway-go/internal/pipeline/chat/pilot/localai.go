@@ -41,9 +41,9 @@ func SetLocalAIHub(h *localai.Hub) {
 	pkgLocalAIHub = h
 }
 
-// GetLocalAIHub returns the centralized local AI hub, or nil if not set.
+// LocalAIHub returns the centralized local AI hub, or nil if not set.
 // Used by callers (e.g., session memory) that need multi-message submission.
-func GetLocalAIHub() *localai.Hub {
+func LocalAIHub() *localai.Hub {
 	return pkgLocalAIHub
 }
 
@@ -146,13 +146,13 @@ func getRoleModel(role modelrole.Role, defaultModel string) string {
 	return defaultModel
 }
 
-// GetLightweightClient returns the cached LLM client for the lightweight model role.
-func GetLightweightClient() *llm.Client {
+// LightweightClient returns the cached LLM client for the lightweight model role.
+func LightweightClient() *llm.Client {
 	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultVllmBaseURL, "local")
 }
 
-// GetLightweightModel returns the model name for the lightweight role.
-func GetLightweightModel() string {
+// LightweightModel returns the model name for the lightweight role.
+func LightweightModel() string {
 	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultVllmModel)
 }
 
@@ -171,8 +171,8 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
-	client := GetLightweightClient()
-	model := GetLightweightModel()
+	client := LightweightClient()
+	model := LightweightModel()
 
 	// Always disable reasoning by default; caller-supplied extraBody merges on top.
 	merged := make(map[string]any, len(localai.NoThinking))

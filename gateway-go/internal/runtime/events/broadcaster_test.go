@@ -175,13 +175,13 @@ func TestSessionEventSubscriptions(t *testing.T) {
 	b.SubscribeSessionEvents("conn-1")
 	b.SubscribeSessionEvents("conn-2")
 
-	subs := b.GetSessionEventSubscriberConnIDs()
+	subs := b.SessionEventSubscriberConnIDs()
 	if len(subs) != 2 {
 		t.Errorf("expected 2 session subs, got %d", len(subs))
 	}
 
 	b.UnsubscribeSessionEvents("conn-1")
-	subs = b.GetSessionEventSubscriberConnIDs()
+	subs = b.SessionEventSubscriberConnIDs()
 	if len(subs) != 1 {
 		t.Errorf("expected 1 session sub after unsubscribe, got %d", len(subs))
 	}
@@ -194,17 +194,17 @@ func TestSessionMessageSubscriptions(t *testing.T) {
 	b.SubscribeSessionMessageEvents("conn-2", "session-abc")
 	b.SubscribeSessionMessageEvents("conn-1", "session-xyz")
 
-	subs := b.GetSessionMessageSubscriberConnIDs("session-abc")
+	subs := b.SessionMessageSubscriberConnIDs("session-abc")
 	if len(subs) != 2 {
 		t.Errorf("expected 2 subs for session-abc, got %d", len(subs))
 	}
-	subs = b.GetSessionMessageSubscriberConnIDs("session-xyz")
+	subs = b.SessionMessageSubscriberConnIDs("session-xyz")
 	if len(subs) != 1 {
 		t.Errorf("expected 1 sub for session-xyz, got %d", len(subs))
 	}
 
 	b.UnsubscribeSessionMessageEvents("conn-1", "session-abc")
-	subs = b.GetSessionMessageSubscriberConnIDs("session-abc")
+	subs = b.SessionMessageSubscriberConnIDs("session-abc")
 	if len(subs) != 1 {
 		t.Errorf("expected 1 sub after unsubscribe, got %d", len(subs))
 	}
@@ -214,12 +214,12 @@ func TestToolEventRecipients(t *testing.T) {
 	b := NewBroadcaster()
 
 	b.RegisterToolEventRecipient("run-1", "conn-1")
-	if got := b.GetToolEventRecipient("run-1"); got != "conn-1" {
+	if got := b.ToolEventRecipient("run-1"); got != "conn-1" {
 		t.Errorf("expected conn-1, got %q", got)
 	}
 
 	b.UnregisterToolEventRecipient("run-1")
-	if got := b.GetToolEventRecipient("run-1"); got != "" {
+	if got := b.ToolEventRecipient("run-1"); got != "" {
 		t.Errorf("expected empty after unregister, got %q", got)
 	}
 }
@@ -234,10 +234,10 @@ func TestUnsubscribe_CleansUpSessionSubs(t *testing.T) {
 
 	b.Unsubscribe("conn-1")
 
-	if subs := b.GetSessionEventSubscriberConnIDs(); len(subs) != 0 {
+	if subs := b.SessionEventSubscriberConnIDs(); len(subs) != 0 {
 		t.Error("session subs should be cleaned up on Unsubscribe")
 	}
-	if subs := b.GetSessionMessageSubscriberConnIDs("session-abc"); len(subs) != 0 {
+	if subs := b.SessionMessageSubscriberConnIDs("session-abc"); len(subs) != 0 {
 		t.Error("session message subs should be cleaned up on Unsubscribe")
 	}
 }

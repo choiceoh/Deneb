@@ -15,7 +15,7 @@ type sessionSnapshotAdapter struct {
 	sessions *session.Manager
 }
 
-func (a *sessionSnapshotAdapter) GetSessionSnapshot(sessionKey string) *events.SessionSnapshot {
+func (a *sessionSnapshotAdapter) SessionSnapshot(sessionKey string) *events.SessionSnapshot {
 	s := a.sessions.Get(sessionKey)
 	if s == nil {
 		return nil

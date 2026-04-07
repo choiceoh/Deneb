@@ -19,9 +19,9 @@ const ToolApprovalConfirm = "confirm"
 // ToolApprovalBlock means the tool is never executed autonomously.
 const ToolApprovalBlock = "block"
 
-// GetToolApprovalPolicy returns the approval policy for a tool.
+// ToolApprovalPolicy returns the approval policy for a tool.
 // Returns "auto" for tools not explicitly classified (default safe).
-func GetToolApprovalPolicy(toolName string) string {
+func ToolApprovalPolicy(toolName string) string {
 	if policy, ok := toolApprovalPolicy[toolName]; ok {
 		return policy
 	}
@@ -32,18 +32,18 @@ func GetToolApprovalPolicy(toolName string) string {
 
 // IsToolAutoApproved returns true if a tool can execute without user confirmation.
 func IsToolAutoApproved(toolName string) bool {
-	return GetToolApprovalPolicy(toolName) == ToolApprovalAuto
+	return ToolApprovalPolicy(toolName) == ToolApprovalAuto
 }
 
 // IsToolBlocked returns true if a tool should never be executed autonomously.
 func IsToolBlocked(toolName string) bool {
-	return GetToolApprovalPolicy(toolName) == ToolApprovalBlock
+	return ToolApprovalPolicy(toolName) == ToolApprovalBlock
 }
 
 // ShouldConfirmTool returns true if a tool requires user confirmation
 // in autonomous contexts (cron, subagent).
 func ShouldConfirmTool(toolName string) bool {
-	return GetToolApprovalPolicy(toolName) == ToolApprovalConfirm
+	return ToolApprovalPolicy(toolName) == ToolApprovalConfirm
 }
 
 // FilterToolsForAutonomous returns a list of tool names that are safe for

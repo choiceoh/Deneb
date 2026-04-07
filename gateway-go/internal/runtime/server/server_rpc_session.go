@@ -44,7 +44,7 @@ func (s *Server) registerSessionRPCMethods() {
 		if event == "session.tool" {
 			if m, ok := payload.(map[string]any); ok {
 				if runID, _ := m["runId"].(string); runID != "" {
-					if connID := s.broadcaster.GetToolEventRecipient(runID); connID != "" {
+					if connID := s.broadcaster.ToolEventRecipient(runID); connID != "" {
 						return s.broadcaster.BroadcastToConnIDs(event, payload, map[string]bool{connID: true})
 					}
 				}

@@ -33,7 +33,7 @@ type SessionSnapshot struct {
 
 // SessionSnapshotProvider resolves session snapshots for event enrichment.
 type SessionSnapshotProvider interface {
-	GetSessionSnapshot(sessionKey string) *SessionSnapshot
+	SessionSnapshot(sessionKey string) *SessionSnapshot
 }
 
 // PresenceSnapshot holds the system presence state.
@@ -106,7 +106,7 @@ func (p *Publisher) PublishSessionMessage(update TranscriptUpdate) {
 
 	// Enrich with session snapshot.
 	if p.snapshots != nil {
-		if snap := p.snapshots.GetSessionSnapshot(update.SessionKey); snap != nil {
+		if snap := p.snapshots.SessionSnapshot(update.SessionKey); snap != nil {
 			payload["session"] = snap
 		}
 	}
@@ -199,7 +199,7 @@ func (p *Publisher) CleanupAgentSeq(runID string) {
 
 // publishSessionChanged sends a sessions.changed event to session event subscribers.
 func (p *Publisher) publishSessionChanged(sessionKey, phase string, overrides map[string]any) {
-	connIDs := p.broadcaster.GetSessionEventSubscriberConnIDs()
+	connIDs := p.broadcaster.SessionEventSubscriberConnIDs()
 	if len(connIDs) == 0 {
 		return
 	}
@@ -214,7 +214,7 @@ func (p *Publisher) publishSessionChanged(sessionKey, phase string, overrides ma
 
 	// Enrich with session snapshot.
 	if p.snapshots != nil {
-		if snap := p.snapshots.GetSessionSnapshot(sessionKey); snap != nil {
+		if snap := p.snapshots.SessionSnapshot(sessionKey); snap != nil {
 			payload["session"] = snap
 		}
 	}

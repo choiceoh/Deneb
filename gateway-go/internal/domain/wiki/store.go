@@ -266,8 +266,8 @@ func (s *Store) ListPages(category string) ([]string, error) {
 	return pages, err
 }
 
-// GetIndex returns the cached master index.
-func (s *Store) GetIndex() *Index {
+// Index returns the cached master index.
+func (s *Store) Index() *Index {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.index

@@ -246,8 +246,8 @@ func (r *CommandRegistry) NormalizeCommandBody(raw string, botUsername string) s
 	return spec.canonical
 }
 
-// GetDetection returns the precomputed command detection data.
-func (r *CommandRegistry) GetDetection() *CommandDetection {
+// Detection returns the precomputed command detection data.
+func (r *CommandRegistry) Detection() *CommandDetection {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.detection
