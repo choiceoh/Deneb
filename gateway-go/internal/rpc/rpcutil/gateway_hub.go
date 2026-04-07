@@ -23,7 +23,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
@@ -69,9 +68,6 @@ type HubConfig struct {
 	Approvals *approval.Store
 	Skills    *skill.Manager
 
-	// RL self-learning (optional, nil when rl.enable=false).
-	RLService *rl.Service
-
 	// Metadata.
 	Logger  *slog.Logger
 	Version string // optional
@@ -109,9 +105,6 @@ type GatewayHub struct {
 	approvals *approval.Store
 	skills    *skill.Manager
 
-	// RL self-learning pipeline (optional, nil when rl is disabled).
-	rlService *rl.Service
-
 	// Wiki knowledge base (optional, nil when wiki is disabled).
 	wikiStore *wiki.Store
 
@@ -140,7 +133,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		tasks:          cfg.Tasks,
 		approvals:      cfg.Approvals,
 		skills:         cfg.Skills,
-		rlService:      cfg.RLService,
 		logger:         cfg.Logger,
 		version:        cfg.Version,
 		phase:          PhaseInit,
@@ -163,8 +155,7 @@ func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.
 func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
 func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
-func (h *GatewayHub) RLService() *rl.Service { return h.rlService }
-func (h *GatewayHub) WikiStore() *wiki.Store { return h.wikiStore }
+func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
 func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
@@ -173,9 +164,6 @@ func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.
 
 // SetLocalAIHub sets the centralized local AI hub (created early, before method registration).
 func (h *GatewayHub) SetLocalAIHub(sh *localai.Hub) { h.localAIHub = sh }
-
-// SetRLService sets the RL training service (optional, created during server init).
-func (h *GatewayHub) SetRLService(s *rl.Service) { h.rlService = s }
 
 // SetWikiStore sets the wiki knowledge base (optional, created during session phase).
 func (h *GatewayHub) SetWikiStore(s *wiki.Store) { h.wikiStore = s }

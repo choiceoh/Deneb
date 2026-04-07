@@ -28,7 +28,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          tools.ToolFetchTools(registry),
 	})
 
-	// Wiki knowledge base tools (always active when wiki is enabled).
+	// Wiki knowledge base tools (always active when wiki is configured).
 	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
 	RegisterDefaultPostProcessors(registry)

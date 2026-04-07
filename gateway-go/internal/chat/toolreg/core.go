@@ -507,10 +507,9 @@ func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writ
 	})
 }
 
-// RegisterWikiTools registers wiki knowledge base tools.
-// Wiki is the unified knowledge base — all long-term knowledge access
-// (search, read, write, log) goes through wiki. Project-specific tools
-// provide structured access to the "프로젝트" wiki category.
+// RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
+// access (search, read, write, log). Project-specific tools provide structured
+// access to the "프로젝트" wiki category.
 func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps, workspaceDir string) {
 	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
 	if wikiDeps.Store != nil {
