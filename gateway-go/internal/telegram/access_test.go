@@ -395,27 +395,6 @@ func TestConfig_PolicyDefaults(t *testing.T) {
 	if cfg.EffectiveGroupPolicy() != GroupPolicyOpen {
 		t.Error("expected default group policy to be open")
 	}
-	if cfg.EffectiveStreamingMode() != StreamingOff {
-		t.Error("expected default streaming to be off")
-	}
-	if cfg.EffectiveChunkMode() != ChunkModeLength {
-		t.Error("expected default chunk mode to be length")
-	}
-	if cfg.EffectiveReplyToMode() != ReplyToOff {
-		t.Error("expected default replyTo mode to be off")
-	}
-	if cfg.EffectiveReactionLevel() != ReactionAck {
-		t.Error("expected default reaction level to be ack")
-	}
-	if cfg.IsConfigWritesEnabled() != true {
-		t.Error("expected config writes enabled by default")
-	}
-	if cfg.EffectiveLinkPreview() != true {
-		t.Error("expected link preview enabled by default")
-	}
-	if cfg.EffectiveTextChunkLimit() != TextChunkLimit {
-		t.Errorf("expected default text chunk limit %d, got %d", TextChunkLimit, cfg.EffectiveTextChunkLimit())
-	}
 }
 
 func TestConfig_PolicyOverrides(t *testing.T) {
@@ -423,14 +402,7 @@ func TestConfig_PolicyOverrides(t *testing.T) {
 		Enabled:        boolPtr(false),
 		DmPolicy:       DmPolicyOpen,
 		GroupPolicy:    GroupPolicyAllowlist,
-		Streaming:      StreamingPartial,
 		BlockStreaming: boolPtr(true),
-		ChunkMode:      ChunkModeNewline,
-		ReplyToMode:    ReplyToAll,
-		ReactionLevel:  ReactionExtensive,
-		ConfigWrites:   boolPtr(false),
-		LinkPreview:    boolPtr(false),
-		TextChunkLimit: 2000,
 	}
 
 	if cfg.IsEnabled() {
@@ -442,28 +414,7 @@ func TestConfig_PolicyOverrides(t *testing.T) {
 	if cfg.EffectiveGroupPolicy() != GroupPolicyAllowlist {
 		t.Error("expected allowlist")
 	}
-	if cfg.EffectiveStreamingMode() != StreamingPartial {
-		t.Error("expected partial")
-	}
 	if !cfg.IsBlockStreamingDisabled() {
 		t.Error("expected block streaming disabled when set to true")
-	}
-	if cfg.EffectiveChunkMode() != ChunkModeNewline {
-		t.Error("expected newline")
-	}
-	if cfg.EffectiveReplyToMode() != ReplyToAll {
-		t.Error("expected all")
-	}
-	if cfg.EffectiveReactionLevel() != ReactionExtensive {
-		t.Error("expected extensive")
-	}
-	if cfg.IsConfigWritesEnabled() {
-		t.Error("expected config writes disabled")
-	}
-	if cfg.EffectiveLinkPreview() {
-		t.Error("expected link preview disabled")
-	}
-	if cfg.EffectiveTextChunkLimit() != 2000 {
-		t.Errorf("expected 2000, got %d", cfg.EffectiveTextChunkLimit())
 	}
 }

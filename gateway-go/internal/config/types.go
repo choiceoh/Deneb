@@ -46,13 +46,6 @@ const (
 	TransportDirect = "direct"
 )
 
-// Browser routing modes.
-const (
-	BrowserAuto   = "auto"
-	BrowserManual = "manual"
-	BrowserOff    = "off"
-)
-
 // Logging formats.
 const (
 	LogFormatText = "text"
@@ -81,18 +74,17 @@ const (
 // Only gateway-relevant sections are fully typed; other sections are preserved
 // as raw JSON for forwarding to the Node.js Plugin Host bridge.
 type DenebConfig struct {
-	Meta       *MetaConfig       `json:"meta,omitempty"`
-	Gateway    *GatewayConfig    `json:"gateway,omitempty"`
-	Logging    *LoggingConfig    `json:"logging,omitempty"`
-	Hooks      *HooksConfig      `json:"hooks,omitempty"`
-	CanvasHost *CanvasHostConfig `json:"canvasHost,omitempty"`
-	Media      *MediaConfig      `json:"media,omitempty"`
-	Secrets    *SecretsConfig    `json:"secrets,omitempty"`
-	Channels   *ChannelsConfig   `json:"channels,omitempty"`
-	Session    *SessionConfig    `json:"session,omitempty"`
-	Agents     *AgentsConfig     `json:"agents,omitempty"`
-	GmailPoll  *GmailPollConfig  `json:"gmailPoll,omitempty"`
-	Cron       *CronConfig       `json:"cron,omitempty"`
+	Meta      *MetaConfig      `json:"meta,omitempty"`
+	Gateway   *GatewayConfig   `json:"gateway,omitempty"`
+	Logging   *LoggingConfig   `json:"logging,omitempty"`
+	Hooks     *HooksConfig     `json:"hooks,omitempty"`
+	Media     *MediaConfig     `json:"media,omitempty"`
+	Secrets   *SecretsConfig   `json:"secrets,omitempty"`
+	Channels  *ChannelsConfig  `json:"channels,omitempty"`
+	Session   *SessionConfig   `json:"session,omitempty"`
+	Agents    *AgentsConfig    `json:"agents,omitempty"`
+	GmailPoll *GmailPollConfig `json:"gmailPoll,omitempty"`
+	Cron      *CronConfig      `json:"cron,omitempty"`
 }
 
 // MetaConfig tracks config version metadata.
@@ -112,10 +104,7 @@ type GatewayConfig struct {
 	Tailscale                         *GatewayTailscaleConfig `json:"tailscale,omitempty"`
 	Remote                            *GatewayRemoteConfig    `json:"remote,omitempty"`
 	Reload                            *GatewayReloadConfig    `json:"reload,omitempty"`
-	TLS                               *GatewayTLSConfig       `json:"tls,omitempty"`
 	HTTP                              *GatewayHTTPConfig      `json:"http,omitempty"`
-	Push                              *GatewayPushConfig      `json:"push,omitempty"`
-	Nodes                             *GatewayNodesConfig     `json:"nodes,omitempty"`
 	TrustedProxies                    []string                `json:"trustedProxies,omitempty"`
 	AllowRealIPFallback               *bool                   `json:"allowRealIpFallback,omitempty"`
 	Tools                             *GatewayToolsConfig     `json:"tools,omitempty"`
@@ -185,15 +174,6 @@ type GatewayReloadConfig struct {
 	DeferralTimeoutMs *int   `json:"deferralTimeoutMs,omitempty"`
 }
 
-// GatewayTLSConfig for TLS termination.
-type GatewayTLSConfig struct {
-	Enabled      *bool  `json:"enabled,omitempty"`
-	AutoGenerate *bool  `json:"autoGenerate,omitempty"`
-	CertPath     string `json:"certPath,omitempty"`
-	KeyPath      string `json:"keyPath,omitempty"`
-	CAPath       string `json:"caPath,omitempty"`
-}
-
 // GatewayHTTPConfig for HTTP endpoint settings.
 type GatewayHTTPConfig struct {
 	SecurityHeaders *GatewayHTTPSecurityHeadersConfig `json:"securityHeaders,omitempty"`
@@ -202,35 +182,6 @@ type GatewayHTTPConfig struct {
 // GatewayHTTPSecurityHeadersConfig for HTTP security headers.
 type GatewayHTTPSecurityHeadersConfig struct {
 	StrictTransportSecurity *string `json:"strictTransportSecurity,omitempty"`
-}
-
-// GatewayPushConfig for push notification settings.
-type GatewayPushConfig struct {
-	APNS *GatewayPushAPNSConfig `json:"apns,omitempty"`
-}
-
-// GatewayPushAPNSConfig for APNs push relay.
-type GatewayPushAPNSConfig struct {
-	Relay *GatewayPushAPNSRelayConfig `json:"relay,omitempty"`
-}
-
-// GatewayPushAPNSRelayConfig for APNs relay settings.
-type GatewayPushAPNSRelayConfig struct {
-	BaseURL   string `json:"baseUrl,omitempty"`
-	TimeoutMs *int   `json:"timeoutMs,omitempty"`
-}
-
-// GatewayNodesConfig for node browser routing.
-type GatewayNodesConfig struct {
-	Browser       *GatewayNodesBrowserConfig `json:"browser,omitempty"`
-	AllowCommands []string                   `json:"allowCommands,omitempty"`
-	DenyCommands  []string                   `json:"denyCommands,omitempty"`
-}
-
-// GatewayNodesBrowserConfig for browser routing mode.
-type GatewayNodesBrowserConfig struct {
-	Mode string `json:"mode,omitempty"` // "auto" | "manual" | "off"
-	Node string `json:"node,omitempty"`
 }
 
 // GatewayToolsConfig for HTTP /tools/invoke access control.
@@ -261,14 +212,6 @@ type HookEntry struct {
 	TimeoutMs *int   `json:"timeoutMs,omitempty"`
 	Blocking  *bool  `json:"blocking,omitempty"`
 	Enabled   *bool  `json:"enabled,omitempty"`
-}
-
-// CanvasHostConfig for A2UI canvas hosting.
-type CanvasHostConfig struct {
-	Enabled    *bool  `json:"enabled,omitempty"`
-	Root       string `json:"root,omitempty"`
-	Port       *int   `json:"port,omitempty"`
-	LiveReload *bool  `json:"liveReload,omitempty"`
 }
 
 // MediaConfig for media handling.

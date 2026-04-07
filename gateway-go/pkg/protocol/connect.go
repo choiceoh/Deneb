@@ -52,14 +52,13 @@ type ConnectAuth struct {
 // HelloOk is the server's handshake response.
 // Mirrors HelloOk message in proto/gateway.proto.
 type HelloOk struct {
-	Type          string        `json:"type"` // always "hello-ok"
-	Protocol      int           `json:"protocol"`
-	Server        HelloServer   `json:"server"`
-	Features      HelloFeatures `json:"features"`
-	Snapshot      Snapshot      `json:"snapshot"`
-	CanvasHostURL string        `json:"canvasHostUrl,omitempty"`
-	Auth          *HelloAuth    `json:"auth,omitempty"`
-	Policy        HelloPolicy   `json:"policy"`
+	Type     string        `json:"type"` // always "hello-ok"
+	Protocol int           `json:"protocol"`
+	Server   HelloServer   `json:"server"`
+	Features HelloFeatures `json:"features"`
+	Snapshot Snapshot      `json:"snapshot"`
+	Auth     *HelloAuth    `json:"auth,omitempty"`
+	Policy   HelloPolicy   `json:"policy"`
 }
 
 // HelloServer identifies the server.

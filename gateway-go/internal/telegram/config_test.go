@@ -119,34 +119,11 @@ func TestAllowList_MarshalJSON(t *testing.T) {
 	}
 }
 
-func TestConfig_EffectiveLinkPreview(t *testing.T) {
-	// Nil (unset) defaults to true.
-	c := Config{}
-	if !c.EffectiveLinkPreview() {
-		t.Error("expected default true for nil LinkPreview")
-	}
-
-	// Explicit false.
-	f := false
-	c.LinkPreview = &f
-	if c.EffectiveLinkPreview() {
-		t.Error("expected false for explicit false")
-	}
-
-	// Explicit true.
-	tr := true
-	c.LinkPreview = &tr
-	if !c.EffectiveLinkPreview() {
-		t.Error("expected true for explicit true")
-	}
-}
-
 func TestConfig_UnmarshalJSON(t *testing.T) {
 	input := `{
 		"botToken": "123:ABC",
 		"allowFrom": [42, "*", "@peter"],
 		"groupAllowFrom": [100],
-		"linkPreview": false,
 		"timeoutSeconds": 60
 	}`
 
@@ -169,9 +146,6 @@ func TestConfig_UnmarshalJSON(t *testing.T) {
 	}
 	if !c.GroupAllowFrom.ContainsID(100) {
 		t.Error("expected groupAllowFrom to contain 100")
-	}
-	if c.EffectiveLinkPreview() {
-		t.Error("expected linkPreview false")
 	}
 	if c.EffectiveTimeout() != 60 {
 		t.Errorf("timeout: got %d", c.EffectiveTimeout())
