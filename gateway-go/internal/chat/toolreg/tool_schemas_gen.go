@@ -1728,6 +1728,44 @@ func memoryStoreToolSchema() map[string]any {
 	}
 }
 
+func memoryRecallToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "수행할 작업: search (검색), read (페이지 읽기), list (목록)",
+				"enum":        []string{"search", "read", "list"},
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "검색 쿼리 (action=search 시 필수)",
+			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "위키 페이지 경로 (action=read 시 필수, e.g. '사람/홍길동.md')",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"description": "카테고리 필터: 사람, 프로젝트, 기술, 업무, 결정, 선호",
+				"enum":        []string{"사람", "프로젝트", "기술", "업무", "결정", "선호"},
+			},
+			"section": map[string]any{
+				"type":        "string",
+				"description": "섹션명 (action=read 시, 미지정이면 전체 페이지)",
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "최대 결과 수 (action=search 시, default: 10)",
+				"default":     10,
+				"minimum":     1,
+				"maximum":     30,
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func llmSpawnToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

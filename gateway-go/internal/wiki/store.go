@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -150,6 +151,41 @@ func (s *Store) GetIndex() *Index {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.index
+}
+
+// Tier1Pages returns all non-archived pages with importance >= minImportance,
+// sorted by importance descending. Each result includes the page path and content.
+func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
+	s.mu.RLock()
+	idx := s.index
+	s.mu.RUnlock()
+
+	var results []Tier1Result
+	for path, entry := range idx.Entries {
+		if entry.Importance < minImportance {
+			continue
+		}
+		page, err := s.ReadPage(path)
+		if err != nil || page.Meta.Archived {
+			continue
+		}
+		results = append(results, Tier1Result{
+			Path: path,
+			Page: page,
+		})
+	}
+
+	// Sort by importance descending.
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Page.Meta.Importance > results[j].Page.Meta.Importance
+	})
+	return results
+}
+
+// Tier1Result is a high-importance wiki page for auto-injection.
+type Tier1Result struct {
+	Path string
+	Page *Page
 }
 
 // Stats returns wiki statistics.

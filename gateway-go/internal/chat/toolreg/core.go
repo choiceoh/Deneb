@@ -540,6 +540,13 @@ func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps
 			Fn:              tools.ToolMemoryStore(wikiDeps),
 			ConcurrencySafe: true,
 		})
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:            "memory_recall",
+			Description:     "위키 지식베이스에서 정보 조회. search (검색), read (페이지 읽기), list (카테고리별 목록)",
+			InputSchema:     memoryRecallToolSchema(),
+			Fn:              tools.ToolMemoryRecall(wikiDeps),
+			ConcurrencySafe: true,
+		})
 	}
 }
 
