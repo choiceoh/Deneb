@@ -157,7 +157,7 @@ func (h *Handler) getOrCreateNotifyQueue(parentKey string) *notifyQueue {
 
 // getOrCreateSubagentNotifyCh returns the notification channel for a parent
 // session, creating it lazily if needed.
-func (h *Handler) getOrCreateSubagentNotifyCh(sessionKey string) chan string {
+func (h *Handler) getOrCreateSubagentNotifyCh(sessionKey string) chan<- string {
 	h.subagentNotifyMu.Lock()
 	defer h.subagentNotifyMu.Unlock()
 	ch, ok := h.subagentNotifyChs[sessionKey]
