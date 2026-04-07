@@ -8,6 +8,15 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > **코드 완성도가 높아도 실제 작동 품질이 나쁘면 의미 없다.**
 > 단위 테스트 통과 ≠ 제품 품질. 반드시 실제 게이트웨이에서 작동 + 품질을 검증하라.
 
+> **모든 채팅/품질/재현 테스트는 실제 텔레그램 경로를 사용한다 (WebSocket 테스트 제거됨).**
+
+### Telegram 테스트 전제조건
+
+- `~/.deneb/.env`에 `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` 설정
+- `~/.deneb/telegram-test.session` 생성: `python3 scripts/telegram-session-init.py`
+- `DENEB_DEV_BOT_USERNAME` (기본: nebdev1bot)
+- dev 게이트웨이 실행 중 + `DENEB_DEV_TELEGRAM_TOKEN` 설정
+
 ## 도구
 
 프로덕션(18789)과 분리된 dev 인스턴스(포트 18790)를 관리한다.
@@ -51,10 +60,8 @@ DENEB_ITERATE_TELEGRAM_TOKEN=<iterate bot token>  # dev-iterate.sh (port 18791)
 
 | Command | Description |
 |---|---|
-| `smoke` | Health + Ready + WebSocket RPC smoke test |
-| `rpc METHOD [PARAMS]` | 단일 RPC 호출 |
-| `session CMD1 CMD2...` | 여러 턴 — 하나의 WebSocket에서 복수 RPC 순서 실행 |
-| `chat MESSAGE` | 채팅 메시지 전송 + 스트리밍 응답 수신 |
+| `smoke` | Health + Ready smoke test |
+| `chat MESSAGE` | 텔레그램으로 채팅 메시지 전송 + 응답 수신 |
 
 ### Quality Testing
 
@@ -161,7 +168,7 @@ scripts/dev-live-test.sh stop
 
 ```bash
 scripts/dev-iterate.sh
-# 출력: build... ok → start... ok → smoke... 3/3 → ITERATE_RESULT metric=3 ...
+# 출력: build... ok → start... ok → smoke... 2/2 → ITERATE_RESULT metric=2 ...
 ```
 
 ### 사용 패턴: 상수 최적화 루프
@@ -179,12 +186,12 @@ scripts/dev-iterate.sh
 
 출력의 마지막 두 줄:
 ```
-ITERATE_RESULT metric=3 build=ok server=ok checks=3/3 latency_ms=1835
+ITERATE_RESULT metric=2 build=ok server=ok checks=2/2 latency_ms=1835
 DENEB_TEST_JSON {"version":1,"commit":"abc1234","phase":{...},"checks":[...],...}
 ```
 
 - `ITERATE_RESULT` — 레거시 포맷 (하위 호환)
-  - `metric=N` — 통과한 체크 수 (기본: 3이 최대)
+  - `metric=N` — 통과한 체크 수 (기본: 2가 최대)
   - `build=ok|fail` — 빌드 성공 여부
   - `server=ok|fail` — 서버 기동 성공 여부
   - `checks=P/T` — 통과/전체

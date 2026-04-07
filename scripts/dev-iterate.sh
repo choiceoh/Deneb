@@ -297,15 +297,15 @@ print(json.dumps(d))
   PASS=$( [[ "$(echo "$METRIC_VAL > 0" | bc -l 2>/dev/null || echo 0)" == "1" ]] && echo 1 || echo 0 )
 
 else
-  # Default: built-in smoke test.
+  # Default: built-in smoke test (health + ready, no WebSocket).
   echo -n "smoke... "
-  TOTAL=3
+  TOTAL=2
   CHECK_START=$(date +%s%N)
 
   # Collect per-check results for JSON.
   declare -a CHECK_NAMES=() CHECK_OKS=() CHECK_MSS=() CHECK_DETAILS=()
 
-  # Run all 3 checks in parallel (health, ready, ws_rpc).
+  # Run 2 HTTP checks in parallel.
   _TMP="/tmp/deneb-smoke-$$"
   C_PAR_START=$(date +%s%N)
 
@@ -327,38 +327,7 @@ else
   ) > "$_TMP-r" 2>/dev/null &
   _PID_R=$!
 
-  # Check 3: WebSocket handshake + RPC (background).
-  (
-    _s=$(date +%s%N)
-    _v=$(python3 -c "
-import json, asyncio, time, websockets
-async def main():
-    try:
-        ws = await asyncio.wait_for(websockets.connect('ws://$HOST:$PORT/ws', ping_interval=None), timeout=3)
-        await asyncio.wait_for(ws.recv(), timeout=3)
-        connect = {'type':'req','id':'it-hs','method':'connect','params':{'minProtocol':1,'maxProtocol':5,'client':{'id':'iterate','version':'1.0.0','platform':'test','mode':'control'}}}
-        await ws.send(json.dumps(connect))
-        hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
-        if not hello.get('ok'): print('0|handshake_rejected'); return
-        rpc = {'type':'req','id':f'it-{int(time.time()*1000)}','method':'health','params':{}}
-        await ws.send(json.dumps(rpc))
-        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
-        print('1|ok' if resp.get('ok') else '0|rpc_failed')
-        await ws.close()
-    except asyncio.TimeoutError:
-        print('0|timeout')
-    except ConnectionRefusedError:
-        print('0|connection_refused')
-    except Exception as e:
-        print(f'0|{type(e).__name__}')
-asyncio.run(main())
-" 2>/dev/null || echo "0|python_error")
-    _ms=$(( ($(date +%s%N) - _s) / 1000000 ))
-    echo "${_v}|${_ms}"
-  ) > "$_TMP-w" 2>/dev/null &
-  _PID_W=$!
-
-  wait $_PID_H $_PID_R $_PID_W
+  wait $_PID_H $_PID_R
 
   # Parse health result.
   _H_RAW=$(cat "$_TMP-h" 2>/dev/null || echo "|0")
@@ -380,18 +349,7 @@ asyncio.run(main())
   fi
   CHECK_NAMES+=("ready"); CHECK_MSS+=("$C2_MS"); CHECK_DETAILS+=("http=$READY")
 
-  # Parse ws_rpc result.
-  _W_RAW=$(cat "$_TMP-w" 2>/dev/null || echo "0|python_error|0")
-  _W_BODY="${_W_RAW%|*}"; C3_MS="${_W_RAW##*|}"
-  WS_OK="${_W_BODY%%|*}"; WS_DETAIL="${_W_BODY#*|}"
-  if [[ "$WS_OK" == "1" ]]; then
-    PASS=$((PASS+1)); CHECK_OKS+=(true)
-  else
-    CHECK_OKS+=(false)
-  fi
-  CHECK_NAMES+=("ws_rpc"); CHECK_MSS+=("$C3_MS"); CHECK_DETAILS+=("$WS_DETAIL")
-
-  rm -f "$_TMP-h" "$_TMP-r" "$_TMP-w"
+  rm -f "$_TMP-h" "$_TMP-r"
   CHECK_MS=$(( ($(date +%s%N) - C_PAR_START) / 1000000 ))
   echo "$PASS/$TOTAL (${CHECK_MS}ms)"
   METRIC_VAL=$PASS
@@ -402,7 +360,7 @@ import json
 names = '${CHECK_NAMES[*]}'.split()
 oks = '${CHECK_OKS[*]}'.split()
 mss = '${CHECK_MSS[*]}'.split()
-details = '''${CHECK_DETAILS[0]}|${CHECK_DETAILS[1]}|${CHECK_DETAILS[2]}'''.split('|')
+details = '''${CHECK_DETAILS[0]}|${CHECK_DETAILS[1]}'''.split('|')
 checks = []
 for i in range(len(names)):
     checks.append({'name': names[i], 'ok': oks[i] == 'true', 'ms': int(mss[i]), 'detail': details[i].strip()})
