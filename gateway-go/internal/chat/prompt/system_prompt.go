@@ -300,14 +300,17 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// Sub-agent delegation guidance (conditional).
 	if toolSet["sessions_spawn"] {
 		d.WriteString("## Sub-Agents\n")
-		d.WriteString("Use `sessions_spawn` to delegate work in parallel. Don't do everything yourself.\n")
-		d.WriteString("- **Investigation**: spawn a researcher to explore files, the web, or any topic.\n")
-		d.WriteString("- **Independent subtasks**: if a task decomposes into 2+ independent parts, spawn workers.\n")
-		d.WriteString("- **Verification**: after changes, spawn a verifier to check results.\n")
-		d.WriteString("For coding tasks: set `tool_preset` (researcher/implementer/verifier) to scope tools.\n")
-		d.WriteString("For non-coding tasks (research, writing, analysis): spawn without tool_preset so the worker has full tool access.\n")
-		d.WriteString("Depth limit: 5, breadth limit: 10. Prefer fewer focused agents over many trivial ones.\n")
-		d.WriteString("After spawning: end your turn. Do NOT poll `subagents` or repeat the delegated work. You will be notified automatically when each agent completes with its result.\n\n")
+		d.WriteString("Use `sessions_spawn` to delegate work in parallel instead of doing everything sequentially.\n")
+		d.WriteString("**When to spawn:**\n")
+		d.WriteString("- Task involves web research + code/file work → spawn researcher, handle the rest yourself.\n")
+		d.WriteString("- Task takes long (multi-file exploration, deep analysis) and the user is waiting → spawn to parallelize.\n")
+		d.WriteString("- Task decomposes into 2+ independent parts → spawn workers for each.\n")
+		d.WriteString("- After code changes → spawn a verifier to check results while you continue.\n")
+		d.WriteString("**How:**\n")
+		d.WriteString("- Coding tasks: set `tool_preset` (researcher/implementer/verifier) to scope tools.\n")
+		d.WriteString("- Non-coding tasks (research, writing, analysis): omit tool_preset for full tool access.\n")
+		d.WriteString("- Depth limit: 5, breadth limit: 10.\n")
+		d.WriteString("After spawning: end your turn. Do NOT poll `subagents` or repeat the delegated work. You will be notified automatically when each agent completes.\n\n")
 	}
 
 	// Conversation mode (conditional).
