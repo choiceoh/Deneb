@@ -5,8 +5,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
