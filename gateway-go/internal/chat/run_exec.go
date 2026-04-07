@@ -325,14 +325,6 @@ func executeAgentRun(
 		}
 		tz, _ := prompt.LoadCachedTimezone()
 		ch := deliveryChannel(params.Delivery)
-		// Session memory: pre-format for prompt injection.
-		var sessionMemoryText string
-		if deps.sessionMemory != nil {
-			if content := deps.sessionMemory.Get(params.SessionKey); content != "" {
-				sessionMemoryText = FormatForPrompt(content)
-			}
-		}
-
 		// Build tool defs — filtered if a preset is active.
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
 		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
@@ -358,11 +350,10 @@ func executeAgentRun(
 			UserTimezone:  tz,
 			ContextFiles: prompt.LoadContextFiles(workspaceDir,
 				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
-			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:       ch,
-			SessionMemory: sessionMemoryText,
-			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
-			ToolPreset:    sessionToolPreset,
+			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:      ch,
+			SkillsPrompt: loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
+			ToolPreset:   sessionToolPreset,
 		}
 
 		// Coordinator mode: use the coordinator-specific system prompt.

@@ -109,7 +109,6 @@ type runDeps struct {
 	// emitTranscriptFn sends transcript updates (user/assistant message appends)
 	// to the gateway event subscription pipeline. Optional; nil if not wired.
 	emitTranscriptFn     func(sessionKey string, message any, messageID string)
-	sessionMemory        *SessionMemoryStore // optional; structured session state
 	contextCfg           ContextConfig
 	defaultModel         string
 	subagentDefaultModel string
@@ -394,13 +393,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			"stopReason", chatResult.StopReason,
 			"deepWork", params.DeepWork)
 
-		// Build continuation message; inject session memory in deep work mode.
 		contMsg := fmt.Sprintf(contMessage, nextIndex, maxConts, contReason)
-		if params.DeepWork && deps.sessionMemory != nil {
-			if sm := deps.sessionMemory.Get(params.SessionKey); sm != "" {
-				contMsg += "\n\n## Session Memory — your task state\n" + sm
-			}
-		}
 
 		contParams := RunParams{
 			SessionKey:        params.SessionKey,

@@ -251,58 +251,9 @@ func handleRunSuccess(
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
-	// Auto-memory: extract key learnings asynchronously via local AI.
-	// When structured memory store is available, use Honcho-style importance extraction.
-	// Falls back to legacy MEMORY.md append otherwise.
-	//
-	// Dream turn is incremented on every successful run with a user message,
-	// regardless of whether the response is empty or memory extraction succeeds.
-	// This ensures dreaming triggers reliably even for tool-only or silent runs.
-	//
-	// Execute auto-memory extraction/dreaming for successful runs with user input.
-	if params.Message != "" {
-		go func() {
-			// Bound by the server shutdown context (if set) so the goroutine
-			// exits when the process is shutting down rather than leaking until
-			// autoMemoryTimeout fires against a dead process.
-			base := deps.shutdownCtx
-			if base == nil {
-				base = context.Background()
-			}
-
-			// Concurrency for local AI calls is managed by the centralized
-			// local AI hub's token budget. Bail early on server shutdown.
-			select {
-			case <-base.Done():
-				logger.Debug("memory extraction skipped: context canceled")
-				return
-			default:
-			}
-			memCtx, memCancel := context.WithTimeout(base, autoMemoryTimeout)
-			defer memCancel()
-
-			// Structured memory store replaced by wiki; use file-based fallback.
-			if result.Text != "" {
-				notes := extractAutoMemory(memCtx, params.Message, result.Text, logger)
-				if notes != "" {
-					workspaceDir := resolveWorkspaceDirForPrompt()
-					appendToMemoryFile(workspaceDir, notes, logger)
-				}
-			}
-
-			// Session memory: update structured session state.
-			// Use an independent context so prior local AI calls in this
-			// goroutine don't eat into the session-memory deadline.
-			if deps.sessionMemory != nil {
-				smCtx, smCancel := context.WithTimeout(base, sessionMemoryUpdateTimeout)
-				smToolSummary := formatToolActivitySummary(result.ToolActivities)
-				UpdateSessionMemory(smCtx, deps.sessionMemory, deps.transcript,
-					params.SessionKey, smToolSummary, logger)
-				smCancel()
-			}
-
-		}()
-	}
+	// Dream turn increment for successful runs with user input.
+	// Auto-memory and session memory removed — RLM wiki handles long-term
+	// memory, RLM compaction handles session context preservation.
 
 	logger.Info("agent run completed",
 		"stopReason", result.StopReason,
@@ -840,7 +791,7 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 
 // buildREPLEnv creates a Starlark REPL environment for the repl tool.
 // Conversation history is injected as `context`, and llm_query() calls
-// go through the sub-agent path with session memory inheritance.
+// go through the sub-agent path.
 func buildREPLEnv(
 	ctx context.Context,
 	messages []llm.Message,
@@ -852,13 +803,9 @@ func buildREPLEnv(
 	// Convert LLM messages to REPL MessageEntry format.
 	entries := messagesToREPLEntries(messages)
 
-	// Build llm_query callback: sub-agent with session memory.
+	// Build llm_query callback: sub-agent call.
 	queryFn := func(ctx context.Context, prompt string) (string, error) {
-		var sessionMemory string
-		if deps.sessionMemory != nil {
-			sessionMemory = deps.sessionMemory.Get(params.SessionKey)
-		}
-		system := rlm.BuildSubAgentSystem(sessionMemory)
+		system := rlm.BuildSubAgentSystem("")
 
 		text, err := client.Complete(ctx, llm.ChatRequest{
 			Model:     model,

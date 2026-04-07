@@ -35,7 +35,6 @@ type Handler struct {
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
 	wikiStore       *wiki.Store                       // optional; wiki knowledge base
-	sessionMemory   *SessionMemoryStore               // optional; structured session working state
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
 	registry        *modelrole.Registry               // centralized model role registry
@@ -132,7 +131,6 @@ type HandlerConfig struct {
 	AuthManager          *provider.AuthManager
 	JobTracker           *agent.JobTracker
 	ProviderConfigs      map[string]ProviderConfig // provider ID → config
-	SessionMemory        *SessionMemoryStore       // optional; structured session working state
 	WikiStore            *wiki.Store               // optional; wiki knowledge base
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
@@ -186,7 +184,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		jobTracker:           cfg.JobTracker,
 		providerConfigs:      cfg.ProviderConfigs,
 		wikiStore:            cfg.WikiStore,
-		sessionMemory:        cfg.SessionMemory,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,
 		registry:             cfg.Registry,

@@ -29,20 +29,6 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-
-	// Session memory store (structured working state per session).
-	sessMemDir := filepath.Join(home, ".deneb", "sessions")
-	sessMemStore := chat.NewSessionMemoryStore(sessMemDir)
-	loaded := sessMemStore.LoadFromDisk()
-	chatCfg.SessionMemory = sessMemStore
-	if loaded > 0 {
-		s.logger.Info("session memory restored", "count", loaded)
-	}
-
 	// Wiki knowledge base.
 	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
 		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)

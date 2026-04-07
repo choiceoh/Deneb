@@ -78,7 +78,6 @@ type SystemPromptParams struct {
 	RuntimeInfo   *RuntimeInfo
 	Channel       string
 	DocsPath      string
-	SessionMemory string // pre-formatted session state block (empty = omit)
 	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
 }
 
@@ -340,12 +339,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString(fmt.Sprintf("- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken))
 	}
 	d.WriteString("\n")
-
-	// Session State (structured session memory from previous runs).
-	if params.SessionMemory != "" {
-		d.WriteString(params.SessionMemory)
-		d.WriteString("\n")
-	}
 
 	// Inter-agent bridge.
 	if toolSet["bridge"] {
