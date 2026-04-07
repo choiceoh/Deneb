@@ -19,6 +19,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 )
 
 // RunAgent executes the agent tool-call loop: call LLM → detect tool_use →
@@ -199,6 +200,16 @@ func RunAgent(
 		// Accumulate usage.
 		result.Usage.InputTokens += turnRes.usage.InputTokens
 		result.Usage.OutputTokens += turnRes.usage.OutputTokens
+
+		// Feed actual token usage back to the estimator for self-calibration.
+		if turnRes.usage.InputTokens > 0 {
+			est := tokenest.ForModel(cfg.Model)
+			estimated := est.CountBytes([]byte(req.System))
+			for _, m := range req.Messages {
+				estimated += est.CountBytes([]byte(m.Content))
+			}
+			tokenest.RecordFeedback(est.Family(), estimated, turnRes.usage.InputTokens)
+		}
 
 		// Log LLM turn result to agent detail log.
 		if runLog != nil {

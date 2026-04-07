@@ -1,7 +1,5 @@
 package model
 
-import "unicode/utf8"
-
 // ModelRuntimeInfo holds capacity and token information for a model.
 type ModelRuntimeInfo struct {
 	Provider         string
@@ -37,18 +35,4 @@ func ResolveMaxTokens(configured, modelDefault int) int {
 		return modelDefault
 	}
 	return DefaultMaxTokens
-}
-
-// EstimateTokens provides a rough token estimate for text.
-// Uses Unicode rune count divided by 2, calibrated for Korean BPE (~2 runes/token).
-// Matches the canonical estimator in chat/prompt.EstimateTokens.
-func EstimateTokens(text string) int {
-	if text == "" {
-		return 0
-	}
-	n := utf8.RuneCountInString(text) / 2
-	if n < 1 {
-		return 1
-	}
-	return n
 }

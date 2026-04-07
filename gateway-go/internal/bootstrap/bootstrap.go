@@ -10,6 +10,7 @@ package bootstrap
 import (
 	"log/slog"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
@@ -41,6 +42,9 @@ func Run(compiledVersion string) int {
 		)
 	}
 
+	// Load token estimator calibration from previous runs.
+	tokenest.LoadCalibration(cfg.CfgDir)
+
 	// Phase 3: services — wire server, Gemini embedder, Vega backend.
 	svc, err := WireServices(cfg.Addr, cfg.RuntimeCfg, log.Logger, flags.Version, log.UseColor)
 	if err != nil {
@@ -49,8 +53,18 @@ func Run(compiledVersion string) int {
 	}
 
 	// Phase 4: lifecycle — daemon or foreground run with signal handling.
+	var exitCode int
 	if flags.DaemonMode || flags.PIDFile != "" {
-		return RunDaemon(flags, cfg, svc, log)
+		exitCode = RunDaemon(flags, cfg, svc, log)
+	} else {
+		exitCode = RunServer(flags, cfg, svc, log)
 	}
-	return RunServer(flags, cfg, svc, log)
+
+	// Persist token estimator calibration for next startup.
+	if cfg.CfgDir != "" {
+		if err := tokenest.SaveCalibration(cfg.CfgDir); err != nil {
+			log.Logger.Warn("tokenest: failed to save calibration", "error", err)
+		}
+	}
+	return exitCode
 }

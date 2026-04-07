@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/chat/tokenutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 )
 
 // Context assembly defaults.
@@ -15,7 +15,6 @@ const (
 	defaultSystemPromptBudget = 30_000
 	defaultFreshTailCount     = 48
 	defaultMaxMessages        = 100
-	runesPerToken             = tokenutil.RunesPerToken
 )
 
 // AssemblyResult holds the output of context assembly.
@@ -47,9 +46,9 @@ func DefaultContextConfig() ContextConfig {
 }
 
 // estimateTokens returns a rough token count for a string.
-// Delegates to tokenutil.EstimateTokens (shared across chat subsystem).
+// Delegates to tokenest.Estimate (script-aware, Korean-weighted).
 func estimateTokens(s string) int {
-	return tokenutil.EstimateTokens(s)
+	return tokenest.Estimate(s)
 }
 
 // assembleContext selects transcript messages that fit within the token budget.

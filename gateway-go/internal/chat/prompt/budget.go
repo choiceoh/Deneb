@@ -4,13 +4,9 @@ package prompt
 import (
 	"sort"
 	"strings"
-	"unicode/utf8"
-)
 
-// runesPerToken is the rune-based token estimate divisor.
-// Korean BPE averages ~2 runes/token; English averages ~4 runes/token.
-// Divisor 2 is calibrated for Korean (the primary language of this app).
-const runesPerToken = 2
+	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
+)
 
 // DefaultSystemPromptBudget is the default token budget for system prompt
 // fragments (65536 tokens). The base system prompt (identity, tools, skills,
@@ -51,20 +47,6 @@ var DefaultPriorities = map[string]int{
 var defaultShrinkable = map[int]bool{
 	2: true,
 	3: true,
-}
-
-// EstimateTokens returns a rough token count for a string.
-// Uses Unicode rune count divided by runesPerToken (2), calibrated for Korean.
-func EstimateTokens(text string) uint64 {
-	n := utf8.RuneCountInString(text)
-	if n == 0 {
-		return 0
-	}
-	est := uint64(n) / runesPerToken
-	if est < 1 {
-		return 1
-	}
-	return est
 }
 
 // NewFragment creates a PromptFragment with default priority and shrinkable
@@ -136,7 +118,7 @@ func (b *PromptBudget) Assemble(fragments []PromptFragment) string {
 func sumTokens(fragments []PromptFragment) uint64 {
 	var total uint64
 	for _, f := range fragments {
-		total += EstimateTokens(f.Content)
+		total += uint64(tokenest.Estimate(f.Content))
 	}
 	return total
 }
@@ -163,7 +145,7 @@ func shrinkByPriority(fragments []PromptFragment, priority int, fraction float64
 	var targets []idxTokens
 	for i, f := range fragments {
 		if f.Priority == priority && f.Shrinkable {
-			targets = append(targets, idxTokens{i, EstimateTokens(f.Content)})
+			targets = append(targets, idxTokens{i, uint64(tokenest.Estimate(f.Content))})
 		}
 	}
 	sort.Slice(targets, func(i, j int) bool {
@@ -189,7 +171,7 @@ func removeShrinkableSmallestFirst(fragments []PromptFragment, priority int, bud
 	var removable []idxTokens
 	for i, f := range fragments {
 		if f.Priority == priority {
-			removable = append(removable, idxTokens{i, EstimateTokens(f.Content)})
+			removable = append(removable, idxTokens{i, uint64(tokenest.Estimate(f.Content))})
 		}
 	}
 	sort.Slice(removable, func(i, j int) bool {
