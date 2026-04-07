@@ -273,17 +273,15 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions_spawn",
-		Description: "Create an isolated sub-agent session for parallel work. Use subagents to monitor",
+		Description: "Spawn a sub-agent to work in parallel — use for long tasks, research, or when the user is waiting. Faster than doing it yourself",
 		InputSchema: sessionsSpawnToolSchema(),
 		Fn:          tools.ToolSessionsSpawn(d),
-		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "subagents",
 		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: subagentsToolSchema(),
 		Fn:          tools.ToolSubagents(d),
-		Deferred:    true,
 	})
 }
 
