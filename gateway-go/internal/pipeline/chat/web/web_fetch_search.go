@@ -114,7 +114,7 @@ func tavilyCall(ctx context.Context, apiKey, query string, count int) (answer st
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, "POST",
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost,
 		"https://api.tavily.com/search", bytes.NewReader(body))
 	if err != nil {
 		return "", nil, fmt.Errorf("create tavily request: %w", err)
@@ -128,9 +128,9 @@ func tavilyCall(ctx context.Context, apiKey, query string, count int) (answer st
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", nil, fmt.Errorf("Tavily HTTP %d: %s", resp.StatusCode, string(respBody))
+		return "", nil, fmt.Errorf("tavily HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var result tavilyResponse
@@ -176,6 +176,7 @@ type searchResult struct {
 func braveWebSearch(ctx context.Context, apiKey, query string, count int) (string, error) {
 	results, err := braveSearchRaw(ctx, apiKey, query, count)
 	if err != nil {
+		//nolint:nilerr // tool returns user-facing error in result string
 		return formatFetchError(webFetchErr{
 			Code: "search_failed", Message: err.Error(), Retryable: true,
 		}), nil
@@ -187,7 +188,7 @@ func braveSearchRaw(ctx context.Context, apiKey, query string, count int) ([]sea
 	reqURL := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d",
 		url.QueryEscape(query), count)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -200,8 +201,8 @@ func braveSearchRaw(ctx context.Context, apiKey, query string, count int) ([]sea
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Brave Search HTTP %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("brave search HTTP %d", resp.StatusCode)
 	}
 
 	var result braveSearchResult
@@ -228,7 +229,7 @@ func duckDuckGoSearch(ctx context.Context, query string) (string, error) {
 	reqURL := fmt.Sprintf("https://api.duckduckgo.com/?q=%s&format=json&no_html=1&skip_disambig=1",
 		url.QueryEscape(query))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
 		return "", err
 	}

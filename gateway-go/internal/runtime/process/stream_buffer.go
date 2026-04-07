@@ -72,7 +72,7 @@ func drainToBuffer(r io.Reader, sb *StreamBuffer) {
 	for {
 		n, err := r.Read(buf)
 		if n > 0 {
-			sb.Write(buf[:n])
+			sb.Write(buf[:n]) //nolint:errcheck // best-effort
 		}
 		if err != nil {
 			break

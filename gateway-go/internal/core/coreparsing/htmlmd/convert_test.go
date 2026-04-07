@@ -239,7 +239,7 @@ func TestCurlyQuotesInHTML(t *testing.T) {
 }
 
 func TestCurlyQuotesAtEveryByteAlignment(t *testing.T) {
-	for padding := 0; padding < 4; padding++ {
+	for padding := range 4 {
 		prefix := strings.Repeat("x", padding)
 		html := "<p>" + prefix + "\u2019</p><li>" + prefix + "\u2019item</li><a href=\"u\">" + prefix + "\u2019link</a><h2>" + prefix + "\u2019head</h2>"
 		r := Convert(html)
@@ -304,7 +304,7 @@ func TestXcomKoreanHTMLWithEllipsisNoPanic(t *testing.T) {
 }
 
 func TestEllipsisAtEveryByteAlignment(t *testing.T) {
-	for padding := 0; padding < 4; padding++ {
+	for padding := range 4 {
 		prefix := strings.Repeat("x", padding)
 		html := "<p>" + prefix + "\u2026</p><li>" + prefix + "\u2026item</li><a href=\"u\">" + prefix + "\u2026link</a><h2>" + prefix + "\u2026head</h2><code>" + prefix + "\u2026code</code>"
 		r := Convert(html)

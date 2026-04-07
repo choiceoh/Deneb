@@ -154,7 +154,8 @@ func TestHashString(t *testing.T) {
 	}
 
 	// Deterministic: same input always produces same hash.
-	if HashString("test") != HashString("test") {
+	h1, h2 := HashString("test"), HashString("test")
+	if h1 != h2 {
 		t.Error("HashString should be deterministic")
 	}
 

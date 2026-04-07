@@ -100,7 +100,7 @@ func assembleContext(
 
 	// Token-budget truncation: drop oldest messages until history fits.
 	if budget := cfg.MemoryTokenBudget; budget > 0 && len(msgs) > 0 {
-		msgs = trimToTokenBudget(msgs, int(budget))
+		msgs = trimToTokenBudget(msgs, int(budget)) //nolint:gosec // G115 — budget is a practical token count, never near int overflow
 	}
 
 	return &AssemblyResult{

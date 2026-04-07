@@ -78,7 +78,7 @@ func TestRandomTransitionSequencesNeverPanic(t *testing.T) {
 		rng := rand.New(rand.NewSource(int64(seed)))
 		status := RunStatus("")
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			next := allStatuses[rng.Intn(len(allStatuses))]
 			// These must never panic regardless of input.
 			_ = IsValidTransition(status, next)

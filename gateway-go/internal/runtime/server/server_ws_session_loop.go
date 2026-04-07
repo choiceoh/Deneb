@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // runMessageLoop reads frames from the WebSocket and dispatches them.
@@ -92,7 +92,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 }
 
 // runPingLoop sends periodic WebSocket pings and disconnects idle or unresponsive clients.
-// nhooyr.io/websocket handles pong responses automatically; Ping() blocks until pong arrives.
+// github.com/coder/websocket handles pong responses automatically; Ping() blocks until pong arrives.
 // Tolerates up to maxPingFailures consecutive failures before closing — GPU inference on
 // DGX Spark can temporarily delay pong responses.
 func (s *Server) runPingLoop(ctx context.Context, client *WsClient) {
@@ -145,11 +145,11 @@ func (s *Server) startTickBroadcaster(ctx context.Context) {
 			case <-ticker.C:
 				data := buildTickJSON(time.Now().UnixMilli())
 				s.clients.Range(func(_, value any) bool {
-					client := value.(*WsClient)
+					client := value.(*WsClient) //nolint:errcheck // type guaranteed by sync.Map usage
 					if client.authed {
 						// Best-effort tick: ignore write errors (client will disconnect naturally).
 						writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-						s.writeFrameRaw(writeCtx, client, data)
+						s.writeFrameRaw(writeCtx, client, data) //nolint:errcheck // best-effort
 						cancel()
 					}
 					return true

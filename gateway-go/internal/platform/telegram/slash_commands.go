@@ -155,10 +155,7 @@ func IsSlashCommand(text string) (command, args string, ok bool) {
 // IsCommandAlias checks if the text matches any command alias and returns the
 // canonical command name. This is useful for resolving aliases before dispatch.
 func IsCommandAlias(text string, commands []SlashCommand) (canonical string, ok bool) {
-	text = strings.TrimSpace(text)
-	if strings.HasPrefix(text, "/") {
-		text = text[1:]
-	}
+	text = strings.TrimPrefix(strings.TrimSpace(text), "/")
 
 	// Strip @bot suffix.
 	if atIdx := strings.IndexByte(text, '@'); atIdx >= 0 {

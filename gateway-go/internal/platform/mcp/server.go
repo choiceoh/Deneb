@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -57,7 +58,7 @@ func (s *Server) Run(ctx context.Context) error {
 	for {
 		req, err := s.transport.ReadRequest()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				s.logger.Info("stdin closed, shutting down")
 				return nil
 			}

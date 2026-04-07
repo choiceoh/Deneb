@@ -89,16 +89,16 @@ func formatPlanStatus(plan *PlanState) string {
 		default:
 			icon = "⬜"
 		}
-		sb.WriteString(fmt.Sprintf("%s %s", icon, step.Title))
+		fmt.Fprintf(&sb, "%s %s", icon, step.Title)
 		if step.Note != "" {
-			sb.WriteString(fmt.Sprintf(" — %s", step.Note))
+			fmt.Fprintf(&sb, " — %s", step.Note)
 		}
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString(fmt.Sprintf("\nProgress: %d/%d completed", completed, total))
+	fmt.Fprintf(&sb, "\nProgress: %d/%d completed", completed, total)
 	if plan.Summary != "" {
-		sb.WriteString(fmt.Sprintf("\nSummary: %s", plan.Summary))
+		fmt.Fprintf(&sb, "\nSummary: %s", plan.Summary)
 	}
 
 	return sb.String()

@@ -41,7 +41,7 @@ func (r *PostProcessRegistry) Add(toolName string, p PostProcessor) {
 
 // Apply runs all applicable post-processors on the output.
 // Per-tool processors run first (e.g., summarizers before trimming), then global ones.
-func (r *PostProcessRegistry) Apply(ctx context.Context, toolName string, output string) string {
+func (r *PostProcessRegistry) Apply(ctx context.Context, toolName, output string) string {
 	if processors, ok := r.perTool[toolName]; ok {
 		for _, p := range processors {
 			output = p(ctx, toolName, output)
@@ -63,7 +63,7 @@ const (
 )
 
 // OutputTrimmer caps output at outputTrimMax chars, preserving head and tail.
-func OutputTrimmer(_ context.Context, _ string, output string) string {
+func OutputTrimmer(_ context.Context, _, output string) string {
 	if len(output) <= outputTrimMax {
 		return output
 	}
@@ -74,7 +74,7 @@ func OutputTrimmer(_ context.Context, _ string, output string) string {
 }
 
 // ErrorEnricher adds actionable hints to common error patterns.
-func ErrorEnricher(_ context.Context, _ string, output string) string {
+func ErrorEnricher(_ context.Context, _, output string) string {
 	if !strings.Contains(output, "Error:") && !strings.Contains(output, "STDERR:") {
 		return output
 	}
@@ -101,7 +101,7 @@ func ErrorEnricher(_ context.Context, _ string, output string) string {
 
 // GrepResultSummarizer caps grep output and adds match count summary.
 // Registered as a per-tool processor for "grep".
-func GrepResultSummarizer(_ context.Context, _ string, output string) string {
+func GrepResultSummarizer(_ context.Context, _, output string) string {
 	lines := strings.Split(output, "\n")
 	if len(lines) <= grepMaxMatches {
 		return output
@@ -112,7 +112,7 @@ func GrepResultSummarizer(_ context.Context, _ string, output string) string {
 
 // FindResultSummarizer caps find output and groups by directory.
 // Registered as a per-tool processor for "find".
-func FindResultSummarizer(_ context.Context, _ string, output string) string {
+func FindResultSummarizer(_ context.Context, _, output string) string {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) <= findMaxEntries {
 		return output
@@ -131,7 +131,7 @@ func FindResultSummarizer(_ context.Context, _ string, output string) string {
 
 	var sb strings.Builder
 	sb.WriteString(strings.Join(lines[:findMaxEntries], "\n"))
-	sb.WriteString(fmt.Sprintf("\n\n[... %d more files omitted (total: %d)]", len(lines)-findMaxEntries, len(lines)))
+	fmt.Fprintf(&sb, "\n\n[... %d more files omitted (total: %d)]", len(lines)-findMaxEntries, len(lines))
 	sb.WriteString("\n\nDirectory summary:")
 	for dir, count := range dirCounts {
 		fmt.Fprintf(&sb, "\n  %s: %d files", dir, count)
@@ -140,9 +140,9 @@ func FindResultSummarizer(_ context.Context, _ string, output string) string {
 }
 
 // StructuredFormatter pretty-prints compact JSON outputs for readability.
-func StructuredFormatter(_ context.Context, _ string, output string) string {
+func StructuredFormatter(_ context.Context, _, output string) string {
 	trimmed := strings.TrimSpace(output)
-	if len(trimmed) == 0 || len(trimmed) > 10000 {
+	if trimmed == "" || len(trimmed) > 10000 {
 		return output
 	}
 	// Only attempt if it looks like JSON.
@@ -165,7 +165,7 @@ func StructuredFormatter(_ context.Context, _ string, output string) string {
 }
 
 // ExecAnnotator adds a structured header to exec results with metadata.
-func ExecAnnotator(_ context.Context, toolName string, output string) string {
+func ExecAnnotator(_ context.Context, toolName, output string) string {
 	if toolName != "exec" {
 		return output
 	}

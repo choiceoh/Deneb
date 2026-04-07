@@ -29,7 +29,8 @@ func TestNewStickyDialer_DefaultStrategy(t *testing.T) {
 func TestStickyDialer_ConnectsToLocalServer(t *testing.T) {
 	t.Parallel()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}

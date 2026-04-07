@@ -256,16 +256,16 @@ func rewriteStagedMediaPaths(ctx *types.MsgContext, rawPaths []string, staged ma
 	}
 
 	// Rewrite MediaUrls array.
-	if len(ctx.MediaUrls) > 0 {
-		nextUrls := make([]string, len(ctx.MediaUrls))
-		for i, u := range ctx.MediaUrls {
+	if len(ctx.MediaURLs) > 0 {
+		nextUrls := make([]string, len(ctx.MediaURLs))
+		for i, u := range ctx.MediaURLs {
 			nextUrls[i] = rewriteIfStaged(u)
 		}
-		ctx.MediaUrls = nextUrls
+		ctx.MediaURLs = nextUrls
 	}
 	// Rewrite single MediaUrl.
-	rewrittenUrl := rewriteIfStaged(ctx.MediaUrl)
-	if rewrittenUrl != ctx.MediaUrl {
-		ctx.MediaUrl = rewrittenUrl
+	rewrittenUrl := rewriteIfStaged(ctx.MediaURL)
+	if rewrittenUrl != ctx.MediaURL {
+		ctx.MediaURL = rewrittenUrl
 	}
 }

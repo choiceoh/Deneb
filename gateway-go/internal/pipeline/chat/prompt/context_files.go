@@ -198,7 +198,7 @@ func ClearSessionSnapshot(sessionKey string) {
 }
 
 // loadContextFilesFromDisk performs the actual filesystem scan.
-func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]time.Time) {
+func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]time.Time) { //nolint:gocritic // unnamedResult — naming would shadow local vars
 	searchDirs := collectSearchDirs(workspaceDir)
 
 	var files []ContextFile
@@ -232,7 +232,7 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 			}
 
 			content := string(data)
-			if len(content) == 0 {
+			if content == "" {
 				continue
 			}
 
@@ -296,7 +296,7 @@ func collectSearchDirs(workspaceDir string) []string {
 
 	home, _ := os.UserHomeDir()
 	current := workspaceDir
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		parent := filepath.Dir(current)
 		if parent == current {
 			break // reached filesystem root

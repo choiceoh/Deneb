@@ -444,7 +444,7 @@ func formatDeleteEvent(p map[string]any, repo, actor string) string {
 	}
 }
 
-func formatWorkflowRunEvent(p map[string]any, repo, actor string) string {
+func formatWorkflowRunEvent(p map[string]any, repo, _ string) string {
 	action := strField(p, "action")
 	if action != "completed" {
 		return ""

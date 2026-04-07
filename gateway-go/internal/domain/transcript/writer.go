@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -129,7 +128,7 @@ func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
 	}
 	data = append(data, '\n')
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil { //nolint:gosec // G306 — transcript file, readable by owner
 		return fmt.Errorf("transcript: write header: %w", err)
 	}
 
@@ -225,10 +224,7 @@ func (w *Writer) ReadPreview(sessionKey string, maxItems int) ([]PreviewItem, er
 				Timestamp int64  `json:"timestamp"`
 			}
 			if err := dec.Decode(&msg); err != nil {
-				if err != io.EOF {
-					// skip malformed tail
-				}
-				break
+				break // skip malformed tail (EOF or corrupt)
 			}
 
 			item := PreviewItem{

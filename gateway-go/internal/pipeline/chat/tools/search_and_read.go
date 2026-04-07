@@ -74,7 +74,7 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 				return "No matches found.", nil
 			}
 			// If stdout has valid match lines despite the error, use them.
-			if len(out) > 0 && hasGrepMatches(out) {
+			if len(out) > 0 && hasGrepMatches(out) { //nolint:gocritic // ifElseChain — grep retry logic
 				// Continue to step 2 with partial results.
 			} else if exitCode == 2 {
 				// Retry 1: treat pattern as literal string (-F).
@@ -83,7 +83,7 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 				fixedArgs = append([]string{"-F"}, fixedArgs...)
 				if retryOut, _, retryErr := runRg(ctx, fixedArgs); retryErr == nil {
 					out = retryOut
-				} else if rgExitCode(retryErr) == 1 {
+				} else if rgExitCode(retryErr) == 1 { //nolint:gocritic // ifElseChain — grep retry cascade
 					return "No matches found.", nil
 				} else if p.FileType != "" {
 					// Retry 2: strip --type (commonly unrecognized), keep -F.
@@ -236,7 +236,7 @@ type lineRange struct {
 }
 
 // mergeRanges builds non-overlapping line ranges around match locations.
-func mergeRanges(matchLines []int, context, totalLines int) []lineRange {
+func mergeRanges(matchLines []int, surrounding, totalLines int) []lineRange {
 	if len(matchLines) == 0 {
 		return nil
 	}
@@ -246,8 +246,8 @@ func mergeRanges(matchLines []int, context, totalLines int) []lineRange {
 	var ranges []lineRange
 	for _, ml := range matchLines {
 		// Convert to 0-based index.
-		start := ml - 1 - context
-		end := ml - 1 + context
+		start := ml - 1 - surrounding
+		end := ml - 1 + surrounding
 		if start < 0 {
 			start = 0
 		}

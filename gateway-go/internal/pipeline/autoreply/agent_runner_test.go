@@ -22,16 +22,16 @@ func sseTextResponse(text, stopReason string) string {
 		finishReason = "stop"
 	}
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"%s\"},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":0}}\n\n", text))
-	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"%s\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}\n\n", finishReason))
+	fmt.Fprintf(&b, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"%s\"},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":0}}\n\n", text)
+	fmt.Fprintf(&b, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"%s\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}\n\n", finishReason)
 	b.WriteString("data: [DONE]\n\n")
 	return b.String()
 }
 
 func sseToolResponse(toolID, toolName, toolInput string) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"%s\",\"type\":\"function\",\"function\":{\"name\":\"%s\",\"arguments\":\"\"}}]},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":0}}\n\n", toolID, toolName))
-	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"%s\"}}]},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}\n\n", toolInput))
+	fmt.Fprintf(&b, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"%s\",\"type\":\"function\",\"function\":{\"name\":\"%s\",\"arguments\":\"\"}}]},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":0}}\n\n", toolID, toolName)
+	fmt.Fprintf(&b, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"%s\"}}]},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}\n\n", toolInput)
 	b.WriteString("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":10}}\n\n")
 	b.WriteString("data: [DONE]\n\n")
 	return b.String()
@@ -261,7 +261,7 @@ var _ agent.LLMStreamer = (*llm.Client)(nil)
 func TestAgentRunnerMemory_Compaction(t *testing.T) {
 	mem := NewAgentRunnerMemory(100)
 	mem.Append(AgentMessage{Role: "system", Content: "You are helpful."})
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		mem.Append(AgentMessage{Role: "user", Content: fmt.Sprintf("Message %d with some padding text to use tokens", i)})
 	}
 
@@ -284,7 +284,7 @@ func TestAgentRunnerMemory_Compaction(t *testing.T) {
 func TestAgentRunnerMemory_CompactWithSummary(t *testing.T) {
 	mem := NewAgentRunnerMemory(50)
 	mem.Append(AgentMessage{Role: "system", Content: "System."})
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mem.Append(AgentMessage{Role: "user", Content: fmt.Sprintf("Long message %d padding padding padding", i)})
 	}
 

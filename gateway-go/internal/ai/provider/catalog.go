@@ -113,7 +113,7 @@ func BuildPairedProviderAPIKeyCatalog(params PairedProviderCatalogParams) *Paire
 	}
 
 	providers := params.BuildProviders()
-	if providers == nil || len(providers) == 0 {
+	if len(providers) == 0 {
 		return nil
 	}
 

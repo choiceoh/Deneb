@@ -355,15 +355,16 @@ func FormatSubagentList(agents []ACPAgent) string {
 	var lines []string
 	for _, a := range agents {
 		status := a.Status
-		if status == "running" {
+		switch status {
+		case "running":
 			status = "🟢 running"
-		} else if status == "idle" {
+		case "idle":
 			status = "🟡 idle"
-		} else if status == "done" {
+		case "done":
 			status = "✅ done"
-		} else if status == "failed" {
+		case "failed":
 			status = "❌ failed"
-		} else if status == "killed" {
+		case "killed":
 			status = "💀 killed"
 		}
 		role := a.Role

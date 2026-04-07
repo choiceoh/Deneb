@@ -35,7 +35,7 @@ type RegisteredProviderDef struct {
 	DocsPath             string                  `json:"docsPath,omitempty"`
 	Aliases              []string                `json:"aliases,omitempty"`
 	EnvVars              []string                `json:"envVars,omitempty"`
-	DeprecatedProfileIds []string                `json:"deprecatedProfileIds,omitempty"`
+	DeprecatedProfileIDs []string                `json:"deprecatedProfileIds,omitempty"`
 	Auth                 []ProviderAuthMethodDef `json:"auth"`
 	HasCatalog           bool                    `json:"hasCatalog,omitempty"`
 	HasDiscovery         bool                    `json:"hasDiscovery,omitempty"`
@@ -181,8 +181,8 @@ func NormalizeRegisteredProvider(params NormalizeProviderParams) (*RegisteredPro
 	if v := normalizeTextList(params.Provider.Aliases); v != nil {
 		result.Aliases = v
 	}
-	if v := normalizeTextList(params.Provider.DeprecatedProfileIds); v != nil {
-		result.DeprecatedProfileIds = v
+	if v := normalizeTextList(params.Provider.DeprecatedProfileIDs); v != nil {
+		result.DeprecatedProfileIDs = v
 	}
 	if v := normalizeTextList(params.Provider.EnvVars); v != nil {
 		result.EnvVars = v
@@ -198,15 +198,4 @@ type NormalizeProviderParams struct {
 	PluginID string
 	Source   string
 	Provider RegisteredProviderDef
-}
-
-// --- Utility ---
-
-func hasAuthMethod(auth []ProviderAuthMethodDef, methodID string) bool {
-	for _, m := range auth {
-		if m.ID == methodID {
-			return true
-		}
-	}
-	return false
 }

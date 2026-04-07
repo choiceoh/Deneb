@@ -567,8 +567,8 @@ func buildSenderName(from *telegram.User) string {
 }
 
 // isGroupChat checks if a Telegram chat is a group/supergroup.
-func isGroupChat(chat telegram.Chat) bool {
-	return chat.Type == "group" || chat.Type == "supergroup"
+func isGroupChat(tgChat telegram.Chat) bool {
+	return tgChat.Type == "group" || tgChat.Type == "supergroup"
 }
 
 // handleCallbackQuery processes an inline keyboard button click.

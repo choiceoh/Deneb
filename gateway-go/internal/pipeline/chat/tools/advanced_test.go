@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -136,7 +137,7 @@ func TestToolSearchAndRead_noMatch(t *testing.T) {
 func TestToolSearchAndRead_maxFiles(t *testing.T) {
 	requireRg(t)
 	tmp := t.TempDir()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		name := filepath.Join(tmp, strings.Repeat("a", i+1)+".txt")
 		os.WriteFile(name, []byte("target_pattern\n"), 0o644)
 	}
@@ -430,7 +431,7 @@ func testGitCommit(t *testing.T, dir, msg string) {
 
 func runCmd(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

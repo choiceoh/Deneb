@@ -45,7 +45,7 @@ func TestBuildSkillsPrompt_fullFormat(t *testing.T) {
 func TestBuildSkillsPrompt_compactFallback(t *testing.T) {
 	// Create many skills that exceed the full format budget.
 	var manySkills []PromptSkill
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		manySkills = append(manySkills, PromptSkill{
 			Name:        strings.Repeat("x", 50),
 			Description: strings.Repeat("description text ", 20),
@@ -92,8 +92,8 @@ func TestCompactSkillPaths(t *testing.T) {
 func TestEscapeXml(t *testing.T) {
 	input := `<test & "thing" 'here'>`
 	expected := "&lt;test &amp; &quot;thing&quot; &apos;here&apos;&gt;"
-	if got := escapeXml(input); got != expected {
-		t.Errorf("escapeXml(%q) = %q, want %q", input, got, expected)
+	if got := escapeXML(input); got != expected {
+		t.Errorf("escapeXML(%q) = %q, want %q", input, got, expected)
 	}
 }
 

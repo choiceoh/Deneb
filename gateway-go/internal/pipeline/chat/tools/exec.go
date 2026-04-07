@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,7 +46,7 @@ var workdirCache sync.Map // map[string]workdirCacheEntry
 
 func validateWorkdir(dir string) error {
 	if cached, ok := workdirCache.Load(dir); ok {
-		entry := cached.(workdirCacheEntry)
+		entry := cached.(workdirCacheEntry) //nolint:errcheck // type guaranteed by sync.Map usage
 		if time.Since(entry.checked) <= workdirCacheTTL {
 			if entry.exists {
 				return nil
@@ -120,7 +121,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			// so the caller can poll via the process tool.
 			if p.Background {
 				id := procMgr.ExecuteBackground(ctx, req)
-				return fmt.Sprintf(`{"id":"%s","status":"running","message":"background process started, use process tool with action=poll to check"}`, id), nil
+				return fmt.Sprintf(`{"id":%q,"status":"running","message":"background process started, use process tool with action=poll to check"}`, id), nil
 			}
 
 			result := procMgr.Execute(ctx, req)
@@ -145,7 +146,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 		execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
 		start := time.Now()
-		cmd := exec.CommandContext(execCtx, "bash", "-c", p.Command)
+		cmd := exec.CommandContext(execCtx, "bash", "-c", p.Command) //nolint:gosec // G204 — command execution is by design
 		cmd.Dir = workDir
 		out, err := cmd.CombinedOutput()
 		elapsed := time.Since(start)
@@ -153,7 +154,8 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 		if p.Structured {
 			exitCode := 0
 			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); ok {
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) {
 					exitCode = exitErr.ExitCode()
 				} else {
 					exitCode = -1
@@ -269,7 +271,7 @@ func ToolProcess(procMgr *process.Manager) ToolFunc {
 			if p.SessionID == "" {
 				return "", fmt.Errorf("sessionId is required for kill")
 			}
-			procMgr.Kill(p.SessionID)
+			procMgr.Kill(p.SessionID) //nolint:errcheck // best-effort
 			return fmt.Sprintf("Process %q killed.", p.SessionID), nil
 		default:
 			return fmt.Sprintf("Unknown process action: %q", p.Action), nil

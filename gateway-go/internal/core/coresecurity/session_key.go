@@ -12,7 +12,7 @@ const maxSessionKeyLen = 512
 // no control characters (except \n, \t, \r). Uses char (rune) count, not
 // byte length, to match TypeScript semantics.
 func ValidateSessionKey(key string) error {
-	if len(key) == 0 {
+	if key == "" {
 		return errors.New("coresecurity: empty session key")
 	}
 	count := 0

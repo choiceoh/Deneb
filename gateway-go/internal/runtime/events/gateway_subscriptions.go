@@ -24,7 +24,7 @@ type AgentEvent struct {
 // HeartbeatEvent represents a periodic heartbeat from the agent runtime.
 type HeartbeatEvent struct {
 	SessionKey string `json:"sessionKey,omitempty"`
-	Ts         int64  `json:"ts"`
+	Ts         int64  `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 }
 
 // TranscriptUpdate represents a session transcript message update.

@@ -127,7 +127,7 @@ func extractCommandArgs(normalized, cmdKey string) *handlers.CommandArgs {
 		return nil
 	}
 	rest := normalized[len(prefix):]
-	if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+	if rest != "" && (rest[0] == ' ' || rest[0] == '\t') {
 		raw := rest[1:]
 		return &handlers.CommandArgs{Raw: raw}
 	}

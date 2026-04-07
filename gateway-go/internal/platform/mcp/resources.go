@@ -118,7 +118,7 @@ func (rm *ResourceManager) SubscribedURIs() []string {
 }
 
 // resolveURI maps a resource URI to an RPC method and optional params.
-func (rm *ResourceManager) resolveURI(uri string) (string, map[string]any, error) {
+func (rm *ResourceManager) resolveURI(uri string) (method string, params map[string]any, err error) {
 	// Dynamic URIs: deneb://sessions/{key}, deneb://memory/{query}
 	if strings.HasPrefix(uri, "deneb://sessions/") {
 		key := strings.TrimPrefix(uri, "deneb://sessions/")

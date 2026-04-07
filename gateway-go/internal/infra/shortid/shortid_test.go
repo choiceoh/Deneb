@@ -19,7 +19,7 @@ func TestNew_Format(t *testing.T) {
 
 func TestNew_Uniqueness(t *testing.T) {
 	seen := make(map[string]struct{}, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		id := New("x")
 		if _, ok := seen[id]; ok {
 			t.Fatalf("duplicate id at iteration %d: %s", i, id)

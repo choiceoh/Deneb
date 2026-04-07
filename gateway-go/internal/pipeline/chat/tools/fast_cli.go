@@ -19,7 +19,7 @@ type binaryCacheEntry struct {
 func firstAvailableBinary(candidates ...string) (string, bool) {
 	key := strings.Join(candidates, ",")
 	if v, ok := binaryCache.Load(key); ok {
-		e := v.(binaryCacheEntry)
+		e := v.(binaryCacheEntry) //nolint:errcheck // type guaranteed by sync.Map usage
 		return e.path, e.ok
 	}
 	for _, candidate := range candidates {

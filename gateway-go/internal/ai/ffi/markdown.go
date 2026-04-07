@@ -11,8 +11,8 @@ import (
 // MarkdownToIR parses markdown text into an intermediate representation using
 // the pure-Go goldmark-based parser. Returns JSON-encoded IR with text, styles,
 // links, and code block detection.
-func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) {
-	if len(markdown) == 0 {
+func MarkdownToIR(markdown, optionsJSON string) (json.RawMessage, error) {
+	if markdown == "" {
 		return json.RawMessage(`{"text":"","styles":[],"links":[],"has_code_blocks":false}`), nil
 	}
 
@@ -22,7 +22,7 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 	}
 
 	opts := coremarkdown.DefaultParseOptions()
-	if len(optionsJSON) > 0 {
+	if optionsJSON != "" {
 		if err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {
 			return nil, fmt.Errorf("markdown_to_ir: invalid options: %w", err)
 		}
@@ -55,7 +55,7 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 // MarkdownDetectFences detects fenced code blocks in markdown text.
 // Returns JSON array of fence span objects.
 func MarkdownDetectFences(text string) (json.RawMessage, error) {
-	if len(text) == 0 {
+	if text == "" {
 		return json.RawMessage("[]"), nil
 	}
 	spans := coremarkdown.DetectFences(text)
@@ -82,7 +82,7 @@ func mdFnv1a64(s string) uint64 {
 	const offset64 = 14695981039346656037
 	const prime64 = 1099511628211
 	h := uint64(offset64)
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		h ^= uint64(s[i])
 		h *= prime64
 	}

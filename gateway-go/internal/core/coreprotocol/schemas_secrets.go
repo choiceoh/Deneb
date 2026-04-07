@@ -6,7 +6,7 @@ func validateSecretsReloadParams(value any, path string, errors *[]ValidationErr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -16,7 +16,7 @@ func validateSecretsResolveParams(value any, path string, errors *[]ValidationEr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject
 	CheckNoAdditionalProperties(obj, []string{"commandName", "targetIds"}, path, errors)
 	if CheckRequired(obj, "commandName", path, errors) {
 		CheckNonEmptyString(obj["commandName"], path+"/commandName", errors)

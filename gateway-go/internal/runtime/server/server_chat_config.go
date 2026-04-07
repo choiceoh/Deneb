@@ -139,7 +139,7 @@ func resolveDefaultModel(logger *slog.Logger) string {
 
 // resolveSubagentDefaultModel reads agents.defaults.subagents.model from
 // deneb.json for separate sub-agent model configuration.
-func resolveSubagentDefaultModel(logger *slog.Logger) string {
+func resolveSubagentDefaultModel(_ *slog.Logger) string {
 	snapshot, err := config.LoadConfigFromDefaultPath()
 	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
 		return ""

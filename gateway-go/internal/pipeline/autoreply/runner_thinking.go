@@ -50,7 +50,8 @@ func agentMessagesToLLM(history []AgentMessage) []llm.Message {
 		if m.Role == "system" {
 			continue // system goes in AgentConfig.System
 		}
-		if m.ToolUseID != "" {
+		switch {
+		case m.ToolUseID != "":
 			block := llm.ContentBlock{
 				Type:      "tool_result",
 				ToolUseID: m.ToolUseID,
@@ -58,7 +59,7 @@ func agentMessagesToLLM(history []AgentMessage) []llm.Message {
 				IsError:   m.IsError,
 			}
 			out = append(out, llm.NewBlockMessage("user", []llm.ContentBlock{block}))
-		} else if len(m.ContentBlocks) > 0 {
+		case len(m.ContentBlocks) > 0:
 			blocks := make([]llm.ContentBlock, 0, len(m.ContentBlocks))
 			for _, cb := range m.ContentBlocks {
 				blocks = append(blocks, llm.ContentBlock{
@@ -70,7 +71,7 @@ func agentMessagesToLLM(history []AgentMessage) []llm.Message {
 				})
 			}
 			out = append(out, llm.NewBlockMessage(m.Role, blocks))
-		} else {
+		default:
 			out = append(out, llm.NewTextMessage(m.Role, m.Content))
 		}
 	}

@@ -134,12 +134,13 @@ func ResolveReplyThreading(payload types.ReplyPayload, msg *types.MsgContext) Re
 
 	// Check for explicit reply-to tag.
 	replyTo, current := tokens.ApplyReplyThreading(payload.Text, "")
-	if current {
+	switch {
+	case current:
 		threading.ReplyToCurrent = true
 		threading.ReplyToID = msg.MessageSid
-	} else if replyTo != "" {
+	case replyTo != "":
 		threading.ReplyToID = replyTo
-	} else if payload.ReplyToID != "" {
+	case payload.ReplyToID != "":
 		threading.ReplyToID = payload.ReplyToID
 	}
 

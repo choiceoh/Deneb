@@ -24,7 +24,7 @@ func (b Backoff) Delay(attempt int) time.Duration {
 		delay = b.Max
 	}
 	if b.Jitter > 0 && delay > 0 {
-		jitter := time.Duration(rand.Int64N(int64(float64(delay) * b.Jitter)))
+		jitter := time.Duration(rand.Int64N(int64(float64(delay) * b.Jitter))) //nolint:gosec // G404 — jitter, not security
 		delay += jitter
 	}
 	return delay

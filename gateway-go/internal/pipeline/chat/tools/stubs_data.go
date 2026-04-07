@@ -215,7 +215,7 @@ func killSession(sessions *session.Manager, s *session.Session) {
 }
 
 // resolveChildTarget finds a child by 1-based index, exact key, label, or key prefix.
-func resolveChildTarget(children []*session.Session, target string) (*session.Session, string) {
+func resolveChildTarget(children []*session.Session, target string) (child *session.Session, errMsg string) {
 	if target == "" {
 		return nil, "Missing sub-agent target."
 	}
@@ -379,7 +379,7 @@ func ToolImage(client *llm.Client, defaultModel string) ToolFunc {
 }
 
 // loadImageBlock loads an image from a file path or URL and returns an LLM content block.
-func loadImageBlock(ctx context.Context, path string) (llm.ContentBlock, error) {
+func loadImageBlock(_ context.Context, path string) (llm.ContentBlock, error) {
 	var data []byte
 	var mimeType string
 

@@ -39,11 +39,12 @@ func StripThinkingTags(s string) string {
 		// Verify it's <think> or <thinking>.
 		rest := s[tagStart:]
 		var closeTag string
-		if strings.HasPrefix(rest, "<thinking>") {
+		switch {
+		case strings.HasPrefix(rest, "<thinking>"):
 			closeTag = "</thinking>"
-		} else if strings.HasPrefix(rest, "<think>") {
+		case strings.HasPrefix(rest, "<think>"):
 			closeTag = "</think>"
-		} else {
+		default:
 			// Not a thinking tag, copy up to and including '<'.
 			b.WriteString(s[i : tagStart+1])
 			i = tagStart + 1
@@ -145,12 +146,12 @@ func ExtractArray(s string) (string, bool) {
 // brackets in s using depth tracking with JSON string-literal awareness.
 // Works for both {} (objects) and [] (arrays). Returns s unchanged if no
 // complete pair is found.
-func findOutermostBracketed(s string, open, close byte) string {
+func findOutermostBracketed(s string, open, closeByte byte) string {
 	start := -1
 	depth := 0
 	inString := false
 	escaped := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if escaped {
 			escaped = false
@@ -167,12 +168,13 @@ func findOutermostBracketed(s string, open, close byte) string {
 		if inString {
 			continue
 		}
-		if c == open {
+		switch c {
+		case open:
 			if depth == 0 {
 				start = i
 			}
 			depth++
-		} else if c == close {
+		case closeByte:
 			depth--
 			if depth == 0 && start >= 0 {
 				return s[start : i+1]
@@ -197,9 +199,7 @@ func stripCodeFences(s string) string {
 	} else {
 		s = s[3:]
 	}
-	if strings.HasSuffix(s, "```") {
-		s = s[:len(s)-3]
-	}
+	s = strings.TrimSuffix(s, "```")
 	return strings.TrimSpace(s)
 }
 
@@ -254,7 +254,7 @@ func lastUnquotedBrace(s string) int {
 	escaped := false
 	last := -1
 
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if escaped {
 			escaped = false

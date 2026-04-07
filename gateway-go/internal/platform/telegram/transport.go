@@ -93,7 +93,7 @@ func (d *stickyDialer) DialContext(ctx context.Context, _, addr string) (net.Con
 		if err == nil {
 			// Stick with this strategy for future calls.
 			if i != startIdx {
-				d.stickyIndex.Store(int32(i))
+				d.stickyIndex.Store(int32(i)) //nolint:gosec // G115 — i is a small strategy index (0-2)
 				d.logger.Info("telegram transport fallback activated",
 					"strategy", strategy.name,
 					"from", d.strategies[startIdx].name,

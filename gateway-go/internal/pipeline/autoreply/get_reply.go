@@ -246,34 +246,34 @@ func InitSessionForReply(msg *types.MsgContext, deps ReplyDeps) *types.SessionSt
 
 // ApplyDirectivesToSession applies parsed directives to the session state.
 // Returns reply payloads if the directive was handled inline (e.g., status query).
-func ApplyDirectivesToSession(inline directives.InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
+func ApplyDirectivesToSession(inline directives.InlineDirectives, sess *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
 	if inline.HasThinkDirective {
-		session.ThinkLevel = inline.ThinkLevel
+		sess.ThinkLevel = inline.ThinkLevel
 	}
 	if inline.HasVerboseDirective {
-		session.VerboseLevel = inline.VerboseLevel
+		sess.VerboseLevel = inline.VerboseLevel
 	}
 	if inline.HasFastDirective {
-		session.FastMode = inline.FastMode
+		sess.FastMode = inline.FastMode
 	}
 	if inline.HasReasoningDirective {
-		session.ReasoningLevel = inline.ReasoningLevel
+		sess.ReasoningLevel = inline.ReasoningLevel
 	}
 	if inline.HasElevatedDirective {
-		session.ElevatedLevel = inline.ElevatedLevel
+		sess.ElevatedLevel = inline.ElevatedLevel
 	}
 	if inline.HasModelDirective && inline.RawModelDirective != "" {
-		session.Model = inline.RawModelDirective
+		sess.Model = inline.RawModelDirective
 	}
 	if inline.HasDeepWorkDirective {
-		session.DeepWork = true
+		sess.DeepWork = true
 	}
 
 	// Handle /status as inline directive.
 	if inline.HasStatusDirective && deps.Router != nil {
 		result, err := deps.Router.Dispatch(handlers.CommandContext{
 			Command: "status",
-			Session: session,
+			Session: sess,
 			Deps:    deps.CommandDeps,
 		})
 		if err != nil {

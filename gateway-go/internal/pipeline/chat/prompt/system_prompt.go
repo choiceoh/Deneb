@@ -353,8 +353,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("- Reply tags: [[reply_to_current]] replies to triggering message (stripped before sending).\n")
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions_send(sessionKey, msg).\n")
 	if _, ok := toolSet["message"]; ok {
-		d.WriteString(fmt.Sprintf("- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken))
-		d.WriteString(fmt.Sprintf("- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken))
+		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
+		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken)
 	}
 	d.WriteString("\n")
 

@@ -64,7 +64,7 @@ func preprocessSpoilers(text string) string {
 // plain text segments to the render state and toggling Spoiler style spans.
 func handleSpoilerText(rs *renderState, text string) {
 	remaining := text
-	for len(remaining) > 0 {
+	for remaining != "" {
 		openIdx := indexOf(remaining, sentinelOpen)
 		closeIdx := indexOf(remaining, sentinelClose)
 
@@ -115,7 +115,7 @@ func postProcessSpoilers(rs *renderState) {
 	remaining := txt
 	spoilerStart := -1
 
-	for len(remaining) > 0 {
+	for remaining != "" {
 		openIdx := indexOf(remaining, sentinelOpen)
 		closeIdx := indexOf(remaining, sentinelClose)
 
@@ -185,7 +185,7 @@ func buildOffsetMap(old, _ string) func(int) int {
 	var removals []removal
 	remaining := old
 	offset := 0
-	for len(remaining) > 0 {
+	for remaining != "" {
 		openIdx := indexOf(remaining, sentinelOpen)
 		closeIdx := indexOf(remaining, sentinelClose)
 		if openIdx < 0 && closeIdx < 0 {

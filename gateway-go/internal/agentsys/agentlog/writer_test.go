@@ -85,7 +85,7 @@ func TestWriter_ReadLimit(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_ = w.Append(LogEntry{Ts: int64(i), Type: TypeTurnLLM, RunID: "r1", Session: "s1"})
 	}
 

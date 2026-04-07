@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 // EventListener connects to the gateway WebSocket and forwards relevant
@@ -63,9 +63,12 @@ func (el *EventListener) Run(ctx context.Context) error {
 
 		el.logger.Info("connecting to gateway WebSocket", "url", wsURL)
 
-		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+		conn, wsResp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
 			HTTPHeader: header,
 		})
+		if wsResp != nil && wsResp.Body != nil {
+			wsResp.Body.Close()
+		}
 		if err != nil {
 			el.logger.Warn("websocket connect failed, retrying", "err", err, "backoff", backoff)
 			select {
@@ -81,7 +84,7 @@ func (el *EventListener) Run(ctx context.Context) error {
 		backoff = time.Second // reset on success
 
 		err = el.readLoop(ctx, conn)
-		conn.CloseNow()
+		conn.CloseNow() //nolint:errcheck // best-effort cleanup
 
 		if ctx.Err() != nil {
 			return ctx.Err()

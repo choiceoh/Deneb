@@ -28,10 +28,6 @@ const (
 	// Stage 2 (final analysis) token limit.
 	stage2MaxTokens   = 1536
 	batchStage2Tokens = 4096 // batch analysis needs more tokens
-
-	// Stage 3: memory extraction.
-	stage3Timeout   = 30 * time.Second
-	stage3MaxTokens = 768
 )
 
 // PipelineDeps holds dependencies for the multi-stage analysis pipeline.
@@ -66,10 +62,6 @@ type EmailFact struct {
 	Project    string  `json:"project,omitempty"`
 }
 
-type emailFactsResponse struct {
-	Facts []EmailFact `json:"facts"`
-}
-
 // MemoryContext holds extracted context from memory recall.
 type MemoryContext struct {
 	SenderFacts     string `json:"sender_facts"`
@@ -100,70 +92,8 @@ JSON으로 응답하세요:
 ## 관련 이전 메일들
 %s`
 
-const memoryExtractorSystem = `당신은 기억 검색 분석기입니다. 메모리에서 검색된 관련 정보를 현재 이메일 맥락에 맞게 정리합니다.
-반드시 JSON으로만 응답하세요.`
-
-const memoryExtractorPrompt = `다음은 현재 이메일과 관련해 메모리에서 검색된 정보입니다.
-현재 이메일 분석에 도움이 되는 맥락을 추출해주세요.
-
-JSON으로 응답하세요:
-{
-  "sender_facts": "이 발신자에 대해 알고 있는 정보",
-  "topic_facts": "이메일 주제와 관련된 기억/정보",
-  "relevant_history": "관련된 과거 맥락이나 결정사항"
-}
-
-관련 정보가 없으면 해당 필드를 빈 문자열로 응답하세요.
-
-## 현재 이메일 요약
-From: %s
-Subject: %s
-
-## 메모리 검색 결과
-%s`
-
 // SourceEmailAnalysis is the fact source identifier for email-derived facts.
 const SourceEmailAnalysis = "email_analysis"
-
-const emailFactExtractorSystem = `당신은 이메일 정보 분류기입니다. 이메일 분석 결과에서 장기적으로 기억할 가치가 있는 사실을 추출합니다.
-반드시 JSON으로만 응답하세요.`
-
-const emailFactExtractorPrompt = `다음은 이메일과 그 분석 결과입니다.
-장기적으로 기억할 가치가 있는 사실을 추출해주세요.
-
-## 추출 기준
-- 발신자에 대한 정보 (역할, 소속, 관계)
-- 프로젝트/업무 관련 결정사항이나 약속
-- 반복될 수 있는 요청 패턴
-- 향후 이메일 분석에 도움이 될 맥락
-
-## 추출하지 않을 것
-- 일회성 알림이나 뉴스레터 내용
-- 인증 코드, 배송 추적 등 일시적 정보
-- 단순한 안부 인사
-
-JSON으로 응답하세요:
-{
-  "facts": [
-    {
-      "content": "사실 내용 (한국어, 1-2문장)",
-      "category": "context|decision|preference|solution",
-      "importance": 0.5-0.9,
-      "expiry_hint": null 또는 "YYYY-MM-DD",
-      "project": "관련 프로젝트명 (없으면 빈 문자열)"
-    }
-  ]
-}
-
-기억할 것이 없으면 {"facts": []}으로 응답하세요. 최대 5개.
-
-## 이메일
-From: %s
-Subject: %s
-Date: %s
-
-## 분석 결과
-%s`
 
 const finalAnalysisSystem = `당신은 이메일 분석 어시스턴트입니다. 이메일 본문, 이전 메일 맥락, 관련 기억을 종합하여 깊이 있는 분석을 제공합니다.`
 
@@ -384,7 +314,7 @@ func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	if msg.Subject != "" {
 		// Strip common reply/forward prefixes for broader matching.
 		subj := stripReplyPrefix(msg.Subject)
-		query := fmt.Sprintf("subject:\"%s\"", subj)
+		query := fmt.Sprintf("subject:%q", subj)
 		threadMsgs, err := deps.GmailClient.Search(ctx, query, maxThreadMessages+1)
 		if err == nil {
 			for _, tm := range threadMsgs {
@@ -506,16 +436,6 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	return collectStreamText(ctx, events)
 }
 
-// normalizeCategory ensures the category is valid for the memory store.
-func normalizeCategory(cat string) string {
-	switch cat {
-	case "context", "decision", "preference", "solution", "user_model", "mutual":
-		return cat
-	default:
-		return "context"
-	}
-}
-
 // --- helpers ---
 
 // callLocalLLMJSON calls the local AI model with JSON mode and unmarshals the result.
@@ -628,28 +548,20 @@ func extractEmailAddr(from string) string {
 	return ""
 }
 
-// extractDisplayName extracts the display name from a "Name <email>" string.
-func extractDisplayName(from string) string {
-	if idx := strings.LastIndex(from, "<"); idx > 0 {
-		return strings.TrimSpace(from[:idx])
-	}
-	return ""
-}
-
 // stripReplyPrefix removes Re:, Fwd:, etc. from an email subject.
 func stripReplyPrefix(subject string) string {
 	s := strings.TrimSpace(subject)
 	for {
 		lower := strings.ToLower(s)
-		if strings.HasPrefix(lower, "re:") || strings.HasPrefix(lower, "fw:") {
+		switch {
+		case strings.HasPrefix(lower, "re:") || strings.HasPrefix(lower, "fw:"):
 			s = strings.TrimSpace(s[3:])
-		} else if strings.HasPrefix(lower, "fwd:") {
+		case strings.HasPrefix(lower, "fwd:"):
 			s = strings.TrimSpace(s[4:])
-		} else {
-			break
+		default:
+			return s
 		}
 	}
-	return s
 }
 
 func hasThreadContext(tc ThreadContext) bool {

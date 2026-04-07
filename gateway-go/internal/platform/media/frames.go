@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -73,7 +74,7 @@ func ExtractFrames(videoData []byte, duration int) ([][]byte, error) {
 			outPath,
 		}
 
-		cmd := exec.Command("ffmpeg", args...)
+		cmd := exec.CommandContext(context.Background(), "ffmpeg", args...)
 		cmd.Stderr = nil // suppress ffmpeg stderr noise
 		cmd.Stdout = nil
 		if err := cmd.Run(); err != nil {
@@ -138,7 +139,7 @@ func selectTimestamps(duration, count int) []float64 {
 	}
 
 	timestamps := make([]float64, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if count == 1 {
 			timestamps[i] = offset
 		} else {

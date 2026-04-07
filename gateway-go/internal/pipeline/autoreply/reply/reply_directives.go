@@ -156,7 +156,7 @@ func splitMediaFromOutputFallback(raw string) (text string, mediaURLs []string, 
 	lineOffset := 0
 	remaining := trimmedRaw
 
-	for len(remaining) > 0 {
+	for remaining != "" {
 		var line string
 		if idx := strings.IndexByte(remaining, '\n'); idx >= 0 {
 			line = remaining[:idx]
@@ -220,17 +220,18 @@ func splitMediaFromOutputFallback(raw string) (text string, mediaURLs []string, 
 			}
 		}
 
-		if foundMediaOnLine {
+		switch {
+		case foundMediaOnLine:
 			// Strip the MEDIA: line entirely if we extracted media from it.
 			cleanedLine := mediaTokenRe.ReplaceAllString(line, "")
 			cleanedLine = strings.TrimSpace(cleanedLine)
 			if cleanedLine != "" {
 				keepLine(cleanedLine)
 			}
-		} else if isLikelyLocalPath(strings.TrimSpace(strings.SplitN(trimmedStart, ":", 2)[1])) {
+		case isLikelyLocalPath(strings.TrimSpace(strings.SplitN(trimmedStart, ":", 2)[1])):
 			// Strip MEDIA: lines with local paths even when invalid.
 			// They should never leak as visible text.
-		} else {
+		default:
 			keepLine(line)
 		}
 		lineOffset += len(line) + 1
@@ -262,7 +263,7 @@ func splitMediaFromOutputFallback(raw string) (text string, mediaURLs []string, 
 
 // ParseReplyDirectives parses reply directives from raw agent output text.
 // Extracts MEDIA: tokens, threading tags, and silent tokens.
-func ParseReplyDirectives(raw string, currentMessageID string, silentToken string) chatport.ReplyDirectives {
+func ParseReplyDirectives(raw, currentMessageID, silentToken string) chatport.ReplyDirectives {
 	text, mediaURLs, mediaURL, audioAsVoice := splitMediaFromOutput(raw)
 
 	// Strip leaked tool-call markup (e.g. "<function=read>...</tool_call>")

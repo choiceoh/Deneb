@@ -10,7 +10,7 @@ import "encoding/json"
 
 // LogEntry is a single line in the agent log JSONL file.
 type LogEntry struct {
-	Ts      int64           `json:"ts"`
+	Ts      int64           `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 	Type    string          `json:"type"`
 	RunID   string          `json:"runId"`
 	Session string          `json:"session"`

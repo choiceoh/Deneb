@@ -82,7 +82,7 @@ func TestRenderChart_Maximize(t *testing.T) {
 func TestRenderChart_LargeIterationCount(t *testing.T) {
 	var rows []ResultRow
 	best := 2.0
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		val := 2.0 - float64(i)*0.02 + float64(i%3)*0.01
 		kept := val < best
 		if kept {

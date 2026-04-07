@@ -139,7 +139,7 @@ func TestCachedTranscriptStore_LimitSlicing(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		inner.Append("s1", NewTextChatMessage("user", "msg", 0))
 	}
 

@@ -200,7 +200,7 @@ func (d *ToolLoopDetector) RecordAndCheck(name string, argsJSON []byte) ToolLoop
 
 // RecordResult updates the last history entry with the tool's result hash.
 // Call this AFTER executing the tool.
-func (d *ToolLoopDetector) RecordResult(name string, result string, isError bool) {
+func (d *ToolLoopDetector) RecordResult(name, result string, isError bool) {
 	if !d.cfg.Enabled {
 		return
 	}

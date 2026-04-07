@@ -90,7 +90,7 @@ func copyDir(src, dst string) error {
 			return os.MkdirAll(destPath, 0o755)
 		}
 
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) //nolint:gosec // G122 — path comes from WalkDir, safe in this context
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(destPath, data, info.Mode())
+		return os.WriteFile(destPath, data, info.Mode()) //nolint:gosec // G703 — destPath is constructed from trusted src/dst paths
 	})
 }
 

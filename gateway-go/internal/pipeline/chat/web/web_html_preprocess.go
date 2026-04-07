@@ -59,7 +59,7 @@ func StripNoiseElements(html string) string {
 
 // stripTagBlock removes all occurrences of <tag ...>...</tag> (case-insensitive).
 // Handles nested tags of the same type by tracking depth.
-func stripTagBlock(html string, tag string) string {
+func stripTagBlock(html, tag string) string {
 	lower := strings.ToLower(html)
 	openPrefix := "<" + tag
 	closeTag := "</" + tag + ">"
@@ -559,11 +559,12 @@ func countVisibleChars(html string) int {
 	count := 0
 	inTag := false
 	for _, r := range html {
-		if r == '<' {
+		switch {
+		case r == '<':
 			inTag = true
-		} else if r == '>' {
+		case r == '>':
 			inTag = false
-		} else if !inTag && r > ' ' {
+		case !inTag && r > ' ':
 			count++
 		}
 	}

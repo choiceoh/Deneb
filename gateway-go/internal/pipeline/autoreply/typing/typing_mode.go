@@ -127,7 +127,7 @@ func (s *FullTypingSignaler) SignalTextDelta(text string) {
 		if !s.controller.IsActive() {
 			s.controller.StartTypingLoop()
 		}
-		s.controller.RefreshTypingTtl()
+		s.controller.RefreshTypingTTL()
 	}
 }
 
@@ -140,7 +140,7 @@ func (s *FullTypingSignaler) SignalReasoningDelta() {
 		return
 	}
 	s.controller.StartTypingLoop()
-	s.controller.RefreshTypingTtl()
+	s.controller.RefreshTypingTTL()
 }
 
 // SignalToolStart signals that a tool invocation has started.
@@ -151,10 +151,10 @@ func (s *FullTypingSignaler) SignalToolStart() {
 	}
 	if !s.controller.IsActive() {
 		s.controller.StartTypingLoop()
-		s.controller.RefreshTypingTtl()
+		s.controller.RefreshTypingTTL()
 		return
 	}
-	s.controller.RefreshTypingTtl()
+	s.controller.RefreshTypingTTL()
 }
 
 // Stop stops the underlying typing controller.

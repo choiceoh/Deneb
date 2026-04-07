@@ -109,7 +109,7 @@ func CheckLocalAIHealth() bool {
 	defer cancel()
 
 	baseURL := LightweightBaseURL()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", http.NoBody)
 	if err != nil {
 		localAIHealthy.Store(false)
 		localAILastCheck.Store(now)

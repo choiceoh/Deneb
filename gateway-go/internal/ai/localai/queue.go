@@ -62,7 +62,7 @@ func (q *requestQueue) PopWait(_ <-chan struct{}) *queueEntry {
 	if q.closed || q.h.Len() == 0 {
 		return nil
 	}
-	return heap.Pop(&q.h).(*queueEntry)
+	return heap.Pop(&q.h).(*queueEntry) //nolint:errcheck // type is guaranteed by heap
 }
 
 // Len returns the current queue depth (unlocked snapshot).
@@ -94,7 +94,7 @@ func (q *requestQueue) DropOldestBackground(maxDepth int) bool {
 	if oldest == -1 {
 		return false
 	}
-	entry := heap.Remove(&q.h, oldest).(*queueEntry)
+	entry := heap.Remove(&q.h, oldest).(*queueEntry) //nolint:errcheck // type is guaranteed by heap
 	entry.resultCh <- submitResult{err: ErrQueueFull}
 	return true
 }
@@ -104,7 +104,7 @@ func (q *requestQueue) DrainAll(err error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for q.h.Len() > 0 {
-		entry := heap.Pop(&q.h).(*queueEntry)
+		entry, _ := heap.Pop(&q.h).(*queueEntry) //nolint:errcheck // type guaranteed by heap implementation
 		entry.resultCh <- submitResult{err: err}
 	}
 }
@@ -129,7 +129,7 @@ func (h queueHeap) Swap(i, j int) {
 }
 
 func (h *queueHeap) Push(x any) {
-	e := x.(*queueEntry)
+	e, _ := x.(*queueEntry) //nolint:errcheck // type guaranteed by heap interface contract
 	e.index = len(*h)
 	*h = append(*h, e)
 }

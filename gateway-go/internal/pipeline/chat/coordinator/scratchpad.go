@@ -64,11 +64,8 @@ func sanitizeSessionID(id string) string {
 	}
 	var b strings.Builder
 	for _, c := range id {
-		switch {
-		case c == '/' || c == '\\' || c == ':' || c == '\x00':
-			b.WriteRune('_')
-		case c == '.':
-			// Prevent ".." path traversal.
+		switch c {
+		case '/', '\\', ':', '\x00', '.':
 			b.WriteRune('_')
 		default:
 			b.WriteRune(c)

@@ -48,8 +48,8 @@ func TestExtractLinks_SSRFBlocked(t *testing.T) {
 	}
 }
 
-func TestHtmlToMarkdown_Basic(t *testing.T) {
-	text, title, err := HtmlToMarkdown("<html><head><title>Test</title></head><body><p>Hello world</p></body></html>")
+func TestHTMLToMarkdown_Basic(t *testing.T) {
+	text, title, err := HTMLToMarkdown("<html><head><title>Test</title></head><body><p>Hello world</p></body></html>")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,8 +61,8 @@ func TestHtmlToMarkdown_Basic(t *testing.T) {
 	}
 }
 
-func TestHtmlToMarkdown_Empty(t *testing.T) {
-	text, title, err := HtmlToMarkdown("")
+func TestHTMLToMarkdown_Empty(t *testing.T) {
+	text, title, err := HTMLToMarkdown("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -199,9 +199,9 @@ func TestExtractLinks_WhitespaceOnly(t *testing.T) {
 	}
 }
 
-func TestHtmlToMarkdown_ScriptStripping(t *testing.T) {
+func TestHTMLToMarkdown_ScriptStripping(t *testing.T) {
 	html := `<html><body><script>alert("xss")</script><p>Safe content</p><style>.bad{}</style></body></html>`
-	text, _, err := HtmlToMarkdown(html)
+	text, _, err := HTMLToMarkdown(html)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -216,9 +216,9 @@ func TestHtmlToMarkdown_ScriptStripping(t *testing.T) {
 	}
 }
 
-func TestHtmlToMarkdown_EntityDecoding(t *testing.T) {
+func TestHTMLToMarkdown_EntityDecoding(t *testing.T) {
 	html := `<p>A &amp; B &lt; C &gt; D &quot;E&quot; &#39;F&#39;</p>`
-	text, _, err := HtmlToMarkdown(html)
+	text, _, err := HTMLToMarkdown(html)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,8 +230,8 @@ func TestHtmlToMarkdown_EntityDecoding(t *testing.T) {
 	}
 }
 
-func TestHtmlToMarkdown_NoTitle(t *testing.T) {
-	text, title, err := HtmlToMarkdown("<body><p>Hello</p></body>")
+func TestHTMLToMarkdown_NoTitle(t *testing.T) {
+	text, title, err := HTMLToMarkdown("<body><p>Hello</p></body>")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

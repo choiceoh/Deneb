@@ -228,16 +228,16 @@ func (h *HooksHTTPHandler) handleMapping(w http.ResponseWriter, r *http.Request,
 // ───────────────────────────────────────────────────────────────────────
 
 // isAgentAllowed checks whether the given agentID passes the allowedAgentIds policy.
-// nil AllowedAgentIds means all agents are allowed.
+// nil AllowedAgentIDs means all agents are allowed.
 func (h *HooksHTTPHandler) isAgentAllowed(agentID string) bool {
-	if h.config.AllowedAgentIds == nil {
+	if h.config.AllowedAgentIDs == nil {
 		return true
 	}
 	if agentID == "" {
 		// Empty = default agent; always allowed.
 		return true
 	}
-	for _, id := range h.config.AllowedAgentIds {
+	for _, id := range h.config.AllowedAgentIDs {
 		if id == agentID {
 			return true
 		}
@@ -545,7 +545,7 @@ func generateUUID() string {
 		// Fallback: timestamp-based pseudo-UUID.
 		t := time.Now().UnixNano()
 		for i := range buf {
-			buf[i] = byte(t >> (i * 4))
+			buf[i] = byte(t >> (i * 4)) //nolint:gosec // G115 — extracting individual bytes from int64 timestamp
 		}
 	}
 	buf[6] = (buf[6] & 0x0f) | 0x40 // version 4

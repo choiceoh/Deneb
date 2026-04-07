@@ -1,14 +1,16 @@
 package tasks
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // register sqlite3 driver
 )
 
 const schemaSQL = `
@@ -127,13 +129,13 @@ func OpenStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		"PRAGMA synchronous = NORMAL",
 		"PRAGMA busy_timeout = 5000",
 	} {
-		if _, err := db.Exec(pragma); err != nil {
+		if _, err := db.ExecContext(context.Background(), pragma); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("tasks store: %s: %w", pragma, err)
 		}
 	}
 
-	if _, err := db.Exec(schemaSQL); err != nil {
+	if _, err := db.ExecContext(context.Background(), schemaSQL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("tasks store: init schema: %w", err)
 	}
@@ -159,7 +161,7 @@ func (s *Store) UpsertTask(t *TaskRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.Exec(`
+	_, err := s.db.ExecContext(context.Background(), `
 		INSERT INTO task_runs (
 			task_id, runtime, source_id, owner_key, scope_kind,
 			child_session_key, parent_task_id, agent_id, run_id, label,
@@ -202,7 +204,7 @@ func (s *Store) Task(taskID string) (*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRow(`SELECT `+taskColumns+` FROM task_runs WHERE task_id = ?`, taskID)
+	row := s.db.QueryRowContext(context.Background(), `SELECT `+taskColumns+` FROM task_runs WHERE task_id = ?`, taskID)
 	return scanTaskRecord(row)
 }
 
@@ -211,7 +213,7 @@ func (s *Store) TaskByRunID(runID string) (*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRow(`SELECT `+taskColumns+` FROM task_runs WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`, runID)
+	row := s.db.QueryRowContext(context.Background(), `SELECT `+taskColumns+` FROM task_runs WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`, runID)
 	return scanTaskRecord(row)
 }
 
@@ -268,19 +270,19 @@ func (s *Store) DeleteTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.Begin()
+	tx, err := s.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("delete task %s: begin tx: %w", taskID, err)
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() //nolint:errcheck // best-effort after commit
 
-	if _, err := tx.Exec(`DELETE FROM task_events WHERE task_id = ?`, taskID); err != nil {
+	if _, err := tx.ExecContext(context.Background(), `DELETE FROM task_events WHERE task_id = ?`, taskID); err != nil {
 		return fmt.Errorf("delete task %s events: %w", taskID, err)
 	}
-	if _, err := tx.Exec(`DELETE FROM task_delivery_state WHERE task_id = ?`, taskID); err != nil {
+	if _, err := tx.ExecContext(context.Background(), `DELETE FROM task_delivery_state WHERE task_id = ?`, taskID); err != nil {
 		return fmt.Errorf("delete task %s delivery state: %w", taskID, err)
 	}
-	if _, err := tx.Exec(`DELETE FROM task_runs WHERE task_id = ?`, taskID); err != nil {
+	if _, err := tx.ExecContext(context.Background(), `DELETE FROM task_runs WHERE task_id = ?`, taskID); err != nil {
 		return fmt.Errorf("delete task %s run: %w", taskID, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -294,14 +296,14 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.Begin()
+	tx, err := s.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return 0, fmt.Errorf("delete terminal before: begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() //nolint:errcheck // best-effort after commit
 
 	// Delete events for terminal tasks that are old enough.
-	if _, err := tx.Exec(`
+	if _, err := tx.ExecContext(context.Background(), `
 		DELETE FROM task_events WHERE task_id IN (
 			SELECT task_id FROM task_runs
 			WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
@@ -311,7 +313,7 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 	}
 
 	// Delete delivery states.
-	if _, err := tx.Exec(`
+	if _, err := tx.ExecContext(context.Background(), `
 		DELETE FROM task_delivery_state WHERE task_id IN (
 			SELECT task_id FROM task_runs
 			WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
@@ -320,7 +322,7 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 		return 0, fmt.Errorf("delete terminal delivery state: %w", err)
 	}
 
-	res, err := tx.Exec(`
+	res, err := tx.ExecContext(context.Background(), `
 		DELETE FROM task_runs
 		WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
 		AND cleanup_after IS NOT NULL AND cleanup_after < ?`, beforeMs)
@@ -341,7 +343,7 @@ func (s *Store) AppendEvent(evt *TaskEventRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.Exec(`INSERT INTO task_events (task_id, at, kind, summary) VALUES (?,?,?,?)`,
+	_, err := s.db.ExecContext(context.Background(), `INSERT INTO task_events (task_id, at, kind, summary) VALUES (?,?,?,?)`,
 		evt.TaskID, evt.At, evt.Kind, nullStr(evt.Summary))
 	if err != nil {
 		return fmt.Errorf("append event for task %s: %w", evt.TaskID, err)
@@ -354,7 +356,7 @@ func (s *Store) ListEvents(taskID string) ([]*TaskEventRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT task_id, at, kind, summary FROM task_events WHERE task_id = ? ORDER BY at ASC`, taskID)
+	rows, err := s.db.QueryContext(context.Background(), `SELECT task_id, at, kind, summary FROM task_events WHERE task_id = ? ORDER BY at ASC`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +382,7 @@ func (s *Store) UpsertFlow(f *FlowRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.Exec(`
+	_, err := s.db.ExecContext(context.Background(), `
 		INSERT INTO flows (
 			flow_id, label, status, owner_key, parent_session_key,
 			created_at, updated_at, completed_at, error,
@@ -408,7 +410,7 @@ func (s *Store) Flow(flowID string) (*FlowRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRow(`SELECT `+flowColumns+` FROM flows WHERE flow_id = ?`, flowID)
+	row := s.db.QueryRowContext(context.Background(), `SELECT `+flowColumns+` FROM flows WHERE flow_id = ?`, flowID)
 	return scanFlowRecord(row)
 }
 
@@ -417,7 +419,7 @@ func (s *Store) ListFlows() ([]*FlowRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT ` + flowColumns + ` FROM flows ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(context.Background(), `SELECT `+flowColumns+` FROM flows ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +441,7 @@ func (s *Store) ListActiveFlows() ([]*FlowRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT ` + flowColumns + ` FROM flows WHERE status IN ('active','blocked') ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(context.Background(), `SELECT `+flowColumns+` FROM flows WHERE status IN ('active','blocked') ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +463,7 @@ func (s *Store) DeleteFlow(flowID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.Exec(`DELETE FROM flows WHERE flow_id = ?`, flowID)
+	_, err := s.db.ExecContext(context.Background(), `DELETE FROM flows WHERE flow_id = ?`, flowID)
 	if err != nil {
 		return fmt.Errorf("delete flow %s: %w", flowID, err)
 	}
@@ -480,7 +482,7 @@ func (s *Store) Summary() (*RegistrySummary, error) {
 		ByRuntime: make(map[TaskRuntime]int),
 	}
 
-	rows, err := s.db.Query(`SELECT status, COUNT(*) FROM task_runs GROUP BY status`)
+	rows, err := s.db.QueryContext(context.Background(), `SELECT status, COUNT(*) FROM task_runs GROUP BY status`)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +510,7 @@ func (s *Store) Summary() (*RegistrySummary, error) {
 		return nil, err
 	}
 
-	rows2, err := s.db.Query(`SELECT runtime, COUNT(*) FROM task_runs GROUP BY runtime`)
+	rows2, err := s.db.QueryContext(context.Background(), `SELECT runtime, COUNT(*) FROM task_runs GROUP BY runtime`)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +556,7 @@ func scanTaskRecord(row scanner) (*TaskRecord, error) {
 		&errStr, &progressSum, &termSum, &termOutcome, &flowID,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -590,7 +592,7 @@ func scanFlowRecord(row scanner) (*FlowRecord, error) {
 		&f.TaskCount, &f.CompletedCount, &f.FailedCount,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -623,7 +625,7 @@ func scanFlowFromRows(rows *sql.Rows) (*FlowRecord, error) {
 }
 
 func (s *Store) queryTasks(query string, args ...any) ([]*TaskRecord, error) {
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.QueryContext(context.Background(), query, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -127,7 +127,7 @@ func computeNextCronMs(schedule StoreSchedule, nowMs int64) int64 {
 // evaluateCronExpr parses a standard 5-field cron expression and finds the
 // next matching time after `now`. Supports: *, ranges (1-5), steps (*/5),
 // lists (1,3,5), fixed values, @shorthand aliases, and named months/days.
-func evaluateCronExpr(expr string, now time.Time, loc *time.Location) time.Time {
+func evaluateCronExpr(expr string, now time.Time, _ *time.Location) time.Time {
 	// Expand shorthand aliases.
 	switch strings.ToLower(strings.TrimSpace(expr)) {
 	case "@yearly", "@annually":
@@ -183,14 +183,14 @@ func evaluateCronExpr(expr string, now time.Time, loc *time.Location) time.Time 
 
 // parseCronField parses a single cron field into a boolean set.
 // Returns nil on parse error.
-func parseCronField(field string, min, max int) map[int]bool {
+func parseCronField(field string, lo, hi int) map[int]bool {
 	result := make(map[int]bool)
 
 	parts := strings.Split(field, ",")
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "*" {
-			for i := min; i <= max; i++ {
+			for i := lo; i <= hi; i++ {
 				result[i] = true
 			}
 			continue
@@ -203,7 +203,7 @@ func parseCronField(field string, min, max int) map[int]bool {
 			if err != nil || step <= 0 {
 				return nil
 			}
-			rangeStart, rangeEnd := min, max
+			rangeStart, rangeEnd := lo, hi
 			if tokens[0] != "*" {
 				rangeParts := strings.SplitN(tokens[0], "-", 2)
 				rangeStart, err = strconv.Atoi(rangeParts[0])
@@ -311,7 +311,7 @@ func stableJobOffset(expr string, staggerMs int64) int64 {
 	}
 	h := sha256.Sum256([]byte(expr))
 	val := binary.BigEndian.Uint64(h[:8])
-	return int64(val % uint64(staggerMs))
+	return int64(val % uint64(staggerMs)) //nolint:gosec // G115 — result is bounded by staggerMs which fits in int64
 }
 
 // FormatHumanSchedule converts a StoreSchedule to a Korean-friendly display string.
@@ -376,24 +376,24 @@ func formatCronExprKorean(expr string) string {
 		return "cron: " + expr
 	}
 
-	min, hour, dom, mon, dow := fields[0], fields[1], fields[2], fields[3], fields[4]
+	minute, hour, dom, mon, dow := fields[0], fields[1], fields[2], fields[3], fields[4]
 
 	// "every N minutes": */N * * * *
-	if strings.HasPrefix(min, "*/") && hour == "*" && dom == "*" && mon == "*" && dow == "*" {
-		if n, err := strconv.Atoi(min[2:]); err == nil {
+	if strings.HasPrefix(minute, "*/") && hour == "*" && dom == "*" && mon == "*" && dow == "*" {
+		if n, err := strconv.Atoi(minute[2:]); err == nil {
 			return fmt.Sprintf("%d분마다", n)
 		}
 	}
 
 	// "every N hours": 0 */N * * *
-	if min == "0" && strings.HasPrefix(hour, "*/") && dom == "*" && mon == "*" && dow == "*" {
+	if minute == "0" && strings.HasPrefix(hour, "*/") && dom == "*" && mon == "*" && dow == "*" {
 		if n, err := strconv.Atoi(hour[2:]); err == nil {
 			return fmt.Sprintf("%d시간마다", n)
 		}
 	}
 
 	// Fixed minute + hour patterns.
-	minVal, minErr := strconv.Atoi(min)
+	minVal, minErr := strconv.Atoi(minute)
 	hourVal, hourErr := strconv.Atoi(hour)
 	fixedTime := minErr == nil && hourErr == nil
 

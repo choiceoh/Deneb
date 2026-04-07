@@ -47,7 +47,7 @@ func cacheKey(req *Request) [32]byte {
 	}
 	// Include maxTokens and response format in the key so requests with
 	// different generation parameters don't collide.
-	b := [4]byte{byte(req.MaxTokens >> 24), byte(req.MaxTokens >> 16), byte(req.MaxTokens >> 8), byte(req.MaxTokens)}
+	b := [4]byte{byte(req.MaxTokens >> 24), byte(req.MaxTokens >> 16), byte(req.MaxTokens >> 8), byte(req.MaxTokens)} //nolint:gosec // G115 — extracting individual bytes from int for hashing
 	h.Write(b[:])
 	if req.ResponseFormat != nil {
 		h.Write([]byte(req.ResponseFormat.Type))

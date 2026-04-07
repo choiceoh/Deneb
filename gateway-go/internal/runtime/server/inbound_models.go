@@ -148,7 +148,7 @@ func (p *InboundProcessor) buildModelKeyboard(entries []modelEntry, currentModel
 }
 
 // handleModelSwitchCallback processes a model quick-change button press.
-func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery, chatID string, fullModelID string) {
+func (p *InboundProcessor) handleModelSwitchCallback(cb *telegram.CallbackQuery, chatID, fullModelID string) {
 	client := p.server.telegramPlug.Client()
 	if client == nil {
 		return

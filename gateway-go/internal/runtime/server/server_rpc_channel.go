@@ -46,7 +46,7 @@ func (s *Server) registerConfigLifecycleMethods() {
 // propagateConfigReload performs the post-reload side effects: hooks, channel
 // restart (bounded by deferralTimeoutMs), cron restart, and process env cache
 // invalidation.
-func (s *Server) propagateConfigReload(snap *config.ConfigSnapshot, deferralTimeoutMs int) {
+func (s *Server) propagateConfigReload(_ *config.ConfigSnapshot, deferralTimeoutMs int) {
 	// Broadcast config change to subscribers via publisher.
 	s.publisher.PublishConfigChanged("config")
 

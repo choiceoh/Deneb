@@ -172,7 +172,7 @@ func ToolTree(defaultDir string) ToolFunc {
 	}
 }
 
-func treeWithEza(ctx context.Context, dir string, maxDepth int, showHidden bool) (string, bool, error) {
+func treeWithEza(ctx context.Context, dir string, maxDepth int, showHidden bool) (string, bool, error) { //nolint:gocritic // unnamedResult — naming would shadow local vars
 	bin, ok := firstAvailableBinary("eza", "exa")
 	if !ok {
 		return "", false, nil
@@ -214,7 +214,7 @@ func treeWithEza(ctx context.Context, dir string, maxDepth int, showHidden bool)
 }
 
 // buildTree recursively builds the tree string. Returns (fileCount, dirCount).
-func buildTree(sb *strings.Builder, dir, prefix string, maxDepth, currentDepth int, showHidden, dirsOnly bool, pattern string) (int, int) {
+func buildTree(sb *strings.Builder, dir, prefix string, maxDepth, currentDepth int, showHidden, dirsOnly bool, pattern string) (fileCount, dirCount int) {
 	if currentDepth >= maxDepth {
 		return 0, 0
 	}
@@ -423,7 +423,7 @@ func diffFiles(file1, file2, defaultDir string) (string, error) {
 	path1 := ResolvePath(file1, defaultDir)
 	path2 := ResolvePath(file2, defaultDir)
 
-	cmd := exec.Command("diff", "-u", "--color=never", path1, path2)
+	cmd := exec.CommandContext(context.Background(), "diff", "-u", "--color=never", path1, path2)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		// diff exits 1 when files differ — that's expected.

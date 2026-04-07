@@ -6,7 +6,7 @@ func validateAgentsListParams(value any, path string, errors *[]ValidationError)
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -16,7 +16,7 @@ func validateAgentsCreateParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"name", "workspace", "emoji", "avatar"}, path, errors)
 	if CheckRequired(obj, "name", path, errors) {
 		CheckNonEmptyString(obj["name"], path+"/name", errors)
@@ -38,7 +38,7 @@ func validateAgentsUpdateParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId", "name", "workspace", "model", "avatar"}, path, errors)
 	if CheckRequired(obj, "agentId", path, errors) {
 		CheckNonEmptyString(obj["agentId"], path+"/agentId", errors)
@@ -63,7 +63,7 @@ func validateAgentsDeleteParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId", "deleteFiles"}, path, errors)
 	if CheckRequired(obj, "agentId", path, errors) {
 		CheckNonEmptyString(obj["agentId"], path+"/agentId", errors)
@@ -79,7 +79,7 @@ func validateAgentsFilesListParams(value any, path string, errors *[]ValidationE
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId"}, path, errors)
 	if CheckRequired(obj, "agentId", path, errors) {
 		CheckNonEmptyString(obj["agentId"], path+"/agentId", errors)
@@ -92,7 +92,7 @@ func validateAgentsFilesGetParams(value any, path string, errors *[]ValidationEr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId", "name"}, path, errors)
 	if CheckRequired(obj, "agentId", path, errors) {
 		CheckNonEmptyString(obj["agentId"], path+"/agentId", errors)
@@ -108,7 +108,7 @@ func validateAgentsFilesSetParams(value any, path string, errors *[]ValidationEr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId", "name", "content"}, path, errors)
 	if CheckRequired(obj, "agentId", path, errors) {
 		CheckNonEmptyString(obj["agentId"], path+"/agentId", errors)
@@ -127,7 +127,7 @@ func validateModelsListParams(value any, path string, errors *[]ValidationError)
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -137,7 +137,7 @@ func validateSkillsStatusParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId"}, path, errors)
 	CheckOptional(obj, "agentId", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckNonEmptyString(v, p, e)
@@ -150,7 +150,7 @@ func validateSkillsBinsParams(value any, path string, errors *[]ValidationError)
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -160,7 +160,7 @@ func validateSkillsInstallParams(value any, path string, errors *[]ValidationErr
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"name", "installId", "timeoutMs"}, path, errors)
 	if CheckRequired(obj, "name", path, errors) {
 		CheckNonEmptyString(obj["name"], path+"/name", errors)
@@ -177,7 +177,7 @@ func validateSkillsInstallParams(value any, path string, errors *[]ValidationErr
 
 func checkStringRecord(v any, p string, e *[]ValidationError) {
 	if RequireObject(v, p, e) {
-		m := v.(map[string]any)
+		m := v.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 		for key, val := range m {
 			if key == "" {
 				*e = append(*e, ValidationError{
@@ -193,7 +193,7 @@ func validateSkillsUpdateParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"skillKey", "enabled", "apiKey", "env"}, path, errors)
 	if CheckRequired(obj, "skillKey", path, errors) {
 		CheckNonEmptyString(obj["skillKey"], path+"/skillKey", errors)
@@ -213,7 +213,7 @@ func validateToolsCatalogParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"agentId", "includePlugins"}, path, errors)
 	CheckOptional(obj, "agentId", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckNonEmptyString(v, p, e)

@@ -187,17 +187,18 @@ func cleanLogFiles(dir string, maxAge time.Duration, maxTotalBytes int64, now ti
 
 	// Phase 1: remove files older than maxAge.
 	for _, f := range files {
-		if f.modTime.Before(cutoff) {
-			path := filepath.Join(dir, f.name)
-			cf := CleanedFile{Path: path, Size: f.size, Reason: "older than " + maxAge.String()}
-			if !dryRun {
-				if err := os.Remove(path); err == nil {
-					cf.Removed = true
-				}
-			}
-			cleaned = append(cleaned, cf)
-			removed[f.name] = struct{}{}
+		if !f.modTime.Before(cutoff) {
+			continue
 		}
+		path := filepath.Join(dir, f.name)
+		cf := CleanedFile{Path: path, Size: f.size, Reason: "older than " + maxAge.String()}
+		if !dryRun {
+			if err := os.Remove(path); err == nil {
+				cf.Removed = true
+			}
+		}
+		cleaned = append(cleaned, cf)
+		removed[f.name] = struct{}{}
 	}
 
 	// Phase 2: if total remaining size > maxTotalBytes, remove oldest first.

@@ -56,7 +56,7 @@ type HooksHTTPConfig struct {
 	DefaultSessionKey         string
 	AllowRequestSessionKey    bool
 	AllowedSessionKeyPrefixes []string
-	AllowedAgentIds           []string // nil = allow all
+	AllowedAgentIDs           []string // nil = allow all
 	Mappings                  []HookMapping
 }
 

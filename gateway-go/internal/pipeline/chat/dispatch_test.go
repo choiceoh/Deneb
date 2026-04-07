@@ -293,7 +293,7 @@ func TestBudgetHistory_keepsRecentMessages(t *testing.T) {
 	defer h.Close()
 
 	msgs := make([]json.RawMessage, 0, 20)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		raw, _ := json.Marshal(map[string]any{
 			"role":    "user",
 			"content": strings.Repeat("x", 50) + fmt.Sprintf(" msg-%d", i),

@@ -29,7 +29,7 @@ type RunSnapshot struct {
 	StartedAt *int64    `json:"startedAt,omitempty"`
 	EndedAt   *int64    `json:"endedAt,omitempty"`
 	Error     string    `json:"error,omitempty"`
-	Ts        int64     `json:"ts"`
+	Ts        int64     `json:"ts"` //nolint:revive,staticcheck // JSON wire format
 }
 
 // LifecycleEvent is an agent lifecycle event from the event bus.
@@ -38,7 +38,7 @@ type LifecycleEvent struct {
 	Phase   string `json:"phase"` // "start", "end", "error"
 	Aborted bool   `json:"aborted,omitempty"`
 	Error   string `json:"error,omitempty"`
-	Ts      int64  `json:"ts,omitempty"`
+	Ts      int64  `json:"ts,omitempty"` //nolint:revive,staticcheck // JSON wire format
 }
 
 // pendingError tracks an error waiting for grace period to expire.

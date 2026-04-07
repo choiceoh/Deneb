@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // initAndListen creates the HTTP server, binds to the address, and starts

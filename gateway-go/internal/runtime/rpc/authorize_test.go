@@ -16,7 +16,7 @@ func TestAuthorizePublicMethod(t *testing.T) {
 func TestAuthorizeRequiresAuth(t *testing.T) {
 	err := AuthorizeMethod("sessions.list", "", false)
 	if err == nil {
-		t.Error("non-public method should require auth")
+		t.Fatal("non-public method should require auth")
 	}
 	if err.Code != protocol.ErrUnauthorized {
 		t.Errorf("expected UNAUTHORIZED, got %q", err.Code)
@@ -40,7 +40,7 @@ func TestAuthorizeAgentAllowed(t *testing.T) {
 func TestAuthorizeProbeBlocked(t *testing.T) {
 	err := AuthorizeMethod("sessions.list", "probe", true)
 	if err == nil {
-		t.Error("probe should not access non-public methods")
+		t.Fatal("probe should not access non-public methods")
 	}
 	if err.Code != protocol.ErrForbidden {
 		t.Errorf("expected FORBIDDEN, got %q", err.Code)

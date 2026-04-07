@@ -76,7 +76,7 @@ func DetectFences(text string) []FenceSpan {
 
 // matchFenceLine matches: ^( {0,3})(`{3,}|~{3,})(.*)$
 // Returns (indent, marker, rest) or ("", "", "") if no match.
-func matchFenceLine(line string) (string, string, string) {
+func matchFenceLine(line string) (indent, marker, rest string) {
 	n := len(line)
 	// Count leading spaces (0-3).
 	indentLen := 0

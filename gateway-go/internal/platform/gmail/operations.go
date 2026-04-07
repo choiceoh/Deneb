@@ -110,7 +110,7 @@ func (c *Client) Search(ctx context.Context, query string, maxResults int) ([]Me
 }
 
 // fetchMessageMetadata fetches a single message with metadata format.
-func (c *Client) fetchMessageMetadata(ctx context.Context, id, threadID string) (MessageSummary, error) {
+func (c *Client) fetchMessageMetadata(ctx context.Context, id, _ string) (MessageSummary, error) {
 	path := "/messages/" + id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date"
 
 	var msg apiMessage
@@ -331,11 +331,7 @@ func (c *Client) ListLabels(ctx context.Context) ([]LabelInfo, error) {
 
 	labels := make([]LabelInfo, len(list.Labels))
 	for i, l := range list.Labels {
-		labels[i] = LabelInfo{
-			ID:   l.ID,
-			Name: l.Name,
-			Type: l.Type,
-		}
+		labels[i] = LabelInfo(l)
 	}
 	return labels, nil
 }

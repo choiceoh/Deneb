@@ -14,7 +14,7 @@ type promptParts struct {
 
 // buildPrompt constructs the LLM prompt for hypothesis generation.
 // Designed to match or exceed the depth of karpathy/autoresearch's program.md.
-func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results string, iteration int) promptParts {
+func (r *Runner) buildPrompt(cfg *Config, files map[string]string, _ string, iteration int) promptParts {
 	budget := strconv.Itoa(cfg.TimeBudgetSec)
 	direction := cfg.MetricDirection // "minimize" or "maximize"
 	better := "lower"
@@ -67,22 +67,23 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	sys.WriteString("- Consider the computational cost: a 2x model size means ~2x time per step, halving the number of steps.\n\n")
 
 	// --- Stuck recovery (progressive) ---
-	if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdCritical {
-		sys.WriteString(fmt.Sprintf("=== CRITICAL: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdCritical))
+	switch {
+	case cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdCritical:
+		fmt.Fprintf(&sys, "=== CRITICAL: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdCritical)
 		sys.WriteString("You are deeply stuck. Drastic measures required:\n")
 		sys.WriteString("- Revert to the SIMPLEST possible configuration that is known to work.\n")
 		sys.WriteString("- Discard all complex hypotheses. Start from first principles.\n")
 		sys.WriteString("- Consider whether the metric command or evaluation setup has issues.\n")
 		sys.WriteString("- Try a change that is the OPPOSITE of your recent failed attempts.\n\n")
-	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdModerate {
-		sys.WriteString(fmt.Sprintf("=== WARNING: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdModerate))
+	case cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdModerate:
+		fmt.Fprintf(&sys, "=== WARNING: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdModerate)
 		sys.WriteString("Your current strategy is not working. Required changes:\n")
 		sys.WriteString("- Abandon the current approach entirely and try a fundamentally different direction.\n")
 		sys.WriteString("- Review the KEPT experiments in history — what made them succeed? Return to those principles.\n")
 		sys.WriteString("- Consider reverting to a well-known, simpler architecture or configuration.\n")
 		sys.WriteString("- The definition of insanity is trying the same thing and expecting different results.\n\n")
-	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdMild {
-		sys.WriteString(fmt.Sprintf("=== NOTE: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdMild))
+	case cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdMild:
+		fmt.Fprintf(&sys, "=== NOTE: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdMild)
 		sys.WriteString("Recent changes are not yielding improvements. Consider:\n")
 		sys.WriteString("- Changing strategy (e.g., if you've been tuning hyperparameters, try architectural changes instead).\n")
 		sys.WriteString("- Making a smaller, more conservative change.\n")
@@ -118,7 +119,7 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	for name, content := range files {
 		content = truncateFileContent(content, 200)
 		lineCount := strings.Count(content, "\n") + 1
-		usr.WriteString(fmt.Sprintf("--- %s (%d lines) ---\n", name, lineCount))
+		fmt.Fprintf(&usr, "--- %s (%d lines) ---\n", name, lineCount)
 		usr.WriteString(content)
 		usr.WriteString("\n--- end " + name + " ---\n\n")
 	}
@@ -139,8 +140,8 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 		var keptSummary strings.Builder
 		for _, row := range rows {
 			if row.Kept && row.Iteration > 0 {
-				keptSummary.WriteString(fmt.Sprintf("  #%d: %s=%.6f — %s\n",
-					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis))
+				fmt.Fprintf(&keptSummary, "  #%d: %s=%.6f — %s\n",
+					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis)
 			}
 		}
 		if keptSummary.Len() > 0 {
@@ -157,8 +158,8 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 		}
 		for _, row := range rows[start:] {
 			if !row.Kept && row.Iteration > 0 {
-				failedRecent.WriteString(fmt.Sprintf("  #%d: %s=%.6f — %s\n",
-					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis))
+				fmt.Fprintf(&failedRecent, "  #%d: %s=%.6f — %s\n",
+					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis)
 			}
 		}
 		if failedRecent.Len() > 0 {
@@ -169,30 +170,31 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 	}
 
 	// --- Task ---
-	usr.WriteString(fmt.Sprintf("=== YOUR TASK: ITERATION %d ===\n\n", iteration))
+	fmt.Fprintf(&usr, "=== YOUR TASK: ITERATION %d ===\n\n", iteration)
 	if cfg.BaselineMetric != nil {
-		usr.WriteString(fmt.Sprintf("Baseline %s: %.6f\n", cfg.MetricName, *cfg.BaselineMetric))
+		fmt.Fprintf(&usr, "Baseline %s: %.6f\n", cfg.MetricName, *cfg.BaselineMetric)
 	}
 	if cfg.BestMetric != nil {
-		usr.WriteString(fmt.Sprintf("Current best %s: %.6f", cfg.MetricName, *cfg.BestMetric))
+		fmt.Fprintf(&usr, "Current best %s: %.6f", cfg.MetricName, *cfg.BestMetric)
 		if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
 			improvement := (*cfg.BaselineMetric - *cfg.BestMetric) / *cfg.BaselineMetric * 100
 			if cfg.MetricDirection == "maximize" {
 				improvement = (*cfg.BestMetric - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
 			}
-			usr.WriteString(fmt.Sprintf(" (%.2f%% improvement from baseline)", improvement))
+			fmt.Fprintf(&usr, " (%.2f%% improvement from baseline)", improvement)
 		}
 		usr.WriteString("\n")
 	}
-	usr.WriteString(fmt.Sprintf("Consecutive failures: %d\n\n", cfg.ConsecutiveFailures))
+	fmt.Fprintf(&usr, "Consecutive failures: %d\n\n", cfg.ConsecutiveFailures)
 
-	if iteration <= cfg.Params.PhaseEarlyEnd {
+	switch {
+	case iteration <= cfg.Params.PhaseEarlyEnd:
 		usr.WriteString("You are in the EARLY phase. Explore broadly — try different approaches to understand the landscape.\n")
-	} else if iteration <= cfg.Params.PhaseExplorationEnd {
+	case iteration <= cfg.Params.PhaseExplorationEnd:
 		usr.WriteString("You are in the EXPLORATION phase. Balance between trying new ideas and refining what works.\n")
-	} else if iteration <= cfg.Params.PhaseExploitationEnd {
+	case iteration <= cfg.Params.PhaseExploitationEnd:
 		usr.WriteString("You are in the EXPLOITATION phase. Focus on refining the approaches that have produced the best results.\n")
-	} else {
+	default:
 		usr.WriteString("You are in the FINE-TUNING phase. Make small, precise adjustments. The easy gains are likely behind you.\n")
 	}
 
@@ -204,7 +206,7 @@ func (r *Runner) buildPrompt(cfg *Config, files map[string]string, results strin
 // buildConstantsPrompt constructs the LLM prompt for constants override mode.
 // The agent can only propose new values for named constants — not rewrite files.
 func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
-	currentValues map[string]string, results string, iteration int) promptParts {
+	currentValues map[string]string, _ string, iteration int) promptParts {
 
 	budget := strconv.Itoa(cfg.TimeBudgetSec)
 	direction := cfg.MetricDirection
@@ -251,20 +253,20 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 	sys.WriteString("- A smaller/faster configuration may beat a larger one by doing more optimization steps.\n\n")
 
 	// --- Stuck recovery (same as buildPrompt) ---
-	if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdCritical {
-		sys.WriteString(fmt.Sprintf("=== CRITICAL: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdCritical))
+	if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdCritical { //nolint:gocritic // ifElseChain — threshold-based branching
+		fmt.Fprintf(&sys, "=== CRITICAL: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdCritical)
 		sys.WriteString("You are deeply stuck. Drastic measures required:\n")
 		sys.WriteString("- Revert ALL constants to their original values.\n")
 		sys.WriteString("- Try a single, small change from the baseline.\n")
 		sys.WriteString("- Try the OPPOSITE direction of your recent failed attempts.\n\n")
 	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdModerate {
-		sys.WriteString(fmt.Sprintf("=== WARNING: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdModerate))
+		fmt.Fprintf(&sys, "=== WARNING: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdModerate)
 		sys.WriteString("Your current strategy is not working. Required changes:\n")
 		sys.WriteString("- Abandon the current search direction entirely.\n")
 		sys.WriteString("- Review the KEPT experiments — what value ranges worked? Return to those.\n")
 		sys.WriteString("- Consider changing a DIFFERENT constant than the one you've been tuning.\n\n")
 	} else if cfg.ConsecutiveFailures >= cfg.Params.StuckThresholdMild {
-		sys.WriteString(fmt.Sprintf("=== NOTE: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdMild))
+		fmt.Fprintf(&sys, "=== NOTE: %d+ CONSECUTIVE FAILURES ===\n", cfg.Params.StuckThresholdMild)
 		sys.WriteString("Recent changes are not yielding improvements. Consider:\n")
 		sys.WriteString("- Changing a different constant.\n")
 		sys.WriteString("- Making a smaller, more conservative change.\n")
@@ -297,14 +299,14 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 	usr.WriteString("=== TUNABLE CONSTANTS ===\n\n")
 	for _, cd := range cfg.Constants {
 		val := currentValues[cd.Name]
-		usr.WriteString(fmt.Sprintf("%s = %s  (type: %s", cd.Name, val, cd.Type))
+		fmt.Fprintf(&usr, "%s = %s  (type: %s", cd.Name, val, cd.Type)
 		if cd.Min != nil {
-			usr.WriteString(fmt.Sprintf(", min: %v", *cd.Min))
+			fmt.Fprintf(&usr, ", min: %v", *cd.Min)
 		}
 		if cd.Max != nil {
-			usr.WriteString(fmt.Sprintf(", max: %v", *cd.Max))
+			fmt.Fprintf(&usr, ", max: %v", *cd.Max)
 		}
-		usr.WriteString(fmt.Sprintf(", file: %s)\n", cd.File))
+		fmt.Fprintf(&usr, ", file: %s)\n", cd.File)
 	}
 	usr.WriteString("\n")
 
@@ -313,7 +315,7 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 	for name, content := range files {
 		content = truncateFileContent(content, 200)
 		lineCount := strings.Count(content, "\n") + 1
-		usr.WriteString(fmt.Sprintf("--- %s (%d lines) ---\n", name, lineCount))
+		fmt.Fprintf(&usr, "--- %s (%d lines) ---\n", name, lineCount)
 		usr.WriteString(content)
 		usr.WriteString("\n--- end " + name + " ---\n\n")
 	}
@@ -333,8 +335,8 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 		var keptSummary strings.Builder
 		for _, row := range rows {
 			if row.Kept && row.Iteration > 0 {
-				keptSummary.WriteString(fmt.Sprintf("  #%d: %s=%.6f — %s\n",
-					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis))
+				fmt.Fprintf(&keptSummary, "  #%d: %s=%.6f — %s\n",
+					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis)
 			}
 		}
 		if keptSummary.Len() > 0 {
@@ -350,8 +352,8 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 		}
 		for _, row := range rows[start:] {
 			if !row.Kept && row.Iteration > 0 {
-				failedRecent.WriteString(fmt.Sprintf("  #%d: %s=%.6f — %s\n",
-					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis))
+				fmt.Fprintf(&failedRecent, "  #%d: %s=%.6f — %s\n",
+					row.Iteration, cfg.MetricName, row.MetricValue, row.Hypothesis)
 			}
 		}
 		if failedRecent.Len() > 0 {
@@ -362,24 +364,24 @@ func (r *Runner) buildConstantsPrompt(cfg *Config, files map[string]string,
 	}
 
 	// Task section.
-	usr.WriteString(fmt.Sprintf("=== YOUR TASK: ITERATION %d ===\n\n", iteration))
+	fmt.Fprintf(&usr, "=== YOUR TASK: ITERATION %d ===\n\n", iteration)
 	if cfg.BaselineMetric != nil {
-		usr.WriteString(fmt.Sprintf("Baseline %s: %.6f\n", cfg.MetricName, *cfg.BaselineMetric))
+		fmt.Fprintf(&usr, "Baseline %s: %.6f\n", cfg.MetricName, *cfg.BaselineMetric)
 	}
 	if cfg.BestMetric != nil {
-		usr.WriteString(fmt.Sprintf("Current best %s: %.6f", cfg.MetricName, *cfg.BestMetric))
+		fmt.Fprintf(&usr, "Current best %s: %.6f", cfg.MetricName, *cfg.BestMetric)
 		if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
 			improvement := (*cfg.BaselineMetric - *cfg.BestMetric) / *cfg.BaselineMetric * 100
 			if cfg.MetricDirection == "maximize" {
 				improvement = (*cfg.BestMetric - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
 			}
-			usr.WriteString(fmt.Sprintf(" (%.2f%% improvement from baseline)", improvement))
+			fmt.Fprintf(&usr, " (%.2f%% improvement from baseline)", improvement)
 		}
 		usr.WriteString("\n")
 	}
-	usr.WriteString(fmt.Sprintf("Consecutive failures: %d\n\n", cfg.ConsecutiveFailures))
+	fmt.Fprintf(&usr, "Consecutive failures: %d\n\n", cfg.ConsecutiveFailures)
 
-	if iteration <= cfg.Params.PhaseEarlyEnd {
+	if iteration <= cfg.Params.PhaseEarlyEnd { //nolint:gocritic // ifElseChain — phase-based branching
 		usr.WriteString("You are in the EARLY phase. Explore the constant space broadly.\n")
 	} else if iteration <= cfg.Params.PhaseExplorationEnd {
 		usr.WriteString("You are in the EXPLORATION phase. Balance between trying new ranges and refining what works.\n")
@@ -418,7 +420,7 @@ func windowedHistory(rows []ResultRow, windowSize int) string {
 
 	// Count discarded rows outside the window for the summary.
 	var outsideTotal, outsideKept int
-	for i := 0; i < windowStart; i++ {
+	for i := range windowStart {
 		if rows[i].Iteration == 0 {
 			continue // baseline always shown
 		}
@@ -433,8 +435,8 @@ func windowedHistory(rows []ResultRow, windowSize int) string {
 
 	// Summary of older discarded iterations.
 	if outsideTotal > 0 {
-		sb.WriteString(fmt.Sprintf("[Iterations 1-%d summary: %d discarded iterations omitted (all kept iterations shown below)]\n\n",
-			rows[windowStart-1].Iteration, outsideTotal))
+		fmt.Fprintf(&sb, "[Iterations 1-%d summary: %d discarded iterations omitted (all kept iterations shown below)]\n\n",
+			rows[windowStart-1].Iteration, outsideTotal)
 	}
 
 	// Always include baseline.
@@ -489,7 +491,7 @@ func truncateFileContent(content string, maxLines int) string {
 
 	var sb strings.Builder
 	sb.WriteString(strings.Join(head, "\n"))
-	sb.WriteString(fmt.Sprintf("\n\n... (%d lines omitted) ...\n\n", omitted))
+	fmt.Fprintf(&sb, "\n\n... (%d lines omitted) ...\n\n", omitted)
 	sb.WriteString(strings.Join(tail, "\n"))
 	return sb.String()
 }

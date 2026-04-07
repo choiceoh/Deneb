@@ -219,10 +219,10 @@ func (h *Handler) handleMailCommand(reqID, sessionKey string, delivery *Delivery
 		return
 	}
 
-	var prompt string
+	var mailPrompt string
 	if len(unread) > 0 {
 		inbox := gmail.FormatSearchResults(unread)
-		prompt = fmt.Sprintf("안 읽은 메일 %d건을 확인했어. 각 메일을 분석해서 요약해줘.\n\n%s", len(unread), inbox)
+		mailPrompt = fmt.Sprintf("안 읽은 메일 %d건을 확인했어. 각 메일을 분석해서 요약해줘.\n\n%s", len(unread), inbox)
 	} else {
 		// No unread — fetch recent mail instead.
 		recent, err := client.Search(ctx, "newer_than:3d", 10)
@@ -231,11 +231,11 @@ func (h *Handler) handleMailCommand(reqID, sessionKey string, delivery *Delivery
 			return
 		}
 		inbox := gmail.FormatSearchResults(recent)
-		prompt = fmt.Sprintf("안 읽은 메일은 없어. 최근 메일 %d건을 확인했어. 요약해줘.\n\n%s", len(recent), inbox)
+		mailPrompt = fmt.Sprintf("안 읽은 메일은 없어. 최근 메일 %d건을 확인했어. 요약해줘.\n\n%s", len(recent), inbox)
 	}
 	h.startAsyncRun(reqID, RunParams{
 		SessionKey: sessionKey,
-		Message:    prompt,
+		Message:    mailPrompt,
 		Delivery:   delivery,
 	}, false)
 }
@@ -266,6 +266,8 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		statusIcon = "⛔"
 	case session.StatusTimeout:
 		statusIcon = "⏰"
+	default:
+		// StatusDone, StatusIdle, etc.
 	}
 	sections = append(sections, fmt.Sprintf("📋 **세션:** `%s` %s %s", sessionKey, statusIcon, string(sess.Status)))
 
@@ -314,11 +316,11 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 			livePct = 100
 		}
 		sections = append(sections, fmt.Sprintf("📊 **라이브:** %s / %s (%s %.0f%%) in: %s, out: %s",
-			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(liveBudget)),
+			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(liveBudget)), //nolint:gosec // G115 — liveBudget is a practical token count, never near int64 overflow
 			buildUsageBar(livePct), livePct,
 			formatCompactTokens(in), formatCompactTokens(out)))
 	} else {
-		sections = append(sections, fmt.Sprintf("📊 **라이브:** 0 / %s", formatCompactTokens(int64(liveBudget))))
+		sections = append(sections, fmt.Sprintf("📊 **라이브:** 0 / %s", formatCompactTokens(int64(liveBudget)))) //nolint:gosec // G115 — liveBudget is a practical token count
 	}
 
 	// Channel.
@@ -404,7 +406,7 @@ func buildUsageBar(pct float64) string {
 		filled = totalBlocks
 	}
 	bar := ""
-	for i := 0; i < filled; i++ {
+	for range filled {
 		bar += "█"
 	}
 	for i := filled; i < totalBlocks; i++ {

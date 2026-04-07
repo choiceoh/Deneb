@@ -52,9 +52,9 @@ func ExtractModelDirective(body string, aliases []string) ModelDirective {
 	}
 
 	var raw string
-	if match != nil && len(match) > 3 && match[2] != -1 {
+	if len(match) > 3 && match[2] != -1 {
 		raw = strings.TrimSpace(body[match[2]:match[3]])
-	} else if aliasMatch != nil && len(aliasMatch) > 3 && aliasMatch[2] != -1 {
+	} else if len(aliasMatch) > 3 && aliasMatch[2] != -1 {
 		raw = strings.TrimSpace(body[aliasMatch[2]:aliasMatch[3]])
 	}
 

@@ -109,7 +109,7 @@ type PresenceEntry struct {
 	Reason          string   `json:"reason,omitempty"`
 	Tags            []string `json:"tags,omitempty"`
 	Text            string   `json:"text,omitempty"`
-	Ts              uint64   `json:"ts"`
+	Ts              uint64   `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 	DeviceID        string   `json:"deviceId,omitempty"`
 	Roles           []string `json:"roles,omitempty"`
 	Scopes          []string `json:"scopes,omitempty"`

@@ -102,14 +102,15 @@ func splitKeyValue(token string) (key, value string, ok bool) {
 	eq := strings.IndexByte(token, '=')
 	colon := strings.IndexByte(token, ':')
 
-	idx := -1
-	if eq == -1 {
+	var idx int
+	switch {
+	case eq == -1:
 		idx = colon
-	} else if colon == -1 {
+	case colon == -1:
 		idx = eq
-	} else if eq < colon {
+	case eq < colon:
 		idx = eq
-	} else {
+	default:
 		idx = colon
 	}
 

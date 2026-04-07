@@ -17,7 +17,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	// Per-job execution guard: skip if this job is already running.
 	if _, loaded := s.runningJobs.LoadOrStore(job.ID, true); loaded {
 		s.logger.Info("cron job already running, skipping", "id", job.ID)
-		s.runLog.Append(RunLogEntry{
+		s.runLog.Append(RunLogEntry{ //nolint:errcheck // best-effort
 			Ts:     time.Now().UnixMilli(),
 			JobID:  job.ID,
 			Action: "skipped",
@@ -56,7 +56,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 
 	var outcome RunOutcome
 
-	if targetErr != nil && !isBestEffort(deliveryCfg) {
+	if targetErr != nil && !isBestEffort(deliveryCfg) { //nolint:gocritic // ifElseChain — complex branching
 		outcome = RunOutcome{
 			Status:     "error",
 			Error:      fmt.Sprintf("delivery target error: %s", targetErr),
@@ -215,7 +215,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 			logEntry.DeliveryError = outcome.Delivery.Error
 		}
 	}
-	s.runLog.Append(logEntry)
+	s.runLog.Append(logEntry) //nolint:errcheck // best-effort
 
 	s.emit(CronEvent{Type: "job_finished", JobID: job.ID, Status: outcome.Status})
 	return outcome
@@ -235,7 +235,7 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 		if state.ConsecutiveErrors >= 10 {
 			state.ScheduleErrorCount++
 			// Auto-disable after 10 consecutive errors.
-			s.store.SetJobEnabled(job.ID, false)
+			s.store.SetJobEnabled(job.ID, false) //nolint:errcheck // best-effort
 			state.AutoDisabledAtMs = time.Now().UnixMilli()
 			s.logger.Warn("cron job auto-disabled after consecutive errors",
 				"id", job.ID, "consecutiveErrors", state.ConsecutiveErrors)
@@ -256,7 +256,7 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 	nowMs := time.Now().UnixMilli()
 	state.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
 
-	s.store.UpdateJobState(job.ID, state)
+	s.store.UpdateJobState(job.ID, state) //nolint:errcheck // best-effort
 }
 
 // ShouldSendFailureAlert checks if a failure alert should be sent for a job.
@@ -312,7 +312,7 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 	// Update last failure alert timestamp.
 	state := job.State
 	state.LastFailureAlertAtMs = time.Now().UnixMilli()
-	s.store.UpdateJobState(job.ID, state)
+	s.store.UpdateJobState(job.ID, state) //nolint:errcheck // best-effort
 }
 
 func resolveJobCommand(job StoreJob) string {

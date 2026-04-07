@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // register sqlite3 driver
 )
 
 // SearchResult is a single search hit.
@@ -61,7 +61,7 @@ func newSearchDB(dir string) (*searchDB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wiki: open search db: %w", err)
 	}
-	if _, err := db.Exec(ftsSchema); err != nil {
+	if _, err := db.ExecContext(context.Background(), ftsSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("wiki: init fts schema: %w", err)
 	}
@@ -74,7 +74,7 @@ func newSearchDB(dir string) (*searchDB, error) {
 func (s *searchDB) indexPage(relPath string, page *Page) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(context.Background(),
 		`INSERT INTO wiki_pages (path, title, content) VALUES (?, ?, ?)
 		 ON CONFLICT(path) DO UPDATE SET title=excluded.title, content=excluded.content`,
 		relPath, page.Meta.Title, page.Body,
@@ -86,7 +86,7 @@ func (s *searchDB) indexPage(relPath string, page *Page) error {
 func (s *searchDB) removePage(relPath string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`DELETE FROM wiki_pages WHERE path = ?`, relPath)
+	_, err := s.db.ExecContext(context.Background(), `DELETE FROM wiki_pages WHERE path = ?`, relPath)
 	return err
 }
 
@@ -172,14 +172,14 @@ func (s *searchDB) rebuildIndex(dir string) error {
 	defer s.mu.Unlock()
 
 	// Clear existing data.
-	if _, err := s.db.Exec(`DELETE FROM wiki_pages`); err != nil {
+	if _, err := s.db.ExecContext(context.Background(), `DELETE FROM wiki_pages`); err != nil {
 		return err
 	}
 
 	// Walk all .md files.
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
-			return nil
+			return nil //nolint:nilerr // skip inaccessible entries and directories in walk
 		}
 		if filepath.Ext(path) != ".md" {
 			return nil
@@ -191,9 +191,9 @@ func (s *searchDB) rebuildIndex(dir string) error {
 		rel, _ := filepath.Rel(dir, path)
 		page, err := ParsePageFile(path)
 		if err != nil {
-			return nil // skip unparseable files
+			return nil //nolint:nilerr // skip unparseable files
 		}
-		_, err = s.db.Exec(
+		_, err = s.db.ExecContext(context.Background(),
 			`INSERT INTO wiki_pages (path, title, content) VALUES (?, ?, ?)
 			 ON CONFLICT(path) DO UPDATE SET title=excluded.title, content=excluded.content`,
 			rel, page.Meta.Title, page.Body,

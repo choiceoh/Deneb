@@ -20,15 +20,15 @@ func ResolveFollowupQueueSettings(params types.ResolveFollowupQueueSettingsParam
 	}
 
 	// Resolve cap.
-	cap := params.Cap
-	if cap <= 0 {
-		cap = DefaultFollowupCap
+	queueCap := params.Cap
+	if queueCap <= 0 {
+		queueCap = DefaultFollowupCap
 	}
 
 	return types.FollowupQueueSettings{
 		Mode:       mode,
 		DebounceMs: debounce,
-		Cap:        cap,
+		Cap:        queueCap,
 		DropPolicy: DefaultFollowupDrop,
 	}
 }

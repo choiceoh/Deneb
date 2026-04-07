@@ -173,7 +173,7 @@ func NormalizeReasoningLevel(raw string) (ReasoningLevel, bool) {
 }
 
 // NormalizeFastMode normalizes a fast mode string.
-func NormalizeFastMode(raw string) (bool, bool) {
+func NormalizeFastMode(raw string) (value, ok bool) {
 	if raw == "" {
 		return false, false
 	}
@@ -206,8 +206,8 @@ func NormalizeUsageDisplay(raw string) (UsageDisplayLevel, bool) {
 	return "", false
 }
 
-// NormalizeProviderId normalizes a provider string to a canonical form.
-func NormalizeProviderId(provider string) string {
+// NormalizeProviderID normalizes a provider string to a canonical form.
+func NormalizeProviderID(provider string) string {
 	if provider == "" {
 		return ""
 	}
@@ -223,7 +223,7 @@ func NormalizeProviderId(provider string) string {
 
 // IsBinaryThinkingProvider returns true if the provider only supports on/off thinking.
 func IsBinaryThinkingProvider(provider string) bool {
-	return NormalizeProviderId(provider) == "zai"
+	return NormalizeProviderID(provider) == "zai"
 }
 
 // ListThinkingLevelLabels returns the appropriate labels for a provider's thinking levels.

@@ -370,7 +370,7 @@ func stripLegacyTopLevelFields(raw map[string]any) bool {
 	return found
 }
 
-func normalizeScheduleMap(sched map[string]any, raw map[string]any) bool {
+func normalizeScheduleMap(sched, raw map[string]any) bool {
 	mutated := false
 
 	// Infer kind.
@@ -451,8 +451,7 @@ func normalizeScheduleMap(sched map[string]any, raw map[string]any) bool {
 func resolveStaggerForMigration(sched map[string]any, expr string) int64 {
 	// Check explicit stagger.
 	if raw, has := sched["staggerMs"]; has {
-		switch v := raw.(type) {
-		case float64:
+		if v, ok := raw.(float64); ok {
 			if !math.IsNaN(v) && !math.IsInf(v, 0) {
 				return int64(math.Max(0, math.Floor(v)))
 			}
@@ -508,9 +507,10 @@ func inferLegacyNameFromRaw(raw map[string]any) string {
 	if payload, ok := raw["payload"].(map[string]any); ok {
 		kind := stringField(payload, "kind")
 		var text string
-		if kind == "systemEvent" {
+		switch kind {
+		case "systemEvent":
 			text = stringField(payload, "text")
-		} else if kind == "agentTurn" {
+		case "agentTurn":
 			text = stringField(payload, "message")
 		}
 		if text != "" {

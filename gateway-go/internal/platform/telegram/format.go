@@ -279,14 +279,14 @@ func ChunkText(text string, maxLen int) []string {
 	var chunks []string
 	remaining := text
 
-	for len(remaining) > 0 {
+	for remaining != "" {
 		if len(remaining) <= maxLen {
 			chunks = append(chunks, remaining)
 			break
 		}
 
 		// Find a good split point.
-		splitAt := maxLen
+		var splitAt int
 		// Try to split at a newline.
 		if idx := strings.LastIndex(remaining[:maxLen], "\n"); idx > maxLen/4 {
 			splitAt = idx + 1
@@ -364,7 +364,7 @@ func ChunkHTML(html string, maxLen int) []string {
 	var chunks []string
 	remaining := html
 
-	for len(remaining) > 0 {
+	for remaining != "" {
 		if len(remaining) <= maxLen {
 			chunks = append(chunks, remaining)
 			break
@@ -395,13 +395,13 @@ func ChunkHTML(html string, maxLen int) []string {
 
 // SplitCaptionAndBody splits text for media messages: caption (up to 1024 chars)
 // and remaining body text. Returns (caption, bodyChunks).
-func SplitCaptionAndBody(text string, captionMax, bodyMax int) (string, []string) {
+func SplitCaptionAndBody(text string, captionMax, bodyMax int) (caption string, bodyChunks []string) {
 	if len(text) <= captionMax {
 		return text, nil
 	}
 
 	// Split at a good point within caption limit.
-	splitAt := captionMax
+	var splitAt int
 	if idx := strings.LastIndex(text[:captionMax], "\n"); idx > captionMax/4 {
 		splitAt = idx
 	} else if idx := strings.LastIndex(text[:captionMax], " "); idx > captionMax/4 {
@@ -411,7 +411,7 @@ func SplitCaptionAndBody(text string, captionMax, bodyMax int) (string, []string
 		splitAt = len(truncateUTF8(text, captionMax))
 	}
 
-	caption := text[:splitAt]
+	caption = text[:splitAt]
 	body := strings.TrimSpace(text[splitAt:])
 
 	if body == "" {
@@ -485,7 +485,7 @@ func isLangTag(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '+' || r == '#') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' && r != '+' && r != '#' {
 			return false
 		}
 	}
@@ -541,9 +541,10 @@ func findHTMLSplitPoint(html string, maxLen int) int {
 			continue
 		}
 		ch := html[i]
-		if ch == '>' {
+		switch ch {
+		case '>':
 			inTag = true
-		} else if ch == '<' {
+		case '<':
 			inTag = false
 		}
 		if !inTag && (ch == '\n' || ch == ' ') {

@@ -26,7 +26,7 @@ type PatchFields struct {
 }
 
 // patchStr sets dst to *src if src is non-nil and differs.
-func patchStr(dst *string, src *string) bool {
+func patchStr(dst, src *string) bool {
 	if src != nil && *src != *dst {
 		*dst = *src
 		return true

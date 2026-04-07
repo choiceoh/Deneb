@@ -103,13 +103,14 @@ func (s *Server) handleToolsInvoke(w http.ResponseWriter, r *http.Request) {
 	if resp.Error != nil {
 		status := http.StatusInternalServerError
 		errType := "tool_error"
-		if resp.Error.Code == protocol.ErrNotFound {
+		switch resp.Error.Code {
+		case protocol.ErrNotFound:
 			status = http.StatusNotFound
 			errType = "not_found"
-		} else if resp.Error.Code == protocol.ErrForbidden {
+		case protocol.ErrForbidden:
 			status = http.StatusForbidden
 			errType = "forbidden"
-		} else if resp.Error.Code == protocol.ErrMissingParam || resp.Error.Code == protocol.ErrInvalidRequest {
+		case protocol.ErrMissingParam, protocol.ErrInvalidRequest:
 			status = http.StatusBadRequest
 			errType = "invalid_request"
 		}

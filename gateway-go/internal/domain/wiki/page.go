@@ -37,7 +37,7 @@ func ParsePage(data []byte) (*Page, error) {
 	meta, body, err := splitFrontmatter(data)
 	if err != nil {
 		// No frontmatter — treat entire content as body.
-		return &Page{Body: string(data)}, nil
+		return &Page{Body: string(data)}, nil //nolint:nilerr // missing frontmatter is valid, not an error
 	}
 
 	fm := parseFrontmatterFields(string(meta))
@@ -81,7 +81,7 @@ func (p *Page) Render() []byte {
 		buf.WriteString("updated: " + p.Meta.Updated + "\n")
 	}
 	if p.Meta.Importance > 0 {
-		buf.WriteString(fmt.Sprintf("importance: %.2f\n", p.Meta.Importance))
+		fmt.Fprintf(&buf, "importance: %.2f\n", p.Meta.Importance)
 	}
 	if p.Meta.Archived {
 		buf.WriteString("archived: true\n")
@@ -102,7 +102,7 @@ func (p *Page) Render() []byte {
 func WritePageFile(path string, page *Page) error {
 	data := page.Render()
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 		return fmt.Errorf("wiki: write tmp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -293,14 +293,14 @@ func parseFrontmatterFields(raw string) Frontmatter {
 }
 
 // parseKV splits "key: value" into (key, value, true).
-func parseKV(line string) (string, string, bool) {
+func parseKV(line string) (key, value string, ok bool) {
 	idx := strings.Index(line, ":")
 	if idx < 0 {
 		return "", "", false
 	}
-	key := strings.TrimSpace(line[:idx])
-	val := strings.TrimSpace(line[idx+1:])
-	return key, val, true
+	key = strings.TrimSpace(line[:idx])
+	value = strings.TrimSpace(line[idx+1:])
+	return key, value, true
 }
 
 // parseFlowArray parses "[a, b, c]" into []string{"a", "b", "c"}.

@@ -124,23 +124,6 @@ func buildTextTurnEvents(text string, inputTokens, outputTokens int) []llm.Strea
 	}
 }
 
-// buildToolUseTurnEvents creates SSE events for a turn with one or more tool calls.
-func buildToolUseTurnEvents(tools []toolUseSpec, inputTokens, outputTokens int) []llm.StreamEvent {
-	events := []llm.StreamEvent{messageStartEvent(inputTokens)}
-	for i, t := range tools {
-		events = append(events,
-			contentBlockStartEvent(i, "tool_use", t.id),
-			toolInputDeltaEvent(i, t.name, t.inputJSON),
-			contentBlockStopEvent(i),
-		)
-	}
-	events = append(events,
-		messageDeltaEvent("tool_use", outputTokens),
-		llm.StreamEvent{Type: "message_stop"},
-	)
-	return events
-}
-
 type toolUseSpec struct {
 	id        string
 	name      string

@@ -195,7 +195,7 @@ func skipDirectiveArgPrefix(raw string) int {
 }
 
 // takeDirectiveToken extracts the next whitespace-delimited token.
-func takeDirectiveToken(raw string, start int) (string, int) {
+func takeDirectiveToken(raw string, start int) (token string, end int) {
 	i := start
 	for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t') {
 		i++

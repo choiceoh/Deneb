@@ -2,6 +2,7 @@ package coreprotocol
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -12,7 +13,8 @@ func TestValidateParams_UnknownMethod(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown method")
 	}
-	vpe, ok := err.(*ValidateParamsError)
+	vpe := &ValidateParamsError{}
+	ok := errors.As(err, &vpe)
 	if !ok || vpe.Kind != "unknown_method" {
 		t.Fatalf("expected unknown_method, got %v", err)
 	}
@@ -23,7 +25,8 @@ func TestValidateParams_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
-	vpe, ok := err.(*ValidateParamsError)
+	vpe := &ValidateParamsError{}
+	ok := errors.As(err, &vpe)
 	if !ok || vpe.Kind != "invalid_json" {
 		t.Fatalf("expected invalid_json, got %v", err)
 	}

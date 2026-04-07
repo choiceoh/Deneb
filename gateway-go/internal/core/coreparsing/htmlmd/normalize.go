@@ -24,12 +24,13 @@ func normalizeWhitespace(input string) string {
 	b.Grow(len(s))
 	var trailingWS strings.Builder
 	for _, ch := range s {
-		if ch == ' ' || ch == '\t' {
+		switch ch {
+		case ' ', '\t':
 			trailingWS.WriteRune(ch)
-		} else if ch == '\n' {
+		case '\n':
 			trailingWS.Reset()
 			b.WriteByte('\n')
-		} else {
+		default:
 			if trailingWS.Len() > 0 {
 				b.WriteString(trailingWS.String())
 				trailingWS.Reset()

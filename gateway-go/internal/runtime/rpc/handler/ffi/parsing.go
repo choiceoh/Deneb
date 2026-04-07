@@ -13,7 +13,7 @@ import (
 func ParsingMethods() map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"parsing.extract_links":       parsingExtractLinks(),
-		"parsing.html_to_markdown":    parsingHtmlToMarkdown(),
+		"parsing.html_to_markdown":    parsingHTMLToMarkdown(),
 		"parsing.base64_estimate":     parsingBase64Estimate(),
 		"parsing.base64_canonicalize": parsingBase64Canonicalize(),
 		"parsing.media_tokens":        parsingMediaTokens(),
@@ -42,7 +42,7 @@ func parsingExtractLinks() rpcutil.HandlerFunc {
 	}
 }
 
-func parsingHtmlToMarkdown() rpcutil.HandlerFunc {
+func parsingHTMLToMarkdown() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			HTML string `json:"html"`
@@ -50,7 +50,7 @@ func parsingHtmlToMarkdown() rpcutil.HandlerFunc {
 		if errResp != nil {
 			return errResp
 		}
-		text, title, err := ffipkg.HtmlToMarkdown(p.HTML)
+		text, title, err := ffipkg.HTMLToMarkdown(p.HTML)
 		if err != nil {
 			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}

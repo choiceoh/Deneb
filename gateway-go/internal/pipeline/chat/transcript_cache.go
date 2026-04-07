@@ -46,7 +46,7 @@ func NewCachedTranscriptStore(inner TranscriptStore, ttl time.Duration) *CachedT
 // Load returns messages for the session. On cache hit, returns a copy
 // with limit slicing applied. On miss, delegates to the inner store,
 // caches the full result, then applies limit.
-func (c *CachedTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage, int, error) {
+func (c *CachedTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage, int, error) { //nolint:gocritic // unnamedResult — naming would shadow local vars
 	c.mu.Lock()
 	entry, ok := c.cache[sessionKey]
 	if ok && time.Now().Before(entry.expiresAt) {
