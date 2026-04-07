@@ -1,4 +1,4 @@
-package lcm
+package polaris
 
 import (
 	"encoding/json"
@@ -197,7 +197,7 @@ func TestNewStoreInvalidPath(t *testing.T) {
 
 func TestStoreDBFileCreated(t *testing.T) {
 	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "lcm.db")
+	dbPath := filepath.Join(dir, "polaris.db")
 
 	s, err := NewStore(dbPath)
 	if err != nil {

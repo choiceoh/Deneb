@@ -1630,3 +1630,44 @@
       maximum: 50
   required:
     - action
+
+# ---------------------------------------------------------------------------
+# Polaris context management tools
+# ---------------------------------------------------------------------------
+
+- name: polaris_search
+  properties:
+    query:
+      type: string
+      description: "검색 키워드 (한국어/영어). 압축된 이전 대화에서 키워드 매칭"
+    max_results:
+      type: integer
+      description: "최대 결과 수 (default: 10)"
+      default: 10
+      minimum: 1
+      maximum: 50
+  required:
+    - query
+
+- name: polaris_describe
+  properties:
+    time_range:
+      type: string
+      description: "시간 범위 필터: today, this_week, all (default: all)"
+      default: all
+      enum:
+        - today
+        - this_week
+        - all
+
+- name: polaris_expand
+  properties:
+    summary_id:
+      type: integer
+      description: "확장할 요약 노드 ID (polaris_describe 결과에서 획득)"
+      minimum: 1
+    question:
+      type: string
+      description: "원본 대화에서 알고 싶은 구체적 질문 (선택)"
+  required:
+    - summary_id

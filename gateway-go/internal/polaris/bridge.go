@@ -1,49 +1,56 @@
-package lcm
+package polaris
 
 import (
 	"log/slog"
+	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 )
 
-// Bridge wraps an existing TranscriptStore and dual-writes to the LCM Store.
+// Bridge wraps an existing TranscriptStore and dual-writes to the Polaris Store.
 // It implements the TranscriptStore interface as a drop-in replacement.
 //
-// Read operations (Load, Search, CloneRecent) are delegated to the legacy store.
-// Write operations (Append) write to both legacy JSONL and LCM SQLite.
-// This allows incremental adoption: Phase 1 accumulates data without changing
-// read behavior; Phase 3 will switch reads to LCM-aware context assembly.
+// On first Load for a session, the Bridge lazily migrates existing JSONL
+// messages into the Polaris store (idempotent). Subsequent Appends dual-write
+// to both JSONL and SQLite.
 type Bridge struct {
-	legacy toolctx.TranscriptStore
-	store  *Store
-	logger *slog.Logger
+	legacy   toolctx.TranscriptStore
+	store    *Store
+	engine   *Engine
+	logger   *slog.Logger
+	migrated sync.Map // session_key → true
 }
 
-// NewBridge wraps a legacy TranscriptStore with LCM dual-write.
+// NewBridge wraps a legacy TranscriptStore with Polaris dual-write.
+// Creates a long-lived Engine with circuit breaker for the lifecycle of the Bridge.
 func NewBridge(legacy toolctx.TranscriptStore, store *Store, logger *slog.Logger) *Bridge {
 	return &Bridge{
 		legacy: legacy,
 		store:  store,
+		engine: NewEngine(store, logger, DefaultConfig()),
 		logger: logger,
 	}
 }
 
-// Store returns the underlying LCM store (for direct queries by engine/tools).
+// Store returns the underlying Polaris store.
 func (b *Bridge) Store() *Store { return b.store }
 
-// Load delegates to the legacy store.
+// Engine returns the long-lived Polaris engine (shared across runs).
+func (b *Bridge) Engine() *Engine { return b.engine }
+
+// Load delegates to the legacy store and triggers lazy migration.
 func (b *Bridge) Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int, error) {
+	b.ensureMigrated(sessionKey)
 	return b.legacy.Load(sessionKey, limit)
 }
 
-// Append writes to both legacy JSONL and LCM SQLite.
-// Legacy write is authoritative; LCM failure is logged but does not fail the call.
+// Append writes to both legacy JSONL and Polaris SQLite.
 func (b *Bridge) Append(sessionKey string, msg toolctx.ChatMessage) error {
 	if err := b.legacy.Append(sessionKey, msg); err != nil {
 		return err
 	}
 	if err := b.store.AppendMessage(sessionKey, msg); err != nil {
-		b.logger.Warn("lcm: dual-write failed, message saved to JSONL only",
+		b.logger.Warn("polaris: dual-write failed",
 			"session", sessionKey, "error", err)
 	}
 	return nil
@@ -54,8 +61,9 @@ func (b *Bridge) Delete(sessionKey string) error {
 	if err := b.legacy.Delete(sessionKey); err != nil {
 		return err
 	}
+	b.migrated.Delete(sessionKey)
 	if err := b.store.DeleteSession(sessionKey); err != nil {
-		b.logger.Warn("lcm: delete from sqlite failed", "session", sessionKey, "error", err)
+		b.logger.Warn("polaris: delete from sqlite failed", "session", sessionKey, "error", err)
 	}
 	return nil
 }
@@ -73,4 +81,14 @@ func (b *Bridge) Search(query string, maxResults int) ([]toolctx.SearchResult, e
 // CloneRecent delegates to the legacy store.
 func (b *Bridge) CloneRecent(srcKey, dstKey string, limit int) error {
 	return b.legacy.CloneRecent(srcKey, dstKey, limit)
+}
+
+// ensureMigrated runs lazy migration for a session (once per process lifetime).
+func (b *Bridge) ensureMigrated(sessionKey string) {
+	if _, loaded := b.migrated.LoadOrStore(sessionKey, true); loaded {
+		return
+	}
+	if err := MigrateSession(b.legacy, b.store, sessionKey, b.logger); err != nil {
+		b.logger.Warn("polaris: lazy migration failed", "session", sessionKey, "error", err)
+	}
 }

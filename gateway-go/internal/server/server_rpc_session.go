@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/lcm"
+	"github.com/choiceoh/deneb/gateway-go/internal/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -65,12 +65,12 @@ func (s *Server) registerSessionRPCMethods() {
 
 		// Wrap with LCM dual-write bridge (immutable SQLite store).
 		if home, err := os.UserHomeDir(); err == nil {
-			lcmStore, lcmErr := lcm.NewStore(home + "/.deneb/lcm.db")
-			if lcmErr != nil {
-				s.logger.Warn("lcm: failed to open store, falling back to JSONL only", "error", lcmErr)
+			polarisStore, polarisErr := polaris.NewStore(home + "/.deneb/polaris.db")
+			if polarisErr != nil {
+				s.logger.Warn("polaris: failed to open store, falling back to JSONL only", "error", polarisErr)
 				transcriptStore = cached
 			} else {
-				transcriptStore = lcm.NewBridge(cached, lcmStore, s.logger)
+				transcriptStore = polaris.NewBridge(cached, polarisStore, s.logger)
 			}
 		} else {
 			transcriptStore = cached

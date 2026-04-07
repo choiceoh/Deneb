@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/tokenest"
 )
 
@@ -52,7 +53,8 @@ func estimateTokens(s string) int {
 }
 
 // assembleContext selects transcript messages that fit within the token budget.
-// Loads the most recent messages up to MaxMessages (simple tail-N).
+// When the store is an LCM Bridge with summary data, uses DAG-based assembly
+// (summaries + recent raw messages). Otherwise falls back to simple tail-N.
 func assembleContext(
 	store TranscriptStore,
 	sessionKey string,
@@ -64,6 +66,28 @@ func assembleContext(
 		limit = defaultMaxMessages
 	}
 
+	// LCM-aware assembly: use summary DAG when available.
+	if bridge, ok := store.(*polaris.Bridge); ok {
+		result, err := polaris.AssembleContext(
+			bridge.Store(), bridge,
+			sessionKey,
+			int(cfg.MemoryTokenBudget),
+			int(cfg.FreshTailCount),
+			limit,
+			logger,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return &AssemblyResult{
+			Messages:        result.Messages,
+			EstimatedTokens: result.EstimatedTokens,
+			TotalMessages:   result.TotalMessages,
+			WasCompacted:    result.WasCompacted,
+		}, nil
+	}
+
+	// Legacy tail-N assembly.
 	msgs, total, err := store.Load(sessionKey, limit)
 	if err != nil {
 		return nil, fmt.Errorf("load transcript: %w", err)
