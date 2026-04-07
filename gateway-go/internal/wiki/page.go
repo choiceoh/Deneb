@@ -18,7 +18,7 @@ type Page struct {
 
 // Frontmatter is the YAML metadata at the top of a wiki page.
 type Frontmatter struct {
-	ID         string  // short identifier (e.g., "dgx-spark", "gemma4-switch")
+	ID         string // short identifier (e.g., "dgx-spark", "gemma4-switch")
 	Title      string
 	Summary    string // one-line description for index-level filtering (~80 chars)
 	Category   string

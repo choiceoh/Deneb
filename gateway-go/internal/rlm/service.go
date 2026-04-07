@@ -12,17 +12,26 @@ import (
 )
 
 // Service provides RLM status, wiki-backed project/memory queries,
-// and knowledge write-back for the RPC layer.
+// trace observation, and knowledge write-back for the RPC layer.
 type Service struct {
 	cfg    Config
 	wiki   *wiki.Store
+	traces *TraceStore
 	logger *slog.Logger
 }
 
 // NewService creates an RLM service. wiki may be nil (tools return unavailable).
 func NewService(cfg Config, wikiStore *wiki.Store, logger *slog.Logger) *Service {
-	return &Service{cfg: cfg, wiki: wikiStore, logger: logger}
+	return &Service{
+		cfg:    cfg,
+		wiki:   wikiStore,
+		traces: NewTraceStore(defaultTraceCapacity),
+		logger: logger,
+	}
 }
+
+// TraceStore returns the trace store for wiring into LoopConfig.
+func (s *Service) TraceStore() *TraceStore { return s.traces }
 
 // ServiceStatus is the RPC response for rlm.status.
 type ServiceStatus struct {
@@ -36,6 +45,9 @@ type ServiceStatus struct {
 
 	// Wiki stats (nil when wiki is not connected).
 	WikiStats *wiki.StoreStats `json:"wiki_stats,omitempty"`
+
+	// Trace observation stats.
+	TracesStored int `json:"traces_stored"`
 }
 
 // Status returns the current RLM service status.
@@ -47,6 +59,7 @@ func (s *Service) Status() ServiceStatus {
 		MaxSubSpawns:     s.cfg.MaxSubSpawns,
 		MaxIterations:    s.cfg.MaxIterations,
 		REPLTimeoutSec:   s.cfg.REPLTimeoutSec,
+		TracesStored:     s.traces.Count(),
 	}
 	if s.wiki != nil {
 		stats := s.wiki.Stats()
@@ -241,6 +254,21 @@ func (s *Service) writePage(path, title, category, content string, tags []string
 
 	s.logger.Info("rlm: wiki page written", "path", path, "action", action)
 	return &WriteResult{Path: path, Action: action}, nil
+}
+
+// ── Trace observation ───────────────────────────────────────────────────────
+
+// GetTrace returns a trace by ID, or the latest if id is empty.
+func (s *Service) GetTrace(id string) *Trace {
+	if id == "" {
+		return s.traces.Latest()
+	}
+	return s.traces.Get(id)
+}
+
+// ListTraces returns summaries of recent traces, newest first.
+func (s *Service) ListTraces(limit int) []TraceSummary {
+	return s.traces.List(limit)
 }
 
 // mergeUnique merges two string slices, deduplicating entries.
