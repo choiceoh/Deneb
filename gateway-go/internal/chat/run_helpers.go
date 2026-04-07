@@ -241,10 +241,17 @@ func handleRunSuccess(
 		}
 	}
 
-	// Store last output on the session so cron and other consumers can read it.
-	if result.Text != "" {
+	// Store last output on the session so cron, subagent notifications, and
+	// other consumers can read it. Prefer AllText (accumulated across all turns)
+	// over Text (last turn only) — sub-agents often produce output in early turns
+	// and finish with a tool-only turn, leaving Text empty.
+	lastOutput := result.AllText
+	if lastOutput == "" {
+		lastOutput = result.Text
+	}
+	if lastOutput != "" {
 		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
-			sess.LastOutput = result.Text
+			sess.LastOutput = lastOutput
 		}
 	}
 
