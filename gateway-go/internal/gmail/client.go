@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 var tokenURL = "https://oauth2.googleapis.com/token"
@@ -134,7 +136,7 @@ func newClientFromDir(dir string) (*Client, error) {
 		refreshToken: tok.RefreshToken,
 		expiry:       expiry,
 		tokenPath:    tokenPath,
-		httpClient:   &http.Client{Timeout: 60 * time.Second},
+		httpClient:   httputil.NewClient(60 * time.Second),
 	}, nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // ConnectorConfig configures an HTTP connector for a provider API.
@@ -45,7 +46,7 @@ func NewConnector(cfg ConnectorConfig, logger *slog.Logger) *Connector {
 		logger = slog.Default()
 	}
 	return &Connector{
-		client: &http.Client{Timeout: timeout},
+		client: httputil.NewClient(timeout),
 		config: cfg,
 		logger: logger,
 	}

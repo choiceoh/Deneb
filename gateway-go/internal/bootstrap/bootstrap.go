@@ -9,11 +9,16 @@ package bootstrap
 
 import (
 	"log/slog"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // Run executes the full gateway startup sequence and returns an OS exit code.
 // It is the sole entry point called from main.
 func Run(compiledVersion string) int {
+	// Phase 0: set shared HTTP User-Agent before any outbound requests.
+	httputil.SetVersion(compiledVersion)
+
 	// Phase 1: config — parse flags, load .env, bootstrap config, resolve runtime settings.
 	flags := ParseFlags(compiledVersion)
 	earlyLogger := BuildEarlyLogger(flags.LogLevel)
