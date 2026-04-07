@@ -21,11 +21,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
@@ -77,9 +77,6 @@ type HubConfig struct {
 	// RL self-learning (optional, nil when rl.enable=false).
 	RLService *rl.Service
 
-	// RLM context externalization (nil when wiki unavailable).
-	RLMService *rlm.Service
-
 	// Metadata.
 	Logger  *slog.Logger
 	Version string // optional
@@ -95,7 +92,7 @@ type GatewayHub struct {
 	processes *process.Manager
 
 	// Channel plugins.
-	telegram      *telegram.Plugin // nil until SetTelegram (early phase).
+	telegram      *telegram.Plugin        // nil until SetTelegram (early phase).
 	internalHooks *hooks.InternalRegistry // nil-safe
 
 	// Agent pipeline.
@@ -156,7 +153,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		wizard:         cfg.Wizard,
 		talk:           cfg.Talk,
 		rlService:      cfg.RLService,
-		rlmService:     cfg.RLMService,
 		logger:         cfg.Logger,
 		version:        cfg.Version,
 		phase:          PhaseInit,
@@ -182,11 +178,11 @@ func (h *GatewayHub) Skills() *skill.Manager                         { return h.
 func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
 func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
 func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
-func (h *GatewayHub) RLMService() *rlm.Service                      { return h.rlmService }
+func (h *GatewayHub) RLMService() *rlm.Service                       { return h.rlmService }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
-func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return h.localAIHub }
+func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
 
 // --- Late-binding setters ---
 
@@ -195,6 +191,9 @@ func (h *GatewayHub) SetLocalAIHub(sh *localai.Hub) { h.localAIHub = sh }
 
 // SetRLService sets the RL training service (optional, created during server init).
 func (h *GatewayHub) SetRLService(s *rl.Service) { h.rlService = s }
+
+// SetRLMService sets the RLM service (late-bound: created during session phase alongside wiki).
+func (h *GatewayHub) SetRLMService(s *rlm.Service) { h.rlmService = s }
 
 // SetWikiStore sets the wiki knowledge base (optional, created during session phase).
 func (h *GatewayHub) SetWikiStore(s *wiki.Store) { h.wikiStore = s }
