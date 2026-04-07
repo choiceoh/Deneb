@@ -160,6 +160,9 @@ func wikiWrite(store *wiki.Store, path, title, id, summary, category, content st
 	if category == "" {
 		return "category는 필수입니다.", nil
 	}
+	if !wiki.ValidateCategory(category) {
+		return fmt.Sprintf("잘못된 카테고리: %s. 사용 가능: %s", category, strings.Join(wiki.Categories, ", ")), nil
+	}
 
 	// Auto-generate path if not provided.
 	if path == "" {

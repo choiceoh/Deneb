@@ -18,11 +18,33 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
+// shouldRecordDiary returns false for system-generated messages and noise
+// that would pollute the diary without providing knowledge value.
+func shouldRecordDiary(msg string, continuationIdx int) bool {
+	// Skip autonomous continuation runs — system-generated, not user intent.
+	if continuationIdx > 0 {
+		return false
+	}
+	// Skip system-prefixed messages.
+	if strings.HasPrefix(msg, "[System:") {
+		return false
+	}
+	// Skip very short messages (likely pings/tests).
+	trimmed := strings.TrimSpace(msg)
+	if len([]rune(trimmed)) < 5 {
+		return false
+	}
+	return true
+}
+
 // recordDiary appends the conversation turn to today's diary file.
 // Called from handleRunSuccess as a background goroutine.
 // No LLM needed — raw data is appended as-is.
-func recordDiary(store *wiki.Store, logger *slog.Logger, userMsg string, toolNames []string) {
+func recordDiary(store *wiki.Store, logger *slog.Logger, userMsg string, toolNames []string, continuationIdx int) {
 	if store == nil {
+		return
+	}
+	if !shouldRecordDiary(userMsg, continuationIdx) {
 		return
 	}
 	diaryDir := store.DiaryDir()
