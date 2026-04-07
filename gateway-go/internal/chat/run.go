@@ -93,7 +93,6 @@ type runDeps struct {
 	// channelUploadLimitFn returns the max file upload size for a channel ID.
 	// Returns 0 if no limit is registered (tool applies its own default).
 	channelUploadLimitFn func(channelID string) int64 // optional
-	toolProgressFn       ToolProgressFunc             // optional; reports tool events to channel integrations
 	draftEditFn          DraftEditFunc                // optional; sends/edits streaming draft messages
 	draftDeleteFn        DraftDeleteFunc              // optional; deletes streaming draft messages
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials

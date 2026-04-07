@@ -411,31 +411,6 @@ func FormatPush(p PushInfo) string {
 	return b.String()
 }
 
-// FormatProgressSummary builds a compact progress summary for completed work.
-// Unlike ProgressTracker (which edits a message in-place during execution),
-// this produces a static summary after all tools have finished.
-func FormatProgressSummary(toolNames []string, runtime time.Duration) string {
-	var b strings.Builder
-	b.Grow(256)
-
-	b.WriteString(ColorSuccess)
-	b.WriteString(" <b>\uC791\uC5C5 \uC644\uB8CC</b>\n")
-	b.WriteString("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n")
-
-	for _, name := range toolNames {
-		label := toolNameKorean[name]
-		if label == "" {
-			label = name
-		}
-		fmt.Fprintf(&b, "%s %s\n", ColorSuccess, label)
-	}
-
-	b.WriteByte('\n')
-	b.WriteString("\u23F1\uFE0F <b>\uCD1D \uC2DC\uAC04:</b> ")
-	b.WriteString(formatDuration(runtime))
-
-	return b.String()
-}
 
 // --- Helpers ---
 

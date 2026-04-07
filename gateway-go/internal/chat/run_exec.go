@@ -678,17 +678,6 @@ func executeAgentRun(
 		hc.OnTextDelta(func(_ string) { statusCtrl.SetThinking() })
 	}
 
-	// Tool progress tracking for channel integrations.
-	if deps.toolProgressFn != nil && params.Delivery != nil {
-		delivery := params.Delivery
-		hc.OnToolStart(func(name, reason string, input []byte) {
-			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "start", Name: name, Reason: reason, Input: input})
-		})
-		hc.OnToolResult(func(name, _, _ string, isErr bool) {
-			deps.toolProgressFn(ctx, delivery, ToolProgressEvent{Type: "complete", Name: name, IsError: isErr})
-		})
-	}
-
 	// Gateway event subscription: emit tool.start / tool.end for WebSocket clients.
 	if deps.emitAgentFn != nil {
 		hc.OnToolStart(func(name, _ string, _ []byte) {

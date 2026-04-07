@@ -58,7 +58,6 @@ type Handler struct {
 	typingFn         TypingFunc       // optional: sends typing indicator during agent run
 	reactionFn       ReactionFunc     // optional: sets emoji reaction on triggering message
 	removeReactionFn ReactionFunc     // optional: removes emoji reaction
-	toolProgressFn   ToolProgressFunc // optional: reports tool execution events
 	draftEditFn      DraftEditFunc    // optional: sends/edits streaming draft messages
 	draftDeleteFn    DraftDeleteFunc  // optional: deletes streaming draft messages
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
@@ -266,22 +265,6 @@ func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
 	h.callbackMu.Lock()
 	h.removeReactionFn = fn
 	h.callbackMu.Unlock()
-}
-
-// SetToolProgressFunc sets the function that reports tool execution events
-// (start/complete) to the originating channel for real-time progress display.
-func (h *Handler) SetToolProgressFunc(fn ToolProgressFunc) {
-	h.callbackMu.Lock()
-	h.toolProgressFn = fn
-	h.callbackMu.Unlock()
-}
-
-// ToolProgressFunc returns the current tool progress function (for chaining).
-func (h *Handler) ToolProgressFunc() ToolProgressFunc {
-	h.callbackMu.RLock()
-	fn := h.toolProgressFn
-	h.callbackMu.RUnlock()
-	return fn
 }
 
 // SetDraftEditFunc sets the function that sends/edits streaming draft messages
