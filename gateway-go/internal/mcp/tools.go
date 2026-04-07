@@ -232,6 +232,29 @@ func allTools() []toolDef {
 			},
 		},
 
+		// --- Agent observation (root + worker LLM) ---
+		{
+			rpcMethod: "rlm.agent.trace",
+			tool: Tool{
+				Name:        "deneb_agent_trace",
+				Description: "Get a detailed root or worker LLM agent run trace: model, session, timing, turns, tokens, tool calls. Returns the latest trace if no ID is given.",
+				InputSchema: objectSchema(
+					prop("id", "string", "Trace ID (omit for latest)"),
+				),
+			},
+		},
+		{
+			rpcMethod: "rlm.agent.trace.list",
+			tool: Tool{
+				Name:        "deneb_agent_trace_list",
+				Description: "List recent root and/or worker LLM agent traces with summaries. Filter by kind ('root' or 'worker'). Newest first.",
+				InputSchema: objectSchema(
+					prop("limit", "integer", "Max traces to return (default: 20)"),
+					prop("kind", "string", "Filter by kind: 'root', 'worker', or omit for all"),
+				),
+			},
+		},
+
 		// --- Autoresearch ---
 		{
 			rpcMethod: "autoresearch.status",

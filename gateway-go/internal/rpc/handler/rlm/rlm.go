@@ -24,15 +24,17 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"rlm.status":          rlmStatus(deps),
-		"rlm.config":          rlmConfig(deps),
-		"rlm.trace":           rlmTrace(deps),
-		"rlm.trace.list":      rlmTraceList(deps),
-		"rlm.projects.list":   rlmProjectsList(deps),
-		"rlm.projects.search": rlmProjectsSearch(deps),
-		"rlm.projects.write":  rlmProjectsWrite(deps),
-		"rlm.memory.recall":   rlmMemoryRecall(deps),
-		"rlm.memory.store":    rlmMemoryStore(deps),
+		"rlm.status":           rlmStatus(deps),
+		"rlm.config":           rlmConfig(deps),
+		"rlm.trace":            rlmTrace(deps),
+		"rlm.trace.list":       rlmTraceList(deps),
+		"rlm.agent.trace":      rlmAgentTrace(deps),
+		"rlm.agent.trace.list": rlmAgentTraceList(deps),
+		"rlm.projects.list":    rlmProjectsList(deps),
+		"rlm.projects.search":  rlmProjectsSearch(deps),
+		"rlm.projects.write":   rlmProjectsWrite(deps),
+		"rlm.memory.recall":    rlmMemoryRecall(deps),
+		"rlm.memory.store":     rlmMemoryStore(deps),
 	}
 }
 
@@ -71,6 +73,34 @@ func rlmTraceList(deps Deps) rpcutil.HandlerFunc {
 			limit = 10
 		}
 		traces := deps.Service.ListTraces(limit)
+		return map[string]any{"ok": true, "traces": traces, "count": len(traces)}, nil
+	})
+}
+
+func rlmAgentTrace(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id,omitempty"` // empty = latest
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		t := deps.Service.GetAgentTrace(p.ID)
+		if t == nil {
+			return map[string]any{"ok": false, "error": "no agent trace found"}, nil
+		}
+		return map[string]any{"ok": true, "trace": t}, nil
+	})
+}
+
+func rlmAgentTraceList(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		Limit int    `json:"limit,omitempty"`
+		Kind  string `json:"kind,omitempty"` // "root", "worker", or empty for all
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		limit := p.Limit
+		if limit <= 0 {
+			limit = 20
+		}
+		traces := deps.Service.ListAgentTraces(limit, p.Kind)
 		return map[string]any{"ok": true, "traces": traces, "count": len(traces)}, nil
 	})
 }
