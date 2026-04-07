@@ -39,6 +39,7 @@ var toolApprovalPolicy = map[string]string{
 	"gateway_logs":          "auto",
 	"web_search":            "auto",
 	"web_fetch":             "auto",
+	"deep_research":         "auto",
 	"image_describe":        "auto",
 	"kv":                    "auto",
 	"process":               "auto",

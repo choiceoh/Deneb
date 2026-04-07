@@ -20,6 +20,7 @@ var readOnlyToolFallback = map[string]bool{
 	"memory":           true,
 	"web":              true,
 	"http":             true,
+	"deep_research":    true,
 	"health_check":     true,
 	"image":            true,
 	"sessions_list":    true,

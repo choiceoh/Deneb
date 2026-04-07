@@ -637,17 +637,24 @@ func webToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Web search query. Perplexity (AI answer + citations) > Brave Search > DuckDuckGo fallback",
 			},
+			"queries": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "Multiple search queries executed in parallel (max 5). Use for multi-constraint questions that need cross-referencing",
+			},
 			"fetch": map[string]any{
 				"type":        "number",
-				"description": "With query: auto-fetch top N results in parallel (1-3, default: 0). Saves round-trip vs separate fetches",
+				"description": "With query/queries: auto-fetch top N results per query in parallel (1-3, default: 0)",
 			},
 			"maxChars": map[string]any{
 				"type":        "number",
-				"description": "Maximum content characters per result (default: 50000)",
+				"description": "Maximum content characters total (default: 50000)",
 			},
 			"count": map[string]any{
 				"type":        "number",
-				"description": "Number of search results (default: 5)",
+				"description": "Number of search results per query (default: 5)",
 			},
 		},
 	}
@@ -695,6 +702,34 @@ func httpToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"url"},
+	}
+}
+
+func deepResearchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"question": map[string]any{
+				"type":        "string",
+				"description": "The research question to investigate. Complex multi-constraint questions work best",
+			},
+			"queries": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "Optional: pre-decomposed search queries. If omitted, the tool auto-decomposes the question into sub-queries via LLM",
+			},
+			"maxQueries": map[string]any{
+				"type":        "number",
+				"description": "Maximum number of sub-queries to generate (default: 5, max: 8)",
+			},
+			"fetchPerQuery": map[string]any{
+				"type":        "number",
+				"description": "Pages to auto-fetch per query (default: 2, max: 3)",
+			},
+		},
+		"required": []string{"question"},
 	}
 }
 
