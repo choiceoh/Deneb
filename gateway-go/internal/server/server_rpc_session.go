@@ -86,9 +86,7 @@ func (s *Server) registerSessionRPCMethods() {
 	s.initMemorySubsystem(&chatCfg, &reg)
 
 	// Create centralized local AI hub now that the model registry is available.
-	s.localAIHub = localai.New(localai.Config{
-		CJKBlockFile: firstEnv("LOCAL_AI_CJK_BLOCK_FILE", "SGLANG_CJK_BLOCK_FILE"),
-	}, reg, s.logger)
+	s.localAIHub = localai.New(localai.Config{}, reg, s.logger)
 	chatCfg.LocalAIHub = s.localAIHub
 
 	// Phase 2: Tool deps + registration (core, plugin, autoresearch).
@@ -328,14 +326,4 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Gmail polling service: periodic new-email analysis via LLM.
 	s.initGmailPoll()
 
-}
-
-// firstEnv returns the first non-empty environment variable value.
-func firstEnv(keys ...string) string {
-	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
-			return v
-		}
-	}
-	return ""
 }
