@@ -12,7 +12,8 @@ import (
 
 // localai_hooks.go — local AI model hooks into the agent pipeline:
 //
-//  1. Tool Output Compression: after tool execution, compress large outputs
+//  1. Proactive Context: before agent run, scan related files/memory to enrich system prompt
+//  2. Tool Output Compression: after tool execution, compress large outputs
 
 // deferredSubagentNotifications wraps a subagent notification channel into a
 // DeferredSystemText function. On each turn, it drains all available
