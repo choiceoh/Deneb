@@ -19,8 +19,11 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Source shared dev server library.
+source "$(cd "$(dirname "$0")" && pwd)/lib-dev-server.sh"
+
+SCRIPT_DIR="$DEVLIB_SCRIPT_DIR"
+REPO_DIR="$DEVLIB_REPO_DIR"
 OUT_DIR="/tmp"
 
 # Parse arguments.
@@ -41,34 +44,22 @@ _write_header() {
 # Auto-generated metric script for autoresearch.
 # Builds gateway, runs test, outputs metric_value=N.
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="${AUTORESEARCH_REPO:-PLACEHOLDER_REPO}"
 PORT="${METRIC_PORT:-18791}"
 BINARY="/tmp/deneb-gateway-metric"
 LOG="/tmp/deneb-gateway-metric.log"
 HOST="127.0.0.1"
 
-cleanup() {
-  if [[ -n "${GW_PID:-}" ]]; then
-    kill "$GW_PID" 2>/dev/null || true
-    local w=0
-    while kill -0 "$GW_PID" 2>/dev/null && (( w < 30 )); do
-      sleep 0.1; w=$((w+1))
-    done
-    kill -9 "$GW_PID" 2>/dev/null || true
-    wait "$GW_PID" 2>/dev/null || true
-  fi
-}
-trap cleanup EXIT
+source "$REPO_DIR/scripts/lib-dev-server.sh"
+trap 'devlib_stop_pid "${GW_PID:-}"' EXIT
 
 # Build.
-if ! go build -C "$REPO_DIR/gateway-go" -ldflags "-s -w" -o "$BINARY" ./cmd/gateway/ 2>/tmp/deneb-metric-build.log; then
+if ! devlib_build "$BINARY" 2>/tmp/deneb-metric-build.log; then
   echo "metric_value=0"
   echo "DENEB_METRIC_DETAIL build=fail"
   exit 0
 fi
 HEADER_EOF
-  # Replace placeholder with actual repo dir.
   sed -i "s|PLACEHOLDER_REPO|$REPO_DIR|g" "$script"
 }
 
@@ -78,19 +69,11 @@ _write_server_start() {
 
 # Start gateway.
 DEV_CONFIG="/tmp/deneb-metric-config.json"
-[[ -f "$DEV_CONFIG" ]] || echo '{}' > "$DEV_CONFIG"
-DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
-GW_PID=$!
+devlib_gen_config "$DEV_CONFIG"
+devlib_start_gateway "$BINARY" "$PORT" "$DEV_CONFIG" "/tmp/deneb-metric-state" "$LOG"
+GW_PID=$DEVLIB_PID
 
-_WAIT_MS=50
-for _ in $(seq 1 30); do
-  curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1 && break
-  if ! kill -0 "$GW_PID" 2>/dev/null; then break; fi
-  sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
-  _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
-done
-
-if ! curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
+if ! devlib_wait_healthy "$HOST" "$PORT" 30; then
   echo "metric_value=0"
   echo "DENEB_METRIC_DETAIL build=ok server=fail"
   exit 0
