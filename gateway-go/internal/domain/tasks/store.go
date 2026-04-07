@@ -1,96 +1,28 @@
 package tasks
 
 import (
-	"context"
-	"database/sql"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 
-	_ "modernc.org/sqlite" // register sqlite3 driver
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
-const schemaSQL = `
-CREATE TABLE IF NOT EXISTS task_runs (
-	task_id            TEXT PRIMARY KEY,
-	runtime            TEXT NOT NULL,
-	source_id          TEXT,
-	owner_key          TEXT NOT NULL,
-	scope_kind         TEXT NOT NULL DEFAULT 'session',
-	child_session_key  TEXT,
-	parent_task_id     TEXT,
-	agent_id           TEXT,
-	run_id             TEXT,
-	label              TEXT,
-	task               TEXT NOT NULL,
-	status             TEXT NOT NULL,
-	delivery_status    TEXT NOT NULL,
-	notify_policy      TEXT NOT NULL,
-	created_at         INTEGER NOT NULL,
-	started_at         INTEGER,
-	ended_at           INTEGER,
-	last_event_at      INTEGER,
-	cleanup_after      INTEGER,
-	error              TEXT,
-	progress_summary   TEXT,
-	terminal_summary   TEXT,
-	terminal_outcome   TEXT,
-	flow_id            TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_task_runs_run_id ON task_runs(run_id);
-CREATE INDEX IF NOT EXISTS idx_task_runs_status ON task_runs(status);
-CREATE INDEX IF NOT EXISTS idx_task_runs_runtime_status ON task_runs(runtime, status);
-CREATE INDEX IF NOT EXISTS idx_task_runs_cleanup_after ON task_runs(cleanup_after);
-CREATE INDEX IF NOT EXISTS idx_task_runs_last_event_at ON task_runs(last_event_at);
-CREATE INDEX IF NOT EXISTS idx_task_runs_owner_key ON task_runs(owner_key);
-CREATE INDEX IF NOT EXISTS idx_task_runs_child_session_key ON task_runs(child_session_key);
-CREATE INDEX IF NOT EXISTS idx_task_runs_flow_id ON task_runs(flow_id);
-
-CREATE TABLE IF NOT EXISTS task_events (
-	id       INTEGER PRIMARY KEY AUTOINCREMENT,
-	task_id  TEXT NOT NULL,
-	at       INTEGER NOT NULL,
-	kind     TEXT NOT NULL,
-	summary  TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id);
-
-CREATE TABLE IF NOT EXISTS task_delivery_state (
-	task_id                 TEXT PRIMARY KEY,
-	requester_origin_json   TEXT,
-	last_notified_event_at  INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS flows (
-	flow_id            TEXT PRIMARY KEY,
-	label              TEXT NOT NULL,
-	status             TEXT NOT NULL DEFAULT 'active',
-	owner_key          TEXT NOT NULL,
-	parent_session_key TEXT,
-	created_at         INTEGER NOT NULL,
-	updated_at         INTEGER NOT NULL,
-	completed_at       INTEGER,
-	error              TEXT,
-	task_count         INTEGER NOT NULL DEFAULT 0,
-	completed_count    INTEGER NOT NULL DEFAULT 0,
-	failed_count       INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_flows_status ON flows(status);
-CREATE INDEX IF NOT EXISTS idx_flows_owner_key ON flows(owner_key);
-`
-
-// Store provides SQLite-backed persistence for the task ledger.
+// Store provides file-backed persistence for the task ledger.
+// Tasks and flows are kept in memory and atomically snapshotted to a JSON file.
+// Events are append-only in a separate JSONL file.
 type Store struct {
 	mu     sync.RWMutex
-	db     *sql.DB
-	dbPath string
+	dir    string
 	logger *slog.Logger
+
+	tasks map[string]*TaskRecord
+	flows map[string]*FlowRecord
 }
 
 // StoreConfig configures the task store.
@@ -106,7 +38,14 @@ func DefaultStoreConfig() StoreConfig {
 	}
 }
 
-// OpenStore opens or creates the task ledger database.
+// snapshotData is the on-disk format for the task/flow snapshot.
+type snapshotData struct {
+	Tasks []*TaskRecord `json:"tasks,omitempty"`
+	Flows []*FlowRecord `json:"flows,omitempty"`
+}
+
+// OpenStore opens or creates the task ledger.
+// The DatabasePath config is reinterpreted as a directory base for file storage.
 func OpenStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -117,41 +56,66 @@ func OpenStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("tasks store: mkdir %s: %w", dir, err)
 	}
 
-	db, err := sql.Open("sqlite", cfg.DatabasePath)
-	if err != nil {
-		return nil, fmt.Errorf("tasks store: open db: %w", err)
-	}
-	db.SetMaxOpenConns(1)
-
-	// WAL mode for concurrent reads.
-	for _, pragma := range []string{
-		"PRAGMA journal_mode = WAL",
-		"PRAGMA synchronous = NORMAL",
-		"PRAGMA busy_timeout = 5000",
-	} {
-		if _, err := db.ExecContext(context.Background(), pragma); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("tasks store: %s: %w", pragma, err)
-		}
-	}
-
-	if _, err := db.ExecContext(context.Background(), schemaSQL); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("tasks store: init schema: %w", err)
-	}
-
-	return &Store{
-		db:     db,
-		dbPath: cfg.DatabasePath,
+	s := &Store{
+		dir:    dir,
 		logger: logger,
-	}, nil
+		tasks:  make(map[string]*TaskRecord),
+		flows:  make(map[string]*FlowRecord),
+	}
+
+	// Load existing snapshot.
+	snapPath := s.snapshotPath()
+	data, err := os.ReadFile(snapPath)
+	if err == nil {
+		var snap snapshotData
+		if err := json.Unmarshal(data, &snap); err != nil {
+			logger.Warn("tasks store: corrupt snapshot, starting fresh", "error", err)
+		} else {
+			for _, t := range snap.Tasks {
+				s.tasks[t.TaskID] = t
+			}
+			for _, f := range snap.Flows {
+				s.flows[f.FlowID] = f
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("tasks store: read snapshot: %w", err)
+	}
+
+	return s, nil
 }
 
-// Close closes the database.
+func (s *Store) snapshotPath() string {
+	return filepath.Join(s.dir, "tasks.json")
+}
+
+func (s *Store) eventsPath() string {
+	return filepath.Join(s.dir, "task_events.jsonl")
+}
+
+// saveSnapshot atomically writes the current state. Must be called with mu held.
+func (s *Store) saveSnapshot() error {
+	snap := snapshotData{
+		Tasks: make([]*TaskRecord, 0, len(s.tasks)),
+		Flows: make([]*FlowRecord, 0, len(s.flows)),
+	}
+	for _, t := range s.tasks {
+		snap.Tasks = append(snap.Tasks, t)
+	}
+	for _, f := range s.flows {
+		snap.Flows = append(snap.Flows, f)
+	}
+
+	data, err := json.Marshal(snap)
+	if err != nil {
+		return fmt.Errorf("tasks store: marshal snapshot: %w", err)
+	}
+	return atomicfile.WriteFile(s.snapshotPath(), data, &atomicfile.Options{Fsync: true})
+}
+
+// Close is a no-op (files are written on each mutation).
 func (s *Store) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.db.Close()
+	return nil
 }
 
 // --- Task CRUD ---
@@ -161,39 +125,8 @@ func (s *Store) UpsertTask(t *TaskRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.ExecContext(context.Background(), `
-		INSERT INTO task_runs (
-			task_id, runtime, source_id, owner_key, scope_kind,
-			child_session_key, parent_task_id, agent_id, run_id, label,
-			task, status, delivery_status, notify_policy,
-			created_at, started_at, ended_at, last_event_at, cleanup_after,
-			error, progress_summary, terminal_summary, terminal_outcome, flow_id
-		) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
-		ON CONFLICT(task_id) DO UPDATE SET
-			runtime=excluded.runtime, source_id=excluded.source_id,
-			owner_key=excluded.owner_key, scope_kind=excluded.scope_kind,
-			child_session_key=excluded.child_session_key,
-			parent_task_id=excluded.parent_task_id, agent_id=excluded.agent_id,
-			run_id=excluded.run_id, label=excluded.label, task=excluded.task,
-			status=excluded.status, delivery_status=excluded.delivery_status,
-			notify_policy=excluded.notify_policy,
-			created_at=excluded.created_at, started_at=excluded.started_at,
-			ended_at=excluded.ended_at, last_event_at=excluded.last_event_at,
-			cleanup_after=excluded.cleanup_after, error=excluded.error,
-			progress_summary=excluded.progress_summary,
-			terminal_summary=excluded.terminal_summary,
-			terminal_outcome=excluded.terminal_outcome, flow_id=excluded.flow_id`,
-		t.TaskID, t.Runtime, nullStr(t.SourceID), t.OwnerKey, t.ScopeKind,
-		nullStr(t.ChildSessionKey), nullStr(t.ParentTaskID), nullStr(t.AgentID),
-		nullStr(t.RunID), nullStr(t.Label),
-		t.Task, t.Status, t.DeliveryStatus, t.NotifyPolicy,
-		t.CreatedAt, nullInt(t.StartedAt), nullInt(t.EndedAt),
-		nullInt(t.LastEventAt), nullInt(t.CleanupAfter),
-		nullStr(t.Error), nullStr(t.ProgressSummary),
-		nullStr(t.TerminalSummary), nullStr(string(t.TerminalOutcome)),
-		nullStr(t.FlowID),
-	)
-	if err != nil {
+	s.tasks[t.TaskID] = t
+	if err := s.saveSnapshot(); err != nil {
 		return fmt.Errorf("upsert task %s: %w", t.TaskID, err)
 	}
 	return nil
@@ -204,8 +137,12 @@ func (s *Store) Task(taskID string) (*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRowContext(context.Background(), `SELECT `+taskColumns+` FROM task_runs WHERE task_id = ?`, taskID)
-	return scanTaskRecord(row)
+	t := s.tasks[taskID]
+	if t == nil {
+		return nil, nil
+	}
+	cp := *t
+	return &cp, nil
 }
 
 // TaskByRunID retrieves a task by its run ID.
@@ -213,56 +150,73 @@ func (s *Store) TaskByRunID(runID string) (*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRowContext(context.Background(), `SELECT `+taskColumns+` FROM task_runs WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`, runID)
-	return scanTaskRecord(row)
+	var best *TaskRecord
+	for _, t := range s.tasks {
+		if t.RunID == runID {
+			if best == nil || t.CreatedAt > best.CreatedAt {
+				best = t
+			}
+		}
+	}
+	if best == nil {
+		return nil, nil
+	}
+	cp := *best
+	return &cp, nil
 }
 
 // ListAll returns all tasks ordered by creation time.
 func (s *Store) ListAll() ([]*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	return s.queryTasks(`SELECT ` + taskColumns + ` FROM task_runs ORDER BY created_at ASC`)
+	return s.sortedTasks(func(*TaskRecord) bool { return true }), nil
 }
 
 // ListByStatus returns tasks matching the given status.
 func (s *Store) ListByStatus(status TaskStatus) ([]*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE status = ? ORDER BY created_at ASC`, status)
+	return s.sortedTasks(func(t *TaskRecord) bool { return t.Status == status }), nil
 }
 
 // ListActive returns all queued, running, or blocked tasks.
 func (s *Store) ListActive() ([]*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	return s.queryTasks(`SELECT ` + taskColumns + ` FROM task_runs WHERE status IN ('queued','running','blocked') ORDER BY created_at ASC`)
+	return s.sortedTasks(func(t *TaskRecord) bool { return t.Status.IsActive() }), nil
 }
 
 // ListByOwner returns tasks for a specific owner key.
 func (s *Store) ListByOwner(ownerKey string) ([]*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE owner_key = ? ORDER BY created_at ASC`, ownerKey)
+	return s.sortedTasks(func(t *TaskRecord) bool { return t.OwnerKey == ownerKey }), nil
 }
 
 // ListByFlowID returns all tasks belonging to a flow.
 func (s *Store) ListByFlowID(flowID string) ([]*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE flow_id = ? ORDER BY created_at ASC`, flowID)
+	return s.sortedTasks(func(t *TaskRecord) bool { return t.FlowID == flowID }), nil
 }
 
 // ListByRuntime returns tasks for a specific runtime.
 func (s *Store) ListByRuntime(runtime TaskRuntime) ([]*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.sortedTasks(func(t *TaskRecord) bool { return t.Runtime == runtime }), nil
+}
 
-	return s.queryTasks(`SELECT `+taskColumns+` FROM task_runs WHERE runtime = ? ORDER BY created_at ASC`, runtime)
+func (s *Store) sortedTasks(filter func(*TaskRecord) bool) []*TaskRecord {
+	var out []*TaskRecord
+	for _, t := range s.tasks {
+		if filter(t) {
+			cp := *t
+			out = append(out, &cp)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt < out[j].CreatedAt })
+	return out
 }
 
 // DeleteTask removes a task and its events.
@@ -270,70 +224,52 @@ func (s *Store) DeleteTask(taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return fmt.Errorf("delete task %s: begin tx: %w", taskID, err)
-	}
-	defer tx.Rollback() //nolint:errcheck // best-effort after commit
-
-	if _, err := tx.ExecContext(context.Background(), `DELETE FROM task_events WHERE task_id = ?`, taskID); err != nil {
-		return fmt.Errorf("delete task %s events: %w", taskID, err)
-	}
-	if _, err := tx.ExecContext(context.Background(), `DELETE FROM task_delivery_state WHERE task_id = ?`, taskID); err != nil {
-		return fmt.Errorf("delete task %s delivery state: %w", taskID, err)
-	}
-	if _, err := tx.ExecContext(context.Background(), `DELETE FROM task_runs WHERE task_id = ?`, taskID); err != nil {
-		return fmt.Errorf("delete task %s run: %w", taskID, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("delete task %s: commit: %w", taskID, err)
-	}
-	return nil
+	delete(s.tasks, taskID)
+	return s.saveSnapshot()
 }
 
 // DeleteTerminalBefore removes terminal tasks older than the given timestamp.
+// Also prunes orphaned events from the event log.
 func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return 0, fmt.Errorf("delete terminal before: begin tx: %w", err)
+	var count int64
+	for id, t := range s.tasks {
+		if t.Status.IsTerminal() && t.CleanupAfter != 0 && t.CleanupAfter < beforeMs {
+			delete(s.tasks, id)
+			count++
+		}
 	}
-	defer tx.Rollback() //nolint:errcheck // best-effort after commit
-
-	// Delete events for terminal tasks that are old enough.
-	if _, err := tx.ExecContext(context.Background(), `
-		DELETE FROM task_events WHERE task_id IN (
-			SELECT task_id FROM task_runs
-			WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
-			AND cleanup_after IS NOT NULL AND cleanup_after < ?
-		)`, beforeMs); err != nil {
-		return 0, fmt.Errorf("delete terminal events: %w", err)
+	if count > 0 {
+		if err := s.saveSnapshot(); err != nil {
+			return count, err
+		}
+		s.pruneEvents()
 	}
+	return count, nil
+}
 
-	// Delete delivery states.
-	if _, err := tx.ExecContext(context.Background(), `
-		DELETE FROM task_delivery_state WHERE task_id IN (
-			SELECT task_id FROM task_runs
-			WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
-			AND cleanup_after IS NOT NULL AND cleanup_after < ?
-		)`, beforeMs); err != nil {
-		return 0, fmt.Errorf("delete terminal delivery state: %w", err)
+// pruneEvents rewrites the event log to keep only events for tasks that still exist.
+func (s *Store) pruneEvents() {
+	evPath := s.eventsPath()
+	all, err := jsonlstore.Load[TaskEventRecord](evPath)
+	if err != nil || len(all) == 0 {
+		return
 	}
 
-	res, err := tx.ExecContext(context.Background(), `
-		DELETE FROM task_runs
-		WHERE status IN ('succeeded','failed','timed_out','cancelled','lost')
-		AND cleanup_after IS NOT NULL AND cleanup_after < ?`, beforeMs)
-	if err != nil {
-		return 0, fmt.Errorf("delete terminal runs: %w", err)
+	var kept []TaskEventRecord
+	for _, e := range all {
+		if _, exists := s.tasks[e.TaskID]; exists {
+			kept = append(kept, e)
+		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("delete terminal before: commit: %w", err)
+	if len(kept) < len(all) {
+		if err := jsonlstore.Snapshot(evPath, kept); err != nil {
+			s.logger.Error("tasks store: prune events failed", "error", err)
+		}
 	}
-	return res.RowsAffected()
 }
 
 // --- Task Events ---
@@ -343,12 +279,7 @@ func (s *Store) AppendEvent(evt *TaskEventRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.ExecContext(context.Background(), `INSERT INTO task_events (task_id, at, kind, summary) VALUES (?,?,?,?)`,
-		evt.TaskID, evt.At, evt.Kind, nullStr(evt.Summary))
-	if err != nil {
-		return fmt.Errorf("append event for task %s: %w", evt.TaskID, err)
-	}
-	return nil
+	return jsonlstore.Append(s.eventsPath(), evt)
 }
 
 // ListEvents returns all events for a task, ordered chronologically.
@@ -356,23 +287,20 @@ func (s *Store) ListEvents(taskID string) ([]*TaskEventRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.QueryContext(context.Background(), `SELECT task_id, at, kind, summary FROM task_events WHERE task_id = ? ORDER BY at ASC`, taskID)
+	all, err := jsonlstore.Load[TaskEventRecord](s.eventsPath())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var events []*TaskEventRecord
-	for rows.Next() {
-		var e TaskEventRecord
-		var summary sql.NullString
-		if err := rows.Scan(&e.TaskID, &e.At, &e.Kind, &summary); err != nil {
-			return nil, err
+	for i := range all {
+		if all[i].TaskID == taskID {
+			e := all[i]
+			events = append(events, &e)
 		}
-		e.Summary = summary.String
-		events = append(events, &e)
 	}
-	return events, rows.Err()
+	sort.Slice(events, func(i, j int) bool { return events[i].At < events[j].At })
+	return events, nil
 }
 
 // --- Flow CRUD ---
@@ -382,27 +310,8 @@ func (s *Store) UpsertFlow(f *FlowRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.ExecContext(context.Background(), `
-		INSERT INTO flows (
-			flow_id, label, status, owner_key, parent_session_key,
-			created_at, updated_at, completed_at, error,
-			task_count, completed_count, failed_count
-		) VALUES (?,?,?,?,?, ?,?,?,?, ?,?,?)
-		ON CONFLICT(flow_id) DO UPDATE SET
-			label=excluded.label, status=excluded.status,
-			owner_key=excluded.owner_key, parent_session_key=excluded.parent_session_key,
-			updated_at=excluded.updated_at, completed_at=excluded.completed_at,
-			error=excluded.error,
-			task_count=excluded.task_count, completed_count=excluded.completed_count,
-			failed_count=excluded.failed_count`,
-		f.FlowID, f.Label, f.Status, f.OwnerKey, nullStr(f.ParentSessionKey),
-		f.CreatedAt, f.UpdatedAt, nullInt(f.CompletedAt), nullStr(f.Error),
-		f.TaskCount, f.CompletedCount, f.FailedCount,
-	)
-	if err != nil {
-		return fmt.Errorf("upsert flow %s: %w", f.FlowID, err)
-	}
-	return nil
+	s.flows[f.FlowID] = f
+	return s.saveSnapshot()
 }
 
 // Flow retrieves a flow by ID.
@@ -410,30 +319,26 @@ func (s *Store) Flow(flowID string) (*FlowRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRowContext(context.Background(), `SELECT `+flowColumns+` FROM flows WHERE flow_id = ?`, flowID)
-	return scanFlowRecord(row)
+	f := s.flows[flowID]
+	if f == nil {
+		return nil, nil
+	}
+	cp := *f
+	return &cp, nil
 }
 
-// ListFlows returns all flows ordered by creation time.
+// ListFlows returns all flows ordered by creation time (newest first).
 func (s *Store) ListFlows() ([]*FlowRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.QueryContext(context.Background(), `SELECT `+flowColumns+` FROM flows ORDER BY created_at DESC`)
-	if err != nil {
-		return nil, err
+	out := make([]*FlowRecord, 0, len(s.flows))
+	for _, f := range s.flows {
+		cp := *f
+		out = append(out, &cp)
 	}
-	defer rows.Close()
-
-	var flows []*FlowRecord
-	for rows.Next() {
-		f, err := scanFlowFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		flows = append(flows, f)
-	}
-	return flows, rows.Err()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
+	return out, nil
 }
 
 // ListActiveFlows returns flows that are not in a terminal state.
@@ -441,21 +346,15 @@ func (s *Store) ListActiveFlows() ([]*FlowRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.QueryContext(context.Background(), `SELECT `+flowColumns+` FROM flows WHERE status IN ('active','blocked') ORDER BY created_at DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var flows []*FlowRecord
-	for rows.Next() {
-		f, err := scanFlowFromRows(rows)
-		if err != nil {
-			return nil, err
+	var out []*FlowRecord
+	for _, f := range s.flows {
+		if f.Status == FlowActive || f.Status == FlowBlocked {
+			cp := *f
+			out = append(out, &cp)
 		}
-		flows = append(flows, f)
 	}
-	return flows, rows.Err()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
+	return out, nil
 }
 
 // DeleteFlow removes a flow by ID.
@@ -463,11 +362,8 @@ func (s *Store) DeleteFlow(flowID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.ExecContext(context.Background(), `DELETE FROM flows WHERE flow_id = ?`, flowID)
-	if err != nil {
-		return fmt.Errorf("delete flow %s: %w", flowID, err)
-	}
-	return nil
+	delete(s.flows, flowID)
+	return s.saveSnapshot()
 }
 
 // --- Summary ---
@@ -482,176 +378,19 @@ func (s *Store) Summary() (*RegistrySummary, error) {
 		ByRuntime: make(map[TaskRuntime]int),
 	}
 
-	rows, err := s.db.QueryContext(context.Background(), `SELECT status, COUNT(*) FROM task_runs GROUP BY status`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var status string
-		var count int
-		if err := rows.Scan(&status, &count); err != nil {
-			return nil, err
+	for _, t := range s.tasks {
+		sum.Total++
+		sum.ByStatus[t.Status]++
+		sum.ByRuntime[t.Runtime]++
+		if t.Status.IsActive() {
+			sum.Active++
 		}
-		st := TaskStatus(status)
-		sum.ByStatus[st] = count
-		sum.Total += count
-		if st.IsActive() {
-			sum.Active += count
+		if t.Status.IsTerminal() {
+			sum.Terminal++
 		}
-		if st.IsTerminal() {
-			sum.Terminal += count
-		}
-		if st == StatusFailed || st == StatusTimedOut {
-			sum.Failures += count
+		if t.Status == StatusFailed || t.Status == StatusTimedOut {
+			sum.Failures++
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	rows2, err := s.db.QueryContext(context.Background(), `SELECT runtime, COUNT(*) FROM task_runs GROUP BY runtime`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows2.Close()
-	for rows2.Next() {
-		var runtime string
-		var count int
-		if err := rows2.Scan(&runtime, &count); err != nil {
-			return nil, err
-		}
-		sum.ByRuntime[TaskRuntime(runtime)] = count
-	}
-	return sum, rows2.Err()
-}
-
-// --- Helpers ---
-
-const taskColumns = `task_id, runtime, source_id, owner_key, scope_kind,
-	child_session_key, parent_task_id, agent_id, run_id, label,
-	task, status, delivery_status, notify_policy,
-	created_at, started_at, ended_at, last_event_at, cleanup_after,
-	error, progress_summary, terminal_summary, terminal_outcome, flow_id`
-
-const flowColumns = `flow_id, label, status, owner_key, parent_session_key,
-	created_at, updated_at, completed_at, error,
-	task_count, completed_count, failed_count`
-
-type scanner interface {
-	Scan(dest ...any) error
-}
-
-func scanTaskRecord(row scanner) (*TaskRecord, error) {
-	var t TaskRecord
-	var sourceID, childSess, parentTask, agentID, runID, label sql.NullString
-	var errStr, progressSum, termSum, termOutcome, flowID sql.NullString
-	var startedAt, endedAt, lastEvt, cleanupAfter sql.NullInt64
-
-	err := row.Scan(
-		&t.TaskID, &t.Runtime, &sourceID, &t.OwnerKey, &t.ScopeKind,
-		&childSess, &parentTask, &agentID, &runID, &label,
-		&t.Task, &t.Status, &t.DeliveryStatus, &t.NotifyPolicy,
-		&t.CreatedAt, &startedAt, &endedAt, &lastEvt, &cleanupAfter,
-		&errStr, &progressSum, &termSum, &termOutcome, &flowID,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	t.SourceID = sourceID.String
-	t.ChildSessionKey = childSess.String
-	t.ParentTaskID = parentTask.String
-	t.AgentID = agentID.String
-	t.RunID = runID.String
-	t.Label = label.String
-	t.StartedAt = startedAt.Int64
-	t.EndedAt = endedAt.Int64
-	t.LastEventAt = lastEvt.Int64
-	t.CleanupAfter = cleanupAfter.Int64
-	t.Error = errStr.String
-	t.ProgressSummary = progressSum.String
-	t.TerminalSummary = termSum.String
-	t.TerminalOutcome = TerminalOutcome(termOutcome.String)
-	t.FlowID = flowID.String
-
-	return &t, nil
-}
-
-func scanFlowRecord(row scanner) (*FlowRecord, error) {
-	var f FlowRecord
-	var parentSess, errStr sql.NullString
-	var completedAt sql.NullInt64
-
-	err := row.Scan(
-		&f.FlowID, &f.Label, &f.Status, &f.OwnerKey, &parentSess,
-		&f.CreatedAt, &f.UpdatedAt, &completedAt, &errStr,
-		&f.TaskCount, &f.CompletedCount, &f.FailedCount,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	f.ParentSessionKey = parentSess.String
-	f.CompletedAt = completedAt.Int64
-	f.Error = errStr.String
-	return &f, nil
-}
-
-func scanFlowFromRows(rows *sql.Rows) (*FlowRecord, error) {
-	var f FlowRecord
-	var parentSess, errStr sql.NullString
-	var completedAt sql.NullInt64
-
-	err := rows.Scan(
-		&f.FlowID, &f.Label, &f.Status, &f.OwnerKey, &parentSess,
-		&f.CreatedAt, &f.UpdatedAt, &completedAt, &errStr,
-		&f.TaskCount, &f.CompletedCount, &f.FailedCount,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	f.ParentSessionKey = parentSess.String
-	f.CompletedAt = completedAt.Int64
-	f.Error = errStr.String
-	return &f, nil
-}
-
-func (s *Store) queryTasks(query string, args ...any) ([]*TaskRecord, error) {
-	rows, err := s.db.QueryContext(context.Background(), query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tasks []*TaskRecord
-	for rows.Next() {
-		t, err := scanTaskRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		tasks = append(tasks, t)
-	}
-	return tasks, rows.Err()
-}
-
-func nullStr(s string) sql.NullString {
-	if s == "" {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: s, Valid: true}
-}
-
-func nullInt(n int64) sql.NullInt64 {
-	if n == 0 {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: n, Valid: true}
+	return sum, nil
 }

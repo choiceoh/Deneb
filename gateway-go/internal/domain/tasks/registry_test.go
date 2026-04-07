@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -12,7 +11,7 @@ func testStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
 	store, err := OpenStore(StoreConfig{
-		DatabasePath: filepath.Join(dir, "tasks.db"),
+		DatabasePath: filepath.Join(dir, "tasks.json"),
 	}, nil)
 	testutil.NoError(t, err)
 	t.Cleanup(func() { store.Close() })
@@ -31,15 +30,11 @@ func testRegistry(t *testing.T) *Registry {
 func TestStore_OpenAndClose(t *testing.T) {
 	dir := t.TempDir()
 	store, err := OpenStore(StoreConfig{
-		DatabasePath: filepath.Join(dir, "tasks.db"),
+		DatabasePath: filepath.Join(dir, "tasks.json"),
 	}, nil)
 	testutil.NoError(t, err)
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
-	}
-	// Verify DB file was created.
-	if _, err := os.Stat(filepath.Join(dir, "tasks.db")); err != nil {
-		t.Fatalf("expected tasks.db to exist: %v", err)
 	}
 }
 
@@ -107,7 +102,6 @@ func TestStore_ListActive(t *testing.T) {
 func TestStore_DeleteTerminalBefore(t *testing.T) {
 	store := testStore(t)
 
-	// Add a terminal task with cleanup_after in the past.
 	task := &TaskRecord{
 		TaskID:         "old-task",
 		Runtime:        RuntimeCLI,
@@ -125,7 +119,6 @@ func TestStore_DeleteTerminalBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Delete terminal tasks before t=5000.
 	pruned := testutil.Must(store.DeleteTerminalBefore(5000))
 	if pruned != 1 {
 		t.Errorf("pruned = %d, want 1", pruned)
@@ -226,25 +219,21 @@ func TestRegistry_PutAndGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Lookup by ID.
 	got := reg.Get("task-1")
 	if got == nil || got.TaskID != "task-1" {
 		t.Fatal("Get by ID failed")
 	}
 
-	// Lookup by RunID.
 	got = reg.ByRunID("run-123")
 	if got == nil || got.TaskID != "task-1" {
 		t.Fatal("ByRunID failed")
 	}
 
-	// Lookup by ChildSessionKey.
 	got = reg.ByChildSessionKey("child-sess")
 	if got == nil || got.TaskID != "task-1" {
 		t.Fatal("ByChildSessionKey failed")
 	}
 
-	// Lookup by owner.
 	list := reg.ListByOwner("owner-a")
 	if len(list) != 1 {
 		t.Fatalf("ListByOwner returned %d, want 1", len(list))
@@ -284,10 +273,10 @@ func TestRegistry_Delete(t *testing.T) {
 
 func TestRegistry_RestorePersistence(t *testing.T) {
 	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "tasks.db")
+	cfgPath := filepath.Join(dir, "tasks.json")
 
 	// Create and populate.
-	store1 := testutil.Must(OpenStore(StoreConfig{DatabasePath: dbPath}, nil))
+	store1 := testutil.Must(OpenStore(StoreConfig{DatabasePath: cfgPath}, nil))
 	reg1 := testutil.Must(NewRegistry(store1, nil))
 	if err := reg1.Put(&TaskRecord{
 		TaskID:         "persist-1",
@@ -305,7 +294,7 @@ func TestRegistry_RestorePersistence(t *testing.T) {
 	store1.Close()
 
 	// Reopen and verify restoration.
-	store2 := testutil.Must(OpenStore(StoreConfig{DatabasePath: dbPath}, nil))
+	store2 := testutil.Must(OpenStore(StoreConfig{DatabasePath: cfgPath}, nil))
 	defer store2.Close()
 	reg2 := testutil.Must(NewRegistry(store2, nil))
 
@@ -323,7 +312,6 @@ func TestRegistry_RestorePersistence(t *testing.T) {
 func TestExecutor_CreateAndTransition(t *testing.T) {
 	reg := testRegistry(t)
 
-	// Create a queued task.
 	task, err := CreateQueuedTask(reg, CreateParams{
 		Runtime:             RuntimeSubagent,
 		RequesterSessionKey: "sess-1",
@@ -334,7 +322,6 @@ func TestExecutor_CreateAndTransition(t *testing.T) {
 		t.Errorf("Status = %q, want queued", task.Status)
 	}
 
-	// Start it.
 	if err := StartTask(reg, task.TaskID); err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +333,6 @@ func TestExecutor_CreateAndTransition(t *testing.T) {
 		t.Error("StartedAt should be set")
 	}
 
-	// Record progress.
 	if err := RecordProgress(reg, task.TaskID, "50% done"); err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +341,6 @@ func TestExecutor_CreateAndTransition(t *testing.T) {
 		t.Errorf("ProgressSummary = %q, want %q", got.ProgressSummary, "50% done")
 	}
 
-	// Complete it.
 	if err := CompleteTask(reg, task.TaskID, "all done"); err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +391,6 @@ func TestExecutor_BlockAndResume(t *testing.T) {
 		t.Errorf("Status = %q, want blocked", got.Status)
 	}
 
-	// Resume via StartTask (blocked -> running).
 	if err := StartTask(reg, task.TaskID); err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +425,6 @@ func TestAudit_StaleDetection(t *testing.T) {
 
 	now := int64(100_000_000)
 
-	// Create a stale queued task (last event 20 min ago).
 	if err := reg.Put(&TaskRecord{
 		TaskID:         "stale-queued",
 		Runtime:        RuntimeCron,
@@ -457,7 +440,6 @@ func TestAudit_StaleDetection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a stale running task (last event 45 min ago).
 	if err := reg.Put(&TaskRecord{
 		TaskID:         "stale-running",
 		Runtime:        RuntimeSubagent,
@@ -500,7 +482,6 @@ func TestFlow_CreateAndLink(t *testing.T) {
 		t.Errorf("Status = %q, want active", flow.Status)
 	}
 
-	// Create tasks and link them to the flow.
 	t1, err := CreateRunningTask(reg, CreateParams{
 		Runtime: RuntimeCron,
 		Task:    "step 1",
@@ -514,13 +495,11 @@ func TestFlow_CreateAndLink(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 
-	// Verify tasks belong to flow.
 	flowTasks := reg.ListByFlowID(flow.FlowID)
 	if len(flowTasks) != 2 {
 		t.Fatalf("ListByFlowID returned %d, want 2", len(flowTasks))
 	}
 
-	// Complete step 1, refresh flow.
 	if err := CompleteTask(reg, t1.TaskID, "done"); err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +508,6 @@ func TestFlow_CreateAndLink(t *testing.T) {
 		t.Errorf("CompletedCount = %d, want 1", f.CompletedCount)
 	}
 
-	// Complete step 2 -> flow should auto-complete.
 	if err := StartTask(reg, t2.TaskID); err != nil {
 		t.Fatal(err)
 	}
@@ -558,7 +536,6 @@ func TestFlow_BlockedAndResume(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 
-	// Block the task -> flow should become blocked.
 	if err := BlockTask(reg, task.TaskID, "waiting"); err != nil {
 		t.Fatal(err)
 	}
@@ -567,8 +544,8 @@ func TestFlow_BlockedAndResume(t *testing.T) {
 		t.Errorf("Flow Status = %q, want blocked", f.Status)
 	}
 
-	// Resume blocked flow.
-	resumed := testutil.Must(ResumeBlockedFlow(reg, flow.FlowID))
+	resumed, err := ResumeBlockedFlow(reg, flow.FlowID)
+	testutil.NoError(t, err)
 	if resumed != 1 {
 		t.Errorf("resumed = %d, want 1", resumed)
 	}
@@ -585,7 +562,7 @@ func TestMaintenance_OrphanRecovery(t *testing.T) {
 	reg := testRegistry(t)
 
 	now := int64(100_000_000)
-	oldTime := now - 10*60*1000 // 10 minutes ago (past grace period)
+	oldTime := now - 10*60*1000
 
 	if err := reg.Put(&TaskRecord{
 		TaskID:          "orphan-task",
@@ -603,7 +580,6 @@ func TestMaintenance_OrphanRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Session checker that always says "no backing session".
 	hasSession := func(key string) bool { return false }
 
 	result := RunMaintenance(reg, hasSession, now)
