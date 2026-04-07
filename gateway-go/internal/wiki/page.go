@@ -173,6 +173,57 @@ func (p *Page) Sections() []string {
 	return headings
 }
 
+// H2Section is an ordered section extracted from the page body.
+type H2Section struct {
+	Heading string // section heading (without "## " prefix)
+	Content string // full content including sub-headings
+}
+
+// SplitByH2 splits the page body into a preamble (content before first H2)
+// and an ordered list of H2 sections. Each section includes everything up to
+// the next H2 heading.
+func (p *Page) SplitByH2() (preamble string, sections []H2Section) {
+	scanner := bufio.NewScanner(strings.NewReader(p.Body))
+	var current *H2Section
+	var preambleBuf, sectionBuf strings.Builder
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "## ") {
+			// Flush previous section.
+			if current != nil {
+				current.Content = strings.TrimSpace(sectionBuf.String())
+				sections = append(sections, *current)
+				sectionBuf.Reset()
+			} else {
+				preamble = strings.TrimSpace(preambleBuf.String())
+			}
+			heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			current = &H2Section{Heading: heading}
+			continue
+		}
+
+		if current != nil {
+			sectionBuf.WriteString(line)
+			sectionBuf.WriteByte('\n')
+		} else {
+			preambleBuf.WriteString(line)
+			preambleBuf.WriteByte('\n')
+		}
+	}
+
+	// Flush last section or preamble.
+	if current != nil {
+		current.Content = strings.TrimSpace(sectionBuf.String())
+		sections = append(sections, *current)
+	} else {
+		preamble = strings.TrimSpace(preambleBuf.String())
+	}
+
+	return preamble, sections
+}
+
 // splitFrontmatter separates YAML frontmatter from the body.
 // Frontmatter is delimited by "---" on its own line.
 func splitFrontmatter(data []byte) (meta []byte, body string, err error) {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -25,8 +26,9 @@ type SearchResult struct {
 
 // searchDB manages the FTS5 index for wiki pages.
 type searchDB struct {
-	db *sql.DB
-	mu sync.RWMutex
+	db   *sql.DB
+	mu   sync.RWMutex
+	done chan struct{} // closed on Close to stop checkpoint goroutine
 }
 
 const ftsSchema = `
@@ -63,7 +65,9 @@ func newSearchDB(dir string) (*searchDB, error) {
 		db.Close()
 		return nil, fmt.Errorf("wiki: init fts schema: %w", err)
 	}
-	return &searchDB{db: db}, nil
+	s := &searchDB{db: db, done: make(chan struct{})}
+	go s.periodicCheckpoint()
+	return s, nil
 }
 
 // indexPage upserts a page into the FTS index.
@@ -135,7 +139,31 @@ func (s *searchDB) runQuery(ctx context.Context, ftsQuery string, limit int) ([]
 }
 
 func (s *searchDB) close() error {
+	close(s.done)
+	// Final checkpoint before closing to reclaim WAL space.
+	s.checkpoint()
 	return s.db.Close()
+}
+
+// checkpoint runs a WAL TRUNCATE checkpoint to reclaim disk space.
+func (s *searchDB) checkpoint() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+}
+
+// periodicCheckpoint runs a WAL checkpoint every 30 minutes.
+func (s *searchDB) periodicCheckpoint() {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-ticker.C:
+			s.checkpoint()
+		}
+	}
 }
 
 // rebuildIndex scans all wiki pages and rebuilds the FTS index from scratch.

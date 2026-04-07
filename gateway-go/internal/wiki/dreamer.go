@@ -294,6 +294,27 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 		if !strings.HasSuffix(u.Path, ".md") {
 			u.Path += ".md"
 		}
+		// Validate category; remap invalid ones to "업무" as fallback.
+		if u.Category != "" && !ValidateCategory(u.Category) {
+			wd.logger.Warn("wiki-dream: invalid category, remapping to 업무",
+				"category", u.Category, "path", u.Path)
+			u.Category = "업무"
+			// Fix path prefix to match corrected category.
+			parts := strings.SplitN(u.Path, "/", 2)
+			if len(parts) == 2 {
+				u.Path = u.Category + "/" + parts[1]
+			}
+		}
+
+		// Duplicate prevention: if creating, check for existing similar pages.
+		if u.Action == "create" {
+			if existing := wd.findExistingPage(u); existing != "" {
+				wd.logger.Info("wiki-dream: duplicate detected, converting to update",
+					"proposed", u.Path, "existing", existing)
+				u.Action = "update"
+				u.Path = existing
+			}
+		}
 
 		switch u.Action {
 		case "create":
@@ -401,13 +422,24 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 			updated++
 		}
 
-		// Check page size after write.
+		// Check page size and split if needed.
 		if maxBytes > 0 {
 			abs := filepath.Join(wd.store.Dir(), u.Path)
 			if info, err := os.Stat(abs); err == nil && info.Size() > int64(maxBytes) {
-				wd.logger.Warn("wiki-dream: page exceeds MaxPageBytes",
-					"path", u.Path, "size", info.Size(), "max", maxBytes)
-				oversized = append(oversized, u.Path)
+				subPaths, splitErr := wd.store.SplitPage(u.Path, maxBytes)
+				if splitErr != nil {
+					wd.logger.Warn("wiki-dream: split failed",
+						"path", u.Path, "error", splitErr)
+					oversized = append(oversized, u.Path)
+				} else if len(subPaths) > 0 {
+					wd.logger.Info("wiki-dream: page split",
+						"path", u.Path, "subPages", len(subPaths))
+					created += len(subPaths)
+				} else {
+					wd.logger.Warn("wiki-dream: page oversized but cannot split",
+						"path", u.Path, "size", info.Size())
+					oversized = append(oversized, u.Path)
+				}
 			}
 		}
 	}
@@ -439,9 +471,69 @@ func (wd *WikiDreamer) rebuildIndex() error {
 
 	wd.store.mu.Lock()
 	wd.store.index = newIdx
+	err = newIdx.Save(filepath.Join(wd.store.Dir(), "index.md"))
 	wd.store.mu.Unlock()
 
-	return newIdx.Save(filepath.Join(wd.store.Dir(), "index.md"))
+	return err
+}
+
+// findExistingPage checks if a similar page already exists by ID match,
+// slug prefix match, or FTS title search. Returns the existing path or "".
+func (wd *WikiDreamer) findExistingPage(u wikiUpdate) string {
+	idx := wd.store.GetIndex()
+
+	// 1. Exact ID match in the same category.
+	if u.ID != "" {
+		for path, entry := range idx.Entries {
+			if entry.ID == u.ID {
+				return path
+			}
+		}
+	}
+
+	// 2. Slug prefix match: normalize both and compare.
+	proposedSlug := normalizeSlug(u.Path)
+	for path := range idx.Entries {
+		if normalizeSlug(path) == proposedSlug {
+			return path
+		}
+	}
+
+	// 3. FTS title search: if a result in the same category scores well.
+	if u.Title != "" && wd.store.fts != nil {
+		results, err := wd.store.fts.search(context.Background(), u.Title, 3)
+		if err == nil {
+			for _, r := range results {
+				if r.Score < 0.6 {
+					continue
+				}
+				// Same category check.
+				if u.Category != "" && strings.HasPrefix(r.Path, u.Category+"/") {
+					return r.Path
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// normalizeSlug reduces a wiki path to a comparable slug form.
+// "사람/에코프로-담당자---석문호,-표과장.md" -> "사람/에코프로담당자석문호표과장"
+func normalizeSlug(path string) string {
+	path = strings.TrimSuffix(path, ".md")
+	path = strings.ToLower(path)
+	var sb strings.Builder
+	for _, r := range path {
+		if r == '/' {
+			sb.WriteRune(r)
+		} else if r == '-' || r == '_' || r == ',' || r == ' ' || r == '(' || r == ')' {
+			continue
+		} else {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
 }
 
 func (wd *WikiDreamer) resetCounters() {
