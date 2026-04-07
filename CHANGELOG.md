@@ -1,5 +1,44 @@
 # Changelog
 
+## [4.20.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.19.1...deneb-v4.20.0) (2026-04-07)
+
+
+### ✨ Features
+
+* **chat:** allow read tool in conversation mode ([d14984d](https://github.com/choiceoh/Deneb/commit/d14984d589d6297101d1da7f7c5d3f56f7143a20))
+* **chat:** allow read tool in conversation mode ([fda8fdf](https://github.com/choiceoh/Deneb/commit/fda8fdf802d9b4575a5679d73c3c98316d80f668))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** deliver subagent results to parent notification ([06623f6](https://github.com/choiceoh/Deneb/commit/06623f616d7756c38298313622969a9abbcca491))
+* **chat:** prevent NO_REPLY suppression on subagent notification runs ([51a490e](https://github.com/choiceoh/Deneb/commit/51a490e11bdaac0d86c9d077489fd4cd58c7d918))
+* **chat:** remove subagent polling inducements ([e60773f](https://github.com/choiceoh/Deneb/commit/e60773fb651183239c4d9a381cb01aad0cd2ecaa))
+* **chat:** remove subagent polling inducements, add SpawnFlag for yield behavior ([89b6bc7](https://github.com/choiceoh/Deneb/commit/89b6bc729bf3d252547fe67d600c6b888748d478))
+* **chat:** use AllText for session LastOutput so subagent results are delivered ([9647acc](https://github.com/choiceoh/Deneb/commit/9647acc2e71e3a9cc58e575c0c5a106c810bfaab))
+* **cron:** disable cron scheduler on dev instances ([515b9df](https://github.com/choiceoh/Deneb/commit/515b9df80fdfb1900dadecb96004491c1ff7c13b))
+* **cron:** disable cron scheduler on dev instances to prevent duplicate email analysis ([e25f4a1](https://github.com/choiceoh/Deneb/commit/e25f4a1df2d6354886a470ec015162ff16327a81))
+* **llm:** stop usage-only chunk from overwriting tool_use stop reason ([4d9edf7](https://github.com/choiceoh/Deneb/commit/4d9edf716fd6ec30e89efcf2ef017935004fc5b5))
+* **llm:** stop usage-only chunk from overwriting tool_use stop reason ([82bec0c](https://github.com/choiceoh/Deneb/commit/82bec0c07958bbaec48e9a81b4e108a9c72e8381))
+* **telegram:** make PrimaryChatID deterministic across restarts ([1b6fd95](https://github.com/choiceoh/Deneb/commit/1b6fd95bfbf3d624588ba0ae3766fb9424791f78))
+* **telegram:** make PrimaryChatID deterministic across restarts ([26744d2](https://github.com/choiceoh/Deneb/commit/26744d2e58efd9e73191a568ff3116546d4a2866))
+
+
+### ⚡ Performance
+
+* **boot:** cap boot history to 30K tokens, remove MEMORY.md from context ([eb02cb8](https://github.com/choiceoh/Deneb/commit/eb02cb8567442e0a56000a1ef4834716ef3de745))
+* **boot:** cap boot session history to 30K tokens and remove MEMORY.md from context files ([8e8aaba](https://github.com/choiceoh/Deneb/commit/8e8aaba75f21bad2d2ca520b0a2b665d043e4518))
+
+
+### 🔧 Internal
+
+* **chat:** remove knowledge prefetch, fix context file list ([4dedb3c](https://github.com/choiceoh/Deneb/commit/4dedb3c46a736e4919fe08e41faf55cab2fba4bf))
+* **chat:** remove knowledge prefetch, fix context file list ([5cc18c1](https://github.com/choiceoh/Deneb/commit/5cc18c1a4876096161dca7870010aade4583f898))
+* **telegram:** remove tool progress tracker ([5d69ef7](https://github.com/choiceoh/Deneb/commit/5d69ef75f87e94bc6aa0e8d130e73d9b50c57867))
+* **telegram:** remove tool progress tracker ([9f8fe32](https://github.com/choiceoh/Deneb/commit/9f8fe32a832504a5df6945172a8328a9c287eefe))
+* **test:** replace WebSocket tests with Telegram-based testing ([d6e1c6e](https://github.com/choiceoh/Deneb/commit/d6e1c6e85f22f745f54ae02783a544e85a21c5a4))
+* **test:** replace WebSocket tests with Telegram-based testing ([221f722](https://github.com/choiceoh/Deneb/commit/221f7222979701454d6d034360b882a791d2055c))
+
 ## [4.19.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.19.0...deneb-v4.19.1) (2026-04-07)
 
 
