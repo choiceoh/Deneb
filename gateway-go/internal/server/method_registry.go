@@ -15,8 +15,8 @@ import (
 
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
 	handlerautoresearch "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/autoresearch"
-	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
+	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertelegram"
@@ -95,11 +95,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- RL training pipeline ---
 		handlerrl.Methods(handlerrl.Deps{
 			Service: hub.RLService(),
-		}),
-
-		// --- RLM context externalization ---
-		handlerrlm.Methods(handlerrlm.Deps{
-			Service: hub.RLMService(),
 		}),
 
 		// --- Inter-agent bridge ---
@@ -209,7 +204,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.AdvancePhase(rpcutil.PhaseLate)
 	hub.SetChat(s.chatHandler)
-	hub.SetWikiStore(s.wikiStore) // late-bound: created during session phase
+	hub.SetRLMService(s.rlmService) // late-bound: created during session phase
+	hub.SetWikiStore(s.wikiStore)   // late-bound: created during session phase
 
 	domains := []map[string]rpcutil.HandlerFunc{
 		handlerchat.Methods(handlerchat.Deps{Chat: hub.Chat()}),
@@ -224,6 +220,11 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}),
 		handlerautoresearch.Methods(handlerautoresearch.Deps{
 			Runner: s.autoresearchRunner,
+		}),
+
+		// --- RLM context externalization (late-bound: depends on wiki, created during session phase) ---
+		handlerrlm.Methods(handlerrlm.Deps{
+			Service: hub.RLMService(),
 		}),
 
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---
