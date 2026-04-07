@@ -12,10 +12,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"github.com/coder/websocket"
 )
 
 // initAndListen creates the HTTP server, binds to the address, and starts
@@ -198,7 +198,7 @@ func (s *Server) doShutdown() error {
 	// 3. Close existing WebSocket clients.
 	s.clients.Range(func(key, value any) bool {
 		client := value.(*WsClient)
-		if err := client.conn.Close(websocket.StatusGoingAway, "server shutting down"); err != nil {
+		if err := client.conn.Close(ws.StatusGoingAway, "server shutting down"); err != nil {
 			s.logger.Debug("ws close during shutdown", "connId", client.connID, "error", err)
 		}
 		return true

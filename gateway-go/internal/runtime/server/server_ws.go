@@ -16,10 +16,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"github.com/coder/websocket"
 )
 
 const (
@@ -71,7 +71,7 @@ var _ events.Subscriber = (*WsClient)(nil)
 // WsClient represents a connected WebSocket client.
 // Implements events.Subscriber for event broadcasting.
 type WsClient struct {
-	conn          *websocket.Conn
+	conn          *ws.Conn
 	connID        string
 	created       time.Time
 	role          string
@@ -106,7 +106,7 @@ func (c *WsClient) SendEvent(data []byte) error {
 	defer c.writeMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), eventWriteTimeout)
 	defer cancel()
-	return c.conn.Write(ctx, websocket.MessageText, data)
+	return c.conn.Write(ctx, ws.MessageText, data)
 }
 
 // BufferedAmount returns bytes currently in-flight (being written).
@@ -133,9 +133,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // origin validation deferred
-	})
+	conn, err := ws.Accept(w, r, nil)
 	if err != nil {
 		s.logger.Error("websocket accept failed", "error", err)
 		return
@@ -169,7 +167,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 		if !isRoutineConnError(err) {
 			s.logger.Warn("handshake failed", "connId", client.connID, "error", err)
 		}
-		conn.Close(websocket.StatusPolicyViolation, "handshake failed")
+		conn.Close(ws.StatusPolicyViolation, "handshake failed")
 		return
 	}
 	handshakeCancel()
@@ -205,7 +203,7 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 		},
 	})
 	challengeCtx, challengeCancel := context.WithTimeout(ctx, 5*time.Second)
-	err := client.conn.Write(challengeCtx, 1 /* TextMessage */, challengeEvent)
+	err := client.conn.Write(challengeCtx, ws.MessageText, challengeEvent)
 	challengeCancel()
 	if err != nil {
 		return fmt.Errorf("send connect.challenge: %w", err)
@@ -362,7 +360,7 @@ func (s *Server) writeFrameRaw(ctx context.Context, client *WsClient, data []byt
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	return client.conn.Write(writeCtx, websocket.MessageText, data)
+	return client.conn.Write(writeCtx, ws.MessageText, data)
 }
 
 // generateConnID returns a cryptographically random connection identifier

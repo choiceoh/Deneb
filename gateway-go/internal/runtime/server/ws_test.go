@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"github.com/coder/websocket"
 )
 
 func TestWebSocketHandshake(t *testing.T) {
@@ -26,14 +26,11 @@ func TestWebSocketHandshake(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())
-	conn, wsResp, err := websocket.Dial(ctx, wsURL, nil)
-	if wsResp != nil && wsResp.Body != nil {
-		wsResp.Body.Close()
-	}
+	conn, _, err := ws.Dial(ctx, wsURL, nil)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer conn.Close(ws.StatusNormalClosure, "")
 
 	// Read connect.challenge event first.
 	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
@@ -59,7 +56,7 @@ func TestWebSocketHandshake(t *testing.T) {
 		},
 	})
 	data, _ := json.Marshal(connectReq)
-	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := conn.Write(ctx, ws.MessageText, data); err != nil {
 		t.Fatalf("write connect: %v", err)
 	}
 
@@ -106,12 +103,12 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	conn := connectWS(ctx, t, addr.String())
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer conn.Close(ws.StatusNormalClosure, "")
 
 	// Send health RPC.
 	healthReq, _ := protocol.NewRequestFrame("rpc-1", "health", nil)
 	data, _ := json.Marshal(healthReq)
-	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := conn.Write(ctx, ws.MessageText, data); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -146,11 +143,11 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	conn := connectWS(ctx, t, addr.String())
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer conn.Close(ws.StatusNormalClosure, "")
 
 	req, _ := protocol.NewRequestFrame("rpc-2", "nonexistent.method", nil)
 	data, _ := json.Marshal(req)
-	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := conn.Write(ctx, ws.MessageText, data); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -174,13 +171,10 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 }
 
 // connectWS performs the WebSocket handshake and returns an authenticated connection.
-func connectWS(ctx context.Context, t *testing.T, addr string) *websocket.Conn {
+func connectWS(ctx context.Context, t *testing.T, addr string) *ws.Conn {
 	t.Helper()
 	wsURL := fmt.Sprintf("ws://%s/ws", addr)
-	conn, wsResp, err := websocket.Dial(ctx, wsURL, nil)
-	if wsResp != nil && wsResp.Body != nil {
-		wsResp.Body.Close()
-	}
+	conn, _, err := ws.Dial(ctx, wsURL, nil)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -200,7 +194,7 @@ func connectWS(ctx context.Context, t *testing.T, addr string) *websocket.Conn {
 		},
 	})
 	data, _ := json.Marshal(connectReq)
-	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := conn.Write(ctx, ws.MessageText, data); err != nil {
 		t.Fatalf("write connect: %v", err)
 	}
 

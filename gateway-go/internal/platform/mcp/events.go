@@ -8,8 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 )
 
 // EventListener connects to the gateway WebSocket and forwards relevant
@@ -63,12 +62,9 @@ func (el *EventListener) Run(ctx context.Context) error {
 
 		el.logger.Info("connecting to gateway WebSocket", "url", wsURL)
 
-		conn, wsResp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+		conn, _, err := ws.Dial(ctx, wsURL, &ws.DialOptions{
 			HTTPHeader: header,
 		})
-		if wsResp != nil && wsResp.Body != nil {
-			wsResp.Body.Close()
-		}
 		if err != nil {
 			el.logger.Warn("websocket connect failed, retrying", "err", err, "backoff", backoff)
 			select {
@@ -100,10 +96,14 @@ func (el *EventListener) Run(ctx context.Context) error {
 }
 
 // readLoop reads events from the WebSocket until an error occurs.
-func (el *EventListener) readLoop(ctx context.Context, conn *websocket.Conn) error {
+func (el *EventListener) readLoop(ctx context.Context, conn *ws.Conn) error {
 	for {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			return err
+		}
 		var event gatewayEvent
-		if err := wsjson.Read(ctx, conn, &event); err != nil {
+		if err := json.Unmarshal(data, &event); err != nil {
 			return err
 		}
 		if event.Type != "event" {

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"github.com/coder/websocket"
 )
 
 func TestSmokeHealthEndpoint(t *testing.T) {
@@ -66,14 +66,11 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())
-	conn, wsResp, err := websocket.Dial(ctx, wsURL, nil)
-	if wsResp != nil && wsResp.Body != nil {
-		wsResp.Body.Close()
-	}
+	conn, _, err := ws.Dial(ctx, wsURL, nil)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "done")
+	defer conn.Close(ws.StatusNormalClosure, "done")
 
 	// Read connect.challenge event first.
 	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
@@ -91,7 +88,7 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 		},
 	})
 	data, _ := json.Marshal(connectReq)
-	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := conn.Write(ctx, ws.MessageText, data); err != nil {
 		t.Fatalf("write connect: %v", err)
 	}
 
@@ -113,7 +110,7 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	// Health RPC.
 	healthReq, _ := protocol.NewRequestFrame("smoke-rpc", "health", nil)
 	data, _ = json.Marshal(healthReq)
-	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := conn.Write(ctx, ws.MessageText, data); err != nil {
 		t.Fatalf("write health: %v", err)
 	}
 
@@ -135,7 +132,7 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	// Unknown method -> NOT_FOUND.
 	unknownReq, _ := protocol.NewRequestFrame("smoke-unknown", "nonexistent", nil)
 	data, _ = json.Marshal(unknownReq)
-	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := conn.Write(ctx, ws.MessageText, data); err != nil {
 		t.Fatalf("write unknown: %v", err)
 	}
 
