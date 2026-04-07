@@ -250,7 +250,7 @@ func (h *GatewayHub) Validate() error {
 	//   Version — empty string is valid
 
 	if len(missing) > 0 {
-		return fmt.Errorf("GatewayHub missing required fields: %v", missing)
+		return fmt.Errorf("gatewayHub missing required fields: %v", missing)
 	}
 	return nil
 }

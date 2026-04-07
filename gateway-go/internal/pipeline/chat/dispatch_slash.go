@@ -36,7 +36,7 @@ func (h *Handler) handleSlashCommand(
 		// Clear tool preset so session exits coordinator/worker mode.
 		if sess := h.sessions.Get(sessionKey); sess != nil && sess.ToolPreset != "" {
 			sess.ToolPreset = ""
-			_ = h.sessions.Set(sess)
+			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 		}
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
@@ -88,17 +88,17 @@ func (h *Handler) handleSlashCommand(
 		case "대화", "chat", "conversation":
 			sess.Mode = session.ModeChat
 			sess.ToolPreset = "conversation"
-			_ = h.sessions.Set(sess)
+			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 			h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
 		case "작업", "work":
 			sess.Mode = session.ModeWork
 			sess.ToolPreset = ""
-			_ = h.sessions.Set(sess)
+			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 			h.deliverSlashResponse(delivery, "🔨 작업 모드 — 모든 도구 + 자율 계속 실행이 활성화됩니다.")
 		case "일반", "normal":
 			sess.Mode = session.ModeNormal
 			sess.ToolPreset = ""
-			_ = h.sessions.Set(sess)
+			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 			h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용하지만 자율 계속 실행은 비활성화됩니다.")
 		case "":
 			// Cycle: normal → chat → work → normal
@@ -106,17 +106,17 @@ func (h *Handler) handleSlashCommand(
 			case session.ModeNormal:
 				sess.Mode = session.ModeChat
 				sess.ToolPreset = "conversation"
-				_ = h.sessions.Set(sess)
+				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 				h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
 			case session.ModeChat:
 				sess.Mode = session.ModeWork
 				sess.ToolPreset = ""
-				_ = h.sessions.Set(sess)
+				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 				h.deliverSlashResponse(delivery, "🔨 작업 모드 — 모든 도구 + 자율 계속 실행이 활성화됩니다.")
 			default:
 				sess.Mode = session.ModeNormal
 				sess.ToolPreset = ""
-				_ = h.sessions.Set(sess)
+				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 				h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용하지만 자율 계속 실행은 비활성화됩니다.")
 			}
 		default:
@@ -128,12 +128,12 @@ func (h *Handler) handleSlashCommand(
 		h.InterruptActiveRun(sessionKey)
 		h.clearPending(sessionKey)
 		if h.transcript != nil {
-			_ = h.transcript.Delete(sessionKey)
+			_ = h.transcript.Delete(sessionKey) // best-effort: transcript cleanup is non-critical
 		}
 		sess := h.sessions.Get(sessionKey)
 		if sess != nil {
 			sess.ToolPreset = "coordinator"
-			_ = h.sessions.Set(sess)
+			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 		}
 		h.deliverSlashResponse(delivery, "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.")
 

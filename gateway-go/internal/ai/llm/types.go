@@ -290,7 +290,7 @@ type Tool struct {
 // also be called manually for tools constructed outside the registry.
 func (t *Tool) PreSerialize() {
 	if t.InputSchema != nil && t.RawInputSchema == nil {
-		t.RawInputSchema, _ = json.Marshal(t.InputSchema)
+		t.RawInputSchema, _ = json.Marshal(t.InputSchema) // best-effort: marshal of known-good schema cannot fail
 	}
 }
 

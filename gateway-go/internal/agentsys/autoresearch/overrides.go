@@ -98,7 +98,7 @@ func ApplyOverrides(workdir string, constants []ConstantDef, overrides map[strin
 		once.Do(func() {
 			for file, content := range originals {
 				path := filepath.Join(workdir, file)
-				_ = os.WriteFile(path, content, 0o644)
+				_ = os.WriteFile(path, content, 0o644) // best-effort: restoration failure is non-critical
 			}
 		})
 	}

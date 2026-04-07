@@ -122,7 +122,7 @@ func (pm *PromptManager) systemCheck(ctx context.Context) (*PromptGetResult, err
 func (pm *PromptManager) sessionReview(ctx context.Context, sessionKey string) (*PromptGetResult, error) {
 	var params json.RawMessage
 	if sessionKey != "" {
-		params, _ = json.Marshal(map[string]any{"session_key": sessionKey})
+		params, _ = json.Marshal(map[string]any{"session_key": sessionKey}) // best-effort: marshal of known-good types cannot fail
 	}
 
 	var result json.RawMessage

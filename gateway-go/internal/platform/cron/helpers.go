@@ -51,7 +51,7 @@ func ParseSmartScheduleWithOpts(spec string, opts SmartScheduleOpts) (StoreSched
 	if len(fields) == 5 && looksLikeCronExpr(fields) {
 		loc := time.Local
 		if opts.Tz != "" {
-			loc, _ = time.LoadLocation(opts.Tz)
+			loc, _ = time.LoadLocation(opts.Tz) // best-effort: defaults to Local
 		}
 		now := time.Now()
 		next := evaluateCronExpr(spec, now, loc)

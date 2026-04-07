@@ -161,7 +161,7 @@ func (s *Server) registerSessionRPCMethods() {
 			Method: "sessions.send",
 		}
 		params := map[string]string{"key": sessionKey, "message": message}
-		fakeReq.Params, _ = json.Marshal(params)
+		fakeReq.Params, _ = json.Marshal(params) // best-effort: marshal of known-good types cannot fail
 		resp := s.chatHandler.SessionsSend(context.Background(), fakeReq)
 		if resp != nil && resp.Error != nil {
 			return errors.New(resp.Error.Message)

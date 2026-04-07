@@ -95,7 +95,7 @@ func (s *Store) WritePage(relPath string, page *Page) error {
 	if err := s.writePageInternal(relPath, page, false); err != nil {
 		return err
 	}
-	_ = s.AppendLog(op, relPath+" — "+page.Meta.Title)
+	_ = s.AppendLog(op, relPath+" — "+page.Meta.Title) // best-effort: audit log is non-critical
 	return nil
 }
 
@@ -110,7 +110,7 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 
 	// Update FTS index.
 	if s.fts != nil {
-		_ = s.fts.indexPage(relPath, page)
+		_ = s.fts.indexPage(relPath, page) // best-effort: FTS index is non-critical
 	}
 
 	// Capture old related list before updating index.
@@ -149,7 +149,7 @@ func (s *Store) DeletePage(relPath string) error {
 
 	// Update FTS index.
 	if s.fts != nil {
-		_ = s.fts.removePage(relPath)
+		_ = s.fts.removePage(relPath) // best-effort: FTS cleanup is non-critical
 	}
 
 	s.mu.Lock()
@@ -160,7 +160,7 @@ func (s *Store) DeletePage(relPath string) error {
 	}
 	s.mu.Unlock()
 
-	_ = s.AppendLog("delete", relPath)
+	_ = s.AppendLog("delete", relPath) // best-effort: audit log is non-critical
 
 	// Remove backlinks: remove relPath from each formerly-related page.
 	s.maintainBacklinks(relPath, oldRelated, nil)
@@ -203,7 +203,7 @@ func (s *Store) addBacklink(targetPath, sourcePath string) {
 	}
 	page.Meta.Related = append(page.Meta.Related, sourcePath)
 	page.Meta.Updated = time.Now().Format("2006-01-02")
-	_ = s.writePageInternal(targetPath, page, true)
+	_ = s.writePageInternal(targetPath, page, true) // best-effort: related page update is non-critical
 }
 
 func (s *Store) removeBacklink(targetPath, sourcePath string) {
@@ -222,7 +222,7 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 	}
 	page.Meta.Related = filtered
 	page.Meta.Updated = time.Now().Format("2006-01-02")
-	_ = s.writePageInternal(targetPath, page, true)
+	_ = s.writePageInternal(targetPath, page, true) // best-effort: related page update is non-critical
 }
 
 func toSet(ss []string) map[string]bool {
@@ -557,7 +557,7 @@ func (s *Store) pruneGhostEntries() {
 	for _, g := range ghosts {
 		delete(s.index.Entries, g)
 	}
-	_ = s.index.Save(filepath.Join(s.dir, "index.md"))
+	_ = s.index.Save(filepath.Join(s.dir, "index.md")) // best-effort: index save is non-critical
 }
 
 func ensureDirs(dir string) error {

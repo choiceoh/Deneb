@@ -62,7 +62,7 @@ func (rm *ResourceManager) Read(ctx context.Context, uri string) (*ResourceReadR
 
 	var paramsRaw json.RawMessage
 	if params != nil {
-		paramsRaw, _ = json.Marshal(params)
+		paramsRaw, _ = json.Marshal(params) // best-effort: marshal of known-good types cannot fail
 	}
 
 	payload, err := rm.bridge.Call(ctx, rpcMethod, paramsRaw)

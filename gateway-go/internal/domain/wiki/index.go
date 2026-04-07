@@ -241,7 +241,7 @@ func parseTSVLine(line, category string) indexRenderEntry {
 		}
 	}
 	if len(fields) > 5 {
-		e.Importance, _ = strconv.ParseFloat(fields[5], 64)
+		e.Importance, _ = strconv.ParseFloat(fields[5], 64) // best-effort: defaults to zero
 	}
 	if len(fields) > 6 {
 		e.Updated = fields[6]
@@ -309,7 +309,7 @@ func parseIndexLine(line, category string) indexRenderEntry {
 			for _, part := range strings.Split(metaStr, ",") {
 				part = strings.TrimSpace(part)
 				if strings.HasPrefix(part, "i:") {
-					importance, _ = strconv.ParseFloat(strings.TrimPrefix(part, "i:"), 64)
+					importance, _ = strconv.ParseFloat(strings.TrimPrefix(part, "i:"), 64) // best-effort: defaults to zero
 				} else if strings.HasPrefix(part, "u:") {
 					updated = strings.TrimPrefix(part, "u:")
 				}

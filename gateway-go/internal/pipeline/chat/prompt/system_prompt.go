@@ -372,7 +372,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	fmt.Fprintf(&d, "Workspace: %s\n", params.WorkspaceDir)
 	tz := params.UserTimezone
 	if tz == "" {
-		tz, _ = loadCachedTimezone()
+		tz, _ = loadCachedTimezone() // best-effort: defaults to Local
 	}
 	now := time.Now()
 	_, cachedLoc := loadCachedTimezone()

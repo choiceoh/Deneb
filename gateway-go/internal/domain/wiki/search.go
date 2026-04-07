@@ -149,7 +149,7 @@ func (s *searchDB) close() error {
 func (s *searchDB) checkpoint() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+	_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)") // best-effort: WAL compaction is non-critical
 }
 
 // periodicCheckpoint runs a WAL checkpoint every 30 minutes.

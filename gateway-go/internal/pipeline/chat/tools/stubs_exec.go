@@ -37,7 +37,7 @@ func ToolSessionsList(sessions *session.Manager) ToolFunc {
 			Kinds []string `json:"kinds"`
 		}
 		if len(input) > 0 {
-			_ = json.Unmarshal(input, &p)
+			_ = json.Unmarshal(input, &p) // best-effort: use defaults on parse failure
 		}
 
 		allSessions := sessions.List()
