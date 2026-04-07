@@ -104,6 +104,19 @@ func WithContinuationSignal(ctx context.Context, sig *ContinuationSignal) contex
 	return toolctx.WithContinuationSignal(ctx, sig)
 }
 
+// SpawnFlag is a re-export of toolctx.SpawnFlag.
+type SpawnFlag = toolctx.SpawnFlag
+
+// NewSpawnFlag creates a new (unset) SpawnFlag.
+func NewSpawnFlag() *SpawnFlag {
+	return toolctx.NewSpawnFlag()
+}
+
+// WithSpawnFlag attaches a SpawnFlag to ctx.
+func WithSpawnFlag(ctx context.Context, f *SpawnFlag) context.Context {
+	return toolctx.WithSpawnFlag(ctx, f)
+}
+
 // DeferredActivation is a re-export of toolctx.DeferredActivation.
 type DeferredActivation = toolctx.DeferredActivation
 

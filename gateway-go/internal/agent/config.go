@@ -88,6 +88,12 @@ type AgentConfig struct {
 	// handle follow-up work after the run completes.
 	ContinuationRequested func() bool
 
+	// SpawnDetected returns true when sessions_spawn was called during this run.
+	// Used to change turn-budget warnings from "call continue_run" to
+	// "end your turn — sub-agents are working", preventing the agent from
+	// requesting a continuation that duplicates the sub-agents' work.
+	SpawnDetected func() bool
+
 	// DynamicToolsProvider is called before each turn starting from turn 1.
 	// When it returns a non-empty slice, those tools are appended to cfg.Tools
 	// (deduplicating by name). Used by the deferred tools system: fetch_tools

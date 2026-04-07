@@ -3,6 +3,7 @@ package toolctx
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 )
@@ -22,6 +23,7 @@ const (
 	ctxKeyToolPreset
 	ctxKeyContinuationSignal
 	ctxKeyDeferredActivation
+	ctxKeySpawnFlag
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -174,6 +176,36 @@ func WithContinuationSignal(ctx context.Context, sig *ContinuationSignal) contex
 func ContinuationSignalFromContext(ctx context.Context) *ContinuationSignal {
 	s, _ := ctx.Value(ctxKeyContinuationSignal).(*ContinuationSignal)
 	return s
+}
+
+// --- SpawnFlag ---
+
+// SpawnFlag is an atomic flag set by sessions_spawn when a sub-agent is created.
+// The executor reads it to suppress turn-budget warnings that induce continue_run
+// after spawning, and the continuation logic uses it to change the continuation
+// message from "continue your work" to "synthesize subagent results".
+type SpawnFlag struct {
+	val atomic.Bool
+}
+
+// NewSpawnFlag creates a new (unset) SpawnFlag.
+func NewSpawnFlag() *SpawnFlag { return &SpawnFlag{} }
+
+// Set marks the flag as active (a sub-agent was spawned in this run).
+func (f *SpawnFlag) Set() { f.val.Store(true) }
+
+// IsSet reports whether sessions_spawn was called during this run.
+func (f *SpawnFlag) IsSet() bool { return f.val.Load() }
+
+// WithSpawnFlag attaches a SpawnFlag to the context.
+func WithSpawnFlag(ctx context.Context, f *SpawnFlag) context.Context {
+	return context.WithValue(ctx, ctxKeySpawnFlag, f)
+}
+
+// SpawnFlagFromContext extracts the SpawnFlag from a context.
+func SpawnFlagFromContext(ctx context.Context) *SpawnFlag {
+	f, _ := ctx.Value(ctxKeySpawnFlag).(*SpawnFlag)
+	return f
 }
 
 // --- DeferredActivation ---

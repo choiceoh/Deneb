@@ -140,6 +140,8 @@ type chatRunResult struct {
 	// ContSignal is non-nil when the continue_run tool was available.
 	// Check ContSignal.Requested() to see if the LLM requested a continuation.
 	ContSignal *ContinuationSignal
+	// SpawnFlag is non-nil; IsSet() returns true when sessions_spawn was called.
+	SpawnFlag *SpawnFlag
 }
 
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
@@ -514,6 +516,10 @@ func executeAgentRun(
 		contSignal = NewContinuationSignal()
 	}
 
+	// SpawnFlag: tracks whether sessions_spawn was called during this run.
+	// Read by the executor (turn budget warning) and run orchestrator (continuation).
+	spawnFlag := NewSpawnFlag()
+
 	// DeferredActivation: tracks which deferred tools have been activated via
 	// fetch_tools during this run. The executor reads it each turn to inject
 	// newly activated tool schemas into the ChatRequest.
@@ -608,6 +614,7 @@ func executeAgentRun(
 			if contSignal != nil {
 				ctx = WithContinuationSignal(ctx, contSignal)
 			}
+			ctx = WithSpawnFlag(ctx, spawnFlag)
 			if replEnv != nil {
 				ctx = repl.WithEnv(ctx, replEnv)
 			}
@@ -628,6 +635,7 @@ func executeAgentRun(
 		ContinuationRequested: func() bool {
 			return contSignal != nil && contSignal.Requested()
 		},
+		SpawnDetected:          spawnFlag.IsSet,
 		StreamingToolExecution: true,
 		ToolLoopDetector:       agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
 		// Per-turn message persistence: persist each assistant and tool_result
@@ -942,7 +950,7 @@ func executeAgentRun(
 		})
 	}
 
-	return &chatRunResult{AgentResult: agentResult, ContSignal: contSignal}, nil
+	return &chatRunResult{AgentResult: agentResult, ContSignal: contSignal, SpawnFlag: spawnFlag}, nil
 }
 
 // resolveThinkingConfig maps a session ThinkingLevel string to an llm.ThinkingConfig.
