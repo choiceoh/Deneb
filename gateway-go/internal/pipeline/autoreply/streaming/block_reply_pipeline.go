@@ -88,12 +88,12 @@ type BlockReplyPipelineFull struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	sentKeys          map[string]bool
-	sentContentKeys   map[string]bool
-	pendingKeys       map[string]bool
-	seenKeys          map[string]bool
-	bufferedKeys      map[string]bool
-	bufferedPayloadKs map[string]bool
+	sentKeys          map[string]struct{}
+	sentContentKeys   map[string]struct{}
+	pendingKeys       map[string]struct{}
+	seenKeys          map[string]struct{}
+	bufferedKeys      map[string]struct{}
+	bufferedPayloadKs map[string]struct{}
 	bufferedPayloads  []types.ReplyPayload
 
 	coalescer *BlockReplyCoalescer
@@ -115,12 +115,12 @@ func NewBlockReplyPipelineFull(ctx context.Context, cfg BlockReplyPipelineConfig
 		cfg:               cfg,
 		ctx:               pipeCtx,
 		cancel:            cancel,
-		sentKeys:          make(map[string]bool),
-		sentContentKeys:   make(map[string]bool),
-		pendingKeys:       make(map[string]bool),
-		seenKeys:          make(map[string]bool),
-		bufferedKeys:      make(map[string]bool),
-		bufferedPayloadKs: make(map[string]bool),
+		sentKeys:          make(map[string]struct{}),
+		sentContentKeys:   make(map[string]struct{}),
+		pendingKeys:       make(map[string]struct{}),
+		seenKeys:          make(map[string]struct{}),
+		bufferedKeys:      make(map[string]struct{}),
+		bufferedPayloadKs: make(map[string]struct{}),
 		sendCh:            make(chan sendItem, 256),
 		doneCh:            make(chan struct{}),
 	}
@@ -131,7 +131,7 @@ func NewBlockReplyPipelineFull(ctx context.Context, cfg BlockReplyPipelineConfig
 	if cfg.Coalescing != nil {
 		p.coalescer = NewBlockReplyCoalescer(*cfg.Coalescing, p.IsAborted, func(payload types.ReplyPayload) {
 			p.mu.Lock()
-			p.bufferedKeys = make(map[string]bool)
+			p.bufferedKeys = make(map[string]struct{})
 			p.mu.Unlock()
 			p.enqueueSend(payload, true)
 		})
@@ -183,8 +183,8 @@ func (p *BlockReplyPipelineFull) sendLoop() {
 			continue
 		}
 
-		p.sentKeys[item.pk] = true
-		p.sentContentKeys[item.ck] = true
+		p.sentKeys[item.pk] = struct{}{}
+		p.sentContentKeys[item.ck] = struct{}{}
 		p.didStreamFlag = true
 		p.mu.Unlock()
 	}
@@ -253,17 +253,21 @@ func (p *BlockReplyPipelineFull) enqueueSend(payload types.ReplyPayload, bypassS
 	ck := contentKey(payload)
 
 	if !bypassSeenCheck {
-		if p.seenKeys[pk] {
+		if _, ok := p.seenKeys[pk]; ok {
 			p.mu.Unlock()
 			return
 		}
-		p.seenKeys[pk] = true
+		p.seenKeys[pk] = struct{}{}
 	}
-	if p.sentKeys[pk] || p.pendingKeys[pk] {
+	if _, sent := p.sentKeys[pk]; sent {
 		p.mu.Unlock()
 		return
 	}
-	p.pendingKeys[pk] = true
+	if _, pending := p.pendingKeys[pk]; pending {
+		p.mu.Unlock()
+		return
+	}
+	p.pendingKeys[pk] = struct{}{}
 	p.mu.Unlock()
 
 	// Non-blocking send to the sequential queue.
@@ -286,11 +290,20 @@ func (p *BlockReplyPipelineFull) bufferPayload(payload types.ReplyPayload) bool 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.seenKeys[pk] || p.sentKeys[pk] || p.pendingKeys[pk] || p.bufferedPayloadKs[pk] {
+	if _, ok := p.seenKeys[pk]; ok {
 		return true
 	}
-	p.seenKeys[pk] = true
-	p.bufferedPayloadKs[pk] = true
+	if _, ok := p.sentKeys[pk]; ok {
+		return true
+	}
+	if _, ok := p.pendingKeys[pk]; ok {
+		return true
+	}
+	if _, ok := p.bufferedPayloadKs[pk]; ok {
+		return true
+	}
+	p.seenKeys[pk] = struct{}{}
+	p.bufferedPayloadKs[pk] = struct{}{}
 	p.bufferedPayloads = append(p.bufferedPayloads, payload)
 	return true
 }
@@ -304,7 +317,7 @@ func (p *BlockReplyPipelineFull) flushBuffered() {
 	payloads := make([]types.ReplyPayload, len(p.bufferedPayloads))
 	copy(payloads, p.bufferedPayloads)
 	p.bufferedPayloads = p.bufferedPayloads[:0]
-	p.bufferedPayloadKs = make(map[string]bool)
+	p.bufferedPayloadKs = make(map[string]struct{})
 	p.mu.Unlock()
 
 	for _, payload := range payloads {
@@ -341,12 +354,20 @@ func (p *BlockReplyPipelineFull) Enqueue(payload types.ReplyPayload) {
 	if p.coalescer != nil {
 		pk := payloadKey(payload)
 		p.mu.Lock()
-		if p.seenKeys[pk] || p.pendingKeys[pk] || p.bufferedKeys[pk] {
+		if _, ok := p.seenKeys[pk]; ok {
 			p.mu.Unlock()
 			return
 		}
-		p.seenKeys[pk] = true
-		p.bufferedKeys[pk] = true
+		if _, ok := p.pendingKeys[pk]; ok {
+			p.mu.Unlock()
+			return
+		}
+		if _, ok := p.bufferedKeys[pk]; ok {
+			p.mu.Unlock()
+			return
+		}
+		p.seenKeys[pk] = struct{}{}
+		p.bufferedKeys[pk] = struct{}{}
 		p.mu.Unlock()
 		p.coalescer.Enqueue(payload)
 		return
@@ -415,5 +436,6 @@ func (p *BlockReplyPipelineFull) HasSentPayload(payload types.ReplyPayload) bool
 	ck := contentKey(payload)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.sentContentKeys[ck]
+	_, ok := p.sentContentKeys[ck]
+	return ok
 }

@@ -268,6 +268,8 @@ func renderValue(node *yaml.Node, goType string, valueMap map[string]string) str
 		return node.Value
 	case "int":
 		return node.Value
+	case "struct{}":
+		return "{}"
 	default:
 		// Custom type (e.g. auth.Scope) — use as-is.
 		return node.Value

@@ -54,14 +54,14 @@ func normalizeTextList(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var result []string
 	for _, v := range values {
 		trimmed := strings.TrimSpace(v)
-		if trimmed == "" || seen[trimmed] {
+		if _, ok := seen[trimmed]; trimmed == "" || ok {
 			continue
 		}
-		seen[trimmed] = true
+		seen[trimmed] = struct{}{}
 		result = append(result, trimmed)
 	}
 	if len(result) == 0 {
@@ -75,7 +75,7 @@ func normalizeTextList(values []string) []string {
 // NormalizeProviderAuthMethods validates and normalizes auth method definitions.
 func NormalizeProviderAuthMethods(params NormalizeAuthParams) ([]ProviderAuthMethodDef, []ProviderDiagnostic) {
 	var diagnostics []ProviderDiagnostic
-	seenIDs := make(map[string]bool)
+	seenIDs := make(map[string]struct{})
 	var normalized []ProviderAuthMethodDef
 
 	for _, method := range params.Auth {
@@ -89,7 +89,7 @@ func NormalizeProviderAuthMethods(params NormalizeAuthParams) ([]ProviderAuthMet
 			})
 			continue
 		}
-		if seenIDs[methodID] {
+		if _, ok := seenIDs[methodID]; ok {
 			diagnostics = append(diagnostics, ProviderDiagnostic{
 				Level:    "error",
 				PluginID: params.PluginID,
@@ -98,7 +98,7 @@ func NormalizeProviderAuthMethods(params NormalizeAuthParams) ([]ProviderAuthMet
 			})
 			continue
 		}
-		seenIDs[methodID] = true
+		seenIDs[methodID] = struct{}{}
 
 		label := normalizeText(method.Label)
 		if label == "" {

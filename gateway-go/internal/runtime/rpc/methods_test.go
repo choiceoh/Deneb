@@ -61,12 +61,12 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 		// Tools catalog (static core).
 		"tools.catalog",
 	}
-	set := make(map[string]bool)
+	set := make(map[string]struct{})
 	for _, m := range methods {
-		set[m] = true
+		set[m] = struct{}{}
 	}
 	for _, e := range expected {
-		if !set[e] {
+		if _, ok := set[e]; !ok {
 			t.Errorf("expected method %q to be registered", e)
 		}
 	}

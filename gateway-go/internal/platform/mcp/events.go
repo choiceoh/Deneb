@@ -132,7 +132,7 @@ func (el *EventListener) handleEvent(ctx context.Context, event *gatewayEvent) {
 	}
 
 	// Trigger sampling for events that need analysis.
-	if eventRequiresSampling[event.Event] && el.sampler != nil {
+	if _, ok := eventRequiresSampling[event.Event]; ok && el.sampler != nil {
 		go el.sampler.HandleEvent(ctx, event.Event, event.Payload)
 	}
 }

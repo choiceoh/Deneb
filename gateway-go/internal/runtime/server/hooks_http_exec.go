@@ -379,7 +379,7 @@ func resolveTemplateExpr(expr string, ctx templateContext) string {
 	// {{headers.<key>}}
 	if strings.HasPrefix(expr, "headers.") {
 		key := strings.ToLower(strings.TrimPrefix(expr, "headers."))
-		if key != "" && !blockedTemplateKeys[key] {
+		if _, blocked := blockedTemplateKeys[key]; key != "" && !blocked {
 			if v, ok := ctx.Headers[key]; ok {
 				return v
 			}
@@ -390,7 +390,7 @@ func resolveTemplateExpr(expr string, ctx templateContext) string {
 	// {{query.<key>}}
 	if strings.HasPrefix(expr, "query.") {
 		key := strings.TrimPrefix(expr, "query.")
-		if key != "" && !blockedTemplateKeys[key] {
+		if _, blocked := blockedTemplateKeys[key]; key != "" && !blocked {
 			if v, ok := ctx.Query[key]; ok {
 				return v
 			}
@@ -405,7 +405,7 @@ func resolveTemplateExpr(expr string, ctx templateContext) string {
 	}
 
 	// Direct key lookup in payload for backward compatibility.
-	if !blockedTemplateKeys[expr] {
+	if _, blocked := blockedTemplateKeys[expr]; !blocked {
 		if v, ok := ctx.Payload[expr]; ok {
 			return fmt.Sprintf("%v", v)
 		}
@@ -423,7 +423,7 @@ func resolvePayloadDotPath(payload map[string]any, dotPath string) string {
 	parts := strings.Split(dotPath, ".")
 	var current any = payload
 	for _, part := range parts {
-		if blockedTemplateKeys[part] {
+		if _, blocked := blockedTemplateKeys[part]; blocked {
 			return ""
 		}
 		m, ok := current.(map[string]any)

@@ -97,14 +97,14 @@ func ToolMultiEdit(defaultDir string) ToolFunc {
 		}
 
 		// Write all modified files back to disk atomically (flock + tmp + rename).
-		writtenFiles := make(map[string]bool)
+		writtenFiles := make(map[string]struct{})
 		for path, content := range fileCache {
 			if err := atomicfile.WriteFile(path, []byte(content), nil); err != nil {
 				results = append(results, fmt.Sprintf("WRITE FAIL %s: %v", path, err))
 				failCount++
 				successCount-- // undo the OK count
 			}
-			writtenFiles[path] = true
+			writtenFiles[path] = struct{}{}
 		}
 
 		summary := fmt.Sprintf("\n--- %d succeeded, %d failed, %d files modified ---",
@@ -119,11 +119,11 @@ func ToolMultiEdit(defaultDir string) ToolFunc {
 // Helps the agent quickly understand project structure without multiple ls/find calls.
 
 // skipDirs are directories always excluded from tree output to avoid noise.
-var skipDirs = map[string]bool{
-	"node_modules": true, ".git": true, "__pycache__": true,
-	".tox": true, ".mypy_cache": true, ".pytest_cache": true,
-	"vendor": true, "target": true, "dist": true, "build": true,
-	".next": true, ".nuxt": true, ".cache": true,
+var skipDirs = map[string]struct{}{
+	"node_modules": {}, ".git": {}, "__pycache__": {},
+	".tox": {}, ".mypy_cache": {}, ".pytest_cache": {},
+	"vendor": {}, "target": {}, "dist": {}, "build": {},
+	".next": {}, ".nuxt": {}, ".cache": {},
 }
 
 // ToolTree returns a tool that renders a directory tree rooted at defaultDir.
@@ -242,7 +242,7 @@ func buildTree(sb *strings.Builder, dir, prefix string, maxDepth, currentDepth i
 			continue
 		}
 		// Skip known noisy directories.
-		if e.IsDir() && skipDirs[name] {
+		if _, skip := skipDirs[name]; e.IsDir() && skip {
 			continue
 		}
 		// Skip files if dirs_only.

@@ -36,7 +36,7 @@ type Writer struct {
 	mu        sync.Mutex
 	baseDir   string // e.g. ~/.deneb/agents/<agentId>/sessions/
 	logger    *slog.Logger
-	known     map[string]bool // tracks which sessions have been initialized
+	known     map[string]struct{} // tracks which sessions have been initialized
 	listeners []AppendListener
 	listMu    sync.RWMutex
 }
@@ -50,7 +50,7 @@ func NewWriter(baseDir string, logger *slog.Logger) *Writer {
 	return &Writer{
 		baseDir: baseDir,
 		logger:  logger,
-		known:   make(map[string]bool),
+		known:   make(map[string]struct{}),
 	}
 }
 
@@ -100,7 +100,7 @@ func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.known[sessionKey] {
+	if _, ok := w.known[sessionKey]; ok {
 		return nil
 	}
 
@@ -108,7 +108,7 @@ func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
 
 	// Check if file already exists.
 	if _, err := os.Stat(path); err == nil {
-		w.known[sessionKey] = true
+		w.known[sessionKey] = struct{}{}
 		return nil
 	}
 
@@ -133,7 +133,7 @@ func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
 		return fmt.Errorf("transcript: write header: %w", err)
 	}
 
-	w.known[sessionKey] = true
+	w.known[sessionKey] = struct{}{}
 	w.logger.Debug("session transcript created", "session", sessionKey, "path", path)
 	return nil
 }

@@ -184,14 +184,14 @@ func fullDispatcher() *Dispatcher {
 // is registered in the Go dispatcher.
 func TestTSBaseMethodParity(t *testing.T) {
 	d := fullDispatcher()
-	registered := make(map[string]bool)
+	registered := make(map[string]struct{})
 	for _, m := range d.Methods() {
-		registered[m] = true
+		registered[m] = struct{}{}
 	}
 
 	var missing []string
 	for _, m := range tsBaseMethods {
-		if !registered[m] {
+		if _, ok := registered[m]; !ok {
 			missing = append(missing, m)
 		}
 	}

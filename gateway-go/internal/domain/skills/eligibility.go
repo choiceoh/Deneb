@@ -26,7 +26,7 @@ type EligibilityContext struct {
 	SkillConfigs   map[string]SkillConfig
 	AllowBundled   []string // config.skills.allowBundled
 	ConfigValues   map[string]bool
-	AvailableTools map[string]bool // tools currently registered in the agent
+	AvailableTools map[string]struct{} // tools currently registered in the agent
 }
 
 // DefaultEligibilityContext creates a context using the current runtime environment.
@@ -110,7 +110,7 @@ func evaluateRuntimeEligibility(entry SkillEntry, skillCfg SkillConfig, ctx Elig
 	// requires_tools: show only when ALL listed tools are available.
 	if len(meta.RequiresTools) > 0 && len(ctx.AvailableTools) > 0 {
 		for _, tool := range meta.RequiresTools {
-			if !ctx.AvailableTools[tool] {
+			if _, ok := ctx.AvailableTools[tool]; !ok {
 				return false
 			}
 		}
@@ -120,7 +120,7 @@ func evaluateRuntimeEligibility(entry SkillEntry, skillCfg SkillConfig, ctx Elig
 	if len(meta.FallbackForTools) > 0 && len(ctx.AvailableTools) > 0 {
 		allPresent := true
 		for _, tool := range meta.FallbackForTools {
-			if !ctx.AvailableTools[tool] {
+			if _, ok := ctx.AvailableTools[tool]; !ok {
 				allPresent = false
 				break
 			}
@@ -257,14 +257,14 @@ func FilterBySkillFilter(entries []SkillEntry, filter []string) []SkillEntry {
 	if len(normalized) == 0 {
 		return nil
 	}
-	filterSet := make(map[string]bool, len(normalized))
+	filterSet := make(map[string]struct{}, len(normalized))
 	for _, f := range normalized {
-		filterSet[strings.ToLower(f)] = true
+		filterSet[strings.ToLower(f)] = struct{}{}
 	}
 	var result []SkillEntry
 	for _, entry := range entries {
 		key := strings.ToLower(resolveSkillKeyFromEntry(entry))
-		if filterSet[key] {
+		if _, ok := filterSet[key]; ok {
 			result = append(result, entry)
 		}
 	}

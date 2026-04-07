@@ -28,11 +28,11 @@ func ExtractMentions(text string) []string {
 		return nil
 	}
 	var mentions []string
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	for _, m := range matches {
 		username := m[1]
-		if !seen[username] {
-			seen[username] = true
+		if _, ok := seen[username]; !ok {
+			seen[username] = struct{}{}
 			mentions = append(mentions, username)
 		}
 	}

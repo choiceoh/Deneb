@@ -98,29 +98,31 @@ func (rc *RunCache) Len() int {
 	return len(rc.entries)
 }
 
-var cacheableTools = map[string]bool{
-	"find":    true,
-	"tree":    true,
-	"grep":    true,
-	"analyze": true,
+var cacheableTools = map[string]struct{}{
+	"find":    {},
+	"tree":    {},
+	"grep":    {},
+	"analyze": {},
 }
 
-var mutationTools = map[string]bool{
-	"write":       true,
-	"edit":        true,
-	"multi_edit":  true,
-	"apply_patch": true,
-	"git":         true,
+var mutationTools = map[string]struct{}{
+	"write":       {},
+	"edit":        {},
+	"multi_edit":  {},
+	"apply_patch": {},
+	"git":         {},
 }
 
 // IsCacheableTool returns true if the named tool's results can be cached.
 func IsCacheableTool(name string) bool {
-	return cacheableTools[name]
+	_, ok := cacheableTools[name]
+	return ok
 }
 
 // IsMutationTool returns true if the named tool can modify files.
 func IsMutationTool(name string) bool {
-	return mutationTools[name]
+	_, ok := mutationTools[name]
+	return ok
 }
 
 // BuildCacheKey creates a canonical cache key from tool name and input JSON.

@@ -4,23 +4,23 @@ package process
 
 // blockedEnvKeys lists environment variable names that must be stripped
 // from subprocess environments.
-var blockedEnvKeys = map[string]bool{
-	"LD_PRELOAD":           true,
-	"LD_LIBRARY_PATH":      true,
-	"BASH_ENV":             true,
-	"ENV":                  true,
-	"ZDOTDIR":              true,
-	"MAVEN_OPTS":           true,
-	"SBT_OPTS":             true,
-	"GRADLE_OPTS":          true,
-	"_JAVA_OPTIONS":        true,
-	"JAVA_TOOL_OPTIONS":    true,
-	"PYTHONSTARTUP":        true,
-	"PERL5OPT":             true,
-	"RUBYOPT":              true,
-	"DOTNET_STARTUP_HOOKS": true,
-	"DOTNET_ROOT":          true,
-	"GLIBC_TUNABLES":       true,
+var blockedEnvKeys = map[string]struct{}{
+	"LD_PRELOAD":           {},
+	"LD_LIBRARY_PATH":      {},
+	"BASH_ENV":             {},
+	"ENV":                  {},
+	"ZDOTDIR":              {},
+	"MAVEN_OPTS":           {},
+	"SBT_OPTS":             {},
+	"GRADLE_OPTS":          {},
+	"_JAVA_OPTIONS":        {},
+	"JAVA_TOOL_OPTIONS":    {},
+	"PYTHONSTARTUP":        {},
+	"PERL5OPT":             {},
+	"RUBYOPT":              {},
+	"DOTNET_STARTUP_HOOKS": {},
+	"DOTNET_ROOT":          {},
+	"GLIBC_TUNABLES":       {},
 }
 
 // blockedEnvPrefixes lists environment variable prefixes that should be blocked.

@@ -38,10 +38,10 @@ const (
 var templateExprRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
 // blockedTemplateKeys prevents prototype pollution via template traversal.
-var blockedTemplateKeys = map[string]bool{
-	"__proto__":   true,
-	"prototype":   true,
-	"constructor": true,
+var blockedTemplateKeys = map[string]struct{}{
+	"__proto__":   {},
+	"prototype":   {},
+	"constructor": {},
 }
 
 // ───────────────────────────────────────────────────────────────────────

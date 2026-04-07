@@ -15,7 +15,7 @@ func TestPartitionTools(t *testing.T) {
 		{Name: "mcp_fetch"},
 		{Name: "edit"},
 	}
-	builtins := map[string]bool{"grep": true, "exec": true, "read": true, "edit": true}
+	builtins := map[string]struct{}{"grep": {}, "exec": {}, "read": {}, "edit": {}}
 
 	p := PartitionTools(tools, builtins)
 
@@ -54,7 +54,7 @@ func TestMergedTools(t *testing.T) {
 		{Name: "exec"},
 		{Name: "read"},
 	}
-	builtins := map[string]bool{"exec": true, "read": true}
+	builtins := map[string]struct{}{"exec": {}, "read": {}}
 	p := PartitionTools(tools, builtins)
 
 	merged := p.MergedTools()
@@ -83,13 +83,13 @@ func TestFilterDeniedTools(t *testing.T) {
 	})
 
 	t.Run("filters denied tools", func(t *testing.T) {
-		deny := map[string]bool{"dangerous": true, "exec": true}
+		deny := map[string]struct{}{"dangerous": {}, "exec": {}}
 		result := FilterDeniedTools(tools, deny)
 		if len(result) != 2 {
 			t.Fatalf("expected 2, got %d", len(result))
 		}
 		for _, r := range result {
-			if deny[r.Name] {
+			if _, ok := deny[r.Name]; ok {
 				t.Errorf("denied tool %q should be filtered", r.Name)
 			}
 		}

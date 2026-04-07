@@ -58,18 +58,18 @@ func TestSanitizeEnv(t *testing.T) {
 	}
 	result := SanitizeEnv(env, nil)
 
-	expected := map[string]bool{
-		"PATH=/usr/bin":                          true,
-		"HOME=/root":                             true,
-		"NODE_OPTIONS=--max-old-space-size=4096": true,
-		"TERM=xterm":                             true,
+	expected := map[string]struct{}{
+		"PATH=/usr/bin":                          {},
+		"HOME=/root":                             {},
+		"NODE_OPTIONS=--max-old-space-size=4096": {},
+		"TERM=xterm":                             {},
 	}
 
 	if len(result) != len(expected) {
 		t.Fatalf("expected %d entries, got %d: %v", len(expected), len(result), result)
 	}
 	for _, entry := range result {
-		if !expected[entry] {
+		if _, ok := expected[entry]; !ok {
 			t.Errorf("unexpected entry: %q", entry)
 		}
 	}

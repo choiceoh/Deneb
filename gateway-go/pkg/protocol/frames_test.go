@@ -176,14 +176,14 @@ func TestErrorCodeConstants(t *testing.T) {
 	if len(codes) != 14 {
 		t.Errorf("expected 14 error codes, got %d", len(codes))
 	}
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	for _, c := range codes {
 		if c == "" {
 			t.Error("empty error code")
 		}
-		if seen[c] {
+		if _, ok := seen[c]; ok {
 			t.Errorf("duplicate error code: %s", c)
 		}
-		seen[c] = true
+		seen[c] = struct{}{}
 	}
 }

@@ -36,14 +36,14 @@ type ResourceManager struct {
 	bridge *Bridge
 
 	subsMu sync.RWMutex
-	subs   map[string]bool // subscribed URIs
+	subs   map[string]struct{} // subscribed URIs
 }
 
 // NewResourceManager creates a resource manager.
 func NewResourceManager(bridge *Bridge) *ResourceManager {
 	return &ResourceManager{
 		bridge: bridge,
-		subs:   make(map[string]bool),
+		subs:   make(map[string]struct{}),
 	}
 }
 
@@ -87,7 +87,7 @@ func (rm *ResourceManager) Read(ctx context.Context, uri string) (*ResourceReadR
 // Subscribe registers interest in a resource URI.
 func (rm *ResourceManager) Subscribe(uri string) {
 	rm.subsMu.Lock()
-	rm.subs[uri] = true
+	rm.subs[uri] = struct{}{}
 	rm.subsMu.Unlock()
 }
 
@@ -102,7 +102,8 @@ func (rm *ResourceManager) Unsubscribe(uri string) {
 func (rm *ResourceManager) IsSubscribed(uri string) bool {
 	rm.subsMu.RLock()
 	defer rm.subsMu.RUnlock()
-	return rm.subs[uri]
+	_, ok := rm.subs[uri]
+	return ok
 }
 
 // SubscribedURIs returns all subscribed URIs.

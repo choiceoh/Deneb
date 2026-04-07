@@ -166,9 +166,9 @@ func (s *Service) Evaluate(sctx SessionContext) bool {
 	}
 
 	// Require diverse tool usage — at least 2 distinct tools.
-	toolSet := make(map[string]bool)
+	toolSet := make(map[string]struct{})
 	for _, ta := range sctx.ToolActivities {
-		toolSet[ta.Name] = true
+		toolSet[ta.Name] = struct{}{}
 	}
 	if len(toolSet) < 2 {
 		return false

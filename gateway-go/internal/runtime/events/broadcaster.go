@@ -29,7 +29,7 @@ type Subscriber interface {
 // Filter controls which events a subscriber receives.
 type Filter struct {
 	// Events is a set of event names to receive. If empty, all events are received.
-	Events map[string]bool
+	Events map[string]struct{}
 }
 
 // Accepts returns true if the filter allows the given event name.
@@ -37,7 +37,8 @@ func (f *Filter) Accepts(event string) bool {
 	if len(f.Events) == 0 {
 		return true
 	}
-	return f.Events[event]
+	_, ok := f.Events[event]
+	return ok
 }
 
 // BroadcastOpts controls per-broadcast behavior.
@@ -47,7 +48,7 @@ type BroadcastOpts struct {
 	// StateVersion includes snapshot versioning for client-side dedup.
 	StateVersion *protocol.StateVersion
 	// TargetConnIDs restricts delivery to specific connection IDs (nil = all).
-	TargetConnIDs map[string]bool
+	TargetConnIDs map[string]struct{}
 }
 
 // maxBufferedBytes is the threshold for slow consumer detection.
@@ -63,8 +64,8 @@ type Broadcaster struct {
 
 	// Session event subscriptions: connID -> subscribed.
 	sessionSubMu   sync.RWMutex
-	sessionSubs    map[string]bool            // connIDs subscribed to session events
-	sessionMsgSubs map[string]map[string]bool // sessionKey -> set of connIDs
+	sessionSubs    map[string]struct{}            // connIDs subscribed to session events
+	sessionMsgSubs map[string]map[string]struct{} // sessionKey -> set of connIDs
 
 	// Tool event recipients: runId -> connID.
 	toolRecipientMu sync.RWMutex
@@ -80,8 +81,8 @@ type subscriberEntry struct {
 func NewBroadcaster() *Broadcaster {
 	return &Broadcaster{
 		subscribers:    make(map[string]subscriberEntry),
-		sessionSubs:    make(map[string]bool),
-		sessionMsgSubs: make(map[string]map[string]bool),
+		sessionSubs:    make(map[string]struct{}),
+		sessionMsgSubs: make(map[string]map[string]struct{}),
 		toolRecipients: make(map[string]string),
 		logger:         slog.Default(),
 	}
@@ -170,7 +171,7 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 			continue
 		}
 		// Target filtering.
-		if opts.TargetConnIDs != nil && !opts.TargetConnIDs[entry.sub.ID()] {
+		if _, targeted := opts.TargetConnIDs[entry.sub.ID()]; opts.TargetConnIDs != nil && !targeted {
 			continue
 		}
 		if !entry.filter.Accepts(event) {
@@ -198,7 +199,7 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 }
 
 // BroadcastToConnIDs sends an event to specific connection IDs.
-func (b *Broadcaster) BroadcastToConnIDs(event string, payload any, connIDs map[string]bool) (int, []error) {
+func (b *Broadcaster) BroadcastToConnIDs(event string, payload any, connIDs map[string]struct{}) (int, []error) {
 	return b.BroadcastWithOpts(event, payload, BroadcastOpts{TargetConnIDs: connIDs})
 }
 
@@ -239,7 +240,7 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 func (b *Broadcaster) SubscribeSessionEvents(connID string) {
 	b.sessionSubMu.Lock()
 	defer b.sessionSubMu.Unlock()
-	b.sessionSubs[connID] = true
+	b.sessionSubs[connID] = struct{}{}
 }
 
 // UnsubscribeSessionEvents removes a connID from session events.
@@ -254,9 +255,9 @@ func (b *Broadcaster) SubscribeSessionMessageEvents(connID, sessionKey string) {
 	b.sessionSubMu.Lock()
 	defer b.sessionSubMu.Unlock()
 	if b.sessionMsgSubs[sessionKey] == nil {
-		b.sessionMsgSubs[sessionKey] = make(map[string]bool)
+		b.sessionMsgSubs[sessionKey] = make(map[string]struct{})
 	}
-	b.sessionMsgSubs[sessionKey][connID] = true
+	b.sessionMsgSubs[sessionKey][connID] = struct{}{}
 }
 
 // UnsubscribeSessionMessageEvents removes a connID from a session's message events.
@@ -272,27 +273,27 @@ func (b *Broadcaster) UnsubscribeSessionMessageEvents(connID, sessionKey string)
 }
 
 // SessionEventSubscriberConnIDs returns the set of connIDs subscribed to session events.
-func (b *Broadcaster) SessionEventSubscriberConnIDs() map[string]bool {
+func (b *Broadcaster) SessionEventSubscriberConnIDs() map[string]struct{} {
 	b.sessionSubMu.RLock()
 	defer b.sessionSubMu.RUnlock()
-	result := make(map[string]bool, len(b.sessionSubs))
+	result := make(map[string]struct{}, len(b.sessionSubs))
 	for id := range b.sessionSubs {
-		result[id] = true
+		result[id] = struct{}{}
 	}
 	return result
 }
 
 // SessionMessageSubscriberConnIDs returns connIDs subscribed to a specific session's messages.
-func (b *Broadcaster) SessionMessageSubscriberConnIDs(sessionKey string) map[string]bool {
+func (b *Broadcaster) SessionMessageSubscriberConnIDs(sessionKey string) map[string]struct{} {
 	b.sessionSubMu.RLock()
 	defer b.sessionSubMu.RUnlock()
 	subs, ok := b.sessionMsgSubs[sessionKey]
 	if !ok {
 		return nil
 	}
-	result := make(map[string]bool, len(subs))
+	result := make(map[string]struct{}, len(subs))
 	for id := range subs {
-		result[id] = true
+		result[id] = struct{}{}
 	}
 	return result
 }
@@ -322,15 +323,15 @@ func (b *Broadcaster) ToolEventRecipient(runID string) string {
 
 // MergedSessionRecipients returns the union of session event subscribers and
 // session message subscribers for a given session key.
-func (b *Broadcaster) MergedSessionRecipients(sessionKey string) map[string]bool {
+func (b *Broadcaster) MergedSessionRecipients(sessionKey string) map[string]struct{} {
 	b.sessionSubMu.RLock()
 	defer b.sessionSubMu.RUnlock()
-	result := make(map[string]bool)
+	result := make(map[string]struct{})
 	for id := range b.sessionSubs {
-		result[id] = true
+		result[id] = struct{}{}
 	}
 	for id := range b.sessionMsgSubs[sessionKey] {
-		result[id] = true
+		result[id] = struct{}{}
 	}
 	return result
 }

@@ -162,14 +162,14 @@ func TestMethodRegistry_RequiredMethodsRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registered := make(map[string]bool)
+	registered := make(map[string]struct{})
 	for _, m := range srv.dispatcher.Methods() {
-		registered[m] = true
+		registered[m] = struct{}{}
 	}
 
 	var missing []string
 	for _, m := range requiredMethods {
-		if !registered[m] {
+		if _, ok := registered[m]; !ok {
 			missing = append(missing, m)
 		}
 	}

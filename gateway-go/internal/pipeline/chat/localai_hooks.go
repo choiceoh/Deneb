@@ -63,7 +63,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 	if len(output) < compressThreshold {
 		return output
 	}
-	if toolCompressSkipSet[toolName] {
+	if _, ok := toolCompressSkipSet[toolName]; ok {
 		return output
 	}
 	// Skip if local AI was recently confirmed down (cached result only, no probe).

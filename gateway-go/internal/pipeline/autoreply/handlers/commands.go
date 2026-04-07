@@ -67,7 +67,7 @@ type CommandArgs struct {
 
 // CommandDetection holds precomputed structures for fast command detection.
 type CommandDetection struct {
-	Exact map[string]bool
+	Exact map[string]struct{}
 	Regex *regexp.Regexp
 }
 
@@ -146,7 +146,7 @@ func (r *CommandRegistry) rebuild() {
 	r.aliasMap = aliasMap
 
 	// Build detection.
-	exact := make(map[string]bool, len(aliasMap))
+	exact := make(map[string]struct{}, len(aliasMap))
 	var patterns []string
 	for _, cmd := range r.commands {
 		for _, alias := range cmd.TextAliases {
@@ -154,7 +154,7 @@ func (r *CommandRegistry) rebuild() {
 			if normalized == "" {
 				continue
 			}
-			exact[normalized] = true
+			exact[normalized] = struct{}{}
 			escaped := regexp.QuoteMeta(normalized)
 			if cmd.AcceptsArgs {
 				patterns = append(patterns, escaped+`(?:\s+.+|\s*:\s*.*)?`)
@@ -308,7 +308,7 @@ func (r *CommandRegistry) MaybeResolveTextAlias(raw string) string {
 	r.mu.RUnlock()
 
 	normalized := strings.ToLower(trimmed)
-	if det.Exact[normalized] {
+	if _, ok := det.Exact[normalized]; ok {
 		return normalized
 	}
 	if !det.Regex.MatchString(normalized) {

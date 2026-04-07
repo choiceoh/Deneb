@@ -318,9 +318,9 @@ func TestBuildSystemPromptNormalModeNoConversationBlock(t *testing.T) {
 }
 
 func TestWriteCompactToolList_UncategorizedTools(t *testing.T) {
-	toolSet := map[string]bool{
-		"read":        true,
-		"custom_tool": true,
+	toolSet := map[string]struct{}{
+		"read":        {},
+		"custom_tool": {},
 	}
 
 	var sb strings.Builder

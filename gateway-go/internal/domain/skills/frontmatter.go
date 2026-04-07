@@ -93,8 +93,8 @@ var (
 )
 
 // Allowed install spec kinds.
-var allowedInstallKinds = map[string]bool{
-	"brew": true, "node": true, "go": true, "uv": true, "download": true,
+var allowedInstallKinds = map[string]struct{}{
+	"brew": {}, "node": {}, "go": {}, "uv": {}, "download": {},
 }
 
 // ExtractFrontmatterBlock returns only the frontmatter portion of content
@@ -292,7 +292,7 @@ func parseInstallSpec(raw json.RawMessage) *SkillInstallSpec {
 
 	var kind string
 	parseJSONString(obj, "kind", &kind)
-	if !allowedInstallKinds[kind] {
+	if _, ok := allowedInstallKinds[kind]; !ok {
 		return nil
 	}
 

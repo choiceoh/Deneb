@@ -8,22 +8,22 @@ import (
 )
 
 // blockedSchemes are URL schemes that should never be followed.
-var blockedSchemes = map[string]bool{
-	"file": true, "ftp": true, "gopher": true, "dict": true,
-	"data": true, "ldap": true, "ldaps": true, "tftp": true, "telnet": true,
+var blockedSchemes = map[string]struct{}{
+	"file": {}, "ftp": {}, "gopher": {}, "dict": {},
+	"data": {}, "ldap": {}, "ldaps": {}, "tftp": {}, "telnet": {},
 }
 
 // blockedHosts are hostnames that should not be accessed (SSRF protection).
-var blockedHosts = map[string]bool{
-	"localhost": true,
-	"127.0.0.1": true,
-	"0.0.0.0":   true,
-	"[::1]":     true,
-	"::1":       true,
-	"::0":       true,
-	"0000:0000:0000:0000:0000:0000:0000:0001": true,
-	"metadata.google.internal":                true,
-	"169.254.169.254":                         true,
+var blockedHosts = map[string]struct{}{
+	"localhost": {},
+	"127.0.0.1": {},
+	"0.0.0.0":   {},
+	"[::1]":     {},
+	"::1":       {},
+	"::0":       {},
+	"0000:0000:0000:0000:0000:0000:0000:0001": {},
+	"metadata.google.internal":                {},
+	"169.254.169.254":                         {},
 }
 
 // IsSafeURL validates a URL for SSRF safety. Blocks private/loopback IPs,
@@ -41,7 +41,7 @@ func IsSafeURL(rawURL string) bool {
 		return false
 	}
 	scheme := strings.ToLower(u.Scheme)
-	if blockedSchemes[scheme] {
+	if _, ok := blockedSchemes[scheme]; ok {
 		return false
 	}
 	if scheme != "http" && scheme != "https" {
@@ -52,7 +52,7 @@ func IsSafeURL(rawURL string) bool {
 	if host == "" {
 		return false
 	}
-	if blockedHosts[host] {
+	if _, ok := blockedHosts[host]; ok {
 		return false
 	}
 
@@ -61,7 +61,7 @@ func IsSafeURL(rawURL string) bool {
 	hostNormalized := stripIPv6ZoneID(hostNoBrackets)
 
 	// Re-check after normalization (catches [::1] → ::1, zone-id variants).
-	if blockedHosts[hostNormalized] {
+	if _, ok := blockedHosts[hostNormalized]; ok {
 		return false
 	}
 

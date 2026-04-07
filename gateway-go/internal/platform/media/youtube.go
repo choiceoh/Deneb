@@ -46,11 +46,11 @@ func IsYouTubeURL(text string) bool {
 func ExtractYouTubeURLs(text string) []string {
 	matches := youtubeURLPattern.FindAllString(text, 5)
 	// Deduplicate.
-	seen := make(map[string]bool, len(matches))
+	seen := make(map[string]struct{}, len(matches))
 	var urls []string
 	for _, u := range matches {
-		if !seen[u] {
-			seen[u] = true
+		if _, ok := seen[u]; !ok {
+			seen[u] = struct{}{}
 			urls = append(urls, u)
 		}
 	}

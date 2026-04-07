@@ -563,16 +563,16 @@ func TestManager_ClearTokens(t *testing.T) {
 func TestSessionMethodsRegistered(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	methods := d.Methods()
-	set := make(map[string]bool)
+	set := make(map[string]struct{})
 	for _, m := range methods {
-		set[m] = true
+		set[m] = struct{}{}
 	}
 	expected := []string{
 		"sessions.patch", "sessions.reset", "sessions.preview",
 		"sessions.resolve",
 	}
 	for _, e := range expected {
-		if !set[e] {
+		if _, ok := set[e]; !ok {
 			t.Errorf("expected method %q to be registered", e)
 		}
 	}

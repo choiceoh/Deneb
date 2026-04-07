@@ -15,8 +15,8 @@ var eventToResourceURI = map[string]string{
 }
 
 // eventRequiresSampling lists events that should trigger Claude analysis.
-var eventRequiresSampling = map[string]bool{
-	"session.failed":  true,
-	"agent.completed": true,
-	"cron.fired":      true,
+var eventRequiresSampling = map[string]struct{}{
+	"session.failed":  {},
+	"agent.completed": {},
+	"cron.fired":      {},
 }

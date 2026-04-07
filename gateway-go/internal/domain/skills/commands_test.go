@@ -25,7 +25,7 @@ func TestSanitizeSkillCommandName(t *testing.T) {
 }
 
 func TestResolveUniqueSkillCommandName(t *testing.T) {
-	used := map[string]bool{"github": true}
+	used := map[string]struct{}{"github": {}}
 
 	// First call should get _2 suffix.
 	name := resolveUniqueSkillCommandName("github", used)
@@ -75,7 +75,7 @@ func TestBuildSkillCommandSpecs_reserved(t *testing.T) {
 			Invocation: &SkillInvocationPolicy{UserInvocable: true},
 		},
 	}
-	reserved := map[string]bool{"help": true}
+	reserved := map[string]struct{}{"help": {}}
 	specs := BuildSkillCommandSpecs(entries, reserved)
 	if len(specs) != 1 {
 		t.Fatalf("expected 1 spec, got %d", len(specs))

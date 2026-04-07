@@ -187,18 +187,18 @@ func FilterReplyPayloads(payloads []types.ReplyPayload, opts NormalizeOpts) []ty
 
 // DeduplicateReplyPayloads removes duplicate text and media from payloads.
 func DeduplicateReplyPayloads(payloads []types.ReplyPayload) []types.ReplyPayload {
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var result []types.ReplyPayload
 	for _, p := range payloads {
 		key := p.Text
 		if key == "" {
 			key = p.MediaURL
 		}
-		if key != "" && seen[key] {
+		if _, ok := seen[key]; key != "" && ok {
 			continue
 		}
 		if key != "" {
-			seen[key] = true
+			seen[key] = struct{}{}
 		}
 		result = append(result, p)
 	}

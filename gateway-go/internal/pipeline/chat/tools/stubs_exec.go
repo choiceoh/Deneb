@@ -46,9 +46,9 @@ func ToolSessionsList(sessions *session.Manager) ToolFunc {
 		}
 
 		// Apply kind filter if specified.
-		kindFilter := make(map[string]bool, len(p.Kinds))
+		kindFilter := make(map[string]struct{}, len(p.Kinds))
 		for _, k := range p.Kinds {
-			kindFilter[k] = true
+			kindFilter[k] = struct{}{}
 		}
 
 		var sb strings.Builder
@@ -59,7 +59,7 @@ func ToolSessionsList(sessions *session.Manager) ToolFunc {
 			limit = 50
 		}
 		for _, s := range allSessions {
-			if len(kindFilter) > 0 && !kindFilter[string(s.Kind)] {
+			if _, ok := kindFilter[string(s.Kind)]; len(kindFilter) > 0 && !ok {
 				continue
 			}
 			if shown >= limit {

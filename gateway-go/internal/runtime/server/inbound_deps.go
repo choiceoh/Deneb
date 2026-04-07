@@ -138,17 +138,17 @@ func (p *InboundProcessor) buildModelCandidates() []model.ModelCandidate {
 		return nil
 	}
 	configured := reg.ConfiguredModels()
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var candidates []model.ModelCandidate
 	for role, cfg := range configured {
 		if cfg.Model == "" {
 			continue
 		}
 		fullID := cfg.ProviderID + "/" + cfg.Model
-		if seen[fullID] {
+		if _, ok := seen[fullID]; ok {
 			continue
 		}
-		seen[fullID] = true
+		seen[fullID] = struct{}{}
 		candidates = append(candidates, model.ModelCandidate{
 			Provider: cfg.ProviderID,
 			Model:    cfg.Model,

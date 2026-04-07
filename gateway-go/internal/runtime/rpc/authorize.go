@@ -10,7 +10,7 @@ import (
 // Public methods (health, health.check) are open to all.
 // All other methods require authentication and the operator role.
 func AuthorizeMethod(method string, role string, authenticated bool) *protocol.ErrorShape {
-	if publicMethods[method] {
+	if _, ok := publicMethods[method]; ok {
 		return nil
 	}
 	if !authenticated {

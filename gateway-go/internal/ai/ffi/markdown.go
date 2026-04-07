@@ -3,8 +3,8 @@ package ffi
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/corecache"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremarkdown"
 )
 
@@ -17,7 +17,7 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 	}
 
 	cacheKey := mdFnv1a64(markdown + "|" + optionsJSON)
-	if cached, ok := mdCache.get(cacheKey); ok {
+	if cached, ok := mdCache.Get(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -48,7 +48,7 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 	if err != nil {
 		return nil, fmt.Errorf("markdown_to_ir: marshal: %w", err)
 	}
-	mdCache.put(cacheKey, result)
+	mdCache.Put(cacheKey, result)
 	return result, nil
 }
 
@@ -76,20 +76,7 @@ func MarkdownToPlainText(markdown string) (string, error) {
 }
 
 // LRU cache for MarkdownToIR results (avoids redundant parsing during streaming).
-var mdCache = &markdownCache{entries: make(map[uint64]*mdCacheEntry)}
-
-const mdCacheMaxEntries = 128
-
-type mdCacheEntry struct {
-	value      json.RawMessage
-	lastAccess int64
-}
-
-type markdownCache struct {
-	mu        sync.Mutex
-	entries   map[uint64]*mdCacheEntry
-	accessCtr int64
-}
+var mdCache = corecache.NewLRU[uint64, json.RawMessage](128, 0)
 
 func mdFnv1a64(s string) uint64 {
 	const offset64 = 14695981039346656037
@@ -100,34 +87,4 @@ func mdFnv1a64(s string) uint64 {
 		h *= prime64
 	}
 	return h
-}
-
-func (c *markdownCache) get(key uint64) (json.RawMessage, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.entries[key]
-	if !ok {
-		return nil, false
-	}
-	c.accessCtr++
-	e.lastAccess = c.accessCtr
-	return e.value, true
-}
-
-func (c *markdownCache) put(key uint64, val json.RawMessage) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.accessCtr++
-	if len(c.entries) >= mdCacheMaxEntries {
-		var lruKey uint64
-		lruAccess := c.accessCtr + 1
-		for k, e := range c.entries {
-			if e.lastAccess < lruAccess {
-				lruAccess = e.lastAccess
-				lruKey = k
-			}
-		}
-		delete(c.entries, lruKey)
-	}
-	c.entries[key] = &mdCacheEntry{value: val, lastAccess: c.accessCtr}
 }

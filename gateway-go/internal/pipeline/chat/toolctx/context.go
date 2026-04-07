@@ -216,12 +216,12 @@ func SpawnFlagFromContext(ctx context.Context) *SpawnFlag {
 // activated tools into the ChatRequest.
 type DeferredActivation struct {
 	mu        sync.Mutex
-	activated map[string]bool
+	activated map[string]struct{}
 }
 
 // NewDeferredActivation creates a new (empty) DeferredActivation tracker.
 func NewDeferredActivation() *DeferredActivation {
-	return &DeferredActivation{activated: make(map[string]bool)}
+	return &DeferredActivation{activated: make(map[string]struct{})}
 }
 
 // Activate marks the given tool names as activated.
@@ -229,7 +229,7 @@ func (d *DeferredActivation) Activate(names []string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for _, n := range names {
-		d.activated[n] = true
+		d.activated[n] = struct{}{}
 	}
 }
 

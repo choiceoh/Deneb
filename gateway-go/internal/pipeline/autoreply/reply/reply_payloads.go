@@ -18,18 +18,18 @@ func FilterMessagingToolDuplicates(payloads []types.ReplyPayload, sentTexts []st
 		return payloads
 	}
 
-	sentSet := make(map[string]bool, len(sentTexts))
+	sentSet := make(map[string]struct{}, len(sentTexts))
 	for _, t := range sentTexts {
 		trimmed := strings.TrimSpace(t)
 		if trimmed != "" {
-			sentSet[trimmed] = true
+			sentSet[trimmed] = struct{}{}
 		}
 	}
 
 	var filtered []types.ReplyPayload
 	for _, p := range payloads {
 		text := strings.TrimSpace(p.Text)
-		if text != "" && sentSet[text] {
+		if _, ok := sentSet[text]; text != "" && ok {
 			continue // already sent by messaging tool
 		}
 		filtered = append(filtered, p)
@@ -43,17 +43,17 @@ func FilterMessagingToolMediaDuplicates(payloads []types.ReplyPayload, sentMedia
 		return payloads
 	}
 
-	sentSet := make(map[string]bool, len(sentMediaURLs))
+	sentSet := make(map[string]struct{}, len(sentMediaURLs))
 	for _, url := range sentMediaURLs {
 		trimmed := strings.TrimSpace(url)
 		if trimmed != "" {
-			sentSet[trimmed] = true
+			sentSet[trimmed] = struct{}{}
 		}
 	}
 
 	var filtered []types.ReplyPayload
 	for _, p := range payloads {
-		if p.MediaURL != "" && sentSet[strings.TrimSpace(p.MediaURL)] {
+		if _, ok := sentSet[strings.TrimSpace(p.MediaURL)]; p.MediaURL != "" && ok {
 			// Remove the duplicate media but keep the payload if it has text.
 			if p.Text != "" {
 				p.MediaURL = ""

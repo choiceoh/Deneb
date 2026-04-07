@@ -182,7 +182,7 @@ func cleanLogFiles(dir string, maxAge time.Duration, maxTotalBytes int64, now ti
 	})
 
 	cutoff := now.Add(-maxAge)
-	removed := make(map[string]bool)
+	removed := make(map[string]struct{})
 	var cleaned []CleanedFile
 
 	// Phase 1: remove files older than maxAge.
@@ -196,14 +196,14 @@ func cleanLogFiles(dir string, maxAge time.Duration, maxTotalBytes int64, now ti
 				}
 			}
 			cleaned = append(cleaned, cf)
-			removed[f.name] = true
+			removed[f.name] = struct{}{}
 		}
 	}
 
 	// Phase 2: if total remaining size > maxTotalBytes, remove oldest first.
 	var totalSize int64
 	for _, f := range files {
-		if !removed[f.name] {
+		if _, ok := removed[f.name]; !ok {
 			totalSize += f.size
 		}
 	}
@@ -212,7 +212,7 @@ func cleanLogFiles(dir string, maxAge time.Duration, maxTotalBytes int64, now ti
 		if totalSize <= maxTotalBytes {
 			break
 		}
-		if removed[f.name] {
+		if _, ok := removed[f.name]; ok {
 			continue
 		}
 		path := filepath.Join(dir, f.name)
