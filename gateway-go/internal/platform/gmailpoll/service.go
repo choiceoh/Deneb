@@ -137,7 +137,7 @@ func (s *Service) Run(ctx context.Context) error {
 	s.mu.Unlock()
 
 	if client == nil {
-		c, err := gmail.GetClient()
+		c, err := gmail.DefaultClient()
 		if err != nil {
 			return fmt.Errorf("Gmail 클라이언트 초기화 실패: %w", err)
 		}

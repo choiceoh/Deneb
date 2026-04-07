@@ -88,8 +88,8 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	return skillsCache.prompt
 }
 
-// GetCachedSkillsSnapshot returns the last-built skills snapshot, or nil.
-func GetCachedSkillsSnapshot() *skills.FullSkillSnapshot {
+// CachedSkillsSnapshot returns the last-built skills snapshot, or nil.
+func CachedSkillsSnapshot() *skills.FullSkillSnapshot {
 	skillsCache.mu.RLock()
 	defer skillsCache.mu.RUnlock()
 	return skillsCache.snapshot

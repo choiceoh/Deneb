@@ -51,7 +51,7 @@ func (r *ProviderRuntimeResolver) ResolvePlugin(providerID string) Plugin {
 	}
 
 	// Look up in registry using the normalized ID.
-	plugin := r.registry.GetByNormalizedID(normalized)
+	plugin := r.registry.ByNormalizedID(normalized)
 
 	// Cache the result (including nil for negative caching).
 	r.mu.Lock()

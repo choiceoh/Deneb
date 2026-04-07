@@ -171,7 +171,7 @@ func skillsUsageReport(deps GenesisDeps) rpcutil.HandlerFunc {
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.SkillName != "" {
-			stats, err := deps.Tracker.GetStats(p.SkillName)
+			stats, err := deps.Tracker.Stats(p.SkillName)
 			if err != nil {
 				return nil, err
 			}

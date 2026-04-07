@@ -66,7 +66,7 @@ func TestStore_WriteAndReadPage(t *testing.T) {
 	}
 
 	// Verify index was updated.
-	idx := store.GetIndex()
+	idx := store.Index()
 	entry, ok := idx.Entries["기술/dgx-spark.md"]
 	if !ok {
 		t.Fatal("page not in index")
@@ -101,7 +101,7 @@ func TestStore_DeletePage(t *testing.T) {
 	}
 
 	// Index should be updated.
-	idx := store.GetIndex()
+	idx := store.Index()
 	if _, ok := idx.Entries["결정/temp.md"]; ok {
 		t.Error("deleted page still in index")
 	}

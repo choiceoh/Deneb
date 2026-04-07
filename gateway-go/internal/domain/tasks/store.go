@@ -197,8 +197,8 @@ func (s *Store) UpsertTask(t *TaskRecord) error {
 	return nil
 }
 
-// GetTask retrieves a single task by ID.
-func (s *Store) GetTask(taskID string) (*TaskRecord, error) {
+// Task retrieves a single task by ID.
+func (s *Store) Task(taskID string) (*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -206,8 +206,8 @@ func (s *Store) GetTask(taskID string) (*TaskRecord, error) {
 	return scanTaskRecord(row)
 }
 
-// GetTaskByRunID retrieves a task by its run ID.
-func (s *Store) GetTaskByRunID(runID string) (*TaskRecord, error) {
+// TaskByRunID retrieves a task by its run ID.
+func (s *Store) TaskByRunID(runID string) (*TaskRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -403,8 +403,8 @@ func (s *Store) UpsertFlow(f *FlowRecord) error {
 	return nil
 }
 
-// GetFlow retrieves a flow by ID.
-func (s *Store) GetFlow(flowID string) (*FlowRecord, error) {
+// Flow retrieves a flow by ID.
+func (s *Store) Flow(flowID string) (*FlowRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

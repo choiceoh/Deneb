@@ -174,7 +174,7 @@ func cronGet(deps ExtendedDeps) rpcutil.HandlerFunc {
 		if p.ID == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		job := deps.CronService.GetJob(p.ID)
+		job := deps.CronService.Job(p.ID)
 		if job == nil {
 			return rpcerr.NotFound("cron job").Response(req.ID)
 		}
@@ -475,7 +475,7 @@ func agentsFilesGet(deps AgentsDeps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("agentId and name").Response(req.ID)
 		}
 
-		file, err := deps.Agents.GetFile(p.AgentID, p.Name)
+		file, err := deps.Agents.File(p.AgentID, p.Name)
 		if err != nil {
 			return rpcerr.NotFound("agent file").WithAgent(p.AgentID).Response(req.ID)
 		}

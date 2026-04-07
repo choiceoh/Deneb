@@ -133,8 +133,8 @@ func (rl *AuthRateLimiter) Reset(ip string) {
 	delete(rl.failures, ip)
 }
 
-// GetBearerToken extracts a Bearer token from an HTTP request.
-func GetBearerToken(r *http.Request) string {
+// BearerToken extracts a Bearer token from an HTTP request.
+func BearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
 		return ""

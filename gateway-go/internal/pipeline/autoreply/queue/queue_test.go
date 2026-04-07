@@ -53,7 +53,7 @@ func TestFollowupQueueRegistry_Clear(t *testing.T) {
 	if cleared != 3 {
 		t.Errorf("expected cleared=3, got %d", cleared)
 	}
-	if r.GetExisting("k") != nil {
+	if r.Existing("k") != nil {
 		t.Error("expected queue to be deleted after clear")
 	}
 }
@@ -99,7 +99,7 @@ func TestEnqueueFollowupRun_summarizeDropPolicy(t *testing.T) {
 		t.Errorf("expected depth=2, got %d", r.Depth("k"))
 	}
 	// Check that the dropped item was summarized.
-	q := r.GetExisting("k")
+	q := r.Existing("k")
 	if q == nil {
 		t.Fatal("expected queue to exist")
 	}
@@ -186,7 +186,7 @@ func TestExtractQueueDirective(t *testing.T) {
 func TestClearSessionQueues(t *testing.T) {
 	r := NewFollowupQueueRegistry()
 	r.GetOrCreate("k1", types.FollowupQueueSettings{Mode: types.FollowupModeCollect})
-	q := r.GetExisting("k1")
+	q := r.Existing("k1")
 	q.Items = append(q.Items, types.FollowupRun{Prompt: "a"}, types.FollowupRun{Prompt: "b"})
 
 	result := ClearSessionQueues(r, nil, []string{"k1", "k1", "k2"})

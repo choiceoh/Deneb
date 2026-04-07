@@ -107,8 +107,8 @@ func (w *Watcher) BumpVersion(workspaceDir, reason, changedPath string) int64 {
 	return newVersion
 }
 
-// GetVersion returns the current version for a workspace or global.
-func (w *Watcher) GetVersion(workspaceDir string) int64 {
+// Version returns the current version for a workspace or global.
+func (w *Watcher) Version(workspaceDir string) int64 {
 	w.versionsMu.RLock()
 	defer w.versionsMu.RUnlock()
 	if workspaceDir == "" {

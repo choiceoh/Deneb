@@ -112,8 +112,8 @@ func (jt *JobTracker) OnLifecycleEvent(evt LifecycleEvent) {
 	jt.notifySubscribers(evt)
 }
 
-// GetCachedSnapshot returns a cached run snapshot if available and not expired.
-func (jt *JobTracker) GetCachedSnapshot(runID string) *RunSnapshot {
+// CachedSnapshot returns a cached run snapshot if available and not expired.
+func (jt *JobTracker) CachedSnapshot(runID string) *RunSnapshot {
 	jt.mu.Lock()
 	defer jt.mu.Unlock()
 	jt.pruneCacheLocked(time.Now().UnixMilli())
@@ -138,7 +138,7 @@ func (jt *JobTracker) IsRunning(runID string) bool {
 func (jt *JobTracker) WaitForJob(ctx context.Context, runID string, timeoutMs int64, ignoreCached bool) *RunSnapshot {
 	// Check cache first.
 	if !ignoreCached {
-		if snap := jt.GetCachedSnapshot(runID); snap != nil {
+		if snap := jt.CachedSnapshot(runID); snap != nil {
 			return snap
 		}
 	}
@@ -172,7 +172,7 @@ func (jt *JobTracker) WaitForJob(ctx context.Context, runID string, timeoutMs in
 				// Run restarted; keep waiting.
 				continue
 			case "end":
-				return jt.GetCachedSnapshot(runID)
+				return jt.CachedSnapshot(runID)
 			case "error":
 				// Wait for grace period; may restart.
 				// Use a shorter sub-timeout.
@@ -183,12 +183,12 @@ func (jt *JobTracker) WaitForJob(ctx context.Context, runID string, timeoutMs in
 				case <-timeout:
 					return nil
 				case <-graceTimeout:
-					return jt.GetCachedSnapshot(runID)
+					return jt.CachedSnapshot(runID)
 				case nextEvt := <-ch:
 					if nextEvt.Phase == "start" {
 						continue // Restarted during grace.
 					}
-					return jt.GetCachedSnapshot(runID)
+					return jt.CachedSnapshot(runID)
 				}
 			}
 		}

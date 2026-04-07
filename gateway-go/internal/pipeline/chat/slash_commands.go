@@ -125,7 +125,7 @@ func ParseSlashCommand(text string) *SlashResult {
 
 // trySkillCommand checks the cached skills snapshot for local/system skill matches.
 func trySkillCommand(cmd, args string) *SlashResult {
-	snapshot := GetCachedSkillsSnapshot()
+	snapshot := CachedSkillsSnapshot()
 	if snapshot == nil {
 		return nil
 	}

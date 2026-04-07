@@ -310,7 +310,7 @@ func executeAgentRun(
 	if len(messages) > 0 {
 		polarisCtx, polarisCancel := context.WithTimeout(ctx, 30*time.Second)
 		var summarizer compact.Summarizer
-		if pilotHub := pilot.GetLocalAIHub(); pilotHub != nil {
+		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
 		}
 		var polarisResult compact.Result

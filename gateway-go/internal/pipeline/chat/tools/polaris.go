@@ -131,7 +131,7 @@ func ToolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFu
 		}
 
 		// Find the summary node by ID.
-		target, err := store.GetSummaryByID(int64(p.SummaryID))
+		target, err := store.SummaryByID(int64(p.SummaryID))
 		if err != nil {
 			return fmt.Sprintf("ID %d인 요약 노드를 찾을 수 없습니다.", p.SummaryID), nil
 		}

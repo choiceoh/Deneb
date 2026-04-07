@@ -212,7 +212,7 @@ func (g *GatewayEventSubscriptions) runTranscriptLoop(params GatewaySubscription
 
 			params.Broadcaster.BroadcastToConnIDs("session.message", payload, connIDs)
 
-			sessionEventConnIDs := params.Broadcaster.GetSessionEventSubscriberConnIDs()
+			sessionEventConnIDs := params.Broadcaster.SessionEventSubscriberConnIDs()
 			if len(sessionEventConnIDs) > 0 {
 				changedPayload := map[string]any{
 					"sessionKey": update.SessionKey,
@@ -237,7 +237,7 @@ func (g *GatewayEventSubscriptions) runLifecycleLoop(params GatewaySubscriptionP
 		case <-g.done:
 			return
 		case evt := <-g.lifecycleCh:
-			connIDs := params.Broadcaster.GetSessionEventSubscriberConnIDs()
+			connIDs := params.Broadcaster.SessionEventSubscriberConnIDs()
 			if len(connIDs) == 0 {
 				continue
 			}

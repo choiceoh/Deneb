@@ -47,8 +47,8 @@ func HasReplyTag(text, tagName string) bool {
 	return false
 }
 
-// GetReplyTagValue returns the value of a specific tag, or empty string.
-func GetReplyTagValue(text, tagName string) string {
+// ReplyTagValue returns the value of a specific tag, or empty string.
+func ReplyTagValue(text, tagName string) string {
 	tags := ExtractReplyTags(text)
 	for _, t := range tags {
 		if t.Name == tagName {
@@ -64,7 +64,7 @@ func ApplyReplyThreading(text, defaultReplyTo string) (replyToID string, replyTo
 	if HasReplyTag(text, "reply_to_current") {
 		return "", true
 	}
-	tagValue := GetReplyTagValue(text, "reply_to")
+	tagValue := ReplyTagValue(text, "reply_to")
 	if tagValue != "" {
 		return tagValue, false
 	}

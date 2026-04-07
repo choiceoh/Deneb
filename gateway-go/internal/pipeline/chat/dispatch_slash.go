@@ -207,7 +207,7 @@ func (h *Handler) handleMailCommand(reqID, sessionKey string, delivery *Delivery
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	client, err := gmail.GetClient()
+	client, err := gmail.DefaultClient()
 	if err != nil {
 		h.deliverSlashResponse(delivery, "📬 Gmail 인증 정보를 찾을 수 없습니다.")
 		return

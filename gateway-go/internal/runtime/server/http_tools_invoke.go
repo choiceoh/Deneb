@@ -132,7 +132,7 @@ func (s *Server) authorizeHTTP(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 
-	token := auth.GetBearerToken(r)
+	token := auth.BearerToken(r)
 	if token == "" {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
 			"ok": false, "error": map[string]string{"type": "unauthorized", "message": "Bearer token required"},

@@ -136,7 +136,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	// Update last-processed diary date in index.
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	idx.LastProcessed = time.Now().Format("2006-01-02")
 	indexPath := filepath.Join(wd.store.Dir(), "index.md")
 	if err := idx.Save(indexPath); err != nil {
@@ -170,7 +170,7 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (string, error) {
 	}
 
 	// Determine cutoff date from index.
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	cutoff := idx.LastProcessed
 
 	var diaryFiles []string
@@ -231,7 +231,7 @@ type wikiUpdate struct {
 // synthesize calls the LLM to determine which wiki pages should be updated.
 func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string) ([]wikiUpdate, error) {
 	// Build existing wiki context.
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	indexContent := idx.Render()
 
 	prompt := fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
@@ -466,7 +466,7 @@ func (wd *WikiDreamer) rebuildIndex() error {
 		return fmt.Errorf("list pages: %w", err)
 	}
 
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 	// Preserve LastProcessed from the old index.
 	lastProcessed := idx.LastProcessed
 
@@ -492,7 +492,7 @@ func (wd *WikiDreamer) rebuildIndex() error {
 // findExistingPage checks if a similar page already exists by ID match,
 // slug prefix match, or FTS title search. Returns the existing path or "".
 func (wd *WikiDreamer) findExistingPage(u wikiUpdate) string {
-	idx := wd.store.GetIndex()
+	idx := wd.store.Index()
 
 	// 1. Exact ID match in the same category.
 	if u.ID != "" {

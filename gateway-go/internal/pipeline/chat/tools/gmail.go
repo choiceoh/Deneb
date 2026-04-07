@@ -45,7 +45,7 @@ func ToolGmail(deps GmailPipelineDeps) ToolFunc {
 			return "", err
 		}
 
-		client, err := gmail.GetClient()
+		client, err := gmail.DefaultClient()
 		if err != nil {
 			return fmt.Sprintf("Gmail 인증 정보를 찾을 수 없습니다: %s\n~/.deneb/credentials/에 gmail_client.json과 gmail_token.json을 설정하세요.", err), nil
 		}

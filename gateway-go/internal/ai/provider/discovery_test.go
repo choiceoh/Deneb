@@ -81,25 +81,25 @@ func TestRegistry_GetByNormalizedID(t *testing.T) {
 	})
 
 	// Direct match.
-	p := r.GetByNormalizedID("openai")
+	p := r.ByNormalizedID("openai")
 	if p == nil || p.ID() != "openai" {
 		t.Error("expected openai via direct match")
 	}
 
 	// Normalized match.
-	p = r.GetByNormalizedID("bedrock")
+	p = r.ByNormalizedID("bedrock")
 	if p == nil || p.ID() != "amazon-bedrock" {
 		t.Error("expected amazon-bedrock via normalization")
 	}
 
 	// Alias match.
-	p = r.GetByNormalizedID("aws-bedrock")
+	p = r.ByNormalizedID("aws-bedrock")
 	if p == nil || p.ID() != "amazon-bedrock" {
 		t.Error("expected amazon-bedrock via alias")
 	}
 
 	// Not found.
-	p = r.GetByNormalizedID("nonexistent")
+	p = r.ByNormalizedID("nonexistent")
 	if p != nil {
 		t.Error("expected nil for unknown provider")
 	}

@@ -115,7 +115,7 @@ func TestFileOperations(t *testing.T) {
 	}
 
 	// Get file (includes content).
-	got, err := s.GetFile(a.AgentID, "config.json")
+	got, err := s.File(a.AgentID, "config.json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestFileOperations(t *testing.T) {
 	}
 
 	// Get unknown file.
-	_, err = s.GetFile(a.AgentID, "unknown.txt")
+	_, err = s.File(a.AgentID, "unknown.txt")
 	if err == nil {
 		t.Fatal("expected error for unknown file")
 	}
@@ -136,7 +136,7 @@ func TestFileOpsUnknownAgent(t *testing.T) {
 	if _, err := s.ListFiles("unknown"); err == nil {
 		t.Fatal("expected error")
 	}
-	if _, err := s.GetFile("unknown", "f"); err == nil {
+	if _, err := s.File("unknown", "f"); err == nil {
 		t.Fatal("expected error")
 	}
 	if _, err := s.SetFile("unknown", "f", ""); err == nil {

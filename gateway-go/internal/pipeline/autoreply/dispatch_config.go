@@ -113,7 +113,7 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 	}
 
 	// 3. Generate reply via agent.
-	payloads, err := GetReplyFromConfig(ctx, msg, cfg.ReplyOptions, deps)
+	payloads, err := ReplyFromConfig(ctx, msg, cfg.ReplyOptions, deps)
 	if err != nil {
 		return DispatchResult{Error: err}
 	}

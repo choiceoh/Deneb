@@ -24,7 +24,7 @@ func TestJobTracker_LifecycleStartEnd(t *testing.T) {
 		t.Error("expected run-1 to not be running after end")
 	}
 
-	snap := jt.GetCachedSnapshot("run-1")
+	snap := jt.CachedSnapshot("run-1")
 	if snap == nil {
 		t.Fatal("expected cached snapshot")
 	}
@@ -40,7 +40,7 @@ func TestJobTracker_AbortedRunTimeout(t *testing.T) {
 	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-2", Phase: "start", Ts: now})
 	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-2", Phase: "end", Ts: now + 500, Aborted: true})
 
-	snap := jt.GetCachedSnapshot("run-2")
+	snap := jt.CachedSnapshot("run-2")
 	if snap == nil {
 		t.Fatal("expected cached snapshot")
 	}
@@ -57,7 +57,7 @@ func TestJobTracker_ErrorGraceWindow(t *testing.T) {
 	jt.OnLifecycleEvent(LifecycleEvent{RunID: "run-3", Phase: "error", Ts: now + 100, Error: "auth failed"})
 
 	// Immediately after error, should NOT be cached (grace window active).
-	snap := jt.GetCachedSnapshot("run-3")
+	snap := jt.CachedSnapshot("run-3")
 	if snap != nil {
 		t.Error("expected no cached snapshot during grace window")
 	}

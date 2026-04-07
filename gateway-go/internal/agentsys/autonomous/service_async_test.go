@@ -160,7 +160,7 @@ func TestService_RegisterTask_RunsOnStart(t *testing.T) {
 	defer svc.Stop()
 
 	// The task should be registered with a status entry.
-	status := svc.GetTaskStatus("test-task")
+	status := svc.TaskStatus("test-task")
 	if status == nil {
 		t.Fatal("expected task status to exist")
 	}
@@ -171,7 +171,7 @@ func TestService_RegisterTask_RunsOnStart(t *testing.T) {
 
 func TestService_GetTaskStatus_Unknown(t *testing.T) {
 	svc := NewService(nil)
-	if status := svc.GetTaskStatus("nonexistent"); status != nil {
+	if status := svc.TaskStatus("nonexistent"); status != nil {
 		t.Error("expected nil status for unknown task")
 	}
 }
@@ -197,7 +197,7 @@ func TestService_TaskPanicRecovery(t *testing.T) {
 	}()
 
 	// Verify error was recorded.
-	status := svc.GetTaskStatus("panicker")
+	status := svc.TaskStatus("panicker")
 	if status != nil && status.ErrorCount > 0 {
 		// Good — panic was recorded.
 	}
@@ -218,7 +218,7 @@ func TestService_ExecuteTask_RecordsPanic(t *testing.T) {
 	// Should not panic.
 	svc.executeTask(context.Background(), &panicingTask{})
 
-	status := svc.GetTaskStatus("panicker")
+	status := svc.TaskStatus("panicker")
 	if status == nil {
 		t.Fatal("expected status")
 	}
@@ -405,7 +405,7 @@ func TestService_PeriodicTask_ErrorTracking(t *testing.T) {
 	// Execute the task directly.
 	svc.executeTask(context.Background(), task)
 
-	status := svc.GetTaskStatus("error-task")
+	status := svc.TaskStatus("error-task")
 	if status == nil {
 		t.Fatal("expected task status")
 	}
@@ -433,7 +433,7 @@ func TestService_PeriodicTask_Success(t *testing.T) {
 
 	svc.executeTask(context.Background(), task)
 
-	status := svc.GetTaskStatus("ok-task")
+	status := svc.TaskStatus("ok-task")
 	if status.LastError != "" {
 		t.Errorf("LastError should be cleared, got %q", status.LastError)
 	}

@@ -65,7 +65,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName string) (*EvolveRes
 	// Get usage stats.
 	var stats *UsageStats
 	if e.tracker != nil {
-		stats, _ = e.tracker.GetStats(skillName)
+		stats, _ = e.tracker.Stats(skillName)
 	}
 	if stats == nil {
 		stats = &UsageStats{SkillName: skillName}

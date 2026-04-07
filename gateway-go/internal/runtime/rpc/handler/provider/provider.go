@@ -92,7 +92,7 @@ func providersGet(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 
-		plugin := deps.Providers.GetByNormalizedID(p.ID)
+		plugin := deps.Providers.ByNormalizedID(p.ID)
 		if plugin == nil {
 			return rpcerr.Newf(protocol.ErrNotFound, "provider not found: %s", p.ID).Response(req.ID)
 		}
@@ -112,7 +112,7 @@ func providersCatalog(deps Deps) rpcutil.HandlerFunc {
 
 		// If provider specified, check if it supports catalog locally.
 		if p.Provider != "" {
-			plugin := deps.Providers.GetByNormalizedID(p.Provider)
+			plugin := deps.Providers.ByNormalizedID(p.Provider)
 			if cp, ok := plugin.(provider.CatalogProvider); ok {
 				result, err := cp.Catalog(ctx, provider.CatalogContext{})
 				if err == nil && result != nil {

@@ -16,8 +16,8 @@ type SchemaNode struct {
 	Required    []string               `json:"required,omitempty"`
 }
 
-// GetSchema returns the full config schema tree.
-func GetSchema() *SchemaNode {
+// Schema returns the full config schema tree.
+func Schema() *SchemaNode {
 	return &SchemaNode{
 		Type:        "object",
 		Description: "Deneb configuration schema",
@@ -60,7 +60,7 @@ func GetSchema() *SchemaNode {
 
 // LookupSchema finds a schema node by dotted path (e.g. "gateway.port").
 func LookupSchema(path string) *SchemaNode {
-	schema := GetSchema()
+	schema := Schema()
 	if path == "" {
 		return schema
 	}

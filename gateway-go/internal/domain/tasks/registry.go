@@ -109,8 +109,8 @@ func (r *Registry) Get(taskID string) *TaskRecord {
 	return &cp
 }
 
-// GetByRunID returns the task associated with a run ID.
-func (r *Registry) GetByRunID(runID string) *TaskRecord {
+// ByRunID returns the task associated with a run ID.
+func (r *Registry) ByRunID(runID string) *TaskRecord {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	taskID, ok := r.byRunID[runID]
@@ -125,8 +125,8 @@ func (r *Registry) GetByRunID(runID string) *TaskRecord {
 	return &cp
 }
 
-// GetByChildSessionKey returns the task associated with a child session key.
-func (r *Registry) GetByChildSessionKey(key string) *TaskRecord {
+// ByChildSessionKey returns the task associated with a child session key.
+func (r *Registry) ByChildSessionKey(key string) *TaskRecord {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	taskID, ok := r.byChildSessionKey[key]
@@ -261,8 +261,8 @@ func (r *Registry) PutFlow(f *FlowRecord) error {
 	return r.store.UpsertFlow(f)
 }
 
-// GetFlow returns a flow by ID.
-func (r *Registry) GetFlow(flowID string) *FlowRecord {
+// Flow returns a flow by ID.
+func (r *Registry) Flow(flowID string) *FlowRecord {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	f := r.flows[flowID]

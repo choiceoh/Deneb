@@ -134,7 +134,7 @@ func StartTask(reg *Registry, taskID string) error {
 
 // StartTaskByRunID transitions a task identified by runID to running.
 func StartTaskByRunID(reg *Registry, runID string) error {
-	t := reg.GetByRunID(runID)
+	t := reg.ByRunID(runID)
 	if t == nil {
 		return fmt.Errorf("task not found for runID: %s", runID)
 	}

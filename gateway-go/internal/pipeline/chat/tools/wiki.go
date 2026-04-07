@@ -123,7 +123,7 @@ func wikiRead(store *wiki.Store, path, section string) (string, error) {
 func wikiIndex(store *wiki.Store, category string) (string, error) {
 	if category == "" {
 		// Return master index.
-		idx := store.GetIndex()
+		idx := store.Index()
 		return idx.Render(), nil
 	}
 

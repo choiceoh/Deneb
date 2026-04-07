@@ -12,7 +12,7 @@ func TestInstallAndGetStatus(t *testing.T) {
 		t.Fatal("expected OK")
 	}
 
-	status := m.GetStatus("")
+	status := m.Status("")
 	if len(status.Skills) != 1 {
 		t.Fatalf("expected 1 skill, got %d", len(status.Skills))
 	}
@@ -74,7 +74,7 @@ func TestRegisterSkill(t *testing.T) {
 	m := NewManager()
 	m.RegisterSkill(SkillEntry{Key: "github", Name: "GitHub", Installed: true, Enabled: true})
 
-	status := m.GetStatus("")
+	status := m.Status("")
 	if len(status.Skills) != 1 {
 		t.Fatalf("expected 1 skill, got %d", len(status.Skills))
 	}

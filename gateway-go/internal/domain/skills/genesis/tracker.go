@@ -123,8 +123,8 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 	return nil
 }
 
-// GetStats returns aggregated usage stats for a skill.
-func (t *Tracker) GetStats(skillName string) (*UsageStats, error) {
+// Stats returns aggregated usage stats for a skill.
+func (t *Tracker) Stats(skillName string) (*UsageStats, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -223,7 +223,7 @@ func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([
 	for _, s := range all {
 		if s.TotalUses >= minUses && s.SuccessRate <= maxSuccessRate {
 			// Fetch recent errors for context.
-			stats, _ := t.GetStats(s.SkillName)
+			stats, _ := t.Stats(s.SkillName)
 			if stats != nil {
 				s.RecentErrors = stats.RecentErrors
 			}
