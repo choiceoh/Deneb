@@ -69,7 +69,7 @@ func TestOptimize_WithinBudget(t *testing.T) {
 	fragments := []PromptFragment{
 		{Name: "soul", Content: makeContent(200), Priority: 0},
 		{Name: "memory", Content: makeContent(300), Priority: 2, Shrinkable: true},
-		{Name: "proactive_hints", Content: makeContent(100), Priority: 3, Shrinkable: true},
+		{Name: "low_priority", Content: makeContent(100), Priority: 3, Shrinkable: true},
 	}
 
 	result := budget.Optimize(fragments)
@@ -91,7 +91,7 @@ func TestOptimize_RemovePriority3(t *testing.T) {
 	fragments := []PromptFragment{
 		{Name: "soul", Content: makeContent(200), Priority: 0},
 		{Name: "memory", Content: makeContent(300), Priority: 2, Shrinkable: true},
-		{Name: "proactive_hints", Content: makeContent(100), Priority: 3, Shrinkable: true},
+		{Name: "low_priority", Content: makeContent(100), Priority: 3, Shrinkable: true},
 	}
 
 	result := budget.Optimize(fragments)
@@ -99,8 +99,8 @@ func TestOptimize_RemovePriority3(t *testing.T) {
 		t.Fatalf("expected 2 fragments, got %d", len(result))
 	}
 	for _, f := range result {
-		if f.Name == "proactive_hints" {
-			t.Error("proactive_hints should have been removed")
+		if f.Name == "low_priority" {
+			t.Error("low_priority should have been removed")
 		}
 	}
 }
@@ -112,7 +112,7 @@ func TestOptimize_ShrinkPriority2(t *testing.T) {
 	fragments := []PromptFragment{
 		{Name: "soul", Content: makeContent(200), Priority: 0},
 		{Name: "memory", Content: makeContent(400), Priority: 2, Shrinkable: true},
-		{Name: "proactive_hints", Content: makeContent(50), Priority: 3, Shrinkable: true},
+		{Name: "low_priority", Content: makeContent(50), Priority: 3, Shrinkable: true},
 	}
 
 	result := budget.Optimize(fragments)
@@ -139,7 +139,7 @@ func TestOptimize_RemovePriority2(t *testing.T) {
 	fragments := []PromptFragment{
 		{Name: "soul", Content: makeContent(500), Priority: 0},
 		{Name: "memory", Content: makeContent(500), Priority: 2, Shrinkable: true},
-		{Name: "proactive_hints", Content: makeContent(50), Priority: 3, Shrinkable: true},
+		{Name: "low_priority", Content: makeContent(50), Priority: 3, Shrinkable: true},
 	}
 
 	result := budget.Optimize(fragments)

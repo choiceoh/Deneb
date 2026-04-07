@@ -38,14 +38,13 @@ type PromptBudget struct {
 // Priority 2: can be shrunk or removed under pressure.
 // Priority 3: first to be removed entirely.
 var DefaultPriorities = map[string]int{
-	"soul":            0,
-	"identity":        0,
-	"user_profile":    0,
-	"tool_schemas":    1,
-	"skills":          1,
-	"memory":          2,
-	"session_state":   2,
-	"proactive_hints": 3,
+	"soul":          0,
+	"identity":      0,
+	"user_profile":  0,
+	"tool_schemas":  1,
+	"skills":        1,
+	"memory":        2,
+	"session_state": 2,
 }
 
 // defaultShrinkable defines which priority levels support content shrinking.

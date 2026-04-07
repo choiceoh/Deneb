@@ -194,43 +194,19 @@ func TestIsTerminalStatus(t *testing.T) {
 	}
 }
 
-func TestComposeDeferredSources_BothNil(t *testing.T) {
-	fn := composeDeferredSources(nil, nil)
+func TestDeferredSubagentNotifications_Nil(t *testing.T) {
+	fn := deferredSubagentNotifications(nil)
 	if fn != nil {
-		t.Error("should return nil when both sources are nil")
+		t.Error("should return nil when channel is nil")
 	}
 }
 
-func TestComposeDeferredSources_ProactiveOnly(t *testing.T) {
-	called := false
-	proactive := func() string {
-		if !called {
-			called = true
-			return "hint"
-		}
-		return ""
-	}
-	fn := composeDeferredSources(proactive, nil)
-	if fn == nil {
-		t.Fatal("should return non-nil function")
-	}
-	result := fn()
-	if result != "hint" {
-		t.Errorf("expected 'hint', got %q", result)
-	}
-	// Second call should return empty (proactive consumed).
-	result = fn()
-	if result != "" {
-		t.Errorf("expected empty after consumption, got %q", result)
-	}
-}
-
-func TestComposeDeferredSources_SubagentOnly(t *testing.T) {
+func TestDeferredSubagentNotifications_Drain(t *testing.T) {
 	ch := make(chan string, 2)
 	ch <- "child A done"
 	ch <- "child B done"
 
-	fn := composeDeferredSources(nil, ch)
+	fn := deferredSubagentNotifications(ch)
 	result := fn()
 
 	// Should drain both notifications.
@@ -242,31 +218,5 @@ func TestComposeDeferredSources_SubagentOnly(t *testing.T) {
 	result = fn()
 	if result != "" {
 		t.Errorf("expected empty when channel drained, got %q", result)
-	}
-}
-
-func TestComposeDeferredSources_Both(t *testing.T) {
-	proactiveCh := make(chan string, 1)
-	proactiveCh <- "proactive hint"
-	proactiveFn := func() string {
-		select {
-		case h := <-proactiveCh:
-			return h
-		default:
-			return ""
-		}
-	}
-
-	subagentCh := make(chan string, 1)
-	subagentCh <- "child done"
-
-	fn := composeDeferredSources(proactiveFn, subagentCh)
-	result := fn()
-
-	if !strings.Contains(result, "proactive hint") {
-		t.Error("should contain proactive hint")
-	}
-	if !strings.Contains(result, "child done") {
-		t.Error("should contain subagent notification")
 	}
 }

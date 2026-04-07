@@ -54,7 +54,7 @@ func (o *LiteOptions) liteDefaults() {
 //   - No knowledge prefetch (Vega, memory search, user model)
 //   - No context files (CLAUDE.md, SOUL.md, etc.)
 //   - No Aurora context assembly or compaction
-//   - No skills prompt, shadow context, or proactive hints
+//   - No skills prompt or shadow context
 //   - No nudge budget or autonomous continuation
 //   - Only the explicitly listed tools are available
 func (h *Handler) SendLite(ctx context.Context, systemPrompt, userMessage string, toolNames []string, opts *LiteOptions) (*SyncResult, error) {

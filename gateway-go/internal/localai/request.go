@@ -15,7 +15,7 @@ import (
 type Priority int
 
 const (
-	// PriorityCritical — pilot, proactive context, memory recall.
+	// PriorityCritical — pilot, memory recall.
 	// Allowed to overdraw token budget by 25%.
 	PriorityCritical Priority = iota
 
