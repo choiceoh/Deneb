@@ -556,7 +556,7 @@
       description: "URL to fetch and extract content. Handles HTML (noise-stripped), JSON, PDF/Office. Bot-block evasion included"
     query:
       type: string
-      description: "Web search query. Perplexity (AI answer + citations) > Brave Search > DuckDuckGo fallback"
+      description: "Web search query. Tavily (AI answer + results) > Brave Search > DuckDuckGo fallback"
     queries:
       type: array
       items:

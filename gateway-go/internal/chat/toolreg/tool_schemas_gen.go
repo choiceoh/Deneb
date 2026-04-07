@@ -635,7 +635,7 @@ func webToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query. Perplexity (AI answer + citations) > Brave Search > DuckDuckGo fallback",
+				"description": "Web search query. Tavily (AI answer + results) > Brave Search > DuckDuckGo fallback",
 			},
 			"queries": map[string]any{
 				"type": "array",
