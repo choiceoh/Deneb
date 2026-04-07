@@ -10,44 +10,48 @@ import (
 
 func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs: func() []string { return []string{"telegram", "slack"} },
-		GetChannelStatus: func(id string) string {
-			if id == "telegram" {
-				return "running"
-			}
-			return "stopped"
-		},
-		GetChannelLastEventAt: func(_ string) int64 { return time.Now().UnixMilli() },
+		GetChannelStatus:      func() string { return "running" },
+		GetChannelLastEventAt: func() int64 { return time.Now().UnixMilli() },
 	}, DefaultChannelHealthConfig(), slog.Default())
 
 	snap := m.HealthSnapshot()
-	if len(snap) != 2 {
-		t.Fatalf("expected 2 channels, got %d", len(snap))
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(snap))
 	}
+	if snap[0].ChannelID != "telegram" {
+		t.Errorf("expected channelId telegram, got %q", snap[0].ChannelID)
+	}
+	if !snap[0].Healthy {
+		t.Error("telegram should be healthy")
+	}
+}
 
-	for _, ch := range snap {
-		if ch.ChannelID == "telegram" && !ch.Healthy {
-			t.Error("telegram should be healthy")
-		}
-		if ch.ChannelID == "slack" && ch.Healthy {
-			t.Error("slack should be unhealthy (stopped)")
-		}
+func TestChannelHealthMonitor_HealthSnapshot_Stopped(t *testing.T) {
+	m := NewChannelHealthMonitor(ChannelHealthDeps{
+		GetChannelStatus: func() string { return "stopped" },
+	}, DefaultChannelHealthConfig(), slog.Default())
+
+	snap := m.HealthSnapshot()
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(snap))
+	}
+	if snap[0].Healthy {
+		t.Error("stopped channel should be unhealthy")
 	}
 }
 
 func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
-	restarted := ""
+	restarted := false
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs:   func() []string { return []string{"telegram"} },
-		GetChannelStatus: func(_ string) string { return "running" },
-		GetChannelLastEventAt: func(_ string) int64 {
+		GetChannelStatus: func() string { return "running" },
+		GetChannelLastEventAt: func() int64 {
 			return time.Now().Add(-1 * time.Hour).UnixMilli() // stale
 		},
-		GetChannelStartedAt: func(_ string) int64 {
+		GetChannelStartedAt: func() int64 {
 			return time.Now().Add(-2 * time.Hour).UnixMilli()
 		},
-		RestartChannel: func(id string) error {
-			restarted = id
+		RestartChannel: func() error {
+			restarted = true
 			return nil
 		},
 	}, ChannelHealthConfig{
@@ -62,23 +66,22 @@ func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 	m.startedAt = time.Now().Add(-1 * time.Hour)
 	m.check()
 
-	if restarted != "telegram" {
-		t.Errorf("expected telegram to be restarted, got %q", restarted)
+	if !restarted {
+		t.Error("expected telegram to be restarted")
 	}
 }
 
 func TestChannelHealthMonitor_CooldownPreventsRestart(t *testing.T) {
 	restartCount := 0
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs:   func() []string { return []string{"telegram"} },
-		GetChannelStatus: func(_ string) string { return "running" },
-		GetChannelLastEventAt: func(_ string) int64 {
+		GetChannelStatus: func() string { return "running" },
+		GetChannelLastEventAt: func() int64 {
 			return time.Now().Add(-1 * time.Hour).UnixMilli()
 		},
-		GetChannelStartedAt: func(_ string) int64 {
+		GetChannelStartedAt: func() int64 {
 			return time.Now().Add(-2 * time.Hour).UnixMilli()
 		},
-		RestartChannel: func(_ string) error {
+		RestartChannel: func() error {
 			restartCount++
 			return nil
 		},
@@ -120,9 +123,7 @@ func TestChannelHealthMonitor_RunContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs: func() []string { return nil },
-	}, ChannelHealthConfig{
+	m := NewChannelHealthMonitor(ChannelHealthDeps{}, ChannelHealthConfig{
 		CheckIntervalMs:       10,
 		MonitorStartupGraceMs: 100000,
 	}, slog.Default())

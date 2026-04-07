@@ -1,7 +1,7 @@
-// Package monitoring implements the channel health monitor and activity trackers.
+// Package monitoring implements the Telegram channel health monitor and activity trackers.
 //
-// The channel health monitor detects half-dead channels (connected but no
-// events) and restarts them individually without killing the entire gateway.
+// The health monitor detects a half-dead Telegram connection (connected but no
+// events) and restarts it without killing the entire gateway.
 package monitoring
 
 import (
@@ -12,23 +12,21 @@ import (
 	"time"
 )
 
-// --- Channel Health Monitor ---
+// --- Telegram Health Monitor ---
 
-// ChannelHealthDeps provides per-channel state queries.
+// ChannelHealthDeps provides Telegram channel state queries.
 type ChannelHealthDeps struct {
-	// ListChannelIDs returns IDs of all configured channels.
-	ListChannelIDs func() []string
-	// GetChannelStatus returns the status of a channel ("running", "stopped", "error").
-	GetChannelStatus func(id string) string
-	// GetChannelLastEventAt returns the unix ms timestamp of the last event for a channel.
-	GetChannelLastEventAt func(id string) int64
+	// GetChannelStatus returns "running", "stopped", or "error".
+	GetChannelStatus func() string
+	// GetChannelLastEventAt returns the unix ms timestamp of the last event.
+	GetChannelLastEventAt func() int64
 	// GetChannelStartedAt returns when the channel was started (unix ms).
-	GetChannelStartedAt func(id string) int64
-	// RestartChannel restarts a specific channel.
-	RestartChannel func(id string) error
+	GetChannelStartedAt func() int64
+	// RestartChannel restarts the Telegram channel.
+	RestartChannel func() error
 }
 
-// ChannelHealthConfig tunes the channel health monitor.
+// ChannelHealthConfig tunes the health monitor.
 type ChannelHealthConfig struct {
 	CheckIntervalMs       int64 // default: 300000 (5 min)
 	MonitorStartupGraceMs int64 // default: 60000 (1 min)
@@ -50,7 +48,7 @@ func DefaultChannelHealthConfig() ChannelHealthConfig {
 	}
 }
 
-// ChannelHealthMonitor detects and restarts half-dead channels.
+// ChannelHealthMonitor detects and restarts a half-dead Telegram channel.
 type ChannelHealthMonitor struct {
 	deps   ChannelHealthDeps
 	cfg    ChannelHealthConfig
@@ -58,11 +56,11 @@ type ChannelHealthMonitor struct {
 
 	mu             sync.Mutex
 	startedAt      time.Time
-	cooldowns      map[string]int // channelID -> remaining cooldown cycles
+	cooldown       int // remaining cooldown cycles
 	restartHistory []time.Time
 }
 
-// NewChannelHealthMonitor creates a new channel health monitor.
+// NewChannelHealthMonitor creates a new health monitor.
 func NewChannelHealthMonitor(deps ChannelHealthDeps, cfg ChannelHealthConfig, logger *slog.Logger) *ChannelHealthMonitor {
 	if cfg.CheckIntervalMs == 0 {
 		cfg = DefaultChannelHealthConfig()
@@ -72,11 +70,10 @@ func NewChannelHealthMonitor(deps ChannelHealthDeps, cfg ChannelHealthConfig, lo
 		cfg:       cfg,
 		logger:    logger,
 		startedAt: time.Now(),
-		cooldowns: make(map[string]int),
 	}
 }
 
-// Run starts the channel health monitor loop. Blocks until context is canceled.
+// Run starts the health monitor loop. Blocks until context is canceled.
 func (m *ChannelHealthMonitor) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(m.cfg.CheckIntervalMs) * time.Millisecond)
 	defer ticker.Stop()
@@ -99,48 +96,37 @@ func (m *ChannelHealthMonitor) check() {
 		return
 	}
 
-	if m.deps.ListChannelIDs == nil {
-		return
-	}
+	m.checkChannel(now)
 
-	ids := m.deps.ListChannelIDs()
-	for _, id := range ids {
-		m.checkChannel(id, now)
-	}
-
-	// Decay cooldowns each cycle.
+	// Decay cooldown each cycle.
 	m.mu.Lock()
-	for id, remaining := range m.cooldowns {
-		if remaining <= 1 {
-			delete(m.cooldowns, id)
-		} else {
-			m.cooldowns[id] = remaining - 1
-		}
+	if m.cooldown > 0 {
+		m.cooldown--
 	}
 	m.mu.Unlock()
 }
 
-// ChannelHealthResult describes the health evaluation of a single channel.
+// ChannelHealthResult describes the health evaluation of the Telegram channel.
 type ChannelHealthResult struct {
 	ChannelID string `json:"channelId"`
 	Healthy   bool   `json:"healthy"`
 	Reason    string `json:"reason,omitempty"`
 }
 
-func (m *ChannelHealthMonitor) checkChannel(id string, now time.Time) {
+func (m *ChannelHealthMonitor) checkChannel(now time.Time) {
 	status := "unknown"
 	if m.deps.GetChannelStatus != nil {
-		status = m.deps.GetChannelStatus(id)
+		status = m.deps.GetChannelStatus()
 	}
 
-	// Only check running channels.
+	// Only check when running.
 	if status != "running" {
 		return
 	}
 
 	// Channel connect grace period.
 	if m.deps.GetChannelStartedAt != nil {
-		startedAt := m.deps.GetChannelStartedAt(id)
+		startedAt := m.deps.GetChannelStartedAt()
 		if startedAt > 0 {
 			elapsed := now.UnixMilli() - startedAt
 			if elapsed < m.cfg.ChannelConnectGraceMs {
@@ -153,7 +139,7 @@ func (m *ChannelHealthMonitor) checkChannel(id string, now time.Time) {
 	if m.deps.GetChannelLastEventAt == nil {
 		return
 	}
-	lastEvent := m.deps.GetChannelLastEventAt(id)
+	lastEvent := m.deps.GetChannelLastEventAt()
 	if lastEvent <= 0 {
 		return // No events yet — within grace.
 	}
@@ -165,7 +151,7 @@ func (m *ChannelHealthMonitor) checkChannel(id string, now time.Time) {
 
 	// Channel is stale — attempt restart.
 	m.mu.Lock()
-	if cooldown, ok := m.cooldowns[id]; ok && cooldown > 0 {
+	if m.cooldown > 0 {
 		m.mu.Unlock()
 		return // In cooldown.
 	}
@@ -183,65 +169,52 @@ func (m *ChannelHealthMonitor) checkChannel(id string, now time.Time) {
 	if len(m.restartHistory) >= m.cfg.MaxRestartsPerHour {
 		m.mu.Unlock()
 		m.logger.Warn("channel health: restart suppressed (max restarts per hour)",
-			"channel", id, "staleMs", staleMs)
+			"staleMs", staleMs)
 		return
 	}
 
 	m.restartHistory = append(m.restartHistory, now)
-	m.cooldowns[id] = m.cfg.CooldownCycles
+	m.cooldown = m.cfg.CooldownCycles
 	m.mu.Unlock()
 
-	m.logger.Warn("channel health: restarting stale channel",
-		"channel", id,
+	m.logger.Warn("channel health: restarting stale telegram",
 		"staleMinutes", staleMs/60000,
 	)
 
 	if m.deps.RestartChannel != nil {
-		if err := m.deps.RestartChannel(id); err != nil {
-			m.logger.Error("channel health: restart failed", "channel", id, "error", err)
+		if err := m.deps.RestartChannel(); err != nil {
+			m.logger.Error("channel health: restart failed", "error", err)
 		}
 	}
 }
 
-// HealthSnapshot returns the current health status for all channels.
+// HealthSnapshot returns the current health status of the Telegram channel.
 func (m *ChannelHealthMonitor) HealthSnapshot() []ChannelHealthResult {
-	if m.deps.ListChannelIDs == nil {
-		return nil
-	}
-
-	ids := m.deps.ListChannelIDs()
-	results := make([]ChannelHealthResult, 0, len(ids))
+	result := ChannelHealthResult{ChannelID: "telegram", Healthy: true}
 	now := time.Now()
 
-	for _, id := range ids {
-		result := ChannelHealthResult{ChannelID: id, Healthy: true}
-
-		status := "unknown"
-		if m.deps.GetChannelStatus != nil {
-			status = m.deps.GetChannelStatus(id)
-		}
-		if status != "running" {
-			result.Healthy = false
-			result.Reason = "not running (status: " + status + ")"
-			results = append(results, result)
-			continue
-		}
-
-		if m.deps.GetChannelLastEventAt != nil {
-			lastEvent := m.deps.GetChannelLastEventAt(id)
-			if lastEvent > 0 {
-				staleMs := now.UnixMilli() - lastEvent
-				if staleMs > m.cfg.StaleEventThresholdMs {
-					result.Healthy = false
-					result.Reason = "stale (" + itoa(int(staleMs/60000)) + " minutes since last event)"
-				}
-			}
-		}
-
-		results = append(results, result)
+	status := "unknown"
+	if m.deps.GetChannelStatus != nil {
+		status = m.deps.GetChannelStatus()
+	}
+	if status != "running" {
+		result.Healthy = false
+		result.Reason = "not running (status: " + status + ")"
+		return []ChannelHealthResult{result}
 	}
 
-	return results
+	if m.deps.GetChannelLastEventAt != nil {
+		lastEvent := m.deps.GetChannelLastEventAt()
+		if lastEvent > 0 {
+			staleMs := now.UnixMilli() - lastEvent
+			if staleMs > m.cfg.StaleEventThresholdMs {
+				result.Healthy = false
+				result.Reason = "stale (" + itoa(int(staleMs/60000)) + " minutes since last event)"
+			}
+		}
+	}
+
+	return []ChannelHealthResult{result}
 }
 
 // --- Activity Tracker ---
@@ -270,39 +243,24 @@ func (t *ActivityTracker) LastActivityAt() int64 {
 
 // --- Channel Event Tracker ---
 
-// ChannelEventTracker records per-channel event timestamps for health monitoring.
+// ChannelEventTracker records the last event timestamp for health monitoring.
 type ChannelEventTracker struct {
-	mu     sync.RWMutex
-	events map[string]int64 // channelID -> last event unix ms
+	lastEventMs atomic.Int64
 }
 
-// NewChannelEventTracker creates a new per-channel event tracker.
+// NewChannelEventTracker creates a new event tracker.
 func NewChannelEventTracker() *ChannelEventTracker {
-	return &ChannelEventTracker{
-		events: make(map[string]int64),
-	}
+	return &ChannelEventTracker{}
 }
 
-// Touch records an event for a specific channel.
-func (t *ChannelEventTracker) Touch(channelID string) {
-	now := time.Now().UnixMilli()
-	t.mu.Lock()
-	t.events[channelID] = now
-	t.mu.Unlock()
+// Touch records an event.
+func (t *ChannelEventTracker) Touch() {
+	t.lastEventMs.Store(time.Now().UnixMilli())
 }
 
-// LastEventAt returns the last event timestamp for a channel, or 0 if unknown.
-func (t *ChannelEventTracker) LastEventAt(channelID string) int64 {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.events[channelID]
-}
-
-// Remove clears tracking for a channel (e.g., on disconnect).
-func (t *ChannelEventTracker) Remove(channelID string) {
-	t.mu.Lock()
-	delete(t.events, channelID)
-	t.mu.Unlock()
+// LastEventAt returns the last event timestamp, or 0 if unknown.
+func (t *ChannelEventTracker) LastEventAt() int64 {
+	return t.lastEventMs.Load()
 }
 
 // itoa is a simple int-to-string without importing strconv.
