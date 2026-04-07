@@ -372,10 +372,11 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 						emit(ctx, out, StreamEvent{Type: "message_start", Payload: correctedStart})
 					}
 
+					// Only emit usage — do NOT emit a stop_reason here.
+					// The real stop_reason was already emitted by the choice chunk
+					// with FinishReason (mapped tool_calls→tool_use, stop→end_turn).
+					// Emitting "end_turn" here would overwrite a prior "tool_use".
 					mdPayload, _ := json.Marshal(MessageDelta{
-						Delta: struct {
-							StopReason string `json:"stop_reason"`
-						}{StopReason: "end_turn"},
 						Usage: struct {
 							OutputTokens int `json:"output_tokens"`
 						}{OutputTokens: chunk.Usage.CompletionTokens},
