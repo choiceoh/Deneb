@@ -28,6 +28,12 @@ func (s *Service) armTimerLocked(ctx context.Context) {
 		if !job.Enabled || job.State.NextRunAtMs <= 0 {
 			continue
 		}
+		// Skip jobs that are currently running — their NextRunAtMs hasn't
+		// been advanced yet, so including them would cause the timer to
+		// re-fire every minRefireGap just to hit the concurrency guard.
+		if _, running := s.runningJobs.Load(job.ID); running {
+			continue
+		}
 		if nextWake == 0 || job.State.NextRunAtMs < nextWake {
 			nextWake = job.State.NextRunAtMs
 		}
@@ -98,6 +104,10 @@ func (s *Service) fireTimerLocked(ctx context.Context) {
 			continue
 		}
 		if job.State.NextRunAtMs > 0 && job.State.NextRunAtMs <= now {
+			// Skip jobs already running to avoid goroutine + log churn.
+			if _, running := s.runningJobs.Load(job.ID); running {
+				continue
+			}
 			// Execute asynchronously.
 			jobCopy := job
 			go func() {
