@@ -131,7 +131,6 @@ scripts/dev-live-test.sh stop       # 정리
 - **quality test 실패 시 "완료"라고 하지 마라** — 수정 → 재시작 → 재검증.
 - **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료.
 - 포트: dev=18790, iterate=18791, prod=18789 (프로덕션 영향 없음).
-- 텔레그램 관련 수정 시 `vchat-quality` 추가 실행.
 - 상세 절차/명령어: `.claude/rules/live-testing.md` 참조.
 
 ---

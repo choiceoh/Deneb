@@ -9,8 +9,6 @@
 #   scripts/dev-iterate.sh                    # default: smoke test (3 checks)
 #   scripts/dev-iterate.sh --metric CMD       # custom metric command
 #   scripts/dev-iterate.sh --port 18791       # custom port (default: 18791)
-#   scripts/dev-iterate.sh --vchat            # test through Telegram pipeline
-#   scripts/dev-iterate.sh --vchat --scenario korean  # specific vchat scenario
 #   scripts/dev-iterate.sh --baseline         # compare against saved baseline
 #   scripts/dev-iterate.sh --save-baseline    # save result as new baseline
 #
@@ -35,16 +33,12 @@ LOCK_FILE="/tmp/deneb-iterate.lock"
 
 # Parse arguments.
 METRIC_CMD=""
-USE_VCHAT=false
-VCHAT_SCENARIO="all"
 USE_BASELINE=false
 SAVE_BASELINE=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --metric) METRIC_CMD="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
-    --vchat) USE_VCHAT=true; shift ;;
-    --scenario) VCHAT_SCENARIO="$2"; shift 2 ;;
     --baseline) USE_BASELINE=true; shift ;;
     --save-baseline) SAVE_BASELINE=true; shift ;;
     --prod-parity) shift ;; # Ignored (prod config is now the default).
@@ -139,11 +133,6 @@ cleanup() {
     fi
     GW_PID=""
   fi
-  # Stop vchat if we started it.
-  if [[ "${VCHAT_STARTED:-}" == "true" ]]; then
-    python3 "$SCRIPT_DIR/vchat.py" stop 2>/dev/null || true
-    VCHAT_STARTED=""
-  fi
   _verify_port_free "$PORT" || true
 }
 trap cleanup EXIT
@@ -186,64 +175,31 @@ PHASE_OK[build]=true; PHASE_MS[build]=$BUILD_MS
 echo "ok (${BUILD_MS}ms)"
 
 # --- Step 2: Start gateway ---
-if [[ "$USE_VCHAT" == "true" ]]; then
-  # Start through vchat (mock Telegram + gateway with Telegram config).
-  echo -n "vchat-start... "
-  START_WAIT_BEGIN=$(date +%s%N)
+# Start gateway with production config (iterate-specific Telegram token).
+echo -n "start... "
+DEV_CONFIG="/tmp/deneb-iterate-config.json"
+DENEB_DEV_TELEGRAM_TOKEN="${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}" \
+  "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
+DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
+GW_PID=$!
 
-  VCHAT_MOCK_PORT=$((PORT + 1))
-  export VCHAT_MOCK_PORT
-  export VCHAT_GATEWAY_PORT="$PORT"
-  export VCHAT_BINARY="$BINARY"
-
-  python3 "$SCRIPT_DIR/vchat.py" start --no-build --background 2>/dev/null &
-  VCHAT_STARTER_PID=$!
-  VCHAT_STARTED=true
-
-  # Wait for mock + gateway to be ready (exponential backoff).
-  HEALTHY=false
-  _WAIT_MS=50
-  for _ in $(seq 1 50); do
-    if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1 && \
-       curl -sf "http://$HOST:$VCHAT_MOCK_PORT/control/status" > /dev/null 2>&1; then
-      HEALTHY=true
-      break
-    fi
-    # Check if starter crashed.
-    if ! kill -0 "$VCHAT_STARTER_PID" 2>/dev/null; then
-      break
-    fi
-    sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
-    _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
-  done
-  WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
-else
-  # Start raw gateway with production config (iterate-specific Telegram token).
-  echo -n "start... "
-  DEV_CONFIG="/tmp/deneb-iterate-config.json"
-  DENEB_DEV_TELEGRAM_TOKEN="${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}" \
-    "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
-  DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
-  GW_PID=$!
-
-  # Wait for health (exponential backoff: 50ms → 300ms cap).
-  START_WAIT_BEGIN=$(date +%s%N)
-  HEALTHY=false
-  _WAIT_MS=50
-  for _ in $(seq 1 30); do
-    if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
-      HEALTHY=true
-      break
-    fi
-    # Early exit if process crashed.
-    if ! kill -0 "$GW_PID" 2>/dev/null; then
-      break
-    fi
-    sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
-    _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
-  done
-  WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
-fi
+# Wait for health (exponential backoff: 50ms → 300ms cap).
+START_WAIT_BEGIN=$(date +%s%N)
+HEALTHY=false
+_WAIT_MS=50
+for _ in $(seq 1 30); do
+  if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
+    HEALTHY=true
+    break
+  fi
+  # Early exit if process crashed.
+  if ! kill -0 "$GW_PID" 2>/dev/null; then
+    break
+  fi
+  sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
+  _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
+done
+WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
 
 if [[ "$HEALTHY" != "true" ]]; then
   PHASE_OK[start]=false; PHASE_MS[start]=$WAIT_MS
@@ -304,34 +260,7 @@ echo "ok (${WAIT_MS}ms)"
 PASS=0
 TOTAL=0
 
-if [[ "$USE_VCHAT" == "true" ]]; then
-  # vchat quality test through Telegram pipeline.
-  echo -n "vchat-quality ($VCHAT_SCENARIO)... "
-  CHECK_START=$(date +%s%N)
-
-  VCHAT_OUT=$(python3 "$SCRIPT_DIR/dev-vchat-quality.py" \
-    --port "$VCHAT_MOCK_PORT" --gateway-port "$PORT" \
-    --scenario "$VCHAT_SCENARIO" --json 2>&1) || true
-
-  # Parse JSON result.
-  VCHAT_JSON=$(echo "$VCHAT_OUT" | grep '^VCHAT_QUALITY_JSON ' | tail -1 | sed 's/^VCHAT_QUALITY_JSON //')
-  if [[ -n "$VCHAT_JSON" ]]; then
-    PASS=$(echo "$VCHAT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('passed_checks',0))")
-    TOTAL=$(echo "$VCHAT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('total_checks',0))")
-    CHECKS_JSON=$(echo "$VCHAT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('checks',[])))")
-    QUALITY_JSON=$(echo "$VCHAT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('quality',{})))")
-    METRIC_VAL=$PASS
-  else
-    # Fallback: parse human-readable output.
-    echo "  (no JSON output from vchat-quality)"
-    echo "$VCHAT_OUT" | tail -5
-    METRIC_VAL=0
-  fi
-
-  CHECK_MS=$(( ($(date +%s%N) - CHECK_START) / 1000000 ))
-  echo "$PASS/$TOTAL (${CHECK_MS}ms)"
-
-elif [[ -n "$METRIC_CMD" ]]; then
+if [[ -n "$METRIC_CMD" ]]; then
   # Custom metric command.
   echo -n "metric... "
   CHECK_START=$(date +%s%N)
@@ -502,22 +431,17 @@ if [[ -f "$LOG" ]]; then
 fi
 
 # --- Step 5: Stop ---
-if [[ "$USE_VCHAT" == "true" ]]; then
-  python3 "$SCRIPT_DIR/vchat.py" stop 2>/dev/null || true
-  VCHAT_STARTED=""
-else
-  if [[ -n "${GW_PID:-}" ]]; then
-    kill "$GW_PID" 2>/dev/null || true
-    local_wait=0
-    while kill -0 "$GW_PID" 2>/dev/null && (( local_wait < 30 )); do
-      sleep 0.1; local_wait=$((local_wait+1))
-    done
-    if kill -0 "$GW_PID" 2>/dev/null; then
-      kill -9 "$GW_PID" 2>/dev/null || true
-      wait "$GW_PID" 2>/dev/null || true
-    fi
-    GW_PID=""
+if [[ -n "${GW_PID:-}" ]]; then
+  kill "$GW_PID" 2>/dev/null || true
+  local_wait=0
+  while kill -0 "$GW_PID" 2>/dev/null && (( local_wait < 30 )); do
+    sleep 0.1; local_wait=$((local_wait+1))
+  done
+  if kill -0 "$GW_PID" 2>/dev/null; then
+    kill -9 "$GW_PID" 2>/dev/null || true
+    wait "$GW_PID" 2>/dev/null || true
   fi
+  GW_PID=""
 fi
 
 # --- Report ---

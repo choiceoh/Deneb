@@ -69,27 +69,6 @@ DENEB_ITERATE_TELEGRAM_TOKEN=<iterate bot token>  # dev-iterate.sh (port 18791)
 | `quality edge` | 에지 케이스 테스트 (빈 입력/긴 입력/특수문자/코드블록/모호한 의도/멀티턴) |
 | `quality-custom "메시지"` | 커스텀 메시지로 품질 테스트 |
 
-### Telegram Pipeline Quality (실제 유저 경험)
-
-vchat(가상 텔레그램)을 통해 **텔레그램 파이프라인 전체**를 거치는 품질 테스트.
-유저가 텔레그램에서 실제로 보는 것과 동일한 경험을 검증한다.
-
-| Command | Description |
-|---|---|
-| `vchat-quality` | **전체 텔레그램 품질 테스트** (korean + tool + format + multi) |
-| `vchat-quality --scenario korean` | 한국어 + HTML + 리액션 + 드래프트 스트리밍 |
-| `vchat-quality --scenario tool` | 도구 사용 + 진행 메시지 |
-| `vchat-quality --scenario format` | 마크다운→HTML 변환 + 청킹 |
-| `vchat-quality --scenario multi` | 멀티턴 컨텍스트 유지 |
-| `vchat-quality-custom "메시지"` | 커스텀 메시지 텔레그램 품질 테스트 |
-
-**추가 검증 항목** (기존 quality에 없는 것):
-- HTML 태그 균형 (실제 전송 HTML)
-- 드래프트 스트리밍 (유저가 타이핑 진행을 봄)
-- 리액션 시퀀스 (이모지 순서)
-- 메시지 청킹 (4096자 제한)
-- 버튼 존재 (인라인 키보드)
-
 ### Baseline Tracking (회귀 감지)
 
 | Command | Description |
@@ -145,24 +124,7 @@ scripts/dev-live-test.sh quality
 ```
 **전체 시나리오 통과해야** 한다. 실패 항목 있으면 수정 → 재시작 → 재검증.
 
-### Step 4: Telegram Pipeline 품질 (텔레그램/포맷 수정 시)
-
-텔레그램 관련 수정이면, 실제 텔레그램 파이프라인을 거치는 품질 테스트 실행:
-
-```bash
-# vchat이 실행 중이어야 함
-scripts/dev-live-test.sh vchat start
-# (별도 터미널에서) 또는 dev-iterate.sh --vchat 사용
-
-# 전체 텔레그램 품질 테스트
-scripts/dev-live-test.sh vchat-quality
-
-# 특정 시나리오
-scripts/dev-live-test.sh vchat-quality --scenario korean
-scripts/dev-live-test.sh vchat-quality --scenario format
-```
-
-### Step 5: 변경 관련 품질 검증
+### Step 4: 변경 관련 품질 검증
 
 수정한 기능과 직접 관련된 시나리오를 추가로 테스트:
 
@@ -181,13 +143,13 @@ scripts/dev-live-test.sh quality format
 scripts/dev-live-test.sh session "health" "session.list {}"
 ```
 
-### Step 6: 로그로 숨은 문제 확인
+### Step 5: 로그로 숨은 문제 확인
 ```bash
 scripts/dev-live-test.sh logs-errors
 scripts/dev-live-test.sh logs-since 60
 ```
 
-### Step 7: 정리
+### Step 6: 정리
 ```bash
 scripts/dev-live-test.sh stop
 ```
@@ -235,10 +197,6 @@ DENEB_TEST_JSON {"version":1,"commit":"abc1234","phase":{...},"checks":[...],...
 ### 새 플래그
 
 ```bash
-# 텔레그램 파이프라인을 거치는 품질 테스트 (vchat 기반)
-scripts/dev-iterate.sh --vchat
-scripts/dev-iterate.sh --vchat --scenario korean
-
 # 베이스라인 비교/저장
 scripts/dev-iterate.sh --baseline         # 테스트 후 베이스라인과 비교
 scripts/dev-iterate.sh --save-baseline    # 결과를 새 베이스라인으로 저장

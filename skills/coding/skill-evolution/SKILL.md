@@ -63,7 +63,7 @@ cp skills/<category>/<name>/SKILL.md /tmp/skill-baseline.md
 # (edit the specific section)
 
 # Test via autoresearch iterate
-scripts/dev-iterate.sh --vchat --scenario tool
+scripts/dev-iterate.sh --metric "scripts/dev-quality-metric.sh"
 ```
 
 ### Phase 4: Evaluate
@@ -82,8 +82,8 @@ scripts/dev-iterate.sh --vchat --scenario tool
 | Skill type | Metric command |
 |---|---|
 | Chat/prompt skills | `scripts/dev-quality-metric.sh` |
-| Tool-using skills | `scripts/dev-iterate.sh --vchat --scenario tool` |
-| Format skills | `scripts/dev-iterate.sh --vchat --scenario format` |
+| Tool-using skills | `scripts/dev-iterate.sh --metric "scripts/dev-quality-metric.sh"` |
+| Format skills | `scripts/dev-iterate.sh --metric "scripts/dev-quality-metric.sh"` |
 
 ### Phase 5: Keep or Revert
 

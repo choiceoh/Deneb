@@ -12,8 +12,7 @@
 #
 # Start options:
 #   --target FILE           Target file(s) to optimize (required, comma-separated)
-#   --metric PRESET         Metric preset: smoke|quality|vchat|combined (default: smoke)
-#   --scenario SCENARIO     vchat scenario (default: all)
+#   --metric PRESET         Metric preset: smoke|quality|combined (default: smoke)
 #   --name NAME             Metric name (default: auto from preset)
 #   --direction DIR         maximize|minimize (default: maximize)
 #   --budget SECS           Time budget per experiment (default: 120)
@@ -125,14 +124,13 @@ asyncio.run(main())
 # --- Commands ---
 
 cmd_start() {
-  local targets="" metric="smoke" scenario="all" name="" direction="maximize"
+  local targets="" metric="smoke" name="" direction="maximize"
   local budget=120 iterations=20 tag="" constants=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --target) targets="$2"; shift 2 ;;
       --metric) metric="$2"; shift 2 ;;
-      --scenario) scenario="$2"; shift 2 ;;
       --name) name="$2"; shift 2 ;;
       --direction) direction="$2"; shift 2 ;;
       --budget) budget="$2"; shift 2 ;;
@@ -154,7 +152,6 @@ cmd_start() {
   case "$metric" in
     smoke)    metric_script=$("$SCRIPT_DIR/dev-metric-gen.sh" smoke) ;;
     quality)  metric_script=$("$SCRIPT_DIR/dev-metric-gen.sh" quality) ;;
-    vchat)    metric_script=$("$SCRIPT_DIR/dev-metric-gen.sh" vchat --scenario "$scenario") ;;
     combined) metric_script=$("$SCRIPT_DIR/dev-metric-gen.sh" combined) ;;
     *)
       # Treat as raw command.
@@ -261,8 +258,7 @@ case "$CMD" in
     echo ""
     echo "Start options:"
     echo "  --target FILE         Target file(s) (required, comma-separated)"
-    echo "  --metric PRESET       smoke|quality|vchat|combined (default: smoke)"
-    echo "  --scenario SCENARIO   vchat scenario: korean|tool|format|multi|all"
+    echo "  --metric PRESET       smoke|quality|combined (default: smoke)"
     echo "  --direction DIR       maximize|minimize (default: maximize)"
     echo "  --budget SECS         Time per experiment (default: 120)"
     echo "  --iterations N        Max iterations (default: 20)"

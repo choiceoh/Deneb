@@ -886,21 +886,6 @@ case "${1:-help}" in
   multi-chat)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" multi-chat "$@" ;;
   tool-check)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" tool-check "$@" ;;
 
-  # --- Virtual Telegram (full Telegram pipeline testing) ---
-  vchat)         shift; python3 "$SCRIPT_DIR/vchat.py" "$@" ;;
-  vchat-start)   python3 "$SCRIPT_DIR/vchat.py" start --no-build ;;
-  vchat-send)    shift; python3 "$SCRIPT_DIR/vchat.py" send "$@" ;;
-  vchat-multi)   shift; python3 "$SCRIPT_DIR/vchat.py" multi "$@" ;;
-  vchat-stop)    python3 "$SCRIPT_DIR/vchat.py" stop ;;
-  vchat-status)  python3 "$SCRIPT_DIR/vchat.py" status ;;
-  vchat-reset)   python3 "$SCRIPT_DIR/vchat.py" reset ;;
-  vchat-timeline) python3 "$SCRIPT_DIR/vchat.py" timeline ;;
-  vchat-logs)    shift; python3 "$SCRIPT_DIR/vchat.py" logs "$@" ;;
-
-  # vchat quality testing (Telegram pipeline quality checks — mock).
-  vchat-quality)       shift; python3 "$SCRIPT_DIR/dev-vchat-quality.py" "$@" ;;
-  vchat-quality-custom) shift; python3 "$SCRIPT_DIR/dev-vchat-quality.py" --custom "$@" ;;
-
   # Real Telegram e2e quality testing (Telethon — actual Telegram servers).
   e2e-quality)         shift; python3 "$SCRIPT_DIR/dev-e2e-quality.py" "$@" ;;
   e2e-quality-custom)  shift; python3 "$SCRIPT_DIR/dev-e2e-quality.py" --custom "$@" ;;
@@ -946,19 +931,6 @@ case "${1:-help}" in
     echo "  multi-chat M1 M2..  Multi-turn chat on same session (context carryover)"
     echo "  tool-check TOOL MSG Verify specific tool invocation"
     echo ""
-    echo "Virtual Telegram (full Telegram pipeline, Claude Code가 직접 사용자 역할):"
-    echo "  vchat start         Mock Telegram + Gateway 시작 (foreground)"
-    echo "  vchat-start         위와 동일 (--no-build)"
-    echo "  vchat-send MSG      메시지 전송 + 전체 텔레그램 경험 렌더링"
-    echo "  vchat-multi M1 M2.. 멀티턴 대화 (세션 유지)"
-    echo "  vchat-stop          정지"
-    echo "  vchat-status        실행 상태"
-    echo "  vchat-reset         대화 초기화 (서버 유지)"
-    echo "  vchat-timeline      전체 타임라인 출력"
-    echo "  vchat-logs [-n N]   게이트웨이 로그"
-    echo "  vchat-quality [S]   텔레그램 파이프라인 품질 테스트 (korean|tool|format|multi|all)"
-    echo "  vchat-quality-custom MSG  커스텀 메시지 품질 테스트"
-    echo ""
     echo "Real Telegram E2E (실제 텔레그램 서버 경유, Telethon 기반):"
     echo "  e2e-quality [S]     실제 텔레그램 e2e 품질 테스트 (korean|tool|format|multi|all)"
     echo "  e2e-quality-custom MSG  커스텀 메시지 e2e 테스트"
@@ -972,7 +944,7 @@ case "${1:-help}" in
     echo "  baseline-compare    baseline compare 단축"
     echo ""
     echo "Autoresearch:"
-    echo "  metric-gen [PRESET] 메트릭 스크립트 생성 (smoke|quality|vchat|combined|custom)"
+    echo "  metric-gen [PRESET] 메트릭 스크립트 생성 (smoke|quality|combined|custom)"
     echo "  metric-script       레거시: smoke 메트릭 스크립트 생성"
     echo "  ar-start [OPTS]     오토리서치 시작 (--target FILE --metric PRESET)"
     echo "  ar-stop             오토리서치 정지"
