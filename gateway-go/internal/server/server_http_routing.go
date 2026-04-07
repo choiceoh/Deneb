@@ -29,6 +29,10 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /sessions/{key}/kill", s.handleSessionKill)
 	mux.HandleFunc("GET /sessions/{key}/history", s.handleSessionHistory)
 
+	// Admin endpoints (dev/live testing — loopback only, no auth).
+	mux.HandleFunc("GET /admin/model", s.handleAdminModelGet)
+	mux.HandleFunc("PUT /admin/model", s.handleAdminModelPut)
+
 	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
 	if s.hooksHTTP != nil {
 		hooksHandler := s.hooksHTTP
