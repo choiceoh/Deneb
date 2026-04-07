@@ -44,15 +44,20 @@ func sseToolResponse(toolID, toolName, toolInput string) string {
 	return b.String()
 }
 
+// newTestLLMClient creates an httptest server and LLM client for agent tests.
+func newTestLLMClient(t *testing.T, handler http.HandlerFunc, opts ...llm.ClientOption) *llm.Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return llm.NewClient(server.URL, "test-key", opts...)
+}
+
 func TestRunAgent_SimpleTextResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, sseResponse("Hello world", "end_turn"))
-	}))
-	defer server.Close()
-
-	client := llm.NewClient(server.URL, "test-key")
+	})
 	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,
@@ -86,7 +91,7 @@ func TestRunAgent_SimpleTextResponse(t *testing.T) {
 
 func TestRunAgent_ToolCallLoop(t *testing.T) {
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -98,10 +103,7 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 			// Second call: model produces final text.
 			fmt.Fprint(w, sseResponse("Done!", "end_turn"))
 		}
-	}))
-	defer server.Close()
-
-	client := llm.NewClient(server.URL, "test-key")
+	})
 	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,
@@ -135,14 +137,11 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 
 func TestRunAgent_MaxTurns(t *testing.T) {
 	// Model always requests a tool — should stop at MaxTurns.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, sseToolResponse("tool_1", "loop", `{}`))
-	}))
-	defer server.Close()
-
-	client := llm.NewClient(server.URL, "test-key")
+	})
 	cfg := agent.AgentConfig{
 		MaxTurns: 3,
 		Timeout:  10 * time.Second,
@@ -172,7 +171,7 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 }
 
 func TestRunAgent_Timeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher, _ := w.(http.Flusher)
@@ -182,10 +181,7 @@ func TestRunAgent_Timeout(t *testing.T) {
 		}
 		// Block until client disconnects.
 		<-r.Context().Done()
-	}))
-	defer server.Close()
-
-	client := llm.NewClient(server.URL, "test-key", llm.WithRetry(0, 0, 0))
+	}, llm.WithRetry(0, 0, 0))
 	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  200 * time.Millisecond,
@@ -206,7 +202,7 @@ func TestRunAgent_Timeout(t *testing.T) {
 }
 
 func TestRunAgent_Abort(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher, _ := w.(http.Flusher)
@@ -215,12 +211,9 @@ func TestRunAgent_Abort(t *testing.T) {
 			flusher.Flush()
 		}
 		<-r.Context().Done()
-	}))
-	defer server.Close()
+	}, llm.WithRetry(0, 0, 0))
 
 	ctx, cancel := context.WithCancel(context.Background())
-
-	client := llm.NewClient(server.URL, "test-key", llm.WithRetry(0, 0, 0))
 	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,
@@ -248,7 +241,7 @@ func TestRunAgent_Abort(t *testing.T) {
 
 func TestRunAgent_ToolError(t *testing.T) {
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -258,10 +251,7 @@ func TestRunAgent_ToolError(t *testing.T) {
 		} else {
 			fmt.Fprint(w, sseResponse("Handled error", "end_turn"))
 		}
-	}))
-	defer server.Close()
-
-	client := llm.NewClient(server.URL, "test-key")
+	})
 	cfg := agent.AgentConfig{
 		MaxTurns: 5,
 		Timeout:  10 * time.Second,

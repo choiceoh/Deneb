@@ -11,15 +11,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 )
 
+// newTestClient creates an httptest server and LLM client for testing.
+func newTestClient(t *testing.T, handler http.HandlerFunc, opts ...ClientOption) (*Client, *httptest.Server) {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return NewClient(server.URL, "test-key", opts...), server
+}
+
 func TestDoStream_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "event: ping\ndata: {}\n\n")
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key")
+	})
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
 	if err != nil {
@@ -30,14 +35,11 @@ func TestDoStream_Success(t *testing.T) {
 
 func TestDoStream_ClientError_NoRetry(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, `{"error":"bad request"}`)
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key")
+	})
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	_, err := c.DoStream(context.Background(), req)
 	if err == nil {
@@ -50,7 +52,7 @@ func TestDoStream_ClientError_NoRetry(t *testing.T) {
 
 func TestDoStream_ServerError_Retries(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls <= 2 {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -59,11 +61,7 @@ func TestDoStream_ServerError_Retries(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
 	if err != nil {
@@ -76,17 +74,14 @@ func TestDoStream_ServerError_Retries(t *testing.T) {
 }
 
 func TestDoStream_ContextCancelled(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		fmt.Fprint(w, "unavailable")
-	}))
-	defer server.Close()
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately.
 
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	_, err := c.DoStream(ctx, req)
 	if err == nil {
@@ -96,7 +91,7 @@ func TestDoStream_ContextCancelled(t *testing.T) {
 
 func TestDoStream_RateLimitRetryAfter(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls == 1 {
 			w.Header().Set("Retry-After", "1")
@@ -106,11 +101,7 @@ func TestDoStream_RateLimitRetryAfter(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 
 	// Use a context with a generous timeout since retry-after is 1s.
@@ -170,16 +161,12 @@ func TestBackoffDelay_RateLimitFloor(t *testing.T) {
 
 func TestDoStream_DefaultMaxRetries(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Use default client (maxRetries=6) with fast delays for testing.
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusTooManyRequests)
 		fmt.Fprint(w, "rate limited")
-	}))
-	defer server.Close()
-
-	// Use default client (maxRetries=6) with fast delays for testing.
-	c := NewClient(server.URL, "test-key",
-		WithRetry(6, 1*time.Millisecond, 10*time.Millisecond))
+	}, WithRetry(6, 1*time.Millisecond, 10*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	_, err := c.DoStream(context.Background(), req)
 	if err == nil {
@@ -193,7 +180,7 @@ func TestDoStream_DefaultMaxRetries(t *testing.T) {
 
 func TestDoStream_504_Retries(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls == 1 {
 			w.WriteHeader(http.StatusGatewayTimeout)
@@ -202,11 +189,7 @@ func TestDoStream_504_Retries(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
 	if err != nil {
@@ -220,15 +203,11 @@ func TestDoStream_504_Retries(t *testing.T) {
 
 func TestDoStream_410_NoRetry(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusGone)
 		fmt.Fprint(w, "gone")
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	_, err := c.DoStream(context.Background(), req)
 	if err == nil {
@@ -241,15 +220,11 @@ func TestDoStream_410_NoRetry(t *testing.T) {
 
 func TestDoStream_501_NoRetry(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusNotImplemented)
 		fmt.Fprint(w, "not implemented")
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	_, err := c.DoStream(context.Background(), req)
 	if err == nil {
@@ -262,15 +237,11 @@ func TestDoStream_501_NoRetry(t *testing.T) {
 
 func TestDoStream_429Code1302_NoRetry(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusTooManyRequests)
 		fmt.Fprint(w, `{"error":{"code":"1302","message":"Rate limit reached for requests"}}`)
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	_, err := c.DoStream(context.Background(), req)
 	if err == nil {
@@ -284,21 +255,17 @@ func TestDoStream_429Code1302_NoRetry(t *testing.T) {
 func TestDoStream_ExpiredContext_MinRequestTimeout(t *testing.T) {
 	// The parent context is already past its deadline, but minRequestTimeout
 	// should give the HTTP request a fresh timeout so it can still succeed.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "data: ok\n\n")
-	}))
-	defer server.Close()
+	}, WithMinRequestTimeout(5*time.Second), WithRetry(0, 0, 0))
 
 	// Create a context with a deadline that has already passed.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 	time.Sleep(5 * time.Millisecond) // ensure deadline passes
 
-	c := NewClient(server.URL, "test-key",
-		WithMinRequestTimeout(5*time.Second),
-		WithRetry(0, 0, 0))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
 	body, err := c.DoStream(ctx, req)
 	if err != nil {
@@ -312,21 +279,17 @@ func TestDoStream_MinRequestTimeout_ParentCancelPropagates(t *testing.T) {
 	// the request is in flight, the derived request context should also
 	// be cancelled — even though minRequestTimeout gave it a fresh deadline.
 	reqReceived := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		close(reqReceived)
 		// Block until the request context is cancelled.
 		<-r.Context().Done()
-	}))
-	defer server.Close()
+	}, WithMinRequestTimeout(30*time.Second), WithRetry(0, 0, 0))
 
 	// Parent has a short deadline (triggers minRequestTimeout) but is NOT
 	// yet expired — so AfterFunc can propagate the explicit cancel.
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	c := NewClient(server.URL, "test-key",
-		WithMinRequestTimeout(30*time.Second),
-		WithRetry(0, 0, 0))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
 
 	done := make(chan error, 1)
@@ -352,21 +315,17 @@ func TestDoStream_MinRequestTimeout_ParentCancelPropagates(t *testing.T) {
 func TestDoStream_ExpiredContext_NoRetry(t *testing.T) {
 	// When the parent context is expired, retries should be skipped.
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Disable minRequestTimeout so the expired context is not rescued.
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusServiceUnavailable)
 		fmt.Fprint(w, "unavailable")
-	}))
-	defer server.Close()
+	}, WithMinRequestTimeout(0), WithRetry(3, 500*time.Millisecond, 1*time.Second))
 
 	// Use a context that expires after the first request completes.
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	c := NewClient(server.URL, "test-key",
-		// Disable minRequestTimeout so the expired context is not rescued.
-		WithMinRequestTimeout(0),
-		WithRetry(3, 500*time.Millisecond, 1*time.Second))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
 	_, err := c.DoStream(ctx, req)
 	if err == nil {
@@ -380,7 +339,7 @@ func TestDoStream_ExpiredContext_NoRetry(t *testing.T) {
 
 func TestDoStream_429OtherCode_Retries(t *testing.T) {
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls <= 2 {
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -389,11 +348,7 @@ func TestDoStream_429OtherCode_Retries(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
-	}))
-	defer server.Close()
-
-	c := NewClient(server.URL, "test-key",
-		WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
+	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
 	if err != nil {
