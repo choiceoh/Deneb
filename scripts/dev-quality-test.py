@@ -3,15 +3,16 @@
 Deneb Gateway Quality Test Runner — 165 consolidated test cases.
 
 Loads test definitions from quality-tests.yaml and executes them
-against the dev gateway via WebSocket.
+against the dev gateway via Telegram (Telethon).
 
 Usage:
-    python3 scripts/dev-quality-test.py [--port 18790] [--scenario all]
+    python3 scripts/dev-quality-test.py [--scenario all]
     python3 scripts/dev-quality-test.py --scenario daily       # daily chat
     python3 scripts/dev-quality-test.py --scenario system      # system mgmt
     python3 scripts/dev-quality-test.py --scenario core        # core quick tests
     python3 scripts/dev-quality-test.py --custom "메시지"       # custom message
     python3 scripts/dev-quality-test.py --list                 # list all tests
+    python3 scripts/dev-quality-test.py --bot nebdev2bot       # specify bot
 """
 
 import json
@@ -29,11 +30,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-try:
-    import websockets
-except ImportError:
-    print("ERROR: pip install websockets")
-    sys.exit(1)
+# Add scripts dir to path for shared module.
+sys.path.insert(0, str(Path(__file__).parent))
+from telegram_test_client import TelegramTestClient, ChatCapture, check_prerequisites
 
 try:
     import yaml
@@ -44,7 +43,7 @@ except ImportError:
 # --- Configuration ---
 
 HOST = "127.0.0.1"
-PORT = 18790
+PORT = 18790  # Used only for HTTP health checks.
 TIMEOUT_CONNECT = 5
 TIMEOUT_RPC = 10
 TIMEOUT_CHAT = 120
@@ -106,39 +105,7 @@ class QualityResult:
         return f"[{status}] {self.name} ({passed}/{total} checks, score={self.score:.0%}, {self.latency_ms:.0f}ms)"
 
 
-@dataclass
-class ChatCapture:
-    """Captures everything from a chat interaction."""
-    events: list = field(default_factory=list)
-    deltas: list = field(default_factory=list)
-    tool_starts: list = field(default_factory=list)
-    tool_results: list = field(default_factory=list)
-    heartbeats: list = field(default_factory=list)
-    status_changes: list = field(default_factory=list)
-    final_response: dict = field(default_factory=dict)
-    errors: list = field(default_factory=list)
-    reply_text: str = ""
-    start_time: float = 0
-    end_time: float = 0
-    all_text: str = ""
-    token_usage_data: dict = field(default_factory=dict)
-
-    @property
-    def latency_ms(self) -> float:
-        return (self.end_time - self.start_time) * 1000
-
-    @property
-    def first_token_ms(self) -> float:
-        if self.deltas:
-            return (self.deltas[0]["ts"] - self.start_time) * 1000
-        return 0
-
-    @property
-    def token_usage(self) -> dict:
-        if self.token_usage_data:
-            return self.token_usage_data
-        payload = self.final_response.get("payload", {})
-        return payload.get("usage", {})
+# ChatCapture is imported from telegram_test_client.
 
 
 # --- Result Store (SQLite) ---
@@ -309,15 +276,16 @@ class ResultStore:
 
 # --- Helpers ---
 
-async def detect_model(client) -> str:
-    """Get current model from gateway health RPC."""
+async def detect_model(host: str, port: int) -> str:
+    """Get current model from gateway HTTP health endpoint."""
+    import urllib.request
     try:
-        resp = await client.rpc("health")
-        if resp.get("ok"):
-            return resp.get("payload", {}).get("model", "")
+        url = f"http://{host}:{port}/health"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read())
+        return data.get("model", "")
     except Exception:
-        pass
-    return ""
+        return ""
 
 
 def git_info() -> tuple[str, str]:
@@ -441,176 +409,51 @@ def print_trend(store: ResultStore, test_name: str, limit: int = 20):
     print()
 
 
-# --- WebSocket Client ---
+# --- Telegram Client Wrapper ---
+# Uses the shared TelegramTestClient for sending messages via real Telegram.
+# GatewayClient is an alias so all existing runner code works unchanged.
 
 class GatewayClient:
-    def __init__(self, host: str, port: int):
+    """Telegram-based test client (replaces former WebSocket client).
+
+    Wraps TelegramTestClient to match the interface expected by the
+    test runner: connect(), create_session(), chat(), rpc(), close().
+    """
+
+    def __init__(self, host: str = HOST, port: int = PORT, bot: str = ""):
         self.host = host
         self.port = port
-        self.uri = f"ws://{host}:{port}/ws"
-        self.ws = None
-        self.seq = 0
+        self._tg = TelegramTestClient(bot_username=bot)
+        self._connected = False
 
-    async def connect(self):
-        self.ws = await websockets.connect(
-            self.uri, max_size=10 * 1024 * 1024,
-            ping_interval=None,
-        )
-        await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_CONNECT)
-        connect = {
-            "type": "req", "id": "quality-hs", "method": "connect",
-            "params": {
-                "minProtocol": 1, "maxProtocol": 5,
-                "client": {"id": "quality-test", "version": "1.0.0",
-                           "platform": "test", "mode": "control"},
-            },
-        }
-        await self.ws.send(json.dumps(connect))
-        hello = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_CONNECT))
-        if not hello.get("ok"):
-            raise RuntimeError(f"Handshake failed: {json.dumps(hello)}")
-        return hello.get("payload", {}).get("server", {}).get("version", "?")
-
-    async def rpc(self, method: str, params: dict = None, timeout: float = TIMEOUT_RPC) -> dict:
-        self.seq += 1
-        rpc_id = f"quality-{self.seq}-{int(time.time() * 1000)}"
-        msg = {"type": "req", "id": rpc_id, "method": method, "params": params or {}}
-        await self.ws.send(json.dumps(msg))
-        deadline = asyncio.get_event_loop().time() + timeout
-        while True:
-            remaining = deadline - asyncio.get_event_loop().time()
-            if remaining <= 0:
-                raise asyncio.TimeoutError(f"rpc {method} timed out waiting for id={rpc_id}")
-            raw = await asyncio.wait_for(self.ws.recv(), timeout=remaining)
-            resp = json.loads(raw)
-            # Skip event frames and responses for other request IDs.
-            if resp.get("type") == "evt":
-                continue
-            if resp.get("id") == rpc_id:
-                return resp
-            # Non-matching response — skip (stale from previous session).
+    async def connect(self) -> str:
+        bot_name = await self._tg.connect()
+        self._connected = True
+        return bot_name
 
     async def create_session(self, key: str = "") -> str:
-        if not key:
-            key = f"quality-test-{int(time.time() * 1000)}"
-        resp = await self.rpc("sessions.create", {"key": key, "kind": "direct"})
-        if not resp.get("ok"):
-            raise RuntimeError(f"sessions.create failed: {json.dumps(resp.get('error', {}))}")
-        return key
+        return await self._tg.create_session(key)
 
     async def chat(self, message: str, session_key: str = "",
                    timeout: float = TIMEOUT_CHAT) -> ChatCapture:
-        self.seq += 1
-        rpc_id = f"quality-chat-{self.seq}-{int(time.time() * 1000)}"
-        client_run_id = f"qrun-{self.seq}-{int(time.time() * 1000)}"
+        # session_key is ignored in Telegram mode (bot manages sessions).
+        return await self._tg.chat(message, timeout=timeout)
 
-        if not session_key:
-            session_key = await self.create_session()
-
-        msg = {
-            "type": "req", "id": rpc_id, "method": "chat.send",
-            "params": {
-                "sessionKey": session_key,
-                "message": message,
-                "clientRunId": client_run_id,
-            },
-        }
-
-        capture = ChatCapture(start_time=time.time())
-        await self.ws.send(json.dumps(msg))
-
-        # Read the immediate RPC response, skipping stale events.
-        deadline = asyncio.get_event_loop().time() + TIMEOUT_RPC
-        initial = None
-        while True:
-            remaining = deadline - asyncio.get_event_loop().time()
-            if remaining <= 0:
-                raise asyncio.TimeoutError("chat.send timed out waiting for RPC response")
-            raw = await asyncio.wait_for(self.ws.recv(), timeout=remaining)
-            frame = json.loads(raw)
-            if frame.get("id") == rpc_id:
-                initial = frame
-                break
-            # Skip event frames and non-matching responses.
-
-        capture.events.append(initial)
-        if not initial.get("ok"):
-            capture.final_response = initial
-            capture.end_time = time.time()
-            return capture
-
-        # Listen for streamed events, filtering by clientRunId.
-        done_states = {"done", "error", "aborted"}
-        while True:
+    async def rpc(self, method: str, params: dict = None, timeout: float = TIMEOUT_RPC) -> dict:
+        if method == "health":
+            import urllib.request
             try:
-                raw = await asyncio.wait_for(self.ws.recv(), timeout=timeout)
-            except asyncio.TimeoutError:
-                capture.end_time = time.time()
-                capture.errors = [f"Timeout after {timeout}s"]
-                break
-
-            frame = json.loads(raw)
-            frame["_recv_ts"] = time.time()
-
-            # Filter: only process events for our run (skip autonomous continuations).
-            payload = frame.get("payload", {})
-            frame_run_id = payload.get("clientRunId", "")
-            if frame_run_id and frame_run_id != client_run_id:
-                continue
-
-            capture.events.append(frame)
-
-            evt = frame.get("event", "")
-            state = payload.get("state", "")
-
-            if evt:
-                if evt == "chat.delta":
-                    delta = payload.get("delta", "")
-                    if delta:
-                        capture.deltas.append({"text": delta, "ts": time.time()})
-                        capture.all_text += delta
-                elif evt == "chat":
-                    if state in done_states:
-                        capture.final_response = frame
-                        capture.end_time = time.time()
-                        if state == "done":
-                            done_text = payload.get("text")
-                            if done_text is not None:
-                                capture.reply_text = done_text
-                            else:
-                                capture.reply_text = capture.all_text
-                            capture.token_usage_data = payload.get("usage", {})
-                        elif state in ("error", "aborted"):
-                            capture.errors.append(payload.get("error", f"state={state}"))
-                        break
-                elif evt == "chat.tool":
-                    if state == "started":
-                        capture.tool_starts.append({
-                            "name": payload.get("tool", "?"), "ts": time.time(),
-                        })
-                    elif state == "completed":
-                        capture.tool_results.append({
-                            "name": payload.get("tool", "?"),
-                            "isError": payload.get("isError", False),
-                            "ts": time.time(),
-                        })
-                elif evt == "heartbeat":
-                    capture.heartbeats.append(payload)
-                elif evt == "sessions.changed":
-                    capture.status_changes.append(payload)
-
-        # Only fall back to accumulated deltas when the complete event was
-        # never received (e.g., timeout). When the server sends an explicit
-        # "done" event with text="" (e.g., suppressed NO_REPLY), respect that.
-        if not capture.reply_text and capture.all_text and not capture.final_response:
-            capture.reply_text = capture.all_text
-        if not capture.end_time:
-            capture.end_time = time.time()
-        return capture
+                url = f"http://{self.host}:{self.port}/health"
+                with urllib.request.urlopen(url, timeout=5) as resp:
+                    data = json.loads(resp.read())
+                return {"ok": True, "payload": data}
+            except Exception as e:
+                return {"ok": False, "error": {"message": str(e)}}
+        return {"ok": False, "error": {"message": f"RPC not supported in Telegram mode: {method}"}}
 
     async def close(self):
-        if self.ws:
-            await self.ws.close()
+        await self._tg.disconnect()
+        self._connected = False
 
 
 # --- Quality Checks ---
@@ -1441,16 +1284,23 @@ async def run(args):
         print(f"Available categories: {sorted(set(t.get('cat') for t in all_tests))}")
         return 1
 
-    # Connectivity check.
-    probe = GatewayClient(HOST, args.port)
+    # Prerequisite check.
+    ok, detail = check_prerequisites()
+    if not ok:
+        print(f"Telegram prerequisites not met: {detail}")
+        return 1
+
+    # Connectivity check via Telegram.
+    bot_name = args.bot or ""
+    probe = GatewayClient(HOST, args.port, bot=bot_name)
     try:
         version = await probe.connect()
         count = len(tests) if not args.custom else 1
         conc = args.concurrency
         conc_label = f", concurrency={conc}" if conc > 1 else ""
-        print(f"Connected to gateway v{version} on port {args.port} — running {count} tests{conc_label}")
+        print(f"Connected to {version} — running {count} tests via Telegram{conc_label}")
     except Exception as e:
-        print(f"Failed to connect to {HOST}:{args.port}: {e}")
+        print(f"Failed to connect to Telegram: {e}")
         print("Is the dev gateway running? Try: scripts/dev-live-test.sh start")
         return 1
     finally:
@@ -1461,75 +1311,40 @@ async def run(args):
     model = ""
 
     try:
-        # Detect model before running tests (while client is connected).
+        # Detect model from HTTP health (not Telegram).
         if args.record:
-            model = args.model or await detect_model(client)
+            model = args.model or await detect_model(HOST, args.port)
 
         if args.custom:
-            client = GatewayClient(HOST, args.port)
+            client = GatewayClient(HOST, args.port, bot=bot_name)
             await client.connect()
             try:
                 r = await run_custom(client, args.custom)
                 results.append(r)
             finally:
                 await client.close()
-        elif args.concurrency <= 1:
-            # Sequential mode: one connection per test for multi-turn stability.
-            for i, tdef in enumerate(tests, 1):
-                name = tdef["name"]
-                total = len(tests)
-                print(f"[{i}/{total}] {name}...")
-                client = GatewayClient(HOST, args.port)
-                await client.connect()
-                try:
-                    r = await run_test(client, tdef, profiles, cat_defaults)
-                    results.append(r)
-                    status = "PASS" if r.passed else "FAIL"
-                    print(f"  {status} ({r.latency_ms:.0f}ms)")
-                except Exception as e:
-                    r = QualityResult(name=name)
-                    r.add_check("execution", False, str(e))
-                    results.append(r)
-                    print(f"  ERROR: {e}")
-                finally:
-                    await client.close()
         else:
-            # Concurrent mode: semaphore(N) + pipelining.
-            # Scoring/printing happens outside the semaphore so the slot
-            # is freed as soon as the LLM response is received.
-            sem = asyncio.Semaphore(args.concurrency)
-            total = len(tests)
-            done_count = 0
-            print_lock = asyncio.Lock()
-
-            async def _run_one(idx: int, tdef: dict) -> QualityResult:
-                nonlocal done_count
-                name = tdef["name"]
-                c = GatewayClient(HOST, args.port)
-                async with sem:
-                    await c.connect()
+            # Sequential mode: one shared Telegram connection, reset per test.
+            # Telegram clients are expensive (Telethon session) so reuse one.
+            client = GatewayClient(HOST, args.port, bot=bot_name)
+            await client.connect()
+            try:
+                for i, tdef in enumerate(tests, 1):
+                    name = tdef["name"]
+                    total = len(tests)
+                    print(f"[{i}/{total}] {name}...")
                     try:
-                        r = await run_test(c, tdef, profiles, cat_defaults)
+                        r = await run_test(client, tdef, profiles, cat_defaults)
+                        results.append(r)
+                        status = "PASS" if r.passed else "FAIL"
+                        print(f"  {status} ({r.latency_ms:.0f}ms)")
                     except Exception as e:
                         r = QualityResult(name=name)
                         r.add_check("execution", False, str(e))
-                # Close + print outside sem — frees slot immediately after LLM response.
-                await c.close()
-                async with print_lock:
-                    done_count += 1
-                    status = "PASS" if r.passed else ("FAIL" if r.checks else "ERROR")
-                    print(f"[{done_count}/{total}] {name}... {status} ({r.latency_ms:.0f}ms)")
-                return r
-
-            tasks = [asyncio.create_task(_run_one(i, t)) for i, t in enumerate(tests)]
-            done_results = await asyncio.gather(*tasks, return_exceptions=True)
-            for r in done_results:
-                if isinstance(r, BaseException):
-                    rr = QualityResult(name="unknown")
-                    rr.add_check("execution", False, str(r))
-                    results.append(rr)
-                else:
-                    results.append(r)
+                        results.append(r)
+                        print(f"  ERROR: {e}")
+            finally:
+                await client.close()
 
     except KeyboardInterrupt:
         print("\nInterrupted — showing partial results")
@@ -1577,9 +1392,11 @@ def main():
         "chat", "tools", "tools-deep",
     ]
 
-    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (165 cases)")
+    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (165 cases, Telegram)")
     parser.add_argument("--port", type=int, default=PORT,
-                        help=f"Gateway port (default: {PORT})")
+                        help=f"Gateway HTTP port for health checks (default: {PORT})")
+    parser.add_argument("--bot", type=str, default="",
+                        help="Bot username (default: DENEB_DEV_BOT_USERNAME)")
     parser.add_argument("--scenario", default="all", choices=all_scenarios,
                         help="Test scenario/category to run")
     parser.add_argument("--custom", type=str,
@@ -1588,8 +1405,8 @@ def main():
                         help="List all available tests")
     parser.add_argument("--json", action="store_true",
                         help="Output JSON report")
-    parser.add_argument("--concurrency", type=int, default=2,
-                        help="Max concurrent test runners (default: 2)")
+    parser.add_argument("--concurrency", type=int, default=1,
+                        help="Ignored (Telegram tests run sequentially)")
     parser.add_argument("--report", action="store_true",
                         help="Run full quality report (same as --scenario all)")
     # Recording & history.

@@ -12,9 +12,9 @@ globs: ["gateway-go/**/*.go"]
 
 | Command | What |
 |---|---|
-| `scripts/dev-iterate.sh` | 빌드→서버→smoke 3체크→결과 (~2초) |
+| `scripts/dev-iterate.sh` | 빌드→서버→smoke 2체크→결과 (~2초) |
 | `scripts/dev-iterate.sh --metric CMD` | 커스텀 metric |
-| `scripts/dev-quality-metric.sh [PORT] [MSG]` | 채팅 품질 점수 0-100 (15~60초) |
+| `scripts/dev-quality-metric.sh [MSG]` | 텔레그램 채팅 품질 점수 0-100 (15~60초) |
 
 ### 오토리서치 (자율 최적화 루프)
 
@@ -35,7 +35,7 @@ globs: ["gateway-go/**/*.go"]
 |---|---|---|
 | 시스템 프롬프트/채팅 파이프라인 | `quality` (0~100) | 한국어 응답 품질 직접 측정 |
 | 전반적 품질 | `combined` | smoke(20%) + quality(80%) |
-| 인프라/시작 성능 | `smoke` (0~3) | 빠른 빌드+시작 확인 |
+| 인프라/시작 성능 | `smoke` (0~2) | 빠른 빌드+시작 확인 |
 | 특정 메시지 응답 | `custom "메시지"` | 해당 메시지 품질 직접 측정 |
 
 ### 오토리서치 사용 절차
@@ -155,7 +155,7 @@ scripts/dev-iterate.sh
 
 | # | 상수 | 값 | metric | keep | latency | 가설 |
 |---|------|-----|--------|------|---------|------|
-| 0 | baseline | - | 3 | - | 1773ms | baseline |
+| 0 | baseline | - | 2 | - | 1773ms | baseline |
 | 1 | ... | ... | ... | ✓/✗ | ... | ... |
 
 ### 4. 최종

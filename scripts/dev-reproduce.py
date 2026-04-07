@@ -2,7 +2,7 @@
 """
 Deneb Gateway Live Reproduction Tool.
 
-AI agents use this to reproduce user-reported symptoms live.
+AI agents use this to reproduce user-reported symptoms live via Telegram.
 Supports single/multi-turn chat with assertions, tool verification,
 and symptom-based diagnosis.
 
@@ -29,13 +29,12 @@ import time
 import argparse
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
-try:
-    import websockets
-except ImportError:
-    print("ERROR: pip install websockets")
-    sys.exit(1)
+# Add scripts dir to path for shared module.
+sys.path.insert(0, str(Path(__file__).parent))
+from telegram_test_client import TelegramTestClient, ChatCapture, check_prerequisites
 
 # --- Configuration ---
 
@@ -48,37 +47,7 @@ TIMEOUT_CHAT = 120
 
 # --- Data Structures ---
 
-@dataclass
-class ChatCapture:
-    """Captures everything from a chat interaction."""
-    events: list = field(default_factory=list)
-    deltas: list = field(default_factory=list)
-    tool_starts: list = field(default_factory=list)
-    tool_results: list = field(default_factory=list)
-    status_changes: list = field(default_factory=list)
-    final_response: dict = field(default_factory=dict)
-    errors: list = field(default_factory=list)
-    reply_text: str = ""
-    all_text: str = ""
-    start_time: float = 0
-    end_time: float = 0
-    token_usage_data: dict = field(default_factory=dict)
-
-    @property
-    def latency_ms(self) -> float:
-        return (self.end_time - self.start_time) * 1000
-
-    @property
-    def first_token_ms(self) -> float:
-        if self.deltas:
-            return (self.deltas[0]["ts"] - self.start_time) * 1000
-        return 0
-
-    @property
-    def token_usage(self) -> dict:
-        if self.token_usage_data:
-            return self.token_usage_data
-        return self.final_response.get("payload", {}).get("usage", {})
+# ChatCapture is imported from telegram_test_client.
 
 
 @dataclass
@@ -110,157 +79,34 @@ class TurnResult:
         return [c for c in self.checks if not c.passed]
 
 
-# --- WebSocket Client ---
+# --- Telegram Client Wrapper ---
 
 class GatewayClient:
-    def __init__(self, host: str, port: int):
+    """Telegram-based test client (replaces former WebSocket client)."""
+
+    def __init__(self, host: str, port: int, bot: str = ""):
         self.host = host
         self.port = port
-        self.uri = f"ws://{host}:{port}/ws"
-        self.ws = None
-        self.seq = 0
+        self._tg = TelegramTestClient(bot_username=bot)
         self.session_key = ""
 
-    async def connect(self):
-        self.ws = await websockets.connect(self.uri, max_size=10 * 1024 * 1024, ping_interval=None)
-        await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_CONNECT)
-        connect = {
-            "type": "req", "id": "repro-hs", "method": "connect",
-            "params": {
-                "minProtocol": 1, "maxProtocol": 5,
-                "client": {"id": "dev-reproduce", "version": "1.0.0", "platform": "test", "mode": "control"},
-            },
-        }
-        await self.ws.send(json.dumps(connect))
-        hello = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_CONNECT))
-        if not hello.get("ok"):
-            raise RuntimeError(f"Handshake failed: {json.dumps(hello)}")
-        return hello.get("payload", {}).get("server", {}).get("version", "?")
+    async def connect(self) -> str:
+        return await self._tg.connect()
 
     async def create_session(self, key: str = "") -> str:
-        if not key:
-            key = f"repro-{int(time.time() * 1000)}"
-        self.seq += 1
-        msg = {"type": "req", "id": f"repro-sess-{self.seq}-{int(time.time() * 1000)}", "method": "sessions.create",
-               "params": {"key": key, "kind": "direct"}}
-        await self.ws.send(json.dumps(msg))
-        resp = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_RPC))
-        if not resp.get("ok"):
-            raise RuntimeError(f"sessions.create failed: {json.dumps(resp.get('error', {}))}")
-        self.session_key = key
-        return key
+        self.session_key = await self._tg.create_session(key)
+        return self.session_key
 
-    async def chat(self, message: str, session_key: str = "", timeout: float = TIMEOUT_CHAT) -> ChatCapture:
-        self.seq += 1
-        rpc_id = f"repro-chat-{self.seq}-{int(time.time() * 1000)}"
-        client_run_id = f"repro-run-{self.seq}-{int(time.time() * 1000)}"
+    async def chat(self, message: str, session_key: str = "",
+                   timeout: float = TIMEOUT_CHAT) -> ChatCapture:
+        return await self._tg.chat(message, timeout=timeout)
 
-        if not session_key:
-            if not self.session_key:
-                await self.create_session()
-            session_key = self.session_key
-
-        msg = {
-            "type": "req", "id": rpc_id, "method": "chat.send",
-            "params": {
-                "sessionKey": session_key,
-                "message": message,
-                "clientRunId": client_run_id,
-            },
-        }
-
-        capture = ChatCapture(start_time=time.time())
-        await self.ws.send(json.dumps(msg))
-
-        # Read immediate RPC response, skipping stale events from prior turns.
-        while True:
-            initial = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=TIMEOUT_RPC))
-            capture.events.append(initial)
-            # Skip events (they lack "id") — wait for our RPC response.
-            if initial.get("id") == rpc_id or initial.get("type") != "event":
-                break
-        if not initial.get("ok"):
-            capture.final_response = initial
-            capture.end_time = time.time()
-            return capture
-
-        # Stream events until done/error/aborted.
-        done_states = {"done", "error", "aborted"}
-        while True:
-            try:
-                raw = await asyncio.wait_for(self.ws.recv(), timeout=timeout)
-            except asyncio.TimeoutError:
-                capture.end_time = time.time()
-                capture.errors.append(f"Timeout after {timeout}s")
-                break
-
-            frame = json.loads(raw)
-            frame["_recv_ts"] = time.time()
-            capture.events.append(frame)
-
-            evt = frame.get("event", "")
-            payload = frame.get("payload", {})
-            state = payload.get("state", "")
-
-            if evt == "chat.delta":
-                delta = payload.get("delta", "")
-                if delta:
-                    capture.deltas.append({"text": delta, "ts": time.time()})
-                    capture.all_text += delta
-
-            elif evt == "chat":
-                if state in done_states:
-                    capture.final_response = frame
-                    capture.end_time = time.time()
-                    if state == "done":
-                        done_text = payload.get("text")
-                        if done_text is not None:
-                            capture.reply_text = done_text
-                        else:
-                            capture.reply_text = capture.all_text
-                        capture.token_usage_data = payload.get("usage", {})
-                    elif state in ("error", "aborted"):
-                        capture.errors.append(payload.get("error", f"state={state}"))
-                    break
-
-            elif evt == "chat.tool":
-                if state == "started":
-                    capture.tool_starts.append({
-                        "name": payload.get("tool", "?"),
-                        "args": payload.get("args", {}),
-                        "ts": time.time(),
-                    })
-                elif state == "completed":
-                    capture.tool_results.append({
-                        "name": payload.get("tool", "?"),
-                        "isError": payload.get("isError", False),
-                        "result": payload.get("result", ""),
-                        "ts": time.time(),
-                    })
-
-            elif evt == "sessions.changed":
-                capture.status_changes.append(payload)
-
-        # Only fall back to accumulated deltas when the complete event was
-        # never received (e.g., timeout). When the server sends an explicit
-        # "done" event with text="" (e.g., suppressed NO_REPLY), respect that.
-        if not capture.reply_text and capture.all_text and not capture.final_response:
-            capture.reply_text = capture.all_text
-        if not capture.end_time:
-            capture.end_time = time.time()
-
-        return capture
-
-    async def rpc(self, method: str, params: dict = None, timeout: float = TIMEOUT_RPC) -> dict:
-        self.seq += 1
-        rpc_id = f"repro-rpc-{self.seq}-{int(time.time() * 1000)}"
-        msg = {"type": "req", "id": rpc_id, "method": method, "params": params or {}}
-        await self.ws.send(json.dumps(msg))
-        return json.loads(await asyncio.wait_for(self.ws.recv(), timeout=timeout))
+    async def rpc(self, method: str, params: dict = None,
+                  timeout: float = TIMEOUT_RPC) -> dict:
+        return await self._tg.rpc(method, params, timeout)
 
     async def close(self):
-        if self.ws:
-            await self.ws.close()
+        await self._tg.disconnect()
 
 
 # --- Assertion Checks ---
@@ -430,10 +276,15 @@ def check_expect_error(capture: ChatCapture) -> CheckResult:
 
 async def cmd_chat_check(args):
     """Send a chat message with configurable assertions."""
-    client = GatewayClient(HOST, args.port)
+    ok, detail = check_prerequisites()
+    if not ok:
+        print(f"Telegram prerequisites not met: {detail}")
+        return 1
+
+    client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
-        version = await client.connect()
-        print(f"Connected to gateway v{version}")
+        bot_name = await client.connect()
+        print(f"Connected to {bot_name} via Telegram")
 
         if args.session:
             await client.create_session(args.session)
@@ -479,10 +330,15 @@ async def cmd_chat_check(args):
 
 async def cmd_multi_chat(args):
     """Multi-turn chat on the same session. Tests context carryover."""
-    client = GatewayClient(HOST, args.port)
+    ok, detail = check_prerequisites()
+    if not ok:
+        print(f"Telegram prerequisites not met: {detail}")
+        return 1
+
+    client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
-        version = await client.connect()
-        print(f"Connected to gateway v{version}")
+        bot_name = await client.connect()
+        print(f"Connected to {bot_name} via Telegram")
 
         session_key = await client.create_session()
         print(f"Session: {session_key}")
@@ -535,10 +391,15 @@ async def cmd_multi_chat(args):
 
 async def cmd_tool_check(args):
     """Send a message designed to trigger a specific tool, verify it completes."""
-    client = GatewayClient(HOST, args.port)
+    ok, detail = check_prerequisites()
+    if not ok:
+        print(f"Telegram prerequisites not met: {detail}")
+        return 1
+
+    client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
-        version = await client.connect()
-        print(f"Connected to gateway v{version}")
+        bot_name = await client.connect()
+        print(f"Connected to {bot_name} via Telegram")
 
         capture = await client.chat(args.message, timeout=args.timeout)
 
@@ -612,8 +473,11 @@ def print_turn_result(result: TurnResult) -> int:
 # --- Main ---
 
 def main():
-    parser = argparse.ArgumentParser(description="Deneb Live Reproduction Tool")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser = argparse.ArgumentParser(description="Deneb Live Reproduction Tool (Telegram)")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+                        help="Gateway HTTP port for health checks")
+    parser.add_argument("--bot", type=str, default="",
+                        help="Bot username (default: DENEB_DEV_BOT_USERNAME)")
     parser.add_argument("--timeout", type=float, default=TIMEOUT_CHAT)
     sub = parser.add_subparsers(dest="command")
 

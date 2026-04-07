@@ -122,8 +122,8 @@
 **필수 흐름** (코드 수정 완료 후):
 ```bash
 scripts/dev-live-test.sh restart    # 빌드 + dev 게이트웨이 재시작
-scripts/dev-live-test.sh smoke      # Health + Ready + WebSocket 작동 확인
-scripts/dev-live-test.sh quality    # 전체 품질 테스트 (한국어/도구/포맷/에지)
+scripts/dev-live-test.sh smoke      # Health + Ready 확인
+scripts/dev-live-test.sh quality    # 전체 품질 테스트 (텔레그램 경유, 한국어/도구/포맷/에지)
 scripts/dev-live-test.sh logs-errors  # 숨은 에러 확인
 scripts/dev-live-test.sh stop       # 정리
 ```
