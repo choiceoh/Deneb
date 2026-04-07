@@ -443,29 +443,6 @@ func TestSessionsResolve_KeyBypassesKindFilter(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// sessions.compact — without bridge returns not-compacted
-// ---------------------------------------------------------------------------
-
-func TestSessionsCompact_NoBridge(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	payload, resp := dispatchJSON(t, d, "sessions.compact", map[string]any{"key": "some-session"})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
-	}
-	if payload["compacted"] != false {
-		t.Errorf("expected compacted=false without bridge, got %v", payload["compacted"])
-	}
-}
-
-func TestSessionsCompact_MissingKey(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	_, resp := dispatchJSON(t, d, "sessions.compact", map[string]any{})
-	if resp.OK {
-		t.Fatal("expected error for missing key")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // session.PatchFields unit tests
 // ---------------------------------------------------------------------------
 
@@ -592,7 +569,7 @@ func TestSessionMethodsRegistered(t *testing.T) {
 	}
 	expected := []string{
 		"sessions.patch", "sessions.reset", "sessions.preview",
-		"sessions.resolve", "sessions.compact",
+		"sessions.resolve",
 	}
 	for _, e := range expected {
 		if !set[e] {

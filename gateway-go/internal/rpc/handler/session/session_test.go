@@ -19,8 +19,6 @@ func TestMethods_returnsHandlers(t *testing.T) {
 		"sessions.reset",
 		"sessions.preview",
 		"sessions.resolve",
-		"sessions.compact",
-		"sessions.repair",
 		"sessions.overflow_check",
 	} {
 		if _, ok := m[name]; !ok {

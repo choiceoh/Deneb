@@ -72,7 +72,6 @@ var tsBaseMethods = []string{
 	"sessions.patch",
 	"sessions.reset",
 	"sessions.delete",
-	"sessions.compact",
 	"last-heartbeat",
 	"set-heartbeats",
 	"wake",

@@ -311,22 +311,6 @@ func validateSessionsDeleteParams(value any, path string, errors *[]ValidationEr
 	})
 }
 
-// --- sessions.compact ---
-
-func validateSessionsCompactParams(value any, path string, errors *[]ValidationError) {
-	if !RequireObject(value, path, errors) {
-		return
-	}
-	obj := value.(map[string]any)
-	CheckNoAdditionalProperties(obj, []string{"key", "maxLines"}, path, errors)
-	if CheckRequired(obj, "key", path, errors) {
-		CheckNonEmptyString(obj["key"], path+"/key", errors)
-	}
-	CheckOptional(obj, "maxLines", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckInteger(v, p, intPtr(1), nil, e)
-	})
-}
-
 // --- sessions.usage ---
 
 var (
