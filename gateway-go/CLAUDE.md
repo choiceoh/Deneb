@@ -35,7 +35,7 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 4. Follow existing patterns for request/response types
 
 ### Adding a New Agent Tool
-1. Add schema to `internal/pipeline/chat/toolreg/tool_schemas.yaml`, run `make tool-schemas`
+1. Add schema to `internal/pipeline/chat/toolreg/tool_schemas.json`, run `make tool-schemas`
 2. Implement handler in `internal/pipeline/chat/tools/<name>.go`
 3. Register in `internal/pipeline/chat/toolreg/core.go` (appropriate Register*Tools function)
 
@@ -45,7 +45,7 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 
 | File | Source | Command |
 |------|--------|---------|
-| `internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `internal/pipeline/chat/toolreg/tool_schemas.yaml` | `make tool-schemas` |
+| `internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `internal/pipeline/chat/toolreg/tool_schemas.json` | `make tool-schemas` |
 | `internal/pipeline/autoreply/thinking/model_caps_gen.go` | `internal/pipeline/autoreply/thinking/model_caps.yaml` | `make model-caps` |
 | `internal/pipeline/chat/tool_classification_gen.go` | `internal/pipeline/chat/tool_classification.yaml` | `make data-gen` |
 

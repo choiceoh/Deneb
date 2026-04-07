@@ -119,7 +119,7 @@ generate: tool-schemas model-caps data-gen
 # Verify generated sources are up to date.
 # Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@echo "==> [1/3] tool schemas (tool_schemas.yaml -> tool_schemas_gen.go)"
+	@echo "==> [1/3] tool schemas (tool_schemas.json -> tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
 	@echo "==> [2/3] model capabilities (model_caps.yaml -> model_caps_gen.go)"
 	@$(MAKE) model-caps-check
@@ -132,17 +132,17 @@ fmt:
 
 # --- Tool schema code generation ---
 
-# Regenerate gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go from tool_schemas.yaml.
+# Regenerate gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go from tool_schemas.json.
 tool-schemas:
 	cd gateway-go && go run cmd/tool-schema-gen/main.go \
-		-yaml internal/pipeline/chat/toolreg/tool_schemas.yaml \
+		-json internal/pipeline/chat/toolreg/tool_schemas.json \
 		-out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
 		-pkg  toolreg
 
-# Verify tool_schemas_gen.go is up to date (fails if yaml and Go are out of sync).
+# Verify tool_schemas_gen.go is up to date (fails if json and Go are out of sync).
 tool-schemas-check:
 	cd gateway-go && go run cmd/tool-schema-gen/main.go \
-		-yaml internal/pipeline/chat/toolreg/tool_schemas.yaml \
+		-json internal/pipeline/chat/toolreg/tool_schemas.json \
 		-out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
 		-pkg  toolreg
 	@git diff --exit-code -- gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go
