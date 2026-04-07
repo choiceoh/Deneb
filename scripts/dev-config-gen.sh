@@ -99,6 +99,12 @@ if changes:
         print(f'  - {c}')
 else:
     print('No fields modified (config is dev-safe as-is)')
+
+print('')
+print('Storage isolation (set by dev-live-test.sh / dev-iterate.sh):')
+print('  - DENEB_STATE_DIR → /tmp/deneb-dev-state (or /tmp/deneb-iterate-state)')
+print('  - DENEB_WIKI_DIR → isolated from ~/.deneb/wiki')
+print('  - DENEB_WIKI_DIARY_DIR → isolated from ~/.deneb/memory/diary')
 "
     ;;
 
