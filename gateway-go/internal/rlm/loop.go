@@ -26,9 +26,10 @@ type LoopConfig struct {
 	MaxConsecErrors  int
 	FallbackEnabled  bool
 
-	REPLEnv *repl.Env
-	Budget  *TokenBudget
-	Logger  *slog.Logger
+	REPLEnv    *repl.Env
+	Budget     *TokenBudget
+	Logger     *slog.Logger
+	TraceStore *TraceStore // optional; when set, a Trace is recorded and stored
 
 	// Callbacks for streaming integration with the chat pipeline.
 	OnTextDelta func(text string)
@@ -67,6 +68,7 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 	}
 
 	result := &LoopResult{}
+	loopStart := time.Now()
 
 	// Build the system prompt: base + loop-specific instructions.
 	rlmCfg := ConfigFromEnv()
@@ -79,6 +81,11 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 		compactThreshold = int(float64(rlmCfg.ModelContextLimit) * rlmCfg.CompactionThresholdPct)
 	}
 
+	// Trace: prepare trace if store is available.
+	tracing := cfg.TraceStore != nil
+	traceID := fmt.Sprintf("rlm-%d", loopStart.UnixMilli())
+	var traceSteps []IterationTrace
+
 	// Internal message history for the loop.
 	messages := []llm.Message{
 		llm.NewTextMessage("user", userPrompt),
@@ -86,12 +93,39 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 
 	var consecutiveErrors int
 
+	// finishTrace assembles and stores the trace from accumulated data.
+	finishTrace := func() {
+		if !tracing {
+			return
+		}
+		now := time.Now()
+		t := Trace{
+			ID:          traceID,
+			StartedAt:   loopStart,
+			FinishedAt:  now,
+			ElapsedMS:   now.Sub(loopStart).Milliseconds(),
+			UserPrompt:  truncate(userPrompt, 500),
+			Model:       cfg.Model,
+			StopReason:  result.StopReason,
+			Iterations:  result.Iterations,
+			TotalIn:     result.TotalTokensIn,
+			TotalOut:    result.TotalTokensOut,
+			Compactions: result.CompactionCount,
+			Errors:      result.ErrorCount,
+			FinalLen:    len(result.FinalAnswer),
+			Steps:       traceSteps,
+		}
+		cfg.TraceStore.Add(t)
+	}
+
 	for iter := 0; iter < cfg.MaxIter; iter++ {
+		iterStart := time.Now()
 		result.Iterations = iter + 1
 
 		// Check context cancellation.
 		if ctx.Err() != nil {
 			result.StopReason = "cancelled"
+			finishTrace()
 			return result, nil
 		}
 
@@ -106,6 +140,12 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 			cfg.OnIterStart(iter, cfg.MaxIter)
 		}
 
+		// Per-iteration trace data.
+		step := IterationTrace{
+			Iter:      iter,
+			StartedAt: iterStart,
+		}
+
 		// Compaction check: estimate token count and summarize if needed.
 		if compactThreshold > 0 && estimateTokens(messages) > compactThreshold {
 			compacted, err := compactHistory(ctx, cfg, system, messages)
@@ -114,6 +154,7 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 			} else {
 				messages = compacted
 				result.CompactionCount++
+				step.Compacted = true
 				cfg.Logger.Info("loop compaction completed",
 					"iter", iter, "messages_after", len(messages))
 			}
@@ -136,13 +177,14 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 			MaxTokens: cfg.MaxTokens,
 		}
 
-		start := time.Now()
+		llmStart := time.Now()
 		responseText, err := cfg.Client.Complete(ctx, req)
-		elapsed := time.Since(start)
+		llmElapsed := time.Since(llmStart)
 
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = "cancelled"
+				finishTrace()
 				return result, nil
 			}
 			return nil, fmt.Errorf("loop LLM call (iter %d): %w", iter, err)
@@ -157,9 +199,14 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 			cfg.Budget.TryReserve(estIn + estOut)
 		}
 
+		step.LLMElapsed = llmElapsed.Milliseconds()
+		step.ResponseLen = len(responseText)
+		step.TokensIn = estIn
+		step.TokensOut = estOut
+
 		cfg.Logger.Info("loop LLM response",
 			"iter", iter, "response_len", len(responseText),
-			"elapsed_ms", elapsed.Milliseconds())
+			"elapsed_ms", llmElapsed.Milliseconds())
 
 		// Callback: text delta (entire response since we use Complete).
 		if cfg.OnTextDelta != nil && responseText != "" {
@@ -170,26 +217,45 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 		if answer := extractTextFinal(responseText); answer != "" {
 			result.FinalAnswer = answer
 			result.StopReason = "final"
+			step.HasFinal = true
+			step.TotalElapsed = time.Since(iterStart).Milliseconds()
+			if tracing {
+				traceSteps = append(traceSteps, step)
+			}
 			if cfg.OnFinal != nil {
 				cfg.OnFinal(answer)
 			}
+			finishTrace()
 			return result, nil
 		}
 
 		// Extract and execute code blocks.
 		blocks := extractCodeBlocks(responseText)
+		step.CodeBlocks = len(blocks)
 
 		if len(blocks) == 0 {
 			// No code blocks — append the response as-is and continue.
+			step.TotalElapsed = time.Since(iterStart).Milliseconds()
+			if tracing {
+				traceSteps = append(traceSteps, step)
+			}
 			messages = append(messages,
 				llm.NewTextMessage("assistant", responseText),
 			)
 			continue
 		}
 
+		// Record code snippets for trace.
+		if tracing {
+			for _, block := range blocks {
+				step.CodeSnippets = append(step.CodeSnippets, truncate(block, 200))
+			}
+		}
+
 		// Execute each code block in the REPL.
 		var execOutputs []string
 		iterHadError := false
+		execStart := time.Now()
 
 		for _, block := range blocks {
 			cfg.REPLEnv.ResetFinal()
@@ -207,20 +273,43 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 				}
 				output.WriteString("Error: ")
 				output.WriteString(execResult.Error)
+
+				if tracing {
+					step.ExecErrors = append(step.ExecErrors, truncate(execResult.Error, 300))
+				}
 			}
 			execOutputs = append(execOutputs, output.String())
+
+			if tracing {
+				step.ExecOutputs = append(step.ExecOutputs, truncate(output.String(), 500))
+			}
 
 			// Check FINAL() from REPL execution.
 			if cfg.REPLEnv.HasFinal() {
 				result.FinalAnswer = cfg.REPLEnv.FinalAnswer()
 				result.StopReason = "final"
+				step.HasFinal = true
+				step.HasError = iterHadError
+				step.ExecElapsed = time.Since(execStart).Milliseconds()
+				step.TotalElapsed = time.Since(iterStart).Milliseconds()
+				if tracing {
+					traceSteps = append(traceSteps, step)
+				}
 				if cfg.OnFinal != nil {
 					cfg.OnFinal(result.FinalAnswer)
 				}
 				cfg.Logger.Info("loop FINAL detected",
 					"iter", iter, "answer_len", len(result.FinalAnswer))
+				finishTrace()
 				return result, nil
 			}
+		}
+
+		step.HasError = iterHadError
+		step.ExecElapsed = time.Since(execStart).Milliseconds()
+		step.TotalElapsed = time.Since(iterStart).Milliseconds()
+		if tracing {
+			traceSteps = append(traceSteps, step)
 		}
 
 		// Track consecutive errors.
@@ -260,6 +349,7 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 		}
 	}
 
+	finishTrace()
 	return result, nil
 }
 

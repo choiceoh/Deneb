@@ -26,6 +26,8 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"rlm.status":          rlmStatus(deps),
 		"rlm.config":          rlmConfig(deps),
+		"rlm.trace":           rlmTrace(deps),
+		"rlm.trace.list":      rlmTraceList(deps),
 		"rlm.projects.list":   rlmProjectsList(deps),
 		"rlm.projects.search": rlmProjectsSearch(deps),
 		"rlm.projects.write":  rlmProjectsWrite(deps),
@@ -43,6 +45,33 @@ func rlmStatus(deps Deps) rpcutil.HandlerFunc {
 func rlmConfig(deps Deps) rpcutil.HandlerFunc {
 	return rpcutil.BindHandler[struct{}](func(_ struct{}) (any, error) {
 		return deps.Service.Config(), nil
+	})
+}
+
+func rlmTrace(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id,omitempty"` // empty = latest
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		t := deps.Service.GetTrace(p.ID)
+		if t == nil {
+			return map[string]any{"ok": false, "error": "no trace found"}, nil
+		}
+		return map[string]any{"ok": true, "trace": t}, nil
+	})
+}
+
+func rlmTraceList(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		Limit int `json:"limit,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		limit := p.Limit
+		if limit <= 0 {
+			limit = 10
+		}
+		traces := deps.Service.ListTraces(limit)
+		return map[string]any{"ok": true, "traces": traces, "count": len(traces)}, nil
 	})
 }
 
