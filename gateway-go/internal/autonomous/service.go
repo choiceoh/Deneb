@@ -296,6 +296,12 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 				report.UserModelUpdated, report.MutualUpdated,
 				float64(report.DurationMs)/1000)
 		}
+		if len(report.VerifyFindings) > 0 {
+			msg += fmt.Sprintf("\n🔍 검증 발견 %d건:", len(report.VerifyFindings))
+			for _, f := range report.VerifyFindings {
+				msg += "\n  - " + truncateOutput(f, 80)
+			}
+		}
 		if len(report.PhaseErrors) > 0 {
 			msg += fmt.Sprintf("\n⚠️ 실패: %s", strings.Join(report.PhaseErrors, "; "))
 		}

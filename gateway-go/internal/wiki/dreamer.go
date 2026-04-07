@@ -123,6 +123,15 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		phaseErrors = append(phaseErrors, fmt.Sprintf("index-rebuild: %v", err))
 	}
 
+	// Phase 5: Verify existing pages (duplicate detection + misclassification).
+	findings := wd.verifyPages(ctx)
+	if len(findings) > 0 {
+		for _, f := range findings {
+			report.VerifyFindings = append(report.VerifyFindings, f.Detail)
+		}
+		wd.logger.Info("wiki-dream: verification findings", "count", len(findings))
+	}
+
 	// Update last-processed diary date in index.
 	idx := wd.store.GetIndex()
 	idx.LastProcessed = time.Now().Format("2006-01-02")
