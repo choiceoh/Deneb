@@ -138,24 +138,11 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 	}
 
 	// Step 4b: Check for duplicate hypothesis.
-	tracker := LoadHypothesisTracker(workdir)
-	changeHash := HashFileChanges(changes)
-	if dupIter, isDup := tracker.IsDuplicate(changeHash); isDup {
-		r.logger.Warn("duplicate hypothesis detected, skipping",
-			"iteration", iteration, "duplicate_of", dupIter)
-		r.dedupHint = fmt.Sprintf("Your proposal was identical to iteration #%d. Try something substantially different.", dupIter)
-		cfg.ConsecutiveFailures++
-		cfg.TotalIterations = iteration
-		if err := SaveConfig(workdir, cfg); err != nil {
-			return err
-		}
+	if skip, err := r.checkAndRecordDedup(workdir, HashFileChanges(changes), iteration, cfg); err != nil {
+		return err
+	} else if skip {
 		return nil
 	}
-	tracker.Record(changeHash, iteration)
-	if err := SaveHypothesisTracker(workdir, tracker); err != nil {
-		r.logger.Warn("failed to save dedup hashes", "error", err)
-	}
-	r.dedupHint = ""
 
 	// Step 5: Apply code changes.
 	for filename, content := range changes {
@@ -185,121 +172,31 @@ func (r *Runner) runOneIteration(ctx context.Context, workdir string) error {
 		}
 	}
 
-	// Step 7: Run experiment with time budget (check cache first).
-	var expResult *experimentResult
-	var runErr error
-	var duration int
-	cacheHit := false
-
-	if cfg.CacheEnabled && fileHash != "" {
-		cacheDir := cfg.ResolveCacheDir(workdir)
-		if metric, ok := loadCachedMetric(cacheDir, fileHash, cfg.MetricCmd); ok {
-			r.logger.Info("cache hit, skipping experiment", "hash", fileHash, "metric", metric)
-			expResult = &experimentResult{metric: metric, stdout: fmt.Sprintf("cached: %.6f", metric)}
-			cacheHit = true
-		}
-	}
-
-	if !cacheHit {
-		startTime := time.Now()
-		expResult, runErr = r.runExperiment(ctx, workdir, cfg, iteration)
-		duration = int(time.Since(startTime).Seconds())
-
-		// Cache the result on success.
-		if runErr == nil && cfg.CacheEnabled && fileHash != "" {
-			cacheDir := cfg.ResolveCacheDir(workdir)
-			if saveErr := saveCachedMetric(cacheDir, fileHash, cfg.MetricCmd, expResult.metric); saveErr != nil {
-				r.logger.Warn("failed to cache metric", "error", saveErr)
-			}
-		}
-	}
-
-	// Save experiment output for debugging/analysis.
-	if expResult != nil && !cacheHit {
-		if saveErr := SaveExperimentOutput(workdir, iteration, expResult.stdout, expResult.stderr); saveErr != nil {
-			r.logger.Error("failed to save experiment output", "error", saveErr)
-		}
-	}
+	// Step 7: Run experiment with cache.
+	exp := r.runExperimentWithCache(ctx, workdir, cfg, iteration, fileHash)
 
 	// Step 8: Evaluate and decide.
-	row := ResultRow{
-		Iteration:   iteration,
-		Timestamp:   time.Now(),
-		Hypothesis:  hypothesis,
-		DurationSec: duration,
-	}
-
-	// Track the running best for the results table.
-	currentBest := float64(0)
-	if cfg.BestMetric != nil {
-		currentBest = *cfg.BestMetric
-	}
-
-	if runErr != nil {
-		// Experiment crashed — revert.
-		r.logger.Warn("experiment crashed", "error", runErr, "iteration", iteration)
-		gitResetHard(ctx, workdir, cfg.KeptCommit)
-		row.MetricValue = 0
-		row.Kept = false
-		row.CommitHash = ""
-		row.BestSoFar = currentBest
-		row.DeltaFromBest = 0
-		cfg.ConsecutiveFailures++
-		r.notify(ctx, fmt.Sprintf("Iteration #%d CRASHED: %s\nHypothesis: %s", iteration, runErr, hypothesis))
-	} else {
-		metricValue := expResult.metric
-		row.MetricValue = metricValue
-		bestMetric := cfg.BestMetric
-		if bestMetric == nil {
-			// First successful iteration — always keep.
-			row.Kept = true
-			row.DeltaFromBest = 0
-		} else {
-			row.Kept = cfg.IsBetter(metricValue, *bestMetric)
-			row.DeltaFromBest = metricValue - *bestMetric
-		}
-
-		if row.Kept {
-			row.CommitHash = commitHash
-			row.BestSoFar = metricValue
-			cfg.BestMetric = &metricValue
-			cfg.BestCommit = commitHash
-			cfg.KeptCommit = commitHash
-			cfg.KeptIterations++
-			cfg.ConsecutiveFailures = 0
-
-			// Build improvement info for notification.
-			improvementInfo := ""
-			if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
-				improvement := (*cfg.BaselineMetric - metricValue) / *cfg.BaselineMetric * 100
-				if cfg.MetricDirection == "maximize" {
-					improvement = (metricValue - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
-				}
-				improvementInfo = fmt.Sprintf(" (%.2f%% from baseline)", improvement)
-			}
-			r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s",
-				iteration, cfg.MetricName, metricValue, improvementInfo, hypothesis))
-		} else {
-			// Revert to last kept commit.
-			gitResetHard(ctx, workdir, cfg.KeptCommit)
-			row.CommitHash = ""
-			row.BestSoFar = currentBest
-			cfg.ConsecutiveFailures++
-			r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARDED: %s=%.6f (best=%.6f)\nHypothesis: %s",
-				iteration, cfg.MetricName, metricValue, *bestMetric, hypothesis))
-		}
-	}
-
+	eval := evaluateExperiment(cfg, iteration, hypothesis, exp.result, exp.err, exp.duration)
 	cfg.TotalIterations = iteration
 
-	// Persist results and config.
-	if err := AppendResult(workdir, row); err != nil {
-		r.logger.Error("failed to append result", "error", err)
-	}
-	if err := SaveConfig(workdir, cfg); err != nil {
-		r.logger.Error("failed to save config", "error", err)
+	if exp.err != nil {
+		r.logger.Warn("experiment crashed", "error", exp.err, "iteration", iteration)
+		gitResetHard(ctx, workdir, cfg.KeptCommit)
+		cfg.ConsecutiveFailures++
+		r.notify(ctx, fmt.Sprintf("Iteration #%d CRASHED: %s\nHypothesis: %s", iteration, exp.err, hypothesis))
+	} else if eval.row.Kept {
+		eval.row.CommitHash = commitHash
+		markKept(cfg, eval.metricValue, commitHash)
+		r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s",
+			iteration, cfg.MetricName, eval.metricValue, improvementFromBaseline(cfg, eval.metricValue), hypothesis))
+	} else {
+		gitResetHard(ctx, workdir, cfg.KeptCommit)
+		cfg.ConsecutiveFailures++
+		r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARDED: %s=%.6f (best=%.6f)\nHypothesis: %s",
+			iteration, cfg.MetricName, eval.metricValue, *cfg.BestMetric, hypothesis))
 	}
 
+	r.persistIterationResult(workdir, cfg, eval.row)
 	return nil
 }
 
@@ -347,24 +244,11 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 	}
 
 	// Step 3b: Check for duplicate hypothesis.
-	tracker := LoadHypothesisTracker(workdir)
-	ovHash := HashOverrideChanges(overrides)
-	if dupIter, isDup := tracker.IsDuplicate(ovHash); isDup {
-		r.logger.Warn("duplicate hypothesis detected (constants), skipping",
-			"iteration", iteration, "duplicate_of", dupIter)
-		r.dedupHint = fmt.Sprintf("Your proposal was identical to iteration #%d. Try something substantially different.", dupIter)
-		cfg.ConsecutiveFailures++
-		cfg.TotalIterations = iteration
-		if err := SaveConfig(workdir, cfg); err != nil {
-			return err
-		}
+	if skip, err := r.checkAndRecordDedup(workdir, HashOverrideChanges(overrides), iteration, cfg); err != nil {
+		return err
+	} else if skip {
 		return nil
 	}
-	tracker.Record(ovHash, iteration)
-	if err := SaveHypothesisTracker(workdir, tracker); err != nil {
-		r.logger.Warn("failed to save dedup hashes", "error", err)
-	}
-	r.dedupHint = ""
 
 	// Step 4: Apply overrides temporarily.
 	restore, err := ApplyOverrides(workdir, cfg.Constants, overrides)
@@ -376,49 +260,133 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 	// sync.Once internally so double-calls are safe.
 	defer func() { restore() }()
 
-	// Step 5: Run experiment with overridden files (check cache first).
-	var expResult *experimentResult
-	var runErr error
-	var duration int
-	cacheHit := false
-
-	if cfg.CacheEnabled {
-		baseHash, _ := contentHash(workdir, cfg.TargetFiles)
-		hash := overrideHash(baseHash, overrides)
-		cacheDir := cfg.ResolveCacheDir(workdir)
-		if metric, ok := loadCachedMetric(cacheDir, hash, cfg.MetricCmd); ok {
-			r.logger.Info("cache hit (constants), skipping experiment", "hash", hash, "metric", metric)
-			expResult = &experimentResult{metric: metric, stdout: fmt.Sprintf("cached: %.6f", metric)}
-			cacheHit = true
-		}
-	}
-
-	if !cacheHit {
-		startTime := time.Now()
-		expResult, runErr = r.runExperiment(ctx, workdir, cfg, iteration)
-		duration = int(time.Since(startTime).Seconds())
-
-		// Cache the result on success.
-		if runErr == nil && cfg.CacheEnabled {
-			baseHash, _ := contentHash(workdir, cfg.TargetFiles)
-			hash := overrideHash(baseHash, overrides)
-			cacheDir := cfg.ResolveCacheDir(workdir)
-			if saveErr := saveCachedMetric(cacheDir, hash, cfg.MetricCmd, expResult.metric); saveErr != nil {
-				r.logger.Warn("failed to cache metric", "error", saveErr)
-			}
-		}
-	}
-
-	if expResult != nil && !cacheHit {
-		if saveErr := SaveExperimentOutput(workdir, iteration, expResult.stdout, expResult.stderr); saveErr != nil {
-			r.logger.Error("failed to save experiment output", "error", saveErr)
-		}
-	}
+	// Step 5: Run experiment with cache.
+	baseHash, _ := contentHash(workdir, cfg.TargetFiles)
+	cacheHash := overrideHash(baseHash, overrides)
+	exp := r.runExperimentWithCache(ctx, workdir, cfg, iteration, cacheHash)
 
 	// Step 6: Restore originals BEFORE evaluating (files must be clean for git).
 	restore()
 
 	// Step 7: Evaluate and decide.
+	eval := evaluateExperiment(cfg, iteration, hypothesis, exp.result, exp.err, exp.duration)
+	cfg.TotalIterations = iteration
+
+	if exp.err != nil {
+		r.logger.Warn("experiment crashed", "error", exp.err, "iteration", iteration)
+		cfg.ConsecutiveFailures++
+		r.notify(ctx, fmt.Sprintf("Iteration #%d CRASHED: %s\nHypothesis: %s", iteration, exp.err, hypothesis))
+	} else if eval.row.Kept {
+		// Save best overrides and commit. If commit fails, flip to discarded.
+		ov := &OverrideSet{Values: overrides}
+		if saveErr := SaveOverrides(workdir, ov); saveErr != nil {
+			r.logger.Error("failed to save overrides", "error", saveErr)
+		}
+
+		commitMsg := fmt.Sprintf("autoresearch #%d: %s", iteration, hypothesis)
+		if commitErr := gitCommit(ctx, workdir, commitMsg); commitErr != nil {
+			r.logger.Error("failed to commit overrides, treating as discarded", "error", commitErr)
+			eval.row.Kept = false
+			eval.row.BestSoFar = eval.currentBest
+			eval.row.DeltaFromBest = 0
+			cfg.ConsecutiveFailures++
+			r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARD (commit failed): %s=%.6f\nHypothesis: %s",
+				iteration, cfg.MetricName, eval.metricValue, hypothesis))
+		} else {
+			commitHash, _ := gitRevParse(ctx, workdir, "HEAD")
+			eval.row.CommitHash = commitHash
+			markKept(cfg, eval.metricValue, commitHash)
+			r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s\nOverrides: %v",
+				iteration, cfg.MetricName, eval.metricValue, improvementFromBaseline(cfg, eval.metricValue), hypothesis, overrides))
+		}
+	} else {
+		cfg.ConsecutiveFailures++
+		r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARDED: %s=%.6f (best=%.6f)\nHypothesis: %s",
+			iteration, cfg.MetricName, eval.metricValue, *cfg.BestMetric, hypothesis))
+	}
+
+	r.persistIterationResult(workdir, cfg, eval.row)
+	return nil
+}
+
+// --- Shared iteration helpers ---
+
+// checkAndRecordDedup checks if the given change hash duplicates a previous
+// iteration. Returns true if duplicate (config already saved). On non-duplicate,
+// records the hash for future checks.
+func (r *Runner) checkAndRecordDedup(workdir string, hash string, iteration int, cfg *Config) (skip bool, err error) {
+	tracker := LoadHypothesisTracker(workdir)
+	if dupIter, isDup := tracker.IsDuplicate(hash); isDup {
+		r.logger.Warn("duplicate hypothesis detected, skipping",
+			"iteration", iteration, "duplicate_of", dupIter)
+		r.dedupHint = fmt.Sprintf("Your proposal was identical to iteration #%d. Try something substantially different.", dupIter)
+		cfg.ConsecutiveFailures++
+		cfg.TotalIterations = iteration
+		if err := SaveConfig(workdir, cfg); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	tracker.Record(hash, iteration)
+	if err := SaveHypothesisTracker(workdir, tracker); err != nil {
+		r.logger.Warn("failed to save dedup hashes", "error", err)
+	}
+	r.dedupHint = ""
+	return false, nil
+}
+
+// cachedExperimentResult bundles experiment output with cache/timing metadata.
+type cachedExperimentResult struct {
+	result   *experimentResult
+	duration int
+	cacheHit bool
+	err      error
+}
+
+// runExperimentWithCache runs the metric command, checking and populating cache.
+// Also persists experiment stdout/stderr for debugging.
+func (r *Runner) runExperimentWithCache(ctx context.Context, workdir string, cfg *Config, iteration int, cacheHash string) cachedExperimentResult {
+	if cfg.CacheEnabled && cacheHash != "" {
+		cacheDir := cfg.ResolveCacheDir(workdir)
+		if metric, ok := loadCachedMetric(cacheDir, cacheHash, cfg.MetricCmd); ok {
+			r.logger.Info("cache hit, skipping experiment", "hash", cacheHash, "metric", metric)
+			return cachedExperimentResult{
+				result:   &experimentResult{metric: metric, stdout: fmt.Sprintf("cached: %.6f", metric)},
+				cacheHit: true,
+			}
+		}
+	}
+
+	startTime := time.Now()
+	expResult, runErr := r.runExperiment(ctx, workdir, cfg, iteration)
+	duration := int(time.Since(startTime).Seconds())
+
+	if runErr == nil && cfg.CacheEnabled && cacheHash != "" {
+		cacheDir := cfg.ResolveCacheDir(workdir)
+		if saveErr := saveCachedMetric(cacheDir, cacheHash, cfg.MetricCmd, expResult.metric); saveErr != nil {
+			r.logger.Warn("failed to cache metric", "error", saveErr)
+		}
+	}
+
+	if expResult != nil {
+		if saveErr := SaveExperimentOutput(workdir, iteration, expResult.stdout, expResult.stderr); saveErr != nil {
+			r.logger.Error("failed to save experiment output", "error", saveErr)
+		}
+	}
+
+	return cachedExperimentResult{result: expResult, duration: duration, err: runErr}
+}
+
+// iterationEval holds the pure evaluation result (no side effects applied).
+type iterationEval struct {
+	row         ResultRow
+	currentBest float64
+	metricValue float64
+}
+
+// evaluateExperiment determines kept/discarded and builds the ResultRow.
+// Pure function — does not modify cfg, persist, or notify.
+func evaluateExperiment(cfg *Config, iteration int, hypothesis string, expResult *experimentResult, runErr error, duration int) iterationEval {
 	row := ResultRow{
 		Iteration:   iteration,
 		Timestamp:   time.Now(),
@@ -432,84 +400,58 @@ func (r *Runner) runConstantsIteration(ctx context.Context, workdir string, cfg 
 	}
 
 	if runErr != nil {
-		r.logger.Warn("experiment crashed", "error", runErr, "iteration", iteration)
-		row.MetricValue = 0
 		row.Kept = false
 		row.BestSoFar = currentBest
-		row.DeltaFromBest = 0
-		cfg.ConsecutiveFailures++
-		r.notify(ctx, fmt.Sprintf("Iteration #%d CRASHED: %s\nHypothesis: %s", iteration, runErr, hypothesis))
-	} else {
-		metricValue := expResult.metric
-		row.MetricValue = metricValue
-		bestMetric := cfg.BestMetric
-		if bestMetric == nil {
-			row.Kept = true
-			row.DeltaFromBest = 0
-		} else {
-			row.Kept = cfg.IsBetter(metricValue, *bestMetric)
-			row.DeltaFromBest = metricValue - *bestMetric
-		}
-
-		if row.Kept {
-			row.BestSoFar = metricValue
-
-			// Save best overrides to overrides.json.
-			ov := &OverrideSet{Values: overrides}
-			if saveErr := SaveOverrides(workdir, ov); saveErr != nil {
-				r.logger.Error("failed to save overrides", "error", saveErr)
-			}
-
-			// Commit overrides.json (not modified source files).
-			// Only update BestMetric/BestCommit after a successful commit
-			// to avoid inconsistent state when commit fails.
-			commitMsg := fmt.Sprintf("autoresearch #%d: %s", iteration, hypothesis)
-			if commitErr := gitCommit(ctx, workdir, commitMsg); commitErr != nil {
-				r.logger.Error("failed to commit overrides, treating as discarded", "error", commitErr)
-				row.Kept = false
-				row.BestSoFar = currentBest
-				row.DeltaFromBest = 0
-				cfg.ConsecutiveFailures++
-				r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARD (commit failed): %s=%.6f\nHypothesis: %s",
-					iteration, cfg.MetricName, metricValue, hypothesis))
-			} else {
-				commitHash, _ := gitRevParse(ctx, workdir, "HEAD")
-				row.CommitHash = commitHash
-				cfg.BestMetric = &metricValue
-				cfg.BestCommit = commitHash
-				cfg.KeptCommit = commitHash
-				cfg.KeptIterations++
-				cfg.ConsecutiveFailures = 0
-
-				improvementInfo := ""
-				if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
-					improvement := (*cfg.BaselineMetric - metricValue) / *cfg.BaselineMetric * 100
-					if cfg.MetricDirection == "maximize" {
-						improvement = (metricValue - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
-					}
-					improvementInfo = fmt.Sprintf(" (%.2f%% from baseline)", improvement)
-				}
-				r.notify(ctx, fmt.Sprintf("Iteration #%d KEPT: %s=%.6f%s\nHypothesis: %s\nOverrides: %v",
-					iteration, cfg.MetricName, metricValue, improvementInfo, hypothesis, overrides))
-			}
-		} else {
-			row.BestSoFar = currentBest
-			cfg.ConsecutiveFailures++
-			r.notify(ctx, fmt.Sprintf("Iteration #%d DISCARDED: %s=%.6f (best=%.6f)\nHypothesis: %s",
-				iteration, cfg.MetricName, metricValue, *bestMetric, hypothesis))
-		}
+		return iterationEval{row: row, currentBest: currentBest}
 	}
 
-	cfg.TotalIterations = iteration
+	metricValue := expResult.metric
+	row.MetricValue = metricValue
+	if cfg.BestMetric == nil {
+		row.Kept = true
+	} else {
+		row.Kept = cfg.IsBetter(metricValue, *cfg.BestMetric)
+		row.DeltaFromBest = metricValue - *cfg.BestMetric
+	}
 
+	if row.Kept {
+		row.BestSoFar = metricValue
+	} else {
+		row.BestSoFar = currentBest
+	}
+
+	return iterationEval{row: row, currentBest: currentBest, metricValue: metricValue}
+}
+
+// markKept updates cfg fields for a kept iteration.
+func markKept(cfg *Config, metricValue float64, commitHash string) {
+	cfg.BestMetric = &metricValue
+	cfg.BestCommit = commitHash
+	cfg.KeptCommit = commitHash
+	cfg.KeptIterations++
+	cfg.ConsecutiveFailures = 0
+}
+
+// improvementFromBaseline returns a formatted improvement percentage, or "".
+func improvementFromBaseline(cfg *Config, metricValue float64) string {
+	if cfg.BaselineMetric == nil || *cfg.BaselineMetric == 0 {
+		return ""
+	}
+	improvement := (*cfg.BaselineMetric - metricValue) / *cfg.BaselineMetric * 100
+	if cfg.MetricDirection == "maximize" {
+		improvement = (metricValue - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
+	}
+	return fmt.Sprintf(" (%.2f%% from baseline)", improvement)
+}
+
+// persistIterationResult saves the result row and updated config.
+func (r *Runner) persistIterationResult(workdir string, cfg *Config, row ResultRow) {
 	if err := AppendResult(workdir, row); err != nil {
 		r.logger.Error("failed to append result", "error", err)
 	}
 	if err := SaveConfig(workdir, cfg); err != nil {
 		r.logger.Error("failed to save config", "error", err)
 	}
-
-	return nil
 }
 
 // experimentResult holds the full output of an experiment run.
