@@ -7,6 +7,7 @@
 package toolreg
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
@@ -32,7 +33,7 @@ type LocalAIDeps struct {
 func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, localAI *LocalAIDeps) {
 	RegisterFSTools(registry, deps, localAI)
 	RegisterProcessTools(registry, &deps.Process)
-	RegisterWebTools(registry)
+	RegisterWebTools(registry, deps.LLMClient, deps.DefaultModel)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterInfraTools(registry, localAI)
@@ -218,13 +219,13 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 	})
 }
 
-// RegisterWebTools registers web fetch and HTTP tools.
-func RegisterWebTools(registry toolctx.ToolRegistrar) {
+// RegisterWebTools registers web fetch, HTTP, and deep research tools.
+func RegisterWebTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "web",
-		Description:     "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch (HTML extraction, bot evasion), {query:...} search (Perplexity > Brave > DDG), {query:...,fetch:N} search+fetch top N",
+		Description:     "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch, {queries:[...]} parallel search (max 5 queries at once)",
 		InputSchema:     webToolSchema(),
 		Fn:              web.Tool(webCache, localAI),
 		ConcurrencySafe: true,
@@ -235,6 +236,33 @@ func RegisterWebTools(registry toolctx.ToolRegistrar) {
 		InputSchema:     httpToolSchema(),
 		Fn:              tools.ToolHTTP(),
 		ConcurrencySafe: true,
+	})
+
+	// Deep research: auto-decomposes complex questions into parallel sub-queries.
+	var drLLM web.DeepResearchLLM
+	if llmClient != nil {
+		drLLM = &deepResearchLLMAdapter{client: llmClient}
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "deep_research",
+		Description:     "Deep web research for complex multi-constraint questions. Auto-decomposes into parallel sub-queries, searches+fetches all at once, returns structured findings. Much faster and more accurate than sequential web searches for questions requiring cross-referencing multiple facts",
+		InputSchema:     deepResearchToolSchema(),
+		Fn:              web.DeepResearchTool(webCache, localAI, drLLM, defaultModel),
+		ConcurrencySafe: true,
+	})
+}
+
+// deepResearchLLMAdapter adapts llm.Client to web.DeepResearchLLM.
+type deepResearchLLMAdapter struct {
+	client *llm.Client
+}
+
+func (a *deepResearchLLMAdapter) Complete(ctx context.Context, model, system, user string, maxTokens int) (string, error) {
+	return a.client.Complete(ctx, llm.ChatRequest{
+		Model:     model,
+		System:    llm.SystemString(system),
+		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+		MaxTokens: maxTokens,
 	})
 }
 

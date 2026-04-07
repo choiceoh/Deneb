@@ -101,7 +101,7 @@ var toolCategories = []struct {
 	{"File", []string{"read", "write", "edit", "grep", "find", "search_and_read", "batch_read"}},
 	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
-	{"Web", []string{"web", "http"}},
+	{"Web", []string{"web", "http", "deep_research"}},
 	{"Memory", []string{"wiki", "memory_store", "memory_recall", "projects_write"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},

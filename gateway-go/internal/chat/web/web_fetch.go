@@ -1,10 +1,11 @@
 // web_fetch.go — Unified web tool: search, fetch, and search+fetch in one.
 //
-// Three modes via parameter dispatch:
+// Four modes via parameter dispatch:
 //
 //	{"url": "..."}                        → Fetch mode (extract content from URL)
 //	{"query": "..."}                      → Search mode (web search results)
 //	{"query": "...", "fetch": N}          → Search+fetch (search then auto-fetch top N)
+//	{"queries": ["...", "..."]}           → Parallel search (multiple queries at once)
 //
 // Designed for AI agent consumption with structured metadata, machine-readable
 // errors, aggressive noise removal, local AI extraction, and bot-block evasion.
@@ -39,11 +40,12 @@ var fetchGroup singleflight
 func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, json.RawMessage) (string, error) {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			URL      string `json:"url"`
-			Query    string `json:"query"`
-			Fetch    int    `json:"fetch"`
-			MaxChars int    `json:"maxChars"`
-			Count    int    `json:"count"`
+			URL      string   `json:"url"`
+			Query    string   `json:"query"`
+			Queries  []string `json:"queries"`
+			Fetch    int      `json:"fetch"`
+			MaxChars int      `json:"maxChars"`
+			Count    int      `json:"count"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return formatFetchError(webFetchErr{
@@ -56,6 +58,20 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 		case p.URL != "":
 			// Fetch mode: extract content from URL.
 			return webFetchURL(ctx, cache, localAI, p.URL, p.MaxChars)
+
+		case len(p.Queries) > 0:
+			// Parallel search mode: multiple queries at once.
+			if len(p.Queries) > 5 {
+				p.Queries = p.Queries[:5]
+			}
+			if p.Count <= 0 {
+				p.Count = 5
+			}
+			fetch := p.Fetch
+			if fetch > 3 {
+				fetch = 3
+			}
+			return webParallelSearch(ctx, cache, localAI, p.Queries, p.Count, fetch, p.MaxChars)
 
 		case p.Query != "":
 			if p.Count <= 0 {
@@ -73,7 +89,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 
 		default:
 			return formatFetchError(webFetchErr{
-				Code: "missing_params", Message: "either url or query is required", Retryable: false,
+				Code: "missing_params", Message: "either url, query, or queries is required", Retryable: false,
 			}), nil
 		}
 	}
@@ -140,6 +156,53 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 	}
 
 	return applyTruncation(v.(string), maxChars), nil
+}
+
+// webParallelSearch runs multiple search queries concurrently and returns
+// combined results. Each query runs independently with optional fetch.
+// This avoids sequential LLM round-trips for multi-constraint questions.
+func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, queries []string, count, fetch, maxChars int) (string, error) {
+	if maxChars <= 0 {
+		maxChars = 50000
+	}
+	perQueryChars := maxChars / len(queries)
+
+	type queryResult struct {
+		query   string
+		content string
+		err     error
+	}
+	results := make([]queryResult, len(queries))
+	var wg sync.WaitGroup
+	for i, q := range queries {
+		wg.Add(1)
+		go func(idx int, query string) {
+			defer wg.Done()
+			var content string
+			var err error
+			if fetch > 0 {
+				content, err = webSearchAndFetch(ctx, cache, localAI, query, count, fetch, perQueryChars)
+			} else {
+				content, err = webSearch(ctx, query, count)
+			}
+			results[idx] = queryResult{query: query, content: content, err: err}
+		}(i, q)
+	}
+	wg.Wait()
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "<parallel_search queries=\"%d\">\n\n", len(queries))
+	for i, r := range results {
+		fmt.Fprintf(&sb, "<query index=\"%d\" q=\"%s\">\n", i+1, r.query)
+		if r.err != nil {
+			fmt.Fprintf(&sb, "Search failed: %s\n", r.err.Error())
+		} else {
+			sb.WriteString(r.content)
+		}
+		sb.WriteString("\n</query>\n\n")
+	}
+	sb.WriteString("</parallel_search>")
+	return sb.String(), nil
 }
 
 // webSearchAndFetch searches the web and auto-fetches the top N results.
