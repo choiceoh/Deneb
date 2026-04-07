@@ -69,12 +69,7 @@ func (t *bootTask) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	// Use SendLite: boot only needs health + memory tools.
-	// Avoids the full pipeline (193 msgs, 20 tools, 32K sysprompt, 15K knowledge).
-	result, err := t.chatHandler.SendLite(runCtx, "", prompt,
-		[]string{"health_check", "memory"},
-		&chat.LiteOptions{MaxTurns: 3},
-	)
+	result, err := t.chatHandler.SendSync(runCtx, "boot", prompt, "", nil)
 	if err != nil {
 		return fmt.Errorf("boot: agent turn failed: %w", err)
 	}
