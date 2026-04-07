@@ -93,22 +93,23 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 // Creates the session if it doesn't exist. Returns a snapshot copy.
 func (m *Manager) Patch(key string, patch PatchFields) *Session {
 	m.lazyInit()
-	m.emitMu.Lock()
-	defer m.emitMu.Unlock()
+	var cp Session
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
+		s := m.sessions[key]
+		if s == nil {
+			s = &Session{Key: key, Kind: KindUnknown, CreatedAt: time.Now()}
+			m.sessions[key] = s
+		}
+		changed := s.ApplyPatch(patch)
+		cp = *s
+		m.mu.Unlock()
 
-	m.mu.Lock()
-	s := m.sessions[key]
-	if s == nil {
-		s = &Session{Key: key, Kind: KindUnknown, CreatedAt: time.Now()}
-		m.sessions[key] = s
-	}
-	changed := s.ApplyPatch(patch)
-	cp := *s
-	m.mu.Unlock()
-
-	if changed {
-		m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: key})
-	}
+		if changed {
+			return []Event{{Kind: EventStatusChanged, Key: key}}
+		}
+		return nil
+	})
 	return &cp
 }
 
@@ -116,32 +117,34 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 // Returns a snapshot copy of the reset session, or nil if not found.
 func (m *Manager) ResetSession(key string) *Session {
 	m.lazyInit()
-	m.emitMu.Lock()
-	defer m.emitMu.Unlock()
-
-	m.mu.Lock()
-	s := m.sessions[key]
-	if s == nil {
+	var result *Session
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
+		s := m.sessions[key]
+		if s == nil {
+			m.mu.Unlock()
+			return nil
+		}
+		oldStatus := s.Status
+		s.Status = ""
+		s.StartedAt = nil
+		s.EndedAt = nil
+		s.RuntimeMs = nil
+		s.AbortedLastRun = false
+		s.InputTokens = nil
+		s.OutputTokens = nil
+		s.TotalTokens = nil
+		s.UpdatedAt = time.Now().UnixMilli()
+		cp := *s
+		result = &cp
 		m.mu.Unlock()
-		return nil
-	}
-	oldStatus := s.Status
-	s.Status = ""
-	s.StartedAt = nil
-	s.EndedAt = nil
-	s.RuntimeMs = nil
-	s.AbortedLastRun = false
-	s.InputTokens = nil
-	s.OutputTokens = nil
-	s.TotalTokens = nil
-	s.UpdatedAt = time.Now().UnixMilli()
-	cp := *s
-	m.mu.Unlock()
 
-	if oldStatus != "" {
-		m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: key, OldStatus: oldStatus, NewStatus: ""})
-	}
-	return &cp
+		if oldStatus != "" {
+			return []Event{{Kind: EventStatusChanged, Key: key, OldStatus: oldStatus, NewStatus: ""}}
+		}
+		return nil
+	})
+	return result
 }
 
 // FindBySessionID scans all sessions for one matching the given sessionId.

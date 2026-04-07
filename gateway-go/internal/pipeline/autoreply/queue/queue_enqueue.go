@@ -175,8 +175,8 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	}
 
 	// All queue field access under the per-queue lock.
-	queue.Lock()
-	defer queue.Unlock()
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
 
 	// Check in-queue deduplication.
 	allowPrompt := dedupeMode == types.DedupePrompt

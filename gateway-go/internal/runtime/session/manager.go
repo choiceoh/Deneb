@@ -186,16 +186,15 @@ type Manager struct {
 	initOnce sync.Once // lazy initialization for sessions map and eventBus
 	gcOnce   sync.Once // ensures StartGC spawns at most one GC goroutine
 
-	// emitMu serializes state-mutation + event-emission as an atomic unit.
-	// Without this, a gap between mu.Unlock() and eventBus.Emit() allows
-	// concurrent mutations to interleave, causing out-of-order events
-	// (e.g., EventDeleted arriving after a concurrent EventCreated for the
-	// same key).
+	// emitGate serializes state-mutation + event-emission as an atomic unit.
+	// Buffered channel (cap 1) acts as a gate: a goroutine sends to acquire,
+	// receives to release. This replaces a dedicated sync.Mutex and eliminates
+	// the manual lock-ordering constraint (emitGate → mu is automatic because
+	// mutateAndEmit always acquires in that order).
 	//
-	// Lock ordering: emitMu → mu (never acquire mu then emitMu).
 	// Event subscribers must NOT call mutating Manager methods (Set, Delete,
-	// Create, Patch, etc.) or they will deadlock on emitMu re-entry.
-	emitMu sync.Mutex
+	// Create, Patch, etc.) or they will deadlock on emitGate re-entry.
+	emitGate chan struct{}
 }
 
 // lazyInit ensures sessions map and eventBus are initialized.
@@ -204,6 +203,7 @@ func (m *Manager) lazyInit() {
 	m.initOnce.Do(func() {
 		m.sessions = make(map[string]*Session)
 		m.eventBus = NewEventBus()
+		m.emitGate = make(chan struct{}, 1)
 	})
 }
 
@@ -239,59 +239,44 @@ func (m *Manager) StartGC(ctx context.Context) {
 // evictStale removes terminal sessions whose UpdatedAt is older than the
 // Kind-specific retention period, and enforces TimeoutAt on running sessions.
 func (m *Manager) evictStale() {
-	now := time.Now()
-	nowMs := now.UnixMilli()
-	var evicted []string
-	var timedOut []string
+	m.mutateAndEmit(func() []Event {
+		now := time.Now()
+		nowMs := now.UnixMilli()
+		var events []Event
 
-	m.mu.Lock()
-	for key, s := range m.sessions {
-		switch {
-		case isTerminal(s.Status):
-			maxAge := gcMaxAgeForKind(s.Kind)
-			if s.UpdatedAt < now.Add(-maxAge).UnixMilli() {
-				delete(m.sessions, key)
-				evicted = append(evicted, key)
-			}
-		case s.Status == StatusRunning && s.TimeoutAt != nil && nowMs > *s.TimeoutAt:
-			s.Status = StatusTimeout
-			endedAt := nowMs
-			s.EndedAt = &endedAt
-			s.UpdatedAt = nowMs
-			timedOut = append(timedOut, key)
-		case s.Status == StatusRunning && s.IdleTimeoutMs > 0:
-			// Idle stall detection: if no activity for IdleTimeoutMs, timeout.
-			activityAt := s.UpdatedAt
-			if s.LastActivityAt != nil {
-				activityAt = *s.LastActivityAt
-			}
-			if nowMs-activityAt > s.IdleTimeoutMs {
+		m.mu.Lock()
+		for key, s := range m.sessions {
+			switch {
+			case isTerminal(s.Status):
+				maxAge := gcMaxAgeForKind(s.Kind)
+				if s.UpdatedAt < now.Add(-maxAge).UnixMilli() {
+					delete(m.sessions, key)
+					events = append(events, Event{Kind: EventDeleted, Key: key})
+				}
+			case s.Status == StatusRunning && s.TimeoutAt != nil && nowMs > *s.TimeoutAt:
 				s.Status = StatusTimeout
 				endedAt := nowMs
 				s.EndedAt = &endedAt
 				s.UpdatedAt = nowMs
-				s.FailureReason = "idle timeout: no activity detected"
-				timedOut = append(timedOut, key)
+				events = append(events, Event{Kind: EventStatusChanged, Key: key, OldStatus: StatusRunning, NewStatus: StatusTimeout})
+			case s.Status == StatusRunning && s.IdleTimeoutMs > 0:
+				activityAt := s.UpdatedAt
+				if s.LastActivityAt != nil {
+					activityAt = *s.LastActivityAt
+				}
+				if nowMs-activityAt > s.IdleTimeoutMs {
+					s.Status = StatusTimeout
+					endedAt := nowMs
+					s.EndedAt = &endedAt
+					s.UpdatedAt = nowMs
+					s.FailureReason = "idle timeout: no activity detected"
+					events = append(events, Event{Kind: EventStatusChanged, Key: key, OldStatus: StatusRunning, NewStatus: StatusTimeout})
+				}
 			}
 		}
-	}
-	m.mu.Unlock()
-
-	if len(evicted) == 0 && len(timedOut) == 0 {
-		return
-	}
-
-	// Hold emitMu only for the event emission phase so concurrent
-	// mutations cannot interleave between deletion and EventDeleted.
-	m.emitMu.Lock()
-	defer m.emitMu.Unlock()
-
-	for _, key := range evicted {
-		m.eventBus.Emit(Event{Kind: EventDeleted, Key: key})
-	}
-	for _, key := range timedOut {
-		m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: key, OldStatus: StatusRunning, NewStatus: StatusTimeout})
-	}
+		m.mu.Unlock()
+		return events
+	})
 }
 
 // isTerminal returns true for session statuses that represent completed runs.
@@ -301,6 +286,18 @@ func isTerminal(s RunStatus) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// mutateAndEmit serializes a state mutation with its associated event emissions.
+// It acquires the emit gate, runs fn (which should lock/unlock mu internally),
+// then emits the returned events. All mutating Manager methods use this to
+// guarantee that state changes and their events are never interleaved.
+func (m *Manager) mutateAndEmit(fn func() []Event) {
+	m.emitGate <- struct{}{}
+	defer func() { <-m.emitGate }()
+	for _, e := range fn() {
+		m.eventBus.Emit(e)
 	}
 }
 
@@ -333,54 +330,57 @@ func (m *Manager) Set(s *Session) error {
 		return nil
 	}
 	m.lazyInit()
-	m.emitMu.Lock()
-	defer m.emitMu.Unlock()
-
-	m.mu.Lock()
-	old := m.sessions[s.Key]
-	var oldStatus RunStatus
-	if old != nil {
-		oldStatus = old.Status
-	}
-	newStatus := s.Status
-	// Validate status transition for existing sessions with known statuses.
-	if old != nil && oldStatus != "" && newStatus != "" && oldStatus != newStatus {
-		if err := ValidateTransition(oldStatus, newStatus); err != nil {
-			m.mu.Unlock()
-			return err
+	var setErr error
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
+		old := m.sessions[s.Key]
+		var oldStatus RunStatus
+		if old != nil {
+			oldStatus = old.Status
 		}
-	}
-	m.sessions[s.Key] = s
-	m.mu.Unlock()
+		newStatus := s.Status
+		if old != nil && oldStatus != "" && newStatus != "" && oldStatus != newStatus {
+			if err := ValidateTransition(oldStatus, newStatus); err != nil {
+				m.mu.Unlock()
+				setErr = err
+				return nil
+			}
+		}
+		m.sessions[s.Key] = s
+		m.mu.Unlock()
 
-	if old == nil {
-		m.eventBus.Emit(Event{Kind: EventCreated, Key: s.Key})
-	} else if oldStatus != newStatus {
-		m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: s.Key, OldStatus: oldStatus, NewStatus: newStatus})
-	}
-	return nil
+		if old == nil {
+			return []Event{{Kind: EventCreated, Key: s.Key}}
+		}
+		if oldStatus != newStatus {
+			return []Event{{Kind: EventStatusChanged, Key: s.Key, OldStatus: oldStatus, NewStatus: newStatus}}
+		}
+		return nil
+	})
+	return setErr
 }
 
 // Delete removes a session by key. Returns true if the session existed.
 func (m *Manager) Delete(key string) bool {
 	m.lazyInit()
-	m.emitMu.Lock()
-	defer m.emitMu.Unlock()
+	var found bool
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
+		s := m.sessions[key]
+		found = s != nil
+		var oldStatus RunStatus
+		if s != nil {
+			oldStatus = s.Status
+		}
+		delete(m.sessions, key)
+		m.mu.Unlock()
 
-	m.mu.Lock()
-	s := m.sessions[key]
-	ok := s != nil
-	var oldStatus RunStatus
-	if s != nil {
-		oldStatus = s.Status
-	}
-	delete(m.sessions, key)
-	m.mu.Unlock()
-
-	if ok {
-		m.eventBus.Emit(Event{Kind: EventDeleted, Key: key, OldStatus: oldStatus})
-	}
-	return ok
+		if found {
+			return []Event{{Kind: EventDeleted, Key: key, OldStatus: oldStatus}}
+		}
+		return nil
+	})
+	return found
 }
 
 // TouchActivity updates the LastActivityAt timestamp for a session,
@@ -438,22 +438,21 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 		return nil
 	}
 	m.lazyInit()
-	m.emitMu.Lock()
-	defer m.emitMu.Unlock()
-
-	m.mu.Lock()
-	now := time.Now()
-	s := &Session{
-		Key:       key,
-		Kind:      kind,
-		UpdatedAt: now.UnixMilli(),
-		CreatedAt: now,
-	}
-	m.sessions[key] = s
-	cp := *s
-	m.mu.Unlock()
-
-	m.eventBus.Emit(Event{Kind: EventCreated, Key: key})
+	var cp Session
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
+		now := time.Now()
+		s := &Session{
+			Key:       key,
+			Kind:      kind,
+			UpdatedAt: now.UnixMilli(),
+			CreatedAt: now,
+		}
+		m.sessions[key] = s
+		cp = *s
+		m.mu.Unlock()
+		return []Event{{Kind: EventCreated, Key: key}}
+	})
 	return &cp
 }
 
@@ -467,68 +466,64 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 //     callers can always dereference the result safely without nil checks.
 func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session {
 	m.lazyInit()
-	m.emitMu.Lock()
-	defer m.emitMu.Unlock()
+	var result *Session
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
 
-	m.mu.Lock()
+		existing := m.sessions[key]
+		snap := DeriveLifecycleSnapshot(existing, event)
 
-	existing := m.sessions[key]
-	snap := DeriveLifecycleSnapshot(existing, event)
-
-	// Empty snapshot means unknown phase — no-op.
-	if snap.Status == "" {
-		if existing != nil {
-			cp := *existing
+		// Empty snapshot means unknown phase — no-op.
+		if snap.Status == "" {
+			if existing != nil {
+				cp := *existing
+				result = &cp
+			} else {
+				result = &Session{Key: key, Kind: KindUnknown}
+			}
 			m.mu.Unlock()
-			return &cp
+			return nil
 		}
-		m.mu.Unlock()
-		return &Session{Key: key, Kind: KindUnknown}
-	}
 
-	// Capture old status before mutation.
-	oldStatus := RunStatus("")
-	if existing != nil {
-		oldStatus = existing.Status
-	}
+		oldStatus := RunStatus("")
+		if existing != nil {
+			oldStatus = existing.Status
+		}
 
-	if existing == nil {
-		existing = &Session{Key: key, Kind: KindUnknown, CreatedAt: time.Now()}
-		m.sessions[key] = existing
-	}
+		if existing == nil {
+			existing = &Session{Key: key, Kind: KindUnknown, CreatedAt: time.Now()}
+			m.sessions[key] = existing
+		}
 
-	existing.Status = snap.Status
-	existing.AbortedLastRun = snap.AbortedLastRun
+		existing.Status = snap.Status
+		existing.AbortedLastRun = snap.AbortedLastRun
 
-	// Prefer snapshot-derived UpdatedAt; fall back to now.
-	if snap.UpdatedAt != nil {
-		existing.UpdatedAt = *snap.UpdatedAt
-	} else {
-		existing.UpdatedAt = time.Now().UnixMilli()
-	}
+		if snap.UpdatedAt != nil {
+			existing.UpdatedAt = *snap.UpdatedAt
+		} else {
+			existing.UpdatedAt = time.Now().UnixMilli()
+		}
 
-	if snap.Status == StatusRunning {
-		// Start phase: set StartedAt, clear terminal fields and stale failure reason.
-		existing.StartedAt = snap.StartedAt
-		existing.EndedAt = nil
-		existing.RuntimeMs = nil
-		existing.FailureReason = ""
-	} else {
-		// End/Error phase: preserve existing StartedAt if snapshot doesn't set one.
-		if snap.StartedAt != nil {
+		if snap.Status == StatusRunning {
 			existing.StartedAt = snap.StartedAt
+			existing.EndedAt = nil
+			existing.RuntimeMs = nil
+			existing.FailureReason = ""
+		} else {
+			if snap.StartedAt != nil {
+				existing.StartedAt = snap.StartedAt
+			}
+			existing.EndedAt = snap.EndedAt
+			existing.RuntimeMs = snap.RuntimeMs
+			if snap.FailureReason != "" {
+				existing.FailureReason = snap.FailureReason
+			}
 		}
-		existing.EndedAt = snap.EndedAt
-		existing.RuntimeMs = snap.RuntimeMs
-		if snap.FailureReason != "" {
-			existing.FailureReason = snap.FailureReason
-		}
-	}
 
-	newStatus := existing.Status
-	cp := *existing
-	m.mu.Unlock()
-
-	m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: key, OldStatus: oldStatus, NewStatus: newStatus})
-	return &cp
+		cp := *existing
+		result = &cp
+		m.mu.Unlock()
+		return []Event{{Kind: EventStatusChanged, Key: key, OldStatus: oldStatus, NewStatus: existing.Status}}
+	})
+	return result
 }

@@ -3,8 +3,10 @@
 package queue
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"sync"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 const (
@@ -31,11 +33,142 @@ type FollowupQueueState struct {
 	LastRun        *types.FollowupRunContext `json:"lastRun,omitempty"`
 }
 
-// Lock acquires the per-queue mutex.
-func (q *FollowupQueueState) Lock() { q.mu.Lock() }
+// tryStartDrain atomically checks if the queue is already draining.
+// If not, marks it as draining and returns true; otherwise returns false.
+func (q *FollowupQueueState) tryStartDrain() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.Draining {
+		return false
+	}
+	q.Draining = true
+	return true
+}
 
-// Unlock releases the per-queue mutex.
-func (q *FollowupQueueState) Unlock() { q.mu.Unlock() }
+// finishDrain marks the queue as no longer draining and reports whether it's empty.
+func (q *FollowupQueueState) finishDrain() (empty bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.Draining = false
+	return len(q.Items) == 0 && q.DroppedCount == 0
+}
+
+// resetDraining clears the draining flag and reports whether the queue has pending work.
+func (q *FollowupQueueState) resetDraining() (needsKick bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.Draining = false
+	return len(q.Items) > 0 || q.DroppedCount > 0
+}
+
+// peekWork reports whether the queue has work and returns the debounce setting.
+func (q *FollowupQueueState) peekWork() (hasWork bool, debounceMs int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.Items) > 0 || q.DroppedCount > 0, q.DebounceMs
+}
+
+// checkCrossChannel reports whether items target different routing destinations.
+func (q *FollowupQueueState) checkCrossChannel() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return hasCrossChannelItems(q.Items)
+}
+
+// dequeueFirst removes and returns the first item, or reports false if empty.
+func (q *FollowupQueueState) dequeueFirst() (types.FollowupRun, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.Items) == 0 {
+		return types.FollowupRun{}, false
+	}
+	item := q.Items[0]
+	q.Items = q.Items[1:]
+	return item, true
+}
+
+// touchEnqueue updates LastEnqueuedAt to now.
+func (q *FollowupQueueState) touchEnqueue() {
+	q.mu.Lock()
+	q.LastEnqueuedAt = time.Now().UnixMilli()
+	q.mu.Unlock()
+}
+
+// clearSummary resets the dropped/summary state.
+func (q *FollowupQueueState) clearSummary() {
+	q.mu.Lock()
+	clearFollowupSummaryState(q)
+	q.mu.Unlock()
+}
+
+// depth returns the number of items.
+func (q *FollowupQueueState) depth() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.Items)
+}
+
+// itemCount returns items count plus dropped count.
+func (q *FollowupQueueState) itemCount() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.Items) + q.DroppedCount
+}
+
+// applySettings updates runtime settings under lock.
+func (q *FollowupQueueState) applySettings(settings types.FollowupQueueSettings) {
+	q.mu.Lock()
+	applyFollowupQueueSettings(q, settings)
+	q.mu.Unlock()
+}
+
+// snapshotSummaryDrain takes a snapshot for summary draining.
+// Dequeues the first item as routing source. Returns false if no summary available.
+func (q *FollowupQueueState) snapshotSummaryDrain() (summaryPrompt string, lastRun *types.FollowupRunContext, item types.FollowupRun, ok bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.DroppedCount == 0 || len(q.SummaryLines) == 0 {
+		return "", nil, types.FollowupRun{}, false
+	}
+	summaryPrompt = buildFollowupSummaryPrompt(q)
+	lastRun = q.LastRun
+	if summaryPrompt == "" || lastRun == nil || len(q.Items) == 0 {
+		return "", nil, types.FollowupRun{}, false
+	}
+	item = q.Items[0]
+	q.Items = q.Items[1:]
+	return summaryPrompt, lastRun, item, true
+}
+
+// snapshotCollect takes a snapshot of items for batch draining.
+func (q *FollowupQueueState) snapshotCollect() (items []types.FollowupRun, lastRun *types.FollowupRunContext, summary string, ok bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.Items) == 0 {
+		return nil, nil, "", false
+	}
+	items = make([]types.FollowupRun, len(q.Items))
+	copy(items, q.Items)
+	lastRun = q.LastRun
+	if len(items) > 0 && items[len(items)-1].Run != nil {
+		lastRun = items[len(items)-1].Run
+	}
+	summary = buildFollowupSummaryPrompt(q)
+	return items, lastRun, summary, true
+}
+
+// consumeCollected removes up to n items from the front and optionally clears summary state.
+func (q *FollowupQueueState) consumeCollected(n int, clearSummaryState bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if n > len(q.Items) {
+		n = len(q.Items)
+	}
+	q.Items = q.Items[n:]
+	if clearSummaryState {
+		clearFollowupSummaryState(q)
+	}
+}
 
 // FollowupQueueRegistry manages all followup queues (one per session key).
 type FollowupQueueRegistry struct {
@@ -68,10 +201,7 @@ func (r *FollowupQueueRegistry) GetOrCreate(key string, settings types.FollowupQ
 	defer r.mu.Unlock()
 
 	if existing, ok := r.queues[key]; ok {
-		// Apply settings under the per-queue lock.
-		existing.Lock()
-		applyFollowupQueueSettings(existing, settings)
-		existing.Unlock()
+		existing.applySettings(settings)
 		return existing
 	}
 
@@ -104,9 +234,7 @@ func (r *FollowupQueueRegistry) Clear(key string) int {
 	if !ok {
 		return 0
 	}
-	q.Lock()
-	cleared := len(q.Items) + q.DroppedCount
-	q.Unlock()
+	cleared := q.itemCount()
 	delete(r.queues, key)
 	return cleared
 }
@@ -137,10 +265,7 @@ func (r *FollowupQueueRegistry) Depth(key string) int {
 	if !ok {
 		return 0
 	}
-	q.Lock()
-	n := len(q.Items)
-	q.Unlock()
-	return n
+	return q.depth()
 }
 
 // applyFollowupQueueSettings updates a queue's runtime settings.

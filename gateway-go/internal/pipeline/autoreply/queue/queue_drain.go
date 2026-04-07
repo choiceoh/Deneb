@@ -96,11 +96,7 @@ func (s *FollowupDrainService) ResetDrainState() {
 		if q == nil {
 			continue
 		}
-		q.Lock()
-		q.Draining = false
-		needsKick := len(q.Items) > 0 || q.DroppedCount > 0
-		q.Unlock()
-		if needsKick {
+		if q.resetDraining() {
 			s.KickIfIdle(key)
 		}
 	}
@@ -113,13 +109,9 @@ func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDra
 	if queue == nil {
 		return
 	}
-	queue.Lock()
-	if queue.Draining {
-		queue.Unlock()
+	if !queue.tryStartDrain() {
 		return
 	}
-	queue.Draining = true
-	queue.Unlock()
 	s.callbacks.Set(key, runFollowup)
 
 	go s.drainLoop(key, queue, runFollowup)
@@ -133,11 +125,7 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 	reschedule := true
 
 	defer func() {
-		queue.Lock()
-		queue.Draining = false
-		empty := len(queue.Items) == 0 && queue.DroppedCount == 0
-		queue.Unlock()
-		if empty {
+		if queue.finishDrain() {
 			s.registry.Delete(key)
 		} else if reschedule {
 			s.ScheduleDrain(key, runFollowup)
@@ -145,11 +133,7 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 	}()
 
 	for {
-		// Snapshot loop condition under lock.
-		queue.Lock()
-		hasWork := len(queue.Items) > 0 || queue.DroppedCount > 0
-		debounceMs := queue.DebounceMs
-		queue.Unlock()
+		hasWork, debounceMs := queue.peekWork()
 		if !hasWork {
 			break
 		}
@@ -172,10 +156,7 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 		// Always collect mode for single-user bot. Cross-channel items
 		// fall through to individual drain.
 		if !collectForceIndividual {
-			queue.Lock()
-			isCross := hasCrossChannelItems(queue.Items)
-			queue.Unlock()
-			if isCross {
+			if queue.checkCrossChannel() {
 				collectForceIndividual = true
 			}
 		}
@@ -203,20 +184,14 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 		}
 
 		// --- Individual item drain ---
-		queue.Lock()
-		if len(queue.Items) == 0 {
-			queue.Unlock()
+		item, ok := queue.dequeueFirst()
+		if !ok {
 			break
 		}
-		item := queue.Items[0]
-		queue.Items = queue.Items[1:]
-		queue.Unlock()
 
 		// Execute callback without holding the lock.
 		if err := runFollowup(item); err != nil {
-			queue.Lock()
-			queue.LastEnqueuedAt = time.Now().UnixMilli()
-			queue.Unlock()
+			queue.touchEnqueue()
 			consecutiveFailures++
 			s.logError(fmt.Sprintf("followup queue drain failed for %s: %s", key, err))
 			if consecutiveFailures >= maxConsecutiveFailures {
@@ -232,20 +207,10 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 // trySummaryDrain attempts to drain the summary prompt if accumulated.
 // Returns true if a summary was drained (success or failure).
 func (s *FollowupDrainService) trySummaryDrain(key string, queue *FollowupQueueState, runFollowup FollowupDrainCallback) bool {
-	queue.Lock()
-	if queue.DroppedCount == 0 || len(queue.SummaryLines) == 0 {
-		queue.Unlock()
+	summaryPrompt, lastRun, item, ok := queue.snapshotSummaryDrain()
+	if !ok {
 		return false
 	}
-	summaryPrompt := buildFollowupSummaryPrompt(queue)
-	lastRun := queue.LastRun
-	if summaryPrompt == "" || lastRun == nil || len(queue.Items) == 0 {
-		queue.Unlock()
-		return false
-	}
-	item := queue.Items[0]
-	queue.Items = queue.Items[1:]
-	queue.Unlock()
 
 	err := runFollowup(types.FollowupRun{
 		Prompt:               summaryPrompt,
@@ -260,30 +225,16 @@ func (s *FollowupDrainService) trySummaryDrain(key string, queue *FollowupQueueS
 		s.logError(fmt.Sprintf("followup queue drain summary failed for %s: %s", key, err))
 		return true // still consumed the attempt
 	}
-	queue.Lock()
-	clearFollowupSummaryState(queue)
-	queue.Unlock()
+	queue.clearSummary()
 	return true
 }
 
 // drainCollect processes items in collect mode (batch all into a single prompt).
 func (s *FollowupDrainService) drainCollect(queue *FollowupQueueState, runFollowup FollowupDrainCallback) bool {
-	queue.Lock()
-	if len(queue.Items) == 0 {
-		queue.Unlock()
+	items, run, summary, ok := queue.snapshotCollect()
+	if !ok {
 		return false
 	}
-
-	// Snapshot items for the batch.
-	items := make([]types.FollowupRun, len(queue.Items))
-	copy(items, queue.Items)
-	run := queue.LastRun
-	if len(items) > 0 && items[len(items)-1].Run != nil {
-		run = items[len(items)-1].Run
-	}
-	summary := buildFollowupSummaryPrompt(queue)
-	queue.Unlock()
-
 	if run == nil {
 		return false
 	}
@@ -313,19 +264,9 @@ func (s *FollowupDrainService) drainCollect(queue *FollowupQueueState, runFollow
 		return false
 	}
 
-	// Remove consumed items under lock.
-	queue.Lock()
-	// Items may have been appended during the callback; only remove the
-	// ones we consumed (up to snapshotLen).
-	snapshotLen := len(items)
-	if snapshotLen > len(queue.Items) {
-		snapshotLen = len(queue.Items)
-	}
-	queue.Items = queue.Items[snapshotLen:]
-	if summary != "" {
-		clearFollowupSummaryState(queue)
-	}
-	queue.Unlock()
+	// Remove consumed items; items may have been appended during the
+	// callback so only remove the ones we consumed (up to snapshotLen).
+	queue.consumeCollected(len(items), summary != "")
 	return true
 }
 
