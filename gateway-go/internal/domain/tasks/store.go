@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -16,6 +17,10 @@ import (
 // Store provides file-backed persistence for the task ledger.
 // Tasks and flows are kept in memory and atomically snapshotted to a JSON file.
 // Events are append-only in a separate JSONL file.
+//
+// Write coalescing: mutations mark the store dirty instead of writing immediately.
+// A background goroutine flushes at most once per second, batching burst mutations
+// into a single atomic write.
 type Store struct {
 	mu     sync.RWMutex
 	dir    string
@@ -23,6 +28,12 @@ type Store struct {
 
 	tasks map[string]*TaskRecord
 	flows map[string]*FlowRecord
+
+	// Write coalescing.
+	dirty   bool
+	flushCh chan struct{} // signals the flush goroutine
+	done    chan struct{} // closed on Close to stop the flush goroutine
+	wg      sync.WaitGroup
 }
 
 // StoreConfig configures the task store.
@@ -57,10 +68,12 @@ func OpenStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 	}
 
 	s := &Store{
-		dir:    dir,
-		logger: logger,
-		tasks:  make(map[string]*TaskRecord),
-		flows:  make(map[string]*FlowRecord),
+		dir:     dir,
+		logger:  logger,
+		tasks:   make(map[string]*TaskRecord),
+		flows:   make(map[string]*FlowRecord),
+		flushCh: make(chan struct{}, 1),
+		done:    make(chan struct{}),
 	}
 
 	// Load existing snapshot.
@@ -82,6 +95,10 @@ func OpenStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("tasks store: read snapshot: %w", err)
 	}
 
+	// Start background flush goroutine.
+	s.wg.Add(1)
+	go s.flushLoop()
+
 	return s, nil
 }
 
@@ -93,8 +110,57 @@ func (s *Store) eventsPath() string {
 	return filepath.Join(s.dir, "task_events.jsonl")
 }
 
-// saveSnapshot atomically writes the current state. Must be called with mu held.
-func (s *Store) saveSnapshot() error {
+// markDirty signals that in-memory state has changed and needs to be flushed.
+// Must be called with mu held.
+func (s *Store) markDirty() {
+	s.dirty = true
+	// Non-blocking signal to the flush goroutine.
+	select {
+	case s.flushCh <- struct{}{}:
+	default:
+	}
+}
+
+// flushLoop runs in the background and coalesces writes.
+// After receiving a dirty signal, it waits up to 1 second to batch
+// more mutations, then writes a single snapshot.
+func (s *Store) flushLoop() {
+	defer s.wg.Done()
+	for {
+		select {
+		case <-s.done:
+			// Final flush on shutdown.
+			s.flushIfDirty()
+			return
+		case <-s.flushCh:
+			// Debounce: wait a short window to batch more mutations.
+			select {
+			case <-s.done:
+				s.flushIfDirty()
+				return
+			case <-time.After(time.Second):
+			}
+			s.flushIfDirty()
+		}
+	}
+}
+
+func (s *Store) flushIfDirty() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.dirty {
+		return
+	}
+	if err := s.writeSnapshot(); err != nil {
+		s.logger.Error("tasks store: flush failed", "error", err)
+		return
+	}
+	s.dirty = false
+}
+
+// writeSnapshot atomically writes the current state. Must be called with mu held.
+func (s *Store) writeSnapshot() error {
 	snap := snapshotData{
 		Tasks: make([]*TaskRecord, 0, len(s.tasks)),
 		Flows: make([]*FlowRecord, 0, len(s.flows)),
@@ -113,8 +179,10 @@ func (s *Store) saveSnapshot() error {
 	return atomicfile.WriteFile(s.snapshotPath(), data, &atomicfile.Options{Fsync: true})
 }
 
-// Close is a no-op (files are written on each mutation).
+// Close flushes pending writes and stops the background goroutine.
 func (s *Store) Close() error {
+	close(s.done)
+	s.wg.Wait()
 	return nil
 }
 
@@ -126,9 +194,7 @@ func (s *Store) UpsertTask(t *TaskRecord) error {
 	defer s.mu.Unlock()
 
 	s.tasks[t.TaskID] = t
-	if err := s.saveSnapshot(); err != nil {
-		return fmt.Errorf("upsert task %s: %w", t.TaskID, err)
-	}
+	s.markDirty()
 	return nil
 }
 
@@ -225,7 +291,8 @@ func (s *Store) DeleteTask(taskID string) error {
 	defer s.mu.Unlock()
 
 	delete(s.tasks, taskID)
-	return s.saveSnapshot()
+	s.markDirty()
+	return nil
 }
 
 // DeleteTerminalBefore removes terminal tasks older than the given timestamp.
@@ -242,15 +309,15 @@ func (s *Store) DeleteTerminalBefore(beforeMs int64) (int64, error) {
 		}
 	}
 	if count > 0 {
-		if err := s.saveSnapshot(); err != nil {
-			return count, err
-		}
+		s.markDirty()
+		// Prune events: rewrite event log keeping only events for surviving tasks.
 		s.pruneEvents()
 	}
 	return count, nil
 }
 
 // pruneEvents rewrites the event log to keep only events for tasks that still exist.
+// Must be called with mu held.
 func (s *Store) pruneEvents() {
 	evPath := s.eventsPath()
 	all, err := jsonlstore.Load[TaskEventRecord](evPath)
@@ -265,6 +332,7 @@ func (s *Store) pruneEvents() {
 		}
 	}
 
+	// Only rewrite if we actually pruned something.
 	if len(kept) < len(all) {
 		if err := jsonlstore.Snapshot(evPath, kept); err != nil {
 			s.logger.Error("tasks store: prune events failed", "error", err)
@@ -311,7 +379,8 @@ func (s *Store) UpsertFlow(f *FlowRecord) error {
 	defer s.mu.Unlock()
 
 	s.flows[f.FlowID] = f
-	return s.saveSnapshot()
+	s.markDirty()
+	return nil
 }
 
 // Flow retrieves a flow by ID.
@@ -363,7 +432,8 @@ func (s *Store) DeleteFlow(flowID string) error {
 	defer s.mu.Unlock()
 
 	delete(s.flows, flowID)
-	return s.saveSnapshot()
+	s.markDirty()
+	return nil
 }
 
 // --- Summary ---
