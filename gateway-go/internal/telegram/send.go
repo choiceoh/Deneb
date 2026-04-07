@@ -3,12 +3,16 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg" // register JPEG decoder for ValidatePhotoMetadata
 	_ "image/png"  // register PNG decoder for ValidatePhotoMetadata
 	"io"
 	"strconv"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
 
 // SendOptions configures message sending behavior.
@@ -321,22 +325,28 @@ func ValidatePhotoMetadata(r io.ReadSeeker) bool {
 
 // isHTMLParseError returns true if err is a Telegram API error caused by invalid HTML entities.
 func isHTMLParseError(err error) bool {
-	var apiErr *APIError
-	if isAPIError(err, &apiErr) {
-		return apiErr.IsParseError()
-	}
-	return false
+	var apiErr *httpretry.APIError
+	return errors.As(err, &apiErr) && isParseError(apiErr)
 }
 
 // IsMessageNotModifiedError returns true if err indicates Telegram rejected an
 // edit because the message content is unchanged. This is not a real failure —
 // the message already shows the desired content.
 func IsMessageNotModifiedError(err error) bool {
-	var apiErr *APIError
-	if isAPIError(err, &apiErr) {
-		return apiErr.IsMessageNotModified()
-	}
-	return false
+	var apiErr *httpretry.APIError
+	return errors.As(err, &apiErr) && isMessageNotModified(apiErr)
+}
+
+// isParseError returns true if the API error is an HTML/entity parsing failure.
+func isParseError(e *httpretry.APIError) bool {
+	return e.StatusCode == 400 && (strings.Contains(e.Message, "can't parse entities") ||
+		strings.Contains(e.Message, "parse entities") ||
+		strings.Contains(e.Message, "find end of the entity"))
+}
+
+// isMessageNotModified returns true if the API error indicates unchanged message content.
+func isMessageNotModified(e *httpretry.APIError) bool {
+	return e.StatusCode == 400 && strings.Contains(e.Message, "message is not modified")
 }
 
 // --- Helpers ---

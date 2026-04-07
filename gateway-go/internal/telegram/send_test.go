@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
 
 func TestSendTextHTMLFallbackAllChunks(t *testing.T) {
@@ -126,17 +128,17 @@ func TestIsHTMLParseError(t *testing.T) {
 	}{
 		{
 			name: "parse error",
-			err:  &APIError{Code: 400, Description: "Bad Request: can't parse entities"},
+			err:  &httpretry.APIError{StatusCode: 400, Message: "Bad Request: can't parse entities"},
 			want: true,
 		},
 		{
 			name: "non-parse 400",
-			err:  &APIError{Code: 400, Description: "Bad Request: chat not found"},
+			err:  &httpretry.APIError{StatusCode: 400, Message: "Bad Request: chat not found"},
 			want: false,
 		},
 		{
 			name: "rate limit",
-			err:  &APIError{Code: 429, Description: "Too Many Requests"},
+			err:  &httpretry.APIError{StatusCode: 429, Message: "Too Many Requests"},
 			want: false,
 		},
 		{

@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
 
 // newTestClient creates a Client pointing at a local httptest server.
@@ -100,15 +103,15 @@ func TestAPIError(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	apiErr, ok := err.(*APIError)
+	apiErr, ok := err.(*httpretry.APIError)
 	if !ok {
-		t.Fatalf("expected *APIError, got %T", err)
+		t.Fatalf("expected *httpretry.APIError, got %T", err)
 	}
-	if apiErr.Code != 400 {
-		t.Errorf("expected code 400, got %d", apiErr.Code)
+	if apiErr.StatusCode != 400 {
+		t.Errorf("expected StatusCode 400, got %d", apiErr.StatusCode)
 	}
-	if !apiErr.IsParseError() {
-		t.Error("expected IsParseError to be true")
+	if !isParseError(apiErr) {
+		t.Error("expected isParseError to be true")
 	}
 }
 
@@ -129,15 +132,15 @@ func TestRateLimitError(t *testing.T) {
 		"chat_id": 1,
 		"text":    "test",
 	})
-	apiErr, ok := err.(*APIError)
+	apiErr, ok := err.(*httpretry.APIError)
 	if !ok {
-		t.Fatalf("expected *APIError, got %T", err)
+		t.Fatalf("expected *httpretry.APIError, got %T", err)
 	}
 	if !apiErr.IsRateLimited() {
 		t.Error("expected IsRateLimited to be true")
 	}
-	if apiErr.RetryAfter != 5 {
-		t.Errorf("expected RetryAfter 5, got %d", apiErr.RetryAfter)
+	if apiErr.RetryAfter != 5*time.Second {
+		t.Errorf("expected RetryAfter 5s, got %v", apiErr.RetryAfter)
 	}
 }
 

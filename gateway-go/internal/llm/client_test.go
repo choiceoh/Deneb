@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/httpretry"
 )
 
 func TestDoStream_Success(t *testing.T) {
@@ -128,7 +130,7 @@ func TestDoStream_RateLimitRetryAfter(t *testing.T) {
 func TestBackoffDelay_Jitter(t *testing.T) {
 	c := NewClient("http://localhost", "key",
 		WithRetry(6, 100*time.Millisecond, 10*time.Second))
-	err := &APIError{StatusCode: 503, Body: "unavailable"}
+	err := &httpretry.APIError{StatusCode: 503, Message: "unavailable"}
 
 	// Run multiple times to verify jitter adds variance.
 	seen := make(map[time.Duration]bool)
@@ -150,7 +152,7 @@ func TestBackoffDelay_RateLimitFloor(t *testing.T) {
 		WithRetry(6, 500*time.Millisecond, 60*time.Second))
 
 	// 429 error should use 2s floor instead of the configured 500ms base.
-	rateLimitErr := &APIError{StatusCode: 429, Body: "rate limited"}
+	rateLimitErr := &httpretry.APIError{StatusCode: 429, Message: "rate limited"}
 	d := c.backoffDelay(1, rateLimitErr)
 	// Floor is 2s, attempt 1 → 2s * 2^0 = 2s, plus up to 25% jitter → [2s, 2.5s).
 	if d < 2*time.Second || d >= 2500*time.Millisecond {
@@ -158,7 +160,7 @@ func TestBackoffDelay_RateLimitFloor(t *testing.T) {
 	}
 
 	// 503 error should use the configured 500ms base (no floor).
-	serverErr := &APIError{StatusCode: 503, Body: "unavailable"}
+	serverErr := &httpretry.APIError{StatusCode: 503, Message: "unavailable"}
 	d = c.backoffDelay(1, serverErr)
 	// 500ms * 2^0 = 500ms, plus up to 25% jitter → [500ms, 625ms).
 	if d < 500*time.Millisecond || d >= 625*time.Millisecond {
@@ -189,13 +191,6 @@ func TestDoStream_DefaultMaxRetries(t *testing.T) {
 	}
 }
 
-func TestAPIError_Error(t *testing.T) {
-	err := &APIError{StatusCode: 429, Body: "rate limited"}
-	want := "LLM API error 429: rate limited"
-	if err.Error() != want {
-		t.Errorf("Error() = %q, want %q", err.Error(), want)
-	}
-}
 
 func TestDoStream_504_Retries(t *testing.T) {
 	calls := 0
