@@ -66,12 +66,6 @@ type Request struct {
 	// CacheTTL overrides the default cache TTL for this request's response.
 	// Zero means use the hub's default (5 minutes). Negative means no cache.
 	CacheTTL time.Duration
-
-	// ApplyCJKBlock injects logit_bias to suppress CJK (Chinese/Japanese) tokens.
-	// Only set for user-facing text generation where Chinese output would be
-	// visible. Do NOT set for guided_json or internal pipeline callers — the
-	// 55K logit_bias entries conflict with xgrammar constrained decoding.
-	ApplyCJKBlock bool
 }
 
 // Response is the result of a hub submission.
