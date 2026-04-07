@@ -215,18 +215,24 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 
 		// Check for FINAL() in the LLM text itself (outside code blocks).
 		if answer := extractTextFinal(responseText); answer != "" {
-			result.FinalAnswer = answer
-			result.StopReason = "final"
-			step.HasFinal = true
-			step.TotalElapsed = time.Since(iterStart).Milliseconds()
-			if tracing {
-				traceSteps = append(traceSteps, step)
+			if isPrematureFinal(answer, iter) {
+				cfg.Logger.Warn("premature text FINAL rejected, continuing loop",
+					"iter", iter, "answer_len", len(answer))
+				// Fall through — treat as normal text response.
+			} else {
+				result.FinalAnswer = answer
+				result.StopReason = "final"
+				step.HasFinal = true
+				step.TotalElapsed = time.Since(iterStart).Milliseconds()
+				if tracing {
+					traceSteps = append(traceSteps, step)
+				}
+				if cfg.OnFinal != nil {
+					cfg.OnFinal(answer)
+				}
+				finishTrace()
+				return result, nil
 			}
-			if cfg.OnFinal != nil {
-				cfg.OnFinal(answer)
-			}
-			finishTrace()
-			return result, nil
 		}
 
 		// Extract and execute code blocks.
@@ -286,22 +292,29 @@ func RunLoop(ctx context.Context, cfg LoopConfig, userPrompt string) (*LoopResul
 
 			// Check FINAL() from REPL execution.
 			if cfg.REPLEnv.HasFinal() {
-				result.FinalAnswer = cfg.REPLEnv.FinalAnswer()
-				result.StopReason = "final"
-				step.HasFinal = true
-				step.HasError = iterHadError
-				step.ExecElapsed = time.Since(execStart).Milliseconds()
-				step.TotalElapsed = time.Since(iterStart).Milliseconds()
-				if tracing {
-					traceSteps = append(traceSteps, step)
+				finalAnswer := cfg.REPLEnv.FinalAnswer()
+				if isPrematureFinal(finalAnswer, iter) {
+					cfg.Logger.Warn("premature REPL FINAL rejected, continuing loop",
+						"iter", iter, "answer_len", len(finalAnswer))
+					cfg.REPLEnv.ResetFinal()
+				} else {
+					result.FinalAnswer = finalAnswer
+					result.StopReason = "final"
+					step.HasFinal = true
+					step.HasError = iterHadError
+					step.ExecElapsed = time.Since(execStart).Milliseconds()
+					step.TotalElapsed = time.Since(iterStart).Milliseconds()
+					if tracing {
+						traceSteps = append(traceSteps, step)
+					}
+					if cfg.OnFinal != nil {
+						cfg.OnFinal(result.FinalAnswer)
+					}
+					cfg.Logger.Info("loop FINAL detected",
+						"iter", iter, "answer_len", len(result.FinalAnswer))
+					finishTrace()
+					return result, nil
 				}
-				if cfg.OnFinal != nil {
-					cfg.OnFinal(result.FinalAnswer)
-				}
-				cfg.Logger.Info("loop FINAL detected",
-					"iter", iter, "answer_len", len(result.FinalAnswer))
-				finishTrace()
-				return result, nil
 			}
 		}
 
@@ -424,6 +437,57 @@ func estimateTokens(msgs []llm.Message) int {
 // estimateSystemTokens estimates token count for the system prompt.
 func estimateSystemTokens(system json.RawMessage) int {
 	return len(system) / 4
+}
+
+// ── Premature FINAL guard ──────────────────────────────────────────────────
+//
+// Addresses the "brittle FINAL detection" issue from the RLM paper
+// (Zhang et al., 2025, Appendix A): models sometimes wrap their plan
+// or intention in FINAL() instead of the actual computed answer.
+
+// isPrematureFinal returns true when a FINAL answer is likely a plan or
+// thought rather than a genuine answer. Rejected FINALs cause the loop
+// to continue iterating so the model can actually compute.
+func isPrematureFinal(answer string, iter int) bool {
+	// After sufficient exploration, trust the model's judgment.
+	if iter >= 2 {
+		return false
+	}
+
+	trimmed := strings.TrimSpace(answer)
+
+	// Question-form answers on early iterations are suspicious —
+	// the model is asking itself what to do, not answering.
+	if strings.HasSuffix(trimmed, "?") || strings.HasSuffix(trimmed, "？") {
+		return true
+	}
+
+	// Plan/intention language: 2+ hits means the model is describing
+	// its strategy rather than providing a computed answer.
+	planHits := 0
+	for _, p := range prematurePlanIndicators {
+		if strings.Contains(answer, p) {
+			planHits++
+			if planHits >= 2 {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// prematurePlanIndicators are phrases that signal the model is describing
+// what it intends to do rather than providing a computed answer.
+var prematurePlanIndicators = []string{
+	// Korean future-intent verb endings
+	"하겠습니다", "살펴보겠", "분석하겠", "확인하겠",
+	"탐색하겠", "진행하겠", "시작하겠", "알아보겠", "찾아보겠",
+	// Korean planning nouns
+	"단계별로", "계획은", "전략은",
+	// English intent patterns
+	"I will ", "I'll ", "Let me ", "My plan",
+	"I need to ", "I should ", "Step 1:", "First, I",
 }
 
 // compactHistory summarizes older messages to reduce context size.
