@@ -573,4 +573,3 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 		})
 	}
 }
-

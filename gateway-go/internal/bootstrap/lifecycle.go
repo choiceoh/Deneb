@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // ExitCodeRestart signals that the gateway should be restarted (e.g., after
@@ -45,6 +46,8 @@ func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int
 		}
 		cancel()
 	}()
+
+	defer httputil.CloseIdle()
 
 	if err := fn(ctx); err != nil {
 		logger.Error("gateway error", "error", err)
@@ -132,7 +135,7 @@ func isLocalAIReachable(baseURL string) bool {
 	if err != nil {
 		return false
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httputil.NewClient(3 * time.Second).Do(req)
 	if err != nil {
 		return false
 	}

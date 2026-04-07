@@ -15,7 +15,7 @@ type InfraSubsystem struct {
 	taskRegistry    *tasks.Registry
 	taskStore       *tasks.Store
 	thinkingRuntime *thinking.ThinkingRuntime
-	maintRunner *maintenance.Runner
+	maintRunner     *maintenance.Runner
 }
 
 // NewInfraSubsystem creates infrastructure services that can be eagerly initialized.

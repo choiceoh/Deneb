@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // MorningLetterOpts holds optional configuration for the morning letter tool.
@@ -201,9 +202,7 @@ func fetchWeather(ctx context.Context) any {
 	if err != nil {
 		return weatherData{Error: "request build failed"}
 	}
-	req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httputil.NewClient(30 * time.Second).Do(req)
 	if err != nil {
 		return weatherData{Error: "network error"}
 	}
@@ -275,9 +274,7 @@ func fetchExchangeRates(ctx context.Context) any {
 	if err != nil {
 		return exchangeData{Error: "request build failed"}
 	}
-	req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httputil.NewClient(30 * time.Second).Do(req)
 	if err != nil {
 		return exchangeData{Error: "network error"}
 	}
@@ -322,9 +319,7 @@ func fetchCopper(ctx context.Context) any {
 	if err != nil {
 		return copperData{Error: "request build failed"}
 	}
-	req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httputil.NewClient(30 * time.Second).Do(req)
 	if err != nil {
 		return copperData{Error: "network error"}
 	}

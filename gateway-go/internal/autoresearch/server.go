@@ -1,15 +1,17 @@
 package autoresearch
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // ServerManager manages a persistent server process across iterations.
@@ -94,20 +96,9 @@ func (sm *ServerManager) startLocked() error {
 }
 
 func (sm *ServerManager) waitHealth() error {
-	deadline := time.Now().Add(sm.startup)
-	client := &http.Client{Timeout: 2 * time.Second}
-
-	for time.Now().Before(deadline) {
-		resp, err := client.Get(sm.healthURL)
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode < 500 {
-				return nil
-			}
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	return fmt.Errorf("health check at %s not ready after %v", sm.healthURL, sm.startup)
+	ctx, cancel := context.WithTimeout(context.Background(), sm.startup)
+	defer cancel()
+	return httputil.WaitForHealth(ctx, sm.healthURL, 500*time.Millisecond)
 }
 
 // RestartIfNeeded restarts the server only when the content hash changed.

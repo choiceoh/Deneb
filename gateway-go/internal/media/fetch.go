@@ -63,6 +63,18 @@ const (
 	defaultIdleTimeout  = 30_000 // 30s
 )
 
+// ssrfTransport is a shared SSRF-safe transport for media fetches.
+// Reuses TCP connections across Fetch() calls instead of creating a new
+// transport per invocation.
+var ssrfTransport = &http.Transport{
+	DialContext:         SSRFSafeDialer(),
+	MaxIdleConns:        32,
+	MaxIdleConnsPerHost: 4,
+	IdleConnTimeout:     90 * time.Second,
+	TLSHandshakeTimeout: 5 * time.Second,
+	ForceAttemptHTTP2:   true,
+}
+
 // Fetch downloads media from a URL with SSRF protection and size limits.
 func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 	if opts.MaxBytes <= 0 {
@@ -79,11 +91,8 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 
 	client := opts.Client
 	if client == nil {
-		transport := &http.Transport{
-			DialContext: SSRFSafeDialer(),
-		}
 		client = &http.Client{
-			Transport: transport,
+			Transport: ssrfTransport,
 			Timeout:   60 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= opts.MaxRedirects {

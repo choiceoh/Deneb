@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // Bridge is an HTTP client that forwards RPC calls to the Deneb gateway.
@@ -40,7 +42,7 @@ func NewBridge(cfg BridgeConfig) *Bridge {
 	return &Bridge{
 		baseURL: strings.TrimRight(cfg.GatewayURL, "/"),
 		token:   cfg.Token,
-		client:  &http.Client{Timeout: cfg.Timeout},
+		client:  httputil.NewClient(cfg.Timeout),
 	}
 }
 

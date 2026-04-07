@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -69,7 +70,6 @@ func ToolHTTP() ToolFunc {
 			return "", fmt.Errorf("build request: %w", err)
 		}
 
-		req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
 		if contentType != "" {
 			req.Header.Set("Content-Type", contentType)
 		}
@@ -77,7 +77,7 @@ func ToolHTTP() ToolFunc {
 			req.Header.Set(k, v)
 		}
 
-		client := &http.Client{Timeout: timeout}
+		client := httputil.NewClient(timeout)
 		resp, err := client.Do(req)
 		if err != nil {
 			return "", fmt.Errorf("request failed: %w", err)

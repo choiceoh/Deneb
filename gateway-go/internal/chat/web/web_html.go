@@ -20,6 +20,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -120,7 +121,7 @@ func NewLocalAIExtractor() *LocalAIExtractor {
 		model = modelrole.DefaultVllmModel
 	}
 	return &LocalAIExtractor{
-		client:  &http.Client{Timeout: 60 * time.Second},
+		client:  httputil.NewClient(60 * time.Second),
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		model:   model,
