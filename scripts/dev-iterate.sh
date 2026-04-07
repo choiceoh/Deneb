@@ -20,13 +20,15 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Source shared dev server library.
+source "$(cd "$(dirname "$0")" && pwd)/lib-dev-server.sh"
 
+SCRIPT_DIR="$DEVLIB_SCRIPT_DIR"
+REPO_DIR="$DEVLIB_REPO_DIR"
 PORT="${ITERATE_PORT:-18791}"
 BINARY="/tmp/deneb-gateway-iterate"
 LOG="/tmp/deneb-gateway-iterate.log"
-HOST="127.0.0.1"
+HOST="$DEVLIB_HOST"
 RESULT_FILE="/tmp/deneb-iterate-result.json"
 BUILD_LOG="/tmp/deneb-iterate-build.log"
 LOCK_FILE="/tmp/deneb-iterate.lock"
@@ -100,49 +102,25 @@ with open('$RESULT_FILE', 'w') as f:
 "
 }
 
-# --- Robust process management ---
-
-_verify_port_free() {
-  local port="$1" retries=0 wait_ms=30
-  while (( retries < 15 )); do
-    if ! ss -ltnp 2>/dev/null | grep -q ":$port "; then
-      return 0
-    fi
-    sleep "$(awk "BEGIN {printf \"%.3f\", $wait_ms/1000}")"
-    retries=$((retries+1))
-    wait_ms=$(( wait_ms * 2 )); (( wait_ms > 200 )) && wait_ms=200
-  done
-  local holder
-  holder=$(ss -ltnp 2>/dev/null | grep ":$port " | head -1 || true)
-  echo "  WARN: port $port still held: $holder" >&2
-  return 1
-}
+# --- Process management (via shared library) ---
 
 cleanup() {
   if [[ -n "${GW_PID:-}" ]]; then
-    # SIGTERM first.
-    kill "$GW_PID" 2>/dev/null || true
-    # Wait up to 3s for graceful shutdown.
-    local waited=0
-    while kill -0 "$GW_PID" 2>/dev/null && (( waited < 30 )); do
-      sleep 0.1; waited=$((waited+1))
-    done
-    # SIGKILL fallback if still alive.
-    if kill -0 "$GW_PID" 2>/dev/null; then
-      kill -9 "$GW_PID" 2>/dev/null || true
-      wait "$GW_PID" 2>/dev/null || true
-    fi
+    devlib_stop_pid "$GW_PID"
     GW_PID=""
   fi
-  _verify_port_free "$PORT" || true
+  devlib_wait_port_free "$PORT" || {
+    local holder
+    holder=$(ss -ltnp 2>/dev/null | grep ":$PORT " | head -1 || true)
+    echo "  WARN: port $PORT still held: $holder" >&2
+  }
 }
 trap cleanup EXIT
 
 # --- Step 1: Build ---
 echo -n "build... "
 BUILD_START=$(date +%s%N)
-DENEB_VERSION=$(git -C "$REPO_DIR" tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
-if ! go build -C "$REPO_DIR/gateway-go" -ldflags "-s -w -X main.Version=${DENEB_VERSION:-dev}" -o "$BINARY" ./cmd/gateway/ 2>"$BUILD_LOG"; then
+if ! devlib_build "$BINARY" 2>"$BUILD_LOG"; then
   BUILD_MS=$(( ($(date +%s%N) - BUILD_START) / 1000000 ))
   PHASE_OK[build]=false; PHASE_MS[build]=$BUILD_MS
   echo "FAIL (${BUILD_MS}ms)"
@@ -179,32 +157,16 @@ echo "ok (${BUILD_MS}ms)"
 # Start gateway with production config (iterate-specific Telegram token).
 echo -n "start... "
 DEV_CONFIG="/tmp/deneb-iterate-config.json"
-DENEB_DEV_TELEGRAM_TOKEN="${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}" \
-  "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
-mkdir -p "$ITERATE_STATE_DIR"
-DENEB_CONFIG_PATH="$DEV_CONFIG" \
-DENEB_STATE_DIR="$ITERATE_STATE_DIR" \
-DENEB_WIKI_DIR="$ITERATE_STATE_DIR/wiki" \
-DENEB_WIKI_DIARY_DIR="$ITERATE_STATE_DIR/memory/diary" \
-"$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
-GW_PID=$!
+devlib_gen_config "$DEV_CONFIG" "${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}"
 
-# Wait for health (exponential backoff: 50ms → 300ms cap).
 START_WAIT_BEGIN=$(date +%s%N)
+devlib_start_gateway "$BINARY" "$PORT" "$DEV_CONFIG" "$ITERATE_STATE_DIR" "$LOG"
+GW_PID=$DEVLIB_PID
+
 HEALTHY=false
-_WAIT_MS=50
-for _ in $(seq 1 30); do
-  if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
-    HEALTHY=true
-    break
-  fi
-  # Early exit if process crashed.
-  if ! kill -0 "$GW_PID" 2>/dev/null; then
-    break
-  fi
-  sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
-  _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
-done
+if devlib_wait_healthy "$HOST" "$PORT" 30; then
+  HEALTHY=true
+fi
 WAIT_MS=$(( ($(date +%s%N) - START_WAIT_BEGIN) / 1000000 ))
 
 if [[ "$HEALTHY" != "true" ]]; then
@@ -396,15 +358,7 @@ fi
 
 # --- Step 5: Stop ---
 if [[ -n "${GW_PID:-}" ]]; then
-  kill "$GW_PID" 2>/dev/null || true
-  local_wait=0
-  while kill -0 "$GW_PID" 2>/dev/null && (( local_wait < 30 )); do
-    sleep 0.1; local_wait=$((local_wait+1))
-  done
-  if kill -0 "$GW_PID" 2>/dev/null; then
-    kill -9 "$GW_PID" 2>/dev/null || true
-    wait "$GW_PID" 2>/dev/null || true
-  fi
+  devlib_stop_pid "$GW_PID"
   GW_PID=""
 fi
 

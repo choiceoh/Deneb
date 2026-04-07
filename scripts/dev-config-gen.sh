@@ -17,21 +17,9 @@
 
 set -euo pipefail
 
-# Source .env for dev token (DENEB_DEV_TELEGRAM_TOKEN etc.) if not already set.
-_dotenv="${HOME}/.deneb/.env"
-if [[ -f "$_dotenv" ]]; then
-  # Load KEY=VALUE lines without overriding existing env vars.
-  while IFS='=' read -r key val; do
-    [[ -z "$key" || "$key" == \#* ]] && continue
-    key="${key## }"; key="${key%% }"
-    val="${val## }"; val="${val%% }"
-    val="${val#\"}"; val="${val%\"}"
-    val="${val#\'}"; val="${val%\'}"
-    if [[ -z "${!key:-}" ]]; then
-      export "$key=$val"
-    fi
-  done < "$_dotenv"
-fi
+# Source shared library for .env loading.
+source "$(cd "$(dirname "$0")" && pwd)/lib-dev-server.sh"
+devlib_load_dotenv
 
 PROD_CONFIG="${DENEB_CONFIG_PATH:-${HOME}/.deneb/deneb.json}"
 OUT="/tmp/deneb-dev-config.json"

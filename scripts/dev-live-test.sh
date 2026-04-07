@@ -45,38 +45,23 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Source shared dev server library.
+source "$(cd "$(dirname "$0")" && pwd)/lib-dev-server.sh"
+devlib_load_dotenv
 
+SCRIPT_DIR="$DEVLIB_SCRIPT_DIR"
+REPO_DIR="$DEVLIB_REPO_DIR"
 DEV_PORT="${DEV_LIVE_PORT:-18790}"
 DEV_BINARY="/tmp/deneb-gateway-live"
 DEV_PID_FILE="/tmp/deneb-gateway-live.pid"
 DEV_LOG="/tmp/deneb-gateway-live.log"
-DEV_HOST="127.0.0.1"
+DEV_HOST="$DEVLIB_HOST"
 DEV_STATE_DIR="/tmp/deneb-dev-state"
-
-# Source .env for status messages (config gen does its own loading).
-_dotenv="${HOME}/.deneb/.env"
-if [[ -f "$_dotenv" ]]; then
-  while IFS='=' read -r key val; do
-    [[ -z "$key" || "$key" == \#* ]] && continue
-    key="${key## }"; key="${key%% }"
-    val="${val## }"; val="${val%% }"
-    val="${val#\"}"; val="${val%\"}"
-    val="${val#\'}"; val="${val%\'}"
-    if [[ -z "${!key:-}" ]]; then
-      export "$key=$val"
-    fi
-  done < "$_dotenv"
-fi
-
-# Version from git tags.
-DENEB_VERSION=$(git -C "$REPO_DIR" tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
+DENEB_VERSION=$(devlib_version)
 
 cmd_build() {
   echo "==> Building gateway from $(basename "$REPO_DIR")..."
-  cd "$REPO_DIR"
-  go build -C gateway-go -ldflags "-s -w -X main.Version=${DENEB_VERSION:-dev}" -o "$DEV_BINARY" ./cmd/gateway/
+  devlib_build "$DEV_BINARY"
   echo "    Binary: $DEV_BINARY ($(du -h "$DEV_BINARY" | cut -f1))"
 }
 
@@ -91,39 +76,22 @@ cmd_start() {
     cmd_build
   fi
 
-  # Config: generate dev config from production (with dev bot token).
   local dev_config="/tmp/deneb-dev-config.json"
-  "$SCRIPT_DIR/dev-config-gen.sh" --out "$dev_config" >/dev/null 2>&1
+  devlib_gen_config "$dev_config"
   if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
     echo "    Config: production (Telegram: dev bot active)"
   else
     echo "    Config: production (Telegram: disabled, set DENEB_DEV_TELEGRAM_TOKEN)"
   fi
 
-  # Isolate dev state from production: wiki/diary/spillover write to a temp dir
-  # so the dev bot never pollutes production memory records.
-  mkdir -p "$DEV_STATE_DIR"
-
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT..."
-  DENEB_CONFIG_PATH="$dev_config" \
-  DENEB_STATE_DIR="$DEV_STATE_DIR" \
-  DENEB_WIKI_DIR="$DEV_STATE_DIR/wiki" \
-  DENEB_WIKI_DIARY_DIR="$DEV_STATE_DIR/memory/diary" \
-  nohup "$DEV_BINARY" --bind loopback --port "$DEV_PORT" > "$DEV_LOG" 2>&1 &
-  local pid=$!
-  echo "$pid" > "$DEV_PID_FILE"
+  devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$dev_config" "$DEV_STATE_DIR" "$DEV_LOG" nohup
+  echo "$DEVLIB_PID" > "$DEV_PID_FILE"
 
-  # Wait for health (exponential backoff: 50ms → 300ms cap).
-  local retries=0 wait_ms=50
-  while (( retries < 25 )); do
-    if curl -sf "http://$DEV_HOST:$DEV_PORT/health" > /dev/null 2>&1; then
-      echo "    Running (PID $pid, port $DEV_PORT)"
-      return 0
-    fi
-    sleep "$(awk "BEGIN {printf \"%.3f\", $wait_ms/1000}")"
-    wait_ms=$(( wait_ms * 2 )); (( wait_ms > 300 )) && wait_ms=300
-    retries=$((retries + 1))
-  done
+  if devlib_wait_healthy "$DEV_HOST" "$DEV_PORT" 25; then
+    echo "    Running (PID $DEVLIB_PID, port $DEV_PORT)"
+    return 0
+  fi
 
   echo "    WARN: Gateway started but /health not responding after 6s"
   echo "    Check logs: scripts/dev-live-test.sh logs"
@@ -139,21 +107,14 @@ cmd_stop() {
   local pid
   pid=$(cat "$DEV_PID_FILE")
   echo "==> Stopping dev gateway (PID $pid)..."
-  kill "$pid" 2>/dev/null || true
+  devlib_stop_pid "$pid"
   rm -f "$DEV_PID_FILE"
 
-  # Wait for port release (exponential backoff).
-  local retries=0 wait_ms=30
-  while (( retries < 15 )); do
-    if ! ss -ltnp 2>/dev/null | grep -q ":$DEV_PORT "; then
-      echo "    Stopped"
-      return 0
-    fi
-    sleep "$(awk "BEGIN {printf \"%.3f\", $wait_ms/1000}")"
-    wait_ms=$(( wait_ms * 2 )); (( wait_ms > 200 )) && wait_ms=200
-    retries=$((retries + 1))
-  done
-  echo "    WARN: Port $DEV_PORT still in use"
+  if devlib_wait_port_free "$DEV_PORT"; then
+    echo "    Stopped"
+  else
+    echo "    WARN: Port $DEV_PORT still in use"
+  fi
 }
 
 cmd_restart() {
