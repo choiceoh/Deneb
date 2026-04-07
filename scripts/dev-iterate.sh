@@ -30,6 +30,7 @@ HOST="127.0.0.1"
 RESULT_FILE="/tmp/deneb-iterate-result.json"
 BUILD_LOG="/tmp/deneb-iterate-build.log"
 LOCK_FILE="/tmp/deneb-iterate.lock"
+ITERATE_STATE_DIR="/tmp/deneb-iterate-state"
 
 # Parse arguments.
 METRIC_CMD=""
@@ -180,7 +181,12 @@ echo -n "start... "
 DEV_CONFIG="/tmp/deneb-iterate-config.json"
 DENEB_DEV_TELEGRAM_TOKEN="${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}" \
   "$SCRIPT_DIR/dev-config-gen.sh" --out "$DEV_CONFIG" >/dev/null 2>&1
-DENEB_CONFIG_PATH="$DEV_CONFIG" "$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
+mkdir -p "$ITERATE_STATE_DIR"
+DENEB_CONFIG_PATH="$DEV_CONFIG" \
+DENEB_STATE_DIR="$ITERATE_STATE_DIR" \
+DENEB_WIKI_DIR="$ITERATE_STATE_DIR/wiki" \
+DENEB_WIKI_DIARY_DIR="$ITERATE_STATE_DIR/memory/diary" \
+"$BINARY" --bind loopback --port "$PORT" > "$LOG" 2>&1 &
 GW_PID=$!
 
 # Wait for health (exponential backoff: 50ms → 300ms cap).

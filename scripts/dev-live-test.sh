@@ -51,6 +51,7 @@ DEV_BINARY="/tmp/deneb-gateway-live"
 DEV_PID_FILE="/tmp/deneb-gateway-live.pid"
 DEV_LOG="/tmp/deneb-gateway-live.log"
 DEV_HOST="127.0.0.1"
+DEV_STATE_DIR="/tmp/deneb-dev-state"
 
 # Source .env for status messages (config gen does its own loading).
 _dotenv="${HOME}/.deneb/.env"
@@ -97,8 +98,16 @@ cmd_start() {
     echo "    Config: production (Telegram: disabled, set DENEB_DEV_TELEGRAM_TOKEN)"
   fi
 
+  # Isolate dev state from production: wiki/diary/spillover write to a temp dir
+  # so the dev bot never pollutes production memory records.
+  mkdir -p "$DEV_STATE_DIR"
+
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT..."
-  DENEB_CONFIG_PATH="$dev_config" nohup "$DEV_BINARY" --bind loopback --port "$DEV_PORT" > "$DEV_LOG" 2>&1 &
+  DENEB_CONFIG_PATH="$dev_config" \
+  DENEB_STATE_DIR="$DEV_STATE_DIR" \
+  DENEB_WIKI_DIR="$DEV_STATE_DIR/wiki" \
+  DENEB_WIKI_DIARY_DIR="$DEV_STATE_DIR/memory/diary" \
+  nohup "$DEV_BINARY" --bind loopback --port "$DEV_PORT" > "$DEV_LOG" 2>&1 &
   local pid=$!
   echo "$pid" > "$DEV_PID_FILE"
 
@@ -266,13 +275,19 @@ cmd_parity() {
   fi
   echo ""
 
-  # 5. Port/binding.
+  # 5. Storage isolation.
+  echo "--- Storage ---"
+  echo "  [OK]   Dev state dir: $DEV_STATE_DIR (isolated from ~/.deneb)"
+  echo "  [OK]   Wiki/diary: $DEV_STATE_DIR/wiki, $DEV_STATE_DIR/memory/diary"
+  echo ""
+
+  # 6. Port/binding.
   echo "--- Network ---"
   echo "  [INFO] Dev port: $DEV_PORT (production: 18789)"
   echo "  [INFO] Dev bind: loopback (production: config-driven)"
   echo ""
 
-  # 6. Summary.
+  # 7. Summary.
   if (( issues == 0 )); then
     echo "==> No parity gaps detected"
   else
