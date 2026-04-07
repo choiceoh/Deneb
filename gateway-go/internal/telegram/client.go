@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -148,8 +148,8 @@ func (c *Client) callWithRetry(ctx context.Context, method string, params any, i
 		// API errors (4xx/5xx from Telegram) are not retried here.
 		// The bot-level backoff in bot.go handles polling retries.
 		// Only transport-level errors (network failures) are retried.
-		var apiErr *APIError
-		if isAPIError(err, &apiErr) {
+		var apiErr *httpretry.APIError
+		if errors.As(err, &apiErr) {
 			return nil, err
 		}
 
@@ -196,10 +196,10 @@ func (c *Client) doCall(ctx context.Context, method string, body io.Reader) (jso
 	}
 
 	if !apiResp.OK {
-		return nil, &APIError{
-			Code:        apiResp.ErrorCode,
-			Description: apiResp.Description,
-			RetryAfter:  retryAfterFromParams(apiResp.Parameters),
+		return nil, &httpretry.APIError{
+			StatusCode: apiResp.ErrorCode,
+			Message:    apiResp.Description,
+			RetryAfter: retryAfterFromParams(apiResp.Parameters),
 		}
 	}
 
@@ -269,10 +269,10 @@ func (c *Client) doUpload(ctx context.Context, method string, body []byte, conte
 	}
 
 	if !apiResp.OK {
-		return nil, &APIError{
-			Code:        apiResp.ErrorCode,
-			Description: apiResp.Description,
-			RetryAfter:  retryAfterFromParams(apiResp.Parameters),
+		return nil, &httpretry.APIError{
+			StatusCode: apiResp.ErrorCode,
+			Message:    apiResp.Description,
+			RetryAfter: retryAfterFromParams(apiResp.Parameters),
 		}
 	}
 
@@ -307,8 +307,8 @@ func (c *Client) uploadWithRetry(ctx context.Context, method string, body []byte
 		lastErr = err
 
 		// API errors are not retried.
-		var apiErr *APIError
-		if isAPIError(err, &apiErr) {
+		var apiErr *httpretry.APIError
+		if errors.As(err, &apiErr) {
 			return nil, err
 		}
 
@@ -463,77 +463,18 @@ func (c *Client) DeleteMessage(ctx context.Context, chatID, messageID int64) err
 	return err
 }
 
-// APIError represents a Telegram Bot API error response.
-type APIError struct {
-	Code        int
-	Description string
-	RetryAfter  int
-}
-
-func (e *APIError) Error() string {
-	return fmt.Sprintf("telegram API error %d: %s", e.Code, e.Description)
-}
-
-// IsRetryable returns true if the error suggests the request can be retried.
-// Uses the shared httpretry policy: rate limits, timeouts, and transient server
-// errors are retryable; permanent errors (including 501 Not Implemented) are not.
-func (e *APIError) IsRetryable() bool {
-	return httpretry.IsRetryable(e.Code)
-}
-
-// IsParseError returns true if the error is an HTML/entity parsing failure.
-func (e *APIError) IsParseError() bool {
-	return e.Code == 400 && (strings.Contains(e.Description, "can't parse entities") ||
-		strings.Contains(e.Description, "parse entities") ||
-		strings.Contains(e.Description, "find end of the entity"))
-}
-
-// IsMessageNotModified returns true if the error indicates the message content
-// is identical to the existing message (Telegram rejects no-op edits).
-func (e *APIError) IsMessageNotModified() bool {
-	return e.Code == 400 && strings.Contains(e.Description, "message is not modified")
-}
-
-// IsThreadNotFound returns true if the error is about a missing message thread.
-func (e *APIError) IsThreadNotFound() bool {
-	return e.Code == 400 && strings.Contains(e.Description, "message thread not found")
-}
-
-// IsRateLimited returns true if the error is a rate limit (429).
-func (e *APIError) IsRateLimited() bool {
-	return e.Code == 429
-}
-
-func retryAfterFromParams(p *ResponseParameters) int {
-	if p != nil {
-		return p.RetryAfter
+func retryAfterFromParams(p *ResponseParameters) time.Duration {
+	if p != nil && p.RetryAfter > 0 {
+		return time.Duration(p.RetryAfter) * time.Second
 	}
 	return 0
 }
 
-// retryDelay computes exponential backoff, respecting Retry-After from Telegram API errors.
+// retryDelay computes exponential backoff, respecting Retry-After from API errors.
 func retryDelay(attempt int, err error) time.Duration {
-	var apiErr *APIError
-	if isAPIError(err, &apiErr) && apiErr.RetryAfter > 0 {
-		return time.Duration(apiErr.RetryAfter) * time.Second
+	var apiErr *httpretry.APIError
+	if errors.As(err, &apiErr) && apiErr.RetryAfter > 0 {
+		return apiErr.RetryAfter
 	}
 	return httpretry.Backoff{Base: defaultRetryBase, Max: defaultRetryMax}.Delay(attempt)
-}
-
-// isAPIError checks if err is or wraps an *APIError.
-func isAPIError(err error, target **APIError) bool {
-	if err == nil {
-		return false
-	}
-	e, ok := err.(*APIError)
-	if ok {
-		*target = e
-		return true
-	}
-	// Check wrapped errors.
-	type wrapper interface{ Unwrap() error }
-	if w, ok := err.(wrapper); ok {
-		return isAPIError(w.Unwrap(), target)
-	}
-	return false
 }

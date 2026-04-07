@@ -161,9 +161,9 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 		if readErr != nil {
 			body = []byte("(failed to read error body)")
 		}
-		lastErr = &APIError{
+		lastErr = &httpretry.APIError{
 			StatusCode: resp.StatusCode,
-			Body:       string(body),
+			Message:    string(body),
 			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
 		}
 
@@ -219,13 +219,13 @@ func (c *cancelOnClose) Close() error {
 // Retry-After headers. 429 rate limits use a higher base delay floor.
 func (c *Client) backoffDelay(attempt int, err error) time.Duration {
 	// Respect Retry-After header from the API.
-	if apiErr, ok := err.(*APIError); ok && apiErr.RetryAfter > 0 {
+	if apiErr, ok := err.(*httpretry.APIError); ok && apiErr.RetryAfter > 0 {
 		return apiErr.RetryAfter
 	}
 
 	base := c.baseDelay
 	// Rate-limited responses need a higher floor than transient server errors.
-	if apiErr, ok := err.(*APIError); ok &&
+	if apiErr, ok := err.(*httpretry.APIError); ok &&
 		httpretry.Classify(apiErr.StatusCode) == httpretry.CategoryRateLimit {
 		const rateLimitFloor = 2 * time.Second
 		if base < rateLimitFloor {
@@ -248,23 +248,12 @@ func parseRetryAfter(val string) time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
-// APIError represents a non-2xx response from the LLM API.
-type APIError struct {
-	StatusCode int
-	Body       string
-	RetryAfter time.Duration
-}
-
-func (e *APIError) Error() string {
-	return fmt.Sprintf("LLM API error %d: %s", e.StatusCode, e.Body)
-}
-
 // isProviderPermanentRateLimit returns true for provider error payloads that
 // represent hard request-capacity limits where immediate retry is unlikely to
 // succeed (e.g. OpenRouter code 1302: "Rate limit reached for requests").
 func isProviderPermanentRateLimit(err error) bool {
-	apiErr, ok := err.(*APIError)
-	if !ok || apiErr.StatusCode != http.StatusTooManyRequests || apiErr.Body == "" {
+	apiErr, ok := err.(*httpretry.APIError)
+	if !ok || apiErr.StatusCode != http.StatusTooManyRequests || apiErr.Message == "" {
 		return false
 	}
 	var payload struct {
@@ -272,7 +261,7 @@ func isProviderPermanentRateLimit(err error) bool {
 			Code any `json:"code"`
 		} `json:"error"`
 	}
-	if json.Unmarshal([]byte(apiErr.Body), &payload) != nil {
+	if json.Unmarshal([]byte(apiErr.Message), &payload) != nil {
 		return false
 	}
 	switch v := payload.Error.Code.(type) {
