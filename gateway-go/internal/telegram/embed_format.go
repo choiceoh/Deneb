@@ -411,7 +411,6 @@ func FormatPush(p PushInfo) string {
 	return b.String()
 }
 
-
 // --- Helpers ---
 
 // statusIcon returns the emoji indicator for a status string.

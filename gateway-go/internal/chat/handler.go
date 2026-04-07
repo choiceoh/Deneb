@@ -53,13 +53,13 @@ type Handler struct {
 	// init/serve boundary is refactored in the future.
 	callbackMu sync.RWMutex
 
-	replyFunc        ReplyFunc        // optional: delivers response to originating channel
-	mediaSendFn      MediaSendFunc    // optional: delivers files to originating channel
-	typingFn         TypingFunc       // optional: sends typing indicator during agent run
-	reactionFn       ReactionFunc     // optional: sets emoji reaction on triggering message
-	removeReactionFn ReactionFunc     // optional: removes emoji reaction
-	draftEditFn      DraftEditFunc    // optional: sends/edits streaming draft messages
-	draftDeleteFn    DraftDeleteFunc  // optional: deletes streaming draft messages
+	replyFunc        ReplyFunc       // optional: delivers response to originating channel
+	mediaSendFn      MediaSendFunc   // optional: delivers files to originating channel
+	typingFn         TypingFunc      // optional: sends typing indicator during agent run
+	reactionFn       ReactionFunc    // optional: sets emoji reaction on triggering message
+	removeReactionFn ReactionFunc    // optional: removes emoji reaction
+	draftEditFn      DraftEditFunc   // optional: sends/edits streaming draft messages
+	draftDeleteFn    DraftDeleteFunc // optional: deletes streaming draft messages
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
 	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
 	// emitTranscriptFn sends transcript updates to gateway event subscriptions.

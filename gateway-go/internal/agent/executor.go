@@ -873,7 +873,7 @@ func executeOneTool(
 // blocks. Prefers thinking blocks (Anthropic extended thinking), but falls
 // back to the last text block (OpenAI-compatible models that explain their
 // reasoning in plain text before tool calls). The caller (e.g. channel adapters
-// ProgressTracker) is responsible for summarizing it.
+// channel adapters) is responsible for summarizing it.
 func extractThinkingText(blocks []llm.ContentBlock) string {
 	for i := len(blocks) - 1; i >= 0; i-- {
 		if blocks[i].Thinking != "" {
