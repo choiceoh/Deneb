@@ -235,10 +235,12 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 		return Response{}, ErrUnhealthy
 	}
 
-	// Enqueue.
+	// Enqueue. resultCh is send-only in the entry; keep a local bidirectional
+	// reference for the caller to receive on.
+	ch := make(chan submitResult, 1)
 	entry := &queueEntry{
 		req:        &req,
-		resultCh:   make(chan submitResult, 1),
+		resultCh:   ch,
 		enqueuedAt: time.Now(),
 	}
 	h.queue.Push(entry)
@@ -255,7 +257,7 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 	case <-ctx.Done():
 		h.Stats.Cancelled.Add(1)
 		return Response{}, ctx.Err()
-	case res := <-entry.resultCh:
+	case res := <-ch:
 		if res.err != nil {
 			return Response{}, res.err
 		}

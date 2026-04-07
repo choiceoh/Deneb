@@ -64,7 +64,7 @@ type JobTracker struct {
 
 	// Subscribers for run lifecycle events.
 	subMu       sync.RWMutex
-	subscribers map[string]chan LifecycleEvent
+	subscribers map[string]chan<- LifecycleEvent
 }
 
 // NewJobTracker creates a new agent job tracker.
@@ -77,7 +77,7 @@ func NewJobTracker(logger *slog.Logger) *JobTracker {
 		pending:     make(map[string]*pendingError),
 		runStarts:   make(map[string]int64),
 		logger:      logger,
-		subscribers: make(map[string]chan LifecycleEvent),
+		subscribers: make(map[string]chan<- LifecycleEvent),
 	}
 }
 

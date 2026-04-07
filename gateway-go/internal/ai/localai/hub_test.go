@@ -99,9 +99,10 @@ func TestQueueDropOldestBackground(t *testing.T) {
 		resultCh:   make(chan submitResult, 1),
 		enqueuedAt: time.Now(),
 	}
+	bg1Ch := make(chan submitResult, 1)
 	bg1 := &queueEntry{
 		req:        &Request{Priority: PriorityBackground, CallerTag: "bg1"},
-		resultCh:   make(chan submitResult, 1),
+		resultCh:   bg1Ch,
 		enqueuedAt: time.Now(),
 	}
 	bg2 := &queueEntry{
@@ -121,7 +122,7 @@ func TestQueueDropOldestBackground(t *testing.T) {
 
 	// bg1's resultCh should have an error.
 	select {
-	case res := <-bg1.resultCh:
+	case res := <-bg1Ch:
 		if res.err != ErrQueueFull {
 			t.Fatalf("expected ErrQueueFull, got %v", res.err)
 		}

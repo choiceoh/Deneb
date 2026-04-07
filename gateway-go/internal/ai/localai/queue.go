@@ -9,7 +9,7 @@ import (
 // queueEntry wraps a request with dispatch metadata.
 type queueEntry struct {
 	req        *Request
-	resultCh   chan submitResult
+	resultCh   chan<- submitResult
 	enqueuedAt time.Time
 	index      int // heap index, managed by container/heap
 }
