@@ -423,6 +423,87 @@ func TestCompactHistory_TooShort(t *testing.T) {
 	}
 }
 
+func TestIsPrematureFinal(t *testing.T) {
+	tests := []struct {
+		name   string
+		answer string
+		iter   int
+		want   bool
+	}{
+		// Short answers are always accepted.
+		{"short greeting iter0", "안녕하세요!", 0, false},
+		{"short fact iter0", "42", 0, false},
+		{"short answer iter1", "네, 맞습니다.", 1, false},
+
+		// After iter 2, always accepted.
+		{"long plan iter2", "먼저 context를 살펴보겠습니다. 그다음 분석하겠습니다. " + strings.Repeat("내용", 200), 2, false},
+		{"question iter3", "이게 맞나요?", 3, false},
+
+		// Question-form on early iters → rejected.
+		{"question iter0", "이 데이터를 어떻게 분석해야 하나요?", 0, true},
+		{"question iter1", "What should I do next?", 1, true},
+		{"fullwidth question iter0", "어떻게 할까요？", 0, true},
+
+		// Long + plan language on iter 0 → rejected.
+		{"plan iter0", "먼저 context를 살펴보겠습니다. 그 다음 데이터를 분석하겠습니다. " + strings.Repeat("내용 ", 100), 0, true},
+		{"english plan iter0", "I will analyze the context first. I need to check the data carefully. " + strings.Repeat("content ", 50), 0, true},
+
+		// Long but no plan indicators → accepted.
+		{"long real answer iter0", "서울의 인구는 약 950만 명이며, 대한민국의 수도입니다. " + strings.Repeat("추가 정보 ", 100), 0, false},
+
+		// Single plan indicator (not enough) → accepted.
+		{"single plan word iter0", "먼저 이 결과를 보시면 데이터가 명확합니다. " + strings.Repeat("결과 ", 100), 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isPrematureFinal(tt.answer, tt.iter)
+			if got != tt.want {
+				t.Errorf("isPrematureFinal(%q..., iter=%d) = %v, want %v",
+					truncate(tt.answer, 60), tt.iter, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunLoop_PrematureFinalRejected(t *testing.T) {
+	// Iter 0: model outputs a long plan in FINAL — should be rejected.
+	// Iter 1: model explores context.
+	// Iter 2: model gives real answer — should be accepted.
+	mock := &mockLLMClient{
+		responses: []string{
+			// Iter 0: premature — long plan with intent language
+			`FINAL("먼저 context를 살펴보겠습니다. 데이터를 분석하겠습니다. 그런 다음 결과를 정리하고 패턴을 찾아서 최종 결론을 도출하겠습니다. 이를 위해 먼저 context 변수의 크기를 확인하고 메시지 목록을 순회하면서 각 역할별 메시지 수를 집계하겠습니다.")`,
+			// Iter 1: explores
+			"```starlark\nprint(len(context))\n```",
+			// Iter 2: real answer
+			`FINAL("context에 2개의 메시지가 있습니다.")`,
+		},
+	}
+
+	result, err := RunLoop(context.Background(), LoopConfig{
+		Client:  mock,
+		Model:   "test-model",
+		System:  llm.SystemString("test"),
+		REPLEnv: newTestREPLEnv(),
+		MaxIter: 10,
+	}, "context 분석해줘")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.StopReason != "final" {
+		t.Errorf("stop_reason = %q, want %q", result.StopReason, "final")
+	}
+	// The premature FINAL should have been rejected, so the real answer comes from iter 2.
+	if result.FinalAnswer != "context에 2개의 메시지가 있습니다." {
+		t.Errorf("final_answer = %q, want the real answer from iter 2", result.FinalAnswer)
+	}
+	if result.Iterations < 3 {
+		t.Errorf("iterations = %d, want >= 3 (premature FINAL should not stop early)", result.Iterations)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
