@@ -2,7 +2,7 @@
 
 **Personal AI gateway for NVIDIA DGX Spark.** Telegram bot interface → Go gateway server. Single-user, single-machine deployment. Korean-first.
 
-- **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 130+ tool integrations, Telegram bot plugin.
+- **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, Telegram bot plugin.
 
 ---
 
@@ -28,7 +28,7 @@
 
 | File | Scope | Globs |
 |---|---|---|
-| `architecture.md` | 프로젝트 구조/모듈맵 | `cmd/**`, `internal/**`, `pkg/**`, `src/**` |
+| `architecture.md` | 프로젝트 구조/모듈맵 | `cmd/**`, `internal/**`, `pkg/**` |
 | `go-gateway.md` | Go 게이트웨이 구조 | `gateway-go/**` |
 | `docs.md` | 문서 작성 표준 | `docs/**` |
 | `generated-code.md` | 생성 코드 수정 금지 | 생성 파일 직접 지정 |

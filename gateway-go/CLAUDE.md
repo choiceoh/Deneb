@@ -18,7 +18,7 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 |-----------|---------|
 | `cmd/gateway/` | Entry point (`main.go`), `--port`/`--bind` flags, graceful shutdown |
 | `internal/server/` | HTTP server: `/health`, `/api/v1/rpc`, OpenAI APIs, hooks |
-| `internal/rpc/` | Registry-based RPC dispatcher, 130+ methods |
+| `internal/rpc/` | Registry-based RPC dispatcher, 150+ methods |
 | `internal/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/chat/` | System prompt, tool registration, context files, slash commands |
 | `internal/auth/` | Token auth, allowlists, credentials |
@@ -52,8 +52,8 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.
 
 ### Modifying System Prompt
-- Assembly: `internal/chat/system_prompt.go`
-- Context files: `internal/chat/context_files.go` (loads CLAUDE.md, SOUL.md, etc.)
+- Assembly: `internal/chat/prompt/system_prompt.go`
+- Context files: `internal/chat/prompt/context_files.go` (loads CLAUDE.md, SOUL.md, etc.)
 - Silent replies: `internal/chat/silent_reply.go` (NO_REPLY token)
 - Slash commands: `internal/chat/slash_commands.go` (/reset, /status, /kill, /model, /think)
 

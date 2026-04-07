@@ -11,7 +11,7 @@ Primary runtime — HTTP/WS gateway server.
 
 - `cmd/gateway/main.go` — Entry point with `--port`/`--bind` flags, graceful shutdown.
 - `internal/server/` — HTTP server: `/health`, `/api/v1/rpc`, OpenAI/Responses APIs, hooks, session endpoints. Connection tracking.
-- `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe). 130+ methods.
+- `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe). 150+ methods.
 - `internal/session/` — Session management with lifecycle state machine (`IDLE -> RUNNING -> DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
 - `internal/auth/` — Token auth, allowlists, security paths, credentials, probe auth.
 - `pkg/protocol/` — Hand-written JSON wire types.
@@ -19,8 +19,8 @@ Primary runtime — HTTP/WS gateway server.
 - `internal/chat/toolreg/` — Tool registration hub: wires tool implementations (from tools/) with JSON schemas (from tool_schemas_gen.go) into a ToolRegistrar. Contains tool_schemas.yaml (codegen source) and tool_schemas_gen.go (generated). Never imports chat/.
 - `internal/chat/tools/` — Pure tool implementations (fs, exec, git, health, vega, message, kv, gmail, etc.). Depends only on toolctx/ for types.
 - `internal/chat/toolreg_core.go` — Thin wrapper: calls toolreg.RegisterCoreTools() + registers pilot tool (localai-coupled).
-- `internal/chat/system_prompt.go` — System prompt assembly (identity, tooling, tool call style, safety, skills, memory recall, workspace, reply tags, messaging, timestamp, context files, silent replies, runtime).
-- `internal/chat/context_files.go` — Workspace context file loader (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 20K chars/file, 150K total.
+- `internal/chat/prompt/system_prompt.go` — System prompt assembly (identity, tooling, tool call style, safety, skills, memory recall, workspace, reply tags, messaging, timestamp, context files, silent replies, runtime).
+- `internal/chat/prompt/context_files.go` — Workspace context file loader (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 20K chars/file, 150K total.
 - `internal/chat/silent_reply.go` — SILENT_REPLY_TOKEN (NO_REPLY) detection and stripping for delivery suppression.
 - `internal/chat/slash_commands.go` — Slash command pre-processing (/reset, /status, /kill, /model, /think).
 - `internal/llm/types.go` — Sampling parameters: top_p, top_k, stop_sequences, frequency_penalty, presence_penalty. ImageSource for multimodal content.
@@ -58,7 +58,7 @@ GITHUB_WEBHOOK_CHAT_ID  — Telegram chat ID to deliver Korean-language notifica
 - Hub is built only in `buildHub()`. No other file may create or populate `GatewayHub{}`.
 - Handler Deps assembly happens only in `method_registry.go` (inline literals, no adapter layer).
 - Handler packages (`internal/rpc/handler/*`) must NOT import `rpcutil.GatewayHub`.
-- Adding a new RPC domain: Hub field → handler Deps → `method_registry.go` wiring → `validateHub()` update → snapshot test update.
+- Adding a new RPC domain: Hub field → handler Deps → `method_registry.go` wiring → `hub.Validate()` update → snapshot test update.
 - Do not add adapter/helper files for Deps wiring. Do not add methods to Hub beyond Broadcast/Validate.
 - Registration phases: Early (no Chat) → Session (creates Chat) → Late (Chat-dependent) → WorkflowSideEffects (non-RPC). Add new phases only if absolutely necessary.
 
