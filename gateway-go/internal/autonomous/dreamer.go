@@ -25,6 +25,7 @@ type DreamReport struct {
 	MutualUpdated     int      `json:"mutualUpdated"`
 	WikiPagesCreated  int      `json:"wikiPagesCreated,omitempty"`
 	WikiPagesUpdated  int      `json:"wikiPagesUpdated,omitempty"`
+	VerifyFindings    []string `json:"verifyFindings,omitempty"`
 	DurationMs        int64    `json:"durationMs"`
 	PhaseErrors       []string `json:"phaseErrors,omitempty"`
 }
