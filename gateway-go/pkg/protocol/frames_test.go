@@ -3,6 +3,8 @@ package protocol
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestNewRequestFrame(t *testing.T) {
@@ -26,8 +28,8 @@ func TestNewRequestFrame(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if decoded.Type != req.Type || decoded.ID != req.ID || decoded.Method != req.Method {
-		t.Errorf("round-trip mismatch: got %+v", decoded)
+	if diff := cmp.Diff(*req, decoded); diff != "" {
+		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -83,8 +85,8 @@ func TestResponseFrameOK(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if decoded.ID != resp.ID || decoded.OK != resp.OK {
-		t.Errorf("round-trip mismatch: got %+v", decoded)
+	if diff := cmp.Diff(*resp, decoded); diff != "" {
+		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -106,8 +108,8 @@ func TestResponseFrameError(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if decoded.Error == nil || decoded.Error.Code != ErrNotFound {
-		t.Errorf("error round-trip mismatch: got %+v", decoded.Error)
+	if diff := cmp.Diff(*resp, decoded); diff != "" {
+		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -133,14 +135,8 @@ func TestEventFrameRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if decoded.Event != ev.Event {
-		t.Errorf("Event = %q, want %q", decoded.Event, ev.Event)
-	}
-	if decoded.Seq == nil || *decoded.Seq != 42 {
-		t.Error("Seq round-trip failed")
-	}
-	if decoded.StateVersion == nil || decoded.StateVersion.Health != 1 {
-		t.Error("StateVersion round-trip failed")
+	if diff := cmp.Diff(*ev, decoded); diff != "" {
+		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
 	}
 }
 
