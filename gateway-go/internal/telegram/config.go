@@ -32,41 +32,12 @@ const (
 	GroupPolicyDisabled GroupPolicy = "disabled"
 )
 
-// StreamingMode controls stream preview behavior.
-type StreamingMode string
-
-const (
-	StreamingOff      StreamingMode = "off"
-	StreamingPartial  StreamingMode = "partial"
-	StreamingBlock    StreamingMode = "block"
-	StreamingProgress StreamingMode = "progress"
-)
-
-// ReplyToMode controls reply threading when reply tags are present.
-type ReplyToMode string
-
-const (
-	ReplyToOff   ReplyToMode = "off"
-	ReplyToFirst ReplyToMode = "first"
-	ReplyToAll   ReplyToMode = "all"
-)
-
 // ChunkMode controls how outbound messages are split.
 type ChunkMode string
 
 const (
 	ChunkModeLength  ChunkMode = "length"
 	ChunkModeNewline ChunkMode = "newline"
-)
-
-// ReactionLevel controls agent's reaction capability.
-type ReactionLevel string
-
-const (
-	ReactionOff       ReactionLevel = "off"
-	ReactionAck       ReactionLevel = "ack"
-	ReactionMinimal   ReactionLevel = "minimal"
-	ReactionExtensive ReactionLevel = "extensive"
 )
 
 // TopicConfig holds per-topic overrides within a group or DM.
@@ -125,10 +96,6 @@ type ExecApprovalConfig struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Approvers is the list of Telegram user IDs allowed to approve exec requests.
 	Approvers []int64 `json:"approvers,omitempty"`
-	// AgentFilter restricts approvals to specific agent IDs.
-	AgentFilter []string `json:"agentFilter,omitempty"`
-	// SessionFilter restricts approvals to matching session key patterns.
-	SessionFilter []string `json:"sessionFilter,omitempty"`
 	// Target controls where approval prompts are sent: "dm", "channel", "both".
 	Target string `json:"target,omitempty"`
 }
@@ -163,43 +130,28 @@ type Config struct {
 	// Direct holds per-DM configuration (key is chat ID as string).
 	Direct map[string]*DirectConfig `json:"direct,omitempty"`
 
-	// --- Streaming (required) ---
+	// --- Streaming ---
 
-	// Streaming controls stream preview mode.
-	Streaming StreamingMode `json:"streaming,omitempty"`
 	// BlockStreaming disables block streaming for this account.
 	BlockStreaming *bool `json:"blockStreaming,omitempty"`
 
-	// --- Nice-to-have features ---
+	// --- Optional features ---
 
-	// ChunkMode controls message splitting: "length" (default) or "newline".
-	ChunkMode ChunkMode `json:"chunkMode,omitempty"`
-	// ReplyToMode controls reply threading (off|first|all).
-	ReplyToMode ReplyToMode `json:"replyToMode,omitempty"`
 	// DmHistoryLimit is the max DM turns to keep as history context.
 	DmHistoryLimit *int `json:"dmHistoryLimit,omitempty"`
 	// ThreadBindings controls session-to-thread binding behavior.
 	ThreadBindings *SessionThreadBindingsConfig `json:"threadBindings,omitempty"`
-	// ReactionLevel controls agent's reaction capability (off|ack|minimal|extensive).
-	ReactionLevel ReactionLevel `json:"reactionLevel,omitempty"`
-	// ConfigWrites allows channel-initiated config writes (default: true).
-	ConfigWrites *bool `json:"configWrites,omitempty"`
 	// ExecApprovals configures Telegram-native exec approval delivery.
 	ExecApprovals *ExecApprovalConfig `json:"execApprovals,omitempty"`
 
-	// --- Existing fields ---
+	// --- Connection ---
 
 	// Proxy is an HTTP proxy URL for API calls.
 	Proxy string `json:"proxy,omitempty"`
 	// TimeoutSeconds is the API call timeout (default 30).
 	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
-	// LinkPreview controls whether link previews are shown (default true).
-	// Pointer distinguishes unset (nil → true) from explicit false.
-	LinkPreview *bool `json:"linkPreview,omitempty"`
 	// Silent disables notification sounds for sent messages.
 	Silent bool `json:"silent,omitempty"`
-	// TextChunkLimit overrides the outbound text chunk size (chars). Default: 4000.
-	TextChunkLimit int `json:"textChunkLimit,omitempty"`
 }
 
 // EffectiveTimeout returns the timeout in seconds, using the default if not set.
@@ -226,22 +178,6 @@ func (c *Config) IsBlockStreamingDisabled() bool {
 	return *c.BlockStreaming
 }
 
-// IsConfigWritesEnabled returns whether channel config writes are allowed.
-func (c *Config) IsConfigWritesEnabled() bool {
-	if c.ConfigWrites == nil {
-		return true
-	}
-	return *c.ConfigWrites
-}
-
-// EffectiveLinkPreview returns the link preview setting, defaulting to true.
-func (c *Config) EffectiveLinkPreview() bool {
-	if c.LinkPreview == nil {
-		return true
-	}
-	return *c.LinkPreview
-}
-
 // EffectiveDmPolicy returns the DM policy, defaulting to "pairing".
 func (c *Config) EffectiveDmPolicy() DmPolicy {
 	if c.DmPolicy == "" {
@@ -256,46 +192,6 @@ func (c *Config) EffectiveGroupPolicy() GroupPolicy {
 		return GroupPolicyOpen
 	}
 	return c.GroupPolicy
-}
-
-// EffectiveStreamingMode returns the streaming mode, defaulting to "off".
-func (c *Config) EffectiveStreamingMode() StreamingMode {
-	if c.Streaming == "" {
-		return StreamingOff
-	}
-	return c.Streaming
-}
-
-// EffectiveChunkMode returns the chunk mode, defaulting to "length".
-func (c *Config) EffectiveChunkMode() ChunkMode {
-	if c.ChunkMode == "" {
-		return ChunkModeLength
-	}
-	return c.ChunkMode
-}
-
-// EffectiveReplyToMode returns the reply-to mode, defaulting to "off".
-func (c *Config) EffectiveReplyToMode() ReplyToMode {
-	if c.ReplyToMode == "" {
-		return ReplyToOff
-	}
-	return c.ReplyToMode
-}
-
-// EffectiveReactionLevel returns the reaction level, defaulting to "ack".
-func (c *Config) EffectiveReactionLevel() ReactionLevel {
-	if c.ReactionLevel == "" {
-		return ReactionAck
-	}
-	return c.ReactionLevel
-}
-
-// EffectiveTextChunkLimit returns the text chunk limit, defaulting to TextChunkLimit.
-func (c *Config) EffectiveTextChunkLimit() int {
-	if c.TextChunkLimit > 0 {
-		return c.TextChunkLimit
-	}
-	return TextChunkLimit
 }
 
 // AllowList holds a parsed allowlist that supports numeric IDs, usernames, and wildcards.

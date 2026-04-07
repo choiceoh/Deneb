@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -39,26 +38,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		},
 	}
 
-	// Wire TLS termination from gateway.tls config when enabled with cert/key paths.
-	if s.runtimeCfg != nil && s.runtimeCfg.TLSConfig != nil &&
-		s.runtimeCfg.TLSConfig.Enabled != nil && *s.runtimeCfg.TLSConfig.Enabled {
-		tlsCfg := s.runtimeCfg.TLSConfig
-		if tlsCfg.CertPath != "" && tlsCfg.KeyPath != "" {
-			cert, err := tls.LoadX509KeyPair(tlsCfg.CertPath, tlsCfg.KeyPath)
-			if err != nil {
-				ln.Close()
-				return nil, fmt.Errorf("failed to load TLS cert/key: %w", err)
-			}
-			tlsConfig := &tls.Config{
-				Certificates: []tls.Certificate{cert},
-				MinVersion:   tls.VersionTLS12,
-			}
-			ln = tls.NewListener(ln, tlsConfig)
-			s.logger.Info("TLS enabled", "cert", tlsCfg.CertPath)
-		} else {
-			s.logger.Warn("gateway.tls.enabled=true but certPath/keyPath not configured; serving plain HTTP")
-		}
-	}
 	s.startedAt = time.Now()
 	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)

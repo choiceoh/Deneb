@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"strings"
 )
 
@@ -22,13 +21,11 @@ type GatewayRuntimeConfig struct {
 	AuthMode                      string
 	TailscaleConfig               GatewayTailscaleConfig
 	TailscaleMode                 string // "off" | "serve" | "funnel"
-	CanvasHostEnabled             bool
 	TrustedProxies                []string
 	ChannelHealthCheckMinutes     int
 	ChannelStaleEventThresholdMin int
 	ChannelMaxRestartsPerHour     int
 	ReloadConfig                  GatewayReloadConfig
-	TLSConfig                     *GatewayTLSConfig
 	RemoteConfig                  *GatewayRemoteConfig
 }
 
@@ -195,15 +192,6 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		}
 	}
 
-	// Canvas host.
-	canvasHostEnabled := true
-	if os.Getenv("DENEB_SKIP_CANVAS_HOST") == "1" {
-		canvasHostEnabled = false
-	}
-	if cfg.CanvasHost != nil && cfg.CanvasHost.Enabled != nil && !*cfg.CanvasHost.Enabled {
-		canvasHostEnabled = false
-	}
-
 	// Channel health defaults.
 	channelHealthCheck := DefaultChannelHealthCheckMinutes
 	if gw.ChannelHealthCheckMinutes != nil {
@@ -235,13 +223,11 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		AuthMode:                      authMode,
 		TailscaleConfig:               tailscaleCfg,
 		TailscaleMode:                 tailscaleMode,
-		CanvasHostEnabled:             canvasHostEnabled,
 		TrustedProxies:                trustedProxies,
 		ChannelHealthCheckMinutes:     channelHealthCheck,
 		ChannelStaleEventThresholdMin: channelStale,
 		ChannelMaxRestartsPerHour:     channelMaxRestarts,
 		ReloadConfig:                  reloadCfg,
-		TLSConfig:                     gw.TLS,
 		RemoteConfig:                  gw.Remote,
 	}, nil
 }
