@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // ToolProjectsList returns a tool that lists projects from the wiki "프로젝트" category.
@@ -144,6 +146,168 @@ func ToolProjectsSearch(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 		return fmt.Sprintf("검색 결과 %d건:\n\n%s", count, sb.String()), nil
 	}
+}
+
+// ToolProjectsWrite returns a tool that creates or updates a project wiki page.
+func ToolProjectsWrite(deps *toolctx.WikiDeps) toolctx.ToolFunc {
+	type params struct {
+		ProjectID  string   `json:"project_id"`
+		Title      string   `json:"title"`
+		Content    string   `json:"content"`
+		Tags       []string `json:"tags,omitempty"`
+		Importance float64  `json:"importance,omitempty"`
+	}
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		if deps.Store == nil {
+			return "프로젝트 쓰기 기능이 비활성 상태입니다 (위키 미설정).", nil
+		}
+		var p params
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return "잘못된 파라미터입니다.", nil
+		}
+		if p.Title == "" {
+			return "title은 필수입니다.", nil
+		}
+
+		path := p.ProjectID
+		if path == "" {
+			slug := strings.ReplaceAll(strings.ToLower(p.Title), " ", "-")
+			path = "프로젝트/" + slug + ".md"
+		}
+		if !strings.HasSuffix(path, ".md") {
+			path += ".md"
+		}
+		if !strings.HasPrefix(path, "프로젝트/") {
+			path = "프로젝트/" + path
+		}
+
+		return wikiWriteProject(deps.Store, path, p.Title, p.Content, p.Tags, p.Importance)
+	}
+}
+
+// wikiWriteProject creates or updates a project page via wiki store.
+func wikiWriteProject(store wikiPageWriter, path, title, content string, tags []string, importance float64) (string, error) {
+	existing, _ := store.ReadPage(path)
+
+	var page *wiki.Page
+	action := "생성"
+	if existing != nil {
+		action = "업데이트"
+		page = existing
+		page.Meta.Title = title
+		if len(tags) > 0 {
+			page.Meta.Tags = tags
+		}
+		if importance > 0 {
+			page.Meta.Importance = importance
+		}
+		page.Meta.Updated = time.Now().Format("2006-01-02")
+		if content != "" {
+			page.Body = content
+		}
+	} else {
+		page = wiki.NewPage(title, "프로젝트", tags)
+		if importance > 0 {
+			page.Meta.Importance = importance
+		}
+		if content != "" {
+			page.Body = content
+		} else {
+			page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
+				title, time.Now().Format("2006-01-02"))
+		}
+	}
+
+	if err := store.WritePage(path, page); err != nil {
+		return fmt.Sprintf("프로젝트 페이지 쓰기 실패: %v", err), nil
+	}
+
+	return fmt.Sprintf("프로젝트 페이지 %s: %s (%s)", action, path, title), nil
+}
+
+// ToolMemoryStore returns a tool that stores knowledge to the wiki.
+// Supports all wiki categories: 사람, 프로젝트, 기술, 업무, 결정, 선호.
+func ToolMemoryStore(deps *toolctx.WikiDeps) toolctx.ToolFunc {
+	type params struct {
+		Path       string   `json:"path,omitempty"`
+		Title      string   `json:"title"`
+		Category   string   `json:"category"`
+		Content    string   `json:"content"`
+		Tags       []string `json:"tags,omitempty"`
+		Related    []string `json:"related,omitempty"`
+		Importance float64  `json:"importance,omitempty"`
+	}
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		if deps.Store == nil {
+			return "메모리 저장 기능이 비활성 상태입니다 (위키 미설정).", nil
+		}
+		var p params
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return "잘못된 파라미터입니다.", nil
+		}
+		if p.Title == "" {
+			return "title은 필수입니다.", nil
+		}
+		if p.Category == "" {
+			return "category는 필수입니다. 사용 가능: 사람, 프로젝트, 기술, 업무, 결정, 선호", nil
+		}
+
+		path := p.Path
+		if path == "" {
+			slug := strings.ReplaceAll(strings.ToLower(p.Title), " ", "-")
+			path = p.Category + "/" + slug + ".md"
+		}
+		if !strings.HasSuffix(path, ".md") {
+			path += ".md"
+		}
+
+		existing, _ := deps.Store.ReadPage(path)
+
+		var page *wiki.Page
+		action := "생성"
+		if existing != nil {
+			action = "업데이트"
+			page = existing
+			page.Meta.Title = p.Title
+			if len(p.Tags) > 0 {
+				page.Meta.Tags = p.Tags
+			}
+			if len(p.Related) > 0 {
+				page.Meta.Related = p.Related
+			}
+			if p.Importance > 0 {
+				page.Meta.Importance = p.Importance
+			}
+			page.Meta.Updated = time.Now().Format("2006-01-02")
+			if p.Content != "" {
+				page.Body = p.Content
+			}
+		} else {
+			page = wiki.NewPage(p.Title, p.Category, p.Tags)
+			page.Meta.Related = p.Related
+			if p.Importance > 0 {
+				page.Meta.Importance = p.Importance
+			}
+			if p.Content != "" {
+				page.Body = p.Content
+			} else {
+				page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
+					p.Title, time.Now().Format("2006-01-02"))
+			}
+		}
+
+		if err := deps.Store.WritePage(path, page); err != nil {
+			return fmt.Sprintf("위키 페이지 쓰기 실패: %v", err), nil
+		}
+
+		return fmt.Sprintf("위키 페이지 %s: %s (%s)", action, path, p.Title), nil
+	}
+}
+
+// wikiPageWriter is the minimal interface needed for wiki write operations.
+type wikiPageWriter interface {
+	ReadPage(relPath string) (*wiki.Page, error)
+	WritePage(relPath string, page *wiki.Page) error
 }
 
 // ToolProjectsGetDocument returns a tool that retrieves a project page.

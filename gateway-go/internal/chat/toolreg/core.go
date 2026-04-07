@@ -520,6 +520,22 @@ func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps
 		Fn:              tools.ToolProjectsGetDocument(wikiDeps),
 		ConcurrencySafe: true,
 	})
+	if wikiDeps.Store != nil {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:            "projects_write",
+			Description:     "프로젝트 위키 페이지 생성/수정. 새 프로젝트 등록이나 기존 프로젝트 정보 업데이트",
+			InputSchema:     projectsWriteToolSchema(),
+			Fn:              tools.ToolProjectsWrite(wikiDeps),
+			ConcurrencySafe: true,
+		})
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:            "memory_store",
+			Description:     "위키 지식베이스에 정보 저장. 사람/기술/업무/결정/선호 등 모든 카테고리에 장기 지식을 기록",
+			InputSchema:     memoryStoreToolSchema(),
+			Fn:              tools.ToolMemoryStore(wikiDeps),
+			ConcurrencySafe: true,
+		})
+	}
 }
 
 // RegisterRLMSpawnTools registers RLM Phase 2 sub-LLM spawning tools.

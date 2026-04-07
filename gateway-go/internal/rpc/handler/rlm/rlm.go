@@ -28,7 +28,9 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		"rlm.config":          rlmConfig(deps),
 		"rlm.projects.list":   rlmProjectsList(deps),
 		"rlm.projects.search": rlmProjectsSearch(deps),
+		"rlm.projects.write":  rlmProjectsWrite(deps),
 		"rlm.memory.recall":   rlmMemoryRecall(deps),
+		"rlm.memory.store":    rlmMemoryStore(deps),
 	}
 }
 
@@ -70,6 +72,23 @@ func rlmProjectsSearch(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
+func rlmProjectsWrite(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		Path       string   `json:"path,omitempty"`
+		Title      string   `json:"title"`
+		Content    string   `json:"content,omitempty"`
+		Tags       []string `json:"tags,omitempty"`
+		Importance float64  `json:"importance,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		result, err := deps.Service.WriteProject(p.Path, p.Title, p.Content, p.Tags, p.Importance)
+		if err != nil {
+			return map[string]any{"ok": false, "error": err.Error()}, nil
+		}
+		return map[string]any{"ok": true, "path": result.Path, "action": result.Action}, nil
+	})
+}
+
 func rlmMemoryRecall(deps Deps) rpcutil.HandlerFunc {
 	type params struct {
 		Query string `json:"query"`
@@ -84,4 +103,22 @@ func rlmMemoryRecall(deps Deps) rpcutil.HandlerFunc {
 			return map[string]any{"ok": true, "results": results}, nil
 		})
 	}
+}
+
+func rlmMemoryStore(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		Path       string   `json:"path,omitempty"`
+		Title      string   `json:"title"`
+		Category   string   `json:"category"`
+		Content    string   `json:"content,omitempty"`
+		Tags       []string `json:"tags,omitempty"`
+		Importance float64  `json:"importance,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		result, err := deps.Service.StoreMemory(p.Path, p.Title, p.Category, p.Content, p.Tags, p.Importance)
+		if err != nil {
+			return map[string]any{"ok": false, "error": err.Error()}, nil
+		}
+		return map[string]any{"ok": true, "path": result.Path, "action": result.Action}, nil
+	})
 }

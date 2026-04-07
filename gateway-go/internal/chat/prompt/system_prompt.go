@@ -103,7 +103,7 @@ var toolCategories = []struct {
 	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory", "wiki"}},
+	{"Memory", []string{"memory", "wiki", "memory_store", "projects_write"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
@@ -268,13 +268,23 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// Wiki knowledge base (takes priority when enabled).
 	if toolSet["wiki"] {
 		d.WriteString("## 위키 (장기 지식)\n")
-		d.WriteString("과거 결정, 인물, 프로젝트, 기술 등 장기 지식은 위키에 마크다운으로 정리되어 있다.\n")
+		d.WriteString("과거 결정, 인물, 프로젝트, 기술 등 장기 지식은 위키에 마크다운으로 정리되어 있다.\n\n")
+
+		d.WriteString("### 읽기\n")
 		d.WriteString("- 과거 맥락 필요 → wiki index로 목차 확인 → wiki read로 페이지 읽기\n")
 		d.WriteString("- 키워드 검색 → wiki search\n")
-		d.WriteString("- 새 지식/결정 기록 → wiki write (제목, 카테고리, 태그 필수)\n")
-		d.WriteString("- 일상 활동 기록 → wiki log (일지에 추가, 위키 정리 전 단계)\n")
-		d.WriteString("- 최근 일지 확인 → wiki daily\n")
-		d.WriteString("위키는 정리된 지식만. 임시 메모나 대화 내용은 일지(log)에.\n\n")
+		d.WriteString("- 최근 일지 확인 → wiki daily\n\n")
+
+		d.WriteString("### 쓰기 — 반드시 능동적으로 기록하라\n")
+		d.WriteString("대화 중 다음에 해당하면 응답 끝에 자동으로 기록하라:\n")
+		d.WriteString("- 사용자가 새 사실/선호/결정을 알려줌 → memory_store (해당 카테고리)\n")
+		d.WriteString("- 프로젝트 관련 새 정보(목표, 상태, 결정) → projects_write\n")
+		d.WriteString("- 사람 정보(역할, 연락처, 관계) → memory_store (사람)\n")
+		d.WriteString("- 기술 결정/설계 판단 → memory_store (결정 또는 기술)\n")
+		d.WriteString("- 일상 활동/작업 과정 기록 → wiki log (일지, 위키 정리 전 단계)\n")
+		d.WriteString("- 위키 직접 작성/수정 → wiki write (제목, 카테고리, 태그 필수)\n")
+		d.WriteString("카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호.\n")
+		d.WriteString("정리된 지식은 위키에, 임시 관찰은 일지(log)에. 기록 후 사용자에게 별도 알림 불필요.\n\n")
 	}
 
 	// Memory Recall (legacy, when wiki is not enabled).

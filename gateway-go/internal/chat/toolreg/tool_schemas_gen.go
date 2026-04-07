@@ -1707,6 +1707,86 @@ func projectsGetDocumentToolSchema() map[string]any {
 	}
 }
 
+func projectsWriteToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"project_id": map[string]any{
+				"type":        "string",
+				"description": "프로젝트 경로 (미지정 시 title에서 자동 생성, e.g. '프로젝트/deneb.md')",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "프로젝트 제목",
+			},
+			"content": map[string]any{
+				"type":        "string",
+				"description": "마크다운 본문 (업데이트 시 기존 본문 대체)",
+			},
+			"tags": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "태그 목록",
+			},
+			"importance": map[string]any{
+				"type":        "number",
+				"description": "중요도 0.0~1.0 (default: 0.5)",
+				"minimum":     0,
+				"maximum":     1,
+			},
+		},
+		"required": []string{"title"},
+	}
+}
+
+func memoryStoreToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{
+				"type":        "string",
+				"description": "위키 경로 (미지정 시 category/title에서 자동 생성)",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "페이지 제목",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"description": "카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호",
+				"enum":        []string{"사람", "프로젝트", "기술", "업무", "결정", "선호"},
+			},
+			"content": map[string]any{
+				"type":        "string",
+				"description": "마크다운 본문",
+			},
+			"tags": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "태그 목록",
+			},
+			"related": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "관련 페이지 경로 목록",
+			},
+			"importance": map[string]any{
+				"type":        "number",
+				"description": "중요도 0.0~1.0 (default: 0.5)",
+				"minimum":     0,
+				"maximum":     1,
+			},
+		},
+		"required": []string{"title", "category"},
+	}
+}
+
 func llmSpawnToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

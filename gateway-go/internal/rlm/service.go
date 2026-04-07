@@ -3,14 +3,16 @@ package rlm
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
-// Service provides RLM status and wiki-backed project/memory queries
-// for the RPC layer. Read-only; configuration changes require a restart.
+// Service provides RLM status, wiki-backed project/memory queries,
+// and knowledge write-back for the RPC layer.
 type Service struct {
 	cfg    Config
 	wiki   *wiki.Store
@@ -142,4 +144,117 @@ func (s *Service) RecallMemory(ctx context.Context, query string, limit int) ([]
 		results[i] = SearchResult{Path: h.Path, Content: h.Content, Score: h.Score}
 	}
 	return results, nil
+}
+
+// WriteResult is the response for write operations.
+type WriteResult struct {
+	Path   string `json:"path"`
+	Action string `json:"action"` // "created" or "updated"
+}
+
+// WriteProject creates or updates a project page in the "프로젝트" category.
+// If path is empty, it is auto-generated from the title.
+func (s *Service) WriteProject(path, title, content string, tags []string, importance float64) (*WriteResult, error) {
+	if s.wiki == nil {
+		return nil, fmt.Errorf("wiki not configured")
+	}
+	if title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+
+	const category = "프로젝트"
+	if path == "" {
+		slug := strings.ReplaceAll(strings.ToLower(title), " ", "-")
+		path = category + "/" + slug + ".md"
+	}
+	if !strings.HasSuffix(path, ".md") {
+		path += ".md"
+	}
+	// Ensure path is scoped to the project category.
+	if !strings.HasPrefix(path, category+"/") {
+		path = category + "/" + path
+	}
+
+	return s.writePage(path, title, category, content, tags, importance)
+}
+
+// StoreMemory creates or updates a wiki page in the given category.
+// This is the general write-back path for persisting knowledge to the wiki.
+func (s *Service) StoreMemory(path, title, category, content string, tags []string, importance float64) (*WriteResult, error) {
+	if s.wiki == nil {
+		return nil, fmt.Errorf("wiki not configured")
+	}
+	if title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+	if category == "" {
+		return nil, fmt.Errorf("category is required")
+	}
+
+	if path == "" {
+		slug := strings.ReplaceAll(strings.ToLower(title), " ", "-")
+		path = category + "/" + slug + ".md"
+	}
+	if !strings.HasSuffix(path, ".md") {
+		path += ".md"
+	}
+
+	return s.writePage(path, title, category, content, tags, importance)
+}
+
+// writePage is the shared implementation for WriteProject and StoreMemory.
+func (s *Service) writePage(path, title, category, content string, tags []string, importance float64) (*WriteResult, error) {
+	existing, _ := s.wiki.ReadPage(path)
+
+	action := "created"
+	var page *wiki.Page
+	if existing != nil {
+		action = "updated"
+		page = existing
+		page.Meta.Title = title
+		if len(tags) > 0 {
+			page.Meta.Tags = mergeUnique(page.Meta.Tags, tags)
+		}
+		if importance > 0 {
+			page.Meta.Importance = importance
+		}
+		page.Meta.Updated = time.Now().Format("2006-01-02")
+		if content != "" {
+			page.Body = content
+		}
+	} else {
+		page = wiki.NewPage(title, category, tags)
+		if importance > 0 {
+			page.Meta.Importance = importance
+		}
+		if content != "" {
+			page.Body = content
+		} else {
+			page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
+				title, time.Now().Format("2006-01-02"))
+		}
+	}
+
+	if err := s.wiki.WritePage(path, page); err != nil {
+		return nil, fmt.Errorf("write page: %w", err)
+	}
+
+	s.logger.Info("rlm: wiki page written", "path", path, "action", action)
+	return &WriteResult{Path: path, Action: action}, nil
+}
+
+// mergeUnique merges two string slices, deduplicating entries.
+func mergeUnique(a, b []string) []string {
+	seen := make(map[string]bool, len(a))
+	for _, s := range a {
+		seen[s] = true
+	}
+	result := append([]string{}, a...)
+	for _, s := range b {
+		if !seen[s] {
+			result = append(result, s)
+			seen[s] = true
+		}
+	}
+	return result
 }
