@@ -27,7 +27,7 @@
 //
 // GatewayHub (gateway_hub.go):
 //  Central service registry built from Server fields via buildHub().
-//  Hub-to-Deps adapters in hub_adapters.go preserve handler testability.
+//  Inline Deps literals in method_registry.go preserve handler testability.
 
 package server
 
