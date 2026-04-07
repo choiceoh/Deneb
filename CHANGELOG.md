@@ -1,5 +1,42 @@
 # Changelog
 
+## [4.19.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.18.1...deneb-v4.19.0) (2026-04-07)
+
+
+### ✨ Features
+
+* **chat:** add emergency compaction summarization, RLM sub-agent system prompt inheritance, and REPL environment initialization ([40d42a8](https://github.com/choiceoh/Deneb/commit/40d42a8ef7d13f6e19ee62b11e952730371275e6))
+* **chat:** emergency compaction + RLM sub-agent improvements + REPL init ([bb5e020](https://github.com/choiceoh/Deneb/commit/bb5e02056e07527b882e82d38969d516ecb2e4e4))
+* **localai:** apply Gemma 4 vendor-recommended sampling defaults ([b3e4434](https://github.com/choiceoh/Deneb/commit/b3e4434ce9e929e6f52534da4fa68249971c4b56))
+* **localai:** apply Gemma 4 vendor-recommended sampling defaults ([51a5da1](https://github.com/choiceoh/Deneb/commit/51a5da1d382eb9e044909257de9a80485cf2382a))
+* **rlm:** add memory_recall read tool and tier-1 auto-injection ([9a06d10](https://github.com/choiceoh/Deneb/commit/9a06d10e7e88a6266c20294095c94ee00514c44a))
+* **rlm:** add memory_recall tool and tier-1 auto-injection ([357dc84](https://github.com/choiceoh/Deneb/commit/357dc84165b4815da49b3010c1d9df4283eba373))
+* **rlm:** add wiki write-back path with proactive knowledge recording ([92079cc](https://github.com/choiceoh/Deneb/commit/92079cc946580216c5577a671538d60f1b26d844))
+* **rlm:** add wiki write-back path with proactive knowledge recording ([8aa36cf](https://github.com/choiceoh/Deneb/commit/8aa36cf8ac86db5e7bed6820a3f85f1e6de4e2b8))
+* **rlm:** connect mail analysis and morning letter to RLM diary ([bd0e496](https://github.com/choiceoh/Deneb/commit/bd0e4966a635f3ede4b8531d85964b21246cde31))
+* **rlm:** connect mail analysis and morning letter to RLM diary ([e00a723](https://github.com/choiceoh/Deneb/commit/e00a723cc12d2685fd0a95d8ca8deb611ccfdcb8))
+
+
+### 🐛 Bug Fixes
+
+* **rlm:** move RLM handler registration from Early to Late phase ([2026b2f](https://github.com/choiceoh/Deneb/commit/2026b2f65ebd7507c9f51893650a2269d7cbdb09))
+* **rlm:** move RLM handler registration from Early to Late phase ([5108d7c](https://github.com/choiceoh/Deneb/commit/5108d7cf35fab5188dda63c0560de07dcccda39a))
+* **telegram:** use detached context for progress message edits ([26c1e35](https://github.com/choiceoh/Deneb/commit/26c1e35b424d1a8234830093c8e14da3c3498a07))
+* **telegram:** use detached context for progress message edits ([02689a0](https://github.com/choiceoh/Deneb/commit/02689a0df920bfa8f87ec8a488b67e8209f45b96))
+
+
+### 🔧 Internal
+
+* **gateway:** remove Talk, Wizard, and Vega dead modules ([c7936e1](https://github.com/choiceoh/Deneb/commit/c7936e17cf41f65b42cba0c0a7da99be22991ae2))
+* **gateway:** remove Talk, Wizard, and Vega dead modules ([b7f3ace](https://github.com/choiceoh/Deneb/commit/b7f3ace3365f5dca8f93493ef04e3ca7fa1c4213))
+* **localai:** remove auto-memory, activity summary, and session memory hooks ([58fd825](https://github.com/choiceoh/Deneb/commit/58fd825a59ba74dcc4aef394b19d12a03b24e4d5))
+* **localai:** remove auto-memory, activity summary, and session memory hooks ([784fb9d](https://github.com/choiceoh/Deneb/commit/784fb9d534298aa9e80223342daba6abdfa18986))
+* **localai:** remove CJK token blocking ([f776580](https://github.com/choiceoh/Deneb/commit/f77658072b56ac8378edef7d54beffc4631d042e))
+* **localai:** remove CJK token blocking feature ([351b2ca](https://github.com/choiceoh/Deneb/commit/351b2cad077a1e672ff5d09164e642080fed6d09))
+* **localai:** remove proactive context ([baa0c38](https://github.com/choiceoh/Deneb/commit/baa0c38dbdeb3d5de568aa5f1d210414f79a8952))
+* **localai:** remove proactive context feature ([208ac14](https://github.com/choiceoh/Deneb/commit/208ac1425ef062bac0ac081621b9acc9150ebb2d))
+* **localai:** remove redundant memory/summary hooks ([64896e3](https://github.com/choiceoh/Deneb/commit/64896e3f58a4d878d3559977f2747720678e148a))
+
 ## [4.18.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.18.0...deneb-v4.18.1) (2026-04-06)
 
 
