@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.19.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.19.0...deneb-v4.19.1) (2026-04-07)
+
+
+### 🔧 Internal
+
+* **chat:** remove SendLite ([b19bcbe](https://github.com/choiceoh/Deneb/commit/b19bcbe2614481050d3b6bbcee4c7e097be783ba))
+* **chat:** remove SendLite, use full pipeline for boot task ([650997a](https://github.com/choiceoh/Deneb/commit/650997a5fb36b1253b3917365752645759f8ff28))
+* **testing:** remove vchat mock Telegram test environment ([1f1f98e](https://github.com/choiceoh/Deneb/commit/1f1f98efd9480c10caa65479805b9d10bf545835))
+* **testing:** remove vchat mock Telegram test environment ([e80d3ca](https://github.com/choiceoh/Deneb/commit/e80d3ca24386db1b30ae21ef7b0c1bd3124dd9bd))
+
 ## [4.19.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.18.1...deneb-v4.19.0) (2026-04-07)
 
 
