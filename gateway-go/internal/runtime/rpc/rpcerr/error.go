@@ -19,6 +19,7 @@ type Error struct {
 	Code    string
 	Message string
 	Context map[string]any
+	Cause   error // original error, preserved for errors.Is/As chain traversal
 }
 
 // New creates a structured RPC error with the given code and message.
@@ -38,12 +39,17 @@ func Newf(code, format string, args ...any) *Error {
 }
 
 // Wrap creates a structured error from a Go error, using the given code.
+// The original error is preserved as Cause for errors.Is/As chain traversal.
 func Wrap(code string, err error) *Error {
 	return &Error{
 		Code:    code,
 		Message: err.Error(),
+		Cause:   err,
 	}
 }
+
+// Unwrap returns the underlying cause, implementing the errors.Unwrap interface.
+func (e *Error) Unwrap() error { return e.Cause }
 
 // WithSession attaches a session key to the error context.
 func (e *Error) WithSession(key string) *Error {
@@ -126,8 +132,13 @@ func MissingParam(param string) *Error {
 }
 
 // InvalidParams returns an INVALID_REQUEST error for malformed parameters.
+// The original error is preserved as Cause.
 func InvalidParams(err error) *Error {
-	return New(protocol.ErrInvalidRequest, "invalid params: "+err.Error())
+	return &Error{
+		Code:    protocol.ErrInvalidRequest,
+		Message: "invalid params: " + err.Error(),
+		Cause:   err,
+	}
 }
 
 // NotFound returns a NOT_FOUND error for the given resource description.
@@ -173,4 +184,36 @@ func Unauthorized(msg string) *Error {
 // AgentTimeout returns an AGENT_TIMEOUT error.
 func AgentTimeout(msg string) *Error {
 	return New(protocol.ErrAgentTimeout, msg)
+}
+
+// --- Wrap constructors: message + cause chain preservation ---
+
+// WrapUnavailable returns an UNAVAILABLE error wrapping the original cause.
+func WrapUnavailable(msg string, err error) *Error {
+	return &Error{Code: protocol.ErrUnavailable, Message: msg + ": " + err.Error(), Cause: err}
+}
+
+// WrapInvalidRequest returns an INVALID_REQUEST error wrapping the original cause.
+func WrapInvalidRequest(msg string, err error) *Error {
+	return &Error{Code: protocol.ErrInvalidRequest, Message: msg + ": " + err.Error(), Cause: err}
+}
+
+// WrapDependencyFailed returns a DEPENDENCY_FAILED error wrapping the original cause.
+func WrapDependencyFailed(msg string, err error) *Error {
+	return &Error{Code: protocol.ErrDependencyFailed, Message: msg + ": " + err.Error(), Cause: err}
+}
+
+// WrapValidationFailed returns a VALIDATION_FAILED error wrapping the original cause.
+func WrapValidationFailed(msg string, err error) *Error {
+	return &Error{Code: protocol.ErrValidationFailed, Message: msg + ": " + err.Error(), Cause: err}
+}
+
+// WrapConflict returns a CONFLICT error wrapping the original cause.
+func WrapConflict(msg string, err error) *Error {
+	return &Error{Code: protocol.ErrConflict, Message: msg + ": " + err.Error(), Cause: err}
+}
+
+// WrapNotFound returns a NOT_FOUND error wrapping the original cause.
+func WrapNotFound(msg string, err error) *Error {
+	return &Error{Code: protocol.ErrNotFound, Message: msg + ": " + err.Error(), Cause: err}
 }

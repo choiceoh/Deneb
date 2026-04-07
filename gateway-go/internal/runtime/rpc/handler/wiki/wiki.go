@@ -53,7 +53,7 @@ func wikiSearch(deps Deps) rpcutil.HandlerFunc {
 		}
 		results, err := deps.Store.Search(ctx, p.Query, p.Limit)
 		if err != nil {
-			return rpcerr.Unavailable(err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"results": results})
 	}
@@ -70,7 +70,7 @@ func wikiRead(deps Deps) rpcutil.HandlerFunc {
 		}
 		page, err := deps.Store.ReadPage(p.Path)
 		if err != nil {
-			return nil, rpcerr.NotFound(err.Error())
+			return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
 		}
 		result := map[string]any{
 			"path": p.Path,
@@ -106,7 +106,7 @@ func wikiWrite(deps Deps) rpcutil.HandlerFunc {
 			page.Meta.Importance = p.Importance
 		}
 		if err := deps.Store.WritePage(p.Path, page); err != nil {
-			return nil, rpcerr.Unavailable(err.Error())
+			return nil, rpcerr.Wrap(protocol.ErrUnavailable, err)
 		}
 		return map[string]any{"ok": true, "path": p.Path}, nil
 	})
@@ -121,7 +121,7 @@ func wikiDelete(deps Deps) rpcutil.HandlerFunc {
 			return nil, rpcerr.MissingParam("path")
 		}
 		if err := deps.Store.DeletePage(p.Path); err != nil {
-			return nil, rpcerr.Unavailable(err.Error())
+			return nil, rpcerr.Wrap(protocol.ErrUnavailable, err)
 		}
 		return map[string]any{"ok": true, "path": p.Path}, nil
 	})
@@ -134,7 +134,7 @@ func wikiList(deps Deps) rpcutil.HandlerFunc {
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		pages, err := deps.Store.ListPages(p.Category)
 		if err != nil {
-			return nil, rpcerr.Unavailable(err.Error())
+			return nil, rpcerr.Wrap(protocol.ErrUnavailable, err)
 		}
 		return map[string]any{"pages": pages, "count": len(pages)}, nil
 	})

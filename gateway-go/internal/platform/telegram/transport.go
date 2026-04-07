@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -78,7 +79,7 @@ func (d *stickyDialer) DialContext(ctx context.Context, _, addr string) (net.Con
 	}
 
 	startIdx := int(d.stickyIndex.Load())
-	var lastErr error
+	var dialErrors []error
 
 	for i := startIdx; i < len(d.strategies); i++ {
 		strategy := d.strategies[i]
@@ -102,7 +103,7 @@ func (d *stickyDialer) DialContext(ctx context.Context, _, addr string) (net.Con
 			return conn, nil
 		}
 
-		lastErr = err
+		dialErrors = append(dialErrors, fmt.Errorf("strategy %s: %w", strategy.name, err))
 
 		// Only advance to next strategy for fallback-triggering errors.
 		if !IsFallbackTrigger(err) {
@@ -115,7 +116,7 @@ func (d *stickyDialer) DialContext(ctx context.Context, _, addr string) (net.Con
 		)
 	}
 
-	return nil, fmt.Errorf("telegram dialer: all strategies exhausted: %w", lastErr)
+	return nil, fmt.Errorf("telegram dialer: all strategies exhausted: %w", errors.Join(dialErrors...))
 }
 
 // ResetSticky resets the sticky index back to the default (dual-stack) strategy.

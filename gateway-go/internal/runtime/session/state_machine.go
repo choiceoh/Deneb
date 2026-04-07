@@ -14,6 +14,10 @@ func (e *TransitionError) Error() string {
 	return fmt.Sprintf("invalid state transition: %s → %s", e.From, e.To)
 }
 
+// Unwrap implements the errors.Unwrap interface. TransitionError is purely
+// structural (no underlying cause), so this always returns nil.
+func (e *TransitionError) Unwrap() error { return nil }
+
 // validTransitions defines which status transitions are allowed.
 // Empty string ("") represents no status (new session).
 var validTransitions = map[RunStatus][]RunStatus{

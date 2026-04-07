@@ -88,7 +88,7 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 		{chromeProfile, false, true, 1200 * time.Millisecond},
 	}
 
-	var lastErr error
+	var fetchErrors []error
 	for i, stage := range stages {
 		if stage.backoff > 0 {
 			select {
@@ -129,7 +129,7 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 		cancel()
 
 		if err != nil {
-			lastErr = err
+			fetchErrors = append(fetchErrors, fmt.Errorf("stage %d (%s): %w", i, stage.profile.name, err))
 			// Don't escalate on non-retryable errors (SSRF, DNS, max bytes).
 			if !isRetryableError(err) && !isBlockError(err) {
 				return nil, err
@@ -144,18 +144,14 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 		if isSoftBlock(result) {
 			slog.Debug("soft block detected, escalating",
 				"stage", i, "profile", stage.profile.name, "url", targetURL)
-			lastErr = &media.MediaFetchError{
-				Code:    media.ErrHTTPError,
-				Status:  403,
-				Message: "soft block detected (challenge page)",
-			}
+			fetchErrors = append(fetchErrors, fmt.Errorf("stage %d (%s): soft block detected", i, stage.profile.name))
 			continue
 		}
 
 		return result, nil
 	}
 
-	return nil, lastErr
+	return nil, errors.Join(fetchErrors...)
 }
 
 // isBlockError returns true for HTTP errors that indicate bot blocking.

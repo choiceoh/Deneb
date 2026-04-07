@@ -30,7 +30,7 @@ func ConfigReloadMethods(deps ConfigReloadDeps) map[string]rpcutil.HandlerFunc {
 		"config.reload": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 			snapshot, err := config.LoadConfigFromDefaultPath()
 			if err != nil {
-				return rpcerr.Unavailable("config reload failed: " + err.Error()).Response(req.ID)
+				return rpcerr.WrapUnavailable("config reload failed", err).Response(req.ID)
 			}
 			if !snapshot.Valid {
 				resp := rpcutil.RespondOK(req.ID, map[string]any{
@@ -82,7 +82,7 @@ func configGet() rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		snapshot, err := config.LoadConfigFromDefaultPath()
 		if err != nil {
-			return rpcerr.Unavailable("failed to load config: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("failed to load config", err).Response(req.ID)
 		}
 
 		resp := rpcutil.RespondOK(req.ID, map[string]any{
@@ -114,7 +114,7 @@ func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		// Validate JSON syntax and config structure.
 		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
 		if err != nil {
-			return rpcerr.ValidationFailed("config validation error: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapValidationFailed("config validation error", err).Response(req.ID)
 		}
 		if len(issues) > 0 {
 			return rpcerr.ValidationFailed("invalid config: " + issues[0].String()).Response(req.ID)
@@ -131,7 +131,7 @@ func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		// Write config to the default path.
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("failed to write config", err).Response(req.ID)
 		}
 
 		newHash := config.HashString(p.Raw)
@@ -168,7 +168,7 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		// Validate JSON syntax and config structure.
 		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
 		if err != nil {
-			return rpcerr.ValidationFailed("config validation error: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapValidationFailed("config validation error", err).Response(req.ID)
 		}
 		if len(issues) > 0 {
 			return rpcerr.ValidationFailed("invalid config: " + issues[0].String()).Response(req.ID)
@@ -184,7 +184,7 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("failed to write config", err).Response(req.ID)
 		}
 
 		newHash := config.HashString(p.Raw)
@@ -225,13 +225,13 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		// Parse the patch.
 		var patch map[string]any
 		if err := json.Unmarshal([]byte(p.Raw), &patch); err != nil {
-			return rpcerr.ValidationFailed("invalid JSON patch: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapValidationFailed("invalid JSON patch", err).Response(req.ID)
 		}
 
 		// Load current config for concurrency check.
 		snapshot, err := config.LoadConfigFromDefaultPath()
 		if err != nil {
-			return rpcerr.Unavailable("failed to load config: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("failed to load config", err).Response(req.ID)
 		}
 
 		// Concurrency check.
@@ -244,7 +244,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		// Merge patch into current config.
 		var current map[string]any
 		if err := json.Unmarshal([]byte(snapshot.Raw), &current); err != nil {
-			return rpcerr.Unavailable("failed to parse current config: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("failed to parse current config", err).Response(req.ID)
 		}
 		for k, v := range patch {
 			current[k] = v
@@ -258,7 +258,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		// Validate merged config before writing.
 		issues, warnings, valErr := config.ValidateRawConfig(merged)
 		if valErr != nil {
-			return rpcerr.ValidationFailed("config validation error: " + valErr.Error()).Response(req.ID)
+			return rpcerr.WrapValidationFailed("config validation error", valErr).Response(req.ID)
 		}
 		if len(issues) > 0 {
 			return rpcerr.ValidationFailed("merged config is invalid: " + issues[0].String()).Response(req.ID)
@@ -266,7 +266,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, merged, 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return rpcerr.Unavailable("failed to write config: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("failed to write config", err).Response(req.ID)
 		}
 
 		newHash := config.HashString(string(merged))

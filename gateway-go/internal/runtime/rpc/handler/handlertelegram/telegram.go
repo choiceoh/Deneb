@@ -4,6 +4,9 @@ package handlertelegram
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
@@ -96,7 +99,7 @@ func telegramStart(deps LifecycleDeps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
 		}
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
-			return rpcerr.Unavailable("channel start failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
+			return rpcerr.WrapUnavailable("channel start failed", err).WithChannel(p.ID).Response(req.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
 		return rpcutil.RespondOK(req.ID, map[string]any{"started": true, "id": p.ID})
@@ -118,7 +121,7 @@ func telegramStop(deps LifecycleDeps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
 		}
 		if err := deps.TelegramPlugin.Stop(ctx); err != nil {
-			return rpcerr.Unavailable("channel stop failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
+			return rpcerr.WrapUnavailable("channel stop failed", err).WithChannel(p.ID).Response(req.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
 		return rpcutil.RespondOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
@@ -141,7 +144,7 @@ func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		}
 		deps.TelegramPlugin.Stop(ctx) //nolint:errcheck // best-effort cleanup before restart
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
-			return rpcerr.Unavailable("channel restart failed: " + err.Error()).WithChannel(p.ID).Response(req.ID)
+			return rpcerr.WrapUnavailable("channel restart failed", err).WithChannel(p.ID).Response(req.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
 		return rpcutil.RespondOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
@@ -179,7 +182,7 @@ func messagingSend(deps MessagingDeps) rpcutil.HandlerFunc {
 
 			chatID, err := parseChatID(p.To)
 			if err != nil {
-				return rpcerr.New(protocol.ErrInvalidRequest, "invalid chat ID: "+err.Error()).Response(req.ID)
+				return rpcerr.WrapInvalidRequest("invalid chat ID", err).Response(req.ID)
 			}
 
 			opts := telegram.SendOptions{
@@ -194,23 +197,31 @@ func messagingSend(deps MessagingDeps) rpcutil.HandlerFunc {
 
 			results, err := telegram.SendText(ctx, client, chatID, html, opts)
 			if err != nil {
-				return rpcerr.New(protocol.ErrDependencyFailed, "telegram send failed: "+err.Error()).Response(req.ID)
+				return rpcerr.WrapDependencyFailed("telegram send failed", err).Response(req.ID)
 			}
 
-			// Send media attachments.
+			// Send media attachments, collecting errors.
+			var mediaErrors []error
 			for _, m := range p.Media {
+				var sendErr error
 				switch m.Type {
 				case "photo", "image":
-					_, _ = telegram.SendPhoto(ctx, client, chatID, m.URL, "", opts)
+					_, sendErr = telegram.SendPhoto(ctx, client, chatID, m.URL, "", opts)
 				case "document", "file":
-					_, _ = telegram.SendDocument(ctx, client, chatID, m.URL, "", opts)
+					_, sendErr = telegram.SendDocument(ctx, client, chatID, m.URL, "", opts)
 				case "video":
-					_, _ = telegram.SendVideo(ctx, client, chatID, m.URL, "", opts)
+					_, sendErr = telegram.SendVideo(ctx, client, chatID, m.URL, "", opts)
 				case "audio":
-					_, _ = telegram.SendAudio(ctx, client, chatID, m.URL, "", opts)
+					_, sendErr = telegram.SendAudio(ctx, client, chatID, m.URL, "", opts)
 				case "voice":
-					_, _ = telegram.SendVoice(ctx, client, chatID, m.URL, "", opts)
+					_, sendErr = telegram.SendVoice(ctx, client, chatID, m.URL, "", opts)
 				}
+				if sendErr != nil {
+					mediaErrors = append(mediaErrors, fmt.Errorf("media %s: %w", m.Type, sendErr))
+				}
+			}
+			if err := errors.Join(mediaErrors...); err != nil {
+				slog.Warn("telegram media send errors", "count", len(mediaErrors), "error", err)
 			}
 
 			var resultData any

@@ -27,7 +27,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		DeepWork     bool             `json:"deepWork,omitempty"` // extended autonomous mode (2-3 hours)
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.InvalidRequest("invalid chat.send params: " + err.Error()).Response(req.ID)
+		return rpcerr.WrapInvalidRequest("invalid chat.send params", err).Response(req.ID)
 	}
 	if p.SessionKey == "" {
 		return rpcerr.MissingParam("sessionKey").Response(req.ID)
@@ -85,7 +85,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 		IdempotencyKey string           `json:"idempotencyKey,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.InvalidRequest("invalid sessions.send params: " + err.Error()).Response(req.ID)
+		return rpcerr.WrapInvalidRequest("invalid sessions.send params", err).Response(req.ID)
 	}
 	if p.Key == "" {
 		return rpcerr.MissingParam("key").Response(req.ID)
@@ -121,7 +121,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 		SystemPrompt string `json:"systemPrompt,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.InvalidRequest("invalid sessions.steer params: " + err.Error()).Response(req.ID)
+		return rpcerr.WrapInvalidRequest("invalid sessions.steer params", err).Response(req.ID)
 	}
 	if p.Key == "" {
 		return rpcerr.MissingParam("key").Response(req.ID)
@@ -149,7 +149,7 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 		RunID string `json:"runId,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.InvalidRequest("invalid sessions.abort params: " + err.Error()).Response(req.ID)
+		return rpcerr.WrapInvalidRequest("invalid sessions.abort params", err).Response(req.ID)
 	}
 	if p.Key == "" && p.RunID == "" {
 		return rpcerr.New(protocol.ErrMissingParam, "key or runId is required").Response(req.ID)
@@ -263,7 +263,7 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 	if h.transcript != nil {
 		msgs, total, err := h.transcript.Load(p.SessionKey, limit)
 		if err != nil {
-			return rpcerr.DependencyFailed("transcript load error: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapDependencyFailed("transcript load error", err).Response(req.ID)
 		}
 		if msgs == nil {
 			msgs = []ChatMessage{}
@@ -426,7 +426,7 @@ func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protoco
 	if h.transcript != nil {
 		msg := NewTextChatMessage(p.Role, content, time.Now().UnixMilli())
 		if err := h.transcript.Append(p.SessionKey, msg); err != nil {
-			return rpcerr.DependencyFailed("transcript write error: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapDependencyFailed("transcript write error", err).Response(req.ID)
 		}
 		if h.broadcast != nil {
 			h.broadcast("sessions.changed", map[string]any{

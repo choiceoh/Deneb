@@ -164,11 +164,15 @@ type ConnectorError struct {
 	Method     string
 	Path       string
 	Body       string
+	Cause      error // underlying error (e.g. body-read failure)
 }
 
 func (e *ConnectorError) Error() string {
 	return fmt.Sprintf("provider %s %s returned HTTP %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
 }
+
+// Unwrap returns the underlying cause, implementing the errors.Unwrap interface.
+func (e *ConnectorError) Unwrap() error { return e.Cause }
 
 // ExpandEnvVars expands ${VAR} references in a string using os.Getenv.
 // Both ${VAR} and $VAR forms are expanded.
