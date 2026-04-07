@@ -47,13 +47,12 @@ func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int
 		cancel()
 	}()
 
+	defer httputil.CloseIdle()
+
 	if err := fn(ctx); err != nil {
 		logger.Error("gateway error", "error", err)
-		httputil.CloseIdle()
 		return 1
 	}
-
-	httputil.CloseIdle()
 
 	if restartRequested.Load() {
 		logger.Info("exiting for restart", "exitCode", ExitCodeRestart)

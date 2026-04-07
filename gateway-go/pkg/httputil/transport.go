@@ -56,10 +56,7 @@ func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if version != "" {
 			ua += "/" + version
 		}
-		// Clone the request to avoid mutating the caller's headers.
-		r2 := req.Clone(req.Context())
-		r2.Header.Set("User-Agent", ua)
-		return t.base.RoundTrip(r2)
+		req.Header.Set("User-Agent", ua)
 	}
 	return t.base.RoundTrip(req)
 }
@@ -84,20 +81,16 @@ func CloseIdle() {
 }
 
 // WaitForHealth polls a health endpoint until it returns a non-5xx status
-// or the timeout expires. Useful for waiting on sidecar/subprocess startup.
-func WaitForHealth(ctx context.Context, url string, timeout, interval time.Duration) error {
+// or ctx is cancelled/expired. Callers control the deadline via context.
+func WaitForHealth(ctx context.Context, url string, interval time.Duration) error {
 	client := NewClient(3 * time.Second)
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-deadline.C:
-			return fmt.Errorf("health check at %s not ready after %v", url, timeout)
+			return fmt.Errorf("health check at %s: %w", url, ctx.Err())
 		case <-ticker.C:
 			resp, err := client.Get(url)
 			if err == nil {

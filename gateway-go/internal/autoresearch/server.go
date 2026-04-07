@@ -98,7 +98,7 @@ func (sm *ServerManager) startLocked() error {
 func (sm *ServerManager) waitHealth() error {
 	ctx, cancel := context.WithTimeout(context.Background(), sm.startup)
 	defer cancel()
-	return httputil.WaitForHealth(ctx, sm.healthURL, sm.startup, 500*time.Millisecond)
+	return httputil.WaitForHealth(ctx, sm.healthURL, 500*time.Millisecond)
 }
 
 // RestartIfNeeded restarts the server only when the content hash changed.
