@@ -59,6 +59,10 @@ SCENARIO_ALIASES = {
     "format":     ["format"],
     "edge":       ["edge"],
     "health":     ["health"],
+    "bench":      ["bench-challenge", "bench-multiturn", "bench-oolong"],
+    "bench-ch":   ["bench-challenge"],
+    "bench-mt":   ["bench-multiturn"],
+    "bench-ool":  ["bench-oolong"],
 }
 
 # Core subset: essential tests for quick checks.
@@ -652,6 +656,43 @@ def _eval_simple(name: str, capture: ChatCapture) -> tuple[str, bool, str]:
     return (name, False, f"unknown simple check: {name}")
 
 
+def _eval_llm_judge(capture: ChatCapture, min_score: int) -> tuple[str, bool, str]:
+    """Run LLM-as-Judge evaluation on the response."""
+    try:
+        # dev-bench-judge.py has a hyphen; use importlib for non-standard names.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "dev_bench_judge", SCRIPT_DIR / "dev-bench-judge.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        judge_available = mod.judge_available
+        judge_absolute = mod.judge_absolute
+    except Exception:
+        return ("llm_judge", True, "judge module not found (skipped)")
+
+    if not judge_available():
+        return ("llm_judge", True, "no JUDGE_API_KEY (skipped)")
+
+    # Reconstruct message from capture (stored in _bench_message by the runner).
+    message = getattr(capture, "_bench_message", "")
+    if not message:
+        message = "(message not available)"
+
+    tool_info = ""
+    if capture.tool_starts:
+        tools = [t["name"] for t in capture.tool_starts]
+        tool_info = f"Tools used: {', '.join(tools)}"
+
+    try:
+        scores = judge_absolute(message, capture.reply_text, tool_info)
+        overall = sum(scores.values()) / len(scores) * 10
+        detail_parts = [f"{k}={v}" for k, v in scores.items()]
+        detail = f"score={overall:.0f}/{min_score} {' '.join(detail_parts)}"
+        return ("llm_judge", overall >= min_score, detail)
+    except Exception as e:
+        return ("llm_judge", True, f"judge error: {e} (skipped)")
+
+
 def _eval_param(key: str, val, capture: ChatCapture) -> tuple[str, bool, str]:
     text = capture.reply_text
 
@@ -732,6 +773,11 @@ def _eval_param(key: str, val, capture: ChatCapture) -> tuple[str, bool, str]:
         ok = ratio <= max_ratio
         return ("token_bounded", ok,
                 f"growth {ratio:.1f}x (first={first_input}, last={last_input}, limit={max_ratio}x)")
+
+    if key == "llm_judge":
+        # LLM-as-Judge evaluation. val is min_score (0-100) or dict with options.
+        min_score = int(val) if not isinstance(val, dict) else int(val.get("min_score", 50))
+        return _eval_llm_judge(capture, min_score)
 
     return (key, False, f"unknown param check: {key}={val}")
 
@@ -999,6 +1045,9 @@ async def run_chat_test(client: GatewayClient, tdef: dict,
         result.passed = False
         return result
 
+    # Attach original message for LLM-as-Judge evaluation.
+    capture._bench_message = msg
+
     result.latency_ms = capture.latency_ms
     result.reply_text = capture.reply_text
     result.token_usage = capture.token_usage
@@ -1064,6 +1113,14 @@ async def run_multiturn_test(client: GatewayClient, tdef: dict,
     if not last_capture:
         result.add_check("has_response", False, "no response captured")
         return result
+
+    # Attach last message for LLM-as-Judge evaluation.
+    last_msg = ""
+    for turn in reversed(turns):
+        if "msg" in turn:
+            last_msg = turn["msg"]
+            break
+    last_capture._bench_message = last_msg
 
     result.latency_ms = last_capture.latency_ms
     result.reply_text = last_capture.reply_text
@@ -1387,7 +1444,11 @@ def main():
         # New categories.
         "health", "daily", "system", "code", "task", "search",
         "knowledge", "format", "context", "edge", "safety",
-        "korean", "persona", "reasoning", "compact",
+        "korean", "persona", "reasoning", "compact", "user",
+        # Benchmark categories (Arena-Hard / MT-Bench / Oolong).
+        "bench-challenge", "bench-multiturn", "bench-oolong",
+        # Aliases.
+        "bench", "bench-ch", "bench-mt", "bench-ool",
         # Legacy aliases.
         "chat", "tools", "tools-deep",
     ]

@@ -209,6 +209,133 @@ CUSTOM_EOF
   echo "$script"
 }
 
+gen_judge() {
+  local script="$OUT_DIR/deneb-metric-judge.sh"
+  _write_header "$script"
+  _write_server_start "$script"
+
+  cat >> "$script" << 'JUDGE_EOF'
+
+# LLM-as-Judge quality metric via Telegram.
+# Sends a chat message, captures response, then uses LLM to evaluate quality.
+# Requires JUDGE_API_KEY or ANTHROPIC_API_KEY.
+MESSAGE="${JUDGE_MESSAGE:-안녕, 이 서버에 대해 간단히 설명해줘}"
+
+# 1) Get chat response via Telegram quality metric.
+QUALITY_OUT=$("$REPO_DIR/scripts/dev-quality-metric.sh" "$MESSAGE" 2>&1) || true
+HEURISTIC_VAL=$(echo "$QUALITY_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1)
+HEURISTIC_VAL=${HEURISTIC_VAL:-0}
+
+# 2) Extract response text from quality metric stderr for judge input.
+RESPONSE_TEXT=$(echo "$QUALITY_OUT" | grep '  reply: ' | sed 's/^  reply: //' | head -1)
+
+# 3) Run LLM judge on (message, response).
+if [[ -n "${JUDGE_API_KEY:-${ANTHROPIC_API_KEY:-}}" ]] && [[ -n "$RESPONSE_TEXT" ]]; then
+  JUDGE_OUT=$(python3 "$REPO_DIR/scripts/dev-bench-judge.py" absolute \
+    --message "$MESSAGE" --response "$RESPONSE_TEXT" 2>&1) || true
+  JUDGE_VAL=$(echo "$JUDGE_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1)
+  JUDGE_DETAIL=$(echo "$JUDGE_OUT" | grep '^DENEB_JUDGE_DETAIL ' | tail -1)
+  JUDGE_VAL=${JUDGE_VAL:-0}
+
+  # Combined: heuristic(30%) + judge(70%)
+  TOTAL=$(python3 -c "print(round($HEURISTIC_VAL * 0.3 + $JUDGE_VAL * 0.7))")
+  echo "metric_value=$TOTAL"
+  echo "DENEB_METRIC_DETAIL build=ok server=ok heuristic=$HEURISTIC_VAL judge=$JUDGE_VAL combined=$TOTAL"
+  [[ -n "$JUDGE_DETAIL" ]] && echo "$JUDGE_DETAIL"
+else
+  # Fallback to heuristic only.
+  echo "metric_value=$HEURISTIC_VAL"
+  echo "DENEB_METRIC_DETAIL build=ok server=ok heuristic=$HEURISTIC_VAL judge=skipped"
+fi
+JUDGE_EOF
+
+  chmod +x "$script"
+  echo "$script"
+}
+
+gen_pairwise() {
+  local script="$OUT_DIR/deneb-metric-pairwise.sh"
+  _write_header "$script"
+  _write_server_start "$script"
+
+  cat >> "$script" << 'PAIRWISE_EOF'
+
+# Pairwise comparison metric for autoresearch.
+# Sends same message to baseline and candidate, LLM picks winner.
+# Requires JUDGE_API_KEY or ANTHROPIC_API_KEY.
+# Requires PAIRWISE_BASELINE_PORT (default: 18789, production gateway).
+MESSAGE="${PAIRWISE_MESSAGE:-시스템 상태 확인하고 간단히 요약해줘}"
+BASELINE_PORT="${PAIRWISE_BASELINE_PORT:-18789}"
+
+# 1) Get candidate response (current build on $PORT).
+CAND_OUT=$("$REPO_DIR/scripts/dev-quality-metric.sh" "$MESSAGE" 2>&1) || true
+CAND_TEXT=$(echo "$CAND_OUT" | grep '  reply: ' | sed 's/^  reply: //' | head -1)
+
+# 2) Get baseline response (production on $BASELINE_PORT).
+# Use a separate quality metric call pointed at baseline port.
+BASE_OUT=$(METRIC_PORT=$BASELINE_PORT "$REPO_DIR/scripts/dev-quality-metric.sh" "$MESSAGE" 2>&1) || true
+BASE_TEXT=$(echo "$BASE_OUT" | grep '  reply: ' | sed 's/^  reply: //' | head -1)
+
+# 3) Pairwise judge.
+if [[ -n "${JUDGE_API_KEY:-${ANTHROPIC_API_KEY:-}}" ]] && [[ -n "$CAND_TEXT" ]] && [[ -n "$BASE_TEXT" ]]; then
+  PW_OUT=$(python3 "$REPO_DIR/scripts/dev-bench-judge.py" pairwise \
+    --message "$MESSAGE" --response-a "$BASE_TEXT" --response-b "$CAND_TEXT" 2>&1) || true
+  # B=candidate wins → 100, tie → 50, A=baseline wins → 0
+  PW_METRIC=$(echo "$PW_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1)
+  PW_DETAIL=$(echo "$PW_OUT" | grep '^DENEB_JUDGE_DETAIL ' | tail -1)
+  PW_METRIC=${PW_METRIC:-50}
+  echo "metric_value=$PW_METRIC"
+  echo "DENEB_METRIC_DETAIL build=ok server=ok mode=pairwise"
+  [[ -n "$PW_DETAIL" ]] && echo "$PW_DETAIL"
+else
+  echo "metric_value=50"
+  echo "DENEB_METRIC_DETAIL build=ok server=ok mode=pairwise judge=skipped"
+fi
+PAIRWISE_EOF
+
+  chmod +x "$script"
+  echo "$script"
+}
+
+gen_bench() {
+  local script="$OUT_DIR/deneb-metric-bench.sh"
+  _write_header "$script"
+  _write_server_start "$script"
+
+  cat >> "$script" << 'BENCH_EOF'
+
+# Full benchmark metric: runs bench-challenge + bench-multiturn + bench-oolong tests.
+# Returns pass rate as metric (0-100).
+BENCH_OUT=$(python3 "$REPO_DIR/scripts/dev-quality-test.py" \
+  --scenario bench --json --port "$PORT" 2>&1) || true
+
+# Extract overall score from JSON output.
+SCORE=$(echo "$BENCH_OUT" | python3 -c "
+import sys, json
+try:
+    data = json.loads(sys.stdin.read())
+    print(round(data.get('overall_score', 0) * 100))
+except:
+    print(0)
+" 2>/dev/null || echo "0")
+
+PASSED=$(echo "$BENCH_OUT" | python3 -c "
+import sys, json
+try:
+    data = json.loads(sys.stdin.read())
+    print(f\"{data.get('passed_tests', 0)}/{data.get('total_tests', 0)}\")
+except:
+    print('0/0')
+" 2>/dev/null || echo "0/0")
+
+echo "metric_value=$SCORE"
+echo "DENEB_METRIC_DETAIL build=ok server=ok bench_score=$SCORE tests=$PASSED"
+BENCH_EOF
+
+  chmod +x "$script"
+  echo "$script"
+}
+
 cmd_list() {
   echo "Available metric presets:"
   echo ""
@@ -217,6 +344,14 @@ cmd_list() {
   echo "  combined   Smoke(20%) + Quality(80%) (metric_value=0~100, ~30s)"
   echo "  custom     Custom message quality (metric_value=0~100, ~30s)"
   echo "             Usage: dev-metric-gen.sh custom \"메시지\""
+  echo ""
+  echo "  --- Benchmark Presets ---"
+  echo "  judge      LLM-as-Judge quality (heuristic 30% + LLM judge 70%, 0~100)"
+  echo "             Requires JUDGE_API_KEY or ANTHROPIC_API_KEY"
+  echo "  pairwise   Pairwise A/B comparison (baseline vs candidate, 0/50/100)"
+  echo "             Requires JUDGE_API_KEY + production gateway on port 18789"
+  echo "  bench      Full benchmark suite (Arena-Hard + MT-Bench + Oolong, 0~100)"
+  echo "             Runs 23 benchmark tests via Telegram"
   echo ""
   echo "Generated scripts go to /tmp/deneb-metric-*.sh"
   echo "Use as: autoresearch init --metric_cmd /tmp/deneb-metric-*.sh"
@@ -228,6 +363,9 @@ case "$PRESET" in
   smoke)    gen_smoke ;;
   quality)  gen_quality ;;
   combined) gen_combined ;;
+  judge)    gen_judge ;;
+  pairwise) gen_pairwise ;;
+  bench)    gen_bench ;;
   custom)
     if [[ -z "$CUSTOM_MSG" ]]; then
       echo "Usage: dev-metric-gen.sh custom \"메시지\""

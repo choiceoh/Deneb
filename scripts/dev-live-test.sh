@@ -19,6 +19,11 @@
 #   scripts/dev-live-test.sh quality-history    Show past quality test runs
 #   scripts/dev-live-test.sh quality-compare A B Compare two runs
 #   scripts/dev-live-test.sh quality-trend NAME  Score trend for a test
+#
+# Benchmarks (Arena-Hard + MT-Bench + Oolong + LLM-as-Judge + Pairwise):
+#   scripts/dev-live-test.sh bench [SUITE]       Run benchmark tests (all/challenge/multiturn/oolong)
+#   scripts/dev-live-test.sh bench-judge MSG     LLM-as-Judge single message evaluation
+#
 #   scripts/dev-live-test.sh logs [N]           Tail dev gateway logs (default: 50 lines)
 #   scripts/dev-live-test.sh logs-watch         Follow dev gateway logs in real-time
 #   scripts/dev-live-test.sh logs-grep PATTERN  Search logs for pattern
@@ -461,6 +466,49 @@ case "${1:-help}" in
   multi-chat)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" multi-chat "$@" ;;
   tool-check)  shift; python3 "$SCRIPT_DIR/dev-reproduce.py" --port "$DEV_PORT" tool-check "$@" ;;
 
+  # Benchmarks (Arena-Hard / MT-Bench / Oolong / LLM-as-Judge / Pairwise).
+  bench)
+    shift
+    BENCH_SUITE="${1:-all}"
+    shift || true
+    case "$BENCH_SUITE" in
+      all)        SCENARIO="bench" ;;
+      challenge)  SCENARIO="bench-ch" ;;
+      multiturn)  SCENARIO="bench-mt" ;;
+      oolong)     SCENARIO="bench-ool" ;;
+      *)          SCENARIO="bench-$BENCH_SUITE" ;;
+    esac
+    echo "==> Running benchmark suite: $BENCH_SUITE (scenario=$SCENARIO)"
+    python3 "$SCRIPT_DIR/dev-quality-test.py" --scenario "$SCENARIO" --port "$DEV_PORT" \
+      ${BOT_FLAG:+--bot "$BOT_FLAG"} "$@"
+    ;;
+  bench-judge)
+    shift
+    MSG="${1:?Usage: bench-judge MESSAGE}"
+    shift || true
+    echo "==> LLM-as-Judge evaluation"
+    # Get response via Telegram.
+    CAPTURE=$(python3 -c "
+import sys, asyncio
+sys.path.insert(0, '$SCRIPT_DIR')
+from telegram_test_client import TelegramTestClient, check_prerequisites
+async def main():
+    ok, d = check_prerequisites()
+    if not ok: print(f'ERROR: {d}'); return
+    c = TelegramTestClient()
+    await c.connect()
+    cap = await c.chat('''$MSG''')
+    print(cap.reply_text)
+    await c.disconnect()
+asyncio.run(main())
+" 2>/dev/null) || true
+    if [[ -z "$CAPTURE" ]]; then
+      echo "ERROR: No response captured"
+      exit 1
+    fi
+    python3 "$SCRIPT_DIR/dev-bench-judge.py" absolute --message "$MSG" --response "$CAPTURE"
+    ;;
+
   # Baseline tracking.
   baseline)      shift; "$SCRIPT_DIR/dev-baseline.sh" "$@" ;;
   baseline-save) "$SCRIPT_DIR/dev-baseline.sh" save ;;
@@ -486,6 +534,7 @@ case "${1:-help}" in
     echo "  quality [SCENARIO]  품질 테스트 (165 cases, Telegram)"
     echo "    Scenarios: all|core|health|daily|system|code|task|search|knowledge"
     echo "               format|context|edge|safety|korean|persona|reasoning"
+    echo "               bench-challenge|bench-multiturn|bench-oolong|bench (all bench)"
     echo "    Legacy:    chat|tools|tools-deep (aliases for new categories)"
     echo "    Flags:     --record (save to DB), --model MODEL, --bot USERNAME"
     echo "  quality-custom MSG  커스텀 메시지 품질 테스트"
@@ -507,8 +556,13 @@ case "${1:-help}" in
     echo "  baseline-save       baseline save 단축"
     echo "  baseline-compare    baseline compare 단축"
     echo ""
+    echo "Benchmarks (Arena-Hard + MT-Bench + Oolong + LLM-as-Judge + Pairwise):"
+    echo "  bench [SUITE]       벤치마크 실행 (all|challenge|multiturn|oolong)"
+    echo "  bench-judge MSG     LLM-as-Judge로 단일 메시지 품질 평가"
+    echo "                      Requires JUDGE_API_KEY or ANTHROPIC_API_KEY"
+    echo ""
     echo "Autoresearch:"
-    echo "  metric-gen [PRESET] 메트릭 스크립트 생성 (smoke|quality|combined|custom)"
+    echo "  metric-gen [PRESET] 메트릭 스크립트 생성 (smoke|quality|combined|custom|judge|pairwise|bench)"
     echo "  ar-start [OPTS]     오토리서치 시작 (--target FILE --metric PRESET)"
     echo "  ar-stop             오토리서치 정지"
     echo "  ar-status           오토리서치 상태 확인"
