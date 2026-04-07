@@ -13,7 +13,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
-	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
@@ -249,10 +248,6 @@ func executeAgentRun(
 		}
 	}
 
-	// Snapshot immutable query config once. All subsequent code uses qCfg
-	// for consistent values (model, budget, limits) rather than re-reading.
-	qCfg := BuildQueryConfig(params, model, providerID, workspaceDir)
-
 	runLog.LogStart(agentlog.RunStartData{
 		Model:    model,
 		Provider: providerID,
@@ -383,19 +378,6 @@ func executeAgentRun(
 
 	prepWg.Wait()
 	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
-
-	// Microcompact: prune old tool results to save tokens before the LLM call.
-	// Runs after context assembly but before prompt finalization.
-	// Low-cost (no LLM call) — replaces old tool_result blocks with compact stubs.
-	if len(messages) > 0 {
-		mcMessages, mcResult := compact.MicrocompactMessages(messages, time.Now())
-		if mcResult.PrunedCount > 0 {
-			messages = mcMessages
-			logger.Info("microcompact: pruned old tool results",
-				"pruned", mcResult.PrunedCount,
-				"estimatedTokensSaved", mcResult.EstimatedSaved)
-		}
-	}
 
 	if contextErr != nil {
 		logger.Error("context assembly failed, proceeding with degraded context",
@@ -807,116 +789,60 @@ func executeAgentRun(
 		"model", model, "provider", providerID,
 		"messages", len(messages), "tools", len(tools))
 
-	// 11. Execute agent loop with compaction retry and model fallback chain.
+	// 11. Execute agent loop with model fallback chain.
 	agentStart := time.Now()
 	var agentResult *agent.AgentResult
-
-	// Budget tracker: detect diminishing returns across compaction retries.
-	budgetTracker := NewBudgetTracker()
-
-	// Track the final transition reason for telemetry/debugging.
 	var lastTransition QueryTransition
 
-	for attempt := 0; attempt <= maxCompactionRetries; attempt++ {
-		if attempt > 0 {
-			logger.Info("retrying agent run after compaction", "attempt", attempt)
+	var runErr error
+	agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+	if runErr != nil {
+		// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
+		if deps.isTransientError != nil && deps.isTransientError(runErr.Error()) && ctx.Err() == nil {
+			logger.Warn("transient HTTP error, retrying once", "error", runErr)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2500 * time.Millisecond):
+			}
+			agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+			if runErr != nil {
+				logger.Warn("transient retry also failed", "error", runErr)
+			}
 		}
 
-		var runErr error
-		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
-		if runErr != nil {
-			// Context overflow: summarize middle messages and retry.
-			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
-				logger.Info("context overflow, compacting messages", "error", runErr)
-				if len(messages) > 10 {
-					const keepHead, keepTail = 2, 8
-					if len(messages) > keepHead+keepTail {
-						dropped := len(messages) - keepHead - keepTail
-						middle := messages[keepHead : len(messages)-keepTail]
-
-						// Try to summarize the middle before dropping.
-						summary := emergencySummarize(ctx, client, model, middle, logger)
-
-						kept := make([]llm.Message, 0, keepHead+1+keepTail)
-						kept = append(kept, messages[:keepHead]...)
-						if summary != "" {
-							kept = append(kept, llm.NewTextMessage("user",
-								"[Compacted conversation summary]\n"+summary))
-						}
-						kept = append(kept, messages[len(messages)-keepTail:]...)
-						messages = kept
-						logger.Info("context overflow: emergency compaction",
-							"dropped", dropped, "summarized", summary != "",
-							"remaining", len(messages))
-					}
+		// Model fallback chain: try each subsequent role in the chain.
+		// e.g., Main → Lightweight → Fallback
+		if runErr != nil && deps.registry != nil && ctx.Err() == nil {
+			chain := deps.registry.FallbackChain(initialRole)
+			for i := 1; i < len(chain); i++ {
+				fbRole := chain[i]
+				fbCfg := deps.registry.Config(fbRole)
+				fbClient := deps.registry.Client(fbRole)
+				if fbClient == nil {
+					continue
 				}
-				messages = compact.StripImageBlocks(messages)
-				lastTransition = NewContinue(ContinueCompactRetry)
-				continue
-			}
-
-			// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
-			if deps.isTransientError != nil && deps.isTransientError(runErr.Error()) && ctx.Err() == nil {
-				logger.Warn("transient HTTP error, retrying once", "error", runErr)
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(2500 * time.Millisecond):
-				}
-				agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+				logger.Warn("model failed, trying fallback",
+					"failedRole", string(chain[i-1]),
+					"nextRole", string(fbRole),
+					"nextModel", fbCfg.Model,
+					"error", runErr)
+				agentCfg := cfg
+				agentCfg.Model = fbCfg.Model
+				agentResult, runErr = agent.RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
 				if runErr == nil {
 					break
 				}
-				logger.Warn("transient retry also failed", "error", runErr)
+				logger.Error("fallback also failed",
+					"role", string(fbRole), "model", fbCfg.Model, "error", runErr)
 			}
+		}
 
-			// Model fallback chain: try each subsequent role in the chain.
-			// e.g., Main → Lightweight → Fallback
-			if deps.registry != nil && ctx.Err() == nil {
-				chain := deps.registry.FallbackChain(initialRole)
-				fallbackSucceeded := false
-				for i := 1; i < len(chain); i++ {
-					fbRole := chain[i]
-					fbCfg := deps.registry.Config(fbRole)
-					fbClient := deps.registry.Client(fbRole)
-					if fbClient == nil {
-						continue
-					}
-					logger.Warn("model failed, trying fallback",
-						"failedRole", string(chain[i-1]),
-						"nextRole", string(fbRole),
-						"nextModel", fbCfg.Model,
-						"error", runErr)
-					agentCfg := cfg
-					agentCfg.Model = fbCfg.Model
-					agentResult, runErr = agent.RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
-					if runErr == nil {
-						fallbackSucceeded = true
-						break
-					}
-					logger.Error("fallback also failed",
-						"role", string(fbRole), "model", fbCfg.Model, "error", runErr)
-				}
-				if fallbackSucceeded {
-					break
-				}
-			}
-
+		if runErr != nil {
 			return nil, runErr
 		}
-		// Check budget tracker for diminishing returns across turns.
-		totalTokens := agentResult.Usage.InputTokens + agentResult.Usage.OutputTokens
-		decision := budgetTracker.CheckBudget("", int(qCfg.LiveTokenBudget), totalTokens)
-		if decision.Action == "stop" && decision.DiminishingReturns {
-			lastTransition = NewTerminal(TerminalDiminishingReturn, nil)
-			logger.Info("budget tracker: diminishing returns detected, stopping",
-				"continuations", decision.ContinuationCount,
-				"pct", decision.Pct)
-			break
-		}
-		lastTransition = NewTerminal(TerminalCompleted, nil)
-		break
 	}
+	lastTransition = NewTerminal(TerminalCompleted, nil)
 
 	agentMs := time.Since(agentStart).Milliseconds()
 	totalMs := time.Since(runStart).Milliseconds()

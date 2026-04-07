@@ -35,9 +35,6 @@ type QueryConfig struct {
 	// AgentTimeout is the total time allowed for the agent run.
 	AgentTimeout time.Duration
 
-	// MaxCompactionRetries limits compaction retry attempts per query.
-	MaxCompactionRetries int
-
 	// WorkspaceDir is the resolved workspace directory.
 	WorkspaceDir string
 
@@ -49,13 +46,12 @@ type QueryConfig struct {
 // Callers should override fields from RunParams before use.
 func DefaultQueryConfig() QueryConfig {
 	return QueryConfig{
-		MemoryTokenBudget:    defaultMemoryTokenBudget,
-		LiveTokenBudget:      defaultLiveTokenBudget,
-		MaxTurns:             defaultMaxTurns,
-		MaxOutputTokens:      defaultMaxTokens,
-		AgentTimeout:         defaultAgentTimeout,
-		MaxCompactionRetries: maxCompactionRetries,
-		SnapshotTime:         time.Now(),
+		MemoryTokenBudget: defaultMemoryTokenBudget,
+		LiveTokenBudget:   defaultLiveTokenBudget,
+		MaxTurns:          defaultMaxTurns,
+		MaxOutputTokens:   defaultMaxTokens,
+		AgentTimeout:      defaultAgentTimeout,
+		SnapshotTime:      time.Now(),
 	}
 }
 

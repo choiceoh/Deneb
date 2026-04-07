@@ -68,10 +68,9 @@ type RunParams struct {
 
 // Agent run defaults.
 const (
-	defaultMaxTokens     = 8192
-	defaultMaxTurns      = 25
-	defaultAgentTimeout  = 60 * time.Minute
-	maxCompactionRetries = 2
+	defaultMaxTokens    = 8192
+	defaultMaxTurns     = 25
+	defaultAgentTimeout = 60 * time.Minute
 )
 
 // runDeps holds the dependencies the async run needs from the Handler.

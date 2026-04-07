@@ -26,8 +26,6 @@ func lookupValidator(method string) ValidatorFn {
 		return validateSessionsResetParams
 	case "sessions.delete":
 		return validateSessionsDeleteParams
-	case "sessions.compact":
-		return validateSessionsCompactParams
 	case "sessions.usage":
 		return validateSessionsUsageParams
 

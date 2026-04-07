@@ -1,7 +1,7 @@
 // Package session provides RPC handlers for session management methods.
 //
 // Methods: sessions.patch, sessions.reset, sessions.preview, sessions.resolve,
-// sessions.compact, sessions.repair, sessions.overflow_check, sessions.send,
+// sessions.repair, sessions.overflow_check, sessions.send,
 // sessions.steer, sessions.abort, agent, agent.identity.get, agent.wait.
 package session
 
@@ -25,7 +25,6 @@ type Deps struct {
 	Sessions    *session.Manager
 	GatewaySubs *events.GatewayEventSubscriptions
 	Transcripts *transcript.Writer
-	Compressor  *transcript.Compressor
 }
 
 // ExecDeps holds dependencies for native session execution and agent RPC methods.
@@ -42,8 +41,6 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		"sessions.reset":          sessionsReset(deps),
 		"sessions.preview":        sessionsPreview(deps),
 		"sessions.resolve":        sessionsResolve(deps),
-		"sessions.compact":        sessionsCompact(deps),
-		"sessions.repair":         sessionsRepair(deps),
 		"sessions.overflow_check": sessionsOverflowCheck(deps),
 	}
 }
@@ -261,92 +258,6 @@ func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		return rpcerr.NotFound("session").Response(req.ID)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// sessions.compact — compresses session transcript via Compressor
-// ---------------------------------------------------------------------------
-
-func sessionsCompact(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Key string `json:"key"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		key, errResp2 := rpcutil.RequireKey(req.ID, p.Key)
-		if errResp2 != nil {
-			return errResp2
-		}
-
-		if deps.Compressor == nil || deps.Transcripts == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-				"ok":        true,
-				"key":       key,
-				"compacted": false,
-				"reason":    "transcript compressor not available",
-			})
-			return resp
-		}
-
-		result, err := deps.Compressor.Compact(key, deps.Transcripts)
-		if err != nil {
-			return rpcerr.Unavailable("compaction failed: " + err.Error()).
-				WithSession(key).
-				Response(req.ID)
-		}
-
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
-			"ok":        result.OK,
-			"key":       key,
-			"compacted": result.Compacted,
-			"reason":    result.Reason,
-			"stats": map[string]any{
-				"originalMessages": result.OriginalMessages,
-				"retainedMessages": result.RetainedMessages,
-				"summaryCount":     result.SummaryCount,
-			},
-		})
-		return resp
-	}
-}
-
-// ---------------------------------------------------------------------------
-// sessions.repair — triggers post-compaction transcript repair
-// ---------------------------------------------------------------------------
-
-func sessionsRepair(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			SessionKey string `json:"sessionKey"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
-		if p.SessionKey == "" {
-			return rpcerr.MissingParam("sessionKey").
-				WithMethod("sessions.repair").
-				Response(req.ID)
-		}
-
-		// Verify session exists in the session manager.
-		s := deps.Sessions.Get(p.SessionKey)
-		if s == nil {
-			return rpcerr.NotFound("session").
-				WithSession(p.SessionKey).
-				Response(req.ID)
-		}
-
-		// In native Go mode, transcript repair is handled by the session
-		// manager's compaction pipeline. Return success to indicate the
-		// session is valid and repair can proceed.
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"sessionKey": p.SessionKey,
-			"status":     "repair_queued",
-		})
 	}
 }
 

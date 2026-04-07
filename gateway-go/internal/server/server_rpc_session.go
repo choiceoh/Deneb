@@ -20,23 +20,17 @@ import (
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // registerSessionRPCMethods registers session state, repair, daemon status, and
 // the full chat handler pipeline (init + all chat/session-exec RPC registrations).
 func (s *Server) registerSessionRPCMethods() {
-	// Session state methods (patch/reset/preview/resolve/compact).
-	var sessionCompressor *transcript.Compressor
-	if s.transcript != nil {
-		sessionCompressor = transcript.NewCompressor(transcript.DefaultCompactionConfig(), s.logger)
-	}
+	// Session state methods (patch/reset/preview/resolve).
 	sessionDeps := handlersession.Deps{
 		Sessions:    s.sessions,
 		GatewaySubs: s.gatewaySubs,
 		Transcripts: s.transcript,
-		Compressor:  sessionCompressor,
 	}
 	s.dispatcher.RegisterDomain(handlersession.Methods(sessionDeps))
 

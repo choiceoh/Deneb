@@ -11,17 +11,15 @@ package chat
 type TerminalReason string
 
 const (
-	TerminalCompleted         TerminalReason = "completed"           // normal completion
-	TerminalModelError        TerminalReason = "model_error"         // LLM API error
-	TerminalPromptTooLong     TerminalReason = "prompt_too_long"     // context exceeds limit
-	TerminalAborted           TerminalReason = "aborted"             // user or system cancellation
-	TerminalMaxTurns          TerminalReason = "max_turns"           // turn limit reached
-	TerminalTimeout           TerminalReason = "timeout"             // agent timeout
-	TerminalAuthError         TerminalReason = "auth_error"          // provider auth failure
-	TerminalCompactionFailed  TerminalReason = "compaction_failed"   // compaction exhausted retries
-	TerminalNoClient          TerminalReason = "no_client"           // no LLM client available
-	TerminalBudgetExhausted   TerminalReason = "budget_exhausted"    // token budget depleted
-	TerminalDiminishingReturn TerminalReason = "diminishing_returns" // budget tracker detected stall
+	TerminalCompleted       TerminalReason = "completed"        // normal completion
+	TerminalModelError      TerminalReason = "model_error"      // LLM API error
+	TerminalPromptTooLong   TerminalReason = "prompt_too_long"  // context exceeds limit
+	TerminalAborted         TerminalReason = "aborted"          // user or system cancellation
+	TerminalMaxTurns        TerminalReason = "max_turns"        // turn limit reached
+	TerminalTimeout         TerminalReason = "timeout"          // agent timeout
+	TerminalAuthError       TerminalReason = "auth_error"       // provider auth failure
+	TerminalNoClient        TerminalReason = "no_client"        // no LLM client available
+	TerminalBudgetExhausted TerminalReason = "budget_exhausted" // token budget depleted
 )
 
 // ContinueReason describes why the query loop iterated again.
@@ -29,7 +27,6 @@ type ContinueReason string
 
 const (
 	ContinueToolUse            ContinueReason = "tool_use"            // model requested tool execution
-	ContinueCompactRetry       ContinueReason = "compact_retry"       // retrying after compaction
 	ContinueMaxOutputRecovery  ContinueReason = "max_output_recovery" // recovering from truncated output
 	ContinueBudgetContinuation ContinueReason = "budget_continuation" // continuing within token budget
 	ContinueModelFallback      ContinueReason = "model_fallback"      // retrying with fallback model

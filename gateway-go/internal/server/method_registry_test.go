@@ -50,12 +50,10 @@ var requiredMethods = []string{
 
 	// Session.
 	"sessions.abort",
-	"sessions.compact",
 	"sessions.create",
 	"sessions.lifecycle",
 	"sessions.patch",
 	"sessions.preview",
-	"sessions.repair",
 	"sessions.reset",
 	"sessions.resolve",
 	"sessions.send",
