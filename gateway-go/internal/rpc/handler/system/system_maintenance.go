@@ -157,7 +157,12 @@ func updateRun(deps UpdateDeps) rpcutil.HandlerFunc {
 		pullStep := runStep(updateCtx, repoDir, "git pull", "git", "pull", "--rebase", "origin", "main")
 		steps = append(steps, pullStep)
 		if !pullStep.OK {
-			return updateResult(req.ID, false, "error", "git", beforeSHA, beforeSHA, steps, startTime, deps.DenebDir, p.RestartDelayMs)
+			return updateResult(updateResultOpts{
+				reqID: req.ID, ok: false, status: "error", mode: "git",
+				beforeSHA: beforeSHA, afterSHA: beforeSHA,
+				steps: steps, startTime: startTime,
+				denebDir: deps.DenebDir, restartDelayMs: p.RestartDelayMs,
+			})
 		}
 
 		// Step 3: Get new git SHA (after).
@@ -167,24 +172,48 @@ func updateRun(deps UpdateDeps) rpcutil.HandlerFunc {
 		buildStep := runStep(updateCtx, repoDir, "make all", "make", "all")
 		steps = append(steps, buildStep)
 		if !buildStep.OK {
-			return updateResult(req.ID, false, "error", "make", beforeSHA, afterSHA, steps, startTime, deps.DenebDir, p.RestartDelayMs)
+			return updateResult(updateResultOpts{
+				reqID: req.ID, ok: false, status: "error", mode: "make",
+				beforeSHA: beforeSHA, afterSHA: afterSHA,
+				steps: steps, startTime: startTime,
+				denebDir: deps.DenebDir, restartDelayMs: p.RestartDelayMs,
+			})
 		}
 
-		return updateResult(req.ID, true, "ok", "make", beforeSHA, afterSHA, steps, startTime, deps.DenebDir, p.RestartDelayMs)
+		return updateResult(updateResultOpts{
+			reqID: req.ID, ok: true, status: "ok", mode: "make",
+			beforeSHA: beforeSHA, afterSHA: afterSHA,
+			steps: steps, startTime: startTime,
+			denebDir: deps.DenebDir, restartDelayMs: p.RestartDelayMs,
+		})
 	}
 }
 
-func updateResult(reqID string, ok bool, status, mode, beforeSHA, afterSHA string, steps []updateStep, startTime time.Time, denebDir string, restartDelayMs int64) *protocol.ResponseFrame {
-	durationMs := time.Since(startTime).Milliseconds()
+// updateResultOpts groups parameters for updateResult.
+type updateResultOpts struct {
+	reqID          string
+	ok             bool
+	status         string
+	mode           string
+	beforeSHA      string
+	afterSHA       string
+	steps          []updateStep
+	startTime      time.Time
+	denebDir       string
+	restartDelayMs int64
+}
+
+func updateResult(opts updateResultOpts) *protocol.ResponseFrame {
+	durationMs := time.Since(opts.startTime).Milliseconds()
 
 	// Write restart sentinel on success.
 	var sentinel map[string]any
-	if ok && denebDir != "" {
-		sentinelPath := filepath.Join(denebDir, ".update-sentinel")
+	if opts.ok && opts.denebDir != "" {
+		sentinelPath := filepath.Join(opts.denebDir, ".update-sentinel")
 		sentinelPayload := map[string]any{
 			"updatedAt":  time.Now().Format(time.RFC3339),
-			"beforeSHA":  beforeSHA,
-			"afterSHA":   afterSHA,
+			"beforeSHA":  opts.beforeSHA,
+			"afterSHA":   opts.afterSHA,
 			"durationMs": durationMs,
 		}
 		data, _ := json.Marshal(sentinelPayload)
@@ -196,25 +225,25 @@ func updateResult(reqID string, ok bool, status, mode, beforeSHA, afterSHA strin
 	}
 
 	var restart any
-	if ok && restartDelayMs > 0 {
-		restart = map[string]any{"delayMs": restartDelayMs}
+	if opts.ok && opts.restartDelayMs > 0 {
+		restart = map[string]any{"delayMs": opts.restartDelayMs}
 	}
 
 	result := map[string]any{
-		"ok": ok,
+		"ok": opts.ok,
 		"result": map[string]any{
-			"status":     status,
-			"mode":       mode,
-			"before":     map[string]any{"sha": beforeSHA},
-			"after":      map[string]any{"sha": afterSHA},
-			"steps":      steps,
+			"status":     opts.status,
+			"mode":       opts.mode,
+			"before":     map[string]any{"sha": opts.beforeSHA},
+			"after":      map[string]any{"sha": opts.afterSHA},
+			"steps":      opts.steps,
 			"durationMs": durationMs,
 		},
 		"restart":  restart,
 		"sentinel": sentinel,
 	}
 
-	resp, _ := protocol.NewResponseOK(reqID, result)
+	resp, _ := protocol.NewResponseOK(opts.reqID, result)
 	return resp
 }
 

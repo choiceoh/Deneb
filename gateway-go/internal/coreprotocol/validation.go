@@ -35,6 +35,11 @@ func (e *ValidateParamsError) Error() string { return e.Message }
 // ValidatorFn is the signature for per-method schema validators.
 type ValidatorFn func(value any, path string, errors *[]ValidationError)
 
+// addError appends a ValidationError to the error slice.
+func addError(errors *[]ValidationError, path, message, keyword string) {
+	*errors = append(*errors, ValidationError{Path: path, Message: message, Keyword: keyword})
+}
+
 // --- Core validation helpers ---
 
 // RequireObject checks that value is a JSON object (map).
@@ -42,9 +47,7 @@ func RequireObject(value any, path string, errors *[]ValidationError) bool {
 	if _, ok := value.(map[string]any); ok {
 		return true
 	}
-	*errors = append(*errors, ValidationError{
-		Path: path, Message: "must be object", Keyword: "type",
-	})
+	addError(errors, path, "must be object", "type")
 	return false
 }
 
@@ -53,11 +56,7 @@ func CheckRequired(obj map[string]any, field, parentPath string, errors *[]Valid
 	if _, ok := obj[field]; ok {
 		return true
 	}
-	*errors = append(*errors, ValidationError{
-		Path:    parentPath + "/" + field,
-		Message: fmt.Sprintf("must have required property '%s'", field),
-		Keyword: "required",
-	})
+	addError(errors, parentPath+"/"+field, fmt.Sprintf("must have required property '%s'", field), "required")
 	return false
 }
 
@@ -66,9 +65,7 @@ func CheckString(value any, path string, errors *[]ValidationError) bool {
 	if _, ok := value.(string); ok {
 		return true
 	}
-	*errors = append(*errors, ValidationError{
-		Path: path, Message: "must be string", Keyword: "type",
-	})
+	addError(errors, path, "must be string", "type")
 	return false
 }
 
@@ -76,15 +73,11 @@ func CheckString(value any, path string, errors *[]ValidationError) bool {
 func CheckNonEmptyString(value any, path string, errors *[]ValidationError) bool {
 	s, ok := value.(string)
 	if !ok {
-		*errors = append(*errors, ValidationError{
-			Path: path, Message: "must be string", Keyword: "type",
-		})
+		addError(errors, path, "must be string", "type")
 		return false
 	}
 	if s == "" {
-		*errors = append(*errors, ValidationError{
-			Path: path, Message: "must NOT have fewer than 1 characters", Keyword: "minLength",
-		})
+		addError(errors, path, "must NOT have fewer than 1 characters", "minLength")
 		return false
 	}
 	return true
@@ -97,11 +90,7 @@ func CheckMaxLength(value any, path string, maxLen int, errors *[]ValidationErro
 		return
 	}
 	if utf8.RuneCountInString(s) > maxLen {
-		*errors = append(*errors, ValidationError{
-			Path:    path,
-			Message: fmt.Sprintf("must NOT have more than %d characters", maxLen),
-			Keyword: "maxLength",
-		})
+		addError(errors, path, fmt.Sprintf("must NOT have more than %d characters", maxLen), "maxLength")
 	}
 }
 
@@ -112,11 +101,7 @@ func CheckPattern(value any, path string, pattern *regexp.Regexp, errors *[]Vali
 		return
 	}
 	if !pattern.MatchString(s) {
-		*errors = append(*errors, ValidationError{
-			Path:    path,
-			Message: fmt.Sprintf("must match pattern \"%s\"", pattern.String()),
-			Keyword: "pattern",
-		})
+		addError(errors, path, fmt.Sprintf("must match pattern \"%s\"", pattern.String()), "pattern")
 	}
 }
 
@@ -125,9 +110,7 @@ func CheckBoolean(value any, path string, errors *[]ValidationError) bool {
 	if _, ok := value.(bool); ok {
 		return true
 	}
-	*errors = append(*errors, ValidationError{
-		Path: path, Message: "must be boolean", Keyword: "type",
-	})
+	addError(errors, path, "must be boolean", "type")
 	return false
 }
 
@@ -136,32 +119,20 @@ func CheckBoolean(value any, path string, errors *[]ValidationError) bool {
 func CheckInteger(value any, path string, minimum, maximum *int64, errors *[]ValidationError) bool {
 	f, ok := value.(float64)
 	if !ok {
-		*errors = append(*errors, ValidationError{
-			Path: path, Message: "must be integer", Keyword: "type",
-		})
+		addError(errors, path, "must be integer", "type")
 		return false
 	}
 	n := int64(f)
 	if f != float64(n) {
-		*errors = append(*errors, ValidationError{
-			Path: path, Message: "must be integer", Keyword: "type",
-		})
+		addError(errors, path, "must be integer", "type")
 		return false
 	}
 	if minimum != nil && n < *minimum {
-		*errors = append(*errors, ValidationError{
-			Path:    path,
-			Message: fmt.Sprintf("must be >= %d", *minimum),
-			Keyword: "minimum",
-		})
+		addError(errors, path, fmt.Sprintf("must be >= %d", *minimum), "minimum")
 		return false
 	}
 	if maximum != nil && n > *maximum {
-		*errors = append(*errors, ValidationError{
-			Path:    path,
-			Message: fmt.Sprintf("must be <= %d", *maximum),
-			Keyword: "maximum",
-		})
+		addError(errors, path, fmt.Sprintf("must be <= %d", *maximum), "maximum")
 		return false
 	}
 	return true
@@ -172,9 +143,7 @@ func CheckArray(value any, path string, errors *[]ValidationError) bool {
 	if _, ok := value.([]any); ok {
 		return true
 	}
-	*errors = append(*errors, ValidationError{
-		Path: path, Message: "must be array", Keyword: "type",
-	})
+	addError(errors, path, "must be array", "type")
 	return false
 }
 
@@ -185,11 +154,7 @@ func CheckMinItems(value any, path string, minItems int, errors *[]ValidationErr
 		return
 	}
 	if len(arr) < minItems {
-		*errors = append(*errors, ValidationError{
-			Path:    path,
-			Message: fmt.Sprintf("must NOT have fewer than %d items", minItems),
-			Keyword: "minItems",
-		})
+		addError(errors, path, fmt.Sprintf("must NOT have fewer than %d items", minItems), "minItems")
 	}
 }
 
@@ -197,9 +162,7 @@ func CheckMinItems(value any, path string, minItems int, errors *[]ValidationErr
 func CheckStringEnum(value any, path string, allowed []string, errors *[]ValidationError) bool {
 	s, ok := value.(string)
 	if !ok {
-		*errors = append(*errors, ValidationError{
-			Path: path, Message: "must be string", Keyword: "type",
-		})
+		addError(errors, path, "must be string", "type")
 		return false
 	}
 	for _, a := range allowed {
@@ -207,11 +170,7 @@ func CheckStringEnum(value any, path string, allowed []string, errors *[]Validat
 			return true
 		}
 	}
-	*errors = append(*errors, ValidationError{
-		Path:    path,
-		Message: fmt.Sprintf("must be equal to one of the allowed values: %v, got \"%s\"", allowed, s),
-		Keyword: "enum",
-	})
+	addError(errors, path, fmt.Sprintf("must be equal to one of the allowed values: %v, got \"%s\"", allowed, s), "enum")
 	return false
 }
 
@@ -221,11 +180,7 @@ func CheckLiteral(value any, path string, expected string, errors *[]ValidationE
 	if ok && s == expected {
 		return true
 	}
-	*errors = append(*errors, ValidationError{
-		Path:    path,
-		Message: fmt.Sprintf("must be equal to constant \"%s\"", expected),
-		Keyword: "const",
-	})
+	addError(errors, path, fmt.Sprintf("must be equal to constant \"%s\"", expected), "const")
 	return false
 }
 
@@ -245,11 +200,7 @@ func CheckNoAdditionalProperties(obj map[string]any, allowed []string, parentPat
 			}
 		}
 		if !found {
-			*errors = append(*errors, ValidationError{
-				Path:    parentPath,
-				Message: fmt.Sprintf("must NOT have additional properties: '%s'", key),
-				Keyword: "additionalProperties",
-			})
+			addError(errors, parentPath, fmt.Sprintf("must NOT have additional properties: '%s'", key), "additionalProperties")
 		}
 	}
 }
@@ -343,11 +294,7 @@ func CheckExecSecretRefID(value any, path string, errors *[]ValidationError) {
 		return
 	}
 	if !IsValidExecSecretRefID(s) {
-		*errors = append(*errors, ValidationError{
-			Path:    path,
-			Message: fmt.Sprintf("must match pattern \"%s\"", ExecSecretRefIDPattern),
-			Keyword: "pattern",
-		})
+		addError(errors, path, fmt.Sprintf("must match pattern \"%s\"", ExecSecretRefIDPattern), "pattern")
 	}
 }
 
