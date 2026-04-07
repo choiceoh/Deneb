@@ -92,6 +92,7 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 // Patch applies a PatchFields to the session identified by key.
 // Creates the session if it doesn't exist. Returns a snapshot copy.
 func (m *Manager) Patch(key string, patch PatchFields) *Session {
+	m.lazyInit()
 	m.emitMu.Lock()
 	defer m.emitMu.Unlock()
 
@@ -114,6 +115,7 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 // ResetSession resets a session's runtime state to initial values.
 // Returns a snapshot copy of the reset session, or nil if not found.
 func (m *Manager) ResetSession(key string) *Session {
+	m.lazyInit()
 	m.emitMu.Lock()
 	defer m.emitMu.Unlock()
 
@@ -145,6 +147,7 @@ func (m *Manager) ResetSession(key string) *Session {
 // FindBySessionID scans all sessions for one matching the given sessionId.
 // Returns nil if not found.
 func (m *Manager) FindBySessionID(sessionID string) *Session {
+	m.lazyInit()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, s := range m.sessions {
@@ -158,6 +161,7 @@ func (m *Manager) FindBySessionID(sessionID string) *Session {
 
 // FindByLabel returns all sessions matching the given label.
 func (m *Manager) FindByLabel(label string) []*Session {
+	m.lazyInit()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	var matches []*Session
@@ -173,6 +177,7 @@ func (m *Manager) FindByLabel(label string) []*Session {
 // ClearTokens clears token accounting fields for a session.
 // Used after compaction to reset stale token counts.
 func (m *Manager) ClearTokens(key string) {
+	m.lazyInit()
 	m.mu.Lock()
 	s := m.sessions[key]
 	if s != nil {

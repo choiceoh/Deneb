@@ -226,6 +226,41 @@ func TestApplyLifecycleRuntimeMsFallback(t *testing.T) {
 	}
 }
 
+func TestZeroValueManager(t *testing.T) {
+	// The zero value of Manager is ready to use (like bytes.Buffer).
+	var m Manager
+
+	// Create works without NewManager.
+	s := m.Create("zero-1", KindDirect)
+	if s == nil || s.Key != "zero-1" {
+		t.Fatal("Create on zero-value Manager should work")
+	}
+
+	// Get returns what was created.
+	if got := m.Get("zero-1"); got == nil {
+		t.Fatal("Get should find session created on zero-value Manager")
+	}
+
+	// Count reflects stored sessions.
+	if m.Count() != 1 {
+		t.Errorf("Count = %d, want 1", m.Count())
+	}
+
+	// Delete works.
+	if !m.Delete("zero-1") {
+		t.Error("Delete should return true")
+	}
+	if m.Count() != 0 {
+		t.Errorf("Count after delete = %d, want 0", m.Count())
+	}
+
+	// EventBusRef returns a usable bus.
+	bus := m.EventBusRef()
+	if bus == nil {
+		t.Fatal("EventBusRef should return non-nil on zero-value Manager")
+	}
+}
+
 func TestEvictStale_TimeoutEnforcement(t *testing.T) {
 	m := NewManager()
 
