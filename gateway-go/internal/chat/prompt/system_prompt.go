@@ -102,7 +102,7 @@ var toolCategories = []struct {
 	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory", "wiki", "memory_store", "projects_write"}},
+	{"Memory", []string{"wiki", "memory_store", "projects_write"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
@@ -284,18 +284,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- 위키 직접 작성/수정 → wiki write (제목, 카테고리, 태그 필수)\n")
 		d.WriteString("카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호.\n")
 		d.WriteString("정리된 지식은 위키에, 임시 관찰은 일지(log)에. 기록 후 사용자에게 별도 알림 불필요.\n\n")
-	}
-
-	// Memory Recall (legacy, when wiki is not enabled).
-	if toolSet["memory"] && !toolSet["wiki"] {
-		d.WriteString("## Memory\n")
-		d.WriteString("과거 맥락이 불확실할 때 memory 도구를 사용하라. 사용자가 이전 대화를 언급하면 반드시 recall부터.\n")
-		d.WriteString("- 과거 맥락 필요 → recall (깊은 회상, 우선 사용)\n")
-		d.WriteString("- 팩트/파일 검색 → search, 특정 팩트 → get\n")
-		d.WriteString("- 새 정보 저장 → set, 삭제 → forget, 상태 확인 → status\n")
-		d.WriteString("- 상세 일지 기록 → log (맥락, 과정, 결정, 오류, 사용자 반응 포함)\n")
-		d.WriteString("- 최근 일지 확인 → daily\n")
-		d.WriteString("2시간마다 하트비트에서 자동 일지 기록됨.\n\n")
 	}
 
 	// Web tool guidance (conditional).

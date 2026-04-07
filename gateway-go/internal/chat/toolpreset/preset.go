@@ -19,7 +19,7 @@ const (
 var researcherTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
 	"batch_read", "search_and_read", "inspect",
-	"web", "http", "memory", "fetch_tools",
+	"web", "http", "wiki", "fetch_tools",
 )
 
 // implementerTools include read + write + build tools for code changes.
@@ -27,7 +27,7 @@ var implementerTools = toSet(
 	"read", "write", "edit", "multi_edit",
 	"grep", "find", "tree", "diff", "analyze",
 	"test", "exec", "process", "git", "apply_patch",
-	"batch_read", "search_and_read", "inspect", "memory",
+	"batch_read", "search_and_read", "inspect", "wiki",
 	"fetch_tools",
 )
 
@@ -35,7 +35,7 @@ var implementerTools = toSet(
 var verifierTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
 	"test", "exec", "process",
-	"batch_read", "search_and_read", "inspect", "memory",
+	"batch_read", "search_and_read", "inspect", "wiki",
 	"fetch_tools",
 )
 
@@ -43,14 +43,14 @@ var verifierTools = toSet(
 var coordinatorTools = toSet(
 	"sessions_spawn", "subagents",
 	"sessions_list", "sessions_history", "sessions_send",
-	"read", "grep", "find", "memory", "kv",
+	"read", "grep", "find", "wiki", "kv",
 	"fetch_tools",
 )
 
 // conversationTools are minimal tools for conversation mode (대화모드).
-// Only web access and memory — no file system, exec, or code tools.
+// Only web access and wiki — no file system, exec, or code tools.
 var conversationTools = toSet(
-	"web", "http", "memory", "fetch_tools",
+	"web", "http", "wiki", "fetch_tools",
 )
 
 // AllowedTools returns the set of tool names permitted for a given preset.
