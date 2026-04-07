@@ -85,30 +85,23 @@ The sole user **does not read or write code**. All development is done through n
 | `internal/telegram/plugin.go` | `channel.Plugin` implementation, lifecycle, slash command registration |
 | `internal/telegram/types.go` | Telegram API types (Message, Embed, Component, Interaction, etc.) |
 | `internal/telegram/components.go` | Button builders: context-aware action buttons per outcome type |
-| `internal/telegram/embed_format.go` | Embed builders: progress, test results, errors, dashboard, help |
+| `internal/telegram/embed_format.go` | Embed builders: test results, errors, dashboard, help |
 | `internal/telegram/format.go` | Reply formatter: code block collapsing, chunking, file extraction |
-| `internal/telegram/progress.go` | ProgressTracker: edits a single embed in-place for real-time tool status |
 | `internal/telegram/reply_analysis.go` | Reply outcome classifier + Korean error translation for vibe coders |
 | `internal/telegram/slash_commands.go` | Application command registration (vibe-coder commands only) |
 | `internal/telegram/thread_namer.go` | Auto thread naming via local AI LLM |
 | `internal/telegram/send.go` | SendText helper with auto-chunking |
-| `internal/server/inbound_telegram.go` | Inbound message processing, quick commands, workspace context injection |
-| `internal/server/server_chat.go` | Reply pipeline: formatting → buttons → error translation → auto-verify |
+| `internal/server/inbound.go` | Inbound message processing, quick commands, autoreply pipeline |
+| `internal/server/server_chat_telegram.go` | Reply pipeline: dedup → draft edit → send |
 | `internal/chat/prompt/system_prompt.go` | `BuildCodingSystemPrompt()` — vibe coder agent instructions |
 
 ### Reply Pipeline (agent response → Telegram message)
 
-The reply pipeline is a decorator chain in `server_chat.go:wireTelegramChatHandler()`:
+The reply pipeline is in `server_chat_telegram.go:wireTelegramChatHandler()`:
 
-1. **ProgressTracker finalize** — marks all tool steps as done, sends final progress embed
-2. **Dedup** — 10-second cache prevents duplicate sends
-3. **FormatReply** — extracts large code blocks (≥200 chars) as file attachments, collapses remaining code blocks into Korean summaries like `_(go 코드, 42줄)_`
-4. **AnalyzeReply** — classifies the reply outcome (code change, test pass/fail, build fail, commit, error, general)
-5. **ContextButtons** — selects appropriate buttons per outcome (commit→push, error→fix, test pass→commit+push, etc.)
-6. **Send** — chunks text, attaches buttons to last chunk
-7. **sendVibeCoderFollowUps** — post-reply follow-ups:
-   - Error Korean translation embed (when errors/failures detected)
-   - Auto build/test verification embed (when code changes detected)
+1. **Dedup** — 10-second cache prevents duplicate sends
+2. **Draft edit** — edits streaming draft in-place with final text (prevents flicker)
+3. **Send** — chunks text via `SendText`, attaches buttons to last chunk
 
 ### Quick Commands (Telegram-only)
 
@@ -129,12 +122,6 @@ Telegram buttons embed `action:sessionKey` in their `custom_id`. When clicked:
 2. Most actions (test, commit, fix, revert, details) dispatch an agent message via `chat.send`
 3. `push` runs git push inline for instant feedback
 4. `new` clears the session and starts fresh
-
-### Progress Tracking
-
-Tool names are automatically translated to Korean in the progress embed:
-- `exec` → 명령어 실행, `write` → 파일 작성, `edit` → 파일 수정, `grep` → 코드 검색, etc.
-- Mapping is in `progress.go:toolNameKorean`
 
 ### System Prompt (`BuildCodingSystemPrompt`)
 
@@ -164,4 +151,3 @@ When extending the Telegram channel:
 - [ ] Is error handling translated to Korean?
 - [ ] Is the feature automated (no manual verification required)?
 - [ ] Does it use embeds for visual presentation (not raw text)?
-- [ ] Is the tool name mapped to Korean in `progress.go:toolNameKorean`?
