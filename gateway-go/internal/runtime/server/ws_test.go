@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 func TestWebSocketHandshake(t *testing.T) {
@@ -26,7 +26,10 @@ func TestWebSocketHandshake(t *testing.T) {
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	conn, wsResp, err := websocket.Dial(ctx, wsURL, nil)
+	if wsResp != nil && wsResp.Body != nil {
+		wsResp.Body.Close()
+	}
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -102,7 +105,7 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	}
 	defer srv.Close(context.Background())
 
-	conn := connectWS(t, ctx, addr.String())
+	conn := connectWS(ctx, t, addr.String())
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	// Send health RPC.
@@ -142,7 +145,7 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 	}
 	defer srv.Close(context.Background())
 
-	conn := connectWS(t, ctx, addr.String())
+	conn := connectWS(ctx, t, addr.String())
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	req, _ := protocol.NewRequestFrame("rpc-2", "nonexistent.method", nil)
@@ -171,10 +174,13 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 }
 
 // connectWS performs the WebSocket handshake and returns an authenticated connection.
-func connectWS(t *testing.T, ctx context.Context, addr string) *websocket.Conn {
+func connectWS(ctx context.Context, t *testing.T, addr string) *websocket.Conn {
 	t.Helper()
 	wsURL := fmt.Sprintf("ws://%s/ws", addr)
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	conn, wsResp, err := websocket.Dial(ctx, wsURL, nil)
+	if wsResp != nil && wsResp.Body != nil {
+		wsResp.Body.Close()
+	}
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}

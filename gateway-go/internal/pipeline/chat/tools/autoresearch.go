@@ -109,9 +109,9 @@ func autoresearchInit(ctx context.Context, runner *autoresearch.Runner, workdir 
 	// preventing the agent from entering a discover→retry loop.
 	if cfg.IsConstantsMode() {
 		if _, extractErr := autoresearch.ExtractConstants(workdir, cfg.Constants); extractErr != nil {
-			return "", fmt.Errorf("constants pattern pre-flight failed: %w\n\n"+
-				"Fix the pattern and re-run init. The pattern must match the actual file content "+
-				"(check for tab indentation in Go const blocks).", extractErr)
+			return "", fmt.Errorf("constants pattern pre-flight failed: %w -- "+
+				"fix the pattern and re-run init; the pattern must match the actual file content "+
+				"(check for tab indentation in Go const blocks)", extractErr)
 		}
 	}
 
@@ -186,7 +186,7 @@ func autoresearchStop(runner *autoresearch.Runner) (string, error) {
 	// Return final summary.
 	cfg, err := autoresearch.LoadConfig(workdir)
 	if err != nil {
-		return "Autoresearch stopped.", nil
+		return "Autoresearch stopped.", nil //nolint:nilerr // gracefully degrade when config is unavailable
 	}
 	return "Autoresearch stopped.\n\n" + autoresearch.Summary(workdir, cfg), nil
 }
@@ -232,7 +232,7 @@ func autoresearchUpdateConstants(runner *autoresearch.Runner, workdir string, co
 	// Pre-flight: verify patterns match actual file content.
 	extracted, extractErr := autoresearch.ExtractConstants(workdir, cfg.Constants)
 	if extractErr != nil {
-		return "", fmt.Errorf("pattern pre-flight failed: %w\n\nFix the pattern and retry.", extractErr)
+		return "", fmt.Errorf("pattern pre-flight failed: %w -- fix the pattern and retry", extractErr)
 	}
 
 	// Save updated config.
@@ -243,12 +243,12 @@ func autoresearchUpdateConstants(runner *autoresearch.Runner, workdir string, co
 	var sb strings.Builder
 	sb.WriteString("Constants updated and verified:\n")
 	for _, cd := range constants {
-		sb.WriteString(fmt.Sprintf("  %s = %s (pattern OK)\n", cd.Name, extracted[cd.Name]))
+		fmt.Fprintf(&sb, "  %s = %s (pattern OK)\n", cd.Name, extracted[cd.Name])
 	}
 
 	if autoStart {
 		if startErr := runner.Start(workdir); startErr != nil {
-			sb.WriteString(fmt.Sprintf("\nAuto-start failed: %v", startErr))
+			fmt.Fprintf(&sb, "\nAuto-start failed: %v", startErr)
 		} else {
 			sb.WriteString("\nExperiment restarted automatically.")
 		}
@@ -284,7 +284,7 @@ func autoresearchApplyOverrides(workdir string) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("Applied overrides to source files:\n")
 	for name, val := range ov.Values {
-		sb.WriteString(fmt.Sprintf("  %s = %s\n", name, val))
+		fmt.Fprintf(&sb, "  %s = %s\n", name, val)
 	}
 	sb.WriteString("\nThe overrides are now baked into the source files. Commit when ready.")
 	return sb.String(), nil
@@ -347,14 +347,14 @@ func autoresearchListRuns(workdir string) (string, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Archived runs (%d):\n\n", len(runs)))
+	fmt.Fprintf(&sb, "Archived runs (%d):\n\n", len(runs))
 	for _, run := range runs {
-		sb.WriteString(fmt.Sprintf("  %s — %s (%s)\n", run.Tag, run.MetricName, run.Direction))
-		sb.WriteString(fmt.Sprintf("    Iterations: %d, Kept: %d\n", run.TotalIterations, run.KeptIterations))
+		fmt.Fprintf(&sb, "  %s — %s (%s)\n", run.Tag, run.MetricName, run.Direction)
+		fmt.Fprintf(&sb, "    Iterations: %d, Kept: %d\n", run.TotalIterations, run.KeptIterations)
 		if run.BaselineMetric != nil && run.BestMetric != nil {
-			sb.WriteString(fmt.Sprintf("    Baseline: %.6f, Best: %.6f\n", *run.BaselineMetric, *run.BestMetric))
+			fmt.Fprintf(&sb, "    Baseline: %.6f, Best: %.6f\n", *run.BaselineMetric, *run.BestMetric)
 		}
-		sb.WriteString(fmt.Sprintf("    Archived: %s\n\n", run.ArchivedAt))
+		fmt.Fprintf(&sb, "    Archived: %s\n\n", run.ArchivedAt)
 	}
 	return sb.String(), nil
 }

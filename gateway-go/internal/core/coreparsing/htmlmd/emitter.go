@@ -47,30 +47,32 @@ func newEmitCtx(capacity int) *emitCtx {
 
 // push writes a string to whichever buffer is currently active.
 func (ctx *emitCtx) push(s string) {
-	if ctx.inTitle {
+	switch {
+	case ctx.inTitle:
 		ctx.titleBuf.WriteString(s)
-	} else if ctx.inLink {
+	case ctx.inLink:
 		ctx.linkBuf.WriteString(s)
-	} else if ctx.inBlockquote {
+	case ctx.inBlockquote:
 		ctx.blockquoteBuf.WriteString(s)
-	} else if ctx.inTable && ctx.tableBuilder.inCell {
+	case ctx.inTable && ctx.tableBuilder.inCell:
 		ctx.tableBuilder.cellBuf.WriteString(s)
-	} else {
+	default:
 		ctx.out.WriteString(s)
 	}
 }
 
 // pushChar writes a single rune to the active buffer.
 func (ctx *emitCtx) pushChar(ch rune) {
-	if ctx.inTitle {
+	switch {
+	case ctx.inTitle:
 		ctx.titleBuf.WriteRune(ch)
-	} else if ctx.inLink {
+	case ctx.inLink:
 		ctx.linkBuf.WriteRune(ch)
-	} else if ctx.inBlockquote {
+	case ctx.inBlockquote:
 		ctx.blockquoteBuf.WriteRune(ch)
-	} else if ctx.inTable {
+	case ctx.inTable:
 		ctx.tableBuilder.pushChar(ch)
-	} else {
+	default:
 		ctx.out.WriteRune(ch)
 	}
 }
@@ -87,7 +89,7 @@ func (ctx *emitCtx) activeBuf() *strings.Builder {
 }
 
 // emit walks the token stream and produces Markdown. Returns (text, title).
-func emit(tokens []token, inputLen int, stripNoise bool) (string, *string) {
+func emit(tokens []token, inputLen int, stripNoise bool) (string, *string) { //nolint:gocritic // unnamedResult — naming would shadow local 'title' var
 	ctx := newEmitCtx(inputLen)
 
 	for i := range tokens {
@@ -231,7 +233,7 @@ func emitTagOpen(ctx *emitCtx, tok *token, stripNoise bool) {
 			lc := &ctx.listStack[n-1]
 			if lc.ordered {
 				lc.counter++
-				ctx.out.WriteString(fmt.Sprintf("\n%d. ", lc.counter))
+				fmt.Fprintf(&ctx.out, "\n%d. ", lc.counter)
 			} else {
 				ctx.out.WriteString("\n- ")
 			}
@@ -246,6 +248,9 @@ func emitTagOpen(ctx *emitCtx, tok *token, stripNoise bool) {
 	// --- Block elements: opening does nothing (close emits newline) ---
 	case tagP, tagDiv, tagSection, tagArticle, tagHeader, tagFooter:
 		// No output on open.
+
+	default:
+		// tagOther and remaining tags: no special handling.
 	}
 }
 
@@ -348,6 +353,9 @@ func emitTagClose(ctx *emitCtx, tok *token) {
 
 	case tagP, tagDiv, tagSection, tagArticle, tagHeader, tagFooter:
 		ctx.out.WriteByte('\n')
+
+	default:
+		// tagOther, suppression tags, etc.: no close action.
 	}
 }
 
@@ -357,19 +365,22 @@ func emitSelfClosing(ctx *emitCtx, tok *token) {
 		ctx.out.WriteByte('\n')
 	case tagImg:
 		emitImage(ctx, tok.raw)
+	default:
+		// Other self-closing tags: no special handling.
 	}
 }
 
 func emitText(ctx *emitCtx, s string) {
-	if ctx.inTitle {
+	switch {
+	case ctx.inTitle:
 		ctx.titleBuf.WriteString(s)
-	} else if ctx.inLink {
+	case ctx.inLink:
 		ctx.linkBuf.WriteString(s)
-	} else if ctx.inBlockquote {
+	case ctx.inBlockquote:
 		ctx.blockquoteBuf.WriteString(s)
-	} else if ctx.inTable {
+	case ctx.inTable:
 		ctx.tableBuilder.pushText(s)
-	} else {
+	default:
 		ctx.out.WriteString(s)
 	}
 }

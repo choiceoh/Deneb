@@ -14,5 +14,5 @@ const (
 
 	// ExecSecretRefIDPattern is the regex pattern for exec secret ref IDs.
 	// Used in error messages only; actual validation uses IsValidExecSecretRefID.
-	ExecSecretRefIDPattern = `^(?!.*(?:^|/)\.{1,2}(?:/|$))[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$`
+	ExecSecretRefIDPattern = `^(?!.*(?:^|/)\.{1,2}(?:/|$))[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$` //nolint:gosec // G101 false positive — not a credential
 )

@@ -79,11 +79,11 @@ func (m *AbortMemory) Record(sessionKey string, ts int64) {
 	// Evict oldest if at capacity.
 	if len(m.entries) >= m.maxSize {
 		var oldestKey string
-		var oldestTs int64
+		var oldestTS int64
 		for k, v := range m.entries {
-			if oldestTs == 0 || v < oldestTs {
+			if oldestTS == 0 || v < oldestTS {
 				oldestKey = k
-				oldestTs = v
+				oldestTS = v
 			}
 		}
 		if oldestKey != "" {

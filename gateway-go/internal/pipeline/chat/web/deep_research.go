@@ -36,6 +36,7 @@ func DeepResearchTool(cache *FetchCache, localAI *LocalAIExtractor, llm DeepRese
 			FetchPerQuery int      `json:"fetchPerQuery"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
+			//nolint:nilerr // tool returns user-facing error in result string
 			return formatFetchError(webFetchErr{
 				Code: "invalid_params", Message: err.Error(), Retryable: false,
 			}), nil
@@ -163,7 +164,7 @@ Rules:
 	for _, line := range strings.Split(result, "\n") {
 		line = strings.TrimSpace(line)
 		// Strip leading numbering (1. or 1) or - or *)
-		line = strings.TrimLeft(line, "0123456789.-)*) ")
+		line = strings.TrimLeft(line, "0123456789.-*) ")
 		line = strings.TrimSpace(line)
 		if line != "" && len(line) > 5 {
 			queries = append(queries, line)

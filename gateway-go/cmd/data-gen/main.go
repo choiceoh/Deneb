@@ -86,7 +86,7 @@ func main() {
 		formatted = []byte(src)
 	}
 
-	if err := os.WriteFile(*outFile, formatted, 0o644); err != nil {
+	if err := os.WriteFile(*outFile, formatted, 0o600); err != nil { //nolint:gosec // G306 — generated source file, needs read access
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -108,6 +108,8 @@ func main() {
 				nEntries += len(values.Content) / 2
 			case yaml.SequenceNode:
 				nEntries += len(values.Content)
+			default:
+				// Other node types: no entries to count.
 			}
 		}
 	}

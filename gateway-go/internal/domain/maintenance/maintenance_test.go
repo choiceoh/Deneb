@@ -196,7 +196,6 @@ func TestLogSizeBudgetCleanup(t *testing.T) {
 	// Create files whose total exceeds 50 MB — use small files + override
 	// by testing the internal function directly.
 	now := time.Now()
-	files := []CleanedFile{}
 
 	// 3 recent files, each 20 MB (total 60 MB, budget 50 MB).
 	for i, name := range []string{"a.log", "b.log", "c.log"} {
@@ -212,7 +211,7 @@ func TestLogSizeBudgetCleanup(t *testing.T) {
 		}
 	}
 
-	files = cleanLogFiles(logDir, logMaxAge, logMaxTotalMB*1024*1024, now, false)
+	files := cleanLogFiles(logDir, logMaxAge, logMaxTotalMB*1024*1024, now, false)
 
 	// Should have removed the oldest file (a.log) to bring total under 50 MB.
 	if len(files) < 1 {

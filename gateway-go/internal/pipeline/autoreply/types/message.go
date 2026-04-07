@@ -11,15 +11,15 @@ type SessionOrigin struct {
 }
 
 // MediaContext holds media attachment fields for inbound messages.
-// Supports both single-file (MediaPath/MediaUrl) and multi-file (MediaPaths/MediaUrls)
+// Supports both single-file (MediaPath/MediaURL) and multi-file (MediaPaths/MediaURLs)
 // patterns with parallel MediaTypes array for per-file MIME types.
 type MediaContext struct {
 	MediaPath       string
 	MediaPaths      []string // multiple media file paths
-	MediaUrl        string
-	MediaUrls       []string // multiple media URLs
+	MediaURL        string
+	MediaURLs       []string // multiple media URLs
 	MediaType       string
-	MediaTypes      []string // per-file media types (parallel to MediaPaths/MediaUrls)
+	MediaTypes      []string // per-file media types (parallel to MediaPaths/MediaURLs)
 	MediaRemoteHost string   // remote host for SCP-based media staging
 }
 
@@ -54,7 +54,7 @@ type MsgContext struct {
 	ReplyToID       string
 
 	SessionOrigin  // routing: SessionKey, Channel, AccountID, ThreadID, IsGroup
-	MediaContext   // attachments: MediaPath(s), MediaUrl(s), MediaType(s), MediaRemoteHost
+	MediaContext   // attachments: MediaPath(s), MediaURL(s), MediaType(s), MediaRemoteHost
 	SenderInfo     // sender: SenderID, SenderName, ForwardedFrom, WasMentioned, ChatType
 	CommandControl // command: CommandBody, CommandAuthorized, CommandSource
 }

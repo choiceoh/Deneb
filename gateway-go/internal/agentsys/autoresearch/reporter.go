@@ -8,7 +8,7 @@ import (
 // sendCompletionReport generates and sends the final experiment summary
 // and chart to the notifier (Telegram). Called from the loop's defer on
 // any exit — max iterations, manual stop, cancel, or panic.
-func (r *Runner) sendCompletionReport(workdir string, reason string) {
+func (r *Runner) sendCompletionReport(workdir, reason string) {
 	ctx := context.Background()
 
 	cfg, err := LoadConfig(workdir)

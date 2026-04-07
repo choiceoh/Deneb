@@ -8,7 +8,7 @@ import (
 // WorkerPromptAddition returns a system prompt addition for worker sessions
 // that have a tool preset. This gives the worker role-specific instructions
 // and scratchpad context. Returns empty string for unknown/empty presets.
-func WorkerPromptAddition(preset string, scratchpadDir string) string {
+func WorkerPromptAddition(preset, scratchpadDir string) string {
 	var s strings.Builder
 	switch preset {
 	case "researcher":

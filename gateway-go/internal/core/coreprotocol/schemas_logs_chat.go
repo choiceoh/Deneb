@@ -6,7 +6,7 @@ func validateLogsTailParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"cursor", "limit", "maxBytes"}, path, errors)
 	CheckOptional(obj, "cursor", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckInteger(v, p, intPtr(0), nil, e)
@@ -25,7 +25,7 @@ func validateChatHistoryParams(value any, path string, errors *[]ValidationError
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"sessionKey", "limit"}, path, errors)
 	if CheckRequired(obj, "sessionKey", path, errors) {
 		CheckNonEmptyString(obj["sessionKey"], path+"/sessionKey", errors)
@@ -39,7 +39,7 @@ func validateChatHistoryParams(value any, path string, errors *[]ValidationError
 
 func checkInputProvenance(v any, p string, e *[]ValidationError) {
 	if RequireObject(v, p, e) {
-		prov := v.(map[string]any)
+		prov := v.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 		CheckNoAdditionalProperties(prov, []string{
 			"kind", "originSessionId", "sourceSessionKey", "sourceChannel", "sourceTool",
 		}, p, e)
@@ -54,7 +54,7 @@ func validateChatSendParams(value any, path string, errors *[]ValidationError) {
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"sessionKey", "message", "thinking", "deliver", "attachments",
 		"timeoutMs", "systemInputProvenance", "systemProvenanceReceipt", "idempotencyKey",
@@ -93,7 +93,7 @@ func validateChatAbortParams(value any, path string, errors *[]ValidationError) 
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"sessionKey", "runId"}, path, errors)
 	if CheckRequired(obj, "sessionKey", path, errors) {
 		CheckNonEmptyString(obj["sessionKey"], path+"/sessionKey", errors)
@@ -109,7 +109,7 @@ func validateChatInjectParams(value any, path string, errors *[]ValidationError)
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"sessionKey", "message", "label"}, path, errors)
 	if CheckRequired(obj, "sessionKey", path, errors) {
 		CheckNonEmptyString(obj["sessionKey"], path+"/sessionKey", errors)

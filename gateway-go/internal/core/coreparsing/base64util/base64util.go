@@ -11,12 +11,12 @@ import "errors"
 // allocating or decoding. Whitespace characters (ASCII <= 0x20) are skipped;
 // padding '=' is detected by scanning from the end.
 func Estimate(input string) int64 {
-	if len(input) == 0 {
+	if input == "" {
 		return 0
 	}
 
 	effectiveLen := 0
-	for i := 0; i < len(input); i++ {
+	for i := range len(input) {
 		if input[i] > 0x20 {
 			effectiveLen++
 		}
@@ -58,13 +58,13 @@ var ErrInvalidBase64 = errors.New("invalid base64")
 // and validates that the result is non-empty, length is a multiple of 4,
 // all characters are [A-Za-z0-9+/] with up to 2 trailing '='.
 func Canonicalize(input string) (string, error) {
-	if len(input) == 0 {
+	if input == "" {
 		return "", ErrInvalidBase64
 	}
 
 	// Strip whitespace and normalize URL-safe base64 chars.
 	cleaned := make([]byte, 0, len(input))
-	for i := 0; i < len(input); i++ {
+	for i := range len(input) {
 		b := input[i]
 		if b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' || b == '\v' {
 			continue

@@ -123,16 +123,13 @@ func TestStoreSkipUnchangedWrite(t *testing.T) {
 	job := StoreJob{ID: "same", Enabled: true, Payload: StorePayload{Kind: "agentTurn"}}
 	s.AddJob(job)
 
-	// Get file mod time.
-	stat1, _ := os.Stat(storePath)
-
 	// Save again with same content — should skip write.
 	store, _ := s.Load()
 	s.Save(store)
 
-	stat2, _ := os.Stat(storePath)
-	if stat2.ModTime() != stat1.ModTime() {
-		// Note: This test may be flaky on fast filesystems.
-		// The important thing is that Save() doesn't error.
+	// Verify the store file still exists after save.
+	_, err := os.Stat(storePath)
+	if err != nil {
+		t.Fatalf("stat after save: %v", err)
 	}
 }

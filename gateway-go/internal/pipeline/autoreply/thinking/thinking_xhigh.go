@@ -27,7 +27,7 @@ func matchesExactOrPrefix(modelID string, ids []string) bool {
 //
 // Mirrors src/auto-reply/thinking.shared.ts supportsBuiltInXHighThinking().
 func SupportsBuiltInXHighThinking(provider, model string) bool {
-	providerID := types.NormalizeProviderId(provider)
+	providerID := types.NormalizeProviderID(provider)
 	modelID := strings.ToLower(strings.TrimSpace(model))
 	if providerID == "" || modelID == "" {
 		return false
@@ -84,7 +84,7 @@ func FormatXHighModelHint() string {
 //
 // Mirrors src/auto-reply/thinking.shared.ts resolveThinkingDefaultForModel().
 func ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCatalogEntry) types.ThinkLevel {
-	normalizedProvider := types.NormalizeProviderId(provider)
+	normalizedProvider := types.NormalizeProviderID(provider)
 	modelID := strings.TrimSpace(model)
 
 	// Check adaptive thinking regex patterns (defined in model_caps.yaml).

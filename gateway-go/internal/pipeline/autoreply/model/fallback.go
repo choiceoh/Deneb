@@ -50,18 +50,18 @@ func normalizeFallbackModelRef(value string) string {
 	return strings.TrimSpace(value)
 }
 
-func truncateFallbackReasonPart(value string, max int) string {
-	if max <= 0 {
-		max = fallbackReasonPartMax
+func truncateFallbackReasonPart(value string, maxLen int) string {
+	if maxLen <= 0 {
+		maxLen = fallbackReasonPartMax
 	}
 	text := strings.TrimSpace(strings.Join(strings.Fields(value), " "))
-	if len(text) <= max {
+	if len(text) <= maxLen {
 		return text
 	}
-	if max <= 1 {
+	if maxLen <= 1 {
 		return "…"
 	}
-	return strings.TrimRight(text[:max-1], " ") + "…"
+	return strings.TrimRight(text[:maxLen-1], " ") + "…"
 }
 
 // FormatFallbackAttemptReason returns a human-readable reason for a fallback attempt.

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -65,7 +66,7 @@ func discardLogger() *slog.Logger {
 
 func TestHooksHTTP_NonHooksPath(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/rpc", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/rpc", nil)
 	w := httptest.NewRecorder()
 
 	handled := h.Handle(w, req)
@@ -78,7 +79,7 @@ func TestHooksHTTP_NonHooksPath(t *testing.T) {
 
 func TestHooksHTTP_GetMethodReturns405(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodGet, "/hooks/wake", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/hooks/wake", nil)
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
 
@@ -98,7 +99,7 @@ func TestHooksHTTP_GetMethodReturns405(t *testing.T) {
 
 func TestHooksHTTP_MissingTokenReturns401(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"hi"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"hi"}`))
 	w := httptest.NewRecorder()
 
 	handled := h.Handle(w, req)
@@ -114,7 +115,7 @@ func TestHooksHTTP_MissingTokenReturns401(t *testing.T) {
 
 func TestHooksHTTP_InvalidTokenReturns401(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"hi"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"hi"}`))
 	req.Header.Set("Authorization", "Bearer wrong-token")
 	w := httptest.NewRecorder()
 
@@ -131,7 +132,7 @@ func TestHooksHTTP_InvalidTokenReturns401(t *testing.T) {
 
 func TestHooksHTTP_XDenebTokenHeader(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"hi"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"hi"}`))
 	req.Header.Set("X-Deneb-Token", "test-secret-token")
 	w := httptest.NewRecorder()
 
@@ -148,7 +149,7 @@ func TestHooksHTTP_XDenebTokenHeader(t *testing.T) {
 
 func TestHooksHTTP_QueryParamTokenRejected(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake?token=test-secret-token", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake?token=test-secret-token", strings.NewReader(`{}`))
 	w := httptest.NewRecorder()
 
 	handled := h.Handle(w, req)
@@ -166,8 +167,8 @@ func TestHooksHTTP_RateLimitingReturns429(t *testing.T) {
 	h, _ := testHooksHandler()
 
 	// Exhaust the failure limit.
-	for i := 0; i < hookAuthFailureLimit; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
+	for i := range hookAuthFailureLimit {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
 		req.Header.Set("Authorization", "Bearer wrong")
 		req.RemoteAddr = "1.2.3.4:12345"
 		w := httptest.NewRecorder()
@@ -178,7 +179,7 @@ func TestHooksHTTP_RateLimitingReturns429(t *testing.T) {
 	}
 
 	// Next attempt should be rate-limited.
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer wrong")
 	req.RemoteAddr = "1.2.3.4:12345"
 	w := httptest.NewRecorder()
@@ -194,8 +195,8 @@ func TestHooksHTTP_RateLimitPerIP(t *testing.T) {
 	h, _ := testHooksHandler()
 
 	// Exhaust limit for 1.2.3.4.
-	for i := 0; i < hookAuthFailureLimit; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
+	for range hookAuthFailureLimit {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
 		req.Header.Set("Authorization", "Bearer wrong")
 		req.RemoteAddr = "1.2.3.4:12345"
 		w := httptest.NewRecorder()
@@ -203,7 +204,7 @@ func TestHooksHTTP_RateLimitPerIP(t *testing.T) {
 	}
 
 	// Different IP should not be rate-limited.
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer wrong")
 	req.RemoteAddr = "5.6.7.8:12345"
 	w := httptest.NewRecorder()
@@ -217,7 +218,7 @@ func TestHooksHTTP_RateLimitPerIP(t *testing.T) {
 
 func TestHooksHTTP_WakeEndpoint(t *testing.T) {
 	h, dispatchers := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake",
 		strings.NewReader(`{"text":"hello world","mode":"now"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -255,7 +256,7 @@ func TestHooksHTTP_WakeEndpoint(t *testing.T) {
 
 func TestHooksHTTP_WakeDefaultMode(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake",
 		strings.NewReader(`{"text":"test"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -275,7 +276,7 @@ func TestHooksHTTP_WakeDefaultMode(t *testing.T) {
 
 func TestHooksHTTP_WakeInvalidMode(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake",
 		strings.NewReader(`{"text":"test","mode":"invalid"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -290,7 +291,7 @@ func TestHooksHTTP_WakeInvalidMode(t *testing.T) {
 
 func TestHooksHTTP_AgentEndpoint(t *testing.T) {
 	h, dispatchers := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"message":"run task","name":"my-job"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -329,7 +330,7 @@ func TestHooksHTTP_AgentEndpoint(t *testing.T) {
 
 func TestHooksHTTP_AgentMissingMessage(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"name":"my-job"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -347,7 +348,7 @@ func TestHooksHTTP_Idempotency(t *testing.T) {
 	body := `{"message":"run task","idempotencyKey":"unique-123"}`
 
 	// First request.
-	req1 := httptest.NewRequest(http.MethodPost, "/hooks/agent", strings.NewReader(body))
+	req1 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent", strings.NewReader(body))
 	req1.Header.Set("Authorization", "Bearer test-secret-token")
 	w1 := httptest.NewRecorder()
 	h.Handle(w1, req1)
@@ -359,7 +360,7 @@ func TestHooksHTTP_Idempotency(t *testing.T) {
 	runID1 := resp1["runId"].(string)
 
 	// Second request with same idempotency key.
-	req2 := httptest.NewRequest(http.MethodPost, "/hooks/agent", strings.NewReader(body))
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent", strings.NewReader(body))
 	req2.Header.Set("Authorization", "Bearer test-secret-token")
 	w2 := httptest.NewRecorder()
 	h.Handle(w2, req2)
@@ -381,7 +382,7 @@ func TestHooksHTTP_SessionKeyRejectedWhenNotAllowed(t *testing.T) {
 	h, _ := testHooksHandler(func(cfg *HooksHTTPConfig) {
 		cfg.AllowRequestSessionKey = false
 	})
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"message":"test","sessionKey":"custom-key"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -404,7 +405,7 @@ func TestHooksHTTP_SessionKeyAcceptedWhenAllowed(t *testing.T) {
 	h, dispatchers := testHooksHandler(func(cfg *HooksHTTPConfig) {
 		cfg.AllowRequestSessionKey = true
 	})
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"message":"test","sessionKey":"custom-key"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -430,7 +431,7 @@ func TestHooksHTTP_MaxBodySizeReturns413(t *testing.T) {
 		cfg.MaxBodyBytes = 32 // Very small limit for testing.
 	})
 	largeBody := `{"message":"` + strings.Repeat("x", 100) + `"}`
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent", strings.NewReader(largeBody))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent", strings.NewReader(largeBody))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
 
@@ -444,7 +445,7 @@ func TestHooksHTTP_MaxBodySizeReturns413(t *testing.T) {
 
 func TestHooksHTTP_EmptySubpathReturns404(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
 
@@ -458,7 +459,7 @@ func TestHooksHTTP_EmptySubpathReturns404(t *testing.T) {
 
 func TestHooksHTTP_UnknownEndpointReturns404(t *testing.T) {
 	h, _ := testHooksHandler()
-	req := httptest.NewRequest(http.MethodPost, "/hooks/nonexistent", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/nonexistent", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
 
@@ -472,9 +473,9 @@ func TestHooksHTTP_UnknownEndpointReturns404(t *testing.T) {
 
 func TestHooksHTTP_AgentPolicyRejectsDisallowedAgent(t *testing.T) {
 	h, _ := testHooksHandler(func(cfg *HooksHTTPConfig) {
-		cfg.AllowedAgentIds = []string{"agent-a", "agent-b"}
+		cfg.AllowedAgentIDs = []string{"agent-a", "agent-b"}
 	})
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"message":"test","agentId":"agent-c"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -489,9 +490,9 @@ func TestHooksHTTP_AgentPolicyRejectsDisallowedAgent(t *testing.T) {
 
 func TestHooksHTTP_AgentPolicyAllowsDefaultAgent(t *testing.T) {
 	h, _ := testHooksHandler(func(cfg *HooksHTTPConfig) {
-		cfg.AllowedAgentIds = []string{"agent-a"}
+		cfg.AllowedAgentIDs = []string{"agent-a"}
 	})
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"message":"test"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -516,7 +517,7 @@ func TestHooksHTTP_CustomMappingWake(t *testing.T) {
 			},
 		}
 	})
-	req := httptest.NewRequest(http.MethodPost, "/hooks/github",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/github",
 		strings.NewReader(`{"repo":"deneb/deneb"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -555,7 +556,7 @@ func TestHooksHTTP_CustomMappingAgent(t *testing.T) {
 			},
 		}
 	})
-	req := httptest.NewRequest(http.MethodPost, "/hooks/deploy",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/deploy",
 		strings.NewReader(`{"service":"gateway"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -584,7 +585,7 @@ func TestHooksHTTP_SessionKeyPrefixValidation(t *testing.T) {
 	})
 
 	// Allowed prefix.
-	req := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"message":"test","sessionKey":"hook:abc"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	w := httptest.NewRecorder()
@@ -594,7 +595,7 @@ func TestHooksHTTP_SessionKeyPrefixValidation(t *testing.T) {
 	}
 
 	// Disallowed prefix.
-	req2 := httptest.NewRequest(http.MethodPost, "/hooks/agent",
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/agent",
 		strings.NewReader(`{"message":"test","sessionKey":"admin:evil"}`))
 	req2.Header.Set("Authorization", "Bearer test-secret-token")
 	w2 := httptest.NewRecorder()
@@ -674,7 +675,7 @@ func TestResolveClientIP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 			req.RemoteAddr = tt.remoteAddr
 			if tt.xff != "" {
 				req.Header.Set("X-Forwarded-For", tt.xff)
@@ -693,8 +694,8 @@ func TestHooksHTTP_SuccessfulAuthResetsRateLimit(t *testing.T) {
 	h, _ := testHooksHandler()
 
 	// Record some failures.
-	for i := 0; i < hookAuthFailureLimit-1; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
+	for range hookAuthFailureLimit - 1 {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
 		req.Header.Set("Authorization", "Bearer wrong")
 		req.RemoteAddr = "10.0.0.1:12345"
 		w := httptest.NewRecorder()
@@ -702,7 +703,7 @@ func TestHooksHTTP_SuccessfulAuthResetsRateLimit(t *testing.T) {
 	}
 
 	// Successful auth should reset.
-	req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"ok"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"ok"}`))
 	req.Header.Set("Authorization", "Bearer test-secret-token")
 	req.RemoteAddr = "10.0.0.1:12345"
 	w := httptest.NewRecorder()
@@ -712,8 +713,8 @@ func TestHooksHTTP_SuccessfulAuthResetsRateLimit(t *testing.T) {
 	}
 
 	// After reset, failures should start from 0 again.
-	for i := 0; i < hookAuthFailureLimit; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
+	for i := range hookAuthFailureLimit {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
 		req.Header.Set("Authorization", "Bearer wrong")
 		req.RemoteAddr = "10.0.0.1:12345"
 		w := httptest.NewRecorder()

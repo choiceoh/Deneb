@@ -40,7 +40,7 @@ type SessionSnapshotProvider interface {
 type PresenceSnapshot struct {
 	Channels []ChannelPresence `json:"channels,omitempty"`
 	Health   HealthPresence    `json:"health"`
-	Ts       int64             `json:"ts"`
+	Ts       int64             `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 }
 
 // ChannelPresence represents a channel's presence state.

@@ -246,7 +246,7 @@ func (s *Store) ListPages(category string) ([]string, error) {
 	var pages []string
 	err := filepath.Walk(searchDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // skip errors
+			return nil //nolint:nilerr // skip inaccessible entries in walk
 		}
 		if info.IsDir() {
 			return nil
@@ -397,7 +397,8 @@ func (s *Store) loadOrCreateIndex() (*Index, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			idx = NewIndex()
-			return idx, idx.Save(indexPath)
+			err = idx.Save(indexPath)
+			return idx, err
 		}
 		return nil, err
 	}

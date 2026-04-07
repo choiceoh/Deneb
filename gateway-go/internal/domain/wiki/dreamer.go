@@ -201,7 +201,7 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (string, error) {
 		if err != nil {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("--- %s ---\n", name))
+		fmt.Fprintf(&sb, "--- %s ---\n", name)
 		sb.Write(data)
 		sb.WriteByte('\n')
 		if sb.Len() > maxChars {
@@ -278,9 +278,7 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryCo
 		if idx := strings.Index(text[3:], "\n"); idx >= 0 {
 			text = text[3+idx+1:]
 		}
-		if strings.HasSuffix(text, "```") {
-			text = text[:len(text)-3]
-		}
+		text = strings.TrimSuffix(text, "```")
 		text = strings.TrimSpace(text)
 	}
 
@@ -294,9 +292,7 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryCo
 
 // applyUpdates creates or updates wiki pages based on LLM instructions.
 // Returns (created, updated) counts and paths of oversized pages.
-func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (int, int, []string) {
-	var created, updated int
-	var oversized []string
+func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated int, oversized []string) {
 	maxBytes := wd.config.MaxPageBytes
 
 	for _, u := range updates {
@@ -554,13 +550,13 @@ func (wd *WikiDreamer) resetCounters() {
 }
 
 // mergeTags merges two tag lists, deduplicating.
-func mergeTags(existing, new []string) []string {
+func mergeTags(existing, added []string) []string {
 	seen := map[string]struct{}{}
 	for _, t := range existing {
 		seen[t] = struct{}{}
 	}
 	result := append([]string{}, existing...)
-	for _, t := range new {
+	for _, t := range added {
 		if _, ok := seen[t]; !ok {
 			result = append(result, t)
 			seen[t] = struct{}{}
@@ -570,13 +566,13 @@ func mergeTags(existing, new []string) []string {
 }
 
 // mergeRelated merges two related-page lists, deduplicating (union).
-func mergeRelated(existing, new []string) []string {
+func mergeRelated(existing, added []string) []string {
 	seen := map[string]struct{}{}
 	for _, r := range existing {
 		seen[r] = struct{}{}
 	}
 	result := append([]string{}, existing...)
-	for _, r := range new {
+	for _, r := range added {
 		if _, ok := seen[r]; !ok {
 			result = append(result, r)
 			seen[r] = struct{}{}

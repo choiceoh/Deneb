@@ -100,13 +100,13 @@ func (t *ACPTranslator) ResolveGatewaySessionKey(input ACPPromptInput) string {
 
 // TranslatePromptToChat converts an ACP prompt input to a Gateway dispatch
 // configuration and flattened prompt string.
-func (t *ACPTranslator) TranslatePromptToChat(input ACPPromptInput) (*ACPDispatchConfig, string) {
+func (t *ACPTranslator) TranslatePromptToChat(input ACPPromptInput) (cfg *ACPDispatchConfig, prompt string) {
 	gatewayKey := t.ResolveGatewaySessionKey(input)
 
 	// Build the prompt text by flattening text + resources.
-	prompt := t.flattenPrompt(input)
+	prompt = t.flattenPrompt(input)
 
-	cfg := &ACPDispatchConfig{
+	cfg = &ACPDispatchConfig{
 		SessionKey: gatewayKey,
 		Channel:    "acp",
 	}
@@ -254,7 +254,7 @@ func mapReasonToStopReason(reason string) string {
 }
 
 // BuildACPDispatch creates an ACPDispatch configuration for an ACP session.
-func BuildACPDispatch(sessionKey string, mode string) ACPDispatch {
+func BuildACPDispatch(sessionKey, mode string) ACPDispatch {
 	if mode == "" {
 		mode = "stream"
 	}

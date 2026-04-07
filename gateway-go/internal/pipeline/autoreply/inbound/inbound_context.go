@@ -199,9 +199,9 @@ func normalizeMediaType(value string) string {
 // countMediaEntries counts the total media entries across paths and URLs.
 func countMediaEntries(ctx *types.MsgContext) int {
 	pathCount := len(ctx.MediaPaths)
-	urlCount := len(ctx.MediaUrls)
+	urlCount := len(ctx.MediaURLs)
 	single := 0
-	if ctx.MediaPath != "" || ctx.MediaUrl != "" {
+	if ctx.MediaPath != "" || ctx.MediaURL != "" {
 		single = 1
 	}
 	// Return the maximum across all sources.

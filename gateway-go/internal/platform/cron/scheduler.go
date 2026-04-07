@@ -114,7 +114,7 @@ func (s *Scheduler) Register(ctx context.Context, id string, schedule Schedule, 
 		existingCancel = existing.cancel
 	}
 
-	taskCtx, cancel := context.WithCancel(ctx)
+	taskCtx, cancel := context.WithCancel(ctx) //nolint:gosec // G118 — cancel stored in task.cancel
 	t := &task{
 		id:       id,
 		schedule: schedule,

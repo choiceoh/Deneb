@@ -60,13 +60,8 @@ func (q *notifyQueue) enqueue(item notifyItem) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if len(q.items) < q.capacity {
-		q.items = append(q.items, item)
-	} else {
-		// Overflow: replace oldest non-summary item with a counter.
-		// The flush function handles the summarize rendering.
-		q.items = append(q.items, item)
-	}
+	// Append unconditionally — flush handles overflow summarization.
+	q.items = append(q.items, item)
 
 	// Reset debounce timer.
 	if q.timer != nil {
@@ -245,7 +240,7 @@ func formatBatchNotification(items []notifyItem) string {
 		return sb.String()
 	}
 
-	sb.WriteString(fmt.Sprintf("**System:** %d subagents completed. Synthesize the results below into a unified response for the user. Do NOT re-do their work. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items)))
+	fmt.Fprintf(&sb, "**System:** %d subagents completed. Synthesize the results below into a unified response for the user. Do NOT re-do their work. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items))
 
 	// Render up to cap detailed items.
 	rendered := items
@@ -256,12 +251,12 @@ func formatBatchNotification(items []notifyItem) string {
 	}
 
 	for i, item := range rendered {
-		sb.WriteString(fmt.Sprintf("\n### Agent %d/%d\n", i+1, len(items)))
+		fmt.Fprintf(&sb, "\n### Agent %d/%d\n", i+1, len(items))
 		writeNotifyItem(&sb, item)
 	}
 
 	if overflowCount > 0 {
-		sb.WriteString(fmt.Sprintf("\n... and %d more (use subagents tool for details)\n", overflowCount))
+		fmt.Fprintf(&sb, "\n... and %d more (use subagents tool for details)\n", overflowCount)
 	}
 
 	return sb.String()
@@ -269,16 +264,16 @@ func formatBatchNotification(items []notifyItem) string {
 
 // writeNotifyItem writes a single child's notification details.
 func writeNotifyItem(sb *strings.Builder, item notifyItem) {
-	sb.WriteString(fmt.Sprintf("- Agent: %s\n", item.label))
-	sb.WriteString(fmt.Sprintf("- Status: %s\n", item.status))
+	fmt.Fprintf(sb, "- Agent: %s\n", item.label)
+	fmt.Fprintf(sb, "- Status: %s\n", item.status)
 
 	if item.runtimeMs > 0 {
 		d := time.Duration(item.runtimeMs) * time.Millisecond
-		sb.WriteString(fmt.Sprintf("- Runtime: %s\n", d.Round(time.Second)))
+		fmt.Fprintf(sb, "- Runtime: %s\n", d.Round(time.Second))
 	}
 
 	if item.failureReason != "" {
-		sb.WriteString(fmt.Sprintf("- Failure: %s\n", item.failureReason))
+		fmt.Fprintf(sb, "- Failure: %s\n", item.failureReason)
 	}
 
 	if item.lastOutput != "" {
@@ -287,7 +282,7 @@ func writeNotifyItem(sb *strings.Builder, item notifyItem) {
 		if len(output) > maxOutputLen {
 			output = output[:maxOutputLen] + "\n... (truncated)"
 		}
-		sb.WriteString(fmt.Sprintf("- Result:\n%s\n", output))
+		fmt.Fprintf(sb, "- Result:\n%s\n", output)
 	}
 }
 
@@ -296,6 +291,7 @@ func isTerminalStatus(s session.RunStatus) bool {
 	switch s {
 	case session.StatusDone, session.StatusFailed, session.StatusKilled, session.StatusTimeout:
 		return true
+	default:
+		return false
 	}
-	return false
 }

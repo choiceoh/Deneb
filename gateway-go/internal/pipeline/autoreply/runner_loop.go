@@ -235,7 +235,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 	}
 
 	// Wrap the LLM streamer to inject ThinkingConfig if needed.
-	var client agent.LLMStreamer = r.llm
+	var client agent.LLMStreamer = r.llm //nolint:staticcheck // explicit type annotation for clarity
 	if thinking != nil {
 		client = &thinkingStreamer{inner: r.llm, thinking: thinking}
 	}

@@ -144,8 +144,8 @@ func (tc *TypingController) StartTypingOnText(text string) {
 	tc.StartTypingLoop()
 }
 
-// RefreshTypingTtl extends the TTL deadline without restarting the loop.
-func (tc *TypingController) RefreshTypingTtl() {
+// RefreshTypingTTL extends the TTL deadline without restarting the loop.
+func (tc *TypingController) RefreshTypingTTL() {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if !tc.sealed {

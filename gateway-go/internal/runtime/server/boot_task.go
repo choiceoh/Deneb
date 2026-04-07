@@ -107,7 +107,7 @@ func (t *bootTask) resolveBootPrompt() string {
 	}
 
 	content := string(data)
-	if len(content) == 0 {
+	if content == "" {
 		return defaultBootPrompt
 	}
 

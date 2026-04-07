@@ -228,7 +228,7 @@ func lookPathManual(bin string) bool {
 			continue
 		}
 		candidate := filepath.Join(dir, bin)
-		info, err := os.Stat(candidate)
+		info, err := os.Stat(candidate) //nolint:gosec // G703 — dir comes from PATH env, bin is a known binary name
 		if err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
 			return true
 		}

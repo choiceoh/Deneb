@@ -2,7 +2,6 @@ package ffi
 
 import (
 	"context"
-	"encoding/json"
 
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -32,7 +31,7 @@ func markdownToIR() rpcutil.HandlerFunc {
 			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
 		// ir is already JSON; wrap in the response directly.
-		return rpcutil.RespondOK(req.ID, json.RawMessage(ir))
+		return rpcutil.RespondOK(req.ID, ir)
 	}
 }
 

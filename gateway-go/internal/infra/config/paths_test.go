@@ -38,7 +38,6 @@ func TestStateDirPolicyPrecedence(t *testing.T) {
 	policy := DefaultStateDirPolicy()
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.label, func(t *testing.T) {
 			home := t.TempDir()
 
@@ -91,7 +90,6 @@ func TestConfigPathPolicyPrecedence(t *testing.T) {
 	policy := DefaultConfigPathPolicy()
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.label, func(t *testing.T) {
 			stateDir := t.TempDir()
 
@@ -158,7 +156,6 @@ func TestGatewayPortPolicyPrecedence(t *testing.T) {
 	policy := DefaultGatewayPortPolicy()
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.label, func(t *testing.T) {
 			t.Setenv("DENEB_GATEWAY_PORT", tc.envDeneb)
 

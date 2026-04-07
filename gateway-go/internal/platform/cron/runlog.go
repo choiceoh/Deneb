@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,7 +14,7 @@ import (
 
 // RunLogEntry is a single entry in the cron run log (JSONL format).
 type RunLogEntry struct {
-	Ts             int64  `json:"ts"`
+	Ts             int64  `json:"ts"` //nolint:staticcheck,revive // JSON wire format
 	JobID          string `json:"jobId"`
 	Action         string `json:"action"` // "finished"
 	Status         string `json:"status,omitempty"`
@@ -97,7 +96,7 @@ func (rl *PersistentRunLog) Append(entry RunLogEntry) error {
 		return fmt.Errorf("create run log dir: %w", err)
 	}
 
-	data, err := json.Marshal(entry)
+	data, err := json.Marshal(entry) //nolint:gosec // G117 false positive — not a secret
 	if err != nil {
 		return fmt.Errorf("marshal run log entry: %w", err)
 	}
@@ -235,17 +234,14 @@ func readJSONLEntries(path string) []RunLogEntry {
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		if len(strings.TrimSpace(string(line))) == 0 {
+		if strings.TrimSpace(string(line)) == "" {
 			continue
 		}
 		dec := json.NewDecoder(bytes.NewReader(line))
 		for {
 			var entry RunLogEntry
 			if err := dec.Decode(&entry); err != nil {
-				if err != io.EOF {
-					// skip malformed tail
-				}
-				break
+				break // skip malformed tail (or EOF)
 			}
 			entries = append(entries, entry)
 		}
@@ -269,7 +265,7 @@ func (rl *PersistentRunLog) pruneIfNeeded(logPath string) {
 
 	var buf strings.Builder
 	for _, e := range kept {
-		data, err := json.Marshal(e)
+		data, err := json.Marshal(e) //nolint:gosec // G117 false positive — not a secret
 		if err != nil {
 			rl.logger.Warn("failed to marshal run log entry during prune", "jobId", e.JobID, "error", err)
 			continue

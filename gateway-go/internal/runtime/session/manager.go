@@ -246,19 +246,20 @@ func (m *Manager) evictStale() {
 
 	m.mu.Lock()
 	for key, s := range m.sessions {
-		if isTerminal(s.Status) {
+		switch {
+		case isTerminal(s.Status):
 			maxAge := gcMaxAgeForKind(s.Kind)
 			if s.UpdatedAt < now.Add(-maxAge).UnixMilli() {
 				delete(m.sessions, key)
 				evicted = append(evicted, key)
 			}
-		} else if s.Status == StatusRunning && s.TimeoutAt != nil && nowMs > *s.TimeoutAt {
+		case s.Status == StatusRunning && s.TimeoutAt != nil && nowMs > *s.TimeoutAt:
 			s.Status = StatusTimeout
 			endedAt := nowMs
 			s.EndedAt = &endedAt
 			s.UpdatedAt = nowMs
 			timedOut = append(timedOut, key)
-		} else if s.Status == StatusRunning && s.IdleTimeoutMs > 0 {
+		case s.Status == StatusRunning && s.IdleTimeoutMs > 0:
 			// Idle stall detection: if no activity for IdleTimeoutMs, timeout.
 			activityAt := s.UpdatedAt
 			if s.LastActivityAt != nil {
@@ -298,8 +299,9 @@ func isTerminal(s RunStatus) bool {
 	switch s {
 	case StatusDone, StatusFailed, StatusKilled, StatusTimeout:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 // EventBusRef returns the session event bus for subscribing to lifecycle events.

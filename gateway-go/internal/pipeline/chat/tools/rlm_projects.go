@@ -27,7 +27,7 @@ func ToolProjectsList(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("프로젝트 %d개:\n\n", len(pages)))
+		fmt.Fprintf(&sb, "프로젝트 %d개:\n\n", len(pages))
 		for _, relPath := range pages {
 			page, pErr := deps.Store.ReadPage(relPath)
 			if pErr != nil {
@@ -39,12 +39,12 @@ func ToolProjectsList(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 			if title == "" {
 				title = name
 			}
-			sb.WriteString(fmt.Sprintf("- **%s** (id: %s)", title, relPath))
+			fmt.Fprintf(&sb, "- **%s** (id: %s)", title, relPath)
 			if len(page.Meta.Tags) > 0 {
-				sb.WriteString(fmt.Sprintf(" [%s]", strings.Join(page.Meta.Tags, ", ")))
+				fmt.Fprintf(&sb, " [%s]", strings.Join(page.Meta.Tags, ", "))
 			}
 			if page.Meta.Importance > 0 {
-				sb.WriteString(fmt.Sprintf(" importance=%.1f", page.Meta.Importance))
+				fmt.Fprintf(&sb, " importance=%.1f", page.Meta.Importance)
 			}
 			sb.WriteByte('\n')
 		}
@@ -64,7 +64,7 @@ func ToolProjectsGetField(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 		var p params
 		if err := json.Unmarshal(raw, &p); err != nil {
-			return "잘못된 파라미터입니다.", nil
+			return "잘못된 파라미터입니다.", nil //nolint:nilerr // tool returns user-facing message
 		}
 		if p.ProjectID == "" || p.Field == "" {
 			return "project_id와 field는 필수입니다.", nil
@@ -72,7 +72,7 @@ func ToolProjectsGetField(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 
 		page, err := deps.Store.ReadPage(p.ProjectID)
 		if err != nil {
-			return fmt.Sprintf("프로젝트를 찾을 수 없습니다: %s", p.ProjectID), nil
+			return fmt.Sprintf("프로젝트를 찾을 수 없습니다: %s", p.ProjectID), nil //nolint:nilerr // tool returns user-facing message
 		}
 
 		// Map field name to frontmatter value.
@@ -116,7 +116,7 @@ func ToolProjectsSearch(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 		var p params
 		if err := json.Unmarshal(raw, &p); err != nil {
-			return "잘못된 파라미터입니다.", nil
+			return "잘못된 파라미터입니다.", nil //nolint:nilerr // tool returns user-facing message
 		}
 		if p.Query == "" {
 			return "query는 필수입니다.", nil
@@ -139,7 +139,7 @@ func ToolProjectsSearch(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 				continue
 			}
 			count++
-			sb.WriteString(fmt.Sprintf("- **%s** (score: %.2f)\n  %s\n", r.Path, r.Score, r.Content))
+			fmt.Fprintf(&sb, "- **%s** (score: %.2f)\n  %s\n", r.Path, r.Score, r.Content)
 		}
 		if count == 0 {
 			return fmt.Sprintf("'%s' 관련 프로젝트를 찾을 수 없습니다.", p.Query), nil
@@ -163,7 +163,7 @@ func ToolProjectsWrite(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 		var p params
 		if err := json.Unmarshal(raw, &p); err != nil {
-			return "잘못된 파라미터입니다.", nil
+			return "잘못된 파라미터입니다.", nil //nolint:nilerr // tool returns user-facing message
 		}
 		if p.Title == "" {
 			return "title은 필수입니다.", nil
@@ -243,7 +243,7 @@ func ToolMemoryStore(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 		var p params
 		if err := json.Unmarshal(raw, &p); err != nil {
-			return "잘못된 파라미터입니다.", nil
+			return "잘못된 파라미터입니다.", nil //nolint:nilerr // tool returns user-facing message
 		}
 		if p.Title == "" {
 			return "title은 필수입니다.", nil
@@ -321,7 +321,7 @@ func ToolMemoryRecall(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 		var p params
 		if err := json.Unmarshal(raw, &p); err != nil {
-			return "잘못된 파라미터입니다.", nil
+			return "잘못된 파라미터입니다.", nil //nolint:nilerr // tool returns user-facing message
 		}
 
 		switch p.Action {
@@ -358,7 +358,7 @@ func memoryRecallSearch(ctx context.Context, store *wiki.Store, query, category 
 			continue
 		}
 		count++
-		sb.WriteString(fmt.Sprintf("- **%s** (score: %.2f)\n  %s\n", r.Path, r.Score, r.Content))
+		fmt.Fprintf(&sb, "- **%s** (score: %.2f)\n  %s\n", r.Path, r.Score, r.Content)
 		if count >= limit {
 			break
 		}
@@ -383,7 +383,7 @@ func memoryRecallRead(store *wiki.Store, path, section string) (string, error) {
 
 	page, err := store.ReadPage(path)
 	if err != nil {
-		return fmt.Sprintf("페이지를 찾을 수 없습니다: %s", path), nil
+		return fmt.Sprintf("페이지를 찾을 수 없습니다: %s", path), nil //nolint:nilerr // tool returns user-facing message
 	}
 
 	if section != "" {
@@ -396,12 +396,12 @@ func memoryRecallRead(store *wiki.Store, path, section string) (string, error) {
 
 	// Return full page with metadata.
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**%s** (%s)\n", page.Meta.Title, page.Meta.Category))
+	fmt.Fprintf(&sb, "**%s** (%s)\n", page.Meta.Title, page.Meta.Category)
 	if len(page.Meta.Tags) > 0 {
-		sb.WriteString(fmt.Sprintf("태그: %s\n", strings.Join(page.Meta.Tags, ", ")))
+		fmt.Fprintf(&sb, "태그: %s\n", strings.Join(page.Meta.Tags, ", "))
 	}
 	if page.Meta.Updated != "" {
-		sb.WriteString(fmt.Sprintf("수정: %s\n", page.Meta.Updated))
+		fmt.Fprintf(&sb, "수정: %s\n", page.Meta.Updated)
 	}
 	sb.WriteString("\n")
 	sb.WriteString(page.Body)
@@ -424,7 +424,7 @@ func memoryRecallList(store *wiki.Store, category string) (string, error) {
 			continue
 		}
 		total += len(pages)
-		sb.WriteString(fmt.Sprintf("- **%s**: %d페이지\n", cat, len(pages)))
+		fmt.Fprintf(&sb, "- **%s**: %d페이지\n", cat, len(pages))
 	}
 	if total == 0 {
 		return "위키에 저장된 지식이 없습니다.", nil
@@ -442,7 +442,7 @@ func memoryRecallListCategory(store *wiki.Store, category string) (string, error
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**%s** %d페이지:\n\n", category, len(pages)))
+	fmt.Fprintf(&sb, "**%s** %d페이지:\n\n", category, len(pages))
 	for _, relPath := range pages {
 		page, pErr := store.ReadPage(relPath)
 		if pErr != nil {
@@ -454,9 +454,9 @@ func memoryRecallListCategory(store *wiki.Store, category string) (string, error
 		if title == "" {
 			title = name
 		}
-		sb.WriteString(fmt.Sprintf("- **%s** (%s)", title, relPath))
+		fmt.Fprintf(&sb, "- **%s** (%s)", title, relPath)
 		if len(page.Meta.Tags) > 0 {
-			sb.WriteString(fmt.Sprintf(" [%s]", strings.Join(page.Meta.Tags, ", ")))
+			fmt.Fprintf(&sb, " [%s]", strings.Join(page.Meta.Tags, ", "))
 		}
 		sb.WriteByte('\n')
 	}
@@ -483,7 +483,7 @@ func ToolProjectsGetDocument(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		}
 		var p params
 		if err := json.Unmarshal(raw, &p); err != nil {
-			return "잘못된 파라미터입니다.", nil
+			return "잘못된 파라미터입니다.", nil //nolint:nilerr // tool returns user-facing message
 		}
 		if p.ProjectID == "" {
 			return "project_id는 필수입니다.", nil
@@ -491,7 +491,7 @@ func ToolProjectsGetDocument(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 
 		page, err := deps.Store.ReadPage(p.ProjectID)
 		if err != nil {
-			return fmt.Sprintf("프로젝트를 찾을 수 없습니다: %s", p.ProjectID), nil
+			return fmt.Sprintf("프로젝트를 찾을 수 없습니다: %s", p.ProjectID), nil //nolint:nilerr // tool returns user-facing message
 		}
 
 		if p.Section == "" {
@@ -502,9 +502,9 @@ func ToolProjectsGetDocument(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 					page.Meta.Title, truncate(page.Body, 500)), nil
 			}
 			var sb strings.Builder
-			sb.WriteString(fmt.Sprintf("**%s** 목차:\n\n", page.Meta.Title))
+			fmt.Fprintf(&sb, "**%s** 목차:\n\n", page.Meta.Title)
 			for i, s := range sections {
-				sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, s))
+				fmt.Fprintf(&sb, "%d. %s\n", i+1, s)
 			}
 			return sb.String(), nil
 		}

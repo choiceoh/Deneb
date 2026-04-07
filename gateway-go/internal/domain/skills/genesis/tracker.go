@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -9,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // register sqlite3 driver
 )
 
 // UsageRecord represents a single skill usage event.
@@ -71,7 +72,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 }
 
 func initTrackerSchema(db *sql.DB) error {
-	_, err := db.Exec(`
+	_, err := db.ExecContext(context.Background(), `
 		CREATE TABLE IF NOT EXISTS skill_usage (
 			id          INTEGER PRIMARY KEY AUTOINCREMENT,
 			skill_name  TEXT NOT NULL,
@@ -112,7 +113,7 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 		successInt = 1
 	}
 
-	_, err := t.db.Exec(
+	_, err := t.db.ExecContext(context.Background(),
 		`INSERT INTO skill_usage (skill_name, session_key, success, error_msg, used_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		record.SkillName, record.SessionKey, successInt, record.ErrorMsg, record.UsedAt,
@@ -130,7 +131,7 @@ func (t *Tracker) Stats(skillName string) (*UsageStats, error) {
 
 	stats := &UsageStats{SkillName: skillName}
 
-	row := t.db.QueryRow(`
+	row := t.db.QueryRowContext(context.Background(), `
 		SELECT COUNT(*), SUM(CASE WHEN success=1 THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN success=0 THEN 1 ELSE 0 END),
 		       MAX(used_at)
@@ -148,7 +149,7 @@ func (t *Tracker) Stats(skillName string) (*UsageStats, error) {
 	}
 
 	// Fetch recent errors (last 5).
-	rows, err := t.db.Query(`
+	rows, err := t.db.QueryContext(context.Background(), `
 		SELECT error_msg FROM skill_usage
 		WHERE skill_name = ? AND success = 0 AND error_msg != ''
 		ORDER BY used_at DESC LIMIT 5`, skillName)
@@ -170,7 +171,7 @@ func (t *Tracker) ListAllStats() ([]UsageStats, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	rows, err := t.db.Query(`
+	rows, err := t.db.QueryContext(context.Background(), `
 		SELECT skill_name, COUNT(*),
 		       SUM(CASE WHEN success=1 THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN success=0 THEN 1 ELSE 0 END),
@@ -204,7 +205,7 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	_, err := t.db.Exec(
+	_, err := t.db.ExecContext(context.Background(),
 		`INSERT INTO skill_genesis_log (skill_name, source, session_key, created_at, category, description)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		skillName, source, sessionKey, time.Now().UnixMilli(), category, description,

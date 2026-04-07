@@ -110,7 +110,7 @@ func TestRunCache_ConcurrentAccess(t *testing.T) {
 	const n = 100
 
 	// Concurrent writes (mixed Set and SetWithScope).
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -124,7 +124,7 @@ func TestRunCache_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent reads.
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

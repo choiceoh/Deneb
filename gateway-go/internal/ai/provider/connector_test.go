@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -150,11 +151,11 @@ func TestConnector_JSON_ErrorResponse(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}
-	ce, ok := err.(*ConnectorError)
-	if !ok {
+	var ce *ConnectorError
+	if !errors.As(err, &ce) {
 		t.Fatalf("expected ConnectorError, got %T", err)
 	}
-	if ce.StatusCode != 401 {
+	if ce.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected status 401, got %d", ce.StatusCode)
 	}
 }

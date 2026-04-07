@@ -7,6 +7,7 @@ package process
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -218,7 +219,7 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	tracked.cancel = cancel
 	tracked.mu.Unlock()
 
-	cmd := exec.CommandContext(execCtx, req.Command, req.Args...)
+	cmd := exec.CommandContext(execCtx, req.Command, req.Args...) //nolint:gosec // G204 — command execution is by design
 	// Run in a new process group so we can kill all children together.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	// Graceful shutdown: send SIGTERM to the process group first, then SIGKILL
@@ -357,7 +358,8 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 			result.Status = StatusFailed
 			result.Error = err.Error()
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
 			result.ExitCode = -1
@@ -392,7 +394,7 @@ func (m *Manager) ExecuteBackground(ctx context.Context, req ExecRequest) string
 
 // WriteStdin writes data to a running process's stdin. Returns an error if
 // the process is not found, not running, or stdin is unavailable.
-func (m *Manager) WriteStdin(id string, data string) error {
+func (m *Manager) WriteStdin(id, data string) error {
 	m.mu.RLock()
 	tracked, ok := m.processes[id]
 	m.mu.RUnlock()

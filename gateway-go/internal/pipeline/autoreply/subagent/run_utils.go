@@ -17,13 +17,9 @@ type SubagentRunListEntry struct {
 }
 
 // BuildSubagentRunListEntries builds formatted entries for the /agents list.
-func BuildSubagentRunListEntries(runs []*SubagentRunRecord, recentWindowMinutes int, maxLabelLen int) (active, recent []SubagentRunListEntry) {
+func BuildSubagentRunListEntries(runs []*SubagentRunRecord, recentWindowMinutes, maxLabelLen int) (active, recent []SubagentRunListEntry) {
 	sorted := sortSubagentRunPtrs(runs)
 	recentCutoff := time.Now().UnixMilli() - int64(recentWindowMinutes)*60_000
-	if maxLabelLen <= 0 {
-		maxLabelLen = 110
-	}
-
 	idx := 1
 	for _, e := range sorted {
 		if e.EndedAt != 0 {

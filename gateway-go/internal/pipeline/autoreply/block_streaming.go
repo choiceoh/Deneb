@@ -64,7 +64,7 @@ func (c *BlockCoalescer) Flush() []StreamBlock {
 	var current strings.Builder
 	remaining := text
 
-	for len(remaining) > 0 {
+	for remaining != "" {
 		var line string
 		if idx := strings.IndexByte(remaining, '\n'); idx >= 0 {
 			line = remaining[:idx]

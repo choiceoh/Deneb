@@ -106,7 +106,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	if rc != nil && IsCacheableTool(name) {
 		cacheKey := BuildCacheKey(name, input)
 		if cached, ok := rc.Get(cacheKey); ok {
-			if wantCompress && len(cached) > 0 {
+			if wantCompress && cached != "" {
 				return compressToolOutput(ctx, name, cached, slog.Default()), nil
 			}
 			return cached, nil
@@ -165,7 +165,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	}
 
 	// Apply compression if requested by the agent.
-	if wantCompress && len(output) > 0 {
+	if wantCompress && output != "" {
 		output = compressToolOutput(ctx, name, output, slog.Default())
 	}
 

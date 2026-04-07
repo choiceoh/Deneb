@@ -436,5 +436,5 @@ func SaveConfig(workdir string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	return os.WriteFile(configPath(workdir), data, 0o644)
+	return os.WriteFile(configPath(workdir), data, 0o600) //nolint:gosec // G306
 }

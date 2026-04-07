@@ -13,7 +13,7 @@ func TestWorkerPoolConcurrencyLimit(t *testing.T) {
 	var running atomic.Int64
 	var wg sync.WaitGroup
 
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		wg.Add(1)
 		pool.Submit(func() {
 			defer wg.Done()
@@ -41,7 +41,7 @@ func TestWorkerPoolStats(t *testing.T) {
 	pool := NewWorkerPool(4)
 	var wg sync.WaitGroup
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		wg.Add(1)
 		pool.Submit(func() {
 			defer wg.Done()

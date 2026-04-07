@@ -127,7 +127,7 @@ func (b *Bridge) Call(ctx context.Context, method string, params json.RawMessage
 
 // HealthCheck verifies the gateway is reachable.
 func (b *Bridge) HealthCheck(ctx context.Context) error {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, b.baseURL+"/health", nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, b.baseURL+"/health", http.NoBody)
 	if err != nil {
 		return err
 	}

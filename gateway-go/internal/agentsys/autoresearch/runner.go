@@ -271,9 +271,9 @@ func (r *Runner) Start(workdir string) error {
 		wtStateLink := filepath.Join(wtPath, configDir)
 		if err := os.Symlink(stateDir, wtStateLink); err != nil {
 			r.logger.Warn("symlink failed, copying config instead", "error", err)
-			os.MkdirAll(filepath.Join(wtPath, configDir), 0o755)
+			os.MkdirAll(filepath.Join(wtPath, configDir), 0o755) //nolint:errcheck // best-effort
 			if data, readErr := os.ReadFile(configPath(workdir)); readErr == nil {
-				os.WriteFile(configPath(wtPath), data, 0o644)
+				os.WriteFile(configPath(wtPath), data, 0o644) //nolint:errcheck,gosec // best-effort, G306 world-readable is intentional
 			}
 		}
 
@@ -518,7 +518,7 @@ func gitCurrentBranch(ctx context.Context, dir string) (string, error) {
 }
 
 func gitBranchExists(ctx context.Context, dir, branch string) bool {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "refs/heads/"+branch)
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "refs/heads/"+branch) //nolint:gosec // G204 — git command with validated branch name
 	cmd.Dir = dir
 	return cmd.Run() == nil
 }
@@ -531,7 +531,7 @@ func gitEnsureClean(ctx context.Context, dir string) error {
 	if err != nil {
 		return fmt.Errorf("git status: %w", err)
 	}
-	if len(strings.TrimSpace(string(out))) > 0 {
+	if strings.TrimSpace(string(out)) != "" {
 		return fmt.Errorf("working tree is dirty — commit or stash changes before starting autoresearch")
 	}
 	return nil

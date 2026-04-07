@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +37,7 @@ func (s *FileTranscriptStore) sessionPath(sessionKey string) string {
 }
 
 // Load reads messages from the JSONL file, returning the most recent `limit`.
-func (s *FileTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage, int, error) {
+func (s *FileTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage, int, error) { //nolint:gocritic // unnamedResult — named returns would conflict with local vars
 	path := s.sessionPath(sessionKey)
 	f, err := os.Open(path)
 	if err != nil {
@@ -61,10 +60,7 @@ func (s *FileTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage,
 		for {
 			var msg ChatMessage
 			if err := dec.Decode(&msg); err != nil {
-				if err != io.EOF {
-					// skip malformed tail
-				}
-				break
+				break // io.EOF or malformed tail — both stop decoding
 			}
 			all = append(all, msg)
 		}
@@ -250,7 +246,7 @@ func NewMemoryTranscriptStore() *MemoryTranscriptStore {
 }
 
 // Load returns messages for the session.
-func (s *MemoryTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage, int, error) {
+func (s *MemoryTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage, int, error) { //nolint:gocritic // unnamedResult — naming would shadow local vars
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	msgs := s.sessions[sessionKey]

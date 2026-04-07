@@ -59,7 +59,7 @@ func TestGrepResultSummarizer_Short(t *testing.T) {
 
 func TestGrepResultSummarizer_Long(t *testing.T) {
 	var lines []string
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		lines = append(lines, "file.go:"+strings.Repeat("x", 10))
 	}
 	output := strings.Join(lines, "\n")

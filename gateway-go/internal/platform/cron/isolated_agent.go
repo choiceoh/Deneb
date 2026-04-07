@@ -282,7 +282,7 @@ type CronSkillsSnapshot struct {
 }
 
 // ResolveCronSkillsSnapshot builds the skills snapshot for filtering.
-func ResolveCronSkillsSnapshot(allSkills []string, filter []string) CronSkillsSnapshot {
+func ResolveCronSkillsSnapshot(allSkills, filter []string) CronSkillsSnapshot {
 	if len(filter) == 0 {
 		return CronSkillsSnapshot{Skills: allSkills}
 	}

@@ -117,8 +117,8 @@ func (c *Catalog) Get(key string) (*SkillEntry, bool) {
 	if !ok {
 		return nil, false
 	}
-	copy := *e
-	return &copy, true
+	dup := *e
+	return &dup, true
 }
 
 // Snapshot returns a point-in-time snapshot of the catalog.

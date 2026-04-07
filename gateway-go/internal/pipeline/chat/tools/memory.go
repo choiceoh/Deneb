@@ -120,7 +120,7 @@ type MemoryMatch struct {
 
 // SearchMemoryFiles searches memory files for keyword matches and returns results.
 // Shared by ToolMemorySearch (LLM tool) and PrefetchKnowledge (context assembly).
-func SearchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMatch {
+func SearchMemoryFiles(workspaceDir, query string, limit int) []MemoryMatch {
 	memoryFiles := CollectMemoryFiles(workspaceDir)
 	if len(memoryFiles) == 0 {
 		return nil // nil signals "no memory files exist"
@@ -150,26 +150,27 @@ func SearchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMat
 				continue
 			}
 			for _, kw := range keywords {
-				if strings.Contains(lower, kw) {
-					start := i - 2
-					if start < 0 {
-						start = 0
-					}
-					end := i + 3
-					if end > len(lines) {
-						end = len(lines)
-					}
-					for j := start; j < end; j++ {
-						matchedLines[j] = true
-					}
-					snippet := strings.Join(lines[start:end], "\n")
-					matches = append(matches, MemoryMatch{
-						File:    rel,
-						Line:    i + 1,
-						Snippet: snippet,
-					})
-					break
+				if !strings.Contains(lower, kw) {
+					continue
 				}
+				start := i - 2
+				if start < 0 {
+					start = 0
+				}
+				end := i + 3
+				if end > len(lines) {
+					end = len(lines)
+				}
+				for j := start; j < end; j++ {
+					matchedLines[j] = true
+				}
+				snippet := strings.Join(lines[start:end], "\n")
+				matches = append(matches, MemoryMatch{
+					File:    rel,
+					Line:    i + 1,
+					Snippet: snippet,
+				})
+				break
 			}
 		}
 	}

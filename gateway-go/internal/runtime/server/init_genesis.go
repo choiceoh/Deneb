@@ -41,7 +41,7 @@ func (s *Server) initGenesisServices() {
 
 // registerGenesisAutonomousTasks registers periodic background tasks for genesis.
 // Called during registerWorkflowSideEffects (non-RPC phase).
-func (s *Server) registerGenesisAutonomousTasks(hub *rpcutil.GatewayHub) {
+func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 	if s.genesisSvc == nil || s.autonomousSvc == nil {
 		return
 	}

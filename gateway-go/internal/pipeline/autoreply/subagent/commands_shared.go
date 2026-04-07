@@ -163,7 +163,7 @@ func ResolveHandledPrefix(normalized string) string {
 }
 
 // ResolveSubagentsAction determines which subagent action to run.
-func ResolveSubagentsAction(handledPrefix string, restTokens []string) (SubagentsAction, []string) {
+func ResolveSubagentsAction(handledPrefix string, restTokens []string) (resolved SubagentsAction, remaining []string) {
 	switch handledPrefix {
 	case SubagentsCmdPrefix:
 		action := "list"
@@ -275,7 +275,7 @@ func TruncateLine(s string, maxLen int) string {
 }
 
 // ResolveSubagentTarget resolves a run from a target token (index, label, runId prefix, session key).
-func ResolveSubagentTarget(runs []SubagentRunRecord, token string) (*SubagentRunRecord, string) {
+func ResolveSubagentTarget(runs []SubagentRunRecord, token string) (run *SubagentRunRecord, errMsg string) {
 	if token == "" {
 		return nil, "Missing subagent id."
 	}
@@ -301,16 +301,16 @@ func ResolveSubagentTarget(runs []SubagentRunRecord, token string) (*SubagentRun
 	}
 
 	// Try prefix on runId.
-	var runIdMatches []*SubagentRunRecord
+	var runIDMatches []*SubagentRunRecord
 	for i := range sorted {
 		if strings.HasPrefix(sorted[i].RunID, token) {
-			runIdMatches = append(runIdMatches, &sorted[i])
+			runIDMatches = append(runIDMatches, &sorted[i])
 		}
 	}
-	if len(runIdMatches) == 1 {
-		return runIdMatches[0], ""
+	if len(runIDMatches) == 1 {
+		return runIDMatches[0], ""
 	}
-	if len(runIdMatches) > 1 {
+	if len(runIDMatches) > 1 {
 		return nil, fmt.Sprintf("Ambiguous run id prefix: %s", token)
 	}
 

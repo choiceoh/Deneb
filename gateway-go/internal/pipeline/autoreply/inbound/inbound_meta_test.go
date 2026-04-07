@@ -45,7 +45,7 @@ func TestBuildInboundUserContextPrefix_ConversationInfo(t *testing.T) {
 	ts := int64(1700000000000)
 	ctx := &InboundMetaContext{
 		ChatType:     "group",
-		SenderId:     "user-123",
+		SenderID:     "user-123",
 		SenderName:   "Alice",
 		WasMentioned: true,
 		GroupSubject: "Test Group",
@@ -74,7 +74,7 @@ func TestBuildInboundUserContextPrefix_SenderInfo(t *testing.T) {
 		ChatType:       "direct",
 		SenderName:     "Bob",
 		SenderUsername: "@bob",
-		SenderId:       "bob-id",
+		SenderID:       "bob-id",
 		Surface:        "telegram",
 	}
 
@@ -164,7 +164,7 @@ func TestResolveSenderLabel(t *testing.T) {
 	}{
 		{
 			name: "name and id",
-			ctx:  InboundMetaContext{SenderName: "Alice", SenderId: "123"},
+			ctx:  InboundMetaContext{SenderName: "Alice", SenderID: "123"},
 			want: "Alice (123)",
 		},
 		{
@@ -179,7 +179,7 @@ func TestResolveSenderLabel(t *testing.T) {
 		},
 		{
 			name: "id only",
-			ctx:  InboundMetaContext{SenderId: "123"},
+			ctx:  InboundMetaContext{SenderID: "123"},
 			want: "123",
 		},
 		{
@@ -189,7 +189,7 @@ func TestResolveSenderLabel(t *testing.T) {
 		},
 		{
 			name: "name same as id",
-			ctx:  InboundMetaContext{SenderName: "Alice", SenderId: "Alice"},
+			ctx:  InboundMetaContext{SenderName: "Alice", SenderID: "Alice"},
 			want: "Alice",
 		},
 		{

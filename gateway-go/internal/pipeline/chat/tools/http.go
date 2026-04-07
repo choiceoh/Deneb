@@ -55,7 +55,7 @@ func ToolHTTP() ToolFunc {
 		// Build request body.
 		var bodyReader io.Reader
 		contentType := ""
-		if p.JSON != nil && len(p.JSON) > 0 && string(p.JSON) != "null" {
+		if len(p.JSON) > 0 && string(p.JSON) != "null" {
 			bodyReader = bytes.NewReader(p.JSON)
 			contentType = "application/json"
 		} else if p.Body != "" {

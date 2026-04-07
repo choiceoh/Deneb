@@ -212,7 +212,7 @@ func (r *InternalRegistry) TriggerFromEvent(ctx context.Context, event Event, se
 }
 
 // eventToInternal maps a shell hook Event to an InternalHookEventType + action.
-func eventToInternal(event Event) (InternalHookEventType, string) {
+func eventToInternal(event Event) (eventType InternalHookEventType, action string) {
 	switch event {
 	case EventGatewayStart:
 		return EventTypeGateway, "start"

@@ -145,7 +145,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// Start polling in background.
 	// Use a detached context so polling survives beyond the RPC request that triggered Start.
 	p.bot = NewBot(p.client, p.config, p.handler, p.logger)
-	go func() {
+	go func() { //nolint:gosec // G118 — intentionally detached context so polling survives beyond the triggering RPC request
 		if err := p.bot.Start(context.Background()); err != nil {
 			if errors.Is(err, context.Canceled) {
 				p.logger.Info("telegram polling stopped")

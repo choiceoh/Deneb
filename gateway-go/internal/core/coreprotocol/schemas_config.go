@@ -8,7 +8,7 @@ func validateConfigGetParams(value any, path string, errors *[]ValidationError) 
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -18,7 +18,7 @@ func validateConfigSetParams(value any, path string, errors *[]ValidationError) 
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"raw", "baseHash"}, path, errors)
 	if CheckRequired(obj, "raw", path, errors) {
 		CheckNonEmptyString(obj["raw"], path+"/raw", errors)
@@ -34,7 +34,7 @@ func validateConfigApplyLike(value any, path string, errors *[]ValidationError) 
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"raw", "baseHash", "sessionKey", "note", "restartDelayMs"}, path, errors)
 	if CheckRequired(obj, "raw", path, errors) {
 		CheckNonEmptyString(obj["raw"], path+"/raw", errors)
@@ -67,7 +67,7 @@ func validateConfigSchemaParams(value any, path string, errors *[]ValidationErro
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -85,7 +85,7 @@ func validateConfigSchemaLookupParams(value any, path string, errors *[]Validati
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"path"}, path, errors)
 	if CheckRequired(obj, "path", path, errors) {
 		checkConfigPath(obj["path"], path+"/path", errors)
@@ -98,7 +98,7 @@ func validateUpdateRunParams(value any, path string, errors *[]ValidationError) 
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"sessionKey", "note", "restartDelayMs", "timeoutMs"}, path, errors)
 	CheckOptional(obj, "sessionKey", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckString(v, p, e)

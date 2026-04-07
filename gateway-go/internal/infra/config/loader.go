@@ -326,7 +326,7 @@ func applyDefaults(cfg *DenebConfig) {
 func ValidateRawConfig(raw []byte) (issues []ConfigIssue, warnings []string, err error) {
 	var cfg DenebConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return []ConfigIssue{{Message: "JSON parse failed: " + err.Error()}}, nil, nil
+		return []ConfigIssue{{Message: "JSON parse failed: " + err.Error()}}, nil, nil //nolint:nilerr // parse error reported as config issue, not Go error
 	}
 	issues, warnings = validateConfig(&cfg)
 	return issues, warnings, nil

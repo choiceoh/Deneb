@@ -6,7 +6,7 @@ func validateExecApprovalsGetParams(value any, path string, errors *[]Validation
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, nil, path, errors)
 }
 
@@ -16,7 +16,7 @@ func validateExecApprovalsSetParams(value any, path string, errors *[]Validation
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"file", "baseHash"}, path, errors)
 	if CheckRequired(obj, "file", path, errors) {
 		RequireObject(obj["file"], path+"/file", errors)
@@ -44,7 +44,7 @@ func validateExecApprovalRequestParams(value any, path string, errors *[]Validat
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{
 		"id", "command", "commandArgv", "systemRunPlan", "env", "cwd", "nodeId", "host",
 		"security", "ask", "agentId", "resolvedPath", "sessionKey",
@@ -110,7 +110,7 @@ func validateExecApprovalResolveParams(value any, path string, errors *[]Validat
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"id", "decision"}, path, errors)
 	if CheckRequired(obj, "id", path, errors) {
 		CheckNonEmptyString(obj["id"], path+"/id", errors)
@@ -126,7 +126,7 @@ func validateExecApprovalsNodeGetParams(value any, path string, errors *[]Valida
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"nodeId"}, path, errors)
 	if CheckRequired(obj, "nodeId", path, errors) {
 		CheckNonEmptyString(obj["nodeId"], path+"/nodeId", errors)
@@ -139,7 +139,7 @@ func validateExecApprovalsNodeSetParams(value any, path string, errors *[]Valida
 	if !RequireObject(value, path, errors) {
 		return
 	}
-	obj := value.(map[string]any)
+	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
 	CheckNoAdditionalProperties(obj, []string{"nodeId", "file", "baseHash"}, path, errors)
 	if CheckRequired(obj, "nodeId", path, errors) {
 		CheckNonEmptyString(obj["nodeId"], path+"/nodeId", errors)

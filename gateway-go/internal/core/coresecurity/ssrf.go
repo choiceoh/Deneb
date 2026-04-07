@@ -198,7 +198,7 @@ func isNumericPrivateIPv4(host string) bool {
 // parseOctetMixedRadix parses a single octet that may be decimal, octal
 // (0-prefix), or hex (0x-prefix). Matches Rust parse_octet_mixed_radix.
 func parseOctetMixedRadix(s string) (byte, bool) {
-	if len(s) == 0 {
+	if s == "" {
 		return 0, false
 	}
 	// Hex: 0x or 0X prefix.
@@ -228,8 +228,8 @@ func parseOctetMixedRadix(s string) (byte, bool) {
 // isPrivateIPv4U32 checks if a 32-bit IPv4 address falls in private/loopback/
 // link-local ranges. Matches Rust is_private_ipv4_u32.
 func isPrivateIPv4U32(ip uint32) bool {
-	a := byte(ip >> 24)
-	b := byte(ip >> 16)
+	a := byte(ip >> 24) //nolint:gosec // G115 — extracting individual bytes from uint32 IPv4 address
+	b := byte(ip >> 16) //nolint:gosec // G115 — extracting individual bytes from uint32 IPv4 address
 
 	switch {
 	case a == 127: // 127.0.0.0/8 (loopback)
@@ -251,10 +251,10 @@ func isPrivateIPv4U32(ip uint32) bool {
 }
 
 func isAllDigits(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] < '0' || s[i] > '9' {
 			return false
 		}
 	}
-	return len(s) > 0
+	return s != ""
 }

@@ -30,7 +30,7 @@ type walEntry struct {
 	Op      string   `json:"op"`
 	Session *Session `json:"session,omitempty"`
 	Key     string   `json:"key,omitempty"`
-	Ts      int64    `json:"ts"`
+	Ts      int64    `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 }
 
 // WAL persists session state changes to disk for crash recovery.
@@ -163,7 +163,7 @@ func (w *WAL) append(entry walEntry) {
 		return
 	}
 	// Sync to ensure durability. Single-user system so fsync overhead is fine.
-	w.file.Sync()
+	w.file.Sync() //nolint:errcheck // best-effort
 }
 
 // replayFile reads a WAL or snapshot file and applies entries to the Manager.

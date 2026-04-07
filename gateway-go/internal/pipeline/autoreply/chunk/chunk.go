@@ -18,7 +18,7 @@ const DefaultLimit = 4000
 
 // ResolveTextLimit returns the chunk limit for a given provider/account,
 // falling back to the default. providerLimit is looked up from config externally.
-func ResolveTextLimit(providerLimit int, fallback int) int {
+func ResolveTextLimit(providerLimit, fallback int) int {
 	if fallback <= 0 {
 		fallback = DefaultLimit
 	}
@@ -61,11 +61,12 @@ func chunkTextByBreaks(text string, limit int) []string {
 
 		bp := scanParenAwareBreakpoints(window, 0, len(window), nil)
 		var breakIdx int
-		if bp.lastNewline > 0 {
+		switch {
+		case bp.lastNewline > 0:
 			breakIdx = bp.lastNewline
-		} else if bp.lastWhitespace > 0 {
+		case bp.lastWhitespace > 0:
 			breakIdx = bp.lastWhitespace
-		} else {
+		default:
 			breakIdx = len(window)
 		}
 
@@ -154,11 +155,12 @@ func ByParagraph(text string, limit int, splitLongParagraphs bool) []string {
 		if strings.TrimSpace(paragraph) == "" {
 			continue
 		}
-		if len(paragraph) <= limit {
+		switch {
+		case len(paragraph) <= limit:
 			chunks = append(chunks, paragraph)
-		} else if !splitLongParagraphs {
+		case !splitLongParagraphs:
 			chunks = append(chunks, paragraph)
-		} else {
+		default:
 			chunks = append(chunks, Text(paragraph, limit)...)
 		}
 	}

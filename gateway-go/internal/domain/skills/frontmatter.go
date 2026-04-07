@@ -400,7 +400,7 @@ func normalizeSafeDownloadURL(raw string) string {
 
 // --- JSON parsing helpers ---
 
-func parseJSONString(obj map[string]json.RawMessage, key string, out *string) bool {
+func parseJSONString(obj map[string]json.RawMessage, key string, out *string) bool { //nolint:unparam // return value used for chaining in future
 	raw, ok := obj[key]
 	if !ok {
 		return false

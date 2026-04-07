@@ -69,13 +69,13 @@ func TestConcurrentAccess(t *testing.T) {
 	tr := NewTracker(time.Minute, 1000)
 	defer tr.Close()
 	done := make(chan struct{})
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		go func(i int) {
 			tr.Check(fmt.Sprintf("req-%d", i))
 			done <- struct{}{}
 		}(i)
 	}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		<-done
 	}
 	if tr.Len() != 100 {

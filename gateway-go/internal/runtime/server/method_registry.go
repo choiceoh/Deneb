@@ -53,11 +53,12 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// Create Telegram plugin from config if available.
 	if s.runtimeCfg != nil {
 		tgCfg := loadTelegramConfig(s.runtimeCfg)
-		if tgCfg == nil {
+		switch {
+		case tgCfg == nil:
 			s.logger.Warn("telegram channel not configured (config missing or invalid)")
-		} else if tgCfg.BotToken == "" {
+		case tgCfg.BotToken == "":
 			s.logger.Warn("telegram channel config found but botToken is empty")
-		} else {
+		default:
 			s.telegramPlug = telegram.NewPlugin(tgCfg, s.logger)
 			hub.SetTelegram(s.telegramPlug)
 		}

@@ -45,7 +45,7 @@ func AppendResult(workdir string, row ResultRow) error {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("create results dir: %w", err)
 		}
-		if err := os.WriteFile(path, []byte(tsvHeader+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(tsvHeader+"\n"), 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 			return fmt.Errorf("write results header: %w", err)
 		}
 	}
@@ -118,21 +118,21 @@ func ParseResults(workdir string) ([]ResultRow, error) {
 			continue
 		}
 		iter := 0
-		fmt.Sscanf(fields[0], "%d", &iter)
+		fmt.Sscanf(fields[0], "%d", &iter) //nolint:errcheck // best-effort
 		ts, _ := time.Parse(time.RFC3339, fields[1])
 		var metric float64
-		fmt.Sscanf(fields[3], "%f", &metric)
+		fmt.Sscanf(fields[3], "%f", &metric) //nolint:errcheck // best-effort
 		var dur int
-		fmt.Sscanf(fields[6], "%d", &dur)
+		fmt.Sscanf(fields[6], "%d", &dur) //nolint:errcheck // best-effort
 		var bestSoFar, delta float64
 		if len(fields) >= 9 {
-			fmt.Sscanf(fields[7], "%f", &bestSoFar)
-			fmt.Sscanf(fields[8], "%f", &delta)
+			fmt.Sscanf(fields[7], "%f", &bestSoFar) //nolint:errcheck // best-effort
+			fmt.Sscanf(fields[8], "%f", &delta)     //nolint:errcheck // best-effort
 		}
 
 		var variant int
 		if len(fields) >= 10 && fields[9] != "" {
-			fmt.Sscanf(fields[9], "%d", &variant)
+			fmt.Sscanf(fields[9], "%d", &variant) //nolint:errcheck // best-effort
 		}
 
 		rows = append(rows, ResultRow{
@@ -172,9 +172,9 @@ func TrendAnalysis(rows []ResultRow, cfg *Config) string {
 			recentKept++
 		}
 	}
-	sb.WriteString(fmt.Sprintf("Recent %d iterations: %d kept, %d discarded (%.0f%% success rate)\n",
+	fmt.Fprintf(&sb, "Recent %d iterations: %d kept, %d discarded (%.0f%% success rate)\n",
 		len(window), recentKept, len(window)-recentKept,
-		float64(recentKept)/float64(len(window))*100))
+		float64(recentKept)/float64(len(window))*100)
 
 	// Improvement velocity: how fast is the metric improving?
 	if len(rows) >= 2 {
@@ -184,8 +184,8 @@ func TrendAnalysis(rows []ResultRow, cfg *Config) string {
 		if elapsed > 0 && first.MetricValue != 0 {
 			totalChange := last.BestSoFar - first.MetricValue
 			changePerHour := totalChange / elapsed.Hours()
-			sb.WriteString(fmt.Sprintf("Improvement velocity: %.6f %s/hour\n",
-				absFloat(changePerHour), cfg.MetricName))
+			fmt.Fprintf(&sb, "Improvement velocity: %.6f %s/hour\n",
+				absFloat(changePerHour), cfg.MetricName)
 		}
 	}
 
@@ -199,8 +199,8 @@ func TrendAnalysis(rows []ResultRow, cfg *Config) string {
 		}
 	}
 	if consecutiveDiscarded >= cfg.Params.PlateauThreshold {
-		sb.WriteString(fmt.Sprintf("⚠ PLATEAU: %d consecutive iterations discarded. Strategy change recommended.\n",
-			consecutiveDiscarded))
+		fmt.Fprintf(&sb, "⚠ PLATEAU: %d consecutive iterations discarded. Strategy change recommended.\n",
+			consecutiveDiscarded)
 	}
 
 	// Best improvements: top 3 kept iterations by delta.
@@ -218,10 +218,10 @@ func TrendAnalysis(rows []ResultRow, cfg *Config) string {
 		if len(keptRows) < limit {
 			limit = len(keptRows)
 		}
-		for i := 0; i < limit; i++ {
+		for i := range limit {
 			r := keptRows[i]
-			sb.WriteString(fmt.Sprintf("  #%d: %s (delta=%.6f) — %s\n",
-				r.Iteration, fmtMetric(r.MetricValue), r.DeltaFromBest, r.Hypothesis))
+			fmt.Fprintf(&sb, "  #%d: %s (delta=%.6f) — %s\n",
+				r.Iteration, fmtMetric(r.MetricValue), r.DeltaFromBest, r.Hypothesis)
 		}
 	}
 
@@ -251,37 +251,37 @@ func fmtMetric(v float64) string {
 // Summary returns a human-readable summary of the experiment progress.
 func Summary(workdir string, cfg *Config) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== Autoresearch: %s ===\n", cfg.MetricName))
-	sb.WriteString(fmt.Sprintf("Direction: %s\n", cfg.MetricDirection))
-	sb.WriteString(fmt.Sprintf("Target files: %s\n", strings.Join(cfg.TargetFiles, ", ")))
-	sb.WriteString(fmt.Sprintf("Time budget: %ds/experiment\n", cfg.TimeBudgetSec))
-	sb.WriteString(fmt.Sprintf("Branch: autoresearch/%s\n", cfg.BranchTag))
-	sb.WriteString(fmt.Sprintf("Total iterations: %d\n", cfg.TotalIterations))
+	fmt.Fprintf(&sb, "=== Autoresearch: %s ===\n", cfg.MetricName)
+	fmt.Fprintf(&sb, "Direction: %s\n", cfg.MetricDirection)
+	fmt.Fprintf(&sb, "Target files: %s\n", strings.Join(cfg.TargetFiles, ", "))
+	fmt.Fprintf(&sb, "Time budget: %ds/experiment\n", cfg.TimeBudgetSec)
+	fmt.Fprintf(&sb, "Branch: autoresearch/%s\n", cfg.BranchTag)
+	fmt.Fprintf(&sb, "Total iterations: %d\n", cfg.TotalIterations)
 
 	if cfg.TotalIterations > 0 {
 		successRate := float64(cfg.KeptIterations) / float64(cfg.TotalIterations) * 100
-		sb.WriteString(fmt.Sprintf("Kept: %d, Discarded: %d (%.1f%% success rate)\n",
-			cfg.KeptIterations, cfg.TotalIterations-cfg.KeptIterations, successRate))
+		fmt.Fprintf(&sb, "Kept: %d, Discarded: %d (%.1f%% success rate)\n",
+			cfg.KeptIterations, cfg.TotalIterations-cfg.KeptIterations, successRate)
 	} else {
-		sb.WriteString(fmt.Sprintf("Kept: %d, Discarded: %d\n", cfg.KeptIterations, cfg.TotalIterations-cfg.KeptIterations))
+		fmt.Fprintf(&sb, "Kept: %d, Discarded: %d\n", cfg.KeptIterations, cfg.TotalIterations-cfg.KeptIterations)
 	}
 
 	if cfg.BaselineMetric != nil {
-		sb.WriteString(fmt.Sprintf("Baseline %s: %.6f\n", cfg.MetricName, *cfg.BaselineMetric))
+		fmt.Fprintf(&sb, "Baseline %s: %.6f\n", cfg.MetricName, *cfg.BaselineMetric)
 	}
 	if cfg.BestMetric != nil {
-		sb.WriteString(fmt.Sprintf("Best %s: %.6f", cfg.MetricName, *cfg.BestMetric))
+		fmt.Fprintf(&sb, "Best %s: %.6f", cfg.MetricName, *cfg.BestMetric)
 		if cfg.BaselineMetric != nil && *cfg.BaselineMetric != 0 {
 			improvement := (*cfg.BaselineMetric - *cfg.BestMetric) / *cfg.BaselineMetric * 100
 			if cfg.MetricDirection == "maximize" {
 				improvement = (*cfg.BestMetric - *cfg.BaselineMetric) / *cfg.BaselineMetric * 100
 			}
-			sb.WriteString(fmt.Sprintf(" (%.2f%% improvement)", improvement))
+			fmt.Fprintf(&sb, " (%.2f%% improvement)", improvement)
 		}
 		sb.WriteString("\n")
 	}
 	if cfg.ConsecutiveFailures > 0 {
-		sb.WriteString(fmt.Sprintf("Consecutive failures: %d\n", cfg.ConsecutiveFailures))
+		fmt.Fprintf(&sb, "Consecutive failures: %d\n", cfg.ConsecutiveFailures)
 	}
 
 	// Append trend analysis if results data exists.
@@ -304,8 +304,8 @@ func SaveExperimentOutput(workdir string, iteration int, stdout, stderr string) 
 	path := filepath.Join(dir, fmt.Sprintf("%04d.log", iteration))
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== ITERATION %d ===\n", iteration))
-	sb.WriteString(fmt.Sprintf("Timestamp: %s\n\n", time.Now().UTC().Format(time.RFC3339)))
+	fmt.Fprintf(&sb, "=== ITERATION %d ===\n", iteration)
+	fmt.Fprintf(&sb, "Timestamp: %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	if stdout != "" {
 		sb.WriteString("=== STDOUT ===\n")
 		sb.WriteString(stdout)
@@ -321,7 +321,7 @@ func SaveExperimentOutput(workdir string, iteration int, stdout, stderr string) 
 		}
 	}
 
-	return os.WriteFile(path, []byte(sb.String()), 0o644)
+	return os.WriteFile(path, []byte(sb.String()), 0o644) //nolint:gosec // G306 — world-readable is intentional
 }
 
 // --- Run archival and comparison ---
@@ -445,12 +445,12 @@ func CompareRuns(workdir, runA, runB string) (string, error) {
 
 	var sb strings.Builder
 	sb.WriteString("=== Run Comparison ===\n\n")
-	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "", "Run A", "Run B"))
+	fmt.Fprintf(&sb, "%-20s | %-25s | %-25s\n", "", "Run A", "Run B")
 	sb.WriteString(strings.Repeat("-", 73) + "\n")
-	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Metric", cfgA.MetricName, cfgB.MetricName))
-	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Direction", cfgA.MetricDirection, cfgB.MetricDirection))
-	sb.WriteString(fmt.Sprintf("%-20s | %-25d | %-25d\n", "Iterations", cfgA.TotalIterations, cfgB.TotalIterations))
-	sb.WriteString(fmt.Sprintf("%-20s | %-25d | %-25d\n", "Kept", cfgA.KeptIterations, cfgB.KeptIterations))
+	fmt.Fprintf(&sb, "%-20s | %-25s | %-25s\n", "Metric", cfgA.MetricName, cfgB.MetricName)
+	fmt.Fprintf(&sb, "%-20s | %-25s | %-25s\n", "Direction", cfgA.MetricDirection, cfgB.MetricDirection)
+	fmt.Fprintf(&sb, "%-20s | %-25d | %-25d\n", "Iterations", cfgA.TotalIterations, cfgB.TotalIterations)
+	fmt.Fprintf(&sb, "%-20s | %-25d | %-25d\n", "Kept", cfgA.KeptIterations, cfgB.KeptIterations)
 
 	fmtMetricPtr := func(p *float64) string {
 		if p == nil {
@@ -459,16 +459,16 @@ func CompareRuns(workdir, runA, runB string) (string, error) {
 		return fmt.Sprintf("%.6f", *p)
 	}
 
-	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Baseline", fmtMetricPtr(cfgA.BaselineMetric), fmtMetricPtr(cfgB.BaselineMetric)))
-	sb.WriteString(fmt.Sprintf("%-20s | %-25s | %-25s\n", "Best", fmtMetricPtr(cfgA.BestMetric), fmtMetricPtr(cfgB.BestMetric)))
+	fmt.Fprintf(&sb, "%-20s | %-25s | %-25s\n", "Baseline", fmtMetricPtr(cfgA.BaselineMetric), fmtMetricPtr(cfgB.BaselineMetric))
+	fmt.Fprintf(&sb, "%-20s | %-25s | %-25s\n", "Best", fmtMetricPtr(cfgA.BestMetric), fmtMetricPtr(cfgB.BestMetric))
 
 	if cfgA.TotalIterations > 0 {
-		sb.WriteString(fmt.Sprintf("%-20s | %-25.1f | ", "Success Rate %", float64(cfgA.KeptIterations)/float64(cfgA.TotalIterations)*100))
+		fmt.Fprintf(&sb, "%-20s | %-25.1f | ", "Success Rate %", float64(cfgA.KeptIterations)/float64(cfgA.TotalIterations)*100)
 	} else {
-		sb.WriteString(fmt.Sprintf("%-20s | %-25s | ", "Success Rate %", "N/A"))
+		fmt.Fprintf(&sb, "%-20s | %-25s | ", "Success Rate %", "N/A")
 	}
 	if cfgB.TotalIterations > 0 {
-		sb.WriteString(fmt.Sprintf("%-25.1f\n", float64(cfgB.KeptIterations)/float64(cfgB.TotalIterations)*100))
+		fmt.Fprintf(&sb, "%-25.1f\n", float64(cfgB.KeptIterations)/float64(cfgB.TotalIterations)*100)
 	} else {
 		sb.WriteString("N/A\n")
 	}

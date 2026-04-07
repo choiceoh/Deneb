@@ -127,7 +127,7 @@ func InlineKeyboard(rows [][]ReplyButton) [][]map[string]string {
 // session key. Returns empty strings if the format is invalid.
 func ParseCallbackData(data string) (action, sessionKey string) {
 	idx := -1
-	for i := 0; i < len(data); i++ {
+	for i := range len(data) {
 		if data[i] == ':' {
 			idx = i
 			break

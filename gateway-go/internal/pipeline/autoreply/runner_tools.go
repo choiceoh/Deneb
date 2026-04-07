@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
-func (r *DefaultAgentRunner) executeTool(ctx context.Context, call ToolCall, cfg AgentTurnConfig) (string, bool, error) {
+func (r *DefaultAgentRunner) executeTool(ctx context.Context, call ToolCall, cfg AgentTurnConfig) (result string, isErr bool, err error) {
 	if r.tools == nil {
 		return "", true, fmt.Errorf("no tool executor configured")
 	}
@@ -20,11 +20,9 @@ func (r *DefaultAgentRunner) executeTool(ctx context.Context, call ToolCall, cfg
 		return "Tool execution requires elevated permissions. Use /elevated on to enable.", true, nil
 	}
 
-	// Check approval requirement.
-	if cfg.ExecAsk == ExecAskAlways && (call.Name == "bash" || call.Name == "execute") {
-		// In approval mode, we'd normally pause and wait for user approval.
-		// For now, auto-approve in the Go gateway (matches DGX Spark single-user model).
-	}
+	// Approval requirement: in approval mode, we'd normally pause and wait for
+	// user approval. For now, auto-approve in the Go gateway (matches DGX
+	// Spark single-user model), so no action is needed here.
 
 	return r.tools.Execute(ctx, call)
 }

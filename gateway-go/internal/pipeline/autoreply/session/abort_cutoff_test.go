@@ -10,9 +10,9 @@ func TestShouldSkipMessageByAbortCutoff(t *testing.T) {
 	tests := []struct {
 		name      string
 		cutoffSid string
-		cutoffTs  *int64
+		cutoffTS  *int64
 		msgSid    string
-		msgTs     *int64
+		msgTS     *int64
 		wantSkip  bool
 	}{
 		{"both empty", "", nil, "", nil, false},
@@ -29,7 +29,7 @@ func TestShouldSkipMessageByAbortCutoff(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ShouldSkipMessageByAbortCutoff(tt.cutoffSid, tt.cutoffTs, tt.msgSid, tt.msgTs)
+			got := ShouldSkipMessageByAbortCutoff(tt.cutoffSid, tt.cutoffTS, tt.msgSid, tt.msgTS)
 			if got != tt.wantSkip {
 				t.Errorf("got %v, want %v", got, tt.wantSkip)
 			}

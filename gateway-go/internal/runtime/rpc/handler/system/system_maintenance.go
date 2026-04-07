@@ -217,7 +217,7 @@ func updateResult(opts updateResultOpts) *protocol.ResponseFrame {
 			"durationMs": durationMs,
 		}
 		data, _ := json.Marshal(sentinelPayload)
-		_ = os.WriteFile(sentinelPath, data, 0644)
+		_ = os.WriteFile(sentinelPath, data, 0o644) //nolint:gosec // G306 — world-readable is intentional
 		sentinel = map[string]any{
 			"path":    sentinelPath,
 			"payload": sentinelPayload,
@@ -247,7 +247,7 @@ func updateResult(opts updateResultOpts) *protocol.ResponseFrame {
 	return resp
 }
 
-func runStep(ctx context.Context, dir, name string, cmdName string, args ...string) updateStep {
+func runStep(ctx context.Context, dir, name, cmdName string, args ...string) updateStep {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, cmdName, args...)
 	cmd.Dir = dir
@@ -269,7 +269,7 @@ func runStep(ctx context.Context, dir, name string, cmdName string, args ...stri
 }
 
 func runGitRev(dir string) string {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "HEAD")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {

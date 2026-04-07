@@ -118,7 +118,7 @@ func extractBinaryAndSubcommand(cmd string) (binary, subcommand string) {
 // hasFileRedirection detects output redirection to files.
 // Returns false for safe redirections like >/dev/null or 2>&1.
 func hasFileRedirection(cmd string) bool {
-	for i := 0; i < len(cmd); i++ {
+	for i := range len(cmd) {
 		if cmd[i] != '>' {
 			continue
 		}
@@ -128,7 +128,7 @@ func hasFileRedirection(cmd string) bool {
 		}
 		// Look at what follows >.
 		rest := cmd[i+1:]
-		if len(rest) > 0 && rest[0] == '>' {
+		if rest != "" && rest[0] == '>' {
 			rest = rest[1:] // >> append
 		}
 		rest = strings.TrimLeft(rest, " \t")
@@ -151,7 +151,12 @@ func splitCommandChain(cmd string) []string {
 	inSingle := false
 	inDouble := false
 
-	for i := 0; i < len(cmd); i++ {
+	skip := false
+	for i := range len(cmd) {
+		if skip {
+			skip = false
+			continue
+		}
 		ch := cmd[i]
 
 		// Track quoting to avoid splitting inside strings.
@@ -179,13 +184,13 @@ func splitCommandChain(cmd string) []string {
 		if ch == '&' && i+1 < len(cmd) && cmd[i+1] == '&' {
 			segments = append(segments, current.String())
 			current.Reset()
-			i++ // skip second &
+			skip = true // skip second &
 			continue
 		}
 		if ch == '|' && i+1 < len(cmd) && cmd[i+1] == '|' {
 			segments = append(segments, current.String())
 			current.Reset()
-			i++ // skip second |
+			skip = true // skip second |
 			continue
 		}
 

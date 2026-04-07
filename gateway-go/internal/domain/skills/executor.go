@@ -44,8 +44,10 @@ func ExecuteLocalSkill(entry SkillEntry, args string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
-	cmdArgs := append(le.Args, strings.Fields(args)...)
-	cmd := exec.CommandContext(ctx, le.Command, cmdArgs...)
+	cmdArgs := make([]string, 0, len(le.Args)+len(strings.Fields(args)))
+	cmdArgs = append(cmdArgs, le.Args...)
+	cmdArgs = append(cmdArgs, strings.Fields(args)...)
+	cmd := exec.CommandContext(ctx, le.Command, cmdArgs...) //nolint:gosec // G204 — command comes from trusted skill definitions
 	cmd.Dir = entry.Skill.Dir
 
 	var stdout, stderr bytes.Buffer

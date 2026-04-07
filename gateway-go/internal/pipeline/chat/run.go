@@ -360,7 +360,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	var contReason string
 	var contMessage string
-	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() {
+	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() { //nolint:gocritic // ifElseChain — conditions are not comparable values
 		contReason = chatResult.ContSignal.Reason()
 		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
 			"이전 실행의 컨텍스트:\n" +

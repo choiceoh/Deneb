@@ -61,7 +61,7 @@ type DirectiveQueueChanges struct {
 
 // HandleDirectives processes all inline directives in a message body.
 // This is the main orchestrator matching directive-handling.impl.ts.
-func HandleDirectives(body string, session *types.SessionState, opts DirectiveHandlingOptions) DirectiveHandlingResult {
+func HandleDirectives(body string, sess *types.SessionState, opts DirectiveHandlingOptions) DirectiveHandlingResult {
 	result := DirectiveHandlingResult{}
 
 	// 1. Parse inline directives.
@@ -145,7 +145,7 @@ func HandleDirectives(body string, session *types.SessionState, opts DirectiveHa
 
 	// Status directive (handled as immediate reply).
 	if directives.HasStatusDirective && opts.StatusHandler != nil {
-		statusReply := opts.StatusHandler(session)
+		statusReply := opts.StatusHandler(sess)
 		if statusReply != "" {
 			result.ImmediateReply = &types.ReplyPayload{Text: statusReply}
 		}
@@ -222,24 +222,24 @@ type ResolvedLevels struct {
 	ElevatedLevel  types.ElevatedLevel
 }
 
-func ResolveCurrentDirectiveLevels(session *types.SessionState, defaults ResolvedLevels) ResolvedLevels {
+func ResolveCurrentDirectiveLevels(sess *types.SessionState, defaults ResolvedLevels) ResolvedLevels {
 	result := defaults
 
-	if session == nil {
+	if sess == nil {
 		return result
 	}
-	if session.ThinkLevel != "" {
-		result.ThinkLevel = session.ThinkLevel
+	if sess.ThinkLevel != "" {
+		result.ThinkLevel = sess.ThinkLevel
 	}
-	if session.VerboseLevel != "" {
-		result.VerboseLevel = session.VerboseLevel
+	if sess.VerboseLevel != "" {
+		result.VerboseLevel = sess.VerboseLevel
 	}
-	result.FastMode = session.FastMode
-	if session.ReasoningLevel != "" {
-		result.ReasoningLevel = session.ReasoningLevel
+	result.FastMode = sess.FastMode
+	if sess.ReasoningLevel != "" {
+		result.ReasoningLevel = sess.ReasoningLevel
 	}
-	if session.ElevatedLevel != "" {
-		result.ElevatedLevel = session.ElevatedLevel
+	if sess.ElevatedLevel != "" {
+		result.ElevatedLevel = sess.ElevatedLevel
 	}
 	return result
 }

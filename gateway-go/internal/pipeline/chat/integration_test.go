@@ -100,15 +100,15 @@ func waitForSessionStatus(sm *session.Manager, key string, want session.RunStatu
 // waitForGoroutineCountAtMost polls runtime.NumGoroutine until the count is at
 // most max, or times out. It allows short-lived goroutines spawned by net/http
 // and test helpers to settle before asserting leak-free shutdown paths.
-func waitForGoroutineCountAtMost(max int, timeout time.Duration) bool {
+func waitForGoroutineCountAtMost(maxCount int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if runtime.NumGoroutine() <= max {
+		if runtime.NumGoroutine() <= maxCount {
 			return true
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return runtime.NumGoroutine() <= max
+	return runtime.NumGoroutine() <= maxCount
 }
 
 // newIntegrationHandler creates a Handler wired with an httptest LLM server,

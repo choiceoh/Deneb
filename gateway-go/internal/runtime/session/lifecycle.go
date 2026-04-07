@@ -12,7 +12,7 @@ const (
 // LifecycleEvent represents a session lifecycle state transition event.
 type LifecycleEvent struct {
 	Phase         LifecyclePhase `json:"phase"`
-	Ts            int64          `json:"ts"`
+	Ts            int64          `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 	StopReason    string         `json:"stopReason,omitempty"`
 	Aborted       bool           `json:"aborted,omitempty"`
 	StartedAt     *int64         `json:"startedAt,omitempty"`

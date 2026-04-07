@@ -15,18 +15,18 @@ func WrapSkillInvocation(skillName, skillType, args, contents string) string {
 	b.WriteString("<skill-invocation>\n")
 
 	b.WriteString("  <command-name>")
-	b.WriteString(escapeXmlTag(skillName))
+	b.WriteString(escapeXMLTag(skillName))
 	b.WriteString("</command-name>\n")
 
 	if skillType != "" {
 		b.WriteString("  <command-type>")
-		b.WriteString(escapeXmlTag(skillType))
+		b.WriteString(escapeXMLTag(skillType))
 		b.WriteString("</command-type>\n")
 	}
 
 	if args != "" {
 		b.WriteString("  <command-args>")
-		b.WriteString(escapeXmlTag(args))
+		b.WriteString(escapeXMLTag(args))
 		b.WriteString("</command-args>\n")
 	}
 
@@ -49,30 +49,30 @@ func WrapSkillError(skillName, skillType, args, errMsg string) string {
 	b.WriteString("<skill-invocation>\n")
 
 	b.WriteString("  <command-name>")
-	b.WriteString(escapeXmlTag(skillName))
+	b.WriteString(escapeXMLTag(skillName))
 	b.WriteString("</command-name>\n")
 
 	if skillType != "" {
 		b.WriteString("  <command-type>")
-		b.WriteString(escapeXmlTag(skillType))
+		b.WriteString(escapeXMLTag(skillType))
 		b.WriteString("</command-type>\n")
 	}
 
 	if args != "" {
 		b.WriteString("  <command-args>")
-		b.WriteString(escapeXmlTag(args))
+		b.WriteString(escapeXMLTag(args))
 		b.WriteString("</command-args>\n")
 	}
 
 	b.WriteString("  <command-error>")
-	b.WriteString(escapeXmlTag(errMsg))
+	b.WriteString(escapeXMLTag(errMsg))
 	b.WriteString("</command-error>\n")
 
 	b.WriteString("</skill-invocation>")
 	return b.String()
 }
 
-func escapeXmlTag(s string) string {
+func escapeXMLTag(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")

@@ -15,7 +15,7 @@
 //
 // Parsing:
 //   - ExtractLinks: URL extraction with SSRF checks
-//   - HtmlToMarkdown: HTML to Markdown conversion
+//   - HTMLToMarkdown: HTML to Markdown conversion
 //   - Base64Estimate / Base64Canonicalize: Base64 utilities
 //   - ParseMediaTokens: MEDIA: token extraction
 //

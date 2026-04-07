@@ -75,7 +75,7 @@ func (r *ThinkingRuntime) IsBinaryThinkingProvider(provider, model string) bool 
 		return false
 	}
 
-	normalizedProvider := types.NormalizeProviderId(provider)
+	normalizedProvider := types.NormalizeProviderID(provider)
 	if normalizedProvider == "" {
 		return false
 	}
@@ -108,7 +108,7 @@ func (r *ThinkingRuntime) SupportsXHighThinking(provider, model string) bool {
 		return false
 	}
 
-	providerKey := types.NormalizeProviderId(provider)
+	providerKey := types.NormalizeProviderID(provider)
 	if providerKey == "" {
 		return false
 	}
@@ -163,7 +163,7 @@ func (r *ThinkingRuntime) FormatThinkingLevels(provider, model, separator string
 func (r *ThinkingRuntime) ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCatalogEntry) types.ThinkLevel {
 	resolver := r.getResolver()
 	if resolver != nil {
-		normalizedProvider := types.NormalizeProviderId(provider)
+		normalizedProvider := types.NormalizeProviderID(provider)
 		var reasoning bool
 		for _, entry := range catalog {
 			if entry.Provider == provider && entry.ID == model {

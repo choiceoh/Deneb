@@ -13,7 +13,7 @@ import (
 
 // --- References ---
 
-func analyzeReferences(ctx context.Context, p analyzeParams, defaultDir string) (string, error) {
+func analyzeReferences(_ context.Context, p analyzeParams, defaultDir string) (string, error) {
 	symbol := p.Symbol
 	if symbol == "" {
 		symbol = p.Query
@@ -48,9 +48,9 @@ func analyzeReferences(ctx context.Context, p analyzeParams, defaultDir string) 
 			return nil
 		}
 
-		data, readErr := os.ReadFile(path)
+		data, readErr := os.ReadFile(path) //nolint:gosec // G122 — path comes from WalkDir, safe in this context
 		if readErr != nil {
-			return nil
+			return nil //nolint:nilerr // skip unreadable files in walk
 		}
 		content := string(data)
 		lines := strings.Split(content, "\n")
@@ -75,7 +75,7 @@ func analyzeReferences(ctx context.Context, p analyzeParams, defaultDir string) 
 		return fmt.Sprintf("No references found for %q", symbol), nil
 	}
 	if found >= maxResults {
-		sb.WriteString(fmt.Sprintf("\n[... capped at %d results]", maxResults))
+		fmt.Fprintf(&sb, "\n[... capped at %d results]", maxResults)
 	}
 	return sb.String(), nil
 }
@@ -151,7 +151,7 @@ func importsRustFile(path, displayPath string) (string, error) {
 	found := 0
 	for _, loc := range rustUsePattern.FindAllStringIndex(string(data), -1) {
 		match := rustUsePattern.FindStringSubmatch(string(data)[loc[0]:loc[1]])
-		if match != nil && len(match) > 3 {
+		if len(match) > 3 {
 			fmt.Fprintf(&sb, "  use %s\n", match[3])
 			found++
 		}
@@ -175,7 +175,7 @@ func reverseImports(query, searchPath, defaultDir string) (string, error) {
 	const maxResults = 50
 	found := 0
 
-	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error { //nolint:errcheck // best-effort
 		if err != nil || d.IsDir() {
 			if d != nil && d.IsDir() && shouldSkipDir(d.Name()) {
 				return filepath.SkipDir
@@ -192,7 +192,7 @@ func reverseImports(query, searchPath, defaultDir string) (string, error) {
 			fset := token.NewFileSet()
 			node, parseErr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 			if parseErr != nil {
-				return nil
+				return nil //nolint:nilerr // skip unparseable files in walk
 			}
 			for _, imp := range node.Imports {
 				importPath := strings.Trim(imp.Path.Value, "\"")
@@ -203,14 +203,14 @@ func reverseImports(query, searchPath, defaultDir string) (string, error) {
 				}
 			}
 		} else if isRustFile(path) {
-			data, readErr := os.ReadFile(path)
+			data, readErr := os.ReadFile(path) //nolint:gosec // G122 — path comes from WalkDir, safe in this context
 			if readErr != nil {
-				return nil
+				return nil //nolint:nilerr // skip unreadable files in walk
 			}
 			content := string(data)
 			for _, loc := range rustUsePattern.FindAllStringIndex(content, -1) {
 				match := rustUsePattern.FindStringSubmatch(content[loc[0]:loc[1]])
-				if match != nil && len(match) > 3 && strings.Contains(match[3], query) {
+				if len(match) > 3 && strings.Contains(match[3], query) {
 					fmt.Fprintf(&sb, "%s  uses %s\n", rel, match[3])
 					found++
 					break

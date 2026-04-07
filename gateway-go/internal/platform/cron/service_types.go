@@ -11,7 +11,7 @@ type CronEvent struct {
 	JobID  string `json:"jobId,omitempty"`
 	Status string `json:"status,omitempty"`
 	Error  string `json:"error,omitempty"`
-	Ts     int64  `json:"ts"`
+	Ts     int64  `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 }
 
 // CronEventListener receives cron events.

@@ -168,14 +168,14 @@ func (r *CommandRegistry) rebuild() {
 	if len(patterns) > 0 {
 		re = regexp.MustCompile(`(?i)^(?:` + strings.Join(patterns, "|") + `)$`)
 	} else {
-		re = regexp.MustCompile(`$^`) // never matches
+		re = regexp.MustCompile(`\A\z`) // never matches
 	}
 	r.detection = &CommandDetection{Exact: exact, Regex: re}
 }
 
 // NormalizeCommandBody normalizes a command string: strips bot mentions,
 // handles colon syntax, and resolves text aliases.
-func (r *CommandRegistry) NormalizeCommandBody(raw string, botUsername string) string {
+func (r *CommandRegistry) NormalizeCommandBody(raw, botUsername string) string {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "/") {
 		return trimmed
@@ -428,8 +428,8 @@ func resolveNativeName(cmd ChatCommandDefinition) string {
 // Precompiled regexes for command normalization.
 var (
 	colonCmdRe     = regexp.MustCompile(`^/([^\s:]+)\s*:(.*)$`)
-	mentionCmdRe   = regexp.MustCompile(`^/([^\s@]+)@([^\s]+)(.*)$`)
-	tokenCmdRe     = regexp.MustCompile(`^/([^\s]+)(?:\s+([\s\S]+))?$`)
+	mentionCmdRe   = regexp.MustCompile(`^/([^\s@]+)@(\S+)(.*)$`)
+	tokenCmdRe     = regexp.MustCompile(`^/(\S+)(?:\s+([\s\S]+))?$`)
 	tokenResolveRe = regexp.MustCompile(`^/([^\s:]+)(?:\s|$)`)
 	inlineCmdRe    = regexp.MustCompile(`(?:^|\s)[/!][a-zA-Z]`)
 )

@@ -43,7 +43,7 @@ type LinkContent struct {
 
 // defaultLinkFetcher wraps media.Fetch for production use. Uses the shared
 // pooled HTTP client from the web package for connection reuse.
-func defaultLinkFetcher(ctx context.Context, url string) ([]byte, string, error) {
+func defaultLinkFetcher(ctx context.Context, url string) (body []byte, contentType string, err error) {
 	result, err := media.Fetch(ctx, media.FetchOptions{
 		URL:      url,
 		MaxBytes: linkFetchMaxBytes,
@@ -129,7 +129,7 @@ func fetchAndConvert(ctx context.Context, url string, fetchFn FetchFunc, logger 
 		// Strip noise: Go handles class/ID patterns (ads, cookie banners),
 		// Rust handles tag-level noise (nav, aside, svg, iframe, form).
 		cleaned := web.StripNoiseElements(string(data))
-		text, t, err := ffi.HtmlToMarkdownStripNoise(cleaned)
+		text, t, err := ffi.HTMLToMarkdownStripNoise(cleaned)
 		if err != nil {
 			logger.Debug("html-to-markdown failed", "url", url, "error", err)
 			// Fall back to raw text with basic tag stripping.

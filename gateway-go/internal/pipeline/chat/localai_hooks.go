@@ -86,7 +86,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 		return output
 	}
 
-	if len(compressed) == 0 || len(compressed) >= len(output) {
+	if compressed == "" || len(compressed) >= len(output) {
 		return output
 	}
 

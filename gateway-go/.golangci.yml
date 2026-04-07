@@ -59,7 +59,6 @@ linters:
     staticcheck:
       checks:
         - all
-        - "-SA1019"
     gosec:
       excludes:
         - G104  # Handled via errcheck linter instead.

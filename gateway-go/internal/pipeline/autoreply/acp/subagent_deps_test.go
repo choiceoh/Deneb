@@ -138,7 +138,7 @@ func TestSubagentCommandDeps_SpawnSubagent_MaxBreadth(t *testing.T) {
 	acpRegistry.Register(ACPAgent{ID: "parent", Depth: 0})
 
 	// Spawn 10 children (max allowed).
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
 			ParentSessionKey: "session",
 			ParentAgentID:    "parent",

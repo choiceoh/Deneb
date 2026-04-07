@@ -20,7 +20,7 @@ const DefaultDebounceInterval = 2 * time.Second
 
 // ReloadCallback is called when a config change is detected.
 // Receives the old and new snapshots. Return an error to log a warning.
-type ReloadCallback func(old, new *ConfigSnapshot) error
+type ReloadCallback func(old, updated *ConfigSnapshot) error
 
 // Watcher monitors a config file for changes and triggers reload callbacks.
 type Watcher struct {

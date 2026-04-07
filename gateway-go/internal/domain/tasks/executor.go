@@ -142,7 +142,7 @@ func StartTaskByRunID(reg *Registry, runID string) error {
 }
 
 // RecordProgress updates the progress summary of a running task.
-func RecordProgress(reg *Registry, taskID string, summary string) error {
+func RecordProgress(reg *Registry, taskID, summary string) error {
 	t := reg.Get(taskID)
 	if t == nil {
 		return fmt.Errorf("task not found: %s", taskID)
@@ -155,12 +155,12 @@ func RecordProgress(reg *Registry, taskID string, summary string) error {
 }
 
 // CompleteTask marks a task as succeeded.
-func CompleteTask(reg *Registry, taskID string, summary string) error {
+func CompleteTask(reg *Registry, taskID, summary string) error {
 	return terminateTask(reg, taskID, StatusSucceeded, summary, "", OutcomeSucceeded)
 }
 
 // FailTask marks a task as failed.
-func FailTask(reg *Registry, taskID string, errMsg string, summary string) error {
+func FailTask(reg *Registry, taskID, errMsg, summary string) error {
 	return terminateTask(reg, taskID, StatusFailed, summary, errMsg, "")
 }
 
@@ -194,7 +194,7 @@ func MarkLost(reg *Registry, taskID string) error {
 }
 
 // BlockTask transitions a task to blocked status for later retry.
-func BlockTask(reg *Registry, taskID string, reason string) error {
+func BlockTask(reg *Registry, taskID, reason string) error {
 	t := reg.Get(taskID)
 	if t == nil {
 		return fmt.Errorf("task not found: %s", taskID)
@@ -254,7 +254,7 @@ func DetachToParent(reg *Registry, taskID string) error {
 
 // --- Helpers ---
 
-func terminateTask(reg *Registry, taskID string, status TaskStatus, summary string, errMsg string, outcome TerminalOutcome) error {
+func terminateTask(reg *Registry, taskID string, status TaskStatus, summary, errMsg string, outcome TerminalOutcome) error {
 	t := reg.Get(taskID)
 	if t == nil {
 		return fmt.Errorf("task not found: %s", taskID)

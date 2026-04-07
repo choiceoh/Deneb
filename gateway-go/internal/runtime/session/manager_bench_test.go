@@ -9,7 +9,7 @@ import (
 func BenchmarkManagerCreate(b *testing.B) {
 	m := NewManager()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		m.Create(fmt.Sprintf("sess-%d", i), KindDirect)
 	}
 }
@@ -17,11 +17,11 @@ func BenchmarkManagerCreate(b *testing.B) {
 // BenchmarkManagerGet measures single session lookup (hot path for RPC dispatch).
 func BenchmarkManagerGet(b *testing.B) {
 	m := NewManager()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		m.Create(fmt.Sprintf("sess-%d", i), KindDirect)
 	}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		m.Get(fmt.Sprintf("sess-%d", i%100))
 	}
 }
@@ -29,11 +29,11 @@ func BenchmarkManagerGet(b *testing.B) {
 // BenchmarkManagerGetMiss measures lookup miss (negative path).
 func BenchmarkManagerGetMiss(b *testing.B) {
 	m := NewManager()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		m.Create(fmt.Sprintf("sess-%d", i), KindDirect)
 	}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		m.Get("nonexistent-key")
 	}
 }
@@ -43,11 +43,11 @@ func BenchmarkManagerList(b *testing.B) {
 	for _, n := range []int{10, 100, 500} {
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
 			m := NewManager()
-			for i := 0; i < n; i++ {
+			for i := range n {
 				m.Create(fmt.Sprintf("sess-%d", i), KindDirect)
 			}
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				m.List()
 			}
 		})
@@ -60,7 +60,7 @@ func BenchmarkManagerSet(b *testing.B) {
 	m.Create("sess-0", KindDirect)
 	s := &Session{Key: "sess-0", Kind: KindDirect, Status: StatusRunning}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = m.Set(s)
 	}
 }
@@ -69,7 +69,7 @@ func BenchmarkManagerSet(b *testing.B) {
 // (typical pattern: multiple RPC handlers reading while chat pipeline writes).
 func BenchmarkManagerConcurrentGetSet(b *testing.B) {
 	m := NewManager()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		m.Create(fmt.Sprintf("sess-%d", i), KindDirect)
 	}
 	b.ResetTimer()
@@ -90,11 +90,11 @@ func BenchmarkManagerConcurrentGetSet(b *testing.B) {
 // BenchmarkKeyCacheGet measures LRU cache hit performance (run ID → session key).
 func BenchmarkKeyCacheGet(b *testing.B) {
 	c := NewKeyCache()
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("sess-%d", i))
 	}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		c.Get(fmt.Sprintf("run-%d", i%200))
 	}
 }
@@ -103,7 +103,7 @@ func BenchmarkKeyCacheGet(b *testing.B) {
 func BenchmarkKeyCachePut(b *testing.B) {
 	c := NewKeyCache()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("sess-%d", i))
 	}
 }
@@ -111,7 +111,7 @@ func BenchmarkKeyCachePut(b *testing.B) {
 // BenchmarkKeyCacheConcurrent measures contended cache access.
 func BenchmarkKeyCacheConcurrent(b *testing.B) {
 	c := NewKeyCache()
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("sess-%d", i))
 	}
 	b.ResetTimer()
@@ -137,7 +137,7 @@ func BenchmarkApplyLifecycleEvent(b *testing.B) {
 	m.EventBusRef().Subscribe(func(Event) {})
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		key := fmt.Sprintf("sess-%d", i)
 		m.ApplyLifecycleEvent(key, LifecycleEvent{Phase: PhaseStart, Ts: int64(i * 1000)})
 		m.ApplyLifecycleEvent(key, LifecycleEvent{Phase: PhaseEnd, Ts: int64(i*1000 + 500)})
@@ -147,12 +147,12 @@ func BenchmarkApplyLifecycleEvent(b *testing.B) {
 // BenchmarkEventBusEmit measures event emission overhead with multiple subscribers.
 func BenchmarkEventBusEmit(b *testing.B) {
 	bus := NewEventBus()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		bus.Subscribe(func(Event) {})
 	}
 	evt := Event{Kind: EventStatusChanged, Key: "sess-1", OldStatus: StatusRunning, NewStatus: StatusDone}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		bus.Emit(evt)
 	}
 }

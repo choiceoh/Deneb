@@ -102,7 +102,7 @@ func StripTrailingCommas(s string) string {
 	inString := false
 	escaped := false
 
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 
 		if escaped {

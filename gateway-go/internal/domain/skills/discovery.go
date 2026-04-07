@@ -381,7 +381,7 @@ func resolveNestedSkillsRoot(dir string, maxScan int) string {
 }
 
 // resolveContainedPath checks that candidatePath resolves within rootDir (symlink escape prevention).
-func resolveContainedPath(candidatePath, rootDir, rootRealPath string) string {
+func resolveContainedPath(candidatePath, _, rootRealPath string) string {
 	realPath, err := filepath.EvalSymlinks(candidatePath)
 	if err != nil {
 		return ""

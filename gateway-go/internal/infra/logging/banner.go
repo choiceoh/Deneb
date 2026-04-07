@@ -97,8 +97,8 @@ func formatUptime(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm", h, m)
 }
 
-// pick returns a if color is true, b otherwise.
-func pick(color bool, a, b string) string {
+// pick returns a if color is true, empty string otherwise.
+func pick(color bool, a, b string) string { //nolint:unparam // b is always "" but keeps API symmetric
 	if color {
 		return a
 	}

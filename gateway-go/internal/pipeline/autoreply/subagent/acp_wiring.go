@@ -66,7 +66,7 @@ func NewSubagentCommandDepsFromACP(registry *acp.ACPRegistry, cfg ...ACPCommandD
 		deps.Send = &SubagentSendDeps{
 			SendMessage: func(sessionKey, message string) (*SubagentSendResult, error) {
 				if err := config.SessionSendFn(sessionKey, message); err != nil {
-					return &SubagentSendResult{Status: "error", Error: err.Error()}, nil
+					return &SubagentSendResult{Status: "error", Error: err.Error()}, nil //nolint:nilerr // error surfaced in result struct
 				}
 				return &SubagentSendResult{Status: "ok", RunID: shortid.New("send")}, nil
 			},
@@ -77,7 +77,7 @@ func NewSubagentCommandDepsFromACP(registry *acp.ACPRegistry, cfg ...ACPCommandD
 					return &SubagentSteerResult{Status: "error", Error: "agent not found"}, nil
 				}
 				if err := config.SessionSendFn(agent.SessionKey, message); err != nil {
-					return &SubagentSteerResult{Status: "error", Error: err.Error()}, nil
+					return &SubagentSteerResult{Status: "error", Error: err.Error()}, nil //nolint:nilerr // error surfaced in result struct
 				}
 				return &SubagentSteerResult{Status: "accepted", RunID: runID}, nil
 			},
@@ -96,7 +96,7 @@ func NewSubagentCommandDepsFromACP(registry *acp.ACPRegistry, cfg ...ACPCommandD
 					ToolPreset:       params.ToolPreset,
 				})
 				if result.Error != nil {
-					return &SubagentSpawnResult{Status: "error", Error: result.Error.Error()}, nil
+					return &SubagentSpawnResult{Status: "error", Error: result.Error.Error()}, nil //nolint:nilerr // error surfaced in result struct
 				}
 				// Send initial task message to spawned session.
 				if config.SessionSendFn != nil {

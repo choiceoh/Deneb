@@ -152,10 +152,10 @@ func readProcMeminfo() (total, available uint64) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "MemTotal:") {
-			fmt.Sscanf(line, "MemTotal: %d kB", &total)
-			total *= 1024 // Convert to bytes.
+			fmt.Sscanf(line, "MemTotal: %d kB", &total) //nolint:errcheck // partial parse ok
+			total *= 1024                               // Convert to bytes.
 		} else if strings.HasPrefix(line, "MemAvailable:") {
-			fmt.Sscanf(line, "MemAvailable: %d kB", &available)
+			fmt.Sscanf(line, "MemAvailable: %d kB", &available) //nolint:errcheck // partial parse ok
 			available *= 1024
 		}
 		if total > 0 && available > 0 {

@@ -42,7 +42,7 @@ type ChatRequest struct {
 // ResponseFormat controls the output format for OpenAI-compatible endpoints.
 type ResponseFormat struct {
 	Type       string          `json:"type"`                  // "json_object", "json_schema", or "text"
-	JsonSchema json.RawMessage `json:"json_schema,omitempty"` // schema definition when Type="json_schema"
+	JSONSchema json.RawMessage `json:"json_schema,omitempty"` // schema definition when Type="json_schema"
 }
 
 // hexChars is used by appendJSONString to encode control characters as \uXXXX.
@@ -54,7 +54,7 @@ const hexChars = "0123456789abcdef"
 // Valid UTF-8 multi-byte sequences are passed through unchanged (JSON allows UTF-8).
 func appendJSONString(dst []byte, s string) []byte {
 	dst = append(dst, '"')
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		switch {
 		case c == '"':

@@ -38,7 +38,7 @@ func TestFileCache_SetAndGet(t *testing.T) {
 func TestFileCache_LRUEviction(t *testing.T) {
 	fc := NewFileCache(3)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		path := filepath.Join("/tmp", string(rune('a'+i))+".go")
 		fc.Set(path, &FileCacheEntry{Path: path, Content: path})
 	}

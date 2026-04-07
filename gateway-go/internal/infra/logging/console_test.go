@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestConsoleHandler_BasicFormat(t *testing.T) {
 		slog.String("addr", "127.0.0.1:8080"),
 		slog.Int("port", 8080),
 	)
-	if err := h.Handle(nil, r); err != nil {
+	if err := h.Handle(context.TODO(), r); err != nil {
 		t.Fatal(err)
 	}
 
@@ -52,7 +53,7 @@ func TestConsoleHandler_LevelAbbreviations(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 		r := newTestRecord(tt.level, "test")
-		h.Handle(nil, r)
+		h.Handle(context.TODO(), r)
 
 		if !strings.Contains(buf.String(), tt.want) {
 			t.Errorf("level %v: output %q does not contain %q", tt.level, buf.String(), tt.want)
@@ -71,7 +72,7 @@ func TestConsoleHandler_ValueQuoting(t *testing.T) {
 		slog.String("equals", "a=b"),
 		slog.String("quotes", `say "hi"`),
 	)
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, "plain=hello") {
@@ -93,16 +94,16 @@ func TestConsoleHandler_ValueQuoting(t *testing.T) {
 
 func TestConsoleHandler_Enabled(t *testing.T) {
 	h := NewConsoleHandler(nil, &ConsoleOptions{Level: slog.LevelWarn, Color: false})
-	if h.Enabled(nil, slog.LevelDebug) {
+	if h.Enabled(context.TODO(), slog.LevelDebug) {
 		t.Error("debug should not be enabled at warn level")
 	}
-	if h.Enabled(nil, slog.LevelInfo) {
+	if h.Enabled(context.TODO(), slog.LevelInfo) {
 		t.Error("info should not be enabled at warn level")
 	}
-	if !h.Enabled(nil, slog.LevelWarn) {
+	if !h.Enabled(context.TODO(), slog.LevelWarn) {
 		t.Error("warn should be enabled at warn level")
 	}
-	if !h.Enabled(nil, slog.LevelError) {
+	if !h.Enabled(context.TODO(), slog.LevelError) {
 		t.Error("error should be enabled at warn level")
 	}
 }
@@ -113,7 +114,7 @@ func TestConsoleHandler_WithAttrs(t *testing.T) {
 	h2 := h.WithAttrs([]slog.Attr{slog.String("component", "router")})
 
 	r := newTestRecord(slog.LevelInfo, "request", slog.Int("ms", 42))
-	h2.Handle(nil, r)
+	h2.Handle(context.TODO(), r)
 
 	got := buf.String()
 	compIdx := strings.Index(got, "component=router")
@@ -132,7 +133,7 @@ func TestConsoleHandler_WithGroup(t *testing.T) {
 	h2 := h.WithGroup("http")
 
 	r := newTestRecord(slog.LevelInfo, "request", slog.Int("status", 200))
-	h2.Handle(nil, r)
+	h2.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, "http.status=200") {
@@ -145,7 +146,7 @@ func TestConsoleHandler_ColorStyling(t *testing.T) {
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 
 	r := newTestRecord(slog.LevelError, "fail", slog.String("id", "abc"))
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, ansiBoldRed) {
@@ -173,7 +174,7 @@ func TestConsoleHandler_ColorLevelStyles(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 		r := newTestRecord(tt.level, "test")
-		h.Handle(nil, r)
+		h.Handle(context.TODO(), r)
 
 		if !strings.Contains(buf.String(), tt.want) {
 			t.Errorf("level %v: expected style %q in %q", tt.level, tt.want, buf.String())
@@ -186,7 +187,7 @@ func TestConsoleHandler_NoColorOutput(t *testing.T) {
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
 	r := newTestRecord(slog.LevelError, "fail")
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if strings.Contains(got, "\033[") {
@@ -202,7 +203,7 @@ func TestConsoleHandler_ErrorAttrHighlight(t *testing.T) {
 		slog.String("id", "abc"),
 		slog.String("error", "connection refused"),
 	)
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, ansiItalic) {
@@ -226,7 +227,7 @@ func TestConsoleHandler_PanicAttrHighlight(t *testing.T) {
 	r := newTestRecord(slog.LevelError, "handler panic",
 		slog.String("panic", "nil pointer"),
 	)
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, ansiItalic) {
@@ -243,7 +244,7 @@ func TestConsoleHandler_BoolAttr(t *testing.T) {
 		slog.Bool("ok", true),
 		slog.Int64("ms", 5),
 	)
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	want := "14:05:09 DBG │ rpc method=health ok=true ms=5\n"
@@ -257,7 +258,7 @@ func TestConsoleHandler_Timestamp(t *testing.T) {
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
 	r := newTestRecord(slog.LevelInfo, "test")
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.HasPrefix(got, "14:05:09 ") {
@@ -274,7 +275,7 @@ func TestConsoleHandler_ErrorMessageBoldRed(t *testing.T) {
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 
 	r := newTestRecord(slog.LevelError, "something broke")
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	count := strings.Count(got, ansiBoldRed)
@@ -288,7 +289,7 @@ func TestConsoleHandler_InfoMessageBold(t *testing.T) {
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 
 	r := newTestRecord(slog.LevelInfo, "started")
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, ansiBold) {
@@ -303,7 +304,7 @@ func TestConsoleHandler_Separator(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 	r := newTestRecord(slog.LevelInfo, "test")
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, " │ ") {
@@ -313,7 +314,7 @@ func TestConsoleHandler_Separator(t *testing.T) {
 	// Color mode should also contain │.
 	buf.Reset()
 	h2 := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
-	h2.Handle(nil, r)
+	h2.Handle(context.TODO(), r)
 
 	got = buf.String()
 	if !strings.Contains(got, "│") {
@@ -328,7 +329,7 @@ func TestConsoleHandler_PkgTag(t *testing.T) {
 	h2 := h.WithAttrs([]slog.Attr{slog.String("pkg", "server")})
 
 	r := newTestRecord(slog.LevelInfo, "request", slog.Int("status", 200))
-	h2.Handle(nil, r)
+	h2.Handle(context.TODO(), r)
 
 	got := buf.String()
 	want := "14:05:09 INF │ [server] request status=200\n"
@@ -350,7 +351,7 @@ func TestConsoleHandler_PkgTagInline(t *testing.T) {
 		slog.String("pkg", "media"),
 		slog.Int("status", 200),
 	)
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, "[media]") {
@@ -368,7 +369,7 @@ func TestConsoleHandler_PkgTagColor(t *testing.T) {
 	h2 := h.WithAttrs([]slog.Attr{slog.String("pkg", "server")})
 
 	r := newTestRecord(slog.LevelInfo, "request")
-	h2.Handle(nil, r)
+	h2.Handle(context.TODO(), r)
 
 	got := buf.String()
 	if !strings.Contains(got, ansiDimCyn) {
@@ -385,7 +386,7 @@ func TestConsoleHandler_NoPkgTag(t *testing.T) {
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
 	r := newTestRecord(slog.LevelInfo, "hello")
-	h.Handle(nil, r)
+	h.Handle(context.TODO(), r)
 
 	got := buf.String()
 	want := "14:05:09 INF │ hello\n"
@@ -410,7 +411,7 @@ func TestConsoleHandler_DurationFormatting(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 		r := newTestRecord(slog.LevelInfo, "op", slog.Duration("elapsed", tt.dur))
-		h.Handle(nil, r)
+		h.Handle(context.TODO(), r)
 
 		got := buf.String()
 		wantAttr := "elapsed=" + tt.want

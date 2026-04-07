@@ -219,7 +219,7 @@ func (eb *ExponentialBackoff) Current() time.Duration {
 func (eb *ExponentialBackoff) Wait(ctx context.Context) error {
 	d := eb.Current()
 	jitterRange := float64(d) * eb.Jitter
-	jitter := (rand.Float64()*2 - 1) * jitterRange
+	jitter := (rand.Float64()*2 - 1) * jitterRange //nolint:gosec // G404 — jitter, not security
 	d = time.Duration(float64(d) + jitter)
 	if d < 0 {
 		d = eb.Initial

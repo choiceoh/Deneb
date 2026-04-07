@@ -144,9 +144,10 @@ func ToolGrep(defaultDir string) ToolFunc {
 			}
 			// Last resort: bare search with minimal flags (no type, no glob, fixed string).
 			bareMinArgs := []string{"-F", "-n", fmt.Sprintf("--max-count=%d", maxResults)}
-			if p.Mode == "files_only" {
+			switch p.Mode {
+			case "files_only":
 				bareMinArgs = append(bareMinArgs, "-l")
-			} else if p.Mode == "count" {
+			case "count":
 				bareMinArgs = append(bareMinArgs, "-c")
 			}
 			bareMinArgs = append(bareMinArgs, "-e", p.Pattern, "--", searchPath)
@@ -210,7 +211,7 @@ func groupGrepOutput(raw string) string {
 
 // parseGrepLine parses "file:linenum:content" or "file-linenum-content" format.
 // Returns (file, linenum, content, ok).
-func parseGrepLine(line string) (string, string, string, bool) {
+func parseGrepLine(line string) (file, lineNum, content string, ok bool) {
 	// Try ":" separator first (match lines), then "-" (context lines).
 	for _, sep := range []byte{':', '-'} {
 		// Find first separator.
@@ -234,7 +235,7 @@ func parseGrepLine(line string) (string, string, string, bool) {
 				break
 			}
 		}
-		if !allDigits || len(lineNum) == 0 {
+		if !allDigits || lineNum == "" {
 			continue
 		}
 		return file, lineNum, rest[idx2+1:], true
@@ -242,13 +243,13 @@ func parseGrepLine(line string) (string, string, string, bool) {
 	return "", "", "", false
 }
 
-// clampInt clamps v to [min, max].
-func clampInt(v, min, max int) int {
-	if v < min {
-		return min
+// clampInt clamps v to [lo, hi].
+func clampInt(v, lo, hi int) int { //nolint:unparam // lo is always 0 at current call sites but kept generic
+	if v < lo {
+		return lo
 	}
-	if v > max {
-		return max
+	if v > hi {
+		return hi
 	}
 	return v
 }
@@ -304,7 +305,7 @@ func ToolFind(defaultDir string) ToolFunc {
 		var matches []string
 		err = filepath.WalkDir(searchDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				return nil // skip errors
+				return nil //nolint:nilerr // skip inaccessible entries in walk
 			}
 			if len(matches) >= maxResults {
 				return filepath.SkipAll
@@ -442,7 +443,7 @@ func normalizeFileType(ft string) string {
 // stripRgFlag removes a flag and its value from a ripgrep argument list.
 // For example, stripRgFlag(args, "--type") removes both "--type" and the
 // following value argument.
-func stripRgFlag(args []string, flag string) []string {
+func stripRgFlag(args []string, flag string) []string { //nolint:unparam // flag is always "--type" now but generalizable
 	var result []string
 	skip := false
 	for _, a := range args {
@@ -513,7 +514,7 @@ func ResolvePath(path, defaultDir string) string {
 // Returns (stdout, stderr, error). Using separate pipes prevents stderr
 // warnings (permission denied, binary file skipped) from contaminating
 // valid match output on stdout.
-func runRg(ctx context.Context, args []string) (stdout, stderr []byte, err error) {
+func runRg(ctx context.Context, args []string) (stdout, stderr []byte, err error) { //nolint:unparam // stderr kept for diagnostic use
 	cmd := exec.CommandContext(ctx, "rg", args...)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
