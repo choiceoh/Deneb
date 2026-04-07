@@ -258,18 +258,14 @@ func handleRunSuccess(
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
-	// Wiki recording: spawn 2 parallel RLM loops to record the conversation turn.
-	// Runs in background — never blocks the response path.
-	if deps.wikiStore != nil && deps.registry != nil && params.Message != "" {
+	// Diary recording: append raw conversation turn to today's diary.
+	// Wiki page curation is handled by the main LLM via system prompt.
+	if deps.wikiStore != nil && params.Message != "" {
 		toolNames := make([]string, 0, len(result.ToolActivities))
 		for _, ta := range result.ToolActivities {
 			toolNames = append(toolNames, ta.Name)
 		}
-		go spawnWikiRecorders(deps.shutdownCtx, wikiRecorderDeps{
-			store:    deps.wikiStore,
-			registry: deps.registry,
-			logger:   logger,
-		}, params.Message, result.AllText, toolNames)
+		go recordDiary(deps.wikiStore, logger, params.Message, toolNames)
 	}
 
 	logger.Info("agent run completed",
