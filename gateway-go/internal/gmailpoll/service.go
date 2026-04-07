@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 const (
@@ -38,6 +39,10 @@ type Config struct {
 	// Multi-stage pipeline deps (all optional — nil = skip that stage).
 	LocalClient *llm.Client // local AI for stage-1 extractors
 	LocalModel  string      // local AI model name
+
+	// DiaryDir is the wiki diary directory for logging analysis results.
+	// Empty = diary logging disabled.
+	DiaryDir string
 }
 
 // Service implements autonomous.PeriodicTask for Gmail polling.
@@ -224,6 +229,9 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		report = "(분석 실패)"
 	}
 
+	// Log analysis result to diary for RLM knowledge synthesis.
+	s.logToDiary(len(details), report)
+
 	// Send single consolidated report.
 	s.sendNotification(ctx, report)
 
@@ -255,6 +263,18 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 func (s *Service) saveState(state *PollState) {
 	if err := s.state.Save(state); err != nil {
 		s.log.Error("폴링 상태 저장 실패", "error", err)
+	}
+}
+
+// logToDiary writes the email analysis report to the wiki diary.
+// WikiDreamer will later synthesize these into structured wiki knowledge.
+func (s *Service) logToDiary(count int, report string) {
+	if s.cfg.DiaryDir == "" {
+		return
+	}
+	entry := fmt.Sprintf("📬 메일 분석 (%d건)\n\n%s", count, report)
+	if err := wiki.AppendDiaryTo(s.cfg.DiaryDir, entry); err != nil {
+		s.log.Warn("메일 분석 diary 기록 실패", "error", err)
 	}
 }
 

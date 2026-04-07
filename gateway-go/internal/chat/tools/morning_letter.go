@@ -14,7 +14,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
+
+// MorningLetterOpts holds optional configuration for the morning letter tool.
+type MorningLetterOpts struct {
+	DiaryDir string // wiki diary directory; empty = no diary logging
+}
 
 // ToolMorningLetter returns the morning_letter tool — collects 5 data sections
 // in parallel and returns structured JSON for the LLM to compose the final letter.
@@ -23,7 +29,12 @@ import (
 // contextual interpretation (e.g. "우산 챙기세요" for rain, email importance ranking).
 //
 // Sections: weather (Gwangju), exchange rates, copper price, calendar, email.
-func ToolMorningLetter(_ toolctx.ToolExecutor) ToolFunc {
+func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFunc {
+	var diaryDir string
+	if len(opts) > 0 {
+		diaryDir = opts[0].DiaryDir
+	}
+
 	return func(ctx context.Context, _ json.RawMessage) (string, error) {
 		now := time.Now().In(kstLocation)
 
@@ -60,8 +71,9 @@ func ToolMorningLetter(_ toolctx.ToolExecutor) ToolFunc {
 		wg.Wait()
 
 		weekday := [...]string{"일", "월", "화", "수", "목", "금", "토"}[now.Weekday()]
+		dateStr := fmt.Sprintf("%d년 %d월 %d일 %s요일", now.Year(), int(now.Month()), now.Day(), weekday)
 		envelope := map[string]any{
-			"date":      fmt.Sprintf("%d년 %d월 %d일 %s요일", now.Year(), int(now.Month()), now.Day(), weekday),
+			"date":      dateStr,
 			"timestamp": now.Format(time.RFC3339),
 			"sections": map[string]any{
 				"weather":  results[0],
@@ -76,8 +88,51 @@ func ToolMorningLetter(_ toolctx.ToolExecutor) ToolFunc {
 		if err != nil {
 			return "", fmt.Errorf("marshal morning letter data: %w", err)
 		}
+
+		// Log collected data to diary for RLM knowledge synthesis.
+		if diaryDir != "" {
+			summary := formatMorningDiarySummary(dateStr, results)
+			_ = wiki.AppendDiaryTo(diaryDir, summary)
+		}
+
 		return string(out), nil
 	}
+}
+
+// formatMorningDiarySummary builds a concise diary entry from morning letter data.
+func formatMorningDiarySummary(dateStr string, results []any) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "🌅 모닝레터 수집 (%s)\n\n", dateStr)
+
+	if w, ok := results[0].(weatherData); ok && w.OK {
+		fmt.Fprintf(&sb, "- 날씨: %s°C (체감 %s°C), %s, 습도 %s%%", w.TempC, w.FeelsLikeC, w.Condition, w.Humidity)
+		if w.MaxRainPct > 0 {
+			fmt.Fprintf(&sb, ", 강수확률 %d%% (%s)", w.MaxRainPct, w.MaxRainTime)
+		}
+		sb.WriteString("\n")
+	}
+
+	if x, ok := results[1].(exchangeData); ok && x.OK {
+		fmt.Fprintf(&sb, "- 환율: USD/KRW %.0f", x.USDKRW)
+		if x.EURKRW > 0 {
+			fmt.Fprintf(&sb, ", EUR/KRW %.0f", x.EURKRW)
+		}
+		sb.WriteString("\n")
+	}
+
+	if c, ok := results[2].(copperData); ok && c.OK {
+		fmt.Fprintf(&sb, "- 동: $%.0f/톤\n", c.PricePerTon)
+	}
+
+	if cal, ok := results[3].(calendarData); ok && cal.OK && len(cal.Events) > 0 {
+		fmt.Fprintf(&sb, "- 일정: %d건\n", len(cal.Events))
+	}
+
+	if em, ok := results[4].(emailData); ok && em.OK && len(em.Messages) > 0 {
+		fmt.Fprintf(&sb, "- 메일: %d건\n", len(em.Messages))
+	}
+
+	return sb.String()
 }
 
 // --- KST location ---
