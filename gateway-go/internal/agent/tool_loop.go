@@ -18,20 +18,20 @@ import (
 
 // ToolLoopConfig controls tool loop detection thresholds.
 type ToolLoopConfig struct {
-	Enabled                      bool
-	HistorySize                  int // sliding window (default 30)
-	WarningThreshold             int // generic repeat warning (default 10)
-	CriticalThreshold            int // poll/ping-pong critical block (default 20)
+	Enabled                       bool
+	HistorySize                   int // sliding window (default 30)
+	WarningThreshold              int // generic repeat warning (default 10)
+	CriticalThreshold             int // poll/ping-pong critical block (default 20)
 	GlobalCircuitBreakerThreshold int // absolute catch-all (default 30)
 }
 
 // DefaultToolLoopConfig returns sensible defaults for tool loop detection.
 func DefaultToolLoopConfig() ToolLoopConfig {
 	return ToolLoopConfig{
-		Enabled:                      true,
-		HistorySize:                  30,
-		WarningThreshold:             10,
-		CriticalThreshold:            20,
+		Enabled:                       true,
+		HistorySize:                   30,
+		WarningThreshold:              10,
+		CriticalThreshold:             20,
 		GlobalCircuitBreakerThreshold: 30,
 	}
 }

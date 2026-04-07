@@ -37,10 +37,10 @@ const (
 // PipelineDeps holds dependencies for the multi-stage analysis pipeline.
 type PipelineDeps struct {
 	GmailClient *gmail.Client
-	LLMClient   *llm.Client // main LLM for final analysis (stage 2)
-	LocalClient *llm.Client // local AI for extractors (stage 1)
-	LocalModel  string      // local AI model name
-	MainModel   string      // main LLM model name
+	LLMClient   *llm.Client  // main LLM for final analysis (stage 2)
+	LocalClient *llm.Client  // local AI for extractors (stage 1)
+	LocalModel  string       // local AI model name
+	MainModel   string       // main LLM model name
 	Logger      *slog.Logger // optional; nil = slog.Default()
 }
 

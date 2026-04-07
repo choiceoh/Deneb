@@ -121,7 +121,7 @@ func TestToolLoopDetector_PingPong(t *testing.T) {
 	}
 
 	// Continue alternating to reach the warning threshold (6 alternating calls).
-	d.RecordAndCheck("read", argsA) // call 5
+	d.RecordAndCheck("read", argsA)       // call 5
 	r := d.RecordAndCheck("write", argsB) // call 6
 	if !r.Stuck || r.Detector != "ping_pong" {
 		t.Fatalf("expected ping_pong warning at 6 alternating calls, got stuck=%v detector=%s", r.Stuck, r.Detector)
@@ -135,10 +135,10 @@ func TestToolLoopDetector_GlobalCircuitBreaker(t *testing.T) {
 	// Use a non-polling tool ("read") so poll_no_progress and generic_repeat
 	// don't interfere. Set warning/critical high so only the circuit breaker fires.
 	cfg := ToolLoopConfig{
-		Enabled:                      true,
-		HistorySize:                  30,
-		WarningThreshold:             100,
-		CriticalThreshold:            101,
+		Enabled:                       true,
+		HistorySize:                   30,
+		WarningThreshold:              100,
+		CriticalThreshold:             101,
 		GlobalCircuitBreakerThreshold: 5,
 	}
 	d := NewToolLoopDetector(cfg, slog.Default())

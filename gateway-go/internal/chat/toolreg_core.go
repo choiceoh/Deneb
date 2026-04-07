@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
@@ -93,8 +94,12 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 		// Fresh budget per call — prevents cumulative exhaustion across requests.
 		budget := rlm.NewTokenBudget(budgetLimit)
 
+		// Inherit session memory from parent context for sub-agent continuity.
+		system := buildSubAgentSystem(ctx, deps)
+
 		return rlm.RunSubAgent(ctx, rlm.SubAgentConfig{
 			Prompt:       prompt,
+			System:       system,
 			Tools:        selectedTools,
 			ToolExecutor: registry,
 			Client:       deps.LLMClient,
@@ -120,8 +125,11 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 		// Fresh budget per batch — shared across tasks within this one call.
 		budget := rlm.NewTokenBudget(budgetLimit)
 
+		system := buildSubAgentSystem(ctx, deps)
+
 		return rlm.RunSubAgentBatch(ctx, rlm.BatchConfig{
 			Tasks:        tasks,
+			System:       system,
 			Tools:        selectedTools,
 			ToolExecutor: registry,
 			Client:       deps.LLMClient,
@@ -146,6 +154,19 @@ func stripSpawnTools(names []string) []string {
 		}
 	}
 	return out
+}
+
+// buildSubAgentSystem builds a lightweight system prompt for RLM sub-agents,
+// inheriting session memory from the parent context.
+func buildSubAgentSystem(ctx context.Context, deps *CoreToolDeps) json.RawMessage {
+	var sessionMemory string
+	if deps.SessionMemoryFn != nil {
+		sessionKey := SessionKeyFromContext(ctx)
+		if sessionKey != "" {
+			sessionMemory = deps.SessionMemoryFn(sessionKey)
+		}
+	}
+	return rlm.BuildSubAgentSystem(sessionMemory)
 }
 
 // filterMap converts a name slice to an allowed-set map for FilteredLLMTools.

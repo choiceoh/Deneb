@@ -33,7 +33,7 @@ type Service struct {
 	runningJobs sync.Map
 
 	// Timer state (mirrors TS timer.ts).
-	timerCancel context.CancelFunc
+	timerCancel  context.CancelFunc
 	nextWakeAtMs int64
 
 	// Event listeners.

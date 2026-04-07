@@ -31,7 +31,7 @@ const subagentNotifyChCap = 20
 // Debounced queue constants.
 const (
 	notifyDebounceMs = 1000 // 1s debounce window — batches concurrent completions.
-	notifyQueueCap   = 20  // max pending notifications before overflow summarize.
+	notifyQueueCap   = 20   // max pending notifications before overflow summarize.
 )
 
 // notifyQueue collects child completion notifications for a parent session

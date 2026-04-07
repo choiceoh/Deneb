@@ -125,7 +125,6 @@ func (pm *PromptManager) systemCheck(ctx context.Context) (*PromptGetResult, err
 	}, nil
 }
 
-
 func (pm *PromptManager) sessionReview(ctx context.Context, sessionKey string) (*PromptGetResult, error) {
 	var params json.RawMessage
 	if sessionKey != "" {
@@ -172,7 +171,6 @@ func (pm *PromptManager) dailySummary(ctx context.Context) (*PromptGetResult, er
 		},
 	}, nil
 }
-
 
 // prettyJSON formats raw JSON for readability. Falls back to raw string.
 func prettyJSON(data json.RawMessage) string {

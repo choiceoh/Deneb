@@ -920,4 +920,3 @@ func clampLinkSpans(spans []LinkSpan, maxLen int) []LinkSpan {
 	}
 	return out
 }
-

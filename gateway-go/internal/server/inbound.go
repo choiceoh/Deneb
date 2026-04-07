@@ -359,7 +359,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 				},
 			}
 		},
-		OnSessionEvent: func(eventType, sessKey, reason string) {},
+		OnSessionEvent:  func(eventType, sessKey, reason string) {},
 		ThinkingRuntime: p.server.thinkingRuntime,
 	}
 

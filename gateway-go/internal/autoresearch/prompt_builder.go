@@ -493,4 +493,3 @@ func truncateFileContent(content string, maxLines int) string {
 	sb.WriteString(strings.Join(tail, "\n"))
 	return sb.String()
 }
-

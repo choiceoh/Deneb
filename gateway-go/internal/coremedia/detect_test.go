@@ -68,8 +68,8 @@ func TestTIFF(t *testing.T) {
 
 func TestOOXML_XLSX(t *testing.T) {
 	data := make([]byte, 0, 50)
-	data = append(data, 0x50, 0x4B, 0x03, 0x04)    // ZIP header
-	data = append(data, make([]byte, 26)...)         // local file header padding
+	data = append(data, 0x50, 0x4B, 0x03, 0x04)       // ZIP header
+	data = append(data, make([]byte, 26)...)          // local file header padding
 	data = append(data, []byte("xl/workbook.xml")...) // XLSX marker
 	assertMIME(t, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 }

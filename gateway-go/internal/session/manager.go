@@ -111,16 +111,16 @@ type Session struct {
 	Kind           Kind        `json:"kind"`
 	Mode           SessionMode `json:"mode,omitempty"`
 	Status         RunStatus   `json:"status,omitempty"`
-	Channel        string    `json:"channel,omitempty"`
-	Model          string    `json:"model,omitempty"`
-	UpdatedAt      int64     `json:"updatedAt,omitempty"`
-	StartedAt      *int64    `json:"startedAt,omitempty"`
-	EndedAt        *int64    `json:"endedAt,omitempty"`
-	RuntimeMs      *int64    `json:"runtimeMs,omitempty"`
-	AbortedLastRun bool      `json:"abortedLastRun"`
-	CreatedAt      time.Time `json:"-"`
-	SessionID      string    `json:"sessionId,omitempty"`
-	Label          string    `json:"label,omitempty"`
+	Channel        string      `json:"channel,omitempty"`
+	Model          string      `json:"model,omitempty"`
+	UpdatedAt      int64       `json:"updatedAt,omitempty"`
+	StartedAt      *int64      `json:"startedAt,omitempty"`
+	EndedAt        *int64      `json:"endedAt,omitempty"`
+	RuntimeMs      *int64      `json:"runtimeMs,omitempty"`
+	AbortedLastRun bool        `json:"abortedLastRun"`
+	CreatedAt      time.Time   `json:"-"`
+	SessionID      string      `json:"sessionId,omitempty"`
+	Label          string      `json:"label,omitempty"`
 
 	// Token accounting (cleared on compaction).
 	InputTokens  *int64 `json:"inputTokens,omitempty"`

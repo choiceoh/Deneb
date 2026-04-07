@@ -15,9 +15,9 @@ type emitCtx struct {
 	suppressDepth int
 
 	// Block state.
-	listStack    []listCtx
-	inPre        bool
-	inCodeInPre  bool
+	listStack   []listCtx
+	inPre       bool
+	inCodeInPre bool
 
 	// Compound element buffers.
 	inTitle  bool

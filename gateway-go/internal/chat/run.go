@@ -99,10 +99,10 @@ type runDeps struct {
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
-	wikiStore      *wiki.Store               // optional; wiki knowledge base
-	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
-	agentLog       *agentlog.Writer          // optional; enables agent detail logging
-	registry       *modelrole.Registry       // centralized model role registry
+	wikiStore   *wiki.Store               // optional; wiki knowledge base
+	dreamTurnFn func(ctx context.Context) // optional; increments dream turn via autonomous
+	agentLog    *agentlog.Writer          // optional; enables agent detail logging
+	registry    *modelrole.Registry       // centralized model role registry
 	// emitAgentFn sends agent lifecycle events (run.start, tool.start, tool.end)
 	// to the gateway event subscription pipeline. Optional; nil if not wired.
 	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)

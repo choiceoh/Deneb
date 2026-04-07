@@ -20,7 +20,7 @@ type LoopDetector struct {
 	// Recent tool call fingerprints (tool name + input hash).
 	history []string
 	// Counts of consecutive identical calls.
-	repeatCount int
+	repeatCount     int
 	lastFingerprint string
 	// Total repeated calls across the session.
 	totalRepeats int

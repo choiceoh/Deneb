@@ -15,6 +15,7 @@ import (
 // SubAgentConfig configures a single sub-LLM run.
 type SubAgentConfig struct {
 	Prompt       string
+	System       json.RawMessage // parent system prompt to inherit (nil = use default)
 	Tools        []llm.Tool
 	ToolExecutor agent.ToolExecutor
 	Client       agent.LLMStreamer
@@ -43,6 +44,7 @@ type SubAgentTask struct {
 // BatchConfig configures a parallel batch of sub-LLM runs.
 type BatchConfig struct {
 	Tasks        []SubAgentTask
+	System       json.RawMessage // inherited system prompt for all sub-agents
 	Tools        []llm.Tool
 	ToolExecutor agent.ToolExecutor
 	Client       agent.LLMStreamer
@@ -77,11 +79,17 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 		"max_turns", cfg.MaxTurns,
 		"budget_remaining", budgetRemaining(cfg.Budget))
 
+	// Inherit parent system prompt if provided; otherwise use default.
+	system := cfg.System
+	if system == nil {
+		system = llm.SystemString(SubAgentSystemPrompt())
+	}
+
 	agentCfg := agent.AgentConfig{
 		MaxTurns:  cfg.MaxTurns,
 		Timeout:   2 * time.Minute,
 		Model:     cfg.Model,
-		System:    llm.SystemString(SubAgentSystemPrompt()),
+		System:    system,
 		Tools:     cfg.Tools,
 		MaxTokens: cfg.MaxTokens,
 	}
@@ -171,6 +179,7 @@ func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, e
 
 			subCfg := SubAgentConfig{
 				Prompt:       t.Prompt,
+				System:       cfg.System,
 				Tools:        cfg.Tools,
 				ToolExecutor: cfg.ToolExecutor,
 				Client:       cfg.Client,
