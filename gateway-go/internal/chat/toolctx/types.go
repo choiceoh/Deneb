@@ -65,19 +65,6 @@ type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID st
 // Used to clean up the partial draft before the final reply is delivered.
 type DraftDeleteFunc func(ctx context.Context, delivery *DeliveryContext, msgID string) error
 
-// ToolProgressFunc is called during agent execution to report tool execution events.
-type ToolProgressFunc func(ctx context.Context, delivery *DeliveryContext, event ToolProgressEvent)
-
-// ToolProgressEvent describes a tool execution lifecycle event.
-type ToolProgressEvent struct {
-	Type    string // "start", "complete"
-	Name    string // tool name
-	Reason  string // raw thinking block text for summarization (only for "start"; may be empty)
-	Input   []byte // raw JSON tool arguments (only for "start"; may be nil)
-	IsError bool   // true if tool execution failed (only for "complete")
-	Result  string // truncated error output for display (only for "complete" when IsError; may be empty)
-}
-
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig struct {
 	APIKey  string `json:"apiKey"`

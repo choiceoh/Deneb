@@ -25,12 +25,6 @@ type DraftEditFunc = toolctx.DraftEditFunc
 // DraftDeleteFunc deletes a streaming draft message from the originating channel.
 type DraftDeleteFunc = toolctx.DraftDeleteFunc
 
-// ToolProgressFunc is called during agent execution to report tool lifecycle events.
-type ToolProgressFunc = toolctx.ToolProgressFunc
-
-// ToolProgressEvent describes a tool execution lifecycle event (start or complete).
-type ToolProgressEvent = toolctx.ToolProgressEvent
-
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig = toolctx.ProviderConfig
 

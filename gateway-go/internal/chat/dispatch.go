@@ -618,7 +618,6 @@ func (h *Handler) buildRunDeps() runDeps {
 		mediaSendFn:          h.mediaSendFn,
 		typingFn:             h.typingFn,
 		reactionFn:           h.reactionFn,
-		toolProgressFn:       h.toolProgressFn,
 		draftEditFn:          h.draftEditFn,
 		draftDeleteFn:        h.draftDeleteFn,
 		channelUploadLimitFn: h.ChannelUploadLimit,
