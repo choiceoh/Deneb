@@ -11,14 +11,14 @@ import (
 
 // ContextFile represents a workspace context file embedded in the system prompt.
 type ContextFile struct {
-	Path    string // relative path (e.g., "CLAUDE.md")
+	Path    string // relative path (e.g., "AGENTS.md")
 	Content string
 }
 
 // contextFileNames lists workspace context files in load order.
 // Matches src/agents/workspace/workspace.ts DEFAULT_*_FILENAME constants.
 var contextFileNames = []string{
-	"CLAUDE.md",
+	"AGENTS.md",
 	"SOUL.md",
 	"TOOLS.md",
 	"IDENTITY.md",
@@ -131,7 +131,7 @@ func (c *contextFileCache) store(workspace string, files []ContextFile, resolved
 }
 
 // LoadContextFiles scans the workspace directory and its ancestors for known
-// context files (CLAUDE.md, SOUL.md, TOOLS.md, etc.) and returns
+// context files (AGENTS.md, SOUL.md, TOOLS.md, etc.) and returns
 // their contents. Files closer to the workspace root take precedence.
 // This mirrors the Node.js behavior of walking up the directory tree.
 //

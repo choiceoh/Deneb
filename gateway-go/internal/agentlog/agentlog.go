@@ -39,7 +39,6 @@ type RunStartData struct {
 type RunPrepData struct {
 	SystemPromptChars int   `json:"systemPromptChars"`
 	ContextMessages   int   `json:"contextMessages"`
-	KnowledgeChars    int   `json:"knowledgeChars"`
 	PrepMs            int64 `json:"prepMs"`
 }
 

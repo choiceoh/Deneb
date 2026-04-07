@@ -267,26 +267,13 @@ func executeAgentRun(
 	// as a tool when it needs past context. No parallel goroutine needed.
 
 	prepStart := time.Now()
-	// 5. Run knowledge prefetch, context assembly, and system prompt build in parallel.
-	var knowledgeAddition string
+	// 5. Run tier-1 wiki injection, context assembly, and system prompt build in parallel.
 	var tier1Addition string
 	var messages []llm.Message
 	var contextErr error
 	var systemPrompt json.RawMessage
 
 	var prepWg sync.WaitGroup
-
-	// Knowledge prefetch (parallel).
-	prepWg.Add(1)
-	go func() {
-		defer prepWg.Done()
-		if params.Message != "" {
-			kDeps := knowledge.Deps{
-				WorkspaceDir: workspaceDir,
-			}
-			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
-		}
-	}()
 
 	// Tier-1 wiki auto-injection (parallel).
 	prepWg.Add(1)
@@ -392,7 +379,7 @@ func executeAgentRun(
 	}()
 
 	prepWg.Wait()
-	logger.Info("pipeline: parallel prep done (knowledge+context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
+	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
 
 	// Microcompact: prune old tool results to save tokens before the LLM call.
 	// Runs after context assembly but before prompt finalization.
@@ -441,33 +428,23 @@ func executeAgentRun(
 
 	// 7. Budget-optimize variable prompt additions before appending.
 	// The base system prompt (identity, tools, skills, context files) is fixed;
-	// variable additions (knowledge, aurora, recall) are optimized by priority.
-	promptBudget := prompt.PromptBudget{Total: deps.contextCfg.SystemPromptBudget}
-	baseTokens := prompt.EstimateTokens(string(systemPrompt))
-	var remainingBudget uint64
-	if promptBudget.Total > baseTokens {
-		remainingBudget = promptBudget.Total - baseTokens
-	}
-	additionBudget := prompt.PromptBudget{Total: remainingBudget}
-
-	var additionFragments []prompt.PromptFragment
+	// variable additions (tier-1 wiki) are optimized by priority.
 	if tier1Addition != "" {
-		additionFragments = append(additionFragments, prompt.NewFragment("tier1", tier1Addition))
-	}
-	if knowledgeAddition != "" {
-		additionFragments = append(additionFragments, prompt.NewFragment("memory", knowledgeAddition))
-	}
+		promptBudget := prompt.PromptBudget{Total: deps.contextCfg.SystemPromptBudget}
+		baseTokens := prompt.EstimateTokens(string(systemPrompt))
+		var remainingBudget uint64
+		if promptBudget.Total > baseTokens {
+			remainingBudget = promptBudget.Total - baseTokens
+		}
+		additionBudget := prompt.PromptBudget{Total: remainingBudget}
 
-	// Optimize and append surviving fragments.
-	optimized := additionBudget.Optimize(additionFragments)
-	for _, f := range optimized {
-		systemPrompt = llm.AppendSystemText(systemPrompt, f.Content)
-	}
-	if len(additionFragments) > len(optimized) {
-		logger.Info("prompt budget: trimmed additions",
-			"original", len(additionFragments),
-			"surviving", len(optimized),
-			"budgetTokens", remainingBudget)
+		additionFragments := []prompt.PromptFragment{
+			prompt.NewFragment("tier1", tier1Addition),
+		}
+		optimized := additionBudget.Optimize(additionFragments)
+		for _, f := range optimized {
+			systemPrompt = llm.AppendSystemText(systemPrompt, f.Content)
+		}
 	}
 
 	// 7b. Auto-suggest coordinator mode if the message looks like a multi-file task
@@ -479,13 +456,11 @@ func executeAgentRun(
 	}
 
 	logger.Info("pipeline: system prompt finalized",
-		"chars", len(systemPrompt),
-		"knowledgeChars", len(knowledgeAddition))
+		"chars", len(systemPrompt))
 
 	runLog.LogPrep(agentlog.RunPrepData{
 		SystemPromptChars: len(systemPrompt),
 		ContextMessages:   len(messages),
-		KnowledgeChars:    len(knowledgeAddition),
 		PrepMs:            time.Since(runStart).Milliseconds(),
 	})
 
