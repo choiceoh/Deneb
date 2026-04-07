@@ -1,5 +1,5 @@
 // run_exec.go contains the core agent execution loop: user message persistence,
-// context assembly, LLM invocation with compaction retry and model fallback.
+// context assembly, LLM invocation with model fallback.
 package chat
 
 import (
@@ -13,8 +13,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/coordinator"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/knowledge"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
@@ -404,6 +406,28 @@ func executeAgentRun(
 		// last user message (which was persisted as text-only) with a
 		// multimodal version that includes the image/video content blocks.
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
+	}
+
+	// 5b. Polaris compaction: tiered context compression.
+	// Applied after message assembly, before prompt finalization.
+	if len(messages) > 0 {
+		polarisCtx, polarisCancel := context.WithTimeout(ctx, 30*time.Second)
+		polarisCfg := compact.DefaultConfig()
+		var summarizer compact.Summarizer
+		if pilotHub := pilot.GetLocalAIHub(); pilotHub != nil {
+			summarizer = &localAISummarizer{}
+		}
+		var polarisResult compact.Result
+		messages, polarisResult = compact.Compact(polarisCtx, polarisCfg, messages, summarizer, logger)
+		polarisCancel()
+		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmergencyEvicted > 0 {
+			logger.Info("polaris compaction",
+				"microPruned", polarisResult.MicroPruned,
+				"llmCompacted", polarisResult.LLMCompacted,
+				"emergencyEvicted", polarisResult.EmergencyEvicted,
+				"tokensBefore", polarisResult.TokensBefore,
+				"tokensAfter", polarisResult.TokensAfter)
+		}
 	}
 
 	// 6. Proactive context: no blocking wait. The hint is injected via
@@ -938,4 +962,11 @@ func buildMessagePersister(
 			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
 		}
 	}
+}
+
+// localAISummarizer adapts pilot.CallLocalLLM to the compaction.Summarizer interface.
+type localAISummarizer struct{}
+
+func (s *localAISummarizer) Summarize(ctx context.Context, text string, maxTokens int) (string, error) {
+	return pilot.CallLocalLLM(ctx, "", text, maxTokens)
 }
