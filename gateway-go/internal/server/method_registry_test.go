@@ -142,12 +142,6 @@ var requiredMethods = []string{
 	// Platform.
 	"secrets.reload",
 	"secrets.resolve",
-	"talk.config",
-	"talk.mode",
-	"wizard.cancel",
-	"wizard.next",
-	"wizard.start",
-	"wizard.status",
 
 	// RLM: depends on wiki (DENEB_WIKI_ENABLED), not in required list.
 	// Wiki: feature-flagged (DENEB_WIKI_ENABLED), not in required list.

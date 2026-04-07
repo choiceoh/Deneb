@@ -44,9 +44,7 @@ type UsageDeps = handlersystem.UsageDeps
 type LogsDeps = handlersystem.LogsDeps
 type ConfigReloadDeps = handlersystem.ConfigReloadDeps
 type ConfigAdvancedDeps = handlersystem.ConfigAdvancedDeps
-type WizardDeps = handlerplatform.WizardDeps
 type SecretDeps = handlerplatform.SecretDeps
-type TalkDeps = handlerplatform.TalkDeps
 type ExtendedDeps = handleragent.ExtendedDeps
 type AgentsDeps = handleragent.AgentsDeps
 type SessionDeps = handlersession.Deps
@@ -136,14 +134,8 @@ func RegisterConfigAdvancedMethods(d *Dispatcher, deps ConfigAdvancedDeps) {
 func RegisterIdentityMethods(d *Dispatcher, version string) {
 	d.RegisterDomain(handlersystem.IdentityMethods(version))
 }
-func RegisterWizardMethods(d *Dispatcher, deps WizardDeps) {
-	d.RegisterDomain(handlerplatform.WizardMethods(deps))
-}
 func RegisterSecretMethods(d *Dispatcher, deps SecretDeps) {
 	d.RegisterDomain(handlerplatform.SecretMethods(deps))
-}
-func RegisterTalkMethods(d *Dispatcher, deps TalkDeps) {
-	d.RegisterDomain(handlerplatform.TalkMethods(deps))
 }
 func RegisterHeartbeatMethods(d *Dispatcher, deps HeartbeatDeps) {
 	d.RegisterDomain(handlerpresence.HeartbeatMethods(deps))

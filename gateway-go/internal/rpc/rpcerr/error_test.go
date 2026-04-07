@@ -115,7 +115,7 @@ func TestConvenienceConstructors(t *testing.T) {
 		{"NotFound", NotFound("session"), protocol.ErrNotFound},
 		{"Unavailable", Unavailable("down"), protocol.ErrUnavailable},
 		{"Conflict", Conflict("running"), protocol.ErrConflict},
-		{"FeatureDisabled", FeatureDisabled("vega"), protocol.ErrFeatureDisabled},
+		{"FeatureDisabled", FeatureDisabled("wiki"), protocol.ErrFeatureDisabled},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

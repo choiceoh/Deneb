@@ -39,16 +39,6 @@ func lookupValidator(method string) ValidatorFn {
 	case "secrets.reload":
 		return validateSecretsReloadParams
 
-	// Wizard methods
-	case "wizard.start":
-		return validateWizardStartParams
-	case "wizard.next":
-		return validateWizardNextParams
-	case "wizard.cancel":
-		return validateWizardCancelParams
-	case "wizard.status":
-		return validateWizardStatusParams
-
 	// Logs/chat methods
 	case "logs.tail":
 		return validateLogsTailParams
@@ -86,12 +76,6 @@ func lookupValidator(method string) ValidatorFn {
 		return validateChannelsStatusParams
 	case "telegram.logout":
 		return validateChannelsLogoutParams
-	case "talk.mode":
-		return validateTalkModeParams
-	case "talk.config":
-		return validateTalkConfigParams
-	case "talk.config.result":
-		return validateObjectParams
 	case "weblogin.start":
 		return validateWebLoginStartParams
 	case "weblogin.wait":

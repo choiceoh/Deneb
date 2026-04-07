@@ -6,7 +6,7 @@
 //   3. Process manager, Cron scheduler/service, Hooks registry
 //   4. Monitoring (activity tracker, channel events, auth rate limiter)
 //   5. Provider auth (AuthManager, ProviderRuntime) — conditional
-//   6. Workflow subsystems (approvals, nodes, devices, agents, skills, wizard, secrets)
+//   6. Workflow subsystems (approvals, agents, skills, secrets)
 //   7. ACP subsystem (registry, bindings, lifecycle sync)
 //   8. RPC Dispatcher + middleware:
 //      a. hub = buildHub()              — GatewayHub (Chat=nil at this point)

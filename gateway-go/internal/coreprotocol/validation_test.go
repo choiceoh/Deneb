@@ -408,27 +408,6 @@ func TestExec_ResolveValid(t *testing.T) {
 	}
 }
 
-func TestWizard_StartValid(t *testing.T) {
-	result, err := ValidateParams("wizard.start", `{}`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
-	}
-}
-
-func TestWizard_NextValid(t *testing.T) {
-	result, err := ValidateParams("wizard.next",
-		`{"sessionId":"s1","answer":{"stepId":"step1"}}`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
-	}
-}
-
 func TestSecrets_ResolveValid(t *testing.T) {
 	result, err := ValidateParams("secrets.resolve",
 		`{"commandName":"cmd","targetIds":["a","b"]}`)

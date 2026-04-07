@@ -24,11 +24,10 @@ type BannerInfo struct {
 // Example output (color omitted):
 //
 //	deneb gateway
-//	0.1.0-go · rust-ffi
+//	0.1.0-go
 //
 //	addr      127.0.0.1:18789
-//	vega      enabled
-//	localai    online
+//	localai   online
 //
 //	ready.
 func PrintBanner(w io.Writer, info BannerInfo, color bool) {
