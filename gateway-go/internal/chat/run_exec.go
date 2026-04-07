@@ -27,6 +27,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
 // skillsPromptCache is a version-aware cache for the workspace skills prompt.
@@ -268,6 +269,7 @@ func executeAgentRun(
 	prepStart := time.Now()
 	// 5. Run knowledge prefetch, context assembly, and system prompt build in parallel.
 	var knowledgeAddition string
+	var tier1Addition string
 	var messages []llm.Message
 	var contextErr error
 	var systemPrompt json.RawMessage
@@ -283,6 +285,16 @@ func executeAgentRun(
 				WorkspaceDir: workspaceDir,
 			}
 			knowledgeAddition = knowledge.Prefetch(ctx, params.Message, kDeps)
+		}
+	}()
+
+	// Tier-1 wiki auto-injection (parallel).
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+		if deps.wikiStore != nil {
+			cfg := wiki.ConfigFromEnv()
+			tier1Addition = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
 		}
 	}()
 
@@ -439,6 +451,9 @@ func executeAgentRun(
 	additionBudget := prompt.PromptBudget{Total: remainingBudget}
 
 	var additionFragments []prompt.PromptFragment
+	if tier1Addition != "" {
+		additionFragments = append(additionFragments, prompt.NewFragment("tier1", tier1Addition))
+	}
 	if knowledgeAddition != "" {
 		additionFragments = append(additionFragments, prompt.NewFragment("memory", knowledgeAddition))
 	}

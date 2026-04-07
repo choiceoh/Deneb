@@ -102,7 +102,7 @@ var toolCategories = []struct {
 	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"wiki", "memory_store", "projects_write"}},
+	{"Memory", []string{"wiki", "memory_store", "memory_recall", "projects_write"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
@@ -270,8 +270,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("과거 결정, 인물, 프로젝트, 기술 등 장기 지식은 위키에 마크다운으로 정리되어 있다.\n\n")
 
 		d.WriteString("### 읽기\n")
-		d.WriteString("- 과거 맥락 필요 → wiki index로 목차 확인 → wiki read로 페이지 읽기\n")
-		d.WriteString("- 키워드 검색 → wiki search\n")
+		d.WriteString("- 과거 맥락/지식 조회 → memory_recall (search/read/list)\n")
+		d.WriteString("- 위키 목차 확인 → wiki index → wiki read\n")
+		d.WriteString("- 키워드 검색 → wiki search 또는 memory_recall search\n")
 		d.WriteString("- 최근 일지 확인 → wiki daily\n\n")
 
 		d.WriteString("### 쓰기 — 반드시 능동적으로 기록하라\n")

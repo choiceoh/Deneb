@@ -803,7 +803,7 @@ func buildREPLEnv(
 	// Convert LLM messages to REPL MessageEntry format.
 	entries := messagesToREPLEntries(messages)
 
-	// Build llm_query callback: sub-agent call.
+	// Build llm_query callback: sub-agent via RLM.
 	queryFn := func(ctx context.Context, prompt string) (string, error) {
 		system := rlm.BuildSubAgentSystem("")
 

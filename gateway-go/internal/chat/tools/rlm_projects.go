@@ -304,6 +304,165 @@ func ToolMemoryStore(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 	}
 }
 
+// ToolMemoryRecall returns a tool that reads/searches knowledge from the wiki.
+// Supports search across categories, reading specific pages, and listing by category.
+func ToolMemoryRecall(deps *toolctx.WikiDeps) toolctx.ToolFunc {
+	type params struct {
+		Action   string `json:"action"`
+		Query    string `json:"query,omitempty"`
+		Path     string `json:"path,omitempty"`
+		Category string `json:"category,omitempty"`
+		Section  string `json:"section,omitempty"`
+		Limit    int    `json:"limit,omitempty"`
+	}
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		if deps.Store == nil {
+			return "메모리 조회 기능이 비활성 상태입니다 (위키 미설정).", nil
+		}
+		var p params
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return "잘못된 파라미터입니다.", nil
+		}
+
+		switch p.Action {
+		case "search":
+			return memoryRecallSearch(ctx, deps.Store, p.Query, p.Category, p.Limit)
+		case "read":
+			return memoryRecallRead(deps.Store, p.Path, p.Section)
+		case "list":
+			return memoryRecallList(deps.Store, p.Category)
+		default:
+			return "action은 search, read, list 중 하나여야 합니다.", nil
+		}
+	}
+}
+
+// memoryRecallSearch searches wiki pages, optionally filtered by category.
+func memoryRecallSearch(ctx context.Context, store *wiki.Store, query, category string, limit int) (string, error) {
+	if query == "" {
+		return "query는 필수입니다.", nil
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+
+	results, err := store.Search(ctx, query, limit*2) // over-fetch for category filter
+	if err != nil {
+		return fmt.Sprintf("검색 실패: %v", err), nil
+	}
+
+	var sb strings.Builder
+	count := 0
+	for _, r := range results {
+		if category != "" && !strings.HasPrefix(r.Path, category+"/") {
+			continue
+		}
+		count++
+		sb.WriteString(fmt.Sprintf("- **%s** (score: %.2f)\n  %s\n", r.Path, r.Score, r.Content))
+		if count >= limit {
+			break
+		}
+	}
+	if count == 0 {
+		if category != "" {
+			return fmt.Sprintf("'%s' 카테고리에서 '%s' 관련 결과 없음.", category, query), nil
+		}
+		return fmt.Sprintf("'%s' 관련 결과 없음.", query), nil
+	}
+	return fmt.Sprintf("검색 결과 %d건:\n\n%s", count, sb.String()), nil
+}
+
+// memoryRecallRead reads a wiki page by path, optionally a specific section.
+func memoryRecallRead(store *wiki.Store, path, section string) (string, error) {
+	if path == "" {
+		return "path는 필수입니다.", nil
+	}
+	if !strings.HasSuffix(path, ".md") {
+		path += ".md"
+	}
+
+	page, err := store.ReadPage(path)
+	if err != nil {
+		return fmt.Sprintf("페이지를 찾을 수 없습니다: %s", path), nil
+	}
+
+	if section != "" {
+		content := page.Section(section)
+		if content == "" {
+			return fmt.Sprintf("섹션을 찾을 수 없습니다: %s", section), nil
+		}
+		return content, nil
+	}
+
+	// Return full page with metadata.
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**%s** (%s)\n", page.Meta.Title, page.Meta.Category))
+	if len(page.Meta.Tags) > 0 {
+		sb.WriteString(fmt.Sprintf("태그: %s\n", strings.Join(page.Meta.Tags, ", ")))
+	}
+	if page.Meta.Updated != "" {
+		sb.WriteString(fmt.Sprintf("수정: %s\n", page.Meta.Updated))
+	}
+	sb.WriteString("\n")
+	sb.WriteString(page.Body)
+	return sb.String(), nil
+}
+
+// memoryRecallList lists wiki pages in a category or all categories.
+func memoryRecallList(store *wiki.Store, category string) (string, error) {
+	if category != "" {
+		return memoryRecallListCategory(store, category)
+	}
+
+	// List all categories with page counts.
+	categories := []string{"사람", "프로젝트", "기술", "업무", "결정", "선호"}
+	var sb strings.Builder
+	total := 0
+	for _, cat := range categories {
+		pages, err := store.ListPages(cat)
+		if err != nil {
+			continue
+		}
+		total += len(pages)
+		sb.WriteString(fmt.Sprintf("- **%s**: %d페이지\n", cat, len(pages)))
+	}
+	if total == 0 {
+		return "위키에 저장된 지식이 없습니다.", nil
+	}
+	return fmt.Sprintf("전체 %d페이지:\n\n%s", total, sb.String()), nil
+}
+
+func memoryRecallListCategory(store *wiki.Store, category string) (string, error) {
+	pages, err := store.ListPages(category)
+	if err != nil {
+		return fmt.Sprintf("카테고리 조회 실패: %v", err), nil
+	}
+	if len(pages) == 0 {
+		return fmt.Sprintf("'%s' 카테고리에 저장된 페이지 없음.", category), nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**%s** %d페이지:\n\n", category, len(pages)))
+	for _, relPath := range pages {
+		page, pErr := store.ReadPage(relPath)
+		if pErr != nil {
+			continue
+		}
+		name := filepath.Base(relPath)
+		name = strings.TrimSuffix(name, ".md")
+		title := page.Meta.Title
+		if title == "" {
+			title = name
+		}
+		sb.WriteString(fmt.Sprintf("- **%s** (%s)", title, relPath))
+		if len(page.Meta.Tags) > 0 {
+			sb.WriteString(fmt.Sprintf(" [%s]", strings.Join(page.Meta.Tags, ", ")))
+		}
+		sb.WriteByte('\n')
+	}
+	return sb.String(), nil
+}
+
 // wikiPageWriter is the minimal interface needed for wiki write operations.
 type wikiPageWriter interface {
 	ReadPage(relPath string) (*wiki.Page, error)
