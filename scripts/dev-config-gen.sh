@@ -88,6 +88,11 @@ gp = cfg.get('gmailPoll', {})
 if gp.get('enabled'):
     changes.append('gmailPoll.enabled (set to false)')
 
+# Strip cron scheduler (avoid duplicate cron execution).
+cr = cfg.get('cron', {})
+if cr.get('enabled', True):
+    changes.append('cron.enabled (set to false)')
+
 if changes:
     print('Modified fields (dev safety):')
     for c in changes:
@@ -118,6 +123,9 @@ if tg and isinstance(tg, dict):
 gp = cfg.get('gmailPoll')
 if gp and isinstance(gp, dict):
     gp['enabled'] = False
+
+# Disable cron scheduler to avoid duplicate cron execution.
+cfg.setdefault('cron', {})['enabled'] = False
 
 with open('$OUT', 'w') as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
