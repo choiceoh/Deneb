@@ -237,13 +237,15 @@ func buildNotifyItem(child *session.Session) notifyItem {
 func formatBatchNotification(items []notifyItem) string {
 	var sb strings.Builder
 
+	// IMPORTANT: the trailing instruction prevents the LLM from using NO_REPLY
+	// (which would suppress delivery of the synthesized response to the user).
 	if len(items) == 1 {
-		sb.WriteString("**System:** subagent completed. Synthesize the result below into your response. Do NOT re-do this work.\n")
+		sb.WriteString("**System:** subagent completed. Synthesize the result below into your response for the user. Do NOT re-do this work. Do NOT use NO_REPLY — the user is waiting for this answer.\n")
 		writeNotifyItem(&sb, items[0])
 		return sb.String()
 	}
 
-	sb.WriteString(fmt.Sprintf("**System:** %d subagents completed. Synthesize the results below into a unified response. Do NOT re-do their work.\n", len(items)))
+	sb.WriteString(fmt.Sprintf("**System:** %d subagents completed. Synthesize the results below into a unified response for the user. Do NOT re-do their work. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items)))
 
 	// Render up to cap detailed items.
 	rendered := items
