@@ -1,34 +1,5 @@
 package coreprotocol
 
-// --- talk.mode ---
-
-func validateTalkModeParams(value any, path string, errors *[]ValidationError) {
-	if !RequireObject(value, path, errors) {
-		return
-	}
-	obj := value.(map[string]any)
-	CheckNoAdditionalProperties(obj, []string{"enabled", "phase"}, path, errors)
-	if CheckRequired(obj, "enabled", path, errors) {
-		CheckBoolean(obj["enabled"], path+"/enabled", errors)
-	}
-	CheckOptional(obj, "phase", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckString(v, p, e)
-	})
-}
-
-// --- talk.config ---
-
-func validateTalkConfigParams(value any, path string, errors *[]ValidationError) {
-	if !RequireObject(value, path, errors) {
-		return
-	}
-	obj := value.(map[string]any)
-	CheckNoAdditionalProperties(obj, []string{"includeSecrets"}, path, errors)
-	CheckOptional(obj, "includeSecrets", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckBoolean(v, p, e)
-	})
-}
-
 // --- telegram.status ---
 
 func validateChannelsStatusParams(value any, path string, errors *[]ValidationError) {

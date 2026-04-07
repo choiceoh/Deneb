@@ -23,7 +23,6 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | `internal/chat/` | System prompt, tool registration, context files, slash commands |
 | `internal/auth/` | Token auth, allowlists, credentials |
 | `internal/llm/` | LLM client, sampling parameters, multimodal types |
-| `internal/vega/` | Vega search integration, model auto-detection |
 | `internal/telegram/` | Telegram channel plugin (primary deployment target) |
 | `pkg/protocol/` | Hand-written JSON wire types |
 

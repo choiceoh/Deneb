@@ -15,9 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
-	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
-	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -43,12 +41,6 @@ var tsBaseMethods = []string{
 	"exec.approval.request",
 	"exec.approval.waitDecision",
 	"exec.approval.resolve",
-	"wizard.start",
-	"wizard.next",
-	"wizard.cancel",
-	"wizard.status",
-	"talk.config",
-	"talk.mode",
 	"models.list",
 	"tools.catalog",
 	"agents.list",
@@ -127,9 +119,7 @@ func fullDispatcher() *Dispatcher {
 	RegisterAgentsMethods(d, AgentsDeps{Agents: agent.NewStore(), Broadcaster: broadcastFn})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})
 	RegisterSkillMethods(d, SkillDeps{Skills: skill.NewManager(), Broadcaster: broadcastFn})
-	RegisterWizardMethods(d, WizardDeps{Engine: wizard.NewEngine()})
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
-	RegisterTalkMethods(d, TalkDeps{Talk: talk.NewState()})
 	// Session state methods (patch/reset/preview/resolve/compact).
 	RegisterSessionMethods(d, SessionDeps{
 		Sessions:    deps.Sessions,

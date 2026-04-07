@@ -5,7 +5,7 @@
 //     consistent error formatting. Zero overhead beyond encoding/json.
 //   - LLM: ExtractObject/ExtractArray/RecoverTruncated/UnmarshalLLM —
 //     handles noisy model output (thinking tags, code fences, prose, truncation).
-//     Only imported by LLM-adjacent code (memory, vega, chat/pilot).
+//     Only imported by LLM-adjacent code (memory, chat/pilot).
 package jsonutil
 
 import (

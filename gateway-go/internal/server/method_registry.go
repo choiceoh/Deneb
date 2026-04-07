@@ -20,7 +20,6 @@ import (
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/handlertelegram"
-	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
@@ -169,9 +168,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
 		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
 
-		// --- Platform ---
-		handlerplatform.WizardMethods(handlerplatform.WizardDeps{Engine: hub.Wizard()}),
-		handlerplatform.TalkMethods(handlerplatform.TalkDeps{Talk: hub.Talk()}),
 	}
 
 	// Conditional: provider methods.

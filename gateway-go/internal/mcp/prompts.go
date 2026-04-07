@@ -14,7 +14,6 @@ func allPrompts() []Prompt {
 			Name:        "deneb_system_check",
 			Description: "Deneb 시스템 전체 상태 점검 (게이트웨이, 런타임, 프로바이더, 모델, 스킬, 활동 메트릭)",
 		},
-		// deneb_memory_recall removed (vega backend removed)
 		{
 			Name:        "deneb_session_review",
 			Description: "최근 또는 특정 세션의 대화 내역 리뷰",
@@ -26,7 +25,6 @@ func allPrompts() []Prompt {
 			Name:        "deneb_daily_summary",
 			Description: "오늘의 Deneb 활동 요약 (세션, 메모리 변경, 크론 작업)",
 		},
-		// deneb_vega_deep_search removed (vega backend removed)
 	}
 }
 
@@ -66,14 +64,10 @@ func (pm *PromptManager) Get(ctx context.Context, name string, args map[string]s
 	switch name {
 	case "deneb_system_check":
 		return pm.systemCheck(ctx)
-	case "deneb_memory_recall":
-		return nil, fmt.Errorf("prompt %s removed (vega backend removed)", name)
 	case "deneb_session_review":
 		return pm.sessionReview(ctx, args["session_key"])
 	case "deneb_daily_summary":
 		return pm.dailySummary(ctx)
-	case "deneb_vega_deep_search":
-		return nil, fmt.Errorf("prompt %s removed (vega backend removed)", name)
 	default:
 		return nil, fmt.Errorf("prompt %s not implemented", p.Name)
 	}

@@ -18,8 +18,6 @@ func (s *Server) buildHub() *rpcutil.GatewayHub {
 		Tasks:          s.taskRegistry,
 		Approvals:      s.approvals,
 		Skills:         s.skills,
-		Wizard:         s.wizardEng,
-		Talk:           s.talkState,
 		RLService:      s.rlService,
 		Logger:         s.logger,
 		Version:        s.version,

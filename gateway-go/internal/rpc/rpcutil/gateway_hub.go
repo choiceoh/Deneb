@@ -27,11 +27,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
-	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 )
 
 // Registration phase constants. Phases must advance in order:
@@ -71,8 +69,6 @@ type HubConfig struct {
 	// Workflow subsystems.
 	Approvals *approval.Store
 	Skills    *skill.Manager
-	Wizard    *wizard.Engine
-	Talk      *talk.State // optional
 
 	// RL self-learning (optional, nil when rl.enable=false).
 	RLService *rl.Service
@@ -113,8 +109,6 @@ type GatewayHub struct {
 	// Workflow subsystems.
 	approvals *approval.Store
 	skills    *skill.Manager
-	wizard    *wizard.Engine
-	talk      *talk.State
 
 	// RL self-learning pipeline (optional, nil when rl is disabled).
 	rlService *rl.Service
@@ -150,8 +144,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		tasks:          cfg.Tasks,
 		approvals:      cfg.Approvals,
 		skills:         cfg.Skills,
-		wizard:         cfg.Wizard,
-		talk:           cfg.Talk,
 		rlService:      cfg.RLService,
 		logger:         cfg.Logger,
 		version:        cfg.Version,
@@ -175,8 +167,6 @@ func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.
 func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
 func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
-func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
-func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
 func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
 func (h *GatewayHub) RLMService() *rlm.Service                       { return h.rlmService }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
@@ -269,16 +259,12 @@ func (h *GatewayHub) Validate() error {
 	if h.skills == nil {
 		missing = append(missing, "Skills")
 	}
-	if h.wizard == nil {
-		missing = append(missing, "Wizard")
-	}
 	if h.logger == nil {
 		missing = append(missing, "Logger")
 	}
 	// Optional (nil-safe or late-bound):
 	//   InternalHooks — explicitly nil-safe in handlers
 	//   CronPersistLog — optional run log
-	//   Talk — optional workflow state
 	//   Telegram — late-bound via SetTelegram
 	//   Chat — late-bound via SetChat
 	//   Version — empty string is valid

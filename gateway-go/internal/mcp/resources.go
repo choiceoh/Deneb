@@ -127,11 +127,6 @@ func (rm *ResourceManager) resolveURI(uri string) (string, map[string]any, error
 		}
 		return "sessions.preview", map[string]any{"keys": []string{key}}, nil
 	}
-	if strings.HasPrefix(uri, "deneb://memory/") {
-		query := strings.TrimPrefix(uri, "deneb://memory/")
-		return "vega.memory-search", map[string]any{"query": query}, nil
-	}
-
 	// Static URIs.
 	for _, route := range resourceRoutes {
 		if uri == route.prefix {

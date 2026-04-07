@@ -218,7 +218,7 @@ func (s *Server) registerSessionRPCMethods() {
 
 // registerWorkflowSideEffects wires non-RPC business logic: process approval
 // callbacks, autonomous/dreaming service, Telegram notifiers, and memory flush.
-// All RPC domain registrations (approval, agent CRUD, wizard, talk) are now
+// All RPC domain registrations (approval, agent CRUD) are now
 // handled by registerEarlyMethods via hub adapters.
 func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Wire process approval callback using the Go approval store directly.
