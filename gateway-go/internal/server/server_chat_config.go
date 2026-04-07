@@ -51,6 +51,11 @@ func (s *Server) initGmailPoll() {
 		cfg.PromptFile = pollCfg.PromptFile
 	}
 
+	// Wire diary dir for RLM knowledge synthesis.
+	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
+		cfg.DiaryDir = s.wikiStore.DiaryDir()
+	}
+
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
 	// Wire Telegram notifier.

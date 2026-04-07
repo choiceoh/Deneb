@@ -111,7 +111,22 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 		Status:              sd,
 		SubagentRuns:        subagentRunsFn,
 		ZeroCallsFn:         zeroCallsFn,
-		MorningLetterDataFn: tools.CollectMorningLetterData,
+		MorningLetterDataFn: p.buildMorningLetterDataFn(),
+	}
+}
+
+// buildMorningLetterDataFn returns a data collection function that includes
+// diary logging when wiki is enabled.
+func (p *InboundProcessor) buildMorningLetterDataFn() func(ctx context.Context) (string, error) {
+	var diaryDir string
+	if p.server.wikiStore != nil {
+		diaryDir = p.server.wikiStore.DiaryDir()
+	}
+	if diaryDir == "" {
+		return tools.CollectMorningLetterData
+	}
+	return func(ctx context.Context) (string, error) {
+		return tools.CollectMorningLetterDataWithOpts(ctx, tools.MorningLetterOpts{DiaryDir: diaryDir})
 	}
 }
 

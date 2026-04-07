@@ -38,7 +38,11 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterInfraTools(registry, localAI)
 	RegisterMediaTools(registry, deps.LLMClient, deps.DefaultModel)
 	RegisterDataTools(registry)
-	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel)
+	var diaryDir string
+	if deps.Wiki.Store != nil {
+		diaryDir = deps.Wiki.Store.DiaryDir()
+	}
+	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir)
 	RegisterAdvancedTools(registry, deps.WorkspaceDir)
 	RegisterHiddenTools(registry, deps.AgentLog)
 
@@ -296,7 +300,8 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // RegisterRoutineTools registers tools for recurring/scheduled tasks —
 // things that sit between always-on core tools and on-demand skills.
 // Typical trigger: cron scheduler, daily routines, periodic checks.
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel string) {
+// diaryDir is the wiki diary directory for RLM logging (empty = disabled).
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
@@ -322,7 +327,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 			Name:        "morning_letter",
 			Description: "Collect daily morning briefing data (모닝레터). Fetches weather, exchange rates, copper price (MetalpriceAPI), calendar, and email in parallel. Returns structured JSON for you to compose the final letter",
 			InputSchema: morningLetterToolSchema(),
-			Fn:          tools.ToolMorningLetter(exec),
+			Fn:          tools.ToolMorningLetter(exec, tools.MorningLetterOpts{DiaryDir: diaryDir}),
 			Deferred:    true,
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // Categories are the top-level wiki directories.
@@ -180,6 +181,35 @@ type StoreStats struct {
 	TotalPages    int
 	TotalBytes    int64
 	CategoryCount map[string]int
+}
+
+// AppendDiary appends a timestamped entry to today's diary file.
+// Safe to call from any goroutine. Creates the diary directory and file if needed.
+func (s *Store) AppendDiary(content string) error {
+	return AppendDiaryTo(s.diaryDir, content)
+}
+
+// AppendDiaryTo appends a timestamped entry to today's diary file in the given directory.
+// Standalone function usable without a Store instance.
+func AppendDiaryTo(diaryDir, content string) error {
+	if content == "" || diaryDir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
+		return fmt.Errorf("diary mkdir: %w", err)
+	}
+	now := time.Now()
+	path := filepath.Join(diaryDir, "diary-"+now.Format("2006-01-02")+".md")
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("diary open: %w", err)
+	}
+	defer f.Close()
+
+	entry := fmt.Sprintf("\n## %s\n\n%s\n", now.Format("15:04"), content)
+	_, err = f.WriteString(entry)
+	return err
 }
 
 // Close releases the FTS search database.
