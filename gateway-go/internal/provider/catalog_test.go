@@ -54,11 +54,11 @@ func TestFindCatalogTemplateEmpty(t *testing.T) {
 	}
 }
 
-func TestBuildSingleProviderApiKeyCatalog(t *testing.T) {
+func TestBuildSingleProviderAPIKeyCatalog(t *testing.T) {
 	// No API key → nil.
-	result := BuildSingleProviderApiKeyCatalog(SingleProviderCatalogParams{
+	result := BuildSingleProviderAPIKeyCatalog(SingleProviderCatalogParams{
 		ProviderID: "openai",
-		ApiKey:     "",
+		APIKey:     "",
 		BuildProvider: func() *ModelProviderCatalog {
 			return &ModelProviderCatalog{ID: "openai", BaseURL: "https://api.openai.com"}
 		},
@@ -68,9 +68,9 @@ func TestBuildSingleProviderApiKeyCatalog(t *testing.T) {
 	}
 
 	// With API key.
-	result2 := BuildSingleProviderApiKeyCatalog(SingleProviderCatalogParams{
+	result2 := BuildSingleProviderAPIKeyCatalog(SingleProviderCatalogParams{
 		ProviderID: "openai",
-		ApiKey:     "sk-test-key",
+		APIKey:     "sk-test-key",
 		BuildProvider: func() *ModelProviderCatalog {
 			return &ModelProviderCatalog{ID: "openai", BaseURL: "https://api.openai.com"}
 		},
@@ -78,15 +78,15 @@ func TestBuildSingleProviderApiKeyCatalog(t *testing.T) {
 	if result2 == nil {
 		t.Fatal("expected non-nil result with API key")
 	}
-	if result2.Provider.ApiKey != "sk-test-key" {
-		t.Errorf("expected API key 'sk-test-key', got %q", result2.Provider.ApiKey)
+	if result2.Provider.APIKey != "sk-test-key" {
+		t.Errorf("expected API key 'sk-test-key', got %q", result2.Provider.APIKey)
 	}
 	if result2.Provider.BaseURL != "https://api.openai.com" {
 		t.Errorf("expected base URL from builder, got %q", result2.Provider.BaseURL)
 	}
 }
 
-func TestBuildSingleProviderApiKeyCatalogWithExplicitBaseUrl(t *testing.T) {
+func TestBuildSingleProviderAPIKeyCatalogWithExplicitBaseURL(t *testing.T) {
 	config := map[string]any{
 		"models": map[string]any{
 			"providers": map[string]any{
@@ -97,11 +97,11 @@ func TestBuildSingleProviderApiKeyCatalogWithExplicitBaseUrl(t *testing.T) {
 		},
 	}
 
-	result := BuildSingleProviderApiKeyCatalog(SingleProviderCatalogParams{
+	result := BuildSingleProviderAPIKeyCatalog(SingleProviderCatalogParams{
 		Config:               config,
 		ProviderID:           "openai",
-		ApiKey:               "sk-test",
-		AllowExplicitBaseUrl: true,
+		APIKey:               "sk-test",
+		AllowExplicitBaseURL: true,
 		BuildProvider: func() *ModelProviderCatalog {
 			return &ModelProviderCatalog{ID: "openai", BaseURL: "https://default.com"}
 		},
@@ -116,11 +116,11 @@ func TestBuildSingleProviderApiKeyCatalogWithExplicitBaseUrl(t *testing.T) {
 	}
 }
 
-func TestBuildPairedProviderApiKeyCatalog(t *testing.T) {
+func TestBuildPairedProviderAPIKeyCatalog(t *testing.T) {
 	// No API key → nil.
-	result := BuildPairedProviderApiKeyCatalog(PairedProviderCatalogParams{
+	result := BuildPairedProviderAPIKeyCatalog(PairedProviderCatalogParams{
 		ProviderID: "volcengine",
-		ApiKey:     "",
+		APIKey:     "",
 		BuildProviders: func() map[string]*ModelProviderCatalog {
 			return map[string]*ModelProviderCatalog{
 				"volcengine":      {ID: "volcengine"},
@@ -133,9 +133,9 @@ func TestBuildPairedProviderApiKeyCatalog(t *testing.T) {
 	}
 
 	// With API key.
-	result2 := BuildPairedProviderApiKeyCatalog(PairedProviderCatalogParams{
+	result2 := BuildPairedProviderAPIKeyCatalog(PairedProviderCatalogParams{
 		ProviderID: "volcengine",
-		ApiKey:     "vol-key",
+		APIKey:     "vol-key",
 		BuildProviders: func() map[string]*ModelProviderCatalog {
 			return map[string]*ModelProviderCatalog{
 				"volcengine":      {ID: "volcengine"},
@@ -150,8 +150,8 @@ func TestBuildPairedProviderApiKeyCatalog(t *testing.T) {
 		t.Fatalf("expected 2 providers, got %d", len(result2.Providers))
 	}
 	for id, p := range result2.Providers {
-		if p.ApiKey != "vol-key" {
-			t.Errorf("provider %q API key = %q, want 'vol-key'", id, p.ApiKey)
+		if p.APIKey != "vol-key" {
+			t.Errorf("provider %q API key = %q, want 'vol-key'", id, p.APIKey)
 		}
 	}
 }

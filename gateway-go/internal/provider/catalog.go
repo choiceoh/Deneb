@@ -3,8 +3,8 @@
 //
 // Provides helper functions for building provider catalog results:
 // - FindCatalogTemplate: case-insensitive model search
-// - BuildSingleProviderApiKeyCatalog: single provider + API key
-// - BuildPairedProviderApiKeyCatalog: multiple providers sharing one API key
+// - BuildSingleProviderAPIKeyCatalog: single provider + API key
+// - BuildPairedProviderAPIKeyCatalog: multiple providers sharing one API key
 package provider
 
 import (
@@ -37,7 +37,7 @@ func FindCatalogTemplate(entries []CatalogTemplateEntry, providerID string, temp
 type ModelProviderCatalog struct {
 	ID      string         `json:"id,omitempty"`
 	BaseURL string         `json:"baseUrl,omitempty"`
-	ApiKey  string         `json:"apiKey,omitempty"`
+	APIKey  string         `json:"apiKey,omitempty"`
 	API     string         `json:"api,omitempty"`
 	Models  map[string]any `json:"models,omitempty"`
 	Headers map[string]any `json:"headers,omitempty"`
@@ -56,17 +56,17 @@ type PairedProviderCatalogResult struct {
 // CatalogBuilderContext provides context for building catalog results.
 type CatalogBuilderContext struct {
 	Config     map[string]any
-	ApiKey     string
+	APIKey     string
 	ProviderID string
 }
 
-// BuildSingleProviderApiKeyCatalog creates a catalog result for a single provider
+// BuildSingleProviderAPIKeyCatalog creates a catalog result for a single provider
 // with an API key. Returns nil if no API key is available.
 //
 // If allowExplicitBaseUrl is true and the config has an explicit baseUrl for
 // the provider, it will be merged into the result.
-func BuildSingleProviderApiKeyCatalog(params SingleProviderCatalogParams) *SingleProviderCatalogResult {
-	if params.ApiKey == "" {
+func BuildSingleProviderAPIKeyCatalog(params SingleProviderCatalogParams) *SingleProviderCatalogResult {
+	if params.APIKey == "" {
 		return nil
 	}
 
@@ -75,10 +75,10 @@ func BuildSingleProviderApiKeyCatalog(params SingleProviderCatalogParams) *Singl
 		return nil
 	}
 
-	provider.ApiKey = params.ApiKey
+	provider.APIKey = params.APIKey
 
 	// Merge explicit baseUrl from config if allowed.
-	if params.AllowExplicitBaseUrl && params.Config != nil {
+	if params.AllowExplicitBaseURL && params.Config != nil {
 		if models, ok := params.Config["models"].(map[string]any); ok {
 			if providers, ok := models["providers"].(map[string]any); ok {
 				if provConfig, ok := providers[params.ProviderID].(map[string]any); ok {
@@ -96,19 +96,19 @@ func BuildSingleProviderApiKeyCatalog(params SingleProviderCatalogParams) *Singl
 	return &SingleProviderCatalogResult{Provider: provider}
 }
 
-// SingleProviderCatalogParams holds parameters for BuildSingleProviderApiKeyCatalog.
+// SingleProviderCatalogParams holds parameters for BuildSingleProviderAPIKeyCatalog.
 type SingleProviderCatalogParams struct {
 	Config               map[string]any
 	ProviderID           string
-	ApiKey               string
-	AllowExplicitBaseUrl bool
+	APIKey               string
+	AllowExplicitBaseURL bool
 	BuildProvider        func() *ModelProviderCatalog
 }
 
-// BuildPairedProviderApiKeyCatalog creates a catalog result for multiple
+// BuildPairedProviderAPIKeyCatalog creates a catalog result for multiple
 // providers sharing one API key. Returns nil if no API key is available.
-func BuildPairedProviderApiKeyCatalog(params PairedProviderCatalogParams) *PairedProviderCatalogResult {
-	if params.ApiKey == "" {
+func BuildPairedProviderAPIKeyCatalog(params PairedProviderCatalogParams) *PairedProviderCatalogResult {
+	if params.APIKey == "" {
 		return nil
 	}
 
@@ -119,15 +119,15 @@ func BuildPairedProviderApiKeyCatalog(params PairedProviderCatalogParams) *Paire
 
 	// Inject the API key into all providers.
 	for _, p := range providers {
-		p.ApiKey = params.ApiKey
+		p.APIKey = params.APIKey
 	}
 
 	return &PairedProviderCatalogResult{Providers: providers}
 }
 
-// PairedProviderCatalogParams holds parameters for BuildPairedProviderApiKeyCatalog.
+// PairedProviderCatalogParams holds parameters for BuildPairedProviderAPIKeyCatalog.
 type PairedProviderCatalogParams struct {
 	ProviderID     string
-	ApiKey         string
+	APIKey         string
 	BuildProviders func() map[string]*ModelProviderCatalog
 }

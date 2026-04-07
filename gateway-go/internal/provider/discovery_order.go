@@ -44,7 +44,7 @@ type DiscoveryProvider struct {
 type DiscoveryProviderConfig struct {
 	ID      string         `json:"id,omitempty"`
 	BaseURL string         `json:"baseUrl,omitempty"`
-	ApiKey  string         `json:"apiKey,omitempty"`
+	APIKey  string         `json:"apiKey,omitempty"`
 	API     string         `json:"api,omitempty"`
 	Models  map[string]any `json:"models,omitempty"`
 	Headers map[string]any `json:"headers,omitempty"`
