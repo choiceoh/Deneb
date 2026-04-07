@@ -82,7 +82,147 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// ── TraceStore ──────────────────────────────────────────────────────────────
+// ── AgentTrace (root LLM + worker LLM) ─────────────────────────────────────
+
+// AgentTrace captures a single LLM agent run (root or worker).
+type AgentTrace struct {
+	ID         string    `json:"id"`
+	Kind       string    `json:"kind"`                  // "root" or "worker"
+	SessionKey string    `json:"session_key,omitempty"` // root only
+	ParentID   string    `json:"parent_id,omitempty"`   // worker: root run's client_run_id
+	StartedAt  time.Time `json:"started_at"`
+	ElapsedMS  int64     `json:"elapsed_ms"`
+	Model      string    `json:"model"`
+	Prompt     string    `json:"prompt,omitempty"` // first 200 chars (worker only)
+	StopReason string    `json:"stop_reason"`
+	Turns      int       `json:"turns"`
+	TokensIn   int       `json:"tokens_in"`
+	TokensOut  int       `json:"tokens_out"`
+	ToolCalls  int       `json:"tool_calls"`
+	Tools      []string  `json:"tools,omitempty"` // unique tool names used
+	Error      string    `json:"error,omitempty"`
+}
+
+// AgentTraceSummary is a compact view for listing recent agent traces.
+type AgentTraceSummary struct {
+	ID         string `json:"id"`
+	Kind       string `json:"kind"`
+	SessionKey string `json:"session_key,omitempty"`
+	StartedAt  string `json:"started_at"` // RFC3339
+	ElapsedMS  int64  `json:"elapsed_ms"`
+	Model      string `json:"model"`
+	StopReason string `json:"stop_reason"`
+	Turns      int    `json:"turns"`
+	TokensIn   int    `json:"tokens_in"`
+	TokensOut  int    `json:"tokens_out"`
+	ToolCalls  int    `json:"tool_calls"`
+	Error      string `json:"error,omitempty"`
+}
+
+// Summary returns a compact summary of the agent trace.
+func (t *AgentTrace) Summary() AgentTraceSummary {
+	return AgentTraceSummary{
+		ID:         t.ID,
+		Kind:       t.Kind,
+		SessionKey: t.SessionKey,
+		StartedAt:  t.StartedAt.Format(time.RFC3339),
+		ElapsedMS:  t.ElapsedMS,
+		Model:      t.Model,
+		StopReason: t.StopReason,
+		Turns:      t.Turns,
+		TokensIn:   t.TokensIn,
+		TokensOut:  t.TokensOut,
+		ToolCalls:  t.ToolCalls,
+		Error:      t.Error,
+	}
+}
+
+// AgentTraceStore keeps recent agent traces in a ring buffer.
+// Safe for concurrent use.
+type AgentTraceStore struct {
+	mu    sync.Mutex
+	buf   []AgentTrace
+	head  int
+	count int
+	cap   int
+}
+
+// NewAgentTraceStore creates a store that retains up to cap agent traces.
+func NewAgentTraceStore(cap int) *AgentTraceStore {
+	if cap <= 0 {
+		cap = 50
+	}
+	return &AgentTraceStore{
+		buf: make([]AgentTrace, cap),
+		cap: cap,
+	}
+}
+
+// Add stores a completed agent trace.
+func (s *AgentTraceStore) Add(t AgentTrace) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.buf[s.head] = t
+	s.head = (s.head + 1) % s.cap
+	if s.count < s.cap {
+		s.count++
+	}
+}
+
+// Latest returns the most recent agent trace, or nil if empty.
+func (s *AgentTraceStore) Latest() *AgentTrace {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.count == 0 {
+		return nil
+	}
+	idx := (s.head - 1 + s.cap) % s.cap
+	t := s.buf[idx]
+	return &t
+}
+
+// Get returns the agent trace with the given ID, or nil.
+func (s *AgentTraceStore) Get(id string) *AgentTrace {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := 0; i < s.count; i++ {
+		idx := (s.head - 1 - i + s.cap*2) % s.cap
+		if s.buf[idx].ID == id {
+			t := s.buf[idx]
+			return &t
+		}
+	}
+	return nil
+}
+
+// List returns summaries of recent agent traces, newest first.
+// kind filters by "root"/"worker"; empty string returns all.
+func (s *AgentTraceStore) List(limit int, kind string) []AgentTraceSummary {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit <= 0 {
+		limit = 20
+	}
+	result := make([]AgentTraceSummary, 0, limit)
+	for i := 0; i < s.count && len(result) < limit; i++ {
+		idx := (s.head - 1 - i + s.cap*2) % s.cap
+		t := &s.buf[idx]
+		if kind != "" && t.Kind != kind {
+			continue
+		}
+		result = append(result, t.Summary())
+	}
+	return result
+}
+
+// Count returns the number of stored agent traces.
+func (s *AgentTraceStore) Count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.count
+}
+
+// ── TraceStore (RLM loop) ───────────────────────────────────────────────────
 
 const defaultTraceCapacity = 20
 

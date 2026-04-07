@@ -14,24 +14,29 @@ import (
 // Service provides RLM status, wiki-backed project/memory queries,
 // trace observation, and knowledge write-back for the RPC layer.
 type Service struct {
-	cfg    Config
-	wiki   *wiki.Store
-	traces *TraceStore
-	logger *slog.Logger
+	cfg         Config
+	wiki        *wiki.Store
+	traces      *TraceStore
+	agentTraces *AgentTraceStore
+	logger      *slog.Logger
 }
 
 // NewService creates an RLM service. wiki may be nil (tools return unavailable).
 func NewService(cfg Config, wikiStore *wiki.Store, logger *slog.Logger) *Service {
 	return &Service{
-		cfg:    cfg,
-		wiki:   wikiStore,
-		traces: NewTraceStore(defaultTraceCapacity),
-		logger: logger,
+		cfg:         cfg,
+		wiki:        wikiStore,
+		traces:      NewTraceStore(defaultTraceCapacity),
+		agentTraces: NewAgentTraceStore(50),
+		logger:      logger,
 	}
 }
 
-// TraceStore returns the trace store for wiring into LoopConfig.
+// TraceStore returns the RLM loop trace store for wiring into LoopConfig.
 func (s *Service) TraceStore() *TraceStore { return s.traces }
+
+// AgentTraceStore returns the agent trace store for root+worker LLM observation.
+func (s *Service) AgentTraceStore() *AgentTraceStore { return s.agentTraces }
 
 // ServiceStatus is the RPC response for rlm.status.
 type ServiceStatus struct {
@@ -47,19 +52,21 @@ type ServiceStatus struct {
 	WikiStats *wiki.StoreStats `json:"wiki_stats,omitempty"`
 
 	// Trace observation stats.
-	TracesStored int `json:"traces_stored"`
+	TracesStored      int `json:"traces_stored"`       // RLM loop traces
+	AgentTracesStored int `json:"agent_traces_stored"` // root+worker LLM traces
 }
 
 // Status returns the current RLM service status.
 func (s *Service) Status() ServiceStatus {
 	st := ServiceStatus{
-		WikiConnected:    s.wiki != nil,
-		FreshTailCount:   s.cfg.FreshTailCount,
-		TotalTokenBudget: s.cfg.TotalTokenBudget,
-		MaxSubSpawns:     s.cfg.MaxSubSpawns,
-		MaxIterations:    s.cfg.MaxIterations,
-		REPLTimeoutSec:   s.cfg.REPLTimeoutSec,
-		TracesStored:     s.traces.Count(),
+		WikiConnected:     s.wiki != nil,
+		FreshTailCount:    s.cfg.FreshTailCount,
+		TotalTokenBudget:  s.cfg.TotalTokenBudget,
+		MaxSubSpawns:      s.cfg.MaxSubSpawns,
+		MaxIterations:     s.cfg.MaxIterations,
+		REPLTimeoutSec:    s.cfg.REPLTimeoutSec,
+		TracesStored:      s.traces.Count(),
+		AgentTracesStored: s.agentTraces.Count(),
 	}
 	if s.wiki != nil {
 		stats := s.wiki.Stats()
@@ -269,6 +276,20 @@ func (s *Service) GetTrace(id string) *Trace {
 // ListTraces returns summaries of recent traces, newest first.
 func (s *Service) ListTraces(limit int) []TraceSummary {
 	return s.traces.List(limit)
+}
+
+// GetAgentTrace returns an agent trace by ID, or the latest if id is empty.
+func (s *Service) GetAgentTrace(id string) *AgentTrace {
+	if id == "" {
+		return s.agentTraces.Latest()
+	}
+	return s.agentTraces.Get(id)
+}
+
+// ListAgentTraces returns summaries of recent agent traces, newest first.
+// kind filters by "root"/"worker"; empty returns all.
+func (s *Service) ListAgentTraces(limit int, kind string) []AgentTraceSummary {
+	return s.agentTraces.List(limit, kind)
 }
 
 // mergeUnique merges two string slices, deduplicating entries.

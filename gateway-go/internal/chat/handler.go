@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
@@ -34,6 +35,7 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
+	agentTraces     *rlm.AgentTraceStore              // optional; records root+worker LLM traces
 	wikiStore       *wiki.Store                       // optional; wiki knowledge base
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
@@ -130,6 +132,7 @@ type HandlerConfig struct {
 	AuthManager          *provider.AuthManager
 	JobTracker           *agent.JobTracker
 	ProviderConfigs      map[string]ProviderConfig // provider ID → config
+	AgentTraces          *rlm.AgentTraceStore      // optional; records root+worker LLM traces
 	WikiStore            *wiki.Store               // optional; wiki knowledge base
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
@@ -182,6 +185,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
 		providerConfigs:      cfg.ProviderConfigs,
+		agentTraces:          cfg.AgentTraces,
 		wikiStore:            cfg.WikiStore,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,

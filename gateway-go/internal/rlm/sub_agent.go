@@ -24,6 +24,8 @@ type SubAgentConfig struct {
 	MaxTurns     int // max tool-call turns (default: 3)
 	Budget       *TokenBudget
 	Logger       *slog.Logger
+	AgentTraces  *AgentTraceStore // optional; records worker traces
+	ParentRunID  string           // parent run ID for trace correlation
 }
 
 // SubAgentResult holds the output of a single sub-LLM run.
@@ -53,6 +55,8 @@ type BatchConfig struct {
 	MaxTurns     int
 	Budget       *TokenBudget
 	Logger       *slog.Logger
+	AgentTraces  *AgentTraceStore // optional; records worker traces
+	ParentRunID  string           // parent run ID for trace correlation
 }
 
 // RunSubAgent executes a single synchronous sub-LLM call.
@@ -124,6 +128,26 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 		"elapsed_ms", elapsed.Milliseconds(),
 		"budget_remaining", budgetRemaining(cfg.Budget))
 
+	// Record worker trace.
+	if cfg.AgentTraces != nil {
+		tools := uniqueToolNames(result.ToolActivities)
+		cfg.AgentTraces.Add(AgentTrace{
+			ID:         fmt.Sprintf("worker-%d", start.UnixMilli()),
+			Kind:       "worker",
+			ParentID:   cfg.ParentRunID,
+			StartedAt:  start,
+			ElapsedMS:  elapsed.Milliseconds(),
+			Model:      cfg.Model,
+			Prompt:     truncate(cfg.Prompt, 200),
+			StopReason: result.StopReason,
+			Turns:      result.Turns,
+			TokensIn:   result.Usage.InputTokens,
+			TokensOut:  result.Usage.OutputTokens,
+			ToolCalls:  len(result.ToolActivities),
+			Tools:      tools,
+		})
+	}
+
 	return &SubAgentResult{
 		Text:      result.AllText,
 		TokensIn:  result.Usage.InputTokens,
@@ -131,6 +155,19 @@ func RunSubAgent(ctx context.Context, cfg SubAgentConfig) (*SubAgentResult, erro
 		ToolCalls: result.Turns,
 		Error:     "",
 	}, nil
+}
+
+// uniqueToolNames extracts deduplicated tool names from activities.
+func uniqueToolNames(activities []agent.ToolActivity) []string {
+	seen := make(map[string]bool, len(activities))
+	var names []string
+	for _, a := range activities {
+		if !seen[a.Name] {
+			seen[a.Name] = true
+			names = append(names, a.Name)
+		}
+	}
+	return names
 }
 
 func budgetRemaining(b *TokenBudget) int {
@@ -188,6 +225,8 @@ func RunSubAgentBatch(ctx context.Context, cfg BatchConfig) ([]SubAgentResult, e
 				MaxTurns:     cfg.MaxTurns,
 				Budget:       cfg.Budget,
 				Logger:       cfg.Logger.With("sub_index", t.Index),
+				AgentTraces:  cfg.AgentTraces,
+				ParentRunID:  cfg.ParentRunID,
 			}
 
 			r, err := RunSubAgent(batchCtx, subCfg)

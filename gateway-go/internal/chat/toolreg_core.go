@@ -14,7 +14,12 @@ import (
 // RegisterCoreTools populates the tool registry with all core agent tools.
 // It delegates to toolreg.RegisterCoreTools for the bulk of registrations,
 // then adds tools that depend on chat-internal state (post-processors).
-func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
+// agentTraces is optional; when non-nil, worker LLM sub-agent calls record traces.
+func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps, agentTraces ...*rlm.AgentTraceStore) {
+	var traceStore *rlm.AgentTraceStore
+	if len(agentTraces) > 0 {
+		traceStore = agentTraces[0]
+	}
 	localAI := &toolreg.LocalAIDeps{
 		CheckLocalAIHealth: pilot.CheckLocalAIHealth,
 		BaseURL:            pilot.LightweightBaseURL,
@@ -39,7 +44,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		toolreg.RegisterRLMTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
 		if deps.LLMClient != nil {
-			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg)
+			spawnFn, batchFn := buildRLMSpawnFuncs(deps, registry, cfg, traceStore)
 			toolreg.RegisterRLMSpawnTools(registry, spawnFn, batchFn, cfg.MaxSubSpawns)
 		}
 
@@ -79,7 +84,11 @@ var rlmSpawnToolNames = map[string]bool{
 // client, tool registry, and config needed by Phase 2 sub-LLM tools.
 // Each invocation creates a fresh TokenBudget so budgets are per-call,
 // not cumulative across the server's lifetime.
-func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Config) (tools.SpawnFunc, tools.SpawnBatchFunc) {
+func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Config, agentTraces ...*rlm.AgentTraceStore) (tools.SpawnFunc, tools.SpawnBatchFunc) {
+	var traceStore *rlm.AgentTraceStore
+	if len(agentTraces) > 0 {
+		traceStore = agentTraces[0]
+	}
 	budgetLimit := cfg.TotalTokenBudget
 
 	// Build the LLM tool list available to sub-LLMs (data tools only).
@@ -108,6 +117,7 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 			MaxTurns:     maxTurns,
 			Budget:       budget,
 			Logger:       slog.Default().With("component", "rlm_sub"),
+			AgentTraces:  traceStore,
 		})
 	}
 
@@ -138,6 +148,7 @@ func buildRLMSpawnFuncs(deps *CoreToolDeps, registry *ToolRegistry, cfg rlm.Conf
 			MaxTurns:     cfg.SubMaxToolCalls,
 			Budget:       budget,
 			Logger:       slog.Default().With("component", "rlm_batch"),
+			AgentTraces:  traceStore,
 		})
 	}
 

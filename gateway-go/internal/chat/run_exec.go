@@ -23,6 +23,7 @@ import (
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
@@ -926,6 +927,32 @@ func executeAgentRun(
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
 		"transition", lastTransition.Reason())
+
+	// Record root LLM trace.
+	if deps.agentTraces != nil && agentResult != nil {
+		tools := make([]string, 0)
+		seen := make(map[string]bool)
+		for _, ta := range agentResult.ToolActivities {
+			if !seen[ta.Name] {
+				seen[ta.Name] = true
+				tools = append(tools, ta.Name)
+			}
+		}
+		deps.agentTraces.Add(rlm.AgentTrace{
+			ID:         fmt.Sprintf("root-%d", agentStart.UnixMilli()),
+			Kind:       "root",
+			SessionKey: params.SessionKey,
+			StartedAt:  agentStart,
+			ElapsedMS:  agentMs,
+			Model:      model,
+			StopReason: agentResult.StopReason,
+			Turns:      agentResult.Turns,
+			TokensIn:   agentResult.Usage.InputTokens,
+			TokensOut:  agentResult.Usage.OutputTokens,
+			ToolCalls:  len(agentResult.ToolActivities),
+			Tools:      tools,
+		})
+	}
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.emitAgentFn != nil {

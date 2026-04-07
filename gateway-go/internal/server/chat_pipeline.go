@@ -42,6 +42,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			// RLM service backed by wiki (always active).
 			rlmCfg := rlm.ConfigFromEnv()
 			s.rlmService = rlm.NewService(rlmCfg, wikiStore, s.logger)
+			chatCfg.AgentTraces = s.rlmService.AgentTraceStore()
 			s.logger.Info("rlm: service enabled (wiki-backed)")
 
 			// Wiki dreamer.
@@ -92,7 +93,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	}
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
-	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
+	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps, chatCfg.AgentTraces)
 
 	// Autoresearch runner + tool.
 	s.autoresearchRunner = autoresearch.NewRunner(s.logger)
