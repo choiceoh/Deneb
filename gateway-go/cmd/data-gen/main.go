@@ -7,8 +7,8 @@
 // Usage (from gateway-go/):
 //
 //	go run cmd/data-gen/main.go \
-//	    -yaml internal/chat/tool_classification.yaml \
-//	    -out  internal/chat/tool_classification_gen.go
+//	    -yaml internal/pipeline/chat/tool_classification.yaml \
+//	    -out  internal/pipeline/chat/tool_classification_gen.go
 //
 // Or via Makefile: make data-gen
 //

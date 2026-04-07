@@ -63,7 +63,7 @@ cp skills/<category>/<name>/SKILL.md /tmp/skill-baseline.md
 # (edit the specific section)
 
 # Test via autoresearch iterate
-scripts/dev-iterate.sh --metric "scripts/dev-quality-metric.sh"
+scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 ```
 
 ### Phase 4: Evaluate
@@ -81,9 +81,9 @@ scripts/dev-iterate.sh --metric "scripts/dev-quality-metric.sh"
 
 | Skill type | Metric command |
 |---|---|
-| Chat/prompt skills | `scripts/dev-quality-metric.sh` |
-| Tool-using skills | `scripts/dev-iterate.sh --metric "scripts/dev-quality-metric.sh"` |
-| Format skills | `scripts/dev-iterate.sh --metric "scripts/dev-quality-metric.sh"` |
+| Chat/prompt skills | `scripts/dev/quality-metric.sh` |
+| Tool-using skills | `scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"` |
+| Format skills | `scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"` |
 
 ### Phase 5: Keep or Revert
 
@@ -106,18 +106,18 @@ For systematic optimization, use the autoresearch infrastructure:
 
 ```bash
 # Generate a quality metric for the target skill
-scripts/dev-metric-gen.sh quality
+scripts/dev/metric-gen.sh quality
 
 # Start autoresearch targeting the skill file
-scripts/dev-autoresearch.sh start \
+scripts/dev/autoresearch.sh start \
   --target skills/<category>/<name>/SKILL.md \
   --metric quality
 
 # Monitor progress
-scripts/dev-autoresearch.sh status
+scripts/dev/autoresearch.sh status
 
 # Review results
-scripts/dev-ar-results.sh --suggest
+scripts/dev/ar-results.sh --suggest
 ```
 
 ### Hard Constraints for Autoresearch

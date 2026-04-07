@@ -3,8 +3,8 @@
 // Usage (from gateway-go/):
 //
 //	go run cmd/tool-schema-gen/main.go \
-//	    -yaml internal/chat/toolreg/tool_schemas.yaml \
-//	    -out  internal/chat/toolreg/tool_schemas_gen.go \
+//	    -yaml internal/pipeline/chat/toolreg/tool_schemas.yaml \
+//	    -out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
 //	    -pkg  toolreg
 //
 // Or via Makefile: make tool-schemas

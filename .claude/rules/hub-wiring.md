@@ -1,10 +1,10 @@
 ---
 description: GatewayHub wiring discipline and method registration rules
 globs:
-  - "gateway-go/internal/server/method_registry.go"
-  - "gateway-go/internal/server/gateway_hub.go"
-  - "gateway-go/internal/rpc/rpcutil/gateway_hub.go"
-  - "gateway-go/internal/rpc/handler/**"
+  - "gateway-go/internal/runtime/server/method_registry.go"
+  - "gateway-go/internal/runtime/server/gateway_hub.go"
+  - "gateway-go/internal/runtime/rpc/rpcutil/gateway_hub.go"
+  - "gateway-go/internal/runtime/rpc/handler/**"
 ---
 
 # GatewayHub Wiring Rules
@@ -25,7 +25,7 @@ and `hub.Telegram` in `registerEarlyMethods` after plugin creation).
 
 ### Rule 3: Handlers never import Hub
 
-Handler packages (`internal/rpc/handler/*`) accept `Deps` structs only.
+Handler packages (`internal/runtime/rpc/handler/*`) accept `Deps` structs only.
 They must NOT import `rpcutil.GatewayHub` or the `server` package.
 
 ### Rule 4: Adding a new handler (3-step process)

@@ -18,7 +18,7 @@ globs: ["cmd/**", "internal/**", "pkg/**"]
 
 ## Key Architectural Flows
 
-1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/server` (HTTP/WS) -> `internal/rpc` (dispatch) -> `internal/session` (state) -> `internal/telegram` (plugin).
+1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/runtime/server` (HTTP/WS) -> `internal/runtime/rpc` (dispatch) -> `internal/runtime/session` (state) -> `internal/platform/telegram` (plugin).
 
 ## Cross-Cutting Concerns
 

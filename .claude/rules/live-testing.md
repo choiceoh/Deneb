@@ -21,7 +21,7 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 
 프로덕션(18789)과 분리된 dev 인스턴스(포트 18790)를 관리한다.
 
-### Lifecycle: `scripts/dev-live-test.sh`
+### Lifecycle: `scripts/dev/live-test.sh`
 
 | Command | Description |
 |---|---|
@@ -43,7 +43,7 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 
 **환경 차이 확인:**
 ```bash
-scripts/dev-live-test.sh parity    # dev vs prod 환경 비교 리포트
+scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
 ```
 
 **Telegram 설정:** `~/.deneb/.env`에 dev 전용 봇 토큰 필수:
@@ -117,17 +117,17 @@ DENEB_ITERATE_TELEGRAM_TOKEN=<iterate bot token>  # dev-iterate.sh (port 18791)
 
 ### Step 1: 빌드 + 시작
 ```bash
-scripts/dev-live-test.sh restart
+scripts/dev/live-test.sh restart
 ```
 
 ### Step 2: Smoke test (작동 여부)
 ```bash
-scripts/dev-live-test.sh smoke
+scripts/dev/live-test.sh smoke
 ```
 
 ### Step 3: Quality test (작동 품질)
 ```bash
-scripts/dev-live-test.sh quality
+scripts/dev/live-test.sh quality
 ```
 **전체 시나리오 통과해야** 한다. 실패 항목 있으면 수정 → 재시작 → 재검증.
 
@@ -137,37 +137,37 @@ scripts/dev-live-test.sh quality
 
 ```bash
 # 채팅 파이프라인 수정했으면
-scripts/dev-live-test.sh quality chat
-scripts/dev-live-test.sh quality-custom "수정한 기능을 테스트할 메시지"
+scripts/dev/live-test.sh quality chat
+scripts/dev/live-test.sh quality-custom "수정한 기능을 테스트할 메시지"
 
 # 도구 관련 수정했으면
-scripts/dev-live-test.sh quality tools
+scripts/dev/live-test.sh quality tools
 
 # 포맷/렌더링 수정했으면
-scripts/dev-live-test.sh quality format
+scripts/dev/live-test.sh quality format
 
 # 여러 턴 흐름 테스트
-scripts/dev-live-test.sh session "health" "session.list {}"
+scripts/dev/live-test.sh session "health" "session.list {}"
 ```
 
 ### Step 5: 로그로 숨은 문제 확인
 ```bash
-scripts/dev-live-test.sh logs-errors
-scripts/dev-live-test.sh logs-since 60
+scripts/dev/live-test.sh logs-errors
+scripts/dev/live-test.sh logs-since 60
 ```
 
 ### Step 6: 정리
 ```bash
-scripts/dev-live-test.sh stop
+scripts/dev/live-test.sh stop
 ```
 
-## 반복 테스트: `scripts/dev-iterate.sh`
+## 반복 테스트: `scripts/dev/iterate.sh`
 
 **코드 수정 → 빌드 → 라이브 검증을 한 번에 실행하는 원샷 스크립트.**
 클로드 코드가 상수값이나 코드를 수정한 뒤 바로 실행해서 결과를 확인한다.
 
 ```bash
-scripts/dev-iterate.sh
+scripts/dev/iterate.sh
 # 출력: build... ok → start... ok → smoke... 2/2 → ITERATE_RESULT metric=2 ...
 ```
 
@@ -178,7 +178,7 @@ scripts/dev-iterate.sh
 1. 대상 파일에서 상수값 읽기
 2. 가설 세우기 (클로드 코드 자체가 LLM)
 3. 상수값 수정 (Edit 도구)
-4. `scripts/dev-iterate.sh` 실행
+4. `scripts/dev/iterate.sh` 실행
 5. ITERATE_RESULT 확인: metric이 올랐으면 keep, 내렸으면 revert
 6. 반복
 
@@ -205,11 +205,11 @@ DENEB_TEST_JSON {"version":1,"commit":"abc1234","phase":{...},"checks":[...],...
 
 ```bash
 # 베이스라인 비교/저장
-scripts/dev-iterate.sh --baseline         # 테스트 후 베이스라인과 비교
-scripts/dev-iterate.sh --save-baseline    # 결과를 새 베이스라인으로 저장
+scripts/dev/iterate.sh --baseline         # 테스트 후 베이스라인과 비교
+scripts/dev/iterate.sh --save-baseline    # 결과를 새 베이스라인으로 저장
 
 # 커스텀 metric
-scripts/dev-iterate.sh --metric "python3 my_metric.py"
+scripts/dev/iterate.sh --metric "python3 my_metric.py"
 # metric 스크립트는 stdout에 metric_value=N 출력해야 함
 ```
 
@@ -222,22 +222,22 @@ scripts/dev-iterate.sh --metric "python3 my_metric.py"
 유저의 실제 메시지를 보내고 assertion으로 증상 유무를 판별:
 ```bash
 # 한국어 응답 확인
-scripts/dev-live-test.sh chat-check "안녕" --expect-korean
+scripts/dev/live-test.sh chat-check "안녕" --expect-korean
 
 # 특정 패턴이 응답에 있는지
-scripts/dev-live-test.sh chat-check "날씨 알려줘" --expect "날씨|기온|온도"
+scripts/dev/live-test.sh chat-check "날씨 알려줘" --expect "날씨|기온|온도"
 
 # 특정 패턴이 없는지 (누출 검사)
-scripts/dev-live-test.sh chat-check "안녕" --expect-not "<thinking>"
+scripts/dev/live-test.sh chat-check "안녕" --expect-not "<thinking>"
 
 # 특정 도구가 호출되는지
-scripts/dev-live-test.sh chat-check "시스템 상태" --expect-tool health
+scripts/dev/live-test.sh chat-check "시스템 상태" --expect-tool health
 
 # 레이턴시 확인
-scripts/dev-live-test.sh chat-check "안녕" --max-latency 10000
+scripts/dev/live-test.sh chat-check "안녕" --max-latency 10000
 
 # 조합
-scripts/dev-live-test.sh chat-check "파일 목록 보여줘" \
+scripts/dev/live-test.sh chat-check "파일 목록 보여줘" \
     --expect-korean --expect-tool fs --max-latency 30000
 ```
 
@@ -246,13 +246,13 @@ scripts/dev-live-test.sh chat-check "파일 목록 보여줘" \
 같은 세션에서 여러 턴을 보내 컨텍스트 유지 문제를 재현:
 ```bash
 # 컨텍스트 유지 확인
-scripts/dev-live-test.sh multi-chat \
+scripts/dev/live-test.sh multi-chat \
     "내 이름은 홍길동이야" \
     "내 이름이 뭐라고 했지?" \
     --expect-context "홍길동"
 
 # 연속 대화 흐름
-scripts/dev-live-test.sh multi-chat \
+scripts/dev/live-test.sh multi-chat \
     "프로젝트 상태 알려줘" \
     "더 자세히 설명해줘"
 ```
@@ -261,8 +261,8 @@ scripts/dev-live-test.sh multi-chat \
 
 특정 도구가 올바르게 호출 + 완료되는지:
 ```bash
-scripts/dev-live-test.sh tool-check health "시스템 상태 확인해줘"
-scripts/dev-live-test.sh tool-check vega "최근 대화 검색해줘"
+scripts/dev/live-test.sh tool-check health "시스템 상태 확인해줘"
+scripts/dev/live-test.sh tool-check vega "최근 대화 검색해줘"
 ```
 
 ### AI 에이전트의 증상 재현 절차

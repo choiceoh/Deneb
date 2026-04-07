@@ -29,7 +29,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/mcp"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mcp"
 )
 
 // Version is injected at build time via ldflags.

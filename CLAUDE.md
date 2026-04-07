@@ -9,7 +9,7 @@
 # Repository Guidelines
 
 - Repo: https://github.com/deneb/deneb
-- In chat replies, file references must be repo-root relative only (example: `gateway-go/internal/server/server.go:80`); never absolute paths or `~/...`.
+- In chat replies, file references must be repo-root relative only (example: `gateway-go/internal/runtime/server/server.go:80`); never absolute paths or `~/...`.
 - Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
 
 ---
@@ -37,7 +37,7 @@
 | `git-pr.md` | Git/PR 상세 가이드 | `.github/**` |
 | `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
-| `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/server/method_registry.go`, `gateway-go/internal/rpc/rpcutil/gateway_hub.go` |
+| `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/runtime/server/method_registry.go`, `gateway-go/internal/runtime/rpc/rpcutil/gateway_hub.go` |
 | `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go` |
 | `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go` |
 
@@ -51,7 +51,7 @@
 2. **Build Go gateway:** `make go`
 3. **Run tests:** `make test`
 4. **Fast iteration:** `make go-dev` (auto-restart)
-5. **Live test:** `scripts/dev-live-test.sh restart && scripts/dev-live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
+5. **Live test:** `scripts/dev/live-test.sh restart && scripts/dev/live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
 
 **Module guides:** Each module (`gateway-go/`, `skills/`) has its own `CLAUDE.md` with targeted build/test/contribution guidance.
 
@@ -121,11 +121,11 @@
 
 **필수 흐름** (코드 수정 완료 후):
 ```bash
-scripts/dev-live-test.sh restart    # 빌드 + dev 게이트웨이 재시작
-scripts/dev-live-test.sh smoke      # Health + Ready 확인
-scripts/dev-live-test.sh quality    # 전체 품질 테스트 (텔레그램 경유, 한국어/도구/포맷/에지)
-scripts/dev-live-test.sh logs-errors  # 숨은 에러 확인
-scripts/dev-live-test.sh stop       # 정리
+scripts/dev/live-test.sh restart    # 빌드 + dev 게이트웨이 재시작
+scripts/dev/live-test.sh smoke      # Health + Ready 확인
+scripts/dev/live-test.sh quality    # 전체 품질 테스트 (텔레그램 경유, 한국어/도구/포맷/에지)
+scripts/dev/live-test.sh logs-errors  # 숨은 에러 확인
+scripts/dev/live-test.sh stop       # 정리
 ```
 
 - **quality test 실패 시 "완료"라고 하지 마라** — 수정 → 재시작 → 재검증.

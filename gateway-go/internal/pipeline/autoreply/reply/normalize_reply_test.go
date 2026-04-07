@@ -1,0 +1,320 @@
+package reply
+
+import (
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
+)
+
+func TestDeduplicateReplyPayloads(t *testing.T) {
+	tests := []struct {
+		name     string
+		payloads []types.ReplyPayload
+		wantLen  int
+		wantKeys []string // expected Text values in order
+	}{
+		{
+			name:     "nil input",
+			payloads: nil,
+			wantLen:  0,
+		},
+		{
+			name:     "empty input",
+			payloads: []types.ReplyPayload{},
+			wantLen:  0,
+		},
+		{
+			name: "no duplicates",
+			payloads: []types.ReplyPayload{
+				{Text: "hello"},
+				{Text: "world"},
+			},
+			wantLen:  2,
+			wantKeys: []string{"hello", "world"},
+		},
+		{
+			name: "duplicate texts removed",
+			payloads: []types.ReplyPayload{
+				{Text: "hello"},
+				{Text: "hello"},
+				{Text: "world"},
+			},
+			wantLen:  2,
+			wantKeys: []string{"hello", "world"},
+		},
+		{
+			name: "duplicate media URLs removed",
+			payloads: []types.ReplyPayload{
+				{MediaURL: "https://example.com/img.png"},
+				{MediaURL: "https://example.com/img.png"},
+			},
+			wantLen:  1,
+			wantKeys: []string{""},
+		},
+		{
+			name: "empty text and media are kept",
+			payloads: []types.ReplyPayload{
+				{Text: ""},
+				{Text: ""},
+			},
+			wantLen:  2,
+			wantKeys: []string{"", ""},
+		},
+		{
+			name: "text takes precedence over media for key",
+			payloads: []types.ReplyPayload{
+				{Text: "msg", MediaURL: "https://a.com/1.png"},
+				{Text: "msg", MediaURL: "https://a.com/2.png"},
+			},
+			wantLen:  1,
+			wantKeys: []string{"msg"},
+		},
+		{
+			name: "mixed text and media payloads",
+			payloads: []types.ReplyPayload{
+				{Text: "hello"},
+				{MediaURL: "https://example.com/img.png"},
+				{Text: "hello"},
+				{MediaURL: "https://example.com/img.png"},
+				{Text: "world"},
+			},
+			wantLen:  3,
+			wantKeys: []string{"hello", "", "world"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DeduplicateReplyPayloads(tt.payloads)
+			if len(got) != tt.wantLen {
+				t.Fatalf("len = %d, want %d", len(got), tt.wantLen)
+			}
+			for i, key := range tt.wantKeys {
+				if i < len(got) && got[i].Text != key {
+					t.Errorf("result[%d].Text = %q, want %q", i, got[i].Text, key)
+				}
+			}
+		})
+	}
+}
+
+func TestStripLeakedToolCallMarkup(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "removes leaked tool envelope before final text",
+			in: `<function=read>
+<arg_key>file_path</arg_key>
+<arg_value>/tmp/HEARTBEAT.md</arg_value>
+</tool_call>
+HEARTBEAT_OK`,
+			want: "HEARTBEAT_OK",
+		},
+		{
+			name: "removes repeated tool envelope segments",
+			in: `<function=read>
+<arg_key>file_path</arg_key>
+</tool_call>
+<function=read>
+<arg_key>file_path</arg_key>
+</tool_call>
+Done`,
+			want: "Done",
+		},
+		{
+			name: "keeps normal text unchanged",
+			in:   "안녕하세요",
+			want: "안녕하세요",
+		},
+		{
+			name: "keeps incomplete envelope unchanged",
+			in:   "<function=read>\nmissing close tag",
+			want: "<function=read>\nmissing close tag",
+		},
+		{
+			name: "removes <tool_call>...</tool_call> block",
+			in:   "작업 중입니다.\n<tool_call>\n{\"name\": \"read\", \"arguments\": {\"file_path\": \"/tmp/x\"}}\n</tool_call>\n완료!",
+			want: "작업 중입니다.\n\n완료!",
+		},
+		{
+			name: "removes JSON-style tool call block",
+			in:   "먼저 확인합니다.\n{\"name\": \"exec\", \"arguments\": {\"command\": \"git status\"}}\n결과입니다.",
+			want: "먼저 확인합니다.\n\n결과입니다.",
+		},
+		{
+			name: "removes special token lines",
+			in:   "<|python_tag|>exec(command='ls')\n파일 목록입니다.",
+			want: "파일 목록입니다.",
+		},
+		{
+			name: "removes bracket tool call from session memory format",
+			in:   "먼저 멈추고 확인한다.\n[tool:autoresearch({\"action\":\"stop\",\"workdir\":\"/home/choiceoh/Deneb\"})]\n완료.",
+			want: "먼저 멈추고 확인한다.\n\n완료.",
+		},
+		{
+			name: "removes bracket tool call with result",
+			in:   "확인합니다.\n[tool:read_file({\"path\":\"/tmp/x\"})]\n[result → file contents here]\n끝.",
+			want: "확인합니다.\n\n\n끝.",
+		},
+		{
+			name: "removes tool-only text",
+			in:   "[tool:autoresearch({\"action\":\"stop\",\"workdir\":\"/home/choiceoh/Deneb\"})]",
+			want: "",
+		},
+		{
+			name: "removes truncated tool call without closing bracket",
+			in:   "[tool:exec({\"command\":\"python3 -c \\\"import json; vocab = json.load(open('tokenizer.json'))['model']['vocab']; print(len(vocab",
+			want: "",
+		},
+		{
+			name: "removes truncated tool call preserving preceding text",
+			in:   "확인해볼게요.\n[tool:exec({\"command\":\"git diff HEAD~1 -- gateway-go/internal/pipeline/chat/",
+			want: "확인해볼게요.",
+		},
+		{
+			name: "removes multi-line tool call with actual newlines in args",
+			in:   "[tool:exec({\"command\":\"python3 << 'EOF'\\nimport json\\nvocab = json.load(open('tok.json'))\\nprint(len(vocab))\\nEOF\"})]",
+			want: "",
+		},
+		{
+			name: "removes tool call with embedded newlines in heredoc",
+			in:   "[tool:exec({\"command\":\"python3 << 'EOF'\nimport json\nprint('hello')\nEOF\"})]",
+			want: "",
+		},
+		{
+			name: "removes Korean-style tool call from session memory format",
+			in:   "확인합니다.\n— web_fetch 사용: {\"query\":\"test\",\"fetch\":2}\n결과입니다.",
+			want: "확인합니다.\n\n결과입니다.",
+		},
+		{
+			name: "removes Korean tool call with result arrow",
+			in:   "— read_file 사용: {\"path\":\"config.yaml\"}\n  ↳ port: 8080\n완료.",
+			want: "완료.",
+		},
+		{
+			name: "removes Korean tool call only",
+			in:   "— web_fetch 사용: {\"query\":\"agentskills.io Hermes Agent skills quality review\",\"fetch\":2}",
+			want: "",
+		},
+		{
+			name: "removes bare tool name in brackets",
+			in:   "[cron]",
+			want: "",
+		},
+		{
+			name: "removes bare tool name preserving surrounding text",
+			in:   "확인해볼게요.\n[cron]\n완료.",
+			want: "확인해볼게요.\n\n완료.",
+		},
+		{
+			name: "removes bare tool name with underscores",
+			in:   "[read_file]",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StripLeakedToolCallMarkup(tt.in); got != tt.want {
+				t.Fatalf("StripLeakedToolCallMarkup() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripFencedCodeBlocks(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "removes fenced code block",
+			in:   "확인해볼게\n```bash\ncd /tmp && gh pr view 919\n```\n완료",
+			want: "확인해볼게\n\n완료",
+		},
+		{
+			name: "removes code block without language tag",
+			in:   "작업 시작\n```\ngit status\n```",
+			want: "작업 시작",
+		},
+		{
+			name: "removes multiple code blocks",
+			in:   "먼저\n```go\nfmt.Println()\n```\n그리고\n```bash\nmake test\n```\n끝",
+			want: "먼저\n\n그리고\n\n끝",
+		},
+		{
+			name: "keeps text without code blocks",
+			in:   "안녕하세요, 확인했습니다.",
+			want: "안녕하세요, 확인했습니다.",
+		},
+		{
+			name: "returns empty for code-only content",
+			in:   "```bash\ngh pr view 919 --json title\n```",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StripFencedCodeBlocks(tt.in); got != tt.want {
+				t.Fatalf("StripFencedCodeBlocks() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeDraftText(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "strips code block and tool call markup",
+			in:   "확인해볼게 🐾\n```bash\ncd ~/.deneb && gh pr view 919\n```\n<tool_call>\n{}\n</tool_call>",
+			want: "확인해볼게 🐾",
+		},
+		{
+			name: "returns empty for command-only content",
+			in:   "```bash\ngit status\n```",
+			want: "",
+		},
+		{
+			name: "preserves normal text",
+			in:   "PR을 확인하겠습니다.",
+			want: "PR을 확인하겠습니다.",
+		},
+		{
+			name: "strips bracket tool call and code block together",
+			in:   "확인해볼게\n[tool:exec({\"command\":\"git status\"})]\n```bash\ngit status\n```",
+			want: "확인해볼게",
+		},
+		{
+			name: "strips partial tool prefix during streaming",
+			in:   "확인해볼게\n[tool:exec",
+			want: "확인해볼게",
+		},
+		{
+			name: "strips bare tool prefix during streaming",
+			in:   "[tool:",
+			want: "",
+		},
+		{
+			name: "strips bare tool name during streaming",
+			in:   "확인해볼게\n[cron]",
+			want: "확인해볼게",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SanitizeDraftText(tt.in); got != tt.want {
+				t.Fatalf("SanitizeDraftText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

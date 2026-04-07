@@ -17,27 +17,27 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | Directory | Purpose |
 |-----------|---------|
 | `cmd/gateway/` | Entry point (`main.go`), `--port`/`--bind` flags, graceful shutdown |
-| `internal/server/` | HTTP server: `/health`, `/api/v1/rpc`, OpenAI APIs, hooks |
-| `internal/rpc/` | Registry-based RPC dispatcher, 150+ methods |
-| `internal/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
-| `internal/chat/` | System prompt, tool registration, context files, slash commands |
-| `internal/auth/` | Token auth, allowlists, credentials |
-| `internal/llm/` | LLM client, sampling parameters, multimodal types |
-| `internal/telegram/` | Telegram channel plugin (primary deployment target) |
+| `internal/runtime/server/` | HTTP server: `/health`, `/api/v1/rpc`, OpenAI APIs, hooks |
+| `internal/runtime/rpc/` | Registry-based RPC dispatcher, 150+ methods |
+| `internal/runtime/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
+| `internal/pipeline/chat/` | System prompt, tool registration, context files, slash commands |
+| `internal/infra/auth/` | Token auth, allowlists, credentials |
+| `internal/ai/llm/` | LLM client, sampling parameters, multimodal types |
+| `internal/platform/telegram/` | Telegram channel plugin (primary deployment target) |
 | `pkg/protocol/` | Hand-written JSON wire types |
 
 ## Common Tasks
 
 ### Adding a New RPC Method
-1. Define the method in `internal/rpc/methods.go`
-2. Register in `internal/rpc/register.go`
-3. Add handler in `internal/rpc/handler/`
+1. Define the method in `internal/runtime/rpc/methods.go`
+2. Register in `internal/runtime/rpc/register.go`
+3. Add handler in `internal/runtime/rpc/handler/`
 4. Follow existing patterns for request/response types
 
 ### Adding a New Agent Tool
-1. Add schema to `internal/chat/toolreg/tool_schemas.yaml`, run `make tool-schemas`
-2. Implement handler in `internal/chat/tools/<name>.go`
-3. Register in `internal/chat/toolreg/core.go` (appropriate Register*Tools function)
+1. Add schema to `internal/pipeline/chat/toolreg/tool_schemas.yaml`, run `make tool-schemas`
+2. Implement handler in `internal/pipeline/chat/tools/<name>.go`
+3. Register in `internal/pipeline/chat/toolreg/core.go` (appropriate Register*Tools function)
 
 ### Working with Generated Files
 
@@ -45,17 +45,17 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 
 | File | Source | Command |
 |------|--------|---------|
-| `internal/chat/toolreg/tool_schemas_gen.go` | `internal/chat/toolreg/tool_schemas.yaml` | `make tool-schemas` |
-| `internal/autoreply/thinking/model_caps_gen.go` | `internal/autoreply/thinking/model_caps.yaml` | `make model-caps` |
-| `internal/chat/tool_classification_gen.go` | `internal/chat/tool_classification.yaml` | `make data-gen` |
+| `internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `internal/pipeline/chat/toolreg/tool_schemas.yaml` | `make tool-schemas` |
+| `internal/pipeline/autoreply/thinking/model_caps_gen.go` | `internal/pipeline/autoreply/thinking/model_caps.yaml` | `make model-caps` |
+| `internal/pipeline/chat/tool_classification_gen.go` | `internal/pipeline/chat/tool_classification.yaml` | `make data-gen` |
 
 To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.
 
 ### Modifying System Prompt
-- Assembly: `internal/chat/prompt/system_prompt.go`
-- Context files: `internal/chat/prompt/context_files.go` (loads CLAUDE.md, SOUL.md, etc.)
-- Silent replies: `internal/chat/silent_reply.go` (NO_REPLY token)
-- Slash commands: `internal/chat/slash_commands.go` (/reset, /status, /kill, /model, /think)
+- Assembly: `internal/pipeline/chat/prompt/system_prompt.go`
+- Context files: `internal/pipeline/chat/prompt/context_files.go` (loads CLAUDE.md, SOUL.md, etc.)
+- Silent replies: `internal/pipeline/chat/silent_reply.go` (NO_REPLY token)
+- Slash commands: `internal/pipeline/chat/slash_commands.go` (/reset, /status, /kill, /model, /think)
 
 ### Changing Wire Types
 - Hand-written types: `pkg/protocol/`
@@ -79,21 +79,21 @@ The sole user **does not read or write code**. All development is done through n
 
 | File | Purpose |
 |------|---------|
-| `internal/telegram/bot.go` | Gateway WebSocket connection, heartbeating, event dispatch |
-| `internal/telegram/client.go` | Telegram REST API client (send/edit messages, files, interactions) |
-| `internal/telegram/config.go` | Channel config (bot token, guild, allowed channels, workspaces) |
-| `internal/telegram/plugin.go` | `channel.Plugin` implementation, lifecycle, slash command registration |
-| `internal/telegram/types.go` | Telegram API types (Message, Embed, Component, Interaction, etc.) |
-| `internal/telegram/components.go` | Button builders: context-aware action buttons per outcome type |
-| `internal/telegram/embed_format.go` | Embed builders: test results, errors, dashboard, help |
-| `internal/telegram/format.go` | Reply formatter: code block collapsing, chunking, file extraction |
-| `internal/telegram/reply_analysis.go` | Reply outcome classifier + Korean error translation for vibe coders |
-| `internal/telegram/slash_commands.go` | Application command registration (vibe-coder commands only) |
-| `internal/telegram/thread_namer.go` | Auto thread naming via local AI LLM |
-| `internal/telegram/send.go` | SendText helper with auto-chunking |
-| `internal/server/inbound.go` | Inbound message processing, quick commands, autoreply pipeline |
-| `internal/server/server_chat_telegram.go` | Reply pipeline: dedup → draft edit → send |
-| `internal/chat/prompt/system_prompt.go` | `BuildCodingSystemPrompt()` — vibe coder agent instructions |
+| `internal/platform/telegram/bot.go` | Gateway WebSocket connection, heartbeating, event dispatch |
+| `internal/platform/telegram/client.go` | Telegram REST API client (send/edit messages, files, interactions) |
+| `internal/platform/telegram/config.go` | Channel config (bot token, guild, allowed channels, workspaces) |
+| `internal/platform/telegram/plugin.go` | `channel.Plugin` implementation, lifecycle, slash command registration |
+| `internal/platform/telegram/types.go` | Telegram API types (Message, Embed, Component, Interaction, etc.) |
+| `internal/platform/telegram/components.go` | Button builders: context-aware action buttons per outcome type |
+| `internal/platform/telegram/embed_format.go` | Embed builders: test results, errors, dashboard, help |
+| `internal/platform/telegram/format.go` | Reply formatter: code block collapsing, chunking, file extraction |
+| `internal/platform/telegram/reply_analysis.go` | Reply outcome classifier + Korean error translation for vibe coders |
+| `internal/platform/telegram/slash_commands.go` | Application command registration (vibe-coder commands only) |
+| `internal/platform/telegram/thread_namer.go` | Auto thread naming via local AI LLM |
+| `internal/platform/telegram/send.go` | SendText helper with auto-chunking |
+| `internal/runtime/server/inbound.go` | Inbound message processing, quick commands, autoreply pipeline |
+| `internal/runtime/server/server_chat_telegram.go` | Reply pipeline: dedup → draft edit → send |
+| `internal/pipeline/chat/prompt/system_prompt.go` | `BuildCodingSystemPrompt()` — vibe coder agent instructions |
 
 ### Reply Pipeline (agent response → Telegram message)
 

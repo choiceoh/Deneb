@@ -7,7 +7,7 @@ package main
 import (
 	"os"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/bootstrap"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/bootstrap"
 )
 
 // Version is the gateway version, injected at build time via ldflags.

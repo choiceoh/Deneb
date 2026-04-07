@@ -7,7 +7,7 @@
 # Security-sensitive code, config, and docs require secops review.
 /.github/dependabot.yml @deneb/secops
 /.github/workflows/codeql.yml @deneb/secops
-/gateway-go/internal/auth/ @deneb/secops
+/gateway-go/internal/infra/auth/ @deneb/secops
 /docs/reference/secretref-user-supplied-credentials-matrix.json @deneb/secops
 
 # Go gateway and build infrastructure.
