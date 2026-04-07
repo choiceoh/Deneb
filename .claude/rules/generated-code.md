@@ -9,7 +9,7 @@ Several Go files in this repo are **machine-generated** and carry a `// Code gen
 
 | Generated file | Source of truth | Regenerate with |
 |---|---|---|
-| `gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `gateway-go/internal/pipeline/chat/toolreg/tool_schemas.yaml` | `make tool-schemas` |
+| `gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json` | `make tool-schemas` |
 | `gateway-go/internal/pipeline/autoreply/thinking/model_caps_gen.go` | `gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml` | `make model-caps` |
 | `gateway-go/internal/pipeline/chat/tool_classification_gen.go` | `gateway-go/internal/pipeline/chat/tool_classification.yaml` | `make data-gen` |
 

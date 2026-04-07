@@ -8,14 +8,14 @@ name: Generate Check
 on:
   pull_request:
     paths:
-      - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.yaml"
+      - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
   push:
     branches: [main]
     paths:
-      - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.yaml"
+      - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
       - "gateway-go/cmd/tool-schema-gen/**"
       - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
       - "gateway-go/cmd/model-caps-gen/**"
@@ -41,7 +41,7 @@ jobs:
         with:
           filters: |
             tool-schemas:
-              - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.yaml"
+              - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
               - "gateway-go/cmd/tool-schema-gen/**"
             model-caps:
               - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
@@ -49,7 +49,7 @@ jobs:
 
 # ── Domain check jobs ──────────────────────────────────────────────────────
 
-  # tool_schemas.yaml -> tool_schemas_gen.go
+  # tool_schemas.json -> tool_schemas_gen.go
   tool-schemas:
     name: tool schemas
     needs: changes
@@ -64,10 +64,7 @@ jobs:
           cache: true
           cache-dependency-path: gateway-go/go.sum
 
-      - name: Install pyyaml
-        run: pip install pyyaml
-
-      - name: tool schemas check (tool_schemas.yaml -> tool_schemas_gen.go)
+      - name: tool schemas check (tool_schemas.json -> tool_schemas_gen.go)
         run: make tool-schemas-check
 
   # model_caps.yaml -> model_caps_gen.go
