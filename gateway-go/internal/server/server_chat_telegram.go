@@ -236,7 +236,7 @@ func (s *Server) wireTelegramChatHandler() {
 		trackerMu.Lock()
 		pt := trackers[trackerKey]
 		if pt == nil {
-			pt = telegram.NewProgressTracker(client, chatID, chat.SummarizeToolActivity)
+			pt = telegram.NewProgressTracker(client, chatID, nil)
 			trackers[trackerKey] = pt
 		}
 		trackerMu.Unlock()

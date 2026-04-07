@@ -129,9 +129,7 @@ func DefaultConfig() Config {
 		Atropos: AtroposConfig{
 			Port: 30101,
 		},
-		Environments: []EnvConfig{
-			{TaskType: "session_memory", Weight: 0.5, Enabled: true},
-		},
+		Environments: []EnvConfig{},
 		Collection: CollectionConfig{
 			MinTurns:     3,
 			MinToolCalls: 2,
