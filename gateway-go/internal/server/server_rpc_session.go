@@ -303,9 +303,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Skill Genesis: register autonomous tasks (services created in initGenesisServices).
 	s.registerGenesisAutonomousTasks(hub)
 
-	// RL self-learning: wire session trajectory collection hook.
-	s.registerRLSideEffects(hub)
-
 	// Gmail polling service: periodic new-email analysis via LLM.
 	s.initGmailPoll()
 

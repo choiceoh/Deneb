@@ -23,7 +23,6 @@ import (
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
-	handlerrl "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/rl"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
@@ -88,11 +87,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerskill.Methods(handlerskill.Deps{
 			Skills:      hub.Skills(),
 			Broadcaster: hub.Broadcast,
-		}),
-
-		// --- RL training pipeline ---
-		handlerrl.Methods(handlerrl.Deps{
-			Service: hub.RLService(),
 		}),
 
 		// --- Inter-agent bridge ---

@@ -27,7 +27,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
@@ -100,10 +99,6 @@ type Server struct {
 	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
 	*ChatManager    // chatHandler, toolDeps, telegramPlug
 	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
-
-	// RL self-learning pipeline (optional, nil when rl.enable=false).
-	rlService *rl.Service
-	rlHook    *rl.SessionHook
 
 	// bridgeInjector is late-bound: created in registerEarlyMethods,
 	// populated in registerLateMethods after chatHandler is ready.
@@ -223,10 +218,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.dispatcher.UseMiddleware(metrics.RPCInstrumentation(), middleware.Logging(s.logger))
-
-	// RL self-learning pipeline: create service before hub so
-	// hub.RLService() is non-nil during early method registration.
-	s.initRLService()
 
 	// Build GatewayHub — central service registry. Chat is nil until
 	// registerSessionRPCMethods() creates the chat handler.

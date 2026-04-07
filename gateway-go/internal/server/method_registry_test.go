@@ -141,7 +141,6 @@ var requiredMethods = []string{
 	"secrets.reload",
 	"secrets.resolve",
 
-	// RLM: depends on wiki (DENEB_WIKI_ENABLED), not in required list.
 	// Wiki: feature-flagged (DENEB_WIKI_ENABLED), not in required list.
 
 	// Autoresearch.
