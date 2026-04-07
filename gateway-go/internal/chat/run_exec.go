@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/chatport"
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -304,15 +305,28 @@ func executeAgentRun(
 
 	// 5b. Polaris compaction: tiered context compression.
 	// Applied after message assembly, before prompt finalization.
+	// When Polaris bridge is active, summaries are persisted to the DAG
+	// and proactive condensation is triggered in the background.
 	if len(messages) > 0 {
 		polarisCtx, polarisCancel := context.WithTimeout(ctx, 30*time.Second)
-		polarisCfg := compact.DefaultConfig()
 		var summarizer compact.Summarizer
 		if pilotHub := pilot.GetLocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
 		}
 		var polarisResult compact.Result
-		messages, polarisResult = compact.Compact(polarisCtx, polarisCfg, messages, summarizer, logger)
+		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
+			engine := bridge.Engine()
+			messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer)
+
+			// Proactive condensation: when a new leaf summary was persisted,
+			// trigger background condensation to merge leaves into higher-level nodes.
+			if polarisResult.LLMCompacted && summarizer != nil {
+				condSummarizer := summarizer // capture for goroutine
+				go engine.Condense(context.Background(), params.SessionKey, condSummarizer)
+			}
+		} else {
+			messages, polarisResult = compact.Compact(polarisCtx, compact.DefaultConfig(), messages, summarizer, logger)
+		}
 		polarisCancel()
 		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmergencyEvicted > 0 {
 			logger.Info("polaris compaction",

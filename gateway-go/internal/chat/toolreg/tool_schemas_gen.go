@@ -1880,6 +1880,58 @@ func wikiToolSchema() map[string]any {
 	}
 }
 
+func polarisSearchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "검색 키워드 (한국어/영어). 압축된 이전 대화에서 키워드 매칭",
+			},
+			"max_results": map[string]any{
+				"type":        "integer",
+				"description": "최대 결과 수 (default: 10)",
+				"default":     10,
+				"minimum":     1,
+				"maximum":     50,
+			},
+		},
+		"required": []string{"query"},
+	}
+}
+
+func polarisDescribeToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"time_range": map[string]any{
+				"type":        "string",
+				"description": "시간 범위 필터: today, this_week, all (default: all)",
+				"default":     "all",
+				"enum":        []string{"today", "this_week", "all"},
+			},
+		},
+	}
+}
+
+func polarisExpandToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"summary_id": map[string]any{
+				"type":        "integer",
+				"description": "확장할 요약 노드 ID (polaris_describe 결과에서 획득)",
+				"minimum":     1,
+			},
+			"question": map[string]any{
+				"type":        "string",
+				"description": "원본 대화에서 알고 싶은 구체적 질문 (선택)",
+			},
+		},
+		"required": []string{"summary_id"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.yaml.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {

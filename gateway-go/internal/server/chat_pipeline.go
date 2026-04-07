@@ -12,7 +12,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
@@ -106,4 +109,15 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Bridge: inter-agent communication tool.
 	toolreg.RegisterBridgeTool(chatCfg.Tools, s.broadcaster.Broadcast)
+
+	// Polaris: retrieval tools for compressed conversation history.
+	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {
+		var localAI tools.LocalAIFunc
+		if pilot.GetLocalAIHub() != nil {
+			localAI = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+				return pilot.CallLocalLLM(ctx, system, user, maxTokens)
+			}
+		}
+		toolreg.RegisterPolarisTools(chatCfg.Tools, bridge.Store(), localAI)
+	}
 }

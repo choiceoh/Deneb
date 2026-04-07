@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/web"
+	"github.com/choiceoh/deneb/gateway-go/internal/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
@@ -100,6 +101,38 @@ func RegisterAutoresearchTool(registry toolctx.ToolRegistrar, runner *autoresear
 		InputSchema: autoresearchToolSchema(),
 		Fn:          tools.ToolAutoresearch(runner),
 		Deferred:    true,
+	})
+}
+
+// RegisterPolarisTools registers Polaris context management retrieval tools.
+// Called separately because the store and localAI are not part of CoreToolDeps.
+func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, localAI tools.LocalAIFunc) {
+	if store == nil {
+		return
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "polaris_search",
+		Description:     "압축된 대화 이력에서 키워드 검색. 요약 노드와 원본 메시지 모두 검색.",
+		InputSchema:     polarisSearchToolSchema(),
+		Fn:              tools.ToolPolarisSearch(store),
+		Deferred:        true,
+		ConcurrencySafe: true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "polaris_describe",
+		Description:     "이전 대화의 요약 구조를 설명. 어떤 주제가 언제 논의되었는지 파악할 때 사용.",
+		InputSchema:     polarisDescribeToolSchema(),
+		Fn:              tools.ToolPolarisDescribe(store),
+		Deferred:        true,
+		ConcurrencySafe: true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:            "polaris_expand",
+		Description:     "요약된 이전 대화의 원본을 복원하여 상세 질문에 답변. polaris_describe로 요약 ID 확인 후 사용.",
+		InputSchema:     polarisExpandToolSchema(),
+		Fn:              tools.ToolPolarisExpand(store, localAI),
+		Deferred:        true,
+		ConcurrencySafe: true,
 	})
 }
 
