@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/timeouts"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-	"github.com/coder/websocket"
 )
 
 // runMessageLoop reads frames from the WebSocket and dispatches them.
@@ -20,7 +20,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 	for {
 		_, data, err := client.conn.Read(ctx)
 		if err != nil {
-			if websocket.CloseStatus(err) != -1 || ctx.Err() != nil {
+			if ws.CloseStatus(err) != -1 || ctx.Err() != nil {
 				return
 			}
 			s.logger.Error("websocket read error", "connId", client.connID, "error", err)
@@ -92,7 +92,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 }
 
 // runPingLoop sends periodic WebSocket pings and disconnects idle or unresponsive clients.
-// github.com/coder/websocket handles pong responses automatically; Ping() blocks until pong arrives.
+// Ping() blocks until pong arrives; pongs are handled transparently by the ws.Conn reader.
 // Tolerates up to maxPingFailures consecutive failures before closing — GPU inference on
 // DGX Spark can temporarily delay pong responses.
 func (s *Server) runPingLoop(ctx context.Context, client *WsClient) {
@@ -107,7 +107,7 @@ func (s *Server) runPingLoop(ctx context.Context, client *WsClient) {
 			// Check idle timeout first.
 			if client.idleDuration() > idleTimeout {
 				s.logger.Info("closing idle connection", "connId", client.connID, "idle", client.idleDuration().String())
-				client.conn.Close(websocket.StatusGoingAway, "idle timeout")
+				client.conn.Close(ws.StatusGoingAway, "idle timeout")
 				return
 			}
 			// Send ping; tolerate transient failures under load.
@@ -119,7 +119,7 @@ func (s *Server) runPingLoop(ctx context.Context, client *WsClient) {
 				if consecutiveFailures >= maxPingFailures {
 					s.logger.Info("ping failed repeatedly, closing connection",
 						"connId", client.connID, "failures", consecutiveFailures, "error", err)
-					client.conn.Close(websocket.StatusGoingAway, "ping timeout")
+					client.conn.Close(ws.StatusGoingAway, "ping timeout")
 					return
 				}
 				s.logger.Debug("ping failed, will retry",
