@@ -147,11 +147,11 @@ func (sm *ServerManager) stopLocked() {
 	// Kill the entire process group (server + any children spawned by bash -c).
 	pgid, err := syscall.Getpgid(sm.cmd.Process.Pid)
 	if err == nil {
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		_ = syscall.Kill(-pgid, syscall.SIGKILL) // best-effort: process may already be dead
 	} else {
-		_ = sm.cmd.Process.Kill()
+		_ = sm.cmd.Process.Kill() // best-effort: process may already be dead
 	}
-	_ = sm.cmd.Wait()
+	_ = sm.cmd.Wait() // best-effort: reap zombie
 	sm.cmd = nil
 
 	// Close the log file to avoid descriptor leaks across restarts.

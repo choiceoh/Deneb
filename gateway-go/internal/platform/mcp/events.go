@@ -123,7 +123,7 @@ func (el *EventListener) handleEvent(ctx context.Context, event *gatewayEvent) {
 	if uri, ok := eventToResourceURI[event.Event]; ok {
 		if el.resources.IsSubscribed(uri) {
 			params, _ := json.Marshal(ResourceUpdatedParams{URI: uri})
-			_ = el.transport.WriteNotification(&Notification{
+			_ = el.transport.WriteNotification(&Notification{ // best-effort: notification delivery is non-critical
 				JSONRPC: "2.0",
 				Method:  "notifications/resources/updated",
 				Params:  params,

@@ -153,7 +153,7 @@ func (s *FileTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) erro
 			continue
 		}
 		_, _ = w.Write(data)
-		_ = w.WriteByte('\n')
+		_ = w.WriteByte('\n') // best-effort: buffer write cannot fail
 	}
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("clone: flush: %w", err)

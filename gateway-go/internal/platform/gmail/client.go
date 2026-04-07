@@ -209,7 +209,7 @@ func (c *Client) persistToken() {
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return
 	}
-	_ = os.Rename(tmp, c.tokenPath)
+	_ = os.Rename(tmp, c.tokenPath) // best-effort: token persist failure is non-critical
 }
 
 // doAPI performs an authenticated HTTP request to the Gmail API.

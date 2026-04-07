@@ -22,7 +22,7 @@ func (s *Server) registerAuthRPCMethods() {
 			Channel string `json:"channel"`
 		}
 		if len(req.Params) > 0 {
-			_ = json.Unmarshal(req.Params, &p)
+			_ = json.Unmarshal(req.Params, &p) // best-effort: use defaults on parse failure
 		}
 		if p.Channel == "" {
 			return rpcerr.MissingParam("channel").Response(req.ID)

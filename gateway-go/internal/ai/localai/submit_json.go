@@ -30,7 +30,7 @@ func SubmitJSON[T any](h *Hub, ctx context.Context, req Request) (T, error) {
 
 		raw := strings.TrimSpace(resp.Text)
 		if raw == "" {
-			return zero, fmt.Errorf("SubmitJSON: empty response from model")
+			return zero, fmt.Errorf("submitJSON: empty response from model")
 		}
 
 		result, err := jsonutil.UnmarshalLLM[T](raw)
@@ -41,8 +41,8 @@ func SubmitJSON[T any](h *Hub, ctx context.Context, req Request) (T, error) {
 		if attempt == 0 {
 			continue
 		}
-		return zero, fmt.Errorf("SubmitJSON: parse failed after retry: raw=%s", jsonutil.Truncate(raw, 300))
+		return zero, fmt.Errorf("submitJSON: parse failed after retry: raw=%s", jsonutil.Truncate(raw, 300))
 	}
 
-	return zero, fmt.Errorf("SubmitJSON: unreachable")
+	return zero, fmt.Errorf("submitJSON: unreachable")
 }

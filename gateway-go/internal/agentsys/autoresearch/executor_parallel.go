@@ -156,10 +156,10 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 			wt := r.worktreeDirs[i]
 			var hash string
 			if cfg.IsConstantsMode() {
-				baseHash, _ := contentHash(wt, cfg.TargetFiles)
+				baseHash, _ := contentHash(wt, cfg.TargetFiles) // best-effort: hash failure falls back to no-cache
 				hash = overrideHash(baseHash, hypotheses[i].overrides)
 			} else {
-				hash, _ = contentHash(wt, cfg.TargetFiles)
+				hash, _ = contentHash(wt, cfg.TargetFiles) // best-effort: hash failure falls back to no-cache
 			}
 			if hash != "" {
 				if metric, ok := loadCachedMetric(cacheDir, hash, cfg.MetricCmd); ok {
@@ -198,10 +198,10 @@ func (r *Runner) runParallelIteration(ctx context.Context) error {
 				wt := r.worktreeDirs[idx]
 				var hash string
 				if cfg.IsConstantsMode() {
-					baseHash, _ := contentHash(wt, cfg.TargetFiles)
+					baseHash, _ := contentHash(wt, cfg.TargetFiles) // best-effort: hash failure falls back to no-cache
 					hash = overrideHash(baseHash, hypotheses[idx].overrides)
 				} else {
-					hash, _ = contentHash(wt, cfg.TargetFiles)
+					hash, _ = contentHash(wt, cfg.TargetFiles) // best-effort: hash failure falls back to no-cache
 				}
 				if hash != "" {
 					saveCachedMetric(cacheDir, hash, cfg.MetricCmd, expResult.metric)

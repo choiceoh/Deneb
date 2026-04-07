@@ -246,7 +246,7 @@ func (r *Runner) Start(workdir string) error {
 		// Clean up stale worktree from a previous run if it exists.
 		if _, statErr := os.Stat(wtPath); statErr == nil {
 			r.logger.Info("cleaning up stale worktree", "path", wtPath)
-			_ = gitWorktreeRemove(context.Background(), workdir, wtPath)
+			_ = gitWorktreeRemove(context.Background(), workdir, wtPath) // best-effort: worktree cleanup is non-critical
 			os.RemoveAll(wtPath)
 		}
 
@@ -255,7 +255,7 @@ func (r *Runner) Start(workdir string) error {
 		if err := gitWorktreeAdd(context.Background(), workdir, wtPath, branchName, createBranch); err != nil {
 			// Clean up any worktrees we already created.
 			for j := range i {
-				_ = gitWorktreeRemove(context.Background(), workdir, worktrees[j])
+				_ = gitWorktreeRemove(context.Background(), workdir, worktrees[j]) // best-effort: worktree cleanup is non-critical
 				os.RemoveAll(worktrees[j])
 			}
 			return fmt.Errorf("create experiment worktree %d: %w", i, err)

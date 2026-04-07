@@ -280,7 +280,7 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		case "updated":
 			fm.Updated = val
 		case "importance":
-			fm.Importance, _ = strconv.ParseFloat(val, 64)
+			fm.Importance, _ = strconv.ParseFloat(val, 64) // best-effort: defaults to zero
 		case "archived":
 			fm.Archived = val == "true"
 		case "type":

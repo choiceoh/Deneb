@@ -83,7 +83,7 @@ func (s *Server) wireTelegramChatHandler() {
 				// Delete the draft and fall through to send as new message.
 				s.logger.Warn("draft edit failed, falling back to new message",
 					"msgId", draftID, "error", editErr)
-				_ = client.DeleteMessage(ctx, chatID, editMsgID)
+				_ = client.DeleteMessage(ctx, chatID, editMsgID) // best-effort: draft cleanup is non-critical
 			}
 		}
 

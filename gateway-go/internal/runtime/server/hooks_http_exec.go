@@ -522,14 +522,14 @@ func readJSONBody(r *http.Request, maxBytes int64) (map[string]any, error) {
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+	_ = json.NewEncoder(w).Encode(body) // best-effort: response already committed
 }
 
 // writeText writes a plain text response.
 func writeText(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)
-	_, _ = io.WriteString(w, msg)
+	_, _ = io.WriteString(w, msg) // best-effort: response already committed
 }
 
 // sha256Hex returns the hex-encoded SHA256 of a string.
