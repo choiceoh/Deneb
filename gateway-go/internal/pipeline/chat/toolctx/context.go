@@ -136,35 +136,48 @@ func ToolPresetFromContext(ctx context.Context) string {
 // that the LLM wants a new agent run to start after the current one completes.
 // Thread-safe; the tool sets it from a tool goroutine, the run orchestrator
 // reads it after the agent loop returns.
+//
+// Implemented as a close-once channel: Request() writes the reason then closes
+// the done channel (via sync.Once), establishing a happens-before guarantee
+// so any goroutine that observes the close also sees the reason value.
 type ContinuationSignal struct {
-	mu        sync.Mutex
-	requested bool
-	reason    string
+	once   sync.Once
+	done   chan struct{}
+	reason string
 }
 
 // NewContinuationSignal creates a new (unset) ContinuationSignal.
-func NewContinuationSignal() *ContinuationSignal { return &ContinuationSignal{} }
-
-// Request marks the signal as requested with the given reason.
-func (s *ContinuationSignal) Request(reason string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.requested = true
-	s.reason = reason
+func NewContinuationSignal() *ContinuationSignal {
+	return &ContinuationSignal{done: make(chan struct{})}
 }
 
-// Requested reports whether continue_run was called.
+// Request marks the signal as requested with the given reason.
+// Safe to call multiple times; only the first call takes effect.
+func (s *ContinuationSignal) Request(reason string) {
+	s.once.Do(func() {
+		s.reason = reason
+		close(s.done)
+	})
+}
+
+// Requested reports whether continue_run was called (non-blocking).
 func (s *ContinuationSignal) Requested() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.requested
+	select {
+	case <-s.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // Reason returns the continuation reason (empty if not requested).
 func (s *ContinuationSignal) Reason() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.reason
+	select {
+	case <-s.done:
+		return s.reason
+	default:
+		return ""
+	}
 }
 
 // WithContinuationSignal attaches a ContinuationSignal to the context.
@@ -211,37 +224,52 @@ func SpawnFlagFromContext(ctx context.Context) *SpawnFlag {
 // --- DeferredActivation ---
 
 // DeferredActivation tracks which deferred tools have been activated via
-// fetch_tools during a run. Thread-safe; the fetch_tools tool sets it from
-// a tool goroutine, the executor reads it before each turn to inject
-// activated tools into the ChatRequest.
+// fetch_tools during a run. The fetch_tools tool sends names through a
+// buffered channel from tool goroutines; the executor drains and accumulates
+// them between turns via ActivatedNames(). The channel eliminates the need
+// for a mutex: cross-goroutine transfer is handled by the channel send/receive,
+// and the accumulated state (collected/seen) is only touched by the single
+// executor goroutine.
 type DeferredActivation struct {
-	mu        sync.Mutex
-	activated map[string]struct{}
+	ch        chan []string
+	collected []string
+	seen      map[string]bool
 }
 
 // NewDeferredActivation creates a new (empty) DeferredActivation tracker.
 func NewDeferredActivation() *DeferredActivation {
-	return &DeferredActivation{activated: make(map[string]struct{})}
+	return &DeferredActivation{
+		ch:   make(chan []string, 16),
+		seen: make(map[string]bool),
+	}
 }
 
 // Activate marks the given tool names as activated.
+// Called from tool goroutines; non-blocking.
 func (d *DeferredActivation) Activate(names []string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for _, n := range names {
-		d.activated[n] = struct{}{}
+	select {
+	case d.ch <- names:
+	default:
+		// Buffer full — should not happen in practice (16 slots).
 	}
 }
 
-// ActivatedNames returns the set of activated tool names.
+// ActivatedNames drains pending activations and returns all activated tool names.
+// Called from the executor goroutine between turns (single reader).
 func (d *DeferredActivation) ActivatedNames() []string {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	out := make([]string, 0, len(d.activated))
-	for n := range d.activated {
-		out = append(out, n)
+	for {
+		select {
+		case names := <-d.ch:
+			for _, n := range names {
+				if !d.seen[n] {
+					d.seen[n] = true
+					d.collected = append(d.collected, n)
+				}
+			}
+		default:
+			return d.collected
+		}
 	}
-	return out
 }
 
 // WithDeferredActivation attaches a DeferredActivation to the context.
