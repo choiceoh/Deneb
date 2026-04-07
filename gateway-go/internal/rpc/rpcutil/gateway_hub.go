@@ -250,9 +250,7 @@ func (h *GatewayHub) Validate() error {
 	if h.jobTracker == nil {
 		missing = append(missing, "JobTracker")
 	}
-	if h.cronService == nil {
-		missing = append(missing, "CronService")
-	}
+	// CronService is optional — nil when cron is disabled by config.
 	if h.approvals == nil {
 		missing = append(missing, "Approvals")
 	}
