@@ -75,7 +75,16 @@ func (s *Store) ReadPage(relPath string) (*Page, error) {
 // WritePage writes a page to the wiki. Creates parent directories if needed.
 // Updates the master index entry and maintains bidirectional backlinks.
 func (s *Store) WritePage(relPath string, page *Page) error {
-	return s.writePageInternal(relPath, page, false)
+	_, readErr := s.ReadPage(relPath)
+	op := "update"
+	if readErr != nil {
+		op = "create"
+	}
+	if err := s.writePageInternal(relPath, page, false); err != nil {
+		return err
+	}
+	_ = s.AppendLog(op, relPath+" — "+page.Meta.Title)
+	return nil
 }
 
 func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool) error {
@@ -138,6 +147,8 @@ func (s *Store) DeletePage(relPath string) error {
 		return err
 	}
 	s.mu.Unlock()
+
+	_ = s.AppendLog("delete", relPath)
 
 	// Remove backlinks: remove relPath from each formerly-related page.
 	s.maintainBacklinks(relPath, oldRelated, nil)
@@ -231,9 +242,9 @@ func (s *Store) ListPages(category string) ([]string, error) {
 		if filepath.Ext(path) != ".md" {
 			return nil
 		}
-		// Skip index files.
+		// Skip index and log files.
 		base := filepath.Base(path)
-		if base == "index.md" || base == "_index.md" {
+		if base == "index.md" || base == "_index.md" || base == "log.md" {
 			return nil
 		}
 		rel, _ := filepath.Rel(s.dir, path)
@@ -341,6 +352,21 @@ func AppendDiaryTo(diaryDir, content string) error {
 	defer f.Close()
 
 	entry := fmt.Sprintf("\n## %s\n\n%s\n", now.Format("15:04"), content)
+	_, err = f.WriteString(entry)
+	return err
+}
+
+// AppendLog appends a timestamped operation entry to log.md in the wiki root.
+// Tracks all wiki mutations for temporal awareness (Karpathy wiki concept).
+func (s *Store) AppendLog(operation, details string) error {
+	logPath := filepath.Join(s.dir, "log.md")
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("wiki: open log: %w", err)
+	}
+	defer f.Close()
+	ts := time.Now().Format("2006-01-02 15:04")
+	entry := fmt.Sprintf("## [%s] %s\n%s\n\n", ts, operation, details)
 	_, err = f.WriteString(entry)
 	return err
 }

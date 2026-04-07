@@ -212,6 +212,8 @@ type wikiUpdate struct {
 	Related    []string `json:"related"` // existing page paths semantically related
 	Content    string   `json:"content"` // markdown body or section to append
 	Importance float64  `json:"importance"`
+	Type       string   `json:"type"`       // concept, entity, source, comparison, log
+	Confidence string   `json:"confidence"` // high, medium, low
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
@@ -235,6 +237,8 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string) ([]w
 - 카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호
 - content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용
 - importance: 0.5(일반) ~ 0.9(핵심 결정)
+- type: 페이지 유형 — concept(개념), entity(인물/조직), source(출처), comparison(비교), log(이력)
+- confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)
 - id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
 - summary: 한 줄 요약 (~80자, 한국어)
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
@@ -306,6 +310,12 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 			if len(u.Related) > 0 {
 				page.Meta.Related = u.Related
 			}
+			if u.Type != "" {
+				page.Meta.Type = u.Type
+			}
+			if u.Confidence != "" {
+				page.Meta.Confidence = u.Confidence
+			}
 			if u.Content != "" {
 				page.Body = u.Content
 			} else {
@@ -342,6 +352,12 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 				if len(u.Related) > 0 {
 					page.Meta.Related = u.Related
 				}
+				if u.Type != "" {
+					page.Meta.Type = u.Type
+				}
+				if u.Confidence != "" {
+					page.Meta.Confidence = u.Confidence
+				}
 				page.Body = u.Content
 				if err := wd.store.WritePage(u.Path, page); err != nil {
 					wd.logger.Warn("wiki-dream: create-on-update failed", "path", u.Path, "error", err)
@@ -369,6 +385,12 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (in
 			}
 			if len(u.Related) > 0 {
 				existing.Meta.Related = mergeRelated(existing.Meta.Related, u.Related)
+			}
+			if u.Type != "" {
+				existing.Meta.Type = u.Type
+			}
+			if u.Confidence != "" {
+				existing.Meta.Confidence = u.Confidence
 			}
 			existing.Meta.Updated = time.Now().Format("2006-01-02")
 

@@ -269,26 +269,39 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("## 위키 — 너의 외부 메모리\n")
 		d.WriteString("위키에 없으면 다음 대화에서 모른다. 위키가 너의 장기 기억이다.\n\n")
 
-		d.WriteString("### 읽기\n")
+		d.WriteString("### 핵심 원칙: Compile at Ingest Time\n")
+		d.WriteString("정보를 받을 때 정리하라. 질문 시점에 정리하려 하지 마라.\n")
+		d.WriteString("가치 있는 답변은 위키 페이지로 저장하라 — 같은 질문에 다시 처리할 필요가 없도록.\n\n")
+
+		d.WriteString("### 3가지 연산\n")
+		d.WriteString("1. **Ingest** — 대화에서 지식을 추출하여 위키에 기록 (create/update)\n")
+		d.WriteString("2. **Query** — 위키를 검색하여 맥락을 가져옴 (search/read)\n")
+		d.WriteString("3. **Lint** — 오래되거나 중복된 페이지를 정리/병합\n\n")
+
+		d.WriteString("### 페이지 타입과 신뢰도\n")
+		d.WriteString("모든 위키 페이지에 type과 confidence를 지정하라:\n")
+		d.WriteString("- type: concept(개념), entity(인물/조직), source(출처/레퍼런스), comparison(비교), log(이력)\n")
+		d.WriteString("- confidence: high(검증됨), medium(합리적 추론), low(불확실)\n\n")
+
+		d.WriteString("### 읽기 (Query)\n")
 		d.WriteString("- 과거 맥락/지식 조회 → memory_recall (search/read/list)\n")
 		d.WriteString("- 위키 목차 확인 → wiki index → wiki read\n")
 		d.WriteString("- 키워드 검색 → wiki search 또는 memory_recall search\n")
 		d.WriteString("- 최근 일지 확인 → wiki daily\n\n")
 
-		d.WriteString("### 쓰기 — 2층 구조\n")
+		d.WriteString("### 쓰기 (Ingest) — 2층 구조\n")
 		d.WriteString("**원칙: 모든 대화는 기록한다. 기록 안 하는 것이 예외다.**\n\n")
 
 		d.WriteString("#### 일지 (매 턴, append)\n")
 		d.WriteString("응답할 때 `wiki log`로 오늘 일지에 추가하라.\n")
-		d.WriteString("내용: 사용자 요청 + 내 응답/수행 요약, 1~3줄.\n")
-		d.WriteString("일지는 시간순 append이므로 중복 걱정 없다.\n\n")
+		d.WriteString("내용: 사용자 요청 + 내 응답/수행 요약, 1~3줄.\n\n")
 
 		d.WriteString("#### 위키 페이지 (축적, 비중복)\n")
 		d.WriteString("대화에서 장기 보존할 지식이 나오면 위키 페이지를 생성하거나 **기존 페이지에 병합**하라.\n")
 		d.WriteString("**반드시 먼저 memory_recall 또는 wiki search로 기존 페이지를 확인한 후**, 있으면 업데이트하고 없을 때만 새로 생성.\n")
 		d.WriteString("- 사실/선호/결정 → memory_store (카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호)\n")
 		d.WriteString("- 프로젝트 진행/목표/상태 → projects_write\n")
-		d.WriteString("- 정리된 지식/레퍼런스 → wiki write (제목, 카테고리, 태그 필수)\n")
+		d.WriteString("- 정리된 지식/레퍼런스 → wiki write (제목, 카테고리, 태그, type, confidence 필수)\n")
 		d.WriteString("하나의 주제는 하나의 페이지. 같은 주제로 여러 페이지를 만들지 마라.\n\n")
 
 		d.WriteString("#### 기록 요령\n")

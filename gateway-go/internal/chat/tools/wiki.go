@@ -28,6 +28,8 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Tags       []string `json:"tags"`
 			Related    []string `json:"related"`
 			Importance float64  `json:"importance"`
+			Type       string   `json:"type"`
+			Confidence string   `json:"confidence"`
 			Section    string   `json:"section"`
 			Limit      int      `json:"limit"`
 		}
@@ -47,7 +49,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(d.Store, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Importance)
+			return wikiWrite(d.Store, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Importance, p.Type, p.Confidence)
 		case "log":
 			return wikiLog(workspaceDir, d.Store.DiaryDir(), p.Content)
 		case "daily":
@@ -151,7 +153,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(store *wiki.Store, path, title, id, summary, category, content string, tags, related []string, importance float64) (string, error) {
+func wikiWrite(store *wiki.Store, path, title, id, summary, category, content string, tags, related []string, importance float64, pageType, confidence string) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -191,6 +193,12 @@ func wikiWrite(store *wiki.Store, path, title, id, summary, category, content st
 		if importance > 0 {
 			page.Meta.Importance = importance
 		}
+		if pageType != "" {
+			page.Meta.Type = pageType
+		}
+		if confidence != "" {
+			page.Meta.Confidence = confidence
+		}
 		page.Meta.Updated = time.Now().Format("2006-01-02")
 		if content != "" {
 			page.Body = content
@@ -204,6 +212,8 @@ func wikiWrite(store *wiki.Store, path, title, id, summary, category, content st
 		if importance > 0 {
 			page.Meta.Importance = importance
 		}
+		page.Meta.Type = pageType
+		page.Meta.Confidence = confidence
 		if content != "" {
 			page.Body = content
 		} else {

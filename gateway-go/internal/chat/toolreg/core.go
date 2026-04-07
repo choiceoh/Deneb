@@ -8,7 +8,6 @@ package toolreg
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoresearch"
@@ -326,7 +325,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // RegisterRoutineTools registers tools for recurring/scheduled tasks —
 // things that sit between always-on core tools and on-demand skills.
 // Typical trigger: cron scheduler, daily routines, periodic checks.
-// diaryDir is the wiki diary directory for RLM logging (empty = disabled).
+// diaryDir is the wiki diary directory for morning letter logging (empty = disabled).
 func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
@@ -508,11 +507,11 @@ func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writ
 	})
 }
 
-// RegisterRLMTools registers RLM (Recursive Language Model) tools for context
-// externalization. Wiki is the unified knowledge base — all long-term knowledge
-// access (search, read, write, log) goes through RLM. Project-specific tools
+// RegisterWikiTools registers wiki knowledge base tools.
+// Wiki is the unified knowledge base — all long-term knowledge access
+// (search, read, write, log) goes through wiki. Project-specific tools
 // provide structured access to the "프로젝트" wiki category.
-func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps, workspaceDir string) {
+func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps, workspaceDir string) {
 	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
 	if wikiDeps.Store != nil {
 		registry.RegisterTool(toolctx.ToolDef{
@@ -576,32 +575,3 @@ func RegisterRLMTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps
 	}
 }
 
-// RegisterRLMSpawnTools registers RLM Phase 2 sub-LLM spawning tools.
-// maxTasks caps the number of tasks in a single batch call.
-func RegisterRLMSpawnTools(registry toolctx.ToolRegistrar, spawnFn tools.SpawnFunc, batchFn tools.SpawnBatchFunc, maxTasks int) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "llm_spawn",
-		Description:     "서브 LLM을 동기 실행. 독립 컨텍스트에서 데이터 조회+분석 후 결과만 반환",
-		InputSchema:     llmSpawnToolSchema(),
-		Fn:              tools.ToolLLMSpawn(spawnFn),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "llm_spawn_batch",
-		Description:     fmt.Sprintf("복수 서브 LLM을 병렬 실행 (최대 %d개). 각각 독립 컨텍스트에서 처리 후 결과 배열 반환", maxTasks),
-		InputSchema:     llmSpawnBatchToolSchema(),
-		Fn:              tools.ToolLLMSpawnBatch(batchFn, maxTasks),
-		ConcurrencySafe: true,
-	})
-}
-
-// RegisterREPLTools registers the Starlark REPL tool for RLM context exploration.
-// The REPL environment is injected per-request via repl.WithEnv(ctx) in run_exec.go.
-func RegisterREPLTools(registry toolctx.ToolRegistrar) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "repl",
-		Description: "Starlark(Python호환) REPL 실행. 대화 기록(context 변수)을 코드로 탐색·분석. 변수는 호출 간 유지. llm_query()로 서브 LLM 호출, FINAL()로 최종 답변",
-		InputSchema: replToolSchema(),
-		Fn:          tools.ToolREPL(),
-	})
-}

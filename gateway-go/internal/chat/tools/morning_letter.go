@@ -89,7 +89,7 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 			return "", fmt.Errorf("marshal morning letter data: %w", err)
 		}
 
-		// Log collected data to diary for RLM knowledge synthesis.
+		// Log collected data to diary for wiki knowledge synthesis.
 		if diaryDir != "" {
 			summary := formatMorningDiarySummary(dateStr, results)
 			_ = wiki.AppendDiaryTo(diaryDir, summary)

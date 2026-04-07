@@ -1801,65 +1801,6 @@ func memoryRecallToolSchema() map[string]any {
 	}
 }
 
-func llmSpawnToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"task": map[string]any{
-				"type":        "string",
-				"description": "서브 LLM에게 줄 작업 설명",
-			},
-			"tools": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "string",
-				},
-				"description": "서브 LLM이 사용할 도구 목록",
-			},
-			"max_tokens": map[string]any{
-				"type":        "integer",
-				"description": "서브 LLM 최대 응답 토큰 (default: 500)",
-				"default":     500,
-			},
-			"max_turns": map[string]any{
-				"type":        "integer",
-				"description": "서브 LLM 최대 도구 턴 (default: 3)",
-				"default":     3,
-			},
-		},
-		"required": []string{"task"},
-	}
-}
-
-func llmSpawnBatchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"tasks": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "string",
-				},
-				"description": "병렬 실행할 작업 목록 (기본 최대 10개, 서버 설정에 따라 변경)",
-				"minItems":    1,
-			},
-			"tools": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "string",
-				},
-				"description": "모든 서브 LLM이 공유할 도구 목록",
-			},
-			"max_tokens": map[string]any{
-				"type":        "integer",
-				"description": "각 서브 LLM 최대 응답 토큰 (default: 500)",
-				"default":     500,
-			},
-		},
-		"required": []string{"tasks"},
-	}
-}
-
 func wikiToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1914,6 +1855,16 @@ func wikiToolSchema() map[string]any {
 				"minimum":     0,
 				"maximum":     1,
 			},
+			"type": map[string]any{
+				"type":        "string",
+				"enum":        []string{"concept", "entity", "source", "comparison", "log"},
+				"description": "Page type (write action): concept, entity, source, comparison, log",
+			},
+			"confidence": map[string]any{
+				"type":        "string",
+				"enum":        []string{"high", "medium", "low"},
+				"description": "Confidence level (write action): high (verified), medium (reasonable inference), low (uncertain)",
+			},
 			"section": map[string]any{
 				"type":        "string",
 				"description": "Read a specific section from the page (read action)",
@@ -1926,19 +1877,6 @@ func wikiToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"action"},
-	}
-}
-
-func replToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"code": map[string]any{
-				"type":        "string",
-				"description": "Starlark (Python-like) code to execute. Variables persist across calls. Use context to access conversation history, llm_query() for sub-LLM calls, FINAL() for final answer.",
-			},
-		},
-		"required": []string{"code"},
 	}
 }
 

@@ -24,7 +24,6 @@ import (
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/provider"
 	handlerrl "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/rl"
-	handlerrlm "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/rlm"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/system"
@@ -199,8 +198,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.AdvancePhase(rpcutil.PhaseLate)
 	hub.SetChat(s.chatHandler)
-	hub.SetRLMService(s.rlmService) // late-bound: created during session phase
-	hub.SetWikiStore(s.wikiStore)   // late-bound: created during session phase
+	hub.SetWikiStore(s.wikiStore) // late-bound: created during session phase
 
 	domains := []map[string]rpcutil.HandlerFunc{
 		handlerchat.Methods(handlerchat.Deps{Chat: hub.Chat()}),
@@ -215,11 +213,6 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}),
 		handlerautoresearch.Methods(handlerautoresearch.Deps{
 			Runner: s.autoresearchRunner,
-		}),
-
-		// --- RLM context externalization (late-bound: depends on wiki, created during session phase) ---
-		handlerrlm.Methods(handlerrlm.Deps{
-			Service: hub.RLMService(),
 		}),
 
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---

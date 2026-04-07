@@ -16,7 +16,6 @@ func staticResources() []Resource {
 		{URI: "deneb://config", Name: "Configuration", Description: "Current gateway configuration", MimeType: "application/json"},
 		{URI: "deneb://skills", Name: "Skills", Description: "Installed skills and their status", MimeType: "application/json"},
 		{URI: "deneb://models", Name: "Models", Description: "Available LLM models across providers", MimeType: "application/json"},
-		{URI: "deneb://rlm", Name: "RLM Status", Description: "RLM service status, config, and trace count", MimeType: "application/json"},
 	}
 }
 
@@ -30,7 +29,6 @@ var resourceRoutes = []struct {
 	{"deneb://config", "config.get"},
 	{"deneb://skills", "skills.status"},
 	{"deneb://models", "models.list"},
-	{"deneb://rlm", "rlm.status"},
 }
 
 // ResourceManager handles resource listing, reading, and subscriptions.

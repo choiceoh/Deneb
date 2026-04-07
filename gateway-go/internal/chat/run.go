@@ -16,7 +16,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -98,7 +97,6 @@ type runDeps struct {
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
-	agentTraces *rlm.AgentTraceStore      // optional; records root+worker LLM traces
 	wikiStore   *wiki.Store               // optional; wiki knowledge base
 	dreamTurnFn func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog    *agentlog.Writer          // optional; enables agent detail logging
