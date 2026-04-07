@@ -79,6 +79,19 @@ func buildWikiFuncs(store *wiki.Store) *repl.WikiFuncs {
 			}
 			return store.WritePage(relPath, page)
 		},
+
+		DiaryLog: buildDiaryLogFunc(store),
+	}
+}
+
+// buildDiaryLogFunc creates a diary append callback from the wiki store's diary dir.
+func buildDiaryLogFunc(store *wiki.Store) repl.WikiDiaryLogFunc {
+	return func(content string) error {
+		diaryDir := store.DiaryDir()
+		if diaryDir == "" {
+			return fmt.Errorf("diary directory not configured")
+		}
+		return appendDiaryEntry(diaryDir, content)
 	}
 }
 

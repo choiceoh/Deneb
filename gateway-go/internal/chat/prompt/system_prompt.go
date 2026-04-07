@@ -266,8 +266,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 	// Wiki knowledge base (takes priority when enabled).
 	if toolSet["wiki"] {
-		d.WriteString("## 위키 (장기 지식)\n")
-		d.WriteString("과거 결정, 인물, 프로젝트, 기술 등 장기 지식은 위키에 마크다운으로 정리되어 있다.\n\n")
+		d.WriteString("## 위키 — 너의 외부 메모리\n")
+		d.WriteString("위키에 없으면 다음 대화에서 모른다. 위키가 너의 장기 기억이다.\n\n")
 
 		d.WriteString("### 읽기\n")
 		d.WriteString("- 과거 맥락/지식 조회 → memory_recall (search/read/list)\n")
@@ -275,16 +275,26 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- 키워드 검색 → wiki search 또는 memory_recall search\n")
 		d.WriteString("- 최근 일지 확인 → wiki daily\n\n")
 
-		d.WriteString("### 쓰기 — 반드시 능동적으로 기록하라\n")
-		d.WriteString("대화 중 다음에 해당하면 응답 끝에 자동으로 기록하라:\n")
-		d.WriteString("- 사용자가 새 사실/선호/결정을 알려줌 → memory_store (해당 카테고리)\n")
-		d.WriteString("- 프로젝트 관련 새 정보(목표, 상태, 결정) → projects_write\n")
-		d.WriteString("- 사람 정보(역할, 연락처, 관계) → memory_store (사람)\n")
-		d.WriteString("- 기술 결정/설계 판단 → memory_store (결정 또는 기술)\n")
-		d.WriteString("- 일상 활동/작업 과정 기록 → wiki log (일지, 위키 정리 전 단계)\n")
-		d.WriteString("- 위키 직접 작성/수정 → wiki write (제목, 카테고리, 태그 필수)\n")
-		d.WriteString("카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호.\n")
-		d.WriteString("정리된 지식은 위키에, 임시 관찰은 일지(log)에. 기록 후 사용자에게 별도 알림 불필요.\n\n")
+		d.WriteString("### 쓰기 — 2층 구조\n")
+		d.WriteString("**원칙: 모든 대화는 기록한다. 기록 안 하는 것이 예외다.**\n\n")
+
+		d.WriteString("#### 일지 (매 턴, append)\n")
+		d.WriteString("응답할 때 `wiki log`로 오늘 일지에 추가하라.\n")
+		d.WriteString("내용: 사용자 요청 + 내 응답/수행 요약, 1~3줄.\n")
+		d.WriteString("일지는 시간순 append이므로 중복 걱정 없다.\n\n")
+
+		d.WriteString("#### 위키 페이지 (축적, 비중복)\n")
+		d.WriteString("대화에서 장기 보존할 지식이 나오면 위키 페이지를 생성하거나 **기존 페이지에 병합**하라.\n")
+		d.WriteString("**반드시 먼저 memory_recall 또는 wiki search로 기존 페이지를 확인한 후**, 있으면 업데이트하고 없을 때만 새로 생성.\n")
+		d.WriteString("- 사실/선호/결정 → memory_store (카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호)\n")
+		d.WriteString("- 프로젝트 진행/목표/상태 → projects_write\n")
+		d.WriteString("- 정리된 지식/레퍼런스 → wiki write (제목, 카테고리, 태그 필수)\n")
+		d.WriteString("하나의 주제는 하나의 페이지. 같은 주제로 여러 페이지를 만들지 마라.\n\n")
+
+		d.WriteString("#### 기록 요령\n")
+		d.WriteString("- 기록은 응답과 함께 도구 호출로 수행. 사용자에게 별도 알림 불필요.\n")
+		d.WriteString("- 카테고리 판단이 어려우면 \"업무\"에 넣어라.\n")
+		d.WriteString("- 판단이 애매하면 기록한다. 안 남기는 것보다 남기는 게 낫다.\n\n")
 	}
 
 	// Web tool guidance (conditional).

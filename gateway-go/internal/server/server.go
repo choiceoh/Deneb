@@ -188,14 +188,13 @@ func New(addr string, opts ...Option) (*Server, error) {
 		}
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
-		if cronEnabled {
-			s.cronService = cron.NewService(cron.ServiceConfig{
-				StorePath:      storePath,
-				DefaultChannel: "telegram",
-				Enabled:        true,
-				Sessions:       s.sessions,
-			}, nil, s.logger) // agent runner wired later during chat handler setup
-		} else {
+		s.cronService = cron.NewService(cron.ServiceConfig{
+			StorePath:      storePath,
+			DefaultChannel: "telegram",
+			Enabled:        cronEnabled,
+			Sessions:       s.sessions,
+		}, nil, s.logger) // agent runner wired later during chat handler setup
+		if !cronEnabled {
 			s.logger.Info("cron service disabled by config")
 		}
 	}

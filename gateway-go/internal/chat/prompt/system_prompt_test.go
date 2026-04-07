@@ -37,7 +37,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 		"## 안전",
 		"## Tooling",
 		"## Tool Usage",
-		"## 위키 (장기 지식)",
+		"## 위키 — 너의 외부 메모리",
 		"## Messaging",
 		"## Context",
 		"/home/user/project",

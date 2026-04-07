@@ -26,6 +26,9 @@ type WikiSearchFunc func(ctx context.Context, query string, limit int) (string, 
 // WikiWriteFunc writes a page to the wiki.
 type WikiWriteFunc func(relPath, content string) error
 
+// WikiDiaryLogFunc appends a timestamped entry to today's diary file.
+type WikiDiaryLogFunc func(content string) error
+
 // WikiFuncs groups all wiki callback functions for REPL injection.
 type WikiFuncs struct {
 	Read      WikiReadFunc
@@ -34,6 +37,7 @@ type WikiFuncs struct {
 	Index     WikiIndexFunc
 	Search    WikiSearchFunc
 	Write     WikiWriteFunc
+	DiaryLog  WikiDiaryLogFunc
 }
 
 // registerWikiBuiltins adds wiki_* functions to the Starlark globals.
@@ -55,6 +59,9 @@ func registerWikiBuiltins(ctx context.Context, globals starlark.StringDict, wf W
 	}
 	if wf.Write != nil {
 		globals["wiki_write"] = builtinWikiWrite(wf.Write)
+	}
+	if wf.DiaryLog != nil {
+		globals["diary_log"] = builtinDiaryLog(wf.DiaryLog)
 	}
 }
 
@@ -162,9 +169,22 @@ func builtinWikiWrite(fn WikiWriteFunc) *starlark.Builtin {
 	})
 }
 
+func builtinDiaryLog(fn WikiDiaryLogFunc) *starlark.Builtin {
+	return starlark.NewBuiltin("diary_log", func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var content starlark.String
+		if err := starlark.UnpackPositionalArgs(b.Name(), args, kwargs, 1, &content); err != nil {
+			return starlark.None, err
+		}
+		if err := fn(string(content)); err != nil {
+			return starlark.None, fmt.Errorf("diary_log: %w", err)
+		}
+		return starlark.String("ok"), nil
+	})
+}
+
 // wikiBuiltinNames lists wiki builtin names for SHOW_VARS exclusion.
 var wikiBuiltinNames = []string{
-	"wiki_read", "wiki_read_batch", "wiki_list", "wiki_index", "wiki_search", "wiki_write",
+	"wiki_read", "wiki_read_batch", "wiki_list", "wiki_index", "wiki_search", "wiki_write", "diary_log",
 }
 
 func init() {
