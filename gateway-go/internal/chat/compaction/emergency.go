@@ -61,9 +61,13 @@ func EmergencyCompact(
 	// Summarize non-evicted old messages so the agent retains context.
 	if summarizer != nil && len(nonEvicted) > 0 {
 		text := serializeMessages(nonEvicted)
-		targetTokens := int(float64(cfg.ContextBudget) * 0.10) // 10% budget for summary
-
-		summary, err := summarizer.Summarize(ctx, compactionSystemPrompt+"\n\n## 요약할 대화 내용\n\n"+text, targetTokens)
+		// Cap output at 2048: emergency summaries should be brief since
+		// we already evicted the bulkiest messages.
+		maxOutput := int(float64(cfg.ContextBudget) * 0.10)
+		if maxOutput > 2048 {
+			maxOutput = 2048
+		}
+		summary, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
 		if err == nil && summary != "" {
 			result := make([]llm.Message, 0, 1+len(recent))
 			result = append(result, llm.NewTextMessage("user",

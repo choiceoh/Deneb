@@ -115,12 +115,14 @@ func TestMicroCompact_PreservesRecentCode(t *testing.T) {
 
 type mockSummarizer struct {
 	called bool
+	system string
 	text   string
 }
 
-func (m *mockSummarizer) Summarize(_ context.Context, text string, _ int) (string, error) {
+func (m *mockSummarizer) Summarize(_ context.Context, system, conversation string, _ int) (string, error) {
 	m.called = true
-	m.text = text
+	m.system = system
+	m.text = conversation
 	return "### 핵심 사실\n- [테스트] 요약 완료", nil
 }
 

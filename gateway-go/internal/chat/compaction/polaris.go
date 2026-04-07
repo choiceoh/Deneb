@@ -53,8 +53,10 @@ type Result struct {
 }
 
 // Summarizer provides LLM-based summarization (typically local AI).
+// system is the instruction prompt, conversation is the serialized messages.
+// maxOutputTokens caps the LLM response length (not input).
 type Summarizer interface {
-	Summarize(ctx context.Context, text string, maxTokens int) (string, error)
+	Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error)
 }
 
 // Compact applies the full Polaris pipeline to assembled context messages.
@@ -70,11 +72,14 @@ func Compact(
 	r.TokensBefore = EstimateMessagesTokens(messages)
 
 	// Tier 1: Emergency — evict oldest when a single input is huge.
+	// Emergency already summarizes non-evicted old messages, so skip LLM tier after it.
+	emergencyFired := false
 	lastInputTokens := lastUserMessageTokens(messages)
 	if lastInputTokens >= cfg.EmergencyInputThreshold && summarizer != nil {
 		var evicted int
 		messages, evicted = EmergencyCompact(ctx, cfg, messages, lastInputTokens, summarizer, logger)
 		r.EmergencyEvicted = evicted
+		emergencyFired = evicted > 0
 	}
 
 	// Tier 2: Micro — strip code from old tool results (zero cost).
@@ -83,12 +88,15 @@ func Compact(
 	r.MicroPruned = pruned
 
 	// Tier 3: LLM — summarize old messages when over threshold.
-	threshold := int(float64(cfg.ContextBudget) * cfg.LLMThresholdPct)
-	if EstimateMessagesTokens(messages) > threshold && summarizer != nil {
-		compacted, ok := LLMCompact(ctx, cfg, messages, summarizer, logger)
-		if ok {
-			messages = compacted
-			r.LLMCompacted = true
+	// Skipped when emergency already summarized (avoids double summarization / fact loss).
+	if !emergencyFired {
+		threshold := int(float64(cfg.ContextBudget) * cfg.LLMThresholdPct)
+		if EstimateMessagesTokens(messages) > threshold && summarizer != nil {
+			compacted, ok := LLMCompact(ctx, cfg, messages, summarizer, logger)
+			if ok {
+				messages = compacted
+				r.LLMCompacted = true
+			}
 		}
 	}
 

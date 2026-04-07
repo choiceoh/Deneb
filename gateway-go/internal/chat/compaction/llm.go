@@ -41,8 +41,14 @@ func LLMCompact(
 		return messages, false // too little to bother
 	}
 
-	targetTokens := int(float64(cfg.ContextBudget) * cfg.LLMTargetPct)
-	summary, err := summarizer.Summarize(ctx, compactionSystemPrompt+"\n\n## 요약할 대화 내용\n\n"+text, targetTokens)
+	// maxOutputTokens: target size for the summary, capped at 4096 to avoid
+	// slow local AI responses. The structured prompt produces dense output
+	// so 4096 tokens is sufficient for most compaction scenarios.
+	maxOutput := int(float64(cfg.ContextBudget) * cfg.LLMTargetPct)
+	if maxOutput > 4096 {
+		maxOutput = 4096
+	}
+	summary, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
 	if err != nil {
 		if logger != nil {
 			logger.Warn("polaris: LLM compaction failed", "error", err)

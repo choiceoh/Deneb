@@ -967,6 +967,6 @@ func buildMessagePersister(
 // localAISummarizer adapts pilot.CallLocalLLM to the compaction.Summarizer interface.
 type localAISummarizer struct{}
 
-func (s *localAISummarizer) Summarize(ctx context.Context, text string, maxTokens int) (string, error) {
-	return pilot.CallLocalLLM(ctx, "", text, maxTokens)
+func (s *localAISummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
+	return pilot.CallLocalLLM(ctx, system, conversation, maxOutputTokens)
 }
