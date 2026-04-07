@@ -5,7 +5,15 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autoresearch"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+)
+
+// Compile-time interface compliance.
+var (
+	_ autonomous.Notifier   = (*telegramNotifier)(nil)
+	_ autoresearch.Notifier = (*telegramNotifier)(nil)
 )
 
 // telegramNotifier implements autonomous.Notifier and autoresearch.Notifier

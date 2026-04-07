@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -44,6 +45,9 @@ type Config struct {
 	// Empty = diary logging disabled.
 	DiaryDir string
 }
+
+// Compile-time interface compliance.
+var _ autonomous.PeriodicTask = (*Service)(nil)
 
 // Service implements autonomous.PeriodicTask for Gmail polling.
 // It fetches new unread emails, analyzes them via LLM, and sends reports
