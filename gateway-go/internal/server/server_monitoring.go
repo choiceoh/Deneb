@@ -41,14 +41,8 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 
 	// Channel health monitor — simplified for single Telegram channel.
 	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
-		ListChannelIDs: func() []string {
-			if s.telegramPlug != nil {
-				return []string{"telegram"}
-			}
-			return nil
-		},
-		GetChannelStatus: func(id string) string {
-			if id != "telegram" || s.telegramPlug == nil {
+		GetChannelStatus: func() string {
+			if s.telegramPlug == nil {
 				return "unknown"
 			}
 			st := s.telegramPlug.Status()
@@ -60,21 +54,21 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			}
 			return "stopped"
 		},
-		GetChannelLastEventAt: func(id string) int64 {
+		GetChannelLastEventAt: func() int64 {
 			if s.channelEvents != nil {
-				return s.channelEvents.LastEventAt(id)
+				return s.channelEvents.LastEventAt()
 			}
 			return 0
 		},
-		GetChannelStartedAt: func(id string) int64 {
-			if id == "telegram" && s.telegramPlug != nil {
+		GetChannelStartedAt: func() int64 {
+			if s.telegramPlug != nil {
 				return s.telegramPlug.StartedAt()
 			}
 			return 0
 		},
-		RestartChannel: func(id string) error {
-			if id != "telegram" || s.telegramPlug == nil {
-				return fmt.Errorf("channel %q not available", id)
+		RestartChannel: func() error {
+			if s.telegramPlug == nil {
+				return fmt.Errorf("telegram not available")
 			}
 			s.logger.Info("restarting telegram via watchdog")
 			restartCtx, restartCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -84,7 +78,7 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			if err != nil {
 				s.logger.Error("telegram restart failed", "error", err)
 			} else {
-				s.emitChannelEvent(id, hooks.EventChannelConnect, "restarted")
+				s.emitChannelEvent("telegram", hooks.EventChannelConnect, "restarted")
 			}
 			return err
 		},
