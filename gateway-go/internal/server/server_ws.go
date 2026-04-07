@@ -285,18 +285,14 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 		client.authed = true
 		client.role = string(claims.Role)
 		client.deviceID = claims.DeviceID
-		s.authValidator.TouchDevice(claims.DeviceID)
 	} else if s.authValidator == nil {
 		// No-auth mode: trust all connections as operator.
 		client.authed = true
 		client.role = "operator"
 	} else {
-		// Auth configured but no token provided: limited access (probe role).
+		// Auth configured but no token provided: reject.
 		client.authed = false
-		client.role = params.Role
-		if client.role == "" {
-			client.role = "probe"
-		}
+		client.role = ""
 	}
 
 	// Register with broadcaster.

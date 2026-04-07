@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -181,28 +180,6 @@ func TestDispatchWithMiddleware(t *testing.T) {
 		if order[i] != w {
 			t.Errorf("order[%d] = %q, want %q (full: %v)", i, order[i], w, order)
 		}
-	}
-}
-
-func TestDispatchWithMiddlewareAuthReject(t *testing.T) {
-	d := NewDispatcher(rpctest.NewLogger())
-
-	authMw := middleware.Auth(map[string]bool{"public.method": true})
-	d.UseMiddleware(authMw)
-
-	d.Register("private.method", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, "should not reach")
-		return resp
-	})
-
-	// No RequestContext attached — should be rejected.
-	req := &protocol.RequestFrame{ID: "auth-1", Method: "private.method"}
-	resp := d.Dispatch(context.Background(), req)
-	if resp.OK {
-		t.Fatal("expected auth rejection for unauthenticated request")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrUnauthorized {
-		t.Fatalf("expected UNAUTHORIZED, got: %+v", resp.Error)
 	}
 }
 

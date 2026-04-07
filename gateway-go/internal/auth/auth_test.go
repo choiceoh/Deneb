@@ -1,57 +1,58 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
 )
 
-func TestIssueAndValidateToken(t *testing.T) {
-	v := NewValidator([]byte("test-secret"))
+// issueTestToken creates a signed token for testing.
+func issueTestToken(secret []byte, deviceID string, role Role) string {
+	now := time.Now().Unix()
+	payload := fmt.Sprintf("%s:%s::%d", deviceID, role, now)
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(payload))
+	sig := hex.EncodeToString(mac.Sum(nil))
+	return sig + ":" + payload
+}
 
-	token, err := v.IssueToken("device-1", RoleOperator, []Scope{ScopeRead, ScopeWrite})
-	if err != nil {
-		t.Fatalf("issue error: %v", err)
-	}
-	if token == "" {
-		t.Fatal("expected non-empty token")
-	}
+func TestValidateToken(t *testing.T) {
+	secret := []byte("test-secret")
+	v := NewValidator(secret)
 
+	token := issueTestToken(secret, "device-1", RoleOperator)
 	claims, err := v.ValidateToken(token)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if claims.DeviceID != "device-1" {
 		t.Errorf("expected device-1, got %s", claims.DeviceID)
 	}
 	if claims.Role != RoleOperator {
 		t.Errorf("expected operator, got %s", claims.Role)
 	}
-	if len(claims.Scopes) != 2 {
-		t.Errorf("expected 2 scopes, got %d", len(claims.Scopes))
-	}
 }
 
-func TestIssueToken_EmptyDeviceID(t *testing.T) {
-	v := NewValidator([]byte("secret"))
-	_, err := v.IssueToken("", RoleOperator, nil)
-	if err == nil {
-		t.Error("expected error for empty device ID")
-	}
-}
+func TestValidateToken_AgentRole(t *testing.T) {
+	secret := []byte("test-secret")
+	v := NewValidator(secret)
 
-func TestIssueToken_DeviceIDWithColon(t *testing.T) {
-	v := NewValidator([]byte("secret"))
-	_, err := v.IssueToken("device:bad", RoleOperator, nil)
-	if err == nil {
-		t.Error("expected error for device ID containing colon")
+	token := issueTestToken(secret, "agent-1", RoleAgent)
+	claims, err := v.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if claims.Role != RoleAgent {
+		t.Errorf("expected agent, got %s", claims.Role)
 	}
 }
 
 func TestValidateToken_InvalidSignature(t *testing.T) {
 	v := NewValidator([]byte("test-secret"))
-	// 64 hex chars (all zeros) + colon + payload
-	_, err := v.ValidateToken("0000000000000000000000000000000000000000000000000000000000000000:device-1:operator:read:12345")
+	_, err := v.ValidateToken("0000000000000000000000000000000000000000000000000000000000000000:device-1:operator::12345")
 	if err == nil {
 		t.Fatal("expected error for invalid signature")
 	}
@@ -74,10 +75,11 @@ func TestValidateToken_TooShort(t *testing.T) {
 }
 
 func TestValidateToken_DifferentSecret(t *testing.T) {
-	v1 := NewValidator([]byte("secret-1"))
-	v2 := NewValidator([]byte("secret-2"))
+	secret1 := []byte("secret-1")
+	secret2 := []byte("secret-2")
+	v2 := NewValidator(secret2)
 
-	token, _ := v1.IssueToken("dev", RoleViewer, []Scope{ScopeRead})
+	token := issueTestToken(secret1, "dev", RoleOperator)
 	_, err := v2.ValidateToken(token)
 	if err == nil {
 		t.Fatal("expected error for different secret")
@@ -100,89 +102,5 @@ func TestTokenClaims_IsExpired(t *testing.T) {
 	claims.ExpiresAt = time.Time{}
 	if claims.IsExpired(time.Now()) {
 		t.Error("expected not expired for zero time")
-	}
-}
-
-func TestTokenClaims_HasScope(t *testing.T) {
-	claims := &TokenClaims{
-		Scopes: []Scope{ScopeRead, ScopeWrite},
-	}
-	if !claims.HasScope(ScopeRead) {
-		t.Error("expected HasScope(read) = true")
-	}
-	if claims.HasScope(ScopeAdmin) {
-		t.Error("expected HasScope(admin) = false")
-	}
-}
-
-func TestDeviceManagement(t *testing.T) {
-	v := NewValidator([]byte("secret"))
-
-	dev := DeviceRecord{
-		ID:       "dev-1",
-		Name:     "Test Device",
-		PairedAt: time.Now(),
-		LastSeen: time.Now(),
-	}
-	v.RegisterDevice(dev)
-
-	got := v.GetDevice("dev-1")
-	if got == nil {
-		t.Fatal("expected device")
-	}
-	if got.Name != "Test Device" {
-		t.Errorf("expected 'Test Device', got %s", got.Name)
-	}
-
-	devices := v.ListDevices()
-	if len(devices) != 1 {
-		t.Errorf("expected 1 device, got %d", len(devices))
-	}
-	// ListDevices returns copies, so mutating them is safe.
-	if devices[0].Name != "Test Device" {
-		t.Errorf("expected copy with name 'Test Device', got %s", devices[0].Name)
-	}
-
-	v.TouchDevice("dev-1")
-
-	removed := v.RemoveDevice("dev-1")
-	if !removed {
-		t.Error("expected removal to return true")
-	}
-
-	if v.GetDevice("dev-1") != nil {
-		t.Error("expected nil after removal")
-	}
-}
-
-func TestCheckPermission(t *testing.T) {
-	// Operator has all scopes.
-	if err := CheckPermission(RoleOperator, nil, ScopeWrite); err != nil {
-		t.Errorf("operator should have write: %v", err)
-	}
-
-	// Viewer lacks write.
-	if err := CheckPermission(RoleViewer, nil, ScopeWrite); err == nil {
-		t.Error("viewer should not have write")
-	}
-
-	// Explicit scope override.
-	if err := CheckPermission(RoleViewer, []Scope{ScopeWrite}, ScopeWrite); err != nil {
-		t.Errorf("explicit scope should grant access: %v", err)
-	}
-
-	// Admin scope grants everything.
-	if err := CheckPermission(RoleViewer, []Scope{ScopeAdmin}, ScopeApprovals); err != nil {
-		t.Errorf("admin scope should grant approvals: %v", err)
-	}
-
-	// Operator has pairing scope by default.
-	if err := CheckPermission(RoleOperator, nil, ScopePairing); err != nil {
-		t.Errorf("operator should have pairing: %v", err)
-	}
-
-	// Agent lacks admin.
-	if err := CheckPermission(RoleAgent, nil, ScopeAdmin); err == nil {
-		t.Error("agent should not have admin")
 	}
 }

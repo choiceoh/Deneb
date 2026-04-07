@@ -57,42 +57,6 @@ func TestChain_Order(t *testing.T) {
 	}
 }
 
-func TestAuth_PublicMethod(t *testing.T) {
-	mw := Auth(map[string]bool{"health": true})
-	handler := mw(okHandler)
-
-	// Public method: no auth required.
-	resp := handler(context.Background(), makeReq("1", "health"))
-	if !resp.OK {
-		t.Error("expected OK for public method")
-	}
-}
-
-func TestAuth_ProtectedMethod_NoContext(t *testing.T) {
-	mw := Auth(map[string]bool{"health": true})
-	handler := mw(okHandler)
-
-	resp := handler(context.Background(), makeReq("1", "sessions.list"))
-	if resp.OK {
-		t.Error("expected error for unauthenticated protected method")
-	}
-}
-
-func TestAuth_ProtectedMethod_Authenticated(t *testing.T) {
-	mw := Auth(map[string]bool{"health": true})
-	handler := mw(okHandler)
-
-	ctx := WithRequestContext(context.Background(), &RequestContext{
-		ConnID:        "conn-1",
-		Authenticated: true,
-	})
-
-	resp := handler(ctx, makeReq("1", "sessions.list"))
-	if !resp.OK {
-		t.Error("expected OK for authenticated request")
-	}
-}
-
 func TestLogging_Middleware(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	mw := Logging(logger)
@@ -101,52 +65,5 @@ func TestLogging_Middleware(t *testing.T) {
 	resp := handler(context.Background(), makeReq("1", "test"))
 	if !resp.OK {
 		t.Error("expected OK")
-	}
-}
-
-func TestRateLimit_AllowsNormal(t *testing.T) {
-	rl := NewRateLimiter(RateLimitConfig{MaxRequests: 5, WindowMs: 60000})
-	defer rl.Close()
-	handler := rl.Middleware()(okHandler)
-
-	ctx := WithRequestContext(context.Background(), &RequestContext{ConnID: "c1"})
-	for i := 0; i < 5; i++ {
-		resp := handler(ctx, makeReq("1", "test"))
-		if !resp.OK {
-			t.Errorf("request %d should be allowed", i+1)
-		}
-	}
-}
-
-func TestRateLimit_BlocksExcess(t *testing.T) {
-	rl := NewRateLimiter(RateLimitConfig{MaxRequests: 2, WindowMs: 60000})
-	defer rl.Close()
-	handler := rl.Middleware()(okHandler)
-
-	ctx := WithRequestContext(context.Background(), &RequestContext{ConnID: "c1"})
-	handler(ctx, makeReq("1", "test"))
-	handler(ctx, makeReq("2", "test"))
-
-	resp := handler(ctx, makeReq("3", "test"))
-	if resp.OK {
-		t.Error("third request should be rate-limited")
-	}
-}
-
-func TestRequestContext_RoundTrip(t *testing.T) {
-	rc := &RequestContext{
-		ConnID:        "conn-123",
-		Role:          "operator",
-		Authenticated: true,
-		DeviceID:      "dev-1",
-	}
-	ctx := WithRequestContext(context.Background(), rc)
-	got := GetRequestContext(ctx)
-
-	if got == nil {
-		t.Fatal("expected non-nil request context")
-	}
-	if got.ConnID != "conn-123" {
-		t.Errorf("expected conn-123, got %s", got.ConnID)
 	}
 }
