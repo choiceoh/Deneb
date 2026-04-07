@@ -246,13 +246,23 @@ func (pt *ProgressTracker) Finalize(ctx context.Context) {
 	}
 }
 
+// progressEditTimeout is the deadline for a single Telegram send/edit API call
+// in the progress tracker. Progress edits use a detached context so they are not
+// canceled when the parent agent execution context ends.
+const progressEditTimeout = 10 * time.Second
+
 // updateMessage sends a new progress message or edits the existing one.
-func (pt *ProgressTracker) updateMessage(ctx context.Context) {
+// It uses a detached context with a fixed timeout so that edits (especially
+// the final "finalize" update) are not aborted when the agent context is canceled.
+func (pt *ProgressTracker) updateMessage(_ context.Context) {
 	if pt.client == nil {
 		return
 	}
 
 	text := pt.renderText()
+
+	ctx, cancel := context.WithTimeout(context.Background(), progressEditTimeout)
+	defer cancel()
 
 	pt.mu.Lock()
 	msgID := pt.messageID
