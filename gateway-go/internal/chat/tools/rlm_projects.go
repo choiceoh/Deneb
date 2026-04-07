@@ -194,5 +194,3 @@ func ToolProjectsGetDocument(deps *toolctx.WikiDeps) toolctx.ToolFunc {
 		return content, nil
 	}
 }
-
-

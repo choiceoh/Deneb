@@ -23,8 +23,8 @@ type ToolDef struct {
 	Hidden          bool   // if true, excluded from LLMTools() but still callable via Execute
 	Deferred        bool   // if true, excluded from initial LLMTools() but activatable via fetch_tools
 	Profile         string // optional: "coding" = coding-only, "" = available in all profiles
-	ConcurrencySafe bool // if true, safe for parallel execution (no shared-state mutations)
-	MaxOutput       int  // max chars for tool result in LLM context; 0 = agent.DefaultMaxOutput
+	ConcurrencySafe bool   // if true, safe for parallel execution (no shared-state mutations)
+	MaxOutput       int    // max chars for tool result in LLM context; 0 = agent.DefaultMaxOutput
 }
 
 // DeferredToolSummary is a minimal view of a deferred tool for system prompt assembly.

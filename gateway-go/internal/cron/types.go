@@ -37,4 +37,3 @@ type CronFailureAlert struct {
 	Mode       string `json:"mode,omitempty"` // "announce" (Telegram delivery)
 	AccountID  string `json:"accountId,omitempty"`
 }
-

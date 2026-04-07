@@ -17,11 +17,11 @@ import (
 type Phase string
 
 const (
-	PhaseIdle      Phase = "idle"      // no processes running
-	PhaseStarting  Phase = "starting"  // launching processes
-	PhaseRunning   Phase = "running"   // all processes healthy
-	PhaseStopping  Phase = "stopping"  // shutting down
-	PhaseFailed    Phase = "failed"    // startup or runtime failure
+	PhaseIdle     Phase = "idle"     // no processes running
+	PhaseStarting Phase = "starting" // launching processes
+	PhaseRunning  Phase = "running"  // all processes healthy
+	PhaseStopping Phase = "stopping" // shutting down
+	PhaseFailed   Phase = "failed"   // startup or runtime failure
 )
 
 // ProcessInfo tracks a managed subprocess.
@@ -34,23 +34,23 @@ type ProcessInfo struct {
 
 // ServiceStatus is the aggregate pipeline status.
 type ServiceStatus struct {
-	Phase       Phase           `json:"phase"`
-	Processes   []ProcessInfo   `json:"processes,omitempty"`
+	Phase        Phase           `json:"phase"`
+	Processes    []ProcessInfo   `json:"processes,omitempty"`
 	Trajectories TrajectoryStats `json:"trajectories"`
-	LastAdapter string          `json:"lastAdapter,omitempty"`
-	Error       string          `json:"error,omitempty"`
-	StartedAt   int64           `json:"startedAt,omitempty"`
+	LastAdapter  string          `json:"lastAdapter,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	StartedAt    int64           `json:"startedAt,omitempty"`
 }
 
 // Service orchestrates the sglang + Tinker + Atropos process trio.
 // It does NOT train — it manages the external Python processes that train.
 type Service struct {
-	mu        sync.Mutex
-	cfg       Config
-	phase     Phase
-	startedAt int64
-	lastError string
-	processes map[string]*ProcessInfo
+	mu          sync.Mutex
+	cfg         Config
+	phase       Phase
+	startedAt   int64
+	lastError   string
+	processes   map[string]*ProcessInfo
 	lastAdapter string
 
 	store     *Store

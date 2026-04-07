@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
+	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 )
 
 // --- Package-level model role registry ---
@@ -24,7 +24,7 @@ import (
 var (
 	pkgRegistry     *modelrole.Registry
 	pkgRegistryOnce sync.Once
-	pkgLocalAIHub    *localai.Hub
+	pkgLocalAIHub   *localai.Hub
 )
 
 // SetModelRoleRegistry sets the package-level model role registry.
@@ -62,7 +62,7 @@ const (
 	localAIWarmupTTL  = 5 * time.Second
 	localAIWarmupFor  = 2 * time.Minute
 	localAIHealthPing = 3 * time.Second
-	pilotTimeout     = 2 * time.Minute
+	pilotTimeout      = 2 * time.Minute
 )
 
 var (

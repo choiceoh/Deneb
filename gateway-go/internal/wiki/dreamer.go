@@ -202,12 +202,12 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (string, error) {
 
 // wikiUpdate represents a single page update instruction from the LLM.
 type wikiUpdate struct {
-	Action     string   `json:"action"`     // "create" or "update"
-	Path       string   `json:"path"`       // e.g., "기술/dgx-spark.md"
+	Action     string   `json:"action"` // "create" or "update"
+	Path       string   `json:"path"`   // e.g., "기술/dgx-spark.md"
 	Title      string   `json:"title"`
 	Category   string   `json:"category"`
 	Tags       []string `json:"tags"`
-	Content    string   `json:"content"`    // markdown body or section to append
+	Content    string   `json:"content"` // markdown body or section to append
 	Importance float64  `json:"importance"`
 }
 

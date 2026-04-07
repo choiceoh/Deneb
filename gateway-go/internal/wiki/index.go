@@ -12,9 +12,9 @@ import (
 // Index is the master wiki index (index.md).
 // It maps page paths to metadata for fast LLM navigation.
 type Index struct {
-	Entries         map[string]IndexEntry // relPath -> entry
-	LastProcessed   string                // last processed diary date (YYYY-MM-DD)
-	GeneratedAt     string                // ISO timestamp of last generation
+	Entries       map[string]IndexEntry // relPath -> entry
+	LastProcessed string                // last processed diary date (YYYY-MM-DD)
+	GeneratedAt   string                // ISO timestamp of last generation
 }
 
 // IndexEntry is a single entry in the master index.

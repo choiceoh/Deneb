@@ -133,4 +133,3 @@ func (s *Server) applyChannelHealthConfig(newCfg *config.DenebConfig) {
 		s.logger.Info("channel health config reloaded from config file")
 	}
 }
-

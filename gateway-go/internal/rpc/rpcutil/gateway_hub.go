@@ -21,11 +21,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rl"
 	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
@@ -95,7 +95,7 @@ type GatewayHub struct {
 	processes *process.Manager
 
 	// Channel plugins.
-	telegram      *telegram.Plugin // nil until SetTelegram (early phase).
+	telegram      *telegram.Plugin        // nil until SetTelegram (early phase).
 	internalHooks *hooks.InternalRegistry // nil-safe
 
 	// Agent pipeline.
@@ -182,11 +182,11 @@ func (h *GatewayHub) Skills() *skill.Manager                         { return h.
 func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
 func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
 func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
-func (h *GatewayHub) RLMService() *rlm.Service                      { return h.rlmService }
+func (h *GatewayHub) RLMService() *rlm.Service                       { return h.rlmService }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
-func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return h.localAIHub }
+func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
 
 // --- Late-binding setters ---
 

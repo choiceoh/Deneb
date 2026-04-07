@@ -33,19 +33,19 @@ func IsValidSkillType(t string) bool {
 
 // DenebSkillMetadata represents parsed skill metadata from frontmatter.
 type DenebSkillMetadata struct {
-	Always        bool               `json:"always,omitempty"`
-	SkillKey      string             `json:"skillKey,omitempty"`
-	PrimaryEnv    string             `json:"primaryEnv,omitempty"`
-	Emoji         string             `json:"emoji,omitempty"`
-	Homepage      string             `json:"homepage,omitempty"`
-	Tags            []string           `json:"tags,omitempty"`
-	RelatedSkills   []string           `json:"related_skills,omitempty"`
-	RequiresTools   []string           `json:"requires_tools,omitempty"`
-	FallbackForTools []string          `json:"fallback_for_tools,omitempty"`
-	Requires        *SkillRequires     `json:"requires,omitempty"`
-	Install       []SkillInstallSpec `json:"install,omitempty"`
-	LocalExec     *SkillLocalExec    `json:"localExec,omitempty"`
-	SystemHandler string             `json:"systemHandler,omitempty"`
+	Always           bool               `json:"always,omitempty"`
+	SkillKey         string             `json:"skillKey,omitempty"`
+	PrimaryEnv       string             `json:"primaryEnv,omitempty"`
+	Emoji            string             `json:"emoji,omitempty"`
+	Homepage         string             `json:"homepage,omitempty"`
+	Tags             []string           `json:"tags,omitempty"`
+	RelatedSkills    []string           `json:"related_skills,omitempty"`
+	RequiresTools    []string           `json:"requires_tools,omitempty"`
+	FallbackForTools []string           `json:"fallback_for_tools,omitempty"`
+	Requires         *SkillRequires     `json:"requires,omitempty"`
+	Install          []SkillInstallSpec `json:"install,omitempty"`
+	LocalExec        *SkillLocalExec    `json:"localExec,omitempty"`
+	SystemHandler    string             `json:"systemHandler,omitempty"`
 }
 
 // SkillLocalExec defines execution config for local-type skills.

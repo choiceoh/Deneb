@@ -305,11 +305,11 @@ func arResume(deps Deps) rpcutil.HandlerFunc {
 		}
 		snap := deps.Runner.Status()
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"ok":               true,
-			"running":          snap.Running,
-			"resumed_from":     cfg.TotalIterations,
-			"best_metric":      cfg.BestMetric,
-			"baseline_metric":  cfg.BaselineMetric,
+			"ok":              true,
+			"running":         snap.Running,
+			"resumed_from":    cfg.TotalIterations,
+			"best_metric":     cfg.BestMetric,
+			"baseline_metric": cfg.BaselineMetric,
 		})
 	}
 }

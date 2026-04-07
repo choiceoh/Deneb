@@ -82,4 +82,3 @@ func WithHooksHTTP(h *HooksHTTPHandler) Option {
 		s.hooksHTTP = h
 	}
 }
-

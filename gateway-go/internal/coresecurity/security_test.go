@@ -167,14 +167,14 @@ func TestIsSafeURL_MetadataIPv6(t *testing.T) {
 
 func TestIsSafeURL_NumericBypass(t *testing.T) {
 	blocked := []string{
-		"http://0177.0.0.1/",     // octal 127.0.0.1
+		"http://0177.0.0.1/",       // octal 127.0.0.1
 		"http://0177.0.0.01/admin", // octal 127.0.0.1
-		"http://0x7f000001/",     // hex 127.0.0.1
-		"http://0X7F000001/",     // hex uppercase
-		"http://2130706433/",     // decimal 127.0.0.1
-		"http://012.0.0.01/",     // octal 10.0.0.1
-		"http://0xC0A80101/",     // hex 192.168.1.1
-		"http://2852039166/",     // decimal 169.254.169.254
+		"http://0x7f000001/",       // hex 127.0.0.1
+		"http://0X7F000001/",       // hex uppercase
+		"http://2130706433/",       // decimal 127.0.0.1
+		"http://012.0.0.01/",       // octal 10.0.0.1
+		"http://0xC0A80101/",       // hex 192.168.1.1
+		"http://2852039166/",       // decimal 169.254.169.254
 	}
 	for _, u := range blocked {
 		if IsSafeURL(u) {
@@ -274,15 +274,15 @@ func TestParseOctetMixedRadix(t *testing.T) {
 	}{
 		{"0", 0, true},
 		{"127", 127, true},
-		{"0177", 127, true},  // octal
-		{"0x7f", 127, true},  // hex
-		{"0X7F", 127, true},  // hex uppercase
-		{"0xff", 255, true},  // hex max
-		{"0377", 255, true},  // octal max
-		{"256", 0, false},    // overflow
-		{"0400", 0, false},   // octal overflow
-		{"0xfff", 0, false},  // hex overflow
-		{"", 0, false},       // empty
+		{"0177", 127, true}, // octal
+		{"0x7f", 127, true}, // hex
+		{"0X7F", 127, true}, // hex uppercase
+		{"0xff", 255, true}, // hex max
+		{"0377", 255, true}, // octal max
+		{"256", 0, false},   // overflow
+		{"0400", 0, false},  // octal overflow
+		{"0xfff", 0, false}, // hex overflow
+		{"", 0, false},      // empty
 	}
 	for _, tc := range cases {
 		got, ok := parseOctetMixedRadix(tc.s)

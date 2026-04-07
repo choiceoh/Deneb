@@ -206,4 +206,3 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	}
 	return true
 }
-

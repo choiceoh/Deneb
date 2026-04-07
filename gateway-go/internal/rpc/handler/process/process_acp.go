@@ -22,14 +22,14 @@ import (
 // Pointer receiver required: enabled field is an atomic.Bool mutated by
 // IsEnabled/SetEnabled, so ACPMethods takes *ACPDeps (not a value).
 type ACPDeps struct {
-	Registry     *acp.ACPRegistry
-	Bindings     *acp.SessionBindingService
-	Infra        *acp.SubagentInfraDeps
-	Sessions     *session.Manager
-	GatewaySubs  *events.GatewayEventSubscriptions
-	BindingStore   *acp.BindingStore
-	RegistryStore  *acp.RegistryStore
-	Translator     *acp.ACPTranslator
+	Registry      *acp.ACPRegistry
+	Bindings      *acp.SessionBindingService
+	Infra         *acp.SubagentInfraDeps
+	Sessions      *session.Manager
+	GatewaySubs   *events.GatewayEventSubscriptions
+	BindingStore  *acp.BindingStore
+	RegistryStore *acp.RegistryStore
+	Translator    *acp.ACPTranslator
 
 	// SessionSendFn sends a message to a session, triggering an agent run.
 	SessionSendFn func(sessionKey, message string) error

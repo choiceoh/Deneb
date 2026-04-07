@@ -14,9 +14,9 @@ func TestSanitizeSkillName(t *testing.T) {
 		{"deploy_gateway", "deploy-gateway"},
 		{"debug-ffi-crash", "debug-ffi-crash"},
 		{"UPPER-CASE", "upper-case"},
-		{"a", ""},      // too short
-		{"", ""},        // empty
-		{"---", ""},     // only hyphens
+		{"a", ""},   // too short
+		{"", ""},    // empty
+		{"---", ""}, // only hyphens
 		{"hello!!world", "helloworld"},
 		{"foo--bar", "foo-bar"},
 		{"-leading-", "leading"},

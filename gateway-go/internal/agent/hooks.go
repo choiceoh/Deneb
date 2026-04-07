@@ -37,11 +37,15 @@ type HookCompositor struct {
 	toolBlockReady func(llm.ContentBlock, int)
 }
 
-func (c *HookCompositor) OnTextDelta(fn func(string))                        { c.textDelta = append(c.textDelta, fn) }
-func (c *HookCompositor) OnThinking(fn func())                               { c.thinking = append(c.thinking, fn) }
-func (c *HookCompositor) OnToolStart(fn func(string, string, []byte))        { c.toolStart = append(c.toolStart, fn) }
-func (c *HookCompositor) OnToolEmit(fn func(string, string))                 { c.toolEmit = append(c.toolEmit, fn) }
-func (c *HookCompositor) OnToolResult(fn func(string, string, string, bool)) { c.toolResult = append(c.toolResult, fn) }
+func (c *HookCompositor) OnTextDelta(fn func(string)) { c.textDelta = append(c.textDelta, fn) }
+func (c *HookCompositor) OnThinking(fn func())        { c.thinking = append(c.thinking, fn) }
+func (c *HookCompositor) OnToolStart(fn func(string, string, []byte)) {
+	c.toolStart = append(c.toolStart, fn)
+}
+func (c *HookCompositor) OnToolEmit(fn func(string, string)) { c.toolEmit = append(c.toolEmit, fn) }
+func (c *HookCompositor) OnToolResult(fn func(string, string, string, bool)) {
+	c.toolResult = append(c.toolResult, fn)
+}
 
 func (c *HookCompositor) SetBeforeToolCall(fn func(string, string, []byte) (bool, string)) {
 	c.beforeToolCall = fn

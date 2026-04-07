@@ -15,15 +15,15 @@ var blockedSchemes = map[string]bool{
 
 // blockedHosts are hostnames that should not be accessed (SSRF protection).
 var blockedHosts = map[string]bool{
-	"localhost":                true,
-	"127.0.0.1":               true,
-	"0.0.0.0":                 true,
-	"[::1]":                   true,
-	"::1":                     true,
-	"::0":                     true,
+	"localhost": true,
+	"127.0.0.1": true,
+	"0.0.0.0":   true,
+	"[::1]":     true,
+	"::1":       true,
+	"::0":       true,
 	"0000:0000:0000:0000:0000:0000:0000:0001": true,
-	"metadata.google.internal": true,
-	"169.254.169.254":          true,
+	"metadata.google.internal":                true,
+	"169.254.169.254":                         true,
 }
 
 // IsSafeURL validates a URL for SSRF safety. Blocks private/loopback IPs,

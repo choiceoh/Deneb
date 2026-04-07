@@ -73,12 +73,12 @@ type FenceSpan struct {
 // ParseOptions controls markdown parsing behavior.
 // Field names use camelCase to match the Rust serde(rename_all = "camelCase").
 type ParseOptions struct {
-	Linkify         bool   `json:"linkify"`
-	EnableSpoilers  bool   `json:"enableSpoilers"`
-	HeadingStyle    string `json:"headingStyle"`    // "none" or "bold"
+	Linkify          bool   `json:"linkify"`
+	EnableSpoilers   bool   `json:"enableSpoilers"`
+	HeadingStyle     string `json:"headingStyle"` // "none" or "bold"
 	BlockquotePrefix string `json:"blockquotePrefix"`
-	Autolink        bool   `json:"autolink"`
-	TableMode       string `json:"tableMode"` // "off", "bullets", or "code"
+	Autolink         bool   `json:"autolink"`
+	TableMode        string `json:"tableMode"` // "off", "bullets", or "code"
 }
 
 // DefaultParseOptions returns the same defaults as Rust's ParseOptions::default().

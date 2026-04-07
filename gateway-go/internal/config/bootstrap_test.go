@@ -232,7 +232,7 @@ func TestPersistDefaultModel(t *testing.T) {
 	t.Run("existing config", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-	t.Setenv("DENEB_GATEWAY_TOKEN", "")
+		t.Setenv("DENEB_GATEWAY_TOKEN", "")
 		existing := map[string]any{
 			"gateway": map[string]any{
 				"auth": map[string]any{"token": "keep-me"},
@@ -289,7 +289,7 @@ func TestPersistDefaultModel(t *testing.T) {
 	t.Run("no existing file", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-	t.Setenv("DENEB_GATEWAY_TOKEN", "")
+		t.Setenv("DENEB_GATEWAY_TOKEN", "")
 
 		if err := PersistDefaultModel(cfgPath, "google/gemini-3.1-pro", logger); err != nil {
 			t.Fatal(err)

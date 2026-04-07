@@ -66,4 +66,3 @@ func (hc *healthChecker) pingModels() bool {
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
-

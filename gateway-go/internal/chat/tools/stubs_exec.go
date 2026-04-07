@@ -548,7 +548,6 @@ func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
 	return "실행 이력을 사용할 수 없습니다.", nil
 }
 
-
 // --- sessions_list tool ---
 
 // ToolSessionsList returns a tool function that lists active sessions.
