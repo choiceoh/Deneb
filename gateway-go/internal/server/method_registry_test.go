@@ -149,6 +149,7 @@ var requiredMethods = []string{
 	"wizard.start",
 	"wizard.status",
 
+	// RLM: depends on wiki (DENEB_WIKI_ENABLED), not in required list.
 	// Wiki: feature-flagged (DENEB_WIKI_ENABLED), not in required list.
 
 	// Autoresearch.
