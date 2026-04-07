@@ -23,12 +23,12 @@ func TestRegisterCoreTools(t *testing.T) {
 		"fetch_tools",
 	}
 
-	registered := make(map[string]bool)
+	registered := make(map[string]struct{})
 	for _, name := range registry.Names() {
-		registered[name] = true
+		registered[name] = struct{}{}
 	}
 	for _, name := range expectedTools {
-		if !registered[name] {
+		if _, ok := registered[name]; !ok {
 			t.Errorf("expected tool %q to be registered", name)
 		}
 	}

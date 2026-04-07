@@ -14,17 +14,18 @@ func ValidateFrame(jsonStr string) error {
 
 // knownErrorCodes contains all valid gateway error codes.
 // Matches the ErrorCode enum in proto/gateway.proto.
-var knownErrorCodes = map[string]bool{
-	"NOT_LINKED": true, "NOT_PAIRED": true, "AGENT_TIMEOUT": true,
-	"INVALID_REQUEST": true, "UNAVAILABLE": true, "MISSING_PARAM": true,
-	"NOT_FOUND": true, "UNAUTHORIZED": true, "VALIDATION_FAILED": true,
-	"CONFLICT": true, "FORBIDDEN": true, "NODE_DISCONNECTED": true,
-	"DEPENDENCY_FAILED": true, "FEATURE_DISABLED": true,
+var knownErrorCodes = map[string]struct{}{
+	"NOT_LINKED": {}, "NOT_PAIRED": {}, "AGENT_TIMEOUT": {},
+	"INVALID_REQUEST": {}, "UNAVAILABLE": {}, "MISSING_PARAM": {},
+	"NOT_FOUND": {}, "UNAUTHORIZED": {}, "VALIDATION_FAILED": {},
+	"CONFLICT": {}, "FORBIDDEN": {}, "NODE_DISCONNECTED": {},
+	"DEPENDENCY_FAILED": {}, "FEATURE_DISABLED": {},
 }
 
 // ValidateErrorCode checks if an error code string is a known gateway error code.
 func ValidateErrorCode(code string) bool {
-	return knownErrorCodes[code]
+	_, ok := knownErrorCodes[code]
+	return ok
 }
 
 // ValidateParams validates RPC parameters for a given method name.

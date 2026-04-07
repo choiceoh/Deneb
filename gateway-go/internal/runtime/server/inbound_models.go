@@ -38,14 +38,14 @@ func (p *InboundProcessor) quickChangeModels() []modelEntry {
 			{modelrole.RoleLightweight, "lightweight"},
 			{modelrole.RoleFallback, "fallback"},
 		}
-		seen := make(map[string]bool)
+		seen := make(map[string]struct{})
 		for _, r := range roles {
 			cfg := reg.Config(r.role)
 			if cfg.Model == "" {
 				continue
 			}
 			fullID := reg.FullModelID(r.role)
-			seen[fullID] = true
+			seen[fullID] = struct{}{}
 			entries = append(entries, modelEntry{
 				label:   r.label + ": " + shortModelName(cfg.Model),
 				fullID:  fullID,
@@ -63,7 +63,7 @@ func (p *InboundProcessor) quickChangeModels() []modelEntry {
 		}
 		for _, e := range extras {
 			fullID := e.provider + "/" + e.model
-			if seen[fullID] {
+			if _, ok := seen[fullID]; ok {
 				continue
 			}
 			entries = append(entries, modelEntry{

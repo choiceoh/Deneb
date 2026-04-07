@@ -165,7 +165,7 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 
 	// Validate hooks.
 	if cfg.Hooks != nil {
-		seenIDs := make(map[string]bool)
+		seenIDs := make(map[string]struct{})
 		for i, hook := range cfg.Hooks.Entries {
 			prefix := fmt.Sprintf("hooks.entries[%d]", i)
 
@@ -197,13 +197,13 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 			}
 
 			if hook.ID != "" {
-				if seenIDs[hook.ID] {
+				if _, ok := seenIDs[hook.ID]; ok {
 					issues = append(issues, ConfigIssue{
 						Path:    prefix + ".id",
 						Message: fmt.Sprintf("duplicate hook ID %q", hook.ID),
 					})
 				}
-				seenIDs[hook.ID] = true
+				seenIDs[hook.ID] = struct{}{}
 			}
 		}
 	}

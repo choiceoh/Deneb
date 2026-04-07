@@ -129,14 +129,14 @@ func TestShouldIncludeSkill_requiresTools(t *testing.T) {
 	ctx := EligibilityContext{
 		EnvVars:        map[string]string{},
 		SkillConfigs:   map[string]SkillConfig{},
-		AvailableTools: map[string]bool{"exec": true, "terminal": true, "read": true},
+		AvailableTools: map[string]struct{}{"exec": {}, "terminal": {}, "read": {}},
 	}
 	if !ShouldIncludeSkill(entry, ctx) {
 		t.Error("expected skill to be included when required tools are available")
 	}
 
 	// Missing tool — should be excluded.
-	ctx.AvailableTools = map[string]bool{"exec": true, "read": true}
+	ctx.AvailableTools = map[string]struct{}{"exec": {}, "read": {}}
 	if ShouldIncludeSkill(entry, ctx) {
 		t.Error("expected skill to be excluded when required tool is missing")
 	}
@@ -153,14 +153,14 @@ func TestShouldIncludeSkill_fallbackForTools(t *testing.T) {
 	ctx := EligibilityContext{
 		EnvVars:        map[string]string{},
 		SkillConfigs:   map[string]SkillConfig{},
-		AvailableTools: map[string]bool{"web_search": true, "read": true},
+		AvailableTools: map[string]struct{}{"web_search": {}, "read": {}},
 	}
 	if ShouldIncludeSkill(entry, ctx) {
 		t.Error("expected fallback skill to be hidden when target tool is available")
 	}
 
 	// web_search NOT available — fallback should show.
-	ctx.AvailableTools = map[string]bool{"read": true, "exec": true}
+	ctx.AvailableTools = map[string]struct{}{"read": {}, "exec": {}}
 	if !ShouldIncludeSkill(entry, ctx) {
 		t.Error("expected fallback skill to show when target tool is unavailable")
 	}

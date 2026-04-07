@@ -205,9 +205,9 @@ func skillsCommands(_ Deps) rpcutil.HandlerFunc {
 		}
 		eligible := skills.FilterEligibleSkills(entries, eligCtx)
 		eligible = skills.FilterBySkillFilter(eligible, p.SkillFilter)
-		reserved := make(map[string]bool)
+		reserved := make(map[string]struct{})
 		for _, name := range p.ReservedNames {
-			reserved[name] = true
+			reserved[name] = struct{}{}
 		}
 		return map[string]any{"commands": skills.BuildSkillCommandSpecs(eligible, reserved)}, nil
 	})

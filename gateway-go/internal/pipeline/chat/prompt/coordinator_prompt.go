@@ -89,9 +89,9 @@ func writeCoordinatorPrompt(s *strings.Builder, params SystemPromptParams, scrat
 	s.WriteString("- Default language: Korean for status updates, English for specs\n\n")
 
 	// Tooling list (filtered to coordinator tools).
-	toolSet := make(map[string]bool, len(params.ToolDefs))
+	toolSet := make(map[string]struct{}, len(params.ToolDefs))
 	for _, def := range params.ToolDefs {
-		toolSet[def.Name] = true
+		toolSet[def.Name] = struct{}{}
 	}
 	if len(toolSet) > 0 {
 		s.WriteString("## Registered Tools\n")

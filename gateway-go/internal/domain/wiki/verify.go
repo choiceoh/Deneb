@@ -56,14 +56,14 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 	}
 
 	var findings []VerifyFinding
-	seen := map[string]bool{}
+	seen := map[string]struct{}{}
 
 	for i := 0; i < len(pages); i++ {
 		for j := i + 1; j < len(pages); j++ {
 			a, b := pages[i], pages[j]
 			key := a.path + "|" + b.path
 
-			if seen[key] {
+			if _, ok := seen[key]; ok {
 				continue
 			}
 
@@ -83,12 +83,12 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 						PageA:  a.path, PageB: b.path,
 					})
 				}
-				seen[key] = true
+				seen[key] = struct{}{}
 				continue
 			}
 
 			// Compare IDs.
-			if a.id != "" && b.id != "" && !seen[key] && isSimilar(a.id, b.id) {
+			if _, dup := seen[key]; a.id != "" && b.id != "" && !dup && isSimilar(a.id, b.id) {
 				dist := levenshtein(a.id, b.id)
 				if dist == 0 {
 					findings = append(findings, VerifyFinding{
@@ -103,7 +103,7 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 						PageA:  a.path, PageB: b.path,
 					})
 				}
-				seen[key] = true
+				seen[key] = struct{}{}
 			}
 		}
 	}

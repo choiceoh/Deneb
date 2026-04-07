@@ -555,15 +555,15 @@ func (wd *WikiDreamer) resetCounters() {
 
 // mergeTags merges two tag lists, deduplicating.
 func mergeTags(existing, new []string) []string {
-	seen := map[string]bool{}
+	seen := map[string]struct{}{}
 	for _, t := range existing {
-		seen[t] = true
+		seen[t] = struct{}{}
 	}
 	result := append([]string{}, existing...)
 	for _, t := range new {
-		if !seen[t] {
+		if _, ok := seen[t]; !ok {
 			result = append(result, t)
-			seen[t] = true
+			seen[t] = struct{}{}
 		}
 	}
 	return result
@@ -571,15 +571,15 @@ func mergeTags(existing, new []string) []string {
 
 // mergeRelated merges two related-page lists, deduplicating (union).
 func mergeRelated(existing, new []string) []string {
-	seen := map[string]bool{}
+	seen := map[string]struct{}{}
 	for _, r := range existing {
-		seen[r] = true
+		seen[r] = struct{}{}
 	}
 	result := append([]string{}, existing...)
 	for _, r := range new {
-		if !seen[r] {
+		if _, ok := seen[r]; !ok {
 			result = append(result, r)
-			seen[r] = true
+			seen[r] = struct{}{}
 		}
 	}
 	return result

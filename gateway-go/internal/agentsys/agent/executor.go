@@ -583,20 +583,20 @@ func buildConcurrencyCheck(tools ToolExecutor) func(string, json.RawMessage) boo
 		check := cc.IsConcurrencySafe
 		return func(name string, _ json.RawMessage) bool { return check(name) }
 	}
-	return func(name string, _ json.RawMessage) bool { return readOnlyToolFallback[name] }
+	return func(name string, _ json.RawMessage) bool { _, ok := readOnlyToolFallback[name]; return ok }
 }
 
 // appendUniqueTools appends extra tools to base, skipping any whose name
 // already exists in base. Used for dynamic tool injection (deferred tools).
 func appendUniqueTools(base, extra []llm.Tool) []llm.Tool {
-	existing := make(map[string]bool, len(base))
+	existing := make(map[string]struct{}, len(base))
 	for _, t := range base {
-		existing[t.Name] = true
+		existing[t.Name] = struct{}{}
 	}
 	for _, t := range extra {
-		if !existing[t.Name] {
+		if _, ok := existing[t.Name]; !ok {
 			base = append(base, t)
-			existing[t.Name] = true
+			existing[t.Name] = struct{}{}
 		}
 	}
 	return base

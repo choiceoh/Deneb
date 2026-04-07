@@ -63,7 +63,7 @@ var bootTools = toSet(
 
 // AllowedTools returns the set of tool names permitted for a given preset.
 // Returns nil when preset is empty or unknown (meaning no restriction).
-func AllowedTools(preset Preset) map[string]bool {
+func AllowedTools(preset Preset) map[string]struct{} {
 	switch preset {
 	case PresetResearcher:
 		return researcherTools
@@ -97,10 +97,10 @@ func KnownPresets() []Preset {
 	return []Preset{PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator, PresetConversation, PresetBoot}
 }
 
-func toSet(names ...string) map[string]bool {
-	m := make(map[string]bool, len(names))
+func toSet(names ...string) map[string]struct{} {
+	m := make(map[string]struct{}, len(names))
 	for _, n := range names {
-		m[n] = true
+		m[n] = struct{}{}
 	}
 	return m
 }

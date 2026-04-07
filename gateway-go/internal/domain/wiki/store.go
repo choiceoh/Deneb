@@ -176,7 +176,7 @@ func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []strin
 
 	// Add relPath to newly-related pages.
 	for _, target := range newRelated {
-		if oldSet[target] {
+		if _, ok := oldSet[target]; ok {
 			continue // already linked
 		}
 		s.addBacklink(target, relPath)
@@ -184,7 +184,7 @@ func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []strin
 
 	// Remove relPath from no-longer-related pages.
 	for _, target := range oldRelated {
-		if newSet[target] {
+		if _, ok := newSet[target]; ok {
 			continue // still linked
 		}
 		s.removeBacklink(target, relPath)
@@ -225,10 +225,10 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 	_ = s.writePageInternal(targetPath, page, true) // best-effort: related page update is non-critical
 }
 
-func toSet(ss []string) map[string]bool {
-	m := make(map[string]bool, len(ss))
+func toSet(ss []string) map[string]struct{} {
+	m := make(map[string]struct{}, len(ss))
 	for _, s := range ss {
-		m[s] = true
+		m[s] = struct{}{}
 	}
 	return m
 }

@@ -3,7 +3,7 @@
 package rpc
 
 // publicMethods are accessible without authentication.
-var publicMethods = map[string]bool{
-	"health":       true,
-	"health.check": true,
+var publicMethods = map[string]struct{}{
+	"health":       {},
+	"health.check": {},
 }

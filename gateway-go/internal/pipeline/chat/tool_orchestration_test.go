@@ -8,13 +8,13 @@ import (
 )
 
 // testConcurrencySafe mirrors the original hardcoded read-only set for tests.
-var testConcurrencySafe = map[string]bool{
-	"read": true, "grep": true, "glob": true, "find": true,
-	"tree": true, "process": true, "kv": true, "knowledge": true,
-	"memory": true,
+var testConcurrencySafe = map[string]struct{}{
+	"read": {}, "grep": {}, "glob": {}, "find": {},
+	"tree": {}, "process": {}, "kv": {}, "knowledge": {},
+	"memory": {},
 }
 
-func testIsSafe(name string) bool { return testConcurrencySafe[name] }
+func testIsSafe(name string) bool { _, ok := testConcurrencySafe[name]; return ok }
 
 func TestPartitionToolCalls(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {

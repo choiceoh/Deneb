@@ -494,13 +494,13 @@ func TestACPMethodsRegistered(t *testing.T) {
 	}
 
 	methods := d.Methods()
-	methodSet := make(map[string]bool)
+	methodSet := make(map[string]struct{})
 	for _, m := range methods {
-		methodSet[m] = true
+		methodSet[m] = struct{}{}
 	}
 
 	for _, e := range expected {
-		if !methodSet[e] {
+		if _, ok := methodSet[e]; !ok {
 			t.Errorf("missing expected ACP method: %s", e)
 		}
 	}

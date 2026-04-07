@@ -57,9 +57,9 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	}
 
 	// Build available tools map for conditional activation.
-	availableTools := make(map[string]bool, len(availableToolNames))
+	availableTools := make(map[string]struct{}, len(availableToolNames))
 	for _, name := range availableToolNames {
-		availableTools[name] = true
+		availableTools[name] = struct{}{}
 	}
 
 	cfg := skills.SnapshotConfig{

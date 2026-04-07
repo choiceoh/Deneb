@@ -164,15 +164,15 @@ func (c *Catalog) BuildWorkspaceSnapshot(filter []string) SkillSnapshot {
 		return SkillSnapshot{Entries: nil, Version: c.Version()}
 	}
 
-	filterSet := make(map[string]bool, len(normalized))
+	filterSet := make(map[string]struct{}, len(normalized))
 	for _, f := range normalized {
-		filterSet[strings.ToLower(f)] = true
+		filterSet[strings.ToLower(f)] = struct{}{}
 	}
 
 	var filtered []SkillEntry
 	for _, e := range all {
 		key := strings.ToLower(ResolveSkillKey(e))
-		if filterSet[key] {
+		if _, ok := filterSet[key]; ok {
 			filtered = append(filtered, e)
 		}
 	}

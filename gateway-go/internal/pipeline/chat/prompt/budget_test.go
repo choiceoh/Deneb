@@ -280,14 +280,14 @@ func TestOptimize_MultiplePriority2_SmallestRemovedFirst(t *testing.T) {
 	}
 
 	result := budget.Optimize(fragments)
-	names := make(map[string]bool)
+	names := make(map[string]struct{})
 	for _, f := range result {
-		names[f.Name] = true
+		names[f.Name] = struct{}{}
 	}
-	if names["hints"] {
+	if _, ok := names["hints"]; ok {
 		t.Error("hints (p3) should be removed")
 	}
-	if !names["soul"] {
+	if _, ok := names["soul"]; !ok {
 		t.Error("soul (p0) should survive")
 	}
 	// At least one p2 should survive (big_mem is more likely to remain

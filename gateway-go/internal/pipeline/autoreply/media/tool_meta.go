@@ -55,11 +55,11 @@ func (tm *ToolMeta) ErrorCount() int {
 
 // ToolNames returns a deduplicated list of tool names used.
 func (tm *ToolMeta) ToolNames() []string {
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var names []string
 	for _, inv := range tm.Invocations {
-		if !seen[inv.Name] {
-			seen[inv.Name] = true
+		if _, ok := seen[inv.Name]; !ok {
+			seen[inv.Name] = struct{}{}
 			names = append(names, inv.Name)
 		}
 	}

@@ -162,13 +162,13 @@ func (tc *TurnContext) IDs() []string {
 // DetectCycle checks whether the given refs form a cycle.
 func DetectCycle(refs map[string]string) error {
 	for start := range refs {
-		visited := map[string]bool{start: true}
+		visited := map[string]struct{}{start: {}}
 		current := refs[start]
 		for current != "" {
-			if visited[current] {
+			if _, ok := visited[current]; ok {
 				return fmt.Errorf("circular $ref: %s → %s (cycle detected)", start, current)
 			}
-			visited[current] = true
+			visited[current] = struct{}{}
 			current = refs[current]
 		}
 	}

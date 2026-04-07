@@ -15,10 +15,10 @@ type MediaAttachment struct {
 }
 
 // audioExtensions is used to detect audio files by extension.
-var audioExtensions = map[string]bool{
-	".mp3": true, ".wav": true, ".ogg": true, ".oga": true,
-	".m4a": true, ".aac": true, ".flac": true, ".opus": true,
-	".wma": true, ".amr": true, ".spx": true,
+var audioExtensions = map[string]struct{}{
+	".mp3": {}, ".wav": {}, ".ogg": {}, ".oga": {},
+	".m4a": {}, ".aac": {}, ".flac": {}, ".opus": {},
+	".wma": {}, ".amr": {}, ".spx": {},
 }
 
 // IsAudioAttachment returns true if the attachment appears to be audio.
@@ -30,7 +30,8 @@ func IsAudioAttachment(a MediaAttachment) bool {
 	if ext == "" {
 		ext = strings.ToLower(filepath.Ext(a.Path))
 	}
-	return audioExtensions[ext]
+	_, ok := audioExtensions[ext]
+	return ok
 }
 
 // BuildInboundMediaNote generates a "[media attached: ...]" annotation for

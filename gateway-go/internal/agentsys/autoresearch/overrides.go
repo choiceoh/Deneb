@@ -306,9 +306,9 @@ func validateOverrideValue(cd ConstantDef, value string) error {
 //	BATCH_SIZE = 64
 func parseConstantsLLMResponse(resp string, constants []ConstantDef) (string, map[string]string) {
 	// Build lookup of valid constant names.
-	validNames := make(map[string]bool, len(constants))
+	validNames := make(map[string]struct{}, len(constants))
 	for _, cd := range constants {
-		validNames[cd.Name] = true
+		validNames[cd.Name] = struct{}{}
 	}
 
 	var hypothesis string
@@ -334,7 +334,7 @@ func parseConstantsLLMResponse(resp string, constants []ConstantDef) (string, ma
 			name = strings.TrimSpace(line[:idx])
 			value = strings.TrimSpace(line[idx+1:])
 		}
-		if name != "" && value != "" && validNames[name] {
+		if _, ok := validNames[name]; name != "" && value != "" && ok {
 			overrides[name] = value
 		}
 	}

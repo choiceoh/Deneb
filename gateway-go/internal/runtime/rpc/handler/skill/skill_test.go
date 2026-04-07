@@ -44,10 +44,10 @@ func TestBuildCoreToolCatalog(t *testing.T) {
 func TestBuildCoreToolCatalog_KnownGroups(t *testing.T) {
 	groups := buildCoreToolCatalog()
 
-	expectedIDs := map[string]bool{
-		"fs": true, "runtime": true, "web": true, "memory": true,
-		"sessions": true, "messaging": true, "automation": true,
-		"media": true,
+	expectedIDs := map[string]struct{}{
+		"fs": {}, "runtime": {}, "web": {}, "memory": {},
+		"sessions": {}, "messaging": {}, "automation": {},
+		"media": {},
 	}
 
 	for _, g := range groups {

@@ -75,13 +75,14 @@ func isReadOnlySimpleCommand(cmd string) bool {
 	}
 
 	// Check simple read-only binaries (no subcommand needed).
-	if readOnlyBinaries[bin] {
+	if _, ok := readOnlyBinaries[bin]; ok {
 		return true
 	}
 
 	// Check compound commands with subcommand verification.
 	if subs, ok := readOnlySubcommands[bin]; ok && sub != "" {
-		return subs[sub]
+		_, found := subs[sub]
+		return found
 	}
 
 	return false
@@ -197,86 +198,86 @@ func splitCommandChain(cmd string) []string {
 }
 
 // readOnlyBinaries are commands that never modify state regardless of arguments.
-var readOnlyBinaries = map[string]bool{
+var readOnlyBinaries = map[string]struct{}{
 	// File content inspection
-	"cat": true, "head": true, "tail": true, "less": true, "more": true,
-	"wc": true, "file": true, "stat": true, "readlink": true,
-	"md5sum": true, "sha256sum": true, "sha1sum": true,
-	"xxd": true, "hexdump": true, "strings": true, "od": true,
+	"cat": {}, "head": {}, "tail": {}, "less": {}, "more": {},
+	"wc": {}, "file": {}, "stat": {}, "readlink": {},
+	"md5sum": {}, "sha256sum": {}, "sha1sum": {},
+	"xxd": {}, "hexdump": {}, "strings": {}, "od": {},
 
 	// Search
-	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
-	"ack": true, "find": true, "fd": true, "locate": true,
-	"which": true, "whereis": true,
+	"grep": {}, "egrep": {}, "fgrep": {}, "rg": {}, "ag": {},
+	"ack": {}, "find": {}, "fd": {}, "locate": {},
+	"which": {}, "whereis": {},
 
 	// Listing/tree
-	"ls": true, "tree": true, "exa": true, "eza": true,
-	"du": true, "df": true,
+	"ls": {}, "tree": {}, "exa": {}, "eza": {},
+	"du": {}, "df": {},
 
 	// Text processing (stdout-only, no file modification)
-	"sort": true, "uniq": true, "cut": true, "tr": true,
-	"jq": true, "yq": true, "column": true, "paste": true,
-	"fold": true, "nl": true, "rev": true, "base64": true,
+	"sort": {}, "uniq": {}, "cut": {}, "tr": {},
+	"jq": {}, "yq": {}, "column": {}, "paste": {},
+	"fold": {}, "nl": {}, "rev": {}, "base64": {},
 
 	// Diff/compare
-	"diff": true, "cmp": true,
+	"diff": {}, "cmp": {},
 
 	// System info
-	"uname": true, "hostname": true, "whoami": true, "id": true,
-	"env": true, "printenv": true, "date": true, "uptime": true,
-	"nproc": true, "arch": true,
+	"uname": {}, "hostname": {}, "whoami": {}, "id": {},
+	"env": {}, "printenv": {}, "date": {}, "uptime": {},
+	"nproc": {}, "arch": {},
 
 	// Process/network info
-	"ps": true, "pgrep": true, "lsof": true, "ss": true,
-	"netstat": true, "free": true,
+	"ps": {}, "pgrep": {}, "lsof": {}, "ss": {},
+	"netstat": {}, "free": {},
 
 	// Output/test
-	"echo": true, "printf": true, "true": true, "false": true, "test": true,
+	"echo": {}, "printf": {}, "true": {}, "false": {}, "test": {},
 
 	// Version/help
-	"man": true,
+	"man": {},
 }
 
 // readOnlySubcommands maps compound commands to their safe-for-read subcommands.
-var readOnlySubcommands = map[string]map[string]bool{
+var readOnlySubcommands = map[string]map[string]struct{}{
 	"git": {
-		"status": true, "log": true, "diff": true, "show": true,
-		"branch": true, "tag": true, "remote": true, "blame": true,
-		"rev-parse": true, "rev-list": true, "describe": true,
-		"ls-files": true, "ls-tree": true, "cat-file": true,
-		"shortlog": true, "config": true, "version": true,
-		"stash": true, // `git stash list` etc.
+		"status": {}, "log": {}, "diff": {}, "show": {},
+		"branch": {}, "tag": {}, "remote": {}, "blame": {},
+		"rev-parse": {}, "rev-list": {}, "describe": {},
+		"ls-files": {}, "ls-tree": {}, "cat-file": {},
+		"shortlog": {}, "config": {}, "version": {},
+		"stash": {}, // `git stash list` etc.
 	},
 	"go": {
-		"test": true, "vet": true, "build": true, "list": true,
-		"version": true, "env": true, "doc": true,
+		"test": {}, "vet": {}, "build": {}, "list": {},
+		"version": {}, "env": {}, "doc": {},
 	},
 	"cargo": {
-		"test": true, "check": true, "clippy": true, "build": true,
-		"doc": true, "metadata": true, "version": true, "tree": true,
-		"bench": true, "fmt": true,
+		"test": {}, "check": {}, "clippy": {}, "build": {},
+		"doc": {}, "metadata": {}, "version": {}, "tree": {},
+		"bench": {}, "fmt": {},
 	},
 	"buf": {
-		"lint": true, "breaking": true, "build": true, "ls-files": true,
+		"lint": {}, "breaking": {}, "build": {}, "ls-files": {},
 	},
 	"npm": {
-		"test": true, "run": true, "list": true, "ls": true,
-		"outdated": true, "view": true, "version": true,
+		"test": {}, "run": {}, "list": {}, "ls": {},
+		"outdated": {}, "view": {}, "version": {},
 	},
 	"pnpm": {
-		"test": true, "run": true, "list": true, "ls": true,
-		"outdated": true, "view": true, "why": true,
+		"test": {}, "run": {}, "list": {}, "ls": {},
+		"outdated": {}, "view": {}, "why": {},
 	},
 	"yarn": {
-		"test": true, "run": true, "list": true,
-		"info": true, "why": true,
+		"test": {}, "run": {}, "list": {},
+		"info": {}, "why": {},
 	},
 	"docker": {
-		"ps": true, "images": true, "inspect": true, "logs": true,
-		"stats": true, "top": true, "version": true, "info": true,
+		"ps": {}, "images": {}, "inspect": {}, "logs": {},
+		"stats": {}, "top": {}, "version": {}, "info": {},
 	},
 	"kubectl": {
-		"get": true, "describe": true, "logs": true,
-		"top": true, "version": true, "cluster-info": true,
+		"get": {}, "describe": {}, "logs": {},
+		"top": {}, "version": {}, "cluster-info": {},
 	},
 }

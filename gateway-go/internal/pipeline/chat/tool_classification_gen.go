@@ -6,13 +6,13 @@ package chat
 
 // mutatingTools are tools that change the filesystem or run commands.
 // When a run uses these, it likely needs a verification follow-up.
-var mutatingTools = map[string]bool{
-	"edit":          true,
-	"write":         true,
-	"exec":          true,
-	"git":           true,
-	"multi_edit":    true,
-	"notebook_edit": true,
+var mutatingTools = map[string]struct{}{
+	"edit":          {},
+	"write":         {},
+	"exec":          {},
+	"git":           {},
+	"multi_edit":    {},
+	"notebook_edit": {},
 }
 
 // toolApprovalPolicy classifies tools by their autonomous execution safety.
@@ -70,14 +70,14 @@ var channelSilentTools = map[string][]string{
 // toolCompressSkipSet contains tools whose output should not be compressed.
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.
-var toolCompressSkipSet = map[string]bool{
-	"grep":          true,
-	"find":          true,
-	"tree":          true,
-	"git":           true,
-	"analyze":       true,
-	"diff":          true,
-	"wiki":          true,
-	"kv":            true,
-	"sessions_list": true,
+var toolCompressSkipSet = map[string]struct{}{
+	"grep":          {},
+	"find":          {},
+	"tree":          {},
+	"git":           {},
+	"analyze":       {},
+	"diff":          {},
+	"wiki":          {},
+	"kv":            {},
+	"sessions_list": {},
 }

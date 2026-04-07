@@ -72,7 +72,7 @@ func TestBroadcast_Filter(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: true}
 
-	b.Subscribe(s1, Filter{Events: map[string]bool{"wanted": true}})
+	b.Subscribe(s1, Filter{Events: map[string]struct{}{"wanted": {}}})
 
 	// Event that matches filter.
 	sent, _ := b.Broadcast("wanted", nil)
@@ -156,7 +156,7 @@ func TestBroadcastToConnIDs(t *testing.T) {
 	b.Subscribe(s1, Filter{})
 	b.Subscribe(s2, Filter{})
 
-	targets := map[string]bool{"s1": true}
+	targets := map[string]struct{}{"s1": {}}
 	sent, _ := b.BroadcastToConnIDs("test", nil, targets)
 	if sent != 1 {
 		t.Errorf("expected 1 targeted send, got %d", sent)

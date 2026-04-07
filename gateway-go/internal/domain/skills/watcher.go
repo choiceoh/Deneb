@@ -22,11 +22,11 @@ type SkillsChangeEvent struct {
 type ChangeListener func(SkillsChangeEvent)
 
 // defaultSkillsWatchIgnored lists directories excluded from watching.
-var defaultSkillsWatchIgnored = map[string]bool{
-	".git": true, "node_modules": true, "dist": true,
-	".venv": true, "venv": true, "__pycache__": true,
-	".mypy_cache": true, ".pytest_cache": true,
-	"build": true, ".cache": true,
+var defaultSkillsWatchIgnored = map[string]struct{}{
+	".git": {}, "node_modules": {}, "dist": {},
+	".venv": {}, "venv": {}, "__pycache__": {},
+	".mypy_cache": {}, ".pytest_cache": {},
+	"build": {}, ".cache": {},
 }
 
 // Watcher manages file system watching and version tracking for skills.
@@ -220,7 +220,7 @@ func scanSkillFiles(dir string, known map[string]time.Time) {
 		return
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() || defaultSkillsWatchIgnored[entry.Name()] {
+		if !entry.IsDir() || func() bool { _, ok := defaultSkillsWatchIgnored[entry.Name()]; return ok }() {
 			continue
 		}
 		childDir := filepath.Join(dir, entry.Name())
@@ -232,7 +232,7 @@ func scanSkillFiles(dir string, known map[string]time.Time) {
 			continue
 		}
 		for _, sub := range subEntries {
-			if !sub.IsDir() || defaultSkillsWatchIgnored[sub.Name()] {
+			if _, ignored := defaultSkillsWatchIgnored[sub.Name()]; !sub.IsDir() || ignored {
 				continue
 			}
 			checkFile(filepath.Join(childDir, sub.Name(), "SKILL.md"), known)
@@ -262,7 +262,7 @@ func detectChanges(dir string, known map[string]time.Time) bool {
 	entries, err := os.ReadDir(dir)
 	if err == nil {
 		for _, entry := range entries {
-			if !entry.IsDir() || defaultSkillsWatchIgnored[entry.Name()] {
+			if _, ignored := defaultSkillsWatchIgnored[entry.Name()]; !entry.IsDir() || ignored {
 				continue
 			}
 			childDir := filepath.Join(dir, entry.Name())
@@ -274,7 +274,7 @@ func detectChanges(dir string, known map[string]time.Time) bool {
 			subEntries, subErr := os.ReadDir(childDir)
 			if subErr == nil {
 				for _, sub := range subEntries {
-					if !sub.IsDir() || defaultSkillsWatchIgnored[sub.Name()] {
+					if _, ignored := defaultSkillsWatchIgnored[sub.Name()]; !sub.IsDir() || ignored {
 						continue
 					}
 					sp := filepath.Join(childDir, sub.Name(), "SKILL.md")
@@ -310,15 +310,15 @@ func detectChanges(dir string, known map[string]time.Time) bool {
 
 // resolveWatchTargets builds the list of directories to watch for skills.
 func resolveWatchTargets(workspaceDir string, extraDirs []string) []string {
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var targets []string
 
 	add := func(dir string) {
 		dir = strings.TrimSpace(dir)
-		if dir == "" || seen[dir] {
+		if _, ok := seen[dir]; dir == "" || ok {
 			return
 		}
-		seen[dir] = true
+		seen[dir] = struct{}{}
 		targets = append(targets, dir)
 	}
 
