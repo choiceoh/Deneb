@@ -73,8 +73,12 @@ func (s *Store) ReadPage(relPath string) (*Page, error) {
 }
 
 // WritePage writes a page to the wiki. Creates parent directories if needed.
-// Updates the master index entry for this page.
+// Updates the master index entry and maintains bidirectional backlinks.
 func (s *Store) WritePage(relPath string, page *Page) error {
+	return s.writePageInternal(relPath, page, false)
+}
+
+func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool) error {
 	abs := filepath.Join(s.dir, relPath)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return fmt.Errorf("wiki: mkdir: %w", err)
@@ -88,15 +92,35 @@ func (s *Store) WritePage(relPath string, page *Page) error {
 		_ = s.fts.indexPage(relPath, page)
 	}
 
-	// Update master index.
+	// Capture old related list before updating index.
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var oldRelated []string
+	if old, ok := s.index.Entries[relPath]; ok {
+		oldRelated = old.Related
+	}
 	s.index.UpdateEntry(relPath, page)
-	return s.index.Save(filepath.Join(s.dir, "index.md"))
+	if err := s.index.Save(filepath.Join(s.dir, "index.md")); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.mu.Unlock()
+
+	// Maintain bidirectional backlinks.
+	if !skipBacklinks {
+		s.maintainBacklinks(relPath, oldRelated, page.Meta.Related)
+	}
+	return nil
 }
 
 // DeletePage removes a page and its index entry.
+// Cleans up backlinks from related pages.
 func (s *Store) DeletePage(relPath string) error {
+	// Read page before deleting to get its related list.
+	var oldRelated []string
+	if page, err := s.ReadPage(relPath); err == nil {
+		oldRelated = page.Meta.Related
+	}
+
 	abs := filepath.Join(s.dir, relPath)
 	if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("wiki: delete: %w", err)
@@ -108,9 +132,82 @@ func (s *Store) DeletePage(relPath string) error {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.index.RemoveEntry(relPath)
-	return s.index.Save(filepath.Join(s.dir, "index.md"))
+	if err := s.index.Save(filepath.Join(s.dir, "index.md")); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.mu.Unlock()
+
+	// Remove backlinks: remove relPath from each formerly-related page.
+	s.maintainBacklinks(relPath, oldRelated, nil)
+	return nil
+}
+
+// maintainBacklinks ensures bidirectional Related links.
+// It compares oldRelated (previous state) with newRelated (current state)
+// and updates target pages accordingly.
+func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []string) {
+	oldSet := toSet(oldRelated)
+	newSet := toSet(newRelated)
+
+	// Add relPath to newly-related pages.
+	for _, target := range newRelated {
+		if oldSet[target] {
+			continue // already linked
+		}
+		s.addBacklink(target, relPath)
+	}
+
+	// Remove relPath from no-longer-related pages.
+	for _, target := range oldRelated {
+		if newSet[target] {
+			continue // still linked
+		}
+		s.removeBacklink(target, relPath)
+	}
+}
+
+func (s *Store) addBacklink(targetPath, sourcePath string) {
+	page, err := s.ReadPage(targetPath)
+	if err != nil {
+		return // target doesn't exist — skip
+	}
+	for _, r := range page.Meta.Related {
+		if r == sourcePath {
+			return // already present
+		}
+	}
+	page.Meta.Related = append(page.Meta.Related, sourcePath)
+	page.Meta.Updated = time.Now().Format("2006-01-02")
+	_ = s.writePageInternal(targetPath, page, true)
+}
+
+func (s *Store) removeBacklink(targetPath, sourcePath string) {
+	page, err := s.ReadPage(targetPath)
+	if err != nil {
+		return
+	}
+	filtered := page.Meta.Related[:0]
+	for _, r := range page.Meta.Related {
+		if r != sourcePath {
+			filtered = append(filtered, r)
+		}
+	}
+	if len(filtered) == len(page.Meta.Related) {
+		return // nothing changed
+	}
+	page.Meta.Related = filtered
+	page.Meta.Updated = time.Now().Format("2006-01-02")
+	_ = s.writePageInternal(targetPath, page, true)
+}
+
+func toSet(ss []string) map[string]bool {
+	m := make(map[string]bool, len(ss))
+	for _, s := range ss {
+		m[s] = true
+	}
+	return m
 }
 
 // ListPages returns all page paths in a category (e.g., "기술").

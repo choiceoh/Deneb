@@ -33,6 +33,7 @@ type EnvConfig struct {
 	LLMQueryFn LLMQueryFunc
 	LLMBatchFn LLMBatchFunc
 	RLMQueryFn RLMQueryFunc
+	Wiki       *WikiFuncs    // optional; wiki builtins injected when non-nil
 	Timeout    time.Duration // per-execution timeout (default: 30s)
 }
 
@@ -79,6 +80,11 @@ func NewEnv(ctx context.Context, cfg EnvConfig) *Env {
 	// Optional: recursive RLM
 	if cfg.RLMQueryFn != nil {
 		env.globals["rlm_query"] = builtinRLMQuery(ctx, cfg.RLMQueryFn, env)
+	}
+
+	// Optional: wiki builtins
+	if cfg.Wiki != nil {
+		registerWikiBuiltins(ctx, env.globals, *cfg.Wiki)
 	}
 
 	// Thread with cancellation support

@@ -825,10 +825,17 @@ func buildREPLEnv(
 		return text, nil
 	}
 
-	return repl.NewEnv(ctx, repl.EnvConfig{
+	cfg := repl.EnvConfig{
 		Messages:   entries,
 		LLMQueryFn: queryFn,
-	})
+	}
+
+	// Wire wiki store into REPL environment if available.
+	if deps.wikiStore != nil {
+		cfg.Wiki = buildWikiFuncs(deps.wikiStore)
+	}
+
+	return repl.NewEnv(ctx, cfg)
 }
 
 // messagesToREPLEntries converts LLM messages to REPL MessageEntry format.

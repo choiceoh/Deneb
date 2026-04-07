@@ -8,7 +8,9 @@ import (
 
 func TestParsePage_WithFrontmatter(t *testing.T) {
 	input := `---
+id: dgx-spark
 title: DGX Spark
+summary: 128GB 통합 메모리 로컬 AI 서버
 category: 기술
 tags: [하드웨어, NVIDIA]
 related: [deneb]
@@ -32,8 +34,14 @@ NVIDIA DGX Spark.
 		t.Fatalf("ParsePage: %v", err)
 	}
 
+	if page.Meta.ID != "dgx-spark" {
+		t.Errorf("id = %q, want %q", page.Meta.ID, "dgx-spark")
+	}
 	if page.Meta.Title != "DGX Spark" {
 		t.Errorf("title = %q, want %q", page.Meta.Title, "DGX Spark")
+	}
+	if page.Meta.Summary != "128GB 통합 메모리 로컬 AI 서버" {
+		t.Errorf("summary = %q", page.Meta.Summary)
 	}
 	if page.Meta.Category != "기술" {
 		t.Errorf("category = %q, want %q", page.Meta.Category, "기술")
@@ -65,6 +73,8 @@ func TestParsePage_NoFrontmatter(t *testing.T) {
 
 func TestPage_RenderRoundtrip(t *testing.T) {
 	page := NewPage("테스트", "기술", []string{"Go", "테스트"})
+	page.Meta.ID = "test-page"
+	page.Meta.Summary = "테스트용 페이지"
 	page.Body = "# 테스트\n\n## 요약\n테스트 내용."
 
 	rendered := page.Render()
@@ -73,8 +83,14 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParsePage after render: %v", err)
 	}
+	if parsed.Meta.ID != "test-page" {
+		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)
+	}
 	if parsed.Meta.Title != "테스트" {
 		t.Errorf("title roundtrip: got %q", parsed.Meta.Title)
+	}
+	if parsed.Meta.Summary != "테스트용 페이지" {
+		t.Errorf("summary roundtrip: got %q", parsed.Meta.Summary)
 	}
 	if parsed.Meta.Category != "기술" {
 		t.Errorf("category roundtrip: got %q", parsed.Meta.Category)

@@ -1587,6 +1587,12 @@
     title:
       type: string
       description: "Page title (write action)"
+    id:
+      type: string
+      description: "Short identifier (kebab-case, e.g. 'dgx-spark')"
+    summary:
+      type: string
+      description: "한 줄 요약 (~80자)"
     category:
       type: string
       enum:

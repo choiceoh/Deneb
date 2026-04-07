@@ -42,6 +42,38 @@ REPL 출력은 최대 20,000자로 잘립니다. 큰 데이터는 직접 보지 
 
 6. **SHOW_VARS()**: 현재 REPL에 저장된 변수 목록 확인.
 
+7. **위키 (장기 지식 — MD 파일 컬렉션)**:
+   - **wiki_index([카테고리])**: TSV 인덱스 (id, path, title, summary, tags, importance, updated, backlinks)
+   - **wiki_read(path)**: 페이지 전문 (YAML frontmatter + 마크다운 본문)
+   - **wiki_read_batch(paths)**: 여러 페이지 병렬 읽기 (리스트→리스트). 10+ 페이지 시 wiki_read 반복보다 빠름.
+   - **wiki_list([카테고리])**: 페이지 경로 목록
+   - **wiki_search(query, limit)**: FTS5 키워드 검색 (인덱스 탐색으로 못 찾을 때 fallback)
+   - **wiki_write(path, content)**: 페이지 생성/수정
+
+   **위키 탐색 패턴 (인덱스 우선):**
+   1. wiki_index() → TSV 파싱 → title/summary/tags로 후보 필터링
+   2. wiki_read(path) 또는 wiki_read_batch(paths) → 전문 읽기
+   3. frontmatter의 related 필드 → 연결 페이지 탐색
+   4. wiki_search(query) → 인덱스에서 못 찾을 때 FTS5 fallback
+
+   **MD 파일 구조:**
+   %s
+   ---
+   id: gemma4-switch
+   title: Gemma 4 전환 결정
+   summary: Qwen3.5에서 Gemma 4 26B-A4B fp8로 전환
+   category: 결정
+   tags: [모델, LLM, DGX-Spark]
+   related: [기술/dgx-spark.md, 기술/vllm-config.md]
+   importance: 0.85
+   ---
+   # 본문 (자연어 마크다운)
+
+   ## 관련 문서
+   - [[dgx-spark]] — 실행 환경
+   - [[vllm-config]] — 서빙 설정
+   %s
+
 **llm_query vs rlm_query 선택:**
 - llm_query: 단순 요약, 분류, 추출 등 한 번에 끝나는 작업
 - rlm_query: 다단계 추론, 조건 분기, 반복 탐색이 필요한 하위 문제
@@ -137,6 +169,7 @@ FINAL_VAR("interpretation")
 		cfg.MaxIterations,
 		fence, fence, fence,
 		cfg.FreshTailCount,
+		fence, fence, // wiki MD structure example fences
 		fence, fence,
 		fence, fence,
 		fence, fence,
