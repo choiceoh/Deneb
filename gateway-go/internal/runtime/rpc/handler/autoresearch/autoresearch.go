@@ -92,7 +92,7 @@ func arStart(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("workdir").Response(req.ID)
 		}
 		if err := deps.Runner.Start(p.Workdir); err != nil {
-			return rpcerr.Conflict(err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrConflict, err).Response(req.ID)
 		}
 		snap := deps.Runner.Status()
 		return rpcutil.RespondOK(req.ID, map[string]any{
@@ -255,10 +255,10 @@ func arConfig(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		if err := cfg.Validate(); err != nil {
-			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
 		}
 		if err := ar.SaveConfig(p.Workdir, cfg); err != nil {
-			return rpcerr.New(protocol.ErrUnavailable, err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
 		}
 
 		deps.Runner.SetWorkdir(p.Workdir)
@@ -297,11 +297,11 @@ func arResume(deps Deps) rpcutil.HandlerFunc {
 
 		cfg.Resume = true
 		if err := ar.SaveConfig(p.Workdir, cfg); err != nil {
-			return rpcerr.New(protocol.ErrUnavailable, err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
 		}
 
 		if err := deps.Runner.Start(p.Workdir); err != nil {
-			return rpcerr.Conflict(err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrConflict, err).Response(req.ID)
 		}
 		snap := deps.Runner.Status()
 		return rpcutil.RespondOK(req.ID, map[string]any{
@@ -337,7 +337,7 @@ func arArchive(deps Deps) rpcutil.HandlerFunc {
 		}
 		path, err := ar.ArchiveRun(p.Workdir, cfg.BranchTag)
 		if err != nil {
-			return rpcerr.New(protocol.ErrUnavailable, err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":   true,
@@ -366,7 +366,7 @@ func arRuns(deps Deps) rpcutil.HandlerFunc {
 
 		runs, err := ar.ListRuns(p.Workdir)
 		if err != nil {
-			return rpcerr.New(protocol.ErrUnavailable, err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":    true,

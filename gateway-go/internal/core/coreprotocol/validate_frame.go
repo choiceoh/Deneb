@@ -10,9 +10,11 @@ type FrameError struct {
 	Kind    string // "invalid_json", "unknown_type", "missing_field", "invalid_field"
 	Field   string
 	Message string
+	Cause   error // original error (e.g. JSON unmarshal error)
 }
 
 func (e *FrameError) Error() string { return e.Message }
+func (e *FrameError) Unwrap() error { return e.Cause }
 
 // maxShortFieldLen is the maximum length for short string fields (id, method, event).
 const maxShortFieldLen = 256
@@ -38,7 +40,7 @@ func ValidateFrame(jsonStr string) error {
 	}
 
 	if err := json.Unmarshal([]byte(jsonStr), &raw); err != nil {
-		return &FrameError{Kind: "invalid_json", Message: "invalid JSON: " + err.Error()}
+		return &FrameError{Kind: "invalid_json", Message: "invalid JSON: " + err.Error(), Cause: err}
 	}
 
 	switch raw.Type {
@@ -65,7 +67,7 @@ func ValidateFrame(jsonStr string) error {
 				Message string `json:"message"`
 			}
 			if err := json.Unmarshal(raw.Error, &es); err != nil {
-				return &FrameError{Kind: "invalid_json", Message: "invalid JSON: " + err.Error()}
+				return &FrameError{Kind: "invalid_json", Message: "invalid JSON: " + err.Error(), Cause: err}
 			}
 		}
 		return nil

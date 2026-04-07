@@ -31,11 +31,15 @@ type MediaFetchError struct {
 	Code    MediaFetchErrorCode `json:"code"`
 	Message string              `json:"message"`
 	Status  int                 `json:"status,omitempty"`
+	Cause   error               `json:"-"` // underlying error, excluded from JSON
 }
 
 func (e *MediaFetchError) Error() string {
 	return fmt.Sprintf("media fetch error (%s): %s", e.Code, e.Message)
 }
+
+// Unwrap returns the underlying cause, implementing the errors.Unwrap interface.
+func (e *MediaFetchError) Unwrap() error { return e.Cause }
 
 // FetchResult holds the result of a successful media fetch.
 type FetchResult struct {
@@ -86,7 +90,7 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 
 	// SSRF validation.
 	if err := validateURL(opts.URL); err != nil {
-		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: err.Error()}
+		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: err.Error(), Cause: err}
 	}
 
 	client := opts.Client
@@ -109,7 +113,7 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {
-		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: err.Error()}
+		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: err.Error(), Cause: err}
 	}
 	for k, v := range opts.Headers {
 		req.Header.Set(k, v)
@@ -117,7 +121,7 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: redactURL(err.Error(), opts.URL)}
+		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: redactURL(err.Error(), opts.URL), Cause: err}
 	}
 	defer resp.Body.Close()
 
@@ -142,7 +146,7 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 	limited := io.LimitReader(resp.Body, opts.MaxBytes+1)
 	data, err := io.ReadAll(limited)
 	if err != nil {
-		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: redactURL(err.Error(), opts.URL)}
+		return nil, &MediaFetchError{Code: ErrFetchFailed, Message: redactURL(err.Error(), opts.URL), Cause: err}
 	}
 	if int64(len(data)) > opts.MaxBytes {
 		return nil, &MediaFetchError{

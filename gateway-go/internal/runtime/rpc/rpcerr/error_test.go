@@ -3,6 +3,7 @@ package rpcerr
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -90,9 +91,74 @@ func TestResponse(t *testing.T) {
 }
 
 func TestWrap(t *testing.T) {
-	e := Wrap(protocol.ErrDependencyFailed, errors.New("db connection lost"))
+	cause := errors.New("db connection lost")
+	e := Wrap(protocol.ErrDependencyFailed, cause)
 	if e.Message != "db connection lost" {
 		t.Errorf("message = %q", e.Message)
+	}
+	if e.Cause != cause {
+		t.Error("Cause should be the original error")
+	}
+}
+
+func TestUnwrap(t *testing.T) {
+	sentinel := errors.New("root cause")
+	e := Wrap(protocol.ErrDependencyFailed, sentinel)
+
+	// errors.Unwrap should return the cause.
+	if errors.Unwrap(e) != sentinel {
+		t.Error("Unwrap should return the sentinel")
+	}
+
+	// errors.Is should traverse the chain.
+	if !errors.Is(e, sentinel) {
+		t.Error("errors.Is should find the sentinel through the chain")
+	}
+
+	// errors.As should find rpcerr.Error in a wrapped chain.
+	wrapped := fmt.Errorf("outer: %w", e)
+	var rpcErr *Error
+	if !errors.As(wrapped, &rpcErr) {
+		t.Fatal("errors.As should find *rpcerr.Error through wrapping")
+	}
+	if rpcErr.Code != protocol.ErrDependencyFailed {
+		t.Errorf("code = %q, want %q", rpcErr.Code, protocol.ErrDependencyFailed)
+	}
+}
+
+func TestWrapConvenienceConstructors(t *testing.T) {
+	cause := errors.New("disk full")
+	tests := []struct {
+		name string
+		err  *Error
+		code string
+	}{
+		{"WrapUnavailable", WrapUnavailable("write failed", cause), protocol.ErrUnavailable},
+		{"WrapInvalidRequest", WrapInvalidRequest("bad input", cause), protocol.ErrInvalidRequest},
+		{"WrapDependencyFailed", WrapDependencyFailed("db error", cause), protocol.ErrDependencyFailed},
+		{"WrapValidationFailed", WrapValidationFailed("schema error", cause), protocol.ErrValidationFailed},
+		{"WrapConflict", WrapConflict("already running", cause), protocol.ErrConflict},
+		{"WrapNotFound", WrapNotFound("page missing", cause), protocol.ErrNotFound},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.err.Code != tc.code {
+				t.Errorf("code = %q, want %q", tc.err.Code, tc.code)
+			}
+			if !errors.Is(tc.err, cause) {
+				t.Error("errors.Is should find the cause through the chain")
+			}
+			if tc.err.Cause != cause {
+				t.Error("Cause field should be set")
+			}
+		})
+	}
+}
+
+func TestNilCauseUnwrap(t *testing.T) {
+	e := New(protocol.ErrNotFound, "gone")
+	if errors.Unwrap(e) != nil {
+		t.Error("Unwrap should return nil when no cause is set")
 	}
 }
 

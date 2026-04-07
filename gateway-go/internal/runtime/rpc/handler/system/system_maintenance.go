@@ -143,7 +143,7 @@ func updateRun(deps UpdateDeps) rpcutil.HandlerFunc {
 			var err error
 			repoDir, err = os.Getwd()
 			if err != nil {
-				return rpcerr.Unavailable("cannot determine working directory: " + err.Error()).Response(req.ID)
+				return rpcerr.WrapUnavailable("cannot determine working directory", err).Response(req.ID)
 			}
 		}
 

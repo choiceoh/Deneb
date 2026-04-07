@@ -100,7 +100,7 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 		if logDir == "" {
 			home, err := os.UserHomeDir()
 			if err != nil {
-				return rpcerr.Unavailable("cannot determine home directory: " + err.Error()).Response(req.ID)
+				return rpcerr.WrapUnavailable("cannot determine home directory", err).Response(req.ID)
 			}
 			logDir = filepath.Join(home, ".deneb", "logs")
 		}
@@ -113,13 +113,13 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 
 		f, err := os.Open(logFile)
 		if err != nil {
-			return rpcerr.Unavailable("cannot open log file: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("cannot open log file", err).Response(req.ID)
 		}
 		defer f.Close()
 
 		info, err := f.Stat()
 		if err != nil {
-			return rpcerr.Unavailable("cannot stat log file: " + err.Error()).Response(req.ID)
+			return rpcerr.WrapUnavailable("cannot stat log file", err).Response(req.ID)
 		}
 
 		fileSize := info.Size()
@@ -138,7 +138,7 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 		// Seek to cursor position.
 		if cursor > 0 {
 			if _, err := f.Seek(cursor, io.SeekStart); err != nil {
-				return rpcerr.Unavailable("seek failed: " + err.Error()).Response(req.ID)
+				return rpcerr.WrapUnavailable("seek failed", err).Response(req.ID)
 			}
 		}
 

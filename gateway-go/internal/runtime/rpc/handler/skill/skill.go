@@ -111,7 +111,7 @@ func skillsUpdate(deps Deps) rpcutil.HandlerFunc {
 			Env:     p.Env,
 		})
 		if err != nil {
-			return nil, rpcerr.NotFound(err.Error())
+			return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
 		}
 		broadcast(deps.Broadcaster, "skills.changed", map[string]any{
 			"action":   "updated",

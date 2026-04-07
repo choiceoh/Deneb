@@ -28,9 +28,11 @@ type ValidationResult struct {
 type ValidateParamsError struct {
 	Kind    string // "invalid_json" or "unknown_method"
 	Message string
+	Cause   error // original error (e.g. JSON unmarshal error)
 }
 
 func (e *ValidateParamsError) Error() string { return e.Message }
+func (e *ValidateParamsError) Unwrap() error { return e.Cause }
 
 // ValidatorFn is the signature for per-method schema validators.
 type ValidatorFn func(value any, path string, errors *[]ValidationError)
@@ -305,7 +307,7 @@ func CheckExecSecretRefID(value any, path string, errors *[]ValidationError) {
 func ValidateParams(method, jsonStr string) (*ValidationResult, error) {
 	var value any
 	if err := json.Unmarshal([]byte(jsonStr), &value); err != nil {
-		return nil, &ValidateParamsError{Kind: "invalid_json", Message: "invalid JSON: " + err.Error()}
+		return nil, &ValidateParamsError{Kind: "invalid_json", Message: "invalid JSON: " + err.Error(), Cause: err}
 	}
 
 	validator := lookupValidator(method)

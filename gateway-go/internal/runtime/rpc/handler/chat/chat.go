@@ -113,7 +113,7 @@ func handleChatBtw(deps BtwDeps) rpcutil.HandlerFunc {
 		// Process side question through native chat handler.
 		text, err := deps.Chat.HandleBtw(ctx, p.SessionKey, p.Question)
 		if err != nil {
-			return rpcerr.New(protocol.ErrDependencyFailed, "btw failed: "+err.Error()).Response(req.ID)
+			return rpcerr.WrapDependencyFailed("btw failed", err).Response(req.ID)
 		}
 
 		// Broadcast side_result event to connected clients.

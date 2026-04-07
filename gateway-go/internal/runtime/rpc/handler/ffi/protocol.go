@@ -59,7 +59,7 @@ func protocolValidateParams() rpcutil.HandlerFunc {
 		}
 		valid, errorsJSON, err := ffipkg.ValidateParams(p.Method, p.Params)
 		if err != nil {
-			return rpcerr.DependencyFailed(err.Error()).Response(req.ID)
+			return rpcerr.Wrap(protocol.ErrDependencyFailed, err).Response(req.ID)
 		}
 		backend := "go"
 		result := map[string]any{"valid": valid, "backend": backend}
