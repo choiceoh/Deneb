@@ -49,8 +49,9 @@ var coordinatorTools = toSet(
 )
 
 // conversationTools are minimal tools for conversation mode (대화모드).
-// Only web access and wiki — no file system, exec, or code tools.
+// Web access, wiki, plus read-only file inspection.
 var conversationTools = toSet(
+	"read",
 	"web", "http", "wiki", "fetch_tools",
 )
 
