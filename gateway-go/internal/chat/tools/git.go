@@ -16,78 +16,130 @@ import (
 
 func ToolGit(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p gitParams
-		if err := jsonutil.UnmarshalInto("git params", input, &p); err != nil {
+		var act gitAction
+		if err := jsonutil.UnmarshalInto("git action", input, &act); err != nil {
 			return "", err
 		}
 
-		switch p.Action {
+		switch act.Action {
 		case "status":
-			return gitStatus(ctx, defaultDir, p)
+			return gitStatus(ctx, defaultDir, input)
 		case "commit":
-			return gitCommit(ctx, defaultDir, p)
+			return gitCommit(ctx, defaultDir, input)
 		case "log":
-			return gitLog(ctx, defaultDir, p)
+			return gitLog(ctx, defaultDir, input)
 		case "branch":
-			return gitBranch(ctx, defaultDir, p)
+			return gitBranch(ctx, defaultDir, input)
 		case "stash":
-			return gitStash(ctx, defaultDir, p)
+			return gitStash(ctx, defaultDir, input)
 		case "blame":
-			return gitBlame(ctx, defaultDir, p)
+			return gitBlame(ctx, defaultDir, input)
 		case "tag":
-			return gitTag(ctx, defaultDir, p)
+			return gitTag(ctx, defaultDir, input)
 		case "merge":
-			return gitMerge(ctx, defaultDir, p)
+			return gitMerge(ctx, defaultDir, input)
 		case "rebase":
-			return gitRebase(ctx, defaultDir, p)
+			return gitRebase(ctx, defaultDir, input)
 		case "cherry_pick":
-			return gitCherryPick(ctx, defaultDir, p)
+			return gitCherryPick(ctx, defaultDir, input)
 		case "reset":
-			return gitReset(ctx, defaultDir, p)
+			return gitReset(ctx, defaultDir, input)
 		case "remote":
-			return gitRemote(ctx, defaultDir, p)
+			return gitRemote(ctx, defaultDir, input)
 		case "clean":
-			return gitClean(ctx, defaultDir, p)
+			return gitClean(ctx, defaultDir, input)
 		default:
-			return "", fmt.Errorf("unknown git action: %q", p.Action)
+			return "", fmt.Errorf("unknown git action: %q", act.Action)
 		}
 	}
 }
 
-type gitParams struct {
-	Action       string   `json:"action"`
-	Message      string   `json:"message"`
-	Files        []string `json:"files"`
-	All          bool     `json:"all"`
-	Amend        bool     `json:"amend"`
-	Count        int      `json:"count"`
-	Oneline      bool     `json:"oneline"`
-	Author       string   `json:"author"`
-	Since        string   `json:"since"`
-	Path         string   `json:"path"`
-	Grep         string   `json:"grep"`
-	Name         string   `json:"name"`
-	Delete       bool     `json:"delete"`
-	SwitchTo     bool     `json:"switch_to"`
-	Create       bool     `json:"create"`
-	From         string   `json:"from"`
-	File         string   `json:"file"`
-	StartLine    int      `json:"start_line"`
-	EndLine      int      `json:"end_line"`
-	StashAction  string   `json:"stash_action"`
-	Branch       string   `json:"branch"`
-	NoFF         bool     `json:"no_ff"`
-	Abort        bool     `json:"abort"`
-	ContinueOp   bool     `json:"continue_op"`
-	Onto         string   `json:"onto"`
-	Ref          string   `json:"ref"`
-	Mode         string   `json:"mode"`
-	RemoteAction string   `json:"remote_action"`
-	URL          string   `json:"url"`
-	DryRun       bool     `json:"dry_run"`
-	Directories  bool     `json:"directories"`
-	Force        bool     `json:"force"`
-	Short        bool     `json:"short"`
+// gitAction is the discriminator: only the "action" field is read to route dispatch.
+type gitAction struct {
+	Action string `json:"action"`
+}
+
+// Per-subcommand parameter types.
+
+type gitStatusParams struct {
+	Short bool `json:"short"`
+}
+
+type gitCommitParams struct {
+	Message string   `json:"message"`
+	Files   []string `json:"files"`
+	All     bool     `json:"all"`
+	Amend   bool     `json:"amend"`
+}
+
+type gitLogParams struct {
+	Count   int    `json:"count"`
+	Oneline bool   `json:"oneline"`
+	Author  string `json:"author"`
+	Since   string `json:"since"`
+	Path    string `json:"path"`
+	Grep    string `json:"grep"`
+}
+
+type gitBranchParams struct {
+	Name     string `json:"name"`
+	Delete   bool   `json:"delete"`
+	SwitchTo bool   `json:"switch_to"`
+	Create   bool   `json:"create"`
+	From     string `json:"from"`
+}
+
+type gitStashParams struct {
+	StashAction string `json:"stash_action"`
+	Message     string `json:"message"`
+}
+
+type gitBlameParams struct {
+	File      string `json:"file"`
+	Path      string `json:"path"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+}
+
+type gitTagParams struct {
+	Name    string `json:"name"`
+	Delete  bool   `json:"delete"`
+	Message string `json:"message"`
+}
+
+type gitMergeParams struct {
+	Branch string `json:"branch"`
+	NoFF   bool   `json:"no_ff"`
+	Abort  bool   `json:"abort"`
+}
+
+type gitRebaseParams struct {
+	Onto       string `json:"onto"`
+	Abort      bool   `json:"abort"`
+	ContinueOp bool   `json:"continue_op"`
+}
+
+type gitCherryPickParams struct {
+	Ref        string `json:"ref"`
+	Abort      bool   `json:"abort"`
+	ContinueOp bool   `json:"continue_op"`
+}
+
+type gitResetParams struct {
+	Ref  string `json:"ref"`
+	Mode string `json:"mode"`
+}
+
+type gitRemoteParams struct {
+	RemoteAction string `json:"remote_action"`
+	Name         string `json:"name"`
+	URL          string `json:"url"`
+}
+
+type gitCleanParams struct {
+	DryRun      bool `json:"dry_run"`
+	Force       bool `json:"force"`
+	Directories bool `json:"directories"`
 }
 
 // runGit executes a git command and returns its combined output.
@@ -105,14 +157,22 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 	return TruncateForLLM(result), nil
 }
 
-func gitStatus(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitStatus(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitStatusParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	if p.Short {
 		return runGit(ctx, dir, "status", "--short", "--branch")
 	}
 	return runGit(ctx, dir, "status")
 }
 
-func gitCommit(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitCommit(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitCommitParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	if p.Message == "" && !p.Amend {
 		return "", fmt.Errorf("message is required for commit (unless amending)")
 	}
@@ -141,7 +201,11 @@ func gitCommit(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, args...)
 }
 
-func gitLog(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitLog(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitLogParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	count := p.Count
 	if count <= 0 {
 		count = 10
@@ -173,7 +237,11 @@ func gitLog(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, args...)
 }
 
-func gitBranch(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitBranch(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitBranchParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	// Switch to branch.
 	if p.SwitchTo && p.Name != "" {
 		return runGit(ctx, dir, "checkout", p.Name)
@@ -197,7 +265,11 @@ func gitBranch(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, "branch", "-a", "--no-color")
 }
 
-func gitStash(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitStash(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitStashParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	action := p.StashAction
 	if action == "" {
 		action = "list"
@@ -223,7 +295,11 @@ func gitStash(ctx context.Context, dir string, p gitParams) (string, error) {
 	}
 }
 
-func gitBlame(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitBlame(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitBlameParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	file := p.File
 	if file == "" {
 		file = p.Path
@@ -243,7 +319,11 @@ func gitBlame(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, args...)
 }
 
-func gitTag(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitTag(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitTagParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	if p.Name == "" {
 		// List tags.
 		return runGit(ctx, dir, "tag", "-l", "--sort=-creatordate")
@@ -263,7 +343,11 @@ func gitTag(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, args...)
 }
 
-func gitMerge(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitMerge(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitMergeParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	if p.Abort {
 		return runGit(ctx, dir, "merge", "--abort")
 	}
@@ -278,7 +362,11 @@ func gitMerge(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, args...)
 }
 
-func gitRebase(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitRebase(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitRebaseParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	if p.Abort {
 		return runGit(ctx, dir, "rebase", "--abort")
 	}
@@ -291,7 +379,11 @@ func gitRebase(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, "rebase", p.Onto)
 }
 
-func gitCherryPick(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitCherryPick(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitCherryPickParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	if p.Abort {
 		return runGit(ctx, dir, "cherry-pick", "--abort")
 	}
@@ -304,7 +396,11 @@ func gitCherryPick(ctx context.Context, dir string, p gitParams) (string, error)
 	return runGit(ctx, dir, "cherry-pick", p.Ref)
 }
 
-func gitReset(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitReset(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitResetParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	ref := p.Ref
 	if ref == "" {
 		ref = "HEAD"
@@ -316,7 +412,11 @@ func gitReset(ctx context.Context, dir string, p gitParams) (string, error) {
 	return runGit(ctx, dir, "reset", "--"+mode, ref)
 }
 
-func gitRemote(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitRemote(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitRemoteParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	action := p.RemoteAction
 	if action == "" {
 		action = "list"
@@ -340,7 +440,11 @@ func gitRemote(ctx context.Context, dir string, p gitParams) (string, error) {
 	}
 }
 
-func gitClean(ctx context.Context, dir string, p gitParams) (string, error) {
+func gitClean(ctx context.Context, dir string, input json.RawMessage) (string, error) {
+	var p gitCleanParams
+	if err := json.Unmarshal(input, &p); err != nil {
+		return "", err
+	}
 	args := []string{"clean"}
 
 	// Default to dry-run for safety.
