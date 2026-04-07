@@ -14,7 +14,6 @@ globs: ["gateway-go/**/*.go"]
 |---|---|
 | `scripts/dev-iterate.sh` | 빌드→서버→smoke 3체크→결과 (~2초) |
 | `scripts/dev-iterate.sh --metric CMD` | 커스텀 metric |
-| `scripts/dev-iterate.sh --vchat` | 텔레그램 파이프라인 품질 테스트 |
 | `scripts/dev-quality-metric.sh [PORT] [MSG]` | 채팅 품질 점수 0-100 (15~60초) |
 
 ### 오토리서치 (자율 최적화 루프)
@@ -22,7 +21,7 @@ globs: ["gateway-go/**/*.go"]
 | Command | What |
 |---|---|
 | `scripts/dev-metric-gen.sh list` | metric 프리셋 목록 |
-| `scripts/dev-metric-gen.sh PRESET` | metric 스크립트 생성 (smoke\|quality\|vchat\|combined) |
+| `scripts/dev-metric-gen.sh PRESET` | metric 스크립트 생성 (smoke\|quality\|combined) |
 | `scripts/dev-autoresearch.sh start --target FILE --metric PRESET` | 오토리서치 시작 |
 | `scripts/dev-autoresearch.sh status` | 상태 확인 |
 | `scripts/dev-autoresearch.sh results --json` | 결과 JSON |
@@ -35,8 +34,6 @@ globs: ["gateway-go/**/*.go"]
 | 수정 대상 | 추천 metric | 이유 |
 |---|---|---|
 | 시스템 프롬프트/채팅 파이프라인 | `quality` (0~100) | 한국어 응답 품질 직접 측정 |
-| 텔레그램 포맷/렌더링 | `vchat --scenario format` | 실제 HTML 출력 검증 |
-| 도구 호출 로직 | `vchat --scenario tool` | 도구 진행 메시지 포함 검증 |
 | 전반적 품질 | `combined` | smoke(20%) + quality(80%) |
 | 인프라/시작 성능 | `smoke` (0~3) | 빠른 빌드+시작 확인 |
 | 특정 메시지 응답 | `custom "메시지"` | 해당 메시지 품질 직접 측정 |

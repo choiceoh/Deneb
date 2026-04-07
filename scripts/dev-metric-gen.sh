@@ -7,15 +7,13 @@
 # Presets:
 #   smoke     — Health + Ready + WebSocket RPC (metric_value=0~3)
 #   quality   — Chat quality score (metric_value=0~100)
-#   vchat     — Telegram pipeline quality (metric_value=passed checks)
-#   combined  — Weighted smoke + quality + vchat (metric_value=0~100)
+#   combined  — Weighted smoke + quality (metric_value=0~100)
 #   custom    — Custom message quality (metric_value=0~100)
 #
 # Usage:
 #   scripts/dev-metric-gen.sh list                         # show presets
 #   scripts/dev-metric-gen.sh smoke                        # generate smoke metric
 #   scripts/dev-metric-gen.sh quality                      # generate quality metric
-#   scripts/dev-metric-gen.sh vchat [--scenario SCENARIO]  # generate vchat metric
 #   scripts/dev-metric-gen.sh combined                     # generate combined metric
 #   scripts/dev-metric-gen.sh custom "메시지"               # generate custom metric
 
@@ -29,11 +27,9 @@ OUT_DIR="/tmp"
 PRESET="${1:-list}"
 shift || true
 
-SCENARIO="all"
 CUSTOM_MSG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --scenario) SCENARIO="$2"; shift 2 ;;
     *) CUSTOM_MSG="$1"; shift ;;
   esac
 done
@@ -61,10 +57,6 @@ cleanup() {
     done
     kill -9 "$GW_PID" 2>/dev/null || true
     wait "$GW_PID" 2>/dev/null || true
-  fi
-  if [[ -n "${VCHAT_PID:-}" ]]; then
-    kill "$VCHAT_PID" 2>/dev/null || true
-    wait "$VCHAT_PID" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -104,36 +96,6 @@ if ! curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
   exit 0
 fi
 START_EOF
-}
-
-_write_vchat_start() {
-  local script="$1"
-  cat >> "$script" << 'VCHAT_START_EOF'
-
-# Start vchat (mock Telegram + gateway with Telegram config).
-VCHAT_MOCK_PORT=$((PORT + 1))
-export VCHAT_MOCK_PORT VCHAT_GATEWAY_PORT="$PORT" VCHAT_BINARY="$BINARY"
-python3 "$REPO_DIR/scripts/vchat.py" start --no-build --background &
-VCHAT_PID=$!
-
-# Wait for both mock and gateway (exponential backoff).
-_WAIT_MS=50
-for _ in $(seq 1 50); do
-  if curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1 && \
-     curl -sf "http://$HOST:$VCHAT_MOCK_PORT/control/status" > /dev/null 2>&1; then
-    break
-  fi
-  if ! kill -0 "$VCHAT_PID" 2>/dev/null; then break; fi
-  sleep "$(awk "BEGIN {printf \"%.3f\", $_WAIT_MS/1000}")"
-  _WAIT_MS=$(( _WAIT_MS * 2 )); (( _WAIT_MS > 300 )) && _WAIT_MS=300
-done
-
-if ! curl -sf "http://$HOST:$PORT/health" > /dev/null 2>&1; then
-  echo "metric_value=0"
-  echo "DENEB_METRIC_DETAIL build=ok server=fail vchat=fail"
-  exit 0
-fi
-VCHAT_START_EOF
 }
 
 gen_smoke() {
@@ -198,35 +160,6 @@ DETAIL=$(echo "$QUALITY_OUT" | grep '^DENEB_METRIC_DETAIL ' | tail -1)
 echo "metric_value=${METRIC_VAL:-0}"
 [[ -n "$DETAIL" ]] && echo "$DETAIL" || echo "DENEB_METRIC_DETAIL build=ok server=ok"
 QUALITY_EOF
-
-  chmod +x "$script"
-  echo "$script"
-}
-
-gen_vchat() {
-  local scenario="$1"
-  local script="$OUT_DIR/deneb-metric-vchat.sh"
-  _write_header "$script"
-  _write_vchat_start "$script"
-
-  cat >> "$script" << VCHAT_EOF
-
-# vchat quality metric.
-VCHAT_OUT=\$(python3 "\$REPO_DIR/scripts/dev-vchat-quality.py" \\
-  --port "\$VCHAT_MOCK_PORT" --gateway-port "\$PORT" \\
-  --scenario "$scenario" --json 2>&1) || true
-
-VCHAT_JSON=\$(echo "\$VCHAT_OUT" | grep '^VCHAT_QUALITY_JSON ' | tail -1 | sed 's/^VCHAT_QUALITY_JSON //')
-if [[ -n "\$VCHAT_JSON" ]]; then
-  PASSED=\$(echo "\$VCHAT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('passed_checks',0))")
-  TOTAL=\$(echo "\$VCHAT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('total_checks',0))")
-  echo "metric_value=\$PASSED"
-  echo "DENEB_METRIC_DETAIL build=ok server=ok vchat=ok passed=\$PASSED total=\$TOTAL scenario=$scenario"
-else
-  echo "metric_value=0"
-  echo "DENEB_METRIC_DETAIL build=ok server=ok vchat=fail"
-fi
-VCHAT_EOF
 
   chmod +x "$script"
   echo "$script"
@@ -321,8 +254,6 @@ cmd_list() {
   echo ""
   echo "  smoke      Health + Ready + WebSocket RPC (metric_value=0~3, ~2s)"
   echo "  quality    Chat quality score (metric_value=0~100, ~30s)"
-  echo "  vchat      Telegram pipeline quality (metric_value=checks, ~60s)"
-  echo "             Options: --scenario korean|tool|format|multi|all"
   echo "  combined   Smoke(20%) + Quality(80%) (metric_value=0~100, ~30s)"
   echo "  custom     Custom message quality (metric_value=0~100, ~30s)"
   echo "             Usage: dev-metric-gen.sh custom \"메시지\""
@@ -336,7 +267,6 @@ case "$PRESET" in
   list)     cmd_list ;;
   smoke)    gen_smoke ;;
   quality)  gen_quality ;;
-  vchat)    gen_vchat "$SCENARIO" ;;
   combined) gen_combined ;;
   custom)
     if [[ -z "$CUSTOM_MSG" ]]; then

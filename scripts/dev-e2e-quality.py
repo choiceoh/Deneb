@@ -171,7 +171,7 @@ def _strip_html(html: str) -> str:
     return text
 
 
-# --- Quality Checks (same as vchat-quality) ---
+# --- Quality Checks ---
 
 def check_html_valid(exp: TelegramExperience) -> CheckResult:
     for msg in exp.final_messages:
@@ -523,7 +523,7 @@ async def test_custom(client, bot_entity, message: str) -> ScenarioResult:
 SCENARIOS = ["korean", "tool", "format", "multi"]
 
 
-# --- Report & Output (same format as vchat-quality) ---
+# --- Report & Output ---
 
 def print_report(results: list[ScenarioResult]):
     total_checks = 0
