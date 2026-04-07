@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // issueTestToken creates a signed token for testing.
@@ -24,10 +26,7 @@ func TestValidateToken(t *testing.T) {
 	v := NewValidator(secret)
 
 	token := issueTestToken(secret, "device-1", RoleOperator)
-	claims, err := v.ValidateToken(token)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	claims := testutil.Must(v.ValidateToken(token))
 	if claims.DeviceID != "device-1" {
 		t.Errorf("expected device-1, got %s", claims.DeviceID)
 	}
@@ -41,10 +40,7 @@ func TestValidateToken_AgentRole(t *testing.T) {
 	v := NewValidator(secret)
 
 	token := issueTestToken(secret, "agent-1", RoleAgent)
-	claims, err := v.ValidateToken(token)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	claims := testutil.Must(v.ValidateToken(token))
 	if claims.Role != RoleAgent {
 		t.Errorf("expected agent, got %s", claims.Role)
 	}

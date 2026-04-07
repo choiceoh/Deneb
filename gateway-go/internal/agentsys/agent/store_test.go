@@ -2,6 +2,8 @@ package agent
 
 import (
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestCreateAndListAgents(t *testing.T) {
@@ -54,9 +56,7 @@ func TestUpdateAgent(t *testing.T) {
 		"name":  "Updated",
 		"model": "claude-3",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if updated.Name != "Updated" {
 		t.Fatalf("expected 'Updated', got %q", updated.Name)
 	}
@@ -93,19 +93,13 @@ func TestFileOperations(t *testing.T) {
 	a := s.Create(CreateParams{Name: "File Agent"})
 
 	// Set file.
-	f, err := s.SetFile(a.AgentID, "config.json", "eyJ0ZXN0IjogdHJ1ZX0=")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	f := testutil.Must(s.SetFile(a.AgentID, "config.json", "eyJ0ZXN0IjogdHJ1ZX0="))
 	if f.Name != "config.json" {
 		t.Fatalf("expected 'config.json', got %q", f.Name)
 	}
 
 	// List files.
-	files, err := s.ListFiles(a.AgentID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	files := testutil.Must(s.ListFiles(a.AgentID))
 	if len(files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(files))
 	}
@@ -115,16 +109,13 @@ func TestFileOperations(t *testing.T) {
 	}
 
 	// Get file (includes content).
-	got, err := s.File(a.AgentID, "config.json")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	got := testutil.Must(s.File(a.AgentID, "config.json"))
 	if got.ContentBase64 != "eyJ0ZXN0IjogdHJ1ZX0=" {
 		t.Fatalf("unexpected content")
 	}
 
 	// Get unknown file.
-	_, err = s.File(a.AgentID, "unknown.txt")
+	_, err := s.File(a.AgentID, "unknown.txt")
 	if err == nil {
 		t.Fatal("expected error for unknown file")
 	}

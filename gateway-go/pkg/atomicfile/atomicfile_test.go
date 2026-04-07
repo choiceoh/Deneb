@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
@@ -14,14 +15,9 @@ func TestWriteFile_Basic(t *testing.T) {
 	path := filepath.Join(dir, "test.txt")
 
 	err := atomicfile.WriteFile(path, []byte("hello"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "hello" {
 		t.Fatalf("got %q, want %q", got, "hello")
 	}
@@ -32,14 +28,9 @@ func TestWriteFile_CreatesParentDirs(t *testing.T) {
 	path := filepath.Join(dir, "a", "b", "c", "test.txt")
 
 	err := atomicfile.WriteFile(path, []byte("nested"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "nested" {
 		t.Fatalf("got %q, want %q", got, "nested")
 	}
@@ -54,14 +45,9 @@ func TestWriteFile_OverwriteExisting(t *testing.T) {
 	}
 
 	err := atomicfile.WriteFile(path, []byte("new"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "new" {
 		t.Fatalf("got %q, want %q", got, "new")
 	}
@@ -76,9 +62,7 @@ func TestWriteFile_Backup(t *testing.T) {
 	}
 
 	err := atomicfile.WriteFile(path, []byte("updated"), &atomicfile.Options{Backup: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	bak, err := os.ReadFile(path + ".bak")
 	if err != nil {
@@ -94,14 +78,9 @@ func TestWriteFile_Fsync(t *testing.T) {
 	path := filepath.Join(dir, "test.txt")
 
 	err := atomicfile.WriteFile(path, []byte("durable"), &atomicfile.Options{Fsync: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "durable" {
 		t.Fatalf("got %q, want %q", got, "durable")
 	}
@@ -112,14 +91,9 @@ func TestWriteFile_CustomPerms(t *testing.T) {
 	path := filepath.Join(dir, "secure.txt")
 
 	err := atomicfile.WriteFile(path, []byte("secret"), &atomicfile.Options{Perm: 0o600})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	info := testutil.Must(os.Stat(path))
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("perm got %o, want %o", info.Mode().Perm(), 0o600)
 	}
@@ -151,10 +125,7 @@ func TestWriteFile_ConcurrentSafety(t *testing.T) {
 	wg.Wait()
 
 	// File must exist and be readable (not corrupted / partial).
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := testutil.Must(os.ReadFile(path))
 	if len(got) == 0 {
 		t.Fatal("file is empty after concurrent writes")
 	}
@@ -168,10 +139,7 @@ func TestWriteFile_NoLeftoverTempFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := testutil.Must(os.ReadDir(dir))
 
 	for _, e := range entries {
 		name := e.Name()

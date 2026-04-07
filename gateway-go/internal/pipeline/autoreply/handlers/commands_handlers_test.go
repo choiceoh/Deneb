@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestCommandRouter_DispatchModel(t *testing.T) {
@@ -10,9 +12,7 @@ func TestCommandRouter_DispatchModel(t *testing.T) {
 		Command: "model",
 		Args:    &CommandArgs{Raw: "anthropic/claude-3"},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.SessionMod == nil {
 		t.Fatal("expected session mod")
 	}

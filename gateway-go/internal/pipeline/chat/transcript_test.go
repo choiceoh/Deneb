@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestFileTranscriptStore_AppendAndLoad(t *testing.T) {
@@ -23,9 +24,7 @@ func TestFileTranscriptStore_AppendAndLoad(t *testing.T) {
 	}
 
 	msgs, total, err := store.Load("test-session", 0)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	testutil.NoError(t, err)
 	if total != 2 {
 		t.Errorf("total = %d, want 2", total)
 	}
@@ -49,9 +48,7 @@ func TestFileTranscriptStore_LoadWithLimit(t *testing.T) {
 	}
 
 	msgs, total, err := store.Load("session", 2)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	testutil.NoError(t, err)
 	if total != 5 {
 		t.Errorf("total = %d, want 5", total)
 	}
@@ -65,9 +62,7 @@ func TestFileTranscriptStore_LoadMissing(t *testing.T) {
 	store := NewFileTranscriptStore(dir)
 
 	msgs, total, err := store.Load("nonexistent", 0)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	testutil.NoError(t, err)
 	if total != 0 || len(msgs) != 0 {
 		t.Errorf("expected empty result, got total=%d msgs=%d", total, len(msgs))
 	}
@@ -78,9 +73,7 @@ func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 	store := NewFileTranscriptStore(dir)
 
 	err := store.Append("session", NewTextChatMessage("user", "test", 0))
-	if err != nil {
-		t.Fatalf("Append: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Verify file exists.
 	if _, err := os.Stat(filepath.Join(dir, "session.jsonl")); err != nil {
@@ -95,9 +88,7 @@ func TestMemoryTranscriptStore_AppendAndLoad(t *testing.T) {
 	store.Append("s1", NewTextChatMessage("assistant", "b", 0))
 
 	msgs, total, err := store.Load("s1", 0)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	testutil.NoError(t, err)
 	if total != 2 || len(msgs) != 2 {
 		t.Errorf("total=%d len=%d", total, len(msgs))
 	}

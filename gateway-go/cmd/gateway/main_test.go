@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -17,25 +18,13 @@ func TestSmokeHealthEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := server.New("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
-	addr, err := srv.StartAndListen(ctx)
-	if err != nil {
-		t.Fatalf("StartAndListen: %v", err)
-	}
+	srv := testutil.Must(server.New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	url := fmt.Sprintf("http://%s/health", addr.String())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("NewRequest: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET /health: %v", err)
-	}
+	req := testutil.Must(http.NewRequestWithContext(ctx, http.MethodGet, url, nil))
+	resp := testutil.Must(http.DefaultClient.Do(req))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -55,30 +44,20 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := server.New("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
-	addr, err := srv.StartAndListen(ctx)
-	if err != nil {
-		t.Fatalf("StartAndListen: %v", err)
-	}
+	srv := testutil.Must(server.New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())
 	conn, _, err := ws.Dial(ctx, wsURL, nil)
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer conn.Close(ws.StatusNormalClosure, "done")
 
 	// Read connect.challenge event first.
 	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
 	_, _, err = conn.Read(challengeCtx)
 	challengeCancel()
-	if err != nil {
-		t.Fatalf("read challenge: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Handshake.
 	connectReq, _ := protocol.NewRequestFrame("smoke-hs", "connect", protocol.ConnectParams{
@@ -95,9 +74,7 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	_, helloData, err := conn.Read(readCtx)
 	readCancel()
-	if err != nil {
-		t.Fatalf("read hello: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var helloResp protocol.ResponseFrame
 	if err := json.Unmarshal(helloData, &helloResp); err != nil {
@@ -117,9 +94,7 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	readCtx, readCancel = context.WithTimeout(ctx, 2*time.Second)
 	_, rpcData, err := conn.Read(readCtx)
 	readCancel()
-	if err != nil {
-		t.Fatalf("read rpc: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var rpcResp protocol.ResponseFrame
 	if err := json.Unmarshal(rpcData, &rpcResp); err != nil {
@@ -139,9 +114,7 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	readCtx, readCancel = context.WithTimeout(ctx, 2*time.Second)
 	_, errData, err := conn.Read(readCtx)
 	readCancel()
-	if err != nil {
-		t.Fatalf("read error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var errResp protocol.ResponseFrame
 	if err := json.Unmarshal(errData, &errResp); err != nil {

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestFindLatestLogFile(t *testing.T) {
@@ -14,10 +16,7 @@ func TestFindLatestLogFile(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "deneb-2025-03-20.log"), []byte("new"), 0o600)
 	os.WriteFile(filepath.Join(dir, "config.json"), []byte("{}"), 0o600)
 
-	got, err := findLatestLogFile(dir)
-	if err != nil {
-		t.Fatalf("findLatestLogFile() error: %v", err)
-	}
+	got := testutil.Must(findLatestLogFile(dir))
 	want := filepath.Join(dir, "deneb-2025-03-20.log")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -46,10 +45,7 @@ func TestFindLatestLogFile_SingleFile(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "app.log"), []byte("single"), 0o600)
 
-	got, err := findLatestLogFile(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	got := testutil.Must(findLatestLogFile(dir))
 	if filepath.Base(got) != "app.log" {
 		t.Errorf("expected app.log, got %q", filepath.Base(got))
 	}
@@ -60,10 +56,7 @@ func TestFindLatestLogFile_SkipsDirectories(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "archive.log"), 0o700)
 	os.WriteFile(filepath.Join(dir, "real.log"), []byte("data"), 0o600)
 
-	got, err := findLatestLogFile(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	got := testutil.Must(findLatestLogFile(dir))
 	if filepath.Base(got) != "real.log" {
 		t.Errorf("expected real.log, got %q", filepath.Base(got))
 	}

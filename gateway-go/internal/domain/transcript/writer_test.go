@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestWriter_EnsureSession(t *testing.T) {
@@ -18,24 +20,16 @@ func TestWriter_EnsureSession(t *testing.T) {
 		Timestamp: 1700000000000,
 		Cwd:       "/tmp",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	// File should exist.
-	path, err := w.SessionPath("test-session")
-	if err != nil {
-		t.Fatal(err)
-	}
+	path := testutil.Must(w.SessionPath("test-session"))
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("expected session file to exist")
 	}
 
 	// Read and verify header.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := testutil.Must(os.ReadFile(path))
 
 	var header SessionHeader
 	if err := json.Unmarshal([]byte(firstLine(data)), &header); err != nil {
@@ -53,9 +47,7 @@ func TestWriter_EnsureSession(t *testing.T) {
 
 	// Idempotent: calling again should not error or duplicate.
 	err = w.EnsureSession("test-session", SessionHeader{ID: "test-session"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestWriter_AppendMessage(t *testing.T) {
@@ -130,9 +122,7 @@ func TestWriter_AppendStructured(t *testing.T) {
 	}
 
 	err := w.AppendStructured("sess2", chatMsg{Role: "user", Content: "test"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	path, _ := w.SessionPath("sess2")
 	lines := readLines(t, path)
@@ -155,10 +145,7 @@ func TestWriter_InvalidJSON(t *testing.T) {
 
 func TestWriter_SessionPath(t *testing.T) {
 	w := NewWriter("/base/dir", nil)
-	path, err := w.SessionPath("my-key")
-	if err != nil {
-		t.Fatal(err)
-	}
+	path := testutil.Must(w.SessionPath("my-key"))
 	expected := filepath.Join("/base/dir", "my-key.jsonl")
 	if path != expected {
 		t.Errorf("expected %q, got %q", expected, path)
@@ -206,10 +193,7 @@ func firstLine(data []byte) string {
 
 func readLines(t *testing.T, path string) []string {
 	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	f := testutil.Must(os.Open(path))
 	defer f.Close()
 
 	var lines []string

@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestMarkdownToIR_Basic(t *testing.T) {
-	ir, err := MarkdownToIR("**bold** and *italic*", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	ir := testutil.Must(MarkdownToIR("**bold** and *italic*", ""))
 	var result struct {
 		Text          string `json:"text"`
 		HasCodeBlocks bool   `json:"has_code_blocks"`
@@ -28,10 +27,7 @@ func TestMarkdownToIR_Basic(t *testing.T) {
 }
 
 func TestMarkdownToIR_Empty(t *testing.T) {
-	ir, err := MarkdownToIR("", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	ir := testutil.Must(MarkdownToIR("", ""))
 	var result struct {
 		Text string `json:"text"`
 	}
@@ -44,10 +40,7 @@ func TestMarkdownToIR_Empty(t *testing.T) {
 }
 
 func TestMarkdownToIR_CodeBlock(t *testing.T) {
-	ir, err := MarkdownToIR("```go\nfmt.Println(\"hi\")\n```", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	ir := testutil.Must(MarkdownToIR("```go\nfmt.Println(\"hi\")\n```", ""))
 	var result struct {
 		HasCodeBlocks bool `json:"has_code_blocks"`
 	}
@@ -61,10 +54,7 @@ func TestMarkdownToIR_CodeBlock(t *testing.T) {
 
 func TestMarkdownToIR_WithOptions(t *testing.T) {
 	options := `{"enableSpoilers":true,"headingStyle":"bold"}`
-	ir, err := MarkdownToIR("# Heading\n||spoiler||", options)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	ir := testutil.Must(MarkdownToIR("# Heading\n||spoiler||", options))
 	if ir == nil {
 		t.Fatal("expected non-nil IR")
 	}
@@ -73,10 +63,7 @@ func TestMarkdownToIR_WithOptions(t *testing.T) {
 
 func TestMarkdownDetectFences_Basic(t *testing.T) {
 	text := "before\n```python\nprint('hi')\n```\nafter"
-	fences, err := MarkdownDetectFences(text)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(text))
 	var spans []json.RawMessage
 	if err := json.Unmarshal(fences, &spans); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
@@ -88,20 +75,14 @@ func TestMarkdownDetectFences_Basic(t *testing.T) {
 }
 
 func TestMarkdownDetectFences_Empty(t *testing.T) {
-	fences, err := MarkdownDetectFences("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(""))
 	if string(fences) != "[]" {
 		t.Errorf("expected empty array, got %s", string(fences))
 	}
 }
 
 func TestMarkdownToPlainText(t *testing.T) {
-	text, err := MarkdownToPlainText("**bold** and [link](https://example.com)")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	text := testutil.Must(MarkdownToPlainText("**bold** and [link](https://example.com)"))
 	if text == "" {
 		t.Fatal("expected non-empty text")
 	}
@@ -109,10 +90,7 @@ func TestMarkdownToPlainText(t *testing.T) {
 }
 
 func TestMarkdownToIR_Headings(t *testing.T) {
-	ir, err := MarkdownToIR("# Heading 1\n## Heading 2\n### Heading 3", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	ir := testutil.Must(MarkdownToIR("# Heading 1\n## Heading 2\n### Heading 3", ""))
 	var result struct {
 		Text string `json:"text"`
 	}
@@ -129,10 +107,7 @@ func TestMarkdownToIR_Headings(t *testing.T) {
 }
 
 func TestMarkdownToIR_Links(t *testing.T) {
-	ir, err := MarkdownToIR("[Click here](https://example.com)", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	ir := testutil.Must(MarkdownToIR("[Click here](https://example.com)", ""))
 	var result struct {
 		Text string `json:"text"`
 	}
@@ -149,10 +124,7 @@ func TestMarkdownToIR_Links(t *testing.T) {
 
 func TestMarkdownDetectFences_TildeFence(t *testing.T) {
 	text := "before\n~~~python\nprint('hi')\n~~~\nafter"
-	fences, err := MarkdownDetectFences(text)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(text))
 	var spans []json.RawMessage
 	if err := json.Unmarshal(fences, &spans); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
@@ -164,10 +136,7 @@ func TestMarkdownDetectFences_TildeFence(t *testing.T) {
 
 func TestMarkdownDetectFences_Unclosed(t *testing.T) {
 	text := "start\n```python\nsome code\nno closing fence"
-	fences, err := MarkdownDetectFences(text)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(text))
 	var spans []struct {
 		Start int `json:"start"`
 		End   int `json:"end"`
@@ -186,10 +155,7 @@ func TestMarkdownDetectFences_Unclosed(t *testing.T) {
 
 func TestMarkdownDetectFences_MultipleFences(t *testing.T) {
 	text := "```go\nfunc main(){}\n```\nsome text\n```rust\nfn main(){}\n```"
-	fences, err := MarkdownDetectFences(text)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(text))
 	var spans []json.RawMessage
 	if err := json.Unmarshal(fences, &spans); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
@@ -201,10 +167,7 @@ func TestMarkdownDetectFences_MultipleFences(t *testing.T) {
 
 func TestMarkdownDetectFences_IndentedFence(t *testing.T) {
 	text := "   ```python\n   code\n   ```"
-	fences, err := MarkdownDetectFences(text)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(text))
 	var spans []json.RawMessage
 	if err := json.Unmarshal(fences, &spans); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
@@ -217,10 +180,7 @@ func TestMarkdownDetectFences_IndentedFence(t *testing.T) {
 func TestMarkdownDetectFences_TooMuchIndent(t *testing.T) {
 	// 4+ spaces of indent should NOT be treated as a fence
 	text := "    ```python\n    code\n    ```"
-	fences, err := MarkdownDetectFences(text)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(text))
 	var spans []json.RawMessage
 	if err := json.Unmarshal(fences, &spans); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
@@ -232,10 +192,7 @@ func TestMarkdownDetectFences_TooMuchIndent(t *testing.T) {
 
 func TestMarkdownDetectFences_NoFences(t *testing.T) {
 	text := "Just some normal text\nwith multiple lines\nbut no code fences"
-	fences, err := MarkdownDetectFences(text)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fences := testutil.Must(MarkdownDetectFences(text))
 	var spans []json.RawMessage
 	if err := json.Unmarshal(fences, &spans); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
@@ -247,10 +204,7 @@ func TestMarkdownDetectFences_NoFences(t *testing.T) {
 
 func TestMarkdownToPlainText_Complex(t *testing.T) {
 	input := "# Title\n\n**Bold** and *italic* with `code` and [link](https://example.com)\n\n## Section"
-	text, err := MarkdownToPlainText(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	text := testutil.Must(MarkdownToPlainText(input))
 	if strings.Contains(text, "**") || strings.Contains(text, "__") {
 		t.Errorf("bold markers should be stripped, got %q", text)
 	}

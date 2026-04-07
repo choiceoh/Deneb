@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // countingStore wraps MemoryTranscriptStore and counts Load calls.
@@ -30,9 +31,7 @@ func TestCachedTranscriptStore_CacheHit(t *testing.T) {
 
 	// First load: cache miss.
 	msgs, total, err := cache.Load("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 1 || total != 1 {
 		t.Fatalf("expected 1 message, got %d (total=%d)", len(msgs), total)
 	}
@@ -42,9 +41,7 @@ func TestCachedTranscriptStore_CacheHit(t *testing.T) {
 
 	// Second load: cache hit.
 	msgs, total, err = cache.Load("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 1 || total != 1 {
 		t.Fatalf("expected 1 message on cache hit, got %d", len(msgs))
 	}
@@ -67,9 +64,7 @@ func TestCachedTranscriptStore_WriteThrough(t *testing.T) {
 
 	// Load should return 2 messages without hitting inner store again.
 	msgs, total, err := cache.Load("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 2 || total != 2 {
 		t.Fatalf("expected 2 messages after write-through, got %d (total=%d)", len(msgs), total)
 	}
@@ -89,9 +84,7 @@ func TestCachedTranscriptStore_InvalidateOnDelete(t *testing.T) {
 
 	// After delete, cache should be cleared; load returns empty.
 	msgs, total, err := cache.Load("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 0 || total != 0 {
 		t.Fatalf("expected empty after delete, got %d messages", len(msgs))
 	}
@@ -109,9 +102,7 @@ func TestCachedTranscriptStore_AppendBeforeLoad(t *testing.T) {
 
 	// Load must be served from the seeded cache entry — no inner Load call.
 	msgs, total, err := cache.Load("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 1 || total != 1 {
 		t.Fatalf("expected 1 message after append-seed, got %d (total=%d)", len(msgs), total)
 	}
@@ -144,9 +135,7 @@ func TestCachedTranscriptStore_LimitSlicing(t *testing.T) {
 	}
 
 	msgs, total, err := cache.Load("s1", 3)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages with limit, got %d", len(msgs))
 	}

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestStoreLoadEmpty(t *testing.T) {
@@ -11,10 +13,7 @@ func TestStoreLoadEmpty(t *testing.T) {
 	storePath := filepath.Join(dir, "jobs.json")
 	s := NewStore(storePath)
 
-	store, err := s.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	store := testutil.Must(s.Load())
 	if store.Version != 1 {
 		t.Errorf("version = %d, want 1", store.Version)
 	}
@@ -85,9 +84,7 @@ func TestStoreUpdateState(t *testing.T) {
 		LastSessionKey:    "cron:x:1000",
 		ConsecutiveErrors: 0,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	got := s.Job("x")
 	if got.State.LastSessionKey != "cron:x:1000" {
@@ -106,10 +103,7 @@ func TestStorePersistence(t *testing.T) {
 
 	// Read with a fresh instance.
 	s2 := NewStore(storePath)
-	store, err := s2.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	store := testutil.Must(s2.Load())
 	if len(store.Jobs) != 1 || store.Jobs[0].ID != "persist" {
 		t.Error("expected persisted job")
 	}

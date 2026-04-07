@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func testLogger() *slog.Logger {
@@ -26,9 +28,7 @@ func TestScheduler_ImmediateOneShot(t *testing.T) {
 		called.Add(1)
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	// Wait for immediate execution.
 	time.Sleep(50 * time.Millisecond)
@@ -58,9 +58,7 @@ func TestScheduler_IntervalTask(t *testing.T) {
 		called.Add(1)
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	time.Sleep(180 * time.Millisecond)
 

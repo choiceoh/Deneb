@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestManagedCredential_Expiry(t *testing.T) {
@@ -86,9 +88,7 @@ func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 		Provider: "test",
 		APIKey:   "raw-key",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if prepared.APIKey != "raw-key" {
 		t.Errorf("expected raw-key passthrough, got %q", prepared.APIKey)
 	}

@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestNewRequestFrame(t *testing.T) {
-	req, err := NewRequestFrame("req-1", "health", map[string]string{"key": "value"})
-	if err != nil {
-		t.Fatalf("NewRequestFrame: %v", err)
-	}
+	req := testutil.Must(NewRequestFrame("req-1", "health", map[string]string{"key": "value"}))
 	if req.Type != FrameTypeRequest {
 		t.Errorf("Type = %q, want %q", req.Type, FrameTypeRequest)
 	}
@@ -19,10 +17,7 @@ func TestNewRequestFrame(t *testing.T) {
 		t.Errorf("ID = %q, want %q", req.ID, "req-1")
 	}
 
-	b, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	b := testutil.Must(json.Marshal(req))
 
 	var decoded RequestFrame
 	if err := json.Unmarshal(b, &decoded); err != nil {
@@ -34,18 +29,12 @@ func TestNewRequestFrame(t *testing.T) {
 }
 
 func TestNewRequestFrameNilParams(t *testing.T) {
-	req, err := NewRequestFrame("req-2", "status", nil)
-	if err != nil {
-		t.Fatalf("NewRequestFrame: %v", err)
-	}
+	req := testutil.Must(NewRequestFrame("req-2", "status", nil))
 	if req.Params != nil {
 		t.Errorf("Params should be nil, got %s", string(req.Params))
 	}
 
-	b, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	b := testutil.Must(json.Marshal(req))
 
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
@@ -68,18 +57,12 @@ func TestNewRequestFrameValidation(t *testing.T) {
 }
 
 func TestResponseFrameOK(t *testing.T) {
-	resp, err := NewResponseOK("resp-1", map[string]string{"status": "ok"})
-	if err != nil {
-		t.Fatalf("NewResponseOK: %v", err)
-	}
+	resp := testutil.Must(NewResponseOK("resp-1", map[string]string{"status": "ok"}))
 	if !resp.OK {
 		t.Error("OK should be true")
 	}
 
-	b, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	b := testutil.Must(json.Marshal(resp))
 
 	var decoded ResponseFrame
 	if err := json.Unmarshal(b, &decoded); err != nil {
@@ -99,10 +82,7 @@ func TestResponseFrameError(t *testing.T) {
 		t.Errorf("Error.Code = %v, want %q", resp.Error, ErrNotFound)
 	}
 
-	b, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	b := testutil.Must(json.Marshal(resp))
 
 	var decoded ResponseFrame
 	if err := json.Unmarshal(b, &decoded); err != nil {
@@ -114,10 +94,7 @@ func TestResponseFrameError(t *testing.T) {
 }
 
 func TestEventFrameRoundTrip(t *testing.T) {
-	ev, err := NewEventFrame("tick", map[string]int64{"ts": 1234567890})
-	if err != nil {
-		t.Fatalf("NewEventFrame: %v", err)
-	}
+	ev := testutil.Must(NewEventFrame("tick", map[string]int64{"ts": 1234567890}))
 	if ev.Type != FrameTypeEvent {
 		t.Errorf("Type = %q, want %q", ev.Type, FrameTypeEvent)
 	}
@@ -126,10 +103,7 @@ func TestEventFrameRoundTrip(t *testing.T) {
 	ev.Seq = &seq
 	ev.StateVersion = &StateVersion{Health: 1}
 
-	b, err := json.Marshal(ev)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	b := testutil.Must(json.Marshal(ev))
 
 	var decoded EventFrame
 	if err := json.Unmarshal(b, &decoded); err != nil {

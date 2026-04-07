@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestExtractThinkingText_Basic(t *testing.T) {
@@ -81,9 +82,7 @@ func TestConsumeStreamInto_IdleResetOnEvent(t *testing.T) {
 	}()
 
 	err := consumeStreamInto(ctx, events, StreamHooks{}, result, 100*time.Millisecond, nil)
-	if err != nil {
-		t.Fatalf("expected nil error (stream completed), got: %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestConsumeStreamInto_MalformedEventsSkipped(t *testing.T) {
@@ -111,9 +110,7 @@ func TestConsumeStreamInto_MalformedEventsSkipped(t *testing.T) {
 	}()
 
 	err := consumeStreamInto(ctx, events, StreamHooks{}, result, -1, nil)
-	if err != nil {
-		t.Fatalf("expected nil error, got: %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
@@ -163,9 +160,7 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 	}()
 
 	err := consumeStreamInto(ctx, events, StreamHooks{}, result, -1, nil)
-	if err != nil {
-		t.Fatalf("expected nil error, got: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	if result.text != "hello" {
 		t.Errorf("text = %q, want %q (mismatched delta should be dropped)", result.text, "hello")
@@ -185,7 +180,5 @@ func TestConsumeStreamInto_IdleDisabled(t *testing.T) {
 	}()
 
 	err := consumeStreamInto(ctx, events, StreamHooks{}, result, -1, nil)
-	if err != nil {
-		t.Fatalf("expected nil (channel closed), got: %v", err)
-	}
+	testutil.NoError(t, err)
 }

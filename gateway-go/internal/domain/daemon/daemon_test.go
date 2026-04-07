@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func testLogger() *slog.Logger {
@@ -98,10 +100,7 @@ func TestReadPIDFile(t *testing.T) {
 	d.Start(cancel)
 	defer d.Stop()
 
-	info, err := ReadPIDFile(pidFile)
-	if err != nil {
-		t.Fatalf("read failed: %v", err)
-	}
+	info := testutil.Must(ReadPIDFile(pidFile))
 	if info.Port != 18789 {
 		t.Errorf("expected port 18789, got %d", info.Port)
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestSpilloverStore_BelowThreshold(t *testing.T) {
@@ -24,19 +26,13 @@ func TestSpilloverStore_StoreAndLoad(t *testing.T) {
 	store := NewSpilloverStore(dir)
 
 	content := strings.Repeat("x", MaxResultChars+100)
-	spillID, err := store.Store("telegram:user1:main", "read", content)
-	if err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	spillID := testutil.Must(store.Store("telegram:user1:main", "read", content))
 	if !strings.HasPrefix(spillID, "sp_") {
 		t.Fatalf("spill ID should start with sp_, got %q", spillID)
 	}
 
 	// Load with same session.
-	loaded, err := store.Load(spillID, "telegram:user1:main")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	loaded := testutil.Must(store.Load(spillID, "telegram:user1:main"))
 	if loaded != content {
 		t.Fatalf("loaded content mismatch: got %d chars, want %d", len(loaded), len(content))
 	}
@@ -47,13 +43,10 @@ func TestSpilloverStore_SessionIsolation(t *testing.T) {
 	store := NewSpilloverStore(dir)
 
 	content := strings.Repeat("y", MaxResultChars+1)
-	spillID, err := store.Store("session-a", "grep", content)
-	if err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	spillID := testutil.Must(store.Store("session-a", "grep", content))
 
 	// Load from different session should fail.
-	_, err = store.Load(spillID, "session-b")
+	_, err := store.Load(spillID, "session-b")
 	if err == nil {
 		t.Fatal("expected error for different session, got nil")
 	}
@@ -188,24 +181,16 @@ func TestSpilloverStore_DiskFile(t *testing.T) {
 
 	content := strings.Repeat("d", MaxResultChars+1)
 	_, err := store.Store("s1", "read", content)
-	if err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Verify exactly one file exists on disk.
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("ReadDir: %v", err)
-	}
+	entries := testutil.Must(os.ReadDir(dir))
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(entries))
 	}
 
 	// Verify file content.
-	data, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
+	data := testutil.Must(os.ReadFile(filepath.Join(dir, entries[0].Name())))
 	if string(data) != content {
 		t.Error("file content mismatch")
 	}

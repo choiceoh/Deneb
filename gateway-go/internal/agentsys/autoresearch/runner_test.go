@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -108,10 +110,7 @@ func TestConfigSaveLoad(t *testing.T) {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
-	loaded, err := LoadConfig(dir)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	loaded := testutil.Must(LoadConfig(dir))
 
 	if loaded.MetricName != cfg.MetricName {
 		t.Errorf("MetricName = %q, want %q", loaded.MetricName, cfg.MetricName)
@@ -161,10 +160,7 @@ func TestAppendAndReadResults(t *testing.T) {
 		t.Fatalf("AppendResult row2: %v", err)
 	}
 
-	content, err := ReadResults(dir)
-	if err != nil {
-		t.Fatalf("ReadResults: %v", err)
-	}
+	content := testutil.Must(ReadResults(dir))
 
 	// Should have header + 2 data rows.
 	lines := splitNonEmpty(content)
@@ -187,10 +183,7 @@ func TestParseResults(t *testing.T) {
 		}
 	}
 
-	parsed, err := ParseResults(dir)
-	if err != nil {
-		t.Fatalf("ParseResults: %v", err)
-	}
+	parsed := testutil.Must(ParseResults(dir))
 	if len(parsed) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(parsed))
 	}
@@ -231,16 +224,11 @@ func TestTrendAnalysis(t *testing.T) {
 func TestSaveExperimentOutput(t *testing.T) {
 	dir := t.TempDir()
 	err := SaveExperimentOutput(dir, 5, "metric: 1.05\n", "warning: slow\n")
-	if err != nil {
-		t.Fatalf("SaveExperimentOutput: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Verify file exists.
 	path := dir + "/.autoresearch/runs/0005.log"
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read log: %v", err)
-	}
+	data := testutil.Must(os.ReadFile(path))
 	content := string(data)
 	if !contains(content, "metric: 1.05") {
 		t.Error("stdout not saved")
@@ -649,19 +637,13 @@ func TestExtractMetricSmartValidation(t *testing.T) {
 	}
 
 	// Pattern mode.
-	val, err := extractMetricSmart("loss: 0.5\n", `loss:\s*([\d.]+)`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	val := testutil.Must(extractMetricSmart("loss: 0.5\n", `loss:\s*([\d.]+)`))
 	if val != 0.5 {
 		t.Errorf("got %f, want 0.5", val)
 	}
 
 	// Heuristic mode fallback.
-	val, err = extractMetricSmart("42.0\n", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	val = testutil.Must(extractMetricSmart("42.0\n", ""))
 	if val != 42.0 {
 		t.Errorf("got %f, want 42.0", val)
 	}
@@ -789,10 +771,7 @@ func TestConfigSaveLoadWithParams(t *testing.T) {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
-	loaded, err := LoadConfig(dir)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	loaded := testutil.Must(LoadConfig(dir))
 
 	// Custom values should persist.
 	if loaded.Params.MaxTokens != 4096 {

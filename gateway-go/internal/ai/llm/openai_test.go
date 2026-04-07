@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestMergeJSONFields(t *testing.T) {
@@ -13,10 +15,7 @@ func TestMergeJSONFields(t *testing.T) {
 	extra := map[string]any{
 		"timeout": 30.0,
 	}
-	got, err := mergeJSONFields(base, extra)
-	if err != nil {
-		t.Fatalf("mergeJSONFields error: %v", err)
-	}
+	got := testutil.Must(mergeJSONFields(base, extra))
 	s := string(got)
 	if !strings.Contains(s, `"timeout":30`) {
 		t.Errorf("expected timeout:30 in result, got: %s", s)
@@ -42,9 +41,7 @@ func TestComplete_OmitsAuthorizationHeaderWhenAPIKeyEmpty(t *testing.T) {
 		Messages:  []Message{NewTextMessage("user", "hello")},
 		MaxTokens: 16,
 	})
-	if err != nil {
-		t.Fatalf("Complete error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if got != "ok" {
 		t.Fatalf("CompleteOpenAI = %q, want %q", got, "ok")
 	}

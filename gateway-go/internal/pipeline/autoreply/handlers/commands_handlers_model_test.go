@@ -6,15 +6,13 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // ── handleModelCommand ────────────────────────────────────────────────────────
 
 func TestHandleModelCommand_NoArg_NoSession(t *testing.T) {
-	result, err := handleModelCommand(CommandContext{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := testutil.Must(handleModelCommand(CommandContext{}))
 	if result.Reply != "Usage: /model <provider/model>" {
 		t.Errorf("reply = %q", result.Reply)
 	}
@@ -42,9 +40,7 @@ func TestHandleModelCommand_SetWithSlash(t *testing.T) {
 	result, err := handleModelCommand(CommandContext{
 		Args: &CommandArgs{Raw: "anthropic/claude-sonnet"},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !strings.HasPrefix(result.Reply, "🤖 Model set to:") {
 		t.Errorf("missing prefix, reply = %q", result.Reply)
 	}

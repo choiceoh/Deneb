@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -32,10 +33,7 @@ func TestAgentSpawnRequestJSON(t *testing.T) {
 		SessionKey: "sess-123",
 		Model:      &model,
 	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("Marshal AgentSpawnRequest: %v", err)
-	}
+	data := testutil.Must(json.Marshal(req))
 	var decoded protocol.AgentSpawnRequest
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal AgentSpawnRequest: %v", err)
@@ -58,10 +56,7 @@ func TestAgentExecutionResultJSON(t *testing.T) {
 		FinalStatus:      protocol.AgentStatusCompleted,
 		EstimatedCostUsd: &cost,
 	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	data := testutil.Must(json.Marshal(result))
 	var decoded protocol.AgentExecutionResult
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // sseResponse builds an OpenAI-compatible SSE response for a simple text completion.
@@ -72,9 +73,7 @@ func TestRunAgent_SimpleTextResponse(t *testing.T) {
 		agent.StreamHooks{OnTextDelta: func(text string) { deltas = append(deltas, text) }},
 		nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("RunAgent error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.Text != "Hello world" {
 		t.Errorf("Text = %q, want %q", result.Text, "Hello world")
 	}
@@ -121,9 +120,7 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 		[]llm.Message{llm.NewTextMessage("user", "use echo")},
 		client, reg, agent.StreamHooks{}, nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("RunAgent error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.Turns != 2 {
 		t.Errorf("Turns = %d, want 2", result.Turns)
 	}
@@ -159,9 +156,7 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 		[]llm.Message{llm.NewTextMessage("user", "loop forever")},
 		client, reg, agent.StreamHooks{}, nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("RunAgent error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.StopReason != "max_turns" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "max_turns")
 	}
@@ -193,9 +188,7 @@ func TestRunAgent_Timeout(t *testing.T) {
 		[]llm.Message{llm.NewTextMessage("user", "hello")},
 		client, nil, agent.StreamHooks{}, nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("RunAgent error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.StopReason != "timeout" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "timeout")
 	}
@@ -231,9 +224,7 @@ func TestRunAgent_Abort(t *testing.T) {
 		[]llm.Message{llm.NewTextMessage("user", "hello")},
 		client, nil, agent.StreamHooks{}, nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("RunAgent error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.StopReason != "aborted" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "aborted")
 	}
@@ -269,9 +260,7 @@ func TestRunAgent_ToolError(t *testing.T) {
 		[]llm.Message{llm.NewTextMessage("user", "use fail tool")},
 		client, reg, agent.StreamHooks{}, nil, nil,
 	)
-	if err != nil {
-		t.Fatalf("RunAgent error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.Text != "Handled error" {
 		t.Errorf("Text = %q", result.Text)
 	}

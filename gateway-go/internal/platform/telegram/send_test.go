@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestSendTextHTMLFallbackAllChunks(t *testing.T) {
@@ -51,9 +52,7 @@ func TestSendTextHTMLFallbackAllChunks(t *testing.T) {
 	results, err := SendText(context.Background(), c, 123, text, SendOptions{
 		ParseMode: "HTML",
 	})
-	if err != nil {
-		t.Fatalf("SendText failed: %v", err)
-	}
+	testutil.NoError(t, err)
 	numChunks := len(results)
 	if numChunks < 3 {
 		t.Fatalf("expected at least 3 results, got %d", numChunks)
@@ -175,9 +174,7 @@ func TestUploadPooledBuffer(t *testing.T) {
 	result, err := c.Upload(context.Background(), "sendDocument", "document", "test.txt", data, map[string]string{
 		"chat_id": "123",
 	})
-	if err != nil {
-		t.Fatalf("Upload failed: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}

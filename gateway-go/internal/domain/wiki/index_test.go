@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestIndex_RenderAndParse(t *testing.T) {
@@ -82,10 +84,7 @@ func TestIndex_SaveAndReload(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	reloaded, err := ParseIndex(indexPath)
-	if err != nil {
-		t.Fatalf("ParseIndex: %v", err)
-	}
+	reloaded := testutil.Must(ParseIndex(indexPath))
 
 	if len(reloaded.Entries) != 2 {
 		t.Errorf("reloaded %d entries, want 2", len(reloaded.Entries))
@@ -142,10 +141,7 @@ _자동 생성: 2026-04-07 14:30_
 		t.Fatal(err)
 	}
 
-	idx, err := ParseIndex(indexPath)
-	if err != nil {
-		t.Fatalf("ParseIndex: %v", err)
-	}
+	idx := testutil.Must(ParseIndex(indexPath))
 
 	if idx.LastProcessed != "2026-04-05" {
 		t.Errorf("LastProcessed = %q", idx.LastProcessed)

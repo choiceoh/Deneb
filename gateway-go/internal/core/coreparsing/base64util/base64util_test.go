@@ -1,6 +1,10 @@
 package base64util
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
+)
 
 func TestEstimate_Empty(t *testing.T) {
 	if got := Estimate(""); got != 0 {
@@ -72,18 +76,12 @@ func TestCanonicalize_Valid(t *testing.T) {
 
 func TestCanonicalize_URLSafe(t *testing.T) {
 	// URL-safe uses '-' for '+' and '_' for '/'.
-	got, err := Canonicalize("ab-_")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	got := testutil.Must(Canonicalize("ab-_"))
 	if got != "ab+/" {
 		t.Errorf("expected ab+/, got %s", got)
 	}
 	// Mixed standard and URL-safe.
-	got, err = Canonicalize("ab+_")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	got = testutil.Must(Canonicalize("ab+_"))
 	if got != "ab+/" {
 		t.Errorf("expected ab+/, got %s", got)
 	}
@@ -136,10 +134,7 @@ func TestEstimate_TabsAndNewlines(t *testing.T) {
 // --- Rust parity: canonicalize mixed URL-safe ---
 
 func TestCanonicalize_MixedStandardAndURLSafe(t *testing.T) {
-	got, err := Canonicalize("ab+_")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	got := testutil.Must(Canonicalize("ab+_"))
 	if got != "ab+/" {
 		t.Errorf("expected ab+/, got %s", got)
 	}

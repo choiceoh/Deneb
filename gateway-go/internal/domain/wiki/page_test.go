@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestParsePage_WithFrontmatter(t *testing.T) {
@@ -29,10 +31,7 @@ NVIDIA DGX Spark.
 - fact 2
 `
 
-	page, err := ParsePage([]byte(input))
-	if err != nil {
-		t.Fatalf("ParsePage: %v", err)
-	}
+	page := testutil.Must(ParsePage([]byte(input)))
 
 	if page.Meta.ID != "dgx-spark" {
 		t.Errorf("id = %q, want %q", page.Meta.ID, "dgx-spark")
@@ -59,10 +58,7 @@ NVIDIA DGX Spark.
 
 func TestParsePage_NoFrontmatter(t *testing.T) {
 	input := "# Just markdown\n\nSome content."
-	page, err := ParsePage([]byte(input))
-	if err != nil {
-		t.Fatalf("ParsePage: %v", err)
-	}
+	page := testutil.Must(ParsePage([]byte(input)))
 	if page.Meta.Title != "" {
 		t.Errorf("title = %q, want empty", page.Meta.Title)
 	}
@@ -79,10 +75,7 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 
 	rendered := page.Render()
 
-	parsed, err := ParsePage(rendered)
-	if err != nil {
-		t.Fatalf("ParsePage after render: %v", err)
-	}
+	parsed := testutil.Must(ParsePage(rendered))
 	if parsed.Meta.ID != "test-page" {
 		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)
 	}
@@ -166,10 +159,7 @@ func TestWritePageFile_Atomic(t *testing.T) {
 	}
 
 	// Verify content.
-	parsed, err := ParsePageFile(path)
-	if err != nil {
-		t.Fatalf("ParsePageFile: %v", err)
-	}
+	parsed := testutil.Must(ParsePageFile(path))
 	if parsed.Meta.Title != "원자적 쓰기" {
 		t.Errorf("title = %q after write", parsed.Meta.Title)
 	}

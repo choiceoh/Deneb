@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestRunLogAppendAndRead(t *testing.T) {
@@ -19,9 +21,7 @@ func TestRunLogAppendAndRead(t *testing.T) {
 			Action: "finished",
 			Status: "ok",
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.NoError(t, err)
 	}
 
 	// Read page.

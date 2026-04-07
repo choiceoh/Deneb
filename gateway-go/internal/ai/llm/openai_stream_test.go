@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // TestStreamChat_UsageOnFinishChunk verifies that input tokens are
@@ -55,9 +57,7 @@ func TestStreamChat_UsageOnFinishChunk(t *testing.T) {
 		Messages:  []Message{NewTextMessage("user", "hi")},
 		MaxTokens: 100,
 	})
-	if err != nil {
-		t.Fatalf("StreamChat error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var inputTokens, outputTokens int
 	for ev := range events {
@@ -135,9 +135,7 @@ func TestStreamChat_UsageOnSeparateChunk(t *testing.T) {
 		Messages:  []Message{NewTextMessage("user", "hi")},
 		MaxTokens: 100,
 	})
-	if err != nil {
-		t.Fatalf("StreamChat error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var inputTokens, outputTokens int
 	for ev := range events {
@@ -250,9 +248,7 @@ func TestStreamChat_MultipleToolCalls(t *testing.T) {
 		Messages:  []Message{NewTextMessage("user", "read and search")},
 		MaxTokens: 100,
 	})
-	if err != nil {
-		t.Fatalf("StreamChat error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Track block starts and deltas by index.
 	type blockInfo struct {
@@ -353,9 +349,7 @@ func TestStreamChat_UnparseableContentSkipped(t *testing.T) {
 		},
 		MaxTokens: 100,
 	})
-	if err != nil {
-		t.Fatalf("StreamChat error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Should not panic; stream should complete normally.
 	var gotText bool

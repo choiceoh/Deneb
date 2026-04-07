@@ -3,6 +3,8 @@ package telegram
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestAllowList_UnmarshalJSON(t *testing.T) {
@@ -105,10 +107,7 @@ func TestAllowList_Methods(t *testing.T) {
 
 func TestAllowList_MarshalJSON(t *testing.T) {
 	al := AllowList{IDs: []int64{42}, Usernames: []string{"peter"}, Wildcard: true}
-	data, err := json.Marshal(al)
-	if err != nil {
-		t.Fatalf("marshal error: %v", err)
-	}
+	data := testutil.Must(json.Marshal(al))
 
 	var al2 AllowList
 	if err := json.Unmarshal(data, &al2); err != nil {

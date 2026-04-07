@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // --- SSE streaming helpers (mirrors chat/agent_test.go) ---
@@ -94,9 +95,7 @@ func TestDefaultAgentRunner_SimpleReply(t *testing.T) {
 		Model:      "test-model",
 		Message:    "Hi",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.OutputText != "Hello!" {
 		t.Errorf("output = %q, want 'Hello!'", result.OutputText)
 	}
@@ -128,9 +127,7 @@ func TestDefaultAgentRunner_ToolExecution(t *testing.T) {
 		Message:       "List files",
 		ElevatedLevel: types.ElevatedOn,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.TurnCount != 2 {
 		t.Errorf("turns = %d, want 2", result.TurnCount)
 	}
@@ -159,9 +156,7 @@ func TestDefaultAgentRunner_ElevatedBlocked(t *testing.T) {
 		Message:       "run something",
 		ElevatedLevel: types.ElevatedOff, // blocked
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	// Tool should be recorded as an error (blocked).
 	if result.ToolMeta.Count() != 1 {
 		t.Errorf("tool calls = %d, want 1", result.ToolMeta.Count())
@@ -185,9 +180,7 @@ func TestDefaultAgentRunner_Timeout(t *testing.T) {
 		Message:    "Hi",
 		TimeoutMs:  1,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.WasAborted {
 		t.Error("expected WasAborted = true")
 	}
@@ -212,9 +205,7 @@ func TestDefaultAgentRunner_ContextOverflowRecovery(t *testing.T) {
 	result, err := runner.RunTurn(context.Background(), AgentTurnConfig{
 		SessionKey: "test", Model: "m", Message: "hi",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !resetCalled {
 		t.Error("expected session reset callback")
 	}
@@ -232,9 +223,7 @@ func TestDefaultAgentRunner_BillingError(t *testing.T) {
 	result, err := runner.RunTurn(context.Background(), AgentTurnConfig{
 		SessionKey: "test", Model: "m", Message: "hi",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(result.Payloads) == 0 {
 		t.Fatal("expected payloads")
 	}

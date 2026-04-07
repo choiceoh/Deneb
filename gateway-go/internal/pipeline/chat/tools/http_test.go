@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func callHTTP(t *testing.T, params map[string]any) (string, error) {
@@ -30,10 +32,7 @@ func TestToolHTTP_getRequest(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	out, err := callHTTP(t, map[string]any{"url": srv.URL})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out := testutil.Must(callHTTP(t, map[string]any{"url": srv.URL}))
 	if !strings.Contains(out, "HTTP 200") {
 		t.Errorf("expected HTTP 200: %q", out)
 	}
@@ -73,9 +72,7 @@ func TestToolHTTP_methodPost(t *testing.T) {
 		"method": "POST",
 		"body":   "payload",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if gotMethod != "POST" {
 		t.Errorf("expected POST, got %q", gotMethod)
 	}
@@ -131,10 +128,7 @@ func TestToolHTTP_statusHeaders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	out, err := callHTTP(t, map[string]any{"url": srv.URL})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out := testutil.Must(callHTTP(t, map[string]any{"url": srv.URL}))
 	if !strings.Contains(out, "Content-Type: application/json") {
 		t.Errorf("expected Content-Type header in output: %q", out)
 	}
@@ -147,10 +141,7 @@ func TestToolHTTP_404response(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	out, err := callHTTP(t, map[string]any{"url": srv.URL})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out := testutil.Must(callHTTP(t, map[string]any{"url": srv.URL}))
 	// HTTP 4xx is not a Go error — status is reflected in the output.
 	if !strings.Contains(out, "HTTP 404") {
 		t.Errorf("expected HTTP 404: %q", out)
@@ -169,9 +160,7 @@ func TestToolHTTP_truncatesLargeResponse(t *testing.T) {
 		"url":                srv.URL,
 		"max_response_chars": 1000,
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "truncated") {
 		t.Errorf("expected truncation marker: %q", out[:200])
 	}
@@ -186,7 +175,5 @@ func TestToolHTTP_timeoutCap(t *testing.T) {
 
 	// timeout above cap (120s) should still work, just be clamped.
 	_, err := callHTTP(t, map[string]any{"url": srv.URL, "timeout": 9999.0})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 }

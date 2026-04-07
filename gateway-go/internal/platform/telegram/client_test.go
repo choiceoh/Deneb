@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // newTestClient creates a Client pointing at a local httptest server.
@@ -35,10 +36,7 @@ func TestGetMe(t *testing.T) {
 	})
 	defer srv.Close()
 
-	user, err := c.GetMe(context.Background())
-	if err != nil {
-		t.Fatalf("GetMe failed: %v", err)
-	}
+	user := testutil.Must(c.GetMe(context.Background()))
 	want := User{ID: 123, IsBot: true, FirstName: "TestBot", Username: "test_bot"}
 	if diff := cmp.Diff(want, *user); diff != "" {
 		t.Errorf("GetMe mismatch (-want +got):\n%s", diff)
@@ -73,9 +71,7 @@ func TestSendMessage(t *testing.T) {
 		"text":       "hello",
 		"parse_mode": "HTML",
 	})
-	if err != nil {
-		t.Fatalf("sendMessage failed: %v", err)
-	}
+	testutil.NoError(t, err)
 	var msg Message
 	json.Unmarshal(result, &msg)
 	if msg.MessageID != 1 {
@@ -157,10 +153,7 @@ func TestGetUpdates(t *testing.T) {
 	})
 	defer srv.Close()
 
-	updates, err := c.GetUpdates(context.Background(), 100, 1)
-	if err != nil {
-		t.Fatalf("GetUpdates failed: %v", err)
-	}
+	updates := testutil.Must(c.GetUpdates(context.Background(), 100, 1))
 	if len(updates) != 2 {
 		t.Fatalf("expected 2 updates, got %d", len(updates))
 	}

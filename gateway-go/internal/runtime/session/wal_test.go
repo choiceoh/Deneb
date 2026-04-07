@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestWALRoundTrip(t *testing.T) {
@@ -29,10 +31,7 @@ func TestWALRoundTrip(t *testing.T) {
 
 	// Verify WAL file exists and has content.
 	walPath := filepath.Join(dir, walFileName)
-	info, err := os.Stat(walPath)
-	if err != nil {
-		t.Fatalf("wal file: %v", err)
-	}
+	info := testutil.Must(os.Stat(walPath))
 	if info.Size() == 0 {
 		t.Fatal("wal file is empty")
 	}

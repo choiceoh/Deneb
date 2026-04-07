@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -15,30 +16,20 @@ func TestWebSocketHandshake(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr, err := srv.StartAndListen(ctx)
-	if err != nil {
-		t.Fatalf("StartAndListen: %v", err)
-	}
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())
 	conn, _, err := ws.Dial(ctx, wsURL, nil)
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer conn.Close(ws.StatusNormalClosure, "")
 
 	// Read connect.challenge event first.
 	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer challengeCancel()
 	_, challengeData, err := conn.Read(challengeCtx)
-	if err != nil {
-		t.Fatalf("read challenge: %v", err)
-	}
+	testutil.NoError(t, err)
 	var challengeEvent map[string]any
 	if err := json.Unmarshal(challengeData, &challengeEvent); err != nil {
 		t.Fatalf("unmarshal challenge: %v", err)
@@ -64,9 +55,7 @@ func TestWebSocketHandshake(t *testing.T) {
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer readCancel()
 	_, respData, err := conn.Read(readCtx)
-	if err != nil {
-		t.Fatalf("read hello: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var resp protocol.ResponseFrame
 	if err := json.Unmarshal(respData, &resp); err != nil {
@@ -92,14 +81,8 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr, err := srv.StartAndListen(ctx)
-	if err != nil {
-		t.Fatalf("StartAndListen: %v", err)
-	}
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	conn := connectWS(ctx, t, addr.String())
@@ -115,9 +98,7 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer readCancel()
 	_, respData, err := conn.Read(readCtx)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var resp protocol.ResponseFrame
 	if err := json.Unmarshal(respData, &resp); err != nil {
@@ -132,14 +113,8 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr, err := srv.StartAndListen(ctx)
-	if err != nil {
-		t.Fatalf("StartAndListen: %v", err)
-	}
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	conn := connectWS(ctx, t, addr.String())
@@ -154,9 +129,7 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer readCancel()
 	_, respData, err := conn.Read(readCtx)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var resp protocol.ResponseFrame
 	if err := json.Unmarshal(respData, &resp); err != nil {
@@ -175,17 +148,13 @@ func connectWS(ctx context.Context, t *testing.T, addr string) *ws.Conn {
 	t.Helper()
 	wsURL := fmt.Sprintf("ws://%s/ws", addr)
 	conn, _, err := ws.Dial(ctx, wsURL, nil)
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Read connect.challenge event first.
 	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer challengeCancel()
 	_, _, err = conn.Read(challengeCtx)
-	if err != nil {
-		t.Fatalf("read challenge: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	connectReq, _ := protocol.NewRequestFrame("hs", "connect", protocol.ConnectParams{
 		MinProtocol: 1, MaxProtocol: 5,
@@ -201,9 +170,7 @@ func connectWS(ctx context.Context, t *testing.T, addr string) *ws.Conn {
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer readCancel()
 	_, respData, err := conn.Read(readCtx)
-	if err != nil {
-		t.Fatalf("read hello: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var resp protocol.ResponseFrame
 	if err := json.Unmarshal(respData, &resp); err != nil {

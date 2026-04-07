@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestNewStore_CreatesDirs(t *testing.T) {
@@ -12,10 +14,7 @@ func TestNewStore_CreatesDirs(t *testing.T) {
 	wikiDir := filepath.Join(dir, "wiki")
 	diaryDir := filepath.Join(dir, "diary")
 
-	store, err := NewStore(wikiDir, diaryDir)
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(wikiDir, diaryDir))
 	defer store.Close()
 
 	// Verify category directories exist.
@@ -39,10 +38,7 @@ func TestNewStore_CreatesDirs(t *testing.T) {
 
 func TestStore_WriteAndReadPage(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	page := NewPage("DGX Spark", "기술", []string{"하드웨어", "NVIDIA"})
@@ -54,10 +50,7 @@ func TestStore_WriteAndReadPage(t *testing.T) {
 	}
 
 	// Read back.
-	got, err := store.ReadPage("기술/dgx-spark.md")
-	if err != nil {
-		t.Fatalf("ReadPage: %v", err)
-	}
+	got := testutil.Must(store.ReadPage("기술/dgx-spark.md"))
 	if got.Meta.Title != "DGX Spark" {
 		t.Errorf("title = %q", got.Meta.Title)
 	}
@@ -78,10 +71,7 @@ func TestStore_WriteAndReadPage(t *testing.T) {
 
 func TestStore_DeletePage(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	page := NewPage("임시", "결정", nil)
@@ -109,10 +99,7 @@ func TestStore_DeletePage(t *testing.T) {
 
 func TestStore_ListPages(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	// Write pages in different categories.
@@ -133,19 +120,13 @@ func TestStore_ListPages(t *testing.T) {
 	}
 
 	// List all.
-	all, err := store.ListPages("")
-	if err != nil {
-		t.Fatalf("ListPages: %v", err)
-	}
+	all := testutil.Must(store.ListPages(""))
 	if len(all) != 3 {
 		t.Errorf("ListPages('') = %d pages, want 3", len(all))
 	}
 
 	// List by category.
-	tech, err := store.ListPages("기술")
-	if err != nil {
-		t.Fatalf("ListPages(기술): %v", err)
-	}
+	tech := testutil.Must(store.ListPages("기술"))
 	if len(tech) != 2 {
 		t.Errorf("ListPages(기술) = %d pages, want 2", len(tech))
 	}
@@ -153,10 +134,7 @@ func TestStore_ListPages(t *testing.T) {
 
 func TestStore_Search(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	// Write a searchable page.
@@ -168,19 +146,13 @@ func TestStore_Search(t *testing.T) {
 
 	// Search for content.
 	ctx := context.Background()
-	results, err := store.Search(ctx, "NVIDIA", 10)
-	if err != nil {
-		t.Fatalf("Search: %v", err)
-	}
+	results := testutil.Must(store.Search(ctx, "NVIDIA", 10))
 	if len(results) == 0 {
 		t.Error("Search('NVIDIA') returned no results")
 	}
 
 	// Search for non-existent content.
-	results, err = store.Search(ctx, "nonexistent_xyz_12345", 10)
-	if err != nil {
-		t.Fatalf("Search: %v", err)
-	}
+	results = testutil.Must(store.Search(ctx, "nonexistent_xyz_12345", 10))
 	if len(results) != 0 {
 		t.Errorf("Search(nonexistent) returned %d results", len(results))
 	}
@@ -188,10 +160,7 @@ func TestStore_Search(t *testing.T) {
 
 func TestStore_BacklinkMaintenance(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	// Write page B first (target of backlink).
@@ -210,10 +179,7 @@ func TestStore_BacklinkMaintenance(t *testing.T) {
 	}
 
 	// Verify B now has a backlink to A.
-	gotB, err := store.ReadPage("기술/b.md")
-	if err != nil {
-		t.Fatalf("ReadPage(B): %v", err)
-	}
+	gotB := testutil.Must(store.ReadPage("기술/b.md"))
 	found := false
 	for _, r := range gotB.Meta.Related {
 		if r == "기술/a.md" {
@@ -227,10 +193,7 @@ func TestStore_BacklinkMaintenance(t *testing.T) {
 
 func TestStore_BacklinkCleanupOnDelete(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	// Write B, then A referencing B.
@@ -258,10 +221,7 @@ func TestStore_BacklinkCleanupOnDelete(t *testing.T) {
 
 func TestStore_Stats(t *testing.T) {
 	dir := t.TempDir()
-	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	page := NewPage("Test", "기술", nil)

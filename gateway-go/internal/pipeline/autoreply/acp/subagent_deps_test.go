@@ -3,6 +3,8 @@ package acp
 import (
 	"context"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
@@ -88,9 +90,7 @@ func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
 	})
 
 	err := deps.KillSubagent("agent-1")
-	if err != nil {
-		t.Fatalf("KillSubagent() error = %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Both should be killed.
 	parent := acpRegistry.Get("agent-1")
@@ -182,9 +182,7 @@ func TestSubagentCommandDeps_ResetSubagent_RunningGuard(t *testing.T) {
 		Status: "done",
 	})
 	err = deps.ResetSubagent("done-agent", "test reset")
-	if err != nil {
-		t.Fatalf("ResetSubagent(done) error = %v", err)
-	}
+	testutil.NoError(t, err)
 
 	agent := acpRegistry.Get("done-agent")
 	if agent.Status != "idle" {

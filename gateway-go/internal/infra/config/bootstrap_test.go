@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestBootstrapGatewayConfigMissingFile(t *testing.T) {
@@ -17,9 +19,7 @@ func TestBootstrapGatewayConfigMissingFile(t *testing.T) {
 		ConfigPath: cfgPath,
 		Persist:    false,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	// Should auto-generate a token.
 	if result.GeneratedToken == "" {
 		t.Error("expected auto-generated token for missing config")
@@ -51,9 +51,7 @@ func TestBootstrapGatewayConfigWithToken(t *testing.T) {
 		ConfigPath: cfgPath,
 		Persist:    false,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.GeneratedToken != "" {
 		t.Error("should not generate token when one is configured")
 	}
@@ -73,9 +71,7 @@ func TestBootstrapGatewayConfigTokenFromEnv(t *testing.T) {
 		ConfigPath: cfgPath,
 		Persist:    false,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.Auth.Token != "env-token-123" {
 		t.Errorf("expected env token, got %q", result.Auth.Token)
 	}
@@ -103,9 +99,7 @@ func TestBootstrapGatewayConfigPasswordMode(t *testing.T) {
 		ConfigPath: cfgPath,
 		Persist:    false,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.Auth.Mode != "password" {
 		t.Errorf("expected auth mode=password, got %q", result.Auth.Mode)
 	}
@@ -149,18 +143,13 @@ func TestBootstrapPersistToken(t *testing.T) {
 		ConfigPath: cfgPath,
 		Persist:    true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.PersistedGeneratedToken {
 		t.Error("expected token to be persisted")
 	}
 
 	// Verify the file was written.
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := testutil.Must(os.ReadFile(cfgPath))
 	var written map[string]any
 	if err := json.Unmarshal(data, &written); err != nil {
 		t.Fatal(err)
@@ -197,9 +186,7 @@ func TestBootstrapAuthOverride(t *testing.T) {
 			Token: "override-token",
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.Auth.Token != "override-token" {
 		t.Errorf("expected override token, got %q", result.Auth.Token)
 	}
@@ -245,10 +232,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		raw, err := os.ReadFile(cfgPath)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testutil.Must(os.ReadFile(cfgPath))
 		var written map[string]any
 		if err := json.Unmarshal(raw, &written); err != nil {
 			t.Fatal(err)
@@ -295,10 +279,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		raw, err := os.ReadFile(cfgPath)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testutil.Must(os.ReadFile(cfgPath))
 		var written map[string]any
 		if err := json.Unmarshal(raw, &written); err != nil {
 			t.Fatal(err)
@@ -314,10 +295,7 @@ func TestPersistDefaultModel(t *testing.T) {
 }
 
 func TestGenerateRandomToken(t *testing.T) {
-	token, err := generateRandomToken()
-	if err != nil {
-		t.Fatal(err)
-	}
+	token := testutil.Must(generateRandomToken())
 	if len(token) != generatedTokenBytes*2 { // hex encoding doubles length
 		t.Errorf("expected %d hex chars, got %d", generatedTokenBytes*2, len(token))
 	}

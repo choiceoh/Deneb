@@ -3,6 +3,8 @@ package protocol
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestConnectParamsRoundTrip(t *testing.T) {
@@ -19,10 +21,7 @@ func TestConnectParamsRoundTrip(t *testing.T) {
 		Auth: &ConnectAuth{Token: "test-token"},
 	}
 
-	b, err := json.Marshal(params)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	b := testutil.Must(json.Marshal(params))
 
 	var decoded ConnectParams
 	if err := json.Unmarshal(b, &decoded); err != nil {
@@ -56,10 +55,7 @@ func TestHelloOkRoundTrip(t *testing.T) {
 		},
 	}
 
-	b, err := json.Marshal(hello)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	b := testutil.Must(json.Marshal(hello))
 
 	var decoded HelloOk
 	if err := json.Unmarshal(b, &decoded); err != nil {

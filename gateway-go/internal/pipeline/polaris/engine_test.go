@@ -10,15 +10,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func testEngine(t *testing.T) (*Engine, *Store) {
 	t.Helper()
 	dir := t.TempDir()
-	s, err := NewStore(filepath.Join(dir, "test.db"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	s := testutil.Must(NewStore(filepath.Join(dir, "test.db")))
 	t.Cleanup(func() { s.Close() })
 	logger := slog.Default()
 	e := NewEngine(s, logger, DefaultConfig())
@@ -64,10 +62,7 @@ func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
 	}
 
 	// No summary nodes should be created.
-	nodes, err := s.LoadSummaries("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	nodes := testutil.Must(s.LoadSummaries("s1", 0))
 	if len(nodes) != 0 {
 		t.Fatalf("expected 0 summary nodes, got %d", len(nodes))
 	}
@@ -114,10 +109,7 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 	}
 
 	// A summary node should be persisted in the DAG.
-	nodes, err := s.LoadSummaries("s1", 1) // level 1 = leaf
-	if err != nil {
-		t.Fatal(err)
-	}
+	nodes := testutil.Must(s.LoadSummaries("s1", 1)) // level 1 = leaf
 	if len(nodes) == 0 {
 		t.Fatal("expected at least 1 summary node after LLM compaction")
 	}
@@ -134,10 +126,7 @@ func TestCapturingSummarizer(t *testing.T) {
 	inner := &mockSummarizer{summary: "captured text"}
 	cs := &capturingSummarizer{inner: inner, captured: &captured}
 
-	result, err := cs.Summarize(context.Background(), "sys", "conv", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := testutil.Must(cs.Summarize(context.Background(), "sys", "conv", 100))
 	if result != "captured text" {
 		t.Fatalf("unexpected result: %s", result)
 	}

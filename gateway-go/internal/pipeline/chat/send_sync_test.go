@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func newSyncTestHandler(server *httptest.Server, transcript TranscriptStore) *Handler {
@@ -46,10 +47,7 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	h := newSyncTestHandler(server, transcript)
 	defer h.Close()
 
-	result, err := h.SendSync(context.Background(), "sync-default-model", "  hello sync  ", "", nil)
-	if err != nil {
-		t.Fatalf("SendSync error: %v", err)
-	}
+	result := testutil.Must(h.SendSync(context.Background(), "sync-default-model", "  hello sync  ", "", nil))
 	if result.Text != "sync reply" {
 		t.Fatalf("Text = %q, want %q", result.Text, "sync reply")
 	}
@@ -58,9 +56,7 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	}
 
 	msgs, total, err := transcript.Load("sync-default-model", 0)
-	if err != nil {
-		t.Fatalf("transcript load error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if total < 1 {
 		t.Fatalf("transcript total = %d, want >= 1", total)
 	}
@@ -89,9 +85,7 @@ func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 		nil,
 		func(delta string) { deltas = append(deltas, delta) },
 	)
-	if err != nil {
-		t.Fatalf("SendSyncStream error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.Text != "stream reply" {
 		t.Fatalf("Text = %q, want %q", result.Text, "stream reply")
 	}

@@ -1,17 +1,18 @@
 package cron
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
+)
 
 func TestNormalizeRequiredName(t *testing.T) {
-	name, err := NormalizeRequiredName("  My Job  ")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	name := testutil.Must(NormalizeRequiredName("  My Job  "))
 	if name != "My Job" {
 		t.Errorf("expected 'My Job', got %q", name)
 	}
 
-	_, err = NormalizeRequiredName("")
+	_, err := NormalizeRequiredName("")
 	if err == nil {
 		t.Error("expected error for empty name")
 	}
