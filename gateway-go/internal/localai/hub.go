@@ -28,6 +28,22 @@ var (
 // Exported so pilot and memory packages can reference it without duplicating.
 var NoThinking = map[string]any{}
 
+// modelSamplingDefaults returns vendor-recommended sampling parameters for
+// known local models. Returns nil pointers for unknown models (use server defaults).
+// Sources:
+//   - Gemma 4: Google model card (ai.google.dev/gemma/docs/core/model_card_4)
+func modelSamplingDefaults(model string) (temp, topP *float64, topK *int) {
+	m := strings.ToLower(model)
+	switch {
+	case strings.Contains(m, "gemma-4") || strings.Contains(m, "gemma4"):
+		return ptr(1.0), ptr(0.95), ptr(64)
+	default:
+		return nil, nil, nil
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
 // Config controls hub behavior.
 type Config struct {
 	// TokenBudget is the max estimated tokens across all in-flight requests.
@@ -79,6 +95,11 @@ type Hub struct {
 	model    string
 	baseURL  string
 	registry *modelrole.Registry
+
+	// Vendor-recommended sampling defaults, resolved once at startup.
+	defaultTemp *float64
+	defaultTopP *float64
+	defaultTopK *int
 
 	cfg Config
 
@@ -149,6 +170,9 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 		h.model = registry.Model(modelrole.RoleLightweight)
 		h.baseURL = registry.BaseURL(modelrole.RoleLightweight)
 	}
+
+	// Resolve vendor-recommended sampling defaults once at startup.
+	h.defaultTemp, h.defaultTopP, h.defaultTopK = modelSamplingDefaults(h.model)
 
 	// Start background goroutines.
 	h.wg.Add(2)
@@ -373,6 +397,9 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 		System:         llm.SystemString(req.System),
 		MaxTokens:      req.MaxTokens,
 		Stream:         true,
+		Temperature:    h.defaultTemp,
+		TopP:           h.defaultTopP,
+		TopK:           h.defaultTopK,
 		ExtraBody:      merged,
 		ResponseFormat: req.ResponseFormat,
 	}
@@ -436,13 +463,17 @@ func (h *Hub) callDirect(ctx context.Context, client *llm.Client, model, system,
 	// CJK block not applied on fallback — fallback targets are non-local
 	// models that don't need CJK suppression.
 
+	fbTemp, fbTopP, fbTopK := modelSamplingDefaults(model)
 	req := llm.ChatRequest{
-		Model:     model,
-		Messages:  []llm.Message{llm.NewTextMessage("user", userMessage)},
-		System:    llm.SystemString(system),
-		MaxTokens: maxTokens,
-		Stream:    true,
-		ExtraBody: merged,
+		Model:       model,
+		Messages:    []llm.Message{llm.NewTextMessage("user", userMessage)},
+		System:      llm.SystemString(system),
+		MaxTokens:   maxTokens,
+		Stream:      true,
+		Temperature: fbTemp,
+		TopP:        fbTopP,
+		TopK:        fbTopK,
+		ExtraBody:   merged,
 	}
 
 	events, err := client.StreamChat(ctx, req)
