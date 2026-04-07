@@ -63,15 +63,13 @@ func TestReadMemoryFile_CacheAndInvalidation(t *testing.T) {
 	os.WriteFile(path, []byte("v1"), 0o644)
 
 	// First read: cache miss.
-	content, err := readMemoryFile(path)
-	testutil.NoError(t, err)
+	content := testutil.Must(readMemoryFile(path))
 	if content != "v1" {
 		t.Fatalf("got %q, want %q", content, "v1")
 	}
 
 	// Second read: cache hit (same mtime).
-	content, err = readMemoryFile(path)
-	testutil.NoError(t, err)
+	content = testutil.Must(readMemoryFile(path))
 	if content != "v1" {
 		t.Fatalf("got %q, want %q", content, "v1")
 	}
@@ -83,8 +81,7 @@ func TestReadMemoryFile_CacheAndInvalidation(t *testing.T) {
 	os.WriteFile(path, []byte("v2"), 0o644)
 	os.Chtimes(path, newTime, newTime)
 
-	content, err = readMemoryFile(path)
-	testutil.NoError(t, err)
+	content = testutil.Must(readMemoryFile(path))
 	if content != "v2" {
 		t.Fatalf("got %q after modification, want %q", content, "v2")
 	}

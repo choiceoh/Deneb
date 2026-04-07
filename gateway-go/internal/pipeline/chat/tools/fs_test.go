@@ -16,15 +16,13 @@ import (
 
 func callTool(t *testing.T, fn ToolFunc, params any) (string, error) {
 	t.Helper()
-	raw, err := json.Marshal(params)
-	testutil.NoError(t, err)
+	raw := testutil.Must(json.Marshal(params))
 	return fn(context.Background(), json.RawMessage(raw))
 }
 
 func mustCallTool(t *testing.T, fn ToolFunc, params any) string {
 	t.Helper()
-	out, err := callTool(t, fn, params)
-	testutil.NoError(t, err)
+	out := testutil.Must(callTool(t, fn, params))
 	return out
 }
 
@@ -205,8 +203,7 @@ func TestToolWrite_createsParentDir(t *testing.T) {
 		"file_path": "a/b/c/file.txt",
 		"content":   "nested",
 	})
-	data, err := os.ReadFile(filepath.Join(tmp, "a/b/c/file.txt"))
-	testutil.NoError(t, err)
+	data := testutil.Must(os.ReadFile(filepath.Join(tmp, "a/b/c/file.txt")))
 	if string(data) != "nested" {
 		t.Errorf("got %q", string(data))
 	}
@@ -381,8 +378,7 @@ func TestReadFunctionRegex_rustFn(t *testing.T) {
 		"    x + 1",
 		"}",
 	}
-	out, err := readFunctionRegex("src/lib.rs", lines, "my_func")
-	testutil.NoError(t, err)
+	out := testutil.Must(readFunctionRegex("src/lib.rs", lines, "my_func"))
 	if !strings.Contains(out, "my_func") {
 		t.Errorf("expected function name: %q", out)
 	}
@@ -401,8 +397,7 @@ func TestReadFunctionRegex_pythonDef(t *testing.T) {
 		"def greet(name):",
 		"    return 'hi ' + name",
 	}
-	out, err := readFunctionRegex("script.py", lines, "greet")
-	testutil.NoError(t, err)
+	out := testutil.Must(readFunctionRegex("script.py", lines, "greet"))
 	if !strings.Contains(out, "greet") {
 		t.Errorf("expected function name: %q", out)
 	}

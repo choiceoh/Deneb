@@ -23,15 +23,13 @@ func TestWriter_EnsureSession(t *testing.T) {
 	testutil.NoError(t, err)
 
 	// File should exist.
-	path, err := w.SessionPath("test-session")
-	testutil.NoError(t, err)
+	path := testutil.Must(w.SessionPath("test-session"))
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("expected session file to exist")
 	}
 
 	// Read and verify header.
-	data, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	data := testutil.Must(os.ReadFile(path))
 
 	var header SessionHeader
 	if err := json.Unmarshal([]byte(firstLine(data)), &header); err != nil {
@@ -147,8 +145,7 @@ func TestWriter_InvalidJSON(t *testing.T) {
 
 func TestWriter_SessionPath(t *testing.T) {
 	w := NewWriter("/base/dir", nil)
-	path, err := w.SessionPath("my-key")
-	testutil.NoError(t, err)
+	path := testutil.Must(w.SessionPath("my-key"))
 	expected := filepath.Join("/base/dir", "my-key.jsonl")
 	if path != expected {
 		t.Errorf("expected %q, got %q", expected, path)
@@ -196,8 +193,7 @@ func firstLine(data []byte) string {
 
 func readLines(t *testing.T, path string) []string {
 	t.Helper()
-	f, err := os.Open(path)
-	testutil.NoError(t, err)
+	f := testutil.Must(os.Open(path))
 	defer f.Close()
 
 	var lines []string

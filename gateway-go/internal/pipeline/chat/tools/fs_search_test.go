@@ -54,8 +54,7 @@ func TestToolFind_matchByName(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "alpha.txt"), nil, 0o644)
 	os.WriteFile(filepath.Join(tmp, "beta.txt"), nil, 0o644)
 
-	out, err := callFind(t, tmp, map[string]any{"pattern": "alpha.txt"})
-	testutil.NoError(t, err)
+	out := testutil.Must(callFind(t, tmp, map[string]any{"pattern": "alpha.txt"}))
 	if !strings.Contains(out, "alpha.txt") {
 		t.Errorf("expected alpha.txt in output: %q", out)
 	}
@@ -68,8 +67,7 @@ func TestToolFind_noMatches(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "file.go"), nil, 0o644)
 
-	out, err := callFind(t, tmp, map[string]any{"pattern": "*.nonexistent"})
-	testutil.NoError(t, err)
+	out := testutil.Must(callFind(t, tmp, map[string]any{"pattern": "*.nonexistent"}))
 	if !strings.Contains(out, "No files found") {
 		t.Errorf("expected no-match message: %q", out)
 	}
@@ -89,8 +87,7 @@ func TestToolFind_wildcardGlob(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "util.go"), nil, 0o644)
 	os.WriteFile(filepath.Join(tmp, "notes.txt"), nil, 0o644)
 
-	out, err := callFind(t, tmp, map[string]any{"pattern": "*.go"})
-	testutil.NoError(t, err)
+	out := testutil.Must(callFind(t, tmp, map[string]any{"pattern": "*.go"}))
 	if !strings.Contains(out, "main.go") || !strings.Contains(out, "util.go") {
 		t.Errorf("expected go files: %q", out)
 	}
@@ -105,8 +102,7 @@ func TestToolFind_skipsHiddenByDefault(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, ".git", "config"), nil, 0o644)
 	os.WriteFile(filepath.Join(tmp, "visible.go"), nil, 0o644)
 
-	out, err := callFind(t, tmp, map[string]any{"pattern": "config"})
-	testutil.NoError(t, err)
+	out := testutil.Must(callFind(t, tmp, map[string]any{"pattern": "config"}))
 	// Should not find files inside .git when showHidden=false.
 	if strings.Contains(out, ".git") {
 		t.Errorf("should skip hidden dir: %q", out)
@@ -167,8 +163,7 @@ func TestToolGrep_findsMatch(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\nfunc hello() {}\n"), 0o644)
 
-	out, err := callGrep(t, tmp, map[string]any{"pattern": "hello"})
-	testutil.NoError(t, err)
+	out := testutil.Must(callGrep(t, tmp, map[string]any{"pattern": "hello"}))
 	if !strings.Contains(out, "hello") {
 		t.Errorf("expected match: %q", out)
 	}
@@ -348,8 +343,7 @@ func TestToolGrep_noMatch(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\n"), 0o644)
 
-	out, err := callGrep(t, tmp, map[string]any{"pattern": "ZZZNOMATCH"})
-	testutil.NoError(t, err)
+	out := testutil.Must(callGrep(t, tmp, map[string]any{"pattern": "ZZZNOMATCH"}))
 	if !strings.Contains(out, "No matches") {
 		t.Errorf("expected no-match message: %q", out)
 	}

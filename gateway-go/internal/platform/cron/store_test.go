@@ -13,8 +13,7 @@ func TestStoreLoadEmpty(t *testing.T) {
 	storePath := filepath.Join(dir, "jobs.json")
 	s := NewStore(storePath)
 
-	store, err := s.Load()
-	testutil.NoError(t, err)
+	store := testutil.Must(s.Load())
 	if store.Version != 1 {
 		t.Errorf("version = %d, want 1", store.Version)
 	}
@@ -104,8 +103,7 @@ func TestStorePersistence(t *testing.T) {
 
 	// Read with a fresh instance.
 	s2 := NewStore(storePath)
-	store, err := s2.Load()
-	testutil.NoError(t, err)
+	store := testutil.Must(s2.Load())
 	if len(store.Jobs) != 1 || store.Jobs[0].ID != "persist" {
 		t.Error("expected persisted job")
 	}

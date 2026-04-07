@@ -8,16 +8,14 @@ import (
 )
 
 func TestExtractLinks_Empty(t *testing.T) {
-	urls, err := ExtractLinks("", 5)
-	testutil.NoError(t, err)
+	urls := testutil.Must(ExtractLinks("", 5))
 	if len(urls) != 0 {
 		t.Fatalf("expected empty, got %v", urls)
 	}
 }
 
 func TestExtractLinks_BareURLs(t *testing.T) {
-	urls, err := ExtractLinks("Check https://example.com and https://rust-lang.org", 5)
-	testutil.NoError(t, err)
+	urls := testutil.Must(ExtractLinks("Check https://example.com and https://rust-lang.org", 5))
 	if len(urls) != 2 {
 		t.Fatalf("expected 2 URLs, got %d: %v", len(urls), urls)
 	}
@@ -27,16 +25,14 @@ func TestExtractLinks_BareURLs(t *testing.T) {
 }
 
 func TestExtractLinks_MaxLimit(t *testing.T) {
-	urls, err := ExtractLinks("https://a.com https://b.com https://c.com", 2)
-	testutil.NoError(t, err)
+	urls := testutil.Must(ExtractLinks("https://a.com https://b.com https://c.com", 2))
 	if len(urls) != 2 {
 		t.Fatalf("expected 2 URLs, got %d", len(urls))
 	}
 }
 
 func TestExtractLinks_SSRFBlocked(t *testing.T) {
-	urls, err := ExtractLinks("https://example.com http://127.0.0.1/admin", 5)
-	testutil.NoError(t, err)
+	urls := testutil.Must(ExtractLinks("https://example.com http://127.0.0.1/admin", 5))
 	if len(urls) != 1 {
 		t.Fatalf("expected 1 URL (SSRF blocked), got %d: %v", len(urls), urls)
 	}
@@ -62,32 +58,28 @@ func TestHTMLToMarkdown_Empty(t *testing.T) {
 }
 
 func TestBase64Estimate_Basic(t *testing.T) {
-	est, err := Base64Estimate("AAAA")
-	testutil.NoError(t, err)
+	est := testutil.Must(Base64Estimate("AAAA"))
 	if est != 3 {
 		t.Errorf("expected 3, got %d", est)
 	}
 }
 
 func TestBase64Estimate_Padding(t *testing.T) {
-	est, err := Base64Estimate("AA==")
-	testutil.NoError(t, err)
+	est := testutil.Must(Base64Estimate("AA=="))
 	if est != 1 {
 		t.Errorf("expected 1, got %d", est)
 	}
 }
 
 func TestBase64Estimate_Empty(t *testing.T) {
-	est, err := Base64Estimate("")
-	testutil.NoError(t, err)
+	est := testutil.Must(Base64Estimate(""))
 	if est != 0 {
 		t.Errorf("expected 0, got %d", est)
 	}
 }
 
 func TestBase64Canonicalize_Valid(t *testing.T) {
-	result, err := Base64Canonicalize(" A A A A ")
-	testutil.NoError(t, err)
+	result := testutil.Must(Base64Canonicalize(" A A A A "))
 	if result != "AAAA" {
 		t.Errorf("expected AAAA, got %s", result)
 	}
@@ -142,8 +134,7 @@ func TestParseMediaTokens_Empty(t *testing.T) {
 }
 
 func TestExtractLinks_Deduplication(t *testing.T) {
-	urls, err := ExtractLinks("https://example.com and again https://example.com", 5)
-	testutil.NoError(t, err)
+	urls := testutil.Must(ExtractLinks("https://example.com and again https://example.com", 5))
 	if len(urls) != 1 {
 		t.Errorf("expected 1 deduplicated URL, got %d: %v", len(urls), urls)
 	}
@@ -152,16 +143,14 @@ func TestExtractLinks_Deduplication(t *testing.T) {
 func TestExtractLinks_DefaultMaxLinks(t *testing.T) {
 	// maxLinks <= 0 defaults to 5
 	input := "https://a.com https://b.com https://c.com https://d.com https://e.com https://f.com https://g.com"
-	urls, err := ExtractLinks(input, 0)
-	testutil.NoError(t, err)
+	urls := testutil.Must(ExtractLinks(input, 0))
 	if len(urls) != 5 {
 		t.Errorf("expected 5 URLs (default max), got %d", len(urls))
 	}
 }
 
 func TestExtractLinks_WhitespaceOnly(t *testing.T) {
-	urls, err := ExtractLinks("   \n\t  ", 5)
-	testutil.NoError(t, err)
+	urls := testutil.Must(ExtractLinks("   \n\t  ", 5))
 	if len(urls) != 0 {
 		t.Errorf("expected empty for whitespace-only, got %v", urls)
 	}
@@ -207,16 +196,14 @@ func TestHTMLToMarkdown_NoTitle(t *testing.T) {
 
 func TestBase64Estimate_WithWhitespace(t *testing.T) {
 	// "AAAA" with embedded whitespace should still estimate 3 bytes
-	est, err := Base64Estimate("A A\nA\tA")
-	testutil.NoError(t, err)
+	est := testutil.Must(Base64Estimate("A A\nA\tA"))
 	if est != 3 {
 		t.Errorf("expected 3, got %d", est)
 	}
 }
 
 func TestBase64Estimate_WhitespaceOnly(t *testing.T) {
-	est, err := Base64Estimate("   \n\t  ")
-	testutil.NoError(t, err)
+	est := testutil.Must(Base64Estimate("   \n\t  "))
 	if est != 0 {
 		t.Errorf("expected 0 for whitespace-only, got %d", est)
 	}
@@ -238,8 +225,7 @@ func TestBase64Canonicalize_WhitespaceOnly(t *testing.T) {
 
 func TestBase64Canonicalize_WithNewlines(t *testing.T) {
 	// Valid base64 with embedded newlines
-	result, err := Base64Canonicalize("AQID\nBAUG")
-	testutil.NoError(t, err)
+	result := testutil.Must(Base64Canonicalize("AQID\nBAUG"))
 	if result != "AQIDBAUG" {
 		t.Errorf("expected AQIDBAUG, got %s", result)
 	}

@@ -32,8 +32,7 @@ func TestToolHTTP_getRequest(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	out, err := callHTTP(t, map[string]any{"url": srv.URL})
-	testutil.NoError(t, err)
+	out := testutil.Must(callHTTP(t, map[string]any{"url": srv.URL}))
 	if !strings.Contains(out, "HTTP 200") {
 		t.Errorf("expected HTTP 200: %q", out)
 	}
@@ -129,8 +128,7 @@ func TestToolHTTP_statusHeaders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	out, err := callHTTP(t, map[string]any{"url": srv.URL})
-	testutil.NoError(t, err)
+	out := testutil.Must(callHTTP(t, map[string]any{"url": srv.URL}))
 	if !strings.Contains(out, "Content-Type: application/json") {
 		t.Errorf("expected Content-Type header in output: %q", out)
 	}
@@ -143,8 +141,7 @@ func TestToolHTTP_404response(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	out, err := callHTTP(t, map[string]any{"url": srv.URL})
-	testutil.NoError(t, err)
+	out := testutil.Must(callHTTP(t, map[string]any{"url": srv.URL}))
 	// HTTP 4xx is not a Go error — status is reflected in the output.
 	if !strings.Contains(out, "HTTP 404") {
 		t.Errorf("expected HTTP 404: %q", out)

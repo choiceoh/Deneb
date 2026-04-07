@@ -9,33 +9,28 @@ import (
 )
 
 func TestScratchpadDir_Creates(t *testing.T) {
-	dir, err := ScratchpadDir("test-session-123")
-	testutil.NoError(t, err)
+	dir := testutil.Must(ScratchpadDir("test-session-123"))
 	defer os.RemoveAll(dir)
 
 	// Check directory exists.
-	info, err := os.Stat(dir)
-	testutil.NoError(t, err)
+	info := testutil.Must(os.Stat(dir))
 	if !info.IsDir() {
 		t.Fatal("scratchpad path is not a directory")
 	}
 
 	// Check implementation subdirectory.
 	implDir := filepath.Join(dir, "implementation")
-	info, err = os.Stat(implDir)
-	testutil.NoError(t, err)
+	info = testutil.Must(os.Stat(implDir))
 	if !info.IsDir() {
 		t.Fatal("implementation path is not a directory")
 	}
 }
 
 func TestScratchpadDir_Idempotent(t *testing.T) {
-	dir1, err := ScratchpadDir("idempotent-test")
-	testutil.NoError(t, err)
+	dir1 := testutil.Must(ScratchpadDir("idempotent-test"))
 	defer os.RemoveAll(dir1)
 
-	dir2, err := ScratchpadDir("idempotent-test")
-	testutil.NoError(t, err)
+	dir2 := testutil.Must(ScratchpadDir("idempotent-test"))
 	if dir1 != dir2 {
 		t.Errorf("expected same path, got %q and %q", dir1, dir2)
 	}
@@ -49,8 +44,7 @@ func TestScratchpadDir_EmptyID(t *testing.T) {
 }
 
 func TestCleanupScratchpad(t *testing.T) {
-	dir, err := ScratchpadDir("cleanup-test")
-	testutil.NoError(t, err)
+	dir := testutil.Must(ScratchpadDir("cleanup-test"))
 
 	if err := CleanupScratchpad("cleanup-test"); err != nil {
 		t.Fatalf("CleanupScratchpad: %v", err)

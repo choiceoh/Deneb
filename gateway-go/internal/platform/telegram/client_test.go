@@ -36,8 +36,7 @@ func TestGetMe(t *testing.T) {
 	})
 	defer srv.Close()
 
-	user, err := c.GetMe(context.Background())
-	testutil.NoError(t, err)
+	user := testutil.Must(c.GetMe(context.Background()))
 	want := User{ID: 123, IsBot: true, FirstName: "TestBot", Username: "test_bot"}
 	if diff := cmp.Diff(want, *user); diff != "" {
 		t.Errorf("GetMe mismatch (-want +got):\n%s", diff)
@@ -154,8 +153,7 @@ func TestGetUpdates(t *testing.T) {
 	})
 	defer srv.Close()
 
-	updates, err := c.GetUpdates(context.Background(), 100, 1)
-	testutil.NoError(t, err)
+	updates := testutil.Must(c.GetUpdates(context.Background(), 100, 1))
 	if len(updates) != 2 {
 		t.Fatalf("expected 2 updates, got %d", len(updates))
 	}

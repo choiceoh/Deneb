@@ -149,8 +149,7 @@ func TestBootstrapPersistToken(t *testing.T) {
 	}
 
 	// Verify the file was written.
-	data, err := os.ReadFile(cfgPath)
-	testutil.NoError(t, err)
+	data := testutil.Must(os.ReadFile(cfgPath))
 	var written map[string]any
 	if err := json.Unmarshal(data, &written); err != nil {
 		t.Fatal(err)
@@ -233,8 +232,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		raw, err := os.ReadFile(cfgPath)
-		testutil.NoError(t, err)
+		raw := testutil.Must(os.ReadFile(cfgPath))
 		var written map[string]any
 		if err := json.Unmarshal(raw, &written); err != nil {
 			t.Fatal(err)
@@ -281,8 +279,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		raw, err := os.ReadFile(cfgPath)
-		testutil.NoError(t, err)
+		raw := testutil.Must(os.ReadFile(cfgPath))
 		var written map[string]any
 		if err := json.Unmarshal(raw, &written); err != nil {
 			t.Fatal(err)
@@ -298,8 +295,7 @@ func TestPersistDefaultModel(t *testing.T) {
 }
 
 func TestGenerateRandomToken(t *testing.T) {
-	token, err := generateRandomToken()
-	testutil.NoError(t, err)
+	token := testutil.Must(generateRandomToken())
 	if len(token) != generatedTokenBytes*2 { // hex encoding doubles length
 		t.Errorf("expected %d hex chars, got %d", generatedTokenBytes*2, len(token))
 	}

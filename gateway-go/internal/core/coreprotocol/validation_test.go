@@ -35,16 +35,14 @@ func TestValidateParams_InvalidJSON(t *testing.T) {
 }
 
 func TestValidateParams_SessionsListEmpty(t *testing.T) {
-	result, err := ValidateParams("sessions.list", "{}")
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("sessions.list", "{}"))
 	if !result.Valid {
 		t.Fatalf("expected valid, got errors: %v", result.Errors)
 	}
 }
 
 func TestValidateParams_AdditionalProperties(t *testing.T) {
-	result, err := ValidateParams("sessions.list", `{"unknownField": true}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("sessions.list", `{"unknownField": true}`))
 	if result.Valid {
 		t.Fatal("expected invalid for unknown properties")
 	}
@@ -60,8 +58,7 @@ func TestValidateParams_ResultSerialization(t *testing.T) {
 			Path: "/key", Message: "must be non-empty", Keyword: "minLength",
 		}},
 	}
-	data, err := json.Marshal(result)
-	testutil.NoError(t, err)
+	data := testutil.Must(json.Marshal(result))
 	s := string(data)
 	if !contains(s, `"valid":false`) || !contains(s, `"minLength"`) {
 		t.Fatalf("unexpected JSON: %s", s)
@@ -100,8 +97,7 @@ func TestValidateParams_GoldenShapes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ValidateParams(tt.method, tt.params)
-			testutil.NoError(t, err)
+			result := testutil.Must(ValidateParams(tt.method, tt.params))
 			if result.Valid != tt.valid {
 				t.Fatalf("expected valid=%v, got valid=%v errors=%v", tt.valid, result.Valid, result.Errors)
 			}
@@ -124,8 +120,7 @@ func TestValidateParams_GoldenShapes(t *testing.T) {
 // --- Per-domain tests ---
 
 func TestSessions_SendMissingRequired(t *testing.T) {
-	result, err := ValidateParams("sessions.send", `{}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("sessions.send", `{}`))
 	if result.Valid {
 		t.Fatal("expected invalid")
 	}
@@ -144,8 +139,7 @@ func TestSessions_SendMissingRequired(t *testing.T) {
 }
 
 func TestSessions_SendValid(t *testing.T) {
-	result, err := ValidateParams("sessions.send", `{"key":"sess-1","message":"hello"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("sessions.send", `{"key":"sess-1","message":"hello"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -176,14 +170,12 @@ func TestSessions_PatchInvalidEnum(t *testing.T) {
 }
 
 func TestSessions_UsageDatePattern(t *testing.T) {
-	result, err := ValidateParams("sessions.usage", `{"startDate":"2024-01-15"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("sessions.usage", `{"startDate":"2024-01-15"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid date, got %v", result.Errors)
 	}
 
-	result, err = ValidateParams("sessions.usage", `{"startDate":"not-a-date"}`)
-	testutil.NoError(t, err)
+	result = testutil.Must(ValidateParams("sessions.usage", `{"startDate":"not-a-date"}`))
 	hasPattern := false
 	for _, e := range result.Errors {
 		if e.Keyword == "pattern" {
@@ -220,8 +212,7 @@ func TestAgent_WakeInvalidMode(t *testing.T) {
 }
 
 func TestCron_ListValid(t *testing.T) {
-	result, err := ValidateParams("cron.list", `{"limit":50,"sortBy":"name"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("cron.list", `{"limit":50,"sortBy":"name"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -237,24 +228,21 @@ func TestCron_AddValid(t *testing.T) {
 }
 
 func TestCron_RemoveValid(t *testing.T) {
-	result, err := ValidateParams("cron.remove", `{"id":"job-1"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("cron.remove", `{"id":"job-1"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestCron_RemoveWithJobId(t *testing.T) {
-	result, err := ValidateParams("cron.remove", `{"jobId":"job-1"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("cron.remove", `{"jobId":"job-1"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestCron_RemoveMissingID(t *testing.T) {
-	result, err := ValidateParams("cron.remove", `{}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("cron.remove", `{}`))
 	if result.Valid {
 		t.Fatal("expected invalid for missing id/jobId")
 	}
@@ -270,32 +258,28 @@ func TestCron_SessionTargetCustom(t *testing.T) {
 }
 
 func TestConfig_GetValid(t *testing.T) {
-	result, err := ValidateParams("config.get", `{}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("config.get", `{}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestConfig_SetValid(t *testing.T) {
-	result, err := ValidateParams("config.set", `{"raw":"yaml content"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("config.set", `{"raw":"yaml content"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestConfig_SchemaLookupValid(t *testing.T) {
-	result, err := ValidateParams("config.schema.lookup", `{"path":"gateway.port"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("config.schema.lookup", `{"path":"gateway.port"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestLogsTail_LimitTooHigh(t *testing.T) {
-	result, err := ValidateParams("logs.tail", `{"limit":10000}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("logs.tail", `{"limit":10000}`))
 	hasMax := false
 	for _, e := range result.Errors {
 		if e.Keyword == "maximum" {
@@ -326,32 +310,28 @@ func TestChatInject_Valid(t *testing.T) {
 }
 
 func TestChannels_StatusValid(t *testing.T) {
-	result, err := ValidateParams("telegram.status", `{"probe":true,"timeoutMs":5000}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("telegram.status", `{"probe":true,"timeoutMs":5000}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestAgents_CreateValid(t *testing.T) {
-	result, err := ValidateParams("agents.create", `{"name":"bot","workspace":"/home/bot"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("agents.create", `{"name":"bot","workspace":"/home/bot"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestSkills_InstallValid(t *testing.T) {
-	result, err := ValidateParams("skills.install", `{"name":"weather","installId":"i1"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("skills.install", `{"name":"weather","installId":"i1"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
 }
 
 func TestExec_ResolveValid(t *testing.T) {
-	result, err := ValidateParams("exec.approval.resolve", `{"id":"req-1","decision":"allow"}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("exec.approval.resolve", `{"id":"req-1","decision":"allow"}`))
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -367,8 +347,7 @@ func TestSecrets_ResolveValid(t *testing.T) {
 }
 
 func TestSecrets_ResolveMissing(t *testing.T) {
-	result, err := ValidateParams("secrets.resolve", `{}`)
-	testutil.NoError(t, err)
+	result := testutil.Must(ValidateParams("secrets.resolve", `{}`))
 	if result.Valid {
 		t.Fatal("expected invalid")
 	}

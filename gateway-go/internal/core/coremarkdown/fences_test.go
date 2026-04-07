@@ -100,8 +100,7 @@ func TestDetectFences_Empty(t *testing.T) {
 
 func TestDetectFences_JSON(t *testing.T) {
 	spans := DetectFences("```python\nprint('hi')\n```")
-	data, err := json.Marshal(spans)
-	testutil.NoError(t, err)
+	data := testutil.Must(json.Marshal(spans))
 	// Verify JSON field names match Rust output.
 	var parsed []map[string]interface{}
 	if err := json.Unmarshal(data, &parsed); err != nil {

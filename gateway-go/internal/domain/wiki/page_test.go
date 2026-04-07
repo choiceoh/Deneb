@@ -31,8 +31,7 @@ NVIDIA DGX Spark.
 - fact 2
 `
 
-	page, err := ParsePage([]byte(input))
-	testutil.NoError(t, err)
+	page := testutil.Must(ParsePage([]byte(input)))
 
 	if page.Meta.ID != "dgx-spark" {
 		t.Errorf("id = %q, want %q", page.Meta.ID, "dgx-spark")
@@ -59,8 +58,7 @@ NVIDIA DGX Spark.
 
 func TestParsePage_NoFrontmatter(t *testing.T) {
 	input := "# Just markdown\n\nSome content."
-	page, err := ParsePage([]byte(input))
-	testutil.NoError(t, err)
+	page := testutil.Must(ParsePage([]byte(input)))
 	if page.Meta.Title != "" {
 		t.Errorf("title = %q, want empty", page.Meta.Title)
 	}
@@ -77,8 +75,7 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 
 	rendered := page.Render()
 
-	parsed, err := ParsePage(rendered)
-	testutil.NoError(t, err)
+	parsed := testutil.Must(ParsePage(rendered))
 	if parsed.Meta.ID != "test-page" {
 		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)
 	}
@@ -162,8 +159,7 @@ func TestWritePageFile_Atomic(t *testing.T) {
 	}
 
 	// Verify content.
-	parsed, err := ParsePageFile(path)
-	testutil.NoError(t, err)
+	parsed := testutil.Must(ParsePageFile(path))
 	if parsed.Meta.Title != "원자적 쓰기" {
 		t.Errorf("title = %q after write", parsed.Meta.Title)
 	}

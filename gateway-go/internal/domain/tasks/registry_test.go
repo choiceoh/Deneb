@@ -22,8 +22,7 @@ func testStore(t *testing.T) *Store {
 func testRegistry(t *testing.T) *Registry {
 	t.Helper()
 	store := testStore(t)
-	reg, err := NewRegistry(store, nil)
-	testutil.NoError(t, err)
+	reg := testutil.Must(NewRegistry(store, nil))
 	return reg
 }
 
@@ -63,8 +62,7 @@ func TestStore_UpsertAndGetTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := store.Task("task-1")
-	testutil.NoError(t, err)
+	got := testutil.Must(store.Task("task-1"))
 	if got == nil {
 		t.Fatal("expected task, got nil")
 	}
@@ -99,8 +97,7 @@ func TestStore_ListActive(t *testing.T) {
 		}
 	}
 
-	active, err := store.ListActive()
-	testutil.NoError(t, err)
+	active := testutil.Must(store.ListActive())
 	// queued + running + blocked = 3
 	if len(active) != 3 {
 		t.Errorf("ListActive() returned %d tasks, want 3", len(active))
@@ -129,14 +126,12 @@ func TestStore_DeleteTerminalBefore(t *testing.T) {
 	}
 
 	// Delete terminal tasks before t=5000.
-	pruned, err := store.DeleteTerminalBefore(5000)
-	testutil.NoError(t, err)
+	pruned := testutil.Must(store.DeleteTerminalBefore(5000))
 	if pruned != 1 {
 		t.Errorf("pruned = %d, want 1", pruned)
 	}
 
-	got, err := store.Task("old-task")
-	testutil.NoError(t, err)
+	got := testutil.Must(store.Task("old-task"))
 	if got != nil {
 		t.Error("expected task to be deleted")
 	}
@@ -155,8 +150,7 @@ func TestStore_Events(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events, err := store.ListEvents("task-1")
-	testutil.NoError(t, err)
+	events := testutil.Must(store.ListEvents("task-1"))
 	if len(events) != 2 {
 		t.Fatalf("ListEvents() returned %d events, want 2", len(events))
 	}
@@ -197,8 +191,7 @@ func TestStore_Summary(t *testing.T) {
 		}
 	}
 
-	sum, err := store.Summary()
-	testutil.NoError(t, err)
+	sum := testutil.Must(store.Summary())
 	if sum.Total != 4 {
 		t.Errorf("Total = %d, want 4", sum.Total)
 	}
@@ -294,10 +287,8 @@ func TestRegistry_RestorePersistence(t *testing.T) {
 	dbPath := filepath.Join(dir, "tasks.db")
 
 	// Create and populate.
-	store1, err := OpenStore(StoreConfig{DatabasePath: dbPath}, nil)
-	testutil.NoError(t, err)
-	reg1, err := NewRegistry(store1, nil)
-	testutil.NoError(t, err)
+	store1 := testutil.Must(OpenStore(StoreConfig{DatabasePath: dbPath}, nil))
+	reg1 := testutil.Must(NewRegistry(store1, nil))
 	if err := reg1.Put(&TaskRecord{
 		TaskID:         "persist-1",
 		Runtime:        RuntimeCron,
@@ -314,11 +305,9 @@ func TestRegistry_RestorePersistence(t *testing.T) {
 	store1.Close()
 
 	// Reopen and verify restoration.
-	store2, err := OpenStore(StoreConfig{DatabasePath: dbPath}, nil)
-	testutil.NoError(t, err)
+	store2 := testutil.Must(OpenStore(StoreConfig{DatabasePath: dbPath}, nil))
 	defer store2.Close()
-	reg2, err := NewRegistry(store2, nil)
-	testutil.NoError(t, err)
+	reg2 := testutil.Must(NewRegistry(store2, nil))
 
 	got := reg2.Get("persist-1")
 	if got == nil {
@@ -579,8 +568,7 @@ func TestFlow_BlockedAndResume(t *testing.T) {
 	}
 
 	// Resume blocked flow.
-	resumed, err := ResumeBlockedFlow(reg, flow.FlowID)
-	testutil.NoError(t, err)
+	resumed := testutil.Must(ResumeBlockedFlow(reg, flow.FlowID))
 	if resumed != 1 {
 		t.Errorf("resumed = %d, want 1", resumed)
 	}

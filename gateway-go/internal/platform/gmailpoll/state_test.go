@@ -13,8 +13,7 @@ func TestStateStore_LoadEmpty(t *testing.T) {
 	dir := t.TempDir()
 	store := newStateStore(dir)
 
-	state, err := store.Load()
-	testutil.NoError(t, err)
+	state := testutil.Must(store.Load())
 	if state.LastPollAt != 0 {
 		t.Errorf("LastPollAt = %d, want 0", state.LastPollAt)
 	}
@@ -43,8 +42,7 @@ func TestStateStore_SaveAndLoad(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	loaded, err := store.Load()
-	testutil.NoError(t, err)
+	loaded := testutil.Must(store.Load())
 	if loaded.LastPollAt != 1234567890 {
 		t.Errorf("LastPollAt = %d, want 1234567890", loaded.LastPollAt)
 	}
@@ -78,8 +76,7 @@ func TestStateStore_TrimSeenIDs(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	loaded, err := store.Load()
-	testutil.NoError(t, err)
+	loaded := testutil.Must(store.Load())
 	if len(loaded.SeenIDs) != maxSeenIDs {
 		t.Errorf("SeenIDs len = %d, want %d", len(loaded.SeenIDs), maxSeenIDs)
 	}

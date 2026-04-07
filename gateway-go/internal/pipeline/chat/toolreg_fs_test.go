@@ -96,8 +96,7 @@ func TestToolRead(t *testing.T) {
 
 	t.Run("basic read with line numbers", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"file_path": filepath.Join(dir, "test.txt")})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "1\tline1") {
 			t.Errorf("expected line-numbered output, got: %s", result)
 		}
@@ -112,8 +111,7 @@ func TestToolRead(t *testing.T) {
 			"offset":    3,
 			"limit":     2,
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		// Offset 3 means start from line 3 (1-based), limit 2 means lines 3-4.
 		if !strings.Contains(result, "3\tline3") {
 			t.Errorf("expected line 3 in output, got: %s", result)
@@ -150,8 +148,7 @@ func TestToolWrite(t *testing.T) {
 	t.Run("write creates file", func(t *testing.T) {
 		path := filepath.Join(dir, "out.txt")
 		input, _ := json.Marshal(map[string]any{"file_path": path, "content": "hello"})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "Wrote") {
 			t.Errorf("expected 'Wrote' in result, got: %s", result)
 		}
@@ -264,8 +261,7 @@ func TestToolFind(t *testing.T) {
 
 	t.Run("pattern matches files", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"pattern": "*.txt"})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "foo.txt") || !strings.Contains(result, "bar.txt") {
 			t.Errorf("expected foo.txt and bar.txt, got: %s", result)
 		}
@@ -276,8 +272,7 @@ func TestToolFind(t *testing.T) {
 
 	t.Run("no matches", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"pattern": "*.rs"})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "No files found") {
 			t.Errorf("expected no-match message, got: %s", result)
 		}
@@ -285,8 +280,7 @@ func TestToolFind(t *testing.T) {
 
 	t.Run("hidden directories skipped", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"pattern": "*.txt"})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if strings.Contains(result, "secret.txt") {
 			t.Errorf("should skip hidden directories, got: %s", result)
 		}

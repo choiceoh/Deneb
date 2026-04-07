@@ -18,17 +18,13 @@ func TestSmokeHealthEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := server.New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(server.New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	url := fmt.Sprintf("http://%s/health", addr.String())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	testutil.NoError(t, err)
-	resp, err := http.DefaultClient.Do(req)
-	testutil.NoError(t, err)
+	req := testutil.Must(http.NewRequestWithContext(ctx, http.MethodGet, url, nil))
+	resp := testutil.Must(http.DefaultClient.Do(req))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -48,10 +44,8 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := server.New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(server.New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())

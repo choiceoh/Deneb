@@ -13,8 +13,7 @@ import (
 func testStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
-	s, err := NewStore(filepath.Join(dir, "test.db"))
-	testutil.NoError(t, err)
+	s := testutil.Must(NewStore(filepath.Join(dir, "test.db")))
 	t.Cleanup(func() { s.Close() })
 	return s
 }
@@ -48,8 +47,7 @@ func TestAppendAndLoad(t *testing.T) {
 	}
 
 	// Load all
-	msgs, err := s.LoadMessages("s1", 0, -1)
-	testutil.NoError(t, err)
+	msgs := testutil.Must(s.LoadMessages("s1", 0, -1))
 	if len(msgs) != 2 {
 		t.Fatalf("load all: got %d, want 2", len(msgs))
 	}
@@ -58,8 +56,7 @@ func TestAppendAndLoad(t *testing.T) {
 	}
 
 	// Load range
-	msgs, err = s.LoadMessages("s1", 1, 1)
-	testutil.NoError(t, err)
+	msgs = testutil.Must(s.LoadMessages("s1", 1, 1))
 	if len(msgs) != 1 || msgs[0].Role != "assistant" {
 		t.Fatalf("range load: got %d msgs, first role=%s", len(msgs), msgs[0].Role)
 	}
@@ -72,8 +69,7 @@ func TestMsgIndexAutoIncrement(t *testing.T) {
 		s.AppendMessage("s1", textMsg("user", "msg", int64(i*1000)))
 	}
 
-	maxIdx, err := s.MaxMsgIndex("s1")
-	testutil.NoError(t, err)
+	maxIdx := testutil.Must(s.MaxMsgIndex("s1"))
 	if maxIdx != 4 {
 		t.Fatalf("max index: got %d, want 4", maxIdx)
 	}
@@ -104,22 +100,19 @@ func TestSummaryNodes(t *testing.T) {
 	_ = id2
 
 	// Load level 1 only
-	leaves, err := s.LoadSummaries("s1", 1)
-	testutil.NoError(t, err)
+	leaves := testutil.Must(s.LoadSummaries("s1", 1))
 	if len(leaves) != 2 {
 		t.Fatalf("leaves: got %d, want 2", len(leaves))
 	}
 
 	// Load all levels
-	all, err := s.LoadSummaries("s1", 0)
-	testutil.NoError(t, err)
+	all := testutil.Must(s.LoadSummaries("s1", 0))
 	if len(all) != 3 {
 		t.Fatalf("all summaries: got %d, want 3", len(all))
 	}
 
 	// LatestSummaryCoverage
-	cov, err := s.LatestSummaryCoverage("s1")
-	testutil.NoError(t, err)
+	cov := testutil.Must(s.LatestSummaryCoverage("s1"))
 	if cov != 19 {
 		t.Fatalf("coverage: got %d, want 19", cov)
 	}
@@ -160,8 +153,7 @@ func TestSessionTokens(t *testing.T) {
 	s.AppendMessage("s1", textMsg("user", "hello world this is a test", 1000))
 	s.AppendMessage("s1", textMsg("assistant", "response text here", 2000))
 
-	tokens, err := s.SessionTokens("s1")
-	testutil.NoError(t, err)
+	tokens := testutil.Must(s.SessionTokens("s1"))
 	if tokens <= 0 {
 		t.Fatalf("tokens: got %d, want > 0", tokens)
 	}
@@ -178,8 +170,7 @@ func TestStoreDBFileCreated(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "polaris.db")
 
-	s, err := NewStore(dbPath)
-	testutil.NoError(t, err)
+	s := testutil.Must(NewStore(dbPath))
 	s.Close()
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {

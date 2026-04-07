@@ -150,8 +150,7 @@ func TestTool_MarshalJSON_PreSerialized(t *testing.T) {
 	}
 	tool.PreSerialize()
 
-	data, err := json.Marshal(tool)
-	testutil.NoError(t, err)
+	data := testutil.Must(json.Marshal(tool))
 
 	var parsed map[string]json.RawMessage
 	if err := json.Unmarshal(data, &parsed); err != nil {

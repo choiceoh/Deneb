@@ -32,8 +32,7 @@ func TestStickyDialer_ConnectsToLocalServer(t *testing.T) {
 	t.Parallel()
 
 	lc := net.ListenConfig{}
-	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
-	testutil.NoError(t, err)
+	ln := testutil.Must(lc.Listen(context.Background(), "tcp", "127.0.0.1:0"))
 	defer ln.Close()
 
 	go func() {
@@ -50,8 +49,7 @@ func TestStickyDialer_ConnectsToLocalServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, err := d.DialContext(ctx, "tcp", ln.Addr().String())
-	testutil.NoError(t, err)
+	conn := testutil.Must(d.DialContext(ctx, "tcp", ln.Addr().String()))
 	conn.Close()
 
 	if idx := d.stickyIndex.Load(); idx != 0 {

@@ -84,8 +84,7 @@ func TestIndex_SaveAndReload(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	reloaded, err := ParseIndex(indexPath)
-	testutil.NoError(t, err)
+	reloaded := testutil.Must(ParseIndex(indexPath))
 
 	if len(reloaded.Entries) != 2 {
 		t.Errorf("reloaded %d entries, want 2", len(reloaded.Entries))
@@ -142,8 +141,7 @@ _자동 생성: 2026-04-07 14:30_
 		t.Fatal(err)
 	}
 
-	idx, err := ParseIndex(indexPath)
-	testutil.NoError(t, err)
+	idx := testutil.Must(ParseIndex(indexPath))
 
 	if idx.LastProcessed != "2026-04-05" {
 		t.Errorf("LastProcessed = %q", idx.LastProcessed)

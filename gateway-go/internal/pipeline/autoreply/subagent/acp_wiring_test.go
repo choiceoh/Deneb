@@ -62,8 +62,7 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 	}
 
 	// Kill should work.
-	killed, err := deps.Kill.KillRun("agent-1")
-	testutil.NoError(t, err)
+	killed := testutil.Must(deps.Kill.KillRun("agent-1"))
 	if !killed {
 		t.Error("expected agent-1 to be killed")
 	}
@@ -78,8 +77,7 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 		SessionKey: "session:sub:4", SpawnedAt: now,
 	})
 	runs2 := deps.ListRuns("session:main")
-	killCount, err := deps.Kill.KillAll("session:main", runs2)
-	testutil.NoError(t, err)
+	killCount := testutil.Must(deps.Kill.KillAll("session:main", runs2))
 	if killCount != 1 { // only agent-4 was running
 		t.Errorf("expected killAll=1, got %d", killCount)
 	}

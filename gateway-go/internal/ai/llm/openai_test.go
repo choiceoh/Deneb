@@ -15,8 +15,7 @@ func TestMergeJSONFields(t *testing.T) {
 	extra := map[string]any{
 		"timeout": 30.0,
 	}
-	got, err := mergeJSONFields(base, extra)
-	testutil.NoError(t, err)
+	got := testutil.Must(mergeJSONFields(base, extra))
 	s := string(got)
 	if !strings.Contains(s, `"timeout":30`) {
 		t.Errorf("expected timeout:30 in result, got: %s", s)

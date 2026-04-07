@@ -29,8 +29,7 @@ func TestConnector_Do_BearerAuth(t *testing.T) {
 		AuthMode: "bearer",
 	}, nil)
 
-	resp, err := c.Do(context.Background(), http.MethodGet, "/test", nil)
-	testutil.NoError(t, err)
+	resp := testutil.Must(c.Do(context.Background(), http.MethodGet, "/test", nil))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
@@ -57,8 +56,7 @@ func TestConnector_Do_APIKeyAuth(t *testing.T) {
 		AuthMode: "api_key",
 	}, nil)
 
-	resp, err := c.Do(context.Background(), http.MethodGet, "/v1/models", nil)
-	testutil.NoError(t, err)
+	resp := testutil.Must(c.Do(context.Background(), http.MethodGet, "/v1/models", nil))
 	resp.Body.Close()
 }
 
@@ -76,8 +74,7 @@ func TestConnector_Do_CustomHeaders(t *testing.T) {
 		Headers: map[string]string{"X-Custom": "value-abc"},
 	}, nil)
 
-	resp, err := c.Do(context.Background(), http.MethodGet, "/", nil)
-	testutil.NoError(t, err)
+	resp := testutil.Must(c.Do(context.Background(), http.MethodGet, "/", nil))
 	resp.Body.Close()
 }
 
@@ -98,8 +95,7 @@ func TestConnector_Do_EnvVarExpansion(t *testing.T) {
 		Headers: map[string]string{"X-Token": "${TEST_CONNECTOR_VAR}"},
 	}, nil)
 
-	resp, err := c.Do(context.Background(), http.MethodGet, "/", nil)
-	testutil.NoError(t, err)
+	resp := testutil.Must(c.Do(context.Background(), http.MethodGet, "/", nil))
 	resp.Body.Close()
 }
 
@@ -169,8 +165,7 @@ func TestConnector_NoAuth(t *testing.T) {
 		AuthMode: "none",
 	}, nil)
 
-	resp, err := c.Do(context.Background(), http.MethodGet, "/", nil)
-	testutil.NoError(t, err)
+	resp := testutil.Must(c.Do(context.Background(), http.MethodGet, "/", nil))
 	resp.Body.Close()
 }
 

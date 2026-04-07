@@ -255,8 +255,7 @@ func TestRunAgent_HappyPath_TextOnly(t *testing.T) {
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "Hi")}
-	result, err := RunAgent(context.Background(), cfg, messages, streamer, nil, StreamHooks{}, nil, nil)
-	testutil.NoError(t, err)
+	result := testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, nil, StreamHooks{}, nil, nil))
 
 	if result.Text != "Hello, world!" {
 		t.Errorf("Text = %q, want %q", result.Text, "Hello, world!")
@@ -297,8 +296,7 @@ func TestRunAgent_SingleToolCall(t *testing.T) {
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "Read test.go")}
-	result, err := RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, nil)
-	testutil.NoError(t, err)
+	result := testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, nil))
 
 	if result.Text != "The file contains test code." {
 		t.Errorf("Text = %q, want %q", result.Text, "The file contains test code.")
@@ -337,8 +335,7 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "loop")}
-	result, err := RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, nil)
-	testutil.NoError(t, err)
+	result := testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, nil))
 
 	if result.StopReason != "max_turns" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "max_turns")
@@ -367,8 +364,7 @@ func TestRunAgent_Timeout(t *testing.T) {
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "slow")}
-	result, err := RunAgent(context.Background(), cfg, messages, streamer, nil, StreamHooks{}, nil, nil)
-	testutil.NoError(t, err)
+	result := testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, nil, StreamHooks{}, nil, nil))
 
 	if result.StopReason != "timeout" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "timeout")
@@ -398,8 +394,7 @@ func TestRunAgent_ContextCancellation(t *testing.T) {
 	}()
 
 	messages := []llm.Message{llm.NewTextMessage("user", "abort")}
-	result, err := RunAgent(ctx, cfg, messages, streamer, nil, StreamHooks{}, nil, nil)
-	testutil.NoError(t, err)
+	result := testutil.Must(RunAgent(ctx, cfg, messages, streamer, nil, StreamHooks{}, nil, nil))
 
 	if result.StopReason != "aborted" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "aborted")
@@ -436,8 +431,7 @@ func TestRunAgent_ToolError(t *testing.T) {
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "write to /etc/passwd")}
-	result, err := RunAgent(context.Background(), cfg, messages, streamer, tools, hooks, nil, nil)
-	testutil.NoError(t, err)
+	result := testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, tools, hooks, nil, nil))
 
 	if result.StopReason != "end_turn" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "end_turn")

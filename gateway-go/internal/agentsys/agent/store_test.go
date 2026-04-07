@@ -93,15 +93,13 @@ func TestFileOperations(t *testing.T) {
 	a := s.Create(CreateParams{Name: "File Agent"})
 
 	// Set file.
-	f, err := s.SetFile(a.AgentID, "config.json", "eyJ0ZXN0IjogdHJ1ZX0=")
-	testutil.NoError(t, err)
+	f := testutil.Must(s.SetFile(a.AgentID, "config.json", "eyJ0ZXN0IjogdHJ1ZX0="))
 	if f.Name != "config.json" {
 		t.Fatalf("expected 'config.json', got %q", f.Name)
 	}
 
 	// List files.
-	files, err := s.ListFiles(a.AgentID)
-	testutil.NoError(t, err)
+	files := testutil.Must(s.ListFiles(a.AgentID))
 	if len(files) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(files))
 	}
@@ -111,14 +109,13 @@ func TestFileOperations(t *testing.T) {
 	}
 
 	// Get file (includes content).
-	got, err := s.File(a.AgentID, "config.json")
-	testutil.NoError(t, err)
+	got := testutil.Must(s.File(a.AgentID, "config.json"))
 	if got.ContentBase64 != "eyJ0ZXN0IjogdHJ1ZX0=" {
 		t.Fatalf("unexpected content")
 	}
 
 	// Get unknown file.
-	_, err = s.File(a.AgentID, "unknown.txt")
+	_, err := s.File(a.AgentID, "unknown.txt")
 	if err == nil {
 		t.Fatal("expected error for unknown file")
 	}

@@ -14,8 +14,7 @@ import (
 // expected routes. This is a component-level test that runs independently of
 // the full server startup sequence.
 func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 	mux := srv.buildMux()
 
 	tests := []struct {
@@ -51,8 +50,7 @@ func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 // TestHandleRoot_ResponseShape verifies that the root handler returns a
 // well-formed JSON response with the expected fields and values.
 func TestHandleRoot_ResponseShape(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	srv.handleRoot(w, req)
@@ -81,8 +79,7 @@ func TestHandleRoot_ResponseShape(t *testing.T) {
 
 // TestHandleRoot_ContentType verifies that root handler sets JSON content type.
 func TestHandleRoot_ContentType(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	srv.handleRoot(w, req)

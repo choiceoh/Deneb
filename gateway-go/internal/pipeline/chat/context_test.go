@@ -99,8 +99,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("returns tail N messages", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 3
-		result, err := assembleContext(store, "test", cfg, slog.Default())
-		testutil.NoError(t, err)
+		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
 		if len(result.Messages) != 3 {
 			t.Errorf("got %d messages, want 3", len(result.Messages))
 		}
@@ -112,8 +111,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("returns all when MaxMessages is larger", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 100
-		result, err := assembleContext(store, "test", cfg, slog.Default())
-		testutil.NoError(t, err)
+		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
 		if len(result.Messages) != 5 {
 			t.Errorf("got %d messages, want 5", len(result.Messages))
 		}
@@ -121,8 +119,7 @@ func TestAssembleContextFallback(t *testing.T) {
 
 	t.Run("empty session returns empty result", func(t *testing.T) {
 		cfg := DefaultContextConfig()
-		result, err := assembleContext(store, "nonexistent", cfg, slog.Default())
-		testutil.NoError(t, err)
+		result := testutil.Must(assembleContext(store, "nonexistent", cfg, slog.Default()))
 		if len(result.Messages) != 0 {
 			t.Errorf("got %d messages, want 0", len(result.Messages))
 		}
@@ -131,8 +128,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("zero MaxMessages uses default", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 0
-		result, err := assembleContext(store, "test", cfg, slog.Default())
-		testutil.NoError(t, err)
+		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
 		// defaultMaxMessages = 100, so all 5 messages should be returned.
 		if len(result.Messages) != 5 {
 			t.Errorf("got %d messages, want 5", len(result.Messages))

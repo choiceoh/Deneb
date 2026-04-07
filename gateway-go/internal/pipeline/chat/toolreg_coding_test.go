@@ -24,8 +24,7 @@ func TestToolMultiEdit(t *testing.T) {
 				{"file_path": path, "old_string": "world", "new_string": "earth"},
 			},
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "1 succeeded") {
 			t.Errorf("expected 1 succeeded, got: %s", result)
 		}
@@ -46,8 +45,7 @@ func TestToolMultiEdit(t *testing.T) {
 				{"file_path": path2, "old_string": "oldpkg", "new_string": "newpkg"},
 			},
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "2 succeeded") {
 			t.Errorf("expected 2 succeeded, got: %s", result)
 		}
@@ -70,8 +68,7 @@ func TestToolMultiEdit(t *testing.T) {
 				{"file_path": path, "old_string": "NOTFOUND", "new_string": "oops"},
 			},
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "1 succeeded") || !strings.Contains(result, "1 failed") {
 			t.Errorf("expected 1 succeeded + 1 failed, got: %s", result)
 		}
@@ -85,8 +82,7 @@ func TestToolMultiEdit(t *testing.T) {
 				{"file_path": path, "old_string": "aaa", "new_string": "zzz", "replace_all": true},
 			},
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "3 replacements") {
 			t.Errorf("expected 3 replacements, got: %s", result)
 		}
@@ -104,8 +100,7 @@ func TestToolMultiEdit(t *testing.T) {
 				{"file_path": path, "old_string": "foo", "new_string": "baz"},
 			},
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "FAIL") || !strings.Contains(result, "not unique") {
 			t.Errorf("expected uniqueness failure, got: %s", result)
 		}
@@ -128,8 +123,7 @@ func TestToolMultiEdit(t *testing.T) {
 				{"file_path": path, "old_string": "gamma", "new_string": "GAMMA"},
 			},
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "2 succeeded") {
 			t.Errorf("expected 2 succeeded, got: %s", result)
 		}
@@ -156,8 +150,7 @@ func TestToolTree(t *testing.T) {
 
 	t.Run("basic tree output", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "src/") {
 			t.Errorf("expected src/ directory, got: %s", result)
 		}
@@ -171,8 +164,7 @@ func TestToolTree(t *testing.T) {
 
 	t.Run("skips .git and node_modules", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if strings.Contains(result, ".git/") {
 			t.Errorf("should skip .git, got: %s", result)
 		}
@@ -183,8 +175,7 @@ func TestToolTree(t *testing.T) {
 
 	t.Run("depth limit", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"depth": 1})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		// At depth 1, we should see src/ and docs/ but not their children.
 		if !strings.Contains(result, "src/") {
 			t.Errorf("expected src/ at depth 1, got: %s", result)
@@ -196,8 +187,7 @@ func TestToolTree(t *testing.T) {
 
 	t.Run("dirs_only", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"dirs_only": true})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if strings.Contains(result, "README.md") {
 			t.Errorf("should not show files in dirs_only mode, got: %s", result)
 		}
@@ -208,8 +198,7 @@ func TestToolTree(t *testing.T) {
 
 	t.Run("pattern filter", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"pattern": "*.go"})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "main.go") {
 			t.Errorf("expected main.go with *.go filter, got: %s", result)
 		}
@@ -235,8 +224,7 @@ func TestToolDiff(t *testing.T) {
 			"path": path1,
 			"ref2": path2,
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "identical") {
 			t.Errorf("expected identical message, got: %s", result)
 		}
@@ -254,8 +242,7 @@ func TestToolDiff(t *testing.T) {
 			"path": path1,
 			"ref2": path2,
 		})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if !strings.Contains(result, "line2") || !strings.Contains(result, "line3") {
 			t.Errorf("expected diff content, got: %s", result)
 		}

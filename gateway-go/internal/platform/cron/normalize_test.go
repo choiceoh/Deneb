@@ -7,13 +7,12 @@ import (
 )
 
 func TestNormalizeRequiredName(t *testing.T) {
-	name, err := NormalizeRequiredName("  My Job  ")
-	testutil.NoError(t, err)
+	name := testutil.Must(NormalizeRequiredName("  My Job  "))
 	if name != "My Job" {
 		t.Errorf("expected 'My Job', got %q", name)
 	}
 
-	_, err = NormalizeRequiredName("")
+	_, err := NormalizeRequiredName("")
 	if err == nil {
 		t.Error("expected error for empty name")
 	}

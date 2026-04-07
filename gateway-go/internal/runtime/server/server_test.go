@@ -14,8 +14,7 @@ import (
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
@@ -38,8 +37,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestReadyEndpoint(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -57,8 +55,7 @@ func TestReadyEndpoint(t *testing.T) {
 }
 
 func TestRPCEndpoint_ValidRequest(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 	body := `{"method":"health","id":"test-1"}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -79,8 +76,7 @@ func TestRPCEndpoint_ValidRequest(t *testing.T) {
 }
 
 func TestRPCEndpoint_MissingMethod(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 	body := `{"id":"test-1"}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -93,12 +89,11 @@ func TestRPCEndpoint_MissingMethod(t *testing.T) {
 }
 
 func TestServerStartStop(t *testing.T) {
-	srv, err := New("127.0.0.1:0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New("127.0.0.1:0"))
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	err = srv.Run(ctx)
+	err := srv.Run(ctx)
 	testutil.NoError(t, err)
 }
 
@@ -106,17 +101,13 @@ func TestServerHealthEndpointLive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	url := fmt.Sprintf("http://%s/health", addr.String())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	testutil.NoError(t, err)
-	resp, err := http.DefaultClient.Do(req)
-	testutil.NoError(t, err)
+	req := testutil.Must(http.NewRequestWithContext(ctx, http.MethodGet, url, nil))
+	resp := testutil.Must(http.DefaultClient.Do(req))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -136,10 +127,8 @@ func TestRPCEndpointLive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	url := fmt.Sprintf("http://%s/api/v1/rpc", addr.String())
@@ -201,10 +190,8 @@ func TestPhase1MethodsReachableViaRPC(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	url := fmt.Sprintf("http://%s/api/v1/rpc", addr.String())

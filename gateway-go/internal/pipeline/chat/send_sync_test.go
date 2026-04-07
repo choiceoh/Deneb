@@ -47,8 +47,7 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	h := newSyncTestHandler(server, transcript)
 	defer h.Close()
 
-	result, err := h.SendSync(context.Background(), "sync-default-model", "  hello sync  ", "", nil)
-	testutil.NoError(t, err)
+	result := testutil.Must(h.SendSync(context.Background(), "sync-default-model", "  hello sync  ", "", nil))
 	if result.Text != "sync reply" {
 		t.Fatalf("Text = %q, want %q", result.Text, "sync reply")
 	}

@@ -21,8 +21,7 @@ func TestExtractConstants(t *testing.T) {
 		{Name: "LEARNING_RATE", File: "train.py", Pattern: `lr\s*=\s*([\d.]+)`, Type: "float"},
 		{Name: "BATCH_SIZE", File: "train.py", Pattern: `batch_size\s*=\s*(\d+)`, Type: "int"},
 	}
-	vals, err := ExtractConstants(dir, constants)
-	testutil.NoError(t, err)
+	vals := testutil.Must(ExtractConstants(dir, constants))
 	if vals["LEARNING_RATE"] != "0.001" {
 		t.Errorf("LEARNING_RATE = %q, want %q", vals["LEARNING_RATE"], "0.001")
 	}
@@ -44,8 +43,7 @@ func TestExtractConstantsMultipleFiles(t *testing.T) {
 		{Name: "X", File: "a.py", Pattern: `x\s*=\s*(\d+)`, Type: "int"},
 		{Name: "Y", File: "b.py", Pattern: `y\s*=\s*(\d+)`, Type: "int"},
 	}
-	vals, err := ExtractConstants(dir, constants)
-	testutil.NoError(t, err)
+	vals := testutil.Must(ExtractConstants(dir, constants))
 	if vals["X"] != "10" {
 		t.Errorf("X = %q, want %q", vals["X"], "10")
 	}
@@ -66,8 +64,7 @@ func TestExtractConstantsGoConstBlock(t *testing.T) {
 		{Name: "WEIGHT_HYBRID", File: "params.go", Pattern: `weightHybrid\s*=\s*([\d.]+)`, Type: "float"},
 		{Name: "WEIGHT_IMPORTANCE", File: "params.go", Pattern: `weightImportance\s*=\s*([\d.]+)`, Type: "float"},
 	}
-	vals, err := ExtractConstants(dir, constants)
-	testutil.NoError(t, err)
+	vals := testutil.Must(ExtractConstants(dir, constants))
 	if vals["WEIGHT_HYBRID"] != "0.40" {
 		t.Errorf("WEIGHT_HYBRID = %q, want %q", vals["WEIGHT_HYBRID"], "0.40")
 	}
@@ -131,8 +128,7 @@ func TestApplyOverrides(t *testing.T) {
 		"BATCH_SIZE":    "64",
 	}
 
-	restore, err := ApplyOverrides(dir, constants, overrides)
-	testutil.NoError(t, err)
+	restore := testutil.Must(ApplyOverrides(dir, constants, overrides))
 
 	// Check overridden content.
 	data, _ := os.ReadFile(filepath.Join(dir, "train.py"))
@@ -167,8 +163,7 @@ func TestApplyOverridesRestoreIdempotent(t *testing.T) {
 	constants := []ConstantDef{
 		{Name: "X", File: "f.py", Pattern: `x\s*=\s*(\d+)`, Type: "int"},
 	}
-	restore, err := ApplyOverrides(dir, constants, map[string]string{"X": "2"})
-	testutil.NoError(t, err)
+	restore := testutil.Must(ApplyOverrides(dir, constants, map[string]string{"X": "2"}))
 
 	// Call restore twice — should not panic.
 	restore()
@@ -193,12 +188,11 @@ func TestApplyOverridesBoundsFloat(t *testing.T) {
 	}
 
 	// Value within bounds — should succeed.
-	restore, err := ApplyOverrides(dir, constants, map[string]string{"LR": "0.05"})
-	testutil.NoError(t, err)
+	restore := testutil.Must(ApplyOverrides(dir, constants, map[string]string{"LR": "0.05"}))
 	restore()
 
 	// Value below min — should fail.
-	_, err = ApplyOverrides(dir, constants, map[string]string{"LR": "0.00001"})
+	_, err := ApplyOverrides(dir, constants, map[string]string{"LR": "0.00001"})
 	if err == nil {
 		t.Fatal("expected error for value below min")
 	}
@@ -284,8 +278,7 @@ func TestSaveLoadOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded, err := LoadOverrides(workdir)
-	testutil.NoError(t, err)
+	loaded := testutil.Must(LoadOverrides(workdir))
 	if loaded.Values["LEARNING_RATE"] != "0.002" {
 		t.Errorf("LEARNING_RATE = %q", loaded.Values["LEARNING_RATE"])
 	}
@@ -365,8 +358,7 @@ func TestReplaceCapture(t *testing.T) {
 	content := "lr = 0.001  # learning rate\nbatch_size = 32\n"
 
 	// Replace lr value, preserving comment.
-	result, err := replaceCapture(content, `lr\s*=\s*([\d.]+)`, "0.002")
-	testutil.NoError(t, err)
+	result := testutil.Must(replaceCapture(content, `lr\s*=\s*([\d.]+)`, "0.002"))
 	want := "lr = 0.002  # learning rate\nbatch_size = 32\n"
 	if result != want {
 		t.Errorf("got:\n%s\nwant:\n%s", result, want)
@@ -378,8 +370,7 @@ func TestReplaceCaptureTabIndented(t *testing.T) {
 	content := "const (\n\tweightHybrid       = 0.40\n\tweightImportance   = 0.25\n)\n"
 
 	// Agent writes pattern without leading \t — should still work via fallback.
-	result, err := replaceCapture(content, `weightHybrid\s*=\s*([\d.]+)`, "0.55")
-	testutil.NoError(t, err)
+	result := testutil.Must(replaceCapture(content, `weightHybrid\s*=\s*([\d.]+)`, "0.55"))
 	if !strings.Contains(result, "0.55") {
 		t.Errorf("expected 0.55 in result:\n%s", result)
 	}
@@ -388,8 +379,7 @@ func TestReplaceCaptureTabIndented(t *testing.T) {
 	}
 
 	// Agent writes pattern with explicit \t — should also work.
-	result2, err := replaceCapture(content, `\tweightImportance\s*=\s*([\d.]+)`, "0.30")
-	testutil.NoError(t, err)
+	result2 := testutil.Must(replaceCapture(content, `\tweightImportance\s*=\s*([\d.]+)`, "0.30"))
 	if !strings.Contains(result2, "0.30") {
 		t.Errorf("expected 0.30 in result:\n%s", result2)
 	}
@@ -438,8 +428,7 @@ func TestExtractConstantsAutoPattern(t *testing.T) {
 		{Name: "weightHybrid", File: "params.go", Type: "float"},
 		{Name: "weightImportance", File: "params.go", Type: "float"},
 	}
-	vals, err := ExtractConstants(dir, constants)
-	testutil.NoError(t, err)
+	vals := testutil.Must(ExtractConstants(dir, constants))
 	if vals["weightHybrid"] != "0.40" {
 		t.Errorf("weightHybrid = %q, want %q", vals["weightHybrid"], "0.40")
 	}

@@ -16,10 +16,8 @@ func TestWebSocketHandshake(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	wsURL := fmt.Sprintf("ws://%s/ws", addr.String())
@@ -83,10 +81,8 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	conn := connectWS(ctx, t, addr.String())
@@ -117,10 +113,8 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := New("127.0.0.1:0")
-	testutil.NoError(t, err)
-	addr, err := srv.StartAndListen(ctx)
-	testutil.NoError(t, err)
+	srv := testutil.Must(New("127.0.0.1:0"))
+	addr := testutil.Must(srv.StartAndListen(ctx))
 	defer srv.Close(context.Background())
 
 	conn := connectWS(ctx, t, addr.String())

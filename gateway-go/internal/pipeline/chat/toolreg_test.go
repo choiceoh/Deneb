@@ -14,8 +14,7 @@ func TestToolRegistry_Execute(t *testing.T) {
 		return string(input), nil
 	})
 
-	result, err := reg.Execute(context.Background(), "echo", json.RawMessage(`"hello"`))
-	testutil.NoError(t, err)
+	result := testutil.Must(reg.Execute(context.Background(), "echo", json.RawMessage(`"hello"`)))
 	if result != `"hello"` {
 		t.Errorf("result = %q, want %q", result, `"hello"`)
 	}

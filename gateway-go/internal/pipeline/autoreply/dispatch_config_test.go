@@ -150,8 +150,7 @@ func TestFollowupRunner_NoFollowup(t *testing.T) {
 	firstResult := &AgentTurnResult{
 		Payloads: []types.ReplyPayload{{Text: "hello"}},
 	}
-	payloads, err := runner.RunFollowups(context.Background(), initial, firstResult)
-	testutil.NoError(t, err)
+	payloads := testutil.Must(runner.RunFollowups(context.Background(), initial, firstResult))
 	if len(payloads) != 1 || payloads[0].Text != "hello" {
 		t.Fatalf("expected single payload 'hello', got %v", payloads)
 	}

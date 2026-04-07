@@ -34,8 +34,7 @@ NOEQUALSSIGN
 		t.Fatal(err)
 	}
 
-	pairs, err := parseDotenv(tmp)
-	testutil.NoError(t, err)
+	pairs := testutil.Must(parseDotenv(tmp))
 
 	tests := []struct {
 		key, want string
@@ -77,8 +76,7 @@ func TestLoadDotenvFilesNoOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pairs, err := parseDotenv(envFile)
-	testutil.NoError(t, err)
+	pairs := testutil.Must(parseDotenv(envFile))
 	if pairs[key] != "replaced" {
 		t.Fatalf("expected parsed value 'replaced', got %q", pairs[key])
 	}

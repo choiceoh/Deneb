@@ -31,8 +31,7 @@ func TestWALRoundTrip(t *testing.T) {
 
 	// Verify WAL file exists and has content.
 	walPath := filepath.Join(dir, walFileName)
-	info, err := os.Stat(walPath)
-	testutil.NoError(t, err)
+	info := testutil.Must(os.Stat(walPath))
 	if info.Size() == 0 {
 		t.Fatal("wal file is empty")
 	}

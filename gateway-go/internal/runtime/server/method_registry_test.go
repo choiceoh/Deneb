@@ -159,8 +159,7 @@ var requiredMethods = []string{
 // methods are registered after server.New(). If this test fails, a method was
 // likely removed from method_registry.go without removing it from the handler.
 func TestMethodRegistry_RequiredMethodsRegistered(t *testing.T) {
-	srv, err := New(":0")
-	testutil.NoError(t, err)
+	srv := testutil.Must(New(":0"))
 	registered := make(map[string]struct{})
 	for _, m := range srv.dispatcher.Methods() {
 		registered[m] = struct{}{}

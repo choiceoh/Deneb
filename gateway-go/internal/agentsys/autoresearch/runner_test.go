@@ -110,8 +110,7 @@ func TestConfigSaveLoad(t *testing.T) {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
-	loaded, err := LoadConfig(dir)
-	testutil.NoError(t, err)
+	loaded := testutil.Must(LoadConfig(dir))
 
 	if loaded.MetricName != cfg.MetricName {
 		t.Errorf("MetricName = %q, want %q", loaded.MetricName, cfg.MetricName)
@@ -161,8 +160,7 @@ func TestAppendAndReadResults(t *testing.T) {
 		t.Fatalf("AppendResult row2: %v", err)
 	}
 
-	content, err := ReadResults(dir)
-	testutil.NoError(t, err)
+	content := testutil.Must(ReadResults(dir))
 
 	// Should have header + 2 data rows.
 	lines := splitNonEmpty(content)
@@ -185,8 +183,7 @@ func TestParseResults(t *testing.T) {
 		}
 	}
 
-	parsed, err := ParseResults(dir)
-	testutil.NoError(t, err)
+	parsed := testutil.Must(ParseResults(dir))
 	if len(parsed) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(parsed))
 	}
@@ -231,8 +228,7 @@ func TestSaveExperimentOutput(t *testing.T) {
 
 	// Verify file exists.
 	path := dir + "/.autoresearch/runs/0005.log"
-	data, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	data := testutil.Must(os.ReadFile(path))
 	content := string(data)
 	if !contains(content, "metric: 1.05") {
 		t.Error("stdout not saved")
@@ -641,15 +637,13 @@ func TestExtractMetricSmartValidation(t *testing.T) {
 	}
 
 	// Pattern mode.
-	val, err := extractMetricSmart("loss: 0.5\n", `loss:\s*([\d.]+)`)
-	testutil.NoError(t, err)
+	val := testutil.Must(extractMetricSmart("loss: 0.5\n", `loss:\s*([\d.]+)`))
 	if val != 0.5 {
 		t.Errorf("got %f, want 0.5", val)
 	}
 
 	// Heuristic mode fallback.
-	val, err = extractMetricSmart("42.0\n", "")
-	testutil.NoError(t, err)
+	val = testutil.Must(extractMetricSmart("42.0\n", ""))
 	if val != 42.0 {
 		t.Errorf("got %f, want 42.0", val)
 	}
@@ -777,8 +771,7 @@ func TestConfigSaveLoadWithParams(t *testing.T) {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
-	loaded, err := LoadConfig(dir)
-	testutil.NoError(t, err)
+	loaded := testutil.Must(LoadConfig(dir))
 
 	// Custom values should persist.
 	if loaded.Params.MaxTokens != 4096 {

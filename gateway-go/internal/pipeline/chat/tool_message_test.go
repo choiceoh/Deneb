@@ -21,8 +21,7 @@ func TestToolMessageSend(t *testing.T) {
 
 	t.Run("no reply func returns info", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"action": "send", "message": "hello"})
-		result, err := fn(context.Background(), input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(context.Background(), input))
 		if result != "Message tool: no reply function available (channel not connected)." {
 			t.Errorf("unexpected result: %s", result)
 		}
@@ -42,8 +41,7 @@ func TestToolMessageSend(t *testing.T) {
 		ctx = WithDeliveryContext(ctx, delivery)
 
 		input, _ := json.Marshal(map[string]any{"action": "send", "message": "hello world"})
-		result, err := fn(ctx, input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(ctx, input))
 		if result != "Message sent successfully." {
 			t.Errorf("result = %q, want success message", result)
 		}
@@ -123,8 +121,7 @@ func TestToolMessageReact(t *testing.T) {
 			"emoji":     "👍",
 			"messageId": "msg-123",
 		})
-		result, err := fn(ctx, input)
-		testutil.NoError(t, err)
+		result := testutil.Must(fn(ctx, input))
 		if sentText != "__react:msg-123:👍" {
 			t.Errorf("sent payload = %q, want react marker", sentText)
 		}
@@ -137,8 +134,7 @@ func TestToolMessageReact(t *testing.T) {
 func TestToolMessageUnknownAction(t *testing.T) {
 	fn := toolMessage()
 	input, _ := json.Marshal(map[string]any{"action": "delete"})
-	result, err := fn(context.Background(), input)
-	testutil.NoError(t, err)
+	result := testutil.Must(fn(context.Background(), input))
 	if result != `Unknown message action: "delete". Supported: send, reply, react.` {
 		t.Errorf("result = %q", result)
 	}
@@ -149,8 +145,7 @@ func TestToolMessageDefaultAction(t *testing.T) {
 	// Empty action should default to "send".
 	input, _ := json.Marshal(map[string]any{"message": "hello"})
 	// No reply func → should return info message, proving default action is "send".
-	result, err := fn(context.Background(), input)
-	testutil.NoError(t, err)
+	result := testutil.Must(fn(context.Background(), input))
 	if result != "Message tool: no reply function available (channel not connected)." {
 		t.Errorf("unexpected result: %s", result)
 	}

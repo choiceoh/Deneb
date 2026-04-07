@@ -8,8 +8,7 @@ import (
 )
 
 func TestHandleResetCommand_ReplyText(t *testing.T) {
-	result, err := handleResetCommand(CommandContext{})
-	testutil.NoError(t, err)
+	result := testutil.Must(handleResetCommand(CommandContext{}))
 	want := "🔄 Session reset."
 	if result.Reply != want {
 		t.Errorf("reply = %q, want %q", result.Reply, want)

@@ -392,8 +392,7 @@ func TestImageAltText(t *testing.T) {
 
 func TestMarshalIROutput_NilSlices(t *testing.T) {
 	out := &IROutput{Text: "test"}
-	data, err := MarshalIROutput(out)
-	testutil.NoError(t, err)
+	data := testutil.Must(MarshalIROutput(out))
 	s := string(data)
 	if strings.Contains(s, "null") {
 		t.Errorf("nil slices should marshal as [], got %s", s)

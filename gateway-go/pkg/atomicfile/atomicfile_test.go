@@ -17,8 +17,7 @@ func TestWriteFile_Basic(t *testing.T) {
 	err := atomicfile.WriteFile(path, []byte("hello"), nil)
 	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "hello" {
 		t.Fatalf("got %q, want %q", got, "hello")
 	}
@@ -31,8 +30,7 @@ func TestWriteFile_CreatesParentDirs(t *testing.T) {
 	err := atomicfile.WriteFile(path, []byte("nested"), nil)
 	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "nested" {
 		t.Fatalf("got %q, want %q", got, "nested")
 	}
@@ -49,8 +47,7 @@ func TestWriteFile_OverwriteExisting(t *testing.T) {
 	err := atomicfile.WriteFile(path, []byte("new"), nil)
 	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "new" {
 		t.Fatalf("got %q, want %q", got, "new")
 	}
@@ -83,8 +80,7 @@ func TestWriteFile_Fsync(t *testing.T) {
 	err := atomicfile.WriteFile(path, []byte("durable"), &atomicfile.Options{Fsync: true})
 	testutil.NoError(t, err)
 
-	got, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	got := testutil.Must(os.ReadFile(path))
 	if string(got) != "durable" {
 		t.Fatalf("got %q, want %q", got, "durable")
 	}
@@ -97,8 +93,7 @@ func TestWriteFile_CustomPerms(t *testing.T) {
 	err := atomicfile.WriteFile(path, []byte("secret"), &atomicfile.Options{Perm: 0o600})
 	testutil.NoError(t, err)
 
-	info, err := os.Stat(path)
-	testutil.NoError(t, err)
+	info := testutil.Must(os.Stat(path))
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("perm got %o, want %o", info.Mode().Perm(), 0o600)
 	}
@@ -130,8 +125,7 @@ func TestWriteFile_ConcurrentSafety(t *testing.T) {
 	wg.Wait()
 
 	// File must exist and be readable (not corrupted / partial).
-	got, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	got := testutil.Must(os.ReadFile(path))
 	if len(got) == 0 {
 		t.Fatal("file is empty after concurrent writes")
 	}
@@ -145,8 +139,7 @@ func TestWriteFile_NoLeftoverTempFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := os.ReadDir(dir)
-	testutil.NoError(t, err)
+	entries := testutil.Must(os.ReadDir(dir))
 
 	for _, e := range entries {
 		name := e.Name()

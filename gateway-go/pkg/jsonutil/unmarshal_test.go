@@ -15,8 +15,7 @@ func TestUnmarshal(t *testing.T) {
 	}
 
 	t.Run("valid JSON", func(t *testing.T) {
-		p, err := Unmarshal[params]("test params", []byte(`{"name":"Alice","age":30}`))
-		testutil.NoError(t, err)
+		p := testutil.Must(Unmarshal[params]("test params", []byte(`{"name":"Alice","age":30}`)))
 		if p.Name != "Alice" || p.Age != 30 {
 			t.Errorf("got %+v", p)
 		}
@@ -149,8 +148,7 @@ func TestUnmarshalLLM(t *testing.T) {
 	}
 
 	t.Run("clean JSON", func(t *testing.T) {
-		r, err := UnmarshalLLM[result](`{"answer": "42"}`)
-		testutil.NoError(t, err)
+		r := testutil.Must(UnmarshalLLM[result](`{"answer": "42"}`))
 		if r.Answer != "42" {
 			t.Errorf("got %+v", r)
 		}
@@ -158,8 +156,7 @@ func TestUnmarshalLLM(t *testing.T) {
 
 	t.Run("thinking tags + code fences", func(t *testing.T) {
 		raw := "<thinking>Let me think...</thinking>\n```json\n{\"answer\": \"yes\"}\n```"
-		r, err := UnmarshalLLM[result](raw)
-		testutil.NoError(t, err)
+		r := testutil.Must(UnmarshalLLM[result](raw))
 		if r.Answer != "yes" {
 			t.Errorf("got %+v", r)
 		}
@@ -167,8 +164,7 @@ func TestUnmarshalLLM(t *testing.T) {
 
 	t.Run("prose wrapped", func(t *testing.T) {
 		raw := "Here is my answer:\n{\"answer\": \"hello\"}\nThat's it."
-		r, err := UnmarshalLLM[result](raw)
-		testutil.NoError(t, err)
+		r := testutil.Must(UnmarshalLLM[result](raw))
 		if r.Answer != "hello" {
 			t.Errorf("got %+v", r)
 		}
@@ -176,8 +172,7 @@ func TestUnmarshalLLM(t *testing.T) {
 
 	t.Run("trailing comma auto-fix", func(t *testing.T) {
 		raw := `{"answer": "yes",}`
-		r, err := UnmarshalLLM[result](raw)
-		testutil.NoError(t, err)
+		r := testutil.Must(UnmarshalLLM[result](raw))
 		if r.Answer != "yes" {
 			t.Errorf("got %+v", r)
 		}
@@ -192,8 +187,7 @@ func TestUnmarshalLLM(t *testing.T) {
 		}
 		raw := `<thinking>let me analyze</thinking>
 {"facts": [{"content": "사용자가 Go를 선호", "importance": 0.8,}, {"content": "DGX Spark 사용", "importance": 0.7,},]}`
-		r, err := UnmarshalLLM[facts](raw)
-		testutil.NoError(t, err)
+		r := testutil.Must(UnmarshalLLM[facts](raw))
 		if len(r.Facts) != 2 {
 			t.Errorf("expected 2 facts, got %d", len(r.Facts))
 		}
@@ -206,8 +200,7 @@ func TestUnmarshalLLM(t *testing.T) {
 			} `json:"items"`
 		}
 		raw := `{"items": [{"id": 1}, {"id": 2}, {"id": 3, "val`
-		r, err := UnmarshalLLM[results](raw)
-		testutil.NoError(t, err)
+		r := testutil.Must(UnmarshalLLM[results](raw))
 		if len(r.Items) != 2 {
 			t.Errorf("expected 2 recovered items, got %d", len(r.Items))
 		}

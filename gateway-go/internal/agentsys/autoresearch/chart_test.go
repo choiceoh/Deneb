@@ -28,8 +28,7 @@ func TestRenderChart_SingleRow(t *testing.T) {
 	}
 	cfg := &Config{MetricName: "val_bpb", MetricDirection: "minimize"}
 
-	data, err := RenderChart(rows, cfg)
-	testutil.NoError(t, err)
+	data := testutil.Must(RenderChart(rows, cfg))
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -53,8 +52,7 @@ func TestRenderChart_MultipleRows(t *testing.T) {
 	}
 	cfg := &Config{MetricName: "val_bpb", MetricDirection: "minimize"}
 
-	data, err := RenderChart(rows, cfg)
-	testutil.NoError(t, err)
+	data := testutil.Must(RenderChart(rows, cfg))
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -68,8 +66,7 @@ func TestRenderChart_Maximize(t *testing.T) {
 	}
 	cfg := &Config{MetricName: "accuracy", MetricDirection: "maximize"}
 
-	data, err := RenderChart(rows, cfg)
-	testutil.NoError(t, err)
+	data := testutil.Must(RenderChart(rows, cfg))
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -93,8 +90,7 @@ func TestRenderChart_LargeIterationCount(t *testing.T) {
 	}
 	cfg := &Config{MetricName: "loss", MetricDirection: "minimize"}
 
-	data, err := RenderChart(rows, cfg)
-	testutil.NoError(t, err)
+	data := testutil.Must(RenderChart(rows, cfg))
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -108,16 +104,14 @@ func TestSaveChart(t *testing.T) {
 	}
 	cfg := &Config{MetricName: "test_metric", MetricDirection: "minimize"}
 
-	path, err := SaveChart(dir, rows, cfg)
-	testutil.NoError(t, err)
+	path := testutil.Must(SaveChart(dir, rows, cfg))
 
 	expected := filepath.Join(dir, configDir, "chart.png")
 	if path != expected {
 		t.Fatalf("expected path %s, got %s", expected, path)
 	}
 
-	data, err := os.ReadFile(path)
-	testutil.NoError(t, err)
+	data := testutil.Must(os.ReadFile(path))
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("saved file is not a valid PNG")
 	}
@@ -132,8 +126,7 @@ func TestRenderChart_FlatMetric(t *testing.T) {
 	}
 	cfg := &Config{MetricName: "flat", MetricDirection: "minimize"}
 
-	data, err := RenderChart(rows, cfg)
-	testutil.NoError(t, err)
+	data := testutil.Must(RenderChart(rows, cfg))
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}

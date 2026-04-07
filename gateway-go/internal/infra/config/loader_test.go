@@ -49,8 +49,7 @@ func TestLoadConfigMissing(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "nonexistent.json")
 
-	snap, err := LoadConfig(cfgPath)
-	testutil.NoError(t, err)
+	snap := testutil.Must(LoadConfig(cfgPath))
 	if snap.Exists {
 		t.Error("expected Exists=false for missing file")
 	}
@@ -92,8 +91,7 @@ func TestLoadConfigValid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := LoadConfig(cfgPath)
-	testutil.NoError(t, err)
+	snap := testutil.Must(LoadConfig(cfgPath))
 	if !snap.Exists {
 		t.Error("expected Exists=true")
 	}
@@ -121,8 +119,7 @@ func TestLoadConfigInvalidJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := LoadConfig(cfgPath)
-	testutil.NoError(t, err)
+	snap := testutil.Must(LoadConfig(cfgPath))
 	if snap.Valid {
 		t.Error("expected Valid=false for invalid JSON")
 	}
@@ -144,8 +141,7 @@ func TestLoadConfigInvalidBindMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := LoadConfig(cfgPath)
-	testutil.NoError(t, err)
+	snap := testutil.Must(LoadConfig(cfgPath))
 	if snap.Valid {
 		t.Error("expected Valid=false for invalid bind mode")
 	}

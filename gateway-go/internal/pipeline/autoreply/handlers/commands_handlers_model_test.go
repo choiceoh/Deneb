@@ -12,8 +12,7 @@ import (
 // ── handleModelCommand ────────────────────────────────────────────────────────
 
 func TestHandleModelCommand_NoArg_NoSession(t *testing.T) {
-	result, err := handleModelCommand(CommandContext{})
-	testutil.NoError(t, err)
+	result := testutil.Must(handleModelCommand(CommandContext{}))
 	if result.Reply != "Usage: /model <provider/model>" {
 		t.Errorf("reply = %q", result.Reply)
 	}

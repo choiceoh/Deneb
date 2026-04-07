@@ -76,14 +76,12 @@ func TestCanonicalize_Valid(t *testing.T) {
 
 func TestCanonicalize_URLSafe(t *testing.T) {
 	// URL-safe uses '-' for '+' and '_' for '/'.
-	got, err := Canonicalize("ab-_")
-	testutil.NoError(t, err)
+	got := testutil.Must(Canonicalize("ab-_"))
 	if got != "ab+/" {
 		t.Errorf("expected ab+/, got %s", got)
 	}
 	// Mixed standard and URL-safe.
-	got, err = Canonicalize("ab+_")
-	testutil.NoError(t, err)
+	got = testutil.Must(Canonicalize("ab+_"))
 	if got != "ab+/" {
 		t.Errorf("expected ab+/, got %s", got)
 	}
@@ -136,8 +134,7 @@ func TestEstimate_TabsAndNewlines(t *testing.T) {
 // --- Rust parity: canonicalize mixed URL-safe ---
 
 func TestCanonicalize_MixedStandardAndURLSafe(t *testing.T) {
-	got, err := Canonicalize("ab+_")
-	testutil.NoError(t, err)
+	got := testutil.Must(Canonicalize("ab+_"))
 	if got != "ab+/" {
 		t.Errorf("expected ab+/, got %s", got)
 	}
