@@ -24,6 +24,8 @@
 #   scripts/dev-live-test.sh bench [SUITE]       Run benchmark tests (all/challenge/multiturn/oolong)
 #   scripts/dev-live-test.sh bench-judge MSG     LLM-as-Judge single message evaluation
 #
+#   scripts/dev-live-test.sh model [show|list|set MODEL]  Hot-swap model without restart
+#
 #   scripts/dev-live-test.sh logs [N]           Tail dev gateway logs (default: 50 lines)
 #   scripts/dev-live-test.sh logs-watch         Follow dev gateway logs in real-time
 #   scripts/dev-live-test.sh logs-grep PATTERN  Search logs for pattern
@@ -429,6 +431,73 @@ cmd_logs_since() {
   fi
 }
 
+# --- Model hot-swap ---
+
+cmd_model() {
+  local sub="${1:-show}"
+  shift 2>/dev/null || true
+
+  case "$sub" in
+    show|get)
+      local resp
+      resp=$(curl -sf "http://$DEV_HOST:$DEV_PORT/admin/model" 2>/dev/null) || {
+        echo "ERROR: dev gateway not responding (port $DEV_PORT)"
+        return 1
+      }
+      local current
+      current=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin)['current'])" 2>/dev/null)
+      echo "현재 모델: $current"
+      ;;
+
+    list)
+      local resp
+      resp=$(curl -sf "http://$DEV_HOST:$DEV_PORT/admin/model" 2>/dev/null) || {
+        echo "ERROR: dev gateway not responding (port $DEV_PORT)"
+        return 1
+      }
+      python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(f'현재: {data[\"current\"]}')
+print()
+for m in data.get('available', []):
+    marker = ' ✓' if m['full_id'] == data['current'] else ''
+    print(f'  [{m[\"role\"]}] {m[\"full_id\"]}{marker}')
+" <<< "$resp"
+      ;;
+
+    set|switch)
+      local model="${1:-}"
+      if [[ -z "$model" ]]; then
+        echo "Usage: scripts/dev-live-test.sh model set MODEL"
+        echo "  예: model set zai/glm-5-turbo"
+        echo "      model set google/gemini-3.1-pro-preview"
+        echo "      model set main  (역할 이름도 가능)"
+        return 1
+      fi
+      local resp
+      resp=$(curl -sf -X PUT "http://$DEV_HOST:$DEV_PORT/admin/model" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"$model\"}" 2>/dev/null) || {
+        echo "ERROR: dev gateway not responding (port $DEV_PORT)"
+        return 1
+      }
+      local prev current
+      prev=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin)['previous'])" 2>/dev/null)
+      current=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin)['current'])" 2>/dev/null)
+      echo "모델 변경: $prev → $current"
+      ;;
+
+    *)
+      echo "Usage: scripts/dev-live-test.sh model [show|list|set MODEL]"
+      echo ""
+      echo "  show          현재 모델 표시 (기본)"
+      echo "  list          사용 가능한 모델 목록"
+      echo "  set MODEL     모델 핫스왑 (재시작 없음)"
+      ;;
+  esac
+}
+
 # --- Internal helpers ---
 
 _is_running() {
@@ -529,6 +598,9 @@ asyncio.run(main())
   baseline-save) "$SCRIPT_DIR/dev-baseline.sh" save ;;
   baseline-compare) "$SCRIPT_DIR/dev-baseline.sh" compare ;;
 
+  # Model hot-swap (재시작 없이 모델 변경).
+  model)         shift; cmd_model "$@" ;;
+
   # Parity report.
   parity)        cmd_parity ;;
 
@@ -590,6 +662,11 @@ asyncio.run(main())
     echo "  logs-grep PAT   Search logs for pattern"
     echo "  logs-errors [N] Show only error/warning lines (last N, default 50)"
     echo "  logs-since SECS Show logs from last N seconds"
+    echo ""
+    echo "Model (핫스왑 — 재시작 없이 모델 변경):"
+    echo "  model               현재 모델 표시"
+    echo "  model list          사용 가능한 모델 목록"
+    echo "  model set MODEL     모델 핫스왑 (예: zai/glm-5-turbo, main, fallback)"
     echo ""
     echo "Parity:"
     echo "  parity              Show dev vs production environment differences"
