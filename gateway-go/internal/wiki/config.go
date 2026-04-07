@@ -40,7 +40,7 @@ func ConfigFromEnv() Config {
 		defaultDiary := home + "/.deneb/memory/diary"
 
 		cachedConfig = Config{
-			Enabled:            envBool("DENEB_WIKI_ENABLED", false),
+			Enabled:            envBool("DENEB_WIKI_ENABLED", true),
 			Dir:                envStr("DENEB_WIKI_DIR", defaultDir),
 			DiaryDir:           envStr("DENEB_WIKI_DIARY_DIR", defaultDiary),
 			MaxPageBytes:       envInt("DENEB_WIKI_MAX_PAGE_BYTES", 50*1024),

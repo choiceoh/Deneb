@@ -18,8 +18,8 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 	}
 
 	cfg := ConfigFromEnv()
-	if cfg.Enabled {
-		t.Error("Enabled should be false by default")
+	if !cfg.Enabled {
+		t.Error("Enabled should be true by default")
 	}
 	if cfg.MaxPageBytes != 50*1024 {
 		t.Errorf("MaxPageBytes = %d, want %d", cfg.MaxPageBytes, 50*1024)
