@@ -14,190 +14,28 @@ import (
 
 // localai_hooks.go — local AI model hooks into the agent pipeline:
 //
-//  1. Proactive Context: before agent run, scan related files/memory to enrich system prompt
-//  2. Tool Output Compression: after tool execution, compress large outputs
-//  3. Auto Memory: after successful run, extract key learnings to MEMORY.md
+//  1. Tool Output Compression: after tool execution, compress large outputs
+//  2. Auto Memory: after successful run, extract key learnings to MEMORY.md
 
-// --- 1. Proactive Context ---
-// Injected in executeAgentRun, between context assembly and agent loop.
-// The local model analyzes the user's message and gathers relevant context.
-
-const (
-	proactiveTimeout   = 15 * time.Second // local AI: optimal timeout (tested: 35→20→15→10, 15 is sweet spot)
-	proactiveMaxTokens = 1024
-	proactiveMinMsgLen = 20 // skip for very short messages
-)
-
-const proactiveSystemPrompt = `You are a context preparation assistant.
-Given the user's message and workspace info, identify what context would help answer it.
-Return a brief context note (max 5 lines) with:
-- Relevant file names or paths the main AI should look at
-- Related past decisions from memory (if any)
-- Key technical context to keep in mind
-Reply in Korean. Be extremely concise. If no special context is needed, reply with just "N/A".`
-
-// buildProactiveContext uses the local AI model to analyze the user's
-// message and generate a context hint for the main agent.
-// Returns empty string if proactive context is not needed or fails.
-// isLowInfoMessage returns true for short follow-up messages that don't benefit
-// from proactive context (e.g., "응", "좋아 그렇게 해", "계속", "다음은?").
-// Uses rune count and simple keyword heuristics to avoid unnecessary local AI calls.
-func isLowInfoMessage(msg string) bool {
-	trimmed := strings.TrimSpace(msg)
-	runes := []rune(trimmed)
-	runeCount := len(runes)
-	// Very short messages (< 8 runes) are almost always follow-ups.
-	if runeCount < 8 {
-		return true
-	}
-	// Short messages are only treated as low-info when they look like pure
-	// acknowledgements/continuations and do not contain obvious task intent.
-	// This avoids skipping concrete imperative asks such as
-	// "로그 보고 원인 분석해줘" that may not end with a question mark.
-	if runeCount < 30 && !strings.ContainsAny(trimmed, "?？") {
-		if containsTaskIntent(trimmed) {
-			return false
-		}
-		return true
-	}
-	return false
-}
-
-// containsTaskIntent returns true when the message includes clear ask/action
-// signals. This keeps proactive context enabled for concise but actionable
-// requests.
-func containsTaskIntent(msg string) bool {
-	lower := strings.ToLower(msg)
-	keywords := []string{
-		// Korean ask/action patterns.
-		"해줘", "해주세요", "해 줄", "해봐", "해 봐", "확인", "분석", "조사", "정리", "수정", "고쳐",
-		"원인", "왜", "어떻게", "찾아", "비교", "설명", "검토", "테스트", "추가", "삭제", "리팩토링",
-		"튜닝", "개선", "최적화", "해결", "보여", "알려",
-		// English ask/action patterns.
-		"please", "fix", "debug", "analyze", "investigate", "check", "review",
-		"compare", "explain", "summarize", "optimize", "improve", "why", "how",
-	}
-	for _, kw := range keywords {
-		if strings.Contains(lower, kw) {
-			return true
-		}
-	}
-	return false
-}
-
-func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string, logger *slog.Logger) string {
-	if len(userMessage) < proactiveMinMsgLen {
-		return ""
-	}
-	if isLowInfoMessage(userMessage) {
-		return ""
-	}
-	// Check local AI health — skip proactive context when local AI is down,
-	// even if a model registry exists (avoids 15s timeout on dead server).
-	if pilot.LocalAIRecentlyDown() || !pilot.CheckLocalAIHealth() {
-		return ""
-	}
-
-	// Concurrency is managed by the centralized local AI hub's token budget.
-	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
-	defer cancel()
-
-	// Gather workspace signals: recent file list + memory file snippets.
-	var contextInfo strings.Builder
-	contextInfo.WriteString("User message: ")
-	contextInfo.WriteString(userMessage)
-
-	// List workspace top-level files for orientation.
-	if entries, err := os.ReadDir(workspaceDir); err == nil {
-		contextInfo.WriteString("\n\nWorkspace files: ")
-		names := make([]string, 0, 20)
-		for _, e := range entries {
-			if !strings.HasPrefix(e.Name(), ".") {
-				names = append(names, e.Name())
-			}
-			if len(names) >= 20 {
-				break
-			}
-		}
-		contextInfo.WriteString(strings.Join(names, ", "))
-	}
-
-	// Memory content is provided to the main LLM by PrefetchKnowledge (importance-weighted).
-	// Reading MEMORY.md here would be redundant I/O on every message.
-
-	result, err := pilot.CallLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
-	if err != nil {
-		logger.Debug("proactive context failed", "error", err)
-		return ""
-	}
-
-	result = strings.TrimSpace(result)
-	if result == "" || result == "N/A" || strings.ToLower(result) == "n/a" {
-		return ""
-	}
-
-	return result
-}
-
-// deferredProactiveHint returns a DeferredSystemText function that non-blocking
-// reads the proactive channel. Returns the hint text when ready, empty string
-// while waiting, or signals done (empty hint consumed / hint delivered) so the
-// executor clears the hook and stops calling it.
-func deferredProactiveHint(ch <-chan string, start time.Time, logger *slog.Logger) func() string {
-	var consumed bool
-	return func() string {
-		if consumed {
-			return ""
-		}
-		select {
-		case hint := <-ch:
-			consumed = true
-			if hint != "" {
-				logger.Info("proactive context hit (deferred injection)",
-					"chars", len(hint),
-					"elapsedMs", time.Since(start).Milliseconds())
-				return "\n## Context Hint (from local analysis)\n" + hint
-			}
-		default:
-		}
-		return ""
-	}
-}
-
-// composeDeferredSources combines a proactive hint function with a subagent
-// notification channel into a single DeferredSystemText function. On each turn,
-// it drains all available notifications and returns them joined with the
-// proactive hint (if any). Returns nil if both sources are nil/empty.
-func composeDeferredSources(proactiveFn func() string, subagentCh <-chan string) func() string {
-	if proactiveFn == nil && subagentCh == nil {
+// deferredSubagentNotifications wraps a subagent notification channel into a
+// DeferredSystemText function. On each turn, it drains all available
+// notifications and returns them joined. Returns nil if the channel is nil.
+func deferredSubagentNotifications(subagentCh <-chan string) func() string {
+	if subagentCh == nil {
 		return nil
 	}
 	return func() string {
 		var parts []string
-
-		// Check proactive hint (single-shot).
-		if proactiveFn != nil {
-			if hint := proactiveFn(); hint != "" {
-				parts = append(parts, hint)
-			}
-		}
-
-		// Drain all available subagent notifications (multi-shot).
-		if subagentCh != nil {
-			for {
-				select {
-				case notif := <-subagentCh:
-					if notif != "" {
-						parts = append(parts, notif)
-					}
-				default:
-					goto done
+		for {
+			select {
+			case notif := <-subagentCh:
+				if notif != "" {
+					parts = append(parts, notif)
 				}
+			default:
+				return strings.Join(parts, "\n\n")
 			}
-		done:
 		}
-
-		return strings.Join(parts, "\n\n")
 	}
 }
 

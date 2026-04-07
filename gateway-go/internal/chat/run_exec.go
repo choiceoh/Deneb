@@ -262,26 +262,6 @@ func executeAgentRun(
 		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
-	// 4. Kick off proactive context as a fire-and-forget goroutine.
-	// The local AI model analyzes the user message and returns a context
-	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
-	// We check for the result non-blocking after the parallel section: if the
-	// hint is ready it gets injected; if not, we skip it rather than stalling.
-	proactiveCh := make(chan string, 1)
-	proactiveStart := time.Now()
-	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
-		go func() {
-			// Use shutdownCtx instead of the request ctx so the proactive
-			// goroutine is not canceled when the current request completes.
-			// The hint is consumed via DeferredSystemText on turn 1+, so it
-			// must outlive the initial request. Its own timeout (25s/20s)
-			// still bounds the LLM call.
-			proactiveCh <- buildProactiveContext(deps.shutdownCtx, params.Message, workspaceDir, logger)
-		}()
-	} else {
-		proactiveCh <- "" // no-op: skip for short messages
-	}
-
 	// Memory recall is now agent-driven: the agent calls memory(action=recall)
 	// as a tool when it needs past context. No parallel goroutine needed.
 
@@ -622,12 +602,9 @@ func executeAgentRun(
 		// Each inline image is ~1600 tokens; stripping saves that cost per turn
 		// from turn 1 onward for multi-turn runs that start with an image.
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
-		// Deferred context injection on turn 1+: proactive hints and subagent
-		// completion notifications. Both are non-blocking channel reads.
-		DeferredSystemText: composeDeferredSources(
-			deferredProactiveHint(proactiveCh, proactiveStart, logger),
-			deps.subagentNotifyCh,
-		),
+		// Deferred context injection on turn 1+: subagent completion
+		// notifications via non-blocking channel reads.
+		DeferredSystemText: deferredSubagentNotifications(deps.subagentNotifyCh),
 		// Emit heartbeat at each turn so WS clients know the agent is alive.
 		OnTurn: func(turn int, accumulatedTokens int) {
 			if deps.emitAgentFn != nil {
