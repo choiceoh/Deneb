@@ -28,7 +28,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rl"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/bridge"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/process"
@@ -105,9 +104,6 @@ type Server struct {
 	// RL self-learning pipeline (optional, nil when rl.enable=false).
 	rlService *rl.Service
 	rlHook    *rl.SessionHook
-
-	// RLM context externalization (nil when wiki unavailable).
-	rlmService *rlm.Service
 
 	// bridgeInjector is late-bound: created in registerEarlyMethods,
 	// populated in registerLateMethods after chatHandler is ready.

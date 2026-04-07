@@ -67,9 +67,6 @@ toolApprovalPolicy:
     projects_get_field: "auto"
     projects_search: "auto"
     projects_get_document: "auto"
-    # RLM Phase 2: sub-LLM spawning (external LLM calls).
-    llm_spawn: "confirm"
-    llm_spawn_batch: "confirm"
     # Block: never auto-execute — too dangerous for unsupervised runs.
     bridge: "block"
 

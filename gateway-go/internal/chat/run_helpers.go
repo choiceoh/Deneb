@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
@@ -19,8 +18,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -800,123 +797,6 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 		out = append(out, prompt.ToolDef{Name: d.Name})
 	}
 	return out
-}
-
-// buildREPLEnv creates a Starlark REPL environment for the repl tool.
-// Conversation history is injected as `context`, and llm_query() / llm_query_batch() /
-// rlm_query() calls go through the sub-agent path.
-func buildREPLEnv(
-	ctx context.Context,
-	messages []llm.Message,
-	client agent.LLMStreamer,
-	model string,
-	deps runDeps,
-	params RunParams,
-) *repl.Env {
-	// Convert LLM messages to REPL MessageEntry format.
-	entries := messagesToREPLEntries(messages)
-	system := rlm.BuildSubAgentSystem("")
-
-	// llm_query: single sub-agent completion.
-	queryFn := func(ctx context.Context, prompt string) (string, error) {
-		return client.Complete(ctx, llm.ChatRequest{
-			Model:     model,
-			System:    system,
-			Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
-			MaxTokens: 4096,
-		})
-	}
-
-	// llm_query_batch: parallel sub-agent completions.
-	batchFn := func(ctx context.Context, prompts []string) ([]string, error) {
-		results := make([]string, len(prompts))
-		errs := make([]error, len(prompts))
-		var wg sync.WaitGroup
-		// Match rlm.maxBatchConcurrency (12) to avoid overloading inference.
-		sem := make(chan struct{}, 12)
-		for i, p := range prompts {
-			wg.Add(1)
-			go func(idx int, prompt string) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				text, err := client.Complete(ctx, llm.ChatRequest{
-					Model:     model,
-					System:    system,
-					Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
-					MaxTokens: 4096,
-				})
-				results[idx] = text
-				errs[idx] = err
-			}(i, p)
-		}
-		wg.Wait()
-		// Return first error encountered.
-		for _, err := range errs {
-			if err != nil {
-				return nil, err
-			}
-		}
-		return results, nil
-	}
-
-	// Wiki funcs: built once, shared by root and recursive sub-REPLs.
-	var wikiFuncs *repl.WikiFuncs
-	if deps.wikiStore != nil {
-		wikiFuncs = buildWikiFuncs(deps.wikiStore)
-	}
-
-	// rlm_query: recursive RLM loop with its own REPL.
-	rlmCfg := rlm.ConfigFromEnv()
-	rlmQueryFn := func(ctx context.Context, prompt string, subContext []repl.MessageEntry) (string, error) {
-		subCfg := repl.EnvConfig{
-			Messages:   subContext,
-			LLMQueryFn: queryFn,
-			LLMBatchFn: batchFn,
-			Wiki:       wikiFuncs,
-		}
-		subEnv := repl.NewEnv(ctx, subCfg)
-		loopResult, err := rlm.RunLoop(ctx, rlm.LoopConfig{
-			Client:          client,
-			Model:           model,
-			System:          system,
-			MaxTokens:       4096,
-			MaxIter:         rlmCfg.MaxIterations,
-			MaxConsecErrors: rlmCfg.MaxConsecutiveErrors,
-			FallbackEnabled: rlmCfg.FallbackEnabled,
-			REPLEnv:         subEnv,
-			Logger:          deps.logger,
-		}, prompt)
-		if err != nil {
-			return "", err
-		}
-		return loopResult.FinalAnswer, nil
-	}
-
-	cfg := repl.EnvConfig{
-		Messages:   entries,
-		LLMQueryFn: queryFn,
-		LLMBatchFn: batchFn,
-		RLMQueryFn: rlmQueryFn,
-		Wiki:       wikiFuncs,
-	}
-
-	return repl.NewEnv(ctx, cfg)
-}
-
-// messagesToREPLEntries converts LLM messages to REPL MessageEntry format.
-// Extracts text content from content blocks for Starlark access.
-func messagesToREPLEntries(messages []llm.Message) []repl.MessageEntry {
-	entries := make([]repl.MessageEntry, 0, len(messages))
-	for i, msg := range messages {
-		content := extractTextContent(msg.Content)
-		entries = append(entries, repl.MessageEntry{
-			Seq:     i,
-			Role:    msg.Role,
-			Content: content,
-		})
-	}
-	return entries
 }
 
 // extractTextContent pulls plain text from a message's content field.

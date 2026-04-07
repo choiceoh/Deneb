@@ -229,7 +229,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		report = "(분석 실패)"
 	}
 
-	// Log analysis result to diary for RLM knowledge synthesis.
+	// Log analysis result to diary for wiki knowledge synthesis.
 	s.logToDiary(len(details), report)
 
 	// Send single consolidated report.

@@ -14,11 +14,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/wiki"
 )
 
-// initMemorySubsystem initializes model registry, session memory, wiki, and RLM.
+// initMemorySubsystem initializes model registry, session memory, and wiki.
 // All results are set on chatCfg and s.
 func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **modelrole.Registry) {
 	// Model role registry.
@@ -38,12 +37,6 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			s.wikiStore = wikiStore
 			chatCfg.WikiStore = wikiStore
 			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
-
-			// RLM service backed by wiki (always active).
-			rlmCfg := rlm.ConfigFromEnv()
-			s.rlmService = rlm.NewService(rlmCfg, wikiStore, s.logger)
-			chatCfg.AgentTraces = s.rlmService.AgentTraceStore()
-			s.logger.Info("rlm: service enabled (wiki-backed)")
 
 			// Wiki dreamer.
 			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
@@ -93,7 +86,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	}
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
-	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps, chatCfg.AgentTraces)
+	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
 	// Autoresearch runner + tool.
 	s.autoresearchRunner = autoresearch.NewRunner(s.logger)

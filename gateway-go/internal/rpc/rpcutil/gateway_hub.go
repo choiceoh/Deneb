@@ -24,7 +24,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rl"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
@@ -113,9 +112,6 @@ type GatewayHub struct {
 	// RL self-learning pipeline (optional, nil when rl is disabled).
 	rlService *rl.Service
 
-	// RLM context externalization (optional, nil when RLM is disabled).
-	rlmService *rlm.Service
-
 	// Wiki knowledge base (optional, nil when wiki is disabled).
 	wikiStore *wiki.Store
 
@@ -167,9 +163,8 @@ func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.
 func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
 func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
-func (h *GatewayHub) RLService() *rl.Service                         { return h.rlService }
-func (h *GatewayHub) RLMService() *rlm.Service                       { return h.rlmService }
-func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
+func (h *GatewayHub) RLService() *rl.Service { return h.rlService }
+func (h *GatewayHub) WikiStore() *wiki.Store { return h.wikiStore }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
 func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
@@ -181,9 +176,6 @@ func (h *GatewayHub) SetLocalAIHub(sh *localai.Hub) { h.localAIHub = sh }
 
 // SetRLService sets the RL training service (optional, created during server init).
 func (h *GatewayHub) SetRLService(s *rl.Service) { h.rlService = s }
-
-// SetRLMService sets the RLM service (late-bound: created during session phase alongside wiki).
-func (h *GatewayHub) SetRLMService(s *rlm.Service) { h.rlmService = s }
 
 // SetWikiStore sets the wiki knowledge base (optional, created during session phase).
 func (h *GatewayHub) SetWikiStore(s *wiki.Store) { h.wikiStore = s }

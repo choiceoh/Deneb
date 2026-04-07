@@ -24,8 +24,6 @@ import (
 	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm"
-	"github.com/choiceoh/deneb/gateway-go/internal/rlm/repl"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -507,12 +505,6 @@ func executeAgentRun(
 	// message is returned instead of the full content, saving context tokens.
 	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
 
-	// REPL environment: Starlark execution context for the repl tool.
-	// Created once per run so variables persist across tool calls.
-	// Conversation history is injected as the `context` variable, and
-	// llm_query() calls go through the sub-agent path with session memory.
-	replEnv := buildREPLEnv(ctx, messages, client, model, deps, params)
-
 	// ContinuationSignal: shared across turns so continue_run tool can set it.
 	// Read by runAgentAsync after the agent loop returns.
 	// Only created for async paths where continuation is actually supported;
@@ -622,9 +614,6 @@ func executeAgentRun(
 				ctx = WithContinuationSignal(ctx, contSignal)
 			}
 			ctx = WithSpawnFlag(ctx, spawnFlag)
-			if replEnv != nil {
-				ctx = repl.WithEnv(ctx, replEnv)
-			}
 			return ctx
 		},
 		DynamicToolsProvider: func() []llm.Tool {
@@ -877,32 +866,6 @@ func executeAgentRun(
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
 		"transition", lastTransition.Reason())
-
-	// Record root LLM trace.
-	if deps.agentTraces != nil && agentResult != nil {
-		tools := make([]string, 0)
-		seen := make(map[string]bool)
-		for _, ta := range agentResult.ToolActivities {
-			if !seen[ta.Name] {
-				seen[ta.Name] = true
-				tools = append(tools, ta.Name)
-			}
-		}
-		deps.agentTraces.Add(rlm.AgentTrace{
-			ID:         fmt.Sprintf("root-%d", agentStart.UnixMilli()),
-			Kind:       "root",
-			SessionKey: params.SessionKey,
-			StartedAt:  agentStart,
-			ElapsedMS:  agentMs,
-			Model:      model,
-			StopReason: agentResult.StopReason,
-			Turns:      agentResult.Turns,
-			TokensIn:   agentResult.Usage.InputTokens,
-			TokensOut:  agentResult.Usage.OutputTokens,
-			ToolCalls:  len(agentResult.ToolActivities),
-			Tools:      tools,
-		})
-	}
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.emitAgentFn != nil {

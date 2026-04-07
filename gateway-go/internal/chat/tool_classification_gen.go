@@ -55,8 +55,6 @@ var toolApprovalPolicy = map[string]string{
 	"projects_get_field":    "auto",
 	"projects_search":       "auto",
 	"projects_get_document": "auto",
-	"llm_spawn":             "confirm",
-	"llm_spawn_batch":       "confirm",
 	"bridge":                "block",
 }
 

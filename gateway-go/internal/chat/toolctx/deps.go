@@ -24,7 +24,6 @@ type CoreToolDeps struct {
 	SpilloverStore *agent.SpilloverStore // optional; spills large tool results to disk
 
 	// SessionMemoryFn returns session memory content for a given session key.
-	// Used by RLM sub-agents to inherit the parent's session context.
 	// Nil means no session memory is available.
 	SessionMemoryFn func(sessionKey string) string
 }
