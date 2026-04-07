@@ -1,5 +1,29 @@
 # Changelog
 
+## [4.21.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.20.0...deneb-v4.21.0) (2026-04-07)
+
+
+### ✨ Features
+
+* **chat:** promote sessions_spawn to eager tool ([068638c](https://github.com/choiceoh/Deneb/commit/068638c485ce9c315fc9ec0848df6694c5e25bf8))
+* **chat:** promote sessions_spawn to eager tool and strengthen sub-agent prompt ([d3671e8](https://github.com/choiceoh/Deneb/commit/d3671e875e43a9b8ac24e0dd520cb919487f1534))
+* **mcp:** expose RLM observation tools for Claude Code ([2efbea3](https://github.com/choiceoh/Deneb/commit/2efbea398014b906e1db1b06996ce301f5caf7c9))
+* **rlm:** add observation trace for loop introspection ([af6e051](https://github.com/choiceoh/Deneb/commit/af6e05143bea1ded89b1b70029e24a69a25b2cf4))
+* **rlm:** add observation trace for RLM loop introspection ([244f027](https://github.com/choiceoh/Deneb/commit/244f027c6773ef0d9e9b48ffa620860318e19397))
+* **rlm:** wire LLMBatchFn and RLMQueryFn into chat REPL ([5280550](https://github.com/choiceoh/Deneb/commit/528055018a91ad2cc12f15d6f131af83cbb6577b))
+* **rlm:** wire LLMBatchFn and RLMQueryFn into chat REPL environment ([86fff12](https://github.com/choiceoh/Deneb/commit/86fff1299c591975848821841ffa261c8aaa619e))
+* **test:** add benchmark suite — HLE, ARC-AGI-2, BrowseComp, LLM-as-Judge ([e901156](https://github.com/choiceoh/Deneb/commit/e9011567bf33a5c64256e88f44fa8672764eae6d))
+* **test:** add benchmark suite — HLE, ARC-AGI-2, BrowseComp, LLM-as-Judge, Pairwise ([c4aa192](https://github.com/choiceoh/Deneb/commit/c4aa19278ccc166f5d3f9b1298d0bfa12581f4b8))
+* **test:** expand bench-challenge to 14 tests — add 8 BrowseComp questions ([ea8c1f2](https://github.com/choiceoh/Deneb/commit/ea8c1f2a51084b5dfa996562773a124c2cb07324))
+* **wiki:** add Karpathy Wiki + RLM scaffold navigation ([9a4bb6c](https://github.com/choiceoh/Deneb/commit/9a4bb6cfc29e8ca4f672fd3a962be18c703c5cd8))
+* **wiki:** Karpathy Wiki + RLM scaffold navigation ([fce848a](https://github.com/choiceoh/Deneb/commit/fce848a296b164b7a343651f2f6644144f0ada72))
+
+
+### 🔧 Internal
+
+* **autoresearch:** extract shared helpers from iteration functions ([112ea63](https://github.com/choiceoh/Deneb/commit/112ea639e4e8c4532275abbd56991a426dd7cb9c))
+* **autoresearch:** extract shared helpers from iteration functions ([01bd139](https://github.com/choiceoh/Deneb/commit/01bd139955cd78aac01761c22dde5058eef3b018))
+
 ## [4.20.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.19.1...deneb-v4.20.0) (2026-04-07)
 
 
