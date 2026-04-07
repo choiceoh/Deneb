@@ -65,6 +65,9 @@ const (
 	maxConsecutiveBadFrames = 3
 )
 
+// Compile-time interface compliance.
+var _ events.Subscriber = (*WsClient)(nil)
+
 // WsClient represents a connected WebSocket client.
 // Implements events.Subscriber for event broadcasting.
 type WsClient struct {

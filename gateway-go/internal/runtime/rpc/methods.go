@@ -57,6 +57,14 @@ func registerCoreBuiltins(d *Dispatcher, deps Deps) error {
 	return nil
 }
 
+// Compile-time interface compliance for built-in RPC modules.
+var (
+	_ MethodModule = healthModule{}
+	_ MethodModule = sessionModule{}
+	_ MethodModule = telegramModule{}
+	_ MethodModule = systemModule{}
+)
+
 type healthModule struct{ deps Deps }
 
 func (m healthModule) Register(d *Dispatcher) {

@@ -837,6 +837,9 @@ func buildMessagePersister(
 	}
 }
 
+// Compile-time interface compliance.
+var _ compact.Summarizer = (*localAISummarizer)(nil)
+
 // localAISummarizer adapts pilot.CallLocalLLM to the compaction.Summarizer interface.
 type localAISummarizer struct{}
 

@@ -5,6 +5,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
+// Compile-time interface compliance.
+var _ events.SessionSnapshotProvider = (*sessionSnapshotAdapter)(nil)
+
 // sessionSnapshotAdapter implements events.SessionSnapshotProvider by
 // delegating to the session.Manager. It maps session.Session fields to
 // events.SessionSnapshot for event enrichment.

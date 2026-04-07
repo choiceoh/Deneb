@@ -26,6 +26,9 @@ const (
 	wikiDreamMaxTokens     = 4096
 )
 
+// Compile-time interface compliance.
+var _ autonomous.Dreamer = (*WikiDreamer)(nil)
+
 // WikiDreamer implements autonomous.Dreamer for wiki-based knowledge consolidation.
 // Phases:
 //  1. Scan unprocessed diary entries
