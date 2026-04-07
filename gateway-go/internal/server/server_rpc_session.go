@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/lcm"
 	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -59,8 +60,21 @@ func (s *Server) registerSessionRPCMethods() {
 	}
 	var transcriptStore chat.TranscriptStore
 	if transcriptDir != "" {
-		transcriptStore = chat.NewCachedTranscriptStore(
+		cached := chat.NewCachedTranscriptStore(
 			chat.NewFileTranscriptStore(transcriptDir), 0)
+
+		// Wrap with LCM dual-write bridge (immutable SQLite store).
+		if home, err := os.UserHomeDir(); err == nil {
+			lcmStore, lcmErr := lcm.NewStore(home + "/.deneb/lcm.db")
+			if lcmErr != nil {
+				s.logger.Warn("lcm: failed to open store, falling back to JSONL only", "error", lcmErr)
+				transcriptStore = cached
+			} else {
+				transcriptStore = lcm.NewBridge(cached, lcmStore, s.logger)
+			}
+		} else {
+			transcriptStore = cached
+		}
 	}
 
 	// Initialize agent detail log writer.
