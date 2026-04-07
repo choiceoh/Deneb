@@ -202,6 +202,36 @@ func allTools() []toolDef {
 			},
 		},
 
+		// --- RLM observation ---
+		{
+			rpcMethod: "rlm.status",
+			tool: Tool{
+				Name:        "deneb_rlm_status",
+				Description: "Get RLM (Recursive Language Model) service status: config, wiki connection, and stored trace count.",
+				InputSchema: objectSchema(),
+			},
+		},
+		{
+			rpcMethod: "rlm.trace",
+			tool: Tool{
+				Name:        "deneb_rlm_trace",
+				Description: "Get a detailed RLM loop execution trace with per-iteration breakdown: LLM/REPL timing, code blocks, exec outputs, errors, and token usage. Returns the latest trace if no ID is given.",
+				InputSchema: objectSchema(
+					prop("id", "string", "Trace ID (omit for latest trace)"),
+				),
+			},
+		},
+		{
+			rpcMethod: "rlm.trace.list",
+			tool: Tool{
+				Name:        "deneb_rlm_trace_list",
+				Description: "List recent RLM loop traces with summaries (ID, model, prompt preview, stop reason, iterations, timing). Newest first.",
+				InputSchema: objectSchema(
+					prop("limit", "integer", "Max traces to return (default: 10)"),
+				),
+			},
+		},
+
 		// --- Autoresearch ---
 		{
 			rpcMethod: "autoresearch.status",
