@@ -43,6 +43,10 @@ type SyncOptions struct {
 	// ToolPreset restricts available tools for this run (e.g. "boot", "conversation").
 	// Empty means no restriction.
 	ToolPreset string
+
+	// MaxHistoryTokens overrides the transcript history token budget.
+	// When set, assembleContext trims older messages to fit within this budget.
+	MaxHistoryTokens int
 }
 
 // StreamDelta is emitted for each text chunk during a streaming synchronous run.
@@ -92,6 +96,9 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 
 	deps := h.buildRunDeps()
 	deps.continuationEnabled = false // sync paths do not support autonomous continuation
+	if opts != nil && opts.MaxHistoryTokens > 0 {
+		deps.contextCfg.MemoryTokenBudget = uint64(opts.MaxHistoryTokens)
+	}
 
 	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, nil)
 	if err != nil {

@@ -702,7 +702,6 @@ func resolveWorkspaceDirForPrompt() string {
 }
 
 // memoryContextOpts returns LoadContextOptions for context file loading.
-// Memory store was replaced by wiki; MEMORY.md is always loaded.
 func memoryContextOpts(_ runDeps) []prompt.LoadContextOption {
 	return nil
 }

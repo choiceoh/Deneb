@@ -71,7 +71,8 @@ func (t *bootTask) Run(ctx context.Context) error {
 	defer cancel()
 
 	result, err := t.chatHandler.SendSync(runCtx, "boot", prompt, "", &chat.SyncOptions{
-		ToolPreset: string(toolpreset.PresetBoot),
+		ToolPreset:       string(toolpreset.PresetBoot),
+		MaxHistoryTokens: 30_000,
 	})
 	if err != nil {
 		return fmt.Errorf("boot: agent turn failed: %w", err)

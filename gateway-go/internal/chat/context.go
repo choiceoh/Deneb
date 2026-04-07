@@ -75,10 +75,33 @@ func assembleContext(
 		msgs = msgs[len(msgs)-limit:]
 	}
 
+	// Token-budget truncation: drop oldest messages until history fits.
+	if budget := cfg.MemoryTokenBudget; budget > 0 && len(msgs) > 0 {
+		msgs = trimToTokenBudget(msgs, int(budget))
+	}
+
 	return &AssemblyResult{
 		Messages:      transcriptToMessages(msgs),
 		TotalMessages: total,
 	}, nil
+}
+
+// trimToTokenBudget drops the oldest messages until the total estimated
+// token count fits within budget. Always keeps at least the last message.
+func trimToTokenBudget(msgs []ChatMessage, budget int) []ChatMessage {
+	total := 0
+	for _, m := range msgs {
+		total += estimateTokens(string(m.Content))
+	}
+	if total <= budget {
+		return msgs
+	}
+	// Drop from the front (oldest) until we fit.
+	for len(msgs) > 1 && total > budget {
+		total -= estimateTokens(string(msgs[0].Content))
+		msgs = msgs[1:]
+	}
+	return msgs
 }
 
 // transcriptToMessages converts ChatMessage transcript entries to LLM messages.

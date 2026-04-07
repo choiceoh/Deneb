@@ -80,16 +80,16 @@ func TestSessionSnapshotFrozen(t *testing.T) {
 	ResetContextFileCacheForTest()
 	dir := t.TempDir()
 
-	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("fact-v1"), 0o644)
+	os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("fact-v1"), 0o644)
 
 	// First load with session key — populates snapshot.
 	files := LoadContextFiles(dir, WithSessionSnapshot("s1"))
 	if len(files) != 1 || files[0].Content != "fact-v1" {
-		t.Fatalf("expected MEMORY.md with fact-v1, got %v", files)
+		t.Fatalf("expected AGENTS.md with fact-v1, got %v", files)
 	}
 
-	// Mutate file on disk (simulates mid-session memory export).
-	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("fact-v2"), 0o644)
+	// Mutate file on disk (simulates mid-session update).
+	os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("fact-v2"), 0o644)
 
 	// Same session key — must return frozen snapshot (fact-v1).
 	files = LoadContextFiles(dir, WithSessionSnapshot("s1"))
@@ -111,28 +111,6 @@ func TestSessionSnapshotFrozen(t *testing.T) {
 	if len(files) != 1 || files[0].Content != "fact-v2" {
 		t.Fatalf("expected fresh fact-v2 after clear, got %q", files[0].Content)
 	}
-}
-
-func TestSessionSnapshotWithSkipMemory(t *testing.T) {
-	ResetContextFileCacheForTest()
-	dir := t.TempDir()
-
-	os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("agent"), 0o644)
-	os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("facts"), 0o644)
-
-	// Load with session key (no skip) — snapshot stores both files.
-	files := LoadContextFiles(dir, WithSessionSnapshot("s3"))
-	if len(files) != 2 {
-		t.Fatalf("expected 2 files, got %d", len(files))
-	}
-
-	// Load with same session key + skipMemory — returns snapshot minus MEMORY.md.
-	files = LoadContextFiles(dir, WithSessionSnapshot("s3"), WithSkipMemory())
-	if len(files) != 1 || files[0].Path != "AGENTS.md" {
-		t.Fatalf("expected only AGENTS.md with skipMemory, got %v", files)
-	}
-
-	ClearSessionSnapshot("s3")
 }
 
 func TestFormatContextFilesForPrompt_NoSoul(t *testing.T) {

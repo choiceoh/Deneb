@@ -23,7 +23,6 @@ var contextFileNames = []string{
 	"TOOLS.md",
 	"IDENTITY.md",
 	"USER.md",
-	"MEMORY.md",
 }
 
 const (
@@ -151,9 +150,6 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 	// Frozen snapshot: return cached files if this session already loaded.
 	if cfg.sessionKey != "" {
 		if frozen, ok := sessionSnapshots.get(cfg.sessionKey); ok {
-			if cfg.skipMemory {
-				return filterOutMemory(frozen)
-			}
 			return frozen
 		}
 	}
@@ -170,37 +166,27 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 		ctxCache.store(workspaceDir, files, resolved)
 	}
 
-	// Freeze for this session (stores full list; skipMemory applied at return).
+	// Freeze for this session.
 	if cfg.sessionKey != "" {
 		sessionSnapshots.set(cfg.sessionKey, files)
 	}
 
-	if cfg.skipMemory {
-		files = filterOutMemory(files)
-	}
 	return files
 }
 
 // loadContextConfig holds options for LoadContextFiles.
 type loadContextConfig struct {
-	skipMemory bool   // skip MEMORY.md (structured memory store provides this)
 	sessionKey string // non-empty → use/populate frozen session snapshot
 }
 
 // LoadContextOption configures LoadContextFiles behavior.
 type LoadContextOption func(*loadContextConfig)
 
-// WithSkipMemory skips loading MEMORY.md when the structured memory store
-// is active, avoiding duplicate content in the context window.
-func WithSkipMemory() LoadContextOption {
-	return func(c *loadContextConfig) { c.skipMemory = true }
-}
-
 // WithSessionSnapshot enables the frozen snapshot pattern: on first call
 // for a given session key the loaded context files are cached and returned
 // unchanged for all subsequent calls within that session. This keeps the
 // system prompt stable across turns so the LLM prefix cache is not
-// invalidated by mid-session MEMORY.md writes.
+// invalidated by mid-session context file writes.
 func WithSessionSnapshot(sessionKey string) LoadContextOption {
 	return func(c *loadContextConfig) { c.sessionKey = sessionKey }
 }
@@ -209,17 +195,6 @@ func WithSessionSnapshot(sessionKey string) LoadContextOption {
 // Call on session reset or terminal state transition.
 func ClearSessionSnapshot(sessionKey string) {
 	sessionSnapshots.delete(sessionKey)
-}
-
-// filterOutMemory removes MEMORY.md entries from a context file slice.
-func filterOutMemory(files []ContextFile) []ContextFile {
-	out := make([]ContextFile, 0, len(files))
-	for _, f := range files {
-		if filepath.Base(f.Path) != "MEMORY.md" {
-			out = append(out, f)
-		}
-	}
-	return out
 }
 
 // loadContextFilesFromDisk performs the actual filesystem scan.
