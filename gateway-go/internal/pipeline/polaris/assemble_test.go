@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // memStore is a minimal in-memory TranscriptStore for testing legacy fallback.
@@ -38,9 +39,7 @@ func testAssembleStore(t *testing.T) (*Store, *memStore) {
 	t.Helper()
 	dir := t.TempDir()
 	s, err := NewStore(filepath.Join(dir, "test.db"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	testutil.NoError(t, err)
 	t.Cleanup(func() { s.Close() })
 	return s, newMemStore()
 }
@@ -53,9 +52,7 @@ func TestAssembleContext_NoLCMData(t *testing.T) {
 	legacy.Append("s1", textMsg("assistant", "hi", 2000))
 
 	result, err := AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(result.Messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(result.Messages))
 	}
@@ -75,9 +72,7 @@ func TestAssembleContext_RecentOnly(t *testing.T) {
 	}
 
 	result, err := AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(result.Messages) != 10 {
 		t.Fatalf("expected 10 messages, got %d", len(result.Messages))
 	}
@@ -111,9 +106,7 @@ func TestAssembleContext_WithSummaries(t *testing.T) {
 	})
 
 	result, err := AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.WasCompacted {
 		t.Fatal("expected WasCompacted=true with summaries")
 	}
@@ -149,9 +142,7 @@ func TestAssembleContext_MultiLevelSummaries(t *testing.T) {
 	})
 
 	result, err := AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.WasCompacted {
 		t.Fatal("expected WasCompacted=true")
 	}
@@ -180,9 +171,7 @@ func TestAssembleContext_TokenBudgetTrimsOldestSummaries(t *testing.T) {
 
 	// Budget is 1000 tokens — summary should be trimmed.
 	result, err := AssembleContext(store, legacy, "s1", 1000, 48, 100, slog.Default())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	// Recent messages should survive even with tight budget.
 	if len(result.Messages) == 0 {
 		t.Fatal("expected at least some messages")

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestStateStore_LoadEmpty(t *testing.T) {
@@ -12,9 +14,7 @@ func TestStateStore_LoadEmpty(t *testing.T) {
 	store := newStateStore(dir)
 
 	state, err := store.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	testutil.NoError(t, err)
 	if state.LastPollAt != 0 {
 		t.Errorf("LastPollAt = %d, want 0", state.LastPollAt)
 	}
@@ -44,9 +44,7 @@ func TestStateStore_SaveAndLoad(t *testing.T) {
 	}
 
 	loaded, err := store.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	testutil.NoError(t, err)
 	if loaded.LastPollAt != 1234567890 {
 		t.Errorf("LastPollAt = %d, want 1234567890", loaded.LastPollAt)
 	}
@@ -81,9 +79,7 @@ func TestStateStore_TrimSeenIDs(t *testing.T) {
 	}
 
 	loaded, err := store.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	testutil.NoError(t, err)
 	if len(loaded.SeenIDs) != maxSeenIDs {
 		t.Errorf("SeenIDs len = %d, want %d", len(loaded.SeenIDs), maxSeenIDs)
 	}

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // TestBuildMux_RegistersExpectedRoutes verifies that buildMux registers all
@@ -13,9 +15,7 @@ import (
 // the full server startup sequence.
 func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 	srv, err := New(":0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	mux := srv.buildMux()
 
 	tests := []struct {
@@ -52,9 +52,7 @@ func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 // well-formed JSON response with the expected fields and values.
 func TestHandleRoot_ResponseShape(t *testing.T) {
 	srv, err := New(":0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	srv.handleRoot(w, req)
@@ -84,9 +82,7 @@ func TestHandleRoot_ResponseShape(t *testing.T) {
 // TestHandleRoot_ContentType verifies that root handler sets JSON content type.
 func TestHandleRoot_ContentType(t *testing.T) {
 	srv, err := New(":0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	srv.handleRoot(w, req)

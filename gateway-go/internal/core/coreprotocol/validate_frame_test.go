@@ -3,34 +3,28 @@ package coreprotocol
 import (
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestValidateFrame_ValidRequest(t *testing.T) {
 	err := ValidateFrame(`{"type":"req","id":"abc","method":"chat.send","params":{"text":"hello"}}`)
-	if err != nil {
-		t.Fatalf("expected valid, got %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestValidateFrame_ValidResponse(t *testing.T) {
 	err := ValidateFrame(`{"type":"res","id":"abc","ok":true,"payload":{"data":1}}`)
-	if err != nil {
-		t.Fatalf("expected valid, got %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestValidateFrame_ValidEvent(t *testing.T) {
 	err := ValidateFrame(`{"type":"event","event":"health","seq":5}`)
-	if err != nil {
-		t.Fatalf("expected valid, got %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestValidateFrame_ResponseWithError(t *testing.T) {
 	err := ValidateFrame(`{"type":"res","id":"x","ok":false,"error":{"code":"NOT_FOUND","message":"session not found","retryable":false}}`)
-	if err != nil {
-		t.Fatalf("expected valid, got %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestValidateFrame_MissingMethod(t *testing.T) {
@@ -66,16 +60,12 @@ func TestValidateFrame_NegativeSeq(t *testing.T) {
 
 func TestValidateFrame_ZeroSeq(t *testing.T) {
 	err := ValidateFrame(`{"type":"event","event":"health","seq":0}`)
-	if err != nil {
-		t.Fatalf("expected valid, got %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestValidateFrame_ExtraFieldsIgnored(t *testing.T) {
 	err := ValidateFrame(`{"type":"req","id":"1","method":"test","unknown_field":42}`)
-	if err != nil {
-		t.Fatalf("expected valid, got %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestValidateFrame_OversizedID(t *testing.T) {

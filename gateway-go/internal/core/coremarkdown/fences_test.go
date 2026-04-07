@@ -3,6 +3,8 @@ package coremarkdown
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestDetectFences_Simple(t *testing.T) {
@@ -99,9 +101,7 @@ func TestDetectFences_Empty(t *testing.T) {
 func TestDetectFences_JSON(t *testing.T) {
 	spans := DetectFences("```python\nprint('hi')\n```")
 	data, err := json.Marshal(spans)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	// Verify JSON field names match Rust output.
 	var parsed []map[string]interface{}
 	if err := json.Unmarshal(data, &parsed); err != nil {

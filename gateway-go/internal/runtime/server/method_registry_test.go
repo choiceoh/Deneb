@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // requiredMethods lists RPC methods that MUST be registered after full server
@@ -159,9 +160,7 @@ var requiredMethods = []string{
 // likely removed from method_registry.go without removing it from the handler.
 func TestMethodRegistry_RequiredMethodsRegistered(t *testing.T) {
 	srv, err := New(":0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	registered := make(map[string]struct{})
 	for _, m := range srv.dispatcher.Methods() {
 		registered[m] = struct{}{}
@@ -202,9 +201,7 @@ func TestWiringRules_HandlersDoNotImportHub(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("failed to walk handler dir: %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 // TestWiringRules_ValidateHub verifies that Validate() catches missing required fields.

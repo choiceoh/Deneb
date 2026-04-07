@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestDefaultContextConfig(t *testing.T) {
@@ -98,9 +100,7 @@ func TestAssembleContextFallback(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 3
 		result, err := assembleContext(store, "test", cfg, slog.Default())
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		testutil.NoError(t, err)
 		if len(result.Messages) != 3 {
 			t.Errorf("got %d messages, want 3", len(result.Messages))
 		}
@@ -113,9 +113,7 @@ func TestAssembleContextFallback(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 100
 		result, err := assembleContext(store, "test", cfg, slog.Default())
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		testutil.NoError(t, err)
 		if len(result.Messages) != 5 {
 			t.Errorf("got %d messages, want 5", len(result.Messages))
 		}
@@ -124,9 +122,7 @@ func TestAssembleContextFallback(t *testing.T) {
 	t.Run("empty session returns empty result", func(t *testing.T) {
 		cfg := DefaultContextConfig()
 		result, err := assembleContext(store, "nonexistent", cfg, slog.Default())
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		testutil.NoError(t, err)
 		if len(result.Messages) != 0 {
 			t.Errorf("got %d messages, want 0", len(result.Messages))
 		}
@@ -136,9 +132,7 @@ func TestAssembleContextFallback(t *testing.T) {
 		cfg := DefaultContextConfig()
 		cfg.MaxMessages = 0
 		result, err := assembleContext(store, "test", cfg, slog.Default())
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		testutil.NoError(t, err)
 		// defaultMaxMessages = 100, so all 5 messages should be returned.
 		if len(result.Messages) != 5 {
 			t.Errorf("got %d messages, want 5", len(result.Messages))

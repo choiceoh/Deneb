@@ -3,6 +3,8 @@ package llm
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func sampleSchema() map[string]any {
@@ -149,9 +151,7 @@ func TestTool_MarshalJSON_PreSerialized(t *testing.T) {
 	tool.PreSerialize()
 
 	data, err := json.Marshal(tool)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var parsed map[string]json.RawMessage
 	if err := json.Unmarshal(data, &parsed); err != nil {

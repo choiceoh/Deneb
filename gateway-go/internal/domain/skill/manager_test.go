@@ -2,6 +2,8 @@ package skill
 
 import (
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestInstallAndGetStatus(t *testing.T) {
@@ -42,9 +44,7 @@ func TestUpdateSkill(t *testing.T) {
 		Enabled: &enabled,
 		APIKey:  "sk-123",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if updated.Enabled {
 		t.Fatal("expected enabled=false")
 	}

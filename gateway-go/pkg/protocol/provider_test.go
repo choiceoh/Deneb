@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -15,9 +16,7 @@ func TestProviderMetaJSON(t *testing.T) {
 		EnvVars: []string{"ANTHROPIC_API_KEY"},
 	}
 	data, err := json.Marshal(meta)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	testutil.NoError(t, err)
 	var decoded protocol.ProviderMeta
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -42,9 +41,7 @@ func TestProviderCatalogEntryJSON(t *testing.T) {
 		Reasoning:     &reasoning,
 	}
 	data, err := json.Marshal(entry)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	testutil.NoError(t, err)
 	var decoded protocol.ProviderCatalogEntry
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -71,9 +68,7 @@ func TestProviderCatalogSnapshotJSON(t *testing.T) {
 		SnapshotAt: 1711234567890,
 	}
 	data, err := json.Marshal(snapshot)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
+	testutil.NoError(t, err)
 	var decoded protocol.ProviderCatalogSnapshot
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)

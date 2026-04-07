@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestSpilloverStore_BelowThreshold(t *testing.T) {
@@ -25,18 +27,14 @@ func TestSpilloverStore_StoreAndLoad(t *testing.T) {
 
 	content := strings.Repeat("x", MaxResultChars+100)
 	spillID, err := store.Store("telegram:user1:main", "read", content)
-	if err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.HasPrefix(spillID, "sp_") {
 		t.Fatalf("spill ID should start with sp_, got %q", spillID)
 	}
 
 	// Load with same session.
 	loaded, err := store.Load(spillID, "telegram:user1:main")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	testutil.NoError(t, err)
 	if loaded != content {
 		t.Fatalf("loaded content mismatch: got %d chars, want %d", len(loaded), len(content))
 	}
@@ -48,9 +46,7 @@ func TestSpilloverStore_SessionIsolation(t *testing.T) {
 
 	content := strings.Repeat("y", MaxResultChars+1)
 	spillID, err := store.Store("session-a", "grep", content)
-	if err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Load from different session should fail.
 	_, err = store.Load(spillID, "session-b")
@@ -188,24 +184,18 @@ func TestSpilloverStore_DiskFile(t *testing.T) {
 
 	content := strings.Repeat("d", MaxResultChars+1)
 	_, err := store.Store("s1", "read", content)
-	if err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// Verify exactly one file exists on disk.
 	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("ReadDir: %v", err)
-	}
+	testutil.NoError(t, err)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(entries))
 	}
 
 	// Verify file content.
 	data, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
+	testutil.NoError(t, err)
 	if string(data) != content {
 		t.Error("file content mismatch")
 	}

@@ -1,13 +1,15 @@
 // commands_handlers_session_test.go — Tests for session command handlers.
 package handlers
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
+)
 
 func TestHandleResetCommand_ReplyText(t *testing.T) {
 	result, err := handleResetCommand(CommandContext{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	want := "🔄 Session reset."
 	if result.Reply != want {
 		t.Errorf("reply = %q, want %q", result.Reply, want)

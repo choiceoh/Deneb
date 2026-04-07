@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestExtractConstants(t *testing.T) {
@@ -20,9 +22,7 @@ func TestExtractConstants(t *testing.T) {
 		{Name: "BATCH_SIZE", File: "train.py", Pattern: `batch_size\s*=\s*(\d+)`, Type: "int"},
 	}
 	vals, err := ExtractConstants(dir, constants)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if vals["LEARNING_RATE"] != "0.001" {
 		t.Errorf("LEARNING_RATE = %q, want %q", vals["LEARNING_RATE"], "0.001")
 	}
@@ -45,9 +45,7 @@ func TestExtractConstantsMultipleFiles(t *testing.T) {
 		{Name: "Y", File: "b.py", Pattern: `y\s*=\s*(\d+)`, Type: "int"},
 	}
 	vals, err := ExtractConstants(dir, constants)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if vals["X"] != "10" {
 		t.Errorf("X = %q, want %q", vals["X"], "10")
 	}
@@ -69,9 +67,7 @@ func TestExtractConstantsGoConstBlock(t *testing.T) {
 		{Name: "WEIGHT_IMPORTANCE", File: "params.go", Pattern: `weightImportance\s*=\s*([\d.]+)`, Type: "float"},
 	}
 	vals, err := ExtractConstants(dir, constants)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if vals["WEIGHT_HYBRID"] != "0.40" {
 		t.Errorf("WEIGHT_HYBRID = %q, want %q", vals["WEIGHT_HYBRID"], "0.40")
 	}
@@ -136,9 +132,7 @@ func TestApplyOverrides(t *testing.T) {
 	}
 
 	restore, err := ApplyOverrides(dir, constants, overrides)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	// Check overridden content.
 	data, _ := os.ReadFile(filepath.Join(dir, "train.py"))
@@ -174,9 +168,7 @@ func TestApplyOverridesRestoreIdempotent(t *testing.T) {
 		{Name: "X", File: "f.py", Pattern: `x\s*=\s*(\d+)`, Type: "int"},
 	}
 	restore, err := ApplyOverrides(dir, constants, map[string]string{"X": "2"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	// Call restore twice — should not panic.
 	restore()
@@ -202,9 +194,7 @@ func TestApplyOverridesBoundsFloat(t *testing.T) {
 
 	// Value within bounds — should succeed.
 	restore, err := ApplyOverrides(dir, constants, map[string]string{"LR": "0.05"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	restore()
 
 	// Value below min — should fail.
@@ -295,9 +285,7 @@ func TestSaveLoadOverrides(t *testing.T) {
 	}
 
 	loaded, err := LoadOverrides(workdir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if loaded.Values["LEARNING_RATE"] != "0.002" {
 		t.Errorf("LEARNING_RATE = %q", loaded.Values["LEARNING_RATE"])
 	}
@@ -378,9 +366,7 @@ func TestReplaceCapture(t *testing.T) {
 
 	// Replace lr value, preserving comment.
 	result, err := replaceCapture(content, `lr\s*=\s*([\d.]+)`, "0.002")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	want := "lr = 0.002  # learning rate\nbatch_size = 32\n"
 	if result != want {
 		t.Errorf("got:\n%s\nwant:\n%s", result, want)
@@ -393,9 +379,7 @@ func TestReplaceCaptureTabIndented(t *testing.T) {
 
 	// Agent writes pattern without leading \t — should still work via fallback.
 	result, err := replaceCapture(content, `weightHybrid\s*=\s*([\d.]+)`, "0.55")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(result, "0.55") {
 		t.Errorf("expected 0.55 in result:\n%s", result)
 	}
@@ -405,9 +389,7 @@ func TestReplaceCaptureTabIndented(t *testing.T) {
 
 	// Agent writes pattern with explicit \t — should also work.
 	result2, err := replaceCapture(content, `\tweightImportance\s*=\s*([\d.]+)`, "0.30")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(result2, "0.30") {
 		t.Errorf("expected 0.30 in result:\n%s", result2)
 	}
@@ -457,9 +439,7 @@ func TestExtractConstantsAutoPattern(t *testing.T) {
 		{Name: "weightImportance", File: "params.go", Type: "float"},
 	}
 	vals, err := ExtractConstants(dir, constants)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if vals["weightHybrid"] != "0.40" {
 		t.Errorf("weightHybrid = %q, want %q", vals["weightHybrid"], "0.40")
 	}
@@ -513,7 +493,5 @@ func TestPatternVariantsFallback(t *testing.T) {
 	// The fallback with \s* should still work.
 	content := "  weightHybrid = 0.40\n"
 	_, err := findWithFallback(content, `\tweightHybrid\s*=\s*([\d.]+)`)
-	if err != nil {
-		t.Fatalf("fallback should handle \\t -> \\s* relaxation: %v", err)
-	}
+	testutil.NoError(t, err)
 }

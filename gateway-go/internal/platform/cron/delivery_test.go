@@ -1,6 +1,10 @@
 package cron
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
+)
 
 func TestNormalizeDeliveryTarget(t *testing.T) {
 	tests := []struct {
@@ -55,9 +59,7 @@ func TestResolveDeliveryTarget(t *testing.T) {
 			&JobDeliveryConfig{Channel: "telegram", To: "12345"},
 			"telegram", "99999",
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.NoError(t, err)
 		if target.Channel != "telegram" || target.To != "12345" {
 			t.Errorf("expected telegram/12345, got %s/%s", target.Channel, target.To)
 		}
@@ -65,9 +67,7 @@ func TestResolveDeliveryTarget(t *testing.T) {
 
 	t.Run("defaults", func(t *testing.T) {
 		target, err := ResolveDeliveryTarget(nil, "telegram", "12345")
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.NoError(t, err)
 		if target.Channel != "telegram" || target.To != "12345" {
 			t.Errorf("expected defaults, got %s/%s", target.Channel, target.To)
 		}

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -15,18 +17,14 @@ import (
 func callTool(t *testing.T, fn ToolFunc, params any) (string, error) {
 	t.Helper()
 	raw, err := json.Marshal(params)
-	if err != nil {
-		t.Fatalf("marshal params: %v", err)
-	}
+	testutil.NoError(t, err)
 	return fn(context.Background(), json.RawMessage(raw))
 }
 
 func mustCallTool(t *testing.T, fn ToolFunc, params any) string {
 	t.Helper()
 	out, err := callTool(t, fn, params)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	return out
 }
 
@@ -208,9 +206,7 @@ func TestToolWrite_createsParentDir(t *testing.T) {
 		"content":   "nested",
 	})
 	data, err := os.ReadFile(filepath.Join(tmp, "a/b/c/file.txt"))
-	if err != nil {
-		t.Fatalf("file not created: %v", err)
-	}
+	testutil.NoError(t, err)
 	if string(data) != "nested" {
 		t.Errorf("got %q", string(data))
 	}
@@ -386,9 +382,7 @@ func TestReadFunctionRegex_rustFn(t *testing.T) {
 		"}",
 	}
 	out, err := readFunctionRegex("src/lib.rs", lines, "my_func")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "my_func") {
 		t.Errorf("expected function name: %q", out)
 	}
@@ -408,9 +402,7 @@ func TestReadFunctionRegex_pythonDef(t *testing.T) {
 		"    return 'hi ' + name",
 	}
 	out, err := readFunctionRegex("script.py", lines, "greet")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "greet") {
 		t.Errorf("expected function name: %q", out)
 	}

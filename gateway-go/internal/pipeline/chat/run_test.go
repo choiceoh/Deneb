@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestParseModelID(t *testing.T) {
@@ -153,9 +154,7 @@ func TestResolveClient_UsesProviderConfigWithoutAPIKey(t *testing.T) {
 		Messages:  []llm.Message{llm.NewTextMessage("user", "hello")},
 		MaxTokens: 32,
 	})
-	if err != nil {
-		t.Fatalf("CompleteOpenAI error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if got != "ok" {
 		t.Fatalf("CompleteOpenAI = %q, want %q", got, "ok")
 	}
@@ -192,9 +191,7 @@ func TestResolveClient_ExpandsProviderConfigEnvVars(t *testing.T) {
 		Messages:  []llm.Message{llm.NewTextMessage("user", "hello")},
 		MaxTokens: 32,
 	})
-	if err != nil {
-		t.Fatalf("CompleteOpenAI error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if got != "expanded" {
 		t.Fatalf("CompleteOpenAI = %q, want %q", got, "expanded")
 	}

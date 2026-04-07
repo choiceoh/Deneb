@@ -3,6 +3,8 @@ package approval
 import (
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestCreateRequest(t *testing.T) {
@@ -70,9 +72,7 @@ func TestResolve(t *testing.T) {
 	req := s.CreateRequest(CreateRequestParams{Command: "test"})
 
 	err := s.Resolve(req.ID, DecisionAllowOnce)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	got := s.Get(req.ID)
 	if got.Decision == nil {

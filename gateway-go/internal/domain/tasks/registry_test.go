@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func testStore(t *testing.T) *Store {
@@ -12,9 +14,7 @@ func testStore(t *testing.T) *Store {
 	store, err := OpenStore(StoreConfig{
 		DatabasePath: filepath.Join(dir, "tasks.db"),
 	}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	t.Cleanup(func() { store.Close() })
 	return store
 }
@@ -23,9 +23,7 @@ func testRegistry(t *testing.T) *Registry {
 	t.Helper()
 	store := testStore(t)
 	reg, err := NewRegistry(store, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	return reg
 }
 
@@ -36,9 +34,7 @@ func TestStore_OpenAndClose(t *testing.T) {
 	store, err := OpenStore(StoreConfig{
 		DatabasePath: filepath.Join(dir, "tasks.db"),
 	}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -68,9 +64,7 @@ func TestStore_UpsertAndGetTask(t *testing.T) {
 	}
 
 	got, err := store.Task("task-1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if got == nil {
 		t.Fatal("expected task, got nil")
 	}
@@ -106,9 +100,7 @@ func TestStore_ListActive(t *testing.T) {
 	}
 
 	active, err := store.ListActive()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	// queued + running + blocked = 3
 	if len(active) != 3 {
 		t.Errorf("ListActive() returned %d tasks, want 3", len(active))
@@ -138,17 +130,13 @@ func TestStore_DeleteTerminalBefore(t *testing.T) {
 
 	// Delete terminal tasks before t=5000.
 	pruned, err := store.DeleteTerminalBefore(5000)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if pruned != 1 {
 		t.Errorf("pruned = %d, want 1", pruned)
 	}
 
 	got, err := store.Task("old-task")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if got != nil {
 		t.Error("expected task to be deleted")
 	}
@@ -168,9 +156,7 @@ func TestStore_Events(t *testing.T) {
 	}
 
 	events, err := store.ListEvents("task-1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(events) != 2 {
 		t.Fatalf("ListEvents() returned %d events, want 2", len(events))
 	}
@@ -212,9 +198,7 @@ func TestStore_Summary(t *testing.T) {
 	}
 
 	sum, err := store.Summary()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if sum.Total != 4 {
 		t.Errorf("Total = %d, want 4", sum.Total)
 	}
@@ -311,13 +295,9 @@ func TestRegistry_RestorePersistence(t *testing.T) {
 
 	// Create and populate.
 	store1, err := OpenStore(StoreConfig{DatabasePath: dbPath}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	reg1, err := NewRegistry(store1, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if err := reg1.Put(&TaskRecord{
 		TaskID:         "persist-1",
 		Runtime:        RuntimeCron,
@@ -335,14 +315,10 @@ func TestRegistry_RestorePersistence(t *testing.T) {
 
 	// Reopen and verify restoration.
 	store2, err := OpenStore(StoreConfig{DatabasePath: dbPath}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	defer store2.Close()
 	reg2, err := NewRegistry(store2, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	got := reg2.Get("persist-1")
 	if got == nil {
@@ -364,9 +340,7 @@ func TestExecutor_CreateAndTransition(t *testing.T) {
 		RequesterSessionKey: "sess-1",
 		Task:                "do something",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if task.Status != StatusQueued {
 		t.Errorf("Status = %q, want queued", task.Status)
 	}
@@ -415,9 +389,7 @@ func TestExecutor_CancelTask(t *testing.T) {
 		Runtime: RuntimeACP,
 		Task:    "cancel me",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	if err := CancelTask(reg, task.TaskID); err != nil {
 		t.Fatal(err)
@@ -435,9 +407,7 @@ func TestExecutor_BlockAndResume(t *testing.T) {
 		Runtime: RuntimeSubagent,
 		Task:    "block me",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	if err := BlockTask(reg, task.TaskID, "waiting for input"); err != nil {
 		t.Fatal(err)
@@ -464,9 +434,7 @@ func TestExecutor_MarkLost(t *testing.T) {
 		Runtime: RuntimeCLI,
 		Task:    "orphan",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	if err := MarkLost(reg, task.TaskID); err != nil {
 		t.Fatal(err)
@@ -538,9 +506,7 @@ func TestFlow_CreateAndLink(t *testing.T) {
 		Label:    "deploy pipeline",
 		OwnerKey: "owner-1",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if flow.Status != FlowActive {
 		t.Errorf("Status = %q, want active", flow.Status)
 	}
@@ -551,17 +517,13 @@ func TestFlow_CreateAndLink(t *testing.T) {
 		Task:    "step 1",
 		FlowID:  flow.FlowID,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	t2, err := CreateQueuedTask(reg, CreateParams{
 		Runtime: RuntimeCron,
 		Task:    "step 2",
 		FlowID:  flow.FlowID,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	// Verify tasks belong to flow.
 	flowTasks := reg.ListByFlowID(flow.FlowID)
@@ -598,18 +560,14 @@ func TestFlow_BlockedAndResume(t *testing.T) {
 		Label:    "blocked flow",
 		OwnerKey: "owner",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	task, err := CreateRunningTask(reg, CreateParams{
 		Runtime: RuntimeSubagent,
 		Task:    "blockable step",
 		FlowID:  flow.FlowID,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	// Block the task -> flow should become blocked.
 	if err := BlockTask(reg, task.TaskID, "waiting"); err != nil {
@@ -622,9 +580,7 @@ func TestFlow_BlockedAndResume(t *testing.T) {
 
 	// Resume blocked flow.
 	resumed, err := ResumeBlockedFlow(reg, flow.FlowID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if resumed != 1 {
 		t.Errorf("resumed = %d, want 1", resumed)
 	}

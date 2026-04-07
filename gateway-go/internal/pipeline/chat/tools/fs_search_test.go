@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // ─── clampInt ────────────────────────────────────────────────────────────────
@@ -53,9 +55,7 @@ func TestToolFind_matchByName(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "beta.txt"), nil, 0o644)
 
 	out, err := callFind(t, tmp, map[string]any{"pattern": "alpha.txt"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "alpha.txt") {
 		t.Errorf("expected alpha.txt in output: %q", out)
 	}
@@ -69,9 +69,7 @@ func TestToolFind_noMatches(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "file.go"), nil, 0o644)
 
 	out, err := callFind(t, tmp, map[string]any{"pattern": "*.nonexistent"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "No files found") {
 		t.Errorf("expected no-match message: %q", out)
 	}
@@ -92,9 +90,7 @@ func TestToolFind_wildcardGlob(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "notes.txt"), nil, 0o644)
 
 	out, err := callFind(t, tmp, map[string]any{"pattern": "*.go"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "main.go") || !strings.Contains(out, "util.go") {
 		t.Errorf("expected go files: %q", out)
 	}
@@ -110,9 +106,7 @@ func TestToolFind_skipsHiddenByDefault(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "visible.go"), nil, 0o644)
 
 	out, err := callFind(t, tmp, map[string]any{"pattern": "config"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	// Should not find files inside .git when showHidden=false.
 	if strings.Contains(out, ".git") {
 		t.Errorf("should skip hidden dir: %q", out)
@@ -128,9 +122,7 @@ func TestToolFind_showHidden(t *testing.T) {
 		"pattern":    "secret.txt",
 		"showHidden": true,
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "secret.txt") {
 		t.Errorf("expected hidden file: %q", out)
 	}
@@ -148,9 +140,7 @@ func TestToolFind_customPath(t *testing.T) {
 		"pattern": "*.go",
 		"path":    "src",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "main.go") {
 		t.Errorf("expected main.go: %q", out)
 	}
@@ -178,9 +168,7 @@ func TestToolGrep_findsMatch(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\nfunc hello() {}\n"), 0o644)
 
 	out, err := callGrep(t, tmp, map[string]any{"pattern": "hello"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "hello") {
 		t.Errorf("expected match: %q", out)
 	}
@@ -267,9 +255,7 @@ func TestToolGrep_commaSeparatedInclude(t *testing.T) {
 		"pattern": ".",
 		"include": "*.go,*.rs",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "main.go") {
 		t.Errorf("expected main.go in output: %q", out)
 	}
@@ -351,9 +337,7 @@ func TestToolGrep_fileTypeNormalization(t *testing.T) {
 		"pattern":  "package",
 		"fileType": "golang",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error with fileType=golang: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "main.go") {
 		t.Errorf("expected main.go in output: %q", out)
 	}
@@ -365,9 +349,7 @@ func TestToolGrep_noMatch(t *testing.T) {
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\n"), 0o644)
 
 	out, err := callGrep(t, tmp, map[string]any{"pattern": "ZZZNOMATCH"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !strings.Contains(out, "No matches") {
 		t.Errorf("expected no-match message: %q", out)
 	}

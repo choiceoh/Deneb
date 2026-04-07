@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // --- End-to-end chat execution integration tests ---
@@ -168,9 +169,7 @@ func TestIntegration_SimpleTextResponse(t *testing.T) {
 
 	// Verify transcript has both user and assistant messages.
 	msgs, total, err := transcript.Load("int-test-1", 0)
-	if err != nil {
-		t.Fatalf("transcript load error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if total < 2 {
 		t.Fatalf("transcript total = %d, want >= 2", total)
 	}
@@ -285,9 +284,7 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 
 	// Verify transcript contains the final assistant response.
 	msgs, _, err := transcript.Load("int-tool-1", 0)
-	if err != nil {
-		t.Fatalf("transcript load: %v", err)
-	}
+	testutil.NoError(t, err)
 	last := msgs[len(msgs)-1]
 	// The persisted assistant message includes a tool activity summary prefix
 	// (e.g., "Tools used: greet\n\n") followed by the actual response text.
@@ -409,9 +406,7 @@ func TestIntegration_MultipleMessagesHistory(t *testing.T) {
 
 	// Verify transcript has 4 messages (2 user + 2 assistant).
 	msgs, total, err := transcript.Load(sessionKey, 0)
-	if err != nil {
-		t.Fatalf("load error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if total != 4 {
 		t.Fatalf("total = %d, want 4", total)
 	}

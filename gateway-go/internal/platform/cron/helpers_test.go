@@ -2,6 +2,8 @@ package cron
 
 import (
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestParseSchedule(t *testing.T) {
@@ -30,9 +32,7 @@ func TestParseSchedule(t *testing.T) {
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.NoError(t, err)
 			if sched.IntervalMs != tt.wantMs {
 				t.Fatalf("expected %d ms, got %d", tt.wantMs, sched.IntervalMs)
 			}
@@ -83,9 +83,7 @@ func TestParseSmartSchedule(t *testing.T) {
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.NoError(t, err)
 			if sched.Kind != tt.wantKind {
 				t.Fatalf("expected kind=%q, got %q", tt.wantKind, sched.Kind)
 			}

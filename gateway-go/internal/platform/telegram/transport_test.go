@@ -6,6 +6,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestNewStickyDialer_DefaultStrategy(t *testing.T) {
@@ -31,9 +33,7 @@ func TestStickyDialer_ConnectsToLocalServer(t *testing.T) {
 
 	lc := net.ListenConfig{}
 	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer ln.Close()
 
 	go func() {
@@ -51,9 +51,7 @@ func TestStickyDialer_ConnectsToLocalServer(t *testing.T) {
 	defer cancel()
 
 	conn, err := d.DialContext(ctx, "tcp", ln.Addr().String())
-	if err != nil {
-		t.Fatalf("DialContext failed: %v", err)
-	}
+	testutil.NoError(t, err)
 	conn.Close()
 
 	if idx := d.stickyIndex.Load(); idx != 0 {

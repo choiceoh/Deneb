@@ -3,6 +3,8 @@ package coremarkdown
 import (
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func parse(md string) MarkdownIR {
@@ -391,9 +393,7 @@ func TestImageAltText(t *testing.T) {
 func TestMarshalIROutput_NilSlices(t *testing.T) {
 	out := &IROutput{Text: "test"}
 	data, err := MarshalIROutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	s := string(data)
 	if strings.Contains(s, "null") {
 		t.Errorf("nil slices should marshal as [], got %s", s)

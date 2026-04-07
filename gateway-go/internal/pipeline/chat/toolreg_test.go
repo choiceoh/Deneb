@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestToolRegistry_Execute(t *testing.T) {
@@ -13,9 +15,7 @@ func TestToolRegistry_Execute(t *testing.T) {
 	})
 
 	result, err := reg.Execute(context.Background(), "echo", json.RawMessage(`"hello"`))
-	if err != nil {
-		t.Fatalf("Execute error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result != `"hello"` {
 		t.Errorf("result = %q, want %q", result, `"hello"`)
 	}

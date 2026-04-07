@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestParseDotenv(t *testing.T) {
@@ -33,9 +35,7 @@ NOEQUALSSIGN
 	}
 
 	pairs, err := parseDotenv(tmp)
-	if err != nil {
-		t.Fatalf("parseDotenv error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	tests := []struct {
 		key, want string
@@ -78,9 +78,7 @@ func TestLoadDotenvFilesNoOverride(t *testing.T) {
 	}
 
 	pairs, err := parseDotenv(envFile)
-	if err != nil {
-		t.Fatalf("parseDotenv error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if pairs[key] != "replaced" {
 		t.Fatalf("expected parsed value 'replaced', got %q", pairs[key])
 	}

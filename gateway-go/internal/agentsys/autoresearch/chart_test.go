@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // pngMagic is the first 8 bytes of a valid PNG file.
@@ -27,9 +29,7 @@ func TestRenderChart_SingleRow(t *testing.T) {
 	cfg := &Config{MetricName: "val_bpb", MetricDirection: "minimize"}
 
 	data, err := RenderChart(rows, cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -54,9 +54,7 @@ func TestRenderChart_MultipleRows(t *testing.T) {
 	cfg := &Config{MetricName: "val_bpb", MetricDirection: "minimize"}
 
 	data, err := RenderChart(rows, cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -71,9 +69,7 @@ func TestRenderChart_Maximize(t *testing.T) {
 	cfg := &Config{MetricName: "accuracy", MetricDirection: "maximize"}
 
 	data, err := RenderChart(rows, cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -98,9 +94,7 @@ func TestRenderChart_LargeIterationCount(t *testing.T) {
 	cfg := &Config{MetricName: "loss", MetricDirection: "minimize"}
 
 	data, err := RenderChart(rows, cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}
@@ -115,9 +109,7 @@ func TestSaveChart(t *testing.T) {
 	cfg := &Config{MetricName: "test_metric", MetricDirection: "minimize"}
 
 	path, err := SaveChart(dir, rows, cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	expected := filepath.Join(dir, configDir, "chart.png")
 	if path != expected {
@@ -125,9 +117,7 @@ func TestSaveChart(t *testing.T) {
 	}
 
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read chart file: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("saved file is not a valid PNG")
 	}
@@ -143,9 +133,7 @@ func TestRenderChart_FlatMetric(t *testing.T) {
 	cfg := &Config{MetricName: "flat", MetricDirection: "minimize"}
 
 	data, err := RenderChart(rows, cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !bytes.HasPrefix(data, pngMagic) {
 		t.Fatal("output is not a valid PNG")
 	}

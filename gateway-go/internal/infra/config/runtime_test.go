@@ -2,6 +2,8 @@ package config
 
 import (
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestResolveGatewayRuntimeConfigDefaults(t *testing.T) {
@@ -14,9 +16,7 @@ func TestResolveGatewayRuntimeConfigDefaults(t *testing.T) {
 		Port:   18789,
 		Auth:   &auth,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if rtCfg.BindHost != "127.0.0.1" {
 		t.Errorf("expected 127.0.0.1, got %q", rtCfg.BindHost)
 	}
@@ -54,9 +54,7 @@ func TestResolveGatewayRuntimeConfigBindOverride(t *testing.T) {
 		Bind:   "lan",
 		Auth:   &auth,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if rtCfg.BindHost != "0.0.0.0" {
 		t.Errorf("expected 0.0.0.0 for lan bind, got %q", rtCfg.BindHost)
 	}
@@ -123,9 +121,7 @@ func TestResolveGatewayRuntimeConfigTrustedProxyLoopback(t *testing.T) {
 		Port:   18789,
 		Auth:   &auth,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if rtCfg.AuthMode != "trusted-proxy" {
 		t.Errorf("expected trusted-proxy, got %q", rtCfg.AuthMode)
 	}
@@ -242,9 +238,7 @@ func TestControlUIDisabled(t *testing.T) {
 		Port:   18789,
 		Auth:   &auth,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if rtCfg.ControlUIEnabled {
 		t.Error("control UI should be disabled")
 	}

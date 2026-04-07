@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // --- ValidateParams dispatch tests ---
@@ -34,9 +36,7 @@ func TestValidateParams_InvalidJSON(t *testing.T) {
 
 func TestValidateParams_SessionsListEmpty(t *testing.T) {
 	result, err := ValidateParams("sessions.list", "{}")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got errors: %v", result.Errors)
 	}
@@ -44,9 +44,7 @@ func TestValidateParams_SessionsListEmpty(t *testing.T) {
 
 func TestValidateParams_AdditionalProperties(t *testing.T) {
 	result, err := ValidateParams("sessions.list", `{"unknownField": true}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if result.Valid {
 		t.Fatal("expected invalid for unknown properties")
 	}
@@ -63,9 +61,7 @@ func TestValidateParams_ResultSerialization(t *testing.T) {
 		}},
 	}
 	data, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("marshal error: %v", err)
-	}
+	testutil.NoError(t, err)
 	s := string(data)
 	if !contains(s, `"valid":false`) || !contains(s, `"minLength"`) {
 		t.Fatalf("unexpected JSON: %s", s)
@@ -105,9 +101,7 @@ func TestValidateParams_GoldenShapes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ValidateParams(tt.method, tt.params)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.NoError(t, err)
 			if result.Valid != tt.valid {
 				t.Fatalf("expected valid=%v, got valid=%v errors=%v", tt.valid, result.Valid, result.Errors)
 			}
@@ -131,9 +125,7 @@ func TestValidateParams_GoldenShapes(t *testing.T) {
 
 func TestSessions_SendMissingRequired(t *testing.T) {
 	result, err := ValidateParams("sessions.send", `{}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.Valid {
 		t.Fatal("expected invalid")
 	}
@@ -153,9 +145,7 @@ func TestSessions_SendMissingRequired(t *testing.T) {
 
 func TestSessions_SendValid(t *testing.T) {
 	result, err := ValidateParams("sessions.send", `{"key":"sess-1","message":"hello"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -164,9 +154,7 @@ func TestSessions_SendValid(t *testing.T) {
 func TestSessions_PatchNullable(t *testing.T) {
 	result, err := ValidateParams("sessions.patch",
 		`{"key":"k","label":null,"fastMode":null,"responseUsage":null}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("null values should be accepted for nullable fields: %v", result.Errors)
 	}
@@ -175,9 +163,7 @@ func TestSessions_PatchNullable(t *testing.T) {
 func TestSessions_PatchInvalidEnum(t *testing.T) {
 	result, err := ValidateParams("sessions.patch",
 		`{"key":"k","responseUsage":"invalid"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	hasEnum := false
 	for _, e := range result.Errors {
 		if e.Keyword == "enum" {
@@ -191,17 +177,13 @@ func TestSessions_PatchInvalidEnum(t *testing.T) {
 
 func TestSessions_UsageDatePattern(t *testing.T) {
 	result, err := ValidateParams("sessions.usage", `{"startDate":"2024-01-15"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid date, got %v", result.Errors)
 	}
 
 	result, err = ValidateParams("sessions.usage", `{"startDate":"not-a-date"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	hasPattern := false
 	for _, e := range result.Errors {
 		if e.Keyword == "pattern" {
@@ -216,9 +198,7 @@ func TestSessions_UsageDatePattern(t *testing.T) {
 func TestAgent_SendValid(t *testing.T) {
 	result, err := ValidateParams("agent.send",
 		`{"to":"user1","message":"hi","idempotencyKey":"k1"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -227,9 +207,7 @@ func TestAgent_SendValid(t *testing.T) {
 func TestAgent_WakeInvalidMode(t *testing.T) {
 	result, err := ValidateParams("agent.wake",
 		`{"mode":"invalid","text":"t"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	hasEnum := false
 	for _, e := range result.Errors {
 		if e.Keyword == "enum" {
@@ -243,9 +221,7 @@ func TestAgent_WakeInvalidMode(t *testing.T) {
 
 func TestCron_ListValid(t *testing.T) {
 	result, err := ValidateParams("cron.list", `{"limit":50,"sortBy":"name"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -254,9 +230,7 @@ func TestCron_ListValid(t *testing.T) {
 func TestCron_AddValid(t *testing.T) {
 	result, err := ValidateParams("cron.add",
 		`{"name":"daily-check","schedule":{"kind":"cron","expr":"0 9 * * *"},"sessionTarget":"main","wakeMode":"now","payload":{"kind":"systemEvent","text":"check"}}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -264,9 +238,7 @@ func TestCron_AddValid(t *testing.T) {
 
 func TestCron_RemoveValid(t *testing.T) {
 	result, err := ValidateParams("cron.remove", `{"id":"job-1"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -274,9 +246,7 @@ func TestCron_RemoveValid(t *testing.T) {
 
 func TestCron_RemoveWithJobId(t *testing.T) {
 	result, err := ValidateParams("cron.remove", `{"jobId":"job-1"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -284,9 +254,7 @@ func TestCron_RemoveWithJobId(t *testing.T) {
 
 func TestCron_RemoveMissingID(t *testing.T) {
 	result, err := ValidateParams("cron.remove", `{}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.Valid {
 		t.Fatal("expected invalid for missing id/jobId")
 	}
@@ -295,9 +263,7 @@ func TestCron_RemoveMissingID(t *testing.T) {
 func TestCron_SessionTargetCustom(t *testing.T) {
 	result, err := ValidateParams("cron.add",
 		`{"name":"t","schedule":{"kind":"at","at":"2024-01-01"},"sessionTarget":"session:my-key","wakeMode":"now","payload":{"kind":"systemEvent","text":"t"}}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -305,9 +271,7 @@ func TestCron_SessionTargetCustom(t *testing.T) {
 
 func TestConfig_GetValid(t *testing.T) {
 	result, err := ValidateParams("config.get", `{}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -315,9 +279,7 @@ func TestConfig_GetValid(t *testing.T) {
 
 func TestConfig_SetValid(t *testing.T) {
 	result, err := ValidateParams("config.set", `{"raw":"yaml content"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -325,9 +287,7 @@ func TestConfig_SetValid(t *testing.T) {
 
 func TestConfig_SchemaLookupValid(t *testing.T) {
 	result, err := ValidateParams("config.schema.lookup", `{"path":"gateway.port"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -335,9 +295,7 @@ func TestConfig_SchemaLookupValid(t *testing.T) {
 
 func TestLogsTail_LimitTooHigh(t *testing.T) {
 	result, err := ValidateParams("logs.tail", `{"limit":10000}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	hasMax := false
 	for _, e := range result.Errors {
 		if e.Keyword == "maximum" {
@@ -352,9 +310,7 @@ func TestLogsTail_LimitTooHigh(t *testing.T) {
 func TestChatSend_Valid(t *testing.T) {
 	result, err := ValidateParams("chat.send",
 		`{"sessionKey":"sk","message":"hi","idempotencyKey":"idk1"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -363,9 +319,7 @@ func TestChatSend_Valid(t *testing.T) {
 func TestChatInject_Valid(t *testing.T) {
 	result, err := ValidateParams("chat.inject",
 		`{"sessionKey":"sk","message":"injected"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -373,9 +327,7 @@ func TestChatInject_Valid(t *testing.T) {
 
 func TestChannels_StatusValid(t *testing.T) {
 	result, err := ValidateParams("telegram.status", `{"probe":true,"timeoutMs":5000}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -383,9 +335,7 @@ func TestChannels_StatusValid(t *testing.T) {
 
 func TestAgents_CreateValid(t *testing.T) {
 	result, err := ValidateParams("agents.create", `{"name":"bot","workspace":"/home/bot"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -393,9 +343,7 @@ func TestAgents_CreateValid(t *testing.T) {
 
 func TestSkills_InstallValid(t *testing.T) {
 	result, err := ValidateParams("skills.install", `{"name":"weather","installId":"i1"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -403,9 +351,7 @@ func TestSkills_InstallValid(t *testing.T) {
 
 func TestExec_ResolveValid(t *testing.T) {
 	result, err := ValidateParams("exec.approval.resolve", `{"id":"req-1","decision":"allow"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -414,9 +360,7 @@ func TestExec_ResolveValid(t *testing.T) {
 func TestSecrets_ResolveValid(t *testing.T) {
 	result, err := ValidateParams("secrets.resolve",
 		`{"commandName":"cmd","targetIds":["a","b"]}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if !result.Valid {
 		t.Fatalf("expected valid, got %v", result.Errors)
 	}
@@ -424,9 +368,7 @@ func TestSecrets_ResolveValid(t *testing.T) {
 
 func TestSecrets_ResolveMissing(t *testing.T) {
 	result, err := ValidateParams("secrets.resolve", `{}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if result.Valid {
 		t.Fatal("expected invalid")
 	}

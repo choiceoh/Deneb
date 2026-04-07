@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestTruncateForError(t *testing.T) {
@@ -40,9 +42,7 @@ func TestUnmarshalParams(t *testing.T) {
 		Name string `json:"name"`
 	}
 	err = unmarshalParams([]byte(`{"name":"test"}`), &out)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutil.NoError(t, err)
 	if out.Name != "test" {
 		t.Errorf("expected name 'test', got %q", out.Name)
 	}

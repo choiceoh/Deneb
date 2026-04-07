@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // newTestClient creates an httptest server and LLM client for testing.
@@ -27,9 +28,7 @@ func TestDoStream_Success(t *testing.T) {
 	})
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
-	if err != nil {
-		t.Fatalf("DoStream error: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer body.Close()
 }
 
@@ -64,9 +63,7 @@ func TestDoStream_ServerError_Retries(t *testing.T) {
 	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
-	if err != nil {
-		t.Fatalf("DoStream error: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer body.Close()
 	if calls != 3 {
 		t.Errorf("expected 3 calls, got %d", calls)
@@ -109,9 +106,7 @@ func TestDoStream_RateLimitRetryAfter(t *testing.T) {
 	defer cancel()
 
 	body, err := c.DoStream(ctx, req)
-	if err != nil {
-		t.Fatalf("DoStream error: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer body.Close()
 	if calls != 2 {
 		t.Errorf("expected 2 calls, got %d", calls)
@@ -192,9 +187,7 @@ func TestDoStream_504_Retries(t *testing.T) {
 	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
-	if err != nil {
-		t.Fatalf("DoStream error: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer body.Close()
 	if calls != 2 {
 		t.Errorf("expected 2 calls (1 timeout + 1 success), got %d", calls)
@@ -268,9 +261,7 @@ func TestDoStream_ExpiredContext_MinRequestTimeout(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
 	body, err := c.DoStream(ctx, req)
-	if err != nil {
-		t.Fatalf("expected success with minRequestTimeout, got: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer body.Close()
 }
 
@@ -351,9 +342,7 @@ func TestDoStream_429OtherCode_Retries(t *testing.T) {
 	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	body, err := c.DoStream(context.Background(), req)
-	if err != nil {
-		t.Fatalf("DoStream error: %v", err)
-	}
+	testutil.NoError(t, err)
 	defer body.Close()
 	if calls != 3 {
 		t.Errorf("expected 3 calls for retryable 429 payload, got %d", calls)

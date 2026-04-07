@@ -7,15 +7,14 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
 	s, err := NewStore(filepath.Join(dir, "test.db"))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	testutil.NoError(t, err)
 	t.Cleanup(func() { s.Close() })
 	return s
 }
@@ -50,9 +49,7 @@ func TestAppendAndLoad(t *testing.T) {
 
 	// Load all
 	msgs, err := s.LoadMessages("s1", 0, -1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 2 {
 		t.Fatalf("load all: got %d, want 2", len(msgs))
 	}
@@ -62,9 +59,7 @@ func TestAppendAndLoad(t *testing.T) {
 
 	// Load range
 	msgs, err = s.LoadMessages("s1", 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(msgs) != 1 || msgs[0].Role != "assistant" {
 		t.Fatalf("range load: got %d msgs, first role=%s", len(msgs), msgs[0].Role)
 	}
@@ -78,9 +73,7 @@ func TestMsgIndexAutoIncrement(t *testing.T) {
 	}
 
 	maxIdx, err := s.MaxMsgIndex("s1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if maxIdx != 4 {
 		t.Fatalf("max index: got %d, want 4", maxIdx)
 	}
@@ -93,17 +86,13 @@ func TestSummaryNodes(t *testing.T) {
 		SessionKey: "s1", Level: 1, Content: "leaf summary 1",
 		TokenEst: 100, CreatedAt: 1000, MsgStart: 0, MsgEnd: 9,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	id2, err := s.InsertSummary(SummaryNode{
 		SessionKey: "s1", Level: 1, Content: "leaf summary 2",
 		TokenEst: 120, CreatedAt: 2000, MsgStart: 10, MsgEnd: 19,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 
 	// Condensed node referencing first leaf
 	_, err = s.InsertSummary(SummaryNode{
@@ -111,34 +100,26 @@ func TestSummaryNodes(t *testing.T) {
 		TokenEst: 80, CreatedAt: 3000, MsgStart: 0, MsgEnd: 19,
 		ParentID: &id1,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	_ = id2
 
 	// Load level 1 only
 	leaves, err := s.LoadSummaries("s1", 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(leaves) != 2 {
 		t.Fatalf("leaves: got %d, want 2", len(leaves))
 	}
 
 	// Load all levels
 	all, err := s.LoadSummaries("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if len(all) != 3 {
 		t.Fatalf("all summaries: got %d, want 3", len(all))
 	}
 
 	// LatestSummaryCoverage
 	cov, err := s.LatestSummaryCoverage("s1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if cov != 19 {
 		t.Fatalf("coverage: got %d, want 19", cov)
 	}
@@ -180,9 +161,7 @@ func TestSessionTokens(t *testing.T) {
 	s.AppendMessage("s1", textMsg("assistant", "response text here", 2000))
 
 	tokens, err := s.SessionTokens("s1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	if tokens <= 0 {
 		t.Fatalf("tokens: got %d, want > 0", tokens)
 	}
@@ -200,9 +179,7 @@ func TestStoreDBFileCreated(t *testing.T) {
 	dbPath := filepath.Join(dir, "polaris.db")
 
 	s, err := NewStore(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.NoError(t, err)
 	s.Close()
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {

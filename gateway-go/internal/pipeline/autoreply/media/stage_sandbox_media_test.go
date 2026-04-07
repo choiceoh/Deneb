@@ -1,10 +1,12 @@
 package media
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestResolveAbsolutePath(t *testing.T) {
@@ -116,9 +118,7 @@ func TestStageSandboxMedia_Integration(t *testing.T) {
 		WorkspaceDir: workspaceDir,
 		MediaDir:     mediaDir,
 	})
-	if err != nil {
-		t.Fatalf("StageSandboxMedia() error = %v", err)
-	}
+	testutil.NoError(t, err)
 
 	// MediaPath should be rewritten to staged path.
 	if ctx.MediaPath == testFile {
@@ -160,9 +160,7 @@ func TestStageSandboxMedia_FileTooLarge(t *testing.T) {
 		WorkspaceDir: workspaceDir,
 		MediaDir:     mediaDir,
 	})
-	if err != nil {
-		t.Fatalf("StageSandboxMedia() error = %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestStageSandboxMedia_NoMedia(t *testing.T) {
@@ -172,9 +170,7 @@ func TestStageSandboxMedia_NoMedia(t *testing.T) {
 		SessionKey:   "test-session",
 		WorkspaceDir: "/tmp/workspace",
 	})
-	if err != nil {
-		t.Fatalf("expected nil error for no media, got %v", err)
-	}
+	testutil.NoError(t, err)
 }
 
 func TestStageSandboxMedia_BlockedPath(t *testing.T) {
@@ -187,9 +183,7 @@ func TestStageSandboxMedia_BlockedPath(t *testing.T) {
 		WorkspaceDir: "/tmp/workspace",
 		MediaDir:     "/tmp/media",
 	})
-	if err != nil {
-		t.Fatalf("expected nil error for blocked path, got %v", err)
-	}
+	testutil.NoError(t, err)
 	// Path should NOT be rewritten.
 	if ctx.MediaPath != "/etc/passwd" {
 		t.Errorf("expected path to remain unchanged for blocked source")

@@ -9,15 +9,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // writeJSON writes a JSON file to the given path.
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+	testutil.NoError(t, err)
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
@@ -39,9 +39,7 @@ func TestNewClientFromDir_InstalledCredentials(t *testing.T) {
 	})
 
 	client, err := newClientFromDir(dir)
-	if err != nil {
-		t.Fatalf("newClientFromDir: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	if client.clientID != "test-id.apps.googleusercontent.com" {
 		t.Errorf("clientID = %q, want test-id.apps.googleusercontent.com", client.clientID)
@@ -72,9 +70,7 @@ func TestNewClientFromDir_WebCredentials(t *testing.T) {
 	})
 
 	client, err := newClientFromDir(dir)
-	if err != nil {
-		t.Fatalf("newClientFromDir: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	if client.clientID != "web-id.apps.googleusercontent.com" {
 		t.Errorf("clientID = %q, want web-id", client.clientID)
@@ -169,9 +165,7 @@ func TestValidToken_UsesCache(t *testing.T) {
 	}
 
 	tok, err := c.validToken()
-	if err != nil {
-		t.Fatalf("validToken: %v", err)
-	}
+	testutil.NoError(t, err)
 	if tok != "cached-token" {
 		t.Errorf("token = %q, want cached-token", tok)
 	}
@@ -216,9 +210,7 @@ func TestValidToken_RefreshesExpired(t *testing.T) {
 	}
 
 	tok, err := c.validToken()
-	if err != nil {
-		t.Fatalf("validToken: %v", err)
-	}
+	testutil.NoError(t, err)
 	if tok != "ya29.refreshed" {
 		t.Errorf("token = %q, want ya29.refreshed", tok)
 	}
@@ -228,9 +220,7 @@ func TestValidToken_RefreshesExpired(t *testing.T) {
 
 	// Verify token was persisted.
 	data, err := os.ReadFile(tokenPath)
-	if err != nil {
-		t.Fatalf("read persisted token: %v", err)
-	}
+	testutil.NoError(t, err)
 	var persisted tokenJSON
 	json.Unmarshal(data, &persisted)
 	if persisted.AccessToken != "ya29.refreshed" {
@@ -309,9 +299,7 @@ func TestPersistToken(t *testing.T) {
 	c.persistToken()
 
 	data, err := os.ReadFile(tokenPath)
-	if err != nil {
-		t.Fatalf("read token: %v", err)
-	}
+	testutil.NoError(t, err)
 
 	var tok tokenJSON
 	if err := json.Unmarshal(data, &tok); err != nil {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestNewSubagentCommandDepsFromACP(t *testing.T) {
@@ -62,9 +63,7 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 
 	// Kill should work.
 	killed, err := deps.Kill.KillRun("agent-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+	testutil.NoError(t, err)
 	if !killed {
 		t.Error("expected agent-1 to be killed")
 	}
@@ -80,9 +79,7 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 	})
 	runs2 := deps.ListRuns("session:main")
 	killCount, err := deps.Kill.KillAll("session:main", runs2)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+	testutil.NoError(t, err)
 	if killCount != 1 { // only agent-4 was running
 		t.Errorf("expected killAll=1, got %d", killCount)
 	}
