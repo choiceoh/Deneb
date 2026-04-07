@@ -167,7 +167,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlersystem.DoctorMethods(handlersystem.DoctorDeps{}),
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
 		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
-
 	}
 
 	// Conditional: provider methods.

@@ -306,17 +306,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		})
 	}
 
-	// Register diary heartbeat task: every 2 hours, the main LLM writes
-	// a detailed narrative diary entry (memory/diary/diary-YYYY-MM-DD.md).
-	if s.chatHandler != nil {
-		s.autonomousSvc.RegisterTask(&diaryHeartbeatTask{
-			chatHandler: s.chatHandler,
-			activity:    s.activity,
-			logger:      s.logger,
-		})
-
-	}
-
 	// Skill Genesis: register autonomous tasks (services created in initGenesisServices).
 	s.registerGenesisAutonomousTasks(hub)
 
