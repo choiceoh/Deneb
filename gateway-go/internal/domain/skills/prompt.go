@@ -123,9 +123,6 @@ func formatSkillsFull(skills []PromptSkill) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("\n\nThe following skills provide specialized instructions for specific tasks.")
-	b.WriteString("\nUse the read tool to load a skill's file when the task matches its name or description.")
-	b.WriteString("\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.")
 	b.WriteString("\n\n<available_skills>")
 
 	for _, s := range skills {
@@ -171,9 +168,6 @@ func formatSkillsCompact(skills []PromptSkill) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("\n\nThe following skills provide specialized instructions for specific tasks.")
-	b.WriteString("\nUse the read tool to load a skill's file when the task matches its name.")
-	b.WriteString("\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.")
 	b.WriteString("\n\n<available_skills>")
 
 	for _, s := range skills {

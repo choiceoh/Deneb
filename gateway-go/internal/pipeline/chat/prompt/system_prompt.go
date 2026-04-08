@@ -238,15 +238,25 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Semi-static block (skills — changes only when skills are added/removed) ---
 	var ss strings.Builder
 	if params.SkillsPrompt != "" {
-		ss.WriteString("## Skills\n")
-		ss.WriteString("Before replying: scan <available_skills> <description> entries.\n")
-		ss.WriteString("- If exactly one skill clearly applies: read its SKILL.md at <location> with `read`, then follow it.\n")
-		ss.WriteString("- If multiple could apply: choose the most specific one, then read/follow it.\n")
-		ss.WriteString("- If none clearly apply: do not read any SKILL.md.\n")
-		ss.WriteString("Constraints: never read more than one skill up front; only read after selecting.\n")
+		ss.WriteString("## 스킬 (전문 절차서)\n\n")
+		ss.WriteString("스킬은 특정 작업에 대한 검증된 절차서다. **직접 즉흥으로 하지 말고, 스킬이 있으면 반드시 따라라.**\n\n")
+		ss.WriteString("### 반드시 스킬을 사용하는 경우\n")
+		ss.WriteString("응답 전에 <available_skills>의 <description>을 스캔하라. 다음 중 하나라도 해당하면 해당 스킬의 SKILL.md를 `read`로 읽고 따라라:\n")
+		ss.WriteString("1. 작업이 스킬의 description 또는 tags와 일치\n")
+		ss.WriteString("2. 사용자가 슬래시 커맨드(`/이름`)로 스킬을 직접 호출\n")
+		ss.WriteString("3. 복합 워크플로우(빌드, 배포, 릴리스, PR, 커밋 등) — 단계를 즉흥으로 만들지 마라\n")
+		ss.WriteString("4. 위 목록에 없지만 해당할 수 있는 작업 → `skills_list`로 먼저 검색\n\n")
+		ss.WriteString("### 사용 방법\n")
+		ss.WriteString("1. <available_skills>에서 일치하는 스킬 하나 선택 (description 기준)\n")
+		ss.WriteString("2. 해당 스킬의 <location>에서 SKILL.md를 `read`\n")
+		ss.WriteString("3. SKILL.md의 절차를 그대로 따르기\n\n")
 		ss.WriteString(params.SkillsPrompt)
 		ss.WriteString("\n")
-		ss.WriteString("Additional skills are available via the `skills_list` tool. Use it when a task might match a skill not listed above.\n\n")
+		ss.WriteString("### 규칙\n")
+		ss.WriteString("- 스킬이 존재하는 작업을 **스킬 없이 처리하지 마라.** 스킬이 더 정확하다.\n")
+		ss.WriteString("- 여러 개 해당하면 가장 구체적인 것 하나만 선택. 한 번에 하나만 읽어라.\n")
+		ss.WriteString("- 스킬 경로의 상대 경로는 SKILL.md 디렉토리 기준으로 해석.\n")
+		ss.WriteString("- 목록에 없는 작업도 `skills_list`로 확인 — discoverable 스킬이 더 있다.\n\n")
 		// Skill Genesis: instruct the agent to identify reusable patterns.
 		ss.WriteString("### Skill Genesis (경험에서 스킬 자동 생성)\n")
 		ss.WriteString("복합 워크플로우(5+ 도구, 3+ 턴)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
@@ -256,9 +266,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("3. 기존 스킬이 부족하면 skills.evolve로 개선을 트리거할 수 있습니다.\n\n")
 	} else {
 		// No always-skills, but discoverable skills may still exist.
-		ss.WriteString("## Skills\n")
-		ss.WriteString("Skills provide specialized instructions for specific tasks.\n")
-		ss.WriteString("Use the `skills_list` tool to discover available skills when a task might benefit from one.\n\n")
+		ss.WriteString("## 스킬 (전문 절차서)\n\n")
+		ss.WriteString("스킬은 특정 작업에 대한 검증된 절차서다.\n")
+		ss.WriteString("`skills_list` 도구로 사용 가능한 스킬을 확인하라. 해당하는 스킬이 있으면 반드시 사용.\n\n")
 	}
 
 	// --- Dynamic block ---
