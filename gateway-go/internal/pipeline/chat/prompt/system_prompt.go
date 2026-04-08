@@ -102,7 +102,7 @@ var toolCategories = []struct {
 	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web", "http", "deep_research"}},
-	{"Memory", []string{"wiki", "memory_store", "memory_recall", "projects_write"}},
+	{"Memory", []string{"wiki"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
@@ -182,7 +182,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("사용자가 작업을 요청하면 같은 턴에서 바로 시작하라. 계획만 세우거나 '하겠습니다'로 끝내지 마라.\n")
 		s.WriteString("도구가 있고 다음 행동이 명확하면, 도구를 먼저 호출하라. 코멘트만 하는 턴은 미완성이다.\n")
 		s.WriteString("여러 단계가 필요하면, 짧은 진행 알림과 함께 바로 작업하라.\n")
-		s.WriteString("복잡한 다단계 작업에서는 `update_plan`으로 진행 상태를 추적하라. 단순 작업에는 불필요. update_plan 호출 후 멈추지 말고 계속 작업하라.\n\n")
+		s.WriteString("복잡한 다단계 작업에서는 짧은 진행 알림과 함께 바로 작업하라.\n\n")
 
 		// Tool Call Style / Progress narration.
 		s.WriteString("## 작업 과정 설명\n")
@@ -284,9 +284,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- confidence: high(검증됨), medium(합리적 추론), low(불확실)\n\n")
 
 		d.WriteString("### 읽기 (Query)\n")
-		d.WriteString("- 과거 맥락/지식 조회 → memory_recall (search/read/list)\n")
+		d.WriteString("- 과거 맥락/지식 조회 → wiki search / wiki read\n")
 		d.WriteString("- 위키 목차 확인 → wiki index → wiki read\n")
-		d.WriteString("- 키워드 검색 → wiki search 또는 memory_recall search\n")
+		d.WriteString("- 키워드 검색 → wiki search\n")
 		d.WriteString("- 최근 일지 확인 → wiki daily\n\n")
 
 		d.WriteString("### 쓰기 (Ingest) — 2층 구조\n")
@@ -298,10 +298,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		d.WriteString("#### 위키 페이지 (축적, 비중복)\n")
 		d.WriteString("대화에서 장기 보존할 지식이 나오면 위키 페이지를 생성하거나 **기존 페이지에 병합**하라.\n")
-		d.WriteString("**반드시 먼저 memory_recall 또는 wiki search로 기존 페이지를 확인한 후**, 있으면 업데이트하고 없을 때만 새로 생성.\n")
-		d.WriteString("- 사실/선호/결정 → memory_store (카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호)\n")
-		d.WriteString("- 프로젝트 진행/목표/상태 → projects_write\n")
-		d.WriteString("- 정리된 지식/레퍼런스 → wiki write (제목, 카테고리, 태그, type, confidence 필수)\n")
+		d.WriteString("**반드시 먼저 wiki search로 기존 페이지를 확인한 후**, 있으면 업데이트하고 없을 때만 새로 생성.\n")
+		d.WriteString("- 모든 지식 (사실/선호/결정/프로젝트/레퍼런스) → wiki write (제목, 카테고리, 태그, type, confidence 필수)\n")
 		d.WriteString("하나의 주제는 하나의 페이지. 같은 주제로 여러 페이지를 만들지 마라.\n\n")
 
 		d.WriteString("#### 기록 요령\n")
