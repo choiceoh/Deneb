@@ -406,6 +406,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			SessionKey:        params.SessionKey,
 			ClientRunID:       shortid.New("cont"),
 			Message:           contMsg,
+			PrebuiltMessages:  chatResult.FinalMessages,
 			Delivery:          params.Delivery,
 			Model:             params.Model,
 			WorkspaceDir:      params.WorkspaceDir,

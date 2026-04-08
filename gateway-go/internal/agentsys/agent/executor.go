@@ -124,6 +124,7 @@ func RunAgent(
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
+				result.FinalMessages = messages
 				return result, nil
 			}
 			return nil, fmt.Errorf("stream chat (turn %d): %w", turn, err)
@@ -187,6 +188,7 @@ func RunAgent(
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
+				result.FinalMessages = messages
 				return result, nil
 			}
 			return nil, fmt.Errorf("consume stream (turn %d): %w", turn, err)
@@ -332,6 +334,7 @@ func RunAgent(
 			}
 			result.NudgeContinuations = nudgeContinuationCount
 			result.MaxTokensRecoveries = maxTokensRecoveryCount
+			result.FinalMessages = messages
 			return result, nil
 		}
 
@@ -372,6 +375,7 @@ func RunAgent(
 				for _, tc := range turnRes.toolCalls {
 					result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
 				}
+				result.FinalMessages = messages
 				return result, nil
 			}
 
@@ -467,6 +471,7 @@ func RunAgent(
 				for _, tc := range turnRes.toolCalls {
 					result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
 				}
+				result.FinalMessages = messages
 				return result, nil
 			}
 		}
@@ -513,6 +518,7 @@ func RunAgent(
 	result.StopReason = "max_turns"
 	result.NudgeContinuations = nudgeContinuationCount
 	result.MaxTokensRecoveries = maxTokensRecoveryCount
+	result.FinalMessages = messages
 	return result, nil
 }
 

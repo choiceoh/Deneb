@@ -298,9 +298,16 @@ func executeAgentRun(
 	}
 
 	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
-	// with full conversation history), use those instead of transcript context.
+	// with full conversation history, or continuation runs passing the previous
+	// run's final message array), use those instead of transcript context.
 	if len(params.PrebuiltMessages) > 0 {
 		messages = params.PrebuiltMessages
+		// Continuation runs set both PrebuiltMessages (previous run's context)
+		// and Message (continuation system message). Append the message so the
+		// LLM sees it without re-loading the entire transcript.
+		if params.Message != "" && len(params.Attachments) == 0 {
+			messages = append(messages, llm.NewTextMessage("user", params.Message))
+		}
 	}
 
 	// Build or augment user message with attachments.

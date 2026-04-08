@@ -176,4 +176,9 @@ type AgentResult struct {
 	// MaxTokensRecoveries is the number of max-output-tokens recovery retries
 	// that were triggered during this run. 0 when recovery is disabled.
 	MaxTokensRecoveries int
+
+	// FinalMessages is the message array at the end of the agent loop.
+	// Used by continuation runs to skip transcript reload — the next run
+	// receives this as PrebuiltMessages instead of re-assembling from scratch.
+	FinalMessages []llm.Message
 }
