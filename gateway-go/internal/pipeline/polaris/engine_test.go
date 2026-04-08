@@ -48,6 +48,7 @@ func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
 	}
 
 	// Small context — Polaris should not trigger LLM compaction.
+	// Bootstrap will recover the 8 older messages (raw inject, < 50K threshold).
 	msgs := []llm.Message{
 		llmMsg("user", "hello"),
 		llmMsg("assistant", "hi"),
@@ -57,11 +58,12 @@ func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
 	if result.LLMCompacted {
 		t.Fatal("expected no LLM compaction for small context")
 	}
-	if len(compacted) != 2 {
-		t.Fatalf("got %d, want 2 messages", len(compacted))
+	// Bootstrap injects 8 older messages (raw) + 2 fresh = 10 total.
+	if len(compacted) != 10 {
+		t.Fatalf("got %d, want 10 messages (8 bootstrap + 2 fresh)", len(compacted))
 	}
 
-	// No summary nodes should be created.
+	// No summary nodes — raw inject does not persist to DAG.
 	nodes := testutil.Must(s.LoadSummaries("s1", 0))
 	if len(nodes) != 0 {
 		t.Fatalf("got %d, want 0 summary nodes", len(nodes))
