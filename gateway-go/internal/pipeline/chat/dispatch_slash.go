@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -140,44 +139,6 @@ func (h *Handler) handleSlashCommand(
 	case "mail":
 		go h.handleMailCommand(reqID, sessionKey, delivery)
 
-	case "chart":
-		// Prefer the most recently used autoresearch workdir (from Runner)
-		// so /chart works regardless of the global workspace config.
-		var workdir string
-		h.callbackMu.RLock()
-		if h.autoresearchWorkdirFn != nil {
-			workdir = h.autoresearchWorkdirFn()
-		}
-		h.callbackMu.RUnlock()
-		if workdir == "" {
-			workdir = resolveWorkspaceDirForPrompt()
-		}
-		cfg, err := autoresearch.LoadConfig(workdir)
-		if err != nil {
-			h.deliverSlashResponse(delivery, "실험이 없습니다. autoresearch를 먼저 실행하세요.")
-			break
-		}
-		rows, err := autoresearch.ParseResults(workdir)
-		if err != nil || len(rows) == 0 {
-			h.deliverSlashResponse(delivery, "실험 결과가 없습니다.")
-			break
-		}
-		chartPath, err := autoresearch.SaveChart(workdir, rows, cfg)
-		if err != nil {
-			h.deliverSlashResponse(delivery, fmt.Sprintf("차트 생성 실패: %s", err.Error()))
-			break
-		}
-		h.callbackMu.RLock()
-		sendFn := h.mediaSendFn
-		h.callbackMu.RUnlock()
-		if sendFn != nil && delivery != nil {
-			sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			caption := fmt.Sprintf("📊 %s (%s)", cfg.MetricName, cfg.MetricDirection)
-			if sendErr := sendFn(sendCtx, delivery, chartPath, "photo", caption, false); sendErr != nil {
-				h.deliverSlashResponse(delivery, fmt.Sprintf("차트 전송 실패: %s", sendErr.Error()))
-			}
-			cancel()
-		}
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{

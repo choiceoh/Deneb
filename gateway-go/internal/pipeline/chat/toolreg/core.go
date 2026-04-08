@@ -10,7 +10,6 @@ import (
 	"context"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -77,22 +76,6 @@ func RegisterBridgeTool(registry toolctx.ToolRegistrar, broadcaster tools.Broadc
 		InputSchema:     bridgeToolSchema(),
 		Fn:              tools.ToolBridge(broadcaster),
 		ConcurrencySafe: true,
-	})
-}
-
-// RegisterAutoresearchTool registers the autoresearch tool with the given runner.
-// Called separately from RegisterCoreTools because the runner is created by the
-// server layer and not part of CoreToolDeps.
-func RegisterAutoresearchTool(registry toolctx.ToolRegistrar, runner *autoresearch.Runner) {
-	if runner == nil {
-		return
-	}
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "autoresearch",
-		Description: "Autonomous experiment loop (karpathy/autoresearch). Iteratively modifies code, runs experiments, evaluates a scalar metric, and keeps improvements or reverts failures — all without human intervention. Actions: init (configure), start (begin loop), stop (halt), status (check progress), results (get log)",
-		InputSchema: autoresearchToolSchema(),
-		Fn:          tools.ToolAutoresearch(runner),
-		Deferred:    true,
 	})
 }
 
