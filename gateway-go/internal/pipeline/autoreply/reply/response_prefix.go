@@ -1,6 +1,7 @@
 package reply
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -38,8 +39,7 @@ func FormatResponsePrefix(tmpl ResponsePrefixTemplate, params ResponsePrefixPara
 				elapsed = "<1s"
 			} else {
 				elapsed = strings.TrimRight(strings.TrimRight(
-					formatFloat(secs, 1), "0"), ".")
-				elapsed += "s"
+					fmt.Sprintf("%.1f", secs), "0"), ".") + "s"
 			}
 		}
 		result = strings.ReplaceAll(result, "{elapsed}", elapsed)
@@ -56,61 +56,16 @@ type ResponsePrefixParams struct {
 	ElapsedMs int64
 }
 
-func formatFloat(f float64, prec int) string {
-	s := strings.TrimRight(strings.TrimRight(
-		strings.ReplaceAll(
-			strings.ReplaceAll(
-				formatFloatRaw(f, prec),
-				",", ""),
-			" ", ""),
-		"0"), ".")
-	return s
-}
-
-func formatFloatRaw(f float64, prec int) string {
-	if prec <= 0 {
-		return strings.Split(strings.ReplaceAll(
-			strings.ReplaceAll(
-				strings.TrimRight(
-					strings.TrimRight(
-						formatFloatSimple(f), "0"),
-					"."),
-				",", ""),
-			" ", ""), ".")[0]
+// FormatEnvelopeTimestamp formats a timestamp for response prefix display.
+func FormatEnvelopeTimestamp(t time.Time, timezone string) string {
+	if t.IsZero() {
+		return ""
 	}
-	return formatFloatSimple(f)
-}
-
-func formatFloatSimple(f float64) string {
-	// Simple float formatting.
-	s := ""
-	whole := int64(f)
-	frac := f - float64(whole)
-	s = intToStr(whole)
-	if frac > 0.05 {
-		s += "."
-		digit := int64(frac * 10)
-		s += intToStr(digit)
+	loc := time.Local
+	if timezone != "" {
+		if l, err := time.LoadLocation(timezone); err == nil {
+			loc = l
+		}
 	}
-	return s
-}
-
-func intToStr(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	digits := ""
-	for n > 0 {
-		digits = string(rune('0'+n%10)) + digits
-		n /= 10
-	}
-	if neg {
-		return "-" + digits
-	}
-	return digits
+	return t.In(loc).Format("Mon 15:04")
 }

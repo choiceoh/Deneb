@@ -1,9 +1,6 @@
 package model
 
-import (
-	"strings"
-	"unicode/utf8"
-)
+import "strings"
 
 // ModelSelection holds the resolved model for a reply.
 type ModelSelection struct {
@@ -92,81 +89,7 @@ func ScoreFuzzyMatch(query string, candidate ModelCandidate) int {
 		return 65
 	}
 
-	// Bounded Levenshtein distance.
-	dist := boundedLevenshtein(query, modelLow, 3)
-	if dist >= 0 && dist <= 2 {
-		return 60 - dist*10
-	}
 	return 0
-}
-
-// boundedLevenshtein computes edit distance up to maxDist.
-// Returns -1 if distance exceeds maxDist.
-func boundedLevenshtein(a, b string, maxDist int) int {
-	la := utf8.RuneCountInString(a)
-	lb := utf8.RuneCountInString(b)
-	if abs(la-lb) > maxDist {
-		return -1
-	}
-
-	ra := []rune(a)
-	rb := []rune(b)
-
-	// Use two rows for space efficiency.
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		minInRow := curr[0]
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if ra[i-1] == rb[j-1] {
-				cost = 0
-			}
-			curr[j] = min3(
-				prev[j]+1,      // deletion
-				curr[j-1]+1,    // insertion
-				prev[j-1]+cost, // substitution
-			)
-			if curr[j] < minInRow {
-				minInRow = curr[j]
-			}
-		}
-		if minInRow > maxDist {
-			return -1
-		}
-		prev, curr = curr, prev
-	}
-
-	if prev[lb] > maxDist {
-		return -1
-	}
-	return prev[lb]
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-func min3(a, b, c int) int {
-	if a < b {
-		if a < c {
-			return a
-		}
-		return c
-	}
-	if b < c {
-		return b
-	}
-	return c
 }
 
 // ResolveModelOverride checks session and config for model overrides.

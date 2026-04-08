@@ -157,35 +157,3 @@ func ResolveStoredModelOverride(sessionModel, parentSessionModel, configModel st
 	}
 	return configModel
 }
-
-// VariantTokens are model name fragments used for fuzzy variant matching.
-var VariantTokens = []string{
-	"mini", "nano", "micro", "small", "medium", "large", "xl", "xxl",
-	"pro", "plus", "ultra", "lite", "turbo", "preview",
-	"latest", "snapshot", "exp", "experimental",
-}
-
-// IsVariantToken returns true if the token is a known model variant suffix.
-func IsVariantToken(token string) bool {
-	lower := strings.ToLower(token)
-	for _, vt := range VariantTokens {
-		if lower == vt {
-			return true
-		}
-	}
-	return false
-}
-
-// StripVariantTokens removes variant tokens from a model name for base comparison.
-func StripVariantTokens(model string) string {
-	parts := strings.FieldsFunc(model, func(r rune) bool {
-		return r == '-' || r == '_' || r == '.'
-	})
-	var kept []string
-	for _, p := range parts {
-		if !IsVariantToken(p) {
-			kept = append(kept, p)
-		}
-	}
-	return strings.Join(kept, "-")
-}

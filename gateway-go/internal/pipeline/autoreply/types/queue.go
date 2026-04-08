@@ -80,10 +80,3 @@ type FollowupRun struct {
 	OriginatingChatType  string              `json:"originatingChatType,omitempty"`
 	Run                  *FollowupRunContext `json:"run"`
 }
-
-// ResolveFollowupQueueSettingsParams holds the inputs for resolving queue settings.
-// Mode and drop policy fields removed: always collect + summarize.
-type ResolveFollowupQueueSettingsParams struct {
-	DebounceMs int
-	Cap        int
-}

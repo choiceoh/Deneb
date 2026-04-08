@@ -13,67 +13,12 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 // MentionPattern detects @mentions in message text.
 var MentionPattern = regexp.MustCompile(`@([a-zA-Z0-9_]+)`)
-
-// ExtractMentions returns all @mentioned usernames from text.
-func ExtractMentions(text string) []string {
-	matches := MentionPattern.FindAllStringSubmatch(text, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-	var mentions []string
-	seen := make(map[string]struct{})
-	for _, m := range matches {
-		username := m[1]
-		if _, ok := seen[username]; !ok {
-			seen[username] = struct{}{}
-			mentions = append(mentions, username)
-		}
-	}
-	return mentions
-}
-
-// ContainsMention checks if text mentions a specific username.
-func ContainsMention(text, username string) bool {
-	if username == "" {
-		return false
-	}
-	re := regexp.MustCompile(`(?i)@` + regexp.QuoteMeta(username) + `\b`)
-	return re.MatchString(text)
-}
-
-// GroupContext holds context for group chat messages.
-type GroupContext struct {
-	GroupID     string
-	GroupTitle  string
-	MemberCount int
-	IsThread    bool
-	ThreadID    string
-}
-
-// ChannelContext holds channel-specific context.
-type ChannelContext struct {
-	Channel     string
-	AccountID   string
-	BotUsername string
-	ChatType    string // "direct", "group", "supergroup", "channel"
-}
-
-// TelegramContext holds Telegram-specific message context.
-type TelegramContext struct {
-	ChatID           int64
-	MessageID        int64
-	ThreadID         int64
-	IsForward        bool
-	IsReply          bool
-	ReplyToMessageID int64
-}
 
 // ExtractInboundText extracts the text body from an inbound message context.
 func ExtractInboundText(msg *types.MsgContext) string {
@@ -119,69 +64,4 @@ type ReplyReference struct {
 	MessageID string
 	Text      string
 	From      string
-}
-
-// ReplyThreading resolves threading for a reply.
-type ReplyThreading struct {
-	ReplyToID      string
-	ReplyToCurrent bool
-	ThreadID       string
-}
-
-// ResolveReplyThreading determines the threading for a reply payload.
-func ResolveReplyThreading(payload types.ReplyPayload, msg *types.MsgContext) ReplyThreading {
-	threading := ReplyThreading{}
-
-	// Check for explicit reply-to tag.
-	replyTo, current := tokens.ApplyReplyThreading(payload.Text, "")
-	switch {
-	case current:
-		threading.ReplyToCurrent = true
-		threading.ReplyToID = msg.MessageSid
-	case replyTo != "":
-		threading.ReplyToID = replyTo
-	case payload.ReplyToID != "":
-		threading.ReplyToID = payload.ReplyToID
-	}
-
-	// Thread ID from message context.
-	threading.ThreadID = msg.ThreadID
-
-	return threading
-}
-
-// MediaPathResolver resolves media file paths for delivery.
-type MediaPathResolver struct {
-	BaseDir string
-}
-
-// ResolvePath resolves a media path to an absolute path.
-func (r *MediaPathResolver) ResolvePath(path string) string {
-	if path == "" {
-		return ""
-	}
-	if strings.HasPrefix(path, "/") || strings.HasPrefix(path, "http") {
-		return path
-	}
-	if r.BaseDir != "" {
-		return r.BaseDir + "/" + path
-	}
-	return path
-}
-
-// ReplyDelivery handles the final delivery of a reply to a channel.
-type ReplyDeliveryConfig struct {
-	Channel    string
-	To         string
-	AccountID  string
-	ThreadID   string
-	ReplyToID  string
-	ChunkLimit int
-	ChunkMode  chunk.Mode
-}
-
-// AudioTag represents audio metadata.
-type AudioTag struct {
-	IsVoice  bool
-	Duration int // seconds
 }

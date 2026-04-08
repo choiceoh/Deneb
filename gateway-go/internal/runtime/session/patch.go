@@ -21,8 +21,6 @@ type PatchFields struct {
 	SpawnDepth           *int    `json:"spawnDepth,omitempty"`
 	SubagentRole         *string `json:"subagentRole,omitempty"`
 	SubagentControlScope *string `json:"subagentControlScope,omitempty"`
-	SendPolicy           *string `json:"sendPolicy,omitempty"`
-	GroupActivation      *string `json:"groupActivation,omitempty"`
 }
 
 // patchStr sets dst to *src if src is non-nil and differs.
@@ -80,8 +78,6 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 	changed = patchInt(&s.SpawnDepth, p.SpawnDepth) || changed
 	changed = patchStr(&s.SubagentRole, p.SubagentRole) || changed
 	changed = patchStr(&s.SubagentControlScope, p.SubagentControlScope) || changed
-	changed = patchStr(&s.SendPolicy, p.SendPolicy) || changed
-	changed = patchStr(&s.GroupActivation, p.GroupActivation) || changed
 
 	if changed {
 		s.UpdatedAt = time.Now().UnixMilli()

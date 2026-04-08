@@ -111,78 +111,6 @@ func TestEnqueueFollowupRun_summarizeDropPolicy(t *testing.T) {
 	}
 }
 
-func TestNormalizeFollowupQueueMode(t *testing.T) {
-	tests := []struct {
-		input string
-		want  types.FollowupQueueMode
-	}{
-		// All recognized inputs map to collect.
-		{"steer", types.FollowupModeCollect},
-		{"Steer", types.FollowupModeCollect},
-		{"collect", types.FollowupModeCollect},
-		{"followup", types.FollowupModeCollect},
-		{"interrupt", types.FollowupModeCollect},
-		{"steer-backlog", types.FollowupModeCollect},
-		{"queue", types.FollowupModeCollect},
-		{"", ""},
-		{"unknown", ""},
-	}
-	for _, tt := range tests {
-		got := NormalizeFollowupQueueMode(tt.input)
-		if got != tt.want {
-			t.Errorf("NormalizeFollowupQueueMode(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-func TestNormalizeFollowupDropPolicy(t *testing.T) {
-	tests := []struct {
-		input string
-		want  types.FollowupDropPolicy
-	}{
-		// All recognized inputs map to summarize.
-		{"old", types.FollowupDropSummarize},
-		{"oldest", types.FollowupDropSummarize},
-		{"new", types.FollowupDropSummarize},
-		{"summarize", types.FollowupDropSummarize},
-		{"", ""},
-		{"bad", ""},
-	}
-	for _, tt := range tests {
-		got := NormalizeFollowupDropPolicy(tt.input)
-		if got != tt.want {
-			t.Errorf("NormalizeFollowupDropPolicy(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-func TestExtractQueueDirective(t *testing.T) {
-	tests := []struct {
-		input   string
-		hasDir  bool
-		reset   bool
-		cleaned string
-	}{
-		{"hello /queue collect world", true, false, "hello world"},
-		{"/queue reset", true, true, ""},
-		{"/queue steer", true, false, ""},
-		{"no queue here", false, false, "no queue here"},
-		{"", false, false, ""},
-	}
-	for _, tt := range tests {
-		got := ExtractQueueDirective(tt.input)
-		if got.HasDirective != tt.hasDir {
-			t.Errorf("ExtractQueueDirective(%q): HasDirective=%v, want %v", tt.input, got.HasDirective, tt.hasDir)
-		}
-		if got.QueueReset != tt.reset {
-			t.Errorf("ExtractQueueDirective(%q): QueueReset=%v, want %v", tt.input, got.QueueReset, tt.reset)
-		}
-		if got.Cleaned != tt.cleaned {
-			t.Errorf("ExtractQueueDirective(%q): Cleaned=%q, want %q", tt.input, got.Cleaned, tt.cleaned)
-		}
-	}
-}
-
 func TestClearSessionQueues(t *testing.T) {
 	r := NewFollowupQueueRegistry()
 	r.GetOrCreate("k1", types.FollowupQueueSettings{Mode: types.FollowupModeCollect})
@@ -267,27 +195,5 @@ func TestFollowupDrainService_basic(t *testing.T) {
 	drainedMu.Unlock()
 	if count < 1 {
 		t.Errorf("got %d, want at least 1 drain callback (collect batches items)", count)
-	}
-}
-
-func TestResolveFollowupQueueSettings(t *testing.T) {
-	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{})
-	if s.Mode != types.FollowupModeCollect {
-		t.Errorf("got %s, want default mode=collect", s.Mode)
-	}
-	if s.DebounceMs != DefaultFollowupDebounceMs {
-		t.Errorf("got %d, want default debounce=%d", s.DebounceMs, DefaultFollowupDebounceMs)
-	}
-
-	s2 := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
-		DebounceMs: 2000,
-		Cap:        50,
-	})
-	// Mode is always collect.
-	if s2.Mode != types.FollowupModeCollect {
-		t.Errorf("got %s, want mode=collect", s2.Mode)
-	}
-	if s2.DebounceMs != 2000 {
-		t.Errorf("got %d, want debounce=2000", s2.DebounceMs)
 	}
 }

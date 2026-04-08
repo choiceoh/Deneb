@@ -72,37 +72,4 @@ func TestPersistDirectives(t *testing.T) {
 	}
 }
 
-func TestIsFastLaneDirective(t *testing.T) {
-	d := ParseInlineDirectives("/think high", nil)
-	if !IsFastLaneDirective(d) {
-		t.Error("expected fast lane")
-	}
-
-	d = ParseInlineDirectives("/model gpt-4", nil)
-	if IsFastLaneDirective(d) {
-		t.Error("model change should not be fast lane")
-	}
-}
-
-func TestBuildFastLaneReply(t *testing.T) {
-	d := ParseInlineDirectives("/think high /fast", nil)
-	reply := BuildFastLaneReply(d)
-	if reply == nil {
-		t.Fatal("expected reply")
-	}
-	if !strings.Contains(reply.Text, "Think") {
-		t.Errorf("reply should mention Think: %q", reply.Text)
-	}
-}
-
-func TestParseDirectiveParams(t *testing.T) {
-	params := ParseDirectiveParams("hello @key=value @flag world")
-	if params.Params["key"] != "value" {
-		t.Errorf("key = %q", params.Params["key"])
-	}
-	if params.Params["flag"] != "true" {
-		t.Errorf("flag = %q", params.Params["flag"])
-	}
-}
-
 func boolPtr(b bool) *bool { return &b }
