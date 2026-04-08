@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
-
-	"github.com/google/go-cmp/cmp"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -38,8 +37,8 @@ func TestGetMe(t *testing.T) {
 
 	user := testutil.Must(c.GetMe(context.Background()))
 	want := User{ID: 123, IsBot: true, FirstName: "TestBot", Username: "test_bot"}
-	if diff := cmp.Diff(want, *user); diff != "" {
-		t.Errorf("GetMe mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(want, *user) {
+		t.Errorf("GetMe mismatch:\n  want: %+v\n   got: %+v", want, *user)
 	}
 }
 

@@ -121,9 +121,9 @@ generate: tool-schemas model-caps data-gen
 generate-check:
 	@echo "==> [1/3] tool schemas (tool_schemas.json -> tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
-	@echo "==> [2/3] model capabilities (model_caps.yaml -> model_caps_gen.go)"
+	@echo "==> [2/3] model capabilities (model_caps.json -> model_caps_gen.go)"
 	@$(MAKE) model-caps-check
-	@echo "==> [3/3] data tables (*.yaml -> *_gen.go)"
+	@echo "==> [3/3] data tables (*.json -> *_gen.go)"
 	@$(MAKE) data-gen-check
 	@echo "All generation checks passed"
 
@@ -147,23 +147,23 @@ tool-schemas-check:
 		-pkg  toolreg
 	@git diff --exit-code -- gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go
 
-# Regenerate gateway-go/internal/pipeline/autoreply/model_caps_gen.go from model_caps.yaml.
+# Regenerate gateway-go/internal/pipeline/autoreply/model_caps_gen.go from model_caps.json.
 model-caps:
 	cd gateway-go && go run cmd/model-caps-gen/main.go \
-		-yaml internal/pipeline/autoreply/thinking/model_caps.yaml \
+		-json internal/pipeline/autoreply/thinking/model_caps.json \
 		-out  internal/pipeline/autoreply/thinking/model_caps_gen.go
 
-# Verify model_caps_gen.go is up to date (fails if yaml and Go are out of sync).
+# Verify model_caps_gen.go is up to date (fails if json and Go are out of sync).
 model-caps-check:
 	cd gateway-go && go run cmd/model-caps-gen/main.go \
-		-yaml internal/pipeline/autoreply/thinking/model_caps.yaml \
+		-json internal/pipeline/autoreply/thinking/model_caps.json \
 		-out  internal/pipeline/autoreply/thinking/model_caps_gen.go
 	@git diff --exit-code -- gateway-go/internal/pipeline/autoreply/thinking/model_caps_gen.go
 
 # --- Data table code generation ---
 #
-# Universal YAML -> Go var generator for data tables (tool classification).
-# Source YAML files live next to their generated Go counterparts.
+# Universal JSON -> Go var generator for data tables (tool classification).
+# Source JSON files live next to their generated Go counterparts.
 
 DATA_GEN = go run cmd/data-gen/main.go
 DATA_GEN_TARGETS = \
@@ -171,12 +171,12 @@ DATA_GEN_TARGETS = \
 
 data-gen:
 	@cd gateway-go && for t in $(DATA_GEN_TARGETS); do \
-		$(DATA_GEN) -yaml $${t}.yaml -out $${t}_gen.go; \
+		$(DATA_GEN) -json $${t}.json -out $${t}_gen.go; \
 	done
 
 data-gen-check:
 	@cd gateway-go && for t in $(DATA_GEN_TARGETS); do \
-		$(DATA_GEN) -yaml $${t}.yaml -out $${t}_gen.go; \
+		$(DATA_GEN) -json $${t}.json -out $${t}_gen.go; \
 	done
 	@git diff --exit-code -- $(addprefix gateway-go/,$(addsuffix _gen.go,$(DATA_GEN_TARGETS)))
 

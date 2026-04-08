@@ -2,10 +2,10 @@ package protocol
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
-	"github.com/google/go-cmp/cmp"
 )
 
 func TestNewRequestFrame(t *testing.T) {
@@ -23,8 +23,8 @@ func TestNewRequestFrame(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if diff := cmp.Diff(*req, decoded); diff != "" {
-		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(*req, decoded) {
+		t.Errorf("round-trip mismatch:\n  want: %+v\n   got: %+v", *req, decoded)
 	}
 }
 
@@ -68,8 +68,8 @@ func TestResponseFrameOK(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if diff := cmp.Diff(*resp, decoded); diff != "" {
-		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(*resp, decoded) {
+		t.Errorf("round-trip mismatch:\n  want: %+v\n   got: %+v", *resp, decoded)
 	}
 }
 
@@ -88,8 +88,8 @@ func TestResponseFrameError(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if diff := cmp.Diff(*resp, decoded); diff != "" {
-		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(*resp, decoded) {
+		t.Errorf("round-trip mismatch:\n  want: %+v\n   got: %+v", *resp, decoded)
 	}
 }
 
@@ -109,8 +109,8 @@ func TestEventFrameRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if diff := cmp.Diff(*ev, decoded); diff != "" {
-		t.Errorf("round-trip mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(*ev, decoded) {
+		t.Errorf("round-trip mismatch:\n  want: %+v\n   got: %+v", *ev, decoded)
 	}
 }
 

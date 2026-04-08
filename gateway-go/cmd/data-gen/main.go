@@ -1,78 +1,71 @@
-// data-gen generates Go variable declarations from YAML data files.
+// data-gen generates Go variable declarations from JSON data files.
 //
-// Universal code generator for data-driven Go code. Reads a YAML file
+// Universal code generator for data-driven Go code. Reads a JSON file
 // containing variable definitions with type metadata and generates
 // corresponding Go source code.
 //
 // Usage (from gateway-go/):
 //
 //	go run cmd/data-gen/main.go \
-//	    -yaml internal/pipeline/chat/tool_classification.yaml \
+//	    -json internal/pipeline/chat/tool_classification.json \
 //	    -out  internal/pipeline/chat/tool_classification_gen.go
 //
 // Or via Makefile: make data-gen
 //
-// YAML format:
+// JSON format:
 //
-//	_gen:
-//	  package: <go-package-name>
-//	  imports: [<import-path>, ...]   # optional
-//	  build_tags: <tags>              # optional
-//
-//	<varName>:
-//	  _type: <go-type>               # map[K]V, []T, etc.
-//	  _doc: <comment>                # optional doc comment
-//	  _value_map:                    # optional shorthand → Go expression
-//	    short: GoExpr
-//	  _values:                       # data entries (dict for maps, list for slices)
-//	    key: value
+//	{
+//	  "_gen": {
+//	    "package": "<go-package-name>",
+//	    "imports": ["<import-path>", ...],
+//	    "build_tags": "<tags>"
+//	  },
+//	  "<varName>": {
+//	    "_type": "<go-type>",
+//	    "_doc": "<comment>",
+//	    "_value_map": { "short": "GoExpr" },
+//	    "_values": { ... }
+//	  }
+//	}
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"go/format"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	yamlFile := flag.String("yaml", "", "YAML source file")
+	jsonFile := flag.String("json", "", "JSON source file")
 	outFile := flag.String("out", "", "Output Go file")
 	flag.Parse()
 
-	if *yamlFile == "" || *outFile == "" {
-		fmt.Fprintln(os.Stderr, "usage: data-gen -yaml FILE -out FILE")
+	if *jsonFile == "" || *outFile == "" {
+		fmt.Fprintln(os.Stderr, "usage: data-gen -json FILE -out FILE")
 		os.Exit(1)
 	}
 
-	data, err := os.ReadFile(*yamlFile)
+	data, err := os.ReadFile(*jsonFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 ||
-		root.Content[0].Kind != yaml.MappingNode {
-		fmt.Fprintln(os.Stderr, "error: YAML root must be a mapping")
-		os.Exit(1)
-	}
-
-	doc := root.Content[0]
-
 	// Derive source path for the header comment.
-	sourcePath := *yamlFile
-	if abs, err := filepath.Abs(*yamlFile); err == nil {
+	sourcePath := *jsonFile
+	if abs, err := filepath.Abs(*jsonFile); err == nil {
 		if idx := strings.Index(abs, "/gateway-go/"); idx >= 0 {
 			sourcePath = abs[idx+1:]
 		}
@@ -92,24 +85,21 @@ func main() {
 	}
 
 	nVars, nEntries := 0, 0
-	for i := 0; i < len(doc.Content); i += 2 {
-		key := doc.Content[i].Value
-		if strings.HasPrefix(key, "_") {
+	for k, v := range doc {
+		if strings.HasPrefix(k, "_") {
 			continue
 		}
-		val := doc.Content[i+1]
-		if val.Kind != yaml.MappingNode {
+		varDef, ok := v.(map[string]any)
+		if !ok {
 			continue
 		}
 		nVars++
-		if values := nodeGet(val, "_values"); values != nil {
-			switch values.Kind {
-			case yaml.MappingNode:
-				nEntries += len(values.Content) / 2
-			case yaml.SequenceNode:
-				nEntries += len(values.Content)
-			default:
-				// Other node types: no entries to count.
+		if values := varDef["_values"]; values != nil {
+			switch vals := values.(type) {
+			case map[string]any:
+				nEntries += len(vals)
+			case []any:
+				nEntries += len(vals)
 			}
 		}
 	}
@@ -120,23 +110,24 @@ func main() {
 // Code generation
 // ---------------------------------------------------------------------------
 
-func generate(doc *yaml.Node, sourcePath string) string {
-	gen := nodeGet(doc, "_gen")
+func generate(doc map[string]any, sourcePath string) string {
+	gen, _ := doc["_gen"].(map[string]any)
 	pkg := "main"
 	var imports []string
 	buildTags := ""
 
 	if gen != nil {
-		if v := nodeGet(gen, "package"); v != nil {
-			pkg = v.Value
+		if v, ok := gen["package"].(string); ok {
+			pkg = v
 		}
-		if v := nodeGet(gen, "imports"); v != nil {
-			for _, item := range v.Content {
-				imports = append(imports, item.Value)
+		if v, ok := gen["imports"].([]any); ok {
+			for _, item := range v {
+				s, _ := item.(string)
+				imports = append(imports, s)
 			}
 		}
-		if v := nodeGet(gen, "build_tags"); v != nil {
-			buildTags = v.Value
+		if v, ok := gen["build_tags"].(string); ok {
+			buildTags = v
 		}
 	}
 
@@ -163,55 +154,60 @@ func generate(doc *yaml.Node, sourcePath string) string {
 		}
 	}
 
-	// Emit each variable definition (preserving YAML order).
-	for i := 0; i < len(doc.Content); i += 2 {
-		varName := doc.Content[i].Value
-		if strings.HasPrefix(varName, "_") {
-			continue
+	// Collect and sort variable names for deterministic output.
+	varNames := make([]string, 0)
+	for k := range doc {
+		if !strings.HasPrefix(k, "_") {
+			if _, ok := doc[k].(map[string]any); ok {
+				varNames = append(varNames, k)
+			}
 		}
-		varDef := doc.Content[i+1]
-		if varDef.Kind != yaml.MappingNode {
-			continue
-		}
+	}
+	sort.Strings(varNames)
+
+	// Emit each variable definition.
+	for _, varName := range varNames {
+		varDef := doc[varName].(map[string]any)
 
 		typeStr := "map[string]string"
-		if v := nodeGet(varDef, "_type"); v != nil {
-			typeStr = v.Value
+		if v, ok := varDef["_type"].(string); ok {
+			typeStr = v
 		}
 
-		if docNode := nodeGet(varDef, "_doc"); docNode != nil {
-			for _, line := range strings.Split(docNode.Value, "\n") {
+		if docStr, ok := varDef["_doc"].(string); ok {
+			for _, line := range strings.Split(docStr, "\n") {
 				fmt.Fprintf(&b, "// %s\n", line)
 			}
 		}
 
 		var valueMap map[string]string
-		if vm := nodeGet(varDef, "_value_map"); vm != nil {
+		if vm, ok := varDef["_value_map"].(map[string]any); ok {
 			valueMap = make(map[string]string)
-			for j := 0; j < len(vm.Content); j += 2 {
-				valueMap[vm.Content[j].Value] = vm.Content[j+1].Value
+			for k, v := range vm {
+				s, _ := v.(string)
+				valueMap[k] = s
 			}
 		}
 
-		values := nodeGet(varDef, "_values")
+		values := varDef["_values"]
 
 		keyType, valType := parseMapType(typeStr)
 		if keyType != "" {
 			// Map type.
 			fmt.Fprintf(&b, "var %s = %s{\n", varName, typeStr)
-			if values != nil && values.Kind == yaml.MappingNode {
-				for j := 0; j < len(values.Content); j += 2 {
-					k := values.Content[j].Value
-					v := values.Content[j+1]
+			if valMap, ok := values.(map[string]any); ok {
+				keys := sortedKeys(valMap)
+				for _, k := range keys {
+					v := valMap[k]
 					fmt.Fprintf(&b, "\t%s: %s,\n", renderKey(k, keyType), renderValue(v, valType, valueMap))
 				}
 			}
 			b.WriteString("}\n\n")
 		} else if elemType := parseSliceType(typeStr); elemType != "" {
 			// Slice type.
-			if values != nil && values.Kind == yaml.SequenceNode {
+			if arr, ok := values.([]any); ok {
 				fmt.Fprintf(&b, "var %s = %s{\n", varName, typeStr)
-				for _, item := range values.Content {
+				for _, item := range arr {
 					fmt.Fprintf(&b, "\t%s,\n", renderValue(item, elemType, valueMap))
 				}
 				b.WriteString("}\n\n")
@@ -233,48 +229,57 @@ func renderKey(key, keyType string) string {
 	return key
 }
 
-func renderValue(node *yaml.Node, goType string, valueMap map[string]string) string {
+func renderValue(val any, goType string, valueMap map[string]string) string {
 	// Check value_map shorthand first.
-	if len(valueMap) > 0 && node.Kind == yaml.ScalarNode {
-		if replacement, ok := valueMap[node.Value]; ok {
-			return replacement
+	if len(valueMap) > 0 {
+		if s, ok := val.(string); ok {
+			if replacement, ok := valueMap[s]; ok {
+				return replacement
+			}
 		}
 	}
 
-	// Slice type → recurse into elements.
+	// Slice type -> recurse into elements.
 	if elemType := parseSliceType(goType); elemType != "" {
-		if node.Kind == yaml.SequenceNode {
-			items := make([]string, len(node.Content))
-			for i, item := range node.Content {
+		if arr, ok := val.([]any); ok {
+			items := make([]string, len(arr))
+			for i, item := range arr {
 				items[i] = renderValue(item, elemType, valueMap)
 			}
 			return goType + "{" + strings.Join(items, ", ") + "}"
 		}
-		// Single scalar → wrap in slice.
-		return goType + "{" + renderValue(node, elemType, valueMap) + "}"
+		// Single value -> wrap in slice.
+		return goType + "{" + renderValue(val, elemType, valueMap) + "}"
 	}
 
 	// Scalar types.
 	switch goType {
 	case "string":
-		return goStr(node.Value)
+		s, _ := val.(string)
+		return goStr(s)
 	case "bool":
-		if node.Value == "true" {
+		if b, ok := val.(bool); ok && b {
 			return "true"
 		}
 		return "false"
 	case "float64":
-		if node.Tag == "!!int" {
-			return node.Value + ".0"
+		if f, ok := val.(float64); ok {
+			if f == float64(int64(f)) {
+				return fmt.Sprintf("%d.0", int64(f))
+			}
+			return fmt.Sprintf("%v", f)
 		}
-		return node.Value
+		return fmt.Sprintf("%v", val)
 	case "int":
-		return node.Value
+		if f, ok := val.(float64); ok {
+			return fmt.Sprintf("%d", int64(f))
+		}
+		return fmt.Sprintf("%v", val)
 	case "struct{}":
 		return "{}"
 	default:
 		// Custom type (e.g. auth.Scope) — use as-is.
-		return node.Value
+		return fmt.Sprintf("%v", val)
 	}
 }
 
@@ -303,13 +308,13 @@ func parseSliceType(t string) string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-func nodeGet(mapping *yaml.Node, key string) *yaml.Node {
-	for i := 0; i < len(mapping.Content); i += 2 {
-		if mapping.Content[i].Value == key {
-			return mapping.Content[i+1]
-		}
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
 	}
-	return nil
+	sort.Strings(keys)
+	return keys
 }
 
 func goStr(s string) string {
