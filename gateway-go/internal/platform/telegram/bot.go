@@ -157,8 +157,11 @@ func (b *Bot) pollLoop(ctx context.Context) error {
 			// Dispatch to handler asynchronously so polling is not blocked
 			// by slow inbound processing (YouTube extraction, link enrichment, etc.).
 			// Single-user deployment: goroutine explosion is not a concern.
-			if b.handler != nil {
-				go b.handler(ctx, u)
+			b.handlerMu.Lock()
+			h := b.handler
+			b.handlerMu.Unlock()
+			if h != nil {
+				go h(ctx, u)
 			}
 		}
 

@@ -107,7 +107,7 @@ func (s *Server) startProcessPruner(ctx context.Context) {
 	if s.processes == nil {
 		return
 	}
-	go func() {
+	s.safeGo("process-pruner", func() {
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -121,7 +121,7 @@ func (s *Server) startProcessPruner(ctx context.Context) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.

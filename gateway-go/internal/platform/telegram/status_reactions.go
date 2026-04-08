@@ -255,6 +255,12 @@ func (c *StatusReactionController) scheduleEmoji(emoji string, immediate, skipSt
 		c.debounceTimer = nil
 	}
 
+	// Reset stall timers under the lock to prevent concurrent access
+	// from parallel scheduleEmoji calls racing on timer fields.
+	if !skipStallReset {
+		c.resetStallTimers()
+	}
+
 	if immediate {
 		c.mu.Unlock()
 		e := emoji
@@ -282,10 +288,6 @@ func (c *StatusReactionController) scheduleEmoji(emoji string, immediate, skipSt
 			},
 		)
 		c.mu.Unlock()
-	}
-
-	if !skipStallReset {
-		c.resetStallTimers()
 	}
 }
 

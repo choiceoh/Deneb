@@ -301,7 +301,10 @@ func executeAgentRun(
 	// with full conversation history, or continuation runs passing the previous
 	// run's final message array), use those instead of transcript context.
 	if len(params.PrebuiltMessages) > 0 {
-		messages = params.PrebuiltMessages
+		// Copy to avoid aliasing the caller's backing array (e.g., FinalMessages
+		// from a previous continuation run). Without the copy, append may write
+		// into shared capacity, corrupting the original slice.
+		messages = append([]llm.Message(nil), params.PrebuiltMessages...)
 		// Continuation runs set both PrebuiltMessages (previous run's context)
 		// and Message (continuation system message). Append the message so the
 		// LLM sees it without re-loading the entire transcript.
