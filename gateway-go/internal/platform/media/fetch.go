@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 	"strings"
 	"time"
 )
@@ -292,13 +294,9 @@ func redactURL(msg, rawURL string) string {
 }
 
 // DetectMIME detects the MIME type from a byte buffer using magic bytes.
-// This delegates to the Rust core-rs via FFI when available; falls back to
-// a pure-Go detection using net/http.DetectContentType.
+// Uses coremedia's 21+ format magic-byte sniffing (WEBP, AVIF, HEIC, OOXML, etc.).
 func DetectMIME(data []byte) string {
-	if len(data) == 0 {
-		return "application/octet-stream"
-	}
-	return http.DetectContentType(data)
+	return coremedia.DetectMIME(data)
 }
 
 // Logger returns a logger suitable for media operations.

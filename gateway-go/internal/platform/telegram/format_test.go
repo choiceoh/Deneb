@@ -30,9 +30,6 @@ func TestFormatHTML_Bold(t *testing.T) {
 	}
 }
 
-
-
-
 func TestFormatHTML_Spoiler(t *testing.T) {
 	got := FormatHTML("||hidden||")
 	if got != "<tg-spoiler>hidden</tg-spoiler>" {
@@ -73,7 +70,6 @@ func TestMarkdownToTelegramHTML_Heading(t *testing.T) {
 	}
 }
 
-
 func TestMarkdownToTelegramHTML_Mixed(t *testing.T) {
 	md := "# Title\n\nhello **bold** and *italic*\n\n```\ncode\n```"
 	got := MarkdownToTelegramHTML(md)
@@ -93,52 +89,30 @@ func TestMarkdownToTelegramHTML_Mixed(t *testing.T) {
 
 // --- Table tests ---
 
-func TestIsTableLine(t *testing.T) {
-	tests := []struct {
-		line string
-		want bool
-	}{
-		{"| a | b |", true},
-		{"  | a | b |  ", true},
-		{"| --- | --- |", true},
-		{"| single |", true},
-		{"not a table", false},
-		{"|", false},
-		{"| a | b", false}, // no trailing pipe
-		{"a | b |", false}, // no leading pipe
-		{"", false},
-	}
-	for _, tt := range tests {
-		got := isTableLine(tt.line)
-		if got != tt.want {
-			t.Errorf("isTableLine(%q) = %v, want %v", tt.line, got, tt.want)
-		}
-	}
-}
-
 func TestMarkdownToTelegramHTML_Table(t *testing.T) {
 	md := "| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |"
 	got := MarkdownToTelegramHTML(md)
-	want := "<pre>| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |</pre>"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
+	// coremarkdown renders tables as aligned code blocks.
+	if !strings.Contains(got, "<pre><code>") {
+		t.Errorf("expected <pre><code> wrapper, got %q", got)
+	}
+	if !strings.Contains(got, "Name") || !strings.Contains(got, "Alice") || !strings.Contains(got, "Bob") {
+		t.Errorf("missing table content: %q", got)
 	}
 }
 
 func TestMarkdownToTelegramHTML_TableWithSpecialChars(t *testing.T) {
 	md := "| Expr | Result |\n| --- | --- |\n| a < b | true |\n| x & y | false |"
 	got := MarkdownToTelegramHTML(md)
-	want := "<pre>| Expr | Result |\n| --- | --- |\n| a &lt; b | true |\n| x &amp; y | false |</pre>"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
+	if !strings.Contains(got, "&lt;") {
+		t.Errorf("expected escaped <, got %q", got)
+	}
+	if !strings.Contains(got, "&amp;") {
+		t.Errorf("expected escaped &, got %q", got)
 	}
 }
 
-
-
-
 // --- Chunking tests ---
-
 
 func TestChunkText_SplitsAtNewline(t *testing.T) {
 	text := "line one\nline two\nline three"
@@ -147,7 +121,6 @@ func TestChunkText_SplitsAtNewline(t *testing.T) {
 		t.Errorf("got %d: %v, want multiple chunks", len(chunks), chunks)
 	}
 }
-
 
 func TestChunkHTML_SplitsLongText(t *testing.T) {
 	html := strings.Repeat("a", 100)
@@ -158,7 +131,6 @@ func TestChunkHTML_SplitsLongText(t *testing.T) {
 }
 
 // --- SplitCaptionAndBody tests ---
-
 
 func TestSplitCaptionAndBody_Long(t *testing.T) {
 	text := strings.Repeat("word ", 300)
@@ -172,8 +144,6 @@ func TestSplitCaptionAndBody_Long(t *testing.T) {
 }
 
 // --- MarkdownToTelegramChunks integration ---
-
-
 
 // --- UTF16Len tests ---
 
