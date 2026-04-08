@@ -13,7 +13,7 @@ import (
 const (
 	defaultMemoryTokenBudget  = 150_000
 	defaultSystemPromptBudget = 30_000
-	defaultFreshTailCount     = 48
+	defaultFreshTailCount     = 24
 )
 
 // AssemblyResult holds the output of context assembly.

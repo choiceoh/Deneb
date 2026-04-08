@@ -43,6 +43,11 @@ func assembleContextFull(
 	// Convert recent ChatMessages to llm.Messages.
 	recent := chatToLLM(recentMsgs)
 
+	// Enforce fresh tail count: keep only the most recent N messages.
+	if freshTailCount > 0 && len(recent) > freshTailCount {
+		recent = recent[len(recent)-freshTailCount:]
+	}
+
 	// If no summaries exist, just return recent messages (token-trimmed).
 	if summaryCoverage < 0 {
 		trimmed := trimLLMToTokenBudget(recent, memoryTokenBudget)
