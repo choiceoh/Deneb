@@ -37,7 +37,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterInfraTools(registry, localAI)
-	RegisterMediaTools(registry, deps.LLMClient, deps.DefaultModel)
+	RegisterMediaTools(registry)
 	RegisterDataTools(registry)
 	var diaryDir string
 	if deps.Wiki.Store != nil {
@@ -448,16 +448,8 @@ func RegisterInfraTools(registry toolctx.ToolRegistrar, localAI *LocalAIDeps) {
 	})
 }
 
-// RegisterMediaTools registers image analysis and media delivery tools.
-func RegisterMediaTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "image",
-		Description:     "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
-		InputSchema:     imageToolSchema(),
-		Fn:              tools.ToolImage(llmClient, defaultModel),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
+// RegisterMediaTools registers media delivery tools.
+func RegisterMediaTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "youtube_transcript",
 		Description:     "Extract transcript/subtitles and metadata from a YouTube video",
@@ -497,29 +489,6 @@ func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) 
 		Fn:              tools.ToolBatchRead(workspaceDir),
 		Deferred:        true,
 		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "search_and_read",
-		Description:     "Grep for a pattern then auto-read matching files with surrounding context. Combines grep+read into one step. Returns file content around each match",
-		InputSchema:     searchAndReadToolSchema(),
-		Fn:              tools.ToolSearchAndRead(workspaceDir),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "inspect",
-		Description:     "Deep code inspection: file outline + imports + git history in one call. depth=shallow (outline+imports), deep (+git log+stats), symbol (+definition+references+blame). Auto-promotes to symbol depth when symbol param is set",
-		InputSchema:     inspectToolSchema(),
-		Fn:              tools.ToolInspect(workspaceDir),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "apply_patch",
-		Description: "Apply a unified diff patch (git diff format). Handles multi-file, multi-hunk patches atomically via git apply. Use dry_run=true to verify before applying",
-		InputSchema: applyPatchToolSchema(),
-		Fn:          tools.ToolApplyPatch(workspaceDir),
-		Deferred:    true,
 	})
 }
 

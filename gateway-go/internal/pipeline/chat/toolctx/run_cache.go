@@ -109,7 +109,6 @@ var mutationTools = map[string]struct{}{
 	"write":       {},
 	"edit":        {},
 	"multi_edit":  {},
-	"apply_patch": {},
 	"git":         {},
 }
 

@@ -98,15 +98,15 @@ var toolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "grep", "find", "search_and_read", "batch_read"}},
-	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "inspect", "test", "git"}},
+	{"File", []string{"read", "write", "edit", "grep", "find", "batch_read"}},
+	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web", "http", "deep_research"}},
 	{"Memory", []string{"wiki", "memory_store", "memory_recall", "projects_write"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail", "morning_letter"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
-	{"Media", []string{"image", "youtube_transcript", "send_file"}},
+	{"Media", []string{"youtube_transcript", "send_file"}},
 	{"Data", []string{"kv"}},
 }
 

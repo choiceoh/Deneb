@@ -161,7 +161,7 @@ func TestRegisterAdvancedTools_registersTools(t *testing.T) {
 		t.Fatal("expected RegisterAdvancedTools to register at least one tool")
 	}
 	names := reg.toolNames()
-	for _, want := range []string{"batch_read", "search_and_read", "inspect", "apply_patch"} {
+	for _, want := range []string{"batch_read"} {
 		if !containsName(names, want) {
 			t.Errorf("missing expected tool %q", want)
 		}
