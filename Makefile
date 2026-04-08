@@ -3,7 +3,7 @@
 # Pure Go gateway build (Rust core has been removed).
 
 .PHONY: all \
-       go go-run go-dev go-test go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary mcp-server gateway-prod \
+       go go-run go-dev go-test go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        model-caps model-caps-check \
@@ -82,9 +82,6 @@ go-lint-all:
 go-binary:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
 
-# Build MCP server binary (pure Go, thin bridge to gateway HTTP RPC).
-mcp-server:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -o ../bin/deneb-mcp ./cmd/mcp-server/
 
 # Build production gateway binary to dist/.
 gateway-prod: go-binary

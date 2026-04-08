@@ -36,39 +36,6 @@ download_go_modules() {
         && touch "$SETUP_TMPDIR/installed_go_modules"
 }
 
-# ---------- MCP server build ----------
-
-build_mcp_server() {
-    local mcp_bin="$REPO_ROOT/bin/deneb-mcp"
-    if [ -f "$mcp_bin" ]; then return 0; fi
-    (cd "$REPO_ROOT/gateway-go" && CGO_ENABLED=0 go build -trimpath -o "$mcp_bin" ./cmd/mcp-server/) 2>/dev/null \
-        && touch "$SETUP_TMPDIR/installed_mcp"
-}
-
-setup_mcp_json() {
-    local mcp_json="$REPO_ROOT/.mcp.json"
-    if [ -f "$mcp_json" ]; then return 0; fi
-    local gh_token
-    gh_token=$(gh auth token 2>/dev/null || echo "")
-    cat > "$mcp_json" <<MCPEOF
-{
-  "mcpServers": {
-    "deneb": {
-      "command": "$REPO_ROOT/bin/deneb-mcp",
-      "args": ["--gateway-url", "http://127.0.0.1:18789", "--verbose"]
-    },
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "$gh_token"
-      }
-    }
-  }
-}
-MCPEOF
-}
-
 # ---------- Main ----------
 
 echo "Deneb dev environment setup"
@@ -78,11 +45,6 @@ echo ""
 
 # Run independent installs in parallel
 download_go_modules &
-wait
-
-# Build MCP server + write .mcp.json (needs go modules ready)
-build_mcp_server &
-setup_mcp_json
 wait
 
 # ---------- Compact summary ----------
@@ -100,18 +62,7 @@ if ! (cd "$REPO_ROOT/gateway-go" && go mod verify) &>/dev/null 2>&1; then
 fi
 
 echo "  [env] $go_ver"
-# MCP server status
-mcp_status="ready"
-if [ ! -f "$REPO_ROOT/bin/deneb-mcp" ]; then
-    mcp_status="missing"
-fi
-mcp_json_status="ready"
-if [ ! -f "$REPO_ROOT/.mcp.json" ]; then
-    mcp_json_status="missing"
-fi
-
 echo "  [env] go-modules=$go_mod_status"
-echo "  [env] deneb-mcp=$mcp_status .mcp.json=$mcp_json_status"
 
 # Go version compatibility warning
 go_minor=$(echo "$go_ver" | grep -oP '(?<=go)\d+\.\d+' || echo "0.0")
