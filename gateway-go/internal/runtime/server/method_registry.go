@@ -15,7 +15,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
-	handlerautoresearch "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/autoresearch"
 	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/bridge"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
@@ -202,10 +201,6 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Agents:     hub.Agents(),
 			JobTracker: hub.JobTracker(),
 		}),
-		handlerautoresearch.Methods(handlerautoresearch.Deps{
-			Runner: s.autoresearchRunner,
-		}),
-
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---
 		handlerwiki.Methods(handlerwiki.Deps{
 			Store: hub.WikiStore(),

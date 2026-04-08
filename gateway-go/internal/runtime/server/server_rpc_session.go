@@ -102,7 +102,7 @@ func (s *Server) registerSessionRPCMethods() {
 	s.localAIHub = localai.New(localai.Config{}, reg, s.logger)
 	chatCfg.LocalAIHub = s.localAIHub
 
-	// Phase 2: Tool deps + registration (core, plugin, autoresearch).
+	// Phase 2: Tool deps + registration (core, plugin).
 	s.initToolsAndDeps(&chatCfg, reg, transcriptStore, agentLogWriter)
 
 	if s.authManager != nil {
@@ -174,11 +174,6 @@ func (s *Server) registerSessionRPCMethods() {
 	}
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
-
-	// Wire autoresearch workdir resolver so /chart finds the experiment dir.
-	if s.autoresearchRunner != nil {
-		s.chatHandler.SetAutoresearchWorkdirFn(s.autoresearchRunner.Workdir)
-	}
 
 	// Wire transcript cloner for subagent cron session support.
 	// The cached store satisfies cron.TranscriptCloner (CloneRecent), avoiding
@@ -278,7 +273,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		hub.Broadcast("dreaming.cycle", event)
 	})
 
-	// Wire Telegram notifier for dreaming and autoresearch events.
+	// Wire Telegram notifier for dreaming events.
 	if s.telegramPlug != nil {
 		tgCfg := s.telegramPlug.Config()
 		if tgCfg != nil && tgCfg.ChatID != 0 {
@@ -288,9 +283,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				logger: s.logger,
 			}
 			s.autonomousSvc.SetNotifier(notifier)
-			if s.autoresearchRunner != nil {
-				s.autoresearchRunner.SetNotifier(notifier)
-			}
 		}
 	}
 

@@ -138,13 +138,6 @@ var requiredMethods = []string{
 
 	// Wiki: feature-flagged (DENEB_WIKI_ENABLED), not in required list.
 
-	// Autoresearch.
-	"autoresearch.config",
-	"autoresearch.results",
-	"autoresearch.start",
-	"autoresearch.status",
-	"autoresearch.stop",
-
 	// Gateway builtins.
 	"status",
 }

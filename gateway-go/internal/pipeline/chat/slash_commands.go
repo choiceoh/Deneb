@@ -111,12 +111,6 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "",
 			Command:  "mail",
 		}
-	case "chart":
-		return &SlashResult{
-			Handled:  true,
-			Response: "",
-			Command:  "chart",
-		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil

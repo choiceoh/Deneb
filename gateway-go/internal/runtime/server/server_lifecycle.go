@@ -225,11 +225,6 @@ func (s *Server) doShutdown() error {
 		s.taskStore.Close()
 	}
 
-	// 8. Stop autoresearch runner.
-	if s.autoresearchRunner != nil {
-		s.autoresearchRunner.Stop()
-	}
-
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
 	// 9. Fire gateway.stop internal hook.

@@ -10,7 +10,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autoresearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -52,8 +51,8 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	}
 }
 
-// initToolsAndDeps builds CoreToolDeps, registers core/plugin/autoresearch
-// tools, and stores toolDeps on the server.
+// initToolsAndDeps builds CoreToolDeps, registers core/plugin tools,
+// and stores toolDeps on the server.
 func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Registry, transcriptStore chat.TranscriptStore, agentLogWriter *agentlog.Writer) {
 	workspaceDir := resolveWorkspaceDir()
 
@@ -90,22 +89,6 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
-
-	// Autoresearch runner + tool.
-	s.autoresearchRunner = autoresearch.NewRunner(s.logger)
-	if lwClient := reg.Client(modelrole.RoleLightweight); lwClient != nil {
-		s.autoresearchRunner.SetLLMClient(lwClient)
-		s.autoresearchRunner.SetDefaultModel(reg.Model(modelrole.RoleLightweight))
-	} else if mainClient := reg.Client(modelrole.RoleMain); mainClient != nil {
-		s.autoresearchRunner.SetLLMClient(mainClient)
-	}
-	if transcriptStore != nil {
-		s.autoresearchRunner.SetTranscriptAppendFn(func(sessionKey, text string) error {
-			msg := chat.NewTextChatMessage("system", text, 0)
-			return transcriptStore.Append(sessionKey, msg)
-		})
-	}
-	toolreg.RegisterAutoresearchTool(chatCfg.Tools, s.autoresearchRunner)
 
 	// Bridge: inter-agent communication tool.
 	toolreg.RegisterBridgeTool(chatCfg.Tools, s.broadcaster.Broadcast)
