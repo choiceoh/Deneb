@@ -205,14 +205,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	hub := s.buildHub()
 
 	s.registerBuiltinMethods()
-	if err := rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
-		Sessions:      s.sessions,
-		SnapshotStore: s.snapshotStore,
-		GatewaySubs:   s.gatewaySubs,
-		Version:       s.version,
-	}); err != nil {
-		return nil, fmt.Errorf("register builtin methods: %w", err)
-	}
+	rpc.RegisterBuiltinMethods(s.dispatcher)
 	if err := s.registerEarlyMethods(hub, denebDir); err != nil {
 		return nil, fmt.Errorf("register early methods: %w", err)
 	}

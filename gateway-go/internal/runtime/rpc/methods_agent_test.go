@@ -31,7 +31,8 @@ func testExtendedDeps() ExtendedDeps {
 
 func testAgentDispatcher(deps ExtendedDeps) *Dispatcher {
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, SessionDeps{
 		Sessions:    deps.Sessions,
 		GatewaySubs: deps.GatewaySubs,
 	})

@@ -22,15 +22,16 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-func testDeps() Deps {
-	return Deps{
-		Sessions: session.NewManager(),
-	}
-}
-
+// testDispatcher creates a dispatcher with all built-in methods registered:
+// FFI + catalog (via RegisterBuiltinMethods) + session CRUD + health/system.info
+// + telegram status queries.
 func testDispatcher() *Dispatcher {
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, testDeps())
+	sm := session.NewManager()
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
+	RegisterTelegramStatusMethods(d, TelegramStatusDeps{})
+	RegisterHealthMethods(d, SystemHealthDeps{})
 	return d
 }
 
@@ -246,7 +247,8 @@ func TestSessionsDelete(t *testing.T) {
 	sm.Set(&session.Session{Key: "test-1", Kind: session.KindDirect})
 
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm})
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
 
 	resp := dispatch(t, d, "sessions.delete", map[string]string{"key": "test-1"})
 	if !resp.OK {
@@ -262,7 +264,8 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 	sm.Set(&session.Session{Key: "run-1", Kind: session.KindDirect, Status: session.StatusRunning})
 
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm})
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
 
 	// Without force: should be rejected.
 	resp := dispatch(t, d, "sessions.delete", map[string]any{"key": "run-1"})
@@ -322,7 +325,8 @@ func TestSessionsList(t *testing.T) {
 	sm.Set(&session.Session{Key: "s2", Kind: session.KindGroup})
 
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm})
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
 
 	resp := dispatch(t, d, "sessions.list", nil)
 	if !resp.OK {

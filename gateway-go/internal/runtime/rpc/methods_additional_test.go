@@ -39,7 +39,8 @@ func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 	sm := session.NewManager()
 	sm.Set(&session.Session{Key: "abc", Kind: session.KindDirect})
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: sm})
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
 
 	resp := dispatch(t, d, "sessions.get", map[string]any{})
 	if resp.OK || resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
@@ -54,7 +55,8 @@ func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 
 func TestTelegramGetMissingAndNotFound(t *testing.T) {
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager()})
+	RegisterBuiltinMethods(d)
+	RegisterTelegramStatusMethods(d, TelegramStatusDeps{})
 
 	missing := dispatch(t, d, "telegram.get", map[string]any{})
 	if missing.OK || missing.Error == nil || missing.Error.Code != protocol.ErrMissingParam {
@@ -75,7 +77,9 @@ func TestTelegramGetMissingAndNotFound(t *testing.T) {
 
 func TestSystemInfoUnknownVersion(t *testing.T) {
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager()})
+	RegisterBuiltinMethods(d)
+	RegisterHealthMethods(d, SystemHealthDeps{})
+
 	resp := dispatch(t, d, "system.info", nil)
 	if !resp.OK {
 		t.Fatalf("got %+v, want success", resp.Error)
