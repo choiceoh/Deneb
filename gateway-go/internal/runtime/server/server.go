@@ -6,6 +6,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -107,6 +108,11 @@ type Server struct {
 	// githubWebhookCfg is non-nil when GITHUB_WEBHOOK_SECRET is set.
 	// Resolved once at startup from environment variables; never mutated.
 	githubWebhookCfg *GitHubWebhookConfig
+
+	// lifecycleCtx is cancelled by doShutdown() so background goroutines
+	// exit promptly even if the caller's original context is still alive.
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
 
 	// bgWg tracks background goroutines launched via safeGo so that
 	// shutdown can wait for them to finish before exiting.
