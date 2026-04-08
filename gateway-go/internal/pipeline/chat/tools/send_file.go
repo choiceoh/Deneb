@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -94,7 +94,7 @@ func DetectMediaType(filePath string) string {
 		return "document"
 	}
 
-	mime := http.DetectContentType(buf[:n])
+	mime := coremedia.DetectMIME(buf[:n])
 
 	switch {
 	case strings.HasPrefix(mime, "image/"):

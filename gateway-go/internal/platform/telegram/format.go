@@ -1,8 +1,12 @@
 package telegram
 
 import (
+	"sort"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coremarkdown"
 )
 
 // Telegram message limits.
@@ -13,254 +17,127 @@ const (
 	MaxCaptionLength = 1024
 )
 
+// telegramParseOpts configures coremarkdown for Telegram HTML output.
+var telegramParseOpts = &coremarkdown.ParseOptions{
+	Linkify:        true,
+	EnableSpoilers: true,
+	HeadingStyle:   "bold",
+	Autolink:       true,
+	TableMode:      "code",
+}
+
 // FormatHTML converts basic markdown to Telegram-compatible HTML.
 // Supports: **bold**, *italic*, `code`, ```code blocks```, ~~strikethrough~~,
-// [text](url) links. Falls back to plain text on parse failure.
+// ||spoiler||, [text](url) links.
 func FormatHTML(text string) string {
-	var b strings.Builder
-	b.Grow(len(text) + len(text)/10)
-
-	i := 0
-	runes := []rune(text)
-	n := len(runes)
-
-	for i < n {
-		ch := runes[i]
-
-		// Code block: ```...```
-		if i+2 < n && ch == '`' && runes[i+1] == '`' && runes[i+2] == '`' {
-			end := findTripleBacktick(runes, i+3)
-			if end >= 0 {
-				content := string(runes[i+3 : end])
-				// Skip optional language tag on first line.
-				if nl := strings.IndexByte(content, '\n'); nl >= 0 {
-					lang := strings.TrimSpace(content[:nl])
-					code := content[nl+1:]
-					if isLangTag(lang) {
-						b.WriteString("<pre><code class=\"language-")
-						b.WriteString(escapeHTML(lang))
-						b.WriteString("\">")
-						b.WriteString(escapeHTML(code))
-					} else {
-						b.WriteString("<pre><code>")
-						b.WriteString(escapeHTML(content))
-					}
-				} else {
-					b.WriteString("<pre><code>")
-					b.WriteString(escapeHTML(content))
-				}
-				b.WriteString("</code></pre>")
-				i = end + 3
-				continue
-			}
-		}
-
-		// Inline code: `...`
-		if ch == '`' {
-			end := indexRune(runes, '`', i+1)
-			if end >= 0 {
-				b.WriteString("<code>")
-				b.WriteString(escapeHTML(string(runes[i+1 : end])))
-				b.WriteString("</code>")
-				i = end + 1
-				continue
-			}
-		}
-
-		// Bold: **...**
-		if i+1 < n && ch == '*' && runes[i+1] == '*' {
-			end := findDouble(runes, '*', i+2)
-			if end >= 0 {
-				b.WriteString("<b>")
-				b.WriteString(FormatHTML(string(runes[i+2 : end])))
-				b.WriteString("</b>")
-				i = end + 2
-				continue
-			}
-		}
-
-		// Strikethrough: ~~...~~
-		if i+1 < n && ch == '~' && runes[i+1] == '~' {
-			end := findDouble(runes, '~', i+2)
-			if end >= 0 {
-				b.WriteString("<s>")
-				b.WriteString(FormatHTML(string(runes[i+2 : end])))
-				b.WriteString("</s>")
-				i = end + 2
-				continue
-			}
-		}
-
-		// Link: [text](url)
-		if ch == '[' {
-			textEnd := indexRune(runes, ']', i+1)
-			if textEnd >= 0 && textEnd+1 < n && runes[textEnd+1] == '(' {
-				urlEnd := indexRune(runes, ')', textEnd+2)
-				if urlEnd >= 0 {
-					linkText := string(runes[i+1 : textEnd])
-					linkURL := string(runes[textEnd+2 : urlEnd])
-					b.WriteString("<a href=\"")
-					b.WriteString(escapeHTML(linkURL))
-					b.WriteString("\">")
-					b.WriteString(escapeHTML(linkText))
-					b.WriteString("</a>")
-					i = urlEnd + 1
-					continue
-				}
-			}
-		}
-
-		// Italic: *...* (single asterisk, not preceded by *)
-		if ch == '*' && (i == 0 || runes[i-1] != '*') && (i+1 >= n || runes[i+1] != '*') {
-			end := indexRune(runes, '*', i+1)
-			if end >= 0 && (end+1 >= n || runes[end+1] != '*') {
-				b.WriteString("<i>")
-				b.WriteString(FormatHTML(string(runes[i+1 : end])))
-				b.WriteString("</i>")
-				i = end + 1
-				continue
-			}
-		}
-
-		// Spoiler: ||...||
-		if i+1 < n && ch == '|' && runes[i+1] == '|' {
-			end := findDouble(runes, '|', i+2)
-			if end >= 0 {
-				b.WriteString("<tg-spoiler>")
-				b.WriteString(FormatHTML(string(runes[i+2 : end])))
-				b.WriteString("</tg-spoiler>")
-				i = end + 2
-				continue
-			}
-		}
-
-		// Default: escape and write.
-		b.WriteString(escapeHTMLRune(ch))
-		i++
-	}
-
-	return b.String()
+	return MarkdownToTelegramHTML(text)
 }
 
 // MarkdownToTelegramHTML converts multiline markdown to Telegram HTML.
-// Handles line-level constructs (headings, blockquotes, fenced code blocks)
-// in addition to inline formatting via FormatHTML.
+// Parses markdown via coremarkdown IR, then renders style/link spans as HTML.
 func MarkdownToTelegramHTML(markdown string) string {
 	if markdown == "" {
 		return ""
 	}
-	lines := strings.Split(markdown, "\n")
-	var out strings.Builder
-	out.Grow(len(markdown) + len(markdown)/4)
-
-	inCodeBlock := false
-	var codeBlockBuf strings.Builder
-	inTable := false
-	var tableBuf strings.Builder
-
-	for i, line := range lines {
-		// Handle fenced code blocks.
-		if strings.HasPrefix(line, "```") {
-			if inCodeBlock {
-				out.WriteString("<pre><code>")
-				out.WriteString(escapeHTML(codeBlockBuf.String()))
-				out.WriteString("</code></pre>")
-				codeBlockBuf.Reset()
-				inCodeBlock = false
-				if i < len(lines)-1 {
-					out.WriteByte('\n')
-				}
-				continue
-			}
-			inCodeBlock = true
-			// Skip the language tag line.
-			continue
-		}
-		if inCodeBlock {
-			if codeBlockBuf.Len() > 0 {
-				codeBlockBuf.WriteByte('\n')
-			}
-			codeBlockBuf.WriteString(line)
-			continue
-		}
-
-		// Handle markdown tables: buffer lines and render as <pre>.
-		if isTableLine(line) {
-			if tableBuf.Len() > 0 {
-				tableBuf.WriteByte('\n')
-			}
-			tableBuf.WriteString(line)
-			inTable = true
-			continue
-		}
-		if inTable {
-			out.WriteString("<pre>")
-			out.WriteString(escapeHTML(tableBuf.String()))
-			out.WriteString("</pre>")
-			tableBuf.Reset()
-			inTable = false
-			out.WriteByte('\n')
-			// Fall through to process current non-table line.
-		}
-
-		// Blockquote: "> text"
-		if strings.HasPrefix(line, "> ") {
-			out.WriteString("<blockquote>")
-			out.WriteString(FormatHTML(line[2:]))
-			out.WriteString("</blockquote>")
-			if i < len(lines)-1 {
-				out.WriteByte('\n')
-			}
-			continue
-		}
-
-		// Heading: render as bold (Telegram has no heading tags).
-		if headingContent := parseHeading(line); headingContent != "" {
-			out.WriteString("<b>")
-			out.WriteString(FormatHTML(headingContent))
-			out.WriteString("</b>")
-			if i < len(lines)-1 {
-				out.WriteByte('\n')
-			}
-			continue
-		}
-
-		out.WriteString(FormatHTML(line))
-		if i < len(lines)-1 {
-			out.WriteByte('\n')
-		}
-	}
-
-	// Handle unclosed table.
-	if inTable {
-		out.WriteString("<pre>")
-		out.WriteString(escapeHTML(tableBuf.String()))
-		out.WriteString("</pre>")
-	}
-
-	// Handle unclosed code block.
-	if inCodeBlock {
-		out.WriteString("<pre><code>")
-		out.WriteString(escapeHTML(codeBlockBuf.String()))
-		out.WriteString("</code></pre>")
-	}
-
-	return out.String()
+	ir := coremarkdown.MarkdownToIR(markdown, telegramParseOpts)
+	return renderIRToTelegramHTML(ir)
 }
 
-// parseHeading returns the heading content if line is a markdown heading.
-func parseHeading(line string) string {
-	if !strings.HasPrefix(line, "#") {
+// spanEvent represents an HTML tag open/close at a byte position in the IR text.
+type spanEvent struct {
+	pos       int
+	isClose   bool
+	tag       string
+	spanStart int // original span Start (for close ordering)
+	spanEnd   int // original span End (for open ordering)
+}
+
+// renderIRToTelegramHTML renders a coremarkdown IR to Telegram HTML.
+func renderIRToTelegramHTML(ir coremarkdown.MarkdownIR) string {
+	text := ir.Text
+	if text == "" {
 		return ""
 	}
-	i := 0
-	for i < len(line) && line[i] == '#' {
-		i++
+
+	var events []spanEvent
+
+	for _, s := range ir.Styles {
+		open, close := styleTags(s.Style)
+		if open == "" {
+			continue
+		}
+		events = append(events,
+			spanEvent{pos: s.Start, isClose: false, tag: open, spanStart: s.Start, spanEnd: s.End},
+			spanEvent{pos: s.End, isClose: true, tag: close, spanStart: s.Start, spanEnd: s.End},
+		)
 	}
-	if i > 6 || i >= len(line) || line[i] != ' ' {
-		return ""
+
+	for _, l := range ir.Links {
+		events = append(events,
+			spanEvent{pos: l.Start, isClose: false, tag: `<a href="` + escapeHTML(l.Href) + `">`, spanStart: l.Start, spanEnd: l.End},
+			spanEvent{pos: l.End, isClose: true, tag: "</a>", spanStart: l.Start, spanEnd: l.End},
+		)
 	}
-	return strings.TrimSpace(line[i+1:])
+
+	// Sort: by position, closes before opens, then LIFO for closes / outer-first for opens.
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].pos != events[j].pos {
+			return events[i].pos < events[j].pos
+		}
+		if events[i].isClose != events[j].isClose {
+			return events[i].isClose // closes before opens
+		}
+		if events[i].isClose {
+			return events[i].spanStart > events[j].spanStart // LIFO: inner closes first
+		}
+		return events[i].spanEnd > events[j].spanEnd // outer opens first
+	})
+
+	var b strings.Builder
+	b.Grow(len(text) + len(text)/4)
+	eventIdx := 0
+	textBytes := []byte(text)
+
+	for i := 0; i < len(textBytes); {
+		for eventIdx < len(events) && events[eventIdx].pos == i {
+			b.WriteString(events[eventIdx].tag)
+			eventIdx++
+		}
+		r, size := utf8.DecodeRune(textBytes[i:])
+		b.WriteString(escapeHTMLRune(r))
+		i += size
+	}
+	for eventIdx < len(events) {
+		b.WriteString(events[eventIdx].tag)
+		eventIdx++
+	}
+
+	result := b.String()
+	// Strip trailing newline inside code blocks (parser artifact).
+	result = strings.ReplaceAll(result, "\n</code></pre>", "</code></pre>")
+	return result
+}
+
+// styleTags maps a coremarkdown style to Telegram HTML open/close tags.
+func styleTags(style coremarkdown.MarkdownStyle) (string, string) {
+	switch style {
+	case coremarkdown.StyleBold:
+		return "<b>", "</b>"
+	case coremarkdown.StyleItalic:
+		return "<i>", "</i>"
+	case coremarkdown.StyleStrikethrough:
+		return "<s>", "</s>"
+	case coremarkdown.StyleCode:
+		return "<code>", "</code>"
+	case coremarkdown.StyleCodeBlock:
+		return "<pre><code>", "</code></pre>"
+	case coremarkdown.StyleSpoiler:
+		return "<tg-spoiler>", "</tg-spoiler>"
+	case coremarkdown.StyleBlockquote:
+		return "<blockquote>", "</blockquote>"
+	default:
+		return "", ""
+	}
 }
 
 // MarkdownToTelegramChunks converts markdown to chunked Telegram HTML.
@@ -444,52 +321,6 @@ func escapeHTMLRune(r rune) string {
 	default:
 		return string(r)
 	}
-}
-
-func indexRune(runes []rune, target rune, start int) int {
-	for i := start; i < len(runes); i++ {
-		if runes[i] == target {
-			return i
-		}
-	}
-	return -1
-}
-
-func findDouble(runes []rune, ch rune, start int) int {
-	for i := start; i+1 < len(runes); i++ {
-		if runes[i] == ch && runes[i+1] == ch {
-			return i
-		}
-	}
-	return -1
-}
-
-func findTripleBacktick(runes []rune, start int) int {
-	for i := start; i+2 < len(runes); i++ {
-		if runes[i] == '`' && runes[i+1] == '`' && runes[i+2] == '`' {
-			return i
-		}
-	}
-	return -1
-}
-
-// isTableLine returns true if the line looks like a markdown table row
-// (trimmed, starts and ends with |, length > 1).
-func isTableLine(line string) bool {
-	trimmed := strings.TrimSpace(line)
-	return len(trimmed) > 1 && trimmed[0] == '|' && trimmed[len(trimmed)-1] == '|'
-}
-
-func isLangTag(s string) bool {
-	if s == "" || len(s) > 20 {
-		return false
-	}
-	for _, r := range s {
-		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' && r != '+' && r != '#' {
-			return false
-		}
-	}
-	return true
 }
 
 // unclosedCodeBlock scans html for an unmatched <pre><code...> tag.

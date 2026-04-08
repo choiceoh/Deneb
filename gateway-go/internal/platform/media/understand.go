@@ -17,9 +17,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
@@ -179,7 +179,7 @@ func downloadImage(ctx context.Context, client *telegram.Client, fileID, mimeTyp
 
 	// Detect MIME type from content if not provided.
 	if mimeType == "" || mimeType == "application/octet-stream" {
-		detected := http.DetectContentType(data)
+		detected := coremedia.DetectMIME(data)
 		if strings.HasPrefix(detected, "image/") {
 			mimeType = detected
 		} else {
