@@ -30,10 +30,10 @@ type Store struct {
 	flows map[string]*FlowRecord
 
 	// Write coalescing.
-	dirty    bool
-	flushCh  chan struct{} // signals the flush goroutine
-	done     chan struct{} // closed on Close to stop the flush goroutine
-	wg       sync.WaitGroup
+	dirty     bool
+	flushCh   chan struct{} // signals the flush goroutine
+	done      chan struct{} // closed on Close to stop the flush goroutine
+	wg        sync.WaitGroup
 	closeOnce sync.Once
 }
 
