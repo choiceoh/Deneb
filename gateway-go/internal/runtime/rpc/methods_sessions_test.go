@@ -19,9 +19,8 @@ func sessionDispatcher(t *testing.T) (*Dispatcher, SessionDeps) {
 	t.Helper()
 	deps := testSessionDeps()
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, Deps{
-		Sessions: deps.Sessions,
-	})
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, deps)
 	RegisterSessionMethods(d, deps)
 	return d, deps
 }

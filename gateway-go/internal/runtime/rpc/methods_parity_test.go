@@ -98,12 +98,14 @@ var tsBaseMethods = []string{
 func fullDispatcher() *Dispatcher {
 	d := NewDispatcher(testLogger())
 
-	deps := testDeps()
-	RegisterBuiltinMethods(d, deps)
+	sm := session.NewManager()
+	RegisterBuiltinMethods(d)
+	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
+	RegisterTelegramStatusMethods(d, TelegramStatusDeps{})
+	RegisterHealthMethods(d, SystemHealthDeps{})
 	testCronService := cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-ext"}, nil, testLogger())
 	RegisterExtendedMethods(d, ExtendedDeps{
-		Sessions:    deps.Sessions,
-		GatewaySubs: deps.GatewaySubs,
+		Sessions:    sm,
 		Processes:   process.NewManager(testLogger()),
 		CronService: testCronService,
 	})
@@ -119,8 +121,7 @@ func fullDispatcher() *Dispatcher {
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
 	// Session state methods (patch/reset/preview/resolve/compact).
 	RegisterSessionMethods(d, SessionDeps{
-		Sessions:    deps.Sessions,
-		GatewaySubs: deps.GatewaySubs,
+		Sessions: sm,
 	})
 
 	// Phase 4: Native system methods.

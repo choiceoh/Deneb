@@ -46,6 +46,8 @@ type SecretDeps = handlerplatform.SecretDeps
 type ExtendedDeps = handleragent.ExtendedDeps
 type AgentsDeps = handleragent.AgentsDeps
 type SessionDeps = handlersession.Deps
+type TelegramStatusDeps = handlertelegram.StatusDeps
+type SystemHealthDeps = handlersystem.HealthDeps
 type GatewayRuntimeDeps = handlergateway.Deps
 
 // --- Registration wrappers ---
@@ -57,7 +59,15 @@ func RegisterChatBtwMethods(d *Dispatcher, deps ChatBtwDeps) {
 func RegisterSessionMethods(d *Dispatcher, deps SessionDeps) {
 	d.RegisterDomain(handlersession.Methods(deps))
 }
-func RegisterSessionRepairMethods(d *Dispatcher, _ SessionDeps) {} // no-op
+func RegisterSessionCRUDMethods(d *Dispatcher, deps SessionDeps) {
+	d.RegisterDomain(handlersession.CRUDMethods(deps))
+}
+func RegisterTelegramStatusMethods(d *Dispatcher, deps TelegramStatusDeps) {
+	d.RegisterDomain(handlertelegram.StatusMethods(deps))
+}
+func RegisterHealthMethods(d *Dispatcher, deps SystemHealthDeps) {
+	d.RegisterDomain(handlersystem.HealthMethods(deps))
+}
 func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps) {
 	d.RegisterDomain(handlersession.ExecMethods(deps))
 }

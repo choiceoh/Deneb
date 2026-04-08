@@ -58,6 +58,25 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
 	domains := []map[string]rpcutil.HandlerFunc{
+		// --- Session CRUD (list/get/delete) ---
+		handlersession.CRUDMethods(handlersession.Deps{
+			Sessions:    hub.Sessions(),
+			GatewaySubs: hub.GatewaySubs(),
+		}),
+
+		// --- Health and system info ---
+		handlersystem.HealthMethods(handlersystem.HealthDeps{
+			SessionCount: hub.Sessions().Count,
+			HasTelegram:  func() bool { return hub.Telegram() != nil },
+			Version:      hub.Version(),
+		}),
+
+		// --- Telegram status (list/get/status/health) ---
+		handlertelegram.StatusMethods(handlertelegram.StatusDeps{
+			TelegramPlugin: hub.Telegram(),
+			SnapshotStore:  s.snapshotStore,
+		}),
+
 		// --- Agent orchestration ---
 		handleragent.ExtendedMethods(handleragent.ExtendedDeps{
 			Sessions:       hub.Sessions(),

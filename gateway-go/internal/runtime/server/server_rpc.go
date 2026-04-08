@@ -11,8 +11,8 @@
 //   8. RPC Dispatcher + middleware:
 //      a. hub = buildHub()              — GatewayHub (Chat=nil at this point)
 //      b. registerBuiltinMethods()      — gateway.status, gateway.ping
-//      c. rpc.RegisterBuiltinMethods()  — session.list, session.get, etc.
-//      d. registerEarlyMethods(hub)     — ~30 domains via hub adapters (method_registry.go)
+//      c. rpc.RegisterBuiltinMethods()  — stateless FFI (protocol/security/media) + tools.catalog
+//      d. registerEarlyMethods(hub)     — ~35 domains via hub adapters (method_registry.go)
 //      e. registerSessionRPCMethods()   — chat pipeline init + handler creation
 //      f. registerLateMethods(hub)      — Chat-dependent domains (method_registry.go)
 //      g. registerWorkflowSideEffects() — non-RPC: autonomous, dreaming, notifier

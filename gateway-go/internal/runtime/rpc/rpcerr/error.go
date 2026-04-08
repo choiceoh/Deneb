@@ -56,11 +56,6 @@ func (e *Error) WithSession(key string) *Error {
 	return e.with("sessionKey", key)
 }
 
-// WithModel attaches a model identifier to the error context.
-func (e *Error) WithModel(model string) *Error {
-	return e.with("model", model)
-}
-
 // WithChannel attaches a channel ID to the error context.
 func (e *Error) WithChannel(id string) *Error {
 	return e.with("channel", id)
@@ -156,11 +151,6 @@ func Conflict(msg string) *Error {
 	return New(protocol.ErrConflict, msg)
 }
 
-// FeatureDisabled returns a FEATURE_DISABLED error.
-func FeatureDisabled(feature string) *Error {
-	return New(protocol.ErrFeatureDisabled, feature+" is disabled")
-}
-
 // InvalidRequest returns an INVALID_REQUEST error with a direct message.
 func InvalidRequest(msg string) *Error {
 	return New(protocol.ErrInvalidRequest, msg)
@@ -174,16 +164,6 @@ func DependencyFailed(msg string) *Error {
 // ValidationFailed returns a VALIDATION_FAILED error.
 func ValidationFailed(msg string) *Error {
 	return New(protocol.ErrValidationFailed, msg)
-}
-
-// Unauthorized returns an UNAUTHORIZED error.
-func Unauthorized(msg string) *Error {
-	return New(protocol.ErrUnauthorized, msg)
-}
-
-// AgentTimeout returns an AGENT_TIMEOUT error.
-func AgentTimeout(msg string) *Error {
-	return New(protocol.ErrAgentTimeout, msg)
 }
 
 // --- Wrap constructors: message + cause chain preservation ---
@@ -213,7 +193,3 @@ func WrapConflict(msg string, err error) *Error {
 	return &Error{Code: protocol.ErrConflict, Message: msg + ": " + err.Error(), Cause: err}
 }
 
-// WrapNotFound returns a NOT_FOUND error wrapping the original cause.
-func WrapNotFound(msg string, err error) *Error {
-	return &Error{Code: protocol.ErrNotFound, Message: msg + ": " + err.Error(), Cause: err}
-}

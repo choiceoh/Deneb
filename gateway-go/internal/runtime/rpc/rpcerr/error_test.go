@@ -25,15 +25,11 @@ func TestNewBasic(t *testing.T) {
 func TestWithChaining(t *testing.T) {
 	e := New(protocol.ErrNotFound, "session not found").
 		WithSession("abc-123").
-		WithModel("claude-3").
 		WithMethod("sessions.get").
 		With("extra", 42)
 
 	if e.Context["sessionKey"] != "abc-123" {
 		t.Errorf("sessionKey = %v", e.Context["sessionKey"])
-	}
-	if e.Context["model"] != "claude-3" {
-		t.Errorf("model = %v", e.Context["model"])
 	}
 	if e.Context["method"] != "sessions.get" {
 		t.Errorf("method = %v", e.Context["method"])
@@ -138,7 +134,6 @@ func TestWrapConvenienceConstructors(t *testing.T) {
 		{"WrapDependencyFailed", WrapDependencyFailed("db error", cause), protocol.ErrDependencyFailed},
 		{"WrapValidationFailed", WrapValidationFailed("schema error", cause), protocol.ErrValidationFailed},
 		{"WrapConflict", WrapConflict("already running", cause), protocol.ErrConflict},
-		{"WrapNotFound", WrapNotFound("page missing", cause), protocol.ErrNotFound},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -181,7 +176,6 @@ func TestConvenienceConstructors(t *testing.T) {
 		{"NotFound", NotFound("session"), protocol.ErrNotFound},
 		{"Unavailable", Unavailable("down"), protocol.ErrUnavailable},
 		{"Conflict", Conflict("running"), protocol.ErrConflict},
-		{"FeatureDisabled", FeatureDisabled("wiki"), protocol.ErrFeatureDisabled},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
