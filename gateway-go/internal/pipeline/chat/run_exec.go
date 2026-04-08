@@ -347,12 +347,23 @@ func executeAgentRun(
 		}
 		polarisCancel()
 		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmergencyEvicted > 0 {
-			logger.Info("polaris compaction",
-				"microPruned", polarisResult.MicroPruned,
-				"llmCompacted", polarisResult.LLMCompacted,
-				"emergencyEvicted", polarisResult.EmergencyEvicted,
-				"tokensBefore", polarisResult.TokensBefore,
-				"tokensAfter", polarisResult.TokensAfter)
+			var tier string
+			switch {
+			case polarisResult.EmergencyEvicted > 0:
+				tier = "emergency"
+			case polarisResult.LLMCompacted:
+				tier = "llm"
+			default:
+				tier = "micro"
+			}
+			attrs := []any{"tokensBefore", polarisResult.TokensBefore, "tokensAfter", polarisResult.TokensAfter}
+			if polarisResult.MicroPruned > 0 {
+				attrs = append(attrs, "pruned", polarisResult.MicroPruned)
+			}
+			if polarisResult.EmergencyEvicted > 0 {
+				attrs = append(attrs, "evicted", polarisResult.EmergencyEvicted)
+			}
+			logger.Info("polaris "+tier+" compaction", attrs...)
 		}
 	}
 
