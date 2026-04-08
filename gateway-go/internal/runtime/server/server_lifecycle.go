@@ -274,11 +274,6 @@ func (s *Server) doShutdown() error {
 		s.chatHandler.Close()
 	}
 
-	// 10. Close auth rate limiter.
-	if s.authRateLimiter != nil {
-		s.authRateLimiter.Close()
-	}
-
 	// 11. Close wiki store (FTS database).
 	if s.wikiStore != nil {
 		s.wikiStore.Close()

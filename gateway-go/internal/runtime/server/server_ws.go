@@ -22,11 +22,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-const (
-	// maxWebSocketClients limits the number of concurrent WebSocket connections.
-	maxWebSocketClients = 256
-)
-
 // jsonBufPool reduces GC pressure for writeFrame by reusing marshal buffers.
 var jsonBufPool = sync.Pool{
 	New: func() any {
@@ -127,12 +122,6 @@ func (c *WsClient) idleDuration() time.Duration {
 
 // handleWsUpgrade upgrades an HTTP connection to WebSocket and manages the lifecycle.
 func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
-	// Enforce connection limit.
-	if s.clientCnt.Load() >= maxWebSocketClients {
-		http.Error(w, "too many connections", http.StatusServiceUnavailable)
-		return
-	}
-
 	conn, err := ws.Accept(w, r, nil)
 	if err != nil {
 		s.logger.Error("websocket accept failed", "error", err)
@@ -189,7 +178,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHandshake sends a connect.challenge event, then reads and validates the connect request.
-func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAddr string) error {
+func (s *Server) handleHandshake(ctx context.Context, client *WsClient, _ string) error {
 	// Send connect.challenge event with random nonce before reading connect frame.
 	// This prevents replay attacks and proves device identity.
 	// Mirrors src/gateway/server/ws-connection.ts.
@@ -247,54 +236,9 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAd
 		return fmt.Errorf("build hello-ok: %w", err)
 	}
 
-	// Extract IP for rate limiting (strip port from remoteAddr).
-	rateLimitKey := remoteAddr
-	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
-		rateLimitKey = host
-	}
-
-	// Rate limit check before token validation.
-	if s.authRateLimiter != nil && params.Auth != nil && params.Auth.Token != "" {
-		allowed, retryMs := s.authRateLimiter.Check(rateLimitKey)
-		if !allowed {
-			rpcErr := rpcerr.Newf(protocol.ErrUnauthorized, "rate limited, retry after %dms", retryMs)
-			if writeErr := s.writeFrame(ctx, client, rpcErr.Response(req.ID)); writeErr != nil {
-				s.logger.Error("failed to send rate limit error", "connId", client.connID, "error", writeErr)
-			}
-			return fmt.Errorf("auth rate limited")
-		}
-	}
-
-	// Authenticate: validate token if auth validator is configured.
-	if s.authValidator != nil && params.Auth != nil && params.Auth.Token != "" { //nolint:gocritic // ifElseChain — auth flow branching
-		claims, err := s.authValidator.ValidateToken(params.Auth.Token)
-		if err != nil {
-			// Record auth failure for rate limiting.
-			if s.authRateLimiter != nil {
-				s.authRateLimiter.RecordFailure(rateLimitKey)
-			}
-			rpcErr := rpcerr.Unauthorized("invalid token: " + err.Error())
-			if writeErr := s.writeFrame(ctx, client, rpcErr.Response(req.ID)); writeErr != nil {
-				s.logger.Error("failed to send auth error", "connId", client.connID, "error", writeErr)
-			}
-			return fmt.Errorf("token validation failed: %w", err)
-		}
-		// Reset rate limiter on successful auth.
-		if s.authRateLimiter != nil {
-			s.authRateLimiter.Reset(rateLimitKey)
-		}
-		client.authed = true
-		client.role = string(claims.Role)
-		client.deviceID = claims.DeviceID
-	} else if s.authValidator == nil {
-		// No-auth mode: trust all connections as operator.
-		client.authed = true
-		client.role = "operator"
-	} else {
-		// Auth configured but no token provided: reject.
-		client.authed = false
-		client.role = ""
-	}
+	// Single-user deployment: trust all connections as operator.
+	client.authed = true
+	client.role = "operator"
 
 	// Register with broadcaster.
 	s.broadcaster.Subscribe(client, events.Filter{})

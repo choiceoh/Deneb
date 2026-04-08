@@ -1,7 +1,6 @@
 package telegram
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"slices"
 	"sync"
 	"time"
 )
@@ -220,27 +218,11 @@ func (p *Plugin) Config() *Config {
 
 // PrimaryChatID returns the operator's DM chat ID from config, for use as a
 // default delivery target (e.g. cron output). Returns "" if none configured.
-// Prefers AllowFrom.IDs[0] (user-controlled order) over Direct map iteration
-// to ensure deterministic results across restarts.
 func (p *Plugin) PrimaryChatID() string {
-	if p.config == nil {
+	if p.config == nil || p.config.ChatID == 0 {
 		return ""
 	}
-	// Prefer AllowFrom — it's a slice so order is deterministic and
-	// user-controlled (first entry = operator).
-	if len(p.config.AllowFrom.IDs) > 0 {
-		return fmt.Sprintf("%d", p.config.AllowFrom.IDs[0])
-	}
-	// Fall back to Direct map keys (sorted for determinism).
-	if len(p.config.Direct) > 0 {
-		keys := make([]string, 0, len(p.config.Direct))
-		for chatID := range p.config.Direct {
-			keys = append(keys, chatID)
-		}
-		slices.SortFunc(keys, cmp.Compare[string])
-		return keys[0]
-	}
-	return ""
+	return fmt.Sprintf("%d", p.config.ChatID)
 }
 
 // BotUserID returns the bot's user ID, or 0 if not yet verified.

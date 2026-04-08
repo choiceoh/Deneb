@@ -27,8 +27,6 @@ import (
 const (
 	defaultHooksBasePath     = "/hooks"
 	defaultHooksMaxBodyBytes = 256 * 1024 // 256 KB
-	hookAuthFailureLimit     = 20
-	hookAuthFailureWindowMs  = 60_000
 	hookReplayCacheTTL       = 5 * time.Minute
 	hookReplayCacheMax       = 1000
 	maxIdempotencyKeyLen     = 256
@@ -147,73 +145,6 @@ type HookDispatchers struct {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Rate limiter (simple per-IP sliding window for hook auth failures).
-// ───────────────────────────────────────────────────────────────────────
-
-type hookAuthRateLimiter struct {
-	mu          sync.Mutex
-	failures    map[string]*hookIPFailures
-	maxFailures int
-	windowMs    int64
-}
-
-type hookIPFailures struct {
-	count   int
-	firstAt int64 // unix ms
-}
-
-func newHookAuthRateLimiter(maxFailures int, windowMs int64) *hookAuthRateLimiter {
-	return &hookAuthRateLimiter{
-		failures:    make(map[string]*hookIPFailures),
-		maxFailures: maxFailures,
-		windowMs:    windowMs,
-	}
-}
-
-// check returns true if the IP is rate-limited (should be rejected).
-func (rl *hookAuthRateLimiter) check(ip string) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	f, ok := rl.failures[ip]
-	if !ok {
-		return false
-	}
-	now := time.Now().UnixMilli()
-	// Window expired — reset.
-	if now-f.firstAt > rl.windowMs {
-		delete(rl.failures, ip)
-		return false
-	}
-	return f.count >= rl.maxFailures
-}
-
-// recordFailure increments the failure count for the given IP.
-func (rl *hookAuthRateLimiter) recordFailure(ip string) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	now := time.Now().UnixMilli()
-	f, ok := rl.failures[ip]
-	if !ok {
-		rl.failures[ip] = &hookIPFailures{count: 1, firstAt: now}
-		return
-	}
-	// Window expired — reset and start fresh.
-	if now-f.firstAt > rl.windowMs {
-		f.count = 1
-		f.firstAt = now
-		return
-	}
-	f.count++
-}
-
-// reset clears the failure record for the given IP (on successful auth).
-func (rl *hookAuthRateLimiter) reset(ip string) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	delete(rl.failures, ip)
-}
-
-// ───────────────────────────────────────────────────────────────────────
 // Replay cache (idempotency).
 // ───────────────────────────────────────────────────────────────────────
 
@@ -311,7 +242,6 @@ func (rc *hookReplayCache) pruneUnsafe() {
 type HooksHTTPHandler struct {
 	config      *HooksHTTPConfig
 	dispatchers HookDispatchers
-	rateLimiter *hookAuthRateLimiter
 	replayCache *hookReplayCache
 	logger      *slog.Logger
 }
@@ -327,7 +257,6 @@ func NewHooksHTTPHandler(cfg *HooksHTTPConfig, dispatchers HookDispatchers, logg
 	return &HooksHTTPHandler{
 		config:      cfg,
 		dispatchers: dispatchers,
-		rateLimiter: newHookAuthRateLimiter(hookAuthFailureLimit, hookAuthFailureWindowMs),
 		replayCache: newHookReplayCache(hookReplayCacheTTL, hookReplayCacheMax),
 		logger:      logger,
 	}
@@ -361,21 +290,10 @@ func (h *HooksHTTPHandler) Handle(w http.ResponseWriter, r *http.Request) bool {
 
 	// ── Token auth ─────────────────────────────────────────────────
 	token := extractToken(r)
-	clientIP := resolveClientIP(r)
 	if !constantTimeEqual(token, h.config.Token) {
-		// Check rate limit before recording the failure.
-		if h.rateLimiter.check(clientIP) {
-			w.Header().Set("Retry-After", "60")
-			writeText(w, http.StatusTooManyRequests, "Too Many Requests")
-			h.logger.Warn("hook auth throttled", "ip", clientIP)
-			return true
-		}
-		h.rateLimiter.recordFailure(clientIP)
 		writeText(w, http.StatusUnauthorized, "Unauthorized")
 		return true
 	}
-	// Successful auth — reset failure counter.
-	h.rateLimiter.reset(clientIP)
 
 	// ── Sub-path resolution ────────────────────────────────────────
 	subPath := strings.TrimPrefix(path, basePath)

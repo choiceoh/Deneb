@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -30,11 +28,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 
 // handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	authMode := ""
 	providerCount := 0
-	if s.runtimeCfg != nil {
-		authMode = s.runtimeCfg.AuthMode
-	}
 	if s.providers != nil {
 		providerCount = len(s.providers.List())
 	}
@@ -87,7 +81,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime_ms": uptime.Milliseconds(),
 		"subsystems": map[string]any{
 			"core": "go",
-			"auth": authMode,
 		},
 		"connections": s.clientCnt.Load(),
 		"sessions":    s.sessions.Count(),
@@ -176,37 +169,6 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve auth from Bearer token.
-	role := ""
-	authenticated := false
-
-	if s.authValidator != nil {
-		token := extractBearerToken(r)
-		if token != "" {
-			claims, err := s.authValidator.ValidateToken(token)
-			if err != nil {
-				s.writeJSON(w, http.StatusUnauthorized, rpcerr.Unauthorized("invalid token: "+err.Error()).Response(req.ID))
-				return
-			}
-			role = string(claims.Role)
-			authenticated = true
-		}
-	} else {
-		// No-auth mode: treat all HTTP requests as operator.
-		role = "operator"
-		authenticated = true
-	}
-
-	// Authorize method call.
-	if authErr := rpc.AuthorizeMethod(req.Method, role, authenticated); authErr != nil {
-		status := http.StatusForbidden
-		if authErr.Code == protocol.ErrUnauthorized {
-			status = http.StatusUnauthorized
-		}
-		s.writeJSON(w, status, protocol.NewResponseError(req.ID, authErr))
-		return
-	}
-
 	frame := &protocol.RequestFrame{
 		Type:   protocol.FrameTypeRequest,
 		ID:     req.ID,
@@ -219,17 +181,4 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	dispatchCancel()
 
 	s.writeJSON(w, http.StatusOK, resp)
-}
-
-// extractBearerToken extracts the token from an "Authorization: Bearer <token>" header.
-func extractBearerToken(r *http.Request) string {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return ""
-	}
-	const prefix = "Bearer "
-	if len(authHeader) > len(prefix) && strings.EqualFold(authHeader[:len(prefix)], prefix) {
-		return authHeader[len(prefix):]
-	}
-	return ""
 }

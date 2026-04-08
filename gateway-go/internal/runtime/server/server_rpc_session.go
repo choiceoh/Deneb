@@ -277,10 +277,10 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Wire Telegram notifier for dreaming and autoresearch events.
 	if s.telegramPlug != nil {
 		tgCfg := s.telegramPlug.Config()
-		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
+		if tgCfg != nil && tgCfg.ChatID != 0 {
 			notifier := &telegramNotifier{
 				plugin: s.telegramPlug,
-				chatID: tgCfg.AllowFrom.IDs[0],
+				chatID: tgCfg.ChatID,
 				logger: s.logger,
 			}
 			s.autonomousSvc.SetNotifier(notifier)
