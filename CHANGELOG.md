@@ -1,5 +1,39 @@
 # Changelog
 
+## [4.22.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.22.1...deneb-v4.22.2) (2026-04-08)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** lower default memory token budget from 200k to 150k ([07cd76a](https://github.com/choiceoh/Deneb/commit/07cd76aae1e0ab631e942379b1ca5934bb895142))
+* **chat:** lower default memory token budget to 150k ([3a7cc52](https://github.com/choiceoh/Deneb/commit/3a7cc52b00151451407fb1452c818909b7e2fc90))
+* **chat:** unify token budgets and prevent silent context truncation ([dd68a91](https://github.com/choiceoh/Deneb/commit/dd68a9167da2d7c254942a186931a937c4dc4ca7))
+* **chat:** unify token budgets and prevent silent context truncation ([b0529e0](https://github.com/choiceoh/Deneb/commit/b0529e0835f41ae745b8af4cb7702939352dfe89))
+
+
+### ⚡ Performance
+
+* **chat:** reduce multi-turn token cost with prior-turn compaction ([4e5222c](https://github.com/choiceoh/Deneb/commit/4e5222c5ee4945a80219f1228f9d9287e2f5e41c))
+* **chat:** reduce multi-turn token cost with prior-turn compaction and tighter web defaults ([fe9653f](https://github.com/choiceoh/Deneb/commit/fe9653f7cad3dd3913d40c438d8f218cf70993f7))
+
+
+### 🔧 Internal
+
+* **chat:** remove legacy context assembly, require Polaris Bridge ([c843347](https://github.com/choiceoh/Deneb/commit/c84334702ddafbd55c7506fbd1cba62300c6a386))
+* **chat:** remove legacy context assembly, require Polaris Bridge ([906c92d](https://github.com/choiceoh/Deneb/commit/906c92dc5a372f9adab76192bdda7e33bb29fa7d))
+* **chat:** show compaction tier in polaris log message ([2db17fb](https://github.com/choiceoh/Deneb/commit/2db17fb3d7646e78059f1ff88389f2d8bd0cc3fe))
+* **chat:** show compaction tier in polaris log message ([add255c](https://github.com/choiceoh/Deneb/commit/add255c42a34f4408d616ff43f9b7d0c1ca6945b))
+* remove dead code, simplify compaction config ([b08fe38](https://github.com/choiceoh/Deneb/commit/b08fe388b607287ee1235edd9fc669956d05e60d))
+* remove dead code, simplify compaction config ([26f3421](https://github.com/choiceoh/Deneb/commit/26f34210084259af8ef8628bf0c0a8f80c9a5719))
+* **rpc:** remove dead validators and orphaned methods ([c740743](https://github.com/choiceoh/Deneb/commit/c7407434b76fc714a6ddc1993ec4a6247fb531db))
+* **rpc:** remove dead validators, fix name mismatches, delete send/poll/wake methods ([19a2489](https://github.com/choiceoh/Deneb/commit/19a248941c6e971c6b39dae98f6cdee47c468e1b))
+* **telegram:** remove multi-user access control and auth for single-user deployment ([1a57ad9](https://github.com/choiceoh/Deneb/commit/1a57ad9b8cc4d011a114020c808a026cfab71f03))
+* **telegram:** remove multi-user access control and auth for single-user deployment ([f8706de](https://github.com/choiceoh/Deneb/commit/f8706de30534aad6015cabaf24affe38bb413e54))
+* **telegram:** remove orphan ThreadNamer code ([1c4bb2c](https://github.com/choiceoh/Deneb/commit/1c4bb2cc108283ec4f50a8c28ff38c414a85609d))
+* **telegram:** remove orphan ThreadNamer code ([acd8f94](https://github.com/choiceoh/Deneb/commit/acd8f94fc2cc4b4f48d2969e7aa6f302e3562410))
+* **tools:** rename rlm_projects.go to wiki_tools.go ([36278da](https://github.com/choiceoh/Deneb/commit/36278da03b199a4218ef97106c936f86757fd1d4))
+* **tools:** rename rlm_projects.go to wiki_tools.go and fix PATH ([22f5684](https://github.com/choiceoh/Deneb/commit/22f56842dabce61a845ccd6f5d4c6ec69a1b532c))
+
 ## [4.22.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.22.0...deneb-v4.22.1) (2026-04-08)
 
 
