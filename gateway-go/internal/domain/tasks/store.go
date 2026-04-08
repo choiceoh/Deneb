@@ -30,10 +30,11 @@ type Store struct {
 	flows map[string]*FlowRecord
 
 	// Write coalescing.
-	dirty   bool
-	flushCh chan struct{} // signals the flush goroutine
-	done    chan struct{} // closed on Close to stop the flush goroutine
-	wg      sync.WaitGroup
+	dirty    bool
+	flushCh  chan struct{} // signals the flush goroutine
+	done     chan struct{} // closed on Close to stop the flush goroutine
+	wg       sync.WaitGroup
+	closeOnce sync.Once
 }
 
 // StoreConfig configures the task store.
@@ -180,8 +181,11 @@ func (s *Store) writeSnapshot() error {
 }
 
 // Close flushes pending writes and stops the background goroutine.
+// Safe to call multiple times.
 func (s *Store) Close() error {
-	close(s.done)
+	s.closeOnce.Do(func() {
+		close(s.done)
+	})
 	s.wg.Wait()
 	return nil
 }
