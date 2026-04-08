@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.22.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.22.0...deneb-v4.22.1) (2026-04-08)
+
+
+### 🔧 Internal
+
+* **chat,autoreply:** extract helpers to reduce nesting and parameterize dispatcher ctx ([8c127f3](https://github.com/choiceoh/Deneb/commit/8c127f3d92525e0a80d6acc0fc78e811f0ba0a03))
+* **chat,autoreply:** reduce nesting and parameterize dispatcher ctx ([0bcf6df](https://github.com/choiceoh/Deneb/commit/0bcf6dfe2ec4a011769e4127b2306f715e461ab8))
+* improve code hygiene — remove unused suppressions, add defer, flatten nesting ([83229af](https://github.com/choiceoh/Deneb/commit/83229af68edd0f168c0e1530b0fa04b82eb0c035))
+* improve code hygiene (audit VIII [#37](https://github.com/choiceoh/Deneb/issues/37)-40) ([1dfa559](https://github.com/choiceoh/Deneb/commit/1dfa559cb2d8f2319cf14d35bbdb1e4e3c5bcda0))
+* **rpc:** adopt Bind[P] generics across 74 RPC handlers ([b19df87](https://github.com/choiceoh/Deneb/commit/b19df874414508387d77029817c51282379c4c41))
+* **rpc:** adopt Bind[P] generics across 74 RPC handlers ([0dc63c5](https://github.com/choiceoh/Deneb/commit/0dc63c5f538591816ceb1150a39a2079e4c5253e))
+* **test:** standardize assertion messages to Go `got, want` convention ([42cc04a](https://github.com/choiceoh/Deneb/commit/42cc04a514e1375ac9bf39522e48b98ceba8a9a8))
+* **test:** standardize assertion messages to Go got/want convention ([8acda61](https://github.com/choiceoh/Deneb/commit/8acda616de8964523429d3eb000b8f532f0b2e1a))
+
 ## [4.22.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.21.0...deneb-v4.22.0) (2026-04-08)
 
 
