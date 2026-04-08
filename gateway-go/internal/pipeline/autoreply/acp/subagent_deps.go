@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -17,14 +16,13 @@ import (
 // infrastructure. This connects to the actual ACPRegistry, session manager,
 // and followup queue infrastructure.
 type SubagentInfraDeps struct {
-	ACPRegistry   *ACPRegistry
-	ACPProjector  *ACPProjector
-	FollowupQueue *queue.FollowupQueueRegistry
-	Sessions      *session.Manager // session lifecycle for subagent sessions
-	SessionStore  func(key string) *types.SessionState
-	SaveSession   func(session *types.SessionState) error
-	AbortSession  func(sessionKey string) error
-	Logger        *slog.Logger
+	ACPRegistry  *ACPRegistry
+	ACPProjector *ACPProjector
+	Sessions     *session.Manager // session lifecycle for subagent sessions
+	SessionStore func(key string) *types.SessionState
+	SaveSession  func(session *types.SessionState) error
+	AbortSession func(sessionKey string) error
+	Logger       *slog.Logger
 }
 
 // SpawnSubagentParams holds the parameters for spawning a sub-agent.
@@ -227,24 +225,6 @@ func (d *SubagentInfraDeps) ResetSubagent(agentID, reason string) error {
 	d.ACPRegistry.Register(*agent)
 
 	return nil
-}
-
-// EnqueueFollowup adds a followup message for a session.
-func (d *SubagentInfraDeps) EnqueueFollowup(sessionKey, text string, run *types.FollowupRunContext) {
-	if d.FollowupQueue == nil {
-		return
-	}
-	d.FollowupQueue.EnqueueFollowupRun(
-		sessionKey,
-		types.FollowupRun{
-			Prompt:     text,
-			Run:        run,
-			EnqueuedAt: time.Now().UnixMilli(),
-		},
-		types.FollowupQueueSettings{},
-		types.DedupeNone,
-		queue.NewRecentMessageIDCache(),
-	)
 }
 
 func (d *SubagentInfraDeps) logger() *slog.Logger {

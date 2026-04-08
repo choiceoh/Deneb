@@ -7,10 +7,8 @@ package autoreply
 
 import (
 	"context"
-	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/dispatch"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
@@ -150,87 +148,4 @@ func ResolveOriginRouting(msg *types.MsgContext) OriginRouting {
 		AccountID: msg.AccountID,
 		ThreadID:  msg.ThreadID,
 	}
-}
-
-// DispatcherRegistry tracks active dispatchers for session coordination.
-type DispatcherRegistry struct {
-	mu          sync.Mutex
-	dispatchers map[string]*dispatch.ReplyDispatcher
-}
-
-// NewDispatcherRegistry creates a new dispatcher registry.
-func NewDispatcherRegistry() *DispatcherRegistry {
-	return &DispatcherRegistry{
-		dispatchers: make(map[string]*dispatch.ReplyDispatcher),
-	}
-}
-
-// Register adds a dispatcher for a session.
-func (r *DispatcherRegistry) Register(sessionKey string, d *dispatch.ReplyDispatcher) {
-	r.mu.Lock()
-	r.dispatchers[sessionKey] = d
-	r.mu.Unlock()
-}
-
-// Unregister removes a dispatcher.
-func (r *DispatcherRegistry) Unregister(sessionKey string) {
-	r.mu.Lock()
-	delete(r.dispatchers, sessionKey)
-	r.mu.Unlock()
-}
-
-// Get returns the active dispatcher for a session.
-func (r *DispatcherRegistry) Get(sessionKey string) *dispatch.ReplyDispatcher {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.dispatchers[sessionKey]
-}
-
-// FollowupRunner handles multi-turn follow-up executions.
-type FollowupRunner struct {
-	agent    AgentExecutor
-	maxTurns int
-}
-
-// NewFollowupRunner creates a followup runner with a turn limit.
-func NewFollowupRunner(agent AgentExecutor, maxTurns int) *FollowupRunner {
-	if maxTurns <= 0 {
-		maxTurns = 10
-	}
-	return &FollowupRunner{agent: agent, maxTurns: maxTurns}
-}
-
-// RunFollowups executes follow-up turns until the agent signals completion.
-func (f *FollowupRunner) RunFollowups(ctx context.Context, initial AgentTurnConfig, firstResult *AgentTurnResult) ([]types.ReplyPayload, error) {
-	allPayloads := make([]types.ReplyPayload, 0)
-	allPayloads = append(allPayloads, firstResult.Payloads...)
-
-	for turn := 1; turn < f.maxTurns; turn++ {
-		// Check if the agent signaled it needs another turn (e.g., tool_use).
-		if !needsFollowup(firstResult) {
-			break
-		}
-
-		result, err := f.agent.RunTurn(ctx, initial)
-		if err != nil {
-			return allPayloads, err
-		}
-		allPayloads = append(allPayloads, result.Payloads...)
-		firstResult = result
-	}
-
-	return allPayloads, nil
-}
-
-func needsFollowup(result *AgentTurnResult) bool {
-	if result == nil {
-		return false
-	}
-	// Check if any payload has tool use content.
-	for _, p := range result.Payloads {
-		if IsToolUseContent(p.Text) {
-			return true
-		}
-	}
-	return false
 }

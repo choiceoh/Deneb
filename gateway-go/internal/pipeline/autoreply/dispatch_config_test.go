@@ -143,15 +143,3 @@ func TestOriginRouting(t *testing.T) {
 	}
 }
 
-
-func TestNeedsFollowup(t *testing.T) {
-	if needsFollowup(nil) {
-		t.Error("nil result should not need followup")
-	}
-	if needsFollowup(&AgentTurnResult{}) {
-		t.Error("empty result should not need followup")
-	}
-	if needsFollowup(&AgentTurnResult{Payloads: []types.ReplyPayload{{Text: "hello"}}}) {
-		t.Error("text-only result should not need followup")
-	}
-}
