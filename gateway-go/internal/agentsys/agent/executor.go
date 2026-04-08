@@ -201,6 +201,15 @@ func RunAgent(
 		result.Usage.InputTokens += turnRes.usage.InputTokens
 		result.Usage.OutputTokens += turnRes.usage.OutputTokens
 
+		// Per-turn token logging: surface per-turn cost so multi-turn runs
+		// are transparent (the accumulated total can be misleading).
+		logger.Info("agent turn complete",
+			"turn", turn,
+			"turnInputTokens", turnRes.usage.InputTokens,
+			"turnOutputTokens", turnRes.usage.OutputTokens,
+			"accInputTokens", result.Usage.InputTokens,
+			"messages", len(messages))
+
 		// Feed actual token usage back to the estimator for self-calibration.
 		if turnRes.usage.InputTokens > 0 {
 			est := tokenest.ForModel(cfg.Model)
@@ -339,6 +348,11 @@ func RunAgent(
 		if turn == 0 && cfg.StripImagesAfterFirstTurn {
 			messages = stripBase64ImagesFromHistory(messages)
 		}
+
+		// Record where the current turn's messages begin in the array.
+		// Everything before this index is from prior turns and eligible for
+		// tool result compaction.
+		currentTurnStart := len(messages)
 
 		// Build assistant message with all content blocks from this turn.
 		assistantMsg := llm.NewBlockMessage("assistant", turnRes.contentBlocks)
@@ -527,6 +541,17 @@ func RunAgent(
 					"beforeMsgs", beforeCount,
 					"afterMsgs", len(compacted))
 			}
+		}
+
+		// Prior-turn tool result compaction: shrink tool_result content from
+		// completed turns to CompactedMaxOutput (4K chars). The LLM already
+		// saw the full result on the turn it was produced; subsequent turns
+		// only need a summary. This prevents multi-turn token explosion where
+		// resending full tool results (32K each) on every turn compounds cost.
+		if n := CompactPriorToolResults(messages, currentTurnStart); n > 0 {
+			logger.Info("compacted prior tool results",
+				"turn", turn,
+				"blocksCompacted", n)
 		}
 	}
 

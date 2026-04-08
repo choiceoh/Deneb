@@ -99,7 +99,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 // webFetchURL fetches a URL and returns extracted content with metadata envelope.
 func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, targetURL string, maxChars int) (string, error) {
 	if maxChars <= 0 {
-		maxChars = 50000
+		maxChars = 20000
 	}
 
 	// YouTube → transcript.
@@ -164,7 +164,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 // This avoids sequential LLM round-trips for multi-constraint questions.
 func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, queries []string, count, fetch, maxChars int) (string, error) {
 	if maxChars <= 0 {
-		maxChars = 50000
+		maxChars = 20000
 	}
 	perQueryChars := maxChars / len(queries)
 
@@ -210,7 +210,7 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 // Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
 func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
-		maxChars = 30000
+		maxChars = 15000
 	}
 
 	searchOutput, fetchURLs, err := webSearchWithURLs(ctx, query, count)

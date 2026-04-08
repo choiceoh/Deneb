@@ -47,7 +47,7 @@ func ToolHTTP() ToolFunc {
 				timeout = 120 * time.Second
 			}
 		}
-		maxChars := 50000
+		maxChars := 20000
 		if p.MaxResponseChar > 0 {
 			maxChars = p.MaxResponseChar
 		}
