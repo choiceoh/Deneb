@@ -20,7 +20,6 @@ build/
 
 # OS
 .DS_Store
-Thumbs.db
 
 # Logs
 *.log
@@ -31,11 +30,6 @@ quality-results.db
 # Go build artifacts
 gateway-go/gateway
 gateway-go/cover.out
-
-# Rust build artifacts (workspace)
-/target/
-core-rs/target/
-cli-rs/target/
 
 # Go build artifacts
 gateway-go/deneb-gateway
