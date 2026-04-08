@@ -25,6 +25,9 @@ else
 GO_ENV :=
 endif
 
+# Ensure Go toolchain binaries (golangci-lint, etc.) are on PATH.
+export PATH := $(HOME)/go/bin:$(PATH)
+
 # Default: build Go gateway.
 all: go
 
