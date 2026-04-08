@@ -16,7 +16,6 @@ var readOnlyToolFallback = map[string]struct{}{
 	"kv":             {},
 	"memory":         {},
 	"web":            {},
-	"health_check":   {},
 	"sessions":       {},
 	"skills":         {},
 	"polaris":        {},

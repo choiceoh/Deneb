@@ -56,14 +56,6 @@ func TestShouldSilenceForChannel(t *testing.T) {
 			want: false,
 		},
 		{
-			name:    "health_check on telegram is NOT silenced",
-			channel: "telegram",
-			activities: []agent.ToolActivity{
-				{Name: "health_check"},
-			},
-			want: false,
-		},
-		{
 			name:       "empty activities",
 			channel:    "telegram",
 			activities: nil,

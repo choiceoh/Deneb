@@ -3,18 +3,13 @@ package chat
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
 // It delegates to toolreg.RegisterCoreTools for the bulk of registrations,
 // then adds tools that depend on chat-internal state (post-processors).
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
-	localAI := &toolreg.LocalAIDeps{
-		CheckLocalAIHealth: pilot.CheckLocalAIHealth,
-		BaseURL:            pilot.LightweightBaseURL,
-	}
-	toolreg.RegisterCoreTools(registry, deps, localAI)
+	toolreg.RegisterCoreTools(registry, deps)
 
 	// Skills discovery + management: list, create, patch, delete skills at runtime.
 	toolreg.RegisterSkillsTools(registry, CachedSkillsSnapshot,

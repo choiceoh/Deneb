@@ -710,19 +710,6 @@ func webToolSchema() map[string]any {
 	}
 }
 
-func healthCheckToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"component": map[string]any{
-				"type":        "string",
-				"description": "Component to check (default: all). localai=local LLM",
-				"enum":        []string{"all", "localai"},
-			},
-		},
-	}
-}
-
 func cronToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -955,19 +942,6 @@ func subagentsToolSchema() map[string]any {
 				"description": "Target sub-agent ID or label",
 			},
 		},
-	}
-}
-
-func youtubeTranscriptToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"url": map[string]any{
-				"type":        "string",
-				"description": "YouTube video URL (youtube.com/watch?v=... or youtu.be/...)",
-			},
-		},
-		"required": []string{"url"},
 	}
 }
 
