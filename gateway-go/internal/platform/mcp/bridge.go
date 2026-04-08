@@ -135,7 +135,7 @@ func (b *Bridge) HealthCheck(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("gateway unreachable at %s: %w", b.baseURL, err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("gateway health check returned HTTP %d", resp.StatusCode)
 	}

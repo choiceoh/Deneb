@@ -67,56 +67,13 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		}
 		args = append(args, "--", searchPath)
 
-		out, _, err := runRg(ctx, args)
+		bareMinArgs := []string{"-F", "-n", "--max-count=20", "--no-heading", "-e", p.Pattern, "--", searchPath}
+		out, err := rgWithFallbacks(ctx, args, bareMinArgs, p.FileType)
 		if err != nil {
-			exitCode := rgExitCode(err)
-			if exitCode == 1 {
-				return "No matches found.", nil
-			}
-			// If stdout has valid match lines despite the error, use them.
-			if len(out) > 0 && hasGrepMatches(out) { //nolint:gocritic // ifElseChain — grep retry logic
-				// Continue to step 2 with partial results.
-			} else if exitCode == 2 {
-				// Retry 1: treat pattern as literal string (-F).
-				fixedArgs := make([]string, len(args))
-				copy(fixedArgs, args)
-				fixedArgs = append([]string{"-F"}, fixedArgs...)
-				if retryOut, _, retryErr := runRg(ctx, fixedArgs); retryErr == nil {
-					out = retryOut
-				} else if rgExitCode(retryErr) == 1 { //nolint:gocritic // ifElseChain — grep retry cascade
-					return "No matches found.", nil
-				} else if p.FileType != "" {
-					// Retry 2: strip --type (commonly unrecognized), keep -F.
-					bareArgs := stripRgFlag(fixedArgs, "--type")
-					if bareOut, _, bareErr := runRg(ctx, bareArgs); bareErr == nil {
-						out = bareOut
-					} else if rgExitCode(bareErr) == 1 {
-						return "No matches found.", nil
-					} else {
-						return "", fmt.Errorf("grep failed: %s", strings.TrimSpace(string(out)))
-					}
-				} else {
-					// Last resort: bare search, no type/glob/regex.
-					bareMinArgs := []string{"-F", "-n", "--max-count=20", "--no-heading", "-e", p.Pattern, "--", searchPath}
-					if bareMinOut, _, bareMinErr := runRg(ctx, bareMinArgs); bareMinErr == nil {
-						out = bareMinOut
-					} else if rgExitCode(bareMinErr) == 1 {
-						return "No matches found.", nil
-					} else {
-						return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
-					}
-				}
-			} else {
-				// Non-regex error. Try bare minimum search.
-				bareMinArgs := []string{"-F", "-n", "--max-count=20", "--no-heading", "-e", p.Pattern, "--", searchPath}
-				if bareMinOut, _, bareMinErr := runRg(ctx, bareMinArgs); bareMinErr == nil {
-					out = bareMinOut
-				} else if rgExitCode(bareMinErr) == 1 {
-					return "No matches found.", nil
-				} else {
-					return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
-				}
-			}
+			return "", err
+		}
+		if out == nil {
+			return "No matches found.", nil
 		}
 
 		// Step 2: Parse results into file → line numbers map.

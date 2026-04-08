@@ -122,9 +122,6 @@ type SkillStatusEntry struct {
 
 // BuildWorkspaceSkillStatus builds a status report for all discovered skills.
 func BuildWorkspaceSkillStatus(cfg DiscoverConfig, eligCtx EligibilityContext) *SkillStatus {
-	log := cfg.logger()
-	_ = log
-
 	allEntries := DiscoverWorkspaceSkills(cfg)
 
 	binsSet := make(map[string]struct{})

@@ -96,7 +96,7 @@ func WaitForHealth(ctx context.Context, url string, interval time.Duration) erro
 		if err != nil {
 			return false, nil // transient — retry
 		}
-		resp.Body.Close()
+		defer resp.Body.Close()
 		return resp.StatusCode < 500, nil
 	}
 

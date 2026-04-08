@@ -129,8 +129,8 @@ func (s *Store) CreateRequest(params CreateRequestParams) *Request {
 	}
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.requests[id] = req
-	s.mu.Unlock()
 
 	return req
 }
