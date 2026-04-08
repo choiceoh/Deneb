@@ -95,16 +95,6 @@ func NewCommandRegistry(commands []ChatCommandDefinition) *CommandRegistry {
 	return r
 }
 
-// SetCommands replaces the command list and invalidates caches.
-func (r *CommandRegistry) SetCommands(commands []ChatCommandDefinition) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.commands = commands
-	r.aliasMap = nil
-	r.detection = nil
-	r.rebuild()
-}
-
 // Commands returns the current command list.
 func (r *CommandRegistry) Commands() []ChatCommandDefinition {
 	r.mu.RLock()
@@ -244,13 +234,6 @@ func (r *CommandRegistry) NormalizeCommandBody(raw, botUsername string) string {
 		return spec.canonical + " " + normalizedRest
 	}
 	return spec.canonical
-}
-
-// Detection returns the precomputed command detection data.
-func (r *CommandRegistry) Detection() *CommandDetection {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.detection
 }
 
 // HasControlCommand returns true if the text contains a recognized command.
