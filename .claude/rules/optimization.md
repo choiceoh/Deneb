@@ -13,16 +13,15 @@ globs: ["gateway-go/**/*.go"]
 | Command | What |
 |---|---|
 | `scripts/dev/iterate.sh` | 빌드→서버→smoke 2체크→결과 (~2초) |
-| `scripts/dev/iterate.sh --metric CMD` | 커스텀 metric |
+| `scripts/dev/iterate.sh --metric quality` | 내장 프리셋 (smoke\|quality\|combined) |
+| `scripts/dev/iterate.sh --metric CMD` | 커스텀 metric 커맨드 |
 | `scripts/dev/quality-metric.sh [MSG]` | 텔레그램 채팅 품질 점수 0-100 (15~60초) |
 
 ### 오토리서치 (자율 최적화 루프)
 
 | Command | What |
 |---|---|
-| `scripts/dev/metric-gen.sh list` | metric 프리셋 목록 |
-| `scripts/dev/metric-gen.sh PRESET` | metric 스크립트 생성 (smoke\|quality\|combined) |
-| `scripts/dev/autoresearch.sh start --target FILE --metric PRESET` | 오토리서치 시작 |
+| `scripts/dev/autoresearch.sh start --target FILE --metric PRESET` | 오토리서치 시작 (직접 RPC) |
 | `scripts/dev/autoresearch.sh status` | 상태 확인 |
 | `scripts/dev/autoresearch.sh results --json` | 결과 JSON |
 | `scripts/dev/autoresearch.sh stop` | 정지 |

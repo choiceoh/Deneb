@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# One-shot autoresearch wrapper for Claude Code agents.
+# Autoresearch wrapper — direct RPC (no LLM bypass).
 #
-# Sends autoresearch commands through the gateway's chat.send RPC,
-# which triggers the autoresearch tool inside the LLM agent.
+# Calls autoresearch RPC methods directly via WebSocket,
+# instead of sending chat messages through the LLM.
 #
 # Usage:
 #   scripts/autoresearch.sh start --target FILE [OPTIONS]
@@ -18,26 +18,25 @@
 #   --budget SECS           Time budget per experiment (default: 120)
 #   --iterations N          Max iterations (default: 20)
 #   --tag TAG               Branch tag (default: auto)
-#   --constants SPEC        Constants mode: "NAME:TYPE:MIN:MAX,..." (optional)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Gateway connection (use production or dev port).
 GW_HOST="127.0.0.1"
 GW_PORT="${DEV_LIVE_PORT:-18790}"
 
 CMD="${1:-help}"
 shift || true
 
-# --- Chat helper: send a message and capture tool results ---
-_chat_rpc() {
-  local message="$1"
-  local timeout="${2:-120}"
+# --- Direct WebSocket RPC helper ---
+# Connects, handshakes, sends ONE RPC request, prints the response payload.
+_rpc() {
+  local method="$1"
+  local params="${2:-{}}"
   python3 -c "
-import json, asyncio, time, sys
+import json, asyncio, sys
 try:
     import websockets
 except ImportError:
@@ -50,70 +49,30 @@ async def main():
             websockets.connect('ws://$GW_HOST:$GW_PORT/ws', max_size=10*1024*1024, ping_interval=None),
             timeout=5)
     except Exception as e:
-        print(f'ERROR: cannot connect to gateway at $GW_HOST:$GW_PORT: {e}', file=sys.stderr)
+        print(json.dumps({'ok': False, 'error': f'cannot connect to $GW_HOST:$GW_PORT: {e}'}))
         sys.exit(1)
 
     try:
+        # Read server hello.
         await asyncio.wait_for(ws.recv(), timeout=3)
-        connect = {'type':'req','id':'ar-hs','method':'connect','params':{
-            'minProtocol':1,'maxProtocol':5,
-            'client':{'id':'ar-wrapper','version':'1.0.0','platform':'test','mode':'control'}
-        }}
-        await ws.send(json.dumps(connect))
+        # Handshake.
+        await ws.send(json.dumps({
+            'type': 'req', 'id': 'hs', 'method': 'connect',
+            'params': {'minProtocol': 1, 'maxProtocol': 5,
+                       'client': {'id': 'ar-cli', 'version': '1.0.0', 'platform': 'script', 'mode': 'control'}}
+        }))
         hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
         if not hello.get('ok'):
-            print('ERROR: handshake failed', file=sys.stderr)
+            print(json.dumps({'ok': False, 'error': 'handshake failed'}))
             sys.exit(1)
 
-        # Create session.
-        sess = f'ar-{int(time.time()*1000)}'
-        await ws.send(json.dumps({'type':'req','id':'ar-sess','method':'sessions.create',
-            'params':{'key':sess,'kind':'direct'}}))
-        await asyncio.wait_for(ws.recv(), timeout=5)
-
-        # Send chat.
-        run_id = f'ar-run-{int(time.time()*1000)}'
+        # Send RPC request.
         await ws.send(json.dumps({
-            'type':'req','id':'ar-chat','method':'chat.send',
-            'params':{'sessionKey':sess,'message':$(python3 -c "import json; print(json.dumps('''$message'''))"),'clientRunId':run_id}
+            'type': 'req', 'id': 'ar-rpc', 'method': '$method',
+            'params': json.loads('''$params''')
         }))
-
-        # Collect response.
-        text = ''
-        tool_results = []
-        start = time.time()
-        for _ in range(2000):
-            try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=$timeout)
-            except asyncio.TimeoutError:
-                break
-            frame = json.loads(raw)
-            evt = frame.get('event','')
-            payload = frame.get('payload',{})
-            state = payload.get('state','')
-
-            if evt == 'chat.delta':
-                text += payload.get('delta','')
-            elif evt == 'chat.tool':
-                if state == 'completed':
-                    tool_results.append({
-                        'tool': payload.get('tool',''),
-                        'result': payload.get('result',''),
-                        'isError': payload.get('isError', False),
-                    })
-            elif evt == 'chat' and state in ('done','error','aborted'):
-                text = payload.get('text', text)
-                break
-            elif evt == 'tick':
-                continue
-
-        # Output: text on stdout, tool results as JSON on stderr.
-        print(text)
-        if tool_results:
-            for tr in tool_results:
-                r = str(tr.get('result',''))
-                print(f'TOOL_RESULT {json.dumps(tr, ensure_ascii=False)}', file=sys.stderr)
-
+        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
+        print(json.dumps(resp, ensure_ascii=False))
     finally:
         await ws.close()
 
@@ -125,7 +84,7 @@ asyncio.run(main())
 
 cmd_start() {
   local targets="" metric="smoke" name="" direction="maximize"
-  local budget=120 iterations=20 tag="" constants=""
+  local budget=120 iterations=20 tag=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -136,7 +95,6 @@ cmd_start() {
       --budget) budget="$2"; shift 2 ;;
       --iterations) iterations="$2"; shift 2 ;;
       --tag) tag="$2"; shift 2 ;;
-      --constants) constants="$2"; shift 2 ;;
       *) echo "Unknown option: $1"; exit 1 ;;
     esac
   done
@@ -147,79 +105,92 @@ cmd_start() {
     exit 1
   fi
 
-  # Generate metric script.
-  local metric_script
+  # Build metric command from preset.
+  local metric_cmd
   case "$metric" in
-    smoke)    metric_script=$("$SCRIPT_DIR/metric-gen.sh" smoke) ;;
-    quality)  metric_script=$("$SCRIPT_DIR/metric-gen.sh" quality) ;;
-    combined) metric_script=$("$SCRIPT_DIR/metric-gen.sh" combined) ;;
-    *)
-      # Treat as raw command.
-      metric_script="$metric"
-      ;;
+    smoke)    metric_cmd="$SCRIPT_DIR/iterate.sh --metric smoke" ;;
+    quality)  metric_cmd="$SCRIPT_DIR/iterate.sh --metric quality" ;;
+    combined) metric_cmd="$SCRIPT_DIR/iterate.sh --metric combined" ;;
+    *)        metric_cmd="$metric" ;;
   esac
 
-  # Auto-derive metric name if not set.
   [[ -z "$name" ]] && name="$metric"
   [[ -z "$tag" ]] && tag="$metric-$(date +%m%d-%H%M)"
 
-  echo "autoresearch: starting"
+  echo "autoresearch: configuring + starting"
   echo "  target: $targets"
-  echo "  metric: $metric ($metric_script)"
+  echo "  metric: $name ($metric_cmd)"
   echo "  direction: $direction"
   echo "  budget: ${budget}s/experiment"
   echo "  iterations: $iterations"
   echo "  tag: $tag"
 
-  # Build the instruction for the LLM agent.
-  local target_list
-  target_list=$(echo "$targets" | tr ',' ' ' | sed 's/ /", "/g')
+  # Build target_files JSON array.
+  local target_json
+  target_json=$(python3 -c "import json; print(json.dumps([f.strip() for f in '''$targets'''.split(',')]))")
 
-  local constants_json=""
-  if [[ -n "$constants" ]]; then
-    # Parse "NAME:TYPE:MIN:MAX,..." into JSON.
-    constants_json=$(python3 -c "
+  # Step 1: Configure.
+  local params
+  params=$(python3 -c "
 import json
-specs = '''$constants'''.split(',')
-result = []
-for spec in specs:
-    parts = spec.strip().split(':')
-    if len(parts) >= 4:
-        result.append({'name': parts[0], 'type': parts[1], 'min': parts[2], 'max': parts[3]})
-    elif len(parts) >= 2:
-        result.append({'name': parts[0], 'type': parts[1]})
-print(json.dumps(result))
+d = {
+    'workdir': '$REPO_DIR',
+    'target_files': $target_json,
+    'metric_cmd': '$metric_cmd',
+    'metric_name': '$name',
+    'metric_direction': '$direction',
+    'time_budget_sec': $budget,
+    'max_iterations': $iterations,
+    'branch_tag': '$tag',
+}
+print(json.dumps(d))
 ")
-    echo "  constants: $constants_json"
+
+  local resp
+  resp=$(_rpc "autoresearch.config" "$params")
+  local ok
+  ok=$(echo "$resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('ok', False))" 2>/dev/null)
+  if [[ "$ok" != "True" ]]; then
+    echo "ERROR: config failed"
+    echo "$resp" | python3 -m json.tool 2>/dev/null || echo "$resp"
+    exit 1
   fi
+  echo "  configured"
 
-  local msg="오토리서치 시작해줘. autoresearch 도구를 사용해서:
-action: init
-workdir: $REPO_DIR
-target_files: [\"$target_list\"]
-metric_cmd: bash $metric_script
-metric_name: $name
-metric_direction: $direction
-time_budget_sec: $budget
-max_iterations: $iterations
-branch_tag: $tag"
-
-  if [[ -n "$constants_json" ]]; then
-    msg="$msg
-constants: $constants_json"
+  # Step 2: Start.
+  resp=$(_rpc "autoresearch.start" "{\"workdir\": \"$REPO_DIR\"}")
+  ok=$(echo "$resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('ok', False))" 2>/dev/null)
+  if [[ "$ok" != "True" ]]; then
+    echo "ERROR: start failed"
+    echo "$resp" | python3 -m json.tool 2>/dev/null || echo "$resp"
+    exit 1
   fi
-
-  msg="$msg
-
-init이 완료되면 바로 action: start로 시작해."
-
-  echo ""
-  _chat_rpc "$msg" 30
+  echo "  started"
 }
 
 cmd_status() {
-  echo "autoresearch: checking status..."
-  _chat_rpc "오토리서치 현재 상태 알려줘. autoresearch 도구의 status action 사용해. workdir은 $REPO_DIR" 15
+  local resp
+  resp=$(_rpc "autoresearch.status" "{}")
+  echo "$resp" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+p = d.get('payload', d)
+running = p.get('running', False)
+print(f'autoresearch: {\"RUNNING\" if running else \"STOPPED\"}')
+if running or p.get('total_iterations', 0) > 0:
+    print(f'  target: {\", \".join(p.get(\"target_files\", []))}')
+    print(f'  metric: {p.get(\"metric_name\", \"?\")} ({p.get(\"metric_direction\", \"?\")})')
+    total = p.get('total_iterations', 0)
+    kept = p.get('kept_iterations', 0)
+    print(f'  iterations: {total} (kept: {kept})')
+    if p.get('baseline_metric') is not None:
+        print(f'  baseline: {p[\"baseline_metric\"]}')
+    if p.get('best_metric') is not None:
+        print(f'  best: {p[\"best_metric\"]}')
+    consec = p.get('consecutive_failures', 0)
+    if consec > 0:
+        print(f'  consecutive failures: {consec}')
+" 2>/dev/null || echo "ERROR: cannot parse response"
 }
 
 cmd_results() {
@@ -232,19 +203,41 @@ cmd_results() {
     esac
   done
 
-  # For JSON, try to parse results directly from the .autoresearch dir first.
+  # For JSON, use ar-results.sh (works without gateway).
   if [[ "$format" == "json" ]]; then
     "$SCRIPT_DIR/ar-results.sh" --json
     return
   fi
 
-  echo "autoresearch: fetching results ($format)..."
-  _chat_rpc "오토리서치 결과 보여줘. autoresearch 도구의 results action, format=$format, workdir=$REPO_DIR" 15
+  local resp
+  resp=$(_rpc "autoresearch.results" "{\"workdir\": \"$REPO_DIR\", \"format\": \"$format\"}")
+  echo "$resp" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+p = d.get('payload', d)
+if 'tsv' in p:
+    print(p['tsv'])
+elif 'summary' in p:
+    print(p['summary'])
+else:
+    print(json.dumps(p, indent=2, ensure_ascii=False))
+" 2>/dev/null || echo "$resp"
 }
 
 cmd_stop() {
   echo "autoresearch: stopping..."
-  _chat_rpc "오토리서치 멈춰줘. autoresearch 도구의 stop action 사용해." 15
+  local resp
+  resp=$(_rpc "autoresearch.stop" "{}")
+  echo "$resp" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+p = d.get('payload', d)
+total = p.get('total_iterations', 0)
+kept = p.get('kept_iterations', 0)
+print(f'  stopped (iterations: {total}, kept: {kept})')
+if p.get('best_metric') is not None:
+    print(f'  best: {p[\"best_metric\"]} (baseline: {p.get(\"baseline_metric\", \"?\")})')
+" 2>/dev/null || echo "  stopped"
 }
 
 # --- Main ---
@@ -263,7 +256,6 @@ case "$CMD" in
     echo "  --budget SECS         Time per experiment (default: 120)"
     echo "  --iterations N        Max iterations (default: 20)"
     echo "  --tag TAG             Branch tag (default: auto)"
-    echo "  --constants SPEC      Constants: NAME:TYPE:MIN:MAX,..."
     exit 1
     ;;
 esac

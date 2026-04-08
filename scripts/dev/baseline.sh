@@ -19,7 +19,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BASELINE_DIR="/tmp/deneb-baselines"
+BASELINE_DIR="${HOME}/.deneb/baselines"
 RESULT_FILE="/tmp/deneb-iterate-result.json"
 
 mkdir -p "$BASELINE_DIR"

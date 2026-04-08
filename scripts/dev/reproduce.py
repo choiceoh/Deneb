@@ -35,6 +35,14 @@ from typing import Optional
 # Add scripts dir to path for shared module.
 sys.path.insert(0, str(Path(__file__).parent))
 from telegram_test_client import TelegramTestClient, ChatCapture, check_prerequisites
+from checks import (
+    check_korean_response as _check_korean_core,
+    check_no_leaked_markup as _check_no_leaked_markup_core,
+    check_telegram_safe as _check_telegram_safe_core,
+    check_no_filler as _check_no_filler_core,
+    check_latency as _check_latency_core,
+    check_response_substance as _check_substance_core,
+)
 
 # --- Configuration ---
 
@@ -113,13 +121,8 @@ class GatewayClient:
 
 def check_korean(text: str) -> CheckResult:
     """Response is primarily Korean."""
-    korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", text))
-    total_alpha = len(re.findall(r"[a-zA-Z\uac00-\ud7af]", text))
-    if total_alpha == 0:
-        return CheckResult("korean", False, "no alphabetic content")
-    ratio = korean_chars / max(total_alpha, 1)
-    passed = ratio > 0.3
-    return CheckResult("korean", passed, f"ratio={ratio:.0%} ({korean_chars}/{total_alpha})")
+    ok, detail = _check_korean_core(text)
+    return CheckResult("korean", ok, detail)
 
 
 def check_expect(text: str, pattern: str) -> CheckResult:
@@ -169,8 +172,8 @@ def check_tool_success(capture: ChatCapture) -> CheckResult:
 
 def check_latency(capture: ChatCapture, max_ms: float) -> CheckResult:
     """Response latency within limit."""
-    ms = capture.latency_ms
-    return CheckResult(f"latency(<{max_ms:.0f}ms)", ms <= max_ms, f"{ms:.0f}ms")
+    ok, detail = _check_latency_core(capture.latency_ms, max_ms)
+    return CheckResult(f"latency(<{max_ms:.0f}ms)", ok, detail)
 
 
 def check_first_token(capture: ChatCapture, max_ms: float) -> CheckResult:
@@ -192,55 +195,26 @@ def check_no_error(capture: ChatCapture) -> CheckResult:
 
 def check_has_reply(capture: ChatCapture, min_len: int = 1) -> CheckResult:
     """Response has non-empty reply."""
-    text = capture.reply_text.strip()
-    if not text:
-        return CheckResult("has_reply", False, "empty response")
-    if len(text) < min_len:
-        return CheckResult("has_reply", False, f"too short: {len(text)} < {min_len} chars")
-    return CheckResult("has_reply", True, f"{len(text)} chars")
+    ok, detail = _check_substance_core(capture.reply_text, min_chars=min_len, min_alpha=1)
+    return CheckResult("has_reply", ok, detail)
 
 
 def check_no_leaked_markup(text: str) -> CheckResult:
     """No internal tokens leaked to response."""
-    patterns = [
-        (r"<function=", "leaked <function= tag"),
-        (r"</?thinking>", "leaked thinking tag"),
-        (r"</?artifact", "leaked artifact tag"),
-        (r"\[\[reply_to", "leaked reply directive"),
-        (r"MEDIA:\S+", "leaked MEDIA token"),
-        (r"NO_REPLY", "leaked NO_REPLY token"),
-    ]
-    for pat, desc in patterns:
-        if re.search(pat, text):
-            return CheckResult("no_leaked_markup", False, desc)
-    return CheckResult("no_leaked_markup", True, "clean")
+    ok, detail = _check_no_leaked_markup_core(text)
+    return CheckResult("no_leaked_markup", ok, detail)
 
 
 def check_no_filler(text: str) -> CheckResult:
     """No AI filler phrases at start."""
-    filler_patterns = [
-        r"^(Great question|I'd be happy to|Sure,? I can|Of course|Certainly|Absolutely)",
-        r"^(좋은 질문|물론이죠|당연하죠|기꺼이)",
-    ]
-    for pat in filler_patterns:
-        match = re.match(pat, text.strip(), re.IGNORECASE)
-        if match:
-            return CheckResult("no_filler", False, f"starts with: '{match.group()}'")
-    return CheckResult("no_filler", True, "clean")
+    ok, detail = _check_no_filler_core(text)
+    return CheckResult("no_filler", ok, detail)
 
 
 def check_telegram_safe(text: str) -> CheckResult:
     """Safe for Telegram delivery."""
-    issues = []
-    if len(text) > 4096:
-        issues.append(f"exceeds 4096 chars ({len(text)})")
-    open_tags = re.findall(r"<(b|i|code|pre|s|u|a|blockquote|tg-spoiler)[\s>]", text)
-    close_tags = re.findall(r"</(b|i|code|pre|s|u|a|blockquote|tg-spoiler)>", text)
-    if len(open_tags) != len(close_tags):
-        issues.append(f"mismatched HTML (open={len(open_tags)}, close={len(close_tags)})")
-    if issues:
-        return CheckResult("telegram_safe", False, "; ".join(issues))
-    return CheckResult("telegram_safe", True, f"{len(text)} chars")
+    ok, detail = _check_telegram_safe_core(text)
+    return CheckResult("telegram_safe", ok, detail)
 
 
 def check_streaming(capture: ChatCapture) -> CheckResult:

@@ -494,7 +494,7 @@ case "${1:-help}" in
   quality-history)  shift; cmd_quality_history "$@" ;;
   quality-compare)  shift; cmd_quality_compare "$@" ;;
   quality-trend)    shift; cmd_quality_trend "$@" ;;
-  metric-gen)     shift; "$SCRIPT_DIR/metric-gen.sh" "$@" ;;
+  # metric-gen removed: use iterate.sh --metric PRESET directly.
   ar-start)       shift; "$SCRIPT_DIR/autoresearch.sh" start "$@" ;;
   ar-stop)        "$SCRIPT_DIR/autoresearch.sh" stop ;;
   ar-status)      "$SCRIPT_DIR/autoresearch.sh" status ;;
@@ -532,26 +532,37 @@ case "${1:-help}" in
     MSG="${1:?Usage: bench-judge MESSAGE}"
     shift || true
     echo "==> LLM-as-Judge evaluation"
-    # Get response via Telegram.
-    CAPTURE=$(python3 -c "
-import sys, asyncio
+    # Get response via Telegram, then score with LLM judge.
+    python3 -c "
+import sys, asyncio, importlib.util
 sys.path.insert(0, '$SCRIPT_DIR')
 from telegram_test_client import TelegramTestClient, check_prerequisites
+
 async def main():
     ok, d = check_prerequisites()
-    if not ok: print(f'ERROR: {d}'); return
+    if not ok:
+        print(f'ERROR: {d}')
+        sys.exit(1)
     c = TelegramTestClient()
     await c.connect()
-    cap = await c.chat('''$MSG''')
-    print(cap.reply_text)
+    cap = await c.chat(sys.argv[1])
     await c.disconnect()
-asyncio.run(main())
-" 2>/dev/null) || true
-    if [[ -z "$CAPTURE" ]]; then
-      echo "ERROR: No response captured"
-      exit 1
-    fi
-    python3 "$SCRIPT_DIR/bench-judge.py" absolute --message "$MSG" --response "$CAPTURE"
+    if not cap.reply_text:
+        print('ERROR: No response captured')
+        sys.exit(1)
+    # Load bench-judge module.
+    spec = importlib.util.spec_from_file_location('bench_judge', '$SCRIPT_DIR/bench-judge.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    if not mod.judge_available():
+        print('ERROR: No JUDGE_API_KEY or ANTHROPIC_API_KEY set')
+        sys.exit(1)
+    scores = mod.judge_absolute(sys.argv[1], cap.reply_text)
+    overall = sum(scores.values()) / len(scores) * 10
+    print(f'Overall: {overall:.0f}/100')
+    for k, v in scores.items():
+        print(f'  {k}: {v}/10')
+" "$MSG"
     ;;
 
   # Baseline tracking.
@@ -610,7 +621,6 @@ asyncio.run(main())
     echo "                      Requires JUDGE_API_KEY or ANTHROPIC_API_KEY"
     echo ""
     echo "Autoresearch:"
-    echo "  metric-gen [PRESET] 메트릭 스크립트 생성 (smoke|quality|combined|custom|judge|pairwise|bench)"
     echo "  ar-start [OPTS]     오토리서치 시작 (--target FILE --metric PRESET)"
     echo "  ar-stop             오토리서치 정지"
     echo "  ar-status           오토리서치 상태 확인"
