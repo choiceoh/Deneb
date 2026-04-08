@@ -1,7 +1,7 @@
 package coremarkdown
 
 // Spoiler preprocessing: converts ||hidden text|| into zero-width sentinels
-// so goldmark doesn't misinterpret the pipes as table syntax.
+// so the parser doesn't misinterpret the pipes as table syntax.
 // Mirrors core-rs/core/src/markdown/spoilers.rs.
 
 const (
