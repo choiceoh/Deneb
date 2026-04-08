@@ -1,16 +1,15 @@
 package genesis
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite" // register sqlite3 driver
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 // UsageRecord represents a single skill usage event.
@@ -35,69 +34,84 @@ type UsageStats struct {
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
-	db     *sql.DB
-	logger *slog.Logger
-	mu     sync.Mutex
+	logger    *slog.Logger
+	mu        sync.Mutex
+	usagePath string
+	logPath   string
+
+	// In-memory aggregated stats, rebuilt from JSONL on startup.
+	stats        map[string]*usageAgg
+	recentErrors map[string][]string // skill -> last 5 error messages
 }
 
-// NewTracker opens or creates the skill usage database.
+// usageAgg holds running aggregates per skill.
+type usageAgg struct {
+	total    int
+	success  int
+	failure  int
+	lastUsed int64
+}
+
+// NewTracker opens or creates the skill usage tracker.
 func NewTracker(logger *slog.Logger) (*Tracker, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	dbPath := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		dir := filepath.Join(home, ".deneb", "data")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("genesis-tracker: mkdir: %w", err)
-		}
-		dbPath = filepath.Join(dir, "skill_usage.db")
-	}
-	if dbPath == "" {
-		return nil, fmt.Errorf("genesis-tracker: cannot determine db path")
-	}
-
-	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("genesis-tracker: open db: %w", err)
+		return nil, fmt.Errorf("genesis-tracker: home dir: %w", err)
+	}
+	dir := filepath.Join(home, ".deneb", "data")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("genesis-tracker: mkdir: %w", err)
 	}
 
-	if err := initTrackerSchema(db); err != nil {
-		db.Close()
-		return nil, err
+	t := &Tracker{
+		logger:       logger,
+		usagePath:    filepath.Join(dir, "skill_usage.jsonl"),
+		logPath:      filepath.Join(dir, "skill_genesis_log.jsonl"),
+		stats:        make(map[string]*usageAgg),
+		recentErrors: make(map[string][]string),
 	}
 
-	return &Tracker{db: db, logger: logger}, nil
+	// Rebuild in-memory state from existing JSONL.
+	records, err := jsonlstore.Load[UsageRecord](t.usagePath)
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: load usage: %w", err)
+	}
+	for _, r := range records {
+		t.ingest(r)
+	}
+
+	return t, nil
 }
 
-func initTrackerSchema(db *sql.DB) error {
-	_, err := db.ExecContext(context.Background(), `
-		CREATE TABLE IF NOT EXISTS skill_usage (
-			id          INTEGER PRIMARY KEY AUTOINCREMENT,
-			skill_name  TEXT NOT NULL,
-			session_key TEXT NOT NULL,
-			success     INTEGER NOT NULL DEFAULT 1,
-			error_msg   TEXT DEFAULT '',
-			used_at     INTEGER NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_skill_usage_name ON skill_usage(skill_name);
-		CREATE INDEX IF NOT EXISTS idx_skill_usage_time ON skill_usage(used_at);
-
-		CREATE TABLE IF NOT EXISTS skill_genesis_log (
-			id          INTEGER PRIMARY KEY AUTOINCREMENT,
-			skill_name  TEXT NOT NULL,
-			source      TEXT NOT NULL DEFAULT 'session',
-			session_key TEXT DEFAULT '',
-			created_at  INTEGER NOT NULL,
-			category    TEXT DEFAULT '',
-			description TEXT DEFAULT ''
-		);
-	`)
-	if err != nil {
-		return fmt.Errorf("genesis-tracker: init schema: %w", err)
+// ingest updates in-memory aggregates from a single usage record.
+func (t *Tracker) ingest(r UsageRecord) {
+	agg := t.stats[r.SkillName]
+	if agg == nil {
+		agg = &usageAgg{}
+		t.stats[r.SkillName] = agg
 	}
-	return nil
+	agg.total++
+	if r.Success {
+		agg.success++
+	} else {
+		agg.failure++
+	}
+	if r.UsedAt > agg.lastUsed {
+		agg.lastUsed = r.UsedAt
+	}
+
+	if !r.Success && r.ErrorMsg != "" {
+		errs := t.recentErrors[r.SkillName]
+		errs = append(errs, r.ErrorMsg)
+		if len(errs) > 5 {
+			errs = errs[len(errs)-5:]
+		}
+		t.recentErrors[r.SkillName] = errs
+	}
 }
 
 // RecordUsage logs a skill usage event.
@@ -108,19 +122,11 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 	if record.UsedAt == 0 {
 		record.UsedAt = time.Now().UnixMilli()
 	}
-	successInt := 0
-	if record.Success {
-		successInt = 1
-	}
 
-	_, err := t.db.ExecContext(context.Background(),
-		`INSERT INTO skill_usage (skill_name, session_key, success, error_msg, used_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		record.SkillName, record.SessionKey, successInt, record.ErrorMsg, record.UsedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("genesis-tracker: insert usage: %w", err)
+	if err := jsonlstore.Append(t.usagePath, record); err != nil {
+		return fmt.Errorf("genesis-tracker: append usage: %w", err)
 	}
+	t.ingest(record)
 	return nil
 }
 
@@ -129,41 +135,27 @@ func (t *Tracker) Stats(skillName string) (*UsageStats, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	return t.getStatsLocked(skillName), nil
+}
+
+func (t *Tracker) getStatsLocked(skillName string) *UsageStats {
 	stats := &UsageStats{SkillName: skillName}
-
-	row := t.db.QueryRowContext(context.Background(), `
-		SELECT COUNT(*), SUM(CASE WHEN success=1 THEN 1 ELSE 0 END),
-		       SUM(CASE WHEN success=0 THEN 1 ELSE 0 END),
-		       MAX(used_at)
-		FROM skill_usage WHERE skill_name = ?`, skillName)
-
-	var lastUsed sql.NullInt64
-	if err := row.Scan(&stats.TotalUses, &stats.SuccessCount, &stats.FailureCount, &lastUsed); err != nil {
-		return stats, nil // Empty stats for unknown skill.
+	agg := t.stats[skillName]
+	if agg == nil {
+		return stats
 	}
-	if lastUsed.Valid {
-		stats.LastUsed = lastUsed.Int64
+	stats.TotalUses = agg.total
+	stats.SuccessCount = agg.success
+	stats.FailureCount = agg.failure
+	stats.LastUsed = agg.lastUsed
+	if agg.total > 0 {
+		stats.SuccessRate = float64(agg.success) / float64(agg.total)
 	}
-	if stats.TotalUses > 0 {
-		stats.SuccessRate = float64(stats.SuccessCount) / float64(stats.TotalUses)
+	if errs := t.recentErrors[skillName]; len(errs) > 0 {
+		stats.RecentErrors = make([]string, len(errs))
+		copy(stats.RecentErrors, errs)
 	}
-
-	// Fetch recent errors (last 5).
-	rows, err := t.db.QueryContext(context.Background(), `
-		SELECT error_msg FROM skill_usage
-		WHERE skill_name = ? AND success = 0 AND error_msg != ''
-		ORDER BY used_at DESC LIMIT 5`, skillName)
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var msg string
-			if rows.Scan(&msg) == nil && msg != "" {
-				stats.RecentErrors = append(stats.RecentErrors, msg)
-			}
-		}
-	}
-
-	return stats, nil
+	return stats
 }
 
 // ListAllStats returns usage stats for all tracked skills.
@@ -171,33 +163,24 @@ func (t *Tracker) ListAllStats() ([]UsageStats, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	rows, err := t.db.QueryContext(context.Background(), `
-		SELECT skill_name, COUNT(*),
-		       SUM(CASE WHEN success=1 THEN 1 ELSE 0 END),
-		       SUM(CASE WHEN success=0 THEN 1 ELSE 0 END),
-		       MAX(used_at)
-		FROM skill_usage GROUP BY skill_name ORDER BY COUNT(*) DESC`)
-	if err != nil {
-		return nil, fmt.Errorf("genesis-tracker: list stats: %w", err)
+	result := make([]UsageStats, 0, len(t.stats))
+	for name := range t.stats {
+		result = append(result, *t.getStatsLocked(name))
 	}
-	defer rows.Close()
-
-	var result []UsageStats
-	for rows.Next() {
-		var s UsageStats
-		var lastUsed sql.NullInt64
-		if err := rows.Scan(&s.SkillName, &s.TotalUses, &s.SuccessCount, &s.FailureCount, &lastUsed); err != nil {
-			continue
-		}
-		if lastUsed.Valid {
-			s.LastUsed = lastUsed.Int64
-		}
-		if s.TotalUses > 0 {
-			s.SuccessRate = float64(s.SuccessCount) / float64(s.TotalUses)
-		}
-		result = append(result, s)
-	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].TotalUses > result[j].TotalUses
+	})
 	return result, nil
+}
+
+// genesisLogEntry is the JSONL format for genesis log events.
+type genesisLogEntry struct {
+	SkillName   string `json:"skillName"`
+	Source      string `json:"source"`
+	SessionKey  string `json:"sessionKey,omitempty"`
+	CreatedAt   int64  `json:"createdAt"`
+	Category    string `json:"category,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // LogGenesis records that a skill was auto-generated.
@@ -205,12 +188,14 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	_, err := t.db.ExecContext(context.Background(),
-		`INSERT INTO skill_genesis_log (skill_name, source, session_key, created_at, category, description)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		skillName, source, sessionKey, time.Now().UnixMilli(), category, description,
-	)
-	return err
+	return jsonlstore.Append(t.logPath, genesisLogEntry{
+		SkillName:   skillName,
+		Source:      source,
+		SessionKey:  sessionKey,
+		CreatedAt:   time.Now().UnixMilli(),
+		Category:    category,
+		Description: description,
+	})
 }
 
 // SkillsNeedingEvolution returns skills with high failure rates.
@@ -223,21 +208,13 @@ func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([
 	var candidates []UsageStats
 	for _, s := range all {
 		if s.TotalUses >= minUses && s.SuccessRate <= maxSuccessRate {
-			// Fetch recent errors for context.
-			stats, _ := t.Stats(s.SkillName)
-			if stats != nil {
-				s.RecentErrors = stats.RecentErrors
-			}
 			candidates = append(candidates, s)
 		}
 	}
 	return candidates, nil
 }
 
-// Close closes the database connection.
+// Close is a no-op (JSONL files are opened/closed per write).
 func (t *Tracker) Close() error {
-	if t.db != nil {
-		return t.db.Close()
-	}
 	return nil
 }

@@ -166,14 +166,19 @@ func TestNewStoreInvalidPath(t *testing.T) {
 	}
 }
 
-func TestStoreDBFileCreated(t *testing.T) {
+func TestStoreDirectoryCreated(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "polaris.db")
 
 	s := testutil.Must(NewStore(dbPath))
 	s.Close()
 
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		t.Fatal("db file not created")
+	// Verify directory structure was created (path ending in .db is converted to polaris/ dir).
+	polarisDir := filepath.Join(dir, "polaris")
+	if _, err := os.Stat(filepath.Join(polarisDir, "messages")); os.IsNotExist(err) {
+		t.Fatal("messages directory not created")
+	}
+	if _, err := os.Stat(filepath.Join(polarisDir, "summaries")); os.IsNotExist(err) {
+		t.Fatal("summaries directory not created")
 	}
 }

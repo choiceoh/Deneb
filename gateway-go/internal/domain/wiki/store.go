@@ -56,16 +56,10 @@ func NewStore(dir, diaryDir string) (*Store, error) {
 	s.index = idx
 	s.pruneGhostEntries()
 
-	// Initialize FTS search index.
-	fts, err := newSearchDB(dir)
-	if err != nil {
-		return nil, fmt.Errorf("wiki: init search: %w", err)
-	}
+	// Initialize in-memory search index (rebuilt from .md files on startup).
+	fts := newSearchDB()
 	s.fts = fts
-
-	// Rebuild FTS from disk on startup.
 	if err := fts.rebuildIndex(dir); err != nil {
-		fts.close()
 		return nil, fmt.Errorf("wiki: rebuild search index: %w", err)
 	}
 
@@ -108,9 +102,9 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 		return err
 	}
 
-	// Update FTS index.
+	// Update search index.
 	if s.fts != nil {
-		_ = s.fts.indexPage(relPath, page) // best-effort: FTS index is non-critical
+		s.fts.indexPage(relPath, page)
 	}
 
 	// Capture old related list before updating index.
@@ -147,9 +141,9 @@ func (s *Store) DeletePage(relPath string) error {
 		return fmt.Errorf("wiki: delete: %w", err)
 	}
 
-	// Update FTS index.
+	// Update search index.
 	if s.fts != nil {
-		_ = s.fts.removePage(relPath) // best-effort: FTS cleanup is non-critical
+		s.fts.removePage(relPath)
 	}
 
 	s.mu.Lock()

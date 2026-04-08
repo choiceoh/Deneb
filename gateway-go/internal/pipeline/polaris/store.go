@@ -1,180 +1,217 @@
 package polaris
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-
-	_ "modernc.org/sqlite"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
 )
 
-// schema defines all LCM tables and FTS indexes.
-// Messages are append-only (immutable). Summary nodes form a DAG via parent_id.
-const schema = `
-CREATE TABLE IF NOT EXISTS messages (
-	id           INTEGER PRIMARY KEY AUTOINCREMENT,
-	session_key  TEXT    NOT NULL,
-	role         TEXT    NOT NULL,
-	content      TEXT    NOT NULL,
-	text_content TEXT    NOT NULL DEFAULT '',
-	timestamp    INTEGER NOT NULL,
-	token_est    INTEGER NOT NULL,
-	msg_index    INTEGER NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_session_unique ON messages(session_key, msg_index);
-
-CREATE TABLE IF NOT EXISTS summary_nodes (
-	id          INTEGER PRIMARY KEY AUTOINCREMENT,
-	session_key TEXT    NOT NULL,
-	level       INTEGER NOT NULL DEFAULT 1,
-	content     TEXT    NOT NULL,
-	token_est   INTEGER NOT NULL,
-	created_at  INTEGER NOT NULL,
-	msg_start   INTEGER NOT NULL,
-	msg_end     INTEGER NOT NULL,
-	parent_id   INTEGER REFERENCES summary_nodes(id)
-);
-CREATE INDEX IF NOT EXISTS idx_summary_session ON summary_nodes(session_key, level, msg_start);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS lcm_fts USING fts5(
-	session_key, role, text_content,
-	content='messages', content_rowid='id',
-	tokenize='unicode61 remove_diacritics 2'
-);
-CREATE TRIGGER IF NOT EXISTS lcm_msg_ai AFTER INSERT ON messages BEGIN
-	INSERT INTO lcm_fts(rowid, session_key, role, text_content)
-	VALUES (new.id, new.session_key, new.role, new.text_content);
-END;
-CREATE TRIGGER IF NOT EXISTS lcm_msg_ad AFTER DELETE ON messages BEGIN
-	INSERT INTO lcm_fts(lcm_fts, rowid, session_key, role, text_content)
-	VALUES ('delete', old.id, old.session_key, old.role, old.text_content);
-END;
-`
-
-// Store is the SQLite-backed immutable message store and summary DAG.
+// Store is the file-backed immutable message store and summary DAG.
+// Messages are stored as per-session JSONL files; summaries as per-session JSON snapshots.
 type Store struct {
-	db *sql.DB
-	mu sync.RWMutex
+	dir      string
+	mu       sync.Mutex // all methods need write access due to lazy session init
+	sessions map[string]*sessionData
 }
 
-// NewStore opens (or creates) the LCM database at dbPath.
-// Uses WAL mode and busy_timeout for safe concurrent reads.
-func NewStore(dbPath string) (*Store, error) {
-	dsn := dbPath + "?_pragma=journal_mode(wal)&_pragma=busy_timeout(5000)"
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("polaris: open db: %w", err)
-	}
-	if _, err := db.Exec(schema); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("polaris: init schema: %w", err)
-	}
-	return &Store{db: db}, nil
+// messageRecord is the on-disk JSONL format for a single message.
+type messageRecord struct {
+	Role        string          `json:"role"`
+	Content     json.RawMessage `json:"content"`
+	TextContent string          `json:"textContent"`
+	Timestamp   int64           `json:"ts"`
+	TokenEst    int             `json:"tokenEst"`
+	MsgIndex    int             `json:"msgIndex"`
 }
 
-// Close closes the database connection.
+// sessionData holds the in-memory state for a single session.
+type sessionData struct {
+	messages     []messageRecord
+	summaries    []SummaryNode
+	nextMsgIndex int
+	nextSumID    int64
+	totalTokens  int
+	fts          *textsearch.Index
+}
+
+// NewStore opens (or creates) the Polaris file store.
+// The path parameter is reinterpreted as a base: if it ends in ".db",
+// we strip that and use the parent directory + "polaris/" subdirectory.
+func NewStore(path string) (*Store, error) {
+	dir := path
+	if strings.HasSuffix(path, ".db") {
+		dir = filepath.Join(filepath.Dir(path), "polaris")
+	}
+
+	for _, sub := range []string{"messages", "summaries"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			return nil, fmt.Errorf("polaris: mkdir: %w", err)
+		}
+	}
+
+	s := &Store{
+		dir:      dir,
+		sessions: make(map[string]*sessionData),
+	}
+	return s, nil
+}
+
+// Close is a no-op (files are written per mutation).
 func (s *Store) Close() error {
-	return s.db.Close()
+	return nil
+}
+
+func (s *Store) messagesPath(sessionKey string) string {
+	return filepath.Join(s.dir, "messages", sessionKey+".jsonl")
+}
+
+func (s *Store) summariesPath(sessionKey string) string {
+	return filepath.Join(s.dir, "summaries", sessionKey+".json")
+}
+
+// ensureSession lazily loads a session's data into memory.
+func (s *Store) ensureSession(sessionKey string) *sessionData {
+	sd := s.sessions[sessionKey]
+	if sd != nil {
+		return sd
+	}
+
+	sd = &sessionData{
+		fts: textsearch.New(),
+	}
+
+	// Load messages from JSONL.
+	msgs, _ := jsonlstore.Load[messageRecord](s.messagesPath(sessionKey))
+	sd.messages = msgs
+	for i := range msgs {
+		m := &msgs[i]
+		sd.totalTokens += m.TokenEst
+		if m.MsgIndex >= sd.nextMsgIndex {
+			sd.nextMsgIndex = m.MsgIndex + 1
+		}
+		// Index for FTS.
+		sd.fts.Upsert(fmt.Sprintf("%d", m.MsgIndex), m.TextContent)
+	}
+
+	// Load summaries from JSON snapshot.
+	data, err := os.ReadFile(s.summariesPath(sessionKey))
+	if err == nil {
+		var nodes []SummaryNode
+		if json.Unmarshal(data, &nodes) == nil {
+			sd.summaries = nodes
+			for _, n := range nodes {
+				if n.ID >= sd.nextSumID {
+					sd.nextSumID = n.ID + 1
+				}
+			}
+		}
+	}
+
+	s.sessions[sessionKey] = sd
+	return sd
 }
 
 // AppendMessage inserts a ChatMessage into the immutable store.
 // msg_index is auto-assigned as max(msg_index)+1 for the session.
-// text_content stores extracted plain text for FTS indexing (no JSON escapes).
 func (s *Store) AppendMessage(sessionKey string, msg toolctx.ChatMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	sd := s.ensureSession(sessionKey)
+
 	content := string(msg.Content)
-	textContent := msg.TextContent() // plain text for FTS (no JSON quoting)
+	textContent := msg.TextContent()
 	tokenEst := tokenest.Estimate(textContent)
 	ts := msg.Timestamp
 	if ts == 0 {
 		ts = time.Now().UnixMilli()
 	}
 
-	_, err := s.db.Exec(`
-		INSERT INTO messages (session_key, role, content, text_content, timestamp, token_est, msg_index)
-		VALUES (?, ?, ?, ?, ?, ?, COALESCE(
-			(SELECT MAX(msg_index) + 1 FROM messages WHERE session_key = ?), 0
-		))`,
-		sessionKey, msg.Role, content, textContent, ts, tokenEst, sessionKey,
-	)
-	if err != nil {
+	rec := messageRecord{
+		Role:        msg.Role,
+		Content:     json.RawMessage(content),
+		TextContent: textContent,
+		Timestamp:   ts,
+		TokenEst:    tokenEst,
+		MsgIndex:    sd.nextMsgIndex,
+	}
+
+	if err := jsonlstore.Append(s.messagesPath(sessionKey), rec); err != nil {
 		return fmt.Errorf("polaris: append message: %w", err)
 	}
+
+	sd.messages = append(sd.messages, rec)
+	sd.totalTokens += tokenEst
+	sd.nextMsgIndex++
+	sd.fts.Upsert(fmt.Sprintf("%d", rec.MsgIndex), textContent)
+
 	return nil
 }
 
 // MessageCount returns the number of messages for a session.
 func (s *Store) MessageCount(sessionKey string) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	var count int
-	err := s.db.QueryRow(
-		`SELECT COUNT(*) FROM messages WHERE session_key = ?`, sessionKey,
-	).Scan(&count)
-	return count, err
+	sd := s.ensureSession(sessionKey)
+	return len(sd.messages), nil
 }
 
 // SessionTokens returns the total estimated tokens for a session's messages.
 func (s *Store) SessionTokens(sessionKey string) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	var total sql.NullInt64
-	err := s.db.QueryRow(
-		`SELECT SUM(token_est) FROM messages WHERE session_key = ?`, sessionKey,
-	).Scan(&total)
-	return int(total.Int64), err
+	sd := s.ensureSession(sessionKey)
+	return sd.totalTokens, nil
 }
 
 // LoadMessages returns messages in [startIdx, endIdx] range (inclusive).
 // If endIdx < 0, loads from startIdx to the end.
 func (s *Store) LoadMessages(sessionKey string, startIdx, endIdx int) ([]toolctx.ChatMessage, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	var rows *sql.Rows
-	var err error
-	if endIdx < 0 {
-		rows, err = s.db.Query(
-			`SELECT role, content, timestamp FROM messages
-			 WHERE session_key = ? AND msg_index >= ?
-			 ORDER BY msg_index ASC`, sessionKey, startIdx,
-		)
-	} else {
-		rows, err = s.db.Query(
-			`SELECT role, content, timestamp FROM messages
-			 WHERE session_key = ? AND msg_index >= ? AND msg_index <= ?
-			 ORDER BY msg_index ASC`, sessionKey, startIdx, endIdx,
-		)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("polaris: load messages: %w", err)
-	}
-	defer rows.Close()
+	sd := s.ensureSession(sessionKey)
 
 	var msgs []toolctx.ChatMessage
-	for rows.Next() {
-		var role, content string
-		var ts int64
-		if err := rows.Scan(&role, &content, &ts); err != nil {
-			return nil, fmt.Errorf("polaris: scan message: %w", err)
+	for _, m := range sd.messages {
+		if m.MsgIndex < startIdx {
+			continue
+		}
+		if endIdx >= 0 && m.MsgIndex > endIdx {
+			continue
 		}
 		msgs = append(msgs, toolctx.ChatMessage{
-			Role:      role,
-			Content:   json.RawMessage(content),
-			Timestamp: ts,
+			Role:      m.Role,
+			Content:   json.RawMessage(m.Content),
+			Timestamp: m.Timestamp,
 		})
 	}
-	return msgs, rows.Err()
+	return msgs, nil
+}
+
+// MaxMsgIndex returns the highest msg_index for a session. Returns -1 if empty.
+func (s *Store) MaxMsgIndex(sessionKey string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sd := s.ensureSession(sessionKey)
+	if len(sd.messages) == 0 {
+		return -1, nil
+	}
+	return sd.nextMsgIndex - 1, nil
 }
 
 // InsertSummary stores a summary node and returns its auto-generated ID.
@@ -182,202 +219,136 @@ func (s *Store) InsertSummary(node SummaryNode) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	res, err := s.db.Exec(`
-		INSERT INTO summary_nodes (session_key, level, content, token_est, created_at, msg_start, msg_end, parent_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		node.SessionKey, node.Level, node.Content, node.TokenEst,
-		node.CreatedAt, node.MsgStart, node.MsgEnd, node.ParentID,
-	)
-	if err != nil {
+	sd := s.ensureSession(node.SessionKey)
+	node.ID = sd.nextSumID
+	sd.nextSumID++
+	sd.summaries = append(sd.summaries, node)
+
+	if err := s.saveSummaries(node.SessionKey, sd); err != nil {
 		return 0, fmt.Errorf("polaris: insert summary: %w", err)
 	}
-	return res.LastInsertId()
+	return node.ID, nil
+}
+
+func (s *Store) saveSummaries(sessionKey string, sd *sessionData) error {
+	data, err := json.Marshal(sd.summaries)
+	if err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(s.summariesPath(sessionKey), data, &atomicfile.Options{Fsync: true})
 }
 
 // LoadSummaries returns all summary nodes for a session at a given level.
 // If level <= 0, returns all levels. Ordered by msg_start ascending.
 func (s *Store) LoadSummaries(sessionKey string, level int) ([]SummaryNode, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	var rows *sql.Rows
-	var err error
-	if level <= 0 {
-		rows, err = s.db.Query(
-			`SELECT id, session_key, level, content, token_est, created_at, msg_start, msg_end, parent_id
-			 FROM summary_nodes WHERE session_key = ?
-			 ORDER BY msg_start ASC`, sessionKey,
-		)
-	} else {
-		rows, err = s.db.Query(
-			`SELECT id, session_key, level, content, token_est, created_at, msg_start, msg_end, parent_id
-			 FROM summary_nodes WHERE session_key = ? AND level = ?
-			 ORDER BY msg_start ASC`, sessionKey, level,
-		)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("polaris: load summaries: %w", err)
-	}
-	defer rows.Close()
+	sd := s.ensureSession(sessionKey)
 
 	var nodes []SummaryNode
-	for rows.Next() {
-		var n SummaryNode
-		if err := rows.Scan(&n.ID, &n.SessionKey, &n.Level, &n.Content,
-			&n.TokenEst, &n.CreatedAt, &n.MsgStart, &n.MsgEnd, &n.ParentID); err != nil {
-			return nil, fmt.Errorf("polaris: scan summary: %w", err)
+	for _, n := range sd.summaries {
+		if level > 0 && n.Level != level {
+			continue
 		}
 		nodes = append(nodes, n)
 	}
-	return nodes, rows.Err()
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].MsgStart < nodes[j].MsgStart })
+	return nodes, nil
 }
 
-// LatestSummaryCoverage returns the highest msg_end covered by any summary
-// for the given session. Returns -1 if no summaries exist.
+// LatestSummaryCoverage returns the highest msg_end covered by any summary.
+// Returns -1 if no summaries exist.
 func (s *Store) LatestSummaryCoverage(sessionKey string) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	var maxEnd sql.NullInt64
-	err := s.db.QueryRow(
-		`SELECT MAX(msg_end) FROM summary_nodes WHERE session_key = ?`, sessionKey,
-	).Scan(&maxEnd)
-	if err != nil || !maxEnd.Valid {
-		return -1, err
+	sd := s.ensureSession(sessionKey)
+	maxEnd := -1
+	for _, n := range sd.summaries {
+		if n.MsgEnd > maxEnd {
+			maxEnd = n.MsgEnd
+		}
 	}
-	return int(maxEnd.Int64), nil
-}
-
-// MaxMsgIndex returns the highest msg_index for a session. Returns -1 if empty.
-func (s *Store) MaxMsgIndex(sessionKey string) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var maxIdx sql.NullInt64
-	err := s.db.QueryRow(
-		`SELECT MAX(msg_index) FROM messages WHERE session_key = ?`, sessionKey,
-	).Scan(&maxIdx)
-	if err != nil || !maxIdx.Valid {
-		return -1, err
-	}
-	return int(maxIdx.Int64), nil
+	return maxEnd, nil
 }
 
 // SearchHit is a single FTS search result.
 type SearchHit struct {
 	SessionKey string
 	Role       string
-	Snippet    string // FTS snippet with context
-	MsgIndex   int    // message position in session
+	Snippet    string
+	MsgIndex   int
 	Timestamp  int64
-	Score      float64 // relevance (0-1, higher is better)
+	Score      float64
 }
 
-// SearchMessages performs FTS5 full-text search across message content.
-// Returns matches ordered by relevance, limited to maxResults.
+// SearchMessages performs full-text search across message content.
 func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]SearchHit, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if query == "" || maxResults <= 0 {
 		return nil, nil
 	}
 
-	// Quote query terms to prevent FTS5 syntax errors from user input.
-	safeQuery := sanitizeFTSQuery(query)
-	if safeQuery == "" {
-		return nil, nil
-	}
+	sd := s.ensureSession(sessionKey)
+	hits := sd.fts.Search(query, maxResults)
 
-	rows, err := s.db.Query(`
-		SELECT m.session_key, m.role, snippet(lcm_fts, 2, '»', '«', '...', 40),
-		       m.msg_index, m.timestamp, rank
-		FROM lcm_fts
-		JOIN messages m ON m.id = lcm_fts.rowid
-		WHERE lcm_fts MATCH ? AND m.session_key = ?
-		ORDER BY rank
-		LIMIT ?`,
-		safeQuery, sessionKey, maxResults,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("polaris: search: %w", err)
-	}
-	defer rows.Close()
-
-	var hits []SearchHit
-	for rows.Next() {
-		var h SearchHit
-		var rank float64
-		if err := rows.Scan(&h.SessionKey, &h.Role, &h.Snippet, &h.MsgIndex, &h.Timestamp, &rank); err != nil {
-			continue
+	var results []SearchHit
+	for _, h := range hits {
+		// Find the message by index.
+		var msgIdx int
+		fmt.Sscanf(h.ID, "%d", &msgIdx)
+		for _, m := range sd.messages {
+			if m.MsgIndex == msgIdx {
+				results = append(results, SearchHit{
+					SessionKey: sessionKey,
+					Role:       m.Role,
+					Snippet:    h.Snippet,
+					MsgIndex:   m.MsgIndex,
+					Timestamp:  m.Timestamp,
+					Score:      h.Score / (h.Score + 1), // normalize to 0-1
+				})
+				break
+			}
 		}
-		// Convert rank to 0-1 score (rank is negative, closer to 0 = better).
-		if rank < 0 {
-			h.Score = 1.0 / (1.0 - rank)
-		}
-		hits = append(hits, h)
 	}
-	return hits, rows.Err()
+	return results, nil
 }
 
 // SummaryByID loads a single summary node by its ID.
 func (s *Store) SummaryByID(id int64) (*SummaryNode, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	var n SummaryNode
-	err := s.db.QueryRow(`
-		SELECT id, session_key, level, content, token_est, created_at, msg_start, msg_end, parent_id
-		FROM summary_nodes WHERE id = ?`, id,
-	).Scan(&n.ID, &n.SessionKey, &n.Level, &n.Content, &n.TokenEst,
-		&n.CreatedAt, &n.MsgStart, &n.MsgEnd, &n.ParentID)
-	if err != nil {
-		return nil, err
-	}
-	return &n, nil
-}
-
-// sanitizeFTSQuery wraps each whitespace-separated token in double quotes
-// to prevent FTS5 syntax errors from user input (e.g. AND, OR, NEAR).
-func sanitizeFTSQuery(query string) string {
-	var parts []string
-	for _, field := range strings.Fields(query) {
-		// Strip existing quotes and re-wrap.
-		field = strings.ReplaceAll(field, `"`, ``)
-		if field != "" {
-			parts = append(parts, `"`+field+`"`)
+	for _, sd := range s.sessions {
+		for i := range sd.summaries {
+			if sd.summaries[i].ID == id {
+				n := sd.summaries[i]
+				return &n, nil
+			}
 		}
 	}
-	return strings.Join(parts, " ")
+	return nil, fmt.Errorf("polaris: summary node %d not found", id)
 }
 
 // LoadUncondensedNodes returns summary nodes at the given level that have not
 // been absorbed into a higher-level condensed node (parent_id IS NULL).
 func (s *Store) LoadUncondensedNodes(sessionKey string, level int) ([]SummaryNode, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`
-		SELECT id, session_key, level, content, token_est, created_at, msg_start, msg_end, parent_id
-		FROM summary_nodes
-		WHERE session_key = ? AND level = ? AND parent_id IS NULL
-		ORDER BY msg_start ASC`, sessionKey, level,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("polaris: load uncondensed: %w", err)
-	}
-	defer rows.Close()
+	sd := s.ensureSession(sessionKey)
 
 	var nodes []SummaryNode
-	for rows.Next() {
-		var n SummaryNode
-		if err := rows.Scan(&n.ID, &n.SessionKey, &n.Level, &n.Content,
-			&n.TokenEst, &n.CreatedAt, &n.MsgStart, &n.MsgEnd, &n.ParentID); err != nil {
-			return nil, err
+	for _, n := range sd.summaries {
+		if n.Level == level && n.ParentID == nil {
+			nodes = append(nodes, n)
 		}
-		nodes = append(nodes, n)
 	}
-	return nodes, rows.Err()
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].MsgStart < nodes[j].MsgStart })
+	return nodes, nil
 }
 
 // UpdateParentID marks nodes as absorbed by a condensed parent node.
@@ -388,20 +359,28 @@ func (s *Store) UpdateParentID(nodeIDs []int64, parentID int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Build placeholders.
-	placeholders := strings.Repeat("?,", len(nodeIDs))
-	placeholders = placeholders[:len(placeholders)-1]
-	args := make([]any, 0, len(nodeIDs)+1)
-	args = append(args, parentID)
+	idSet := make(map[int64]bool, len(nodeIDs))
 	for _, id := range nodeIDs {
-		args = append(args, id)
+		idSet[id] = true
 	}
 
-	_, err := s.db.Exec(
-		`UPDATE summary_nodes SET parent_id = ? WHERE id IN (`+placeholders+`)`,
-		args...,
-	)
-	return err
+	// Find the session for these nodes and update them.
+	for sessionKey, sd := range s.sessions {
+		changed := false
+		for i := range sd.summaries {
+			if idSet[sd.summaries[i].ID] {
+				pid := parentID
+				sd.summaries[i].ParentID = &pid
+				changed = true
+			}
+		}
+		if changed {
+			if err := s.saveSummaries(sessionKey, sd); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // DeleteSession removes all messages and summaries for a session.
@@ -409,17 +388,8 @@ func (s *Store) DeleteSession(sessionKey string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("polaris: begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec(`DELETE FROM summary_nodes WHERE session_key = ?`, sessionKey); err != nil {
-		return fmt.Errorf("polaris: delete summaries: %w", err)
-	}
-	if _, err := tx.Exec(`DELETE FROM messages WHERE session_key = ?`, sessionKey); err != nil {
-		return fmt.Errorf("polaris: delete messages: %w", err)
-	}
-	return tx.Commit()
+	delete(s.sessions, sessionKey)
+	os.Remove(s.messagesPath(sessionKey))
+	os.Remove(s.summariesPath(sessionKey))
+	return nil
 }
