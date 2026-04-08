@@ -176,16 +176,6 @@ func CheckStringEnum(value any, path string, allowed []string, errors *[]Validat
 	return false
 }
 
-// CheckLiteral checks that a value is a specific literal string.
-func CheckLiteral(value any, path string, expected string, errors *[]ValidationError) bool {
-	s, ok := value.(string)
-	if ok && s == expected {
-		return true
-	}
-	addError(errors, path, fmt.Sprintf("must be equal to constant \"%s\"", expected), "const")
-	return false
-}
-
 // IsNull checks if a value is nil (JSON null).
 func IsNull(value any) bool {
 	return value == nil
@@ -287,17 +277,6 @@ func IsValidExecSecretRefID(s string) bool {
 
 func isASCIIAlphanumeric(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
-}
-
-// CheckExecSecretRefID checks that a string is a valid exec secret ref ID.
-func CheckExecSecretRefID(value any, path string, errors *[]ValidationError) {
-	s, ok := value.(string)
-	if !ok {
-		return
-	}
-	if !IsValidExecSecretRefID(s) {
-		addError(errors, path, fmt.Sprintf("must match pattern \"%s\"", ExecSecretRefIDPattern), "pattern")
-	}
 }
 
 // --- Params validation entry point ---

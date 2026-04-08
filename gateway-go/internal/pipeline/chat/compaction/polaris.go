@@ -25,23 +25,14 @@ const (
 
 // Config holds Polaris compaction parameters.
 type Config struct {
-	ContextBudget           int     // effective token budget (MemoryTokenBudget - SystemPromptBudget)
-	MicroTurnThreshold      int     // turns before code stripping (default 4)
-	LLMThresholdPct         float64 // trigger LLM compaction at this fraction (default 0.80)
-	LLMTargetPct            float64 // target size as fraction of budget (default 0.20)
-	EmergencyInputThreshold int     // single-input token threshold (default 30K)
+	ContextBudget     int  // effective token budget (MemoryTokenBudget - SystemPromptBudget)
+	SkipLLMCompaction bool // skip LLM summarization tier (e.g. when summaries already injected)
 }
 
 // NewConfig creates a compaction config for the given context budget.
 // contextBudget should be (MemoryTokenBudget - SystemPromptBudget).
 func NewConfig(contextBudget int) Config {
-	return Config{
-		ContextBudget:           contextBudget,
-		MicroTurnThreshold:      DefaultMicroTurnThreshold,
-		LLMThresholdPct:         DefaultLLMThresholdPct,
-		LLMTargetPct:            DefaultLLMTargetPct,
-		EmergencyInputThreshold: DefaultEmergencyInputThreshold,
-	}
+	return Config{ContextBudget: contextBudget}
 }
 
 // Result reports what the pipeline did.
@@ -77,7 +68,7 @@ func Compact(
 	// Emergency already summarizes non-evicted old messages, so skip LLM tier after it.
 	emergencyFired := false
 	lastInputTokens := lastUserInputTokens(messages)
-	if lastInputTokens >= cfg.EmergencyInputThreshold && summarizer != nil {
+	if lastInputTokens >= DefaultEmergencyInputThreshold && summarizer != nil {
 		var evicted int
 		messages, evicted = EmergencyCompact(ctx, cfg, messages, lastInputTokens, summarizer, logger)
 		r.EmergencyEvicted = evicted
@@ -86,13 +77,13 @@ func Compact(
 
 	// Tier 2: Micro — strip code from old tool results (zero cost).
 	var pruned int
-	messages, pruned = MicroCompact(messages, cfg.MicroTurnThreshold)
+	messages, pruned = MicroCompact(messages, DefaultMicroTurnThreshold)
 	r.MicroPruned = pruned
 
 	// Tier 3: LLM — summarize old messages when over threshold.
 	// Skipped when emergency already summarized (avoids double summarization / fact loss).
-	if !emergencyFired {
-		threshold := int(float64(cfg.ContextBudget) * cfg.LLMThresholdPct)
+	if !emergencyFired && !cfg.SkipLLMCompaction {
+		threshold := int(float64(cfg.ContextBudget) * DefaultLLMThresholdPct)
 		if EstimateMessagesTokens(messages) > threshold && summarizer != nil {
 			compacted, ok := LLMCompact(ctx, cfg, messages, summarizer, logger)
 			if ok {

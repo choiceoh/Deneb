@@ -51,8 +51,7 @@ func (e *Engine) CompactAndPersist(
 	if hasSummaryMessages(messages) {
 		// Polaris can still micro-compact and handle emergency, but the
 		// LLM tier should not re-summarize our injected summaries.
-		// Raise the LLM threshold to effectively disable it for this run.
-		polarisCfg.LLMThresholdPct = 1.0 // 100% = never trigger
+		polarisCfg.SkipLLMCompaction = true
 	}
 
 	// Wrap summarizer to capture the summary text for DAG persistence.

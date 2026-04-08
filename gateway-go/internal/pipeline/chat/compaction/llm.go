@@ -44,7 +44,7 @@ func LLMCompact(
 	// maxOutputTokens: target size for the summary, capped at 4096 to avoid
 	// slow local AI responses. The structured prompt produces dense output
 	// so 4096 tokens is sufficient for most compaction scenarios.
-	maxOutput := int(float64(cfg.ContextBudget) * cfg.LLMTargetPct)
+	maxOutput := int(float64(cfg.ContextBudget) * DefaultLLMTargetPct)
 	if maxOutput > 4096 {
 		maxOutput = 4096
 	}
