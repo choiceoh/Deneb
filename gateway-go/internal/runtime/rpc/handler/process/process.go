@@ -41,32 +41,29 @@ func ApprovalMethods(deps ApprovalDeps) map[string]rpcutil.HandlerFunc {
 }
 
 func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID                  string            `json:"id,omitempty"`
-			Command             string            `json:"command"`
-			CommandArgv         []string          `json:"commandArgv,omitempty"`
-			Env                 map[string]string `json:"env,omitempty"`
-			Cwd                 string            `json:"cwd,omitempty"`
-			SystemRunPlan       any               `json:"systemRunPlan,omitempty"`
-			Host                string            `json:"host,omitempty"`
-			Security            string            `json:"security,omitempty"`
-			Ask                 string            `json:"ask,omitempty"`
-			AgentID             string            `json:"agentId,omitempty"`
-			ResolvedPath        string            `json:"resolvedPath,omitempty"`
-			SessionKey          string            `json:"sessionKey,omitempty"`
-			TimeoutMs           int64             `json:"timeoutMs,omitempty"`
-			TwoPhase            bool              `json:"twoPhase,omitempty"`
-			TurnSourceChannel   string            `json:"turnSourceChannel,omitempty"`
-			TurnSourceTo        string            `json:"turnSourceTo,omitempty"`
-			TurnSourceAccountID string            `json:"turnSourceAccountId,omitempty"`
-			TurnSourceThreadID  string            `json:"turnSourceThreadId,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		ID                  string            `json:"id,omitempty"`
+		Command             string            `json:"command"`
+		CommandArgv         []string          `json:"commandArgv,omitempty"`
+		Env                 map[string]string `json:"env,omitempty"`
+		Cwd                 string            `json:"cwd,omitempty"`
+		SystemRunPlan       any               `json:"systemRunPlan,omitempty"`
+		Host                string            `json:"host,omitempty"`
+		Security            string            `json:"security,omitempty"`
+		Ask                 string            `json:"ask,omitempty"`
+		AgentID             string            `json:"agentId,omitempty"`
+		ResolvedPath        string            `json:"resolvedPath,omitempty"`
+		SessionKey          string            `json:"sessionKey,omitempty"`
+		TimeoutMs           int64             `json:"timeoutMs,omitempty"`
+		TwoPhase            bool              `json:"twoPhase,omitempty"`
+		TurnSourceChannel   string            `json:"turnSourceChannel,omitempty"`
+		TurnSourceTo        string            `json:"turnSourceTo,omitempty"`
+		TurnSourceAccountID string            `json:"turnSourceAccountId,omitempty"`
+		TurnSourceThreadID  string            `json:"turnSourceThreadId,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.Command == "" {
-			return rpcerr.MissingParam("command").Response(req.ID)
+			return nil, rpcerr.MissingParam("command")
 		}
 
 		var turnSource *approval.TurnSourceInfo
@@ -105,16 +102,16 @@ func execApprovalRequest(deps ApprovalDeps) rpcutil.HandlerFunc {
 		}
 
 		if p.TwoPhase {
-			return rpcutil.RespondOK(req.ID, map[string]any{
+			return map[string]any{
 				"status":      "accepted",
 				"id":          created.ID,
 				"createdAtMs": created.CreatedAtMs,
 				"expiresAtMs": created.ExpiresAtMs,
-			})
+			}, nil
 		}
 
-		return rpcutil.RespondOK(req.ID, created)
-	}
+		return created, nil
+	})
 }
 
 func execApprovalWaitDecision(deps ApprovalDeps) rpcutil.HandlerFunc {
@@ -150,16 +147,13 @@ func execApprovalWaitDecision(deps ApprovalDeps) rpcutil.HandlerFunc {
 }
 
 func execApprovalResolve(deps ApprovalDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID       string `json:"id"`
-			Decision string `json:"decision"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		ID       string `json:"id"`
+		Decision string `json:"decision"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.ID == "" || p.Decision == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "id and decision are required").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrMissingParam, "id and decision are required")
 		}
 
 		var decision approval.Decision
@@ -171,11 +165,11 @@ func execApprovalResolve(deps ApprovalDeps) rpcutil.HandlerFunc {
 		case "deny":
 			decision = approval.DecisionDeny
 		default:
-			return rpcerr.New(protocol.ErrValidationFailed, "invalid decision: must be allow-once, allow-always, or deny").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrValidationFailed, "invalid decision: must be allow-once, allow-always, or deny")
 		}
 
 		if err := deps.Store.Resolve(p.ID, decision); err != nil {
-			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
+			return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
 		}
 
 		if deps.Broadcaster != nil {
@@ -185,8 +179,8 @@ func execApprovalResolve(deps ApprovalDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
-	}
+		return map[string]bool{"ok": true}, nil
+	})
 }
 
 func execApprovalsGet(deps ApprovalDeps) rpcutil.HandlerFunc {
@@ -203,19 +197,14 @@ func execApprovalsGet(deps ApprovalDeps) rpcutil.HandlerFunc {
 }
 
 func execApprovalsSet(deps ApprovalDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			File     approval.ApprovalsFile `json:"file"`
-			BaseHash string                 `json:"baseHash,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
-		deps.Store.SetGlobalSnapshot(p.File, p.BaseHash)
-
-		return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
+	type params struct {
+		File     approval.ApprovalsFile `json:"file"`
+		BaseHash string                 `json:"baseHash,omitempty"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		deps.Store.SetGlobalSnapshot(p.File, p.BaseHash)
+		return map[string]bool{"ok": true}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------

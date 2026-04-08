@@ -85,70 +85,61 @@ func emitTelegramLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.E
 }
 
 func telegramStart(deps LifecycleDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID string `json:"id"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		ID string `json:"id"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		if p.ID == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
+			return nil, rpcerr.MissingParam("id")
 		}
 		if p.ID != "telegram" {
-			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
+			return nil, rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID)
 		}
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
-			return rpcerr.WrapUnavailable("channel start failed", err).WithChannel(p.ID).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("channel start failed", err).WithChannel(p.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
-		return rpcutil.RespondOK(req.ID, map[string]any{"started": true, "id": p.ID})
-	}
+		return map[string]any{"started": true, "id": p.ID}, nil
+	})
 }
 
 func telegramStop(deps LifecycleDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID string `json:"id"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		ID string `json:"id"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		if p.ID == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
+			return nil, rpcerr.MissingParam("id")
 		}
 		if p.ID != "telegram" {
-			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
+			return nil, rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID)
 		}
 		if err := deps.TelegramPlugin.Stop(ctx); err != nil {
-			return rpcerr.WrapUnavailable("channel stop failed", err).WithChannel(p.ID).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("channel stop failed", err).WithChannel(p.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
-		return rpcutil.RespondOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
-	}
+		return map[string]any{"stopped": true, "id": p.ID}, nil
+	})
 }
 
 func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID string `json:"id"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		ID string `json:"id"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		if p.ID == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
+			return nil, rpcerr.MissingParam("id")
 		}
 		if p.ID != "telegram" {
-			return rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID).Response(req.ID)
+			return nil, rpcerr.Unavailable("channel " + p.ID + " not found").WithChannel(p.ID)
 		}
 		deps.TelegramPlugin.Stop(ctx) //nolint:errcheck // best-effort cleanup before restart
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
-			return rpcerr.WrapUnavailable("channel restart failed", err).WithChannel(p.ID).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("channel restart failed", err).WithChannel(p.ID)
 		}
 		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
-		return rpcutil.RespondOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
-	}
+		return map[string]any{"restarted": true, "id": p.ID}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -156,48 +147,39 @@ func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func messagingSend(deps MessagingDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Channel string `json:"channel"`
-			To      string `json:"to"`
-			Text    string `json:"text"`
-			Media   []struct {
-				Type string `json:"type"`
-				URL  string `json:"url"`
-			} `json:"media,omitempty"`
-			ReplyTo  int64 `json:"replyTo,omitempty"`
-			ThreadID int64 `json:"threadId,omitempty"`
-			Silent   bool  `json:"silent,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
-		// Route to Telegram if channel matches and plugin is available.
+	type mediaEntry struct {
+		Type string `json:"type"`
+		URL  string `json:"url"`
+	}
+	type params struct {
+		Channel  string       `json:"channel"`
+		To       string       `json:"to"`
+		Text     string       `json:"text"`
+		Media    []mediaEntry `json:"media,omitempty"`
+		ReplyTo  int64        `json:"replyTo,omitempty"`
+		ThreadID int64        `json:"threadId,omitempty"`
+		Silent   bool         `json:"silent,omitempty"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		if (p.Channel == "" || p.Channel == "telegram") && deps.TelegramPlugin != nil {
 			client := deps.TelegramPlugin.Client()
 			if client == nil {
-				return rpcerr.Unavailable("telegram client not connected").Response(req.ID)
+				return nil, rpcerr.Unavailable("telegram client not connected")
 			}
-
 			chatID, err := parseChatID(p.To)
 			if err != nil {
-				return rpcerr.WrapInvalidRequest("invalid chat ID", err).Response(req.ID)
+				return nil, rpcerr.WrapInvalidRequest("invalid chat ID", err)
 			}
-
 			opts := telegram.SendOptions{
 				ParseMode:           "HTML",
 				ThreadID:            p.ThreadID,
 				DisableNotification: p.Silent,
 				ReplyToMessageID:    p.ReplyTo,
 			}
-
-			// Format text as HTML.
 			html := telegram.FormatHTML(p.Text)
-
 			results, err := telegram.SendText(ctx, client, chatID, html, opts)
 			if err != nil {
-				return rpcerr.WrapDependencyFailed("telegram send failed", err).Response(req.ID)
+				return nil, rpcerr.WrapDependencyFailed("telegram send failed", err)
 			}
 
 			// Send media attachments, collecting errors.
@@ -223,21 +205,18 @@ func messagingSend(deps MessagingDeps) rpcutil.HandlerFunc {
 			if err := errors.Join(mediaErrors...); err != nil {
 				slog.Warn("telegram media send errors", "count", len(mediaErrors), "error", err)
 			}
-
 			var resultData any
 			if len(results) > 0 {
 				resultData = results[0]
 			}
-			return rpcutil.RespondOK(req.ID, map[string]any{
+			return map[string]any{
 				"ok":      true,
 				"channel": "telegram",
 				"result":  resultData,
-			})
+			}, nil
 		}
-
-		// No other channels available in standalone Go gateway.
-		return rpcerr.Unavailable("no channel available for sending").Response(req.ID)
-	}
+		return nil, rpcerr.Unavailable("no channel available for sending")
+	})
 }
 
 func messagingPoll(deps MessagingDeps) rpcutil.HandlerFunc {

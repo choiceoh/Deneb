@@ -178,28 +178,24 @@ func acpList(deps *ACPDeps) rpcutil.HandlerFunc {
 // --- acp.spawn ---
 
 func acpSpawn(deps *ACPDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireEnabled(deps, req.ID); errResp != nil {
-			return errResp
+	type params struct {
+		ParentSessionKey string `json:"parentSessionKey"`
+		ParentAgentID    string `json:"parentAgentId"`
+		Role             string `json:"role"`
+		Model            string `json:"model"`
+		Provider         string `json:"provider"`
+		InitialMessage   string `json:"initialMessage"`
+		MaxDepth         int    `json:"maxDepth"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
+		if !deps.enabled.Load() {
+			return nil, rpcerr.New(protocol.ErrFeatureDisabled, "ACP is not enabled; call acp.start first")
 		}
 		if deps.Infra == nil {
-			return rpcerr.New(protocol.ErrDependencyFailed, "subagent infrastructure not available").Response(req.ID)
-		}
-
-		p, errResp := rpcutil.DecodeParams[struct {
-			ParentSessionKey string `json:"parentSessionKey"`
-			ParentAgentID    string `json:"parentAgentId"`
-			Role             string `json:"role"`
-			Model            string `json:"model"`
-			Provider         string `json:"provider"`
-			InitialMessage   string `json:"initialMessage"`
-			MaxDepth         int    `json:"maxDepth"`
-		}](req)
-		if errResp != nil {
-			return errResp
+			return nil, rpcerr.New(protocol.ErrDependencyFailed, "subagent infrastructure not available")
 		}
 		if p.Role == "" {
-			return rpcerr.MissingParam("role").Response(req.ID)
+			return nil, rpcerr.MissingParam("role")
 		}
 
 		result := deps.Infra.SpawnSubagent(ctx, acp.SpawnSubagentParams{
@@ -212,7 +208,7 @@ func acpSpawn(deps *ACPDeps) rpcutil.HandlerFunc {
 			MaxDepth:         p.MaxDepth,
 		})
 		if result.Error != nil {
-			return rpcerr.Wrap(protocol.ErrConflict, result.Error).Response(req.ID)
+			return nil, rpcerr.Wrap(protocol.ErrConflict, result.Error)
 		}
 
 		// Send initial message if provided and send function is available.
@@ -220,63 +216,58 @@ func acpSpawn(deps *ACPDeps) rpcutil.HandlerFunc {
 			_ = deps.SessionSendFn(result.SessionKey, p.InitialMessage)
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"agentId":    result.AgentID,
 			"sessionKey": result.SessionKey,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- acp.kill ---
 
 func acpKill(deps *ACPDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireEnabled(deps, req.ID); errResp != nil {
-			return errResp
+	type params struct {
+		AgentID string `json:"agentId"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if !deps.enabled.Load() {
+			return nil, rpcerr.New(protocol.ErrFeatureDisabled, "ACP is not enabled; call acp.start first")
 		}
-
-		var p struct {
-			AgentID string `json:"agentId"`
-		}
-		if err := rpcutil.UnmarshalParams(req.Params, &p); err != nil || p.AgentID == "" {
-			return rpcerr.MissingParam("agentId").Response(req.ID)
+		if p.AgentID == "" {
+			return nil, rpcerr.MissingParam("agentId")
 		}
 
 		if deps.Infra != nil {
 			if err := deps.Infra.KillSubagent(p.AgentID); err != nil {
-				return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
+				return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
 			}
 		} else {
 			if !deps.Registry.Kill(p.AgentID) {
-				return rpcerr.Newf(protocol.ErrNotFound, "agent not found: %s", p.AgentID).Response(req.ID)
+				return nil, rpcerr.Newf(protocol.ErrNotFound, "agent not found: %s", p.AgentID)
 			}
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"killed":  true,
 			"agentId": p.AgentID,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- acp.send ---
 
 func acpSend(deps *ACPDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireEnabled(deps, req.ID); errResp != nil {
-			return errResp
-		}
-
-		p, errResp := rpcutil.DecodeParams[struct {
-			AgentID    string `json:"agentId"`
-			SessionKey string `json:"sessionKey"`
-			Message    string `json:"message"`
-		}](req)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		AgentID    string `json:"agentId"`
+		SessionKey string `json:"sessionKey"`
+		Message    string `json:"message"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if !deps.enabled.Load() {
+			return nil, rpcerr.New(protocol.ErrFeatureDisabled, "ACP is not enabled; call acp.start first")
 		}
 		if p.Message == "" {
-			return rpcerr.MissingParam("message").Response(req.ID)
+			return nil, rpcerr.MissingParam("message")
 		}
 
 		// Resolve target session key.
@@ -284,52 +275,48 @@ func acpSend(deps *ACPDeps) rpcutil.HandlerFunc {
 		if targetKey == "" && p.AgentID != "" {
 			agent := deps.Registry.Get(p.AgentID)
 			if agent == nil {
-				return rpcerr.Newf(protocol.ErrNotFound, "agent not found: %s", p.AgentID).Response(req.ID)
+				return nil, rpcerr.Newf(protocol.ErrNotFound, "agent not found: %s", p.AgentID)
 			}
 			targetKey = agent.SessionKey
 		}
 		if targetKey == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "agentId or sessionKey is required").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrMissingParam, "agentId or sessionKey is required")
 		}
 
 		if deps.SessionSendFn == nil {
-			return rpcerr.New(protocol.ErrDependencyFailed, "session send not available").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrDependencyFailed, "session send not available")
 		}
 
 		if err := deps.SessionSendFn(targetKey, p.Message); err != nil {
-			return rpcerr.Newf(protocol.ErrDependencyFailed, "send failed: %v", err).Response(req.ID)
+			return nil, rpcerr.Newf(protocol.ErrDependencyFailed, "send failed: %v", err)
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"sent":       true,
 			"sessionKey": targetKey,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- acp.bind ---
 
 func acpBind(deps *ACPDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireEnabled(deps, req.ID); errResp != nil {
-			return errResp
+	type params struct {
+		Channel          string `json:"channel"`
+		AccountID        string `json:"accountId"`
+		ConversationID   string `json:"conversationId"`
+		TargetSessionKey string `json:"targetSessionKey"`
+		BoundBy          string `json:"boundBy"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if !deps.enabled.Load() {
+			return nil, rpcerr.New(protocol.ErrFeatureDisabled, "ACP is not enabled; call acp.start first")
 		}
 		if deps.Bindings == nil {
-			return rpcerr.New(protocol.ErrDependencyFailed, "binding service not available").Response(req.ID)
-		}
-
-		p, errResp := rpcutil.DecodeParams[struct {
-			Channel          string `json:"channel"`
-			AccountID        string `json:"accountId"`
-			ConversationID   string `json:"conversationId"`
-			TargetSessionKey string `json:"targetSessionKey"`
-			BoundBy          string `json:"boundBy"`
-		}](req)
-		if errResp != nil {
-			return errResp
+			return nil, rpcerr.New(protocol.ErrDependencyFailed, "binding service not available")
 		}
 		if p.TargetSessionKey == "" {
-			return rpcerr.MissingParam("targetSessionKey").Response(req.ID)
+			return nil, rpcerr.MissingParam("targetSessionKey")
 		}
 
 		result := deps.Bindings.Bind(acp.SessionBindParams{
@@ -345,12 +332,12 @@ func acpBind(deps *ACPDeps) rpcutil.HandlerFunc {
 			_ = deps.BindingStore.SyncFromService(deps.Bindings)
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"bindingId":      result.BindingID,
 			"conversationId": result.ConversationID,
 			"targetKey":      result.TargetKey,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- acp.unbind ---

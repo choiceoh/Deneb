@@ -160,54 +160,54 @@ func TestNilRunner_errorMessage(t *testing.T) {
 
 // ── start: missing workdir ──────────────────────────────────────────────────
 
-// Note: requireRunner fires first when Runner is nil, so we can only test
-// param validation by observing the UNAVAILABLE error takes precedence.
-// The following tests document the handler's param requirements for when
-// Runner is non-nil (the requireRunner guard returns before param decode).
+// Note: With Bind[P], param decode fires before the runner nil check.
+// When Runner is nil AND params are nil, INVALID_REQUEST is returned
+// (param decode error) rather than UNAVAILABLE (runner check).
 
-func TestStart_nilParams_unavailableBeforeParamCheck(t *testing.T) {
+func TestStart_nilParams_invalidRequestBeforeRunnerCheck(t *testing.T) {
 	m := Methods(Deps{})
 	resp := callMethod(m, "autoresearch.start", nil)
 	mustErr(t, resp)
-	// With nil Runner, requireRunner fires before param decode.
-	if resp.Error.Code != protocol.ErrUnavailable {
-		t.Fatalf("expected UNAVAILABLE, got %s", resp.Error.Code)
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("expected INVALID_REQUEST, got %s", resp.Error.Code)
 	}
 }
 
-func TestConfig_nilParams_unavailableBeforeParamCheck(t *testing.T) {
+func TestConfig_nilParams_invalidRequestBeforeRunnerCheck(t *testing.T) {
 	m := Methods(Deps{})
 	resp := callMethod(m, "autoresearch.config", nil)
 	mustErr(t, resp)
-	if resp.Error.Code != protocol.ErrUnavailable {
-		t.Fatalf("expected UNAVAILABLE, got %s", resp.Error.Code)
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("expected INVALID_REQUEST, got %s", resp.Error.Code)
 	}
 }
 
-func TestResume_nilParams_unavailableBeforeParamCheck(t *testing.T) {
+func TestResume_nilParams_invalidRequestBeforeRunnerCheck(t *testing.T) {
 	m := Methods(Deps{})
 	resp := callMethod(m, "autoresearch.resume", nil)
 	mustErr(t, resp)
-	if resp.Error.Code != protocol.ErrUnavailable {
-		t.Fatalf("expected UNAVAILABLE, got %s", resp.Error.Code)
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("expected INVALID_REQUEST, got %s", resp.Error.Code)
 	}
 }
 
-func TestArchive_nilParams_unavailableBeforeParamCheck(t *testing.T) {
+func TestArchive_nilParams_invalidRequestBeforeRunnerCheck(t *testing.T) {
 	m := Methods(Deps{})
 	resp := callMethod(m, "autoresearch.archive", nil)
 	mustErr(t, resp)
-	if resp.Error.Code != protocol.ErrUnavailable {
-		t.Fatalf("expected UNAVAILABLE, got %s", resp.Error.Code)
+	// Bind[P] decodes params before runner check, so nil params → INVALID_REQUEST.
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("expected INVALID_REQUEST, got %s", resp.Error.Code)
 	}
 }
 
-func TestRuns_nilParams_unavailableBeforeParamCheck(t *testing.T) {
+func TestRuns_nilParams_invalidRequestBeforeRunnerCheck(t *testing.T) {
 	m := Methods(Deps{})
 	resp := callMethod(m, "autoresearch.runs", nil)
 	mustErr(t, resp)
-	if resp.Error.Code != protocol.ErrUnavailable {
-		t.Fatalf("expected UNAVAILABLE, got %s", resp.Error.Code)
+	// Bind[P] decodes params before runner check, so nil params → INVALID_REQUEST.
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("expected INVALID_REQUEST, got %s", resp.Error.Code)
 	}
 }
 

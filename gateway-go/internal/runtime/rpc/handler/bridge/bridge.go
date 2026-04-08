@@ -5,7 +5,6 @@
 package bridge
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // SendFunc sends a message to a session and triggers an LLM run.
@@ -84,16 +82,13 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 // bridgeSend broadcasts a bridge.message event to all WebSocket clients
 // and triggers an LLM run on the main agent's active session.
 func bridgeSend(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Message string `json:"message"`
-			Source  string `json:"source,omitempty"` // sender identity (e.g., "main-agent", "claude-code")
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		Message string `json:"message"`
+		Source  string `json:"source,omitempty"` // sender identity (e.g., "main-agent", "claude-code")
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.Message == "" {
-			return rpcerr.MissingParam("message").Response(req.ID)
+			return nil, rpcerr.MissingParam("message")
 		}
 		if p.Source == "" {
 			p.Source = "api"
@@ -115,12 +110,12 @@ func bridgeSend(deps Deps) rpcutil.HandlerFunc {
 			triggered = true
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"sent":      sent,
 			"triggered": triggered,
 			"ts":        ts,
-		})
-	}
+		}, nil
+	})
 }
 
 // isFromMainAgent returns true if the source is the gateway/main agent itself.

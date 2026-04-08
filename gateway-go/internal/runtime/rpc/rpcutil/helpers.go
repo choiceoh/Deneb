@@ -102,7 +102,12 @@ func RespondOK(reqID string, result any) *protocol.ResponseFrame {
 //	})
 func BindHandler[P any](fn func(P) (any, error)) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return Bind[P](req, fn)
+		p, errResp := DecodeParams[P](req)
+		if errResp != nil {
+			return errResp
+		}
+		result, err := fn(p)
+		return finalize(req.ID, result, err)
 	}
 }
 
@@ -124,12 +129,50 @@ func Bind[P any](req *protocol.RequestFrame, fn func(P) (any, error)) *protocol.
 		return errResp
 	}
 	result, err := fn(p)
+	return finalize(req.ID, result, err)
+}
+
+// BindCtx is like Bind but threads context.Context through to the handler
+// function. Use this for handlers that call context-aware services (providers,
+// process execution, timeout-scoped operations).
+//
+//	return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
+//	    return deps.Provider.Catalog(ctx, p.Name)
+//	})
+func BindCtx[P any](ctx context.Context, req *protocol.RequestFrame, fn func(context.Context, P) (any, error)) *protocol.ResponseFrame {
+	p, errResp := DecodeParams[P](req)
+	if errResp != nil {
+		return errResp
+	}
+	result, err := fn(ctx, p)
+	return finalize(req.ID, result, err)
+}
+
+// BindHandlerCtx returns a HandlerFunc that decodes params into P, calls fn
+// with context and decoded params, and builds the response.
+//
+//	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
+//	    return deps.Provider.Catalog(ctx, p.Name), nil
+//	})
+func BindHandlerCtx[P any](fn func(context.Context, P) (any, error)) HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := DecodeParams[P](req)
+		if errResp != nil {
+			return errResp
+		}
+		result, err := fn(ctx, p)
+		return finalize(req.ID, result, err)
+	}
+}
+
+// finalize converts (result, error) into a ResponseFrame.
+func finalize(reqID string, result any, err error) *protocol.ResponseFrame {
 	if err != nil {
 		var rpcErr *rpcerr.Error
 		if errors.As(err, &rpcErr) {
-			return rpcErr.Response(req.ID)
+			return rpcErr.Response(reqID)
 		}
-		return rpcerr.InvalidParams(err).Response(req.ID)
+		return rpcerr.InvalidParams(err).Response(reqID)
 	}
-	return RespondOK(req.ID, result)
+	return RespondOK(reqID, result)
 }

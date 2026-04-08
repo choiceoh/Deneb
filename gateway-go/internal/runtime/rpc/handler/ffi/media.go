@@ -1,11 +1,8 @@
 package ffi
 
 import (
-	"context"
-
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // MediaMethods returns handlers for media detection RPC methods.
@@ -16,15 +13,10 @@ func MediaMethods() map[string]rpcutil.HandlerFunc {
 }
 
 func mediaDetectMIME() rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Data []byte `json:"data"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"mime": ffipkg.DetectMIME(p.Data),
-		})
+	type params struct {
+		Data []byte `json:"data"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		return map[string]any{"mime": ffipkg.DetectMIME(p.Data)}, nil
+	})
 }

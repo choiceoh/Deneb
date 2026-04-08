@@ -81,76 +81,53 @@ func providersList(deps Deps) rpcutil.HandlerFunc {
 }
 
 func providersGet(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID string `json:"id"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		ID string `json:"id"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.ID == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
+			return nil, rpcerr.MissingParam("id")
 		}
-
 		plugin := deps.Providers.ByNormalizedID(p.ID)
 		if plugin == nil {
-			return rpcerr.Newf(protocol.ErrNotFound, "provider not found: %s", p.ID).Response(req.ID)
+			return nil, rpcerr.Newf(protocol.ErrNotFound, "provider not found: %s", p.ID)
 		}
-
-		return rpcutil.RespondOK(req.ID, serializePlugin(plugin))
-	}
+		return serializePlugin(plugin), nil
+	})
 }
 
 func providersCatalog(deps Deps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Provider string `json:"provider"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
-		// If provider specified, check if it supports catalog locally.
+	type params struct {
+		Provider string `json:"provider"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		if p.Provider != "" {
 			plugin := deps.Providers.ByNormalizedID(p.Provider)
 			if cp, ok := plugin.(provider.CatalogProvider); ok {
 				result, err := cp.Catalog(ctx, provider.CatalogContext{})
 				if err == nil && result != nil {
-					return rpcutil.RespondOK(req.ID, result)
+					return result, nil
 				}
 			}
 		}
-
-		// Empty catalog fallback.
-		return rpcutil.RespondOK(req.ID, provider.CatalogResult{
-			Entries: []provider.CatalogEntry{},
-		})
-	}
+		return provider.CatalogResult{Entries: []provider.CatalogEntry{}}, nil
+	})
 }
 
 func providersAuthPrepare(deps Deps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[provider.RuntimeAuthContext](req)
-		if errResp != nil {
-			return errResp
-		}
+	return rpcutil.BindHandlerCtx[provider.RuntimeAuthContext](func(ctx context.Context, p provider.RuntimeAuthContext) (any, error) {
 		if p.Provider == "" {
-			return rpcerr.MissingParam("provider").Response(req.ID)
+			return nil, rpcerr.MissingParam("provider")
 		}
-
 		if deps.AuthManager == nil {
-			return rpcutil.RespondOK(req.ID, provider.PreparedAuth{
-				APIKey: p.APIKey,
-			})
+			return provider.PreparedAuth{APIKey: p.APIKey}, nil
 		}
-
 		prepared, err := deps.AuthManager.Prepare(ctx, p)
 		if err != nil {
-			return rpcerr.Newf(protocol.ErrDependencyFailed, "auth prepare failed: %v", err).Response(req.ID)
+			return nil, rpcerr.Newf(protocol.ErrDependencyFailed, "auth prepare failed: %v", err)
 		}
-
-		return rpcutil.RespondOK(req.ID, prepared)
-	}
+		return prepared, nil
+	})
 }
 
 func modelsList(deps ModelsDeps) rpcutil.HandlerFunc {
