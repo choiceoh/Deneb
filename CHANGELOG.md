@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.22.3](https://github.com/choiceoh/Deneb/compare/deneb-v4.22.2...deneb-v4.22.3) (2026-04-08)
+
+
+### 🔧 Internal
+
+* **server:** remove single-user unnecessary infrastructure ([d865132](https://github.com/choiceoh/Deneb/commit/d865132a3483f3ed60bfeef56b3b72105ffc88e9))
+
 ## [4.22.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.22.1...deneb-v4.22.2) (2026-04-08)
 
 
