@@ -33,18 +33,13 @@ func AssembleContext(
 	sessionKey string,
 	memoryTokenBudget int,
 	freshTailCount int,
-	maxMessages int,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
-	if maxMessages <= 0 {
-		maxMessages = 100
-	}
-
 	// Check if LCM store has data for this session.
 	maxIdx, err := store.MaxMsgIndex(sessionKey)
 	if err != nil || maxIdx < 0 {
 		// No LCM data — fall back to legacy store.
-		return legacyAssemble(legacy, sessionKey, memoryTokenBudget, maxMessages)
+		return legacyAssemble(legacy, sessionKey, memoryTokenBudget)
 	}
 
 	// Query summary coverage.
@@ -225,14 +220,10 @@ func legacyAssemble(
 	store toolctx.TranscriptStore,
 	sessionKey string,
 	memoryTokenBudget int,
-	maxMessages int,
 ) (*AssemblyResult, error) {
-	msgs, total, err := store.Load(sessionKey, maxMessages)
+	msgs, total, err := store.Load(sessionKey, 0)
 	if err != nil {
 		return nil, fmt.Errorf("legacy assemble: %w", err)
-	}
-	if len(msgs) > maxMessages {
-		msgs = msgs[len(msgs)-maxMessages:]
 	}
 
 	// Token-budget trim.

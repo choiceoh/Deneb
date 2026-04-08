@@ -192,6 +192,22 @@ func executeAgentRun(
 				contextErr = err
 			} else {
 				messages = result.Messages
+				// When messages were silently truncated (no summaries covering them),
+				// inject a notice so the AI knows its context is incomplete.
+				if !result.WasCompacted && result.TotalMessages > len(result.Messages) && len(result.Messages) > 0 {
+					dropped := result.TotalMessages - len(result.Messages)
+					notice := fmt.Sprintf(
+						"[컨텍스트 알림: 이 세션의 전체 대화 %d개 메시지 중 최근 %d개만 포함되어 있습니다. "+
+							"이전 %d개 메시지는 컨텍스트 제한으로 생략되었습니다. "+
+							"이전 대화 내용을 정확히 기억하지 못할 수 있으니 유저에게 솔직히 알려주세요.]",
+						result.TotalMessages, len(result.Messages), dropped)
+					messages = append([]llm.Message{llm.NewTextMessage("user", notice)}, messages...)
+					logger.Warn("context truncated without summaries",
+						"total", result.TotalMessages,
+						"loaded", len(result.Messages),
+						"dropped", dropped,
+						"session", params.SessionKey)
+				}
 			}
 		}
 	}()
@@ -313,10 +329,12 @@ func executeAgentRun(
 		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
 		}
+		// Derive compaction budget from context assembly budgets so they stay in sync.
+		contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
 		var polarisResult compact.Result
 		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
 			engine := bridge.Engine()
-			messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer)
+			messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer, contextBudget)
 
 			// Proactive condensation: when a new leaf summary was persisted,
 			// trigger background condensation to merge leaves into higher-level nodes.
@@ -325,7 +343,7 @@ func executeAgentRun(
 				go engine.Condense(context.Background(), params.SessionKey, condSummarizer)
 			}
 		} else {
-			messages, polarisResult = compact.Compact(polarisCtx, compact.DefaultConfig(), messages, summarizer, logger)
+			messages, polarisResult = compact.Compact(polarisCtx, compact.NewConfig(contextBudget), messages, summarizer, logger)
 		}
 		polarisCancel()
 		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmergencyEvicted > 0 {

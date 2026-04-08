@@ -50,7 +50,7 @@ func TestAssembleContext_NoLCMData(t *testing.T) {
 	legacy.Append("s1", textMsg("user", "hello", 1000))
 	legacy.Append("s1", textMsg("assistant", "hi", 2000))
 
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default()))
+	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
 	if len(result.Messages) != 2 {
 		t.Fatalf("got %d, want 2 messages", len(result.Messages))
 	}
@@ -69,7 +69,7 @@ func TestAssembleContext_RecentOnly(t *testing.T) {
 		legacy.Append("s1", msg)
 	}
 
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default()))
+	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
 	if len(result.Messages) != 10 {
 		t.Fatalf("got %d, want 10 messages", len(result.Messages))
 	}
@@ -102,7 +102,7 @@ func TestAssembleContext_WithSummaries(t *testing.T) {
 		MsgEnd:     9,
 	})
 
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default()))
+	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
 	if !result.WasCompacted {
 		t.Fatal("expected WasCompacted=true with summaries")
 	}
@@ -137,7 +137,7 @@ func TestAssembleContext_MultiLevelSummaries(t *testing.T) {
 		TokenEst: 40, CreatedAt: 3000, MsgStart: 0, MsgEnd: 19,
 	})
 
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default()))
+	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
 	if !result.WasCompacted {
 		t.Fatal("expected WasCompacted=true")
 	}
@@ -165,7 +165,7 @@ func TestAssembleContext_TokenBudgetTrimsOldestSummaries(t *testing.T) {
 	})
 
 	// Budget is 1000 tokens — summary should be trimmed.
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 1000, 48, 100, slog.Default()))
+	result := testutil.Must(AssembleContext(store, legacy, "s1", 1000, 48, slog.Default()))
 	// Recent messages should survive even with tight budget.
 	if len(result.Messages) == 0 {
 		t.Fatal("expected at least some messages")

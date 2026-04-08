@@ -8,12 +8,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 )
 
-// DefaultSystemPromptBudget is the default token budget for system prompt
-// fragments (65536 tokens). The base system prompt (identity, tools, skills,
-// context files) is considered fixed; this budget governs variable additions
-// like knowledge, recall, and proactive hints.
-const DefaultSystemPromptBudget uint64 = 65_536
-
 // PromptFragment represents a named segment of the system prompt with
 // priority metadata for budget-aware optimization.
 type PromptFragment struct {

@@ -16,9 +16,6 @@ func TestDefaultContextConfig(t *testing.T) {
 	if cfg.FreshTailCount != 48 {
 		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, 48)
 	}
-	if cfg.MaxMessages != 100 {
-		t.Errorf("MaxMessages = %d, want %d", cfg.MaxMessages, 100)
-	}
 }
 
 func TestEstimateTokens(t *testing.T) {
@@ -96,24 +93,26 @@ func TestAssembleContextFallback(t *testing.T) {
 		store.Append("test", msg)
 	}
 
-	t.Run("returns tail N messages", func(t *testing.T) {
+	t.Run("returns all messages within token budget", func(t *testing.T) {
 		cfg := DefaultContextConfig()
-		cfg.MaxMessages = 3
 		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
-		if len(result.Messages) != 3 {
-			t.Errorf("got %d messages, want 3", len(result.Messages))
+		if len(result.Messages) != 5 {
+			t.Errorf("got %d messages, want 5", len(result.Messages))
 		}
 		if result.TotalMessages != 5 {
 			t.Errorf("TotalMessages = %d, want 5", result.TotalMessages)
 		}
 	})
 
-	t.Run("returns all when MaxMessages is larger", func(t *testing.T) {
+	t.Run("trims by token budget", func(t *testing.T) {
 		cfg := DefaultContextConfig()
-		cfg.MaxMessages = 100
+		cfg.MemoryTokenBudget = 1 // extremely low budget → keeps only last message
 		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
-		if len(result.Messages) != 5 {
-			t.Errorf("got %d messages, want 5", len(result.Messages))
+		if len(result.Messages) != 1 {
+			t.Errorf("got %d messages, want 1", len(result.Messages))
+		}
+		if result.TotalMessages != 5 {
+			t.Errorf("TotalMessages = %d, want 5", result.TotalMessages)
 		}
 	})
 
@@ -122,16 +121,6 @@ func TestAssembleContextFallback(t *testing.T) {
 		result := testutil.Must(assembleContext(store, "nonexistent", cfg, slog.Default()))
 		if len(result.Messages) != 0 {
 			t.Errorf("got %d messages, want 0", len(result.Messages))
-		}
-	})
-
-	t.Run("zero MaxMessages uses default", func(t *testing.T) {
-		cfg := DefaultContextConfig()
-		cfg.MaxMessages = 0
-		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
-		// defaultMaxMessages = 100, so all 5 messages should be returned.
-		if len(result.Messages) != 5 {
-			t.Errorf("got %d messages, want 5", len(result.Messages))
 		}
 	})
 }

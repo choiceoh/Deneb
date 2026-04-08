@@ -1,13 +1,14 @@
 // Polaris compaction system: tiered context compression for long-running agent sessions.
 //
 // Three tiers applied in order:
-//  1. Emergency — single input ≥30K tokens: evict oldest messages, compact remaining
+//  1. Emergency — single user input ≥30K tokens: evict oldest messages, compact remaining
 //  2. Micro     — strip code fences from tool results older than 4 turns (no LLM call)
 //  3. LLM       — at 80% of context budget: local AI summarizes old messages to 20% target
 package compaction
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"unicode/utf8"
 
@@ -15,7 +16,6 @@ import (
 )
 
 const (
-	DefaultContextBudget           = 150_000
 	DefaultMicroTurnThreshold      = 4
 	DefaultLLMThresholdPct         = 0.80
 	DefaultLLMTargetPct            = 0.20
@@ -25,17 +25,18 @@ const (
 
 // Config holds Polaris compaction parameters.
 type Config struct {
-	ContextBudget           int     // total token budget (default 150K)
+	ContextBudget           int     // effective token budget (MemoryTokenBudget - SystemPromptBudget)
 	MicroTurnThreshold      int     // turns before code stripping (default 4)
 	LLMThresholdPct         float64 // trigger LLM compaction at this fraction (default 0.80)
 	LLMTargetPct            float64 // target size as fraction of budget (default 0.20)
 	EmergencyInputThreshold int     // single-input token threshold (default 30K)
 }
 
-// DefaultConfig returns production defaults.
-func DefaultConfig() Config {
+// NewConfig creates a compaction config for the given context budget.
+// contextBudget should be (MemoryTokenBudget - SystemPromptBudget).
+func NewConfig(contextBudget int) Config {
 	return Config{
-		ContextBudget:           DefaultContextBudget,
+		ContextBudget:           contextBudget,
 		MicroTurnThreshold:      DefaultMicroTurnThreshold,
 		LLMThresholdPct:         DefaultLLMThresholdPct,
 		LLMTargetPct:            DefaultLLMTargetPct,
@@ -71,10 +72,11 @@ func Compact(
 	var r Result
 	r.TokensBefore = EstimateMessagesTokens(messages)
 
-	// Tier 1: Emergency — evict oldest when a single input is huge.
+	// Tier 1: Emergency — evict oldest when a real user input is huge.
+	// Only fires for actual user messages, not tool_result blocks.
 	// Emergency already summarizes non-evicted old messages, so skip LLM tier after it.
 	emergencyFired := false
-	lastInputTokens := lastUserMessageTokens(messages)
+	lastInputTokens := lastUserInputTokens(messages)
 	if lastInputTokens >= cfg.EmergencyInputThreshold && summarizer != nil {
 		var evicted int
 		messages, evicted = EmergencyCompact(ctx, cfg, messages, lastInputTokens, summarizer, logger)
@@ -127,12 +129,37 @@ func EstimateTokens(s string) int {
 	return est
 }
 
-// lastUserMessageTokens returns estimated tokens of the last user message.
-func lastUserMessageTokens(messages []llm.Message) int {
+// lastUserInputTokens returns estimated tokens of the last real user input message.
+// Skips tool_result messages (role=user but content is tool_result blocks) since
+// those are system-generated and should not trigger emergency compaction.
+func lastUserInputTokens(messages []llm.Message) int {
 	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" {
-			return EstimateTokens(string(messages[i].Content))
+		if messages[i].Role != "user" {
+			continue
 		}
+		if isToolResultMessage(messages[i].Content) {
+			continue
+		}
+		return EstimateTokens(string(messages[i].Content))
 	}
 	return 0
+}
+
+// isToolResultMessage checks if a user message contains tool_result blocks.
+func isToolResultMessage(content json.RawMessage) bool {
+	if len(content) == 0 || content[0] != '[' {
+		return false // plain string or empty — real user input
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(content, &blocks) != nil {
+		return false
+	}
+	for _, b := range blocks {
+		if b.Type == "tool_result" {
+			return true
+		}
+	}
+	return false
 }

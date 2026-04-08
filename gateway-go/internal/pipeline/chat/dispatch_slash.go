@@ -301,8 +301,8 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		sections = append(sections, "⚙️ **모드:** "+strings.Join(modes, " | "))
 	}
 
-	// Token usage from session (live budget).
-	liveBudget := h.contextCfg.LiveTokenBudget
+	// Token usage from session.
+	memBudget := h.contextCfg.MemoryTokenBudget
 	if sess.TotalTokens != nil && *sess.TotalTokens > 0 {
 		in, out := int64(0), int64(0)
 		if sess.InputTokens != nil {
@@ -311,16 +311,16 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		if sess.OutputTokens != nil {
 			out = *sess.OutputTokens
 		}
-		livePct := float64(*sess.TotalTokens) / float64(liveBudget) * 100
-		if livePct > 100 {
-			livePct = 100
+		usagePct := float64(*sess.TotalTokens) / float64(memBudget) * 100
+		if usagePct > 100 {
+			usagePct = 100
 		}
-		sections = append(sections, fmt.Sprintf("📊 **라이브:** %s / %s (%s %.0f%%) in: %s, out: %s",
-			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(liveBudget)), //nolint:gosec // G115 — liveBudget is a practical token count, never near int64 overflow
-			buildUsageBar(livePct), livePct,
+		sections = append(sections, fmt.Sprintf("📊 **토큰:** %s / %s (%s %.0f%%) in: %s, out: %s",
+			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(memBudget)), //nolint:gosec // G115 — memBudget is a practical token count, never near int64 overflow
+			buildUsageBar(usagePct), usagePct,
 			formatCompactTokens(in), formatCompactTokens(out)))
 	} else {
-		sections = append(sections, fmt.Sprintf("📊 **라이브:** 0 / %s", formatCompactTokens(int64(liveBudget)))) //nolint:gosec // G115 — liveBudget is a practical token count
+		sections = append(sections, fmt.Sprintf("📊 **토큰:** 0 / %s", formatCompactTokens(int64(memBudget)))) //nolint:gosec // G115 — memBudget is a practical token count
 	}
 
 	// Channel.
