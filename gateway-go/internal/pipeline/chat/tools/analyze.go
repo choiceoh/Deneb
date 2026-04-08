@@ -110,41 +110,44 @@ func outlineGo(path, displayPath string) (string, error) {
 			fmt.Fprintf(&sb, "func %s  :%d\n", sig, line)
 
 		case *ast.GenDecl:
-			for _, spec := range d.Specs {
-				switch s := spec.(type) {
-				case *ast.TypeSpec:
-					line := fset.Position(s.Pos()).Line
-					kind := goTypeKind(s.Type)
-					fmt.Fprintf(&sb, "type %s (%s)  :%d\n", s.Name.Name, kind, line)
-
-					// List methods for structs/interfaces inline.
-					st, ok := s.Type.(*ast.InterfaceType)
-					if !ok || st.Methods == nil {
-						continue
-					}
-					for _, m := range st.Methods.List {
-						if len(m.Names) == 0 {
-							continue
-						}
-						mLine := fset.Position(m.Pos()).Line
-						fmt.Fprintf(&sb, "  .%s  :%d\n", m.Names[0].Name, mLine)
-					}
-
-				case *ast.ValueSpec:
-					line := fset.Position(s.Pos()).Line
-					kind := "var"
-					if d.Tok == token.CONST {
-						kind = "const"
-					}
-					for _, name := range s.Names {
-						fmt.Fprintf(&sb, "%s %s  :%d\n", kind, name.Name, line)
-					}
-				}
-			}
+			formatGenDecl(&sb, fset, d)
 		}
 	}
 
 	return sb.String(), nil
+}
+
+// formatGenDecl writes type/var/const declarations from a GenDecl to sb.
+func formatGenDecl(sb *strings.Builder, fset *token.FileSet, d *ast.GenDecl) {
+	for _, spec := range d.Specs {
+		switch s := spec.(type) {
+		case *ast.TypeSpec:
+			line := fset.Position(s.Pos()).Line
+			kind := goTypeKind(s.Type)
+			fmt.Fprintf(sb, "type %s (%s)  :%d\n", s.Name.Name, kind, line)
+			// List interface methods inline.
+			st, ok := s.Type.(*ast.InterfaceType)
+			if !ok || st.Methods == nil {
+				continue
+			}
+			for _, m := range st.Methods.List {
+				if len(m.Names) == 0 {
+					continue
+				}
+				mLine := fset.Position(m.Pos()).Line
+				fmt.Fprintf(sb, "  .%s  :%d\n", m.Names[0].Name, mLine)
+			}
+		case *ast.ValueSpec:
+			line := fset.Position(s.Pos()).Line
+			kind := "var"
+			if d.Tok == token.CONST {
+				kind = "const"
+			}
+			for _, name := range s.Names {
+				fmt.Fprintf(sb, "%s %s  :%d\n", kind, name.Name, line)
+			}
+		}
+	}
 }
 
 // Rust outline patterns.

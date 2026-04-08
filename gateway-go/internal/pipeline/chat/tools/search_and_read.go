@@ -77,11 +77,7 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 		}
 
 		// Step 2: Parse results into file → line numbers map.
-		type fileMatch struct {
-			path  string
-			lines []int
-		}
-		fileMap := make(map[string]*fileMatch)
+		fileMap := make(map[string]*grepFileMatch)
 		var fileOrder []string
 
 		lineRe := regexp.MustCompile(`^(.+?):(\d+):`)
@@ -94,7 +90,7 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 			lineNum, _ := strconv.Atoi(m[2])
 
 			if _, exists := fileMap[filePath]; !exists {
-				fileMap[filePath] = &fileMatch{path: filePath}
+				fileMap[filePath] = &grepFileMatch{path: filePath}
 				fileOrder = append(fileOrder, filePath)
 			}
 			fileMap[filePath].lines = append(fileMap[filePath].lines, lineNum)
@@ -110,54 +106,14 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 			filesToRead = filesToRead[:maxFiles]
 		}
 
-		type fileResult struct {
-			output string
-			err    error
-		}
-		fileResults := make([]fileResult, len(filesToRead))
+		fileResults := make([]grepFileResult, len(filesToRead))
 
 		var wg sync.WaitGroup
 		wg.Add(len(filesToRead))
 		for i, filePath := range filesToRead {
 			go func(idx int, fp string) {
 				defer wg.Done()
-				fm := fileMap[fp]
-				data, err := os.ReadFile(fp)
-				if err != nil {
-					fileResults[idx] = fileResult{err: err}
-					return
-				}
-
-				lines := strings.Split(string(data), "\n")
-				totalLines := len(lines)
-
-				displayPath := fp
-				if rel, relErr := filepath.Rel(defaultDir, fp); relErr == nil {
-					displayPath = rel
-				}
-
-				ranges := mergeRanges(fm.lines, contextLines, totalLines)
-
-				var fsb strings.Builder
-				fmt.Fprintf(&fsb, "[File: %s | %d lines | matches at lines: %v]\n",
-					displayPath, totalLines, fm.lines)
-
-				for ri, r := range ranges {
-					if ri > 0 {
-						fsb.WriteString("  ...\n")
-					}
-					for j := r.start; j <= r.end && j < totalLines; j++ {
-						marker := " "
-						for _, ml := range fm.lines {
-							if j+1 == ml {
-								marker = ">"
-								break
-							}
-						}
-						fmt.Fprintf(&fsb, "%s%6d\t%s\n", marker, j+1, lines[j])
-					}
-				}
-				fileResults[idx] = fileResult{output: fsb.String()}
+				fileResults[idx] = readMatchedFile(fp, fileMap[fp], contextLines, defaultDir)
 			}(i, filePath)
 		}
 		wg.Wait()
@@ -186,6 +142,57 @@ func ToolSearchAndRead(defaultDir string) ToolFunc {
 
 		return TruncateForLLM(sb.String()), nil
 	}
+}
+
+type grepFileMatch struct {
+	path  string
+	lines []int
+}
+
+type grepFileResult struct {
+	output string
+	err    error
+}
+
+// readMatchedFile reads a file and formats match lines with surrounding context.
+func readMatchedFile(fp string, fm *grepFileMatch, contextLines int, defaultDir string) grepFileResult {
+	data, err := os.ReadFile(fp)
+	if err != nil {
+		return grepFileResult{err: err}
+	}
+
+	lines := strings.Split(string(data), "\n")
+	totalLines := len(lines)
+
+	displayPath := fp
+	if rel, relErr := filepath.Rel(defaultDir, fp); relErr == nil {
+		displayPath = rel
+	}
+
+	matchSet := make(map[int]struct{}, len(fm.lines))
+	for _, ml := range fm.lines {
+		matchSet[ml] = struct{}{}
+	}
+
+	ranges := mergeRanges(fm.lines, contextLines, totalLines)
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "[File: %s | %d lines | matches at lines: %v]\n",
+		displayPath, totalLines, fm.lines)
+
+	for ri, r := range ranges {
+		if ri > 0 {
+			sb.WriteString("  ...\n")
+		}
+		for j := r.start; j <= r.end && j < totalLines; j++ {
+			marker := " "
+			if _, ok := matchSet[j+1]; ok {
+				marker = ">"
+			}
+			fmt.Fprintf(&sb, "%s%6d\t%s\n", marker, j+1, lines[j])
+		}
+	}
+	return grepFileResult{output: sb.String()}
 }
 
 type lineRange struct {

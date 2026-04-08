@@ -117,11 +117,16 @@ func ToolGrep(defaultDir string) ToolFunc {
 		if stdout == nil {
 			return "No matches found.", nil
 		}
-		if p.Mode == "" || p.Mode == "content" {
-			return groupGrepOutput(string(stdout)), nil
-		}
-		return string(stdout), nil
+		return formatRgOutput(string(stdout), p.Mode), nil
 	}
+}
+
+// formatRgOutput groups content-mode output by file, or returns raw output for other modes.
+func formatRgOutput(raw, mode string) string {
+	if mode == "" || mode == "content" {
+		return groupGrepOutput(raw)
+	}
+	return raw
 }
 
 // groupGrepOutput groups ripgrep content-mode output by file path.
