@@ -5,71 +5,35 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// memStore is a minimal in-memory TranscriptStore for testing legacy fallback.
-type memStore struct {
-	msgs map[string][]toolctx.ChatMessage
-}
-
-func newMemStore() *memStore {
-	return &memStore{msgs: make(map[string][]toolctx.ChatMessage)}
-}
-
-func (m *memStore) Load(key string, limit int) ([]toolctx.ChatMessage, int, error) {
-	msgs := m.msgs[key]
-	total := len(msgs)
-	if limit > 0 && len(msgs) > limit {
-		msgs = msgs[len(msgs)-limit:]
-	}
-	return msgs, total, nil
-}
-func (m *memStore) Append(key string, msg toolctx.ChatMessage) error {
-	m.msgs[key] = append(m.msgs[key], msg)
-	return nil
-}
-func (m *memStore) Delete(key string) error                            { delete(m.msgs, key); return nil }
-func (m *memStore) ListKeys() ([]string, error)                        { return nil, nil }
-func (m *memStore) Search(string, int) ([]toolctx.SearchResult, error) { return nil, nil }
-func (m *memStore) CloneRecent(src, dst string, limit int) error       { return nil }
-
-func testAssembleStore(t *testing.T) (*Store, *memStore) {
+func testAssembleStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
 	s := testutil.Must(NewStore(filepath.Join(dir, "test.db")))
 	t.Cleanup(func() { s.Close() })
-	return s, newMemStore()
+	return s
 }
 
-func TestAssembleContext_NoLCMData(t *testing.T) {
-	store, legacy := testAssembleStore(t)
+func TestAssembleContextFull_EmptyStore(t *testing.T) {
+	store := testAssembleStore(t)
 
-	// Only legacy store has data.
-	legacy.Append("s1", textMsg("user", "hello", 1000))
-	legacy.Append("s1", textMsg("assistant", "hi", 2000))
-
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
-	if len(result.Messages) != 2 {
-		t.Fatalf("got %d, want 2 messages", len(result.Messages))
-	}
-	if result.WasCompacted {
-		t.Fatal("should not be compacted without LCM data")
+	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 48, slog.Default()))
+	if len(result.Messages) != 0 {
+		t.Fatalf("got %d, want 0 messages for empty store", len(result.Messages))
 	}
 }
 
-func TestAssembleContext_RecentOnly(t *testing.T) {
-	store, legacy := testAssembleStore(t)
+func TestAssembleContextFull_RecentOnly(t *testing.T) {
+	store := testAssembleStore(t)
 
-	// LCM store has messages but no summaries.
+	// Store has messages but no summaries.
 	for i := 0; i < 10; i++ {
-		msg := textMsg("user", "message", int64(i*1000))
-		store.AppendMessage("s1", msg)
-		legacy.Append("s1", msg)
+		store.AppendMessage("s1", textMsg("user", "message", int64(i*1000)))
 	}
 
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
+	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 48, slog.Default()))
 	if len(result.Messages) != 10 {
 		t.Fatalf("got %d, want 10 messages", len(result.Messages))
 	}
@@ -81,14 +45,12 @@ func TestAssembleContext_RecentOnly(t *testing.T) {
 	}
 }
 
-func TestAssembleContext_WithSummaries(t *testing.T) {
-	store, legacy := testAssembleStore(t)
+func TestAssembleContextFull_WithSummaries(t *testing.T) {
+	store := testAssembleStore(t)
 
-	// Seed 20 messages in LCM store.
+	// Seed 20 messages.
 	for i := 0; i < 20; i++ {
-		msg := textMsg("user", "message content here", int64(i*1000))
-		store.AppendMessage("s1", msg)
-		legacy.Append("s1", msg)
+		store.AppendMessage("s1", textMsg("user", "message content here", int64(i*1000)))
 	}
 
 	// Insert a summary covering messages 0-9.
@@ -102,7 +64,7 @@ func TestAssembleContext_WithSummaries(t *testing.T) {
 		MsgEnd:     9,
 	})
 
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
+	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 48, slog.Default()))
 	if !result.WasCompacted {
 		t.Fatal("expected WasCompacted=true with summaries")
 	}
@@ -112,14 +74,12 @@ func TestAssembleContext_WithSummaries(t *testing.T) {
 	}
 }
 
-func TestAssembleContext_MultiLevelSummaries(t *testing.T) {
-	store, legacy := testAssembleStore(t)
+func TestAssembleContextFull_MultiLevelSummaries(t *testing.T) {
+	store := testAssembleStore(t)
 
 	// Seed 30 messages.
 	for i := 0; i < 30; i++ {
-		msg := textMsg("user", "msg", int64(i*1000))
-		store.AppendMessage("s1", msg)
-		legacy.Append("s1", msg)
+		store.AppendMessage("s1", textMsg("user", "msg", int64(i*1000)))
 	}
 
 	// Two leaf summaries.
@@ -137,7 +97,7 @@ func TestAssembleContext_MultiLevelSummaries(t *testing.T) {
 		TokenEst: 40, CreatedAt: 3000, MsgStart: 0, MsgEnd: 19,
 	})
 
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, slog.Default()))
+	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 48, slog.Default()))
 	if !result.WasCompacted {
 		t.Fatal("expected WasCompacted=true")
 	}
@@ -147,14 +107,12 @@ func TestAssembleContext_MultiLevelSummaries(t *testing.T) {
 	}
 }
 
-func TestAssembleContext_TokenBudgetTrimsOldestSummaries(t *testing.T) {
-	store, legacy := testAssembleStore(t)
+func TestAssembleContextFull_TokenBudgetTrimsOldestSummaries(t *testing.T) {
+	store := testAssembleStore(t)
 
 	// Seed messages.
 	for i := 0; i < 20; i++ {
-		msg := textMsg("user", "msg", int64(i*1000))
-		store.AppendMessage("s1", msg)
-		legacy.Append("s1", msg)
+		store.AppendMessage("s1", textMsg("user", "msg", int64(i*1000)))
 	}
 
 	// Insert a summary with huge content.
@@ -165,7 +123,7 @@ func TestAssembleContext_TokenBudgetTrimsOldestSummaries(t *testing.T) {
 	})
 
 	// Budget is 1000 tokens — summary should be trimmed.
-	result := testutil.Must(AssembleContext(store, legacy, "s1", 1000, 48, slog.Default()))
+	result := testutil.Must(assembleContextFull(store, "s1", 1000, 48, slog.Default()))
 	// Recent messages should survive even with tight budget.
 	if len(result.Messages) == 0 {
 		t.Fatal("expected at least some messages")

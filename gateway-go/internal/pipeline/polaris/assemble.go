@@ -9,15 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
-// AssemblyResult holds the output of LCM-aware context assembly.
-type AssemblyResult struct {
-	Messages        []llm.Message
-	EstimatedTokens int
-	TotalMessages   int
-	WasCompacted    bool // true if summary nodes were used
-}
-
-// AssembleContext builds the LLM context from the immutable store.
+// assembleContextFull builds the LLM context from the Polaris store.
 //
 // Algorithm:
 //  1. Query latest summary coverage and total message count.
@@ -25,21 +17,17 @@ type AssemblyResult struct {
 //  3. Summary window: highest-level summaries covering older messages.
 //  4. Pack into token budget: protected tail (freshTailCount) + summaries newest-first.
 //  5. If still over budget, drop oldest summaries (deterministic truncation).
-//
-// Falls back to legacy tail-N loading when the LCM store has no data for the session.
-func AssembleContext(
+func assembleContextFull(
 	store *Store,
-	legacy toolctx.TranscriptStore,
 	sessionKey string,
 	memoryTokenBudget int,
 	freshTailCount int,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
-	// Check if LCM store has data for this session.
+	// Check if store has data for this session.
 	maxIdx, err := store.MaxMsgIndex(sessionKey)
 	if err != nil || maxIdx < 0 {
-		// No LCM data — fall back to legacy store.
-		return legacyAssemble(legacy, sessionKey, memoryTokenBudget)
+		return &AssemblyResult{}, nil
 	}
 
 	// Query summary coverage.
@@ -213,28 +201,4 @@ func trimLLMToTokenBudget(msgs []llm.Message, budget int) []llm.Message {
 		msgs = msgs[1:]
 	}
 	return msgs
-}
-
-// legacyAssemble falls back to the existing tail-N assembly from the legacy store.
-func legacyAssemble(
-	store toolctx.TranscriptStore,
-	sessionKey string,
-	memoryTokenBudget int,
-) (*AssemblyResult, error) {
-	msgs, total, err := store.Load(sessionKey, 0)
-	if err != nil {
-		return nil, fmt.Errorf("legacy assemble: %w", err)
-	}
-
-	// Token-budget trim.
-	llmMsgs := chatToLLM(msgs)
-	if memoryTokenBudget > 0 {
-		llmMsgs = trimLLMToTokenBudget(llmMsgs, memoryTokenBudget)
-	}
-
-	return &AssemblyResult{
-		Messages:        llmMsgs,
-		EstimatedTokens: compact.EstimateMessagesTokens(llmMsgs),
-		TotalMessages:   total,
-	}, nil
 }
