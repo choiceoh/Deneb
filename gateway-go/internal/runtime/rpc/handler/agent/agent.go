@@ -6,7 +6,7 @@ import (
 	"context"
 
 	agentpkg "github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
@@ -231,7 +231,7 @@ func sessionsCreate(deps ExtendedDeps) rpcutil.HandlerFunc {
 		if p.Key == "" {
 			return nil, rpcerr.MissingParam("key")
 		}
-		if err := ffi.ValidateSessionKey(p.Key); err != nil {
+		if err := coresecurity.ValidateSessionKey(p.Key); err != nil {
 			return nil, rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
 				WithSession(p.Key)
 		}
@@ -262,7 +262,7 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 		if p.Key == "" || p.Phase == "" {
 			return nil, rpcerr.MissingParam("key and phase")
 		}
-		if err := ffi.ValidateSessionKey(p.Key); err != nil {
+		if err := coresecurity.ValidateSessionKey(p.Key); err != nil {
 			return nil, rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
 				WithSession(p.Key)
 		}

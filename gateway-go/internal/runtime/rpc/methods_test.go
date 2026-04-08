@@ -12,18 +12,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-const (
-	ciHealthMethod = "health.check"
-	ciValidFrame   = `{"type":"req","id":"1","method":"ping"}`
-	ciInvalidFrame = `{"type":"unknown"}`
-)
+const ciHealthMethod = "health.check"
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
 // testDispatcher creates a dispatcher with all built-in methods registered:
-// FFI + catalog (via RegisterBuiltinMethods) + session CRUD + health/system.info
+// catalog (via RegisterBuiltinMethods) + session CRUD + health/system.info
 // + telegram status queries.
 func testDispatcher() *Dispatcher {
 	d := NewDispatcher(testLogger())
@@ -49,16 +45,13 @@ func dispatch(t *testing.T, d *Dispatcher, method string, params any) *protocol.
 func TestBuiltinMethodsRegistered(t *testing.T) {
 	d := testDispatcher()
 	methods := d.Methods()
-	if len(methods) < 20 {
-		t.Errorf("got %d: %v, want at least 20 built-in methods", len(methods), methods)
+	if len(methods) < 10 {
+		t.Errorf("got %d: %v, want at least 10 built-in methods", len(methods), methods)
 	}
 	expected := []string{
 		"health.check", "sessions.get", "sessions.list", "sessions.delete",
 		"telegram.list", "telegram.get", "telegram.status", "telegram.health",
-		"system.info", "protocol.validate", "protocol.validate_params",
-		"security.validate_session_key", "security.sanitize_html",
-		"security.is_safe_url", "security.validate_error_code",
-		"media.detect_mime",
+		"system.info",
 		// Tools catalog (static core).
 		"tools.catalog",
 	}
@@ -161,41 +154,6 @@ func TestRPCSmokeFrequentMethods(t *testing.T) {
 	}
 }
 
-func TestProtocolValidate_FrameContracts(t *testing.T) {
-	d := testDispatcher()
-	tests := []struct {
-		name        string
-		frame       string
-		expectValid bool
-	}{
-		{
-			name:        "valid request frame",
-			frame:       ciValidFrame,
-			expectValid: true,
-		},
-		{
-			name:        "invalid frame type",
-			frame:       ciInvalidFrame,
-			expectValid: false,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			resp := dispatch(t, d, "protocol.validate", map[string]string{"frame": tc.frame})
-			if !resp.OK {
-				t.Fatalf("got error: %+v, want ok (validation result in payload)", resp.Error)
-			}
-			var payload map[string]any
-			if err := json.Unmarshal(resp.Payload, &payload); err != nil {
-				t.Fatalf("unmarshal payload: %v", err)
-			}
-			if payload["valid"] != tc.expectValid {
-				t.Errorf("got %v, want valid=%v", payload["valid"], tc.expectValid)
-			}
-		})
-	}
-}
 
 func TestSessionsGet_NotFound(t *testing.T) {
 	d := testDispatcher()
@@ -275,10 +233,6 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Protocol validate_params RPC tests
-// ---------------------------------------------------------------------------
-
 func TestSessionsList(t *testing.T) {
 	sm := session.NewManager()
 	sm.Set(&session.Session{Key: "s1", Kind: session.KindDirect})
@@ -294,15 +248,4 @@ func TestSessionsList(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Telegram method contract tests
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Security method contract tests
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Markdown method contract tests
-// ---------------------------------------------------------------------------
 
