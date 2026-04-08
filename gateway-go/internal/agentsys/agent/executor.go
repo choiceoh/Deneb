@@ -524,25 +524,6 @@ func RunAgent(
 			result.TurnsPersisted++
 		}
 
-		// Mid-loop compaction: check if context is growing too large and
-		// compact proactively before the LLM rejects with context_length_exceeded.
-		if cfg.OnMidLoopCompact != nil {
-			accTokens := result.Usage.InputTokens + result.Usage.OutputTokens
-			beforeCount := len(messages)
-			if compacted, sysAddition, err := cfg.OnMidLoopCompact(ctx, turn, messages, accTokens); err != nil {
-				logger.Warn("mid-loop compaction failed", "turn", turn, "error", err)
-			} else if compacted != nil {
-				messages = compacted
-				if sysAddition != "" {
-					cfg.System = llm.AppendSystemText(cfg.System, sysAddition)
-				}
-				logger.Info("mid-loop compaction applied",
-					"turn", turn,
-					"beforeMsgs", beforeCount,
-					"afterMsgs", len(compacted))
-			}
-		}
-
 		// Prior-turn tool result compaction: shrink tool_result content from
 		// completed turns to CompactedMaxOutput (4K chars). The LLM already
 		// saw the full result on the turn it was produced; subsequent turns

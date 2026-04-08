@@ -24,49 +24,6 @@ var mutatingTools = map[string]struct{}{
 	"write":         {},
 }
 
-// toolApprovalPolicy classifies tools by their autonomous execution safety.
-// "auto": safe for autonomous execution without user confirmation.
-// "confirm": requires user confirmation before execution (mutating/external).
-// "block": never executed by autonomous agents (dangerous system operations).
-// Used by the agent executor to gate tool calls in autonomous contexts
-// (cron jobs, subagents, deep work mode).
-var toolApprovalPolicy = map[string]string{
-	"agent_logs":            "auto",
-	"analyze":               "auto",
-	"batch_read":            "auto",
-	"bridge":                "block",
-	"deep_research":         "auto",
-	"diff":                  "auto",
-	"edit":                  "confirm",
-	"exec":                  "confirm",
-	"find":                  "auto",
-	"gateway_logs":          "auto",
-	"git":                   "confirm",
-	"grep":                  "auto",
-	"health_check":          "auto",
-	"image_describe":        "auto",
-	"inspect":               "auto",
-	"kv":                    "auto",
-	"multi_edit":            "confirm",
-	"notebook_edit":         "confirm",
-	"process":               "auto",
-	"projects_get_document": "auto",
-	"projects_get_field":    "auto",
-	"projects_list":         "auto",
-	"projects_search":       "auto",
-	"read":                  "auto",
-	"read_spillover":        "auto",
-	"search_and_read":       "auto",
-	"send_file":             "confirm",
-	"sessions_list":         "auto",
-	"skills_list":           "auto",
-	"tree":                  "auto",
-	"web_fetch":             "auto",
-	"web_search":            "auto",
-	"wiki":                  "auto",
-	"write":                 "confirm",
-}
-
 // toolCompressSkipSet contains tools whose output should not be compressed.
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.

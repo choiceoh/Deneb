@@ -101,23 +101,6 @@ type AgentConfig struct {
 	// subsequent LLM requests.
 	DynamicToolsProvider func() []llm.Tool
 
-	// OnMidLoopCompact is called after tool results are appended to the message
-	// history on each turn. If the callback returns a non-nil replacement slice,
-	// the executor swaps the message history with the compacted version. This
-	// allows the chat pipeline to run microcompact / Aurora compaction mid-loop
-	// instead of waiting for a context_length_exceeded error from the LLM.
-	//
-	// Parameters:
-	//   - turn: current turn number (0-based)
-	//   - messages: current message history (including latest tool results)
-	//   - accTokens: accumulated input+output tokens so far
-	//
-	// Returns:
-	//   - replacement messages (nil = no compaction needed)
-	//   - optional system prompt addition from compaction summaries
-	//   - error (non-fatal; logged and ignored)
-	OnMidLoopCompact func(ctx context.Context, turn int, messages []llm.Message, accTokens int) ([]llm.Message, string, error)
-
 	// OnMessagePersist is called each time a message is appended to the in-memory
 	// messages array during the agent loop. The chat layer uses this to persist
 	// each turn's assistant and tool_result messages to transcript immediately,

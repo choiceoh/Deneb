@@ -3,8 +3,6 @@ package prompt
 import (
 	"fmt"
 	"strings"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
 // BuildCoordinatorSystemPrompt returns a plain-text system prompt for
@@ -13,16 +11,6 @@ func BuildCoordinatorSystemPrompt(params SystemPromptParams, scratchpadDir strin
 	var s strings.Builder
 	writeCoordinatorPrompt(&s, params, scratchpadDir)
 	return s.String()
-}
-
-// BuildCoordinatorSystemPromptBlocks returns an Anthropic-style content block
-// array for coordinator mode, with ephemeral cache markers.
-func BuildCoordinatorSystemPromptBlocks(params SystemPromptParams, scratchpadDir string) []llm.ContentBlock {
-	var s strings.Builder
-	writeCoordinatorPrompt(&s, params, scratchpadDir)
-	return []llm.ContentBlock{
-		{Type: "text", Text: s.String(), CacheControl: &llm.CacheControl{Type: "ephemeral"}},
-	}
 }
 
 func writeCoordinatorPrompt(s *strings.Builder, params SystemPromptParams, scratchpadDir string) {
