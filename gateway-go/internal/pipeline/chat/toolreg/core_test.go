@@ -23,11 +23,6 @@ func (m *mockRegistrar) toolNames() []string {
 	return names
 }
 
-// ─── buildLocalAIProbe ────────────────────────────────────────────────────────
-
-
-
-
 // ─── FetchToolsSchema ─────────────────────────────────────────────────────────
 
 func TestFetchToolsSchema_validStructure(t *testing.T) {
@@ -58,7 +53,7 @@ func TestFetchToolsSchema_validStructure(t *testing.T) {
 func TestRegisterFSTools_registersTools(t *testing.T) {
 	reg := &mockRegistrar{}
 	deps := &toolctx.CoreToolDeps{WorkspaceDir: t.TempDir()}
-	RegisterFSTools(reg, deps, nil)
+	RegisterFSTools(reg, deps)
 
 	if len(reg.tools) == 0 {
 		t.Fatal("expected RegisterFSTools to register at least one tool")
@@ -104,21 +99,6 @@ func TestRegisterDataTools_registersTools(t *testing.T) {
 		t.Error("missing expected tool 'kv'")
 	}
 }
-
-// ─── RegisterAdvancedTools ────────────────────────────────────────────────────
-
-func TestRegisterAdvancedTools_registersTools(t *testing.T) {
-	reg := &mockRegistrar{}
-	RegisterAdvancedTools(reg, t.TempDir())
-
-	// batch_read was removed — RegisterAdvancedTools is now a no-op.
-	if len(reg.tools) != 0 {
-		t.Fatalf("expected RegisterAdvancedTools to register no tools (batch_read removed), got %d", len(reg.tools))
-	}
-}
-
-// ─── RegisterHiddenTools ──────────────────────────────────────────────────────
-
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 

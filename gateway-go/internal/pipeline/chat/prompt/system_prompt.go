@@ -80,7 +80,7 @@ var toolCategories = []struct {
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail"}},
 	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
-	{"Media", []string{"youtube_transcript", "send_file"}},
+	{"Media", []string{"send_file"}},
 	{"Data", []string{"kv"}},
 }
 

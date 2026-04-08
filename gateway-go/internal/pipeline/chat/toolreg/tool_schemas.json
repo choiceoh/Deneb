@@ -770,19 +770,6 @@
     }
   },
   {
-    "name": "health_check",
-    "properties": {
-      "component": {
-        "type": "string",
-        "enum": [
-          "all",
-          "localai"
-        ],
-        "description": "Component to check (default: all). localai=local LLM"
-      }
-    }
-  },
-  {
     "name": "cron",
     "description": "Manage scheduled tasks (cron jobs). Actions: add (create), list (all jobs), status (service health),\nget (job detail), update (modify), remove (delete), run (execute now), runs (execution history).\nSchedule formats: cron expression (0 9 * * * = daily 9am), interval (30m, 1h), one-shot (ISO timestamp).\nCommon patterns: 0 9 * * * (daily 9am), 0 */2 * * * (every 2h), 0 9 * * 1-5 (weekdays 9am), @daily, @hourly.\n",
     "properties": {
@@ -1056,18 +1043,6 @@
         "description": "Steering message for steer action"
       }
     }
-  },
-  {
-    "name": "youtube_transcript",
-    "properties": {
-      "url": {
-        "type": "string",
-        "description": "YouTube video URL (youtube.com/watch?v=... or youtu.be/...)"
-      }
-    },
-    "required": [
-      "url"
-    ]
   },
   {
     "name": "send_file",

@@ -9,7 +9,6 @@ package toolreg
 import (
 	"context"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -17,25 +16,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
 
-// LocalAIDeps holds optional local AI integration functions for tools that need
-// local LLM access (pilot). Injected by chat/ to avoid importing local AI code
-// from toolreg/.
-type LocalAIDeps struct {
-	CheckLocalAIHealth func() bool   // may be nil
-	BaseURL            func() string // returns local AI base URL; may be nil
-}
-
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 // It delegates to domain-specific Register*Tools functions.
-//
-// local AI may be nil; tools that require local AI (pilot) degrade gracefully.
-func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, localAI *LocalAIDeps) {
-	RegisterFSTools(registry, deps, localAI)
+func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
+	RegisterFSTools(registry, deps)
 	RegisterProcessTools(registry, &deps.Process)
 	RegisterWebTools(registry, deps.LLMClient, deps.DefaultModel)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	RegisterInfraTools(registry, localAI)
 	RegisterMediaTools(registry)
 	RegisterDataTools(registry)
 	var diaryDir string
@@ -43,8 +31,6 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		diaryDir = deps.Wiki.Store.DiaryDir()
 	}
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir)
-	RegisterAdvancedTools(registry, deps.WorkspaceDir)
-	RegisterHiddenTools(registry, deps.AgentLog)
 
 	// Autonomous continuation: LLM calls this to request a new run after current completes.
 	registry.RegisterTool(toolctx.ToolDef{
@@ -96,7 +82,7 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 }
 
 // RegisterFSTools registers file-system, code analysis, and git tools.
-func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps, localAI *LocalAIDeps) {
+func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
 	workspaceDir := deps.WorkspaceDir
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "read",
@@ -308,23 +294,6 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	// function (CollectMorningLetterData) is called directly by the boot/routine handler.
 }
 
-// buildLocalAIProbe converts toolreg LocalAIDeps into the tools.LocalAIProbe
-// struct expected by ToolHealthCheck.
-func buildLocalAIProbe(localAI *LocalAIDeps) tools.LocalAIProbe {
-	var probe tools.LocalAIProbe
-	if localAI != nil {
-		probe.CheckHealth = localAI.CheckLocalAIHealth
-		probe.BaseURL = localAI.BaseURL
-	}
-	if probe.CheckHealth == nil {
-		probe.CheckHealth = func() bool { return false }
-	}
-	if probe.BaseURL == nil {
-		probe.BaseURL = func() string { return "http://localhost:30000/v1" }
-	}
-	return probe
-}
-
 // RegisterSkillsTools registers the unified skills tool (list/create/patch/delete/read/list_files).
 func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider, workspaceDir string, invalidateCache tools.SkillManageInvalidateFn) {
 	registry.RegisterTool(toolctx.ToolDef{
@@ -338,29 +307,8 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 	})
 }
 
-// RegisterInfraTools registers infrastructure health-check tools.
-
-func RegisterInfraTools(registry toolctx.ToolRegistrar, localAI *LocalAIDeps) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "health_check",
-		Description:     "인프라 상태 점검: local AI (로컬 LLM). component: all (기본), localai",
-		InputSchema:     healthCheckToolSchema(),
-		Fn:              tools.ToolHealthCheck(buildLocalAIProbe(localAI)),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-}
-
 // RegisterMediaTools registers media delivery tools.
 func RegisterMediaTools(registry toolctx.ToolRegistrar) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "youtube_transcript",
-		Description:     "Extract transcript/subtitles and metadata from a YouTube video",
-		InputSchema:     youtubeTranscriptToolSchema(),
-		Fn:              tools.ToolYouTubeTranscript(),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "send_file",
 		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
@@ -382,11 +330,6 @@ func RegisterDataTools(registry toolctx.ToolRegistrar) {
 	})
 }
 
-// RegisterAdvancedTools is a placeholder — batch_read was removed.
-func RegisterAdvancedTools(_ toolctx.ToolRegistrar, _ string) {}
-
-// RegisterHiddenTools is a placeholder — agent_logs/gateway_logs were removed from the tool registry.
-func RegisterHiddenTools(_ toolctx.ToolRegistrar, _ *agentlog.Writer) {}
 
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured

@@ -52,9 +52,9 @@ var conversationTools = toSet(
 )
 
 // bootTools are the minimal set for startup and daily-check agent turns.
-// health_check for system status, kv for persistent memory/logging.
+// kv for persistent memory/logging.
 var bootTools = toSet(
-	"health_check", "kv",
+	"kv",
 )
 
 // AllowedTools returns the set of tool names permitted for a given preset.
