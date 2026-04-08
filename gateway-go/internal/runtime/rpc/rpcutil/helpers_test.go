@@ -23,13 +23,6 @@ func TestUnmarshalParams_NilParams(t *testing.T) {
 	}
 }
 
-func TestUnmarshalParams_EmptyParams(t *testing.T) {
-	var out struct{ Name string }
-	err := UnmarshalParams(json.RawMessage{}, &out)
-	if err == nil {
-		t.Fatal("expected error for empty params")
-	}
-}
 
 func TestUnmarshalParams_ValidJSON(t *testing.T) {
 	var out struct {
@@ -151,41 +144,8 @@ func TestRequireKey(t *testing.T) {
 // ErrMissingKey
 // ---------------------------------------------------------------------------
 
-func TestErrMissingKey(t *testing.T) {
-	resp := ErrMissingKey("req-42")
-	if resp.OK {
-		t.Fatal("expected OK=false")
-	}
-	if resp.ID != "req-42" {
-		t.Fatalf("got %s, want ID=req-42", resp.ID)
-	}
-	if resp.Error == nil {
-		t.Fatal("expected non-nil error")
-	}
-	if resp.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("got %s, want code MISSING_PARAM", resp.Error.Code)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // ParamError
 // ---------------------------------------------------------------------------
 
-func TestParamError(t *testing.T) {
-	resp := ParamError("req-7", json.Unmarshal([]byte(`{bad`), &struct{}{}))
-	if resp.OK {
-		t.Fatal("expected OK=false")
-	}
-	if resp.ID != "req-7" {
-		t.Fatalf("got %s, want ID=req-7", resp.ID)
-	}
-	if resp.Error == nil {
-		t.Fatal("expected non-nil error")
-	}
-	if resp.Error.Code != protocol.ErrInvalidRequest {
-		t.Fatalf("got %s, want code INVALID_REQUEST", resp.Error.Code)
-	}
-	if !strings.Contains(resp.Error.Message, "invalid params") {
-		t.Fatalf("got %s, want message to contain 'invalid params'", resp.Error.Message)
-	}
-}

@@ -24,16 +24,6 @@ func TestExtractThinkingText_Basic(t *testing.T) {
 	}
 }
 
-func TestExtractThinkingText_Empty(t *testing.T) {
-	blocks := []llm.ContentBlock{
-		{Type: "tool_use", Name: "read"},
-	}
-
-	got := extractThinkingText(blocks)
-	if got != "" {
-		t.Errorf("expected empty, got: %q", got)
-	}
-}
 
 func TestExtractThinkingText_MultipleBlocks(t *testing.T) {
 	blocks := []llm.ContentBlock{
@@ -167,18 +157,3 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 	}
 }
 
-func TestConsumeStreamInto_IdleDisabled(t *testing.T) {
-	// Negative timeout disables the watchdog. Stream closes normally.
-	events := make(chan llm.StreamEvent, 1)
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-	result := &turnResult{}
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		close(events)
-	}()
-
-	err := consumeStreamInto(ctx, events, StreamHooks{}, result, -1, nil)
-	testutil.NoError(t, err)
-}

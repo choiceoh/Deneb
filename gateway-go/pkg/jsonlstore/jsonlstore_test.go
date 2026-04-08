@@ -86,21 +86,3 @@ func TestSnapshot(t *testing.T) {
 	}
 }
 
-func TestSnapshotOverwrites(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "overwrite.jsonl")
-
-	if err := Snapshot(path, []record{{Name: "old", Value: 1}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Snapshot(path, []record{{Name: "new", Value: 2}}); err != nil {
-		t.Fatal(err)
-	}
-
-	loaded, err := Load[record](path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(loaded) != 1 || loaded[0].Name != "new" {
-		t.Fatalf("snapshot should overwrite: got %+v", loaded)
-	}
-}

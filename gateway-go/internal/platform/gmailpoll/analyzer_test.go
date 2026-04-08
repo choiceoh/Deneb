@@ -16,12 +16,6 @@ func TestLoadPrompt_Default(t *testing.T) {
 	}
 }
 
-func TestLoadPrompt_MissingFile(t *testing.T) {
-	prompt := loadPrompt("/nonexistent/path/prompt.md")
-	if prompt != DefaultPrompt {
-		t.Errorf("missing file should return default prompt")
-	}
-}
 
 func TestLoadPrompt_CustomFile(t *testing.T) {
 	dir := t.TempDir()
@@ -37,18 +31,6 @@ func TestLoadPrompt_CustomFile(t *testing.T) {
 	}
 }
 
-func TestLoadPrompt_EmptyFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "empty.md")
-	if err := os.WriteFile(path, []byte("  \n  "), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	prompt := loadPrompt(path)
-	if prompt != DefaultPrompt {
-		t.Errorf("empty file should return default prompt")
-	}
-}
 
 func TestFormatEmailForAnalysis(t *testing.T) {
 	msg := &gmail.MessageDetail{

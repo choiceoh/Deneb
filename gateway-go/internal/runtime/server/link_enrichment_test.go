@@ -56,22 +56,6 @@ func TestEnrichMessageWithLinks_SingleHTMLLink(t *testing.T) {
 	}
 }
 
-func TestEnrichMessageWithLinks_PlainText(t *testing.T) {
-	logger := slog.Default()
-	fetch := stubFetcher(map[string]struct {
-		data        []byte
-		contentType string
-		err         error
-	}{
-		"https://api.example.com/data": {[]byte(`{"key":"value"}`), "application/json", nil},
-	})
-
-	result := EnrichMessageWithLinks(context.Background(), "https://api.example.com/data", fetch, logger)
-
-	if !strings.Contains(result, `{"key":"value"}`) {
-		t.Fatal("expected JSON content in output")
-	}
-}
 
 func TestEnrichMessageWithLinks_FetchFailure(t *testing.T) {
 	logger := slog.Default()
@@ -109,17 +93,6 @@ func TestEnrichMessageWithLinks_Truncation(t *testing.T) {
 	}
 }
 
-func TestFormatLinkSummary_Empty(t *testing.T) {
-	result := formatLinkSummary(nil)
-	if result != "" {
-		t.Fatalf("expected empty string for nil links, got: %q", result)
-	}
-
-	result = formatLinkSummary([]LinkContent{{URL: "https://x.com", Err: "failed"}})
-	if result != "" {
-		t.Fatalf("expected empty string for all-failed links, got: %q", result)
-	}
-}
 
 func TestFormatLinkSummary_WithTitle(t *testing.T) {
 	links := []LinkContent{

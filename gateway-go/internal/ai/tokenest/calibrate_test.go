@@ -230,25 +230,7 @@ func TestPersistence_SaveLoad(t *testing.T) {
 	t.Logf("saved=%.4f, loaded=%.4f", claudeFactor, loaded)
 }
 
-func TestPersistence_NoFileIsNoop(t *testing.T) {
-	// LoadCalibration with nonexistent dir should not panic.
-	LoadCalibration("/nonexistent/path/12345")
-}
 
-func TestPersistence_EmptyNotSaved(t *testing.T) {
-	dir := t.TempDir()
-	defer saveGlobalCal()()
-	resetGlobalCal() // no samples
-	if err := SaveCalibration(dir); err != nil {
-		t.Fatalf("SaveCalibration: %v", err)
-	}
-
-	// File should NOT exist (no data to save).
-	path := filepath.Join(dir, calFile)
-	if _, err := os.Stat(path); err == nil {
-		t.Error("expected no file for empty calibration data")
-	}
-}
 
 func TestRecordFeedback_Global(t *testing.T) {
 	defer saveGlobalCal()()

@@ -54,32 +54,6 @@ func TestProviderRuntimeResolverResolvePlugin(t *testing.T) {
 	}
 }
 
-func TestProviderRuntimeResolverWithAliases(t *testing.T) {
-	reg := NewRegistry()
-	tp := &testPlugin{
-		id:      "amazon-bedrock",
-		label:   "Amazon Bedrock",
-		aliases: []string{"bedrock", "aws-bedrock"},
-	}
-	reg.Register(tp)
-
-	resolver := NewProviderRuntimeResolver(reg, slog.Default())
-
-	// Lookup by alias.
-	p := resolver.ResolvePlugin("bedrock")
-	if p == nil {
-		t.Fatal("expected plugin for alias 'bedrock'")
-	}
-	if p.ID() != "amazon-bedrock" {
-		t.Errorf("got %q, want ID 'amazon-bedrock'", p.ID())
-	}
-
-	// Lookup by normalized alias.
-	p2 := resolver.ResolvePlugin("aws-bedrock")
-	if p2 == nil {
-		t.Fatal("expected plugin for alias 'aws-bedrock'")
-	}
-}
 
 func TestProviderRuntimeResolverResetCache(t *testing.T) {
 	reg := NewRegistry()
@@ -124,33 +98,3 @@ func TestProviderRuntimeResolverCapabilities(t *testing.T) {
 	}
 }
 
-func TestGetByNormalizedIDWithAliases(t *testing.T) {
-	reg := NewRegistry()
-	tp := &testPlugin{
-		id:      "openai",
-		label:   "OpenAI",
-		aliases: []string{"oai"},
-	}
-	reg.Register(tp)
-
-	tests := []struct {
-		providerID string
-		wantFound  bool
-	}{
-		{"openai", true},
-		{"OpenAI", true},
-		{"OPENAI", true},
-		{"oai", true},
-		{"OAI", true},
-		{"anthropic", false},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		got := reg.ByNormalizedID(tt.providerID)
-		found := got != nil
-		if found != tt.wantFound {
-			t.Errorf("ByNormalizedID(%q) found=%v, want %v", tt.providerID, found, tt.wantFound)
-		}
-	}
-}

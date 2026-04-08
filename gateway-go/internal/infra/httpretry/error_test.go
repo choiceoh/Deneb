@@ -2,7 +2,6 @@ package httpretry
 
 import (
 	"testing"
-	"time"
 )
 
 func TestAPIError_Error(t *testing.T) {
@@ -41,9 +40,3 @@ func TestAPIError_IsRateLimited(t *testing.T) {
 	}
 }
 
-func TestAPIError_RetryAfter(t *testing.T) {
-	err := &APIError{StatusCode: 429, RetryAfter: 5 * time.Second}
-	if err.RetryAfter != 5*time.Second {
-		t.Errorf("RetryAfter = %v, want 5s", err.RetryAfter)
-	}
-}

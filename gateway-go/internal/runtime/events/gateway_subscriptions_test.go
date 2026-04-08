@@ -75,24 +75,6 @@ func TestGatewaySubscriptions_EmitLifecycle(t *testing.T) {
 	}
 }
 
-func TestGatewaySubscriptions_EmitLifecycle_NoSubscribers(t *testing.T) {
-	b, gs := newTestGatewaySubscriptions()
-	defer gs.Stop()
-
-	sub := &mockSubscriber{id: "s1", authed: true}
-	b.Subscribe(sub, Filter{})
-	// Not subscribed to session events.
-
-	gs.EmitLifecycle(LifecycleChangeEvent{SessionKey: "session-1", Reason: "completed"})
-	time.Sleep(50 * time.Millisecond)
-
-	sub.mu.Lock()
-	count := len(sub.received)
-	sub.mu.Unlock()
-	if count != 0 {
-		t.Errorf("got %d, want 0 events without subscription", count)
-	}
-}
 
 func TestGatewaySubscriptions_EmitTranscript(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()

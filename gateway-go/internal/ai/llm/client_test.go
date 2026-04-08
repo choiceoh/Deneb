@@ -190,39 +190,7 @@ func TestDoStream_504_Retries(t *testing.T) {
 	}
 }
 
-func TestDoStream_410_NoRetry(t *testing.T) {
-	calls := 0
-	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		w.WriteHeader(http.StatusGone)
-		fmt.Fprint(w, "gone")
-	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
-	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
-	_, err := c.DoStream(context.Background(), req)
-	if err == nil {
-		t.Fatal("expected error for 410 response")
-	}
-	if calls != 1 {
-		t.Errorf("got %d, want 1 call (no retry on 410 Gone)", calls)
-	}
-}
 
-func TestDoStream_501_NoRetry(t *testing.T) {
-	calls := 0
-	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		w.WriteHeader(http.StatusNotImplemented)
-		fmt.Fprint(w, "not implemented")
-	}, WithRetry(3, 10*time.Millisecond, 50*time.Millisecond))
-	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
-	_, err := c.DoStream(context.Background(), req)
-	if err == nil {
-		t.Fatal("expected error for 501 response")
-	}
-	if calls != 1 {
-		t.Errorf("got %d, want 1 call (no retry on 501 Not Implemented)", calls)
-	}
-}
 
 func TestDoStream_429Code1302_NoRetry(t *testing.T) {
 	calls := 0

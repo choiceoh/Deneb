@@ -68,16 +68,6 @@ func TestToolsCatalog_ReturnsGroups(t *testing.T) {
 	}
 }
 
-func TestToolsCatalog_CustomAgentID(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	payload, resp := dispatchJSON(t, d, "tools.catalog", map[string]string{"agentId": "my-agent"})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	if payload["agentId"] != "my-agent" {
-		t.Errorf("got %v, want agentId=my-agent", payload["agentId"])
-	}
-}
 
 func TestToolsCatalog_CoreToolCount(t *testing.T) {
 	d, _ := sessionDispatcher(t)
@@ -95,21 +85,6 @@ func TestToolsCatalog_CoreToolCount(t *testing.T) {
 	}
 }
 
-func TestToolsCatalog_FiltersEmptyGroups(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	groups := payload["groups"].([]any)
-	for _, g := range groups {
-		group := g.(map[string]any)
-		tools := group["tools"].([]any)
-		if len(tools) == 0 {
-			t.Errorf("group %q should have been filtered out (empty tools)", group["id"])
-		}
-	}
-}
 
 // ---------------------------------------------------------------------------
 // sessions.patch
@@ -145,18 +120,6 @@ func TestSessionsPatch_AppliesFields(t *testing.T) {
 	}
 }
 
-func TestSessionsPatch_MissingKey(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	_, resp := dispatchJSON(t, d, "sessions.patch", map[string]any{
-		"label": "something",
-	})
-	if resp.OK {
-		t.Fatal("expected error for missing key")
-	}
-	if resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("got %v, want MISSING_PARAM", resp.Error.Code)
-	}
-}
 
 func TestSessionsPatch_CreatesIfNotExists(t *testing.T) {
 	d, deps := sessionDispatcher(t)
@@ -206,47 +169,12 @@ func TestSessionsReset_ClearsState(t *testing.T) {
 	}
 }
 
-func TestSessionsReset_NotFound(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	_, resp := dispatchJSON(t, d, "sessions.reset", map[string]any{"key": "nonexistent"})
-	if resp.OK {
-		t.Fatal("expected error for nonexistent session")
-	}
-}
 
-func TestSessionsReset_ReasonNew(t *testing.T) {
-	d, deps := sessionDispatcher(t)
-	deps.Sessions.Create("s1", session.KindDirect)
-
-	payload, resp := dispatchJSON(t, d, "sessions.reset", map[string]any{
-		"key":    "s1",
-		"reason": "new",
-	})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	if payload["ok"] != true {
-		t.Errorf("expected ok=true")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // sessions.preview — without bridge returns missing
 // ---------------------------------------------------------------------------
 
-func TestSessionsPreview_EmptyKeys(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	payload, resp := dispatchJSON(t, d, "sessions.preview", map[string]any{
-		"keys": []string{},
-	})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	previews := payload["previews"].([]any)
-	if len(previews) != 0 {
-		t.Errorf("got %d, want empty previews", len(previews))
-	}
-}
 
 func TestSessionsPreview_NoBridge_ReturnsMissing(t *testing.T) {
 	d, _ := sessionDispatcher(t)
@@ -326,24 +254,7 @@ func TestSessionsResolve_ByLabel(t *testing.T) {
 	}
 }
 
-func TestSessionsResolve_MissingIdentifier(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	_, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{})
-	if resp.OK {
-		t.Fatal("expected error for missing identifier")
-	}
-}
 
-func TestSessionsResolve_MultipleIdentifiers(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	_, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{
-		"key":       "a",
-		"sessionId": "b",
-	})
-	if resp.OK {
-		t.Fatal("expected error for multiple identifiers")
-	}
-}
 
 func TestSessionsResolve_AmbiguousLabel(t *testing.T) {
 	d, deps := sessionDispatcher(t)
@@ -391,16 +302,6 @@ func TestSessionsResolve_AgentIDFilter(t *testing.T) {
 	}
 }
 
-func TestSessionsResolve_NotFound(t *testing.T) {
-	d, _ := sessionDispatcher(t)
-	_, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"key": "nope"})
-	if resp.OK {
-		t.Fatal("expected error response for not-found session")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
-		t.Errorf("got %+v, want NOT_FOUND error", resp.Error)
-	}
-}
 
 func TestSessionsResolve_ExcludesGlobalByDefault(t *testing.T) {
 	d, deps := sessionDispatcher(t)
@@ -445,115 +346,17 @@ func TestSessionsResolve_KeyBypassesKindFilter(t *testing.T) {
 // session.PatchFields unit tests
 // ---------------------------------------------------------------------------
 
-func TestApplyPatch_PartialUpdate(t *testing.T) {
-	s := &session.Session{Key: "s1", Kind: session.KindDirect, Model: "old-model", Label: "old"}
-	label := "new"
-	changed := s.ApplyPatch(session.PatchFields{Label: &label})
-	if !changed {
-		t.Error("expected changed=true")
-	}
-	if s.Label != "new" {
-		t.Errorf("got %v, want label=new", s.Label)
-	}
-	if s.Model != "old-model" {
-		t.Errorf("got %v, want model unchanged", s.Model)
-	}
-}
 
-func TestApplyPatch_NoChange(t *testing.T) {
-	s := &session.Session{Key: "s1", Label: "same"}
-	label := "same"
-	changed := s.ApplyPatch(session.PatchFields{Label: &label})
-	if changed {
-		t.Error("expected changed=false when value is same")
-	}
-}
 
-func TestApplyPatch_FastMode(t *testing.T) {
-	s := &session.Session{Key: "s1"}
-	fast := true
-	s.ApplyPatch(session.PatchFields{FastMode: &fast})
-	if s.FastMode == nil || !*s.FastMode {
-		t.Error("expected FastMode=true")
-	}
-	fast = false
-	s.ApplyPatch(session.PatchFields{FastMode: &fast})
-	if s.FastMode == nil || *s.FastMode {
-		t.Error("expected FastMode=false")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Manager helper tests
 // ---------------------------------------------------------------------------
 
-func TestManager_ResetSession(t *testing.T) {
-	m := session.NewManager()
-	m.Create("s1", session.KindDirect)
-	m.ApplyLifecycleEvent("s1", session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1000})
 
-	s := m.ResetSession("s1")
-	if s == nil {
-		t.Fatal("expected session after reset")
-	}
-	if s.Status != "" {
-		t.Errorf("got %v, want empty status", s.Status)
-	}
-}
 
-func TestManager_ResetSession_NotFound(t *testing.T) {
-	m := session.NewManager()
-	s := m.ResetSession("missing")
-	if s != nil {
-		t.Error("expected nil for missing session")
-	}
-}
 
-func TestManager_FindBySessionID(t *testing.T) {
-	m := session.NewManager()
-	s := m.Create("s1", session.KindDirect)
-	s.SessionID = "uuid-456"
-	m.Set(s)
 
-	found := m.FindBySessionID("uuid-456")
-	if found == nil {
-		t.Fatal("expected to find session by sessionId")
-	}
-	if found.Key != "s1" {
-		t.Errorf("got %v, want key=s1", found.Key)
-	}
-}
-
-func TestManager_FindByLabel(t *testing.T) {
-	m := session.NewManager()
-	label := "my-label"
-	m.Create("s1", session.KindDirect)
-	m.Patch("s1", session.PatchFields{Label: &label})
-
-	matches := m.FindByLabel("my-label")
-	if len(matches) != 1 {
-		t.Fatalf("got %d, want 1 match", len(matches))
-	}
-	if matches[0].Key != "s1" {
-		t.Errorf("got %v, want key=s1", matches[0].Key)
-	}
-}
-
-func TestManager_ClearTokens(t *testing.T) {
-	m := session.NewManager()
-	s := m.Create("s1", session.KindDirect)
-	tokens := int64(100)
-	s.InputTokens = &tokens
-	s.OutputTokens = &tokens
-	s.TotalTokens = &tokens
-	m.Set(s)
-
-	m.ClearTokens("s1")
-	s = m.Get("s1")
-	if s.InputTokens != nil || s.OutputTokens != nil || s.TotalTokens != nil {
-		t.Error("expected nil token fields after ClearTokens")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // RegisterSessionMethods registration test

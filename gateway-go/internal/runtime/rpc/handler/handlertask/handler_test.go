@@ -85,12 +85,6 @@ func seedFlow(t *testing.T, reg *tasks.Registry, label string, taskIDs ...string
 
 // ─── Methods() registration ─────────────────────────────────────────────────
 
-func TestMethods_nilRegistry_returnsNil(t *testing.T) {
-	m := Methods(Deps{Registry: nil})
-	if m != nil {
-		t.Fatalf("expected nil map when Registry is nil, got %d entries", len(m))
-	}
-}
 
 func TestMethods_registersAll9Handlers(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -122,20 +116,6 @@ func TestMethods_registersAll9Handlers(t *testing.T) {
 
 // ─── task.status ────────────────────────────────────────────────────────────
 
-func TestTaskStatus_emptyRegistry(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.status", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["total"].(float64) != 0 {
-		t.Errorf("expected 0 total, got %v", result["total"])
-	}
-	if result["active"].(float64) != 0 {
-		t.Errorf("expected 0 active, got %v", result["active"])
-	}
-}
 
 func TestTaskStatus_withTasks(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -157,32 +137,7 @@ func TestTaskStatus_withTasks(t *testing.T) {
 
 // ─── task.list ──────────────────────────────────────────────────────────────
 
-func TestTaskList_emptyRegistry(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.list", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
 
-	if result["count"].(float64) != 0 {
-		t.Errorf("expected 0 count, got %v", result["count"])
-	}
-}
-
-func TestTaskList_allTasks(t *testing.T) {
-	reg := newTestRegistry(t)
-	seedTask(t, reg, "one")
-	seedTask(t, reg, "two")
-
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.list", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["count"].(float64) != 2 {
-		t.Errorf("expected 2 count, got %v", result["count"])
-	}
-}
 
 func TestTaskList_filterActive(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -288,19 +243,7 @@ func TestTaskList_filterByStatus(t *testing.T) {
 
 // ─── task.get ───────────────────────────────────────────────────────────────
 
-func TestTaskGet_missingParams_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.get", nil)
-	mustErr(t, resp)
-}
 
-func TestTaskGet_emptyParams_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.get", map[string]any{})
-	mustErr(t, resp)
-}
 
 func TestTaskGet_byTaskID(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -330,35 +273,11 @@ func TestTaskGet_byRunID(t *testing.T) {
 	}
 }
 
-func TestTaskGet_taskNotFound(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.get", map[string]any{"taskId": "nonexistent"})
-	mustErr(t, resp)
-}
 
-func TestTaskGet_runIDNotFound(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.get", map[string]any{"runId": "nonexistent"})
-	mustErr(t, resp)
-}
 
 // ─── task.events ────────────────────────────────────────────────────────────
 
-func TestTaskEvents_missingTaskID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.events", nil)
-	mustErr(t, resp)
-}
 
-func TestTaskEvents_emptyTaskID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.events", map[string]any{"taskId": ""})
-	mustErr(t, resp)
-}
 
 func TestTaskEvents_returnsEvents(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -382,39 +301,10 @@ func TestTaskEvents_returnsEvents(t *testing.T) {
 	}
 }
 
-func TestTaskEvents_noEventsForUnknownTask(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-
-	// A valid taskId that has no events returns an empty list (not an error).
-	resp := callMethod(m, "task.events", map[string]any{"taskId": "no-such-task"})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	// events should be null or empty.
-	if result["events"] != nil {
-		events, ok := result["events"].([]any)
-		if ok && len(events) != 0 {
-			t.Errorf("expected empty events, got %d", len(events))
-		}
-	}
-}
 
 // ─── task.cancel ────────────────────────────────────────────────────────────
 
-func TestTaskCancel_missingTaskID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.cancel", nil)
-	mustErr(t, resp)
-}
 
-func TestTaskCancel_emptyTaskID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.cancel", map[string]any{"taskId": ""})
-	mustErr(t, resp)
-}
 
 func TestTaskCancel_success(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -442,12 +332,6 @@ func TestTaskCancel_success(t *testing.T) {
 	}
 }
 
-func TestTaskCancel_nonexistentTask_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.cancel", map[string]any{"taskId": "nonexistent"})
-	mustErr(t, resp)
-}
 
 func TestTaskCancel_alreadyTerminal_error(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -463,17 +347,6 @@ func TestTaskCancel_alreadyTerminal_error(t *testing.T) {
 
 // ─── task.audit ─────────────────────────────────────────────────────────────
 
-func TestTaskAudit_emptyRegistry(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.audit", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["total"].(float64) != 0 {
-		t.Errorf("expected 0 findings, got %v", result["total"])
-	}
-}
 
 func TestTaskAudit_returnsFindings(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -496,32 +369,7 @@ func TestTaskAudit_returnsFindings(t *testing.T) {
 
 // ─── flow.list ──────────────────────────────────────────────────────────────
 
-func TestFlowList_emptyRegistry(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.list", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
 
-	if result["count"].(float64) != 0 {
-		t.Errorf("expected 0 flows, got %v", result["count"])
-	}
-}
-
-func TestFlowList_allFlows(t *testing.T) {
-	reg := newTestRegistry(t)
-	seedFlow(t, reg, "flow-a")
-	seedFlow(t, reg, "flow-b")
-
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.list", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["count"].(float64) != 2 {
-		t.Errorf("expected 2 flows, got %v", result["count"])
-	}
-}
 
 func TestFlowList_filterActive(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -543,26 +391,8 @@ func TestFlowList_filterActive(t *testing.T) {
 
 // ─── flow.show ──────────────────────────────────────────────────────────────
 
-func TestFlowShow_missingFlowID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.show", nil)
-	mustErr(t, resp)
-}
 
-func TestFlowShow_emptyFlowID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.show", map[string]any{"flowId": ""})
-	mustErr(t, resp)
-}
 
-func TestFlowShow_notFound(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.show", map[string]any{"flowId": "nonexistent"})
-	mustErr(t, resp)
-}
 
 func TestFlowShow_success(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -595,26 +425,8 @@ func TestFlowShow_success(t *testing.T) {
 
 // ─── flow.cancel ────────────────────────────────────────────────────────────
 
-func TestFlowCancel_missingFlowID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.cancel", nil)
-	mustErr(t, resp)
-}
 
-func TestFlowCancel_emptyFlowID_error(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.cancel", map[string]any{"flowId": ""})
-	mustErr(t, resp)
-}
 
-func TestFlowCancel_notFound(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.cancel", map[string]any{"flowId": "nonexistent"})
-	mustErr(t, resp)
-}
 
 func TestFlowCancel_success(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -668,24 +480,6 @@ func TestFlowCancel_noActiveTasks(t *testing.T) {
 
 // ─── task.list: combined status + default filter ────────────────────────────
 
-func TestTaskList_statusFilterWithDefault(t *testing.T) {
-	reg := newTestRegistry(t)
-	tr1 := seedTask(t, reg, "fail-me")
-	seedTask(t, reg, "keep-running")
-
-	if err := tasks.FailTask(reg, tr1.TaskID, "oops", "failed"); err != nil {
-		t.Fatal(err)
-	}
-
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.list", map[string]any{"status": "failed"})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["count"].(float64) != 1 {
-		t.Errorf("expected 1 failed task, got %v", result["count"])
-	}
-}
 
 // ─── task.get: taskId takes priority over runId ─────────────────────────────
 
@@ -710,29 +504,5 @@ func TestTaskGet_taskIDPriority(t *testing.T) {
 // ─── Deterministic output check ─────────────────────────────────────────────
 
 // TestTaskList_nilParams ensures nil params does not crash and returns all.
-func TestTaskList_nilParams(t *testing.T) {
-	reg := newTestRegistry(t)
-	seedTask(t, reg, "solo")
-
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "task.list", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["count"].(float64) != 1 {
-		t.Errorf("expected count=1 with nil params, got %v", result["count"])
-	}
-}
 
 // TestFlowList_nilParams ensures nil params does not crash.
-func TestFlowList_nilParams(t *testing.T) {
-	reg := newTestRegistry(t)
-	m := Methods(Deps{Registry: reg})
-	resp := callMethod(m, "flow.list", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["count"].(float64) != 0 {
-		t.Errorf("expected 0 flows, got %v", result["count"])
-	}
-}

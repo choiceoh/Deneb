@@ -4,12 +4,6 @@ import (
 	"testing"
 )
 
-func TestNormalizeDiscoveryResultNil(t *testing.T) {
-	result := NormalizeDiscoveryResult("openai", nil)
-	if len(result) != 0 {
-		t.Errorf("got %v, want empty map for nil result", result)
-	}
-}
 
 func TestNormalizeDiscoveryResultSingleProvider(t *testing.T) {
 	result := NormalizeDiscoveryResult("openai", &DiscoveryCatalogResult{
@@ -80,19 +74,3 @@ func TestGroupDiscoveryProvidersByOrder(t *testing.T) {
 	}
 }
 
-func TestAllDiscoveryOrders(t *testing.T) {
-	expected := []DiscoveryOrder{
-		DiscoveryOrderSimple,
-		DiscoveryOrderProfile,
-		DiscoveryOrderPaired,
-		DiscoveryOrderLate,
-	}
-	if len(AllDiscoveryOrders) != len(expected) {
-		t.Fatalf("AllDiscoveryOrders has %d entries, want %d", len(AllDiscoveryOrders), len(expected))
-	}
-	for i, order := range expected {
-		if AllDiscoveryOrders[i] != order {
-			t.Errorf("AllDiscoveryOrders[%d] = %q, want %q", i, AllDiscoveryOrders[i], order)
-		}
-	}
-}

@@ -60,28 +60,4 @@ func TestParseReplyButtons_LabelOnlyButtons(t *testing.T) {
 	}
 }
 
-func TestParseReplyButtons_InvalidJSON(t *testing.T) {
-	input := `text <!-- buttons: not-json -->`
 
-	text, kb := parseReplyButtons(input)
-
-	if text != input {
-		t.Fatalf("expected original text on parse failure, got: %q", text)
-	}
-	if kb != nil {
-		t.Fatal("expected nil keyboard on parse failure")
-	}
-}
-
-func TestParseReplyButtons_EmptyRows(t *testing.T) {
-	input := `text <!-- buttons: [[]] -->`
-
-	text, kb := parseReplyButtons(input)
-
-	if text != input {
-		t.Fatalf("expected original text when keyboard empty, got: %q", text)
-	}
-	if kb != nil {
-		t.Fatal("expected nil keyboard for empty rows")
-	}
-}

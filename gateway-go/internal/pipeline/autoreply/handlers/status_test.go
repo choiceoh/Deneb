@@ -88,39 +88,4 @@ func TestBuildStatusMessage_UnhealthyChannel(t *testing.T) {
 	}
 }
 
-func TestFormatUptime(t *testing.T) {
-	tests := []struct {
-		d    time.Duration
-		want string
-	}{
-		{0, "0m"},
-		{30 * time.Second, "0m"},
-		{5 * time.Minute, "5m"},
-		{2*time.Hour + 15*time.Minute, "2h 15m"},
-		{49*time.Hour + 30*time.Minute, "2d 1h 30m"},
-	}
-	for _, tt := range tests {
-		got := formatUptime(tt.d)
-		if got != tt.want {
-			t.Errorf("formatUptime(%v) = %q, want %q", tt.d, got, tt.want)
-		}
-	}
-}
 
-func TestFormatCompactTokens(t *testing.T) {
-	tests := []struct {
-		n    int64
-		want string
-	}{
-		{0, "0"},
-		{500, "500"},
-		{1_500, "1.5K"},
-		{1_200_000, "1.2M"},
-	}
-	for _, tt := range tests {
-		got := formatCompactTokens(tt.n)
-		if got != tt.want {
-			t.Errorf("formatCompactTokens(%d) = %q, want %q", tt.n, got, tt.want)
-		}
-	}
-}

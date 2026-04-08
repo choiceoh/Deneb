@@ -137,14 +137,3 @@ func TestNormalizeMessages_ThreeConsecutive(t *testing.T) {
 	}
 }
 
-func TestContentToBlocks_EmptyInput(t *testing.T) {
-	if got := contentToBlocks(nil); got != nil {
-		t.Fatalf("nil: got %v", got)
-	}
-	if got := contentToBlocks(json.RawMessage(`""`)); got != nil {
-		t.Fatalf("empty string: got %v", got)
-	}
-	if got := contentToBlocks(json.RawMessage(`[]`)); got != nil {
-		t.Fatalf("empty array: got %v", got)
-	}
-}

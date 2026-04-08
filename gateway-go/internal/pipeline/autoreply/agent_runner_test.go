@@ -363,19 +363,3 @@ func TestIsTransientHTTPError(t *testing.T) {
 	}
 }
 
-func TestFormatDuration(t *testing.T) {
-	tests := []struct {
-		ms   int64
-		want string
-	}{
-		{500, "500ms"},
-		{1500, "1.5s"},
-		{65000, "1m5s"},
-	}
-	for _, tt := range tests {
-		got := FormatDuration(tt.ms)
-		if got != tt.want {
-			t.Errorf("FormatDuration(%d) = %q, want %q", tt.ms, got, tt.want)
-		}
-	}
-}

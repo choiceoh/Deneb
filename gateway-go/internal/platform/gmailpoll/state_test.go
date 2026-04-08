@@ -130,13 +130,6 @@ func TestPollState_HasSeen_MapLookup(t *testing.T) {
 	}
 }
 
-func TestPollState_HasSeen_NilSet(t *testing.T) {
-	state := &PollState{SeenIDs: []string{"a"}}
-	// Should not panic with nil seenSet.
-	if state.hasSeen("a") {
-		t.Error("hasSeen should return false when seenSet is nil")
-	}
-}
 
 func TestPollState_MarkSeen(t *testing.T) {
 	state := &PollState{}

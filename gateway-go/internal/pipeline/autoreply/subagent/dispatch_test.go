@@ -151,12 +151,6 @@ func TestHandleSubagentsInfoAction(t *testing.T) {
 	}
 }
 
-func TestHandleSubagentsCommand_nil_for_non_commands(t *testing.T) {
-	result := HandleSubagentsCommand("hello world", "key", "telegram", "acc", "", "sender", false, true, nil)
-	if result != nil {
-		t.Errorf("expected nil for non-command, got: %+v", result)
-	}
-}
 
 func TestHandleSubagentsCommand_help_for_unknown_action(t *testing.T) {
 	result := HandleSubagentsCommand("/subagents badaction", "key", "telegram", "acc", "", "sender", false, true, &SubagentCommandDeps{

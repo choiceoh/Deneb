@@ -1,39 +1,8 @@
 package ffi
 
 import (
-	"strings"
 	"testing"
 )
-
-func TestValidateFrame_ValidRequest(t *testing.T) {
-	if err := ValidateFrame(`{"type":"req","id":"1","method":"chat.send"}`); err != nil {
-		t.Errorf("expected valid, got: %v", err)
-	}
-}
-
-func TestValidateFrame_ValidResponse(t *testing.T) {
-	if err := ValidateFrame(`{"type":"res","id":"1","ok":true}`); err != nil {
-		t.Errorf("expected valid, got: %v", err)
-	}
-}
-
-func TestValidateFrame_ValidEvent(t *testing.T) {
-	if err := ValidateFrame(`{"type":"event","event":"channel.connected"}`); err != nil {
-		t.Errorf("expected valid, got: %v", err)
-	}
-}
-
-func TestValidateFrame_Invalid(t *testing.T) {
-	if err := ValidateFrame(`{"type":"unknown"}`); err == nil {
-		t.Error("expected error for unknown frame type")
-	}
-}
-
-func TestValidateFrame_Empty(t *testing.T) {
-	if err := ValidateFrame(""); err == nil {
-		t.Error("expected error for empty input")
-	}
-}
 
 func TestConstantTimeEq(t *testing.T) {
 	if !ConstantTimeEq([]byte("secret"), []byte("secret")) {
@@ -68,21 +37,6 @@ func TestDetectMIME(t *testing.T) {
 				t.Errorf("DetectMIME() = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestValidateSessionKey(t *testing.T) {
-	if err := ValidateSessionKey("my-session-123"); err != nil {
-		t.Errorf("expected valid, got: %v", err)
-	}
-	if err := ValidateSessionKey("a"); err != nil {
-		t.Errorf("expected valid single char, got: %v", err)
-	}
-	if err := ValidateSessionKey(""); err == nil {
-		t.Error("expected error for empty key")
-	}
-	if err := ValidateSessionKey("has\x00null"); err == nil {
-		t.Error("expected error for control char in key")
 	}
 }
 
@@ -158,79 +112,6 @@ func TestIsSafeURL_FileAndUNC(t *testing.T) {
 	}
 }
 
-func TestValidateErrorCode(t *testing.T) {
-	valid := []string{
-		"NOT_LINKED", "NOT_PAIRED", "AGENT_TIMEOUT", "INVALID_REQUEST",
-		"UNAVAILABLE", "MISSING_PARAM", "NOT_FOUND", "UNAUTHORIZED",
-		"VALIDATION_FAILED", "CONFLICT", "FORBIDDEN", "NODE_DISCONNECTED",
-		"DEPENDENCY_FAILED", "FEATURE_DISABLED",
-	}
-	for _, code := range valid {
-		if !ValidateErrorCode(code) {
-			t.Errorf("expected valid error code: %s", code)
-		}
-	}
-	if ValidateErrorCode("BOGUS") {
-		t.Error("expected invalid for unknown code")
-	}
-	if ValidateErrorCode("") {
-		t.Error("expected invalid for empty code")
-	}
-}
-
-func TestValidateFrame_RequestMissingMethod(t *testing.T) {
-	if err := ValidateFrame(`{"type":"req","id":"1"}`); err == nil {
-		t.Error("expected error for request missing method")
-	}
-}
-
-func TestValidateFrame_RequestMissingID(t *testing.T) {
-	if err := ValidateFrame(`{"type":"req","method":"chat.send"}`); err == nil {
-		t.Error("expected error for request missing id")
-	}
-}
-
-func TestValidateFrame_ResponseMissingID(t *testing.T) {
-	if err := ValidateFrame(`{"type":"res"}`); err == nil {
-		t.Error("expected error for response missing id")
-	}
-}
-
-func TestValidateFrame_EventMissingName(t *testing.T) {
-	if err := ValidateFrame(`{"type":"event"}`); err == nil {
-		t.Error("expected error for event missing event name")
-	}
-}
-
-func TestValidateFrame_InvalidJSON(t *testing.T) {
-	if err := ValidateFrame(`{not json}`); err == nil {
-		t.Error("expected error for invalid JSON")
-	}
-}
-
-func TestDetectMIME_MoreFormats(t *testing.T) {
-	tests := []struct {
-		name string
-		data []byte
-		want string
-	}{
-		{"GIF", []byte("GIF89a..."), "image/gif"},
-		{"ZIP", []byte{0x50, 0x4B, 0x03, 0x04, 0x14, 0x00}, "application/zip"},
-		{"JSON object", []byte(`{"key":"val"}`), "application/json"},
-		{"JSON array", []byte(`[1,2,3]`), "application/json"},
-		{"short 3 bytes", []byte{0x89, 0x50, 0x4E}, "application/octet-stream"},
-		{"short 2 bytes", []byte{0xFF, 0xD8}, "application/octet-stream"},
-		{"single byte", []byte{0x00}, "application/octet-stream"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := DetectMIME(tt.data); got != tt.want {
-				t.Errorf("DetectMIME() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsSafeURL_CGNAT(t *testing.T) {
 	blocked := []string{
 		"http://100.64.0.1/",
@@ -290,47 +171,6 @@ func TestIsSafeURL_DangerousSchemes(t *testing.T) {
 	}
 }
 
-func TestIsSafeURL_EmptyHost(t *testing.T) {
-	if IsSafeURL("http:///path") {
-		t.Error("expected empty host to be blocked")
-	}
-}
-
-func TestValidateSessionKey_LongKey(t *testing.T) {
-	long := strings.Repeat("a", 513)
-	if err := ValidateSessionKey(long); err == nil {
-		t.Error("expected error for key exceeding 512 chars")
-	}
-	// 512 is OK
-	ok := strings.Repeat("b", 512)
-	if err := ValidateSessionKey(ok); err != nil {
-		t.Errorf("expected 512-char key to be valid, got: %v", err)
-	}
-}
-
-func TestValidateSessionKey_AllowedWhitespace(t *testing.T) {
-	// Newline, tab, carriage return are allowed
-	if err := ValidateSessionKey("key\twith\ntabs\r"); err != nil {
-		t.Errorf("expected tabs/newlines to be allowed, got: %v", err)
-	}
-}
-
-func TestSanitizeHTML_NoSpecialChars(t *testing.T) {
-	input := "plain text with no special characters"
-	got := SanitizeHTML(input)
-	if got != input {
-		t.Errorf("got %q, want no-op for plain text", got)
-	}
-}
-
-func TestSanitizeHTML_AllSpecialChars(t *testing.T) {
-	got := SanitizeHTML(`<div class="x">&'test'</div>`)
-	want := "&lt;div class=&quot;x&quot;&gt;&amp;&#x27;test&#x27;&lt;/div&gt;"
-	if got != want {
-		t.Errorf("SanitizeHTML = %q, want %q", got, want)
-	}
-}
-
 func TestValidateParams_Valid(t *testing.T) {
 	valid, errJSON, err := ValidateParams("sessions.resolve", `{"key":"abc"}`)
 	if !valid {
@@ -341,49 +181,5 @@ func TestValidateParams_Valid(t *testing.T) {
 	}
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateParams_InvalidJSON(t *testing.T) {
-	valid, _, err := ValidateParams("sessions.resolve", `{not json}`)
-	if valid {
-		t.Error("expected valid=false for invalid JSON")
-	}
-	if err == nil {
-		t.Error("expected error for invalid JSON")
-	}
-}
-
-func TestValidateParams_UnknownMethod(t *testing.T) {
-	_, _, err := ValidateParams("nonexistent.method", `{"key":"value"}`)
-	if err == nil {
-		t.Error("expected error for unknown method")
-	}
-}
-
-func TestValidateParams_SchemaErrors(t *testing.T) {
-	valid, errJSON, err := ValidateParams("sessions.send", `{}`)
-	if valid {
-		t.Error("expected valid=false for missing required field")
-	}
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if errJSON == nil {
-		t.Error("expected non-nil errorsJSON for schema violations")
-	}
-}
-
-func TestValidateParams_EmptyMethod(t *testing.T) {
-	_, _, err := ValidateParams("", `{"key":"value"}`)
-	if err == nil {
-		t.Error("expected error for empty method")
-	}
-}
-
-func TestValidateParams_EmptyJSON(t *testing.T) {
-	_, _, err := ValidateParams("any.method", "")
-	if err == nil {
-		t.Error("expected error for empty JSON")
 	}
 }

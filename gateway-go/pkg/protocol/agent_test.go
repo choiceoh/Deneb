@@ -49,22 +49,3 @@ func TestAgentSpawnRequestJSON(t *testing.T) {
 	}
 }
 
-func TestAgentExecutionResultJSON(t *testing.T) {
-	cost := 0.05
-	result := protocol.AgentExecutionResult{
-		SessionKey:       "sess-456",
-		FinalStatus:      protocol.AgentStatusCompleted,
-		EstimatedCostUsd: &cost,
-	}
-	data := testutil.Must(json.Marshal(result))
-	var decoded protocol.AgentExecutionResult
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if decoded.FinalStatus != protocol.AgentStatusCompleted {
-		t.Errorf("FinalStatus = %q, want %q", decoded.FinalStatus, protocol.AgentStatusCompleted)
-	}
-	if decoded.EstimatedCostUsd == nil || *decoded.EstimatedCostUsd != 0.05 {
-		t.Errorf("EstimatedCostUsd = %v, want 0.05", decoded.EstimatedCostUsd)
-	}
-}

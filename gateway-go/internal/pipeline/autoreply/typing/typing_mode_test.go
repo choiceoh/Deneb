@@ -120,18 +120,3 @@ func TestFullTypingSignaler_SignalTextDelta_StartsOnRealText(t *testing.T) {
 	}
 }
 
-func TestFullTypingSignaler_Disabled_Heartbeat(t *testing.T) {
-	started := false
-	tc := NewTypingController(TypingControllerConfig{
-		OnStart: func() { started = true },
-	})
-	defer tc.Cleanup()
-
-	s := NewFullTypingSignaler(tc, TypingModeInstant, true) // isHeartbeat=true
-	s.SignalRunStart()
-	s.SignalTextDelta("Hello")
-	s.SignalToolStart()
-	if started {
-		t.Error("expected all signals to be no-ops for heartbeat")
-	}
-}

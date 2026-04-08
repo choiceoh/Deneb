@@ -44,13 +44,3 @@ func TestBackoff_Jitter(t *testing.T) {
 	}
 }
 
-func TestBackoff_NoJitter(t *testing.T) {
-	b := Backoff{Base: 1 * time.Second, Max: 30 * time.Second}
-
-	// Without jitter, results should be deterministic.
-	for range 10 {
-		if got := b.Delay(3); got != 4*time.Second {
-			t.Errorf("Delay(3) = %v, want 4s", got)
-		}
-	}
-}

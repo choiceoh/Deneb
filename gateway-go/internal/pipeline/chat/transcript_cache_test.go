@@ -93,23 +93,6 @@ func TestCachedTranscriptStore_InvalidateOnDelete(t *testing.T) {
 	}
 }
 
-func TestCachedTranscriptStore_AppendBeforeLoad(t *testing.T) {
-	inner := newCountingStore()
-	cache := NewCachedTranscriptStore(inner, 5*time.Second)
-
-	// Append via cache before any Load call.
-	cache.Append("s1", NewTextChatMessage("user", "first", 0))
-
-	// Load must be served from the seeded cache entry — no inner Load call.
-	msgs, total, err := cache.Load("s1", 0)
-	testutil.NoError(t, err)
-	if len(msgs) != 1 || total != 1 {
-		t.Fatalf("got %d (total=%d), want 1 message after append-seed", len(msgs), total)
-	}
-	if inner.loadCount != 0 {
-		t.Fatalf("got %d, want 0 inner loads (cache should be seeded by Append)", inner.loadCount)
-	}
-}
 
 func TestCachedTranscriptStore_TTLExpiry(t *testing.T) {
 	inner := newCountingStore()

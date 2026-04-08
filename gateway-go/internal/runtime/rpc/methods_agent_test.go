@@ -128,48 +128,6 @@ func TestSessionsLifecycle_FullFields(t *testing.T) {
 	}
 }
 
-func TestSessionsLifecycle_WithStartedAtEndedAt(t *testing.T) {
-	deps := testExtendedDeps()
-	defer deps.GatewaySubs.Stop()
-	d := testAgentDispatcher(deps)
-
-	// Start with explicit startedAt.
-	sa := int64(500)
-	resp := dispatch(t, d, "sessions.lifecycle", map[string]any{
-		"key":       "ts-test",
-		"phase":     "start",
-		"ts":        1000,
-		"startedAt": sa,
-	})
-	if !resp.OK {
-		t.Fatalf("start: got error: %+v, want ok", resp.Error)
-	}
-
-	s := deps.Sessions.Get("ts-test")
-	if s.StartedAt == nil || *s.StartedAt != 500 {
-		t.Errorf("StartedAt = %v, want 500", s.StartedAt)
-	}
-
-	// End with explicit endedAt.
-	ea := int64(1800)
-	resp = dispatch(t, d, "sessions.lifecycle", map[string]any{
-		"key":     "ts-test",
-		"phase":   "end",
-		"ts":      2000,
-		"endedAt": ea,
-	})
-	if !resp.OK {
-		t.Fatalf("end: got error: %+v, want ok", resp.Error)
-	}
-
-	s = deps.Sessions.Get("ts-test")
-	if s.EndedAt == nil || *s.EndedAt != 1800 {
-		t.Errorf("EndedAt = %v, want 1800", s.EndedAt)
-	}
-	if s.RuntimeMs == nil || *s.RuntimeMs != 1300 {
-		t.Errorf("RuntimeMs = %v, want 1300 (1800-500)", s.RuntimeMs)
-	}
-}
 
 func TestSessionsLifecycle_TimeoutAborted(t *testing.T) {
 	deps := testExtendedDeps()

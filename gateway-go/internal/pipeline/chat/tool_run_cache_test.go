@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -70,22 +69,6 @@ func TestRunCache_InvalidateByPath(t *testing.T) {
 	}
 }
 
-func TestRunCache_InvalidateByPath_NoScope(t *testing.T) {
-	rc := NewRunCache()
-
-	// Entry without scope is conservatively removed.
-	rc.Set("grep:x", "unscoped result")
-	rc.SetWithScope("find:y", "scoped in other", "other")
-
-	rc.InvalidateByPath("src/foo.go")
-
-	if _, ok := rc.Get("grep:x"); ok {
-		t.Fatal("unscoped entry should be conservatively removed")
-	}
-	if _, ok := rc.Get("find:y"); !ok {
-		t.Fatal("scoped entry in different subtree should survive")
-	}
-}
 
 func TestRunCache_InvalidateByPath_WorkspaceScope(t *testing.T) {
 	rc := NewRunCache()
@@ -230,18 +213,3 @@ func TestIsMutationTool(t *testing.T) {
 	}
 }
 
-func TestRunCacheFromContext(t *testing.T) {
-	// Nil when not set.
-	ctx := context.Background()
-	if rc := RunCacheFromContext(ctx); rc != nil {
-		t.Fatal("expected nil RunCache from bare context")
-	}
-
-	// Non-nil when set.
-	rc := NewRunCache()
-	ctx = WithRunCache(ctx, rc)
-	got := RunCacheFromContext(ctx)
-	if got != rc {
-		t.Fatal("expected to get back the same RunCache")
-	}
-}

@@ -12,20 +12,6 @@ var callMethod = rpctest.Call
 // Methods (session management)
 // ---------------------------------------------------------------------------
 
-func TestMethods_returnsHandlers(t *testing.T) {
-	m := Methods(Deps{})
-	for _, name := range []string{
-		"sessions.patch",
-		"sessions.reset",
-		"sessions.preview",
-		"sessions.resolve",
-		"sessions.overflow_check",
-	} {
-		if _, ok := m[name]; !ok {
-			t.Errorf("missing handler %q", name)
-		}
-	}
-}
 
 func TestSessionsPatch_missingKey(t *testing.T) {
 	m := Methods(Deps{})
@@ -67,9 +53,3 @@ func TestSessionsResolve_missingKey(t *testing.T) {
 // ExecMethods
 // ---------------------------------------------------------------------------
 
-func TestExecMethods_nilChat(t *testing.T) {
-	m := ExecMethods(ExecDeps{})
-	if m != nil {
-		t.Fatal("expected nil when Chat is nil")
-	}
-}

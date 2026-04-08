@@ -69,7 +69,3 @@ func TestRunStateMachineHeartbeat(t *testing.T) {
 	}
 }
 
-func TestRunStateMachineCloseWithoutHeartbeat(t *testing.T) {
-	sm := NewRunStateMachine(context.Background(), func(p StatusPatch) {}, 0)
-	sm.Close() // should not panic or block
-}

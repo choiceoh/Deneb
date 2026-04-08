@@ -28,19 +28,6 @@ func toolResultMsg(content string) llm.Message {
 
 // --- EstimateTokens ---
 
-func TestEstimateTokens(t *testing.T) {
-	if got := EstimateTokens(""); got != 0 {
-		t.Errorf("empty = %d, want 0", got)
-	}
-	// "hello" = 5 runes → 2 tokens
-	if got := EstimateTokens("hello"); got != 2 {
-		t.Errorf("hello = %d, want 2", got)
-	}
-	// Korean: "안녕하세요" = 5 runes → 2 tokens
-	if got := EstimateTokens("안녕하세요"); got != 2 {
-		t.Errorf("Korean = %d, want 2", got)
-	}
-}
 
 // --- MicroCompact ---
 

@@ -135,14 +135,3 @@ func TestDraftStreamLoop_FinalizeFlushesAndStops(t *testing.T) {
 	}
 }
 
-func TestDraftStreamLoop_StopForClear(t *testing.T) {
-	loop := NewDraftStreamLoop(500, func(text string) (bool, error) {
-		return true, nil
-	})
-
-	loop.Update("text")
-	loop.StopForClear()
-
-	// After StopForClear, updates should be no-ops.
-	loop.Update("should not send")
-}

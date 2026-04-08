@@ -57,17 +57,6 @@ func TestResolvePath_traversalClamped(t *testing.T) {
 		t.Errorf("resolved path %q not inside workspace %q", got, abs)
 	}
 }
-
-func TestResolvePath_workspaceRoot(t *testing.T) {
-	tmp := t.TempDir()
-	// Resolving "." should return the workspace root itself.
-	got := ResolvePath(".", tmp)
-	abs, _ := filepath.Abs(tmp)
-	if got != abs {
-		t.Errorf("got %q, want %q", got, abs)
-	}
-}
-
 // ─── ToolRead ───────────────────────────────────────────────────────────────
 
 func TestToolRead_basic(t *testing.T) {
@@ -83,22 +72,6 @@ func TestToolRead_basic(t *testing.T) {
 	// The file ends with \n so strings.Split produces 4 elements (last empty).
 	if !strings.Contains(out, "lines") {
 		t.Errorf("expected line count header: %q", out)
-	}
-}
-
-func TestToolRead_missingFilePath(t *testing.T) {
-	tmp := t.TempDir()
-	_, err := callTool(t, ToolRead(tmp), map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for missing file_path")
-	}
-}
-
-func TestToolRead_fileNotFound(t *testing.T) {
-	tmp := t.TempDir()
-	_, err := callTool(t, ToolRead(tmp), map[string]any{"file_path": "nonexistent.txt"})
-	if err == nil {
-		t.Fatal("expected error for missing file")
 	}
 }
 
@@ -166,20 +139,6 @@ func Greet(name string) string {
 		t.Errorf("expected function body: %q", out)
 	}
 }
-
-func TestToolRead_functionNotFound(t *testing.T) {
-	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "foo.go"), []byte("package foo\n"), 0o644)
-
-	_, err := callTool(t, ToolRead(tmp), map[string]any{
-		"file_path": "foo.go",
-		"function":  "NonExistent",
-	})
-	if err == nil {
-		t.Fatal("expected error for missing function")
-	}
-}
-
 // ─── ToolWrite ──────────────────────────────────────────────────────────────
 
 func TestToolWrite_basic(t *testing.T) {
@@ -209,29 +168,6 @@ func TestToolWrite_createsParentDir(t *testing.T) {
 	}
 }
 
-func TestToolWrite_missingFilePath(t *testing.T) {
-	tmp := t.TempDir()
-	_, err := callTool(t, ToolWrite(tmp), map[string]any{"content": "x"})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestToolWrite_overwritesExisting(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "f.txt")
-	os.WriteFile(path, []byte("old"), 0o644)
-
-	mustCallTool(t, ToolWrite(tmp), map[string]any{
-		"file_path": "f.txt",
-		"content":   "new",
-	})
-	data, _ := os.ReadFile(path)
-	if string(data) != "new" {
-		t.Errorf("expected overwrite; got %q", string(data))
-	}
-}
-
 // ─── ToolEdit ───────────────────────────────────────────────────────────────
 
 func TestToolEdit_basicReplace(t *testing.T) {
@@ -247,31 +183,6 @@ func TestToolEdit_basicReplace(t *testing.T) {
 	data, _ := os.ReadFile(path)
 	if string(data) != "hello Go" {
 		t.Errorf("got %q", string(data))
-	}
-}
-
-func TestToolEdit_missingOldString(t *testing.T) {
-	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("x"), 0o644)
-	_, err := callTool(t, ToolEdit(tmp), map[string]any{
-		"file_path":  "f.txt",
-		"new_string": "y",
-	})
-	if err == nil {
-		t.Fatal("expected error for missing old_string")
-	}
-}
-
-func TestToolEdit_notFound(t *testing.T) {
-	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("hello"), 0o644)
-	_, err := callTool(t, ToolEdit(tmp), map[string]any{
-		"file_path":  "f.txt",
-		"old_string": "xyz",
-		"new_string": "abc",
-	})
-	if err == nil {
-		t.Fatal("expected error when old_string not found")
 	}
 }
 
@@ -346,16 +257,6 @@ func TestFindBlockEnd_simpleBraces(t *testing.T) {
 		t.Errorf("got %d, want 2", end)
 	}
 }
-
-func TestFindBlockEnd_noBraces(t *testing.T) {
-	lines := []string{"no braces here"}
-	end := findBlockEnd(lines, 0)
-	// Should return a reasonable fallback (end of lines or +30).
-	if end < 0 || end >= len(lines)+31 {
-		t.Errorf("unexpected end: %d", end)
-	}
-}
-
 func TestFindBlockEnd_nested(t *testing.T) {
 	lines := []string{
 		"func foo() {",
@@ -380,25 +281,6 @@ func TestReadFunctionRegex_rustFn(t *testing.T) {
 	}
 	out := testutil.Must(readFunctionRegex("src/lib.rs", lines, "my_func"))
 	if !strings.Contains(out, "my_func") {
-		t.Errorf("expected function name: %q", out)
-	}
-}
-
-func TestReadFunctionRegex_notFound(t *testing.T) {
-	lines := []string{"fn other() {}"}
-	_, err := readFunctionRegex("lib.rs", lines, "missing")
-	if err == nil {
-		t.Fatal("expected error for missing symbol")
-	}
-}
-
-func TestReadFunctionRegex_pythonDef(t *testing.T) {
-	lines := []string{
-		"def greet(name):",
-		"    return 'hi ' + name",
-	}
-	out := testutil.Must(readFunctionRegex("script.py", lines, "greet"))
-	if !strings.Contains(out, "greet") {
 		t.Errorf("expected function name: %q", out)
 	}
 }

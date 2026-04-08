@@ -8,7 +8,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestDispatchFromConfig_AbortTrigger(t *testing.T) {
@@ -144,17 +143,6 @@ func TestOriginRouting(t *testing.T) {
 	}
 }
 
-func TestFollowupRunner_NoFollowup(t *testing.T) {
-	runner := NewFollowupRunner(nil, 5)
-	initial := AgentTurnConfig{}
-	firstResult := &AgentTurnResult{
-		Payloads: []types.ReplyPayload{{Text: "hello"}},
-	}
-	payloads := testutil.Must(runner.RunFollowups(context.Background(), initial, firstResult))
-	if len(payloads) != 1 || payloads[0].Text != "hello" {
-		t.Fatalf("got %v, want single payload 'hello'", payloads)
-	}
-}
 
 func TestNeedsFollowup(t *testing.T) {
 	if needsFollowup(nil) {

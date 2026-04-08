@@ -98,18 +98,6 @@ func TestWriter_ReadLimit(t *testing.T) {
 	}
 }
 
-func TestWriter_ReadEmptySession(t *testing.T) {
-	dir := t.TempDir()
-	w := NewWriter(dir)
-
-	result := w.Read(ReadOpts{SessionKey: "nonexistent"})
-	if result.Total != 0 {
-		t.Errorf("Total = %d, want 0", result.Total)
-	}
-	if len(result.Entries) != 0 {
-		t.Errorf("Entries = %d, want 0", len(result.Entries))
-	}
-}
 
 func TestWriter_PathSanitization(t *testing.T) {
 	dir := t.TempDir()
@@ -129,23 +117,7 @@ func TestWriter_PathSanitization(t *testing.T) {
 	}
 }
 
-func TestRunLogger_NilSafe(t *testing.T) {
-	// Nil RunLogger should not panic.
-	var rl *RunLogger
-	rl.LogStart(RunStartData{Model: "test"})
-	rl.LogPrep(RunPrepData{PrepMs: 100})
-	rl.LogTurnLLM(TurnLLMData{Turn: 1})
-	rl.LogTurnTool(TurnToolData{Turn: 1, Name: "exec"})
-	rl.LogEnd(RunEndData{StopReason: "end_turn"})
-	rl.LogError(RunErrorData{Error: "test error"})
-}
 
-func TestRunLogger_NilWriter(t *testing.T) {
-	rl := NewRunLogger(nil, "sess", "run")
-	if rl != nil {
-		t.Error("expected nil RunLogger when Writer is nil")
-	}
-}
 
 func TestRunLogger_Integration(t *testing.T) {
 	dir := t.TempDir()

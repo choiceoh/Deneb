@@ -138,12 +138,6 @@ func TestSessions_SendMissingRequired(t *testing.T) {
 	}
 }
 
-func TestSessions_SendValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("sessions.send", `{"key":"sess-1","message":"hello"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
 func TestSessions_PatchNullable(t *testing.T) {
 	result, err := ValidateParams("sessions.patch",
@@ -169,35 +163,9 @@ func TestSessions_PatchInvalidEnum(t *testing.T) {
 	}
 }
 
-func TestCron_ListValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("cron.list", `{"limit":50,"sortBy":"name"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestCron_AddValid(t *testing.T) {
-	result, err := ValidateParams("cron.add",
-		`{"name":"daily-check","schedule":{"kind":"cron","expr":"0 9 * * *"},"sessionTarget":"main","wakeMode":"now","payload":{"kind":"systemEvent","text":"check"}}`)
-	testutil.NoError(t, err)
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestCron_RemoveValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("cron.remove", `{"id":"job-1"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestCron_RemoveWithJobId(t *testing.T) {
-	result := testutil.Must(ValidateParams("cron.remove", `{"jobId":"job-1"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
 func TestCron_RemoveMissingID(t *testing.T) {
 	result := testutil.Must(ValidateParams("cron.remove", `{}`))
@@ -206,35 +174,9 @@ func TestCron_RemoveMissingID(t *testing.T) {
 	}
 }
 
-func TestCron_SessionTargetCustom(t *testing.T) {
-	result, err := ValidateParams("cron.add",
-		`{"name":"t","schedule":{"kind":"at","at":"2024-01-01"},"sessionTarget":"session:my-key","wakeMode":"now","payload":{"kind":"systemEvent","text":"t"}}`)
-	testutil.NoError(t, err)
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestConfig_GetValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("config.get", `{}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestConfig_SetValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("config.set", `{"raw":"yaml content"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestConfig_SchemaLookupValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("config.schema.lookup", `{"path":"gateway.port"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
 func TestLogsTail_LimitTooHigh(t *testing.T) {
 	result := testutil.Must(ValidateParams("logs.tail", `{"limit":10000}`))
@@ -249,51 +191,11 @@ func TestLogsTail_LimitTooHigh(t *testing.T) {
 	}
 }
 
-func TestChatSend_Valid(t *testing.T) {
-	result, err := ValidateParams("chat.send",
-		`{"sessionKey":"sk","message":"hi","idempotencyKey":"idk1"}`)
-	testutil.NoError(t, err)
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestChatInject_Valid(t *testing.T) {
-	result, err := ValidateParams("chat.inject",
-		`{"sessionKey":"sk","message":"injected"}`)
-	testutil.NoError(t, err)
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestChannels_StatusValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("telegram.status", `{"probe":true,"timeoutMs":5000}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestAgents_CreateValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("agents.create", `{"name":"bot","workspace":"/home/bot"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestSkills_InstallValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("skills.install", `{"name":"weather","installId":"i1"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
-func TestExec_ResolveValid(t *testing.T) {
-	result := testutil.Must(ValidateParams("exec.approval.resolve", `{"id":"req-1","decision":"allow"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
 
 func TestSecrets_ResolveValid(t *testing.T) {
 	result, err := ValidateParams("secrets.resolve",

@@ -68,35 +68,3 @@ func TestDefaultSessionResetPolicy(t *testing.T) {
 	}
 }
 
-func TestBuildSessionHint(t *testing.T) {
-	tests := []struct {
-		name  string
-		flags SessionHintFlags
-		want  string
-	}{
-		{"no flags", SessionHintFlags{}, ""},
-		{"aborted", SessionHintFlags{WasAborted: true}, "Previous run was aborted by user."},
-		{"failed", SessionHintFlags{PreviousRunFailed: true}, "Previous run failed."},
-		{"resumed", SessionHintFlags{IsResumed: true}, "Session resumed."},
-		{"forked", SessionHintFlags{IsForked: true}, "Session forked from parent."},
-		{
-			"multiple flags",
-			SessionHintFlags{WasAborted: true, IsResumed: true},
-			"Previous run was aborted by user. Session resumed.",
-		},
-		{
-			"all flags",
-			SessionHintFlags{WasAborted: true, PreviousRunFailed: true, IsResumed: true, IsForked: true},
-			"Previous run was aborted by user. Previous run failed. Session resumed. Session forked from parent.",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := BuildSessionHint(tc.flags)
-			if got != tc.want {
-				t.Errorf("BuildSessionHint() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}

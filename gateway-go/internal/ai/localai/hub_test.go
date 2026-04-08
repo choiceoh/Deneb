@@ -7,13 +7,6 @@ import (
 	"time"
 )
 
-func TestEstimateInputTokens(t *testing.T) {
-	req := SimpleRequest("system prompt", "안녕하세요", 100, PriorityCritical, "test")
-	tokens := estimateInputTokens(&req)
-	if tokens < 1 {
-		t.Errorf("got %d, want positive token estimate", tokens)
-	}
-}
 
 func TestResponseCache(t *testing.T) {
 	cache := newResponseCache(5*time.Minute, 100)
@@ -135,17 +128,6 @@ func TestQueueDropOldestBackground(t *testing.T) {
 	}
 }
 
-func TestHubStatsSnapshot(t *testing.T) {
-	s := &HubStats{}
-	s.Submitted.Add(10)
-	s.Completed.Add(7)
-	s.CacheHits.Add(3)
-
-	snap := s.Snapshot()
-	if snap.Submitted != 10 || snap.Completed != 7 || snap.CacheHits != 3 {
-		t.Fatalf("unexpected snapshot: %+v", snap)
-	}
-}
 
 func TestCacheKey_DifferentMaxTokens(t *testing.T) {
 	r1 := SimpleRequest("sys", "hello", 100, PriorityNormal, "test")

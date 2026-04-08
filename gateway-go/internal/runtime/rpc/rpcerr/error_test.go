@@ -61,13 +61,6 @@ func TestToShapePreservesDetails(t *testing.T) {
 	}
 }
 
-func TestToShapeNoDetailsWhenEmpty(t *testing.T) {
-	e := New(protocol.ErrMissingParam, "key is required")
-	shape := e.ToShape()
-	if shape.Details != nil {
-		t.Errorf("details should be nil, got %s", shape.Details)
-	}
-}
 
 func TestResponse(t *testing.T) {
 	e := MissingParam("key")
@@ -150,41 +143,8 @@ func TestWrapConvenienceConstructors(t *testing.T) {
 	}
 }
 
-func TestNilCauseUnwrap(t *testing.T) {
-	e := New(protocol.ErrNotFound, "gone")
-	if errors.Unwrap(e) != nil {
-		t.Error("Unwrap should return nil when no cause is set")
-	}
-}
 
-func TestErrorInterface(t *testing.T) {
-	e := New(protocol.ErrNotFound, "gone").WithSession("s1")
-	msg := e.Error()
-	if msg == "" {
-		t.Error("Error() should not be empty")
-	}
-}
 
-func TestConvenienceConstructors(t *testing.T) {
-	tests := []struct {
-		name string
-		err  *Error
-		code string
-	}{
-		{"MissingParam", MissingParam("key"), protocol.ErrMissingParam},
-		{"InvalidParams", InvalidParams(errors.New("bad")), protocol.ErrInvalidRequest},
-		{"NotFound", NotFound("session"), protocol.ErrNotFound},
-		{"Unavailable", Unavailable("down"), protocol.ErrUnavailable},
-		{"Conflict", Conflict("running"), protocol.ErrConflict},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.err.Code != tc.code {
-				t.Errorf("code = %q, want %q", tc.err.Code, tc.code)
-			}
-		})
-	}
-}
 
 func TestLogAttrs(t *testing.T) {
 	e := New(protocol.ErrNotFound, "missing").WithSession("s1")

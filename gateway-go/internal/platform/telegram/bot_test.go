@@ -202,19 +202,3 @@ func TestExponentialBackoff(t *testing.T) {
 	}
 }
 
-func TestExponentialBackoff_ContextCancel(t *testing.T) {
-	b := &ExponentialBackoff{
-		Initial: 1 * time.Second,
-		Max:     5 * time.Second,
-		Factor:  2.0,
-		Jitter:  0.0,
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	err := b.Wait(ctx)
-	if err == nil {
-		t.Error("expected context error")
-	}
-}

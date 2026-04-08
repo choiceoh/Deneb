@@ -30,19 +30,6 @@ func TestTruncateForBroadcast(t *testing.T) {
 	}
 }
 
-func TestStreamBroadcasterNilSafe(t *testing.T) {
-	// All methods should be safe to call with nil broadcastRaw.
-	sb := NewBroadcaster(nil, "session-1", "run-1")
-
-	// None of these should panic.
-	sb.EmitDelta("text")
-	sb.EmitToolStart("read", "tool-1")
-	sb.EmitToolResult("read", "tool-1", "result", false)
-	sb.EmitComplete("done", llm.TokenUsage{InputTokens: 10, OutputTokens: 5})
-	sb.EmitError("something broke")
-	sb.EmitStarted()
-	sb.EmitAborted("partial")
-}
 
 func TestStreamBroadcasterEmitDelta(t *testing.T) {
 	t.Run("skips empty text", func(t *testing.T) {

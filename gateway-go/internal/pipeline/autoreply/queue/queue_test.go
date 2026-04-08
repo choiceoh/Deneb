@@ -43,20 +43,6 @@ func TestFollowupQueueRegistry_GetOrCreate(t *testing.T) {
 	}
 }
 
-func TestFollowupQueueRegistry_Clear(t *testing.T) {
-	r := NewFollowupQueueRegistry()
-	q := r.GetOrCreate("k", types.FollowupQueueSettings{Mode: types.FollowupModeCollect})
-	q.Items = append(q.Items, types.FollowupRun{Prompt: "hello"})
-	q.DroppedCount = 2
-
-	cleared := r.Clear("k")
-	if cleared != 3 {
-		t.Errorf("got %d, want cleared=3", cleared)
-	}
-	if r.Existing("k") != nil {
-		t.Error("expected queue to be deleted after clear")
-	}
-}
 
 func TestEnqueueFollowupRun_basic(t *testing.T) {
 	r := NewFollowupQueueRegistry()

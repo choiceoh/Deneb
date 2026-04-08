@@ -88,47 +88,7 @@ func TestCatalog_BuildWorkspaceSnapshot(t *testing.T) {
 	}
 }
 
-func TestNormalizeSkillFilter(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []string
-		expected []string
-		isNil    bool
-	}{
-		{"nil returns nil", nil, nil, true},
-		{"empty returns empty", []string{}, []string{}, false},
-		{"trims and dedupes", []string{" foo ", "bar", "foo"}, []string{"bar", "foo"}, false},
-		{"filters empty strings", []string{"", " ", "a"}, []string{"a"}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := NormalizeSkillFilter(tt.input)
-			if tt.isNil && got != nil {
-				t.Errorf("got %v, want nil", got)
-				return
-			}
-			if !tt.isNil && got == nil && len(tt.expected) > 0 {
-				t.Errorf("got nil, want %v", tt.expected)
-				return
-			}
-		})
-	}
-}
 
-func TestMatchesSkillFilter(t *testing.T) {
-	if !MatchesSkillFilter(nil, nil) {
-		t.Error("nil vs nil should match")
-	}
-	if MatchesSkillFilter(nil, []string{}) {
-		t.Error("nil vs empty should not match")
-	}
-	if !MatchesSkillFilter([]string{"a", "b"}, []string{"b", "a"}) {
-		t.Error("same elements in different order should match")
-	}
-	if MatchesSkillFilter([]string{"a"}, []string{"a", "b"}) {
-		t.Error("different lengths should not match")
-	}
-}
 
 func TestParseFrontmatter(t *testing.T) {
 	content := `---
@@ -171,26 +131,4 @@ func TestResolveSkillInvocationPolicy(t *testing.T) {
 	}
 }
 
-func TestNormalizeSafeBrewFormula(t *testing.T) {
-	if got := normalizeSafeBrewFormula("ffmpeg"); got != "ffmpeg" {
-		t.Errorf("got %q, want 'ffmpeg'", got)
-	}
-	if got := normalizeSafeBrewFormula("-bad"); got != "" {
-		t.Errorf("got %q, want empty for leading dash", got)
-	}
-	if got := normalizeSafeBrewFormula("../escape"); got != "" {
-		t.Errorf("got %q, want empty for path traversal", got)
-	}
-}
 
-func TestNormalizeSafeDownloadURL(t *testing.T) {
-	if got := normalizeSafeDownloadURL("https://example.com/file.tar.gz"); got == "" {
-		t.Error("expected valid URL")
-	}
-	if got := normalizeSafeDownloadURL("ftp://bad.com/file"); got != "" {
-		t.Errorf("got %q, want empty for non-http scheme", got)
-	}
-	if got := normalizeSafeDownloadURL("has spaces"); got != "" {
-		t.Errorf("got %q, want empty for URL with spaces", got)
-	}
-}

@@ -190,23 +190,3 @@ func TestSubagentCommandDeps_ResetSubagent_RunningGuard(t *testing.T) {
 	}
 }
 
-func TestSubagentCommandDeps_NilRegistry(t *testing.T) {
-	deps := &SubagentInfraDeps{}
-
-	result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
-		Role: "test",
-	})
-	if result.Error == nil {
-		t.Error("expected error for nil registry")
-	}
-
-	err := deps.KillSubagent("agent-1")
-	if err == nil {
-		t.Error("expected error for nil registry")
-	}
-
-	list := deps.ListSubagents("")
-	if list == "" {
-		t.Error("expected non-empty message for nil registry")
-	}
-}

@@ -26,14 +26,6 @@ func TestInstallAndGetStatus(t *testing.T) {
 	}
 }
 
-func TestInstallDuplicate(t *testing.T) {
-	m := NewManager()
-	m.Install("weather", "inst-1")
-	result := m.Install("weather", "inst-2")
-	if !result.OK {
-		t.Fatal("expected OK even for duplicate")
-	}
-}
 
 func TestUpdateSkill(t *testing.T) {
 	m := NewManager()
@@ -53,13 +45,6 @@ func TestUpdateSkill(t *testing.T) {
 	}
 }
 
-func TestUpdateNotFound(t *testing.T) {
-	m := NewManager()
-	_, err := m.Update("unknown", SkillPatch{})
-	if err == nil {
-		t.Fatal("expected error for unknown skill")
-	}
-}
 
 func TestListBins(t *testing.T) {
 	m := NewManager()

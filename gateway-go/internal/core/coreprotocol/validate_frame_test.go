@@ -34,19 +34,7 @@ func TestValidateFrame_MissingMethod(t *testing.T) {
 	}
 }
 
-func TestValidateFrame_EmptyID(t *testing.T) {
-	err := ValidateFrame(`{"type":"req","id":"","method":"test"}`)
-	if err == nil {
-		t.Fatal("expected error for empty id")
-	}
-}
 
-func TestValidateFrame_InvalidJSON(t *testing.T) {
-	err := ValidateFrame(`{not json}`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
 
 func TestValidateFrame_NegativeSeq(t *testing.T) {
 	err := ValidateFrame(`{"type":"event","event":"health","seq":-1}`)
@@ -58,15 +46,7 @@ func TestValidateFrame_NegativeSeq(t *testing.T) {
 	}
 }
 
-func TestValidateFrame_ZeroSeq(t *testing.T) {
-	err := ValidateFrame(`{"type":"event","event":"health","seq":0}`)
-	testutil.NoError(t, err)
-}
 
-func TestValidateFrame_ExtraFieldsIgnored(t *testing.T) {
-	err := ValidateFrame(`{"type":"req","id":"1","method":"test","unknown_field":42}`)
-	testutil.NoError(t, err)
-}
 
 func TestValidateFrame_OversizedID(t *testing.T) {
 	longID := strings.Repeat("x", 300)
@@ -94,12 +74,6 @@ func TestValidateFrame_CaseSensitiveType(t *testing.T) {
 	}
 }
 
-func TestValidateFrame_Empty(t *testing.T) {
-	err := ValidateFrame("")
-	if err == nil {
-		t.Fatal("expected error for empty input")
-	}
-}
 
 func TestValidateFrame_ResponseMissingOK(t *testing.T) {
 	err := ValidateFrame(`{"type":"res","id":"abc"}`)

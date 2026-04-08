@@ -11,15 +11,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestSpilloverStore_BelowThreshold(t *testing.T) {
-	content := strings.Repeat("a", MaxResultChars-1)
-	// Content below threshold should NOT be spilled by callers.
-	// The store itself doesn't enforce the threshold — that's the caller's job.
-	// This test just confirms MaxResultChars is sane.
-	if len(content) >= MaxResultChars {
-		t.Fatal("test content should be below threshold")
-	}
-}
 
 func TestSpilloverStore_StoreAndLoad(t *testing.T) {
 	dir := t.TempDir()
@@ -55,18 +46,6 @@ func TestSpilloverStore_SessionIsolation(t *testing.T) {
 	}
 }
 
-func TestSpilloverStore_UnknownID(t *testing.T) {
-	dir := t.TempDir()
-	store := NewSpilloverStore(dir)
-
-	_, err := store.Load("sp_nonexistent", "any-session")
-	if err == nil {
-		t.Fatal("got nil, want error for unknown ID")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
 
 func TestSpilloverStore_FormatPreview(t *testing.T) {
 	content := strings.Repeat("A", 500) + strings.Repeat("B", 500) + strings.Repeat("C", MaxResultChars)

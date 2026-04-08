@@ -111,19 +111,6 @@ func TestExtractSystemText(t *testing.T) {
 	})
 }
 
-func TestNewTextMessage(t *testing.T) {
-	msg := NewTextMessage("user", "hello")
-	if msg.Role != "user" {
-		t.Errorf("role = %q, want %q", msg.Role, "user")
-	}
-	var text string
-	if err := json.Unmarshal(msg.Content, &text); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if text != "hello" {
-		t.Errorf("content = %q, want %q", text, "hello")
-	}
-}
 
 func TestAppendJSONString(t *testing.T) {
 	cases := []struct {

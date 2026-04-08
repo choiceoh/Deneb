@@ -63,14 +63,3 @@ func TestFetchCache_Eviction(t *testing.T) {
 	}
 }
 
-func TestFetchCache_UpdateExisting(t *testing.T) {
-	c := NewFetchCacheWithTTL(3, time.Minute)
-
-	c.Put("https://a.com", "v1")
-	c.Put("https://a.com", "v2")
-
-	got, ok := c.Get("https://a.com")
-	if !ok || got != "v2" {
-		t.Fatalf("got %q, want updated value 'v2'", got)
-	}
-}

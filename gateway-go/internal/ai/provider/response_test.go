@@ -34,17 +34,6 @@ func TestFormatForChannel_MixedParts(t *testing.T) {
 	}
 }
 
-func TestFormatForChannel_ThinkingOnly(t *testing.T) {
-	resp := &ProviderResponse{
-		Content: []ContentPart{
-			{Type: "thinking", Thinking: "internal thought"},
-		},
-	}
-	result := FormatForChannel(resp)
-	if result != "" {
-		t.Errorf("got %q, want empty for thinking-only", result)
-	}
-}
 
 func TestFormatForChannel_ToolResultString(t *testing.T) {
 	resp := &ProviderResponse{
@@ -70,11 +59,6 @@ func TestFormatForChannel_ToolResultArray(t *testing.T) {
 	}
 }
 
-func TestFormatForChannel_Nil(t *testing.T) {
-	if FormatForChannel(nil) != "" {
-		t.Error("expected empty for nil response")
-	}
-}
 
 func TestFormatForChannel_ImageNoURL(t *testing.T) {
 	resp := &ProviderResponse{

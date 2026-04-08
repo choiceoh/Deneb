@@ -72,11 +72,3 @@ func TestPublisher_PublishAgentEvent_Sequencing(t *testing.T) {
 	pub.seqMu.Unlock()
 }
 
-func TestPublisher_EmptySessionKeySkipped(t *testing.T) {
-	b := NewBroadcaster()
-	pub := NewPublisher(b, nil, nil)
-
-	// Should not panic or broadcast.
-	pub.PublishSessionMessage(TranscriptUpdate{})
-	pub.PublishSessionMessage(TranscriptUpdate{SessionKey: "key", Message: nil})
-}

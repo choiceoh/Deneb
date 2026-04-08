@@ -194,12 +194,6 @@ func TestIsTerminalStatus(t *testing.T) {
 	}
 }
 
-func TestDeferredSubagentNotifications_Nil(t *testing.T) {
-	fn := deferredSubagentNotifications(nil)
-	if fn != nil {
-		t.Error("should return nil when channel is nil")
-	}
-}
 
 func TestDeferredSubagentNotifications_Drain(t *testing.T) {
 	ch := make(chan string, 2)

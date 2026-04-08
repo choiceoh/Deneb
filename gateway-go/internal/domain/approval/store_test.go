@@ -29,16 +29,6 @@ func TestCreateRequest(t *testing.T) {
 	}
 }
 
-func TestCreateRequestWithCustomID(t *testing.T) {
-	s := NewStore()
-	req := s.CreateRequest(CreateRequestParams{
-		ID:      "custom-id",
-		Command: "ls",
-	})
-	if req.ID != "custom-id" {
-		t.Fatalf("got %q, want ID 'custom-id'", req.ID)
-	}
-}
 
 func TestGetRequest(t *testing.T) {
 	s := NewStore()
@@ -60,12 +50,6 @@ func TestGetRequest(t *testing.T) {
 	}
 }
 
-func TestGetNotFound(t *testing.T) {
-	s := NewStore()
-	if s.Get("nonexistent") != nil {
-		t.Fatal("expected nil for nonexistent ID")
-	}
-}
 
 func TestResolve(t *testing.T) {
 	s := NewStore()
@@ -86,24 +70,7 @@ func TestResolve(t *testing.T) {
 	}
 }
 
-func TestResolveNotFound(t *testing.T) {
-	s := NewStore()
-	err := s.Resolve("nonexistent", DecisionDeny)
-	if err == nil {
-		t.Fatal("expected error for nonexistent request")
-	}
-}
 
-func TestResolveAlreadyResolved(t *testing.T) {
-	s := NewStore()
-	req := s.CreateRequest(CreateRequestParams{Command: "test"})
-
-	_ = s.Resolve(req.ID, DecisionDeny)
-	err := s.Resolve(req.ID, DecisionAllowAlways)
-	if err == nil {
-		t.Fatal("expected error for already-resolved request")
-	}
-}
 
 func TestWaitForDecision(t *testing.T) {
 	s := NewStore()

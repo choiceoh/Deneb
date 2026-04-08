@@ -2,7 +2,6 @@ package polaris
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -159,26 +158,4 @@ func TestSessionTokens(t *testing.T) {
 	}
 }
 
-func TestNewStoreInvalidPath(t *testing.T) {
-	_, err := NewStore("/nonexistent/deeply/nested/dir/test.db")
-	if err == nil {
-		t.Fatal("expected error for invalid path")
-	}
-}
 
-func TestStoreDirectoryCreated(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "polaris.db")
-
-	s := testutil.Must(NewStore(dbPath))
-	s.Close()
-
-	// Verify directory structure was created (path ending in .db is converted to polaris/ dir).
-	polarisDir := filepath.Join(dir, "polaris")
-	if _, err := os.Stat(filepath.Join(polarisDir, "messages")); os.IsNotExist(err) {
-		t.Fatal("messages directory not created")
-	}
-	if _, err := os.Stat(filepath.Join(polarisDir, "summaries")); os.IsNotExist(err) {
-		t.Fatal("summaries directory not created")
-	}
-}

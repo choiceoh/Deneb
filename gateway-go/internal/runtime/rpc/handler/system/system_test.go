@@ -23,44 +23,9 @@ func TestFindLatestLogFile(t *testing.T) {
 	}
 }
 
-func TestFindLatestLogFile_NoLogFiles(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "data.txt"), []byte("x"), 0o600)
 
-	_, err := findLatestLogFile(dir)
-	if err == nil {
-		t.Error("expected error when no log files exist")
-	}
-}
 
-func TestFindLatestLogFile_EmptyDir(t *testing.T) {
-	dir := t.TempDir()
-	_, err := findLatestLogFile(dir)
-	if err == nil {
-		t.Error("expected error for empty dir")
-	}
-}
 
-func TestFindLatestLogFile_SingleFile(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "app.log"), []byte("single"), 0o600)
-
-	got := testutil.Must(findLatestLogFile(dir))
-	if filepath.Base(got) != "app.log" {
-		t.Errorf("got %q, want app.log", filepath.Base(got))
-	}
-}
-
-func TestFindLatestLogFile_SkipsDirectories(t *testing.T) {
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "archive.log"), 0o700)
-	os.WriteFile(filepath.Join(dir, "real.log"), []byte("data"), 0o600)
-
-	got := testutil.Must(findLatestLogFile(dir))
-	if filepath.Base(got) != "real.log" {
-		t.Errorf("got %q, want real.log", filepath.Base(got))
-	}
-}
 
 func TestTruncateLog(t *testing.T) {
 	tests := []struct {

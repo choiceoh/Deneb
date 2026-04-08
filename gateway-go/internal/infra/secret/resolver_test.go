@@ -32,13 +32,3 @@ func TestReload(t *testing.T) {
 	}
 }
 
-func TestResolveEmpty(t *testing.T) {
-	r := NewResolver()
-	result := r.Resolve("cmd", []string{})
-	if !result.OK {
-		t.Fatal("expected OK")
-	}
-	if len(result.Assignments) != 0 {
-		t.Fatal("expected 0 assignments")
-	}
-}

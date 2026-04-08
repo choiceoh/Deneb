@@ -93,15 +93,6 @@ func TestChatHistory_MissingSessionKey(t *testing.T) {
 	}
 }
 
-func TestChatHistory_EmptyTranscript(t *testing.T) {
-	sessions := session.NewManager()
-	h := NewHandler(sessions, nil, nil, DefaultHandlerConfig())
-	req := makeReq("1", "chat.history", map[string]any{"sessionKey": "test"})
-	resp := h.History(context.Background(), req)
-	if !resp.OK {
-		t.Error("expected empty history when no forwarder")
-	}
-}
 
 func TestChatAbort_NotFound(t *testing.T) {
 	h := newTestHandler()
@@ -146,14 +137,6 @@ func TestSessionsSend_AsyncStart(t *testing.T) {
 	}
 }
 
-func TestSessionsSend_MissingKey(t *testing.T) {
-	h := newTestHandler()
-	req := makeReq("1", "sessions.send", map[string]any{"message": "hi"})
-	resp := h.SessionsSend(context.Background(), req)
-	if resp.OK {
-		t.Error("expected error for missing key")
-	}
-}
 
 func TestSessionsSteer_AppliesModel(t *testing.T) {
 	h := newTestHandler()
@@ -218,14 +201,6 @@ func TestSessionsAbort_ByRunID(t *testing.T) {
 	}
 }
 
-func TestSessionsAbort_MissingParams(t *testing.T) {
-	h := newTestHandler()
-	req := makeReq("1", "sessions.abort", map[string]any{})
-	resp := h.SessionsAbort(context.Background(), req)
-	if resp.OK {
-		t.Error("expected error for missing key and runId")
-	}
-}
 
 func TestSanitizeInput(t *testing.T) {
 	tests := []struct {

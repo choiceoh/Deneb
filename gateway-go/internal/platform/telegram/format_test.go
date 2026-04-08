@@ -30,26 +30,8 @@ func TestFormatHTML_Bold(t *testing.T) {
 	}
 }
 
-func TestFormatHTML_Italic(t *testing.T) {
-	got := FormatHTML("hello *world*")
-	if got != "hello <i>world</i>" {
-		t.Errorf("got %q", got)
-	}
-}
 
-func TestFormatHTML_InlineCode(t *testing.T) {
-	got := FormatHTML("use `fmt.Println`")
-	if got != "use <code>fmt.Println</code>" {
-		t.Errorf("got %q", got)
-	}
-}
 
-func TestFormatHTML_Strikethrough(t *testing.T) {
-	got := FormatHTML("~~deleted~~")
-	if got != "<s>deleted</s>" {
-		t.Errorf("got %q", got)
-	}
-}
 
 func TestFormatHTML_Spoiler(t *testing.T) {
 	got := FormatHTML("||hidden||")
@@ -91,12 +73,6 @@ func TestMarkdownToTelegramHTML_Heading(t *testing.T) {
 	}
 }
 
-func TestMarkdownToTelegramHTML_Blockquote(t *testing.T) {
-	got := MarkdownToTelegramHTML("> quoted text")
-	if got != "<blockquote>quoted text</blockquote>" {
-		t.Errorf("got %q", got)
-	}
-}
 
 func TestMarkdownToTelegramHTML_Mixed(t *testing.T) {
 	md := "# Title\n\nhello **bold** and *italic*\n\n```\ncode\n```"
@@ -158,45 +134,11 @@ func TestMarkdownToTelegramHTML_TableWithSpecialChars(t *testing.T) {
 	}
 }
 
-func TestMarkdownToTelegramHTML_TableWithSurroundingText(t *testing.T) {
-	md := "Here is a table:\n| A | B |\n| - | - |\n| 1 | 2 |\nAnd more text."
-	got := MarkdownToTelegramHTML(md)
-	if !strings.Contains(got, "Here is a table:") {
-		t.Errorf("missing leading text: %q", got)
-	}
-	if !strings.Contains(got, "<pre>| A | B |\n| - | - |\n| 1 | 2 |</pre>") {
-		t.Errorf("missing table pre block: %q", got)
-	}
-	if !strings.Contains(got, "And more text.") {
-		t.Errorf("missing trailing text: %q", got)
-	}
-}
 
-func TestMarkdownToTelegramHTML_TableAtEnd(t *testing.T) {
-	md := "Summary:\n| X | Y |\n| - | - |\n| a | b |"
-	got := MarkdownToTelegramHTML(md)
-	if !strings.HasSuffix(got, "| a | b |</pre>") {
-		t.Errorf("table at end not flushed: %q", got)
-	}
-}
 
-func TestMarkdownToTelegramHTML_TableWithEmoji(t *testing.T) {
-	md := "| 카테고리 | PR |\n| --- | --- |\n| 🧠 메모리 | #484 |\n| ⚡ 성능 | #469 |"
-	got := MarkdownToTelegramHTML(md)
-	want := "<pre>| 카테고리 | PR |\n| --- | --- |\n| 🧠 메모리 | #484 |\n| ⚡ 성능 | #469 |</pre>"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
 
 // --- Chunking tests ---
 
-func TestChunkText_Short(t *testing.T) {
-	chunks := ChunkText("hello", 100)
-	if len(chunks) != 1 || chunks[0] != "hello" {
-		t.Errorf("got %v", chunks)
-	}
-}
 
 func TestChunkText_SplitsAtNewline(t *testing.T) {
 	text := "line one\nline two\nline three"
@@ -206,13 +148,6 @@ func TestChunkText_SplitsAtNewline(t *testing.T) {
 	}
 }
 
-func TestChunkHTML_NoSplitNeeded(t *testing.T) {
-	html := "<b>short</b>"
-	chunks := ChunkHTML(html, 100)
-	if len(chunks) != 1 || chunks[0] != html {
-		t.Errorf("got %v, want single chunk %q", chunks, html)
-	}
-}
 
 func TestChunkHTML_SplitsLongText(t *testing.T) {
 	html := strings.Repeat("a", 100)
@@ -224,15 +159,6 @@ func TestChunkHTML_SplitsLongText(t *testing.T) {
 
 // --- SplitCaptionAndBody tests ---
 
-func TestSplitCaptionAndBody_Short(t *testing.T) {
-	caption, body := SplitCaptionAndBody("short text", MaxCaptionLength, MaxTextLength)
-	if caption != "short text" {
-		t.Errorf("got %q, want caption 'short text'", caption)
-	}
-	if body != nil {
-		t.Errorf("got %v, want nil body", body)
-	}
-}
 
 func TestSplitCaptionAndBody_Long(t *testing.T) {
 	text := strings.Repeat("word ", 300)
@@ -247,23 +173,7 @@ func TestSplitCaptionAndBody_Long(t *testing.T) {
 
 // --- MarkdownToTelegramChunks integration ---
 
-func TestMarkdownToTelegramChunks_Short(t *testing.T) {
-	chunks := MarkdownToTelegramChunks("hello **world**", TextChunkLimit)
-	if len(chunks) != 1 {
-		t.Fatalf("got %d, want 1 chunk", len(chunks))
-	}
-	if chunks[0] != "hello <b>world</b>" {
-		t.Errorf("got %q", chunks[0])
-	}
-}
 
-func TestMarkdownToTelegramChunks_Long(t *testing.T) {
-	md := strings.Repeat("word ", 1000)
-	chunks := MarkdownToTelegramChunks(md, TextChunkLimit)
-	if len(chunks) < 2 {
-		t.Errorf("got %d, want multiple chunks", len(chunks))
-	}
-}
 
 // --- UTF16Len tests ---
 

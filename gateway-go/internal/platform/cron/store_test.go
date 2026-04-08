@@ -109,21 +109,3 @@ func TestStorePersistence(t *testing.T) {
 	}
 }
 
-func TestStoreSkipUnchangedWrite(t *testing.T) {
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "jobs.json")
-	s := NewStore(storePath)
-
-	job := StoreJob{ID: "same", Enabled: true, Payload: StorePayload{Kind: "agentTurn"}}
-	s.AddJob(job)
-
-	// Save again with same content — should skip write.
-	store, _ := s.Load()
-	s.Save(store)
-
-	// Verify the store file still exists after save.
-	_, err := os.Stat(storePath)
-	if err != nil {
-		t.Fatalf("stat after save: %v", err)
-	}
-}

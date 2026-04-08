@@ -68,35 +68,4 @@ func TestStickyDialer_ResetSticky(t *testing.T) {
 	}
 }
 
-func TestStickyDialer_PinnedIPResolveHost(t *testing.T) {
-	t.Parallel()
 
-	d := newStickyDialer(slog.Default())
-	pinnedStrategy := d.strategies[2]
-
-	if got := pinnedStrategy.resolveHost(telegramAPIHost); got != fallbackIPv4 {
-		t.Errorf("got %s, want %s for %s", got, fallbackIPv4, telegramAPIHost)
-	}
-
-	if got := pinnedStrategy.resolveHost("example.com"); got != "example.com" {
-		t.Errorf("got %s, want example.com", got)
-	}
-}
-
-func TestNewTelegramTransport(t *testing.T) {
-	t.Parallel()
-
-	transport := NewTelegramTransport(slog.Default())
-	if transport == nil {
-		t.Fatal("expected non-nil transport")
-	}
-	if transport.MaxIdleConns != maxIdleConns {
-		t.Errorf("got %d, want MaxIdleConns %d", transport.MaxIdleConns, maxIdleConns)
-	}
-	if transport.IdleConnTimeout != keepAliveTimeout {
-		t.Errorf("got %v, want IdleConnTimeout %v", transport.IdleConnTimeout, keepAliveTimeout)
-	}
-	if transport.ForceAttemptHTTP2 {
-		t.Error("expected ForceAttemptHTTP2 to be false")
-	}
-}

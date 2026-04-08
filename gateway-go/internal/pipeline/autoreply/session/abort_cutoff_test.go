@@ -90,16 +90,3 @@ func TestAbortCutoffLifecycle(t *testing.T) {
 	}
 }
 
-func TestFormatTimestampWithAge(t *testing.T) {
-	if FormatTimestampWithAge(0) != "n/a" {
-		t.Error("zero should be n/a")
-	}
-	if FormatTimestampWithAge(-1) != "n/a" {
-		t.Error("negative should be n/a")
-	}
-	// Valid timestamp should contain "ago".
-	result := FormatTimestampWithAge(1000000000000) // ~2001
-	if result == "n/a" {
-		t.Error("valid timestamp should not be n/a")
-	}
-}

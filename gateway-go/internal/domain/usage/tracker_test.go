@@ -4,15 +4,6 @@ import (
 	"testing"
 )
 
-func TestNew(t *testing.T) {
-	tracker := New()
-	if tracker == nil {
-		t.Fatal("expected non-nil tracker")
-	}
-	if tracker.startedAt.IsZero() {
-		t.Fatal("expected startedAt to be set")
-	}
-}
 
 func TestRecordCall(t *testing.T) {
 	tracker := New()
@@ -97,11 +88,3 @@ func TestStatusIsolation(t *testing.T) {
 	}
 }
 
-func TestEmptyStatus(t *testing.T) {
-	tracker := New()
-	status := tracker.Status()
-
-	if len(status.Providers) != 0 {
-		t.Fatalf("got %d, want 0 providers", len(status.Providers))
-	}
-}

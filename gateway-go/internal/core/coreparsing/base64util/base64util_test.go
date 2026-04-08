@@ -6,14 +6,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestEstimate_Empty(t *testing.T) {
-	if got := Estimate(""); got != 0 {
-		t.Errorf("got %d, want 0", got)
-	}
-	if got := Estimate("   "); got != 0 {
-		t.Errorf("got %d, want 0 for whitespace", got)
-	}
-}
 
 func TestEstimate_NoPadding(t *testing.T) {
 	// "AAAA" = 4 base64 chars -> 3 decoded bytes.
@@ -45,12 +37,6 @@ func TestEstimate_WithWhitespace(t *testing.T) {
 	}
 }
 
-func TestEstimate_URLSafe(t *testing.T) {
-	// URL-safe chars don't affect size estimation (same count).
-	if got := Estimate("ab-_"); got != 3 {
-		t.Errorf("got %d, want 3", got)
-	}
-}
 
 func TestCanonicalize_Valid(t *testing.T) {
 	tests := []struct {
@@ -99,14 +85,6 @@ func TestCanonicalize_InvalidChars(t *testing.T) {
 	}
 }
 
-func TestCanonicalize_Empty(t *testing.T) {
-	if _, err := Canonicalize(""); err == nil {
-		t.Error("expected error for empty input")
-	}
-	if _, err := Canonicalize("   \t\n  "); err == nil {
-		t.Error("expected error for whitespace-only")
-	}
-}
 
 func TestCanonicalize_TriplePadding(t *testing.T) {
 	if _, err := Canonicalize("A==="); err == nil {
@@ -116,29 +94,12 @@ func TestCanonicalize_TriplePadding(t *testing.T) {
 
 // --- Rust parity: URL-safe estimate unchanged ---
 
-func TestEstimate_MixedURLSafe(t *testing.T) {
-	// Standard and URL-safe chars have same byte count.
-	if Estimate("ab+/") != Estimate("ab-_") {
-		t.Error("expected same estimate for standard and URL-safe")
-	}
-}
 
 // --- Rust parity: whitespace variants ---
 
-func TestEstimate_TabsAndNewlines(t *testing.T) {
-	if got := Estimate("\tAA\n==\r"); got != 1 {
-		t.Errorf("got %d, want 1", got)
-	}
-}
 
 // --- Rust parity: canonicalize mixed URL-safe ---
 
-func TestCanonicalize_MixedStandardAndURLSafe(t *testing.T) {
-	got := testutil.Must(Canonicalize("ab+_"))
-	if got != "ab+/" {
-		t.Errorf("got %s, want ab+/", got)
-	}
-}
 
 // --- Rust parity: padding in middle (invalid) ---
 

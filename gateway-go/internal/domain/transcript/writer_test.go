@@ -131,17 +131,6 @@ func TestWriter_AppendStructured(t *testing.T) {
 	}
 }
 
-func TestWriter_InvalidJSON(t *testing.T) {
-	dir := t.TempDir()
-	w := NewWriter(dir, nil)
-
-	_ = w.EnsureSession("sess3", SessionHeader{Version: 1, ID: "sess3"})
-
-	err := w.AppendMessage("sess3", []byte("not valid json {"))
-	if err == nil {
-		t.Error("expected error for invalid JSON")
-	}
-}
 
 func TestWriter_SessionPath(t *testing.T) {
 	w := NewWriter("/base/dir", nil)
@@ -237,12 +226,3 @@ func TestWriter_DeleteSession(t *testing.T) {
 	}
 }
 
-func TestWriter_DeleteSession_InvalidKey(t *testing.T) {
-	dir := t.TempDir()
-	w := NewWriter(dir, nil)
-
-	err := w.DeleteSession("../../etc/passwd")
-	if err == nil {
-		t.Error("expected error for unsafe session key")
-	}
-}

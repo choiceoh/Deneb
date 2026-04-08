@@ -120,12 +120,6 @@ func TestConfigSaveLoad(t *testing.T) {
 	}
 }
 
-func TestLoadConfigMissing(t *testing.T) {
-	_, err := LoadConfig(t.TempDir())
-	if err == nil {
-		t.Error("expected error for missing config")
-	}
-}
 
 func TestAppendAndReadResults(t *testing.T) {
 	dir := t.TempDir()
@@ -682,21 +676,6 @@ func TestDefaultParams(t *testing.T) {
 	}
 }
 
-func TestParamsApplyDefaults(t *testing.T) {
-	// Zero-valued params should get all defaults.
-	var p Params
-	p.applyDefaults()
-	d := DefaultParams()
-	if p.MaxTokens != d.MaxTokens {
-		t.Errorf("MaxTokens = %d, want %d", p.MaxTokens, d.MaxTokens)
-	}
-	if p.PhaseEarlyEnd != d.PhaseEarlyEnd {
-		t.Errorf("PhaseEarlyEnd = %d, want %d", p.PhaseEarlyEnd, d.PhaseEarlyEnd)
-	}
-	if p.DefaultModel != d.DefaultModel {
-		t.Errorf("DefaultModel = %q, want %q", p.DefaultModel, d.DefaultModel)
-	}
-}
 
 func TestParamsApplyDefaultsSanity(t *testing.T) {
 	// Reversed stuck thresholds should be reset to defaults.

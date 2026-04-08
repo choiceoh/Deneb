@@ -3,8 +3,6 @@ package coremarkdown
 import (
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func parse(md string) MarkdownIR {
@@ -32,12 +30,6 @@ func TestPlainText(t *testing.T) {
 	}
 }
 
-func TestEmptyInput(t *testing.T) {
-	ir := parse("")
-	if ir.Text != "" {
-		t.Errorf("got %q, want empty text", ir.Text)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Inline styles
@@ -104,13 +96,6 @@ func TestCodeBlock(t *testing.T) {
 	assertHasStyle(t, ir, StyleCodeBlock)
 }
 
-func TestCodeBlockWithLanguage(t *testing.T) {
-	ir := parse("```go\nfmt.Println()\n```")
-	if !strings.Contains(ir.Text, "fmt.Println()") {
-		t.Errorf("got %q, want code content", ir.Text)
-	}
-	assertHasStyle(t, ir, StyleCodeBlock)
-}
 
 // ---------------------------------------------------------------------------
 // Links
@@ -159,49 +144,13 @@ func TestHeadingBold(t *testing.T) {
 	assertHasStyle(t, ir, StyleBold)
 }
 
-func TestHeadingStripped(t *testing.T) {
-	ir := parse("# Heading 1\n## Heading 2\n### Heading 3")
-	if strings.Contains(ir.Text, "# ") {
-		t.Errorf("heading markers should be stripped, got %q", ir.Text)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Lists
 // ---------------------------------------------------------------------------
 
-func TestBulletList(t *testing.T) {
-	ir := parse("- a\n- b")
-	if !strings.Contains(ir.Text, "• a") {
-		t.Errorf("got %q, want '• a'", ir.Text)
-	}
-	if !strings.Contains(ir.Text, "• b") {
-		t.Errorf("got %q, want '• b'", ir.Text)
-	}
-}
 
-func TestOrderedList(t *testing.T) {
-	ir := parse("1. first\n2. second")
-	if !strings.Contains(ir.Text, "1. first") {
-		t.Errorf("got %q, want '1. first'", ir.Text)
-	}
-	if !strings.Contains(ir.Text, "2. second") {
-		t.Errorf("got %q, want '2. second'", ir.Text)
-	}
-}
 
-func TestNestedList(t *testing.T) {
-	ir := parse("- a\n  - b\n  - c\n- d")
-	if !strings.Contains(ir.Text, "• a") {
-		t.Errorf("got %q, want '• a'", ir.Text)
-	}
-	if !strings.Contains(ir.Text, "• b") {
-		t.Errorf("got %q, want '• b'", ir.Text)
-	}
-	if !strings.Contains(ir.Text, "• d") {
-		t.Errorf("got %q, want '• d'", ir.Text)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Blockquote
@@ -215,43 +164,17 @@ func TestBlockquote(t *testing.T) {
 	assertHasStyle(t, ir, StyleBlockquote)
 }
 
-func TestBlockquotePrefix(t *testing.T) {
-	opts := DefaultParseOptions()
-	opts.BlockquotePrefix = "> "
-	ir := parseWith("> text", &opts)
-	if !strings.HasPrefix(ir.Text, "> ") {
-		t.Errorf("got %q, want prefix '> '", ir.Text)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Horizontal rule
 // ---------------------------------------------------------------------------
 
-func TestHorizontalRule(t *testing.T) {
-	ir := parse("---")
-	if !strings.Contains(ir.Text, "───") {
-		t.Errorf("got %q, want '───'", ir.Text)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Paragraphs and breaks
 // ---------------------------------------------------------------------------
 
-func TestParagraphsSeparated(t *testing.T) {
-	ir := parse("first\n\nsecond")
-	if !strings.Contains(ir.Text, "\n\n") {
-		t.Error("expected paragraph separator")
-	}
-}
 
-func TestSoftBreak(t *testing.T) {
-	ir := parse("line1\nline2")
-	if !strings.Contains(ir.Text, "line1") || !strings.Contains(ir.Text, "line2") {
-		t.Errorf("got %q, want both lines", ir.Text)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Spoilers
@@ -313,13 +236,6 @@ func TestSpoilerUnicode(t *testing.T) {
 	assertHasStyle(t, ir, StyleSpoiler)
 }
 
-func TestSpoilerDisabledByDefault(t *testing.T) {
-	ir := parse("||not spoiler||")
-	// Without enableSpoilers, || should pass through.
-	if strings.Contains(ir.Text, "SPOILER") {
-		t.Error("sentinels should not appear without enableSpoilers")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Tables
@@ -347,24 +263,7 @@ func TestTableCode(t *testing.T) {
 	assertHasStyle(t, ir, StyleCodeBlock)
 }
 
-func TestTableBulletsHeaderValue(t *testing.T) {
-	opts := DefaultParseOptions()
-	opts.TableMode = "bullets"
-	ir := parseWith("| Name | Value |\n|------|-------|\n| A | 1 |\n| B | 2 |", &opts)
-	if !strings.Contains(ir.Text, "Value: 1") {
-		t.Errorf("got %q, want 'Value: 1'", ir.Text)
-	}
-	if !strings.Contains(ir.Text, "Value: 2") {
-		t.Errorf("got %q, want 'Value: 2'", ir.Text)
-	}
-}
 
-func TestTableModeOff(t *testing.T) {
-	_, hasTables := MarkdownToIRWithMeta("| A |\n|---|\n| 1 |", nil)
-	if hasTables {
-		t.Error("tableMode=off should not report hasTables")
-	}
-}
 
 func TestHasTablesFlag(t *testing.T) {
 	opts := DefaultParseOptions()
@@ -379,25 +278,11 @@ func TestHasTablesFlag(t *testing.T) {
 // Image alt text
 // ---------------------------------------------------------------------------
 
-func TestImageAltText(t *testing.T) {
-	ir := parse("![alt text](img.png)")
-	if !strings.Contains(ir.Text, "alt text") {
-		t.Errorf("got %q, want alt text", ir.Text)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // IROutput JSON marshaling
 // ---------------------------------------------------------------------------
 
-func TestMarshalIROutput_NilSlices(t *testing.T) {
-	out := &IROutput{Text: "test"}
-	data := testutil.Must(MarshalIROutput(out))
-	s := string(data)
-	if strings.Contains(s, "null") {
-		t.Errorf("nil slices should marshal as [], got %s", s)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Span utilities

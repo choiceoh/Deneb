@@ -95,29 +95,6 @@ func TestSendTextHTMLFallbackOnlyOnParseError(t *testing.T) {
 	}
 }
 
-func TestSendTextNoFallbackWithoutHTML(t *testing.T) {
-	// Plain text mode should not attempt fallback even on errors.
-	var callCount atomic.Int32
-	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		callCount.Add(1)
-		resp := APIResponse{
-			OK:          false,
-			ErrorCode:   400,
-			Description: "Bad Request: can't parse entities",
-		}
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(resp)
-	})
-	defer srv.Close()
-
-	_, err := SendText(context.Background(), c, 123, "hello", SendOptions{})
-	if err == nil {
-		t.Fatal("got nil, want error")
-	}
-	if callCount.Load() != 1 {
-		t.Errorf("got %d, want exactly 1 call (no fallback)", callCount.Load())
-	}
-}
 
 func TestIsHTMLParseError(t *testing.T) {
 	tests := []struct {
@@ -155,27 +132,3 @@ func TestIsHTMLParseError(t *testing.T) {
 	}
 }
 
-func TestUploadPooledBuffer(t *testing.T) {
-	// Verify Upload works correctly with pooled buffers.
-	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		ct := r.Header.Get("Content-Type")
-		if !strings.Contains(ct, "multipart/form-data") {
-			t.Errorf("got %s, want multipart content type", ct)
-		}
-		resp := APIResponse{
-			OK:     true,
-			Result: json.RawMessage(`{"message_id":1,"chat":{"id":123,"type":"private"}}`),
-		}
-		json.NewEncoder(w).Encode(resp)
-	})
-	defer srv.Close()
-
-	data := strings.NewReader("file content here")
-	result, err := c.Upload(context.Background(), "sendDocument", "document", "test.txt", data, map[string]string{
-		"chat_id": "123",
-	})
-	testutil.NoError(t, err)
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-}

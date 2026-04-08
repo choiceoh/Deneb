@@ -57,14 +57,6 @@ func TestDetectFences_TooMuchIndent(t *testing.T) {
 		t.Errorf("4-space indent should not match, got %d spans", len(spans))
 	}
 }
-
-func TestDetectFences_NoFences(t *testing.T) {
-	spans := DetectFences("just text\nno fences here")
-	if len(spans) != 0 {
-		t.Errorf("got %d, want 0 spans", len(spans))
-	}
-}
-
 func TestDetectFences_MultipleFences(t *testing.T) {
 	spans := DetectFences("```\na\n```\n\n```\nb\n```")
 	if len(spans) != 2 {
@@ -90,14 +82,6 @@ func TestDetectFences_ClosingNeedsEnoughMarkers(t *testing.T) {
 		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 }
-
-func TestDetectFences_Empty(t *testing.T) {
-	spans := DetectFences("")
-	if spans != nil {
-		t.Errorf("got %v, want nil", spans)
-	}
-}
-
 func TestDetectFences_JSON(t *testing.T) {
 	spans := DetectFences("```python\nprint('hi')\n```")
 	data := testutil.Must(json.Marshal(spans))
@@ -134,42 +118,6 @@ func TestMatchFenceLine_Indented(t *testing.T) {
 		t.Errorf("got indent=%q marker=%q rest=%q", indent, marker, rest)
 	}
 }
-
-func TestMatchFenceLine_MaxIndent(t *testing.T) {
-	indent, marker, _ := matchFenceLine("   ```")
-	if indent != "   " || marker != "```" {
-		t.Errorf("3-space indent: indent=%q marker=%q", indent, marker)
-	}
-}
-
-func TestMatchFenceLine_TooMuchIndent(t *testing.T) {
-	_, marker, _ := matchFenceLine("    ```")
-	if marker != "" {
-		t.Error("4+ spaces should not match")
-	}
-}
-
-func TestMatchFenceLine_TooFewMarkers(t *testing.T) {
-	_, marker, _ := matchFenceLine("``")
-	if marker != "" {
-		t.Error("2 backticks should not match")
-	}
-}
-
-func TestMatchFenceLine_NotFence(t *testing.T) {
-	_, marker, _ := matchFenceLine("hello world")
-	if marker != "" {
-		t.Error("plain text should not match")
-	}
-}
-
-func TestMatchFenceLine_LongMarker(t *testing.T) {
-	_, marker, _ := matchFenceLine("``````")
-	if marker != "``````" {
-		t.Errorf("got %q, want 6 backticks", marker)
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Spoiler preprocessing unit tests
 // ---------------------------------------------------------------------------

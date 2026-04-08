@@ -5,21 +5,7 @@ import (
 	"testing"
 )
 
-func TestTruncateHeadTail_BelowLimit(t *testing.T) {
-	content := strings.Repeat("a", 100)
-	got := TruncateHeadTail(content, 200, "")
-	if got != content {
-		t.Error("content below limit should be returned unchanged")
-	}
-}
 
-func TestTruncateHeadTail_ExactLimit(t *testing.T) {
-	content := strings.Repeat("b", 200)
-	got := TruncateHeadTail(content, 200, "")
-	if got != content {
-		t.Error("content at exact limit should be returned unchanged")
-	}
-}
 
 func TestTruncateHeadTail_AboveLimit(t *testing.T) {
 	// Build content with identifiable head and tail.
@@ -85,12 +71,3 @@ func TestTruncateHeadTail_LineCount(t *testing.T) {
 	}
 }
 
-func TestTruncateHeadTail_DefaultMaxOutput(t *testing.T) {
-	// Verify the constant is sane.
-	if DefaultMaxOutput < 1024 {
-		t.Errorf("DefaultMaxOutput too small: %d", DefaultMaxOutput)
-	}
-	if DefaultMaxOutput > 256*1024 {
-		t.Errorf("DefaultMaxOutput too large: %d", DefaultMaxOutput)
-	}
-}

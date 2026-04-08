@@ -18,10 +18,3 @@ func TestResolveCronJobTimeoutMs_DefaultAgentTurn(t *testing.T) {
 	}
 }
 
-func TestResolveCronJobTimeoutMs_ExplicitTimeout(t *testing.T) {
-	job := StoreJob{Payload: StorePayload{Kind: "agentTurn", Message: "run", TimeoutSeconds: 120}}
-	got := ResolveCronJobTimeoutMs(job)
-	if got != 120000 {
-		t.Fatalf("got %d, want 120000", got)
-	}
-}

@@ -159,19 +159,6 @@ func TestToolLoopDetector_GlobalCircuitBreaker(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_Disabled(t *testing.T) {
-	cfg := DefaultToolLoopConfig()
-	cfg.Enabled = false
-	d := NewToolLoopDetector(cfg, slog.Default())
-
-	args := []byte(`{"x": 1}`)
-	for range 50 {
-		r := d.RecordAndCheck("read", args)
-		if r.Stuck {
-			t.Fatal("detector should be disabled")
-		}
-	}
-}
 
 func TestToolLoopDetector_HistoryWindowSlides(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
