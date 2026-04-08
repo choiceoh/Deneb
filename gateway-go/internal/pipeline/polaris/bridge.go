@@ -7,6 +7,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
+// Compile-time interface compliance.
+var _ toolctx.TranscriptStore = (*Bridge)(nil)
+
 // Bridge wraps an existing TranscriptStore and dual-writes to the Polaris Store.
 // It implements the TranscriptStore interface as a drop-in replacement.
 //

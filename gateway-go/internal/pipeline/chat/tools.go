@@ -28,6 +28,14 @@ type ToolExecutor = agent.ToolExecutor
 type ToolFunc = toolctx.ToolFunc
 type ToolDef = toolctx.ToolDef
 
+// Compile-time interface compliance.
+var (
+	_ agent.ToolExecutor                 = (*ToolRegistry)(nil)
+	_ agent.ConcurrencyChecker           = (*ToolRegistry)(nil)
+	_ agent.InputAwareConcurrencyChecker = (*ToolRegistry)(nil)
+	_ toolctx.ToolRegistrar              = (*ToolRegistry)(nil)
+)
+
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {
 	mu             sync.RWMutex

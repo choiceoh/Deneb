@@ -284,6 +284,9 @@ func RegisterWebTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, def
 	})
 }
 
+// Compile-time interface compliance.
+var _ web.DeepResearchLLM = (*deepResearchLLMAdapter)(nil)
+
 // deepResearchLLMAdapter adapts llm.Client to web.DeepResearchLLM.
 type deepResearchLLMAdapter struct {
 	client *llm.Client

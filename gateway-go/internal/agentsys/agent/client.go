@@ -8,6 +8,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
+// Compile-time interface compliance.
+var _ LLMStreamer = (*llm.Client)(nil)
+
 // LLMStreamer abstracts the streaming LLM API used by RunAgent.
 // *llm.Client implements this interface directly.
 type LLMStreamer interface {

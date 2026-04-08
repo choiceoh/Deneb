@@ -3,7 +3,11 @@ package typing
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
+
+// Compile-time interface compliance.
+var _ chatport.TypingSignaler = (*FullTypingSignaler)(nil)
 
 // TypingMode controls when typing indicators are shown.
 type TypingMode string

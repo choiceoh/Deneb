@@ -233,6 +233,9 @@ func buildZeroCallsReport(disp *rpc.Dispatcher) *handlers.RPCZeroCallsReport {
 	}
 }
 
+// Compile-time interface compliance.
+var _ autoreply.AgentExecutor = (*chatSendExecutor)(nil)
+
 // chatSendExecutor bridges the autoreply.AgentExecutor interface to
 // chat.Handler.Send. When the autoreply pipeline decides the message should
 // go to the agent (not handled by a command or abort), RunTurn builds a

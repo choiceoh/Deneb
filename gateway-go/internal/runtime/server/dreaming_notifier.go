@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autoresearch"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
@@ -14,6 +15,7 @@ import (
 var (
 	_ autonomous.Notifier   = (*telegramNotifier)(nil)
 	_ autoresearch.Notifier = (*telegramNotifier)(nil)
+	_ gmailpoll.Notifier    = (*telegramNotifier)(nil)
 )
 
 // telegramNotifier implements autonomous.Notifier and autoresearch.Notifier

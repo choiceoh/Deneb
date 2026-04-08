@@ -39,6 +39,9 @@ type BlockReplyBufferStrategy interface {
 	Finalize(payload types.ReplyPayload) types.ReplyPayload
 }
 
+// Compile-time interface compliance.
+var _ BlockReplyBufferStrategy = (*AudioAsVoiceBuffer)(nil)
+
 // AudioAsVoiceBuffer buffers audio payloads and applies audioAsVoice flag at finalize.
 type AudioAsVoiceBuffer struct {
 	mu               sync.Mutex

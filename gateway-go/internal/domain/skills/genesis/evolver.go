@@ -9,10 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
+
+// Compile-time interface compliance.
+var _ autonomous.PeriodicTask = (*EvolutionTask)(nil)
 
 // EvolveResult describes the outcome of an evolution attempt.
 type EvolveResult struct {

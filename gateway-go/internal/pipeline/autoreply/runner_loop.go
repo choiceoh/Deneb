@@ -118,6 +118,9 @@ const (
 	ExecAskNever        ExecAsk = "never"
 )
 
+// Compile-time interface compliance.
+var _ AgentExecutor = (*DefaultAgentRunner)(nil)
+
 // DefaultAgentRunner implements AgentExecutor using the unified agent.RunAgent loop.
 type DefaultAgentRunner struct {
 	llm      agent.LLMStreamer
@@ -293,6 +296,9 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 	result.DurationMs = time.Since(startedAt).Milliseconds()
 	return result, nil
 }
+
+// Compile-time interface compliance.
+var _ agent.ToolExecutor = (*autoreplyToolAdapter)(nil)
 
 // autoreplyToolAdapter adapts autoreply.ToolExecutor to agent.ToolExecutor.
 // It handles elevated-permission checks, records invocations in ToolMeta,

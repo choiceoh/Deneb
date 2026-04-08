@@ -18,6 +18,12 @@ type SearchResult = toolctx.SearchResult
 type MatchedMsg = toolctx.MatchedMsg
 type TranscriptStore = toolctx.TranscriptStore
 
+// Compile-time interface compliance.
+var (
+	_ toolctx.TranscriptStore = (*FileTranscriptStore)(nil)
+	_ toolctx.TranscriptStore = (*MemoryTranscriptStore)(nil)
+)
+
 // FileTranscriptStore stores transcripts as JSONL files on disk.
 // Each session gets a file at {baseDir}/{sessionKey}.jsonl.
 type FileTranscriptStore struct {

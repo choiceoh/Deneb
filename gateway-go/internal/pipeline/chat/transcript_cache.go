@@ -23,6 +23,9 @@ type transcriptCacheEntry struct {
 	expiresAt time.Time
 }
 
+// Compile-time interface compliance.
+var _ TranscriptStore = (*CachedTranscriptStore)(nil)
+
 // CachedTranscriptStore wraps a TranscriptStore with a per-session TTL cache.
 type CachedTranscriptStore struct {
 	inner TranscriptStore
