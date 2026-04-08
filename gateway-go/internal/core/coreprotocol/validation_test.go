@@ -169,48 +169,6 @@ func TestSessions_PatchInvalidEnum(t *testing.T) {
 	}
 }
 
-func TestSessions_UsageDatePattern(t *testing.T) {
-	result := testutil.Must(ValidateParams("sessions.usage", `{"startDate":"2024-01-15"}`))
-	if !result.Valid {
-		t.Fatalf("got %v, want valid date", result.Errors)
-	}
-
-	result = testutil.Must(ValidateParams("sessions.usage", `{"startDate":"not-a-date"}`))
-	hasPattern := false
-	for _, e := range result.Errors {
-		if e.Keyword == "pattern" {
-			hasPattern = true
-		}
-	}
-	if !hasPattern {
-		t.Fatalf("got %v, want pattern error for bad date", result.Errors)
-	}
-}
-
-func TestAgent_SendValid(t *testing.T) {
-	result, err := ValidateParams("agent.send",
-		`{"to":"user1","message":"hi","idempotencyKey":"k1"}`)
-	testutil.NoError(t, err)
-	if !result.Valid {
-		t.Fatalf("got %v, want valid", result.Errors)
-	}
-}
-
-func TestAgent_WakeInvalidMode(t *testing.T) {
-	result, err := ValidateParams("agent.wake",
-		`{"mode":"invalid","text":"t"}`)
-	testutil.NoError(t, err)
-	hasEnum := false
-	for _, e := range result.Errors {
-		if e.Keyword == "enum" {
-			hasEnum = true
-		}
-	}
-	if !hasEnum {
-		t.Fatalf("got %v, want enum error", result.Errors)
-	}
-}
-
 func TestCron_ListValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("cron.list", `{"limit":50,"sortBy":"name"}`))
 	if !result.Valid {

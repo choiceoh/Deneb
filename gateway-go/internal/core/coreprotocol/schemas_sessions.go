@@ -1,7 +1,5 @@
 package coreprotocol
 
-import "regexp"
-
 // --- sessions.list ---
 
 func validateSessionsListParams(value any, path string, errors *[]ValidationError) {
@@ -307,50 +305,6 @@ func validateSessionsDeleteParams(value any, path string, errors *[]ValidationEr
 		CheckBoolean(v, p, e)
 	})
 	CheckOptional(obj, "emitLifecycleHooks", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckBoolean(v, p, e)
-	})
-}
-
-// --- sessions.usage ---
-
-var (
-	dateRE      = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-	utcOffsetRE = regexp.MustCompile(`^UTC[+-]\d{1,2}(?::[0-5]\d)?$`)
-)
-
-func checkDateString(v any, p string, e *[]ValidationError) {
-	if CheckString(v, p, e) {
-		CheckPattern(v, p, dateRE, e)
-	}
-}
-
-func checkUTCOffset(v any, p string, e *[]ValidationError) {
-	if CheckString(v, p, e) {
-		CheckPattern(v, p, utcOffsetRE, e)
-	}
-}
-
-func validateSessionsUsageParams(value any, path string, errors *[]ValidationError) {
-	if !RequireObject(value, path, errors) {
-		return
-	}
-	obj := value.(map[string]any)
-	CheckNoAdditionalProperties(obj, []string{
-		"key", "startDate", "endDate", "mode", "utcOffset", "limit", "includeContextWeight",
-	}, path, errors)
-	CheckOptional(obj, "key", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckNonEmptyString(v, p, e)
-	})
-	CheckOptional(obj, "startDate", path, errors, checkDateString)
-	CheckOptional(obj, "endDate", path, errors, checkDateString)
-	CheckOptional(obj, "mode", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckStringEnum(v, p, []string{"utc", "gateway", "specific"}, e)
-	})
-	CheckOptional(obj, "utcOffset", path, errors, checkUTCOffset)
-	CheckOptional(obj, "limit", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckInteger(v, p, intPtr(1), nil, e)
-	})
-	CheckOptional(obj, "includeContextWeight", path, errors, func(v any, p string, e *[]ValidationError) {
 		CheckBoolean(v, p, e)
 	})
 }

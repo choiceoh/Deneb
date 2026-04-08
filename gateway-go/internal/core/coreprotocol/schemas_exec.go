@@ -119,35 +119,3 @@ func validateExecApprovalResolveParams(value any, path string, errors *[]Validat
 		CheckNonEmptyString(obj["decision"], path+"/decision", errors)
 	}
 }
-
-// --- exec.approvals.node.get ---
-
-func validateExecApprovalsNodeGetParams(value any, path string, errors *[]ValidationError) {
-	if !RequireObject(value, path, errors) {
-		return
-	}
-	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
-	CheckNoAdditionalProperties(obj, []string{"nodeId"}, path, errors)
-	if CheckRequired(obj, "nodeId", path, errors) {
-		CheckNonEmptyString(obj["nodeId"], path+"/nodeId", errors)
-	}
-}
-
-// --- exec.approvals.node.set ---
-
-func validateExecApprovalsNodeSetParams(value any, path string, errors *[]ValidationError) {
-	if !RequireObject(value, path, errors) {
-		return
-	}
-	obj := value.(map[string]any) //nolint:errcheck // type guaranteed by RequireObject check above
-	CheckNoAdditionalProperties(obj, []string{"nodeId", "file", "baseHash"}, path, errors)
-	if CheckRequired(obj, "nodeId", path, errors) {
-		CheckNonEmptyString(obj["nodeId"], path+"/nodeId", errors)
-	}
-	if CheckRequired(obj, "file", path, errors) {
-		RequireObject(obj["file"], path+"/file", errors)
-	}
-	CheckOptional(obj, "baseHash", path, errors, func(v any, p string, e *[]ValidationError) {
-		CheckNonEmptyString(v, p, e)
-	})
-}

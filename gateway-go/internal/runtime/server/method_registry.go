@@ -115,10 +115,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			InternalHooks:  hub.InternalHooks(),
 			Broadcaster:    hub.Broadcaster(),
 		}),
-		handlertelegram.MessagingMethods(handlertelegram.MessagingDeps{
-			TelegramPlugin: hub.Telegram(),
-		}),
-
 		// --- Scheduling ---
 		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
 			Service:     hub.CronService(),

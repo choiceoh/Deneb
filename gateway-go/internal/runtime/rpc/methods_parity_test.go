@@ -74,7 +74,6 @@ var tsBaseMethods = []string{
 	"sessions.delete",
 	"last-heartbeat",
 	"set-heartbeats",
-	"wake",
 	"cron.list",
 	"cron.listPage",
 	"cron.getJob",
@@ -87,7 +86,6 @@ var tsBaseMethods = []string{
 	"gateway.identity.get",
 	"system-presence",
 	"system-event",
-	"send",
 	"agent",
 	"agent.identity.get",
 	"agent.wait",
@@ -131,8 +129,6 @@ func fullDispatcher() *Dispatcher {
 	RegisterDoctorMethods(d, DoctorDeps{})
 	RegisterMaintenanceMethods(d, MaintenanceDeps{Runner: maintenance.NewRunner("/tmp")})
 	RegisterUpdateMethods(d, UpdateDeps{})
-	RegisterMessagingMethods(d, MessagingDeps{})
-
 	// Phase 4: Native session execution / agent methods.
 	RegisterSessionExecMethods(d, SessionExecDeps{
 		Chat:       chat.NewHandler(session.NewManager(), nil, testLogger(), chat.DefaultHandlerConfig()),
