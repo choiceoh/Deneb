@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 )
 
 // localai_hooks.go — local AI model hooks into the agent pipeline:

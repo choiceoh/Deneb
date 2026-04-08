@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/compaction"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
 // condensing tracks in-flight condensation goroutines to prevent double-scheduling.

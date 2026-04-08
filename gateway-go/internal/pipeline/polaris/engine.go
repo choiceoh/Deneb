@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/compaction"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
 // summaryPrefix is injected by AssembleContext into summary messages.

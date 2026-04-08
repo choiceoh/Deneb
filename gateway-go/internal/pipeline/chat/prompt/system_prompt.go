@@ -3,10 +3,8 @@ package prompt
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -31,40 +29,16 @@ type DeferredToolInfo struct {
 	Description string
 }
 
-// cachedTimezone and cachedTimezoneLocation cache the resolved timezone
-// at startup to avoid time.LoadLocation() on every chat message.
-var (
-	cachedTimezone     string
-	cachedTimezoneLoc  *time.Location
-	cachedTimezoneOnce sync.Once
-)
-
-// staticPromptCache caches the assembled static system prompt block, keyed on
-// the sorted tool name list. Invalidated only when the tool set changes (i.e.
-// never during normal operation after server start).
-var (
-	staticPromptMu     sync.RWMutex
-	staticPromptKey    string
-	staticPromptCached string
-)
-
 // LoadCachedTimezone resolves and caches timezone once.
 // Exported so callers (e.g., chat/run.go) can read the resolved timezone
 // without duplicating the resolution logic.
 func LoadCachedTimezone() (string, *time.Location) {
-	cachedTimezoneOnce.Do(func() {
-		cachedTimezone = resolveTimezone()
-		loc, err := time.LoadLocation(cachedTimezone)
-		if err == nil {
-			cachedTimezoneLoc = loc
-		}
-	})
-	return cachedTimezone, cachedTimezoneLoc
+	return Cache.Timezone()
 }
 
 // loadCachedTimezone is the unexported alias used within this package.
 func loadCachedTimezone() (string, *time.Location) {
-	return LoadCachedTimezone()
+	return Cache.Timezone()
 }
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
@@ -147,12 +121,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// The static block depends only on the tool set, which is fixed after server
 	// start. Cache it to avoid rebuilding ~2 KB of strings on every request.
 	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools)
-	staticPromptMu.RLock()
-	if staticPromptKey == cacheKey {
-		staticText = staticPromptCached
-		staticPromptMu.RUnlock()
+	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
+		staticText = cached
 	} else {
-		staticPromptMu.RUnlock()
 		var s strings.Builder
 
 		// Identity.
@@ -228,10 +199,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
 		built := s.String()
-		staticPromptMu.Lock()
-		staticPromptKey = cacheKey
-		staticPromptCached = built
-		staticPromptMu.Unlock()
+		Cache.SetStaticPrompt(cacheKey, built)
 		staticText = built
 	} // end else (cache miss)
 
@@ -395,8 +363,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		tz, _ = loadCachedTimezone() // best-effort: defaults to Local
 	}
 	now := time.Now()
-	_, cachedLoc := loadCachedTimezone()
-	if cachedLoc != nil && tz == cachedTimezone {
+	cachedTZ, cachedLoc := loadCachedTimezone()
+	if cachedLoc != nil && tz == cachedTZ {
 		now = now.In(cachedLoc)
 	} else if loc, err := time.LoadLocation(tz); err == nil {
 		now = now.In(loc)
@@ -522,23 +490,8 @@ func resolveTimezone() string {
 	return "UTC"
 }
 
-// cachedHostname is resolved once at startup to avoid os.Hostname() syscall per turn.
-var (
-	cachedHostname     string
-	cachedHostnameOnce sync.Once
-)
-
 // BuildDefaultRuntimeInfo creates RuntimeInfo from the current environment.
 // Static fields (hostname, OS, arch) are cached; only model fields change per request.
 func BuildDefaultRuntimeInfo(model, defaultModel string) *RuntimeInfo {
-	cachedHostnameOnce.Do(func() {
-		cachedHostname, _ = os.Hostname()
-	})
-	return &RuntimeInfo{
-		Host:         cachedHostname,
-		OS:           "linux",
-		Arch:         runtime.GOARCH,
-		Model:        model,
-		DefaultModel: defaultModel,
-	}
+	return Cache.BuildRuntimeInfo(model, defaultModel)
 }
